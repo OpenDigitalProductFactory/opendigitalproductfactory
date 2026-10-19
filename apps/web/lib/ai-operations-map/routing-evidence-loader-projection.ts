@@ -1,4 +1,6 @@
 import { AI_ROUTING_ARCHITECTURE_VERSION } from "@/lib/routing/routing-architecture-version";
+import { isRecord } from "@/lib/shared/coerce";
+import { VERTICAL_SENSITIVE_DATA_POLICY_PACKS } from "@/lib/inference/data-screening/vertical-policy-packs";
 import {
   projectRoutingEvidenceConformance,
   type RoutingEvidenceAdapterRunRow,
@@ -8,20 +10,24 @@ import {
   type RoutingEvidenceOutcomeRow,
   type RoutingEvidenceProviderRow,
   type RoutingEvidenceTokenUsageRow,
+  type SafeInferenceScreenReceipt,
 } from "./routing-evidence-conformance";
 
-type LoadedDecision = Omit<RoutingEvidenceDecisionRow, "screenReceipt">;
+type LoadedDecision = Omit<RoutingEvidenceDecisionRow, "screenReceipt"> & {
+  inferenceDataScreenReceipt?: unknown;
+};
 type LoadedAdapterRun = Omit<RoutingEvidenceAdapterRunRow, "estimatedCostUsd"> & {
   estimatedCostUsd: unknown;
 };
+
+const knownDataClasses = new Set<string>(VERTICAL_SENSITIVE_DATA_POLICY_PACKS.map((pack) => pack.dataClass));
 
 /**
  * Privacy boundary between Prisma rows and the owner-facing projection.
  *
  * The loader can pass rows with additional selected fields, but this adapter
- * reconstructs the exact safe contract. The sensitive-routing dependency will
- * add the privacy-safe screen receipt; until it lands, coverage is honestly
- * reported as absent instead of inferred from request content.
+ * reconstructs the exact safe contract. Missing or invalid receipts remain
+ * uncovered; coverage is never inferred from request content.
  */
 export function projectLoadedRoutingEvidence(input: {
   window: { start: Date; end: Date } | null;
@@ -64,7 +70,7 @@ export function projectLoadedRoutingEvidence(input: {
       excludedTrace: row.excludedTrace,
       fallbackChain: row.fallbackChain,
       fallbacksUsed: row.fallbacksUsed,
-      screenReceipt: null,
+      screenReceipt: projectSafeInferenceScreenReceipt(row.inferenceDataScreenReceipt),
       createdAt: row.createdAt,
     })),
     adapterRuns: input.adapterRuns.map((row) => ({
@@ -87,4 +93,23 @@ export function projectLoadedRoutingEvidence(input: {
     capacity: input.capacity.map((row) => ({ ...row })),
     providers: input.providers.map((row) => ({ ...row })),
   });
+}
+
+/** Select only display-safe evidence from the versioned persisted receipt. */
+export function projectSafeInferenceScreenReceipt(value: unknown): SafeInferenceScreenReceipt | null {
+  if (!isRecord(value) || value.schemaVersion !== "inference-data-screen/v1"
+    || typeof value.screenId !== "string" || value.screenId.trim().length === 0
+    || (value.routeEffect !== "allow" && value.routeEffect !== "local-only" && value.routeEffect !== "block")
+    || (value.transformation !== "none" && value.transformation !== "masked"
+      && value.transformation !== "tokenized" && value.transformation !== "blocked")
+    || !Array.isArray(value.classifiedDataClasses)
+    || !value.classifiedDataClasses.every((entry): entry is string => typeof entry === "string" && knownDataClasses.has(entry))
+    || value.rawPayloadStored !== false) return null;
+  return {
+    screenId: value.screenId,
+    routeEffect: value.routeEffect,
+    transformation: value.transformation,
+    classifiedDataClasses: [...value.classifiedDataClasses],
+    rawPayloadStored: false,
+  };
 }

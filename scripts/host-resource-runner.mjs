@@ -1,15 +1,23 @@
 #!/usr/bin/env node
 
+import { parseArgs as utilParseArgs } from "node:util";
 import { readFileSync } from "node:fs";
-import { hostname, freemem, totalmem } from "node:os";
+import { hostname, totalmem } from "node:os";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn, spawnSync } from "node:child_process";
+import { gitTextOrNull } from "./lib/git.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
-import { isAllowedMcpEndpoint, mcpCall } from "./lib/mcp-client.mjs";
-import { superviseLeaseRun } from "./lib/lease-supervisor.mjs";
+import { mcpCall } from "./lib/mcp-client.mjs";
+import { leaseRequestTiming } from "./lib/nonprod-lease-request.mjs";
+import { leaseQueueCallOptions, resolveLeaseQueueTimeoutMs } from "./lib/lease-queue-call-options.mjs";
+import { resolveHostCommandInvocation } from "./lib/host-command-invocation.mjs";
+import { availableMemoryBytes } from "./lib/host-available-memory.mjs";
+import { resolveMcpCredential } from "./lib/mcp-credential.mjs";
+import { admittedLeaseTtlMs, superviseLeaseRun } from "./lib/lease-supervisor.mjs";
 import { readProcessIdentity } from "./lib/local-sandbox-fence.mjs";
 import { spawnDurableWaitResumer } from "./lib/durable-wait-resumer.mjs";
+import { readHostAttemptContext, resolveHostAttempt, hostResumePin } from "./lib/host-resource-attempt.mjs";
 
 const PROFILE_CONTRACT = JSON.parse(readFileSync(
   new URL("../apps/web/lib/nonprod/host-resource-profiles.json", import.meta.url),
@@ -30,24 +38,29 @@ export const HEAVY_PROCESS_CLASSES = Object.freeze([
 ]);
 
 export function parseHostResourceArgs(argv) {
-  const args = [...argv];
-  let resourceClass = "";
-  while (args.length > 0 && args[0] !== "--") {
-    const flag = args.shift();
-    if (flag === "--class") resourceClass = args.shift() ?? "";
-    else throw new Error(`unknown argument: ${flag}`);
-  }
+  const options = { class: { type: "string" }, "resume-pin": { type: "string" } };
+  const { values, tokens } = utilParseArgs({ args: argv, options, strict: false, allowPositionals: true, tokens: true });
+  const terminator = tokens.find((token) => token.kind === "option-terminator");
+  const stray = tokens.find((token) => token !== terminator && (terminator === undefined || token.index < terminator.index)
+    && (token.kind !== "option" || !Object.hasOwn(options, token.name)));
+  if (stray) throw new Error(`unknown argument: ${stray.rawName ?? stray.value}`);
+  const resourceClass = typeof values.class === "string" ? values.class : "";
   if (!resourceClass) throw new Error("--class is required");
   if (!HEAVY_PROCESS_CLASSES.includes(resourceClass)) {
     throw new Error(`unsupported resource class: ${resourceClass}`);
   }
-  if (args.shift() !== "--" || args.length === 0) {
+  if (values["resume-pin"] !== undefined && (typeof values["resume-pin"] !== "string" || !values["resume-pin"])) {
+    throw new Error("--resume-pin requires a nonempty value");
+  }
+  const command = terminator === undefined ? [] : argv.slice(terminator.index + 1);
+  if (command.length === 0) {
     throw new Error("a command is required after --");
   }
   return {
     resourceClass,
-    command: args.shift(),
-    commandArgs: args,
+    command: command[0],
+    commandArgs: command.slice(1),
+    ...(values["resume-pin"] ? { resumePin: values["resume-pin"] } : {}),
   };
 }
 
@@ -94,18 +107,21 @@ export function buildHostResourceClaim({
   availableMemoryBytes,
   inferenceResident,
   ungovernedProcesses,
+  attempt,
 }) {
   const profile = PROFILE_CONTRACT.profiles[resourceClass];
   if (!profile) throw new Error(`unsupported resource class: ${resourceClass}`);
+  if (!attempt?.claimKey) throw new Error("host resource attempt identity is required");
   return {
     environmentKey: "host-heavy-resource",
     ownerProvider,
     ownerSessionId,
-    claimKey: `host-resource:${ownerSessionId}:${pid}`,
+    claimKey: attempt.claimKey,
+    ...(attempt?.leaseId ? { resumeLeaseId: attempt.leaseId } : {}),
     purpose: `host-resource:${resourceClass}`,
     url: "host://localhost",
     ports: [],
-    expiresAt: new Date(now.getTime() + 10 * 60_000).toISOString(),
+    ...leaseRequestTiming({ now, durationMs: 10 * 60_000, deadline: now.getTime() + 10 * 60_000 }),
     worktreePath,
     branchName,
     resourceClass,
@@ -122,107 +138,200 @@ export function buildHostResourceClaim({
 }
 
 function gitValue(args) {
-  const result = spawnSync("git", args, { encoding: "utf8", windowsHide: true });
-  return result.status === 0 ? result.stdout.trim() : "";
+  return gitTextOrNull(args, { cwd: process.cwd() }) ?? "";
 }
 
-export function readMcpConnection(cwd) {
-  const envToken = process.env.DPF_MCP_BEARER_TOKEN;
-  if (envToken) {
-    // Explicit operator input: the endpoint is whatever the operator named.
-    return {
-      mcpUrl: process.env.DPF_MCP_URL || DEFAULT_LOCAL_MCP_URL,
-      bearerToken: envToken,
-    };
+/** At most one same-key replacement, after authoritative reconciliation. */
+export async function claimHostResourceAdmission({ claimArgs, connection, attempt,
+  call = mcpCall, env = process.env, now = () => performance.now(), onProgress = () => {} }) {
+  const started = now();
+  const deadline = started + 3 * resolveLeaseQueueTimeoutMs(env);
+  const safeLeaseId = value => /^NPEL-[A-Z0-9-]{1,80}$/.test(value ?? "");
+  let knownLeaseId = safeLeaseId(attempt.leaseId) ? attempt.leaseId : undefined;
+  let resumeLeaseId = knownLeaseId;
+  const unavailable = reason => Object.assign(new Error("Host admission is unproven; wrapped command unrun."), {
+    code: "host_admission_unavailable", reason, commandExecuted: false,
+    resumePin: hostResumePin(attempt, knownLeaseId), ...(knownLeaseId ? { leaseId: knownLeaseId } : {}),
+  });
+  if (claimArgs.claimKey !== attempt.claimKey || (attempt.leaseId && !knownLeaseId)) {
+    throw unavailable("claim-identity-conflict");
   }
-  return readMcpConnectionFile(resolve(cwd, ".mcp.json"));
-}
-
-// `.mcp.json` is ambient state, not operator intent -- it is copied between
-// worktrees by scripts/sync-mcp-worktrees.ps1 and is writable by anything with
-// the checkout. The token it carries is a live DPF credential, so the endpoint
-// it names is checked against the loopback contract before the token is put on
-// the wire; a non-loopback endpoint is a stop (AGENTS.md section 1), not a
-// silent fall-through to the default.
-function readMcpConnectionFile(configPath) {
-  const config = parseJsonFile(configPath);
-  const server = config?.mcpServers?.dpf;
-  const authorization = server?.headers?.Authorization ?? server?.headers?.authorization;
-  const bearerToken = typeof authorization === "string"
-    ? authorization.replace(/^Bearer\s+/i, "")
-    : "";
-  const mcpUrl = typeof server?.url === "string" ? server.url : "";
-  if (!mcpUrl || !bearerToken) return null;
-  if (!isAllowedMcpEndpoint(mcpUrl)) {
-    throw new Error(
-      `${configPath} points the dpf MCP server at ${mcpUrl}, which is not a local endpoint; `
-      + "refusing to send the bearer token off-box. Set DPF_MCP_BEARER_TOKEN (and DPF_MCP_URL) "
-      + "to reach a non-loopback endpoint deliberately.",
-    );
+  const request = async (name, args) => {
+    const remainingMs = deadline - now();
+    if (remainingMs <= 0) throw unavailable("claim-deadline");
+    const options = leaseQueueCallOptions(connection.mcpUrl, connection.bearerToken, { env, remainingMs });
+    const callStarted = now();
+    const result = await call(name, args, options);
+    if (name === "claim_nonprod_environment_lease" && result?.success === true) {
+      const id = result.entityId ?? result.data?.lease?.leaseId;
+      if (!safeLeaseId(id)) throw unavailable("claim-response-unproven");
+      if ((knownLeaseId && id !== knownLeaseId)
+        || (result.data?.lease?.leaseId && result.data.lease.leaseId !== id)) {
+        throw unavailable("claim-identity-conflict");
+      }
+      knownLeaseId = id;
+    }
+    if (now() >= deadline) throw unavailable("claim-deadline");
+    if (now() - callStarted >= options.timeoutMs) {
+      throw Object.assign(new Error("Lease call completed after its allowance."), { code: "ETIMEDOUT" });
+    }
+    if (name === "claim_nonprod_environment_lease" && typeof result?.success !== "boolean") {
+      throw unavailable("claim-response-unproven");
+    }
+    return result;
+  };
+  const reconcile = async () => {
+    let result;
+    try { result = await request("list_nonprod_environment_leases", {}); }
+    catch { throw unavailable("reconciliation-unavailable"); }
+    if (result?.success !== true || !Array.isArray(result.data?.leases) || !Array.isArray(result.data?.queued)) {
+      throw unavailable("reconciliation-unproven");
+    }
+    const matches = [...result.data.leases, ...result.data.queued]
+      .filter(row => row?.claimKey === claimArgs.claimKey);
+    if (matches.length > 1) throw unavailable("claim-identity-conflict");
+    if (matches.length === 0) return;
+    const lease = matches[0];
+    if (!safeLeaseId(lease.leaseId)
+      || (knownLeaseId && lease.leaseId !== knownLeaseId)
+      || ["environmentKey", "ownerProvider", "ownerSessionId", "worktreePath", "branchName", "resourceClass", "purpose"]
+        .some(field => lease[field] !== claimArgs[field])
+      || Number(lease.expectedMemoryBytes) !== claimArgs.expectedMemoryBytes
+      || !["queued", "active"].includes(lease.status)) throw unavailable("claim-identity-conflict");
+    knownLeaseId = lease.leaseId;
+    // A queued handoff uses the existing server resume fence. An active claim
+    // can only be observed again by its original process; never transfer it.
+    if (lease.status === "active" && lease.ownerPid !== claimArgs.ownerProcessId) {
+      throw unavailable("active-claim-not-resumable");
+    }
+    resumeLeaseId = lease.status === "queued" ? knownLeaseId : undefined;
+  };
+  if (attempt.phase === "claim-uncertain") await reconcile();
+  const claim = () => request("claim_nonprod_environment_lease", {
+    ...claimArgs, ...(resumeLeaseId ? { resumeLeaseId } : {}),
+  });
+  try { return await claim(); } catch (error) {
+    if (error.code === "host_admission_unavailable") throw error;
+    if (error.code !== "ETIMEDOUT" && error.name !== "TimeoutError"
+      && error.cause?.name !== "TimeoutError") throw unavailable("claim-transport-unavailable");
   }
-  return { mcpUrl, bearerToken };
-}
-
-function parseJsonFile(path) {
   try {
-    return JSON.parse(readFileSync(path, "utf8"));
+    await onProgress({ status: "claim-uncertain", reason: "claim-timeout", commandExecuted: false,
+      elapsedMs: Math.max(0, now() - started) });
+  } catch { throw unavailable("progress-unavailable"); }
+  await reconcile();
+  try { return await claim(); } catch {
+    throw unavailable("claim-outcome-uncertain");
+  }
+}
+
+/**
+ * The admission connection: DPF_MCP_URL (operator intent, persisted by setup)
+ * or the local default, with the credential every gate script resolves
+ * (scripts/lib/mcp-credential.mjs: client_credentials, then the legacy PAT).
+ * Returns null when no credential is configured.
+ *
+ * It does not read a project .mcp.json (BI-5201141C): on https no writer
+ * produces one -- Claude Code's dpf connector is the plugin's URL-only,
+ * OAuth-authorized descriptor, which carries no token a script could reuse.
+ */
+export function readMcpConnection(env = process.env) {
+  const mcpUrl = env.DPF_MCP_URL || DEFAULT_LOCAL_MCP_URL;
+  try {
+    return { mcpUrl, bearerToken: resolveMcpCredential({ mcpUrl, env }).bearer };
   } catch {
-    // Absent or malformed: the actionable fail-closed error is emitted by the caller.
     return null;
   }
 }
 
-function readProcessRows() {
-  if (process.platform === "win32") {
-    const command = [
-      "Get-CimInstance Win32_Process |",
-      "Select-Object ProcessId,ParentProcessId,CommandLine |",
-      "ConvertTo-Json -Compress",
-    ].join(" ");
-    const result = spawnSync("powershell.exe", ["-NoProfile", "-Command", command], {
-      encoding: "utf8",
-      windowsHide: true,
-    });
-    if (result.status !== 0 || !result.stdout.trim()) return [];
-    const parsed = JSON.parse(result.stdout);
-    return (Array.isArray(parsed) ? parsed : [parsed]).map((row) => ({
-      pid: row.ProcessId,
-      parentPid: row.ParentProcessId,
-      commandLine: row.CommandLine ?? "",
+export function readProcessRows({ platform = process.platform, spawnSyncImpl = spawnSync } = {}) {
+  let result;
+  const unavailable = reason => {
+    // Neither producer output nor JSON.parse's excerpt may leave this reader:
+    // process command lines can contain credentials belonging to other work.
+    const error = new Error(`Host process inventory unavailable (${reason}); no command was admitted. Retry the same governed command after inventory collection recovers.`);
+    Object.assign(error, { code: "host_inventory_unavailable", reason,
+      producerStatus: result?.status ?? null, producerSignal: result?.signal ?? null,
+      stdoutBytes: Buffer.byteLength(String(result?.stdout ?? ""), "utf8") });
+    throw error;
+  };
+  const command = [
+    "$ErrorActionPreference = 'Stop';",
+    "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false);",
+    "$rows = @(Get-CimInstance Win32_Process | ForEach-Object {",
+    "  $line = [string]$_.CommandLine;",
+    "  if ($line) { $line = [regex]::Replace($line, '[\\u0000-\\u001F]', '') };",
+    "  [pscustomobject]@{ ProcessId = $_.ProcessId; ParentProcessId = $_.ParentProcessId; CommandLine = $line }",
+    "});",
+    "ConvertTo-Json -InputObject $rows -Compress -Depth 3",
+  ].join(" ");
+  try {
+    result = spawnSyncImpl(platform === "win32" ? "powershell.exe" : "ps",
+      platform === "win32" ? ["-NoProfile", "-NonInteractive", "-Command", command] : ["-eo", "pid=,ppid=,args="],
+      { encoding: "utf8", windowsHide: true, timeout: 15_000, maxBuffer: 8 * 1024 * 1024 });
+  } catch { unavailable("producer-failed"); }
+  if (result?.error?.code === "ETIMEDOUT") unavailable("producer-timeout");
+  if (result?.error?.code === "ENOBUFS") unavailable("producer-output-limit");
+  if (result?.error || result?.status !== 0) unavailable("producer-failed");
+  const text = String(result.stdout ?? "").replace(/^\uFEFF/, "").trim();
+  if (!text) unavailable("empty-output");
+  let rows;
+  if (platform === "win32") {
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      // Windows PowerShell 5.1 emits raw U+0000–U+001F inside JSON strings.
+      // One such command line used to make the whole inventory unparseable.
+      try { parsed = JSON.parse(text.replace(/[\u0000-\u001F]/g, "")); }
+      catch { unavailable("malformed-output"); }
+    }
+    rows = (Array.isArray(parsed) ? parsed : [parsed]).map(row => ({
+      pid: row?.ProcessId, parentPid: row?.ParentProcessId, commandLine: row?.CommandLine ?? "",
     }));
+  } else {
+    rows = text.split(/\r?\n/).map(line => {
+      const match = line.trim().match(/^(\d+)\s+(\d+)\s+(.*)$/);
+      if (!match) unavailable("invalid-rows");
+      return { pid: Number(match[1]), parentPid: Number(match[2]), commandLine: match[3] };
+    });
   }
-  const result = spawnSync("ps", ["-eo", "pid=,ppid=,args="], {
-    encoding: "utf8",
-  });
-  if (result.status !== 0) return [];
-  return result.stdout.split(/\r?\n/).flatMap((line) => {
-    const match = line.trim().match(/^(\d+)\s+(\d+)\s+(.*)$/);
-    return match ? [{ pid: Number(match[1]), parentPid: Number(match[2]), commandLine: match[3] }] : [];
-  });
+  if (!rows.length || rows.some(row => !Number.isSafeInteger(row.pid) || row.pid < 0
+    || !Number.isSafeInteger(row.parentPid) || row.parentPid < 0 || typeof row.commandLine !== "string")) unavailable("invalid-rows");
+  return rows;
 }
 
 async function runCommand({ command, commandArgs }) {
-  const child = spawn(command, commandArgs, {
+  const invocation = resolveHostCommandInvocation(command, commandArgs);
+  const child = spawn(invocation.command, invocation.args, {
     stdio: "inherit",
     windowsHide: true,
     shell: false,
   });
+  let commandExecuted = false;
+  child.once("spawn", () => { commandExecuted = true; });
   return await new Promise((resolve, reject) => {
-    child.once("error", reject);
+    child.once("error", () => reject(Object.assign(new Error("Wrapped command could not start."),
+      { code: "host_command_unavailable", commandExecuted })));
     child.once("exit", (code, signal) => resolve(signal ? 1 : code ?? 1));
   });
 }
 
 function createOwnedChild({ command, commandArgs }) {
-  const child = spawn(command, commandArgs, {
+  const invocation = resolveHostCommandInvocation(command, commandArgs);
+  const child = spawn(invocation.command, invocation.args, {
     stdio: "inherit",
     windowsHide: true,
     shell: false,
     detached: process.platform !== "win32",
   });
+  let commandExecuted = false;
+  child.once("spawn", () => { commandExecuted = true; });
   return {
+    get commandExecuted() { return commandExecuted; },
     run: () => new Promise((resolveRun, reject) => {
-      child.once("error", reject);
+      child.once("error", () => reject(Object.assign(new Error("Wrapped command could not start."),
+        { code: "host_command_unavailable", commandExecuted })));
       child.once("exit", (code, signal) => resolveRun(signal ? 1 : code ?? 1));
     }),
     terminate: async () => {
@@ -238,13 +347,14 @@ function createOwnedChild({ command, commandArgs }) {
 
 async function main() {
   const parsed = parseHostResourceArgs(process.argv.slice(2));
-  if (process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true") {
+  if (!parsed.resumePin && (process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true")) {
     process.exitCode = await runCommand(parsed);
     return;
   }
   const cwd = process.cwd();
-  const connection = readMcpConnection(cwd);
-  if (!connection) throw new Error("DPF MCP admission is unavailable; seed .mcp.json or set DPF_MCP_BEARER_TOKEN");
+  const connection = readMcpConnection();
+  if (!connection) throw Object.assign(new Error("MCP admission connection unavailable."),
+    { code: "host_admission_unavailable", reason: "connection-unavailable", commandExecuted: false });
 
   const processRows = readProcessRows();
   const findings = findUngovernedHeavyProcesses(processRows, { governedPids: [process.pid] });
@@ -252,24 +362,52 @@ async function main() {
   const ownerSessionId = process.env.DPF_GATE_OWNER_SESSION_ID
     || process.env.CODEX_THREAD_ID
     || `host-${hostname()}`;
+  const identify = () => readHostAttemptContext({
+    resourceClass: parsed.resourceClass, command: parsed.command, commandArgs: parsed.commandArgs,
+    expectedMemoryBytes: PROFILE_CONTRACT.profiles[parsed.resourceClass].expectedMemoryMiB * 1024 ** 2,
+    ownerProvider, ownerSessionId, worktreePath: cwd.replaceAll("\\", "/"),
+    branchName: gitValue(["branch", "--show-current"]), mcpUrl: connection.mcpUrl,
+  });
+  let attempt;
+  let context;
+  try { context = identify(); attempt = resolveHostAttempt(context, parsed.resumePin); } catch {
+    process.stderr.write("host-resource-runner: source or invocation identity unavailable/changed; command unrun.\n");
+    process.exitCode = 82;
+    return;
+  }
   const claimArgs = buildHostResourceClaim({
     ...parsed,
     ownerProvider,
     ownerSessionId,
     worktreePath: cwd.replaceAll("\\", "/"),
-    branchName: gitValue(["branch", "--show-current"]),
+    branchName: context.branchName,
+    attempt,
     pid: process.pid,
     processIdentity: readProcessIdentity(process.pid),
     now: new Date(),
     totalMemoryBytes: totalmem(),
-    availableMemoryBytes: freemem(),
+    availableMemoryBytes: availableMemoryBytes(),
     inferenceResident: processRows.some((row) => classifyHeavyProcess(row.commandLine) === "inference"),
     ungovernedProcesses: findings.slice(0, 20),
   });
-  const claim = await mcpCall("claim_nonprod_environment_lease", claimArgs, connection);
+  const claim = await claimHostResourceAdmission({ claimArgs, connection, attempt,
+    onProgress: progress => process.stderr.write(`[host-resource-runner] ${JSON.stringify(progress)}\n`) });
   const leaseId = claim?.entityId ?? claim?.data?.lease?.leaseId;
   if (claim?.success !== true || !leaseId) {
-    throw new Error(`host resource admission failed: ${claim?.error ?? "unknown"}`);
+    if (claim?.error === "lease_terminal" || (parsed.resumePin && /^nonprod_resume_/.test(claim?.error ?? ""))) {
+      process.stderr.write(JSON.stringify({ status: "unrun", reason: claim.error }) + "\n");
+      process.exitCode = 81;
+      return;
+    }
+    const reason = typeof claim?.error === "string" && /^[a-z0-9_]{1,100}$/.test(claim.error)
+      ? claim.error : "admission-response-unproven";
+    throw Object.assign(new Error("Host admission refused or unproven."),
+      { code: "host_admission_refused", reason, commandExecuted: false });
+  }
+  if (claim?.data?.admission?.status === "terminal") {
+    process.stderr.write(JSON.stringify({ status: "unrun", reason: "terminal-lease", leaseId }) + "\n");
+    process.exitCode = 81;
+    return;
   }
   if (claim?.data?.admission?.status === "queued") {
     // BI-D35B85BF. This block used to assert that "the event/reconciler wakes
@@ -281,15 +419,24 @@ async function main() {
       runnerPath: resolve(SCRIPT_DIR, "local-ci-durable-wait-resumer.mjs"),
       gateArgv: process.argv,
       cwd: process.cwd(),
+      observerDirectory: process.env.DPF_LOCAL_QUEUE_OBSERVER_DIR
+        || resolve(cwd, gitValue(["rev-parse", "--git-common-dir"]), "dpf-local-ci-queue-observers"),
+      branch: context.branchName,
+      sha: context.source.head,
+      ownerSessionId,
+      gateFlags: ["--resume-pin", hostResumePin(attempt, leaseId)],
+      gateFlagsBeforeTerminator: true,
     });
     process.stderr.write(JSON.stringify({
       status: "queued",
       code: "host_resource_durable_wait",
       leaseId,
+      resumePin: hostResumePin(attempt, leaseId),
       taskRunId: claim?.data?.admission?.taskRunId ?? null,
       resumeMode: claim?.data?.admission?.resumeMode ?? "durable-task",
       resumeOwner: resume.spawned ? "detached-resumer" : "caller",
-      resumerPid: resume.pid,
+      resumerPid: resume.via === "wmi-breakaway" ? null : resume.pid,
+      launcherPid: resume.via === "wmi-breakaway" ? resume.pid : null,
       ...(resume.spawned ? {} : { resumeUnavailableReason: resume.reason }),
       resourceClass: parsed.resourceClass,
       reason: claim?.data?.poolPolicy?.rollbackReason ?? "capacity-full",
@@ -299,10 +446,18 @@ async function main() {
     return;
   }
 
+  if (claim?.data?.admission?.status !== "admitted") throw Object.assign(new Error("Host admission unproven."),
+    { code: "host_admission_refused", reason: "admission-response-unproven", commandExecuted: false });
+  try { resolveHostAttempt(identify(), hostResumePin(attempt, leaseId)); } catch {
+    await mcpCall("release_nonprod_environment_lease", { leaseId, ownerSessionId }, connection);
+    process.exitCode = 82;
+    return;
+  }
   const child = createOwnedChild(parsed);
+  const expiresAt = claim?.data?.lease?.expiresAt;
   const result = await superviseLeaseRun({
-    ttlMs: 10 * 60_000,
-    expiresAt: claim?.data?.lease?.expiresAt,
+    ttlMs: admittedLeaseTtlMs(expiresAt, 10 * 60_000),
+    expiresAt,
     run: child.run,
     terminate: child.terminate,
     renew: () => mcpCall("renew_nonprod_environment_lease", {
@@ -310,11 +465,49 @@ async function main() {
       ownerSessionId,
       ttlMinutes: 10,
     }, connection),
-    release: () => mcpCall("release_nonprod_environment_lease", { leaseId }, connection),
+    release: async () => {
+      const reply = await mcpCall("release_nonprod_environment_lease", { leaseId, ownerSessionId }, connection);
+      const lease = reply?.data?.lease;
+      if (reply?.success !== true || reply.entityId !== leaseId || lease?.leaseId !== leaseId
+        || lease.ownerSessionId !== ownerSessionId || !["released", "cancelled", "expired"].includes(lease.status)) {
+        throw new Error("host_lease_cleanup_unproven");
+      }
+    },
+    onEvent: event => {
+      if (event.type === "release-failed") process.stderr.write(JSON.stringify({
+        status: "cleanup-unproven", cleanupVerified: false, commandExecuted: child.commandExecuted, leaseId,
+        recovery: { tool: "release_nonprod_environment_lease", arguments: { leaseId, ownerSessionId } },
+      }) + "\n");
+    },
   });
+  if (result.status !== "completed") {
+    process.stderr.write(`host-resource-runner: lease ${leaseId} ${result.status} (${result.reason}); the command was stopped.\n`);
+  }
   process.exitCode = result.status === "completed" ? result.result : 1;
 }
 
 if (isEntryModule(import.meta.url)) {
-  await main();
+  try { await main(); } catch (error) {
+    if (error.code === "host_admission_refused") {
+      process.stderr.write(JSON.stringify({ status: "unrun", reason: error.reason,
+        commandExecuted: false, recovery: "Resolve the recorded admission refusal before any further claim." }) + "\n");
+      process.exitCode = 88;
+    } else if (error.code === "host_admission_unavailable") {
+      process.stderr.write(JSON.stringify({ status: "unrun", reason: error.reason,
+        commandExecuted: false, resumePin: error.resumePin, ...(error.leaseId ? { leaseId: error.leaseId } : {}),
+        recovery: "Reconcile this exact admission identity; resume its pin only with unchanged source and invocation." }) + "\n");
+      process.exitCode = 88;
+    } else if (error.code === "host_command_unavailable") {
+      process.stderr.write(JSON.stringify({ status: "unrun", reason: error.code,
+        commandExecuted: Boolean(error.commandExecuted), recovery: "Resolve the wrapped executable and resume through normal admission." }) + "\n");
+      process.exitCode = 88;
+    } else if (error.code !== "host_inventory_unavailable") throw error;
+    else {
+      process.stderr.write(JSON.stringify({ status: "unrun", reason: error.code,
+        commandExecuted: false, failure: { reason: error.reason, producerStatus: error.producerStatus,
+          producerSignal: error.producerSignal, stdoutBytes: error.stdoutBytes },
+        recovery: error.message }) + "\n");
+      process.exitCode = 88;
+    }
+  }
 }

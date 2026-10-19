@@ -12,6 +12,7 @@
 // origin="document", trust="derived" — which, per the founder's draft-by-default
 // decision, lands the derived material as a draft for review.
 
+import { sanitizeUntrustedText } from "@dpf/validators";
 import {
   saveManagedDocument,
   type SaveManagedDocumentInput,
@@ -79,9 +80,12 @@ export async function captureBusinessDocument(
   if (!parsed) {
     throw new Error(
       `Unsupported document type: ${input.fileName} (${input.mimeType || "unknown"}). ` +
-        `Upload a PDF, Word doc, or text/markdown file.`,
+        `Upload a PDF, Word, OpenDocument, PowerPoint, or text/markdown file.`,
     );
   }
+  // A recognised format DPF cannot read (legacy .doc, RTF, OpenDocument): say
+  // so in the parser's words instead of storing an empty or garbled document.
+  if (parsed.type === "unsupported") throw new Error(parsed.reason);
 
   const capped = capParsedContentSize(parsed);
   const text = (capped.fullText ?? "").trim();
@@ -105,7 +109,9 @@ export async function captureBusinessDocument(
       organizationId: input.organizationId,
       documentId: doc.documentId,
       title,
-      text,
+      // The document is stored as written; the enrichment model gets the
+      // hidden-Unicode-free copy (BI-7AD0DA3D).
+      text: sanitizeUntrustedText(text).text,
     });
     enrichmentQueued = true;
   }

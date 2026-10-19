@@ -48,6 +48,7 @@ type RecordedWrites = {
   backlogItemUpdates: Array<{ where: Record<string, unknown>; data: Record<string, unknown> }>;
   backlogItemCreates: Array<Record<string, unknown>>;
   backlogActivities: Array<Record<string, unknown>>;
+  artifactRevisionCreates: Array<Record<string, unknown>>;
   activities: Array<Record<string, unknown>>;
 };
 
@@ -65,6 +66,18 @@ function epicBacklogItemUniqueError(): Error & { code: string; meta: { target: s
   return err;
 }
 
+/**
+ * The supersession write against the originating build.
+ *
+ * Persisting a child's design artifact also writes that child's designDoc
+ * column, so `buildUpdates` now carries one entry per child in addition to the
+ * parent's supersession. These assertions are about the parent, so they select
+ * it by target rather than by position.
+ */
+function parentUpdates(writes: RecordedWrites) {
+  return writes.buildUpdates.filter((u) => u.where.buildId === "FB-PARENT");
+}
+
 function makeFakeDb(
   build: FakeBuild | null,
   /**
@@ -74,6 +87,11 @@ function makeFakeDb(
    * constraint exactly as Postgres would.
    */
   epicsByBacklogItemId: Map<string, string> = new Map(),
+  /**
+   * The parent build's accepted design revision, whose author the children
+   * inherit when no acting agent is supplied. null = the parent has none.
+   */
+  parentDesignRevision: { savedByAgentId: string | null } | null = { savedByAgentId: "AGT-PARENT-DESIGN" },
 ): {
   db: ApproveDecompositionDb;
   writes: RecordedWrites;
@@ -87,6 +105,7 @@ function makeFakeDb(
     backlogItemUpdates: [],
     backlogItemCreates: [],
     backlogActivities: [],
+    artifactRevisionCreates: [],
     activities: [],
   };
 
@@ -143,6 +162,16 @@ function makeFakeDb(
         return null;
       }),
     },
+    buildArtifactRevision: {
+      create: vi.fn(async ({ data }) => {
+        writes.artifactRevisionCreates.push(data);
+        return { id: `rev-${writes.artifactRevisionCreates.length}`, revisionNumber: 1, status: data.status };
+      }),
+      findFirst: vi.fn(async () => null),
+    },
+    toolExecutionReceipt: {
+      findMany: vi.fn(async () => []),
+    },
   };
 
   const db: ApproveDecompositionDb = {
@@ -154,6 +183,9 @@ function makeFakeDb(
         const epicId = epicsByBacklogItemId.get(where.originatingBacklogItemId);
         return epicId ? { epicId } : null;
       }),
+    },
+    buildArtifactRevision: {
+      findFirst: vi.fn(async () => parentDesignRevision) as unknown as ApproveDecompositionDb["buildArtifactRevision"]["findFirst"],
     },
     $transaction: vi.fn(async (fn) => fn(tx)) as unknown as ApproveDecompositionDb["$transaction"],
   };
@@ -277,7 +309,7 @@ describe("approveDecomposition — eligibility checks", () => {
 
     expect(result.ok).toBe(true);
     expect(writes.epicCreates).toHaveLength(1);
-    expect(writes.buildUpdates[0]!.data.supersededByEpicId).toBe("epic-row-1");
+    expect(parentUpdates(writes)[0]!.data.supersededByEpicId).toBe("epic-row-1");
   });
 
   it("rejects when build has no designDoc", async () => {
@@ -517,7 +549,7 @@ describe("approveDecomposition — happy path (Dale scenario)", () => {
     expect(writes.childBuildCreates).toHaveLength(3);
     expect(writes.backlogItemCreates).toHaveLength(3);
     expect(writes.dependencyCreates).toHaveLength(3); // 1->none, 2->1, 3->{1,2}
-    expect(writes.buildUpdates).toHaveLength(1); // supersession of parent
+    expect(parentUpdates(writes)).toHaveLength(1); // supersession of parent
     expect(writes.backlogItemUpdates).toHaveLength(4); // 3 child active links + parent active swap
     expect(writes.backlogActivities).toHaveLength(1); // canonical plan-coverage receipt
   });
@@ -571,7 +603,7 @@ describe("approveDecomposition — happy path (Dale scenario)", () => {
       now: fixedNow,
       idGen: makeIdGen(),
     });
-    const update = writes.buildUpdates[0]!;
+    const update = parentUpdates(writes)[0]!;
     expect(update.where).toEqual({ buildId: "FB-PARENT" });
     expect(update.data.phase).toBe("failed");
     expect(update.data.supersededByEpicId).toBe("epic-row-1"); // row id, not epicId string
@@ -790,5 +822,100 @@ describe("selectUnblockedChildBuildIds", () => {
         map,
       ),
     ).toEqual(["FB-A", "FB-C"]);
+  });
+});
+
+describe("decomposition children carry their acceptance criteria and are never large (BI-660E165F)", () => {
+  it("resolves the child's criteria from the parent design by index, tolerating string and object forms", async () => {
+    const { childAcceptanceCriteria } = await import("./approve-decomposition");
+    const parent = { acceptanceCriteria: ["AC one", { text: "AC two" }, { criterion: "AC three" }, "   ", 42] };
+    expect(childAcceptanceCriteria(parent, [0, 1, 2, 3, 4, 9])).toEqual(["AC one", "AC two", "AC three"]);
+    expect(childAcceptanceCriteria(null, [0])).toEqual([]);
+  });
+
+  it("sizes a child small for up to three criteria and medium otherwise, never large", async () => {
+    const { childEffortSize } = await import("./approve-decomposition");
+    expect(childEffortSize(1)).toBe("small");
+    expect(childEffortSize(3)).toBe("small");
+    expect(childEffortSize(4)).toBe("medium");
+    expect(childEffortSize(0)).toBe("medium");
+  });
+});
+
+describe("decomposition children are visible to initiative readiness", () => {
+  it("mints an accepted designDoc artifact revision for every child", async () => {
+    // Children are born straight into `plan`, so they never pass through
+    // reviewDesignDoc — the only other place a designDoc revision is written.
+    // Initiative readiness resolves CANONICAL_DESIGN_REQUIRED through
+    // BuildArtifactRevision, never through FeatureBuild.designDoc, so without
+    // this the design is real, reviewed, and invisible to governance: every
+    // child wedges at plan → build permanently, because nothing later creates
+    // the revision. Observed live — 42 children, 0 revisions, 5,032 gate-blocked
+    // resume attempts in 24h.
+    const { db, writes } = makeFakeDb(makeBuild());
+    await approveDecomposition({
+      buildId: "FB-PARENT",
+      userId: "user-1",
+      candidate: makeCandidate(),
+      idGen: makeIdGen(),
+      db,
+    });
+
+    expect(writes.childBuildCreates.length).toBeGreaterThan(0);
+    expect(writes.artifactRevisionCreates).toHaveLength(writes.childBuildCreates.length);
+    for (const rev of writes.artifactRevisionCreates) {
+      expect(rev.field).toBe("designDoc");
+      expect(rev.value).toBeTruthy();
+    }
+  });
+
+  it("inherits the parent design's author when no agent performs the approval", async () => {
+    // The child design is a projection of the parent's reviewed document, so
+    // the parent's author is a true statement about where the content came
+    // from — and readiness requires an author before it will accept the design.
+    const { db, writes } = makeFakeDb(makeBuild(), new Map(), { savedByAgentId: "AGT-PARENT-DESIGN" });
+    await approveDecomposition({
+      buildId: "FB-PARENT",
+      userId: "user-1",
+      candidate: makeCandidate(),
+      idGen: makeIdGen(),
+      db,
+    });
+    for (const rev of writes.artifactRevisionCreates) {
+      expect(rev.savedByAgentId).toBe("AGT-PARENT-DESIGN");
+    }
+  });
+
+  it("prefers the acting agent over the inherited author", async () => {
+    const { db, writes } = makeFakeDb(makeBuild(), new Map(), { savedByAgentId: "AGT-PARENT-DESIGN" });
+    await approveDecomposition({
+      buildId: "FB-PARENT",
+      userId: "user-1",
+      agentId: "AGT-ACTING",
+      candidate: makeCandidate(),
+      idGen: makeIdGen(),
+      db,
+    });
+    for (const rev of writes.artifactRevisionCreates) {
+      expect(rev.savedByAgentId).toBe("AGT-ACTING");
+    }
+  });
+
+  it("records NO author rather than inventing one when neither is available", async () => {
+    // Readiness then reports ARTIFACT_AUTHOR_REQUIRED, which is the honest
+    // outcome: a fabricated author would let unattributed work through a gate
+    // whose entire purpose is attribution.
+    const { db, writes } = makeFakeDb(makeBuild(), new Map(), null);
+    await approveDecomposition({
+      buildId: "FB-PARENT",
+      userId: "user-1",
+      candidate: makeCandidate(),
+      idGen: makeIdGen(),
+      db,
+    });
+    expect(writes.artifactRevisionCreates.length).toBeGreaterThan(0);
+    for (const rev of writes.artifactRevisionCreates) {
+      expect(rev.savedByAgentId).toBeNull();
+    }
   });
 });

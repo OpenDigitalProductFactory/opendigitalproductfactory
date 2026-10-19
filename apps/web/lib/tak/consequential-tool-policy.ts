@@ -1,6 +1,7 @@
-import type { ToolConsequence, ToolConsequenceScope, ToolDefinition } from "@/lib/mcp-tools";
+import type { ToolDefinition } from "@/lib/mcp-tool-types";
+import type { ToolConsequence, ToolConsequenceScope } from "@/lib/tool-consequence";
 import { getWorkCaseAction } from "@/lib/work-management/action-registry";
-import type { WorkCaseExecutionContext } from "@/lib/work-management/work-case-governance-hook";
+import type { WorkCaseExecutionContext } from "@/lib/mcp-governed-execute-types";
 import type { WorkroomShapeKey } from "@/lib/work-management/room-shapes";
 
 export const CONSEQUENCE_CLASSES = ["routine-read", "ordinary-mutation", "consequential-mutation"] as const;

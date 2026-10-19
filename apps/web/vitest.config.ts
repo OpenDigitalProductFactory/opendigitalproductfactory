@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react";
 import { resolve } from "path";
 import { config as loadEnv } from "dotenv";
 import { buildNodeModuleAliases } from "./vitest.path-aliases";
+import { enforceSandboxTestScope } from "./lib/build/sandbox/test-scope-guard";
 
 const rootDir = resolve(__dirname, "../..");
 const webDir = resolve(__dirname);
@@ -33,6 +34,12 @@ if (!/(^|\s)--no-experimental-webstorage(\s|$)/.test(process.env.NODE_OPTIONS ??
 
 loadEnv({ path: resolve(rootDir, ".env") });
 loadEnv({ path: resolve(webDir, ".env.local"), override: true });
+
+// BI-F5D4FA50: inside the Build Studio sandbox (DPF_SANDBOX_TEST_SCOPE=enforce,
+// set only on the sandbox service) a run that names no test files is refused
+// here, before any worker starts. Agent CLIs reach vitest through their own
+// shell, so this is the one place every route passes. A no-op everywhere else.
+enforceSandboxTestScope({ runner: "vitest", argv: process.argv, env: process.env, cwd: process.cwd() });
 
 export default defineConfig({
   plugins: [react()],
@@ -166,6 +173,14 @@ export default defineConfig({
         find: "@dpf/db/installation-operating-intent",
         replacement: resolve(rootDir, "packages/db/src/installation-operating-intent.ts"),
       },
+      {
+        find: "@dpf/db/acceptance-sweep-config",
+        replacement: resolve(rootDir, "packages/db/src/acceptance-sweep-config.ts"),
+      },
+      {
+        find: "@dpf/db/backlog-portfolio",
+        replacement: resolve(rootDir, "packages/db/src/backlog-portfolio.ts"),
+      },
       { find: "@dpf/db", replacement: resolve(rootDir, "packages/db/src/client.ts") },
       {
         find: "@dpf/finance-templates",
@@ -174,6 +189,14 @@ export default defineConfig({
       {
         find: "@dpf/storefront-templates",
         replacement: resolve(rootDir, "packages/storefront-templates/src/index.ts"),
+      },
+      {
+        find: /^@dpf\/i18n\/runtime$/,
+        replacement: resolve(rootDir, "packages/i18n/src/runtime.ts"),
+      },
+      {
+        find: /^@dpf\/i18n$/,
+        replacement: resolve(rootDir, "packages/i18n/src/index.ts"),
       },
       {
         find: "@dpf/validators",

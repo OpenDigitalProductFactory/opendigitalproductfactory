@@ -1,0 +1,14 @@
+{
+  "version": "1",
+  "decidedOption": "shared-token-class-map",
+  "decisionInteractionId": "DI-080C09695206",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/knowledge/[articleId]/page.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["shared-token-class-map", "page-local-class-map", "keep-plain-text-drop-prose"]
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "version": "1",
+  "accountableOwner": "Mark Bodman (markdbodman@gmail.com)",
+  "summary": "Repair-only data change: no field is added, removed, retyped or repurposed, so the field resolution below is empty by construction and no data subject, provenance or policy vector changes. BI-061B2BC0. appoint_room_coordinator's replaceExisting authorized a handover and then wrote only the appointee -- nothing stood the incumbent down -- so a deliberate replacement produced a room with TWO active coordinators. selectRoomCoordinator throws on that and conformance treats it as blocking, so the room became permanently unreadable and its Inngest step failed on every attempt. This migration repairs rooms already in that state: for each room with more than one active coordinator it keeps the MOST RECENT (the appointment the operator most recently intended) and demotes the earlier ones by removing the coordinator role. DEMOTE, NOT EVICT: the principal keeps room membership and every other role they held; if coordinator was their only role they become a contributor, so no participant is left with an empty role set. This mirrors rolesAfterStandDown() in the same change -- one rule, applied once to history here and on every future handover there. Scope on this install is exactly one row (room WC-60566397, an external Codex session superseded 84 minutes later by the accountable human, which is the documented intent recorded in the newer row's enteredReason). Verified against live data inside a transaction that was rolled back: UPDATE 1, zero rooms left with multiple coordinators, correct survivor. Idempotent -- a second run matches nothing. No row deleted, no column or constraint changed, applies cleanly against any data state including one with no affected rows.",
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "WorkroomParticipant",
+      "lifecycleDisposition": "domain-lifecycle-managed",
+      "fields": []
+    }
+  ]
+}

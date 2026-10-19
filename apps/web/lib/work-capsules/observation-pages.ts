@@ -1,11 +1,11 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { canonicalJson } from "@/lib/shared/canonical-json";
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { signCursor, equalSignature } from "@/lib/shared/signed-cursor";
 import { summarizeCapsuleLiveness, type CapsuleLivenessSummary } from "./liveness-inventory";
 
 type Row = Record<string, unknown>;
 type Identity = { principal: string; authority: string; filters: Record<string, unknown> };
-type Snapshot = { rows: Row[]; identity: string; owner: string; observedAt: number; bytes: number; limit: number; maxChars: number; environment?: Pick<CapsuleLivenessSummary, "heavyLane" | "progressSlo"> };
+type Snapshot = { rows: Row[]; identity: string; owner: string; ownershipScope: "installation" | "caller-visible"; observedAt: number; bytes: number; limit: number; maxChars: number; environment?: Pick<CapsuleLivenessSummary, "heavyLane" | "progressSlo"> };
 export const WORKROOM_OBSERVATION_LIMIT = 10_000;
 const TTL = 300_000;
 const MAX_BYTES = 8 * 1024 * 1024;
@@ -23,6 +23,7 @@ function compact(row: Row): Row {
   const recovery = row.recovery as Row | undefined;
   return {
     capsuleId: row.capsuleId, title: bounded("title", row.title), status: row.status,
+    worktreePath: row.worktreePath ?? null,
     liveness: row.liveness, isLive: row.isLive, isReapable: row.isReapable,
     backlogItemId: row.backlogItemId ?? null,
     decisionScope: row.decisionScope ?? null, portfolioRole: row.portfolioRole ?? null,
@@ -39,10 +40,11 @@ export class WorkroomObservations {
   private readonly now: () => number;
   constructor(options: { now?: () => number } = {}) { this.now = options.now ?? Date.now; }
 
-  capture(rows: Row[], identity: Identity, options: { limit?: number; maxChars?: number; observedAt?: number; summary?: CapsuleLivenessSummary } = {}) {
+  capture(rows: Row[], identity: Identity, options: { limit?: number; maxChars?: number; observedAt?: number; summary?: CapsuleLivenessSummary; ownershipScope?: "installation" | "caller-visible" } = {}) {
     if (!identity.principal || rows.length > WORKROOM_OBSERVATION_LIMIT) throw new Error("snapshot_capacity_exceeded");
     const snapshot: Snapshot = {
       rows: rows.map(compact), identity: identityHash(identity), owner: identity.principal,
+      ownershipScope: options.ownershipScope ?? "caller-visible",
       observedAt: options.observedAt ?? this.now(), bytes: 0, limit: Number.isFinite(options.limit) ? Math.max(1, Math.min(100, Math.trunc(options.limit!))) : 5,
       maxChars: Math.min(4000, options.maxChars ?? 4000),
       environment: options.summary ? { heavyLane: options.summary.heavyLane, progressSlo: options.summary.progressSlo } : undefined,
@@ -95,7 +97,7 @@ export class WorkroomObservations {
       return { success: true, message: "Workroom observation page.", data: {
         capsules,
         livenessSummary: { ...summarizeCapsuleLiveness(capsules), ...snapshot.environment },
-        page: { version: 1, observationId: id, observedAt: new Date(snapshot.observedAt).toISOString(),
+        page: { version: 1, observationId: id, ownershipScope: snapshot.ownershipScope, observedAt: new Date(snapshot.observedAt).toISOString(),
           expiresAt: new Date(snapshot.observedAt + TTL).toISOString(), pageCount: capsules.length,
           populationCount: snapshot.rows.length, summaryScope: "page", environmentSummaryScope: "installation-at-observation", nextCursor: next < snapshot.rows.length ? this.cursor(id, next) : null,
           disposition: next < snapshot.rows.length ? "more" : "complete" },
@@ -109,7 +111,7 @@ export class WorkroomObservations {
     for (const row of snapshot.rows.slice(offset, offset + snapshot.limit)) {
       if (fits([...selected, row])) { selected.push(row); continue; }
       if (selected.length) break;
-      const minimal = { capsuleId: row.capsuleId, detail: row.detail, liveness: row.liveness, isLive: row.isLive, isReapable: row.isReapable, shortenedFields: ["summary"] };
+      const minimal = { capsuleId: row.capsuleId, status: row.status, worktreePath: row.worktreePath, detail: row.detail, liveness: row.liveness, isLive: row.isLive, isReapable: row.isReapable, shortenedFields: ["summary"] };
       if (!fits([minimal])) throw new Error("page_budget_too_small");
       selected.push(minimal);
       break;

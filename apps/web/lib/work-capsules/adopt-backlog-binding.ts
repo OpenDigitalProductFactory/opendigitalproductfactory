@@ -1,4 +1,4 @@
-import type { ToolResult } from "@/lib/mcp-tools";
+import type { ToolResult } from "@/lib/mcp-tool-types";
 
 import { backlogItemIdFromOutcomeAnchor } from "./outcome-anchor";
 

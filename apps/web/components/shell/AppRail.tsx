@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import type { PortalAudienceMode, ShellNavSection } from "@/lib/permissions";
 import { NAV_MODE_COOKIE } from "@/lib/navigation/nav-mode";
+import { areaHref } from "@/lib/navigation/portal-shell-sections";
 import { InlineBusy } from "@/components/ui/InlineBusy";
 import {
   SHELL_TAP_TARGET_CLASS,
@@ -157,7 +158,20 @@ export function AppRail({ sections, mode = "operator" }: Props) {
           {sections.map((section) => (
             <section key={section.key} className="min-w-0">
               <p className="px-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--dpf-muted)]">
-                {section.label}
+                {section.portfolioRole ? (
+                  // EP-2FB6C0CC (spec §9.3): a portfolio section is a workroom-shaped
+                  // area. Its heading opens the area home: Work, Team and Setup.
+                  <Link
+                    href={areaHref(section.key)}
+                    aria-current={matchesPath(pathname, `/area/${section.key}`) ? "page" : undefined}
+                    onClick={() => setMobileOpen(false)}
+                    className="hover:text-[var(--dpf-text)] aria-[current=page]:text-[var(--dpf-accent)]"
+                  >
+                    {section.label}
+                  </Link>
+                ) : (
+                  section.label
+                )}
               </p>
 
               <div className="mt-1 grid gap-1">

@@ -82,3 +82,56 @@ This spec is the design/plan artifact. User-guide copy is unchanged: `/workspace
 
 - Unit: summarizer + projector + card tests listed above.
 - UX: drive a research-pass envelope on `/workspace/inbox` and confirm the primary card states the verdict and authorization effect before Technical detail is opened.
+
+## Successor: handover approvals that cannot run, stall, or loop (BI-F4EB23C1)
+
+- Backlog: `BI-F4EB23C1` (epic `EP-31815F97`). Workroom `WC-15D6C8CE`. TTL policy stays with `BI-0012E6CA`.
+- Incident: `WC-D72FAD2A`. AGT-EXT-CODEX, connected as `admin@dpf.local`, asked to take the room over. Envelope `cmuqe2lxw0nvl01p719rvyzdb` was approved, then its run failed with `workroom_access_denied` (ToolExecution `cmuqe2pe80nw301p75dtuqpv0`). The identical replay minted `cmuqe3j2p0nyv01p7uthk59oo`. Earlier, `cmuqdae6p0bo001p73ets7zib` stayed grey and its row is still `proposed`.
+
+### Research — defect on a named ref (`origin/main` 79f4b9492)
+
+Live rows were read with a read-only SQL transaction, a stated direct-DB fallback because the room refuses MCP reads to this assistant.
+
+- **The refusal is correct.** `admin@dpf.local` resolves to principal "admin", which created the room. "Mark Bodman" (`markdbodman@gmail.com`) is its only participant, as an active `coordinator`. `ownsRoom` (`workroom-agent-access.server.ts`) says a creator owns a room only when no other person oversees it. The existing test case "someone else oversees a legacy room" covers this exact situation. The approving account was never the owner, so the handover had to be refused.
+- **Defect 1, the approval was asked for anyway.** `governedExecuteTool` runs the authority gate, which mints the envelope, before `callExecuteTool` checks room access (`mcp-governed-execute.ts:197`). A person is asked to authorize a call that is certain to be refused.
+- **Defect 2, the refusal gives no reason.** `workroomTargetAccessRefusal` collapses "you are not the owner" and "this assistant was removed from the room" into "Ask its owner to invite you", even when the asking person is admitted to the room and is told nothing new.
+- **Defect 3, a failed approval is invisible to replay.** `findExecutedAuthorityOutcome` (`authority-approval-envelope.ts:250`) matches only `executed`. A failed approval therefore mints a new card, although `approvalPendingResult` promises that "calling it again afterwards returns that recorded outcome".
+- **Defect 4, the card can stay grey forever.** `CoworkerEnvelopeApproval.decide` awaits `fetch` with no timeout and never reconciles. A request that never answers leaves both buttons disabled with "Waiting for your decision".
+- **Defect 5, the handover card is a wall of text.** `reassign_workroom_executor` falls to the generic `exact` summary. Its `handoffManifest` JSON, raw IDs, and the two effect sentences fill the primary block.
+- Ruled out: credential or consent drift (the run reached the room check, which is after `verifyApprovalCredential`), a mismatched input fingerprint (same reason), and an id-shape mismatch between principal row id and `principalId` (holders store row ids, and the live rows match).
+
+### Design
+
+1. **Room access before approval.** For an OAuth call that targets a room, `workroomTargetAccessRefusal` runs before the authority gate. A refusal is audited and returned, and no envelope is minted. #5914 (BI-061D7192) landed this as `runGovernedToolPreflight` while this work was in flight, and this branch adopts it. The one exception is an approved run (`callerClient` `approval-completion`). It is room-checked after the gate, inside `callExecuteTool`, so a refusal closes its approval as `failed` instead of leaving it `approved`. Every path is checked exactly once.
+2. **Handover refusals name their cause.** `resolveAgentWorkroomAccess` reports why a handover was refused, but only to a person who is admitted to the room: `not-owner` or `assistant-in-room`. The tool returns `workroom_handover_not_owner` or `workroom_handover_assistant_in_room`, each with a supported recovery: connect the assistant as the room owner's own account, or have the owner invite or re-admit the assistant. Nothing is revealed to a person outside the room. No access is granted by the message.
+3. **A failed approval settles its replay.** Replay finds `executed` and `failed` envelopes for the same binding within the existing 15-minute window. A failed one returns `approval_outcome_failed` with the recorded error, and no new card. After the window, the coworker may ask again, which is a new, deliberate request. The pending-result copy says this.
+   - *Amended by BI-5B34D277.* An approval the gate reserved is settled even when the call is refused before its tool runs. That covers a pre-tool hook, the alignment and precondition gates, permit enforcement, receipt reservation, an approved-task resume failure, and any exception. The refusal's disposition in `governed-rejection-disposition.ts` decides the outcome. A settled no (`refused`) closes the envelope as `failed`, and that refusal is the recorded outcome. Replay reports it as "refused before it ran", not "already ran". Every other disposition (`inconclusive`, `awaiting-input`, `awaiting-person`) releases the reservation with a compare-and-set on the run's own `resolvedAt`. Nothing ran, so the approval stands, and a retry spends it once. A run that loses the reservation returns the winner's recorded outcome, if the winner has one, before it reports "already used". Code: `lib/govern/authority/approval-reservation.ts`.
+4. **Bounded pending state on the card.** The decision POST is aborted after 30 seconds. The card then reads the envelope's recorded state from a new owner-only GET `/api/agent/envelope/:id`, which uses the same `loadApprovalOutcomes` projection as the Inbox. If the state is still `waiting`, nothing was saved and the buttons return, with that explained. Any other state is shown with its next step. If the state cannot be read, the card says the result is unknown, says not to approve again, and links to the Inbox result. Nothing is ever resubmitted automatically.
+5. **Plain handover card.** A known handover reads as follows. Who takes over which room, and for which work. What the assistant can then do: act in that one room, on its branch, worktree and evidence. What it cannot do: other rooms, or widening its permissions. What Decline leaves unchanged. Authorize and Decline effects are separate lines. Tool name, IDs, the reason, the full arguments and the handoff manifest move into a collapsed Technical details block. Exact-content cards for other tools keep their content visible. Unknown shapes still fail closed.
+
+### Ordered fix sequence
+
+1. Red tests: pre-approval refusal, handover refusal causes, failed-outcome replay, card timeout and reconcile, handover summary.
+2. Server: deliverables 1–3. 3. Status route and card: deliverables 4–5. 4. Gates, independent review, PR, merge queue, runtime check on the live install.
+
+### Research & benchmarking
+
+GitHub's protected-environment reviews and Argo CD's sync windows both check eligibility before asking a reviewer. A request that cannot run is refused up front rather than queued for approval. DPF adopts that ordering. Stripe's idempotency keys return the stored result, success or failure, for a replayed request within a window. DPF adopts this for failed approvals, where it previously did so only for successes. It rejects automatic client retries of the consequential POST, which Stripe permits only with a key that DPF's card does not hold.
+
+### Verification
+
+Unit tests for each deliverable. Production build. Runtime check after merge, on the live install: an OAuth replay of the incident's call by a non-owner returns `workroom_handover_not_owner` and mints no envelope.
+
+## As built — approval lifetime (BI-0012E6CA, 2026-10-07)
+
+Design §3 above says replay looks back over "the existing 15-minute window". That window was the single envelope lifetime, `AUTHORITY_APPROVAL_TTL_MS`. BI-0012E6CA split it into two:
+
+- **Replay window.** `APPROVAL_REPLAY_WINDOW_MS` in `apps/web/lib/coworker/approval-lifetime.ts` is still 15 minutes. §3 behaves exactly as written.
+- **Decision lifetime.** This is how long a person has to answer. It is now `approvalLifetimeMs(consequence)`: 15 minutes for an `outward` or unclassified call, seven days for everything else. Execution re-checks it against the call's current classification.
+
+So "after the window, the coworker may ask again" refers to the replay window. A request that closes unanswered no longer disappears. It shows as **Expired unanswered**, and the delegating person can choose **Ask again** (`POST /api/agent/envelope/:id/reraise`). Deep links now open the request's own card instead of the outcome panel. The original text above is unchanged.
+
+## As built — the chat card raises approval requests (BI-7BCC87BB, 2026-10-07)
+
+Approval convergence PR-B (spec `2026-10-07-approval-convergence-on-envelope-design.md`, D2 S1) moved the chat card from the AgentActionProposal to the CoworkerActionEnvelope. A coworker's proposal-mode call in chat now goes to the governed executor, which raises an approval request bound to the exact call; the assistant message lists the requests it raised, each with the shared Authorize / Decline (`EnvelopeDecisionButtons`, extracted from the Needs-you card). The same request is the Needs-you card. Authorize runs the call once through the monitor and the chat sends the "Result: <id>" follow-up. The recommendation/authorization split this spec set stays: the card names what the coworker recommends and what the person authorizes. An admin who is not the person asked can decide on their behalf with a recorded reason (plan B8, AC-OVERRIDE).
+

@@ -12,7 +12,7 @@ import type {
   DeliveryNotificationKind,
 } from "@/lib/work-capsules/delivery-task-notifications";
 import { isDeliveryNotificationTransitionRecent } from "@/lib/work-capsules/delivery-task-notifications";
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 
 type WorkroomProjection = {
   id: string;
@@ -266,7 +266,7 @@ const productionDependencies: DeliveryDependencies = {
   now: () => new Date(),
 };
 
-export const asyncOperationTaskHub = inngest.createFunction(
+export const asyncOperationTaskHub = jobs.createFunction(
   {
     id: "inference/async-operation-task-hub",
     retries: 2,

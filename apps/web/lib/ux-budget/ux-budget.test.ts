@@ -16,6 +16,7 @@ import {
   countVisibleFields,
   defaultVisibleHtml,
   extractSubtrees,
+  isLiveRegion,
   leadBandHtml,
   maxChoicesPerControl,
   measureUxBudget,
@@ -28,6 +29,38 @@ import {
 } from "./index";
 import { countWords } from "../owner-first/ux-audit";
 import { ROUTE_SWEEP_EXCLUSIONS } from "./route-shells";
+
+describe("live regions are transient state, not words visible on arrival (BI-99909E53)", () => {
+  it("excises aria-live announcements — populated by a client effect, they race the capture", () => {
+    const server = `<div><p aria-live="polite" aria-atomic="true" class="sr-only"></p><h1>Estate Discovery</h1></div>`;
+    const hydrated = `<div><p aria-live="polite" aria-atomic="true" class="sr-only">Viewing full graph (12 nodes)</p><h1>Estate Discovery</h1></div>`;
+    expect(countWords(defaultVisibleHtml(server))).toBe(2);
+    expect(countWords(defaultVisibleHtml(hydrated))).toBe(2);
+  });
+
+  it("excises implicit live-region roles — the same set the structure projection ignores", () => {
+    for (const role of ["status", "alert", "log", "marquee", "timer"]) {
+      const html = `<main><p>one two</p><div role="${role}">saved just now</div></main>`;
+      expect(countWords(defaultVisibleHtml(html)), role).toBe(2);
+    }
+    expect(isLiveRegion({ name: "div", attrs: { role: "presentation status" }, selfClosing: false })).toBe(true);
+    expect(isLiveRegion({ name: "div", attrs: { role: "region" }, selfClosing: false })).toBe(false);
+  });
+
+  it("keeps a live region that holds a control — an EmptyState's action is not an announcement", () => {
+    // /performance: report-kit EmptyState is role="status" and carries the primary action.
+    const html = `<main><section role="status"><h2>Not ready yet</h2><p>We will not show made-up numbers.</p><a href="/workspace" data-dpf-primary-action>Open Operations</a></section></main>`;
+    expect(countWords(defaultVisibleHtml(html))).toBe(11);
+    expect(measureUxBudget(html).buriedPrimaryAction).toBe(0);
+    expect(measureUxBudget(html).primaryActions).toBe(1);
+  });
+
+  it("keeps an explicit aria-live=\"off\" opt-out in the count", () => {
+    const html = `<main><p aria-live="off">one two three</p></main>`;
+    expect(countWords(defaultVisibleHtml(html))).toBe(3);
+    expect(isLiveRegion({ name: "p", attrs: { "aria-live": "off" }, selfClosing: false })).toBe(false);
+  });
+});
 
 describe("disclosure scoping — collapsed detail is excised, never taxed", () => {
   it("does not count words inside a collapsed <details>", () => {
@@ -512,7 +545,17 @@ describe("generated route-shell registry", () => {
     // 213 -> 214: /workspace/mailroom (design 2026-09-09, BI-727D5FD9) — the Mailroom
     // reads declared mailboxes and routed items from route-owned read models; with no
     // mailbox it renders the education state, so its output is stable and measurable.
-    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(214);
+    // 214 -> 213: /delivery is now a redirect to the Improve & deliver area home
+    // (EP-2FB6C0CC), so there is nothing to measure there. The area home itself is
+    // a dynamic ([key]) route, excluded until the fixture mints one.
+    // 213 -> 214: /customer/footprint (BI-4EC1D572) — the market footprint reads
+    // business context, customer site addresses and active fulfilments; a static
+    // SVG with no wall-clock or live-orchestration state, so it is measurable.
+    // 214 -> 215: /admin/settings/monitoring (BI-8BBFE50B) — the monitoring switch
+    // reads install-state, the capability row and observed services, each failing
+    // soft; on the sweep fixture (no install-state, no Docker) it renders a stable
+    // read-only state, and it carries an explicit page-purpose contract.
+    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(215);
     // 110 -> 113: the three exclusions above. Product Direction then adds seven
     // explicitly classified dynamic routes, bringing the combined total to 120.
     // 120 -> 121: /platform/ai/operations-map.
@@ -527,7 +570,7 @@ describe("generated route-shell registry", () => {
     // 120 -> 119: the mirror of the eligibility gain above — /workspace/cases/[caseKey]
     // left the excluded set when the fixture began minting its id.
     // 120 -> 121: /workspace/mailroom/items/[inboundId] — dynamic, fixture-required.
-    expect(registry.routes.filter((route) => !route.sweepEligible)).toHaveLength(121);
+    expect(registry.routes.filter((route) => !route.sweepEligible)).toHaveLength(119); // 121 -> 122: /delivery became a redirect (EP-2FB6C0CC). 122 -> 119: three superseded detail routes became redirects (BI-DD763B93).
   });
 
   it("keeps contextual sweep exclusions explicit, valid, and non-stale", () => {

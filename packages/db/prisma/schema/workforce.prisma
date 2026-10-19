@@ -1341,6 +1341,7 @@ model Application {
   @@index([requisitionId])
   @@index([status])
   @@index([referredByEmployeeProfileId])
+  @@index([currentStageId])
 }
 
 /// @dpf lifecycle=business-record retention=retained sensitivity=confidential categories=operational owner=business-operator steward=data-steward basis=EEOC/OFCCP_selection-procedure_recordkeeping minYears=2
@@ -1361,6 +1362,7 @@ model ScheduledInterview {
   scorecards  Scorecard[]
 
   @@index([applicationId])
+  @@index([stageId])
 }
 
 /// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential categories=content,personal-attribute owner=business-operator steward=data-steward basis=EEOC/OFCCP_selection-procedure_recordkeeping_(adverse-impact_basis) minYears=2
@@ -1381,6 +1383,7 @@ model Scorecard {
 
   @@index([applicationId])
   @@index([submittedById])
+  @@index([interviewId])
 }
 
 /// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential categories=operational,financial,personal-attribute owner=business-operator steward=data-steward basis=EEOC/OFCCP_applicant-flow_recordkeeping minYears=2

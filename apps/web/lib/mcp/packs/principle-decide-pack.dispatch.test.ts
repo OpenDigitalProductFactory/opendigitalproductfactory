@@ -1,6 +1,6 @@
 // Phase 2 Task 2.7 of the principles-as-wiki-kind plan: principle_decide
 // MCP tool tests. Verifies the tool retrieves principles via Postgres +
-// Qdrant, runs the decide() math, and returns a complete contribution
+// the vector store, runs the decide() math, and returns a complete contribution
 // ledger + flags + reasoning.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -21,7 +21,7 @@ const isEmbeddingAvailable = vi.fn();
 vi.mock("@dpf/db", () => ({
   prisma: mockPrisma,
   listPrinciplesByTier: (...args: unknown[]) => listPrinciplesByTier(...args),
-  QDRANT_COLLECTIONS: { WIKI_PAGES: "wiki-pages" },
+  VECTOR_COLLECTIONS: { WIKI_PAGES: "wiki-pages" },
   PRINCIPLE_DECIDE_DEFAULTS: {
     maxPrinciples: 20,
     tieMargin: 0.2,
@@ -83,7 +83,7 @@ function principlePgRow(
   };
 }
 
-function principleQdrantHit(
+function principleVectorHit(
   id: string,
   tier: "core" | "contextual",
   overrides: Partial<{
@@ -109,7 +109,7 @@ function principleQdrantHit(
     principleDimensions: overrides.principleDimensions ?? [
       "schema_grounding",
     ],
-    // BI-A9E9ADCB (RC3): a per-principle weight override on the Qdrant payload.
+    // BI-A9E9ADCB (RC3): a per-principle weight override on the vector payload.
     ...(overrides.principleWeight !== undefined
       ? { principleWeight: overrides.principleWeight }
       : {}),
@@ -120,7 +120,7 @@ function principleQdrantHit(
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
 describe("principle_decide MCP tool", () => {
-  it("retrieves commandments via Postgres and core/contextual via Qdrant, then returns a recommendation", async () => {
+  it("retrieves commandments via Postgres and core/contextual via the vector index, then returns a recommendation", async () => {
     mockPrisma.organization.findFirst.mockResolvedValueOnce({ id: "org_a" });
     // Commandments from Postgres
     listPrinciplesByTier.mockResolvedValueOnce([
@@ -130,10 +130,10 @@ describe("principle_decide MCP tool", () => {
         principleDimensionVector: { schema_grounding: 1.0 },
       }),
     ]);
-    // Two Qdrant calls: core (first) and contextual (second)
+    // Two vector store calls: core (first) and contextual (second)
     searchWikiPages
       .mockResolvedValueOnce([
-        principleQdrantHit("rs", "core", {
+        principleVectorHit("rs", "core", {
           title: "Reusability by Design",
         }),
       ])
@@ -173,7 +173,7 @@ describe("principle_decide MCP tool", () => {
     listPrinciplesByTier.mockResolvedValueOnce([]);
     searchWikiPages
       .mockResolvedValueOnce([
-        principleQdrantHit("rs", "core", { title: "Reusability", principleWeight: 0.9 }),
+        principleVectorHit("rs", "core", { title: "Reusability", principleWeight: 0.9 }),
       ])
       .mockResolvedValueOnce([]);
 
@@ -199,7 +199,7 @@ describe("principle_decide MCP tool", () => {
     expect(data.scores).toHaveLength(2);
   });
 
-  it("forwards callingPopulation as appliesTo to both Postgres and Qdrant retrieval", async () => {
+  it("forwards callingPopulation as appliesTo to both Postgres and vector retrieval", async () => {
     mockPrisma.organization.findFirst.mockResolvedValueOnce({ id: "org_a" });
     listPrinciplesByTier.mockResolvedValueOnce([]);
     searchWikiPages.mockResolvedValue([]);
@@ -328,15 +328,15 @@ describe("principle_decide MCP tool", () => {
     expect(res.error ?? res.message).toMatch(/callingPopulation/i);
   });
 
-  it("falls back to semantic alignment using server-side embeddings when option features are empty and principles come from Qdrant (BI-3C1A6451)", async () => {
+  it("falls back to semantic alignment using server-side embeddings when option features are empty and principles come from the vector index (BI-3C1A6451)", async () => {
     mockPrisma.organization.findFirst.mockResolvedValueOnce({ id: "org_a" });
-    // No PG commandments — only a Qdrant core hit. The Qdrant payload omits
+    // No PG commandments — only a vector core hit. The vector payload omits
     // the signed dimension vector, so the principle's dimensionVector is {} →
     // decide() falls back to semantic alignment for every contribution.
     listPrinciplesByTier.mockResolvedValueOnce([]);
     searchWikiPages
       .mockResolvedValueOnce([
-        principleQdrantHit("arch", "core", {
+        principleVectorHit("arch", "core", {
           title: "Architecture Over Shortcuts",
         }),
       ])
@@ -379,7 +379,7 @@ describe("principle_decide MCP tool", () => {
         contributions: Array<{ alignment: number; mode: string }>;
       }>;
     };
-    // Every contribution must be semantic mode — the only principle is a Qdrant
+    // Every contribution must be semantic mode — the only principle is a vector
     // hit with no dimension vector.
     const allContribs = data.scores.flatMap((s) => s.contributions);
     expect(allContribs.length).toBeGreaterThan(0);

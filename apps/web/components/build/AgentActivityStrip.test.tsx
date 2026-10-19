@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // apps/web/components/build/AgentActivityStrip.test.tsx
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen, act } from "@testing-library/react";
 
 afterEach(() => {

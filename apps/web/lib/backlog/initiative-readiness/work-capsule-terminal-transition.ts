@@ -4,7 +4,7 @@ import { prisma } from "@dpf/db";
 
 import { STATUS_OVERRIDE_TTL_MS } from "@/lib/work-capsules";
 import type { WorkCapsuleActor } from "@/lib/work-capsules/work-capsule-store-types";
-import { canonicalJson } from "@/lib/shared/canonical-json";
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 
 import {
   persistedTerminalCompletionDecision,

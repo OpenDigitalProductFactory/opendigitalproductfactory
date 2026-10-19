@@ -4,7 +4,7 @@ import { pathToFileURL } from "node:url";
 
 import { appendHarnessAdminEvent } from "./admin-event-log.js";
 import { applyScenarioControl, ControlApiError } from "./control-api.js";
-import { ContractValidationError, createVendorContract, type VendorContract } from "./prism-contract.js";
+import { ContractValidationError, createVendorContract, type VendorContract } from "./openapi-contract.js";
 import { createScenarioStateStore } from "./session-state.js";
 import type { HarnessScenarioFixture, LoadedVendorDefinition, ScenarioStateStore } from "./types.js";
 import { loadScenarioFixture, loadVendors } from "./vendor-registry.js";

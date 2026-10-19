@@ -6,6 +6,7 @@ import {
 import { assessArchetypeFit } from "@/lib/marketing/archetype-fit";
 import { DraftAssetButton } from "./DraftAssetButton";
 import { ArchetypeFitBadge } from "./ArchetypeFitNotice";
+import { CollapsibleList } from "@/components/ui/report-kit/CollapsibleList";
 
 type Props = {
   snapshot: MarketingWorkspaceSnapshot;
@@ -46,6 +47,7 @@ export function MarketingStrategyOverview({
   const isDetail = mode === "detail";
   const strategy = snapshot.strategy;
   const category = snapshot.storefront.category;
+  const ownOffer = snapshot.storefront.ownOffer;
   const territory =
     strategy.geographicScope ?? snapshot.organization.addressSummary ?? "Market territory still needs a decision";
   const constraintNotes = strategy.constraints
@@ -128,7 +130,7 @@ export function MarketingStrategyOverview({
                     {formatMarketingLabel(asset.type)}
                   </span>
                   <ArchetypeFitBadge
-                    assessment={assessArchetypeFit({ text: asset.label, category })}
+                    assessment={assessArchetypeFit({ text: asset.label, category, ownOffer })}
                   />
                 </li>
               ))}
@@ -147,7 +149,7 @@ export function MarketingStrategyOverview({
             Buyer groups
           </p>
           {strategy.targetSegments.length > 0 ? (
-            <ul className="space-y-2 text-sm">
+            <CollapsibleList previewCount={2} listClassName="space-y-2 text-sm">
               {strategy.targetSegments.map((segment) => (
                 <li key={segment.name}>
                   <p className="text-[var(--dpf-text)]">{segment.name}</p>
@@ -156,7 +158,7 @@ export function MarketingStrategyOverview({
                   )}
                 </li>
               ))}
-            </ul>
+            </CollapsibleList>
           ) : (
             <p className="text-sm text-[var(--dpf-muted)]">
               Ask the strategist to help choose the first buyer group.
@@ -169,7 +171,7 @@ export function MarketingStrategyOverview({
             <p className="mb-2 text-xs uppercase tracking-wide text-[var(--dpf-muted)]">
               Best-fit customer profiles
             </p>
-            <ul className="space-y-3 text-sm">
+            <CollapsibleList previewCount={2} listClassName="space-y-3 text-sm">
               {strategy.idealCustomerProfiles.map((profile) => (
                 <li key={profile.name}>
                   <p className="font-medium text-[var(--dpf-text)]">{profile.name}</p>
@@ -185,7 +187,7 @@ export function MarketingStrategyOverview({
                   )}
                 </li>
               ))}
-            </ul>
+            </CollapsibleList>
           </div>
         )}
         </Section>
@@ -263,6 +265,7 @@ export function MarketingStrategyOverview({
                             .filter(Boolean)
                             .join("\n"),
                           category,
+                          ownOffer,
                         })}
                       />
                     </div>
@@ -295,6 +298,7 @@ export function MarketingStrategyOverview({
                         assessment={assessArchetypeFit({
                           text: [task.title, task.brief].filter(Boolean).join("\n"),
                           category,
+                          ownOffer,
                         })}
                       />
                     </div>

@@ -1,9 +1,30 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { prisma } from "@dpf/db";
+
+const taskAuthority = vi.hoisted(() => ({ resolve: vi.fn() }));
+vi.mock("@/lib/auth/oauth-task-authority", () => ({ resolveMcpTaskAuthorityKey: taskAuthority.resolve }));
+
+const currentDesign = vi.hoisted(() => ({ prepare: vi.fn(), guard: vi.fn() }));
+vi.mock("@/lib/backlog/initiative-readiness/canonical-artifact-discovery", async importOriginal => ({
+  ...await importOriginal<typeof import("@/lib/backlog/initiative-readiness/canonical-artifact-discovery")>(),
+  prepareCurrentDesignObservation: currentDesign.prepare,
+}));
+beforeEach(() => {
+  currentDesign.guard.mockReset().mockResolvedValue({ state: "not-applicable" });
+  currentDesign.prepare.mockReset().mockResolvedValue({ evidence: { state: "not-applicable" }, admissionGuard: currentDesign.guard });
+});
 
 import { claimGovernedBacklogWorkspace } from "./governed-work-claim";
-import type { CapsuleDb } from "./work-capsule-store-types";
+import {
+  READINESS_GOVERNING_PRINCIPLE,
+  governingPrinciplesFor,
+  governingRulesLine,
+} from "@/lib/kernel/governing-principles";
+import { actor, input, database } from "./governed-work-claim.test-fixtures";
+import { readyActivities, receipt } from "@/lib/backlog/initiative-readiness/entry-adapter.test-fixtures";
+import type { InitiativeReadinessActivity } from "@/lib/backlog/initiative-readiness/entry-adapter";
 
-const actor = { userId: "user-1", agentId: "AGT-1", principalId: "PRN-1" };
+
 const CANONICAL_DESIGN_PATH = "docs/superpowers/specs/2026-08-22-entry-design.md";
 const CANONICAL_BLOB_SHA = "9f2c1d4e6b8a0c2e4f6a8b0c2d4e6f8a0b2c4d6e";
 const discoverCanonicalArtifact = vi.fn().mockResolvedValue({
@@ -11,120 +32,149 @@ const discoverCanonicalArtifact = vi.fn().mockResolvedValue({
   path: CANONICAL_DESIGN_PATH,
   providerBlobId: CANONICAL_BLOB_SHA,
 });
-const input = {
-  backlogItemId: "BI-ENTRY",
-  repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
-  headBranch: "feat/entry",
-  worktreePath: "D:\\DPF-worktrees\\entry",
-  baseBranch: "main",
-  executorKind: "codex-desktop" as const,
-  executorRef: "session-1",
-};
 
-function database(activities: unknown[] = []) {
-  const db = {
-    backlogItem: {
-      findFirst: vi.fn().mockResolvedValue({
-        id: "row-bi",
-        itemId: "BI-ENTRY",
-        type: "portfolio",
-        source: "user-request",
-        workType: "feature",
-        scopeKind: "platform",
-        archetypeCategories: [],
-        archetypeIds: [],
-        activeBuild: null,
-      }),
-      update: vi.fn(),
-    },
-    backlogItemActivity: {
-      findMany: vi.fn().mockResolvedValue(activities),
-      create: vi.fn().mockResolvedValue({ id: "decision-row" }),
-    },
-    workroom: {
-      create: vi.fn(),
-      // Honour the `where` clause rather than answering unconditionally: the room
-      // on this branch carries NO item binding, which is the state a room is
-      // actually in before any claim has succeeded for its item. A mock that
-      // answers regardless of the query cannot tell the old lookup from the new
-      // one, so it would pass either way and prove nothing (BI-512214EA).
-      findFirst: vi.fn().mockImplementation((args?: { where?: { backlogItemId?: string } }) =>
-        Promise.resolve(args?.where?.backlogItemId ? null : {
-          capsuleId: "WC-ENTRY",
-          repositoryFullName: input.repositoryFullName,
-          headBranch: input.headBranch,
-          headSha: "1111111111111111111111111111111111111111",
-          baseSha: "3333333333333333333333333333333333333333",
-          archivedAt: null,
-        })),
-      // Recovery matches rooms on branch identity (BI-512214EA), so the default
-      // room here carries NO backlogItemId — the state a room is actually in
-      // before a claim has ever succeeded for its item.
-      findUnique: vi.fn().mockResolvedValue({
-        id: "row-wc",
-        capsuleId: "WC-ENTRY",
-        backlogItemId: "BI-ENTRY",
-        status: "ready",
-        archivedAt: null,
-        repositoryFullName: input.repositoryFullName,
-        headBranch: input.headBranch,
-        worktreePath: input.worktreePath,
-        executorKind: input.executorKind,
-        executorRef: input.executorRef,
-        leaseHolderPrincipalId: actor.principalId,
-        leaseExpiresAt: new Date("2099-01-01T00:00:00.000Z"),
-      }),
-      findMany: vi.fn().mockResolvedValue([{
-        capsuleId: "WC-ENTRY",
-        repositoryFullName: input.repositoryFullName,
-        headBranch: input.headBranch,
-        headSha: "1111111111111111111111111111111111111111",
-        baseSha: "3333333333333333333333333333333333333333",
-        backlogItemId: null,
-      }]),
-      update: vi.fn(),
-    },
-    workroomActivity: {
-      create: vi.fn(),
-      findFirst: vi.fn().mockResolvedValue({
-        payload: {
-          schemaVersion: 1,
-          intent: "design",
-          policyVersion: "initiative-readiness.v1",
-          subject: { kind: "backlog-item", id: "BI-ENTRY" },
-        },
-      }),
-    },
-    agentToolGrant: {
-      findMany: vi.fn().mockResolvedValue([
-        {
-          grantKey: "initiative_design_review",
-          agent: {
-            agentId: "AGT-INDEPENDENT-REVIEWER",
-            displayName: "Independent Design Reviewer",
-            status: "active",
-            archived: false,
-            lifecycleStage: "production",
-          },
-        },
-        {
-          grantKey: "file_read",
-          agent: {
-            agentId: "AGT-INDEPENDENT-REVIEWER",
-            displayName: "Independent Design Reviewer",
-            status: "active",
-            archived: false,
-            lifecycleStage: "production",
-          },
-        },
-      ]),
-    },
-    $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(db)),
-  };
-  return db as unknown as CapsuleDb;
-}
+
 
 describe("claimGovernedBacklogWorkspace", () => {
+  it("uses the actual claim source to discover an amendment despite other subject rooms", async () => {
+    const actual = await vi.importActual<typeof import("@/lib/backlog/initiative-readiness/canonical-artifact-discovery")>(
+      "@/lib/backlog/initiative-readiness/canonical-artifact-discovery");
+    const source = { repositoryFullName: input.repositoryFullName, headBranch: input.headBranch,
+      baseSha: "3".repeat(40), headSha: "1".repeat(40) };
+    const activities = readyActivities().map(activity => activity.kind === "initiative_scope_baseline"
+      ? { ...activity, payload: { ...activity.payload, artifactRef: { kind: "repo-blob-at-commit",
+        repositoryFullName: input.repositoryFullName, commitSha: source.baseSha,
+        path: CANONICAL_DESIGN_PATH, providerBlobId: CANONICAL_BLOB_SHA } } } : activity);
+    const db = database(activities);
+    const lock = vi.fn().mockResolvedValue([]);
+    Object.assign(db, { $queryRaw: lock });
+    const rooms = [{ ...source, capsuleId: "WC-ENTRY" },
+      { ...source, capsuleId: "WC-OTHER", headBranch: "feat/other" }];
+    vi.mocked(db.workroom.findMany).mockImplementation(async query => {
+      const { where } = query as { where: Record<string, unknown> };
+      return rooms.filter(room =>
+      ["repositoryFullName", "headBranch", "baseSha", "headSha"].every(key =>
+        where[key] === undefined || where[key] === room[key as keyof typeof room])) as never;
+    });
+    const readCurrentArtifact = vi.fn().mockResolvedValue({ state: "verified", digest: "sha256:new-design" });
+    const prepare = vi.fn((args: Parameters<typeof actual.prepareCurrentDesignObservation>[0]) =>
+      actual.prepareCurrentDesignObservation({ ...args, ports: { readCurrentArtifact } }));
+    const claimWorkspace = vi.fn();
+    const result = await claimGovernedBacklogWorkspace({ db, input: { ...input, ...source }, actor,
+      workIntent: "plan", dependencies: { claimWorkspace, discoverCanonicalArtifact, prepareCurrentDesign: prepare } });
+    expect(result.ok).toBe(false);
+    expect(claimWorkspace).not.toHaveBeenCalled();
+    expect(readCurrentArtifact).toHaveBeenCalledWith(expect.objectContaining({ room: rooms[0] }));
+    expect(lock).toHaveBeenCalled();
+    if (result.ok) throw new Error("An amendment still requires independent approval");
+    expect(result.data.readiness.unmet).toContainEqual(expect.objectContaining({ code: "SPEC_APPROVAL_REQUIRED", state: "stale" }));
+    expect(result.data.recovery.reviewerRoutes.find(route => route.gate === "spec-approval")?.requestCoworker
+      .initiativeReviewBinding?.artifactRef).toMatchObject({ commitSha: source.headSha, providerBlobId: CANONICAL_BLOB_SHA });
+  });
+  it("keeps trusted task identity when coverage synthesizes spec approval for a fix", async () => {
+    taskAuthority.resolve.mockResolvedValue("oauth-family:claim");
+    const history = vi.spyOn(prisma.taskRun, "findFirst").mockResolvedValue(null);
+    try {
+      const db = database([receipt("research", "research")]);
+      const item = await db.backlogItem!.findFirst({});
+      vi.mocked(db.backlogItem!.findFirst).mockResolvedValue({ ...item, workType: "bug" } as never);
+      const result = await claimGovernedBacklogWorkspace({
+        db, input, actor: { ...actor, taskAuthorityTokenId: "access" }, workIntent: "implementation",
+        now: new Date("2026-10-16T00:00:00Z"),
+        dependencies: { claimWorkspace: vi.fn(), discoverCanonicalArtifact },
+      });
+      expect(result.ok).toBe(false);
+      if (result.ok) throw new Error("Missing coverage must not admit implementation");
+      expect(result.data.readiness.profile).toBe("fix");
+      expect(result.data.readiness.unmet.map(entry => entry.code)).toEqual(["PLAN_REQUIRED"]);
+      const request = result.data.recovery.reviewerRoutes.find(route => route.gate === "spec-approval")!.requestCoworker;
+      expect(request.initiativeReviewBinding?.expectedCurrentBaselineId).toBeNull();
+      expect(request.requestKey).toMatch(/:reviewer:[a-f0-9]{64}$/);
+    } finally {
+      history.mockRestore();
+    }
+  });
+
+  it("issues a fresh design request with the same trusted task identity as admission", async () => {
+    taskAuthority.resolve.mockResolvedValue("oauth-family:claim");
+    const history = vi.spyOn(prisma.taskRun, "findFirst").mockResolvedValue(null);
+    try {
+      const result = await claimGovernedBacklogWorkspace({
+        db: database(), input, actor: { ...actor, taskAuthorityTokenId: "access" }, workIntent: "plan",
+        now: new Date("2026-10-16T00:00:00Z"),
+        dependencies: { claimWorkspace: vi.fn(), discoverCanonicalArtifact },
+      });
+      expect(result.ok).toBe(false);
+      if (result.ok) throw new Error("Fresh design must remain unapproved");
+      const request = result.data.recovery.reviewerRoutes.find(route => route.gate === "design-spec")!.requestCoworker;
+      expect(request.requestKey).toMatch(/:reviewer:[a-f0-9]{64}$/);
+      expect(taskAuthority.resolve).toHaveBeenCalledWith({ tokenId: "access", userId: actor.userId, source: "oauth" });
+    } finally {
+      history.mockRestore();
+    }
+  });
+
+  it("reads gate facts only after the guard locks, so a concurrent fail cannot be lost", async () => {
+    const activities: InitiativeReadinessActivity[] = readyActivities();
+    const db = database(activities);
+    vi.mocked(db.backlogItemActivity!.findMany).mockImplementation(async () => [...activities]);
+    currentDesign.guard.mockImplementation(async () => {
+      const failed = receipt("concurrent-failed-review", "spec-approval");
+      activities.push({ ...failed, recordedAt: new Date(Date.now() + 1_000), payload: { ...failed.payload, decision: "fail" } });
+      return { state: "verified", digest: "sha256:design" };
+    });
+    const claimWorkspace = vi.fn().mockResolvedValue({ capsuleId: "WC-ENTRY" });
+    const result = await claimGovernedBacklogWorkspace({ db, input, actor, workIntent: "plan",
+      dependencies: { claimWorkspace, declareIntent: vi.fn(), discoverCanonicalArtifact } });
+    expect(claimWorkspace).not.toHaveBeenCalled();
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.data.readiness.blockers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "REVIEW_FAILED", state: "fail" }),
+    ]));
+  });
+  it("issues the existing independent approval packet for a previously invisible amendment", async () => {
+    currentDesign.guard.mockResolvedValue({ state: "verified", digest: "sha256:new-design" });
+    const claimWorkspace = vi.fn();
+    const result = await claimGovernedBacklogWorkspace({ db: database(readyActivities()), input, actor,
+      workIntent: "plan", dependencies: { claimWorkspace, discoverCanonicalArtifact } });
+    expect(result.ok).toBe(false);
+    expect(claimWorkspace).not.toHaveBeenCalled();
+    if (result.ok) return;
+    expect(result.data.readiness.unmet).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "SPEC_APPROVAL_REQUIRED", state: "stale" }),
+    ]));
+    const approval = result.data.recovery.reviewerRoutes.find(route => route.gate === "spec-approval");
+    expect(approval?.requestCoworker.initiativeReviewBinding).toMatchObject({
+      expectedCurrentBaselineId: "baseline-1", artifactRef: { providerBlobId: CANONICAL_BLOB_SHA },
+    });
+  });
+
+  it("does not issue any packet or claim when current source verification is unavailable", async () => {
+    currentDesign.guard.mockResolvedValue({ state: "unavailable" });
+    const discover = vi.fn(); const claimWorkspace = vi.fn();
+    const result = await claimGovernedBacklogWorkspace({ db: database(readyActivities()), input, actor,
+      workIntent: "plan", dependencies: { claimWorkspace, discoverCanonicalArtifact: discover } });
+    expect(result.ok).toBe(false);
+    expect(discover).not.toHaveBeenCalled(); expect(claimWorkspace).not.toHaveBeenCalled();
+    if (result.ok) return;
+    expect(result.data.recovery.reviewerRoutes).toEqual([]);
+    expect(result.data.readiness.unmet).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "OBJECTIVE_BASELINE_REQUIRED", state: "missing" }),
+    ]));
+  });
+  it("passes the live item's existing design reference into recovery discovery", async () => {
+    const db = database();
+    const body = `## Design\n\`${CANONICAL_DESIGN_PATH}\``;
+    const item = await db.backlogItem!.findFirst({});
+    vi.mocked(db.backlogItem!.findFirst).mockResolvedValue({ ...item, body } as never);
+    const discover = vi.fn().mockResolvedValue({ resolved: true,
+      path: CANONICAL_DESIGN_PATH, providerBlobId: CANONICAL_BLOB_SHA });
+    await claimGovernedBacklogWorkspace({ db, input, actor, workIntent: "plan",
+      dependencies: { claimWorkspace: vi.fn(), discoverCanonicalArtifact: discover } });
+    expect(discover).toHaveBeenCalledWith(expect.objectContaining({ backlogBody: body }));
+  });
+
   it.each([input.repositoryFullName, "other/repository"])("routes only the current baseline's same-repository coverage plan (%s)", async (repositoryFullName) => {
     const planArtifactRef = { kind: "repo-blob-at-commit", repositoryFullName,
       path: "docs/superpowers/plans/admission.md", commitSha: "a".repeat(40), providerBlobId: "b".repeat(40) };
@@ -301,6 +351,8 @@ describe("claimGovernedBacklogWorkspace", () => {
       repositoryFullName: input.repositoryFullName,
       baseSha: "3333333333333333333333333333333333333333",
       headSha: "1111111111111111111111111111111111111111",
+      subjectItemId: "BI-ENTRY",
+      headBranch: "feat/entry",
     });
     expect(result).toMatchObject({
       ok: false,
@@ -570,5 +622,71 @@ describe("claimGovernedBacklogWorkspace", () => {
     const message = result.ok ? "" : String(result.error);
     expect(message).toContain("executor ref");
     expect(message).toContain("foreign-session");
+  });
+});
+
+// BI-DEDAC950: a refusal names the principle page behind each unmet code,
+// beside the readiness decision and never inside it (decisions replay by deep
+// equality), and the message carries one wiki_query line.
+describe("claimGovernedBacklogWorkspace governing principles", () => {
+  it("cites the governing principles beside a not-ready decision and names them in the message", async () => {
+    const result = await claimGovernedBacklogWorkspace({
+      db: database(),
+      input,
+      actor,
+      workIntent: null,
+      now: new Date("2026-08-22T00:00:00.000Z"),
+      dependencies: { claimWorkspace: vi.fn(), discoverCanonicalArtifact },
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const expected = governingPrinciplesFor(result.data.readiness);
+    expect(Object.keys(expected).length).toBeGreaterThan(0);
+    expect(result.data.governingPrinciples).toEqual(expected);
+    expect(result.data.readiness).not.toHaveProperty("governingPrinciples");
+    expect(String(result.error)).toContain(governingRulesLine(expected)!);
+  });
+
+  it("cites the workroom principle on an identity mismatch", async () => {
+    const db = database();
+    const claimWorkspace = vi.fn().mockResolvedValue({
+      capsuleId: "WC-ENTRY",
+      backlogItemId: "BI-ENTRY",
+      headBranch: input.headBranch,
+      worktreePath: input.worktreePath,
+      claimed: true,
+      conflict: null,
+    });
+    const declareIntent = vi.fn().mockResolvedValue({ id: "intent-row" });
+    (db.workroom.findUnique as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      capsuleId: "WC-ENTRY",
+      backlogItemId: "BI-ENTRY",
+      status: "ready",
+      archivedAt: null,
+      repositoryFullName: input.repositoryFullName,
+      headBranch: input.headBranch,
+      worktreePath: input.worktreePath,
+      executorKind: input.executorKind,
+      executorRef: "foreign-session",
+      leaseHolderPrincipalId: actor.principalId,
+      leaseExpiresAt: new Date("2099-01-01T00:00:00.000Z"),
+    });
+
+    const result = await claimGovernedBacklogWorkspace({
+      db,
+      input,
+      actor,
+      workIntent: "design",
+      now: new Date("2026-08-22T00:00:00.000Z"),
+      dependencies: { claimWorkspace, declareIntent, discoverCanonicalArtifact },
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.data.governingPrinciples).toMatchObject({
+      CAPSULE_IDENTITY_MISMATCH: READINESS_GOVERNING_PRINCIPLE.CAPSULE_IDENTITY_MISMATCH,
+    });
+    expect(String(result.error)).toContain("Governing rules: CAPSULE_IDENTITY_MISMATCH → claim-a-workroom-before-you-work");
   });
 });

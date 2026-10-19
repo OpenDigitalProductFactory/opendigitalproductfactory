@@ -103,12 +103,8 @@ import { prisma } from "@dpf/db";
 import {
   listRegulations,
   createRegulation,
-  updateRegulation,
   deactivateRegulation,
-  createObligation,
-  createControl,
   linkControlToObligation,
-  unlinkControlFromObligation,
   createIncident,
   createEvidence,
   supersedeEvidence,

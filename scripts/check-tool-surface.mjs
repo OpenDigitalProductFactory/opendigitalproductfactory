@@ -31,7 +31,6 @@
 //   node scripts/check-tool-surface.mjs --update   # re-baseline, then write the reasons
 
 import { readFileSync, writeFileSync, readdirSync } from "node:fs";
-import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -40,6 +39,8 @@ import {
   enforceClaimReview,
   reviewClaims,
 } from "./check-context-economy.mjs";
+
+import { gitText } from "./lib/git.mjs";
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const BASELINE_PATH = join(REPO_ROOT, "scripts", "tool-surface-baseline.json");
@@ -205,14 +206,24 @@ function readBaseline(path) {
 
 function readBaselineAtBase() {
   try {
-    const out = execFileSync("git", ["show", "origin/main:scripts/tool-surface-baseline.json"], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
+    const out = gitText(["show", "origin/main:scripts/tool-surface-baseline.json"], {
+      cwd: process.cwd(),
+      trim: false,
     });
     return JSON.parse(out).entries ?? null;
   } catch {
-    // Same fail-open contract as the plane-3 guard: a missing comparison must never
-    // invent a violation.
+    // Deliberately fail-open: rule 1 is absolute and needs no comparison, so a
+    // missing base must never invent a violation. But it must not be SILENT
+    // either — an unread baseline means rule 2 (growth-vs-base) did not run, and
+    // a reader seeing only the clean line would credit this guard with a check it
+    // skipped (BI-B6433DC6's distinction, applied to a ref-content comparison
+    // rather than a diff range: `git show <ref>:<path>` needs the ref, not a
+    // merge base, so a shallow clone usually still resolves here).
+    console.warn(
+      "[tool-surface] WARN: could not read scripts/tool-surface-baseline.json at origin/main — "
+        + "the growth-against-base comparison did NOT run; the absolute budget "
+        + "check below still applies. Remedy: git fetch --no-tags origin main",
+    );
     return null;
   }
 }

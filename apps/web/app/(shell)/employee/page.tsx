@@ -1,5 +1,6 @@
 // apps/web/app/(shell)/employee/page.tsx
 import { cookies } from "next/headers";
+import { orgCurrencyFromSettings } from "@/lib/org-locale/org-locale";
 import { prisma } from "@dpf/db";
 import { OwnerFirstSummaryBand } from "@/components/owner-first/OwnerFirstSummary";
 import { OwnerFirstDisclosure } from "@/components/owner-first/OwnerFirstDisclosure";
@@ -138,7 +139,7 @@ export default async function EmployeePage({ searchParams }: Props) {
   // Billable time is archetype-gated (labour financial profiles only); when
   // off, the timesheet shows no billing controls at all.
   const orgSettings = await prisma.orgSettings.findFirst({
-    select: { appliedProfileSlug: true, baseCurrency: true },
+    select: { appliedProfileSlug: true, baseCurrency: true, countryCode: true },
   });
   const billableTimeEnabled =
     (orgSettings?.appliedProfileSlug
@@ -365,7 +366,7 @@ export default async function EmployeePage({ searchParams }: Props) {
             <div className="mt-4 grid grid-cols-1 xl:grid-cols-2 gap-4">
               <CompensationPanel
                 employees={compensationRows}
-                currency={orgSettings?.baseCurrency ?? "GBP"}
+                currency={orgCurrencyFromSettings(orgSettings)}
               />
             </div>
           </>

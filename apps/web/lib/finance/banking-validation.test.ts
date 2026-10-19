@@ -55,12 +55,12 @@ describe("createBankAccountSchema", () => {
     }
   });
 
-  it("defaults currency to GBP when omitted", () => {
+  it("leaves currency unset when omitted, so the writer applies the org base currency (BI-6030131C)", () => {
     const { currency, ...rest } = validInput;
     const result = createBankAccountSchema.safeParse(rest);
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.currency).toBe("GBP");
+      expect(result.data.currency).toBeUndefined();
     }
   });
 

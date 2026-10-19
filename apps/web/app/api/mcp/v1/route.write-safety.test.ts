@@ -60,6 +60,7 @@ beforeEach(() => {
   });
   userMock.mockResolvedValue({
     isSuperuser: true,
+    isActive: true,
     groups: [{ platformRole: { roleId: "HR-000" } }],
   } as never);
 });
@@ -105,7 +106,7 @@ describe("POST — mutating tool safety", () => {
     expect(prisma.taskRun.update).not.toHaveBeenCalled();
   });
 
-  it("allows write-scoped tokens to call create_workroom", async () => {
+  it.each(["create_workroom", "create_work_capsule"])("allows write-scoped tokens to call %s", async (name) => {
     resolveMock.mockResolvedValue({
       tokenId: "tok_write",
       userId: "u1",
@@ -122,7 +123,7 @@ describe("POST — mutating tool safety", () => {
     });
 
     const res = await POST(
-      toolRequest("create_workroom", {
+      toolRequest(name, {
         title: "Token scope test",
         objective: "Verify write-token acceptance",
         source: "operator",
@@ -172,13 +173,15 @@ describe("POST — mutating tool safety", () => {
       runId: "QR-MCP-DRAIN",
       retryAfterSeconds: 30,
       writesRefused: true,
-      cleanupOperationsAllowed: ["release_nonprod_environment_lease"],
+      cleanupOperationsAllowed: ["release_nonprod_environment_lease", "renew_nonprod_environment_lease", "heartbeat_workroom", "heartbeat_runtime_target"],
     });
     expect(body.result.content[0].text).toContain("Mutating MCP write refused");
     expect(govMock).not.toHaveBeenCalled();
   });
 
-  it("allows cleanup-safe lease release during quiescence", async () => {
+  // Renewal joined release on 2026-09-24: refusing it during a drain lapsed the
+  // lease of a gate that was already running, and its verdict was lost.
+  it.each(["release_nonprod_environment_lease", "renew_nonprod_environment_lease", "heartbeat_workroom", "heartbeat_runtime_target"])("allows %s during quiescence", async (toolName) => {
     getQuiescenceConfigMock.mockResolvedValue({
       level: "draining",
       runId: "QR-MCP-DRAIN",
@@ -194,16 +197,12 @@ describe("POST — mutating tool safety", () => {
     });
     govMock.mockResolvedValue({
       success: true,
-      message: "Released lease NPEL-TEST.",
+      message: "Lease NPEL-TEST handled.",
       entityId: "NPEL-TEST",
       data: { leaseId: "NPEL-TEST" },
     });
 
-    const res = await POST(
-      toolRequest("release_nonprod_environment_lease", {
-        leaseId: "NPEL-TEST",
-      }),
-    );
+    const res = await POST(toolRequest(toolName, { leaseId: "NPEL-TEST" }));
 
     const body = await res.json();
     expect(body.result.isError).toBe(false);

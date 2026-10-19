@@ -210,3 +210,36 @@ export async function deleteDocumentBlob(input: {
   }
   await fs.unlink(quarantinePath);
 }
+
+export type StoredDocumentBlob = { id: string; sha256: string; storageKey: string; sizeBytes: number };
+
+type DocumentBlobUpsertDb = {
+  documentBlob: {
+    upsert: (args: {
+      where: { sha256: string };
+      update: Record<string, never>;
+      create: { sha256: string; storageKey: string; mimeType: string | null; sizeBytes: number };
+      select: { id: true; sha256: true; storageKey: true; sizeBytes: true };
+    }) => Promise<StoredDocumentBlob>;
+  };
+};
+
+/**
+ * Write bytes to content-addressed storage and record their DocumentBlob row.
+ * Idempotent on the digest: the same bytes always resolve to the same row.
+ */
+export async function storeDocumentBlob(input: {
+  content: DocumentBlobContent;
+  mimeType: string | null;
+  storageRoot?: string;
+  db?: DocumentBlobUpsertDb;
+}): Promise<StoredDocumentBlob> {
+  const written = await writeDocumentBlob({ content: input.content, storageRoot: input.storageRoot });
+  const db = input.db ?? (prisma as unknown as DocumentBlobUpsertDb);
+  return db.documentBlob.upsert({
+    where: { sha256: written.sha256 },
+    update: {},
+    create: { sha256: written.sha256, storageKey: written.storageKey, mimeType: input.mimeType, sizeBytes: written.sizeBytes },
+    select: { id: true, sha256: true, storageKey: true, sizeBytes: true },
+  });
+}

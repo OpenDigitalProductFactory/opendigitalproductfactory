@@ -14,7 +14,7 @@
 // restructure step and is intentionally NOT part of this additive component.
 
 import { StatusBadge } from "@/components/ui/report-kit";
-import type { Intent } from "@/components/ui/report-kit/statusColors";
+import type { Intent } from "@/lib/ui-model/statusColors";
 import { summaryCopyFor } from "@/lib/build/owner-change-view";
 import type { AutonomousBuildCustodyView } from "@/lib/build/autonomous-build-custody";
 

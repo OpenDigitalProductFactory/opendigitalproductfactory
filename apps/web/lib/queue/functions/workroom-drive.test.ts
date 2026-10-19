@@ -1,6 +1,12 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { buildWorkShapeClaim } from "@/lib/work-management/workroom-shape-claim";
+import { PARALLEL_FIXTURE } from "@/lib/work-management/__fixtures__/graph-shape-fixtures";
+import type { RecordedEvidence } from "@/lib/work-management/stage-evidence-receipts";
+import { readStoredWorkroomDriveState } from "@/lib/work-management/workroom-drive-state";
+import { mergeWorkroomDriveSnapshot } from "@/lib/work-management/workroom-drive-snapshot-merge";
+import { workroomDriveBranchTaskId } from "@/lib/work-management/drive-resolution";
+
+import { buildWorkShapeClaim, buildWorkShapeRoleBindingsClaim } from "@/lib/work-management/workroom-shape-claim";
 import { buildWorkroomPostureClaim } from "@/lib/work-management/workroom-posture-claim";
 import { workroomDriveTaskId } from "@/lib/work-management/drive-resolution";
 import {
@@ -14,10 +20,34 @@ import {
 import { resolveDrivePlan } from "@/lib/work-management/drive-resolution";
 import { readWorkShapeDefinitionContract, getWorkShape } from "@/lib/work-management/work-shapes";
 
+// Parallel branches (GPP Phase 3c PR-3c-2): the graph fixture is not
+// registered (plan constraint 7), so the shape-claim resolver is overridden
+// for its key only; every registry shape resolves exactly as before. The
+// executable-construct table is a mutable copy so a case can switch the
+// parallel flag off (the kill switch); it starts as the real table.
+const flags = vi.hoisted(() => ({ table: {} as Record<string, boolean>, original: {} as Record<string, boolean> }));
+vi.mock("@/lib/gpp/shape-language/executable-constructs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/gpp/shape-language/executable-constructs")>();
+  flags.original = { ...actual.CONSTRUCT_EXECUTABLE };
+  flags.table = { ...actual.CONSTRUCT_EXECUTABLE };
+  return { ...actual, CONSTRUCT_EXECUTABLE: flags.table };
+});
+vi.mock("@/lib/work-management/workroom-shape-claim", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/work-management/workroom-shape-claim")>();
+  const { PARALLEL_FIXTURE: fixture } = await import("@/lib/work-management/__fixtures__/graph-shape-fixtures");
+  return {
+    ...actual,
+    resolveWorkShapeClaim: (scopeClaims: unknown) => {
+      const ref = actual.readWorkShapeClaim(scopeClaims);
+      return ref?.key === fixture.key && ref.version === fixture.version ? fixture : actual.resolveWorkShapeClaim(scopeClaims);
+    },
+  };
+});
+
 const driveDb = {
   workroom: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
   workroomActivity: { create: vi.fn() },
-  scheduledAgentTask: { upsert: vi.fn() },
+  scheduledAgentTask: { upsert: vi.fn(), findUnique: vi.fn() },
   $transaction: vi.fn(),
 };
 
@@ -134,6 +164,14 @@ describe("runWorkroomDriveJob (BI-FCD639D9)", () => {
     expect(fx.persist.mock.calls[0]?.[0]?.summary).toMatch(/lease held/i);
   });
 
+  it("pauses a room whose queue a provider failure held, and dispatches nothing (BI-2B6A8A74)", async () => {
+    const fx = effects();
+    const result = await runWorkroomDriveJob(new Date(), { listRooms: async () => [room({ workspaceState: { queueHold: { since: "2026-03-02T08:00:00.000Z", kind: "rate-limit", taskId: "t-held", error: "busy" } } })], effects: fx });
+    expect(result.dispatched).toBe(0);
+    expect(fx.upsertAgentTask).not.toHaveBeenCalled();
+    expect(fx.persist.mock.calls[0]?.[0]?.snapshot).toMatchObject({ reason: "provider_held" });
+  });
+
   it("records attention for a human stage and never schedules an agent task", async () => {
     const fx = effects();
     const human = room({
@@ -178,7 +216,8 @@ describe("runWorkroomDriveJob (BI-FCD639D9)", () => {
       reason: "executor_writeback_unavailable",
     });
     expect(secondSnapshot.receipts).toEqual(
-      expect.arrayContaining([{ stageKey: snapshot.stageKey, kind: "blocked" }]),
+      // The blocked receipt belongs to the room's run (BI-853120EE).
+      expect.arrayContaining([{ stageKey: snapshot.stageKey, kind: "blocked", runKey: "obligation-assurance-watch@1.0.0:2026-09-01" }]),
     );
   });
 
@@ -186,14 +225,17 @@ describe("runWorkroomDriveJob (BI-FCD639D9)", () => {
     const fx = effects();
     const current = room({ currentStageKey: "sweep", receipts: [{ stageKey: "sweep", kind: "blocked" }],
       stageDispatchedAt: new Date("2026-09-01T00:00:00Z"),
-      recordedEvidence: [{ stageKey: "sweep", kind: "assurance-run", recordedAt: new Date("2026-09-01T00:01:00Z") }],
+      recordedEvidence: [{ stageKey: "sweep", kind: "assurance-run", outcome: "completed", recordedAt: new Date("2026-09-01T00:01:00Z") }],
     });
     await runWorkroomDriveJob(new Date("2026-09-01T00:02:00Z"), { listRooms: async () => [current], effects: fx });
     const snapshot = fx.persist.mock.calls.at(-1)?.[0]?.snapshot as Record<string, unknown>;
-    expect(snapshot.receipts).toEqual([{ stageKey: "sweep", kind: "stage-evidence-recorded" }]);
+    // Earned receipts carry the room's run, and the snapshot names it (BI-853120EE).
+    const run = "obligation-assurance-watch@1.0.0:2026-09-01";
+    expect(snapshot.receipts).toEqual([{ stageKey: "sweep", kind: "stage-evidence-recorded", runKey: run }]);
+    expect(snapshot.runKey).toBe(run);
     expect(snapshot.stageKey).toBe("raise");
     await runWorkroomDriveJob(new Date("2026-09-01T00:03:00Z"), { listRooms: async () => [room({ workspaceState: { workroomDrive: snapshot } })], effects: fx });
-    expect(fx.persist.mock.calls.at(-1)?.[0]?.snapshot.receipts).toEqual(expect.arrayContaining([{ stageKey: "sweep", kind: "stage-evidence-recorded" }]));
+    expect(fx.persist.mock.calls.at(-1)?.[0]?.snapshot.receipts).toEqual(expect.arrayContaining([{ stageKey: "sweep", kind: "stage-evidence-recorded", runKey: run }]));
   });
 
   it("contains delivery notification reconciliation failure after preserving the drive result", async () => {
@@ -212,6 +254,7 @@ describe("applyDrivePlan lease expiry", () => {
   function persistedLease(status = "ready") {
     const persisted = { expiresAt: null as Date | null, holder: "prn-row-coord", status };
     driveDb.scheduledAgentTask.upsert.mockReset().mockResolvedValue({});
+    driveDb.scheduledAgentTask.findUnique.mockReset().mockResolvedValue(null);
     driveDb.$transaction.mockImplementation(async (run) => run(driveDb));
     driveDb.workroom.findUnique.mockResolvedValue({ workspaceState: {} });
     driveDb.workroomActivity.create.mockResolvedValue({ id: "activity-1" });
@@ -250,6 +293,61 @@ describe("applyDrivePlan lease expiry", () => {
     expect(driveDb.scheduledAgentTask.upsert).not.toHaveBeenCalled();
   });
 
+  it("retains the enqueue checkpoint even when the later drive snapshot is never written", async () => {
+    const fx = persistedLease();
+    driveDb.workroom.findUnique.mockResolvedValue({ workspaceState: { unrelated: true }, objective: "Review evidence" });
+    driveDb.workroom.update.mockClear();
+    driveDb.workroomActivity.create.mockClear();
+    // Simulate controller loss immediately after the scheduling transaction.
+    fx.persist.mockRejectedValueOnce(new Error("controller lost"));
+    await expect(runWorkroomDriveJob(new Date("2026-09-01T00:00:00.000Z"), {
+      listRooms: async () => [room()], effects: fx,
+    })).rejects.toThrow("controller lost");
+    expect(driveDb.workroom.update).toHaveBeenCalledWith(expect.objectContaining({ data: {
+      workspaceState: { unrelated: true, workroomDispatchCheckpoint: expect.objectContaining({
+        version: 1, revision: 1, objective: "Review evidence",
+        confirmedEffect: expect.objectContaining({ kind: "scheduled-task-enqueued" }),
+        nextAction: "reconcile-scheduled-task",
+      }) },
+    } }));
+    expect(driveDb.workroomActivity.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
+      kind: "workroom-dispatch-confirmed",
+    }) }));
+  });
+
+  it.each(["matching", "missing", "foreign-agent", "changed-stage"])("reconciles a %s task after snapshot loss without reactivating it", async (caseName) => {
+    const fx = persistedLease();
+    const now = new Date("2026-09-01T00:00:00.000Z");
+    let workspace: Record<string, unknown> = {};
+    let task: Record<string, unknown> | null = null;
+    driveDb.workroom.findUnique.mockImplementation(async () => ({ workspaceState: workspace }));
+    driveDb.workroom.update.mockImplementation(async ({ data }) => {
+      if (data.workspaceState) workspace = data.workspaceState;
+      return {};
+    });
+    driveDb.scheduledAgentTask.upsert.mockImplementation(async ({ create }) => {
+      task = create;
+      return {};
+    });
+    driveDb.scheduledAgentTask.findUnique.mockImplementation(async () => task);
+    fx.persist.mockRejectedValueOnce(new Error("controller lost"));
+    await expect(runWorkroomDriveJob(now, { listRooms: async () => [room()], effects: fx })).rejects.toThrow("controller lost");
+    const confirmed = structuredClone(workspace.workroomDispatchCheckpoint);
+    // A replacement reconstructs from durable state; the original snapshot is absent.
+    // The task may already have executed and become inactive. Do not touch it.
+    fx.state.expiresAt = null;
+    driveDb.workroomActivity.create.mockClear();
+    if (caseName === "missing") task = null;
+    if (caseName === "foreign-agent") task = Object.assign({}, task, { agentId: "replacement-agent" });
+    if (caseName === "changed-stage") task = Object.assign({}, task, { taskConfig: { workroomStage: { shapeKey: "other", shapeVersion: "1", stageKey: "other", tools: [] } } });
+    const replay = runWorkroomDriveJob(now, { listRooms: async () => [room()], effects: fx });
+    if (caseName === "matching") await replay;
+    else await expect(replay).rejects.toThrow(/identity reconciliation/);
+    expect(driveDb.scheduledAgentTask.upsert).toHaveBeenCalledTimes(1);
+    expect(workspace.workroomDispatchCheckpoint).toEqual(confirmed);
+    expect(driveDb.workroomActivity.create).not.toHaveBeenCalled();
+  });
+
   it("fences scheduling when ownership changes after acquisition", async () => {
     const fx = persistedLease();
     const acquire = fx.acquireLease;
@@ -262,6 +360,15 @@ describe("applyDrivePlan lease expiry", () => {
       listRooms: async () => [room()], effects: fx,
     });
     expect(result.dispatched).toBe(0);
+    expect(driveDb.scheduledAgentTask.upsert).not.toHaveBeenCalled();
+  });
+
+  it("refuses corrupt checkpoint history before queueing another task", async () => {
+    const fx = persistedLease();
+    driveDb.workroom.findUnique.mockResolvedValue({ workspaceState: { workroomDispatchCheckpoint: { version: 2, revision: 5 } } });
+    await expect(runWorkroomDriveJob(new Date("2026-09-01T00:00:00.000Z"), {
+      listRooms: async () => [room()], effects: fx,
+    })).rejects.toThrow(/checkpoint/);
     expect(driveDb.scheduledAgentTask.upsert).not.toHaveBeenCalled();
   });
 
@@ -351,5 +458,333 @@ describe("applyDrivePlan lease expiry", () => {
     });
     expect(outcome).toBe("dispatched");
     expect(fx.acquireLease).toHaveBeenCalled();
+  });
+});
+
+// BI-E8C78E80 — a tick that changed nothing updates the snapshot but adds no
+// trail row, and a room stuck for an hour tells its owner once.
+describe("applyDrivePlan hold", () => {
+  const plan = (over: Record<string, unknown> = {}) => ({
+    action: "pause", reason: "conformance_pause", roomId: "row-1", shapeKey: null, shapeVersion: null,
+    definition: null, stageKey: "spec", accountablePrincipalRef: null, agentId: null, attentionPrincipalRef: null,
+    taskId: null, conformance: { deviations: [{ code: "missing_explicit_coordinator" }] }, cycle: null,
+    deviations: [], ledger: [], ...over,
+  }) as unknown as Parameters<typeof applyDrivePlan>[0]["plan"];
+
+  it("records the first tick of a hold and keeps the repeats quiet", async () => {
+    const fx = effects();
+    await applyDrivePlan({ room: room(), plan: plan(), now: new Date("2026-09-24T00:00:00Z"), effects: fx });
+    const stored = fx.persist.mock.calls[0][0].snapshot;
+    expect(fx.persist.mock.calls[0][0].quiet).toBe(false);
+    await applyDrivePlan({ room: room({ workspaceState: { workroomDrive: stored } }), plan: plan(),
+      now: new Date("2026-09-24T00:15:00Z"), effects: fx });
+    expect(fx.persist.mock.calls[1][0]).toMatchObject({ quiet: true, snapshot: { hold: { ticks: 2 } } });
+  });
+
+  it("tells the owner once after an hour stuck, and not again in the same spell", async () => {
+    const notifyStall = vi.fn(async () => {});
+    const fx = { ...effects(), notifyStall };
+    let state: unknown = {};
+    for (let i = 0; i < 6; i++) {
+      await applyDrivePlan({ room: room({ workspaceState: state }), plan: plan(),
+        now: new Date(Date.UTC(2026, 8, 24, 0, 15 * i)), effects: fx });
+      state = { workroomDrive: fx.persist.mock.calls.at(-1)?.[0].snapshot };
+    }
+    expect(notifyStall).toHaveBeenCalledTimes(1);
+    expect(notifyStall).toHaveBeenCalledWith(expect.objectContaining({ hold: expect.objectContaining({ stuckTicks: 4 }) }));
+  });
+});
+
+// BI-43C3E914 — a stage names the tools it needs (GPP element 2 "Attachment",
+// element 5 "Capability set"), and the drive carries them to the run.
+describe("stage-declared tools reach the dispatched task", () => {
+  const declaredRoom = () => room({
+    scopeClaims: [buildWorkShapeClaim({ key: "dependency-advisory-watch", version: "1.0.0" })],
+  });
+
+  it("passes a declared stage's tools to the task and names them in the brief", async () => {
+    const fx = effects();
+    const result = await runWorkroomDriveJob(new Date("2026-09-01T00:00:00.000Z"), {
+      listRooms: async () => [declaredRoom()],
+      effects: fx,
+    });
+    expect(result.dispatched).toBe(1);
+    const call = fx.upsertAgentTask.mock.calls[0]?.[0];
+    expect(call?.stage).toEqual({
+      shapeKey: "dependency-advisory-watch",
+      shapeVersion: "1.0.0",
+      stageKey: "sweep",
+      tools: ["read_codebase_manifest", "list_patch_posture"],
+    });
+    expect(call?.prompt).toContain("Tools for this stage: read_codebase_manifest, list_patch_posture.");
+  });
+
+  it("leaves an undeclared stage exactly as before: no tools, no tools line", async () => {
+    const fx = effects();
+    // obligation-assurance-watch/sweep is on KNOWN_STAGE_TOOL_GAPS.
+    await runWorkroomDriveJob(new Date("2026-09-01T00:00:00.000Z"), {
+      listRooms: async () => [room()],
+      effects: fx,
+    });
+    const call = fx.upsertAgentTask.mock.calls[0]?.[0];
+    expect(call?.stage.tools).toEqual([]);
+    expect(call?.stage.stageKey).toBe("sweep");
+    expect(call?.prompt).not.toContain("Tools for this stage");
+  });
+
+  it("writes the stage record to taskConfig.workroomStage, preserving other taskConfig keys", async () => {
+    driveDb.$transaction.mockImplementation(async (run) => run(driveDb));
+    driveDb.workroom.updateMany.mockResolvedValue({ count: 1 });
+    driveDb.scheduledAgentTask.upsert.mockReset().mockResolvedValue({});
+    driveDb.scheduledAgentTask.findUnique.mockReset().mockResolvedValue({
+      taskConfig: { trigger: { kind: "time", recordedAt: "2026-08-01T00:00:00.000Z" } },
+    });
+    const fx = createWorkroomDriveEffects(async () => driveDb as never, () => new Date("2026-09-01T00:00:00.000Z"));
+    const stage = { shapeKey: "dependency-advisory-watch", shapeVersion: "1.0.0", stageKey: "sweep", tools: ["read_codebase_manifest"] };
+    await expect(fx.upsertAgentTask({
+      taskId: "task-1",
+      agentId: "security-engineer",
+      ownerUserId: "user-1",
+      title: "t",
+      prompt: "p",
+      stage,
+      now: new Date("2026-09-01T00:00:00.000Z"),
+      lease: { roomId: "row-1", expiresAt: new Date("2026-09-01T00:10:00.000Z"), holderPrincipalId: null },
+    })).resolves.toBe(true);
+    const args = driveDb.scheduledAgentTask.upsert.mock.calls[0]?.[0];
+    const expected = {
+      trigger: { kind: "time", recordedAt: "2026-08-01T00:00:00.000Z" },
+      workroomStage: stage,
+      workroomDispatchCheckpoint: expect.objectContaining({
+        roomId: "row-1", confirmedEffect: expect.objectContaining({ taskId: "task-1" }),
+      }),
+    };
+    expect(args?.create?.taskConfig).toEqual(expected);
+    expect(args?.update?.taskConfig).toEqual(expected);
+  });
+});
+
+// AC-3C-BRANCH-LATCH and per-branch tasks (GPP Phase 3c PR-3c-2, BI-8875C9DF).
+// Design: docs/superpowers/specs/2026-10-02-gpp-phase-3c-drive-graph-execution-design.md
+// §6 ("Dispatch every tick"), §6.1 ("Own risk"); plan PR-3c-2 (workroom-drive.test.ts).
+// Through the real runner with the production merge. PARALLEL_FIXTURE is
+// a → split → (b, c) → join → d → success, every stage an agent stage.
+describe("parallel branches: one task per branch under one lease (PR-3c-2)", () => {
+  const DAY = "2026-03-02";
+  const T0 = new Date(`${DAY}T09:00:00.000Z`);
+  const at = (minutes: number) => new Date(T0.getTime() + minutes * 60_000);
+  const CYCLE = `${PARALLEL_FIXTURE.key}@${PARALLEL_FIXTURE.version}:${DAY}`;
+  const PRIMARY = workroomDriveTaskId("WC-FORK", PARALLEL_FIXTURE.key);
+  const branch = (stageKey: string) => workroomDriveBranchTaskId("WC-FORK", PARALLEL_FIXTURE.key, stageKey);
+
+  type Harness = {
+    workspaceState: Record<string, unknown>;
+    evidence: RecordedEvidence[];
+    dispatchedAt: Map<string, Date>;
+    stopConditionHits: string[];
+    upserts: string[];
+    deactivated: string[];
+    leases: number;
+    /** Stage keys whose upsert fails to schedule. */
+    failing: Set<string>;
+  };
+  const harness = (workspaceState: Record<string, unknown> = {}): Harness =>
+    ({ workspaceState, evidence: [], dispatchedAt: new Map(), stopConditionHits: [], upserts: [], deactivated: [], leases: 0, failing: new Set() });
+
+  async function tick(h: Harness, now: Date) {
+    const before = { upserts: h.upserts.length, deactivated: h.deactivated.length, leases: h.leases };
+    const stored = readStoredWorkroomDriveState(h.workspaceState);
+    const forkRoom: WorkroomDriveRoom = {
+      ...room({ id: "row-fork", capsuleId: "WC-FORK", participants: [coordinatorAssignment("row-fork")] }),
+      scopeClaims: [
+        buildWorkShapeClaim({ key: PARALLEL_FIXTURE.key, version: PARALLEL_FIXTURE.version }),
+        buildWorkroomPostureClaim({ proactivityLevel: "balanced" }, new Date("2026-03-01T00:00:00.000Z")),
+      ],
+      workspaceState: h.workspaceState,
+      ...stored,
+      stopConditionHits: h.stopConditionHits,
+      recordedEvidence: [...h.evidence].reverse(),
+      stageDispatchedAt: null,
+      stageDispatchedAtByStage: new Map(h.dispatchedAt),
+    };
+    const fx: WorkroomDriveEffects = {
+      persist: async (input) => {
+        if (input.observationOnly) return;
+        const written = mergeWorkroomDriveSnapshot(h.workspaceState, input.snapshot, { graphShape: input.graphShape });
+        h.workspaceState = JSON.parse(JSON.stringify({ ...h.workspaceState, workroomDrive: written })) as Record<string, unknown>;
+        // What loadStageDispatchTimesByStage reads off the activity row.
+        for (const key of (input.snapshot.dispatchedStageKeys as string[] | undefined) ?? []) h.dispatchedAt.set(key, now);
+      },
+      acquireLease: async () => { h.leases += 1; return "acquired"; },
+      upsertAgentTask: async (input) => {
+        if (h.failing.has(input.stage.stageKey)) return false;
+        h.upserts.push(`${input.taskId}@${input.stage.stageKey}`);
+        return true;
+      },
+      deactivateAgentTask: async (taskId) => { h.deactivated.push(taskId); },
+    };
+    const result = await runWorkroomDriveJob(now, { listRooms: async () => [forkRoom], effects: fx, reconcileNesting: async () => 0, reconcileNotifications: async () => {} });
+    return {
+      plan: result.plans[0]!,
+      upserts: h.upserts.slice(before.upserts),
+      deactivated: h.deactivated.slice(before.deactivated),
+      leases: h.leases - before.leases,
+    };
+  }
+  const drive = (h: Harness) => h.workspaceState.workroomDrive as Record<string, unknown>;
+  const tokens = (h: Harness) => (drive(h).marking as { tokens: Array<Record<string, unknown>> }).tokens;
+  const done = (h: Harness, stageKey: string, minutes: number) =>
+    h.evidence.push({ stageKey, kind: "assurance-run", outcome: "completed", recordedAt: at(minutes) });
+
+  beforeEach(() => {
+    // The real table: parallel split/join is executable since PR-3c-2.
+    Object.assign(flags.table, flags.original);
+    expect(flags.table["parallel-split-join"]).toBe(true);
+  });
+
+  it("a held queue dispatches no branch and keeps the token, which dispatches once resumed (BI-2B6A8A74)", async () => {
+    const h = harness({ queueHold: { since: "2026-03-02T08:00:00.000Z", kind: "rate-limit", taskId: "t-held", error: "busy" } });
+    const held = await tick(h, at(0));
+    expect([held.upserts, drive(h).reason]).toEqual([[], "provider_held"]);
+    delete h.workspaceState["queueHold"];
+    expect((await tick(h, at(1))).upserts).toEqual([`${PRIMARY}@a`]);
+  });
+
+  it("two concurrent agent branches get two upserts with distinct ids fixed on their tokens, under one lease", async () => {
+    const h = harness();
+    expect((await tick(h, at(0))).upserts).toEqual([`${PRIMARY}@a`]);
+    done(h, "a", 5);
+    const split = await tick(h, at(15));
+    expect(split.plan).toMatchObject({ action: "dispatch_agent", reason: "agent_stage" });
+    expect(split.leases).toBe(1);
+    expect(split.upserts).toEqual([`${PRIMARY}@b`, `${branch("c")}@c`]);
+    // a left its stage, but b took the primary id in the same tick, so nothing is deactivated.
+    expect(split.deactivated).toEqual([]);
+    expect(tokens(h)).toEqual([
+      expect.objectContaining({ node: "stage:b", taskId: PRIMARY, lastAction: "dispatch_agent", lastCycleKey: CYCLE }),
+      expect.objectContaining({ node: "stage:c", taskId: branch("c"), lastAction: "dispatch_agent", lastCycleKey: CYCLE }),
+    ]);
+    expect(drive(h).dispatchedStageKeys).toEqual(["b", "c"]);
+    expect(drive(h).stageKey).toBe("b");
+  });
+
+  it("AC-3C-BRANCH-LATCH: two branches that never write back each latch after exactly one dispatch per cycle", async () => {
+    const h = harness();
+    await tick(h, at(0));
+    done(h, "a", 5);
+    await tick(h, at(15));
+    for (const minutes of [30, 45, 60, 75]) {
+      const later = await tick(h, at(minutes));
+      expect(later.plan, `t+${minutes}`).toMatchObject({ action: "pause", reason: "executor_writeback_unavailable" });
+      expect(later.upserts, `t+${minutes}`).toEqual([]);
+    }
+    expect(h.upserts.filter((entry) => entry.endsWith("@b"))).toHaveLength(1);
+    expect(h.upserts.filter((entry) => entry.endsWith("@c"))).toHaveLength(1);
+    // Each latched branch's task is deactivated, and each records its own blocked receipt, in its run (BI-086DC167).
+    expect(new Set(h.deactivated)).toEqual(new Set([PRIMARY, branch("c")]));
+    expect(drive(h).receipts).toEqual(expect.arrayContaining([{ stageKey: "b", kind: "blocked", runKey: CYCLE }, { stageKey: "c", kind: "blocked", runKey: CYCLE }]));
+  });
+
+  it("a branch latched by writeback does not block the other, which still dispatches", async () => {
+    const latched = { node: "stage:b", enteredAt: at(-30).toISOString(), taskId: PRIMARY, lastAction: "dispatch_agent", lastReason: "agent_stage", lastCycleKey: CYCLE };
+    const fresh = { node: "stage:c", enteredAt: at(-30).toISOString(), taskId: branch("c") };
+    const h = harness({ workroomDrive: { kind: "workroom-drive", version: 1, action: "dispatch_agent", reason: "agent_stage", stageKey: "b", lastCycleKey: CYCLE,
+      receipts: [{ stageKey: "a", kind: "stage-evidence-recorded" }], marking: { format: "drive-marking/1", cycleKey: CYCLE, tokens: [latched, fresh], iterations: {}, reworkTaken: {}, deadlines: {}, children: {} } } });
+    const result = await tick(h, at(0));
+    // The aggregate is the latched branch's pause (pause outranks dispatch), yet c is dispatched.
+    expect(result.plan).toMatchObject({ action: "pause", reason: "executor_writeback_unavailable" });
+    expect(result.upserts).toEqual([`${branch("c")}@c`]);
+    expect(result.deactivated).toEqual([PRIMARY]);
+    expect(drive(h).dispatchedStageKeys).toEqual(["c"]);
+  });
+
+  it("a branch that fires and waits at the join, then the join completing, each deactivate the leaving task that tick", async () => {
+    const h = harness();
+    await tick(h, at(0));
+    done(h, "a", 5);
+    await tick(h, at(15));
+    done(h, "b", 20);
+    const waits = await tick(h, at(30));
+    expect(waits.deactivated).toContain(PRIMARY);
+    expect(tokens(h).map((token) => [token.node, token.from])).toEqual([["node:j", "stage:b"], ["stage:c", undefined]]);
+    done(h, "c", 35);
+    const joined = await tick(h, at(45));
+    // c's branch task is deactivated as its token leaves; d enters and takes the primary id, which the upsert reactivates.
+    expect(joined.deactivated).toEqual([branch("c")]);
+    expect(joined.upserts).toEqual([`${PRIMARY}@d`]);
+    expect(tokens(h)).toEqual([expect.objectContaining({ node: "stage:d", taskId: PRIMARY })]);
+  });
+
+  it("a branch whose dispatch fails to schedule is not latched: it records no dispatch and is dispatched next tick", async () => {
+    const h = harness();
+    await tick(h, at(0));
+    done(h, "a", 5);
+    h.failing.add("c");
+    const partial = await tick(h, at(15));
+    expect(partial.upserts).toEqual([`${PRIMARY}@b`]);
+    expect(drive(h).dispatchedStageKeys).toEqual(["b"]);
+    const c = tokens(h).find((token) => token.node === "stage:c");
+    expect(c).toEqual({ node: "stage:c", enteredAt: at(15).toISOString(), taskId: branch("c") });
+    h.failing.clear();
+    const retried = await tick(h, at(30));
+    expect(retried.upserts).toEqual([`${branch("c")}@c`]);
+  });
+
+  it("a stop deactivates every branch task the marking names", async () => {
+    const h = harness();
+    await tick(h, at(0));
+    done(h, "a", 5);
+    await tick(h, at(15));
+    h.stopConditionHits = ["The substrate cannot be read."];
+    const stopped = await tick(h, at(30));
+    expect(stopped.plan).toMatchObject({ action: "stop", reason: "conformance_stop" });
+    expect(new Set(stopped.deactivated)).toEqual(new Set([PRIMARY, branch("c")]));
+    expect(stopped.upserts).toEqual([]);
+  });
+
+  it("success deactivates every task, and a sequential twin of the room keeps the primary id throughout", async () => {
+    const h = harness();
+    await tick(h, at(0));
+    done(h, "a", 5);
+    await tick(h, at(15));
+    done(h, "b", 20);
+    done(h, "c", 20);
+    await tick(h, at(30));
+    await tick(h, at(45));
+    done(h, "d", 50);
+    const success = await tick(h, at(60));
+    expect(success.plan).toMatchObject({ action: "stop", reason: "success" });
+    expect(success.deactivated).toContain(PRIMARY);
+    expect(tokens(h)).toEqual([]);
+  });
+
+  it("with the parallel flag off the room pauses construct_not_executable and dispatches nothing", async () => {
+    flags.table["parallel-split-join"] = false;
+    const h = harness();
+    const paused = await tick(h, at(0));
+    expect(paused.plan).toMatchObject({ action: "pause", reason: "construct_not_executable" });
+    expect(paused.upserts).toEqual([]);
+  });
+});
+
+describe("runWorkroomDriveJob: an acceptance steward room dispatches its bound coworker (BI-C1781121)", () => {
+  it("dispatches the agent the room bound to the verifier role, briefed with the room objective", async () => {
+    const fx = effects();
+    const steward = room({
+      capsuleId: "WC-ACC-C1781121",
+      objective: "Verify BI-C1781121 on the live install.",
+      scopeClaims: [
+        buildWorkShapeClaim("acceptance-verification@1.0.0"),
+        buildWorkShapeRoleBindingsClaim({ "acceptance-verifier": "agent:AGT-WS-BUILD" }),
+      ],
+      participants: [{ ...coordinatorAssignment("row-1"), kind: "person" as const }],
+    });
+    const result = await runWorkroomDriveJob(new Date("2026-09-25T06:00:00.000Z"), { listRooms: async () => [steward], effects: fx });
+    expect(result.dispatched).toBe(1);
+    expect(fx.upsertAgentTask).toHaveBeenCalledWith(expect.objectContaining({
+      agentId: "AGT-WS-BUILD",
+      taskId: workroomDriveTaskId("WC-ACC-C1781121", "acceptance-verification"),
+      prompt: expect.stringContaining("Verify BI-C1781121 on the live install."),
+    }));
   });
 });

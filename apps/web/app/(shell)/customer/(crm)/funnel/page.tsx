@@ -13,6 +13,7 @@ import { OwnerFirstSummaryBand } from "@/components/owner-first/OwnerFirstSummar
 import { loadOwnerFirstContext } from "@/lib/owner-first/context";
 import { buildWorkspaceStorefrontSummary } from "@/lib/owner-first/domain-summary";
 import { isSimpleNavMode, NAV_MODE_COOKIE, resolveNavModeFromCookie } from "@/lib/navigation/nav-mode";
+import { conversionCallouts, weakestConversion } from "./conversion-callout";
 
 function getFunnelWidthClass(width: number) {
   if (width >= 90) return "w-full";
@@ -132,16 +133,11 @@ export default async function FunnelPage() {
     },
   ];
 
-  // Find the weakest conversion point
-  const convRates = [
-    { stage: "Interactions to Engagements", rate: convToEngagement },
-    { stage: "Engagements to Opportunities", rate: convToOpp },
-    { stage: "Opportunities to Won", rate: winRate },
-  ].filter((c) => c.rate !== null);
-
-  const weakest = convRates.length > 0
-    ? convRates.reduce((min, c) => (Number(c.rate) < Number(min.rate) ? c : min))
-    : null;
+  // Name each drop-off from the stages the chart renders, so a direct-lead
+  // install is not told to fix an "Interactions" stage it does not show (BI-0BAFEF84).
+  const weakest = weakestConversion(
+    conversionCallouts(funnelStages, [convToEngagement, convToOpp, winRate]),
+  );
 
   // Owner-first: turn the top-of-funnel storefront counts into concrete guest
   // follow-up work before the conversion-analysis view (BI-3BCAF95F). The funnel
@@ -209,7 +205,7 @@ export default async function FunnelPage() {
             Weakest conversion point
           </p>
           <p className="text-sm text-[var(--dpf-muted)] mt-0.5">
-            {weakest.stage} at {weakest.rate}% — this is where the biggest drop-off occurs
+            {weakest.stage} at {weakest.rate}% is the biggest drop-off
           </p>
         </div>
       )}

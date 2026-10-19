@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const db = vi.hoisted(() => ({
+  persisted: {} as Record<string, unknown>,
   findFirst: vi.fn(),
   findUnique: vi.fn(),
   findModelConfig: vi.fn(),
@@ -17,14 +18,9 @@ const autonomous = vi.hoisted(() => ({
   resolveTools: vi.fn(),
 }));
 
-vi.mock("@dpf/db", () => ({
+vi.mock("@dpf/db", async () => ({
   prisma: {
-    taskRun: {
-      findFirst: (...args: unknown[]) => db.findFirst(...args),
-      findUnique: (...args: unknown[]) => db.findUnique(...args),
-      update: (...args: unknown[]) => db.update(...args),
-      updateMany: (...args: unknown[]) => db.updateMany(...args),
-    },
+    taskRun: (await import("./test-support/task-run-state")).taskRunState(db),
     coworkerActionEnvelope: {
       findFirst: (...args: unknown[]) => db.findEnvelope(...args),
     },
@@ -137,6 +133,7 @@ function existingRun(
 describe("reaper-stalled terminal writer resumption", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  db.persisted = {};
     db.findFirst.mockResolvedValue(existingRun("stalled"));
     db.findEnvelope.mockResolvedValue(null);
     db.findToolExecution.mockResolvedValue(null);
@@ -232,7 +229,8 @@ describe("reaper-stalled terminal writer resumption", () => {
 
   it("admits only one provider loop for duplicate exact-bound recovery deliveries", async () => {
     let claimed = false;
-    db.updateMany.mockImplementation(async () => {
+    db.updateMany.mockImplementation(async (args: { where: { status: string } }) => {
+      if (args.where.status === "working") return { count: 1 };
       if (claimed) return { count: 0 };
       claimed = true;
       return { count: 1 };

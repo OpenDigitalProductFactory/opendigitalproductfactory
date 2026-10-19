@@ -42,18 +42,20 @@ import {
 import { selectRecipeWithExploration } from "./champion-challenger";
 import {
   selectEndpointPreference,
+  toPreferenceCandidate,
+  withInferredPreferenceFamily,
   type EndpointPreferences,
 } from "./preference-finalization";
 import {
-  attachHarnessRecipeToPlan,
+  bindActivityExecutionPlan,
+  activityBudgetExclusion,
   buildPlanFromRecipe,
   buildDefaultPlan,
   resolveDefaultExecutionAdapter,
 } from "./execution-plan";
-import {
-  applyHarnessConfidenceOverride,
-  bindHarnessRecipeForActivity,
-} from "./harness-recipe";
+import { buildRoutingConfidence } from "./route-confidence";
+import { accountCandidateExclusion, accountRuntimeKey, accountTraceProjector, bindProviderAccountExecution } from "./provider-account-candidates";
+import { compareAccountAllocation } from "./provider-account-allocation";
 
 // ── Stage 3: Hard filter (V2 — contract-based) ──────────────────────────────
 
@@ -108,6 +110,8 @@ export function getExclusionReasonV2(
   // accidental overlap cannot broaden eligibility.
   const providerConstraintReason = getProviderConstraintExclusionReason(ep, contract);
   if (providerConstraintReason) return providerConstraintReason;
+  const accountConstraintReason = accountCandidateExclusion(ep, contract);
+  if (accountConstraintReason) return accountConstraintReason;
 
   // Account/transport compatibility is a hard platform fact, not a score.
   // Preserve the endpoint in the excluded trace so runtime-health previews
@@ -273,6 +277,7 @@ function filterHardV2(
    */
   capacityByProvider: ReadonlyMap<string, CapacitySnapshot> = new Map(),
   nowMs: number = Date.now(),
+  activity?: ActivityContract,
 ): HardFilterResultV2 {
   const eligible: EndpointManifest[] = [];
   const excluded: CandidateTrace[] = [];
@@ -301,7 +306,8 @@ function filterHardV2(
   const belowFloor: Array<{ ep: EndpointManifest; reason: string }> = [];
 
   for (const ep of endpoints) {
-    const reason = getExclusionReasonV2(ep, hardContract);
+    const reason = getExclusionReasonV2(ep, hardContract)
+      ?? activityBudgetExclusion(ep, hardContract, activity);
     if (reason === null) {
       const unmet = firstUnmetDimension(ep, contract.minimumDimensions);
       if (unmet) {
@@ -362,7 +368,8 @@ function filterHardV2(
   const cooled: Array<{ ep: EndpointManifest; reason: string }> = [];
   const live: EndpointManifest[] = [];
   for (const ep of eligible) {
-    const runtime = getEndpointRuntimeState(ep.providerId, ep.modelId);
+    const providerRuntime = getEndpointRuntimeState(ep.providerId, ep.modelId);
+    const runtime = providerRuntime.unavailable ? providerRuntime : getEndpointRuntimeState(accountRuntimeKey(ep.providerId, ep.providerConnectionId), ep.modelId);
     if (runtime.unavailable) {
       cooled.push({ ep, reason: `runtime_cooldown:${runtime.reason ?? "unknown"}` });
     } else {
@@ -458,6 +465,7 @@ export async function routeEndpointV2(
     activityHarnessConfidenceOverrides?: ActivityHarnessConfidenceOverride[];
     /** Preferences are evaluated only after the complete eligibility pipeline. */
     preferences?: EndpointPreferences;
+    accountAffinityKey?: string;
     /**
      * Optional ProviderCapacityStatus map (providerId → snapshot). When
      * omitted, the pipeline loads fresh rows from the DB (BI-3607DDDA). Tests
@@ -468,6 +476,7 @@ export async function routeEndpointV2(
   },
 ): Promise<RouteDecision> {
   const timestamp = new Date();
+  const withAccountIdentity = accountTraceProjector(endpoints);
   const allCandidates: CandidateTrace[] = [];
   const allExcludedReasons: string[] = [];
   const sensitivity: SensitivityLevel = contract.sensitivity;
@@ -518,23 +527,13 @@ export async function routeEndpointV2(
   let capacityByProvider = opts?.capacityByProvider;
   if (!capacityByProvider) {
     try {
-      const { prisma } = await import("@dpf/db");
-      const rows = await prisma.providerCapacityStatus.findMany({
-        select: { providerId: true, state: true, retryAt: true },
-      });
-      const map = new Map<string, CapacitySnapshot>();
-      for (const row of rows) {
-        map.set(row.providerId, {
-          state: row.state,
-          retryAtMs: row.retryAt ? row.retryAt.getTime() : null,
-        });
-      }
-      capacityByProvider = map;
+      const { loadProviderCapacitySnapshots } = await import("./provider-capacity/store");
+      capacityByProvider = await loadProviderCapacitySnapshots();
     } catch {
       capacityByProvider = new Map();
     }
   }
-  const hardResult = filterHardV2(working, contract, capacityByProvider, nowMs);
+  const hardResult = filterHardV2(working, contract, capacityByProvider, nowMs, opts?.activityContract);
   working = hardResult.eligible;
 
   for (const trace of hardResult.excluded) {
@@ -575,7 +574,7 @@ export async function routeEndpointV2(
       reason: `No eligible endpoints for task type '${contract.taskType}' with sensitivity '${sensitivity}'. ${allCandidates.length} endpoint(s) excluded.${clearanceBlocked ? ` No connected provider is cleared for '${sensitivity}' data.` : ""}`,
       fitnessScore: 0,
       fallbackChain: [],
-      candidates: allCandidates,
+      candidates: allCandidates.map(withAccountIdentity),
       excludedCount: allCandidates.length,
       excludedReasons: allExcludedReasons,
       policyRulesApplied: policyResult.applied,
@@ -661,6 +660,8 @@ export async function routeEndpointV2(
       const qualityDelta = qualityRank(a.endpoint) - qualityRank(b.endpoint);
       if (qualityDelta !== 0) return qualityDelta;
     }
+    if (a.rankScore === b.rankScore && a.endpoint.providerId === b.endpoint.providerId
+      && a.endpoint.modelId === b.endpoint.modelId) return compareAccountAllocation(a.endpoint, b.endpoint, opts?.accountAffinityKey, nowMs);
     return 0; // preserve prior rankScore order (stable sort)
   });
 
@@ -668,18 +669,15 @@ export async function routeEndpointV2(
   // Persisted endpoint pins and per-coworker provider/model assignments are
   // preferences, never authority. They can select only from the set that has
   // cleared override blocks, policy, contract, cooldown, and capacity fences.
+  // BI-7F2FBDA3: lineage travels with the candidates so an unavailable
+  // preferred model can move to its family successor (preference-finalization).
   const preferenceSelection = selectEndpointPreference(
-    ranked.map((entry) => ({
-      endpointId: entry.endpoint.id,
-      providerId: entry.endpoint.providerId,
-      modelId: entry.endpoint.modelId,
-      entry,
-    })),
+    ranked.map((entry) => toPreferenceCandidate(entry.endpoint, entry)),
     {
       ...(pinnedOverride
         ? { pinnedEndpointId: pinnedOverride.endpointId }
         : {}),
-      ...(opts?.preferences ?? {}),
+      ...withInferredPreferenceFamily(endpoints, opts?.preferences ?? {}),
     },
   );
   const winner = preferenceSelection.winner.entry;
@@ -718,24 +716,18 @@ export async function routeEndpointV2(
         winner.endpoint.providerId, winner.endpoint.modelId, contract,
       );
   const baseExecutionPlan = recipe
-    ? buildPlanFromRecipe(recipe, contract)
+    ? buildPlanFromRecipe(recipe, contract, winner.endpoint)
     : opts?.skipRecipe
       ? undefined
       : buildDefaultPlan(winner.endpoint, contract);
-  const executionPlan =
+  let executionPlan =
     baseExecutionPlan && opts?.activityContract
-      ? attachHarnessRecipeToPlan(baseExecutionPlan, (() => {
-          const hint = {
-            providerId: winner.endpoint.providerId,
-            modelId: winner.endpoint.modelId,
-          };
-          return applyHarnessConfidenceOverride(
-            bindHarnessRecipeForActivity(opts.activityContract, hint),
-            hint,
-            opts.activityHarnessConfidenceOverrides,
-          );
-        })())
+      ? bindActivityExecutionPlan(baseExecutionPlan, opts.activityContract, {
+          providerId: winner.endpoint.providerId,
+          modelId: winner.endpoint.modelId,
+        }, opts.activityHarnessConfidenceOverrides)
       : baseExecutionPlan;
+  executionPlan = bindProviderAccountExecution(executionPlan, winner.endpoint);
 
   // Build full candidate trace (eligible endpoints, with rankScore as fitnessScore)
   const eligibleTraces: CandidateTrace[] = ranked.map(
@@ -755,15 +747,13 @@ export async function routeEndpointV2(
   );
 
   const fallbackChain = fallbackEntries.map((e) => e.endpoint.id);
-  // Always include winner in fallback chain too
-  const fullFallbackChain = [winner.endpoint.id, ...fallbackChain];
+  const fullFallbackChain = [winner.endpoint.id, ...fallbackChain]; // winner leads the chain
 
   const preferenceReason = preferenceSelection.resolution
     ? ` Preferences: ${preferenceSelection.resolution.applied.length} applied, ` +
       `${preferenceSelection.resolution.unavailable.length} unavailable.`
     : "";
-  // BI-16A1B4A3: a relaxed floor must never be silent — the owner is getting a
-  // below-floor model and is entitled to know that is what happened.
+  // BI-16A1B4A3: a relaxed floor is never silent — the owner is entitled to know.
   const degradedReason = hardResult.qualityFloorRelaxed
     ? " No endpoint met the quality floor for this work, so it ran on the best available rather than not running."
     : "";
@@ -778,9 +768,10 @@ export async function routeEndpointV2(
     selectedEndpoint: winner.endpoint.id,
     selectedModelId: winner.endpoint.modelId,
     reason,
+    routingConfidence: buildRoutingConfidence(hardResult.qualityFloorRelaxed, ranked.length, preferenceSelection.resolution?.fallbackUsed),
     fitnessScore: winner.rankScore,
     fallbackChain: fullFallbackChain,
-    candidates: [...eligibleTraces, ...allCandidates],
+    candidates: [...eligibleTraces, ...allCandidates].map(withAccountIdentity),
     excludedCount: allCandidates.length,
     excludedReasons: allExcludedReasons,
     policyRulesApplied: policyResult.applied,

@@ -27,10 +27,10 @@
 import { prisma } from "@dpf/db";
 import { inferProviderIdFromRouteContext } from "@/lib/ai-provider-route-context";
 import { promoteBacklogItemToBuildDraft } from "@/lib/governed-backlog-tee-up";
+import { assertEndpointConcurrencySelection } from "@/lib/operate/endpoint-concurrency-diagnostic";
 
-import type { EndpointTestRunRequest, ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { EndpointTestRunRequest, ToolDefinition, ToolResult, ToolExecutionContext } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
-import type { UnifiedWipDb } from "@/lib/build/unified-wip-query";
 
 const definitions: ToolDefinition[] = [
   {
@@ -145,7 +145,7 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "run_endpoint_tests",
-    description: "Run the agent test harness against a scoped endpoint. On provider detail routes, omit endpointId to use the current provider and default to quick probes. Set allEndpoints=true or allModels=true only when the user explicitly asks for exhaustive diagnostics.",
+    description: "Run scoped endpoint diagnostics; provider detail routes default to quick probes. Use allEndpoints/allModels only for exhaustive diagnostics. concurrencyOnly observes two local calls without grading. fidelityOnly performs one explicit local tool-selection and governed-read observation, or returns its existing checkpoint; explicit continuation builds the matrix without changing ratings or caps.",
     inputSchema: {
       type: "object",
       properties: {
@@ -153,6 +153,11 @@ const definitions: ToolDefinition[] = [
         modelId: { type: "string", description: "Optional model profile to test. Defaults to a representative active model for the endpoint." },
         taskType: { type: "string", description: "Run only scenarios for this task type (default: all)" },
         probesOnly: { type: "boolean", description: "Run only capability probes, skip scenarios (default: true for coworker calls)" },
+        concurrencyOnly: { type: "boolean", description: "Run exactly two local calls in one 30-second observation. Requires explicit endpointId and modelId; incompatible with probesOnly=true, taskType, allModels or allEndpoints. Preserves completion/admission evidence; never updates capability ratings." },
+        fidelityOnly: { type: "boolean", description: "Perform one scheduled observation under existing admission and execution policies. Requires explicit endpoint/account/model and fidelityObservationIndex. Nine prompts at each surface 8/15/24/32/48 require 45 explicit distinct continuations. Replaying an index returns stored progress; held or unknown execution is never retried. No production cap or rating writes." },
+        fidelityObservationIndex: { type: "integer", minimum: 0, maximum: 44, description: "Required for fidelityOnly. Start at 0; continue using the returned checkpoint.nextIndex and fidelityRunId. Each request runs at most one case." },
+        fidelityRunId: { type: "string", description: "Server-issued fidelity run ID, required after index 0. Bound to current authority, source, runtime, account and catalog. Cannot resume legacy matrix runs." },
+        providerConnectionId: { type: "string", description: "Exact configured account identity, required for fidelityOnly." },
         allEndpoints: { type: "boolean", description: "Explicitly test every active LLM endpoint. Use only when the user asks for all endpoints." },
         allModels: { type: "boolean", description: "Test every active model profile for the endpoint. Use only for exhaustive diagnostics." },
       },
@@ -163,7 +168,11 @@ const definitions: ToolDefinition[] = [
   },
 ];
 
-async function promoteToBuildStudioHandler(params: Record<string, unknown>, userId: string): Promise<ToolResult> {
+async function promoteToBuildStudioHandler(
+  params: Record<string, unknown>,
+  userId: string,
+  context?: { agentId?: string; threadId?: string; taskRunId?: string; apiTokenId?: string },
+): Promise<ToolResult> {
   const itemId = String(params["itemId"] ?? "");
   const force = params["force"] === true;
   const governedConfig = await prisma.platformDevConfig.findUnique({
@@ -201,22 +210,23 @@ async function promoteToBuildStudioHandler(params: Record<string, unknown>, user
     }
   }
 
-  // WIP cap (BI-937128F6; shared with the createFeatureBuild start path): refuse
-  // to promote another build into Build Studio while the shared BS sandbox pool
-  // is saturated. Pressure is now the unified, pool-aware count across ALL
-  // surfaces' active WIP — a promote contends on the bs-sandbox pool, so it gates
-  // on that pool (capacity BUILD_WIP_CAP, unchanged), not a BS-only build count.
+  // Admission by points in flight (BI-3430B3A4) replaces the count cap: the
+  // item's portfolio must have room for its points. A person promoting past the
+  // allowance proceeds with a recorded warning; an autonomous caller is refused.
+  // The sandbox pool stays the machine's physical limit, enforced on acquire.
+  let admissionWarning: string | null = null;
   {
-    const { decideUnifiedWip, BuildWipCapError } = await import("@/lib/build/wip-cap");
-    const { loadActiveUnifiedWip, poolPressure } = await import(
-      "@/lib/build/unified-wip-query"
-    );
-    const wip = await loadActiveUnifiedWip(prisma as unknown as UnifiedWipDb);
-    const decision = decideUnifiedWip("bs-sandbox", poolPressure(wip, "bs-sandbox"));
-    if (!decision.admitted) {
-      const err = new BuildWipCapError(decision.pressure, decision.capacity);
-      return { success: false, error: "wip_cap_reached", message: err.message };
+    const { evaluateItemAdmission, recordAdmissionOutcome, blocksStart } = await import("@/lib/build/investment-admission");
+    const { isAutonomousCaller } = await import("@/lib/portfolio/budget-reservation");
+    const admission = await evaluateItemAdmission(prisma as never, {
+      itemId,
+      startKind: isAutonomousCaller(context) ? "autonomous" : "human",
+    });
+    await recordAdmissionOutcome(prisma as never, admission, { source: "promote_to_build_studio", userId, agentId: context?.agentId ?? null });
+    if (blocksStart(admission)) {
+      return { success: false, error: "wip_allowance_reached", message: admission.reason, data: { admission } };
     }
+    if (admission.verdict !== "admit") admissionWarning = admission.reason;
   }
 
   const result = await prisma.$transaction(async (tx) => {
@@ -260,13 +270,14 @@ async function promoteToBuildStudioHandler(params: Record<string, unknown>, user
   return {
     success: true,
     entityId: result.build.buildId,
-    message: result.autoApprovedDispatchEligible
+    message: (result.autoApprovedDispatchEligible
       ? `Promoted ${itemId} to Build Studio (auto-approved under governed flow — Ideate research dispatched)`
-      : `Promoted ${itemId} to Build Studio`,
+      : `Promoted ${itemId} to Build Studio`) + (admissionWarning ? ` Warning: ${admissionWarning}` : ""),
     data: {
       buildId: result.build.buildId,
       backlogItemId: itemId,
       autoApprovedDispatchEligible: result.autoApprovedDispatchEligible,
+      admissionWarning,
     },
   };
 }
@@ -438,6 +449,18 @@ function buildEndpointTestRunRequest(
   const endpointId = explicitEndpointId ?? inferredEndpointId;
   const modelId = cleanEndpointTestString(params["modelId"]);
   const taskType = cleanEndpointTestString(params["taskType"]);
+  if (params["concurrencyOnly"] === true) {
+    try {
+      assertEndpointConcurrencySelection({ endpointId: explicitEndpointId, modelId, taskType,
+        probesOnly: params["probesOnly"] === true, allModels: params["allModels"] === true,
+        allEndpoints: params["allEndpoints"] === true });
+      return { endpointId: explicitEndpointId, modelId, concurrencyOnly: true,
+        probesOnly: false, allEndpoints: false, allModels: false };
+    } catch (error) {
+      return { probesOnly: false, allEndpoints: false, allModels: false,
+        error: error instanceof Error ? error.message : "Concurrency diagnostics selection is invalid" };
+    }
+  }
   const allEndpoints = endpointId ? false : params["allEndpoints"] === true;
 
   const base: EndpointTestRunRequest = {
@@ -485,8 +508,20 @@ async function resolveRepresentativeEndpointModelId(endpointId: string): Promise
 async function runEndpointTestsHandler(
   params: Record<string, unknown>,
   userId: string,
-  context?: { routeContext?: string },
+  context?: ToolExecutionContext,
 ): Promise<ToolResult> {
+  if (params["fidelityOnly"] === true) {
+    if (params["concurrencyOnly"] === true || params["probesOnly"] === true || params["taskType"]
+      || params["allModels"] === true || params["allEndpoints"] === true) {
+      return { success: false, message: "Fidelity diagnostics require a single explicit selection without other diagnostic modes." };
+    }
+    const { runLocalToolFidelityDiagnostic } = await import("@/lib/operate/tool-fidelity-runner");
+    return runLocalToolFidelityDiagnostic({ endpointId: typeof params["endpointId"] === "string" ? params["endpointId"] : "",
+      modelId: typeof params["modelId"] === "string" ? params["modelId"] : "",
+      providerConnectionId: typeof params["providerConnectionId"] === "string" ? params["providerConnectionId"] : "",
+      fidelityRunId: typeof params["fidelityRunId"] === "string" ? params["fidelityRunId"] : undefined,
+      fidelityObservationIndex: typeof params["fidelityObservationIndex"] === "number" ? params["fidelityObservationIndex"] : undefined }, userId, context);
+  }
   const { runEndpointTests } = await import("@/lib/endpoint-test-runner");
   const request = buildEndpointTestRunRequest(params, context);
 
@@ -504,13 +539,15 @@ async function runEndpointTestsHandler(
     ...(request.endpointId ? { endpointId: request.endpointId } : {}),
     ...(modelId ? { modelId } : {}),
     ...(request.taskType ? { taskType: request.taskType } : {}),
-    probesOnly: request.probesOnly,
+    ...(request.concurrencyOnly ? { concurrencyOnly: true } : { probesOnly: request.probesOnly }),
     triggeredBy: userId,
   });
 
   const summary = results.map((r) => {
-    // BI-91F0E312: deferred probes/scenarios never reached the model — report
-    // them as deferred, not failed, and flag the run as incomplete.
+    if (r.concurrency) {
+      return `**${r.endpointId} / ${r.modelId}**: Concurrency: ${r.concurrency.outcome} — ${r.concurrency.reason}`;
+    }
+    // Incomplete observations do not establish a model-quality failure.
     const probesPassed = r.probes.filter((p) => p.outcome === "passed").length;
     const probesFailed = r.probes.filter((p) => p.outcome === "failed").length;
     const probesDeferred = r.probes.filter((p) => p.outcome === "deferred").length;
@@ -519,7 +556,7 @@ async function runEndpointTestsHandler(
     const scenariosDeferred = r.scenarios.filter((s) => s.outcome === "deferred").length;
     const lines = [
       `**${r.endpointId}**: Probes ${probesPassed}/${probesPassed + probesFailed} passed` +
-        (probesDeferred > 0 ? ` (${probesDeferred} deferred — capacity held, run incomplete)` : ""),
+        (probesDeferred > 0 ? ` (${probesDeferred} unverified — run incomplete)` : ""),
     ];
     if (r.scenarios.length > 0) {
       lines.push(
@@ -555,7 +592,7 @@ async function generateCodeHandler(): Promise<ToolResult> {
 }
 
 const handlers: Record<string, ToolPackHandler> = {
-  promote_to_build_studio: (params, userId) => promoteToBuildStudioHandler(params, userId),
+  promote_to_build_studio: (params, userId, context) => promoteToBuildStudioHandler(params, userId, context),
   abandon_stalled_build: (params, userId) => abandonStalledBuildHandler(params, userId),
   update_lifecycle: (params) => updateLifecycleHandler(params),
   verify_live_install_readiness: (params) => verifyLiveInstallReadinessHandler(params),

@@ -40,8 +40,8 @@ export type TrustDimensionKey =
 export type TrustEvidenceRef = {
   kind:
     | "prisma-row"
-    | "neo4j-node"
-    | "neo4j-relationship"
+    | "graph-node"
+    | "graph-relationship"
     | "tool-execution"
     | "assurance-run"
     | "bom-document"

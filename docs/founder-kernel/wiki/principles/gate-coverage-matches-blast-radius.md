@@ -63,3 +63,24 @@ When you must narrow, put the narrowing somewhere a reviewer will see it: a base
 ## Sources
 
 (Rendered from the `sources:` frontmatter by `WikiSourceCitations` — do not duplicate citation prose here.)
+
+## Amendment 2026-09-22 — "I did not click it" is inconclusive, not a pass
+
+For a sampled audit of a running surface, the declared scope is **every actionable
+element on each page visited** — every button, form field, dropdown and onward
+link — not the happy path through it.
+
+Each one is resolved as implemented or as a gap. Resolution may be driving it, or
+a quick check in the code that it is real rather than a stub; a gap found by
+reading is still a finding and is recorded as code-verified rather than
+functionally verified. What is not available is leaving it unexamined and calling
+the page audited: per [[principles/report-only-the-verdict-you-reached]], that is
+an inconclusive, and a scope that quietly excludes it is the partial gate whose
+name implies completeness that this principle already forbids.
+
+The cost of getting this wrong is measured. One archetype audit reached the
+invoice pages, saw a send control and a tax field, drove only the create-draft
+path, and missed two real defects sitting behind the controls it had looked at.
+
+This holds even when the data will be discarded afterwards. The gap is the value,
+not the data.

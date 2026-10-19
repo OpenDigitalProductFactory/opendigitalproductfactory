@@ -1,13 +1,15 @@
 // packages/db/src/sanitized-clone.ts
 // Sanitized clone pipeline -- copies production data to dev with PII obfuscation.
 // Classification driven by table-classification.ts.
-// Postgres-only: BET-5 (BI-A1E864A5) retired Neo4j/Qdrant onto Postgres, so the
-// graph mirror and vectors ride along in the Postgres clone; the former Neo4j
+// Postgres-only: since BET-5 (BI-A1E864A5) the graph mirror and vectors live in
+// Postgres, so they ride along in the Postgres clone; the former graph-store
 // clone step was removed in BI-B1977CEE.
 
 import { getTableSensitivity } from "./table-classification";
 import { spawn, type ChildProcess } from "node:child_process";
 import { pipeline } from "node:stream/promises";
+import { Client } from "pg";
+import { copySanitizedCursorBatches } from "./sanitized-clone-batches";
 import { provisionContributorPreviewAdmin, requireContributorPreviewPassword } from "./contributor-preview-auth";
 
 // -- Obfuscation Helpers --
@@ -355,11 +357,15 @@ export async function runSanitizedClone(): Promise<void> {
   const devAdapter = new PrismaPg({ connectionString: devUrl });
   const prod = new PrismaClient({ adapter: prodAdapter });
   const dev = new PrismaClient({ adapter: devAdapter });
+  const sanitizedSource = new Client({ connectionString: prodUrl });
 
   try {
     console.log("[sanitized-clone] Connecting to production and dev databases...");
     await prod.$connect();
     await dev.$connect();
+    await sanitizedSource.connect();
+    // All confidential tables share one read-only snapshot and user ranking.
+    await sanitizedSource.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
 
     const [productionIdentity, destinationIdentity] = await Promise.all([
       readDatabaseIdentity(prod),
@@ -377,14 +383,18 @@ export async function runSanitizedClone(): Promise<void> {
         const tables = await listPublicTables(prod, false);
         console.log(`[sanitized-clone] Found ${tables.length} tables to process`);
 
-        // Build a stable ID-to-index map from the User table for deterministic obfuscation.
-        // This happens after the initial reset so even an early source-query failure
-        // cannot leave a previously partial preview dataset available.
-        const userIdMap = new Map<string, number>();
-        const users: Array<{ id: string }> = await prod.$queryRaw`SELECT id FROM "User" ORDER BY id`;
-        users.forEach((u, i) => userIdMap.set(u.id, i + 1));
-
-        let autoIndex = users.length;
+        // PostgreSQL owns user ranking; never materialize a User map in JS.
+        const userCount = (await sanitizedSource.query('SELECT count(*) AS count FROM "User"')).rows;
+        let autoIndex = Number(userCount[0]?.count ?? 0);
+        const writeSanitizedBatch = async (tableName: string, rows: Array<Record<string, unknown>>) => {
+          for (let i = 0; i < rows.length; i++) {
+            const row = rows[i]!;
+            const userIndex = row.__dpfCloneUserIndex;
+            delete row.__dpfCloneUserIndex;
+            rows[i] = sanitizeConfidentialRow(row, userIndex == null ? ++autoIndex : Number(userIndex));
+          }
+          await insertRowsWithReplicationDisabled(dev, tableName, rows);
+        };
 
         for (const { tablename } of tables) {
           if (!destinationTableNames.has(tablename)) {
@@ -412,9 +422,8 @@ export async function runSanitizedClone(): Promise<void> {
           if (AUDIT_TABLES.has(tablename)) {
             const copyCount = Math.min(rowCount, AUDIT_RECORD_LIMIT);
             console.log(`  AUDIT (last ${copyCount} of ${rowCount}): ${tablename}`);
-            const rows = await selectRowsForSanitization(prod, dev, tablename, copyCount);
-            const obfuscated = obfuscateRows(rows, userIdMap, () => ++autoIndex);
-            await insertRowsWithReplicationDisabled(dev, tablename, obfuscated);
+            await copyRowsForSanitization(sanitizedSource, prod, dev, tablename,
+              rows => writeSanitizedBatch(tablename, rows), copyCount);
             continue;
           }
 
@@ -423,9 +432,8 @@ export async function runSanitizedClone(): Promise<void> {
             await copyTableCompatible(tablename, prodUrl, devUrl, prod, dev);
           } else if (sensitivity === "confidential") {
             console.log(`  OBFUSCATE (confidential): ${tablename} (${rowCount} rows)`);
-            const rows = await selectRowsForSanitization(prod, dev, tablename);
-            const obfuscated = obfuscateRows(rows, userIdMap, () => ++autoIndex);
-            await insertRowsWithReplicationDisabled(dev, tablename, obfuscated);
+            await copyRowsForSanitization(sanitizedSource, prod, dev, tablename,
+              rows => writeSanitizedBatch(tablename, rows));
           }
         }
 
@@ -433,8 +441,10 @@ export async function runSanitizedClone(): Promise<void> {
       },
     );
 
+    await sanitizedSource.query("COMMIT");
     console.log("[sanitized-clone] PostgreSQL clone complete");
   } finally {
+    await sanitizedSource.end();
     await prod.$disconnect();
     await dev.$disconnect();
   }
@@ -477,12 +487,14 @@ async function resetDestinationData(
   await client.$executeRawUnsafe(resetSql);
 }
 
-async function selectRowsForSanitization(
+async function copyRowsForSanitization(
+  source: Client,
   sourceClient: RawDatabaseClient,
   destinationClient: RawDatabaseClient,
   tableName: string,
+  write: (rows: Array<Record<string, unknown>>) => Promise<void>,
   limit?: number,
-): Promise<Array<Record<string, unknown>>> {
+): Promise<void> {
   const [sourceColumns, destinationColumns] = await Promise.all([
     getCloneColumns(sourceClient, tableName),
     getCloneColumns(destinationClient, tableName),
@@ -497,31 +509,29 @@ async function selectRowsForSanitization(
   );
 
   const quotedTable = quoteIdentifier(tableName);
-  const orderColumn = compatibleColumns.has("createdAt")
-    ? quoteIdentifier("createdAt")
-    : compatibleColumns.has("id")
-      ? quoteIdentifier("id")
-      : null;
-  const orderClause = limit && orderColumn ? ` ORDER BY ${orderColumn} DESC` : "";
+  const ordering = limit && compatibleColumns.has("createdAt")
+    ? ["createdAt", ...(compatibleColumns.has("id") ? ["id"] : [])]
+    : compatibleColumns.has("id") ? ["id"] : [];
+  const orderSql = ordering.length
+    ? ordering.map(column => quoteIdentifier(column) + (limit ? " DESC" : " ASC")).join(", ")
+    : "ctid";
   const limitClause = limit ? ` LIMIT ${Math.max(0, Math.trunc(limit))}` : "";
+  // Match the existing obfuscator's first non-null id/userId/createdById rule.
+  const references = ["id", "userId", "createdById"].filter(column => compatibleColumns.has(column));
+  const referenceSql = references.map(column => `r.${quoteIdentifier(column)}::text`).join(", ");
+  // Carry the ordering through the join; batch boundaries cannot change aliases.
+  const rowsSql = `SELECT ${selectList}, row_number() OVER (ORDER BY ${orderSql}) AS "__dpfCloneRowOrder" FROM ${quotedTable} ORDER BY ${orderSql}${limitClause}`;
+  const selectSql = references.length
+    ? `SELECT r.*, u."__dpfCloneUserIndex" FROM (${rowsSql}) r LEFT JOIN
+       (SELECT id, row_number() OVER (ORDER BY id) AS "__dpfCloneUserIndex" FROM "User") u
+       ON u.id = ${references.length === 1 ? referenceSql : `COALESCE(${referenceSql})`}
+       ORDER BY r."__dpfCloneRowOrder"`
+    : rowsSql;
+  await copySanitizedCursorBatches(source, selectSql, async rows => {
+    for (const row of rows) delete row.__dpfCloneRowOrder;
+    await write(rows);
+  }, 50, false);
 
-  return sourceClient.$queryRawUnsafe<Array<Record<string, unknown>>>(
-    `SELECT ${selectList} FROM ${quotedTable}${orderClause}${limitClause}`,
-  );
-}
-
-function obfuscateRows(
-  rows: Array<Record<string, unknown>>,
-  userIdMap: ReadonlyMap<string, number>,
-  nextIndex: () => number,
-): Array<Record<string, unknown>> {
-  return rows.map((row) => {
-    const userId = (row.id ?? row.userId ?? row.createdById) as string | undefined;
-    const idx = userId && userIdMap.has(userId)
-      ? userIdMap.get(userId)!
-      : nextIndex();
-    return sanitizeConfidentialRow(row, idx);
-  });
 }
 
 /**

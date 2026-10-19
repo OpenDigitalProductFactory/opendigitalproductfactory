@@ -9,6 +9,7 @@ artifact, without Docker, pnpm, Prisma, or the portal runtime.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import platform
@@ -19,13 +20,43 @@ import sys
 from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from urllib.parse import urlparse
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from grok_credential import converge_grok_credential, find_grok_refresher  # noqa: E402
 
 
 PLUGIN_NAME = "dpf-platform"
 CODEX_PLUGIN_ID = f"{PLUGIN_NAME}@personal"
 MARKETPLACE_NAME = "dpf-platform-local"
+CODEX_LEGACY_PLUGIN_IDS = (f"{PLUGIN_NAME}@{MARKETPLACE_NAME}",)
+CLAUDE_PLUGIN_ID = f"{PLUGIN_NAME}@{MARKETPLACE_NAME}"
 TOKEN_ENV_VAR = "DPF_MCP_BEARER_TOKEN"
-DEFAULT_MCP_URL = "http://127.0.0.1:3000/api/mcp/v1"
+# The install's canonical origin when nothing names another (design 12.4.1):
+# setup persists DPF_MCP_URL = <PUBLIC_URL>/api/mcp/v1?tier=full (12.4.3), and
+# this loopback https default is what an install without a DNS name serves.
+# The shipped plugin descriptors are generated from it, so a client with no
+# DPF_MCP_URL still lands on the one origin OAuth tokens are issued for.
+DEFAULT_MCP_URL = "https://localhost/api/mcp/v1"
+
+
+def normalize_mcp_endpoint(endpoint: str) -> str:
+    """Treat an explicit portal origin as the canonical MCP path, never a root resource."""
+    try:
+        parsed = urlsplit(endpoint)
+        credential_keys = {"access_token", "accesstoken", "refresh_token", "refreshtoken", "token", "api_key", "apikey", "key",
+                           "authorization", "client_secret", "clientsecret", "secret", "password"}
+        if (parsed.scheme not in ("http", "https") or not parsed.hostname or "\\" in endpoint
+                or parsed.username or parsed.password or any(char.isspace() for char in endpoint)
+                or any(key.lower().replace("-", "_") in credential_keys for key, _ in parse_qsl(parsed.query))):
+            raise ValueError("Unsafe endpoint")
+        _ = parsed.port  # Validate the port before any configuration is written.
+        if parsed.path in ("", "/"):
+            return urlunsplit((parsed.scheme, parsed.netloc, "/api/mcp/v1", parsed.query, parsed.fragment))
+        return endpoint
+    except ValueError:
+        # Never include an input that may contain credentials in diagnostics.
+        raise ValueError("MCP endpoint must be a credential-free HTTP(S) URL") from None
 
 
 def with_mcp_catalog_tier(mcp_url: str, tier: str) -> str:
@@ -106,6 +137,30 @@ def copy_skill_pack(source: Path, destination: Path, dry_run: bool) -> bool:
     return True
 
 
+def is_build_debris(relative: Path) -> bool:
+    """Files no copy of the pack delivers: the copier and digests skip them."""
+    return "__pycache__" in relative.parts or relative.suffix == ".pyc" or relative.name == ".DS_Store"
+
+
+def codex_content_version(skill_pack: Path) -> str:
+    """Invalidate Codex's versioned cache when delivered bytes change."""
+    manifest_path = skill_pack / ".codex-plugin" / "plugin.json"
+    manifest = read_json(manifest_path, {})
+    base_version = str(manifest.get("version", "0.0.0")).split("+", 1)[0]
+    digest = hashlib.sha256()
+    for path in sorted(skill_pack.rglob("*")):
+        relative = path.relative_to(skill_pack)
+        if not path.is_file() or is_build_debris(relative):
+            continue
+        content = path.read_bytes()
+        if path == manifest_path:
+            # The cache suffix itself must not change the next run's digest.
+            content = json.dumps({**manifest, "version": base_version}, sort_keys=True).encode("utf-8")
+        digest.update(relative.as_posix().encode("utf-8") + b"\0")
+        digest.update(hashlib.sha256(content).digest())
+    return f"{base_version}+codex.{digest.hexdigest()[:24]}"
+
+
 def codex_marketplace_path(home: Path) -> Path:
     return home / ".agents" / "plugins" / "marketplace.json"
 
@@ -123,6 +178,45 @@ def codex_managed_plugin_path(home: Path) -> Path:
 def shared_managed_plugin_path(home: Path) -> Path:
     """Return the managed copy consumed by Claude, Grok, and global hooks."""
     return home / ".agents" / "plugins" / "plugins" / PLUGIN_NAME
+
+
+def claude_installed_plugins_path(home: Path) -> Path:
+    """Claude Code's record of which cache directory each install loads."""
+    return home / ".claude" / "plugins" / "installed_plugins.json"
+
+
+def installed_plugin_copies(home: Path, project_dir: Optional[Path] = None) -> list[dict[str, Any]]:
+    """Every installed copy of this pack a client on this machine may load.
+
+    The one list of copy locations (BI-16EAAB62): the copier above writes the
+    first two, and Claude Code materializes the third from a marketplace into
+    its plugin cache. `connector` marks the copies whose claude.mcp.json a
+    Claude client reads as its dpf server; Codex reads its connector from
+    config.toml, so its copy's descriptor is never loaded. Of the Claude cache
+    records, only user-scope ones and the one for `project_dir` load in a
+    session opened there; records for other checkouts are theirs.
+    """
+    copies: list[dict[str, Any]] = [
+        {"label": "shared managed copy (Claude desktop, Grok, global hooks)",
+         "path": shared_managed_plugin_path(home), "connector": True},
+        {"label": "Codex managed copy", "path": codex_managed_plugin_path(home), "connector": False},
+    ]
+    wanted = os.path.normcase(os.path.realpath(project_dir)) if project_dir else None
+    seen: set[str] = set()
+    for entry in claude_plugin_records(home):
+        if not isinstance(entry.get("installPath"), str):
+            continue
+        project = entry.get("projectPath")
+        loads_here = entry.get("scope") == "user" or (
+            wanted is not None and isinstance(project, str)
+            and os.path.normcase(os.path.realpath(project)) == wanted
+        )
+        if not loads_here or entry["installPath"] in seen:
+            continue
+        seen.add(entry["installPath"])
+        copies.append({"label": f"Claude plugin cache ({entry.get('scope', 'unknown')} scope)",
+                       "path": Path(entry["installPath"]), "connector": True})
+    return copies
 
 
 # Backward-compatible name for existing hook/install helpers and callers.
@@ -593,6 +687,23 @@ def toml_table_enabled(text: str, canonical_key: str) -> Optional[bool]:
     return None
 
 
+def set_codex_plugin_enabled(text: str, plugin_id: str, enabled: bool) -> str:
+    """Change only the managed toggle; plugin options and hook trust stay intact."""
+    retained: list[str] = []
+    active = False
+    seen = False
+    for line in text.splitlines():
+        if _is_table_boundary(line):
+            active = not seen and canonical_toml_table_header(line) == f"plugins.{plugin_id}"
+            seen = seen or active
+        elif active and line.partition("=")[0].strip() != "enabled":
+            retained.append(line)
+    while retained and not retained[-1].strip():
+        retained.pop()
+    return upsert_toml_table(text, f'[plugins."{plugin_id}"]',
+                             [f"enabled = {'true' if enabled else 'false'}", *retained])
+
+
 def disable_competitive_codex_plugins(text: str, plugin_ids: list[str]) -> str:
     for plugin_id in dict.fromkeys(plugin_ids):
         if not plugin_id or plugin_id == PLUGIN_NAME:
@@ -605,11 +716,89 @@ def disable_competitive_codex_plugins(text: str, plugin_ids: list[str]) -> str:
     return text
 
 
+def existing_codex_mcp_endpoint(text: str) -> Optional[str]:
+    """Read only the first DPF URL; an unreadable choice is never a default."""
+    active = False
+    for line in text.splitlines():
+        if _is_table_boundary(line):
+            if active:
+                return None
+            active = canonical_toml_table_header(line) == "mcp_servers.dpf"
+            continue
+        key, separator, value = line.partition("=")
+        if not active or not separator or key.strip() != "url":
+            continue
+        match = re.fullmatch(r'''\s*("(?:[^"\\]|\\.)*"|'[^']*')\s*(?:#.*)?''', value)
+        if not match:
+            raise ValueError("Cannot preserve saved Codex URL; select an explicit MCP endpoint to repair it")
+        quoted = match.group(1)
+        try:
+            endpoint = json.loads(quoted) if quoted.startswith('"') else quoted[1:-1]
+            normalize_mcp_endpoint(endpoint)
+            return endpoint
+        except ValueError as error:
+            raise ValueError("Cannot preserve saved Codex URL; select an explicit MCP endpoint to repair it") from error
+    return None
+
+
+def codex_mcp_body(text: str, endpoint: Optional[str], declaration_header: Optional[str] = None) -> list[str]:
+    """Change managed keys only; retain operator-owned options and credentials."""
+    retained: list[str] = []
+    active = False
+    seen = False
+    custom_bearer = False
+    # An operator's [mcp_servers.dpf.http_headers] table would clash with an
+    # inline http_headers key, so the declaration is then left out.
+    custom_headers = any(canonical_toml_table_header(line) == "mcp_servers.dpf.http_headers" for line in text.splitlines())
+    existing_endpoint = existing_codex_mcp_endpoint(text) if not endpoint else None
+    for line in text.splitlines():
+        if _is_table_boundary(line):
+            active = not seen and canonical_toml_table_header(line) == "mcp_servers.dpf"
+            if active:
+                seen = True
+            continue
+        if not active:
+            continue
+        key, separator, value = line.partition("=")
+        if separator and key.strip() in ("url", "enabled"):
+            continue
+        if separator and key.strip() == "bearer_token_env_var":
+            if value.strip().strip('"').strip("'") == TOKEN_ENV_VAR:
+                continue
+            custom_bearer = True
+        if separator and key.strip() == "http_headers":
+            # The toolchain declaration (BI-DE1E6485) is the one header line
+            # the updater owns; an operator's own headers table is kept as is.
+            if "X-DPF-Toolchain" in value:
+                continue
+            custom_headers = True
+        if line.strip():
+            retained.append(line)
+    # An implicit plugin refresh must not change the resource an OAuth login
+    # names. Only an explicitly supplied CLI/environment URL replaces it.
+    endpoint = with_mcp_catalog_tier(normalize_mcp_endpoint(endpoint) if endpoint else existing_endpoint or DEFAULT_MCP_URL, "full")
+    body = [f'url = {json.dumps(endpoint)}', "enabled = true", *retained]
+    if not custom_bearer and mcp_client_bearer_header_required(endpoint, "codex"):
+        body.append(f'bearer_token_env_var = "{TOKEN_ENV_VAR}"')
+    if declaration_header and not custom_headers:
+        body.append(f'http_headers = {{ "X-DPF-Toolchain" = {json.dumps(declaration_header)} }}')
+    return body
+
+
+def desired_codex_plugin_enabled(text: str) -> bool:
+    for plugin_id in (CODEX_PLUGIN_ID, PLUGIN_NAME, *CODEX_LEGACY_PLUGIN_IDS):
+        choice = toml_table_enabled(text, f"plugins.{plugin_id}")
+        if choice is not None:
+            return choice
+    return True
+
+
 def ensure_codex_config(
     home: Path,
-    mcp_url: str,
+    mcp_url: Optional[str],
     dry_run: bool,
     skill_pack: Optional[Path] = None,
+    declaration_header: Optional[str] = None,
 ) -> bool:
     # NOTE (BI-BCA162CF): the `[plugins."<id>"].enabled` toggles this function
     # writes/reads here are Codex's PERSISTED CONFIG STATE, not a non-interactive
@@ -628,51 +817,157 @@ def ensure_codex_config(
     # ships an equivalent command.
     path = codex_config_path(home)
     text = path.read_text(encoding="utf-8-sig") if path.exists() else ""
-    current_enabled = toml_table_enabled(text, f"plugins.{CODEX_PLUGIN_ID}")
-    legacy_enabled = toml_table_enabled(text, f"plugins.{PLUGIN_NAME}")
-    desired_enabled = current_enabled if current_enabled is not None else legacy_enabled
+    desired_enabled = desired_codex_plugin_enabled(text)
     # Pre-plugin-registry DPF installers wrote the bare key. Current Codex
     # requires <plugin>@<marketplace> and logs the bare key as invalid.
     text = remove_toml_table(text, f"plugins.{PLUGIN_NAME}")
-    text = upsert_toml_table(
-        text,
-        f'[plugins."{CODEX_PLUGIN_ID}"]',
-        [f"enabled = {'false' if desired_enabled is False else 'true'}"],
-    )
+    text = set_codex_plugin_enabled(text, CODEX_PLUGIN_ID, desired_enabled is not False)
     text = disable_competitive_codex_plugins(text, codex_competitive_plugin_ids(skill_pack))
-    lazy_host_mcp_url = with_mcp_catalog_tier(mcp_url, "full")
     text = upsert_toml_table(
         text,
         "[mcp_servers.dpf]",
-        [
-            f'url = "{lazy_host_mcp_url}"',
-            f'bearer_token_env_var = "{TOKEN_ENV_VAR}"',
-            "enabled = true",
-        ],
+        codex_mcp_body(text, mcp_url, declaration_header),
     )
     if dry_run:
         return True
     return write_text_if_changed(path, text)
 
 
-def ensure_claude_repo_mcp_config(skill_pack_path: Path, mcp_url: str, dry_run: bool) -> bool:
-    """Keep the packaged Claude MCP descriptor current for standalone installs."""
+def ensure_codex_project_config(project_root: Path, mcp_url: str, dry_run: bool) -> bool:
+    """Repair an explicitly scoped override, validating all preserved TOML data."""
+    path = project_root / ".codex" / "config.toml"
+    if not path.exists():
+        return False
+    try:
+        import tomllib as toml_parser
+    except ImportError:
+        try:
+            import tomli as toml_parser
+        except ImportError:
+            raise ValueError("Project Codex TOML requires Python 3.11+ or tomli; configuration unchanged") from None
+    text = path.read_text(encoding="utf-8-sig")
+    try:
+        parsed = toml_parser.loads(text)
+    except ValueError:
+        raise ValueError("Invalid project Codex TOML; configuration unchanged") from None
+    servers = parsed.get("mcp_servers", {})
+    if not isinstance(servers, dict) or "dpf" not in servers:
+        return False
+    existing = servers["dpf"]
+    if not isinstance(existing, dict):
+        raise ValueError("Invalid project Codex TOML DPF table; configuration unchanged")
+    expected = dict(existing)
+    expected["url"] = with_mcp_catalog_tier(mcp_url, "full")
+    if mcp_client_bearer_header_required(mcp_url, "codex"):
+        expected.setdefault("bearer_token_env_var", TOKEN_ENV_VAR)
+    elif expected.get("bearer_token_env_var") == TOKEN_ENV_VAR:
+        del expected["bearer_token_env_var"]
+    if existing == expected:
+        return False
+    # Reuse the standalone writer, then verify its whole semantic result.
+    # Unusual TOML spellings it cannot preserve are refused, never clobbered.
+    body = codex_mcp_body(text, mcp_url)
+    body = [line for line in body if not re.match(r"^enabled\s*=", line)]
+    if "enabled" in existing:
+        body.append("enabled = " + json.dumps(existing["enabled"]))
+    updated = upsert_toml_table(text, "[mcp_servers.dpf]", body)
+    servers["dpf"] = expected
+    try:
+        verified = toml_parser.loads(updated) == parsed
+    except ValueError:
+        verified = False
+    if not verified:
+        raise ValueError("Cannot safely preserve project Codex TOML; configuration unchanged")
+    return True if dry_run else write_text_if_changed(path, updated)
+
+
+def mcp_client_bearer_header_required(endpoint: str, client: str = "claude", auth_mode: str | None = None) -> bool:
+    """Mirror the shared TypeScript policy; shared fixtures guard agreement."""
+    mode = auth_mode or os.environ.get("DPF_MCP_AUTH_MODE", "oauth")
+    if mode not in ("oauth", "legacy"):
+        raise ValueError("DPF_MCP_AUTH_MODE must be oauth or legacy")
+    if mode == "legacy" or client == "grok":
+        return True
+    try:
+        parsed = urlparse(endpoint)
+        if not parsed.hostname or parsed.username or parsed.password:
+            return True
+        if parsed.scheme == "https":
+            return False
+        return not (client == "codex" and parsed.scheme == "http"
+                    and parsed.hostname in ("localhost", "127.0.0.1", "::1"))
+    except ValueError:
+        return True
+
+
+# Python mirror of MCP_CLIENT_OAUTH_SCOPE_PIN in
+# packages/integration-shared/src/mcp-client-credential-policy.ts (BI-3D2FD68C).
+# Over https Claude Code authorizes by OAuth; the pin names the development
+# scopes explicitly so the consent grants them even if the portal's advertised
+# set (apps/web/lib/auth/oauth-scope-map.ts ADVERTISED_SCOPES) ever narrows.
+# Keep the two in lockstep, like the predicate above.
+MCP_CLIENT_OAUTH_SCOPE_PIN = "dpf.read dpf.work dpf.build"
+
+# Claude's connector reads its own variable, never the shared DPF_MCP_URL that
+# Codex, Grok, gates and scripts read: any of those (and a test in stale
+# checkouts) could set the shared one to an address Claude's OAuth client
+# refuses (BI-D6A6462A). Only scripts/installer/lib/mcp-client-env.{sh,ps1}
+# write it, and only for https.
+CLAUDE_MCP_URL_ENV_VAR = "DPF_CLAUDE_MCP_URL"
+
+
+def ensure_claude_repo_mcp_config(skill_pack_path: Path, mcp_url: str, dry_run: bool, declarations: Any = None) -> bool:
+    """Keep the packaged Claude MCP descriptor current for standalone installs.
+
+    The plugin descriptor is the one dpf connector a Claude session loads
+    (BI-5201141C, design 12.4.4); no project .mcp.json is written beside it.
+    The checked-in copy is this function's output for DEFAULT_MCP_URL.
+
+    Scheme-aware since BI-FA2C46D7. This generator previously pinned the bearer
+    header unconditionally, which is correct for today's http install and would
+    have been wrong the moment the endpoint moved to https: the next bootstrap
+    run would have re-pinned a header that disables the OAuth the move exists to
+    enable, and silently undone the transition.
+    """
     lazy_host_mcp_url = with_mcp_catalog_tier(mcp_url, "full")
-    content = json.dumps(
-        {
-            "mcpServers": {
-                "dpf": {
-                    "type": "http",
-                    "url": "${DPF_MCP_URL:-" + lazy_host_mcp_url + "}",
-                    "headers": {"Authorization": "Bearer ${DPF_MCP_BEARER_TOKEN:-}"},
-                }
-            }
-        },
-        indent=2,
-    ) + "\n"
+    server: dict[str, object] = {
+        "type": "http",
+        "url": "${" + CLAUDE_MCP_URL_ENV_VAR + ":-" + lazy_host_mcp_url + "}",
+    }
+    if mcp_client_bearer_header_required(lazy_host_mcp_url):
+        server["headers"] = {"Authorization": "Bearer ${DPF_MCP_BEARER_TOKEN:-}"}
+    else:
+        # BI-3D2FD68C: the OAuth path needs the scope pin or the consent grants
+        # read only and every write tool stays out of reach.
+        server["oauth"] = {"scopes": MCP_CLIENT_OAUTH_SCOPE_PIN}
+    if declarations is not None:
+        server = declarations.declare_server(server, "claude-code")
+    content = json.dumps({"mcpServers": {"dpf": server}}, indent=2) + "\n"
     if dry_run:
         return True
     return write_text_if_changed(skill_pack_path / "claude.mcp.json", content)
+
+
+def ensure_antigravity_plugin_descriptor(skill_pack_path: Path, mcp_url: str, dry_run: bool, declarations: Any = None) -> bool:
+    """Keep the packaged Antigravity MCP descriptor current (BI-5201141C).
+
+    Same rule as the Claude descriptor: URL-only with the DPF_MCP_URL override,
+    and the bearer header only where the client cannot authorize by OAuth
+    (plain http, or explicit legacy mode). Antigravity has no scope-pin field.
+    The checked-in copy is this function's output for DEFAULT_MCP_URL.
+    """
+    server: dict[str, object] = {
+        "type": "http",
+        "url": "${DPF_MCP_URL:-" + mcp_url + "}",
+    }
+    if mcp_client_bearer_header_required(mcp_url, "antigravity"):
+        server["headers"] = {"Authorization": "Bearer ${DPF_MCP_BEARER_TOKEN:-}"}
+    if declarations is not None:
+        server = declarations.declare_server(server, "antigravity")
+    content = json.dumps({"mcpServers": {"dpf": server}}, indent=2) + "\n"
+    if dry_run:
+        return True
+    return write_text_if_changed(skill_pack_path / "antigravity.mcp.json", content)
 
 
 def resolve_claude_binary() -> str | None:
@@ -718,7 +1013,206 @@ def install_claude_plugin(home: Path, dry_run: bool) -> str:
         result = subprocess.run(command, cwd=str(marketplace_root), capture_output=True, text=True)
         if result.returncode != 0:
             return f"failed: {' '.join(command[:3])} exited {result.returncode}"
+    records = [entry for entry in claude_plugin_records(home) if entry.get("scope") == "local"]
+    if not records or not all(claude_record_content_matches(home, entry) for entry in records):
+        return "failed: Claude local cache content remains unverified after supported update; client-owned cache retained"
     return "installed and refreshed"
+
+
+def claude_plugin_records(home: Path) -> list[dict[str, Any]]:
+    """Every installed_plugins.json record of the dpf-platform plugin."""
+    try:
+        records = json.loads(claude_installed_plugins_path(home).read_text(encoding="utf-8-sig"))
+        entries = records.get("plugins", {}).get(CLAUDE_PLUGIN_ID, [])
+    except (OSError, ValueError, AttributeError):
+        return []
+    return [entry for entry in entries if isinstance(entry, dict)] if isinstance(entries, list) else []
+
+
+def claude_record_content_matches(home: Path, entry: dict[str, Any]) -> bool:
+    """Verify installed bytes with the existing delivered-content comparator."""
+    from installed_copy_freshness import delivered_digest, pack_version
+
+    install = entry.get("installPath")
+    source = shared_managed_plugin_path(home)
+    if not isinstance(install, str) or not source.is_dir() or not Path(install).is_dir():
+        return False
+    try:
+        expected_version = pack_version(source)
+        return bool(expected_version and entry.get("version") == expected_version
+                    and pack_version(Path(install)) == expected_version
+                    and delivered_digest(Path(install)) == delivered_digest(source))
+    except (OSError, ValueError):
+        return False
+
+
+def converge_claude_project_plugins(home: Path, version: str, dry_run: bool) -> dict[str, list[str]]:
+    """Update project records whose version or delivered content is stale.
+
+    `install_claude_plugin` refreshes only the local-scope record. Claude Code
+    keeps one project-scope record per checkout the plugin was ever installed
+    from, and each keeps loading its own cached version: on 2026-10-07 the
+    D:\\DPF record still loaded 0.2.5's bearer descriptor beside the 0.2.8 OAuth
+    one (BI-B9F359AC). `claude plugin update --scope project` acts on the
+    record for its working directory, so it runs once per existing project.
+    A record whose projectPath is gone is reported as prunable and left alone:
+    Claude Code owns the file and drops it on its own uninstall.
+    """
+    result: dict[str, list[str]] = {"updated": [], "current": [], "pruned": [], "failed": []}
+    # Claude Code records the marketplace version without build metadata; the
+    # pack manifest may carry a `+codex.<stamp>` suffix (codex_content_version).
+    version = version.split("+", 1)[0]
+    claude = resolve_claude_binary()
+    for entry in claude_plugin_records(home):
+        project = entry.get("projectPath")
+        if entry.get("scope") != "project" or not isinstance(project, str):
+            continue
+        if not Path(project).is_dir():
+            result["pruned"].append(project)
+            continue
+        if entry.get("version") == version and claude_record_content_matches(home, entry):
+            result["current"].append(project)
+            continue
+        if dry_run:
+            result["updated"].append(project)
+            continue
+        if not claude:
+            result["failed"].append(project)
+            continue
+        command = [claude, "plugin", "update", CLAUDE_PLUGIN_ID, "--scope", "project"]
+        completed = subprocess.run(command, cwd=project, capture_output=True, text=True)
+        refreshed = [record for record in claude_plugin_records(home)
+                     if record.get("scope") == "project" and record.get("projectPath") == project]
+        verified = (completed.returncode == 0 and len(refreshed) == 1
+                    and refreshed[0].get("version") == version
+                    and claude_record_content_matches(home, refreshed[0]))
+        result["updated" if verified else "failed"].append(project)
+    return result
+
+
+_MCP_URL_TEMPLATE = re.compile(r"^\$\{DPF_(?:CLAUDE_)?MCP_URL:-([^}]+)\}$")
+
+
+def _dpf_endpoint_path(url: object) -> Optional[str]:
+    if not isinstance(url, str):
+        return None
+    match = _MCP_URL_TEMPLATE.match(url)
+    try:
+        return urlsplit(match.group(1) if match else url).path.rstrip("/")
+    except ValueError:
+        return None
+
+
+def retire_duplicate_project_mcp_json(project: Path, dry_run: bool) -> Optional[str]:
+    """Disable a project .mcp.json `dpf` server that duplicates the plugin's.
+
+    The plugin descriptor is the one dpf connector (BI-5201141C); a leftover
+    project .mcp.json naming `dpf` on the same /api/mcp/v1 endpoint loads as a
+    second `dpf` connector (BI-B9F359AC). Disable-not-delete: the original is
+    kept as .mcp.json.legacy-bak. A file with only that server is renamed; a
+    file with other servers keeps them and loses only the duplicate entry.
+    Returns the backup path when it acted (or would act, in dry run).
+    """
+    path = project / ".mcp.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
+        servers = data["mcpServers"]
+        dpf = servers["dpf"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    if not isinstance(dpf, dict) or _dpf_endpoint_path(dpf.get("url")) != "/api/mcp/v1":
+        return None
+    backup = project / ".mcp.json.legacy-bak"
+    suffix = 1
+    while backup.exists():
+        backup = project / f".mcp.json.legacy-bak.{suffix}"
+        suffix += 1
+    if dry_run:
+        return str(backup)
+    remaining = {name: server for name, server in servers.items() if name != "dpf"}
+    if not remaining:
+        path.rename(backup)
+        return str(backup)
+    shutil.copy2(path, backup)
+    path.write_text(json.dumps({**data, "mcpServers": remaining}, indent=2) + "\n", encoding="utf-8")
+    return str(backup)
+
+
+def retire_user_scope_dpf_server(home: Path, dry_run: bool) -> Optional[str]:
+    """Remove a user-scope `dpf` server that duplicates the plugin connector.
+
+    A user-scope server in ~/.claude.json loads in every folder, so a legacy
+    `dpf` entry there (the bearer-header registration the old token rotation
+    wrote) shows beside the plugin's `dpf` in every session (BI-81B0A3BE).
+    Acts only while the plugin connector is installed, and only on a `dpf`
+    server on the /api/mcp/v1 endpoint. Disable-not-delete: the entry is copied
+    to ~/.claude/dpf-user-mcp.legacy-bak.json first; the Claude CLI owns
+    ~/.claude.json, so the removal goes through `claude mcp remove`.
+    Returns None when there is nothing to do, else a status line.
+    """
+    if not claude_plugin_records(home):
+        return None
+    try:
+        server = json.loads((home / ".claude.json").read_text(encoding="utf-8-sig"))["mcpServers"]["dpf"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    if not isinstance(server, dict) or _dpf_endpoint_path(server.get("url")) != "/api/mcp/v1":
+        return None
+    backup = home / ".claude" / "dpf-user-mcp.legacy-bak.json"
+    suffix = 1
+    while backup.exists():
+        backup = home / ".claude" / f"dpf-user-mcp.legacy-bak.{suffix}.json"
+        suffix += 1
+    if dry_run:
+        return f"would remove (backup {backup})"
+    claude = resolve_claude_binary()
+    if not claude:
+        return "failed: Claude CLI not found"
+    backup.parent.mkdir(parents=True, exist_ok=True)
+    backup.write_text(json.dumps({"mcpServers": {"dpf": server}}, indent=2) + "\n", encoding="utf-8")
+    completed = subprocess.run(
+        [claude, "mcp", "remove", "dpf", "-s", "user"], cwd=str(home), capture_output=True, text=True
+    )
+    if completed.returncode != 0:
+        return f"failed: claude mcp remove exited {completed.returncode} (backup {backup})"
+    return f"removed (backup {backup})"
+
+
+def converge_claude_project_connectors(
+    home: Path, version: str, dry_run: bool, outcome: Optional[dict[str, Any]] = None
+) -> list[str]:
+    """Converge stale project-scope plugin pins and duplicate project connectors.
+
+    `outcome`, when given, receives the structured result for --report-json.
+    """
+    version = version.split("+", 1)[0]
+    plugins = converge_claude_project_plugins(home, version, dry_run)
+    if outcome is not None:
+        outcome["plugins"] = plugins
+        outcome["retired"] = []
+    verb = "would update" if dry_run else "updated"
+    lines = [f"  Claude project scope: {verb} {len(plugins['updated'])}, "
+             f"current {len(plugins['current'])}, failed {len(plugins['failed'])}, "
+             f"prunable {len(plugins['pruned'])}"]
+    lines += [f"    {verb} to {version}: {project}" for project in plugins["updated"]]
+    lines += [f"    FAILED to verify updated content: {project}; supported update did not establish the expected digest; client-owned cache retained"
+              for project in plugins["failed"]]
+    lines += [f"    prunable (projectPath gone): {project}" for project in plugins["pruned"]]
+    projects = {
+        entry["projectPath"]
+        for entry in claude_plugin_records(home)
+        if entry.get("scope") in ("project", "local") and isinstance(entry.get("projectPath"), str)
+    }
+    for project in sorted(projects):
+        if not Path(project).is_dir():
+            continue
+        backup = retire_duplicate_project_mcp_json(Path(project), dry_run)
+        if backup and outcome is not None:
+            outcome["retired"].append((project, backup))
+        if backup:
+            action = "would disable" if dry_run else "disabled"
+            lines.append(f"    {action} duplicate dpf connector in {Path(project) / '.mcp.json'} (backup {backup})")
+    return lines
 
 
 def _claude_plugin_matches(installed_id: str, competitive_id: str) -> bool:
@@ -876,6 +1370,30 @@ def resolve_codex_binary() -> str | None:
     return None
 
 
+def is_dpf_registration(row: dict) -> bool:
+    return row.get("name") == PLUGIN_NAME or str(row.get("pluginId", "")).startswith(PLUGIN_NAME + "@")
+
+
+def read_codex_plugin_inventory(codex: str, home: Path) -> tuple[list[dict], str | None]:
+    """Read all marketplaces: a personal-only query hides the migrated install."""
+    try:
+        listed = subprocess.run([codex, "plugin", "list", "--json"], cwd=str(home),
+                                capture_output=True, text=True)
+        if listed.returncode != 0:
+            return [], f"codex plugin list exited {listed.returncode}"
+        inventory = json.loads(listed.stdout or "{}")
+        rows = inventory.get("installed") if isinstance(inventory, dict) else None
+        if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+            return [], "Codex plugin list returned an invalid inventory"
+        for row in rows:
+            if is_dpf_registration(row):
+                if not isinstance(row.get("pluginId"), str) or type(row.get("installed")) is not bool or type(row.get("enabled")) is not bool:
+                    return [], "Codex plugin list returned an invalid DPF registration"
+        return rows, None
+    except (OSError, ValueError) as exc:
+        return [], f"Codex inventory unavailable ({exc.__class__.__name__})"
+
+
 def install_codex_plugin(home: Path, dry_run: bool) -> str:
     """Install and verify the DPF plugin through Codex's own registry."""
     codex = resolve_codex_binary()
@@ -883,7 +1401,10 @@ def install_codex_plugin(home: Path, dry_run: bool) -> str:
         return "skipped: Codex CLI not found"
     selector = f"{PLUGIN_NAME}@personal"
     if dry_run:
-        return f"dry-run: would install and verify {selector}"
+        return f"dry-run: would install and verify {selector}, then disable verified legacy DPF registrations"
+    config = codex_config_path(home)
+    before = config.read_text(encoding="utf-8-sig") if config.exists() else ""
+    desired_enabled = desired_codex_plugin_enabled(before)
     try:
         installed = subprocess.run(
             [codex, "plugin", "add", selector, "--json"],
@@ -893,27 +1414,59 @@ def install_codex_plugin(home: Path, dry_run: bool) -> str:
         )
     except OSError as exc:
         return f"failed: Codex CLI could not start ({exc.__class__.__name__})"
+    # Even a failed native add can have changed configuration. Restore an
+    # explicit disabled choice before any failure return or cache validation.
+    if not desired_enabled and config.exists():
+        current = config.read_text(encoding="utf-8-sig")
+        if toml_table_enabled(current, f"plugins.{CODEX_PLUGIN_ID}") is not False:
+            write_text_if_changed(config, set_codex_plugin_enabled(current, CODEX_PLUGIN_ID, False))
     if installed.returncode != 0:
         return f"failed: codex plugin add exited {installed.returncode}"
-    listed = subprocess.run(
-        [codex, "plugin", "list", "--marketplace", "personal", "--json"],
-        cwd=str(home),
-        capture_output=True,
-        text=True,
-    )
-    if listed.returncode != 0:
-        return f"failed: codex plugin list exited {listed.returncode}"
     try:
-        inventory = json.loads(listed.stdout or "{}")
-    except json.JSONDecodeError:
-        return "failed: codex plugin list returned invalid JSON"
+        installed_path = Path(json.loads(installed.stdout or "{}")["installedPath"])
+    except (ValueError, KeyError, TypeError):
+        return "failed: Codex did not return an installed plugin path"
+    managed = codex_managed_plugin_path(home)
+    if not installed_path.is_dir() or codex_content_version(installed_path) != codex_content_version(managed):
+        return "failed: Codex plugin cache does not match the delivered skill pack"
+    # Native add may write the obsolete bare alias. Restore the operator's
+    # qualified choice before reading back, without touching hook trust.
+    if config.exists():
+        text = remove_toml_table(config.read_text(encoding="utf-8-sig"), f"plugins.{PLUGIN_NAME}")
+        write_text_if_changed(config, set_codex_plugin_enabled(text, CODEX_PLUGIN_ID, desired_enabled))
+    inventory, error = read_codex_plugin_inventory(codex, home)
+    if error:
+        return f"failed: {error}"
     matches = [
         plugin
-        for plugin in inventory.get("installed", [])
+        for plugin in inventory
         if isinstance(plugin, dict) and plugin.get("pluginId") == selector
     ]
-    if not matches or not matches[0].get("installed") or not matches[0].get("enabled"):
-        return "failed: Codex did not report dpf-platform installed and enabled"
+    if len(matches) != 1 or matches[0].get("installed") is not True or matches[0].get("enabled") is not desired_enabled:
+        return "failed: Codex did not report dpf-platform installed with the requested enabled state"
+    if not desired_enabled:
+        return "installed, disabled by operator, and verified; legacy registrations unchanged"
+    active = [p for p in inventory if p.get("installed") and p.get("enabled")
+              and is_dpf_registration(p)]
+    if any(p["pluginId"] not in (CODEX_PLUGIN_ID, *CODEX_LEGACY_PLUGIN_IDS) for p in active):
+        return "failed: unknown active DPF registration; legacy registrations unchanged"
+    aliases = [p["pluginId"] for p in active if p["pluginId"] in CODEX_LEGACY_PLUGIN_IDS]
+    if aliases:
+        text = config.read_text(encoding="utf-8-sig") if config.exists() else ""
+        for alias in aliases:
+            text = set_codex_plugin_enabled(text, alias, False)
+        write_text_if_changed(config, text)
+        final, error = read_codex_plugin_inventory(codex, home)
+        enabled_dpf = [p["pluginId"] for p in final if p.get("installed") and p.get("enabled")
+                       and is_dpf_registration(p)]
+        if error or enabled_dpf != [CODEX_PLUGIN_ID]:
+            # A failed readback cannot prove convergence. Restore only the
+            # toggles this migration changed, retaining all caches and options.
+            text = config.read_text(encoding="utf-8-sig")
+            for alias in aliases:
+                text = set_codex_plugin_enabled(text, alias, True)
+            write_text_if_changed(config, text)
+            return f"failed: {error or 'Codex registration convergence was not verified'}; legacy registrations restored"
     return "installed, enabled, and verified"
 
 
@@ -976,7 +1529,7 @@ def antigravity_mcp_config_path(home: Path) -> Path:
     return home / ".antigravity" / "mcp_config.json"
 
 
-def ensure_antigravity_mcp_config(home: Path, mcp_url: str, dry_run: bool) -> str:
+def ensure_antigravity_mcp_config(home: Path, mcp_url: str, dry_run: bool, declarations: Any = None) -> str:
     """Upsert the DPF `mcpServers.dpf` block into agy's JSON MCP config.
 
     Env-backed (no secret written): the CLI reads the token from
@@ -996,8 +1549,10 @@ def ensure_antigravity_mcp_config(home: Path, mcp_url: str, dry_run: bool) -> st
     servers["dpf"] = {
         "type": "http",
         "url": mcp_url,
-        "headers": {"Authorization": f"Bearer ${{{TOKEN_ENV_VAR}}}"},
+        **({"headers": {"Authorization": f"Bearer ${{{TOKEN_ENV_VAR}}}"}} if mcp_client_bearer_header_required(mcp_url, "antigravity") else {}),
     }
+    if declarations is not None:
+        servers["dpf"] = declarations.declare_server(servers["dpf"], "antigravity")
     data["mcpServers"] = servers
     if dry_run:
         return f"dry-run: would upsert dpf server into {path}"
@@ -1084,6 +1639,7 @@ GROK_HOOK_GUARDS = (
     "lease-guard.mjs",
     "root-clone-guard.mjs",
     "compose-guard.mjs",
+    "raw-tool-guard.mjs",
     "portal-image-guard.mjs",
     "plan-backlog-coverage-guard.mjs",
     "pregate-evidence-guard.mjs",
@@ -1144,6 +1700,15 @@ GROK_STOP_SCRIPTS = ("uncommitted-work-guard.mjs",)
 GROK_SESSION_START_SCRIPT = GROK_SESSION_START_SCRIPTS[0]
 GROK_SESSION_END_SCRIPT = GROK_SESSION_END_SCRIPTS[0]
 
+# PostToolUse (BI-AB4EA033, BI-C3D3762B): re-cache the claim guard's marker from
+# each dpf claim/heartbeat answer, so a lease renewed over MCP stops the guard
+# denying edits. Non-blocking. The matcher mirrors hooks.json (drift-tested).
+CLAIM_REFRESH_SCRIPT = "workroom-claim-refresh.mjs"
+CLAIM_REFRESH_MATCHER = (
+    "^mcp__.+__(adopt_worktree|heartbeat_workroom|claim_workroom_scope"
+    "|claim_backlog_item_for_work|create_workroom)$"
+)
+
 
 def grok_hooks_file(home: Path) -> Path:
     return home / ".grok" / "hooks" / "dpf-guards.json"
@@ -1184,6 +1749,16 @@ def _grok_matched_group(
     return {"matcher": matcher, "hooks": hooks}
 
 
+def claim_refresh_post_tool_use_groups(hooks_dir: Path, *, dry_run: bool) -> list[dict[str, Any]]:
+    """The PostToolUse group that re-caches the Workroom claim marker, or none."""
+    if not (dry_run or (hooks_dir / CLAIM_REFRESH_SCRIPT).exists()):
+        return []
+    return [{
+        "matcher": CLAIM_REFRESH_MATCHER,
+        "hooks": [_managed_hook_command(hooks_dir, CLAIM_REFRESH_SCRIPT, timeout=15, event="PostToolUse")],
+    }]
+
+
 def build_grok_hooks_payload(managed: Path, dry_run: bool = False) -> dict[str, Any]:
     """Build the global Grok hooks payload (PreToolUse + SessionStart + SessionEnd/Stop)."""
     hooks_dir = managed / "hooks"
@@ -1195,6 +1770,9 @@ def build_grok_hooks_payload(managed: Path, dry_run: bool = False) -> dict[str, 
     payload: dict[str, Any] = {"hooks": {}}
     if pre_entries:
         payload["hooks"]["PreToolUse"] = pre_entries
+    post_entries = claim_refresh_post_tool_use_groups(hooks_dir, dry_run=dry_run)
+    if post_entries:
+        payload["hooks"]["PostToolUse"] = post_entries
     start = [
         _grok_command_entry(hooks_dir, script, timeout=30, event="SessionStart")
         for script in GROK_SESSION_START_SCRIPTS
@@ -1324,12 +1902,17 @@ def disable_competitive_grok_plugins(skill_pack: Optional[Path] = None, dry_run:
     return "; ".join(parts) if parts else "no competitive plugins present"
 
 
-# Bash-scoped blocking guards for Codex's user hook plane (~/.codex/hooks.json).
-# decision-routing-guard is wired separately on AskUserQuestion (Gate A).
+# Blocking guards Codex must run on each PreToolUse matcher. They serve two
+# purposes (BI-2B634E68): proving the installed plugin cache wires every guard
+# (codex_plugin_hooks_active), and recognising DPF-owned entries in
+# ~/.codex/hooks.json. Only when the plugin plane cannot be proven are they
+# written there as the fallback copy. decision-routing-guard is Gate A.
 CODEX_BASH_GUARDS = (
     "lease-guard.mjs",
     "root-clone-guard.mjs",
     "compose-guard.mjs",
+    # BI-F87BD9BF: raw tsc / root-level vitest / npx refused with the routine named.
+    "raw-tool-guard.mjs",
     "portal-image-guard.mjs",
     "lease-punt-guard.mjs",
     "pregate-evidence-guard.mjs",
@@ -1338,6 +1921,8 @@ CODEX_BASH_GUARDS = (
     "workroom-claim-guard.mjs",
 )
 CODEX_ASK_GUARDS = ("decision-routing-guard.mjs",)
+# Tool events whose DPF-owned entries the fallback copy writes and prunes.
+CODEX_DPF_TOOL_EVENTS = ("PreToolUse", "PostToolUse")
 CODEX_WRITE_GUARDS = (
     "root-clone-guard.mjs",
     "plan-backlog-coverage-guard.mjs",
@@ -1355,7 +1940,7 @@ def _dpf_hook_command(command: str, managed_hooks_dir: Path) -> bool:
     managed_prefix = str(managed_hooks_dir)
     if managed_prefix in command and ".mjs" in command:
         return True
-    return any(name in command for name in (*CODEX_BASH_GUARDS, *CODEX_ASK_GUARDS, *CODEX_WRITE_GUARDS))
+    return any(name in command for name in (*CODEX_BASH_GUARDS, *CODEX_ASK_GUARDS, *CODEX_WRITE_GUARDS, CLAIM_REFRESH_SCRIPT))
 
 
 def _build_codex_pre_tool_use_groups(managed: Path, *, dry_run: bool) -> list[dict[str, Any]]:
@@ -1385,32 +1970,37 @@ def _build_codex_pre_tool_use_groups(managed: Path, *, dry_run: bool) -> list[di
     return groups
 
 
-def merge_codex_hooks_payload(existing: dict[str, Any], managed: Path, *, dry_run: bool) -> dict[str, Any]:
-    """Upsert DPF plane-1 guards into ~/.codex/hooks.json without clobbering other hooks."""
-    hooks_dir = managed / "hooks"
+def prune_codex_hooks_payload(existing: dict[str, Any], hooks_dir: Path) -> dict[str, Any]:
+    """Drop DPF-owned PreToolUse/PostToolUse entries; keep foreign hooks, drop emptied groups."""
     payload = dict(existing) if isinstance(existing, dict) else {}
-    events = payload.setdefault("hooks", {})
-    if not isinstance(events, dict):
-        events = {}
-        payload["hooks"] = events
+    events = payload.get("hooks")
+    events = dict(events) if isinstance(events, dict) else {}
+    payload["hooks"] = events
+    for event in CODEX_DPF_TOOL_EVENTS:
+        groups = events.get(event)
+        if not isinstance(groups, list):
+            groups = []
+        cleaned: list[Any] = []
+        for group in groups:
+            if not isinstance(group, dict):
+                cleaned.append(group)
+                continue
+            kept = [
+                hook
+                for hook in group.get("hooks", [])
+                if isinstance(hook, dict)
+                and not _dpf_hook_command(str(hook.get("command", "")), hooks_dir)
+            ]
+            if kept:
+                cleaned.append({**group, "hooks": kept})
+        if cleaned:
+            events[event] = cleaned
+        else:
+            events.pop(event, None)
+    return payload
 
-    pre_tool_use = events.get("PreToolUse")
-    if not isinstance(pre_tool_use, list):
-        pre_tool_use = []
-    cleaned: list[Any] = []
-    for group in pre_tool_use:
-        if not isinstance(group, dict):
-            cleaned.append(group)
-            continue
-        kept = [
-            hook
-            for hook in group.get("hooks", [])
-            if isinstance(hook, dict)
-            and not _dpf_hook_command(str(hook.get("command", "")), hooks_dir)
-        ]
-        if kept:
-            cleaned.append({**group, "hooks": kept})
-    dpf_groups = _build_codex_pre_tool_use_groups(managed, dry_run=dry_run)
+
+def _upsert_dpf_groups(cleaned: list[Any], dpf_groups: list[dict[str, Any]]) -> list[Any]:
     for dpf_group in dpf_groups:
         matcher = dpf_group.get("matcher")
         merged = False
@@ -1430,19 +2020,107 @@ def merge_codex_hooks_payload(existing: dict[str, Any], managed: Path, *, dry_ru
                 break
         if not merged:
             cleaned.insert(0, dpf_group)
-    events["PreToolUse"] = cleaned
+    return cleaned
+
+
+def merge_codex_hooks_payload(existing: dict[str, Any], managed: Path, *, dry_run: bool) -> dict[str, Any]:
+    """Fallback: upsert DPF guards into ~/.codex/hooks.json without clobbering other hooks."""
+    payload = prune_codex_hooks_payload(existing, managed / "hooks")
+    events = payload["hooks"]
+    events["PreToolUse"] = _upsert_dpf_groups(
+        list(events.get("PreToolUse", [])), _build_codex_pre_tool_use_groups(managed, dry_run=dry_run)
+    )
+    post = _upsert_dpf_groups(
+        list(events.get("PostToolUse", [])),
+        claim_refresh_post_tool_use_groups(managed / "hooks", dry_run=dry_run),
+    )
+    if post:
+        events["PostToolUse"] = post
     return payload
 
 
-def install_codex_hooks(managed: Path, home: Path, dry_run: bool) -> str:
-    """Wire plane-1 guards into Codex's user hook plane (~/.codex/hooks.json).
+def codex_plugin_cache_hooks_path(managed: Path, home: Path) -> Optional[Path]:
+    """hooks/hooks.json in the Codex plugin cache for the delivered version.
 
-    Plugin-bundled hooks still require interactive HOOK TRUST (BI-66EBEA06).
-    Delivering the same guards via the user hook file ensures Codex discovers
-    them alongside plugin hooks and surfaces them in `/hooks` for a one-time
-    trust grant. We do NOT forge trusted_hash entries (openai/codex#21615).
+    Codex installs `dpf-platform@personal` into
+    ~/.codex/plugins/cache/personal/dpf-platform/<version>/, keyed by the
+    version this script writes into the managed .codex-plugin/plugin.json
+    (codex_content_version; install_codex_plugin verifies the match).
+    """
+    version = read_json(managed / ".codex-plugin" / "plugin.json", {}).get("version")
+    if not isinstance(version, str) or not version.strip():
+        return None
+    return home / ".codex" / "plugins" / "cache" / "personal" / PLUGIN_NAME / version / "hooks" / "hooks.json"
+
+
+def codex_plugin_hooks_active(managed: Path, home: Path) -> bool:
+    """True when Codex's installed, enabled DPF plugin wires every blocking guard.
+
+    Codex loads plugin-bundled hooks (only Grok ignores them, BI-883FC2FC), so
+    a user-file copy would run each guard twice and need trust twice
+    (BI-2B634E68). Anything short of proof -- plugin not enabled, no cache for
+    the delivered version, a cache missing a guard on its matcher -- is False
+    and keeps the ~/.codex/hooks.json fallback.
+    """
+    config = codex_config_path(home)
+    try:
+        text = config.read_text(encoding="utf-8-sig") if config.exists() else ""
+    except OSError:
+        return False
+    if toml_table_enabled(text, f"plugins.{CODEX_PLUGIN_ID}") is not True:
+        return False
+    cache_hooks = codex_plugin_cache_hooks_path(managed, home)
+    if cache_hooks is None:
+        return False
+    try:
+        data = json.loads(cache_hooks.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    groups = data.get("hooks", {}).get("PreToolUse") if isinstance(data, dict) else None
+    if not isinstance(groups, list):
+        return False
+    wired: dict[str, set[str]] = {}
+    for group in groups:
+        if not isinstance(group, dict):
+            continue
+        names = wired.setdefault(str(group.get("matcher", "")), set())
+        for hook in group.get("hooks", []):
+            if isinstance(hook, dict):
+                base = hook_script_basename(str(hook.get("command", "")))
+                if base:
+                    names.add(base)
+    required = {
+        "Bash": CODEX_BASH_GUARDS,
+        "AskUserQuestion": CODEX_ASK_GUARDS,
+        "Write|Edit|MultiEdit": CODEX_WRITE_GUARDS,
+    }
+    return all(set(guards) <= wired.get(matcher, set()) for matcher, guards in required.items())
+
+
+def install_codex_hooks(managed: Path, home: Path, dry_run: bool) -> str:
+    """Converge Codex on ONE active copy of the plane-1 guards (BI-2B634E68).
+
+    Codex loads the plugin-bundled hooks/hooks.json from its plugin cache. When
+    the enabled plugin's cache wires every guard, DPF-owned entries are PRUNED
+    from ~/.codex/hooks.json (foreign hooks kept, emptied groups dropped) so each
+    guard runs once and is trusted once, on the plugin hooks. Otherwise the
+    guards are merged into ~/.codex/hooks.json as a fallback. Either plane still
+    needs interactive HOOK TRUST (BI-66EBEA06); we never forge trusted_hash
+    entries (openai/codex#21615).
     """
     path = codex_hooks_file(home)
+    if codex_plugin_hooks_active(managed, home):
+        if not path.exists():
+            return "served by the dpf-platform plugin hooks (no user hook copy)"
+        existing = read_json(path, {"hooks": {}})
+        payload = prune_codex_hooks_payload(existing, managed / "hooks")
+        if dry_run:
+            return f"dry-run: would prune DPF guards from {path}; the dpf-platform plugin hooks carry them"
+        changed = write_json(path, payload)
+        return (
+            f"pruned DPF guards from {path}; the dpf-platform plugin hooks carry them"
+            + ("" if changed else " (unchanged)")
+        )
     existing = read_json(path, {"hooks": {}})
     payload = merge_codex_hooks_payload(existing, managed, dry_run=dry_run)
     dpf_groups = _build_codex_pre_tool_use_groups(managed, dry_run=dry_run)
@@ -1454,40 +2132,66 @@ def install_codex_hooks(managed: Path, home: Path, dry_run: bool) -> str:
         write_count = sum(len(g.get("hooks", [])) for g in dpf_groups if g.get("matcher") == "Write|Edit|MultiEdit")
         return f"dry-run: would merge {bash_count} Bash + {ask_count} AskUserQuestion + {write_count} Write/Edit guard(s) into {path}"
     changed = write_json(path, payload)
-    return f"merged guards into {path}" + ("" if changed else " (unchanged)")
+    return f"merged guards into {path} (plugin hooks not proven active)" + ("" if changed else " (unchanged)")
 
 
-def codex_hook_trust_established(home: Path) -> bool:
-    """True when Codex has persisted at least one hook-trust entry.
+def codex_hook_trust_established(home: Path, *, plugin_plane: bool = False) -> bool:
+    """True when Codex has persisted hook-trust for the plane DPF relies on.
 
     Live-probed (BI-883FC2FC): absent `hooks.state` / `[hooks.state.*] trusted_hash`
     means every plugin + user hook is silently fail-open until the operator
-    reviews `/hooks` and trusts. We treat ANY persisted trust as "operator has
-    completed the flow at least once" — a coarse but non-forged signal.
+    reviews `/hooks` and trusts. On the user-file fallback we treat ANY persisted
+    trust as "operator has completed the flow at least once" -- a coarse but
+    non-forged signal. On the plugin plane (BI-2B634E68) only trust recorded for
+    the dpf-platform plugin hooks counts, so trust left over from the retired
+    ~/.codex/hooks.json copy cannot mask untrusted plugin guards.
     """
+    plugin_key = re.compile(
+        r"hooks\.state\.[\"']" + re.escape(f"{CODEX_PLUGIN_ID}:hooks/hooks.json:")
+        + r"[^\n]*\]\s*\n(?:[^\[\n][^\n]*\n|\s*\n)*?\s*trusted_hash\s*="
+    )
     config = codex_config_path(home)
     if config.exists():
         text = config.read_text(encoding="utf-8")
-        if "hooks.state" in text and "trusted_hash" in text:
+        if plugin_plane:
+            if plugin_key.search(text):
+                return True
+        elif "hooks.state" in text and "trusted_hash" in text:
             return True
     for name in ("hooks.state", "hooks.state.toml"):
         state_path = home / ".codex" / name
-        if state_path.exists() and state_path.stat().st_size > 0:
+        if not state_path.exists() or state_path.stat().st_size == 0:
+            continue
+        if not plugin_plane:
+            return True
+        if plugin_key.search(state_path.read_text(encoding="utf-8", errors="replace")):
             return True
     return False
 
 
-def codex_hook_trust_pending(home: Path, *, codex_present: bool) -> bool:
+def codex_hook_trust_pending(home: Path, *, codex_present: bool, plugin_plane: bool = False) -> bool:
     if not codex_present:
         return False
-    return not codex_hook_trust_established(home)
+    return not codex_hook_trust_established(home, plugin_plane=plugin_plane)
 
 
-def codex_hook_trust_blocking_notice() -> list[str]:
+def codex_hook_trust_blocking_notice(*, plugin_plane: bool = False) -> list[str]:
+    if plugin_plane:
+        where = [
+            "The guards run from the dpf-platform plugin's own hooks, once each. Trust is",
+            "granted once, on those plugin hooks (source dpf-platform@personal); DPF no",
+            "longer installs a second copy into ~/.codex/hooks.json (BI-2B634E68).",
+        ]
+    else:
+        where = [
+            "The plugin hooks could not be proven active, so the guards are installed in",
+            "~/.codex/hooks.json as a fallback. Trust them there, once.",
+        ]
     return [
         "",
         "ACTION REQUIRED — Codex hook trust not granted (BI-66EBEA06)",
         "Plane-1 governance guards are installed but will NOT run until you trust them.",
+        *where,
         "  1. Start Codex in this repo:  codex",
         "  2. Run:  /hooks",
         "  3. Review the hook roster below and choose 'Trust all and continue'",
@@ -1531,6 +2235,10 @@ def hook_roster(skill_pack: Path) -> list[str]:
     Printed so an operator granting hook-trust on Codex/Grok knows what each numbered
     "Hook N" actually is (BI-276EC984). Order follows hooks.json; clients may
     reorder it, so confirm the event and command before trusting a definition.
+    On Codex this roster IS what the operator trusts: once the plugin hooks are
+    proven active, DPF no longer installs a second ~/.codex/hooks.json copy with
+    its own numbering (BI-2B634E68). The "Hook N" label itself is upstream
+    (openai/codex#31469).
     """
     hooks_json = skill_pack / "hooks" / "hooks.json"
     try:
@@ -1568,11 +2276,13 @@ def guard_liveness_advisory() -> list[str]:
     section 11.
     """
     codex_line = (
-        "  Codex : guards are wired into ~/.codex/hooks.json and DENY correctly once trusted, "
-        + "but Codex gates every non-managed hook behind interactive HOOK TRUST. Until you "
-        + "open a Codex TUI session and choose 'Trust all and continue' in /hooks, every guard "
-        + "is silently fail-open. There is no non-interactive trust API (openai/codex#21615); "
-        + "'--dangerously-bypass-hook-trust' is per-invocation only."
+        "  Codex : guards run from the dpf-platform plugin's hooks, once each, and DENY correctly "
+        + "once trusted; ~/.codex/hooks.json carries them only as a fallback when the plugin "
+        + "hooks cannot be proven active (BI-2B634E68). Codex gates every non-managed hook "
+        + "behind interactive HOOK TRUST. Until you open a Codex TUI session and choose "
+        + "'Trust all and continue' in /hooks, every guard is silently fail-open. There is no "
+        + "non-interactive trust API (openai/codex#21615); '--dangerously-bypass-hook-trust' "
+        + "is per-invocation only."
     )
     grok_line = (
         "  Grok  : guards now DENY (live-probed, Grok 0.2.87). Grok DOES execute PreToolUse "
@@ -1624,8 +2334,14 @@ def hook_reference(skill_pack: Path) -> str:
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="Update DPF Codex/Claude/Grok/Antigravity agent skills and MCP wiring.")
     parser.add_argument("--skill-pack-path", default=str(default_skill_pack_path()))
-    parser.add_argument("--mcp-url", default=os.environ.get("DPF_MCP_URL", DEFAULT_MCP_URL))
+    parser.add_argument("--project-root", type=Path, help="Explicit repository whose existing Codex override should converge")
+    parser.add_argument("--mcp-url", default=os.environ.get("DPF_MCP_URL") or None)
+    parser.add_argument("--auth-mode", choices=("oauth", "legacy"), default=os.environ.get("DPF_MCP_AUTH_MODE", "oauth"))
     parser.add_argument("--codex-only", action="store_true")
+    parser.add_argument("--codex-plugin-only", action="store_true",
+                        help="Refresh only Codex plugin files and registration; the repository planner owns connector configuration.")
+    parser.add_argument("--print-existing-codex-mcp-url", action="store_true",
+                        help="Read the saved Codex DPF endpoint without changing configuration or plugins.")
     parser.add_argument("--claude-only", action="store_true")
     parser.add_argument("--skip-codex-cli-install", action="store_true")
     parser.add_argument("--skip-claude-cli-install", action="store_true")
@@ -1640,11 +2356,40 @@ def main(argv: list[str]) -> int:
         action="store_true",
         help="Exit 2 when Codex is installed but hook trust has not been granted (BI-66EBEA06).",
     )
+    parser.add_argument(
+        "--grok-client-stdin",
+        action="store_true",
+        help="Read Grok's credentials client (from issue_grok_credentials_client) as JSON on stdin (BI-84C1F526).",
+    )
     parser.add_argument("--dry-run", action="store_true")
+    # BI-DE1E6485 (design 2026-10-07 §5.3): pull the pack from the portal,
+    # verified by the installation's signature, instead of a local directory.
+    parser.add_argument("--from-portal", metavar="ORIGIN",
+                        help="Converge from this DPF portal origin (https or loopback); see portal_source.py.")
+    parser.add_argument("--expect-installation", metavar="DID",
+                        help="Device id (did_...) from this session's authenticated DPF connection.")
+    parser.add_argument("--approve-identity-change", action="store_true",
+                        help="The user approved a portal whose identity differs from this host's pin.")
+    parser.add_argument("--report-json", metavar="PATH",
+                        help="Write the per-client, per-scope convergence report as JSON.")
+    parser.add_argument("--portal-manifest", help=argparse.SUPPRESS)
     reference_mode = parser.add_mutually_exclusive_group()
     reference_mode.add_argument("--write-hook-reference", action="store_true")
     reference_mode.add_argument("--check-hook-reference", action="store_true")
     args = parser.parse_args(argv)
+    if args.print_existing_codex_mcp_url:
+        path = codex_config_path(home_dir())
+        text = path.read_text(encoding="utf-8-sig") if path.exists() else ""
+        print(existing_codex_mcp_endpoint(text) or "")
+        return 0
+    if args.mcp_url:
+        args.mcp_url = normalize_mcp_endpoint(args.mcp_url)
+    if args.from_portal:
+        import portal_source
+
+        return portal_source.run_from_portal(args, argv, home_dir(), os.environ)
+    mcp_url = args.mcp_url or DEFAULT_MCP_URL
+    os.environ["DPF_MCP_AUTH_MODE"] = args.auth_mode
 
     if args.write_hook_reference or args.check_hook_reference:
         root = Path(args.skill_pack_path).expanduser().resolve()
@@ -1668,16 +2413,50 @@ def main(argv: list[str]) -> int:
     codex_managed = codex_managed_plugin_path(home)
     shared_managed = shared_managed_plugin_path(home)
 
+    if args.codex_plugin_only:
+        if args.claude_only or args.codex_only or args.skip_codex_cli_install:
+            parser.error("--codex-plugin-only cannot be combined with client selection or skip-install flags")
+        if resolve_codex_binary() is None:
+            print("Codex plugin refresh skipped: Codex CLI not found")
+            return 0
+        copy_skill_pack(skill_pack, codex_managed, args.dry_run)
+        codex_version = codex_content_version(skill_pack)
+        if not args.dry_run:
+            write_json(codex_managed / ".codex-plugin" / "plugin.json", {**manifest, "version": codex_version})
+        ensure_codex_marketplace(home, codex_version, args.dry_run)
+        status = install_codex_plugin(home, args.dry_run)
+        print(f"Codex plugin refresh: {status}")
+        return 1 if status.startswith("failed:") else 0
+
     print(f"DPF agent toolchain updater")
     print(f"  skill pack : {skill_pack}")
     print(f"  version    : {version}")
     print(f"  home       : {home}")
-    print(f"  MCP URL    : {args.mcp_url}")
+    print(f"  MCP URL    : {args.mcp_url or 'preserve existing Codex endpoint; new clients use ' + mcp_url}")
+
+    # BI-DE1E6485: the declaration each connector carries, and the report's
+    # "before" state, which must be read before anything is copied.
+    import toolchain_convergence as convergence
+
+    portal_manifest = read_json(Path(args.portal_manifest), {}) if args.portal_manifest else None
+    pack_identity = convergence.Declarations(skill_pack, portal_manifest)
+    # A connector declares only a well-formed pack version (design §5.2).
+    declarations = pack_identity if pack_identity.enabled() else None
+    report = convergence.ConvergenceReport(home, pack_identity, portal_manifest) if args.report_json else None
+    codex_header = declarations.header_value("codex") if declarations and declarations.carrier("codex") == "header" else None
 
     copy_skill_pack(skill_pack, codex_managed, args.dry_run)
     copy_skill_pack(skill_pack, shared_managed, args.dry_run)
+    codex_version = codex_content_version(skill_pack)
+    if not args.dry_run:
+        write_json(codex_managed / ".codex-plugin" / "plugin.json", {**manifest, "version": codex_version})
     print(f"  Codex source : {codex_managed}")
     print(f"  shared source: {shared_managed}")
+    if declarations is not None:
+        convergence.declare_grok_descriptor(shared_managed, declarations, args.dry_run)
+        print(f"  declares   : pack {declarations.pack}, digest {declarations.digest[:16]}")
+    if report:
+        report.add("shared", "copy", "copied")
     process_spine_root = skill_pack if args.dry_run else codex_managed
     if not process_spine_contract_path(process_spine_root).exists():
         process_spine_root = skill_pack
@@ -1692,18 +2471,25 @@ def main(argv: list[str]) -> int:
         print(line)
 
     codex_present = resolve_codex_binary() is not None
+    codex_install_failed = False
 
     if not args.claude_only:
-        ensure_codex_marketplace(home, version, args.dry_run)
-        ensure_codex_config(home, args.mcp_url, args.dry_run, process_spine_root)
+        ensure_codex_marketplace(home, codex_version, args.dry_run)
+        ensure_codex_config(home, args.mcp_url, args.dry_run, process_spine_root, codex_header)
         codex_status = "skipped by flag"
         if not args.skip_codex_cli_install:
             codex_status = install_codex_plugin(home, args.dry_run)
+            codex_install_failed = codex_status.startswith("failed:")
             # Codex currently writes a legacy `[plugins."<name>"]` alias while
             # installing a qualified registry id. Converge again after the CLI
             # mutation so the next process does not warn that `dpf-platform`
             # lacks its `@marketplace` qualifier.
-            ensure_codex_config(home, args.mcp_url, args.dry_run, process_spine_root)
+            ensure_codex_config(home, args.mcp_url, args.dry_run, process_spine_root, codex_header)
+        if args.project_root and args.project_root.resolve() != home.resolve():
+            global_config = codex_config_path(home)
+            saved = global_config.read_text(encoding="utf-8-sig") if global_config.exists() else ""
+            endpoint = args.mcp_url or existing_codex_mcp_endpoint(saved) or DEFAULT_MCP_URL
+            ensure_codex_project_config(args.project_root, endpoint, args.dry_run)
         codex_hooks_status = install_codex_hooks(codex_managed, home, args.dry_run)
         print(
             f"  Codex      : marketplace + config converged; plugin {codex_status}; "
@@ -1724,25 +2510,72 @@ def main(argv: list[str]) -> int:
                 process_spine_root, dry_run=args.dry_run
             )
         print(f"  Grok competitive: {grok_competitive_status}")
+        # Grok's own OAuth credentials client, refreshed into bearer_token_file
+        # (BI-84C1F526, DI-4B843FAF62F9). The secret arrives on stdin only.
+        grok_credential_status = converge_grok_credential(
+            home=home, refresher=find_grok_refresher(skill_pack), mcp_url=args.mcp_url,
+            client_payload=sys.stdin.read() if args.grok_client_stdin else None,
+            dry_run=args.dry_run, default_mcp_url=mcp_url,
+            # The query carrier declare_grok_descriptor writes into grok.mcp.json, so the
+            # config.toml connector declares the pack too (design §5.2).
+            declare_url=(lambda url: declarations.query_url(url, "grok"))
+            if declarations is not None and declarations.carrier("grok") == "query" else None,
+        )
+        print(f"  Grok credential: {grok_credential_status}")
+        if report:
+            report.add("codex", "user", codex_status)
+            report.add("grok", "user", grok_status)
         # Antigravity (agy): MCP-config wiring + skill-pack sync.
         antigravity_status = "skipped by flag"
         if not args.skip_antigravity_cli_install:
-            mcp_st = ensure_antigravity_mcp_config(home, args.mcp_url, args.dry_run)
+            ensure_antigravity_plugin_descriptor(
+                shared_managed if not args.dry_run else skill_pack,
+                mcp_url,
+                args.dry_run,
+                declarations,
+            )
+            mcp_st = ensure_antigravity_mcp_config(home, mcp_url, args.dry_run, declarations)
             skills_st = ensure_antigravity_skills(skill_pack, home, args.dry_run)
             antigravity_status = f"MCP config {mcp_st}; skills {skills_st}"
         print(f"  Antigravity: {antigravity_status}")
+        if report:
+            report.add("antigravity", "user", antigravity_status)
 
+    claude_install_failed = False
     if not args.codex_only:
         ensure_claude_marketplace(home, version, args.dry_run)
         ensure_claude_repo_mcp_config(
             shared_managed if not args.dry_run else skill_pack,
-            args.mcp_url,
+            mcp_url,
             args.dry_run,
+            declarations,
         )
         status = "skipped by flag"
         if not args.skip_claude_cli_install:
             status = install_claude_plugin(home, args.dry_run)
+            claude_install_failed = status.startswith("failed:")
         print(f"  Claude     : marketplace converged; plugin install {status}")
+        if not args.skip_claude_cli_install:
+            project_outcome: dict[str, Any] = {}
+            for line in converge_claude_project_connectors(home, version, args.dry_run, project_outcome):
+                print(line)
+            claude_install_failed = claude_install_failed or bool((project_outcome.get("plugins") or {}).get("failed"))
+            user_scope_status = retire_user_scope_dpf_server(home, args.dry_run)
+            if user_scope_status:
+                print(f"  Claude user-scope dpf duplicate: {user_scope_status}")
+            local_scope = convergence.retire_local_scope_dpf_servers(home, args.dry_run)
+            for row in local_scope:
+                print(f"  Claude local-scope dpf duplicate in {row['project']}: {row['action']}"
+                      + (f" (backup {row['backupPath']})" if row.get("backupPath") else ""))
+            # Until every client parses the shipped descriptor, each converged
+            # record's cached copy gets a literal endpoint (design §5.4).
+            pins = convergence.pin_record_descriptors(home, mcp_url, os.environ, args.dry_run)
+            pinned = [row["project"] for row in pins if row["action"] == "updated"]
+            if pinned:
+                print(f"  Claude connector URL pinned for {len(pinned)} project record(s)")
+            if report:
+                convergence.record_claude_scopes(
+                    report, home, status, project_outcome, user_scope_status, local_scope)
         claude_competitive_status = "skipped by flag"
         if not args.skip_claude_cli_install:
             claude_competitive_status = disable_competitive_claude_plugins(
@@ -1751,15 +2584,17 @@ def main(argv: list[str]) -> int:
         print(f"  Claude competitive: {claude_competitive_status}")
 
     token_present = bool(os.environ.get(TOKEN_ENV_VAR))
+    print("  MCP auth   : OAuth configuration written; sign in and verify through the client. Unverified clients/transports require explicit legacy compatibility." if args.auth_mode == "oauth" else "  MCP auth   : explicit legacy compatibility")
     print(f"  MCP token  : {'present' if token_present else 'missing'} ({TOKEN_ENV_VAR})")
     for line in guard_liveness_advisory():
         print(line)
 
-    exit_code = 0
+    exit_code = 1 if codex_install_failed or claude_install_failed else 0
     roster_printed = False
-    trust_pending = codex_hook_trust_pending(home, codex_present=codex_present)
+    plugin_plane = codex_plugin_hooks_active(codex_managed, home)
+    trust_pending = codex_hook_trust_pending(home, codex_present=codex_present, plugin_plane=plugin_plane)
     if trust_pending:
-        for line in codex_hook_trust_blocking_notice():
+        for line in codex_hook_trust_blocking_notice(plugin_plane=plugin_plane):
             print(line)
         for line in hook_roster(skill_pack):
             print(line)
@@ -1771,7 +2606,15 @@ def main(argv: list[str]) -> int:
         for line in hook_roster(skill_pack):
             print(line)
 
-    print("Done. Start a new Codex/Claude/Grok session to load updated skills.")
+    if report:
+        written = report.write(args.report_json, args.dry_run)
+        print(f"  Report     : {args.report_json} ({written['result']})")
+        if written["result"] == "failed" and not args.dry_run:
+            exit_code = exit_code or 1
+    if exit_code:
+        print("Incomplete: toolchain convergence is unverified; resolve the reported failure before restarting a client.")
+    else:
+        print("Done. Start a new Codex/Claude/Grok session to load updated skills.")
     return exit_code
 
 

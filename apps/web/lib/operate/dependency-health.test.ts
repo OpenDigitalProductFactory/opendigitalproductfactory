@@ -7,6 +7,13 @@ import {
 } from "./dependency-health"
 import { dependencyUp } from "@/lib/metrics"
 
+const doctools = vi.hoisted(() => ({ up: null as boolean | null }))
+vi.mock("@/lib/documents/conversion/availability", () => ({
+  probeDoctools: async () => doctools.up,
+}))
+const inngestSend = vi.hoisted(() => vi.fn(async () => undefined))
+vi.mock("@/lib/jobs", () => ({ jobs: { send: inngestSend } }))
+
 async function gaugeValue(service: string): Promise<number | undefined> {
   const m = await dependencyUp.get()
   return m.values.find((v) => v.labels.service === service)?.value
@@ -66,6 +73,34 @@ describe("dependency-health probes", () => {
     await refreshDependencyMetrics()
     expect(await gaugeValue("model-runner")).toBe(0)
     expect(await gaugeValue("stt")).toBe(0)
+  })
+
+  it("registers the document converter as an optional dependency (BI-52E565DA)", async () => {
+    global.fetch = vi.fn(async () => new Response("ok", { status: 200 })) as typeof fetch
+    dependencyUp.reset()
+    doctools.up = null
+    await refreshDependencyMetrics()
+    // Unavailable by design (no docker socket / no image configured): no gauge,
+    // so no permanent 0 that reads as an outage.
+    expect(await gaugeValue("doctools")).toBeUndefined()
+
+    doctools.up = false
+    await refreshDependencyMetrics()
+    expect(await gaugeValue("doctools")).toBe(0)
+
+    expect(inngestSend).not.toHaveBeenCalled()
+    doctools.up = true
+    await refreshDependencyMetrics()
+    expect(await gaugeValue("doctools")).toBe(1)
+    // BI-9D43CBEF: the flip to available resumes renditions with one backfill.
+    expect(inngestSend).toHaveBeenCalledTimes(1)
+    expect(inngestSend).toHaveBeenCalledWith({
+      name: "documents/rendition.backfill-requested",
+      data: { reason: "converter-available" },
+    })
+    await refreshDependencyMetrics()
+    expect(inngestSend).toHaveBeenCalledTimes(1)
+    doctools.up = null
   })
 
   it("publishes no stt gauge at all when no local STT is configured", async () => {

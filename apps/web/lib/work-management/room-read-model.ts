@@ -4,6 +4,7 @@ import type {
   WorkCaseSourceRef,
 } from "./case-types";
 import type { ReceiptEnvelope } from "./receipt-envelope";
+import { composeRoomReviewProfile } from "./room-review-profile";
 import {
   normalizeWorkroomActivities,
   type WorkroomActivityInput,
@@ -26,13 +27,16 @@ import {
   getWorkShape,
   readDeclaredWorkShapeKey,
   readWorkShapeDefinitionContract,
+  type WorkShapeDefinition,
 } from "./work-shapes";
+import { isCompletingWorkroomDriveReceiptAt } from "./workroom-drive-receipts";
 import { readWorkShapeClaim, resolveWorkShapeClaim } from "./workroom-shape-claim";
 import {
   evaluateWorkroomShapeConformance,
   projectUnresolvedWorkroomShapeConformance,
   projectUnshapedWorkroomConformance,
   type WorkroomCoordinatorEligibility,
+  type WorkroomShapeConformanceInput,
 } from "./workroom-shape-conformance";
 import {
   getWorkCaseSourceEntry,
@@ -67,7 +71,9 @@ export interface BuildWorkroomViewInput {
   outcomePacket?: WorkroomOutcomePacket | null;
   outcomeHealth?: WorkroomOutcomeView["health"];
   receipts?: readonly ReceiptEnvelope[];
+  reviewerRuns?: WorkroomView["reviewerRuns"];
   sourceHealth?: WorkroomView["projection"]["sourceHealth"];
+  executionAttentionReason?: string | null;
   /**
    * The subject's value-stream + lifecycle structure, pre-resolved by the loader via
    * `resolveWorkroomStructure` (kept out of this pure build, like `sourceHealth`).
@@ -90,9 +96,16 @@ export interface BuildWorkroomViewInput {
   now?: Date;
   /** Optional observed execution state supplied by a lifecycle/drive loader. */
   processOverseerObservation?: {
+    attentionReason?: string | null;
     currentStageKey?: string | null;
     proposedStageKey?: string | null;
-    receipts?: readonly { stageKey: string; kind: string }[];
+    /** Graph rooms only (GPP Phase 3c PR-3c-2): every stage the drive's marking holds. Absent means one current stage. */
+    currentStageKeys?: readonly string[];
+    /** Graph rooms only: each marked stage's current iteration (absent means 0). */
+    stageIterations?: Readonly<Record<string, number>>;
+    /** Graph rooms only (BI-086DC167): the run the marking belongs to; a run-scoped receipt counts only within it. */
+    runKey?: string;
+    receipts?: readonly { stageKey: string; kind: string; iteration?: number; runKey?: string }[];
     budgetUsage?: readonly { kind: string; used: number }[];
     stopConditionHits?: readonly string[];
     reviewDue?: boolean;
@@ -104,6 +117,28 @@ export interface BuildWorkroomViewInput {
     unresolvedDeviationCount?: number;
     coordinatorEligibility?: WorkroomCoordinatorEligibility | null;
   };
+}
+
+/**
+ * Graph rooms only (GPP Phase 3c PR-3c-2, design §4.3 "Room view"): the
+ * marked stages in document order, echoed on the check so the view marks each
+ * one current, and the flow-aware order check the drive itself runs, so a
+ * legal parallel position is not read as out of order by the index rules.
+ * Nothing for a sequential room, whose observation carries no marked stages.
+ */
+function graphStageOrder(
+  shape: WorkShapeDefinition,
+  observation: BuildWorkroomViewInput["processOverseerObservation"],
+): Pick<WorkroomShapeConformanceInput, "currentStageKeys" | "flowOrder"> {
+  const marked = observation?.currentStageKeys;
+  if (!marked) return {};
+  const keys = shape.stages.map((stage) => stage.key).filter((key) => marked.includes(key));
+  const delivered = Object.fromEntries(shape.stages.map((stage) => [
+    stage.key,
+    (observation?.receipts ?? []).some((receipt) =>
+      isCompletingWorkroomDriveReceiptAt(receipt, stage.key, observation?.stageIterations?.[stage.key] ?? 0, observation?.runKey)),
+  ]));
+  return { currentStageKeys: keys, flowOrder: { enabled: keys, delivered } };
 }
 
 function primarySourceRef(detail: WorkCaseDetail): WorkCaseSourceRef {
@@ -255,6 +290,7 @@ export function buildWorkroomView(
         })
       : evaluateWorkroomShapeConformance({
           roomKey: caseRef.caseId,
+          ...graphStageOrder(resolvedShape, observation),
           definition: readWorkShapeDefinitionContract(resolvedShape),
           collaborationShape: input.shapeKey ?? resolvedShape.collaborationShape,
           participants,
@@ -277,8 +313,20 @@ export function buildWorkroomView(
           checkedAt: now,
         });
 
+  const processNeedsAttention = !input.detail.summary.terminal
+    && ["pause", "escalate", "stop"].includes(processOverseer.disposition);
+  const processAttention = processNeedsAttention
+    ? processOverseer.interventionReason ?? "The process check requires attention before work continues."
+    : null;
+  const driveAttention = input.detail.summary.terminal ? null : observation?.attentionReason;
+
   return {
     roomKey: input.caseKey,
+    reviewProfile: {
+      source: composeRoomReviewProfile(caseRef.sourceType, []),
+      applicability: "unknown",
+      assessment: "not-exercised",
+    },
     caseRef,
     identity: {
       definition: getWorkroomDefinitionIdentity(caseRef.sourceType),
@@ -309,11 +357,21 @@ export function buildWorkroomView(
     participants,
     activity: normalizeWorkroomActivities(input.activities ?? []),
     work: {
-      nextAction: standingIdle
+      nextAction: processNeedsAttention
+        ? "Resolve the process check before continuing"
+        : input.executionAttentionReason
+        ? "Inspect Observed execution for the reviewer status and required action."
+        : driveAttention
+        ? driveAttention
+        : standingIdle
         ? "Open next cycle"
+        : input.detail.summary.state === "triage"
+          && input.detail.summary.nextAction === "Assign owner"
+          && boundary.accountablePrincipalRef
+        ? "Review the next step with the accountable owner"
         : input.detail.summary.nextAction,
-      attentionRequired: input.detail.summary.attention.required,
-      attentionReason: input.detail.summary.attention.reason,
+      attentionRequired: processNeedsAttention || Boolean(input.executionAttentionReason) || Boolean(driveAttention) || input.detail.summary.attention.required,
+      attentionReason: [processAttention, input.executionAttentionReason, driveAttention, input.detail.summary.attention.reason].filter(Boolean).join(" · ") || null,
       blockingActorKind: blockingActorKindForState(input.detail.summary.state),
       activeCapsuleRefs,
       activeTaskRunSummary: null,
@@ -324,6 +382,7 @@ export function buildWorkroomView(
     posture,
     processOverseer,
     receipts: [...(input.receipts ?? [])],
+    reviewerRuns: input.reviewerRuns ?? [],
     sourceRefs,
     structure: input.structure ?? null,
     projection: {

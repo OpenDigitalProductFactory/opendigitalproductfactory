@@ -61,7 +61,7 @@ const fixtureData: Omit<PlatformWorkspaceHomeData, "storefrontConfig"> = {
   },
   workspaceSections: [
     {
-      key: "ai-control",
+      key: "platform",
       label: "Platform work",
       description: "AI, builds, and shared platform tooling.",
       tiles: [

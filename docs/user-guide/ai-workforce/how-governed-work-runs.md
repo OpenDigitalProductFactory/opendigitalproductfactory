@@ -10,6 +10,7 @@ relatedCode:
   - apps/web/lib/work-posture/temporal-band.ts
   - apps/web/lib/tak/consequential-tool-policy.ts
   - apps/web/lib/mcp-governed-execute.ts
+  - apps/web/lib/work-management/room-participant-invitation-preflight.server.ts
   - apps/web/lib/work-management/autonomy-envelope.ts
 ---
 
@@ -35,6 +36,14 @@ earlier step allowed — that invariant is what makes the whole sequence safe to
 one sentence.
 
 ## 1. The Workroom holds the work
+
+An external assistant acts within the permissions of the person who connected
+it. Approve the connection once; routine reconnects, refreshes and separate
+tasks do not need another sign-in. A shared assistant does not share people's
+workroom access. Your work remains yours, and joining another room still needs
+an invitation. If your access changes, the next action uses your current
+permissions. See [external agent setup](../contributing/agent-dev-environments.md)
+for setup and recovery.
 
 A Workroom is a focused place where authorized people and AI coworkers coordinate toward a
 named outcome. It is not an open chat channel: it carries a purpose, an outcome, a scope, an
@@ -193,29 +202,91 @@ Every governed tool call is classified into one of three consequence classes:
   destroys state.
 
 Classification is not a hand-maintained list of tool names. It runs from the declared
-consequence on the tool itself, on the central governed execution path, so it covers every
-governed call. A consequential tool also carries the collaboration shape its use implies —
+consequence on the tool itself, on the central governed execution path. How many tools carry a
+declared consequence, and how many consequential tools are actually gated, is reported as a governed
+metric, because not every gate enforces yet. Some run in shadow mode, recording what they would have
+refused. A consequential tool also carries the collaboration shape its use implies —
 which is how a tool reaching outward pulls `outward-review` into the picture even when
 nobody named it.
 
 Reaching outward is not the same as reaching the business. A tool whose outward effect is platform development or operations (opening a pull request, contributing to the hive, running a discovery sweep) declares a platform consequence scope: it is still consequential, receipted and outward-reviewed, but the business-stance alignment check is not applied, because the founder kernel owns that judgement and the business owner should never be asked what the business would do about a pull request.
 
-Two independent checks then apply, and both must pass:
+Three independent checks then apply, and all must pass:
 
 - **The authority intersection.** A tool is unavailable unless the coworker's grant *and*
   the acting user's capability both allow it. Default deny. Asking in natural language is not
   a route around this.
+- **Tools from a connected service need approval first.** A tool that a connected MCP service
+  reports is invisible to coworkers until someone approves it on the service's page under
+  **Platform > Tools > Services**. The approval names the permission a coworker must hold and
+  is tied to the exact description and inputs that were reviewed. If the service changes them,
+  the tool goes back to review and the coworker sees nothing new. The check runs again on every
+  call, so a list the coworker saw earlier is never permission on its own. See
+  [Tools and integrations](../platform/tools-and-integrations.md#review-tools-a-service-discovers).
 - **The autonomy envelope.** This decides whether a human turn is required at all:
   *shadow-only* (recorded, never taken), *propose-for-approval*, *supervised-action*, or
   *autonomous-action* — the only mode that permits acting without a human.
+
+Before the platform asks for approval, it also checks deterministic prerequisites that
+approval cannot change. For example, a coworker that has not joined a Workroom cannot ask
+you to approve its attempt to invite itself. The call stops without creating an approval
+request and names the recovery control instead: the room's current human owner opens the
+room and uses **Participants** to add the approved assistant. Retrying the unchanged call
+returns the same guidance rather than filling the inbox with approvals that can only fail.
+An owner change takes effect immediately; a historical creator or lease holder does not
+override a current accountable owner or coordinator.
 
 The posture from step 3 and the envelope are one projection, and **the stricter of the two
 wins**. A proactivity setting cannot buy autonomy the envelope would deny, and an autonomous
 envelope cannot act on work whose shape declared that it must be proposed.
 
+The decision from step 4 and the permission in this step are deliberately separate, and the
+[Gated Permissions Process](../../architecture/gated-permissions-process.md) is the standard that
+pairs them. For each stage of the work, it records which authority's decision admits which tools.
+One recorded decision then covers every call inside that envelope, and anything outside it is never
+offered. See the
+[pairing diagram](../../architecture/gated-permissions-process.md#73-the-pairing-at-a-glance).
+
+**Permits are being recorded, not yet required.** When a gate admits an outward, authority-changing or
+irreversible call, the platform now records a permit for it: which gate admitted the call, for which
+tool, and until when. The call's receipt notes the permit's verdict. This runs in shadow mode. A
+missing or expired permit is recorded, never refused, and routine reads and ordinary writes are not
+affected. A call made around the governed path is recorded as unmediated. Each permit is also signed
+and tied to the call's exact arguments. A permit that was altered after it was issued, or reused for
+different arguments, is recorded as such. An install that has no permit signing key records its
+permits as unsigned. A permit is good for one use: if the same permit is presented twice at the same
+moment, only one of the two calls uses it, and the other is recorded as used up. Enforcement is
+switched on one binding at a time, and only after its shadow record has been reviewed and a recorded decision approves it. No binding is switched on yet. When one is, a
+call under it without a valid permit is held with "permit required", which names the approval to
+obtain; the call is not lost, and it runs once that approval is in place. If the install has no signing
+key, the platform keeps that binding in shadow and records why, rather than holding every call.
+
 Denials come back as named reasons — a missing decision interaction, a missing envelope, a
 tripped stop condition, a missing verification receipt — not as a generic refusal. A denial
 tells you what to fix.
+
+**A request for approval has a deadline, and a missed deadline is its own answer.** When a
+call needs a person, the approval request carries a window. If it closes with nobody
+answering, the request is settled as **expired** — not cancelled, which would say somebody
+decided, and not left sitting as though it were still live. The difference is what makes
+"how many decisions lapsed unanswered" a question the platform can answer at all, and an
+expired request is final: re-asking mints a new one rather than reviving it.
+
+**A refused room handover says why.** Either the account the assistant is connected as does
+not own the room, and the fix is to connect the assistant as the room's owner or have the
+owner add it under **Participants**. Or the assistant was removed from the room, or limited
+to observing it, and only the owner can restore it there.
+
+**An approved call that failed stays failed.** If a call you approved ran and did not
+complete, an identical retry within the approval window returns that same failure. It does
+not put a new card in front of you. Once the cause is fixed and the window has closed, the
+assistant can ask again.
+
+**A decision that does not go through is checked, not repeated.** If Authorize or Decline
+gets no answer within 30 seconds, the card looks up what the platform recorded. If nothing
+was saved, it says so and offers the buttons again. If something was saved, it shows the
+result. If it cannot tell, it says not to approve again and links to the request's result.
+It never sends your decision a second time on its own.
 
 ### The floors nothing crosses
 
@@ -253,6 +324,25 @@ Four surfaces read that trail, each answering a different question:
   *awaiting a person* are deliberately different marks — a decline is a settled answer to act
   on, an open question is not.
 
+The coworker is told the same difference, in the same words. When a call needs approval it is
+told the work is waiting, which approval request it is waiting on and until when, and that the
+tool is available to it — not that the call was rejected. That wording is load-bearing: while
+the two read alike, coworkers concluded the capability was missing and proposed work to build
+tools that already existed. They are also told that calling again will not advance it, so the
+honest response to a wait is to report it rather than retry.
+
+That difference is now carried by the result itself, not only by its wording. Every governed
+call comes back saying which kind of answer it is: the work went through, a person has to rule
+on it, an input is missing that the coworker can supply, the check could not run at all, or the
+platform said no. Only the last one is a refusal. The middle three are not answers about the
+request, and nothing downstream may file them as failures.
+
+The one you will notice is **the check could not run**. If the platform cannot record the
+authority evidence a call needs, or cannot reserve its receipt, the coworker is told the check
+itself was unavailable and the call can be retried unchanged — not that it was rejected. That is
+an outage on our side, and reading it as a refusal is how a coworker talks itself out of work it
+was entitled to do.
+
 Where the audit trail has nothing to say, these surfaces say so rather than guessing. A stage
 with no records reads **No records yet**. A room with no posture of its own reads **Running on
 defaults**. That is deliberate: a picture that never disagrees with the ledger is worth more
@@ -283,6 +373,7 @@ Stated plainly, so nothing here reads as more finished than it is:
 - [Priority, Outcomes & Calibration](priority-and-outcomes.md) — the cost/quality/time half, and its receipts
 - [AI Workforce](index.md) — the coworker directory, grants, and availability
 - [Work shapes and the decision gate](../../architecture/work-shapes-and-the-decision-gate.md) — the architecture behind steps 2 and 5
+- [Gated Permissions Process (GPP)](../../architecture/gated-permissions-process.md) — the standard that binds step 4's decision to step 5's tool permissions
 
 ## The pace a room runs at
 
@@ -297,3 +388,18 @@ a quieter room still asks permission for exactly the same things.
 
 You can set a room's pace on the room itself, and a default for all rooms under
 Priority & Models. See [Work Rooms](../workspace/work-rooms.md).
+
+
+## Continuing a review after a connection changes
+
+A changed AI connection does not make an unfinished review a new piece of work.
+DPF can supply the agent an exact recovery request for the original review. The
+same person and coworker must still have permission in that Workroom. Current
+permissions are checked again when work resumes, when tools run and when an
+approved action executes; the expired connection is retained as history.
+
+The review's original source, evidence and retry limits stay attached. If the
+prior execution is uncertain, cancelled or exhausted, DPF holds the request for
+reconciliation. Dispatch is not completion: the governed review receipt records
+the actual result. The agent obtains the supported request through the
+[initiative readiness recovery procedure](../../architecture/initiative-readiness-runbook.md#original-review-recovery-across-connection-changes).

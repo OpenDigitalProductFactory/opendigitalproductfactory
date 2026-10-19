@@ -14,7 +14,7 @@ import {
   type CapacityResourceInput,
 } from "./restaurant-capacity";
 import { loadRestaurantCapacitySnapshot, type CapacityLoaderClient } from "./restaurant-capacity-loader";
-import { STOREFRONT_ROUTES } from "@/components/storefront-admin/storefront-nav";
+import { STOREFRONT_ROUTES } from "@/lib/navigation/storefront-nav";
 import { loadLivingBusinessSnapshot } from "@/lib/twin/living-business-snapshot";
 import type { LivingBusinessClient } from "@/lib/twin/living-business-snapshot";
 

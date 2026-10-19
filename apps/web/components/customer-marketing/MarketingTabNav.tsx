@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { SectionNav } from "@/components/shell/SectionNav";
-import { MARKETING_TABS } from "./marketing-nav";
+import { MARKETING_TABS } from "@/lib/navigation/marketing-nav";
 
 // Rendering is delegated to the shared SectionNav (BI-ARCH-SECTIONNAV); this wrapper
 // resolves active state from the pathname. Marketing uses the flat "pill" tone in a

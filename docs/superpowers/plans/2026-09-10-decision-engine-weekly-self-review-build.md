@@ -26,6 +26,24 @@ Phased implementation of the design at `docs/superpowers/specs/2026-09-10-decisi
 - Seed: one task per install, cron `0 6 * * 1`, owned by the operator principal.
 - Digest posted to the standing governance Workroom named by the concierge design.
 
+## Phase 2 — SHIPPED 2026-09-22
+
+`decision-engine-review` is a scheduled-task kind, seeded on every install at
+`0 6 * * 1` (Monday 06:00 UTC, before the bookkeeping cycle so a week of
+governance findings is waiting when the operating week opens). The executor
+`decision/self-review/decision-engine-review-task.ts` mirrors
+`bookkeeping-cycle-task.ts`: deterministic, off the LLM path, idempotent per
+ISO week. `load-review-window.ts` is the single read behind it, so the measures
+stay pure and every finding is reproducible from a fixture.
+
+Material coverage counts only rows the gate can actually read
+(`reviewStatus: approved`, `promotionState: promoted`); draft or unpromoted
+material would make a starved profile look fed.
+
+Not yet: the digest is written to the run log, not posted into the standing
+governance room. That lands with Phase 3, which owns routing and the
+review-page section.
+
 ## Phase 3 — routing, attention, review-page section (AC-3, AC-5)
 
 - Routing by scope: WWMD lines to founder review, WWWD to the owner `weekly-digest` lane (`agreement` below threshold escalates to `needs-you-now`), WSID to the registry's accountable coworker.

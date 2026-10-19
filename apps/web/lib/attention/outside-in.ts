@@ -75,6 +75,8 @@ const SOURCE_PORTFOLIO: Record<AttentionSource, AttentionPortfolio> = {
   // (projectRoomStall sets `portfolio`, which wins over this default). This
   // fallback covers a room with no portfolio role recorded.
   "workroom-stall": "foundational",
+  "workroom-rebind": "foundational",
+  "orphaned-approval": "for-employees", // approvals for AI coworkers that no person is answering
   "business-journey": "products-and-services-sold", // a customer-facing journey (find/enquire/book/pay) failed its watchdog run
   // The workforce — people + AI coworkers needing a human.
   "ai-decision": "for-employees", // a coworker's decision the kernel couldn't make
@@ -90,10 +92,12 @@ const SOURCE_PORTFOLIO: Record<AttentionSource, AttentionPortfolio> = {
   // Foundational back-office / platform infra (deepest inside).
   "approval-bill": "foundational", // AP bill approval
   "approval-expense": "foundational", // expense claim
+  "approval-leave": "for-employees", // a person's time off (BI-7BCC87BB)
   "compliance-submission": "foundational", // regulatory filing
   "ai-readiness-blocker": "foundational", // platform readiness gap
   "platform-health": "foundational", // platform health alert — infra posture
   "provider-credential": "foundational", // an AI provider's saved sign-in expired
+  "contribution-setup": "manufacturing-and-delivery", // how built changes reach the DPF project
   "compliance-source-freshness": "foundational", // governed compliance evidence lapsing — platform posture
 };
 

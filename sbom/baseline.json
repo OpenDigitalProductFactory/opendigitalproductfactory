@@ -1,19 +1,59 @@
 {
-  "note": "Drift anchor for scripts/check-sbom-drift.mjs. `firstPartyDivergent` lists the accepted set of packages whose own workspace declarations resolve to >1 version; the guard fails when a NEW name appears. Update intentionally (align the versions, or accept here) — never to silence a real regression. Totals are informational. See docs/architecture/dependency-reduction-routine.md.",
+  "note": "Drift anchor for scripts/check-sbom-drift.mjs. `firstPartyDivergent` lists the accepted set of packages whose own workspace declarations resolve to >1 version; the guard fails when a NEW name appears. `acceptedSpecifierDrift` maps each registry package that two or more workspaces declare other than through one shared `catalog:` specifier (pnpm-workspace.yaml `catalog`) to the reason; unlisted drift fails, and a listed name that no longer drifts fails as stale. `budgets` are ceilings on the dependency shape; the guard fails when a total exceeds its budget. --update-baseline only lowers budgets. Raising one needs --raise-budget \"<reason>\", which records the reason in `lastBudgetRaise` for review. Never raise a budget to absorb growth that `pnpm dedupe` or a removal would clear. See docs/architecture/dependency-reduction-routine.md.",
   "totals": {
-    "resolvedComponents": 1873,
-    "uniqueNames": 1634,
-    "duplicatedNames": 197,
-    "excessInstances": 239,
-    "multiMajorNames": 122,
-    "firstPartyDivergentNames": 1,
-    "directButTransitiveNames": 12,
-    "dedupeCandidateNames": 75,
-    "directProdNames": 83,
-    "directDevNames": 36,
+    "resolvedComponents": 888,
+    "uniqueNames": 828,
+    "duplicatedNames": 58,
+    "excessInstances": 60,
+    "multiMajorNames": 28,
+    "firstPartyDivergentNames": 0,
+    "directButTransitiveNames": 3,
+    "dedupeCandidateNames": 30,
+    "directProdNames": 54,
+    "directDevNames": 29,
     "workspaces": 16
   },
-  "firstPartyDivergent": [
-    "tailwindcss"
-  ]
+  "budgets": {
+    "resolvedComponents": 888,
+    "duplicatedNames": 58,
+    "excessInstances": 60,
+    "multiMajorNames": 28
+  },
+  "lastBudgetRaise": {
+    "reason": "markdown-it 15 resolves linkify-it 6 and uc.micro 3; mailparser 3.9.40 still resolves linkify-it 5 and uc.micro 2. Those two majors cannot collapse until mailparser adopts linkify-it 6.",
+    "budgets": {
+      "resolvedComponents": 888,
+      "duplicatedNames": 58,
+      "excessInstances": 60,
+      "multiMajorNames": 28
+    }
+  },
+  "firstPartyDivergent": [],
+  "acceptedSpecifierDrift": {
+    "typescript": "packages/repo-guard-runtime pins the exact compiler (6.0.3) that the repo guard AST runtime loads and verifies against the lockfile (scripts/lib/load-pinned-guard-typescript.mjs), so it cannot take the shared catalog: range; every other workspace declares catalog: (^6.0.3 in pnpm-workspace.yaml) and resolves to the same version."
+  },
+  "roots": {
+    "mobile": {
+      "lockfile": "apps/mobile/pnpm-lock.yaml",
+      "totals": {
+        "resolvedComponents": 949,
+        "uniqueNames": 847,
+        "duplicatedNames": 86,
+        "excessInstances": 102,
+        "multiMajorNames": 46,
+        "firstPartyDivergentNames": 0,
+        "directButTransitiveNames": 0,
+        "dedupeCandidateNames": 40,
+        "directProdNames": 24,
+        "directDevNames": 12,
+        "workspaces": 1
+      },
+      "budgets": {
+        "resolvedComponents": 949,
+        "duplicatedNames": 86,
+        "excessInstances": 102,
+        "multiMajorNames": 46
+      }
+    }
+  }
 }

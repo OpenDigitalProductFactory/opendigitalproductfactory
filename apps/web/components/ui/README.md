@@ -39,6 +39,7 @@ text-white on accent buttons" guidance is retired; there is no exception.
 ## Status colors
 
 Never a local status→color map. A status resolves through
-`report-kit/statusColors.ts` (`STATUS_INTENT` registry) via
+`lib/ui-model/statusColors.ts` (`STATUS_INTENT` registry, re-exported by
+the report-kit barrel) via
 `<StatusBadge domain=… status=…>`. Adding a domain/status is a one-line
 registry edit.

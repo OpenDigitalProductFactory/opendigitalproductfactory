@@ -1,5 +1,5 @@
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 
 /**
@@ -8,7 +8,7 @@ import { gateAtEntry } from "../quiescence-gates";
  * Analyzes coworker↔coworker edges, notifies, files critical BIs, and
  * dispatches a one-shot platform-engineer review (MCP-efficiency twin).
  */
-export const a2aCollaborationHealthScan = inngest.createFunction(
+export const a2aCollaborationHealthScan = jobs.createFunction(
   {
     id: "ops/a2a-collaboration-health-scan",
     retries: 1,

@@ -6,13 +6,23 @@ order: 1
 
 ## Overview
 
-Operations is the delivery backlog for the platform. It tracks the work items, epics, priorities, and deployments that make up your team's delivery commitments. It is designed for transparency — blockers are visible, WIP limits are enforced, and progress is always up to date.
+Operations is the delivery backlog for the platform. It tracks the work items, epics, priorities, and deployments that make up your team's delivery commitments. It is designed for transparency — blockers are visible, work in progress is limited by investment (each portfolio admits new work while its points in flight fit its allowance, so ten small items and two large ones that cost the same are treated alike), and progress is always up to date.
 
 ## Workroom Inventory
 
 **Work** in the main navigation opens this same page — there is one entry for work activity, not a separate dashboard beside it. It is distinct from the coworker directory under **Workforce**: the Workforce portfolio groups business work, including supporting activities such as hiring and finance, while the coworker directory is a people-and-agent view across all four portfolios.
 
-Open **Operations > Workrooms** (`/ops/workrooms`) for one operational inventory across business work, coworker activity, and development. **Live now** lists the rooms that are held, so nobody steals a branch someone else is on. Being held is not the same as being worked, and the page distinguishes them. A heartbeat renews a lease without doing anything, so a room whose lease is valid but which has recorded no work since the idle floor reads as **held, no work signal** with how long it has been quiet, rather than as live. Genuine execution evidence is an open pull request, recent build activity, or a recent sync. A held room is never reaped while its lease is valid. **History and cleanup** retains terminal, expired, stalled, and cleanup-eligible records without counting them as active. Select a Workroom to open its canonical activity case; open **Architecture > Workrooms** when you need the reusable definition instead of the instance history.
+Open **Work in progress** (`/ops/workrooms`) to follow business, coworker and development work in one place. Choose **Needs attention**, **Working now** or **Waiting**. The page starts with attention when it is recorded. A renewed session lease alone does not mean work is progressing.
+
+Each row shows the work, its accountable person and its next step. Accountability comes from the room, its responsibility chain or the recorded organization owner. **Not assigned** means a person has not been resolved; the page does not guess from who started the session. Select the work's title to open its existing case and supported actions.
+
+Rooms waiting on the same recovery condition are grouped under **Shared recovery issues**. Expand a group to see its affected rooms. A missing stage result needs evidence or writeback from the executor; changing ownership alone does not restore it.
+
+**Technical evidence** reveals session information, branches, lease reasons and recovery conditions. **History** loads the retained rows only when opened. **System details** explains the system's protected leases and cleanup candidates. Routine expiry follows the existing policy: a valid held lease is not reaped, paused sessions retain their resume grace, and unmerged work is preserved. The Waiting view does not promise that an unavailable worker will automatically return.
+
+History says **Closed** for an archived room. **Source merged** requires recorded merge evidence; it does not assert that the change is deployed or accepted.
+
+The page reads up to 200 recent rooms. Shared recovery can include older rooms. The attention total combines both and counts each room once. Open a portfolio's Work view to narrow the same inventory. Open **Architecture > Workrooms** for reusable definitions rather than instance history.
 
 **Activity by portfolio** groups the same Workrooms under the four portfolios and summarises each one with a few concrete activities rather than a bare count. Every line names its Workroom and says what is happening to it, so two Workrooms blocked for the same reason stay distinguishable. Select any line to open that Workroom's activity case in one step.
 
@@ -22,7 +32,7 @@ Counts describe the Workrooms the page read, not everything in the portfolio. Wh
 
 ## Key Concepts
 
-- **Backlog Items** — Individual units of work with a status, priority, epic, and owner. Items move through triaging, open, in-progress, done, deferred, or retired.
+- **Backlog Items** — Individual units of work with a status, priority, epic, and owner. Items move through triaging, open, in-progress, awaiting acceptance, done, deferred, or retired.
 - **Epics** — Groups of related backlog items that together deliver a meaningful outcome. The list shows the item mix by status and calculates progress from items marked done only.
 - **Archetype Scope** — Planning metadata that indicates whether work is platform-wide, common across businesses, or specific to an archetype category or leaf archetype. This helps separate market-specific gaps from common finance, workforce, identity, and platform substrate work.
 - **Priority** — Items are ranked by priority to make the most important work visible. Priorities can be adjusted as circumstances change.
@@ -51,7 +61,17 @@ complete, two remain wanted but parked, three were intentionally closed without
 delivery, and one remains active. Deferred and retired work do not increase the
 done count.
 
-**Active only** is enabled by default. It hides deferred, done, and retired item
+Delivered work that has not yet been accepted is counted on its own, never as
+done: `3 awaiting acceptance (2 over 14 days) · 5 done`. The part in brackets is
+how many have waited 14 days or more since entering awaiting acceptance. It
+reads `up to 2` when some of those items have no recorded entry date, because
+their age is then counted from when they were created and the real figure may
+be lower; hover it for the explanation. The progress bar shows done in one
+colour and awaiting acceptance as a separate segment after it. The workspace
+**Backlog** tile shows the same counts as **Awaiting acceptance** and **Awaiting
+14+ days**, above **Done**.
+
+**Active only** is enabled by default. It hides awaiting-acceptance, deferred, done, and retired item
 rows when you expand an epic, while the row-level status mix stays visible. Turn
 it off to inspect parked and terminal items.
 
@@ -64,6 +84,9 @@ sharing or refreshing.
 - **Triaging** — Waiting for an intake decision.
 - **Open** — Accepted work that has not started.
 - **In progress** — Work is actively underway.
+- **Awaiting acceptance** — Delivered (for example merged) but not yet proven to
+  meet its acceptance criteria. It is not done, and it is not counted in epic
+  progress.
 - **Done** — Completed work; this is the only status counted as done in epic progress.
 - **Deferred** — Parked but still wanted. A deferral records why it is parked,
   what event should resume it, who owns that decision, and when it must be
@@ -99,6 +122,55 @@ Use **Link evidence** to retain a stable source reference. Booking, order,
 subscription, and fulfillment records are evidence only when they really
 exist. The completeness line measures classified, evidence-linked,
 explainably-scored, and funding-decided records; it does not reward clicks.
+
+### What Build Studio starts next
+
+When the governed backlog lane is on, the daily tee-up (and the capacity drain,
+when it is switched on) starts accepted, build-ready work in this order:
+
+1. Items with a demand score come before items without one, highest score
+   first.
+2. If you have set investment-bucket targets, an item whose bucket (Run, Grow
+   or Transform) is below its target in the work already in flight goes ahead
+   of higher-scored work in the same group. The balance is re-checked after
+   each start.
+3. Ties go to work on an active epic, then to the oldest item.
+
+Each started build records why it was picked in its activity, for example
+"Ranked 1 of 12 eligible by demand score 42 (rice)". An item with no score
+says so, so unscored work is never started by age without saying it. To have
+an item considered on value, give it a score in Delivery Flow.
+
+#### Use spare weekly AI allowance (capacity drain)
+
+The capacity drain is off until you turn it on. When it is on, the platform
+checks every hour whether the weekly AI allowance is close to resetting with
+allowance left over and free build slots. If so, it starts a few of the
+top-ranked ready items, in the order above, so the allowance is not wasted. It
+stops when the allowance is nearly spent or a provider reports a rate limit,
+and it only acts while the governed backlog lane is on.
+
+To turn it on or off, open **Admin > Platform Development**, find **Let Build
+Studio pick up work on its own**, open **Daily limit and the autopilot
+switches**, tick or clear **Use spare weekly AI allowance**, and select
+**Save**. Changing it needs the platform management permission. An agent can
+make the same change with the `set_backlog_delivery_budget` tool
+(`capacityDrainEnabled`); that tool asks a person to approve the change first,
+and its read shows the current setting.
+
+### Proposed scores
+
+Each day the Portfolio Advisor proposes a score for a batch of open and
+in-progress items that have none, starting with items in active epics, items a
+user asked for, and bugs with live evidence. It fills in reach, impact,
+confidence, and effort from what the item already records, and picks an
+investment bucket where the work type makes it clear. A proposed score is marked
+as proposed by an agent and lists the reasons behind each number in the item's
+history. Proposed confidence never goes above 80%.
+
+To change a proposed score, score the item yourself. Your values replace the
+proposal, and the advisor never proposes over them again. If an item has no
+effort size or estimate, the advisor leaves it unscored so a person can size it.
 
 Open **Operations > Delivery Flow** (`/ops/demand`) to review demand shared by
 approved DPF connections. A shared item is an observation from another

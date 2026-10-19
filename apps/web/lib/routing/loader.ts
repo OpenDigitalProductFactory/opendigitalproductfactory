@@ -45,7 +45,13 @@ interface LoaderCacheEntry<T> {
   at: number;
 }
 
-let manifestsCache: LoaderCacheEntry<EndpointManifest[]> | null = null;
+/** The outer execution layer supplies observed runtime facts to routing policy. */
+export type LocalContextReader = (
+  fetchImpl: typeof fetch | undefined,
+  selected: { modelId: string; provider: { providerId: string; baseUrl: string | null; endpoint: string | null } },
+) => Promise<number | null | { contextTokens: number | null; thinkingBudgetEvidence?: import("./types").LocalThinkingBudgetEvidence }>;
+const unknownLocalContext: LocalContextReader = async () => null;
+let manifestsCache = new WeakMap<LocalContextReader, LoaderCacheEntry<EndpointManifest[]>>();
 let policyRulesCache: LoaderCacheEntry<PolicyRuleEval[]> | null = null;
 // Overrides are keyed by taskType — a turn routes one taskType, but a process
 // serves many, so memo per key rather than a single slot.
@@ -58,7 +64,7 @@ const overridesCache = new Map<string, LoaderCacheEntry<EndpointOverride[]>>();
  * tests. Cheap and idempotent — clearing an already-cold cache is a no-op.
  */
 export function invalidateRoutingLoaderCache(): void {
-  manifestsCache = null;
+  manifestsCache = new WeakMap();
   policyRulesCache = null;
   overridesCache.clear();
 }
@@ -83,7 +89,8 @@ import {
 } from "./route-decision-attribution";
 import { MODEL_ROUTING_ENDPOINT_TYPES } from "./provider-eligibility";
 import { serializeActivityHarnessAudit } from "./activity-harness-audit";
-import { codexSubscriptionModelExclusionReason } from "./codex-subscription-model-eligibility";
+import { authEligibilityExclusionReason } from "./model-auth-eligibility";
+import { expandProviderAccountCandidates } from "./provider-account-candidates";
 
 /**
  * EP-MODEL-CAP-001-B: Source-priority tool use resolution.
@@ -156,16 +163,18 @@ export function resolveToolUse(
  */
 export async function loadEndpointManifests(
   now: number = Date.now(),
+  readLocalContext: LocalContextReader = unknownLocalContext,
 ): Promise<EndpointManifest[]> {
-  if (manifestsCache && now - manifestsCache.at < ROUTING_LOADER_TTL_MS) {
-    return manifestsCache.value;
+  const cached = manifestsCache.get(readLocalContext);
+  if (cached && now - cached.at < ROUTING_LOADER_TTL_MS) {
+    return cached.value;
   }
-  const value = await queryEndpointManifests();
-  manifestsCache = { value, at: now };
+  const value = await queryEndpointManifests(readLocalContext);
+  manifestsCache.set(readLocalContext, { value, at: now });
   return value;
 }
 
-async function queryEndpointManifests(): Promise<EndpointManifest[]> {
+async function queryEndpointManifests(readLocalContext: LocalContextReader): Promise<EndpointManifest[]> {
   const profiles = await prisma.modelProfile.findMany({
     where: {
       modelStatus: { in: ["active", "degraded"] },
@@ -195,9 +204,17 @@ async function queryEndpointManifests(): Promise<EndpointManifest[]> {
   // explicitly created one, so this is inert on a default install.
   const riskAcceptedByProvider = await loadActiveRiskAcceptedClearances();
 
-  return profiles
-    .filter((profile) => readiness.get(profile.providerId) === true)
-    .map((profile) => profileToManifest(profile, undefined, riskAcceptedByProvider));
+  const accounts = await prisma.aiProviderConnection.findMany({
+    where: { providerId: { in: [...providers.keys()] } },
+    select: { connectionId: true, providerId: true, status: true, authMethod: true, executionChannel: true,
+      credentialEntryId: true, updatedAt: true, credentialEntry: { select: { status: true, updatedAt: true } },
+      accessibleModelIds: true, modelsVerifiedAt: true, evidenceStatus: true, accountClass: true, supplierContractId: true, lastReviewedAt: true },
+  });
+  const candidates = await Promise.all(profiles.map(async profile => expandProviderAccountCandidates(
+    await profileToManifest(profile, readLocalContext, undefined, riskAcceptedByProvider),
+    accounts, readiness.get(profile.providerId) === true, profile.capabilityOverrides,
+  )));
+  return candidates.flat();
 }
 
 type ProfileWithProvider = Awaited<
@@ -212,16 +229,36 @@ type ProfileWithProvider = Awaited<
  * endpoint be eligible IF its provider were enabled?" by forcing status to
  * "active" without mutating the DB.
  */
-function profileToManifest(
+async function profileToManifest(
   mp: ProfileWithProvider,
+  readLocalContext: LocalContextReader,
   statusOverride?: EndpointManifest["status"],
   riskAcceptedByProvider?: Map<string, SensitivityLevel[]>,
-): EndpointManifest {
-  const eligibilityExclusionReason = codexSubscriptionModelExclusionReason({
+): Promise<EndpointManifest> {
+  // BI-7F2FBDA3: learned per-auth-mode eligibility first; the checked-in Codex
+  // subscription set is only the seed when nothing has been learned yet.
+  const eligibilityExclusionReason = authEligibilityExclusionReason({
     providerId: mp.providerId,
     authMethod: mp.provider.authMethod,
     modelId: mp.modelId,
+    capabilityOverrides: mp.capabilityOverrides,
   });
+
+  let maxContextTokens = mp.maxContextTokens ?? mp.provider.maxContextTokens;
+  let maxOutputTokens = mp.maxOutputTokens ?? mp.provider.maxOutputTokens;
+  let localThinkingBudgetEvidence: EndpointManifest["localThinkingBudgetEvidence"];
+  if (mp.providerId === "local" && ["chat", "reasoning", "code"].includes(mp.modelClass ?? "chat")) {
+    const observation = await readLocalContext(undefined, {
+      modelId: mp.modelId, provider: mp.provider,
+    });
+    const served = typeof observation === "object" && observation !== null ? observation.contextTokens : observation;
+    localThinkingBudgetEvidence = typeof observation === "object" && observation !== null ? observation.thinkingBudgetEvidence : undefined;
+    maxContextTokens = served !== null && Number.isSafeInteger(served) && served > 0 ? served : null;
+    // DMR shares one window between input and completion. This is an upper
+    // bound, not a requested allowance; activity admission still checks the sum.
+    maxOutputTokens = maxContextTokens === null ? null : maxOutputTokens === null
+      ? maxContextTokens : Math.min(maxOutputTokens, maxContextTokens);
+  }
 
   return {
     id: mp.id,
@@ -243,8 +280,8 @@ function profileToManifest(
     supportsToolUse: resolveToolUse(mp),
     supportsStructuredOutput: mp.provider.supportsStructuredOutput,
     supportsStreaming: mp.provider.supportsStreaming,
-    maxContextTokens: mp.maxContextTokens ?? mp.provider.maxContextTokens,
-    maxOutputTokens: mp.maxOutputTokens ?? mp.provider.maxOutputTokens,
+    maxContextTokens,
+    maxOutputTokens,
     modelRestrictions: mp.provider.modelRestrictions,
     ...(eligibilityExclusionReason ? { eligibilityExclusionReason } : {}),
     reasoning: mp.reasoning,
@@ -271,6 +308,7 @@ function profileToManifest(
     capabilities: (mp.capabilities as unknown as ModelCardCapabilities) ?? EMPTY_CAPABILITIES,
     pricing: (mp.pricing as unknown as ModelCardPricing) ?? EMPTY_PRICING,
     supportedParameters: (mp.supportedParameters as string[]) ?? [],
+    ...(localThinkingBudgetEvidence ? { localThinkingBudgetEvidence } : {}),
     deprecationDate: mp.deprecationDate ?? null,
     metadataSource: mp.metadataSource ?? "inferred",
     metadataConfidence: mp.metadataConfidence ?? "low",
@@ -287,7 +325,9 @@ function profileToManifest(
  * profile→manifest mapping as the live query so the hard-filter check
  * (getExclusionReasonV2) behaves identically to real routing.
  */
-export async function loadEnableCandidateManifests(): Promise<EndpointManifest[]> {
+export async function loadEnableCandidateManifests(
+  readLocalContext: LocalContextReader = unknownLocalContext,
+): Promise<EndpointManifest[]> {
   const profiles = await prisma.modelProfile.findMany({
     where: {
       modelStatus: { in: ["active", "degraded"] },
@@ -300,7 +340,7 @@ export async function loadEnableCandidateManifests(): Promise<EndpointManifest[]
     },
     include: { provider: true },
   });
-  return profiles.map((mp) => profileToManifest(mp, "active"));
+  return Promise.all(profiles.map((mp) => profileToManifest(mp, readLocalContext, "active")));
 }
 
 /**

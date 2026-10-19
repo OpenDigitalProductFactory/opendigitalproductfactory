@@ -43,7 +43,68 @@
  * every input is already resolved by the caller.
  */
 import type { PrincipalSensitivity } from "@dpf/db/principal-sensitivity";
-import type { ToolConsequence, ToolConsequenceScope } from "@/lib/mcp-tools";
+import type { ToolConsequence, ToolConsequenceScope } from "@/lib/tool-consequence";
+import type { DecisionRiskTier } from "@/lib/decision-perspective/types";
+
+/** The declared reach shared by the action and decision entry points. */
+export const DAMAGING_CONSEQUENCES = ["outward", "irreversible", "authority"] as const satisfies readonly ToolConsequence[];
+
+export const DECISION_BASES = ["decided", "corpus-gap", "vector-gap", "capability-gap", "policy-limit", "evaluation-fault"] as const;
+export type DecisionBasis = typeof DECISION_BASES[number];
+export const DECISION_ROUTES = ["decided", "human", "independent-review"] as const;
+export type DecisionRoute = typeof DECISION_ROUTES[number];
+
+export type DecisionDeclarations = {
+  consequence?: ToolConsequence | null;
+  thresholdExceeded?: boolean;
+  regulated?: boolean;
+};
+
+export const DECISION_ESCALATION_REASON_CODES = [
+  "damaging-critical-risk", "damaging-consequence", "damaging-threshold",
+  "damaging-regulated", "decided", "independent-review-required",
+] as const;
+export type DecisionEscalationReasonCode = typeof DECISION_ESCALATION_REASON_CODES[number];
+export type DecisionEscalation = {
+  route: DecisionRoute;
+  reasonCode: DecisionEscalationReasonCode;
+  damaging: boolean;
+  followOn: Exclude<DecisionBasis, "decided"> | null;
+};
+
+// Preserve the action gate's existing fail-closed treatment of any declared
+// reach, including a truthy value from an older untyped caller. The closed
+// transport/type vocabulary is DAMAGING_CONSEQUENCES; unknown reach never
+// becomes a way to avoid the damaging branch.
+function hasDamagingConsequence(consequence: ToolConsequence | null | undefined): boolean {
+  return Boolean(consequence);
+}
+
+/** FIRST hit wins: damage precedes even a decisive corpus result. */
+export function resolveDecisionEscalation(input: {
+  basis: DecisionBasis;
+  riskTier: DecisionRiskTier;
+  declarations: DecisionDeclarations;
+}): DecisionEscalation {
+  let damagingReason: DecisionEscalationReasonCode | null = null;
+  if (input.riskTier === "critical") damagingReason = "damaging-critical-risk";
+  else if (hasDamagingConsequence(input.declarations.consequence)) damagingReason = "damaging-consequence";
+  else if (input.declarations.thresholdExceeded === true) damagingReason = "damaging-threshold";
+  else if (input.declarations.regulated === true) damagingReason = "damaging-regulated";
+  if (damagingReason) return { route: "human", reasonCode: damagingReason, damaging: true, followOn: null };
+  if (input.basis === "decided") return { route: "decided", reasonCode: "decided", damaging: false, followOn: null };
+  return { route: "independent-review", reasonCode: "independent-review-required", damaging: false, followOn: input.basis };
+}
+
+export function describeDecisionEscalationRule(): string[] {
+  return [
+    "A decision reaches a person if and only if it is damaging: critical risk, a declared consequence, a crossed threshold, or a regulation.",
+    "Damage precedes a decisive corpus result and remains declared by the caller when evaluation fails.",
+    "A non-damaging decision answered by the corpus stays decided; a decisive decline does not permit the step.",
+    "Every other non-damaging decision routes to independent review with its corpus, vector, capability, policy-limit or evaluation-fault follow-on recorded.",
+    "Legacy rows with no recorded escalation route retain their existing human-review and replay behavior.",
+  ];
+}
 
 /**
  * Sensitivities at which an action is damaging on data grounds alone,
@@ -65,11 +126,45 @@ export const DAMAGING_SENSITIVITIES: readonly PrincipalSensitivity[] = ["restric
  *    `propose` supplies NO steering, so a room can only narrow, never widen.
  *  • wwmd — a recorded `principle_decide` outcome that is autonomy-eligible
  *    for this exact action.
+ *  • scheduled-mandate — the turn is a governed scheduled task whose registry
+ *    entry names this exact tool among the writes its cadence authorizes.
+ *    Installing the cadence IS the recorded decision: an operator declared what
+ *    this coworker may write, how often, and with which tool, before any run
+ *    existed. Server-resolved from the self-task registry, never asserted by a
+ *    model or a client, and scoped to the declared tools alone — a scheduled
+ *    task gets no licence for anything it did not declare. A Workroom drive
+ *    stage is the same declaration made per room (BI-C1781121): the work
+ *    shape's stage names its writes and the room binds the agent that answers
+ *    for it, so the stage's scheduled run is steered for those writes only
+ *    (work-management/room-stage-mandate.ts).
+ *
+ *    This is the branch a cadence needs to function at all. A scheduled run
+ *    carries no Workroom (the scheduler never sets one), so before this it
+ *    reached `unsteered-side-effect` and minted an envelope on every write —
+ *    to a person who, on an unattended cadence, is by definition not there.
+ *    Measured on the reference install: the marketing coworker reached its
+ *    brief-writing tool on 2026-09-21, was parked on a fifteen-minute envelope
+ *    twice, and produced nothing, as it had every week since 2026-08-31.
+ *  • connection-delegation — the call arrives on an OAuth access token whose
+ *    consent binding the resolver revalidated on THIS request: the human is
+ *    active, the binding is current, and it names the acting assistant. That
+ *    consent is the human's recorded delegation to this assistant for the
+ *    scopes it lists, and the token layer has already refused anything outside
+ *    them. PAT, unbound and client-credentials tokens never carry it.
+ *
+ *    Measured 2026-09-23 (BI-12E5DD91, WWMD DI-178749D7F5BD): once OAuth
+ *    resolved the external assistant's identity, every non-damaging write it
+ *    made — Workroom evidence, runtime verification, a backlog item the human
+ *    had just asked for — reached `unsteered-side-effect` and parked on a card
+ *    the human clicked through, while the same human on a PAT client was never
+ *    asked at all. Damage still reaches a person: branch 4 precedes this one.
  */
 export const ESCALATION_STEERING = [
   "independent-reviewer",
   "room-authority",
   "wwmd",
+  "scheduled-mandate",
+  "connection-delegation",
   "none",
 ] as const;
 export type EscalationSteering = (typeof ESCALATION_STEERING)[number];
@@ -80,10 +175,13 @@ export const ESCALATION_REASON_CODES = [
   "steered-by-independent-reviewer",
   "steered-by-room-authority",
   "steered-by-wwmd",
+  "steered-by-scheduled-mandate",
+  "steered-by-connection-delegation",
   "damaging-consequence",
   "damaging-sensitivity",
   "damaging-work-case",
   "declared-proposal",
+  "propose-boundary",
   "unsteered-side-effect",
 ] as const;
 export type EscalationReasonCode = (typeof ESCALATION_REASON_CODES)[number];
@@ -116,18 +214,24 @@ export type EscalationInput = {
   operatorRequiresApproval: boolean;
   /** Server-resolved; `none` when nothing recorded can steer this action. */
   steering: EscalationSteering;
+  /**
+   * BI-C8EC05C9: the call runs under a propose boundary (a coworker set to
+   * propose, not act). Server-set by the propose-interception caller only;
+   * no transport maps it (AC-TRANSPORT).
+   */
+  proposeBoundary?: boolean;
 };
 
 /** Is this action damaging? Any one of the three grounds is enough. */
 export function isDamagingAction(input: EscalationInput): boolean {
   if (input.action.workCaseConsequential === true) return true;
-  if (input.action.consequence) return true;
+  if (hasDamagingConsequence(input.action.consequence)) return true;
   return DAMAGING_SENSITIVITIES.includes(input.dataPolicy.sensitivity);
 }
 
 function damagingReason(input: EscalationInput): EscalationReasonCode {
   if (input.action.workCaseConsequential === true) return "damaging-work-case";
-  if (input.action.consequence) return "damaging-consequence";
+  if (hasDamagingConsequence(input.action.consequence)) return "damaging-consequence";
   return "damaging-sensitivity";
 }
 
@@ -138,6 +242,8 @@ const STEERED_REASON: Record<
   "independent-reviewer": "steered-by-independent-reviewer",
   "room-authority": "steered-by-room-authority",
   wwmd: "steered-by-wwmd",
+  "scheduled-mandate": "steered-by-scheduled-mandate",
+  "connection-delegation": "steered-by-connection-delegation",
 };
 
 /**
@@ -155,6 +261,15 @@ export function resolveEscalation(input: EscalationInput): EscalationDecision {
   //    reads nothing is still a proposal.
   if (input.action.executionMode === "proposal") {
     return { verdict: "human", reasonCode: "declared-proposal", ...base };
+  }
+
+  // 1b. A coworker set to propose, not act, puts every change it attempts to
+  //     a person (BI-C8EC05C9). This reproduces the diversion
+  //     propose-interception has always made BEFORE the monitor, so it adds
+  //     no escalation; it only moves that decision into the gate. Reads were
+  //     never diverted and fall through to branch 2.
+  if (input.proposeBoundary === true && input.action.sideEffect) {
+    return { verdict: "human", reasonCode: "propose-boundary", ...base };
   }
 
   // 2. An immediate read decides nothing and commits nothing.
@@ -183,8 +298,28 @@ export function resolveEscalation(input: EscalationInput): EscalationDecision {
 }
 
 /**
+ * Why a person is being asked, in the approver's words (BI-12E5DD91). Stored
+ * on the envelope so the card states the governing reason instead of a
+ * generic sentence. Only the human-verdict branches have one.
+ */
+const HUMAN_REASON_SENTENCES: Partial<Record<EscalationReasonCode, string>> = {
+  "declared-proposal": "This action is defined as a proposal, so a person decides it.",
+  "propose-boundary": "This coworker is set to propose, not act, so a person decides each change it makes.",
+  "damaging-consequence":
+    "It declares a consequence a person must decide: it reaches outside, cannot be undone, or changes someone's authority.",
+  "damaging-sensitivity": "It touches restricted data, so a person decides it.",
+  "damaging-work-case": "Its Work Case marks this step as consequential.",
+  "unsteered-side-effect":
+    "It changes a record, and no recorded delegation, room decision, schedule or independent review covers it.",
+};
+
+export function escalationReasonSentence(reasonCode: EscalationReasonCode): string | null {
+  return HUMAN_REASON_SENTENCES[reasonCode] ?? null;
+}
+
+/**
  * The rule in words, derived from the same constants the gate runs on.
- * `check-escalation-gate.ts` fails the build unless the kernel principle page
+ * escalation-gate.conformance.test.ts fails the build unless the kernel principle page
  * states these verbatim, so what an agent reads and what the platform enforces
  * cannot drift (BI-6B3DA9DD: the principle follows the process).
  */
@@ -193,11 +328,14 @@ export function describeEscalationRule(): string[] {
     "Escalation is a property of the decision, not of the acting coworker's trust tier.",
     "A coworker whose operator has already graduated it keeps acting alone; this gate never widens that.",
     "For every other coworker, a human is engaged only when the action is damaging, or when nothing recorded can steer it.",
-    `An action is damaging when it declares a consequence (${["outward", "irreversible", "authority"].join(", ")}), when a Work Case declares it consequential, or when its data sensitivity is ${DAMAGING_SENSITIVITIES.join(" or ")}.`,
+    `An action is damaging when it declares a consequence (${DAMAGING_CONSEQUENCES.join(", ")}), when a Work Case declares it consequential, or when its data sensitivity is ${DAMAGING_SENSITIVITIES.join(" or ")}.`,
     "A damaging action is decided by a person; a coworker's steering does not decide damage.",
     `Automated steering is a recorded, server-resolved fact about the action itself: ${ESCALATION_STEERING.filter((s) => s !== "none").join(", ")}.`,
+    "A governed scheduled task steers only the tools its registry entry declares; it gets no licence for anything it did not declare.",
+    "An external assistant steers only through its human's current OAuth consent, revalidated on the call and bounded by the consented scopes; a personal access token or an unbound connection steers nothing.",
     "A non-damaging action with steering is decided automatically and mints no approval envelope.",
     "A non-damaging action with no steering reaches a human only when it has a side effect; an immediate read never escalates.",
     "A tool declared as a proposal is always put to a person, because that is its declared shape.",
+    "A coworker set to propose, not act, puts every change it attempts to a person, and no recorded policy decides it on that person's behalf.",
   ];
 }

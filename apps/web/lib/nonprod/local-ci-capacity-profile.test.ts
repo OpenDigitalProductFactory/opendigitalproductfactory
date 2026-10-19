@@ -162,15 +162,15 @@ describe("resolveLocalCiPoolPolicy with a derived installation profile", () => {
       installation: installation as never,
     });
 
-  it("admits two slots on a development platform-build host with no config row", () => {
+  it("limits the measured development host to the one build its Docker memory supports", () => {
     const policy = resolve({
       environmentClass: "development",
       primaryPurpose: "evolve-dpf",
     });
-    expect(policy.effectiveCapacity).toBe(2);
+    expect(policy.effectiveCapacity).toBe(1);
     expect(policy.source).toBe("installation-profile");
-    expect(policy.rollbackReason).toBeNull();
-    expect(policy.slotKeys).toEqual(["slot-0", "slot-1"]);
+    expect(policy.rollbackReason).toBe("host-build-capacity-one");
+    expect(policy.slotKeys).toEqual(["slot-0"]);
   });
 
   it("keeps a consumer installation at one slot and says why", () => {
@@ -206,7 +206,7 @@ describe("resolveLocalCiPoolPolicy with a derived installation profile", () => {
     // floor((12 - 4) / 6) === 1
     const policy = resolveLocalCiPoolPolicy({
       configValue: null,
-      host: { ...measuredHost, availableMemoryBytes: 12 * GiB },
+      host: { ...measuredHost, availableMemoryBytes: 12 * GiB, dockerAvailableMemoryBytes: 40 * GiB },
       manifestSlotCount: 2,
       reserveAdmissionHeadroom: true,
       installation: {

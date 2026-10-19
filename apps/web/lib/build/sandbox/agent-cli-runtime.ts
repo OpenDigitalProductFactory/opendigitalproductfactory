@@ -71,7 +71,8 @@ Write for the audience that consumes the change. Use docs/user-guide for operato
 Before finishing, verify changed links where practical and report any large follow-up doc debt as a backlog item instead of burying it in prose.`,
 
   "qa-engineer": `You are a QA engineer verifying the build.
-- Run tests: pnpm exec vitest run --reporter=verbose
+- Run tests SCOPED to this build: pnpm exec vitest run <the test files for the changed files> --reporter=verbose (from the package directory, e.g. apps/web).
+- Never run a test command that names no test files (bare "vitest run", "pnpm test", "jest"): the sandbox refuses it. The whole suite runs in cloud CI and the merge queue.
 - Run typecheck: pnpm exec tsc --noEmit
 - Check for runtime errors in the build output
 - Report specific failures with file paths and line numbers`,
@@ -132,6 +133,10 @@ export function buildSpecialistTaskPrompt(params: {
     instructions,
     "",
     `CRITICAL: This is a pnpm monorepo. The Next.js app is at apps/web/. All file paths MUST use the full monorepo-relative path (e.g. apps/web/lib/... not lib/..., apps/web/app/... not app/...). The FILES section below has the authoritative paths — use those exactly. Working directory is ${workdir} (the monorepo root).`,
+    // BI-C36D23B9: the build runs in its own clone. The repo's shared-clone
+    // hook reads that clone as the root clone and tells the agent to take a
+    // worktree; an agent that obeys edits a tree nobody collects.
+    `This directory is this build's own checkout, already on its build branch. Edit the files here, in place. Do not create another git worktree, clone, or branch, and do not switch branches: Build Studio collects the change from this directory only. Ignore any startup notice that says this is a shared clone.`,
     "",
     `TASK: ${task.title}`,
     "",

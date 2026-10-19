@@ -1,3 +1,4 @@
+import { parseInitiativeReviewBinding } from "./mcp-task-review-contract";
 import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -5,19 +6,23 @@ const db = vi.hoisted(() => ({
   findTask: vi.fn(),
   findProjection: vi.fn(),
   findToken: vi.fn(),
+  findHuman: vi.fn(),
+  findConsent: vi.fn(),
   claim: vi.fn(),
   update: vi.fn(),
   findWriter: vi.fn(),
   findEnvelope: vi.fn(),
 }));
 const execution = vi.hoisted(() => ({ run: vi.fn() }));
-const recovery = vi.hoisted(() => ({ submit: vi.fn() }));
+const recovery = vi.hoisted(() => ({ submit: vi.fn(), revalidate: vi.fn() }));
 const durableInference = vi.hoisted(() => ({ admit: vi.fn() }));
 const asyncRuntime = vi.hoisted(() => ({ cancel: vi.fn(), enqueue: vi.fn() }));
 const events = vi.hoisted(() => ({ emit: vi.fn() }));
 
 vi.mock("@dpf/db", () => ({
   prisma: {
+    user: { findUnique: (...args: unknown[]) => db.findHuman(...args) },
+    authorityBinding: { findUnique: (...args: unknown[]) => db.findConsent(...args) },
     taskRun: {
       findUnique: (...args: unknown[]) => db.findTask(...args),
       findFirst: (...args: unknown[]) => db.findProjection(...args),
@@ -31,6 +36,9 @@ vi.mock("@dpf/db", () => ({
 }));
 vi.mock("./mcp-task-execution", () => ({
   executeRemoteTaskAttempt: (...args: unknown[]) => execution.run(...args),
+}));
+vi.mock("./mcp-task-review-recovery", () => ({
+  revalidateReviewExecutionAuthority: (...args: unknown[]) => recovery.revalidate(...args),
 }));
 vi.mock("./mcp-task-submit", () => ({
   submitRemoteCoworkerTask: (...args: unknown[]) => recovery.submit(...args),
@@ -51,6 +59,7 @@ import {
   executePersistedRemoteTask,
   reconstructPersistedRemoteTask,
 } from "./mcp-task-background-worker";
+import * as backgroundDispatch from "./mcp-task-background-dispatch";
 import { remoteTaskRequestDigest } from "./mcp-task-capacity-contract";
 import { DURABLE_INFERENCE_TASK_RECIPE_ID } from "./mcp-task-durable-inference-contract";
 
@@ -107,6 +116,7 @@ function row(overrides: Record<string, unknown> = {}) {
     messages: [{ parts: [{ type: "message", text: params.prompt }] }],
     user: {
       id: "user-1",
+      isActive: true,
       isSuperuser: false,
       groups: [{ platformRole: { roleId: "developer" } }],
     },
@@ -116,6 +126,9 @@ function row(overrides: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  recovery.revalidate.mockResolvedValue(true);
+  db.findHuman.mockResolvedValue({ isActive: true, isSuperuser: true, groups: [] });
+  db.findConsent.mockResolvedValue(null);
   db.findTask.mockResolvedValue(row());
   db.findProjection.mockResolvedValue({
     status: "working",
@@ -149,6 +162,33 @@ beforeEach(() => {
 });
 
 describe("persisted remote TaskRun worker", () => {
+  it("passes the acquired dispatch identity into execution", async () => {
+    db.findTask.mockResolvedValue(row());
+    await executePersistedRemoteTask({ taskRunId: "TR-MCP-ASYNC" });
+    const claimed = db.claim.mock.calls.at(-1)?.[0]?.data?.progressPayload?.dispatch;
+    expect(claimed.claimedAt).toEqual(expect.any(String));
+    expect(execution.run).toHaveBeenCalledWith(expect.objectContaining({
+      expectedReservation: null,
+      expectedDispatchClaim: claimed.claimedAt,
+    }));
+  });
+  it.each(["active", "revoked-client", "missing-client", "wrong-kind", "revoked-consent", "missing-binding", "disabled-human"])("revalidates OAuth %s before dispatch", async state => {
+    const original = row();
+    if (state === "disabled-human") db.findHuman.mockResolvedValue({ isActive: false });
+    db.findTask.mockResolvedValue({ ...original, a2aMetadata: { ...original.a2aMetadata, tokenSource: "oauth" } });
+    db.findToken.mockResolvedValue({ id: "token-1", capability: "write", userId: "user-1",
+      authorityBindingId: state === "revoked-consent" ? "binding" : null, oauthClientId: "client",
+      resource: "https://dpf.example/api/mcp/v1", publicScopes: ["dpf.work"], kind: state === "wrong-kind" ? "oauth_refresh" : "oauth_access",
+      revokedAt: null, expiresAt: new Date(Date.now() + 60_000),
+      oauthClient: state === "missing-client" ? null : { registrationKind: state === "missing-binding" ? "dcr" : "credentials", revokedAt: state === "revoked-client" ? new Date() : null } });
+    const result = await executePersistedRemoteTask({ taskRunId: "TR-MCP-ASYNC" });
+    if (state === "active") expect(execution.run).toHaveBeenCalledOnce();
+    else {
+      expect(result).toMatchObject({ status: "failed", error: "authorization_revoked" });
+      expect(execution.run).not.toHaveBeenCalled();
+    }
+  });
+
   it("resumes a missing reviewer receipt from its persisted request without a client", async () => {
     const binding = {
       writerToolName: "record_initiative_design_review", itemId: "BI-2014236E", gate: "design",
@@ -171,6 +211,43 @@ describe("persisted remote TaskRun worker", () => {
     expect(recovery.submit).toHaveBeenCalledWith(expect.objectContaining({ params: reviewParams }));
     expect(execution.run).not.toHaveBeenCalled();
   });
+  it.each([
+    ["input-required", "native-gate"], ["input-required", "revoked-token"], ["input-required", "disabled-human"],
+    ["submitted", "native-gate"], ["submitted", "revoked-token"], ["submitted", "disabled-human"],
+  ])("heals a recorded receipt for %s despite %s without further execution", async (status, refusal) => {
+    const original = row();
+    const binding = parseInitiativeReviewBinding({ itemId: "BI-TEST", gate: "architecture-review", writerToolName: "record_initiative_architecture_review",
+      artifactRef: { kind: "repo-blob-at-commit", repositoryFullName: "org/repo", commitSha: "a".repeat(40), path: "docs/design.md", providerBlobId: "b".repeat(40) },
+      workroomRef: { kind: "workroom-head", workroomId: "WC-TEST", repositoryFullName: "org/repo", branchName: "fix/test", headSha: "a".repeat(40) } })!;
+    const metadata = { ...original.a2aMetadata, trigger: "external-mcp", tokenSource: "oauth", taskAuthorityKey: "oauth-family:original",
+      initiativeReviewBinding: binding, requestDigest: remoteTaskRequestDigest({ ...params, initiativeReviewBinding: binding }) };
+    db.findTask.mockResolvedValue(row({ status, a2aMetadata: metadata,
+      progressPayload: { reviewExecutionAuthority: {
+        schemaVersion: 1, tokenId: "token-current", userId: "user-1", actingAgentId: "coworker-1",
+        originTokenId: metadata.apiTokenId, requestDigest: metadata.requestDigest,
+        expectedPriorUpdatedAt: original.updatedAt.toISOString(), recordedAt: new Date().toISOString(),
+      } },
+    }));
+    db.findToken.mockResolvedValue({ id: "token-current", capability: "write", userId: "user-1",
+      authorityBindingId: null, oauthClientId: "client", resource: "https://dpf.example/api/mcp/v1",
+      publicScopes: ["dpf.work"], kind: "oauth_access", revokedAt: null,
+      expiresAt: new Date(Date.now() + 60_000), oauthClient: { registrationKind: "credentials", revokedAt: null } });
+    if (refusal === "revoked-token") db.findToken.mockResolvedValue(null);
+    if (refusal === "disabled-human") db.findHuman.mockResolvedValue({ isActive: false });
+    // The native gate is satisfied by the receipt; it no longer authorizes a new review.
+    recovery.revalidate.mockResolvedValue(false);
+    const heal = vi.spyOn(backgroundDispatch, "healParkedReviewFromReceipt").mockResolvedValue(true);
+    try {
+      await expect(executePersistedRemoteTask({ taskRunId: "TR-MCP-ASYNC" }))
+        .resolves.toMatchObject({ status: "completed", idempotentReplay: true });
+      expect(heal).toHaveBeenCalledOnce();
+      expect(db.findToken).not.toHaveBeenCalled();
+      expect(db.findHuman).not.toHaveBeenCalled();
+      expect(recovery.revalidate).not.toHaveBeenCalled();
+      expect(recovery.submit).not.toHaveBeenCalled();
+      expect(execution.run).not.toHaveBeenCalled();
+    } finally { heal.mockRestore(); }
+  });
   it("reconstructs the exact execution packet from server-owned persisted state", () => {
     const reconstructed = reconstructPersistedRemoteTask(row());
 
@@ -179,7 +256,7 @@ describe("persisted remote TaskRun worker", () => {
       data: {
         run: { id: "task-row-1", taskRunId: "TR-MCP-ASYNC" },
         token: { tokenId: "token-1", userId: "user-1", capability: "write", source: "pat" },
-        userContext: { userId: "user-1", platformRole: "developer", isSuperuser: false },
+        userContext: { userId: "user-1", platformRole: "developer", platformRoles: ["developer"], isSuperuser: false },
         parsed: params,
       },
     });
@@ -699,3 +776,23 @@ describe("persisted remote TaskRun worker", () => {
 // Keep Node's crypto import exercised so a future test fixture can compare the
 // digest independently without adding a second ad-hoc hash implementation.
 void createHash;
+
+it("reconstructs separately recorded recovery authority while preserving the original request digest", () => {
+  const binding = parseInitiativeReviewBinding({ itemId: "BI-TEST", gate: "architecture-review", writerToolName: "record_initiative_architecture_review",
+    artifactRef: { kind: "repo-blob-at-commit", repositoryFullName: "org/repo", commitSha: "a".repeat(40), path: "docs/design.md", providerBlobId: "b".repeat(40) },
+    workroomRef: { kind: "workroom-head", workroomId: "WC-TEST", repositoryFullName: "org/repo", branchName: "fix/test", headSha: "a".repeat(40) } })!;
+  const original = row();
+  const digest = remoteTaskRequestDigest({ ...params, initiativeReviewBinding: binding } as never);
+  original.a2aMetadata = { ...original.a2aMetadata, tokenSource: "oauth", taskAuthorityKey: "oauth-family:old",
+    initiativeReviewBinding: binding, requestDigest: digest } as never;
+  original.progressPayload = { reviewExecutionAuthority: { schemaVersion: 1, tokenId: "current-token", userId: "user-1",
+    actingAgentId: "AGT-EXT-CODEX", requestDigest: digest, originTokenId: "token-1",
+    expectedPriorUpdatedAt: original.updatedAt.toISOString(), recordedAt: new Date().toISOString() } } as never;
+  const result = reconstructPersistedRemoteTask(original);
+  expect(result.ok ? null : result).toBeNull();
+  expect(result).toMatchObject({ ok: true, data: { token: { tokenId: "current-token", source: "oauth" },
+    parsed: { initiativeReviewBinding: binding } } });
+  expect(original.a2aMetadata.apiTokenId).toBe("token-1");
+  const invalid = reconstructPersistedRemoteTask({ ...original, progressPayload: { reviewExecutionAuthority: { tokenId: "forged" } } });
+  expect(invalid).toMatchObject({ ok: false, code: "persisted_request_invalid" });
+});

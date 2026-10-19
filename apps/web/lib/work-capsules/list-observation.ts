@@ -1,5 +1,5 @@
-import { canonicalJson } from "@/lib/shared/canonical-json";
-import type { ToolExecutionContext } from "@/lib/mcp-tools";
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
+import type { ToolExecutionContext } from "@/lib/mcp-tool-types";
 import { loadCapsuleLivenessInventory, type InventoryDb } from "./liveness-inventory";
 import { WorkroomObservations, WORKROOM_OBSERVATION_LIMIT } from "./observation-pages";
 
@@ -19,6 +19,13 @@ export async function listWorkroomObservation(db: Db, params: Record<string, unk
     filters: { ...where, staleOnly: params.staleOnly === true },
   };
   try {
+    if (context.authSource === "oauth") {
+      const { workCapsuleActor } = await import("./handler-actor");
+      const actor = await workCapsuleActor(userId, context);
+      where.AND = [actor.principalId, actor.agentPrincipalId].map(principalId => ({
+        OR: ["leaseHolderPrincipalId", "createdByPrincipalId", "requestedByPrincipalId"].map(key => ({ [key]: principalId })),
+      }));
+    }
     if (typeof params.cursor === "string") return store.resume(params.cursor, identity);
     if (captures >= 2) throw new Error("snapshot_capacity_exceeded");
     captures++;
@@ -30,7 +37,8 @@ export async function listWorkroomObservation(db: Db, params: Record<string, unk
       }, { isolationLevel: "RepeatableRead", timeout: 5000, maxWait: 1000 });
       if (capsulesAll.length > WORKROOM_OBSERVATION_LIMIT) throw new Error("snapshot_capacity_exceeded");
       return store.capture(params.staleOnly === true ? capsulesAll.filter(c => !c.isLive) : capsulesAll, identity,
-        { limit: typeof params.limit === "number" ? params.limit : undefined, observedAt: now.getTime(), summary: livenessSummary });
+        { limit: typeof params.limit === "number" ? params.limit : undefined, observedAt: now.getTime(), summary: livenessSummary,
+          ownershipScope: context.authSource === "oauth" ? "caller-visible" : "installation" });
     } finally { captures--; }
   } catch (error) {
     const code = error instanceof Error ? error.message : "snapshot_unavailable";

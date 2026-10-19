@@ -33,7 +33,7 @@ import { OutcomesStrip } from "./OutcomesStrip";
 import { UtilityBand } from "./UtilityBand";
 import { ValueStreamStrip } from "./ValueStreamStrip";
 import { WorkItem } from "./WorkItem";
-import type { TwinSnapshot } from "./snapshot";
+import type { TwinSnapshot } from "@/lib/twin/twin-snapshot";
 
 export interface TwinViewProps {
   profile: TwinProfile;

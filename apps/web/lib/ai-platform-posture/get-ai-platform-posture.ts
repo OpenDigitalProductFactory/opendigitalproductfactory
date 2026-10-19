@@ -27,6 +27,7 @@
 import { prisma } from "@dpf/db";
 import { getTokenSpendByProvider, getTokenSpendByAgent } from "@/lib/inference/ai-provider-data";
 import { providerFromEndpoint } from "@/lib/ai-operations-map/projection-helpers";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 export type AiPlatformPostureOptions = {
   /** Lookback window, in hours, for the failover-chain and agent-assignment signals. Default 24, max 168 (7 days). */
@@ -117,6 +118,18 @@ export type AiPlatformPostureScheduledTasks = {
   counts: { activeAgentTasks: number; failingAgentTasks: number; enabledJobs: number; failingJobs: number };
 };
 
+/**
+ * BI-7F2FBDA3: a production coworker whose capability floor + residency has NO
+ * eligible endpoint right now. An empty list is an honest zero; a non-empty one
+ * is the alarm that would have fired days before the 2026-09-07 reviewer outage.
+ */
+export type AiPlatformPostureUnroutableFloor = {
+  agentId: string;
+  displayName: string;
+  sensitivity: string;
+  reason: string;
+};
+
 export type AiPlatformPosture = {
   generatedAt: string;
   windowHours: number;
@@ -126,11 +139,23 @@ export type AiPlatformPosture = {
   failoverChain: AiPlatformPostureFailover;
   agentProviderAssignments: AiPlatformPostureAssignment[];
   scheduledTasks: AiPlatformPostureScheduledTasks;
+  unroutableFloors: AiPlatformPostureUnroutableFloor[];
 };
 
 const ROUTE_ROW_LIMIT = 500;
 const RECENT_FALLBACK_CHAIN_SAMPLE = 10;
 const MAX_WINDOW_HOURS = 168;
+
+
+async function loadUnroutableFloors(): Promise<Array<{ agentId: string; displayName: string; sensitivity: string; ready: boolean; reason: string }>> {
+  try {
+    const { computeCoworkerRoutingReachability } = await import("@/lib/coworker-service-catalog/routing-reachability-preflight");
+    return await computeCoworkerRoutingReachability();
+  } catch (error) {
+    console.warn(`[ai-platform-posture] reachability unavailable: ${getErrorMessage(error)}`);
+    return [];
+  }
+}
 
 export async function loadAiPlatformPosture(
   options?: AiPlatformPostureOptions,
@@ -400,6 +425,12 @@ export async function loadAiPlatformPosture(
     },
   };
 
+  // BI-7F2FBDA3: the routing preflight already knows which production coworkers
+  // cannot route at all; surface that here so the posture is honest about it.
+  const unroutableFloors: AiPlatformPostureUnroutableFloor[] = (await loadUnroutableFloors())
+    .filter((row) => !row.ready)
+    .map((row) => ({ agentId: row.agentId, displayName: row.displayName, sensitivity: row.sensitivity, reason: row.reason }));
+
   return {
     generatedAt: now.toISOString(),
     windowHours,
@@ -409,5 +440,6 @@ export async function loadAiPlatformPosture(
     failoverChain,
     agentProviderAssignments,
     scheduledTasks,
+    unroutableFloors,
   };
 }

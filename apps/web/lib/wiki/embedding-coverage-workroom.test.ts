@@ -55,6 +55,10 @@ describe("coverage runs land in the corpus-health Workroom (BI-ED117C82)", () =>
     expect(client.workroom.upsert).toHaveBeenCalledTimes(1);
     const upsert = client.workroom.upsert.mock.calls[0]![0] as unknown as { where: { capsuleId: string } };
     expect(upsert.where.capsuleId).toBe(CORPUS_HEALTH_WORKROOM_ID);
+    expect(upsert).toMatchObject({
+      create: { executorKind: "dpf-native", executorRef: EMBEDDING_COVERAGE_ACTIVITY_KIND },
+      update: { executorKind: "dpf-native", executorRef: EMBEDDING_COVERAGE_ACTIVITY_KIND },
+    });
 
     const activity = client.workroomActivity.create.mock.calls[0]![0] as unknown as {
       data: { workCapsuleId: string; kind: string; payload: Record<string, unknown> };

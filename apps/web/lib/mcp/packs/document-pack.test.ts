@@ -34,10 +34,15 @@ const EXPECTED_TOOLS = [
   "doc_version_list",
   "doc_state_change",
   "doc_list_references",
+  "create_presentation",
+  "create_report",
+  "create_letter",
+  "create_sheet",
+  "create_drawing",
 ];
 
 describe("document pack — registration", () => {
-  it("exposes exactly the seven managed-document tools", () => {
+  it("exposes exactly the seven managed-document tools and the five render-family tools", () => {
     const names = documentPack.definitions.map((d) => d.name).sort();
     expect(names).toEqual([...EXPECTED_TOOLS].sort());
     for (const name of EXPECTED_TOOLS) {
@@ -54,6 +59,11 @@ describe("document pack — registration", () => {
       doc_version_list: ["document_read", "registry_read"],
       doc_state_change: ["document_publish", "registry_write"],
       doc_list_references: ["document_read", "registry_read"],
+      create_presentation: ["document_write"],
+      create_report: ["document_write"],
+      create_letter: ["document_write"],
+      create_sheet: ["document_write"],
+      create_drawing: ["document_write", "ea_drawing_export"],
     });
     // The gating source agrees with the co-located mirror.
     expect(isToolAllowedByGrants("doc_save", ["document_write"])).toBe(true);

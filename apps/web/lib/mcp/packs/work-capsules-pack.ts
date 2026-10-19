@@ -8,10 +8,20 @@
 // context). Definitions were moved verbatim out of the inline PLATFORM_TOOLS
 // array; grants mirror agent-grants.ts TOOL_TO_GRANTS.
 
-import type { ToolDefinition } from "@/lib/mcp-tools";
+import { workroomRuntimeConsequence } from "@/lib/workroom-runtime/runtime-consequence";
+import type { ToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
 import { workCapsuleToolEnums } from "@/lib/work-capsules/mcp-handlers";
 import { DELIVERY_SHAPE_REFS } from "@/lib/work-management/delivery-shapes";
+import { PRINCIPAL_SENSITIVITIES } from "@dpf/db/principal-sensitivity";
 import type { ToolPack } from "../tool-pack";
+
+// BI-763D6E01: optional on every receipted Workroom write.
+const COMMAND_ID_PROPERTY = {
+  type: "string",
+  description:
+    "Optional idempotency key you choose for this exact call. Retrying with the same commandId returns the first result " +
+    "(or the same refusal) without doing the work twice; reusing it for a different room or tool is refused with command_id_conflict.",
+} as const;
 
 const ENUMS = workCapsuleToolEnums();
 
@@ -57,6 +67,22 @@ const scopeProperties = {
 
 const definitions: ToolDefinition[] = [
   {
+    name: "review_workroom_sensitivity",
+    description: "Read exact-room administrative classification state and a revision digest. Returns no room content or historical prose. Use before an administrator verifies an invalid declaration.",
+    inputSchema: { type: "object", properties: { capsuleId: { type: "string" } }, required: ["capsuleId"] },
+    requiredCapability: "manage_platform", sideEffect: false,
+  },
+  {
+    name: "correct_workroom_sensitivity",
+    description: "Correct one invalid Workroom sensitivity declaration after an administrator verifies actual classification. Requires the exact review digest and rationale; retains the original in an audit. Cannot lower a valid classification or widen global clearance. Governed approval still applies.",
+    inputSchema: { type: "object", properties: {
+      capsuleId: { type: "string" }, expectedDigest: { type: "string" },
+      sensitivity: { type: "string", enum: [...PRINCIPAL_SENSITIVITIES] },
+      classificationReviewed: { type: "boolean", const: true }, rationale: { type: "string", minLength: 20, maxLength: 2000 },
+    }, required: ["capsuleId", "expectedDigest", "sensitivity", "classificationReviewed", "rationale"] },
+    requiredCapability: "manage_platform", executionMode: "proposal", sideEffect: true, consequence: "authority",
+  },
+  {
     name: "list_workrooms",
     description:
       "List Workroom coordination records for active portal, Build Studio, and external agent work, each annotated with its TRUE liveness (live | lease-expired | build-terminal | idle-stale | no-signal). Liveness is derived from lease expiry, the linked build's phase, an open PR, and last sync — NOT from updatedAt, which a daily heartbeat freezes for Build Studio capsules, so a `working` status is not proof of life. Includes a livenessSummary (live vs reap-candidate counts). Pass staleOnly=true for just the not-live reap candidates. Read-only.",
@@ -78,11 +104,12 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "get_workroom",
-    description: "Fetch one Workroom with its recent activity timeline. Read-only.",
+    description: "Fetch one Workroom with its recent activity timeline. Pass afterSequence to read the room's ordered log from a position you already hold: every later activity exactly once, in order (the room's activitySequence is the latest). Read-only.",
     inputSchema: {
       type: "object",
       properties: {
         capsuleId: { type: "string", description: "Semantic Workroom id (WC-*)." },
+        afterSequence: { type: "integer", minimum: 0, description: "Return data.log.activity: rows with sequence greater than this, oldest first, up to 200 (data.log.hasMore says when to read again)." },
       },
       required: ["capsuleId"],
     },
@@ -151,7 +178,7 @@ const definitions: ToolDefinition[] = [
   {
     name: "claim_backlog_item_for_work",
     description:
-      "Claim a BacklogItem by binding its worktree, branch, and session. Governed intent, readiness, claim, and readback share one transaction. Another live Workroom refuses the claim; deliberate co-delivery requires force plus an audited reason.",
+      "Claim a BacklogItem by binding its worktree, branch, and session. Governed intent, readiness, claim, and readback share one transaction, and the room is born owned: the person the work is for becomes its Process Overseer and their assistant a contributor. Pass baseSha and headSha so reviewers can be routed to the exact source. Another live Workroom refuses the claim; deliberate co-delivery requires force plus an audited reason.",
     inputSchema: {
       type: "object",
       properties: {
@@ -160,6 +187,8 @@ const definitions: ToolDefinition[] = [
         branchName: { type: "string", description: "Branch (head) for this work — the workroom is keyed on (repo, branch)." },
         repositoryFullName: { type: "string", description: "Optional GitHub repository full name; defaults to the platform repo." },
         baseBranch: { type: "string", description: "Optional base branch (defaults to main)." },
+        baseSha: { type: "string", description: "Full 40-character SHA of the base commit. With headSha, it lets reviewers be routed to the exact source; omit only before the first commit." },
+        headSha: { type: "string", description: "Full 40-character SHA of the branch head." },
         provider: { type: "string", description: "Provider string (claude, codex, grok) — mapped to the closest executor kind." },
         sessionRef: { type: "string", description: "Owner/session id, stored as the workroom executorRef." },
         workShape: {
@@ -180,7 +209,7 @@ const definitions: ToolDefinition[] = [
   {
     name: "declare_break_fix",
     description:
-      "Declare the break-fix expedite lane on a claimed backlog item (design 2026-09-02 §4): an operational repair of a live defect that skips pre-authorisation and owes a post-implementation review receipt within 48 hours by someone other than the declarer. Human-only; WIP 1 per installation (a second open break-fix is refused); a declarer whose earlier break-fix missed its PIR is refused. Binds delivery-break-fix@1.0.0 on the item's live Workroom and records break_fix_declared with the PIR deadline.",
+      "Declare the break-fix expedite lane on a claimed backlog item (design 2026-09-02 §4): an operational repair of a live defect that skips pre-authorisation and owes a post-implementation review receipt within 48 hours by someone other than the declarer. Human-only; independent emergencies may be declared concurrently; a declarer whose earlier break-fix missed its PIR is refused. Binds delivery-break-fix@1.0.0 on the item's live Workroom and records break_fix_declared with the PIR deadline.",
     inputSchema: {
       type: "object",
       properties: {
@@ -199,6 +228,7 @@ const definitions: ToolDefinition[] = [
     inputSchema: {
       type: "object",
       properties: {
+        commandId: COMMAND_ID_PROPERTY,
         capsuleId: { type: "string", description: "Semantic Workroom id (WC-*)." },
         claims: {
           type: "array",
@@ -219,18 +249,24 @@ const definitions: ToolDefinition[] = [
     },
     requiredCapability: "manage_backlog",
     sideEffect: true,
-    // changes identity or authority → consult-gated (TAK §8.4.1).
+    // changes identity or authority → consult-gated (TAK §8.4.1). A plain
+    // claim on the caller's own room narrows to ordinary (BI-2D65BD1B); a forced
+    // claim or one over another principal's live lease stays `authority`.
     consequence: "authority",
+    consequenceForCall: async (call) =>
+      (await import("@/lib/work-capsules/scope-claim-consequence")).scopeClaimConsequenceForCall(call),
   },
   {
     name: "heartbeat_workroom",
     description:
       "Renew the active lease for a Workroom so other agents can see that work is in flight. " +
       "Heartbeat on a human-scale cadence (between stages / few minutes), not every tool call. " +
-      "If the lease is already expired, re-claim or abandon — do not thrash heartbeat.",
+      "If the lease is already expired, re-claim or abandon — do not thrash heartbeat. " +
+      "Refused with lease_held_by_other while another principal holds a live lease; ask the room's owner to hand it over instead.",
     inputSchema: {
       type: "object",
       properties: {
+        commandId: COMMAND_ID_PROPERTY,
         capsuleId: { type: "string", description: "Semantic Workroom id (WC-*)." },
       },
       required: ["capsuleId"],
@@ -254,6 +290,96 @@ const definitions: ToolDefinition[] = [
     sideEffect: true,
   },
   {
+    name: "resume_workroom_queue",
+    description:
+      "Release a Workroom's queue held after a provider failure (drive reason provider_held). " +
+      "The held stage is re-armed and runs on the next dispatch. A room with no hold is a no-op. " +
+      "Pass commandId to make a retry return the same answer (receipted).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        capsuleId: { type: "string", description: "Semantic Workroom id (WC-*)." },
+        reason: { type: "string", description: "Why the queue may run again, e.g. the provider answers again." },
+        commandId: { type: "string", description: "Optional idempotency key; a retry with it replays the stored result." },
+      },
+      required: ["capsuleId", "reason"],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+    // Restores the room's ability to dispatch agent work, and to spend on providers.
+    consequence: "authority",
+  },
+  {
+    name: "drive_workroom_runtime",
+    description:
+      "Drive an agent CLI (codex app-server or claude) as this Workroom's supervised runtime. " +
+      "start opens a session with its own room-scoped MCP credential (resumes the room's stored thread); " +
+      "turn sends input (queued when a turn is running); steer adds input to the running turn where the CLI supports it; " +
+      "interrupt stops the running turn; stop ends the session and revokes its credential; " +
+      "decide answers a request the room held for a decision (requestId from the room's question activity); status reports the session. " +
+      "Everything the session does is written to the room's log (get_workroom afterSequence).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        capsuleId: { type: "string", description: "Semantic Workroom id (WC-*)." },
+        action: { type: "string", enum: ["start", "turn", "steer", "interrupt", "stop", "decide", "status"] },
+        provider: { type: "string", enum: ["codex", "claude"], description: "start: which CLI to run." },
+        prompt: { type: "string", description: "start (optional first turn), turn, steer: the input." },
+        model: { type: "string", description: "start: optional model id." },
+        cwd: { type: "string", description: "start: working directory inside the sandbox (default /workspace)." },
+        requestId: { type: "string", description: "decide: the held request." },
+        decision: { type: "string", enum: ["accept", "decline", "cancel"], description: "decide: the room's answer." },
+        reason: { type: "string", description: "stop, decide: why." },
+      },
+      required: ["capsuleId", "action"],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+    // Issues a room-scoped credential to a CLI and lets it act in the sandbox.
+    consequence: "authority",
+    consequenceForCall: workroomRuntimeConsequence,
+  },
+  {
+    name: "approve_runtime_permission",
+    description:
+      "Claude Code's --permission-prompt-tool for a Workroom runtime session. Callable only with the session's own room credential; " +
+      "answers {behavior: allow|deny} by the room's runtime policy, and holds anything that reaches past the sandbox for a room decision.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tool_name: { type: "string", description: "The Claude Code tool asking to run." },
+        input: { type: "object", description: "The tool call's input." },
+        tool_use_id: { type: "string", description: "Claude's id for the call." },
+      },
+      required: ["tool_name", "input"],
+    },
+    requiredCapability: "manage_backlog",
+    // Answers a question and records it on the room; it changes no state the room acts on.
+    sideEffect: false,
+  },
+  {
+    name: "rebind_workroom_shape",
+    description:
+      "Move a Workroom's pinned work shape (key@version) to the shape's current version (GPP §2.1.1). " +
+      "dryRun (default true) returns the binding diff and whether it widens or narrows what the room can reach, and writes nothing. " +
+      "Applying needs the room's accountable owner or a platform manager; a widening also needs a rationale. " +
+      "A task run may preview but never apply. Refusals carry a code: not_authorized, target_not_current, not_an_upgrade, " +
+      "key_change, stage_in_flight (retry after the running stage settles), rationale_required, rebind_conflict (re-read the room).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        capsuleId: { type: "string", description: "Semantic Workroom id (WC-*)." },
+        toVersion: { type: "string", description: "The shape's current version, e.g. 1.1.0." },
+        toKey: { type: "string", description: "Optional; must equal the room's own shape key." },
+        rationale: { type: "string", description: "Why the owner approves. Required to apply a widening." },
+        dryRun: { type: "boolean", description: "Preview only (default true). Set false to apply." },
+      },
+      required: ["capsuleId", "toVersion"],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+  },
+  {
     name: "release_workroom_scope",
     description:
       "Release previously claimed Workroom scope items by kind and value. " +
@@ -265,6 +391,7 @@ const definitions: ToolDefinition[] = [
     inputSchema: {
       type: "object",
       properties: {
+        commandId: COMMAND_ID_PROPERTY,
         capsuleId: { type: "string", description: "Semantic Workroom id (WC-*)." },
         claims: {
           type: "array",
@@ -285,6 +412,8 @@ const definitions: ToolDefinition[] = [
     sideEffect: true,
     // changes identity or authority → consult-gated (TAK §8.4.1).
     consequence: "authority",
+    consequenceForCall: (call) =>
+      import("@/lib/work-capsules/scope-release-consequence").then((module) => module.scopeReleaseConsequenceForCall(call)),
   },
   {
     name: "record_workroom_evidence",
@@ -292,14 +421,28 @@ const definitions: ToolDefinition[] = [
     inputSchema: {
       type: "object",
       properties: {
+        commandId: COMMAND_ID_PROPERTY,
         capsuleId: { type: "string", description: "Semantic Workroom id (WC-*)." },
-        kind: { type: "string", enum: ENUMS.evidenceKinds, description: "Evidence kind." },
+        kind: {
+          type: "string",
+          enum: ENUMS.evidenceKinds,
+          description:
+            "Evidence kind. For a Workroom stage, use a kind the stage brief names — the stage "
+            + "advances only on evidence of a kind it declared; a generic kind like note does not advance it.",
+        },
         stageKey: {
           type: "string",
           description:
             "The work-shape stage this evidence completes. REQUIRED for a Workroom stage to "
             + "advance: the drive earns a completing receipt from stage-scoped evidence and "
             + "never from a run's self-reported status (BI-76B35820).",
+        },
+        outcome: {
+          type: "string",
+          enum: ["completed", "blocked"],
+          description:
+            "REQUIRED with stageKey. \"completed\" when the stage's work is done — only this advances the stage. "
+            + "\"blocked\" when you could not do it (source unreachable, tool missing, authority insufficient); say what blocked you in the summary.",
         },
         summary: { type: "string", description: "Evidence summary." },
         command: { type: "string", description: "Optional command that produced the evidence." },
@@ -321,11 +464,13 @@ const definitions: ToolDefinition[] = [
     inputSchema: {
       type: "object",
       properties: {
+        commandId: COMMAND_ID_PROPERTY,
         capsuleId: { type: "string", description: "Semantic Workroom id (WC-*)." },
         toExecutorKind: { type: "string", enum: ENUMS.executors, description: "Executor taking over the work." },
         toExecutorRef: { type: "string", description: "Optional session/owner id for the receiving executor." },
         reason: { type: "string", description: "Why the handoff is happening." },
         handoffManifest: { type: "object", description: "Optional handoff context: next action, open risks, evidence digest, branch/worktree, suggested receiver." },
+        expectedLeaseHolderPrincipalId: { type: ["string", "null"], description: "The lease holder you read from get_workroom. When given, the handoff is refused with lease_holder_changed if someone else now holds the lease." },
       },
       required: ["capsuleId", "toExecutorKind"],
     },
@@ -364,6 +509,7 @@ const definitions: ToolDefinition[] = [
     inputSchema: {
       type: "object",
       properties: {
+        commandId: COMMAND_ID_PROPERTY,
         capsuleId: { type: "string", description: "Semantic Workroom id (WC-*)." },
         type: { type: "string", enum: ENUMS.agentActivityKinds, description: "Activity type: thought | action | question | response | error." },
         body: { type: "string", description: "Human-legible one-line description of the activity." },
@@ -377,30 +523,47 @@ const definitions: ToolDefinition[] = [
 ];
 
 const HANDLERS = () => import("@/lib/work-capsules/mcp-handlers");
+// BI-763D6E01: a call carrying `commandId` runs once; see receipted-tool.ts.
+type WorkroomHandlers = Awaited<ReturnType<typeof HANDLERS>>;
+type WorkroomHandler = (params: Record<string, unknown>, userId: string, context: ToolExecutionContext | undefined) => Promise<ToolResult>;
+const receipted = (commandType: string, pick: (m: WorkroomHandlers) => WorkroomHandler) =>
+  (params: Record<string, unknown>, userId: string, context: ToolExecutionContext | undefined) => Promise.all([HANDLERS(), import("@/lib/work-capsules/receipted-tool")])
+    .then(([m, r]) => r.receiptedWorkroomTool(commandType, pick(m) as never)(params, userId, context as never));
 
 export const workCapsulesPack: ToolPack = {
   packId: "work-capsules",
   definitions,
   handlers: {
+    review_workroom_sensitivity: (params, userId) => import("@/lib/work-management/workroom-sensitivity-review.server").then(m => m.reviewWorkroomSensitivityTool(params, userId)),
+    correct_workroom_sensitivity: (params, userId, context) => import("@/lib/work-management/workroom-sensitivity-review.server").then(m => m.correctWorkroomSensitivityTool(params, userId, context)),
     list_workrooms: (params, userId, context) => HANDLERS().then((m) => m.listWorkCapsulesTool(params, userId, context)),
-    get_workroom: (params) => HANDLERS().then((m) => m.getWorkCapsuleTool(params)),
+    get_workroom: (params, userId, context) => HANDLERS().then((m) => m.getWorkCapsuleTool(params, userId, context)),
     create_workroom: (params, userId, context) => HANDLERS().then((m) => m.createWorkCapsuleTool(params, userId, context)),
     plan_workroom_worktree: (params, userId, context) => HANDLERS().then((m) => m.planCapsuleWorktreeTool(params, userId, context)),
     adopt_worktree: (params, userId, context) => HANDLERS().then((m) => m.adoptWorktreeTool(params, userId, context)),
     claim_backlog_item_for_work: (params, userId, context) => HANDLERS().then((m) => m.claimBacklogItemForWorkTool(params, userId, context)),
     declare_break_fix: (params, userId, context) =>
       import("@/lib/work-capsules/declare-break-fix-tool").then((m) => m.declareBreakFixTool(params, userId, context)),
-    claim_workroom_scope: (params, userId, context) => HANDLERS().then((m) => m.claimCapsuleScopeTool(params, userId, context)),
-    heartbeat_workroom: (params, userId, context) => HANDLERS().then((m) => m.heartbeatCapsuleTool(params, userId, context)),
+    claim_workroom_scope: (params, userId, context) => receipted("claim-scope", (m) => m.claimCapsuleScopeTool)(params, userId, context),
+    heartbeat_workroom: (params, userId, context) => receipted("heartbeat", (m) => m.heartbeatCapsuleTool)(params, userId, context),
     update_workroom_status: (params, userId, context) => HANDLERS().then((m) => m.updateWorkCapsuleStatusTool(params, userId, context)),
-    release_workroom_scope: (params, userId, context) => HANDLERS().then((m) => m.releaseCapsuleScopeTool(params, userId, context)),
-    record_workroom_evidence: (params, userId, context) => HANDLERS().then((m) => m.recordCapsuleEvidenceTool(params, userId, context)),
-    reassign_workroom_executor: (params, userId, context) => HANDLERS().then((m) => m.reassignCapsuleExecutorTool(params, userId, context)),
+    release_workroom_scope: (params, userId, context) => receipted("release-scope", (m) => m.releaseCapsuleScopeTool)(params, userId, context),
+    drive_workroom_runtime: (params, userId, context) =>
+      import("@/lib/workroom-runtime/runtime-tools").then((m) => m.driveWorkroomRuntimeTool(params, userId, context)),
+    approve_runtime_permission: (params, userId, context) =>
+      import("@/lib/workroom-runtime/runtime-tools").then((m) => m.approveRuntimePermissionTool(params, userId, context)),
+    resume_workroom_queue: (params, userId, context) =>
+      Promise.all([import("@/lib/work-capsules/resume-queue-handler"), import("@/lib/work-capsules/receipted-tool")])
+        .then(([m, r]) => r.receiptedWorkroomTool("resume-queue", m.resumeWorkroomQueueTool as never)(params, userId, context as never)),
+    rebind_workroom_shape: (params, userId, context) =>
+      import("@/lib/work-capsules/workroom-shape-rebind-handler").then((m) => m.rebindWorkroomShapeTool(params, userId, context)),
+    record_workroom_evidence: (params, userId, context) => receipted("record-evidence", (m) => m.recordCapsuleEvidenceTool)(params, userId, context),
+    reassign_workroom_executor: (params, userId, context) => receipted("reassign-executor", (m) => m.reassignCapsuleExecutorTool)(params, userId, context),
     start_external_work: (params, userId, context) => HANDLERS().then((m) => m.startExternalWorkTool(params, userId, context)),
-    record_agent_activity: (params, userId, context) => HANDLERS().then((m) => m.recordAgentActivityTool(params, userId, context)),
+    record_agent_activity: (params, userId, context) => receipted("record-activity", (m) => m.recordAgentActivityTool)(params, userId, context),
     // Legacy workroom names — callable, deliberately NOT advertised in `definitions`.
     list_work_capsules: (params, userId, context) => HANDLERS().then((m) => m.listWorkCapsulesTool(params, userId, context)),
-    get_work_capsule: (params) => HANDLERS().then((m) => m.getWorkCapsuleTool(params)),
+    get_work_capsule: (params, userId, context) => HANDLERS().then((m) => m.getWorkCapsuleTool(params, userId, context)),
     create_work_capsule: (params, userId, context) => HANDLERS().then((m) => m.createWorkCapsuleTool(params, userId, context)),
     plan_capsule_worktree: (params, userId, context) => HANDLERS().then((m) => m.planCapsuleWorktreeTool(params, userId, context)),
     claim_capsule_scope: (params, userId, context) => HANDLERS().then((m) => m.claimCapsuleScopeTool(params, userId, context)),
@@ -411,6 +574,8 @@ export const workCapsulesPack: ToolPack = {
     reassign_capsule_executor: (params, userId, context) => HANDLERS().then((m) => m.reassignCapsuleExecutorTool(params, userId, context)),
   },
   grants: {
+    review_workroom_sensitivity: ["admin_read"],
+    correct_workroom_sensitivity: ["admin_write"],
     list_workrooms: ["work_capsule_read"],
     get_workroom: ["work_capsule_read"],
     create_workroom: ["work_capsule_write"],
@@ -422,7 +587,11 @@ export const workCapsulesPack: ToolPack = {
     heartbeat_workroom: ["work_capsule_write"],
     update_workroom_status: ["work_capsule_write"],
     release_workroom_scope: ["work_capsule_write"],
-    record_workroom_evidence: ["work_capsule_write"],
+    rebind_workroom_shape: ["work_capsule_write"],
+    resume_workroom_queue: ["work_capsule_write"],
+    drive_workroom_runtime: ["work_capsule_write"],
+    approve_runtime_permission: ["work_capsule_write"],
+    record_workroom_evidence: ["workroom_evidence_write"],
     reassign_workroom_executor: ["work_capsule_write"],
     start_external_work: ["work_capsule_adopt"],
     record_agent_activity: ["work_capsule_write"],
@@ -435,7 +604,7 @@ export const workCapsulesPack: ToolPack = {
     heartbeat_capsule: ["work_capsule_write"],
     update_work_capsule_status: ["work_capsule_write"],
     release_capsule_scope: ["work_capsule_write"],
-    record_capsule_evidence: ["work_capsule_write"],
+    record_capsule_evidence: ["workroom_evidence_write"],
     reassign_capsule_executor: ["work_capsule_write"],
   },
 };

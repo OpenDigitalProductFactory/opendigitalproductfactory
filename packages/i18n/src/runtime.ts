@@ -1,0 +1,30 @@
+// Client-safe formatting runtime: parse + pseudo-localize + format one MF2
+// source string. No catalog JSON is imported here, so a client component that
+// formats messages it was handed does not bundle every catalog (L0.2).
+
+import { DEFAULT_LOCALE } from "./locales";
+import type { Message } from "./mf2/ast";
+import { formatMessage, type MessageArgs } from "./mf2/format";
+import { parseMessage } from "./mf2/parse";
+import { isPseudoLocale, pseudoLocalize } from "./pseudo";
+
+export type { MessageArgs } from "./mf2/format";
+export { DEFAULT_LOCALE } from "./locales";
+
+const compiled = new Map<string, Message>();
+
+function compile(locale: string, source: string): Message {
+  const cacheKey = `${locale}\x00${source}`;
+  let message = compiled.get(cacheKey);
+  if (!message) {
+    const parsed = parseMessage(source);
+    message = isPseudoLocale(locale) ? pseudoLocalize(parsed, locale) : parsed;
+    compiled.set(cacheKey, message);
+  }
+  return message;
+}
+
+/** Format one MF2 source string for a locale. Pseudo-locales format with en-US rules. */
+export function formatSource(locale: string, source: string, args: MessageArgs = {}): string {
+  return formatMessage(compile(locale, source), args, isPseudoLocale(locale) ? DEFAULT_LOCALE : locale);
+}

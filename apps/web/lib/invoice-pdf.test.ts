@@ -1,7 +1,12 @@
-import { beforeAll, describe, expect, it } from "vitest";
-import { generateInvoicePdf, getInvoicePdfFilename } from "./invoice-pdf";
-
-const PDF_TEST_TIMEOUT_MS = 20_000;
+import { describe, expect, it, vi } from "vitest";
+import type { ConversionResult, ConvertRequest } from "@/lib/documents/conversion/convert";
+import {
+  generateInvoicePdf,
+  getInvoicePdfFilename,
+  InvoicePdfError,
+  invoicePdfFailureMessage,
+  invoicePdfFailureStatus,
+} from "./invoice-pdf";
 
 const mockInvoice = {
   invoiceRef: "INV-2026-0001",
@@ -25,44 +30,55 @@ const mockInvoice = {
   ],
 };
 
+const PDF_BYTES = Buffer.from("%PDF-1.7\n...");
+
 describe("generateInvoicePdf", () => {
-  let standardPdf: Buffer;
+  it("prints the invoice HTML to PDF through the converter and returns its bytes", async () => {
+    const requests: ConvertRequest[] = [];
+    const convert = vi.fn(async (request: ConvertRequest): Promise<ConversionResult> => {
+      requests.push(request);
+      return { ok: true, data: { bytes: PDF_BYTES, mime: "application/pdf" } };
+    });
+    const result = await generateInvoicePdf(mockInvoice, { convert });
 
-  beforeAll(async () => {
-    standardPdf = await generateInvoicePdf(mockInvoice as never);
-  }, PDF_TEST_TIMEOUT_MS);
-
-  it("returns a Buffer", () => {
-    const result = standardPdf;
     expect(Buffer.isBuffer(result)).toBe(true);
+    expect(result).toBe(PDF_BYTES);
+    expect(requests).toHaveLength(1);
+    expect(requests[0]!.from).toBe("html");
+    expect(requests[0]!.to).toBe("pdf");
+    const html = requests[0]!.input.toString("utf-8");
+    expect(html.startsWith("<!DOCTYPE html>")).toBe(true);
+    expect(html).toContain("INV-2026-0001");
+    expect(html).toContain("GBP 360.00");
   });
 
-  it("returns a non-empty Buffer", () => {
-    const result = standardPdf;
-    expect(result.length).toBeGreaterThan(100);
+  it("rejects with a typed InvoicePdfError when the converter fails", async () => {
+    const convert = vi.fn(async (): Promise<ConversionResult> => ({
+      ok: false,
+      error: "no dpf-doctools image is configured",
+      reason: "converter-unavailable",
+    }));
+    const failure = await generateInvoicePdf(mockInvoice, { convert }).catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(InvoicePdfError);
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as InvoicePdfError).reason).toBe("converter-unavailable");
+    expect((failure as InvoicePdfError).message).toContain("no dpf-doctools image is configured");
+  });
+});
+
+describe("invoice PDF failure mapping", () => {
+  it("reports an absent converter as 503 with plain-language copy", () => {
+    expect(invoicePdfFailureStatus("converter-unavailable")).toBe(503);
+    expect(invoicePdfFailureMessage("converter-unavailable")).toMatch(/document conversion/);
   });
 
-  it("generates valid PDF (starts with %PDF)", () => {
-    const result = standardPdf;
-    const header = result.subarray(0, 5).toString("ascii");
-    expect(header).toBe("%PDF-");
+  it("reports every other failure as 500", () => {
+    for (const reason of ["timeout", "input-too-large", "conversion-failed"] as const) {
+      expect(invoicePdfFailureStatus(reason)).toBe(500);
+      expect(invoicePdfFailureMessage(reason)).toMatch(/invoice PDF/);
+    }
   });
-
-  it("generates a valid PDF when an issuer (org identity) is supplied", async () => {
-    const withIssuer = {
-      ...mockInvoice,
-      issuer: {
-        name: "Acme Trading Ltd",
-        email: "billing@acme.example",
-        addressLines: ["1 High St", "London", "EC1A 1BB"],
-        vatNumber: "GB123456789",
-        bank: { bankName: "Big Bank", accountName: "Acme Current", accountNumber: "12345678", sortCode: "12-34-56", iban: null },
-      },
-    };
-    const result = await generateInvoicePdf(withIssuer as never);
-    expect(result.subarray(0, 5).toString("ascii")).toBe("%PDF-");
-    expect(result.length).toBeGreaterThan(100);
-  }, PDF_TEST_TIMEOUT_MS);
 });
 
 describe("getInvoicePdfFilename", () => {

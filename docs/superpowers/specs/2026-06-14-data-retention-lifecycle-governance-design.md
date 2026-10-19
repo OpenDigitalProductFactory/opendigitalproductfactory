@@ -150,6 +150,48 @@ A null/unknown industry safely falls back to base windows; regulated **records**
 6. **Regulated exclusion** — enforced in code and by a build-failing test.
 7. **Quiescence-gated + concurrency 1** — never overlaps a self-upgrade drain or a prior in-flight sweep.
 8. **Auditable** — rolling per-run summaries persist on the `ScheduledJob` row.
+9. **Self-asserting** — a sweep verifies it did what its policy promises, and does
+   not report success merely because nothing threw. See §8.1.
+
+### 8.1 Residue assertion — "did I purge what my policy says?"
+
+A declared window is a promise, and until BI-E82B0ED7 nothing checked whether the
+promise was kept. `lastStatus` was `"ok"` whenever `errorCount === 0`, so a purge
+that deleted **zero rows while thousands stayed eligible** looked healthy. That is
+how a stalled `DiscoveryRun` purge ran unnoticed for months: the declared
+`retention=30d` was silently unenforced, the raw discovery log grew without bound,
+and the first person to notice was an operator asking why their laptop battery was
+draining. The root cause (two unindexed `ON DELETE CASCADE` FKs making each deleted
+row seq-scan a 566k-row table twice) was a defect; the fact that **nothing said so
+for months** was the governance gap.
+
+After each policy runs, the executor counts how many rows are *still* eligible and
+records it:
+
+- `PolicyResult.residualEligible` — rows left after this policy ran. **`null`, never
+  `0`, when it could not be counted** (custom-purge handlers own their own cascade;
+  a policy that threw verified nothing). "I could not check" must never be recorded
+  as "nothing left" — the same rule as §4's *a gate that could not run is not a
+  verdict*.
+- `RetentionSweepReport.incompletePolicies` — every model whose window is not
+  currently honoured.
+- `RetentionSweepReport.hasStalledPolicy` — the sharp signal.
+
+**Capped is not stalled.** A policy that hit `RETENTION_PER_POLICY_CAP` is *catching
+up*, which is the designed behaviour for a backlog (safety property 4) and stays
+`ok`; treating it as a failure would leave every fresh install permanently amber and
+train operators to ignore the light. **Stalled** means it ran to completion, deleted
+nothing, and rows remain — a purge that *cannot* finish. That, and a thrown policy,
+are what make a run `error`.
+
+**No-progress guard.** `purgeByTimestamp` stops when a full page deletes zero rows.
+Previously that spun forever — `findMany` keeps returning the same undeletable ids
+while `deleted` never advances toward the cap — hanging the sweep and stranding
+every later policy behind it.
+
+The verdict rides on the existing `ScheduledJob` heartbeat, which already outlives
+Loki's log retention, so a purge that has been quietly failing for weeks stays
+provable after the logs are gone.
 
 ## 9. Follow-up slices
 

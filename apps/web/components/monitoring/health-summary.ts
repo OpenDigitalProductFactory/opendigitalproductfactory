@@ -2,6 +2,11 @@ import type {
   CapabilityHealthTone,
   CapabilityServiceHealthProjection,
 } from "@/lib/platform-runtime/service-health";
+import { JOB_PRESENTATION, type MonitoringAlert } from "@/lib/observability/monitoring-jobs";
+import {
+  inactiveCapabilityServices,
+  isInactiveCapabilityTarget,
+} from "@/lib/platform-runtime/inactive-scrape-targets";
 
 export type Tone = CapabilityHealthTone | "critical";
 
@@ -19,13 +24,6 @@ export type PrometheusActiveTarget = {
   lastScrape?: string;
   lastScrapeDuration?: number;
   lastError?: string;
-};
-
-export type MonitoringAlert = {
-  labels: Record<string, string | undefined>;
-  annotations: Record<string, string | undefined>;
-  state: "firing" | "pending" | "inactive" | string;
-  activeAt: string;
 };
 
 export type HealthSummary = {
@@ -95,7 +93,7 @@ export type ServiceDefinition = {
 };
 
 export type ServiceStatus = ServiceDefinition & {
-  state: "up" | "down" | "unknown" | "loading" | "offline" | "not-monitored";
+  state: "up" | "down" | "unknown" | "loading" | "offline" | "not-monitored" | "inactive";
   label: string;
   tone: Tone;
 };
@@ -106,6 +104,8 @@ type SummaryInput = {
   upTargets: PrometheusInstantResult[] | null | undefined;
   alerts: MonitoringAlert[];
   upTargetsLoading?: boolean;
+  /** Monitoring switched off on this install (BI-2CE9CBF4). */
+  off?: boolean;
 };
 
 type CapabilityPlatformSummaryInput = Omit<
@@ -151,16 +151,21 @@ export function derivePlatformSummary({
   capabilityHealth,
   alerts,
   loading = false,
+  off = false,
 }: CapabilityPlatformSummaryInput): HealthSummary {
   if (!checked || loading) {
     return { value: "Checking", tone: "neutral", detail: "Collecting current health signals" };
+  }
+
+  if (off) {
+    return { value: "Monitoring off", tone: "neutral", detail: "Monitoring is off on this install" };
   }
 
   if (!online) {
     return { value: "Unavailable", tone: "critical", detail: "Monitoring stack is unreachable" };
   }
 
-  const activeAlerts = getPlatformImpactAlerts(alerts);
+  const activeAlerts = getPlatformImpactAlerts(alerts, inactiveCapabilityServices(capabilityHealth));
   const criticalAlerts = activeAlerts.filter((alert) => alert.labels.severity === "critical");
   if (criticalAlerts.length > 0) {
     return {
@@ -236,9 +241,14 @@ export function deriveMonitoringSummary({
   online,
   upTargets,
   upTargetsLoading = false,
+  off = false,
 }: SummaryInput): HealthSummary {
   if (!checked || upTargetsLoading) {
     return { value: "Checking", tone: "neutral", detail: "Checking monitoring targets" };
+  }
+
+  if (off) {
+    return { value: "Off", tone: "neutral", detail: "Monitoring is off on this install" };
   }
 
   if (!online) {
@@ -344,42 +354,11 @@ export function deriveServiceStatuses({
   return rows;
 }
 
-// Friendly display name + presentation hints per Prometheus scrape job.
-// Used by deriveServiceStatusesFromTargets to dress up the raw job/instance
-// strings the targets API returns. Jobs not in the map render with their
-// raw job name (forward compatibility: adding a new scrape job auto-creates
-// a tile, no UI change required — but the tile gets a friendlier name as a
-// follow-up commit).
-export type JobPresentation = {
-  name: string;
-  // Optional: tiles whose job appears in this map but with `hidden: true` are
-  // dropped from the grid even when scraped. Use for jobs we expose for
-  // alerting only (e.g. prometheus self-target) without cluttering the UI.
-  hidden?: boolean;
-  // Self-monitoring / internal targets. We still want the tile but tag it
-  // visually so it doesn't read as a customer-facing surface.
-  internal?: boolean;
-};
-
-export const JOB_PRESENTATION: Record<string, JobPresentation> = {
-  portal: { name: "Portal" },
-  sandbox: { name: "Sandbox" },
-  postgres: { name: "PostgreSQL" },
-  inngest: { name: "Inngest" },
-  redis: { name: "Redis" },
-  adp: { name: "ADP" },
-  "dev-portal": { name: "Contributor Preview" },
-  "windows-host": { name: "Windows Host", internal: true },
-  "node-exporter": { name: "Node Exporter", internal: true },
-  cadvisor: { name: "cAdvisor", internal: true },
-  prometheus: { name: "Prometheus", hidden: true }, // self-monitoring; alert-only
-};
-
 // Plain-language service names for the health SUMMARY CARDS (BI-2F778C13
 // follow-up). JOB_PRESENTATION names are the tile-grid labels and are still
-// product/tech vocabulary ("PostgreSQL", "Qdrant", "cAdvisor") — fine on the
+// product/tech vocabulary ("PostgreSQL", "pgvector", "cAdvisor") — fine on the
 // detailed operator grid, but the summary-card detail line used to join the
-// RAW scrape-job strings ("portal, postgres, qdrant, sandbox down") straight
+// RAW scrape-job strings ("portal, postgres, sandbox down") straight
 // at a non-technical business user. This map gives those same jobs a
 // what-it-is-to-you label; the wording mirrors alert-humanize's
 // SERVICE_DOWN_IMPACT so both surfaces speak one language.
@@ -418,7 +397,7 @@ export function humanizeJobList(jobs: string[]): string {
 // see on the Health tab — because they're observable through a different
 // channel (AI Inference + Voice STT both flow through portal application
 // metrics on /api/metrics, not their own scrape job). These tiles render as
-// neutral "Portal metrics". (Neo4j was removed here by BET-5 — BI-2B70C92C.)
+// neutral "Portal metrics".
 export const UNSCRAPED_SERVICES: ServiceDefinition[] = [
   { name: "AI Inference", statusHint: "Portal metrics" },
   { name: "Voice STT", statusHint: "Portal metrics" },
@@ -435,10 +414,15 @@ export function deriveServiceStatusesFromTargets({
   targets,
   loading,
   offline,
+  inactiveServices = new Set<string>(),
 }: {
   targets: PrometheusActiveTarget[] | null | undefined;
   loading: boolean;
   offline: boolean;
+  // BI-36DE938C — services whose runtime capability is inactive (from the
+  // capability projection). Their static scrape targets are expected to be
+  // unreachable, so a non-up target renders as inactive, not DOWN.
+  inactiveServices?: ReadonlySet<string>;
 }): ServiceStatus[] {
   if (offline) {
     return [];
@@ -472,6 +456,8 @@ export function deriveServiceStatusesFromTargets({
       const def: ServiceDefinition = { name, job };
       if (t.health === "up") {
         rows.push({ ...def, state: "up", label: "UP", tone: "success" });
+      } else if (isInactiveCapabilityTarget(t.labels, inactiveServices)) {
+        rows.push({ ...def, state: "inactive", label: "Inactive", tone: "neutral" });
       } else if (t.health === "down") {
         rows.push({
           ...def,
@@ -516,8 +502,25 @@ export function getActiveAlerts(alerts: MonitoringAlert[]): MonitoringAlert[] {
   return alerts.filter((alert) => alert.state === "firing" || alert.state === "pending");
 }
 
-export function getPlatformImpactAlerts(alerts: MonitoringAlert[]): MonitoringAlert[] {
-  return getActiveAlerts(alerts).filter((alert) => !isTelemetryTargetAlert(alert));
+export function getPlatformImpactAlerts(
+  alerts: MonitoringAlert[],
+  inactiveServices: ReadonlySet<string> = new Set<string>(),
+): MonitoringAlert[] {
+  return getActiveAlerts(alerts).filter(
+    (alert) => !isTelemetryTargetAlert(alert) && !isInactiveCapabilityTargetAlert(alert, inactiveServices),
+  );
+}
+
+// BI-36DE938C — a ContainerDown alert for a target whose service belongs to an
+// inactive runtime capability reports an intentional absence, not an outage.
+export function isInactiveCapabilityTargetAlert(
+  alert: MonitoringAlert,
+  inactiveServices: ReadonlySet<string>,
+): boolean {
+  return (
+    alert.labels.alertname === "ContainerDown" &&
+    isInactiveCapabilityTarget(alert.labels, inactiveServices)
+  );
 }
 
 export function getTelemetryTargetAlerts(alerts: MonitoringAlert[]): MonitoringAlert[] {

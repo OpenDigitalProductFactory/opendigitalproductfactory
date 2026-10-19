@@ -5,7 +5,7 @@
 // operating fixtures, capacity pools, time windows, and an append-preserving
 // allocation ledger; person-adjacent data stays in the referenced identity
 // homes (ServiceProvider, StorefrontBooking) under their own assets.
-import type { DataAssetDefinition } from "./assets";
+import type { DataAssetDefinition } from "./asset-types";
 import type { DataAssetId, DataCategory, ProjectionClass } from "./taxonomy";
 
 function defineResourceSchedulingAssets(

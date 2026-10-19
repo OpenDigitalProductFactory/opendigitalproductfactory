@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("@/lib/identity/principal-linking", () => ({
+  syncCustomerPrincipal: vi.fn(),
+}));
+
 vi.mock("@dpf/db", () => ({
   prisma: {
     $transaction: vi.fn(),

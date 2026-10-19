@@ -12,12 +12,20 @@ describe("scheduled agent task kinds", () => {
       "business-analysis-watch",
       "assurance-watch",
       "bookkeeping-cycle",
+      "decision-engine-review",
+      "acceptance-sweep",
+      "demand-scoring-steward",
+      "client-capability-reverify",
     ]);
     expect(isScheduledAgentTaskKind("product-intelligence-watch")).toBe(true);
     expect(isScheduledAgentTaskKind("product-management-playbook")).toBe(true);
     expect(isScheduledAgentTaskKind("business-analysis-watch")).toBe(true);
     expect(isScheduledAgentTaskKind("assurance-watch")).toBe(true);
     expect(isScheduledAgentTaskKind("bookkeeping-cycle")).toBe(true);
+    expect(isScheduledAgentTaskKind("decision-engine-review")).toBe(true);
+    expect(isScheduledAgentTaskKind("acceptance-sweep")).toBe(true);
+    expect(isScheduledAgentTaskKind("demand-scoring-steward")).toBe(true);
+    expect(isScheduledAgentTaskKind("client-capability-reverify")).toBe(true);
     expect(isScheduledAgentTaskKind("prompt-defined-work")).toBe(false);
   });
 });

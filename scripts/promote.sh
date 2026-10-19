@@ -1,6 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# BI-F9EE05E5 plan item 0: PROMOTE_PHASE=build runs only prepare and the image
+# build, then stops. The portal runs it BEFORE the drain, so admission is not
+# closed while `next build` runs (live: 6-14 minutes per upgrade, 2026-10-02).
+# The swap run that follows builds again against the now-warm cache, so every
+# identity check (stamp == built HEAD == target) still runs at swap time. A
+# build-phase run writes no install state, no backup and no .env, and its steps
+# are prefixed so its trail is never read as swap progress.
+_promote_phase="${PROMOTE_PHASE:-all}"
+case "$_promote_phase" in
+  all) _step_prefix="" ;;
+  build) _step_prefix="prebuild-" ;;
+  *) printf 'error: PROMOTE_PHASE must be all or build, got %s\n' "$_promote_phase" >&2; exit 2 ;;
+esac
+
+
 # DPF self-upgrade promoter. Runs inside the dedicated `dpf-promoter` SIBLING
 # container (Dockerfile.promoter) — never inside the portal — so it survives
 # recreating the portal mid-swap. It drives the host docker daemon (mounted
@@ -16,6 +31,13 @@ _self_upgrade=0
 _dry_run=0
 _readiness=0
 _promoter_dir="${DPF_PROMOTER_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+
+for _protocol_arg in "$@"; do
+  if [[ "$_protocol_arg" == "--runtime-capability-protocol-info" ]]; then
+    [[ "$#" -eq 1 ]] || { printf 'invalid_runtime_protocol_probe_arguments\n' >&2; exit 64; }
+    exec node "$_promoter_dir/apply-runtime-capability-transition.mjs" --runtime-capability-protocol-info
+  fi
+done
 
 # A registry release promoter is selected by immutable digest before this
 # script starts. Portals released before the release-mode carrier existed can
@@ -426,7 +448,9 @@ _restore_capability_snapshot() {
       --state "$_install_state" --recovery-path "$_capability_recovery"
   fi
 }
-if [[ $_dry_run -eq 0 ]]; then
+# A build-phase run changes no install state, so it keeps no recovery copy and
+# sets no restore trap: a failed prebuild has nothing to undo.
+if [[ $_dry_run -eq 0 && $_promote_phase == all ]]; then
   mkdir -p "$PROMOTE_BACKUP_PATH"
   cp "$_install_state" "$_capability_recovery"
   trap '_rc=$?; if [[ $_rc -ne 0 ]]; then _restore_capability_snapshot; fi' EXIT
@@ -458,6 +482,44 @@ if [[ -n "${PROMOTE_COMPOSE_ENV_FILE:-}" ]]; then
   _env_args+=(--env-file "$PROMOTE_COMPOSE_ENV_FILE")
 fi
 
+# BI-B422ED03 (BI-C54E691E): the recorded chain above is fixed at install time,
+# but some overlays are switched on later through .env markers
+# (bootstrap-organization-pki writes DPF_ORGANIZATION_TRUST_ENABLED=1). Those
+# overlays never reached the promoter, so portal-tls sat outside every
+# self-upgrade and #6020's reaping init never arrived (live, 2026-10-06).
+# Append them here from the TARGET tree's activation table, the same table the
+# installers read. Reading it from $_compose_root keeps this out of the N-1
+# portal's staged promoter closure (BI-A04D61B9): an older target without the
+# table, or without an overlay file, changes nothing.
+_activation_table="$_compose_root/scripts/installer/lib/activation-overlays.txt"
+_activation_marker_on() {
+  local _name="$1" _value="${!1:-}" _env_file="${PROMOTE_COMPOSE_ENV_FILE:-$_compose_root/.env}"
+  if [[ -z "$_value" && -f "$_env_file" ]]; then
+    _value="$(sed -n "s/^${_name}=//p" "$_env_file" | tail -1 | tr -d '\r')"
+  fi
+  [[ "$_value" == "1" ]]
+}
+if [[ -f "$_activation_table" ]]; then
+  _activated_overlays=()
+  while read -r _marker _overlays || [[ -n "${_marker:-}" ]]; do
+    [[ -z "${_marker:-}" || "$_marker" == \#* ]] && continue
+    _activation_marker_on "$_marker" || continue
+    for _overlay in $_overlays; do
+      if [[ ! -f "$_compose_root/$_overlay" ]]; then
+        printf 'step=compose-activation-overlay-missing marker=%s file=%s\n' "$_marker" "$_overlay"
+        continue
+      fi
+      [[ " ${_compose_files[*]} " == *" $_overlay "* ]] && continue
+      _compose_files+=("$_overlay")
+      _f_args+=(-f "$_compose_root/$_overlay")
+      _activated_overlays+=("$_overlay")
+    done
+  done < "$_activation_table"
+  if [[ ${#_activated_overlays[@]} -gt 0 ]]; then
+    printf 'step=compose-activation-overlays files=%s\n' "$(IFS=,; printf '%s' "${_activated_overlays[*]}")"
+  fi
+fi
+
 # BI-55A30F8B: compose publishes every host port through DPF_HOST_BIND_ADDRESS
 # (default 127.0.0.1, BI-FEE77B68). The portal is recreated in step 4, but the
 # installer only writes the key into the install .env in step 7, so the first
@@ -476,16 +538,180 @@ else
   _host_bind_preserved=0
 fi
 
+# BI-C26D5DC5: the Git update receiver refuses every delivery in production
+# without DPF_GIT_WEBHOOK_SECRET, and no install ever wrote one. Same shape as
+# the bind address above: the portal is recreated in step 4 but the install
+# .env is written in step 7, so generate the value now, export it for compose,
+# and let install-release-assets.mjs persist this exact value when it commits
+# the release identity. An existing value is never replaced: the operator may
+# have pasted it into the repository webhook. The value is never printed.
+if [[ -z "${DPF_GIT_WEBHOOK_SECRET:-}" && -n "${PROMOTE_COMPOSE_ENV_FILE:-}" ]] \
+  && ! grep -Eq '^DPF_GIT_WEBHOOK_SECRET=[^<[:space:]"'"'"']' "$PROMOTE_COMPOSE_ENV_FILE"; then
+  DPF_GIT_WEBHOOK_SECRET="$(node -e 'process.stdout.write(require("node:crypto").randomBytes(32).toString("hex"))')"
+  export DPF_GIT_WEBHOOK_SECRET
+fi
+
+# BI-3267763F: Inngest signing and event keys. Compose used to fall back to
+# values published in this repository, and no installer wrote real ones, so
+# every install verified /api/inngest signatures against a public key. Compose
+# now refuses to render without the keys, so resolve them here, before any
+# compose command runs. A missing, placeholder or known-default value is
+# replaced with a random one and written back to the install .env when the
+# promoter can write it (a real run with a writable mount); in release mode
+# install-release-assets.mjs also persists the exported value. A real value is
+# never rotated. Values are never printed.
+_INNGEST_KEYS=(INNGEST_SIGNING_KEY INNGEST_EVENT_KEY)
+_inngest_key_is_real() {
+  case "$1" in
+    ''|'<'*|abcdef0123456789|deadbeefcafebabe) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+_inngest_env_value() {
+  local _file="$1" _key="$2"
+  [[ -n "$_file" && -f "$_file" ]] || return 0
+  grep -E "^${_key}=" "$_file" 2>/dev/null | tail -n 1 | cut -d= -f2- | tr -d "\"' \t\r" || true
+}
+# Rewrite in place (cat > file, not rename): the env file is a single-file
+# bind mount, and a rename would break the mount's inode. $4 optionally
+# replaces the comment written above an appended key (BI-8541D491 reuses this
+# for the GPP permit key).
+_inngest_env_write() {
+  local _file="$1" _key="$2" _value="$3" _tmp
+  local _comment="${4:-# Inngest ${_key} (BI-3267763F). Generated by the self-upgrade; portal and inngest must share it.}"
+  _tmp="$(mktemp)" || return 1
+  if grep -qE "^${_key}=" "$_file"; then
+    awk -v prefix="${_key}=" -v value="$_value" \
+      'index($0, prefix) == 1 { print prefix value; next } { print }' "$_file" > "$_tmp"
+  else
+    cat "$_file" > "$_tmp"
+    if [[ -s "$_tmp" && -n "$(tail -c 1 "$_tmp")" ]]; then printf '\n' >> "$_tmp"; fi
+    printf '%s\n%s=%s\n' "$_comment" "$_key" "$_value" >> "$_tmp"
+  fi
+  cat "$_tmp" > "$_file"
+  rm -f "$_tmp"
+}
+_inngest_env_file="${PROMOTE_COMPOSE_ENV_FILE:-}"
+_inngest_keys_unpersisted=0
+for _inngest_key in "${_INNGEST_KEYS[@]}"; do
+  _inngest_value="${!_inngest_key:-}"
+  if [[ -z "$_inngest_value" ]]; then
+    _inngest_value="$(_inngest_env_value "$_inngest_env_file" "$_inngest_key")"
+  fi
+  # Without --env-file, compose reads the project directory's .env.
+  if [[ -z "$_inngest_value" && -z "$_inngest_env_file" ]]; then
+    _inngest_value="$(_inngest_env_value "$_compose_root/.env" "$_inngest_key")"
+  fi
+  if ! _inngest_key_is_real "$_inngest_value"; then
+    _inngest_value="$(node -e 'process.stdout.write(require("node:crypto").randomBytes(32).toString("hex"))')"
+    if [[ $_dry_run -eq 0 && -n "$_inngest_env_file" && -w "$_inngest_env_file" ]]; then
+      _inngest_env_write "$_inngest_env_file" "$_inngest_key" "$_inngest_value" || _inngest_keys_unpersisted=1
+    else
+      _inngest_keys_unpersisted=1
+    fi
+  fi
+  # Exported either way: compose then interpolates exactly the value the
+  # running inngest is compared against in step 4.
+  printf -v "$_inngest_key" '%s' "$_inngest_value"
+  export "${_inngest_key?}"
+done
+if [[ $_inngest_keys_unpersisted -eq 1 && $_dry_run -eq 0 && $_release_mode -eq 0 ]]; then
+  printf 'warning: generated Inngest keys for this promotion but could not write them to the install .env; the next self-upgrade persists them (BI-3267763F)\n' >&2
+fi
+
+# BI-8541D491: the HMAC key GPP permits are signed with. Without it every permit
+# is minted unsigned and no binding can be enforced, and no install wrote one.
+# Provisioned like DPF_GIT_WEBHOOK_SECRET above (generate if missing, export for
+# compose so the recreated portal starts with it, and install-release-assets.mjs
+# persists the same value in release mode), and written back to the install
+# .env now when the promoter can, as the Inngest keys are, so a source-mode
+# promotion keeps it too. The existing value is read with quotes stripped, so
+# a quoted real value is kept. An existing value is never replaced: rotating it
+# would invalidate every outstanding permit. The value is never printed.
+_GPP_PERMIT_COMMENT='# Signing key for GPP permits (BI-8541D491). Generated by the self-upgrade; never rotated.'
+if [[ -z "${DPF_GPP_PERMIT_SECRET:-}" ]]; then
+  _gpp_permit_value="$(_inngest_env_value "$_inngest_env_file" DPF_GPP_PERMIT_SECRET)"
+  # Without --env-file, compose reads the project directory's .env.
+  if [[ -z "$_gpp_permit_value" && -z "$_inngest_env_file" ]]; then
+    _gpp_permit_value="$(_inngest_env_value "$_compose_root/.env" DPF_GPP_PERMIT_SECRET)"
+  fi
+  case "$_gpp_permit_value" in
+    ''|'<'*)
+      _gpp_permit_value="$(node -e 'process.stdout.write(require("node:crypto").randomBytes(32).toString("hex"))')"
+      DPF_GPP_PERMIT_SECRET="$_gpp_permit_value"
+      export DPF_GPP_PERMIT_SECRET
+      if [[ $_dry_run -eq 0 && -n "$_inngest_env_file" && -w "$_inngest_env_file" ]]; then
+        _inngest_env_write "$_inngest_env_file" DPF_GPP_PERMIT_SECRET "$_gpp_permit_value" "$_GPP_PERMIT_COMMENT" \
+          || printf 'warning: generated the GPP permit key for this promotion but could not write it to the install .env; the next self-upgrade generates a new one (BI-8541D491)\n' >&2
+      elif [[ $_dry_run -eq 0 && $_release_mode -eq 0 ]]; then
+        printf 'warning: generated the GPP permit key for this promotion but could not write it to the install .env; the next self-upgrade generates a new one (BI-8541D491)\n' >&2
+      fi
+      ;;
+  esac
+  unset _gpp_permit_value
+fi
+
+# BI-F6929F50: dedicated signing keys for attention reach links and coworker
+# delegation receipts, and BI-231A4BC7: self-upgrade target bindings and
+# delivery task hub cursors, all signed with AUTH_SECRET on every install.
+# Provisioned exactly like the GPP permit key above: generated only when the
+# install .env has no real value, exported for compose, written back in place
+# when the promoter can, and persisted in release mode by
+# install-release-assets.mjs. An existing value is never replaced: rotating it
+# would invalidate every outstanding signed handle. Handles signed with
+# AUTH_SECRET before the upgrade keep verifying for a bounded grace window
+# (apps/web/lib/auth/dedicated-signing-key.ts). The value is never printed.
+for _signing_key in DPF_ATTENTION_REACH_SECRET DPF_DELEGATION_RECEIPT_SECRET DPF_SELF_UPGRADE_TARGET_BINDING_SECRET DPF_DELIVERY_TASK_CURSOR_SECRET; do
+  [[ -n "${!_signing_key:-}" ]] && continue
+  _signing_key_value="$(_inngest_env_value "$_inngest_env_file" "$_signing_key")"
+  # Without --env-file, compose reads the project directory's .env.
+  if [[ -z "$_signing_key_value" && -z "$_inngest_env_file" ]]; then
+    _signing_key_value="$(_inngest_env_value "$_compose_root/.env" "$_signing_key")"
+  fi
+  case "$_signing_key_value" in
+    ''|'<'*)
+      _signing_key_value="$(node -e 'process.stdout.write(require("node:crypto").randomBytes(32).toString("hex"))')"
+      printf -v "$_signing_key" '%s' "$_signing_key_value"
+      export "${_signing_key?}"
+      _signing_key_comment="# Signing key ${_signing_key} (BI-F6929F50, BI-231A4BC7). Generated by the self-upgrade; never rotated."
+      if [[ $_dry_run -eq 0 && -n "$_inngest_env_file" && -w "$_inngest_env_file" ]]; then
+        _inngest_env_write "$_inngest_env_file" "$_signing_key" "$_signing_key_value" "$_signing_key_comment" \
+          || printf 'warning: generated %s for this promotion but could not write it to the install .env; the next self-upgrade generates a new one (BI-F6929F50)\n' "$_signing_key" >&2
+      elif [[ $_dry_run -eq 0 && $_release_mode -eq 0 ]]; then
+        printf 'warning: generated %s for this promotion but could not write it to the install .env; the next self-upgrade generates a new one (BI-F6929F50)\n' "$_signing_key" >&2
+      fi
+      ;;
+  esac
+done
+unset _signing_key _signing_key_value _signing_key_comment
+
+# True when the running inngest container carries different keys from the ones
+# this promotion resolved. Portal and inngest verify each other with the same
+# pair, so a drift is fixed by recreating inngest in the same promotion as the
+# portal. No container means nothing to align: service-reconcile creates it.
+_inngest_keys_drifted() {
+  local _id _env _key
+  _id="$(docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
+    "${_f_args[@]}" ps -q inngest 2>/dev/null | head -n 1)"
+  [[ -n "$_id" ]] || return 1
+  _env="$(docker inspect "$_id" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null)" || return 1
+  for _key in "${_INNGEST_KEYS[@]}"; do
+    grep -qxF "${_key}=${!_key}" <<<"$_env" || return 0
+  done
+  return 1
+}
+
 # Emit a tagged step line; always prints in both dry-run and real modes.
 # Only the step name and target SHA are printed — never source/backup/health
 # paths — so logs are safe to surface to operators.
 emit_step() {
+  local _step="${_step_prefix}$1"
   if [[ $_dry_run -eq 1 ]]; then
-    printf 'dry-run: step=%s target=%s\n' "$1" "$PROMOTE_TARGET_SHA"
+    printf 'dry-run: step=%s target=%s\n' "$_step" "$PROMOTE_TARGET_SHA"
   else
-    printf 'step=%s target=%s\n' "$1" "$PROMOTE_TARGET_SHA"
+    printf 'step=%s target=%s\n' "$_step" "$PROMOTE_TARGET_SHA"
   fi
-  _persist_step "$1"
+  _persist_step "$_step"
 }
 
 # Durable step trail (BI-41D7A057). stdout dies with the orchestrating portal —
@@ -588,7 +814,7 @@ fi
 # Record the currently-deployed SHA so a rollback target is captured before the
 # swap. Lightweight (no full tree copy); best-effort.
 emit_step backup
-if [[ $_dry_run -eq 0 ]]; then
+if [[ $_dry_run -eq 0 && $_promote_phase == all ]]; then
   _prev_sha=$(curl -fsS "${PROMOTE_HEALTH_URL}/sha" 2>/dev/null | tr -d '[:space:]' || true)
   printf '%s\n' "${_prev_sha:-unknown}" > "$PROMOTE_BACKUP_PATH/previous-sha.txt" 2>/dev/null || true
 fi
@@ -601,7 +827,7 @@ fi
 # handled by the existing EXIT trap, which restores these exact legacy bytes
 # before the baseline is resumed.
 emit_step install-state-migrate
-if [[ $_dry_run -eq 0 ]]; then
+if [[ $_dry_run -eq 0 && $_promote_phase == all ]]; then
   _migration_envelope="$(node "$_promoter_dir/promoter-migration-envelope.mjs")" || exit $?
   _migration_field() {
     printf '%s' "$_migration_envelope" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const v=JSON.parse(s);const p=process.argv[1].split(".");let x=v;for(const k of p)x=x?.[k];if(typeof x!=="string"&&typeof x!=="number")process.exit(2);process.stdout.write(String(x))})' "$1"
@@ -624,17 +850,25 @@ if [[ $_dry_run -eq 0 ]]; then
     --write >/dev/null
 fi
 
+# safe.directory: the mounted source is owned by the host user, not root, so
+# git refuses to read it without this. Guarded: `--add` appends a duplicate on
+# every run, and the functional suites run this script on developer hosts
+# (BI-249EEA02 — one host's global gitconfig reached 18,495 copies).
+ensure_promote_safe_directory() {
+  git config --global --get-all safe.directory 2>/dev/null | grep -qxF '*' \
+    || git config --global --add safe.directory '*' 2>/dev/null || true
+}
+
 # Real platform version from the source's git release tags, baked into the new
 # image so the portal keeps showing a real version (not version.json) after a
-# self-upgrade. safe.directory: the mounted source is owned by the host user,
-# not root, so git refuses to read it without this.
+# self-upgrade.
 export DPF_PLATFORM_VERSION=""
 if [[ $_dry_run -eq 0 ]]; then
   if [[ $_release_mode -eq 1 ]]; then
     DPF_PLATFORM_VERSION="${DPF_RELEASE_TAG#v}"
     export DPF_PLATFORM_VERSION
   else
-  git config --global --add safe.directory '*' 2>/dev/null || true
+  ensure_promote_safe_directory
   # BI-145214F0 — refresh tags before describe (same root cause as
   # install-dpf.sh). PROMOTE_SOURCE is the host source mount inside the
   # dpf-promoter container; without this the promoter inherits whatever
@@ -714,6 +948,12 @@ if [[ $_dry_run -eq 0 ]]; then
   fi
 fi
 
+if [[ $_promote_phase == build ]]; then
+  emit_step done
+  trap - EXIT
+  exit 0
+fi
+
 # --- Step 3a: ensure Postgres provides pgvector ---
 # BET-5 (BI-A1E864A5): the vector migration runs `CREATE EXTENSION vector`, which the plain
 # `postgres:16` image does not ship. A self-upgrade recreates ONLY the portal (step 4, --no-deps),
@@ -756,6 +996,37 @@ if [[ $_dry_run -eq 0 ]]; then
   docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
     "${_f_args[@]}" run --rm -T --no-deps --entrypoint sh portal \
     -c 'cd /app && pnpm --filter @dpf/db exec prisma migrate resolve --rolled-back 20260714110000_bet5_pgvector_foundation' >/dev/null 2>&1 || true
+
+  # BI-BF20F828: the immutable activity hardening migration can hit the
+  # existing append-only work-intent trigger. Its exact checker proves the
+  # predecessor schema and reproduces that failure in an always-rolled-back
+  # transaction, including when Prisma could not persist the first error.
+  # Run this before the older classifiers, which refuse unrelated failures.
+  _workroom_activity_recovery="$(
+    docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
+      "${_f_args[@]}" run --rm -T --no-deps --entrypoint sh portal \
+      -c 'cd /app && node packages/db/scripts/recover-workroom-activity-migration.mjs'
+  )" || {
+    printf 'error: workroom activity migration recovery did not prove a safe state\n' >&2
+    exit 1
+  }
+  case "$_workroom_activity_recovery" in
+    recover:*)
+      _workroom_activity_migration_id="${_workroom_activity_recovery#recover:}"
+      docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
+        "${_f_args[@]}" run --rm -T --no-deps --entrypoint sh portal \
+        -c 'cd /app && pnpm --filter @dpf/db exec prisma migrate resolve --rolled-back 20261014012000_workroom_activity_ingestion_hardening'
+      docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
+        "${_f_args[@]}" run --rm -T --no-deps --entrypoint sh portal \
+        -c 'cd /app && node packages/db/scripts/recover-workroom-activity-migration.mjs --verify-rolled-back "$1"' \
+        sh "$_workroom_activity_migration_id"
+      ;;
+    not-needed) ;;
+    *)
+      printf 'error: workroom activity migration recovery returned an unknown decision\n' >&2
+      exit 1
+      ;;
+  esac
 
   # BI-2BD99239: a pre-fix upgrade can leave the human-principal backfill
   # failed at zero steps on the PrincipalAlias uniqueness collision. The
@@ -848,11 +1119,23 @@ fi
 
 # --- Step 4: docker-up ---
 # Recreate ONLY the portal from the freshly built image. --no-deps leaves
-# postgres/neo4j/etc. running. DEPLOYED_SHA resolves to DPF_VERSION (the
+# postgres and the other services running. DEPLOYED_SHA resolves to DPF_VERSION (the
 # derived built identity) via compose, so the new portal reports exactly the
 # SHA of the code it is running at /api/health/sha.
+if [[ $_dry_run -eq 0 && $_promote_phase == all && -f "$_promoter_dir/promoter-epoch-evidence.mjs" ]]; then
+  # Optional on N-1 staged promoters. An unavailable baseline never becomes proof.
+  node "$_promoter_dir/promoter-epoch-evidence.mjs" --phase capture \
+    || printf 'step=maintenance-epoch-capture-unavailable\n'
+fi
 emit_step docker-up
 if [[ $_dry_run -eq 0 ]]; then
+  # BI-3267763F: inngest first, so the new portal's boot-time sync is signed
+  # with the key the server already verifies against.
+  if _inngest_keys_drifted; then
+    emit_step inngest-keys-align
+    docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
+      "${_f_args[@]}" up -d --no-deps --force-recreate inngest
+  fi
   docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
     "${_f_args[@]}" up -d --no-deps --force-recreate portal
 fi  # DPF_PLATFORM_VERSION stays exported from above so any rebuild keeps the stamp
@@ -1034,7 +1317,54 @@ if [[ $_dry_run -eq 0 ]]; then
     docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
       "${_f_args[@]}" up -d --no-deps --force-recreate sandbox || _sandbox_ok=0
   fi
+  # BI-547B788D AC-1: a recreate that "succeeded" is not proof. Read the sandbox
+  # back and require it RUNNING on the image the service now resolves to; a
+  # container that exited at once, or kept the old image, is a failed refresh.
+  if [[ $_sandbox_ok -eq 1 ]]; then
+    _sbx_id="$(docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
+      "${_f_args[@]}" ps -q sandbox 2>/dev/null)" || _sbx_id=""
+    # A service render includes dependency images too; their order is not the
+    # identity of sandbox. Read the named service from the same canonical model.
+    _sbx_images="$(docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
+      "${_f_args[@]}" config --images sandbox 2>/dev/null)" || _sbx_images=""
+    _sbx_image_ref="$(docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
+      "${_f_args[@]}" config --format json sandbox 2>/dev/null | node -e '
+        let input = "";
+        process.stdin.on("data", chunk => input += chunk).on("end", () => {
+          try {
+            const model = JSON.parse(input);
+            const sandbox = model?.services?.sandbox;
+            let image = sandbox?.image;
+            // Build-only JSON omits image. Verify its generated name against
+            // Compose itself, including the inherited compatibility separator.
+            if (image === undefined && typeof sandbox?.build?.context === "string"
+                && sandbox.build.context.trim() && typeof model.name === "string"
+                && /^[a-z0-9][a-z0-9_-]*$/.test(model.name)) {
+              const rendered = new Set((process.argv[1] ?? "").split(/\r?\n/));
+              const matches = [`${model.name}-sandbox`, `${model.name}_sandbox`]
+                .filter(candidate => rendered.has(candidate));
+              if (matches.length !== 1) process.exit(1);
+              image = matches[0];
+            }
+            if (typeof image !== "string" || !image || image !== image.trim()) process.exit(1);
+            process.stdout.write(image);
+          } catch { process.exit(1); }
+        });
+      ' "$_sbx_images")" || _sbx_image_ref=""
+    _sbx_target_id=""
+    [[ -n "$_sbx_image_ref" ]] && _sbx_target_id="$(docker image inspect --format '{{.Id}}' "$_sbx_image_ref" 2>/dev/null)" || _sbx_target_id=""
+    _sbx_observed=""
+    [[ -n "$_sbx_id" && "$_sbx_id" != *$'\n'* ]] && _sbx_observed="$(docker inspect --format '{{.State.Running}} {{.Image}}' "$_sbx_id" 2>/dev/null)" || _sbx_observed=""
+    if [[ "${_sbx_observed%% *}" != "true" ]]; then
+      printf 'step=sandbox-refresh-not-running target=%s state=%s\n' "$_built_sha" "${_sbx_observed:-unreadable}"
+      _sandbox_ok=0
+    elif [[ -z "$_sbx_target_id" || "${_sbx_observed#* }" != "$_sbx_target_id" ]]; then
+      printf 'step=sandbox-refresh-stale-image target=%s running=%s expected=%s\n' "$_built_sha" "${_sbx_observed#* }" "${_sbx_target_id:-unreadable}"
+      _sandbox_ok=0
+    fi
+  fi
   if [[ $_sandbox_ok -eq 0 ]]; then
+    _sandbox_refresh_failed=1
     printf 'step=sandbox-refresh-failed target=%s\n' "$_built_sha"
     printf 'warning: dpf-sandbox rebuild/recreate failed after a successful portal promotion — the portal upgrade stands, but the sandbox may be stale (Build Studio builds can fail at the coding phase until it is refreshed via recover_sandbox or a manual `docker compose build sandbox && docker compose up -d --force-recreate sandbox`) (BI-A8686CFC)\n' >&2
   fi
@@ -1042,6 +1372,11 @@ if [[ $_dry_run -eq 0 ]]; then
 fi
 
 # --- Step 7c: legacy-datastore decommission ---
+if [[ $_dry_run -eq 0 && ${_sandbox_ok:-0} -eq 1 && -f "$_promoter_dir/promoter-epoch-evidence.mjs" ]]; then
+  node "$_promoter_dir/promoter-epoch-evidence.mjs" --phase finish \
+    || printf 'step=maintenance-epoch-retirement-unavailable\n'
+fi
+
 # BET-5 (BI-922EBB99 / BI-2A3BE4D7): the portal now runs on Postgres only (pgvector for
 # vectors, a graph mirror for the graph). The one-time boot backfill that staged legacy data
 # into Postgres was retired once the fleet finished migrating; the platform is Postgres-only
@@ -1069,6 +1404,236 @@ if [[ $_dry_run -eq 0 ]]; then
   fi
 fi
 
+# --- Step 7d: service-reconcile ---
+# BI-D011EBE2: every OTHER `up` in this script is `up -d --no-deps --force-recreate
+# <named service>` — portal, sandbox, a postgres override. That recreates services
+# the install ALREADY has and can never create one it does not. install-dpf.sh runs a
+# full `docker compose up -d`, so a fresh install gets every service the shipped
+# compose file declares while an upgraded install keeps the service set it was born
+# with. The two never converge: any service added in any release reaches zero existing
+# installs, while the upgrade reports success. (The mirror case — a service REMOVED
+# from compose is never torn down — is BI-922EBB99, handled for the legacy stores by
+# step 7c above.)
+#
+# Reconcile against `requiredServices` from the capability projection, NOT a blind
+# `compose up -d`: that projection is the platform's own declaration of what this
+# install should run, already filtered by host platform and enabled capabilities, and
+# it is the same source step 7b uses to decide whether the sandbox applies here.
+#
+# Missing services and containers proven Created/never-started are recoverable.
+# Previously started containers are operator-owned; never restart them here.
+# The retry removes only a stopped Created container (never docker rm -f), then
+# uses --no-recreate --no-deps so other services are not restarted as dependencies.
+# Bind sources are translated from this container's mount namespace to the daemon.
+#
+# Fail-LOUD but NOT fail-ABORT, exactly like sandbox-refresh (7b) and
+# decommission-legacy-stores (7c): the portal swap already succeeded and has been
+# verified, so a docker hiccup here must never mislabel a good upgrade. A service left
+# uncreated is a recoverable degraded state — the next upgrade retries it.
+#
+# BI-5ACBAC50: each missing service is created on its OWN `up`. One batched `up` of
+# every missing service meant a single image tag the registry no longer serves
+# (dpf-tts pinned travisvn/chatterbox-tts-api:v0.1.0) aborted the whole pull, so
+# Prometheus, Grafana, Loki, Alloy, both exporters and browser-use were never created
+# on an install whose every upgrade reported success. Created and failed services are
+# also written to the state mount (service-reconcile-outcome.json): stderr dies with
+# this container, and the portal has already marked the run succeeded at boot, so the
+# file is the only way the run's evidence can learn the reconcile was degraded.
+_write_reconcile_outcome() {
+  local _dir="${DPF_PROMOTER_STATE_DIR:-}"
+  [[ -n "$_dir" && -d "$_dir" && -w "$_dir" ]] || return 0
+  local _out="$_dir/service-reconcile-outcome.json"
+  node -e '
+    const [target, outcome, required, created, failed] = process.argv.slice(1);
+    const list = (s) => s.split("\n").filter(Boolean);
+    process.stdout.write(JSON.stringify({
+      targetSha: target, at: new Date().toISOString(), outcome,
+      required: list(required), created: list(created), failed: list(failed),
+    }) + "\n");
+  ' "$PROMOTE_TARGET_SHA" "$1" "$2" "$3" "$4" > "$_out.tmp" 2>/dev/null \
+    && mv -f "$_out.tmp" "$_out" 2>/dev/null \
+    || rm -f "$_out.tmp" 2>/dev/null || true
+  return 0
+}
+emit_step service-reconcile
+if [[ $_dry_run -eq 0 ]]; then
+  _reconcile_required="$(printf '%s' "$_capability_projection" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).requiredServices.join("\n")))')"
+  _reconcile_created=()
+  _reconcile_failed=()
+  _reconcile_missing=()
+  _reconcile_retry_ids=()
+  _reconcile_inventory_ok=1
+  _reconcile_existing="$(docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
+    "${_f_args[@]}" ps -a --services)" || _reconcile_inventory_ok=0
+  while IFS= read -r _reconcile_svc; do
+    [[ -z "$_reconcile_svc" ]] && continue
+    if [[ $_reconcile_inventory_ok -eq 0 ]]; then
+      _reconcile_failed+=("$_reconcile_svc")
+    # grep -q may close a pipe early; under pipefail that turns a present
+    # service into a false miss when printf receives SIGPIPE.
+    elif ! grep -qxF "$_reconcile_svc" <<< "$_reconcile_existing"; then
+      _reconcile_missing+=("$_reconcile_svc")
+      _reconcile_retry_ids+=("")
+    else
+      _reconcile_id="$(docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
+        "${_f_args[@]}" ps -a -q "$_reconcile_svc")" || _reconcile_id=""
+      # Unknown/replicated state is not permission to recreate anything.
+      if [[ -z "$_reconcile_id" || "$_reconcile_id" == *$'\n'* ]]; then
+        _reconcile_failed+=("$_reconcile_svc")
+        continue
+      fi
+      if ! _reconcile_state="$(docker inspect --format '{{.State.Status}} {{.State.StartedAt}}' "$_reconcile_id")"; then
+        _reconcile_failed+=("$_reconcile_svc")
+      elif [[ "$_reconcile_state" == 'created 0001-01-01T00:00:00Z' ]]; then
+        _reconcile_missing+=("$_reconcile_svc")
+        _reconcile_retry_ids+=("$_reconcile_id")
+      elif [[ -z "$_reconcile_state" ]]; then
+        _reconcile_failed+=("$_reconcile_svc")
+      fi
+    fi
+  done <<< "$_reconcile_required"
+  # BI-547B788D AC-1: a sandbox that step 7b could not bring up on the target
+  # image makes this run degraded, by name, through the same durable outcome
+  # file the portal reads. A stderr warning alone dies with this container.
+  if [[ "${_sandbox_refresh_failed:-0}" -eq 1 ]] \
+    && ! printf '%s\n' ${_reconcile_failed[@]+"${_reconcile_failed[@]}"} | grep -qxF sandbox; then
+    _reconcile_failed+=("sandbox")
+  fi
+  if [[ ${#_reconcile_missing[@]} -gt 0 ]]; then
+    printf 'step=service-reconcile-creating target=%s services=%s\n' "$_built_sha" "$(IFS=,; printf '%s' "${_reconcile_missing[*]}")"
+    _reconcile_f_args=("${_f_args[@]}")
+    _reconcile_mounts="$(mktemp)"
+    _reconcile_mounts_ok=1
+    _reconcile_install_root=""
+    [[ $_release_mode -eq 0 ]] || _reconcile_install_root="$PROMOTE_INSTALL_ROOT"
+    # Only the bind override is persisted; rendered environment/secrets stay in
+    # the pipe. Release identity was committed above, so use stable install assets.
+    if docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
+      "${_f_args[@]}" config --format json \
+      | node "$_promoter_dir/lib/govern-capability-compose-args.mjs" "$_compose_root" "$_reconcile_install_root" > "$_reconcile_mounts"; then
+      _reconcile_f_args+=(-f "$_reconcile_mounts")
+    else
+      _reconcile_mounts_ok=0
+    fi
+    for _reconcile_index in "${!_reconcile_missing[@]}"; do
+      _reconcile_svc="${_reconcile_missing[$_reconcile_index]}"
+      _reconcile_id="${_reconcile_retry_ids[$_reconcile_index]}"
+      if [[ $_reconcile_mounts_ok -eq 0 ]]; then
+        _reconcile_failed+=("$_reconcile_svc")
+        continue
+      fi
+      if [[ -n "$_reconcile_id" ]]; then
+        # Recheck immediately before removal. rm without force also refuses if
+        # another actor started it since inspection; never remove running work.
+        _reconcile_state="$(docker inspect --format '{{.State.Status}} {{.State.StartedAt}}' "$_reconcile_id")" || _reconcile_state=""
+        if [[ "$_reconcile_state" != 'created 0001-01-01T00:00:00Z' ]] || ! docker rm "$_reconcile_id"; then
+          _reconcile_failed+=("$_reconcile_svc")
+          continue
+        fi
+      fi
+      if docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
+        "${_reconcile_f_args[@]}" up -d --no-recreate --no-deps "$_reconcile_svc"; then
+        _reconcile_created+=("$_reconcile_svc")
+      else
+        _reconcile_failed+=("$_reconcile_svc")
+      fi
+    done
+    rm -f "$_reconcile_mounts"
+  fi
+  if [[ ${#_reconcile_created[@]} -gt 0 ]]; then
+    printf 'step=service-reconcile-created target=%s services=%s\n' "$_built_sha" "$(IFS=,; printf '%s' "${_reconcile_created[*]}")"
+  fi
+  if [[ ${#_reconcile_failed[@]} -gt 0 ]]; then
+    printf 'step=service-reconcile-failed target=%s services=%s\n' "$_built_sha" "$(IFS=,; printf '%s' "${_reconcile_failed[*]}")"
+    printf 'warning: required service recovery failed for %s; the portal upgrade stands, the run remains degraded, and recovery retries on the next upgrade (BI-D011EBE2, BI-FFFEA4ED)\n' "$(IFS=,; printf '%s' "${_reconcile_failed[*]}")" >&2
+    _write_reconcile_outcome degraded "$_reconcile_required" \
+      "$(printf '%s\n' ${_reconcile_created[@]+"${_reconcile_created[@]}"})" "$(printf '%s\n' "${_reconcile_failed[@]}")"
+  elif [[ ${#_reconcile_created[@]} -gt 0 ]]; then
+    _write_reconcile_outcome complete "$_reconcile_required" "$(printf '%s\n' "${_reconcile_created[@]}")" ""
+  else
+    printf 'step=service-reconcile-current target=%s\n' "$_built_sha"
+    _write_reconcile_outcome current "$_reconcile_required" "" ""
+  fi
+fi
+
+# --- Step 7e: sidecar-converge (shadow) ---
+# BI-00F7D2E3 (BI-C54E691E): no step recreates a RUNNING service whose rendered
+# compose config changed, except portal, sandbox and inngest. #6020 gave
+# portal-tls a reaping init that therefore never arrived (live, 2026-10-06:
+# 11,844 zombies until an operator recreated it).
+#
+# This step reports, per running service, whether compose would recreate it:
+# the desired `config --hash` (rendered with step 7d's daemon-path override)
+# against the container's com.docker.compose.config-hash label. Classes come from
+# each service's `dpf.recreate-class` label (BI-22A2CA0D). SHADOW MODE (WWMD
+# DI-C04ABC76BBF4): it recreates nothing. Whether a host-created container and
+# the promoter's render hash identically is only provable on a live upgrade;
+# once one run shows only genuinely changed services as would-recreate, a
+# follow-up makes stateless ones converge. Read-only, so it also runs under
+# --dry-run. Never fails the promotion.
+emit_step sidecar-converge
+_converge_ok=1
+_converge_f_args=("${_f_args[@]}")
+_converge_rendered="$(mktemp)"
+_converge_hashes="$(mktemp)"
+_converge_running="$(mktemp)"
+_converge_mounts=""
+if [[ $_dry_run -eq 0 ]]; then
+  _converge_mounts="$(mktemp)"
+  _converge_install_root=""
+  [[ $_release_mode -eq 0 ]] || _converge_install_root="$PROMOTE_INSTALL_ROOT"
+  if docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
+    "${_f_args[@]}" config --format json \
+    | node "$_promoter_dir/lib/govern-capability-compose-args.mjs" "$_compose_root" "$_converge_install_root" > "$_converge_mounts"; then
+    _converge_f_args+=(-f "$_converge_mounts")
+  else
+    _converge_ok=0
+  fi
+fi
+docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
+  "${_converge_f_args[@]}" config --format json > "$_converge_rendered" 2>/dev/null || _converge_ok=0
+docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
+  "${_converge_f_args[@]}" config --hash '*' > "$_converge_hashes" 2>/dev/null || _converge_ok=0
+docker ps -a --filter "label=com.docker.compose.project=$_project" \
+  --format '{{.Label "com.docker.compose.service"}}	{{.Label "com.docker.compose.config-hash"}}	{{.State}}' \
+  > "$_converge_running" 2>/dev/null || _converge_ok=0
+_converge_summary="$(node -e '
+  const fs = require("node:fs");
+  const [target, ok, renderedPath, hashesPath, runningPath, dir] = process.argv.slice(1);
+  const out = { mode: "shadow", targetSha: target, at: new Date().toISOString(), outcome: "current",
+    wouldRecreate: [], unchanged: [], skippedStopped: [], dataOwnerChanged: [], unclassified: [], failed: [] };
+  try {
+    if (ok !== "1") throw new Error("render");
+    const services = JSON.parse(fs.readFileSync(renderedPath, "utf8")).services ?? {};
+    const desired = new Map(fs.readFileSync(hashesPath, "utf8").split("\n").map((l) => l.trim().split(/\s+/)).filter((p) => p.length === 2));
+    for (const line of fs.readFileSync(runningPath, "utf8").split("\n").filter(Boolean)) {
+      const [service, current, state] = line.split("\t");
+      const spec = services[service];
+      if (!spec) continue; // a container outside this chain is not ours to judge
+      const cls = spec.labels?.["dpf.recreate-class"];
+      const want = desired.get(service);
+      if (!cls) { out.unclassified.push(service); continue; }
+      if (cls === "managed") continue;
+      if (!want) { out.failed.push(service); continue; }
+      const change = { service, from: current, to: want };
+      if (cls === "data-owner") { if (want !== current) out.dataOwnerChanged.push(change); continue; }
+      if (state !== "running") { out.skippedStopped.push(service); continue; }
+      if (want !== current) out.wouldRecreate.push(change); else out.unchanged.push(service);
+    }
+    out.outcome = out.failed.length ? "degraded" : out.wouldRecreate.length ? "would-recreate" : "current";
+  } catch { out.outcome = "degraded"; }
+  const byName = (a, b) => (a.service ?? a).localeCompare(b.service ?? b);
+  for (const key of ["wouldRecreate", "unchanged", "skippedStopped", "dataOwnerChanged", "unclassified", "failed"]) out[key].sort(byName);
+  if (dir) {
+    try { fs.writeFileSync(`${dir}/service-converge-outcome.json.tmp`, JSON.stringify(out) + "\n"); fs.renameSync(`${dir}/service-converge-outcome.json.tmp`, `${dir}/service-converge-outcome.json`); } catch {}
+  }
+  const names = (list) => list.map((e) => e.service ?? e).join(",") || "none";
+  process.stdout.write(`outcome=${out.outcome} would-recreate=${names(out.wouldRecreate)} data-owner-changed=${names(out.dataOwnerChanged)} unclassified=${names(out.unclassified)}`);
+' "$PROMOTE_TARGET_SHA" "$_converge_ok" "$_converge_rendered" "$_converge_hashes" "$_converge_running" "${DPF_PROMOTER_STATE_DIR:-}" 2>/dev/null)" \
+  || _converge_summary="outcome=degraded"
+printf 'step=sidecar-converge-shadow target=%s %s\n' "${_built_sha:-$PROMOTE_TARGET_SHA}" "$_converge_summary"
+rm -f "$_converge_rendered" "$_converge_hashes" "$_converge_running" ${_converge_mounts:+"$_converge_mounts"}
+
 # --- Step 8: cleanup ---
 # A successful swap leaves the PREVIOUS portal image untagged (dangling) plus BuildKit
 # cache layers from step 3's rebuild. Nothing else sweeps them, so across upgrades they
@@ -1087,9 +1652,34 @@ fi
 #     Capping reclaims runaway disk without making every future upgrade rebuild cold.
 # Volumes are NEVER touched here — operator DB/state lives in volumes.
 emit_step cleanup
+# BI-DC04048A: every sweep below is BOUNDED and NAMED. The acceptance harness
+# watched a promotion complete every verify and then die inside this step with
+# nine silent minutes after `step=cleanup` — no way to tell which sweep hung,
+# and no bound to stop it taking the run with it. A sweep is a disk-hygiene
+# courtesy; it may never hold a finished upgrade hostage. Each one gets its own
+# step line (so the trail names the hang) and a busybox/coreutils `timeout`
+# (so the hang ends). A sweep that times out is reported and skipped; the
+# upgrade stands either way, exactly as `|| true` already promised.
+_sweep_timeout="${PROMOTE_CLEANUP_SWEEP_TIMEOUT_SECONDS:-300}"
+[[ "$_sweep_timeout" =~ ^[0-9]+$ ]] || _sweep_timeout=300
+_bounded_sweep() {
+  # usage: _bounded_sweep <name> <command...>
+  local _name="$1"; shift
+  emit_step "cleanup-${_name}"
+  local _rc=0
+  if command -v timeout >/dev/null 2>&1; then
+    timeout -k 10 "$_sweep_timeout" "$@" >/dev/null 2>&1 || _rc=$?
+  else
+    "$@" >/dev/null 2>&1 || _rc=$?
+  fi
+  if [[ $_rc -eq 124 || $_rc -eq 137 || $_rc -eq 143 ]]; then
+    printf 'warning: cleanup sweep %s did not finish within %ss and was stopped — skipped; the upgrade stands (BI-DC04048A)\n' "$_name" "$_sweep_timeout" >&2
+  fi
+  return 0
+}
 if [[ $_dry_run -eq 0 ]]; then
-  docker image prune -f >/dev/null 2>&1 || true
-  docker builder prune -f --keep-storage "${PROMOTE_BUILD_CACHE_KEEP:-10GB}" >/dev/null 2>&1 || true
+  _bounded_sweep image-prune docker image prune -f
+  _bounded_sweep builder-prune docker builder prune -f --keep-storage "${PROMOTE_BUILD_CACHE_KEEP:-10GB}"
   # BI-9B7FC928: `image prune` above only removes DANGLING images. The TAGGED
   # throwaway images left by Build Studio's content-verify / main-compare /
   # local-integration flows (dpf-*-build-test:*, dpf-*-build-compare:*,
@@ -1101,7 +1691,8 @@ if [[ $_dry_run -eq 0 ]]; then
   # fails the upgrade. Volumes are still never touched.
   for _ref in 'dpf-*-build-test' 'dpf-*-build-compare' 'dpf-*:verify'; do
     _imgs="$(docker images --filter "reference=${_ref}" -q 2>/dev/null | sort -u)"
-    [[ -n "${_imgs}" ]] && docker rmi -f ${_imgs} >/dev/null 2>&1 || true
+    # shellcheck disable=SC2086 # image ids are whitespace-separated by construction
+    [[ -n "${_imgs}" ]] && _bounded_sweep "ephemeral-images" docker rmi -f ${_imgs}
   done
   # BI-1172E86A: the two sweeps above still leave every SUPERSEDED
   # version tag alive. Each upgrade tags a fresh dpf-portal / dpf-postgres /
@@ -1134,14 +1725,15 @@ if [[ $_dry_run -eq 0 ]]; then
       if (( _kept < _keep )); then _kept=$((_kept + 1)); continue; fi
       _chunk+=("$_tagged")
       if (( ${#_chunk[@]} >= 50 )); then
-        docker rmi "${_chunk[@]}" >/dev/null 2>&1 || true
+        _bounded_sweep "superseded-tags-${_repo}" docker rmi "${_chunk[@]}"
         _chunk=()
       fi
     done < <(docker images --filter "reference=${_ref}:v*" --format '{{.Repository}}:{{.Tag}}' 2>/dev/null)
     if (( ${#_chunk[@]} > 0 )); then
-      docker rmi "${_chunk[@]}" >/dev/null 2>&1 || true
+      _bounded_sweep "superseded-tags-${_repo}" docker rmi "${_chunk[@]}"
     fi
   done
+  emit_step cleanup-done
 fi
 
 # Terminal success marker — emitted only after every verify AND the cleanup sweep, so

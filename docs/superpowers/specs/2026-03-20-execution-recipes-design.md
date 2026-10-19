@@ -1,7 +1,10 @@
+---
+status: active
+---
 # EP-INF-005b: Execution Recipes
 
 **Date:** 2026-03-20
-**Status:** Draft
+**Status:** Active (§3 and §2 default-plan parameters superseded 2026-09-18)
 **Author:** Mark Bodman (CEO) + Claude (COO/design partner)
 **Epic:** EP-INF-005b
 
@@ -16,6 +19,8 @@
 
 **Followed by:**
 - EP-INF-006: Adaptive Loop — champion/challenger evolution, outcome recording, promotion gates
+
+**Partially superseded (2026-09-18):** §3 (Provider-Specific Parameter Construction) and the `buildDefaultPlan` parameter defaults in §2 are superseded by [Situational LLM Call Parameterization](2026-09-18-situational-llm-call-parameterization-design.md). Read that design for what parameters a call carries and where they come from. Everything else here — the `ModelRecipe` table, the `RoutedExecutionPlan` shape, recipe lookup, and the `RouteDecision` extension — remains authoritative.
 
 ---
 

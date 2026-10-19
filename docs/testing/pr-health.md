@@ -83,11 +83,75 @@ registry, exact diff, DCO, clean-tree, pushed-branch, and PR-trailer contracts
 before a contributor opens a PR. This is the shift-left gate; `pr:health`
 remains the end-to-end observer after GitHub creates the PR and starts CI.
 
+For ordinary external non-documentation changes, readiness requires one visible `Local-CI-Evidence:`
+or `Local-CI-Override:` trailer in the final PR body. An evidence identifier must
+match the existing worktree slot records for the current branch and commit,
+including a completed, published, unexpired verdict and matching producer
+metadata. Failed, pending, skipped, test-stub and foreign records do not qualify.
+The command only reads those records; it does not acquire a lease or rerun a gate.
+Correct a missing trailer using the actual qualified evidence. When evidence
+cannot be resolved, reconcile its provenance or use an already-authorized
+override; do not invent a PASS or repeat full validation merely to repair text.
+Allowed overrides are reported as **UNRUN**, and protected checks still apply.
+These metadata checks run even when local guard results are reused or skipped.
+
+### Corrections after publication
+
+A failed GitHub check or merge attempt does not automatically send the entire
+PR through local integration again. The normal Git pre-push hook can qualify an
+existing published correction, and `pr:ready` selects the same affected plan.
+For a direct diagnosis or an explicit related-test mapping, run:
+
+```
+node scripts/published-correction.mjs
+node scripts/published-correction.mjs --related-tests <source-to-tests.json>
+node scripts/published-correction.mjs --status
+```
+
+The mapping uses the existing evidence planner's object format: repository
+source paths map to arrays of repository test paths. Missing mappings stop the
+affected route with the precise source paths; they do not request a full lease.
+
+This route requires a clean topic branch, an actual open non-draft PR on that
+branch and repository, required checks plus a protected merge queue on `main`,
+and accepted initial-publication evidence for its published source. A qualified
+canonical record or a previously allowed recorded override can anchor it. An
+open PR by itself, a new correction record or a prose trailer cannot. Initial
+publication keeps its existing requirements.
+
+Unchanged bytes or a commit-message correction execute no source suite. Changed
+bytes use the existing affected-test/package planner and execute its checks;
+full integration and broad source guards are delegated to protected GitHub.
+Repository, DCO and body/label-sensitive guards remain fresh. The verifier
+binds the branch's merge base, so unrelated incoming main commits do not rerun
+affected checks; protected GitHub checks still verify the current integration.
+The verifier
+checks source, toolchain, environment, expected commands, actual PR and branch
+protection again before retaining reusable evidence for at most one hour.
+Failures, skips, dirty files or identity drift refuse this publication path.
+
+Carry the exact emitted `Local-CI-Override: published-correction: ...` line in
+the PR body. Every publication reader requires its current machine proof in the
+existing local stage receipts. It reports **full local integration UNRUN /
+delegated**; neither the previous canonical PASS nor the canonical slot records
+are rewritten. Their source identities and timestamps remain historical.
+All required GitHub checks, unresolved review threads and the protected merge
+queue still gate the merge. Runtime and independent acceptance remain separate.
+
 Build Studio uses the same readiness command with an internal
 `--published-ref` mode. Its shipping transaction is deliberately branch-first:
 it publishes a recoverable branch, fetches and checks out that exact remote
 commit in the build sandbox, runs canonical readiness against the final PR
 body, restores the build branch, and opens a PR only for a ready verdict.
+
+That detached, exact `--published-ref` path retains Build Studio's separate
+server-owned canonical preflight requirement; it does not require external
+worktree slot files. Readiness reports **local proof UNPROVEN** in its text and
+JSON notes. The flag selects mechanical checks, not publication authority or a
+local integration PASS. Supplied local-CI trailers still require validation.
+An original/private-tree proof is not relabeled as proof of a remapped published
+tree. Transporting qualified canonical proof into that body's metadata remains
+a separate follow-up; the server's existing prepublication check still applies.
 Typecheck, tests, and acceptance evidence are additional fail-closed blockers.
 If any check fails, the tool returns the published branch, commit SHA, and
 blockers; it does not create a review-lane placeholder PR.

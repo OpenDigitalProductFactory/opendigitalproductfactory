@@ -24,7 +24,8 @@
 // evidence of absence, and the previous code made exactly that mistake twice
 // (this signal, and the lease payload, which returns "" without a token).
 
-import { spawnSync } from "node:child_process";
+import { mcpPost, extractToolResult } from "./mcp-client.mjs";
+import { resolveMcpCredential } from "./mcp-credential.mjs";
 
 /** Statuses that mean a room still owns its worktree. Anything terminal is not here. */
 export const ACTIVE_WORKROOM_STATUSES = Object.freeze([
@@ -45,104 +46,124 @@ export function normalizePath(value) {
 
 /**
  * Extract worktree paths of non-terminal Workrooms from an MCP response.
- * Tolerant of shape: the payload may be JSON-RPC, SSE-wrapped, or a bare list.
+ * Supports JSON-RPC, SSE and direct tool results with explicit completeness.
  *
  * @returns {{ available: boolean, activePaths: Set<string>, reason: string }}
  */
-export function parseActiveWorktreePaths(raw) {
-  if (typeof raw !== "string" || raw.trim().length === 0) {
-    return { available: false, activePaths: new Set(), reason: "empty response" };
+const unavailable = (reason) => ({ available: false, activePaths: new Set(), reason });
+const MAX_ROOMS = 10_000;
+const READ_BUDGET_MS = 120_000;
+const ROOM_STATUSES = new Set([...ACTIVE_WORKROOM_STATUSES, "complete", "abandoned", "archived"]);
+
+/** Read only known envelopes. Arbitrary nested path objects are not an inventory. */
+function readObservation(raw) {
+  if (typeof raw !== "string" || !raw.trim()) throw new Error("empty response");
+  const dataLine = raw.split(/\r?\n/).find(line => line.startsWith("data:"));
+  const rpc = JSON.parse(dataLine ? dataLine.slice(5).trim() : raw);
+  if (rpc.error || rpc.result?.isError) throw new Error("MCP error response");
+  const result = extractToolResult(rpc);
+  const data = result?.data ?? result;
+  if (!data || result.success === false || result.isError || data._truncated || data.truncated) {
+    throw new Error("failed or truncated workroom observation");
   }
-
-  // Pull every {"worktreePath": "...", ... "status": "..."} pairing out of the
-  // payload without depending on the envelope, which differs between the
-  // JSON-RPC and SSE transports.
-  let text = raw;
-  const dataLine = raw.split(/\r?\n/).find((l) => l.startsWith("data:"));
-  if (dataLine) text = dataLine.slice(5).trim();
-
-  let rooms;
-  try {
-    rooms = collectRooms(JSON.parse(text));
-  } catch {
-    return { available: false, activePaths: new Set(), reason: "unparseable response" };
-  }
-
-  if (rooms === null) {
-    return { available: false, activePaths: new Set(), reason: "no workroom list in response" };
-  }
-
-  const active = new Set();
-  for (const room of rooms) {
-    const path = normalizePath(room.worktreePath);
-    if (!path) continue;
-    if (ACTIVE_WORKROOM_STATUSES.includes(String(room.status ?? "").trim())) {
-      active.add(path);
+  const rooms = data.capsules ?? data.workrooms;
+  if (!Array.isArray(rooms)) throw new Error("no workroom list in response");
+  for (const row of rooms) {
+    if (!row || typeof row.capsuleId !== "string" || !row.capsuleId
+      || !ROOM_STATUSES.has(row.status)
+      || !(row.worktreePath === null || (typeof row.worktreePath === "string" && row.worktreePath.trim()))
+      || row.shortenedFields?.includes("worktreePath")) {
+      throw new Error("missing or shortened workroom ownership identity");
     }
   }
-  return { available: true, activePaths: active, reason: `${rooms.length} workroom(s) read` };
+  const page = data.page;
+  if (page) {
+    if (page.version !== 1 || page.ownershipScope !== "installation"
+      || typeof page.observationId !== "string" || !page.observationId
+      || typeof page.observedAt !== "string" || !Number.isFinite(Date.parse(page.observedAt))
+      || !Number.isSafeInteger(page.populationCount) || page.populationCount < 0 || page.populationCount > MAX_ROOMS
+      || page.pageCount !== rooms.length || rooms.length > page.populationCount
+      || !["more", "complete"].includes(page.disposition)
+      || (page.disposition === "more" ? !(typeof page.nextCursor === "string" && page.nextCursor && rooms.length)
+        : page.nextCursor !== null)) throw new Error("invalid or scoped workroom observation page");
+  } else if (data.truncated !== false || data.total !== rooms.length) {
+    throw new Error("legacy inventory has no completeness proof");
+  }
+  return { rooms, page };
 }
 
-/** Walk an arbitrary JSON shape for objects carrying a worktreePath. */
-function collectRooms(node, found = []) {
-  if (node === null || typeof node !== "object") return found.length > 0 ? found : null;
-  if (Array.isArray(node)) {
-    for (const item of node) collectRooms(item, found);
-    return found.length > 0 ? found : null;
-  }
-  if ("worktreePath" in node) found.push(node);
-  // MCP wraps tool output as {content:[{type:"text",text:"<json>"}]}.
-  if (typeof node.text === "string" && node.text.includes("worktreePath")) {
-    try {
-      collectRooms(JSON.parse(node.text), found);
-    } catch {
-      /* a non-JSON text block is not a failure of the whole parse */
+function addOwners(rooms, paths, ids) {
+  for (const row of rooms) {
+    if (ids.has(row.capsuleId)) throw new Error("duplicate workroom in observation");
+    ids.add(row.capsuleId);
+    if (ACTIVE_WORKROOM_STATUSES.includes(row.status) && row.worktreePath !== null) {
+      paths.add(normalizePath(row.worktreePath));
     }
   }
-  for (const value of Object.values(node)) {
-    if (value && typeof value === "object") collectRooms(value, found);
-  }
-  return found.length > 0 ? found : null;
+}
+
+export function parseActiveWorktreePaths(raw) {
+  try {
+    const { rooms, page } = readObservation(raw);
+    if (page && (page.disposition !== "complete" || page.populationCount !== rooms.length)) {
+      throw new Error("incomplete workroom observation");
+    }
+    const activePaths = new Set();
+    addOwners(rooms, activePaths, new Set());
+    return { available: true, activePaths, reason: `${rooms.length} workroom(s) read` };
+  } catch (error) { return unavailable(error.message); }
 }
 
 /**
- * Ask the platform which worktrees are claimed. Never throws.
+ * Ask the platform which worktrees are claimed. Never rejects.
  *
- * @returns {{ available: boolean, activePaths: Set<string>, reason: string }}
+ * `fetchImpl` is the test seam; production goes through the shared MCP client
+ * (scripts/lib/mcp-client.mjs) over node:http, with no curl dependency.
+ *
+ * @returns {Promise<{ available: boolean, activePaths: Set<string>, reason: string }>}
  */
-export function loadActiveWorkroomPaths(options = {}) {
+export async function loadActiveWorkroomPaths(options = {}) {
   const env = options.env ?? process.env;
-  const run = options.run ?? spawnSync;
-  const token = env.DPF_MCP_BEARER_TOKEN;
-
-  if (!token) {
-    // Deliberately NOT an empty success. Without a token the platform cannot be
-    // asked who is working, and guessing "nobody" is how live worktrees died.
-    return { available: false, activePaths: new Set(), reason: "no DPF_MCP_BEARER_TOKEN" };
-  }
-
   const url = env.DPF_MCP_URL || "http://127.0.0.1:3000/api/mcp/v1";
-  const body = JSON.stringify({
-    jsonrpc: "2.0",
-    id: 1,
-    method: "tools/call",
-    params: { name: "list_workrooms", arguments: {} },
-  });
-
-  let result;
   try {
-    result = run(
-      "curl",
-      [
-        "-sS", "-X", "POST", url,
-        "-H", `Authorization: Bearer ${token}`,
-        "-H", "Content-Type: application/json",
-        "-H", "Accept: application/json, text/event-stream",
-        "--max-time", "20",
-        "-d", body,
-      ],
-      { encoding: "utf8", windowsHide: true },
-    );
+    const credential = (options.resolveCredential ?? resolveMcpCredential)({ mcpUrl: url, env });
+    const deadline = Date.now() + READ_BUDGET_MS;
+    const paths = new Set(), ids = new Set(), cursors = new Set();
+    let cursor, observation;
+    for (let pages = 0; pages <= MAX_ROOMS; pages++) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) throw new Error("workroom observation read budget exceeded");
+      const reply = await mcpPost("tools/call", { name: "list_workrooms", arguments: {
+        limit: 100, ...(cursor ? { cursor } : {}),
+      } }, {
+        mcpUrl: url,
+        bearerToken: credential.bearer,
+        timeoutMs: Math.min(20_000, remaining),
+        accept: "application/json, text/event-stream",
+        fetchImpl: options.fetchImpl,
+        // DPF_MCP_URL is operator intent; `env` may be an injected copy, so the
+        // client's own process.env check cannot see it.
+        allowNonLoopbackEndpoint: Boolean(env.DPF_MCP_URL),
+      });
+      if (reply.status < 200 || reply.status >= 300) throw new Error(`workroom query returned HTTP ${reply.status}`);
+      const { rooms, page } = readObservation(reply.text);
+      if (cursor && !page) throw new Error("workroom continuation lost its observation");
+      if (page) {
+        const identity = JSON.stringify([page.observationId, page.observedAt, page.populationCount]);
+        if (observation && observation !== identity) throw new Error("workroom observation changed during traversal");
+        observation = identity;
+      }
+      addOwners(rooms, paths, ids);
+      if (ids.size > MAX_ROOMS || (page && ids.size > page.populationCount)) throw new Error("workroom count exceeded observation");
+      if (!page || page.disposition === "complete") {
+        if (page && ids.size !== page.populationCount) throw new Error("incomplete workroom observation");
+        return { available: true, activePaths: paths, reason: `${ids.size} workroom(s) read` };
+      }
+      if (cursors.has(page.nextCursor)) throw new Error("workroom cursor loop");
+      cursors.add(page.nextCursor);
+      cursor = page.nextCursor;
+    }
+    throw new Error("workroom observation page budget exceeded");
   } catch (err) {
     return {
       available: false,
@@ -150,11 +171,6 @@ export function loadActiveWorkroomPaths(options = {}) {
       reason: `workroom query failed: ${err instanceof Error ? err.message : String(err)}`,
     };
   }
-
-  if (!result || result.status !== 0) {
-    return { available: false, activePaths: new Set(), reason: "workroom query returned non-zero" };
-  }
-  return parseActiveWorktreePaths(String(result.stdout ?? ""));
 }
 
 /** Is this worktree claimed by a live Workroom? */

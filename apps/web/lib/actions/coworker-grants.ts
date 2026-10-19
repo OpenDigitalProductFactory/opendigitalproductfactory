@@ -23,20 +23,46 @@
 // editable-on-record server action — requires), then revalidates the record route.
 
 import { prisma } from "@dpf/db";
+import { CANONICAL_AGENT_ID_TO_COWORKER_SLUG } from "@dpf/db/agent-identity";
+import { coworkerAuthorityAgentId } from "@/lib/coworker-identity";
 import { revalidatePath } from "next/cache";
 
 import { requireCapability } from "@/lib/actions/shared/guards";
 import {
   applyCoworkerToolGrant,
   removeCoworkerToolGrant,
+  resolveCoworkerAgent,
 } from "@/lib/tak/coworker-tool-grant-core";
 import { ok, err, type ActionResult } from "@/lib/shared/action-result";
+import { previewCoworkerGrantReconciliation, reconcileCoworkerGrants } from "@/lib/tak/coworker-grant-reconciliation";
+
+export async function previewCoworkerPermissions(coworkerRef: string) {
+  await requireCapability("manage_platform");
+  return previewCoworkerGrantReconciliation(coworkerRef);
+}
+
+export async function approveCoworkerPermissions(input: {
+  coworkerRef: string; digest: string;
+  choices: Array<{ grantKey: string; source: "canonical" | "alias" }>;
+}): Promise<ActionResult> {
+  const { userId } = await requireCapability("manage_platform");
+  try {
+    await reconcileCoworkerGrants({ ...input, approvedBy: userId });
+    revalidateRecord(input.coworkerRef);
+    return ok();
+  } catch (error) {
+    return err(error instanceof Error ? error.message : "Permissions could not be reconciled.");
+  }
+}
 
 /** Revalidate every path the coworker record renders under, after a mutation. */
 function revalidateRecord(agentBusinessId: string, slugId?: string | null): void {
   // The record route is /platform/ai/agent/[agentId]; it resolves by agentId OR
   // slugId, so revalidate both spellings plus the directory that shows grant counts.
-  revalidatePath(`/platform/ai/agent/${agentBusinessId}`);
+  const canonical = coworkerAuthorityAgentId(agentBusinessId);
+  revalidatePath(`/platform/ai/agent/${canonical}`);
+  const alias = CANONICAL_AGENT_ID_TO_COWORKER_SLUG[canonical];
+  if (alias) revalidatePath(`/platform/ai/agent/${alias}`);
   if (slugId && slugId !== agentBusinessId) {
     revalidatePath(`/platform/ai/agent/${slugId}`);
   }
@@ -61,8 +87,10 @@ export async function grantCoworkerTool(
   slugId?: string | null,
 ): Promise<ActionResult> {
   const { userId } = await requireCapability("manage_platform");
-
-  const res = await applyCoworkerToolGrant(agentCuid, grantKey, userId);
+  const owner = await resolveCoworkerAgent(agentCuid);
+  const expected = await resolveCoworkerAgent(agentBusinessId);
+  if (!owner || !expected || owner.id !== expected.id) return err("Coworker authority identity changed. Reload this record.");
+  const res = await applyCoworkerToolGrant(owner.id, grantKey, userId);
   if (!res.ok) return err(res.error ?? "Failed to apply tool grant");
 
   revalidateRecord(agentBusinessId, slugId);
@@ -83,8 +111,11 @@ export async function revokeCoworkerTool(
   slugId?: string | null,
 ): Promise<ActionResult> {
   const { userId } = await requireCapability("manage_platform");
-
-  await removeCoworkerToolGrant(agentCuid, grantKey, userId);
+  const owner = await resolveCoworkerAgent(agentCuid);
+  const expected = await resolveCoworkerAgent(agentBusinessId);
+  if (!owner || !expected || owner.id !== expected.id) return err("Coworker authority identity changed. Reload this record.");
+  const res = await removeCoworkerToolGrant(owner.id, grantKey, userId);
+  if (!res.ok) return err(res.error ?? "Failed to revoke tool grant");
 
   revalidateRecord(agentBusinessId, slugId);
   return ok();

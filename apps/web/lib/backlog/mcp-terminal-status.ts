@@ -1,6 +1,7 @@
-import type { ToolResult } from "@/lib/mcp-tools";
+import type { ToolResult } from "@/lib/mcp-tool-types";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { resolveTerminalInitiativeRecovery } from "@/lib/backlog/initiative-readiness/terminal-recovery";
+import { governingPrinciplesFor, withGoverningRules } from "@/lib/kernel/governing-principles";
 
 type TerminalBacklogItem = {
   status: string;
@@ -53,15 +54,18 @@ export async function completeBacklogItemTransitionTool(args: {
   if (!terminal.ok) {
     const codes = [...terminal.decision.blockers, ...terminal.decision.unmet].map((entry) => entry.code);
     const recovery = await resolveTerminalInitiativeRecovery({
+      currentUserId: args.userId,
       decision: terminal.decision,
       currentAgentId: args.agentId ?? null,
       refusedWorkroomId: null,
     });
+    // BI-DEDAC950: beside the decision, never inside it (decisions replay by deep equality).
+    const governingPrinciples = governingPrinciplesFor(terminal.decision);
     return {
       success: false,
       error: "initiative_not_ready",
-      message: `Cannot complete ${args.itemId}: ${codes.join(", ")}.`,
-      data: { stableCode: terminal.code, readiness: terminal.decision, recovery },
+      message: withGoverningRules(`Cannot complete ${args.itemId}: ${codes.join(", ")}.`, governingPrinciples),
+      data: { stableCode: terminal.code, readiness: terminal.decision, governingPrinciples, recovery },
     };
   }
 
@@ -98,6 +102,20 @@ export async function completeBacklogItemTransitionTool(args: {
       });
     }
   }
+
+  // BI-AE9FCB4C: the item's hive mirror (and its epic's, when the epic just
+  // auto-closed) is closed after the local write commits. Best-effort; the
+  // periodic sweep in instrumentation.ts catches anything that fails here.
+  void (async () => {
+    try {
+      const { closeUpstreamIssueInBackground } = await import("@/lib/build/issue-bridge");
+      const row = await prisma.backlogItem.findUnique({ where: { itemId: args.itemId }, select: { id: true, epicId: true } });
+      if (row) closeUpstreamIssueInBackground({ kind: "backlog", id: row.id });
+      if (row?.epicId) closeUpstreamIssueInBackground({ kind: "epic", id: row.epicId });
+    } catch (error) {
+      console.warn(`[issue-bridge] upstream close dispatch failed for ${args.itemId}: ${getErrorMessage(error)}`);
+    }
+  })();
 
   void (async () => {
     try {

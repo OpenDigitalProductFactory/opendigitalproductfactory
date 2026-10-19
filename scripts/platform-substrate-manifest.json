@@ -32,7 +32,8 @@
       "profiles": [],
       "ports": [],
       "volumes": [
-        "dpf-source-code:/workspace"
+        "dpf-source-code:/workspace",
+        "${DPF_STATE_DIR:-${HOME}/.dpf}:/dpf-state:ro"
       ],
       "dependsOn": [
         "postgres"
@@ -64,6 +65,7 @@
         "dpf-source-code:/workspace",
         "sandbox_workspace:/sandbox-workspace",
         "browser_evidence:/evidence:ro",
+        "map_data:/var/lib/dpf/maps",
         "${DPF_BACKUPS_HOST_PATH:-${DPF_HOST_INSTALL_PATH:-.}/backups}:/backups",
         "${DPF_HOST_INSTALL_PATH:-.}:/host-dpf",
         "${DPF_WORKTREE_BASE:-${DPF_HOST_INSTALL_PATH:-.}-worktrees}:/host-worktrees",
@@ -437,14 +439,11 @@
     },
     {
       "service": "loki",
-      "class": "capability-activated",
-      "capability": "runtime:deep-observability",
-      "boundaryReason": "Separate loki runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-      "defaultRequired": false,
-      "profiles": [
-        "runtime-deep-observability",
-        "observability-ui"
-      ],
+      "class": "universal-core",
+      "capability": "runtime:core",
+      "boundaryReason": "Universal log store: container log capture is a platform guarantee, not an opt-in capability (BI-F8024A9D). Reads logs via the Docker socket with no host-path bind mount, so it runs on every supported host.",
+      "defaultRequired": true,
+      "profiles": [],
       "ports": [
         "127.0.0.1:3100:3100"
       ],
@@ -462,18 +461,15 @@
         "macos",
         "linux"
       ],
-      "targetClassification": "capability-activated"
+      "targetClassification": "universal-core"
     },
     {
       "service": "alloy",
-      "class": "capability-activated",
-      "capability": "runtime:deep-observability",
-      "boundaryReason": "Separate alloy runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-      "defaultRequired": false,
-      "profiles": [
-        "runtime-deep-observability",
-        "observability-ui"
-      ],
+      "class": "universal-core",
+      "capability": "runtime:core",
+      "boundaryReason": "Universal log shipper feeding loki; promoted with it (BI-F8024A9D) because a capture layer nobody enabled is a capture layer that does not exist.",
+      "defaultRequired": true,
+      "profiles": [],
       "ports": [],
       "volumes": [
         "./monitoring/alloy/config.alloy:/etc/alloy/config.alloy:ro",
@@ -491,7 +487,7 @@
         "macos",
         "linux"
       ],
-      "targetClassification": "capability-activated"
+      "targetClassification": "universal-core"
     },
     {
       "service": "cadvisor",
@@ -652,7 +648,7 @@
       "service": "dpf-tts",
       "class": "capability-activated",
       "capability": "runtime:local-speech",
-      "boundaryReason": "Separate dpf-tts runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
+      "boundaryReason": "Docker speech runtime for Windows/Linux; macOS uses the host-native Chatterbox service declared by its platform overlay.",
       "defaultRequired": false,
       "profiles": [
         "runtime-local-speech",
@@ -670,7 +666,6 @@
       "healthSemantics": "compose-healthcheck",
       "hostPlatforms": [
         "windows",
-        "macos",
         "linux"
       ],
       "targetClassification": "capability-activated"
@@ -685,7 +680,7 @@
         "runtime-external-ai"
       ],
       "ports": [
-        "11434:11434"
+        "127.0.0.1:11434:11434"
       ],
       "volumes": [
         "ollama_data:/root/.ollama"

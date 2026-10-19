@@ -3,6 +3,8 @@
 
 services:
   step-ca:
+    labels:
+      dpf.recreate-class: data-owner
     image: smallstep/step-ca:0.30.2@sha256:a2b17872915c193259b75a5474c398326f41bd199f0842093e52cf4182bc8270
     restart: unless-stopped
     logging:
@@ -14,16 +16,16 @@ services:
       # Loopback is the safe default. An organization authority that enrolls
       # other LAN installations must deliberately set this to one private IP.
       - "${DPF_PKI_BIND_ADDRESS:-127.0.0.1}:${DPF_PKI_PORT:-9000}:9000"
+    # The bootstrap stages private custody into this volume as the image user.
+    # Host file secret binds cannot remap the invoking user to container UID 1000.
     environment:
       DOCKER_STEPCA_INIT_NAME: ${DPF_PKI_NAME:-DPF Organization CA}
       DOCKER_STEPCA_INIT_DNS_NAMES: ${DPF_PKI_DNS_NAMES:-localhost,127.0.0.1}
       DOCKER_STEPCA_INIT_PROVISIONER_NAME: dpf-installer
-      DOCKER_STEPCA_INIT_PASSWORD_FILE: /run/secrets/step-ca-password
+      DOCKER_STEPCA_INIT_PASSWORD_FILE: /home/step/secrets/password
       DOCKER_STEPCA_INIT_REMOTE_MANAGEMENT: "false"
       DOCKER_STEPCA_INIT_SSH: "false"
       DOCKER_STEPCA_INIT_ACME: "false"
-    secrets:
-      - step-ca-password
     volumes:
       - step_ca_data:/home/step
       - ./scripts/pki/edge-client.tpl:/etc/dpf/pki/edge-client.tpl:ro
@@ -45,10 +47,6 @@ services:
       timeout: 5s
       retries: 10
       start_period: 20s
-
-secrets:
-  step-ca-password:
-    file: ${DPF_PKI_PASSWORD_FILE:?Set DPF_PKI_PASSWORD_FILE to a mode-0600 file}
 
 volumes:
   step_ca_data:

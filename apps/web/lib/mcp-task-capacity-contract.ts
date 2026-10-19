@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { RemoteTaskSubmitParams } from "./mcp-task-submit";
+import type { RemoteTaskSubmitParams } from "./mcp-task-submit-params";
 
 export type ResourceWaitFailureKind = "capacity" | "busy";
 
@@ -10,7 +10,23 @@ export type ResourceWaitProjection = {
   resumeMode: "same-taskrun";
   attempt: number;
   observedAt: string;
+  /** When the next attempt is due: bounded exponential backoff (BI-D25F867D). Absent on older rows. */
+  nextAttemptAt?: string;
 };
+
+/** Waits before a capacity-parked task is failed honestly as busy: about half an hour in all. */
+export const RESOURCE_WAIT_MAX_ATTEMPTS = 5;
+
+/** 1, 2, 4, 8, then 15 minutes between attempts. */
+export function resourceWaitBackoffMs(attempt: number): number {
+  return Math.min(2 ** Math.max(0, attempt - 1), 15) * 60_000;
+}
+
+/** Whether a parked task may be dispatched again now. A wait without a due time is due. */
+export function resourceWaitDue(wait: ResourceWaitProjection, now: Date): boolean {
+  const due = wait.nextAttemptAt ? Date.parse(wait.nextAttemptAt) : Number.NaN;
+  return !Number.isFinite(due) || due <= now.getTime();
+}
 
 function nonEmptyString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
@@ -29,6 +45,7 @@ export function preInferenceResourceWait(input: {
 export function createResourceWaitProjection(
   failureKind: ResourceWaitFailureKind,
   attempt: number,
+  now: Date = new Date(),
 ): ResourceWaitProjection {
   return {
     schemaVersion: 1,
@@ -36,7 +53,8 @@ export function createResourceWaitProjection(
     failureKind,
     resumeMode: "same-taskrun",
     attempt,
-    observedAt: new Date().toISOString(),
+    observedAt: now.toISOString(),
+    nextAttemptAt: new Date(now.getTime() + resourceWaitBackoffMs(attempt)).toISOString(),
   };
 }
 
@@ -83,6 +101,27 @@ export function remoteTaskRequestDigest(parsed: RemoteTaskSubmitParams): string 
   return createHash("sha256")
     .update(JSON.stringify(remoteTaskRequestPacket(parsed, 2)))
     .digest("hex");
+}
+
+/** Keep a review's authority immutable across additive OAuth vocabulary changes.
+ * The caller must still pass current connection and coworker authorization.
+ * Every saved grant must remain available; exact tool/item boundaries cannot grow.
+ * The saved digest authenticates all remaining request fields, including artifact.
+ */
+export function reconcileReviewReplayScope(
+  metadata: unknown,
+  savedScope: unknown,
+  current: RemoteTaskSubmitParams,
+): string[] | null {
+  if (!current.initiativeReviewBinding || !Array.isArray(savedScope)
+    || !savedScope.length || !savedScope.every((scope): scope is string => typeof scope === "string")) return null;
+  const currentScope = new Set(current.authorityScope ?? []);
+  const saved = new Set(savedScope);
+  if (savedScope.some(scope => !currentScope.has(scope))) return null;
+  if ([...currentScope].some(scope => (scope.startsWith("tool:") || scope.startsWith("backlog-item:"))
+    && !saved.has(scope))) return null;
+  return matchingRemoteTaskRequestDigest(metadata, { ...current, authorityScope: savedScope })
+    ? [...savedScope] : null;
 }
 
 function legacyRemoteTaskRequestDigest(parsed: RemoteTaskSubmitParams): string {

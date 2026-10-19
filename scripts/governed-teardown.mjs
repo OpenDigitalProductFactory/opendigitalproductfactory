@@ -14,7 +14,7 @@ import {
   rmdir,
   writeFile,
 } from "node:fs/promises";
-import { basename, dirname, join, posix, resolve } from "node:path";
+import { dirname, join, posix, resolve } from "node:path";
 import { promisify } from "node:util";
 import { pathToFileURL } from "node:url";
 

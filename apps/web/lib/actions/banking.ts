@@ -2,6 +2,7 @@
 
 import { newId } from "@/lib/shared/new-id";
 import { prisma } from "@dpf/db";
+import { getOrgBaseCurrency } from "@/lib/org-locale/org-currency.server";
 import { requireCapability } from "@/lib/actions/shared/guards";
 import { revalidatePath } from "next/cache";
 import { parseCSV } from "@/lib/csv-parser";
@@ -31,7 +32,7 @@ export async function createBankAccount(input: CreateBankAccountInput) {
       sortCode: input.sortCode ?? null,
       iban: input.iban ?? null,
       swift: input.swift ?? null,
-      currency: input.currency ?? "USD",
+      currency: input.currency ?? (await getOrgBaseCurrency()),
       accountType: input.accountType ?? "current",
       openingBalance,
       currentBalance: openingBalance,

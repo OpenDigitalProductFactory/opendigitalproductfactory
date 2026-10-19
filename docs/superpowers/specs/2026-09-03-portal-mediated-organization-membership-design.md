@@ -189,3 +189,29 @@ the existing issue path stays.
    registry/grant/tool-surface updates; tests.
 5. Live proof on the pair (acceptance 1–2), evidence on BI-105BB8B2.
 6. Slice 2 and 3 as separate PRs.
+
+## Objectives and acceptance
+
+Marked for the initiative-readiness baseline manifest
+(`apps/web/lib/backlog/initiative-readiness/baseline-manifest.ts`). These state
+what this design commits to; the table below binds each acceptance criterion to
+the objectives it serves.
+
+- **OBJ-MEMBERSHIP-ONLY-SWITCH:** Holding the organization's join package is the
+  only switch a member needs. No environment variable, generated secret, compose
+  overlay or installer flag stands between an operator and a joined installation.
+- **OBJ-PORTAL-MEDIATED:** Both halves of the act happen in the portal the
+  operator is already signed into — the authority issues the file, the member
+  chooses it — with no shell, no certificate copying and no CA password.
+- **OBJ-BORN-TRUSTED:** A member that proves organization membership is linked
+  without an approval step, and the resulting link records why it is trusted.
+- **OBJ-SESSION-FREE-PARITY:** Every act reachable in the portal is reachable
+  without a browser session, so an agent can perform it under its own authority.
+
+| Criterion | Objectives | Statement |
+| --- | --- | --- |
+| AC-JOIN-PORTAL | OBJ-MEMBERSHIP-ONLY-SWITCH, OBJ-PORTAL-MEDIATED | A member with no prior trust joins by choosing a one-time join file on its own Connections page; the authority issues that file from its Connections page. |
+| AC-SIGN-RELAY | OBJ-PORTAL-MEDIATED | The authority relays the member's CSR to step-ca over the pinned root and returns the signed chain; material is written under the federation state directory with 0600 plus a facts row in PlatformConfig. |
+| AC-TRUSTED-BOTH-SIDES | OBJ-BORN-TRUSTED | The resulting FederationLink is trusted on both installations with confirmationProvenance organization-trust and approvedByPrincipalId null, within two federation ticks, with nothing approved and nothing typed. |
+| AC-MCP-PARITY | OBJ-SESSION-FREE-PARITY | The same import is available as the import_organization_join_file MCP tool, and issuing as issue_organization_join_file. |
+| AC-NO-EDGE-PATH | OBJ-MEMBERSHIP-ONLY-SWITCH | The Connections page no longer routes this act through the edge-node readiness cards, whose server actions were unreachable on both installations. |

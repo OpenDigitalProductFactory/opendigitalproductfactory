@@ -1,0 +1,7 @@
+{
+  "version": "1",
+  "decidedOption": "shared-coordination-context",
+  "decisionInteractionId": "DI-2CB67542C613",
+  "scope": { "files": ["apps/web/components/ea/WorkroomCoordinationContext.tsx"] },
+  "evidence": { "kind": "propose-n-pick", "consideredOptions": ["shared-coordination-context", "inspect-rooms-individually"] }
+}

@@ -34,6 +34,27 @@ function database(activities: unknown[] = []) {
   };
 }
 
+function shapedDatabase(activities: unknown[] = []) {
+  const db = database(activities);
+  return {
+    ...db,
+    backlogItemActivity: {
+      ...db.backlogItemActivity,
+      findMany: vi.fn().mockResolvedValue([{
+        id: "cov-1",
+        backlogItemId: "parent-row",
+        payload: { schemaVersion: 2, decision: "decomposed", deliverables: [{ backlogItemId: "BI-ENTRY" }] },
+      }]),
+    },
+    backlogItem: { findFirst: vi.fn().mockResolvedValue({ itemId: "BI-PARENT" }) },
+    workroom: {
+      findFirst: vi.fn().mockResolvedValue({
+        scopeClaims: [{ workShape: "delivery-small@1.0.0", recordedAt: "2026-09-23T00:00:00.000Z" }],
+      }),
+    },
+  };
+}
+
 describe("enforceBuildInitiativeReadiness", () => {
   it("does not treat legacy designReview or planReview JSON as governed evidence", async () => {
     const db = database();
@@ -75,6 +96,87 @@ describe("enforceBuildInitiativeReadiness", () => {
     expect(db.buildActivity.create).toHaveBeenCalled();
   });
 
+  // BI-0E2E3BC5: with the shape bound (BI-1E8EAD10), a small or medium build
+  // still owed a research receipt no agent it runs as can write. Its own
+  // reviewed design is that research, and sensitivity raises the shape exactly
+  // as it does at the claim and at closure.
+  describe("reads the build's reviewed design and item sensitivity", () => {
+    function shaped(args: { boundShape: string | null; title?: string; designReview?: unknown; planPaths?: string[] }) {
+      const db = database();
+      db.featureBuild.findUnique.mockResolvedValueOnce({
+        id: "build-row",
+        buildId: "FB-ENTRY",
+        kind: "feature",
+        originatingBacklogItemId: "bi-row",
+        designDoc: { acceptanceCriteria: ["the page lists adoptable animals", { text: "each card links to a profile" }] },
+        designReview: args.designReview === undefined ? { decision: "pass" } : args.designReview,
+        buildPlan: args.planPaths ? { fileStructure: args.planPaths.map((path) => ({ path, action: "modify" })) } : null,
+        originator: {
+          id: "bi-row",
+          itemId: "BI-ENTRY",
+          title: args.title ?? "Adoptable animals page",
+          body: "Show the animals available for adoption.",
+          type: "product",
+          source: "user-request",
+          workType: "feature",
+          scopeKind: "platform",
+          archetypeCategories: [],
+          archetypeIds: [],
+          activities: [],
+        },
+      });
+      const workroom = {
+        findFirst: vi.fn().mockResolvedValue(
+          args.boundShape ? { scopeClaims: [{ workShape: args.boundShape, recordedAt: "2026-09-22T00:00:00.000Z" }] } : null,
+        ),
+      };
+      return Object.assign(db, { workroom });
+    }
+    const enforce = (db: ReturnType<typeof shaped>, target: "plan" | "implementation") => enforceBuildInitiativeReadiness({
+      db,
+      buildId: "FB-ENTRY",
+      target,
+      targetPhase: target === "plan" ? "plan" : "build",
+      evaluatedAt: "2026-09-22T00:00:00.000Z",
+    });
+    const medium = "delivery-medium@1.0.0";
+
+    it("lets a medium build with a passed design review enter plan and build", async () => {
+      const plan = await enforce(shaped({ boundShape: medium }), "plan");
+      expect(plan.decision.unmet.map((entry) => entry.code)).toEqual([]);
+      expect(plan.allowed).toBe(true);
+      expect((await enforce(shaped({ boundShape: medium }), "implementation")).allowed).toBe(true);
+    });
+
+    it("still refuses research when the design review failed", async () => {
+      const result = await enforce(shaped({ boundShape: medium, designReview: { decision: "fail" } }), "plan");
+      expect(result.allowed).toBe(false);
+      expect(result.decision.unmet.map((entry) => entry.code)).toContain("RESEARCH_REQUIRED");
+    });
+
+    it("keeps large, sensitive and unshaped work on the full table", async () => {
+      for (const db of [
+        shaped({ boundShape: "delivery-large@1.0.0" }),
+        shaped({ boundShape: medium, planPaths: ["apps/web/lib/auth/password-reset.ts"] }),
+        shaped({ boundShape: null }),
+      ]) {
+        const result = await enforce(db, "plan");
+        expect(result.allowed).toBe(false);
+        expect(result.decision.unmet.map((entry) => entry.code)).toContain("SPEC_APPROVAL_REQUIRED");
+      }
+    });
+
+    // Operator direction 2026-10-07: a word is not evidence; the plan's files are.
+    it("judges sensitivity by the files the plan touches, not by the words in the item", async () => {
+      const wordy = await enforce(shaped({ boundShape: medium, title: "Adopter login and password reset", planPaths: ["apps/web/app/(shell)/adopt/page.tsx"] }), "implementation");
+      expect(wordy.allowed).toBe(true);
+      expect(wordy.decision.shapeDecision?.raised).toBe(false);
+      const touchesAuth = await enforce(shaped({ boundShape: medium, title: "Adoptable animals page", planPaths: ["apps/web/lib/auth/session.ts"] }), "implementation");
+      expect(touchesAuth.allowed).toBe(false);
+      expect(touchesAuth.decision.shapeDecision?.trigger).toEqual({ signal: "access-control", source: "build-plan-paths", evidence: "apps/web/lib/auth/session.ts" });
+    });
+  });
+
   it("returns an allowed decision from the shared projector without consulting advisory JSON", async () => {
     const db = database();
     const projectReadiness = vi.fn().mockReturnValue({
@@ -108,5 +210,28 @@ describe("enforceBuildInitiativeReadiness", () => {
       activities: [],
       target: "plan",
     }));
+  });
+
+  it("keys the gates on the bound delivery shape and inherits the decomposition parent's scope (BI-1E8EAD10)", async () => {
+    const db = shapedDatabase();
+    const projectReadiness = vi.fn().mockReturnValue({
+      governed: true,
+      decision: {
+        decisionId: "IRD-SHAPED", policyVersion: "initiative-readiness.v3",
+        subject: { kind: "backlog-item", id: "BI-ENTRY" },
+        transitionObject: { kind: "feature-build", id: "FB-ENTRY", expectedVersion: "plan", targetState: "build" },
+        profile: "feature", target: "implementation", verdict: "allowed",
+        satisfied: [], unmet: [], blockers: [], evaluatedAt: "2026-09-23T00:00:00.000Z",
+      },
+    });
+
+    await enforceBuildInitiativeReadiness({
+      db, buildId: "FB-ENTRY", target: "implementation", targetPhase: "build", expectedPhase: "plan",
+      evaluatedAt: "2026-09-23T00:00:00.000Z", dependencies: { projectReadiness },
+    });
+
+    const call = projectReadiness.mock.calls[0]![0] as { item: { workShape?: string | null }; inheritedScope?: unknown };
+    expect(call.item.workShape).toBe("delivery-small@1.0.0");
+    expect(call.inheritedScope).toBeTruthy();
   });
 });

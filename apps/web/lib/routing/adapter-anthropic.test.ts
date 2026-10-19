@@ -291,9 +291,23 @@ describe("anthropicAdapter", () => {
     // ── Pricing ──────────────────────────────────────────────────────
 
     describe("pricing", () => {
-      it("is EMPTY_PRICING (not from API)", () => {
+      // The Anthropic models endpoint still returns no prices — that part is
+      // unchanged. What changed (BI-B5071C36) is what the adapter does about
+      // it: writing nulls let the router fall back to the provider's single
+      // flat rate for every model, and let a re-discovery erase a price a
+      // backfill had recorded. It now reads the researched reference.
+      it("fills a researched model's rate from the reference, not nulls", () => {
         const card = anthropicAdapter.extractModelCard(
           "claude-opus-4-6",
+          opusRaw,
+        );
+        expect(card.pricing.inputPerMToken).toBe(5);
+        expect(card.pricing.outputPerMToken).toBe(25);
+      });
+
+      it("still reports nulls for a model the reference has not researched", () => {
+        const card = anthropicAdapter.extractModelCard(
+          "claude-not-a-real-model",
           opusRaw,
         );
         expect(card.pricing).toEqual(EMPTY_PRICING);

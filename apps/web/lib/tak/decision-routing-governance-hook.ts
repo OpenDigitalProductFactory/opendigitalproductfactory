@@ -41,7 +41,7 @@ import type {
   ToolLifecycleEvent,
   ToolLifecyclePostEvent,
   ToolLifecycleHook,
-} from "@/lib/mcp-governed-execute";
+} from "@/lib/mcp-governed-execute-types";
 
 export type DecisionGateMode = "enforce" | "shadow" | "off";
 

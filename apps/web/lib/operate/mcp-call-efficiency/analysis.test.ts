@@ -380,5 +380,7 @@ describe("governed refusals are not tool failures", () => {
     expect(storm?.detail).toContain("GOVERNED REFUSAL");
     expect(storm?.detail).toContain("Fix the caller's retry loop");
     expect(storm?.detail).not.toContain("Fix tool errors or agent instructions");
+    expect(storm?.recommendedAction).toBe("investigate");
+    expect(storm?.severity).toBe("warning");
   });
 });

@@ -2,6 +2,10 @@
  * Plan idempotent writes for the repo-root MCP client config files that point
  * Claude Code and VS Code at the DPF MCP server:
  *   - `<repoRoot>/.mcp.json`        (Claude Code: mcpServers.dpf, http transport)
+ *                                   -- only where Claude cannot authorize by OAuth
+ *                                   (plain http, or explicit legacy mode); on https
+ *                                   the dpf-platform plugin owns the Claude
+ *                                   connector (BI-5201141C)
  *   - `<repoRoot>/.vscode/mcp.json` (VS Code: servers.dpf, http transport)
  *
  * Both reference the `${DPF_MCP_BEARER_TOKEN}` env var rather than embedding the
@@ -17,6 +21,11 @@
  */
 
 import { withDpfMcpCatalogTier } from "@dpf/integration-shared/mcp-catalog-tier";
+import {
+  mcpClientBearerHeaderRequired,
+  mcpClientOAuthScopePin,
+  type McpAuthMode,
+} from "@dpf/integration-shared/mcp-client-credential-policy";
 
 // Mirrors MCP_BEARER_TOKEN_ENV_VAR in apps/web/lib/auth/mcp-setup-snippets.ts.
 const MCP_BEARER_TOKEN_ENV_VAR = "DPF_MCP_BEARER_TOKEN";
@@ -26,6 +35,25 @@ export type McpClientConfigPlan = {
   writes: Array<{ path: string; content: string }>;
   rationale: string;
 };
+
+/** Preserve unrelated servers and user-owned options while converging managed credentials. */
+function mergeManagedServer(existing: string | null, desired: string, key: "mcpServers" | "servers"): string | null {
+  try {
+    const before = existing ? JSON.parse(existing) : {};
+    if (!before || typeof before !== "object" || Array.isArray(before)) return null;
+    const after = JSON.parse(desired);
+    const servers = before[key] ?? {};
+    const dpf = { ...servers.dpf, ...after[key].dpf };
+    if (servers.dpf?.headers) {
+      const headers = { ...servers.dpf.headers };
+      if (["Bearer ${DPF_MCP_BEARER_TOKEN}", "Bearer ${env:DPF_MCP_BEARER_TOKEN}"].includes(headers.Authorization)) delete headers.Authorization;
+      if (!headers.Authorization && after[key].dpf.headers?.Authorization) headers.Authorization = after[key].dpf.headers.Authorization;
+      if (Object.keys(headers).length) dpf.headers = headers;
+      else delete dpf.headers;
+    }
+    return JSON.stringify({ ...before, [key]: { ...servers, dpf } }, null, 2);
+  } catch { return null; }
+}
 
 /**
  * Strip trailing '/' without a regex. `/\/+$/` trips CodeQL's js/polynomial-redos
@@ -57,15 +85,29 @@ export function mcpClientConfigPaths(repoRoot: string): {
   };
 }
 
-function claudeCodeContent(mcpEndpoint: string): string {
+// BI-46B636B0: the bearer-header fallback is written only for an endpoint the
+// client cannot authorize over OAuth (plain http). On https the header would
+// disable OAuth, which is the outage #5416 removed it to prevent; on http it is
+// the only credential path, which is the outage #5416 caused by removing it.
+function claudeCodeContent(mcpEndpoint: string, authMode: McpAuthMode): string {
   const lazyHostEndpoint = withDpfMcpCatalogTier(mcpEndpoint, "full");
+  const headerFallback = mcpClientBearerHeaderRequired(mcpEndpoint, "claude", authMode)
+    ? { headers: { Authorization: `Bearer \${${MCP_BEARER_TOKEN_ENV_VAR}}` } }
+    : {};
+  // BI-3D2FD68C: over https the client authorizes by OAuth and asks for only
+  // the scope the portal advertises (read). The pin is what lets the consent
+  // grant the write scopes platform work needs. Never on http, where OAuth
+  // never runs and the header above is the credential.
+  const scopePin = mcpClientOAuthScopePin(mcpEndpoint, "claude", authMode);
+  const oauthPin = scopePin ? { oauth: { scopes: scopePin } } : {};
   return JSON.stringify(
     {
       mcpServers: {
         dpf: {
           type: "http",
           url: lazyHostEndpoint,
-          headers: { Authorization: `Bearer \${${MCP_BEARER_TOKEN_ENV_VAR}}` },
+          ...headerFallback,
+          ...oauthPin,
         },
       },
     },
@@ -74,14 +116,17 @@ function claudeCodeContent(mcpEndpoint: string): string {
   );
 }
 
-function vscodeContent(mcpEndpoint: string): string {
+function vscodeContent(mcpEndpoint: string, authMode: McpAuthMode): string {
+  const headerFallback = mcpClientBearerHeaderRequired(mcpEndpoint, "vscode", authMode)
+    ? { headers: { Authorization: `Bearer \${env:${MCP_BEARER_TOKEN_ENV_VAR}}` } }
+    : {};
   return JSON.stringify(
     {
       servers: {
         dpf: {
           type: "http",
           url: mcpEndpoint,
-          headers: { Authorization: `Bearer \${env:${MCP_BEARER_TOKEN_ENV_VAR}}` },
+          ...headerFallback,
         },
       },
     },
@@ -102,25 +147,40 @@ export function planMcpClientConfig(
   mcpEndpoint: string,
   existingMcpJson: string | null,
   existingVscodeJson: string | null,
+  authMode: McpAuthMode = "oauth",
 ): McpClientConfigPlan {
   const writes: McpClientConfigPlan["writes"] = [];
 
+  // A trailing newline (editors, `git` hygiene) is not drift; compare the
+  // JSON bodies so a converged tracked file is never rewritten for it.
+  const same = (existing: string | null, desired: string) =>
+    existing !== null && existing.trimEnd() === desired.trimEnd();
+
+  // BI-5201141C (design 12.4.4): where Claude Code authorizes by OAuth, the
+  // dpf-platform plugin's URL-only connector is its one dpf connector. Claude
+  // Code de-duplicates plugin and project servers by endpoint, so a repo
+  // .mcp.json at any other URL loads as a second server. Plan none, and leave
+  // an existing operator file alone. Plain http and explicit legacy mode keep
+  // the header-bearing compatibility file: there it is the credential path.
+  const pluginOwnsClaudeConnector = !mcpClientBearerHeaderRequired(mcpEndpoint, "claude", authMode);
   const mcpPath = joinPath(repoRoot, ".mcp.json");
-  const desiredMcp = claudeCodeContent(mcpEndpoint);
-  if (existingMcpJson !== desiredMcp) {
+  const desiredMcp = pluginOwnsClaudeConnector
+    ? existingMcpJson
+    : mergeManagedServer(existingMcpJson, claudeCodeContent(mcpEndpoint, authMode), "mcpServers");
+  if (!pluginOwnsClaudeConnector && desiredMcp !== null && !same(existingMcpJson, desiredMcp)) {
     writes.push({ path: mcpPath, content: desiredMcp });
   }
 
   const vscodePath = joinPath(repoRoot, ".vscode", "mcp.json");
-  const desiredVscode = vscodeContent(mcpEndpoint);
-  if (existingVscodeJson !== desiredVscode) {
+  const desiredVscode = mergeManagedServer(existingVscodeJson, vscodeContent(mcpEndpoint, authMode), "servers");
+  if (desiredVscode !== null && !same(existingVscodeJson, desiredVscode)) {
     writes.push({ path: vscodePath, content: desiredVscode });
   }
 
   return {
     writes,
     rationale:
-      writes.length === 0
+      (!pluginOwnsClaudeConnector && desiredMcp === null) || desiredVscode === null ?"Invalid MCP JSON preserved; repair it before rerunning setup." : writes.length === 0
         ? "MCP client config already converged."
         : `Writing ${writes.length} MCP client config file(s) for ${repoRoot}.`,
   };

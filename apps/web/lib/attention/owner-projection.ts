@@ -63,3 +63,29 @@ export function buildOwnerAttentionProjection(
     count: needsYouNow.length,
   };
 }
+
+/**
+ * Pin one item into the visible lane (BI-0012E6CA).
+ *
+ * A deep link names a specific card; if routing put it in the weekly review or
+ * with the custodian, the reader would land on a page that does not show it.
+ * The requested entry moves to the front of `needsYouNow` and the count follows.
+ * Unknown ids leave the projection unchanged.
+ */
+export function pinOwnerAttentionEntry(
+  projection: OwnerAttentionProjection,
+  itemId: string | undefined,
+): OwnerAttentionProjection {
+  if (!itemId) return projection;
+  if (projection.needsYouNow.some((entry) => entry.item.id === itemId)) return projection;
+  const pinned = projection.weeklyDigest.find((entry) => entry.item.id === itemId)
+    ?? projection.custodian.find((entry) => entry.item.id === itemId);
+  if (!pinned) return projection;
+  const needsYouNow = [pinned, ...projection.needsYouNow];
+  return {
+    needsYouNow,
+    weeklyDigest: projection.weeklyDigest.filter((entry) => entry.item.id !== itemId),
+    custodian: projection.custodian.filter((entry) => entry.item.id !== itemId),
+    count: needsYouNow.length,
+  };
+}

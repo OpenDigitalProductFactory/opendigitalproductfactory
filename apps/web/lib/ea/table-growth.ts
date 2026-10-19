@@ -22,7 +22,7 @@
 //       payload-anatomy             TOAST dominates the relation — a JSON/text
 //                                   column is carrying blobs that belong in the
 //                                   content-addressed store (see the evidence
-//                                   ceiling in lib/evidence/bounded-output.ts).
+//                                   ceiling in lib/evidence/bounded-evidence-output.ts).
 //
 // Findings reconcile into EaConformanceIssue like every other steward finding,
 // and a finding that persists across PERSISTENT_NIGHTS consecutive samples is
@@ -212,7 +212,7 @@ export function detectGrowthDrift(history: ReadonlyMap<string, readonly TableGro
           toastShare: toast / total,
           liveRows: Number(latest.liveRows),
           avgRowBytes: Number(latest.liveRows) > 0 ? Math.round(total / Number(latest.liveRows)) : null,
-          remedy: "Route oversized payloads through lib/evidence/bounded-output.ts (64 KB inline ceiling) and keep a digest in the row.",
+          remedy: "Route oversized payloads through lib/evidence/bounded-evidence-output.ts (64 KB inline ceiling) and keep a digest in the row.",
         },
       });
     }

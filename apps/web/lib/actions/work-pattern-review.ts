@@ -47,6 +47,7 @@ import type {
 } from "@/lib/tak/work-pattern-types";
 import { parseWorkPatternMetadata } from "@/lib/tak/work-pattern-types";
 import type { ReceiptEnvelope } from "@/lib/work-management/receipt-envelope";
+import { isRecord } from "@/lib/shared/coerce";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -123,10 +124,6 @@ export type ReviewActionResult = {
   needId: string;
   decisionInteractionId: string;
 };
-
-function isRecord(value: unknown): value is JsonRecord {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
 
 function recordFrom(value: unknown): JsonRecord {
   return isRecord(value) ? value : {};

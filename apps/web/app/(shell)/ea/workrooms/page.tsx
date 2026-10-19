@@ -2,14 +2,18 @@ import Link from "next/link";
 import { prisma } from "@dpf/db";
 
 import { EaTabNav } from "@/components/ea/EaTabNav";
+import { WorkroomCoordinationContext } from "@/components/ea/WorkroomCoordinationContext";
 import { Surface } from "@/components/ui/Surface";
-import { EmptyState, StatCard, StatusBadge } from "@/components/ui/report-kit";
-import { loadRoomInventory, loadWorkroomArchitecture, loadWorkroomCoordination } from "@/lib/ea/workroom-architecture";
+import { CollapsibleList } from "@/components/ui/report-kit/CollapsibleList";
+import { EmptyState, FilterBar, StatCard, StatusBadge } from "@/components/ui/report-kit";
+import { WORK_CAPSULE_STATUSES } from "@/lib/work-capsules";
+import { TERMINAL_CAPSULE_STATUSES } from "@/lib/work-capsules/work-capsule-branch-identity";
+import { loadInitiativeOperation, loadRoomInventory, loadWorkroomArchitecture, loadWorkroomCoordination, loadWorkroomInitiatives } from "@/lib/ea/workroom-architecture";
 
 export const dynamic = "force-dynamic";
 
 function HumanGateList({ triggers }: { triggers: Array<{ triggerPoint: string; requiredRole: string; escalationTimeoutMinutes: number }> }) {
-  if (triggers.length === 0) return <p className="text-xs text-[var(--dpf-muted)]">No human checks are set.</p>;
+  if (triggers.length === 0) return <p className="text-xs text-[var(--dpf-muted)]">No checks set.</p>;
   return (
     <ul className="space-y-1 text-xs text-[var(--dpf-muted)]">
       {triggers.map((trigger, index) => (
@@ -22,24 +26,45 @@ function HumanGateList({ triggers }: { triggers: Array<{ triggerPoint: string; r
   );
 }
 
-export default async function WorkroomArchitecturePage({ searchParams }: { searchParams?: Promise<{ operation?: string }> } = {}) {
-  const operation = (await searchParams)?.operation;
-  const [architecture, coordination, inventory] = await Promise.all([
+export default async function WorkroomArchitecturePage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> } = {}) {
+  const params = await searchParams ?? {};
+  const value = (key: string) => typeof params[key] === "string" ? params[key] : "";
+  const operation = value("operation");
+  const initiativeId = operation.startsWith("initiative:") ? operation.slice("initiative:".length, 110) : null;
+  const initiativeQuery = value("initiativeQuery").trim().slice(0, 200);
+  const query = value("coordinationQuery").trim().slice(0, 200);
+  const status = value("coordinationStatus");
+  const after = value("coordinationAfter");
+  const filters = { operation: operation === "all" ? "" : operation, coordinationQuery: query, coordinationStatus: status, initiativeQuery };
+  const coordinationHref = (cursor: string | null) => {
+    const context = new URLSearchParams(Object.entries(filters).filter(([, entry]) => entry));
+    if (cursor) context.set("coordinationAfter", cursor);
+    return `/ea/workrooms?${context}#coordination`;
+  };
+  const [architecture, inventory, initiatives, selectedInitiative] = await Promise.all([
     loadWorkroomArchitecture(prisma),
-    loadWorkroomCoordination(prisma, new Date(), { teamId: operation === "unmapped" ? null : operation }),
     loadRoomInventory(prisma),
+    loadWorkroomInitiatives(prisma, new Date(), initiativeQuery),
+    initiativeId !== null ? loadInitiativeOperation(prisma, initiativeId) : null,
   ]);
+  const coordination = await loadWorkroomCoordination(prisma, new Date(), {
+    teamId: initiativeId !== null ? undefined : operation === "unmapped" ? null : !operation || operation === "all" ? undefined : operation,
+    ...(initiativeId !== null ? { initiative: { id: initiativeId, storedRefs: selectedInitiative?.storedRefs ?? [] } } : {}),
+    query, status, after, ...(initiativeQuery ? { initiativeQuery } : {}),
+  });
   const { bands, unplaced, truncated: architectureTruncated } = architecture;
   const definitions = bands.flatMap((band) => band.definitions);
-  const instanceCount = definitions.reduce((total, definition) => total + definition.instanceCount, 0);
+  const initiativeNames = new Map(initiatives.initiatives.flatMap(initiative => initiative.storedRefs.map(ref => [ref, initiative.title] as const)));
+  for (const ref of selectedInitiative?.storedRefs ?? []) initiativeNames.set(ref, selectedInitiative!.title);
+  // Choose an initiative from its named list; do not turn the filter into a second hundred-option inventory.
+  const initiativeOptions = initiativeId !== null
+    ? [{ value: operation, label: selectedInitiative ? `Initiative: ${selectedInitiative.title}` : "Initiative unavailable" }]
+    : [];
 
   return (
     <div>
       <div className="mb-6">
         <h1 className="text-xl font-bold text-[var(--dpf-text)]">Enterprise Architecture</h1>
-        <p className="mt-0.5 max-w-3xl text-sm text-[var(--dpf-muted)]">
-          Connect team plans to actual work.
-        </p>
       </div>
       <EaTabNav />
 
@@ -68,19 +93,19 @@ export default async function WorkroomArchitecturePage({ searchParams }: { searc
       </Surface>
 
       <div className="mb-6 grid gap-3 sm:grid-cols-3">
-        <StatCard label="Open rooms" value={inventory.openTotal} href="#coordination" hint="Open only" />
-        <StatCard label="No portfolio recorded" value={inventory.unclassified} hint="Never defaulted" />
+        <StatCard label="Open rooms" value={inventory.openTotal} href="#coordination" />
+        <StatCard label="No portfolio recorded" value={inventory.unclassified} />
         <StatCard label="Team plans" value={definitions.length} hint={definitions.length === 0 ? "Not configured on this install" : "Active value stream teams"} />
       </div>
 
       {architectureTruncated ? (
-        <p className="mb-6 text-xs text-[var(--dpf-muted)]">Partial read: more plans exist than shown.</p>
+        <p className="mb-6 text-xs text-[var(--dpf-muted)]">More plans exist.</p>
       ) : null}
 
       {unplaced.length > 0 ? (
         <Surface id="portfolio-unplaced" className="mb-6" rounded="xl">
           <h2 className="text-base font-semibold text-[var(--dpf-text)]">Not placed in a portfolio · {unplaced.length}</h2>
-          <p className="my-2 text-xs text-[var(--dpf-muted)]">Outside the four portfolios until placement is corrected.</p>
+          <p className="my-2 text-xs text-[var(--dpf-muted)]">Placement needs review.</p>
           <ul className="divide-y divide-[var(--dpf-border)]">
             {unplaced.map((definition) => (
               <li key={definition.id} className="py-3">
@@ -94,21 +119,65 @@ export default async function WorkroomArchitecturePage({ searchParams }: { searc
         </Surface>
       ) : null}
 
+      <Surface className="mb-6" rounded="xl">
+        <details open={initiativeId !== null || Boolean(initiativeQuery)}>
+          <summary className="min-h-11 cursor-pointer text-base font-semibold text-[var(--dpf-text)]">Initiatives · {initiatives.initiatives.length} shown</summary>
+          <p className="my-2 text-xs text-[var(--dpf-muted)]">Recorded initiatives with open rooms · observed {initiatives.readAt}</p>
+          <FilterBar mode="url" basePath="/ea/workrooms" value={filters}
+            preserveKeys={["operation", "coordinationQuery", "coordinationStatus"]}
+            className="my-3 [&_input]:min-h-11 [&_button]:min-h-11 [&_input]:text-sm [&_button]:text-sm"
+            facets={[{ kind: "search", key: "initiativeQuery", placeholder: "Search initiative name or ID" }]} />
+          {initiatives.partial ? <p>Initiative records are unavailable. Their state is unknown.</p> : null}
+          {initiatives.truncated ? <p>Partial view: up to 200 initiatives and membership references. Narrow the search for more.</p> : null}
+          {initiatives.unresolvedRooms ? <p>{initiatives.unresolvedRooms} observed rooms refer to an unresolved initiative.</p> : null}
+          {!initiatives.partial && !initiatives.initiatives.length ? <p>No initiative links were resolved.</p> : null}
+          <p className="text-xs text-[var(--dpf-muted)]">Value-stream and capability links require separate recorded relationships.</p>
+          <CollapsibleList previewCount={5} className="divide-y divide-[var(--dpf-border)] [&_button]:min-h-11 [&_button]:text-sm">
+            {initiatives.initiatives.map(initiative => <li key={initiative.id} className="py-3">
+              <Link className="inline-flex min-h-11 items-center text-sm font-medium text-[var(--dpf-accent)] hover:underline"
+                href={`/ea/workrooms?${new URLSearchParams({ operation: initiative.operation, ...(initiativeQuery ? { initiativeQuery } : {}) })}#coordination`}>{initiative.title}</Link>
+              {initiative.description ? <p className="text-sm">{initiative.description.slice(0, 240)}{initiative.description.length > 240 ? "…" : ""}</p> : <p className="text-sm">Outcome description not recorded.</p>}
+              <p className="text-xs text-[var(--dpf-muted)]">{initiative.id} · {initiative.scopeKind ?? "Scope not recorded"} · {initiative.openRooms} observed open rooms</p>
+            </li>)}
+          </CollapsibleList>
+        </details>
+      </Surface>
+
       <Surface id="coordination" className="mb-6" rounded="xl">
-        <details open={Boolean(operation)}>
-          <summary className="min-h-11 cursor-pointer text-base font-semibold text-[var(--dpf-text)]">Coordination · {coordination.rooms.length}{coordination.truncated ? "+" : ""} open</summary>
-          <p className="my-2 text-xs text-[var(--dpf-muted)]">Observed: {coordination.readAt}</p>
-          {operation ? <Link href="/ea/workrooms#coordination" className="inline-flex min-h-11 items-center text-sm text-[var(--dpf-accent)]">All operations</Link> : null}
-          {coordination.truncated ? <p className="text-sm text-[var(--dpf-muted)]">More rooms exist</p> : null}
+        <details open={Boolean(operation || query || status || after)}>
+          <summary className="min-h-11 cursor-pointer text-base font-semibold text-[var(--dpf-text)]">Coordination · {coordination.rooms.length} shown</summary>
+          <p className="my-2 text-xs text-[var(--dpf-muted)]">Open rooms · observed {coordination.readAt}</p>
+          {initiativeId !== null && !selectedInitiative ? <p>The selected initiative could not be resolved. No other operation is shown.</p> : null}
+          <details open={Boolean(query || status)}>
+          <summary className="min-h-11 cursor-pointer py-3 text-sm">Find a room</summary>
+          <FilterBar mode="url" basePath="/ea/workrooms" value={filters}
+            preserveKeys={["initiativeQuery"]}
+            className="my-3 [&_input]:min-h-11 [&_select]:min-h-11 [&_button]:min-h-11 [&_input]:text-sm [&_select]:text-sm [&_button]:text-sm"
+            facets={[
+              { kind: "search", key: "coordinationQuery", placeholder: "Search room title or ID" },
+              { kind: "select", key: "operation", label: "Operation", options: [{ value: "unmapped", label: "No value stream linked" }, ...definitions.map((definition) => ({ value: definition.id, label: definition.name })), ...initiativeOptions] },
+              { kind: "select", key: "coordinationStatus", label: "Room status", options: WORK_CAPSULE_STATUSES.filter((candidate) => !TERMINAL_CAPSULE_STATUSES.includes(candidate)).map((candidate) => ({ value: candidate, label: candidate.replaceAll("-", " ") })) },
+            ]} />
+          </details>
+          {!coordination.rooms.length ? <EmptyState size="sm" title="No matching open rooms" description="Change search or filters." /> : null}
           <ul className="divide-y divide-[var(--dpf-border)]">
             {coordination.rooms.map((room) => <li key={room.roomId} className="flex flex-wrap items-center justify-between gap-3 py-3">
               <div className="min-w-0">
                 <Link href={room.href} className="inline-flex min-h-11 items-center text-sm font-medium text-[var(--dpf-accent)] hover:underline">{room.title}</Link>
                 <p className="text-xs text-[var(--dpf-muted)]">{definitions.find((definition) => definition.id === room.teamId)?.name ?? "No value stream linked"}</p>
+                {room.initiativeRef && initiativeNames.has(room.initiativeRef) ? <p className="text-xs text-[var(--dpf-muted)]">{initiativeNames.get(room.initiativeRef)}</p> : null}
+                <p className="text-xs text-[var(--dpf-muted)]">{room.roomId}</p>
+                {room.waitReason ? <p className="mt-1 text-sm text-[var(--dpf-text)]">{room.waitReason}</p> : null}
+                <WorkroomCoordinationContext accountability={room.accountability} accountableName={room.accountableName}
+                  relationships={room.relationships} partial={coordination.contextPartial} />
               </div>
               <StatusBadge domain="workroom" status={room.status} size="md" uppercase={false} />
             </li>)}
           </ul>
+          <nav aria-label="Coordination pages" className="mt-3 flex flex-wrap gap-4 text-sm text-[var(--dpf-accent)]">
+            {after ? <Link className="inline-flex min-h-11 items-center" href={coordinationHref(null)}>First page</Link> : null}
+            {coordination.nextCursor ? <Link className="inline-flex min-h-11 items-center" href={coordinationHref(coordination.nextCursor)}>Next rooms</Link> : null}
+          </nav>
         </details>
       </Surface>
 
@@ -128,7 +197,7 @@ export default async function WorkroomArchitecturePage({ searchParams }: { searc
                 title={inventory.byRole[band.role] > 0
                   ? `${inventory.byRole[band.role]} open room${inventory.byRole[band.role] === 1 ? "" : "s"} here, none linked to a team plan`
                   : `No open rooms in ${band.label}`}
-                description="Team plans are not configured here. Rooms are listed under Coordination."
+                description="See Coordination for open rooms."
               />
             ) : (
               <div className="grid gap-4 xl:grid-cols-2">

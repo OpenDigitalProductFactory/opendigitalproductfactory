@@ -69,7 +69,7 @@ describe("RoomWorkforcePanel", () => {
       source: "explicit-room",
       inheritedFrom: [],
     });
-    expect(html).toContain("separate from who coordinates it");
+    expect(html).toContain("coordination and permissions are recorded separately");
   });
 
   it("groups delegated subagents under their delegator", () => {

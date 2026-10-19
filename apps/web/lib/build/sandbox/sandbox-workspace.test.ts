@@ -17,7 +17,7 @@ import { buildInstallCommands, installDepsAndStart } from "./sandbox-workspace";
 describe("buildInstallCommands", () => {
   it("returns the verified workspace install commands in order", () => {
     expect(buildInstallCommands()).toEqual([
-      "cd /workspace && pnpm install",
+      "cd /workspace && CI=true pnpm install",
       "cd /workspace && pnpm --filter @dpf/db exec prisma generate",
     ]);
   });
@@ -39,7 +39,7 @@ describe("installDepsAndStart", () => {
   it("runs workspace install and prisma generation before starting the preview server", async () => {
     await installDepsAndStart("dpf-sandbox-1");
 
-    expect(mockExecInSandbox).toHaveBeenNthCalledWith(1, "dpf-sandbox-1", "cd /workspace && pnpm install");
+    expect(mockExecInSandbox).toHaveBeenNthCalledWith(1, "dpf-sandbox-1", "cd /workspace && CI=true pnpm install");
     expect(mockExecInSandbox).toHaveBeenNthCalledWith(2, "dpf-sandbox-1", "cd /workspace && pnpm --filter @dpf/db exec prisma generate");
     expect(mockStartSandboxDevServer).toHaveBeenCalledWith("dpf-sandbox-1");
   });

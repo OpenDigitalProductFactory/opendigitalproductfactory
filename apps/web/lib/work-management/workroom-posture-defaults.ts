@@ -99,9 +99,18 @@ export async function setWorkroomPostureDefault(
       select: { autonomyPolicy: true },
     });
     const policy = asRecord(row?.autonomyPolicy);
+    // The control saves one field per click (pace, boundary, priority). A
+    // partial declaration MERGES over the decreed default; replacing it
+    // silently dropped "preauthorized" the moment the operator set the pace
+    // (observed live 2026-09-18, BI-397157EA).
+    const current = parseWorkroomPostureDefault(policy[DEFAULT_KEY]) ?? {};
+    const merged: RoomPostureDeclaration = {
+      ...current,
+      ...Object.fromEntries(Object.entries(next).filter(([, value]) => value !== undefined)),
+    };
     const res = await client.decisionPerspectiveProfile.updateMany({
       where: { profileId: PLATFORM_PROFILE_ID },
-      data: { autonomyPolicy: { ...policy, [DEFAULT_KEY]: next } },
+      data: { autonomyPolicy: { ...policy, [DEFAULT_KEY]: merged } },
     });
     return res.count > 0;
   } catch (err) {

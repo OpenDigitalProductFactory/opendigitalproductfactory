@@ -23,7 +23,7 @@
 //
 // Spec: docs/superpowers/specs/2026-09-02-platform-owned-client-configuration-design.md §1
 
-import { execFileSync } from "node:child_process";
+import { runGit } from "./git.mjs";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 
 /** Explicit operator/install override, highest precedence after config. */
@@ -52,20 +52,15 @@ export const WORKTREE_BASE_ENV = "DPF_WORKTREE_BASE";
  */
 export function resolveOwningClone(options = {}) {
   const cwd = options.cwd ?? process.cwd();
-  const exec =
-    options.exec ??
-    ((cmd, args, opts) => execFileSync(cmd, args, { ...opts, encoding: "utf8" }));
-
-  let common;
-  try {
-    common = String(exec("git", ["rev-parse", "--git-common-dir"], { cwd })).trim();
-  } catch (err) {
+  const result = runGit(["rev-parse", "--git-common-dir"], { cwd, exec: options.exec });
+  if (!result.ok) {
     throw new Error(
       `resolveOwningClone: ${cwd} is not inside a git repository, so it cannot own worktrees. ` +
         "A worktree base derived from a non-repository is how two bases appeared (BI-541156EE). " +
-        `(${err instanceof Error ? err.message : String(err)})`,
+        `(${result.stderr.trim()})`,
     );
   }
+  const common = result.stdout.trim();
 
   if (!common) {
     throw new Error(`resolveOwningClone: git returned no common dir for ${cwd}`);

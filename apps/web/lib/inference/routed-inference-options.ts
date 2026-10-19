@@ -26,6 +26,8 @@ export interface RouteAndCallOptions {
   taskType?: string;
   preferredProviderId?: string;
   preferredModelId?: string;
+  /** BI-7F2FBDA3: lineage of the preferred model, so an unavailable pin can find its family successor. */
+  preferredModelFamily?: string | null;
   requiresCodeExecution?: boolean;
   requiresWebSearch?: boolean;
   requiresComputerUse?: boolean;
@@ -63,6 +65,8 @@ export interface RouteAndCallOptions {
   minimumDimensions?: Record<string, number>;
   requiredModelClass?: ModelClass;
   interactionMode?: "sync" | "background";
+  /** Token-streaming capability demand; independent of completed vs async delivery. */
+  requiresStreaming?: boolean;
   /**
    * Semantic authority for a durable async route. The server resolves this to
    * the exact TaskRun/Workroom row; callers cannot pass an internal scope key.
@@ -124,6 +128,8 @@ export interface RouteAndCallOptions {
   routeContext?: string;
   effort?: "low" | "medium" | "high" | "max";
   previousResponseId?: string;
+  /** Store with responseId to prevent transferring provider context across accounts. */
+  previousResponseProviderConnectionId?: string;
   activityContract?: ActivityContract;
   agentDisplayName?: string;
   mcpSession?: import("@/lib/routing/adapter-types").AdapterMcpSession;

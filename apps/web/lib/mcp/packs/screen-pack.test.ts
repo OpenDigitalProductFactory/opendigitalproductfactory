@@ -165,7 +165,7 @@ describe("screen pack — handler envelopes", () => {
     );
   });
 
-  it("screen_dispatch_action executes the approved envelope's underlying tool and finalises", async () => {
+  it("screen_dispatch_action runs the approved envelope's underlying tool through the monitor and finalises", async () => {
     db.prisma.coworkerActionEnvelope.findUnique.mockResolvedValue({
       id: "ENV-1",
       status: "approved",
@@ -177,22 +177,52 @@ describe("screen pack — handler envelopes", () => {
       surfaceId: "build",
       domainActions: [{ actionId: "act", tool: "create_backlog_item" }],
     });
-    mcpTools.executeTool.mockResolvedValue({ success: true, message: "done" });
+    const governedDispatch = vi.fn().mockResolvedValue({ success: true, message: "done", governance: { durationMs: 3 } });
+
+    const result = await screenPack.handlers.screen_dispatch_action!(
+      { envelopeId: "ENV-1" },
+      "user-9",
+      { routeContext: "/build", governedDispatch },
+    );
+
+    expect(result.success).toBe(true);
+    // GPP PR-H: the monitor's nested dispatch, never a direct executeTool call.
+    expect(governedDispatch).toHaveBeenCalledWith("create_backlog_item", { foo: 1 });
+    expect(mcpTools.executeTool).not.toHaveBeenCalled();
+    expect((result.data as { toolResult: unknown }).toolResult).toEqual({ success: true, message: "done" });
+    expect(envelopeActions.markEnvelopeExecuted).toHaveBeenCalledWith("ENV-1");
+  });
+
+  it("screen_dispatch_action runs nothing outside the monitor and leaves the envelope approved", async () => {
+    db.prisma.coworkerActionEnvelope.findUnique.mockResolvedValue({
+      id: "ENV-1", status: "approved", manifestActionId: "act", argsJson: {}, delegatingUserId: "user-9",
+    });
+    manifests.findManifestForRoute.mockReturnValue({ surfaceId: "build", domainActions: [{ actionId: "act", tool: "create_backlog_item" }] });
+
+    const result = await screenPack.handlers.screen_dispatch_action!({ envelopeId: "ENV-1" }, "user-9", { routeContext: "/build" });
+
+    expect(result).toMatchObject({ success: false, error: "ungoverned_dispatch" });
+    expect(mcpTools.executeTool).not.toHaveBeenCalled();
+    expect(envelopeActions.markEnvelopeExecuted).not.toHaveBeenCalled();
+    expect(envelopeActions.markEnvelopeFailed).not.toHaveBeenCalled();
+  });
+
+  it("screen_dispatch_action refuses a caller who is not the envelope's delegating user", async () => {
+    db.prisma.coworkerActionEnvelope.findUnique.mockResolvedValue({
+      id: "ENV-1", status: "approved", manifestActionId: "act", argsJson: {}, delegatingUserId: "user-9",
+    });
+    manifests.findManifestForRoute.mockReturnValue({ surfaceId: "build", domainActions: [{ actionId: "act", tool: "create_backlog_item" }] });
+    const governedDispatch = vi.fn();
 
     const result = await screenPack.handlers.screen_dispatch_action!(
       { envelopeId: "ENV-1" },
       "user-1",
-      { routeContext: "/build" },
+      { routeContext: "/build", governedDispatch },
     );
 
-    expect(result.success).toBe(true);
-    expect(mcpTools.executeTool).toHaveBeenCalledWith(
-      "create_backlog_item",
-      { foo: 1 },
-      "user-9",
-      { routeContext: "/build" },
-    );
-    expect(envelopeActions.markEnvelopeExecuted).toHaveBeenCalledWith("ENV-1");
+    expect(result).toMatchObject({ success: false, error: "delegating_user_mismatch" });
+    expect(governedDispatch).not.toHaveBeenCalled();
+    expect(envelopeActions.markEnvelopeFailed).not.toHaveBeenCalled();
   });
 
   it("screen_dispatch_action refuses a non-approved envelope", async () => {

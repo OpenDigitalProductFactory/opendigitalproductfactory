@@ -270,3 +270,338 @@ recovery packet); authors do not hold the receipt writers directly, and that is
 the intended authority split, not a blocker. Reviewer receipts are bound to the
 immutable blob of this file at the reviewed commit, so any edit after a receipt
 requires the affected gates to be re-recorded at the new head.
+
+## PR-submit coding close and awaiting-acceptance (BI-7161625D)
+
+Operator-ratified 2026-09-07. This addendum extends OBJ-DC-2/3/4; it is not a
+second close-out design. Kernel scoring the same day preferred later verification
+over treating merge as `done` (9.52 vs 6.20). The operator then locked a sharper
+split: **coding ends when the merge-ready PR is submitted**, and **acceptance is
+a separate `BacklogItem.status` batched in verification loops that do not use the
+original thread, author, or worktree.**
+
+This supersedes the earlier "prove we do not need a new status" clause on
+BI-7161625D. Workroom `verifying` stays room liveness and is not reused as the
+item lifecycle.
+
+### Research note (medium-item design)
+
+Problem: `done` mixed coding close-out with live acceptance. Authoring threads
+were gone before `update_backlog_item_status(done)` could run, so shipped PRs
+stayed `open` and `get_next_recommended_work` kept offering them. Observed
+2026-09-07: BI-CA54ACC8 (#5126), BI-E54F7F87 (#4972), BI-D58567DC (#5044),
+BI-SIG-463E478D (#5052), BI-MCP-EFF-CD5F744B (#4899) were on `origin/main` and
+still `open`.
+
+Options considered:
+
+1. **Keep `done` as coding close; file misses as new BIs.** Fastest for authors;
+   collapses acceptance into merge. Rejected: kernel and operator require live
+   acceptance after deploy.
+2. **Leave items `open`/`in-progress` until a later verification loop marks
+   `done`.** No enum change. Rejected: the coding pool and next-work selector
+   cannot tell shipped work from unstarted work (the 467-item rot).
+3. **Add `awaiting-acceptance` and close coding at PR submit.** Chosen. DPF
+   opens PRs only when merge-ready (no drafts), so submit is a durable server
+   event. Verification stays independent.
+
+Benchmarks: GitHub can close issues on merge — too late for DPF, whose PRs are
+already merge-ready at open, and too early for acceptance (merge ≠ served SHA).
+Jira/Linear "In Review" is the analogue we adopt, as a closed Prisma enum value,
+not a free-form string. Argo Rollouts analysis and the parent spec's
+release-scoped acceptance still own the later pass (OBJ-DC-3).
+
+### Contracts added
+
+- **OBJ-DC-8:** A merge-ready GitHub PR for a linked BacklogItem moves that item
+  from `triaging`/`open`/`in-progress` to `awaiting-acceptance` without an
+  authoring-session tool call. The item leaves implementation-ready next-work.
+  `done` is reserved for batched verification against the served SHA.
+  (contract CT-DC-PR-SUBMIT)
+
+| Acceptance | Objectives | Statement |
+| --- | --- | --- |
+| AC-DC-8 | OBJ-DC-2, OBJ-DC-3, OBJ-DC-8 | Opening or marking ready a non-draft PR stamps the Workroom PR identity and moves the linked item to `awaiting-acceptance`. Withdrawing an unmerged PR returns it to `open`. `get_next_recommended_work` does not offer `awaiting-acceptance` as implementation-ready. A later verification loop moves a pass to `done` and files exactly one corrective BI on a fail, leaving the original in `awaiting-acceptance`. Already-PRed open items reconcile via Workroom `pullRequestNumber` or evidence `/pull/N` links without reconstructing the original session. |
+
+Legal transitions (extend `apps/web/lib/backlog/transitions.ts`; do not fork):
+
+- `triaging` / `open` / `in-progress` → `awaiting-acceptance` on PR submit
+- `awaiting-acceptance` → `done` on verification pass (`completeBacklogItemTransition`)
+- `awaiting-acceptance` → `open` if the PR is closed without merge
+- `awaiting-acceptance` → `retired` for discarded delivered demand
+
+Coding agents never own `awaiting-acceptance` → `done`. Federation does not
+project `awaiting-acceptance` (delivered locally, not open demand). Visibility
+gets a fourth bucket so the active coding lens does not show PRed work. Epic
+remaining-count still treats the item as unfinished until `done`/`retired`.
+
+Trigger: GitHub `pull_request` webhook on the existing
+`/api/platform/git/updates` intake. Push-only sandbox evaluation is unchanged.
+The actuator is server-side (`apps/web/lib/backlog/pr-submit-awaiting-acceptance.ts`)
+so it survives the authoring session. A bounded reconcile sweeps Workrooms that
+already have a PR number and items whose evidence links name `/pull/N`.
+
+Failure: reuse the existing corrective-intake fingerprint
+(`capture-corrective-bi.ts` pattern). Do not reopen the coding thread.
+
+## Deployment closure addendum — 2026-10-03, BI-7161625D
+
+The operator directed implementation of deployment-based BI closure and preparation of safe cleanup. For direct platform source delivery (the existing platform/common, no build/product/objective predicate), this supersedes earlier statements in this design that `done` always requires acceptance. A server-resolved merged PR included in the successful canonical deployment may close delivery. The terminal activity records deployment identity, closure basis and the actual acceptance state. Pending, unavailable or failed acceptance is never relabeled passed; a subsequent miss can create corrective work while the delivered original stays closed.
+
+Extend the existing governed completion transaction, durable activities, SelfUpgradeRun and canonical served identity. Missing proof, a mismatched repository/served identity, unmerged code, conflicting or malformed scope and denied authority cannot use this path. Product/customer acceptance retains its contract. No new lifecycle enum or parallel completion engine is introduced. The implementation plan is [deployment-based BI closure](../plans/2026-10-03-deployment-bi-closure.md).
+
+Delivery closure and source cleanup remain distinct decisions. Existing liveness, ownership, dirty-tree, pin and unmerged-work protections apply even to a closed BI. Prepare the concrete janitor report before any operator-approved removal. An unreadable ownership source means keep, never infer abandonment.
+
+## Retained acceptance binding — 2026-10-16, BI-E3B918C2
+
+DESIGN preparation only. This extends CT-DC-ACCEPTANCE, OBJ-DC-3/4 and AC-DC-6;
+it does not approve Large implementation or complete the release campaign.
+PR #6230 preserved wakeups and obligations but intentionally retained missing
+reviewer/revision bindings as unresolved. Small delivered BI-D33F968A is a real
+example. Medium-only 6451 recovery does not repair that Small obligation.
+
+Kernel DI-AF2BCA4787FD chose RuntimeVerification over overloading objective
+mappings with a non-baseline result variant. DI-CC29314E6113 chose independent
+final criteria adoption rather than adding a separate Small plan-approval gate.
+Both signals are usable, autonomy eligible and high confidence; their feature
+estimates are grade C, not measurements. Agent outcomes are recorded. Neither
+consult is native design approval, Large admission or acceptance.
+
+### Canonical result and immutable criteria
+
+Extend the existing final-acceptance RuntimeVerification result with a versioned
+server-owned binding. Reuse TaskRun, the acceptance sweep and Task Hub. Add no
+acceptance table, scheduler, provider, lifecycle status or parallel result ledger.
+Objective mappings and raw observations remain references to their own records.
+
+The binding identifies the original item/organization and canonical-deployment
+closure activity; contract/version/digest; immutable criteria and check-plan
+artifact; delivered repository/authored head/verified merge; installation,
+actual served SHA and successful upgrade generation; tenant/persona/fixture and
+check-definition digests; observation interval/evidence; and authenticated
+reviewer/authority and exact reviewer-run generation. An acceptance_owed snapshot
+is a projection, not the original obligation identity.
+
+Use existing Document/DocumentVersion managed Markdown storage for prospective
+criteria/check plans. Bind the exact version row and server-computed contentSha256,
+not Document.currentVersionId alone. Source references distinguish original
+criteria proven by existing artifacts/history from prospective check procedures.
+Keep original body/source authors and the substantive plan author attributable.
+A current BI body is an input with a captured digest; editing it cannot rewrite
+the issued version or alter an in-flight result.
+
+Proposed interface: extend the existing record_initiative_evidence operation set
+with a governed acceptance-plan preparation operation. It accepts the item,
+original closure reference, genuine criteria source references and proposed check
+content. The service re-resolves subject/organization/closure/source authority,
+computes the digest and records the authenticated author through the existing
+document-store version writer. It creates no initiative scope baseline and
+grants no acceptance power. A missing original criteria provenance returns a
+typed criteria-provenance-missing remedy naming the actual owning principal or
+unresolved role and this preparation operation; it does not silently substitute
+a new goal or an unexplained empty gate list.
+
+The preparation writer must reuse an extracted DB-only version append port from
+saveManagedDocument, not call its outer transaction or embedding/rendition work
+inside another transaction. Lock the item before the stable obligation document;
+identical normalized content/provenance reuses the existing version, while a
+substantive change appends a version. Keep managed-document projections after
+commit. Preserve document history and applicable artifact retention pins.
+Use immutable DocumentVersion.createdBy for version authorship; the mutable
+Document.createdBy projection cannot replace original or substantive authors.
+Adopting unchanged bytes preserves that authorship rather than rewriting it.
+This is a proposed extension, not a currently available live operation.
+
+For Small retained obligations, introduce no separate plan-approval gate. The
+independently eligible final verifier judges the frozen plan adequate for the
+original named criteria within its existing acceptance mandate and records that
+judgment AND actual runtime observations in one typed receipt. Adoption alone
+never fulfills acceptance. Inadequate or unproven criteria remain unresolved.
+E3 implementation still owes its own Large approvals; they do not approve a
+Small acceptance plan. Existing governed baseline approvals retain their rules.
+
+Substantive authorship includes changing criteria, expected results, thresholds
+or claimed coverage. Such an author cannot verify that scope. Acknowledging an
+unchanged artifact is adoption, not authorship. Selecting permitted execution
+details within its frozen procedure is not a new approval gate; changing material
+fixture/context requires a new immutable binding and appropriate checks.
+Cosmetic formatting, a new nonce, a different actor or a digest representation
+change does not create a new acceptance obligation or authorize duplicate checks.
+Resolve any relevant uncertain original execution through its supported recovery
+contract before dispatch; a new packet cannot route around that uncertainty.
+
+### Issuer, shape and actual execution context
+
+Extend the existing acceptance-verification shape with a deliberate 1.2.0
+successor; preserve pinned 1.0.0/1.1.0 definitions. The verify stage adds
+record_runtime_verification to its existing mandated tools and declares exactly
+the canonical required grant work_capsule_write. A shape ceiling never grants
+that permission to a live actor: owner selection must find an actually eligible
+independent actor with the existing effective grants/capabilities. Missing grants
+or a pinned old shape returns an owning remedy through normal role assignment
+or rebind_workroom_shape; never silently upgrade a room or widen permissions.
+
+Extend issuance alongside issueAcceptanceObjectiveMappingPacket with a distinct
+typed retained-runtime packet. Existing baseline-mapping packets remain unchanged.
+Freeze criteria/version/digest, original closure, delivered subject, check context
+and applicable runtime BEFORE check dispatch. Reuse server-owned request HMAC
+and deterministic task identity; do not accept a caller-made binding flag.
+
+The sweep records that packet as its own latest steward-room activity. Extend
+the existing steward authority chain: exact acceptanceRoomKey/capsule/source and
+outcome anchor, supported shape and verify-role binding, sweep-authored latest
+packet, authenticated request digest, matching target agent, working TR-SCHED
+sourceRef and exclusion of delivery/criteria/plan authors. Do not reuse an
+unrelated uncertain review TaskRun or its budget.
+
+Use the existing acceptance steward Workroom row as the shared packet-generation
+fence. Retained packet issuance, replacement, withdrawal and completion lock that
+same row and reread the latest packet and role binding under it. Whichever wins
+the fence first is authoritative: a committed withdrawal cannot be followed by
+a completion using the withdrawn packet. Serializable reads alone do not supply
+this ordering. Audit global-sweep issuance and reviewer completion for inversions.
+
+Propagate ToolContext.taskRunId through runtime-coordination/mcp-handlers.ts into
+the typed runtime writer. Resolve the packet from server records and the actual
+TaskRun; public result JSON is never authority. Enforce the same reserved
+acceptance namespace in the shared runtime service so another ordinary writer
+cannot forge it. Existing ordinary health/unit/UX observations remain unchanged.
+The issuer and writer are proposed changes requiring normal Large admission.
+
+### Reviewer identity and real transaction fences
+
+Resolve the actual canonical Principal using reviewer-identity/GAID precedence.
+Fail closed on absent or ambiguous identity; the generic actor helper's null
+fallback is insufficient here. Exclude the full source delivery agent set AND
+authenticated source, criteria and substantive plan author principals. Agent-only
+delivery-actors.ts is not a human/principal exclusion set. Different chats with
+the same accountable identity are not independent.
+
+The reviewer's ownership is its own generation, not the global sweep's completed
+lease. Reuse/extract the existing scheduled-task ownership protocol for the
+reviewer ScheduledAgentTask: an owner token, exact TaskRun and expiry are bound
+before execution and renewed only by that worker. A successor changes the token;
+an expired or stale reviewer cannot commit even if its TaskRun still says working.
+
+Require a real serializable transaction for typed acceptance; do not use the
+generic inTransaction fallback fn(db). Pass the same transaction client through
+authority/exclusions, ownership, duplicate lookup/create and projection writes.
+Use this lock order for the new path: installation quiescence row; reviewer
+ScheduledAgentTask; TaskRun; BacklogItem; acceptance steward Workroom;
+immutable closure/document/source-room
+bindings; then authoritative permission/binding rows in stable table/id order.
+Audit existing interacting paths against it before implementation.
+
+Take a shared lock on the existing PlatformConfig portal.quiescence row and
+require persisted normal state. Canonical upgrades must update this same row
+before drain/swap, so their write serializes with acceptance completion. Re-read
+the authoritative successful SelfUpgradeRun generation and served identity
+under this fence. Missing row, ambiguous generation, changed target or unknown
+state refuses completion; a pre-transaction network read alone is insufficient.
+Test every supported canonical upgrade path rather than assuming it shares this
+protocol. No host-maintenance or direct-runtime substitute is authorized.
+
+Resolve current actor capabilities/grants and applicable token/mandate authority
+inside the same transaction. Lock the actual authority rows read, not merely a
+Principal row that a grant deletion need not touch. Expiry uses database wall
+clock and is rechecked before commit. Revocation visible at completion refuses
+a new write. Once a valid receipt exists, later ordinary revocation preserves
+that historical judgment; it is not re-authorized using today's grants or a
+rotated secret. An explicit relevant invalidating finding is a separate fact.
+
+### Primary attachment, duplicate and historical fulfillment
+
+Add a context-validated retained-acceptance branch to the existing input validator.
+Its sole primary attach point is the exact same-item/org status_change activity
+with to=done and closureBasis=canonical-deployment. The current generic validator
+does not count backlogActivityId. Reject competing runtime/build/candidate/room
+or activity primary attachments; secondary runtime/room references belong in
+the validated binding. Ordinary observation attachment rules stay unchanged.
+
+Derive verificationId on the server from the canonical original closure,
+contract/criteria/check-plan context, installation, campaign upgrade identity
+and admitted reviewer execution identity. Use the existing unique verificationId
+constraint and item/reviewer fences. Equal concurrent completion returns one
+existing receipt; conflicting verdict/evidence refuses. Compare immutable semantic
+content, excluding freshly generated audit timestamps/decision identifiers.
+Do not change a passed result to fit a later contract.
+
+The typed writer atomically records the result and a validated fulfillment
+reference through the existing acceptance_owed projection. RuntimeVerification
+is authoritative; the snapshot is a checked pointer/digest, not a second result
+ledger. It retains the accepted actor/authority/request snapshot needed after
+ephemeral TaskRun/audit retention or key rotation. Generic notes and unbound
+result JSON cannot create that pointer or become acceptance.
+
+Use unique-ID lookup for a known issued execution/fulfillment pointer. Recovery
+and history query exact backlogActivityId plus kind=final-acceptance, ordered
+createdAt DESC,id DESC with a strict tuple cursor and bounded 100-row pages.
+Add a forward-only index on those existing columns after real query-plan
+qualification. Persist incomplete lookup continuation in the existing acceptance
+room/controller state; no latest-N cap may silently hide a relevant receipt.
+Newer unrelated observations are ignored; an authenticated relevant newer
+failure or unsupported binding version remains explicit. Revalidate the read
+generation before committing a projection. Test at least 10,000 receipts with
+equal timestamps and interrupted paging; EP-WORKROOM-CLOSEOUT owns fleet scale.
+
+A known pointer proves its receipt, not the absence of subsequent relevant facts.
+Use the existing steward Workroom activitySequence as the current-through
+watermark, scoped to the obligation and contract in the projection. All typed
+result, criteria/contract and invalidating-observation writers lock the same item
+and steward row and append their existing Workroom activity in that transaction.
+The writer's activity generation orders committed facts; receipt insertion time
+does not determine observation recency. Preserve the admitted campaign/runtime
+generation and observation interval to distinguish delayed older observations
+from a genuinely later relevant failure; ambiguous overlap stays unresolved.
+Recheck the sequence under the projection fence; on change, resolve intervening
+relevant events before publishing current acceptance. An interrupted scan yields
+pending/unresolved current applicability while preserving historical Verified
+on N. Do not treat acceptance_owed snapshots as cached current verdicts. Prove
+that every supported relevant writer participates; an unfenced path prevents
+this optimization rather than allowing an assumed current pass.
+
+Separate two predicates. Admission/write requires the exact current applicable
+runtime and refuses rollback/drift between preparation and commit. A valid
+immutable result fulfills its named original obligation/campaign and remains
+Verified on release N after unrelated N+1. It does not certify N+1. A later SHA
+inequality alone neither erases that fulfillment nor reopens every original.
+Explicit changed contract/new campaign or a later relevant observed failure
+owns additional work. Do not give an old pass to a new obligation.
+
+The sweep consumes validated receipts before its unresolved fallback. Keep
+delivered originals Done; behavior failure uses existing deduplicated corrective
+intake, while infrastructure/incomplete execution uses bounded existing retry.
+Preserve fail/incomplete panels, review rounds and every original Task. This
+receipt cannot settle unrelated child processes/remote effects or authorize
+old uncertain-review replay.
+
+### Operator view, compatibility and verification
+
+Use the existing Task Hub/read model: delivery Done with separate acceptance
+Pending, Passed, Failed or Unresolved, actual next owner/event and Verified on N
+versus current applicability. Details expose immutable criteria, reviewer,
+check context and evidence. Reuse theme tokens, focus behavior and narrow-screen
+components. No new dashboard, author-session retention or routine approval loop.
+
+Legacy, malformed, caller-forged and unknown-version data cannot become a pass.
+Mixed-version readers remain explicit. Rollback disables the new actuator/consumer
+while preserving all observations, receipts and pending work; no invented
+historical backfill or bulk status rewrite. Preserve accepted history separately
+from current verification freshness.
+
+[in-toto Statement v1](https://github.com/in-toto/attestation/blob/main/spec/v1/statement.md)
+supports immutable subject/type separation; use existing DPF authority/persistence,
+not another signing service.
+[Argo Rollouts analysis](https://argo-rollouts.readthedocs.io/en/stable/features/analysis/)
+separates check definitions/executions and retains inconclusive results; absorb
+those semantics into the existing sweep, not another controller.
+
+Required first-failing tests cover real issuer-to-drive-to-TaskRun-to-writer
+context, pinned shapes/missing grants, Small criteria provenance/adoption and
+author exclusions, closure-only attachment, equal/conflicting concurrency,
+stale reviewer after sweep completion/takeover, grant revocation, upgrade between
+preparation and commit, rollback, historical N→N+1 display, changed contract and
+later failure, malformed/future versions, and bounded 10,000-receipt recovery.
+Run real PostgreSQL and native adapters before containing-release acceptance.
+All implementation, new tests and native Large approvals remain unrun. See the
+[existing wakeup plan](../plans/2026-10-12-acceptance-upgrade-wakeup.md).

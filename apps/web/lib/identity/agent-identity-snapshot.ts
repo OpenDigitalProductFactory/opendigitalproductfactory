@@ -1,5 +1,7 @@
 import { prisma } from "@dpf/db";
 import { collapseDualSeedDuplicates } from "@/lib/coworker-record/selectable-coworker";
+import { coworkerAuthorityAgentId } from "@/lib/coworker-identity";
+import { persistedAgentToolGrants } from "@/lib/tak/agent-grants";
 
 import {
   projectInternalAIDoc,
@@ -18,6 +20,7 @@ export type AgentIdentitySnapshot = {
   lifecycleStage: string;
   humanSupervisorId: string | null;
   linkedPrincipalId: string | null;
+  dataAccess?: string[];
   gaid: string | null;
   aidoc: InternalAIDoc | null;
   authorizationClasses: GaidAuthorizationClass[];
@@ -82,10 +85,12 @@ export async function listAgentIdentitySnapshots(
           grantKey: true,
         },
       },
+      toolGrantRevocations: { select: { grantKey: true } },
     },
   });
 
   const agents = collapseDualSeedDuplicates(agentsRaw);
+  const authorityById = new Map(agentsRaw.map(agent => [agent.agentId, agent]));
 
   const [aliases, modelConfigs, memoryFacts] = await Promise.all([
     db.principalAlias.findMany({
@@ -97,6 +102,7 @@ export async function listAgentIdentitySnapshots(
         aliasType: true,
         aliasValue: true,
         principalId: true,
+        principal: { select: { sensitivityClearance: true } },
       },
     }),
     db.agentModelConfig.findMany({
@@ -129,6 +135,8 @@ export async function listAgentIdentitySnapshots(
       .filter((alias) => alias.aliasType === "agent")
       .map((alias) => [alias.aliasValue, alias.principalId]),
   );
+  const dataAccessByAgentId = new Map(aliases.filter((alias) => alias.aliasType === "agent")
+    .map((alias) => [alias.aliasValue, alias.principal?.sensitivityClearance ?? ["public"]]));
   const gaidByPrincipalId = new Map(
     aliases
       .filter((alias) => alias.aliasType === "gaid")
@@ -155,6 +163,7 @@ export async function listAgentIdentitySnapshots(
       ? projectInternalAIDoc({
           gaid,
           principalRef: linkedPrincipalId,
+          authorityGrants: persistedAgentToolGrants(authorityById.get(coworkerAuthorityAgentId(agent.agentId))),
           agent: agent as AIDocProjectionSource["agent"],
           modelConfig: modelConfigByAgentId.get(agent.agentId) ?? null,
         })
@@ -185,6 +194,7 @@ export async function listAgentIdentitySnapshots(
       lifecycleStage: agent.lifecycleStage,
       humanSupervisorId: agent.humanSupervisorId,
       linkedPrincipalId,
+      dataAccess: dataAccessByAgentId.get(agent.agentId) ?? ["public"],
       gaid,
       aidoc,
       authorizationClasses: aidoc?.authorization_classes ?? [],

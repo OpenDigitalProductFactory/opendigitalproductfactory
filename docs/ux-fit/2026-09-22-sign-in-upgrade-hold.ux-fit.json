@@ -1,0 +1,28 @@
+{
+  "version": "1",
+  "decidedOption": "server-render-hold-and-boundary-probe",
+  "decisionInteractionId": "DI-A2F3F879D442",
+  "scope": {
+    "files": [
+      "apps/web/components/auth/UpgradeHold.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "decisionInteractionId": "DI-A2F3F879D442",
+    "consideredOptions": [
+      "server-render-hold-and-boundary-probe",
+      "proxy-renders-html-hold-for-browser-posts",
+      "client-polls-before-submit-only"
+    ]
+  },
+  "notes": {
+    "decision": "Fits with guardrails. The sign-in page itself says the platform is upgrading, on arrival, and the auth error boundary asks the platform before blaming the page. No proxy or transport change; the hold has no controls and retries on the server's cadence.",
+    "persona": "A person who opens the portal during a self-upgrade reads one sentence that says what is happening and that nothing is needed from them, and is signed in normally a few minutes later without touching anything.",
+    "reuse": "Composes Surface. The quiescence truth comes from the existing allow-listed state route the proxy already reads; the server render uses the existing getQuiescenceConfig.",
+    "sourceTruth": "PlatformConfig quiescence level and run id via getQuiescenceConfig on the server and /api/internal/quiescence-state in the browser. Nothing is stored client-side.",
+    "states": "Normal: unchanged sign-in form. Draining or swapping on arrival: the hold instead of the form. Submit that raced the drain: the boundary probes and shows the hold instead of the generic card; a probe failure is unknown and keeps the generic card. Run id shown as text for support; no colour-only meaning; role=status, aria-live=polite.",
+    "aiBoundary": "No coworker prompt; nothing is sent anywhere but the platform's own state route.",
+    "verification": "Unit tests: the hold's copy and self-resume on the retry cadence, the boundary choosing the hold only when quiescing, the page rendering the hold instead of the form while draining (10/10 with the error-card suite). Live verification: the next governed self-upgrade on this install is the real check and is recorded on the backlog item when it happens; until then the UX check is reported as unit-verified, not live-verified."
+  }
+}

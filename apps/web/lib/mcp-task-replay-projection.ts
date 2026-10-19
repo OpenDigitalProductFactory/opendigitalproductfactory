@@ -1,10 +1,15 @@
 import { parseResourceWaitProjection } from "./mcp-task-capacity-contract";
+import { hasExecutionUncertainty, EXECUTION_UNCERTAIN_MESSAGE } from "./shared/execution-uncertainty";
 import type { Prisma } from "@dpf/db";
 import {
   recoverTerminalWriterEscalation,
   terminalWriterEscalationMessage,
   terminalWriterEscalationStructuredContent,
   terminalWriterEscalationWaitReason,
+  TERMINAL_WRITER_REJECTED_WAIT_REASON,
+  terminalWriterRejectionMessage,
+  terminalWriterRejectionStructuredContent,
+  type TerminalWriterRejection,
 } from "./mcp-task-terminal-writer-escalation";
 
 export type TerminalWriterWait = {
@@ -17,6 +22,10 @@ export type TerminalWriterWait = {
   dispatchContract?: "required-tool-call" | "receipt-verified";
   noncompliance?: "prose-without-required-writer";
   validationFailure?: { error: string; message: string; proposal?: Prisma.JsonValue };
+  /** BI-50B0C471: the wait was caused by a capacity deferral after banked reads,
+   * not by the writer; resuming it does not spend a writer attempt. */
+  capacityDeferred?: "capacity" | "busy";
+  writerRejection?: TerminalWriterRejection;
 };
 
 type TerminalWriterDispatchFailure = {
@@ -51,6 +60,7 @@ export function parseTerminalWriterWait(value: unknown): TerminalWriterWait | nu
       && wait["dispatchContract"] !== "required-tool-call"
       && wait["dispatchContract"] !== "receipt-verified")
     || (wait["noncompliance"] !== undefined && wait["noncompliance"] !== "prose-without-required-writer")
+    || (wait["capacityDeferred"] !== undefined && wait["capacityDeferred"] !== "capacity" && wait["capacityDeferred"] !== "busy")
   ) return null;
   return wait as TerminalWriterWait;
 }
@@ -97,8 +107,30 @@ export function projectRemoteTaskReplay(input: {
       },
     };
   }
+  // Historical wait details remain audit evidence, not permission to revive a
+  // terminal task. Explicit recovery must reserve a new dispatch first.
+  if (["failed", "canceled", "rejected", "archived"].includes(input.existing.status)) {
+    return { kind: "result", result: {
+      taskRunId: input.existing.taskRunId, status: input.existing.status,
+      idempotentReplay: true, requiresApproval: false, resumable: false,
+      progressPayload: input.existing.progressPayload, a2aMetadata: input.existing.a2aMetadata,
+    } };
+  }
+  if (hasExecutionUncertainty(input.existing.progressPayload)) {
+    return { kind: "result", result: {
+      taskRunId: input.existing.taskRunId, status: input.existing.status,
+      idempotentReplay: true, requiresApproval: false, resumable: false,
+      waitReason: "execution-uncertain", content: remoteTaskContent(EXECUTION_UNCERTAIN_MESSAGE),
+      progressPayload: input.existing.progressPayload, a2aMetadata: input.existing.a2aMetadata,
+      isError: false,
+    } };
+  }
   const terminalWriterEscalation = recoverTerminalWriterEscalation(input.existing.progressPayload);
   const terminalWriterWait = parseTerminalWriterWait(input.existing.progressPayload);
+  const recordedRejection = terminalWriterWait?.writerRejection;
+  const writerRejection = recordedRejection?.schemaVersion === 1
+    && optionalString(recordedRejection.error) && optionalString(recordedRejection.message)
+    && optionalString(recordedRejection.observedAt) ? recordedRejection : null;
   const terminalWriterDispatchFailure = parseTerminalWriterDispatchFailure(
     input.existing.progressPayload,
     terminalWriterWait,
@@ -125,9 +157,17 @@ export function projectRemoteTaskReplay(input: {
         waitReason: terminalWriterDispatchFailure.code,
         structuredContent: { error: terminalWriterDispatchFailure.code },
         isError: true,
+      } : terminalWriterWait && writerRejection ? {
+        resumable: true,
+        waitReason: TERMINAL_WRITER_REJECTED_WAIT_REASON,
+        content: remoteTaskContent(terminalWriterRejectionMessage(terminalWriterWait.writerToolName, writerRejection)),
+        structuredContent: terminalWriterRejectionStructuredContent(
+          terminalWriterWait.writerToolName, terminalWriterWait.attempt, writerRejection),
+        isError: false,
       } : terminalWriterWait ? {
         resumable: true,
-        waitReason: terminalWriterWait.kind,
+        // BI-50B0C471: a wait the writer never caused replays as the capacity wait it is.
+        waitReason: terminalWriterWait.capacityDeferred ? "provider-capacity" : terminalWriterWait.kind,
       } : resourceWait ? {
         resumable: true,
         waitReason: "provider-capacity",

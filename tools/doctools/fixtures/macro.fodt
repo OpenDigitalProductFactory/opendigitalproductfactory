@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Auto-run macro fixture: a Basic macro bound to every document
+     event (load, save-to/copy-to, layout, view, unload, ...)
+     writes /tmp/dpf-macro-marker. The hardened profile must stop it running. -->
+<office:document xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" xmlns:script="urn:oasis:names:tc:opendocument:xmlns:script:1.0" xmlns:ooo="http://openoffice.org/2004/office" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:dom="http://www.w3.org/2001/xml-events" office:version="1.3" office:mimetype="application/vnd.oasis.opendocument.text">
+ <office:scripts>
+  <office:script script:language="ooo:Basic">
+   <ooo:libraries>
+    <ooo:library-embedded ooo:name="Standard">
+     <ooo:module ooo:name="AutoRun">
+      <ooo:source-code>Sub Main
+  Dim n As Integer
+  n = FreeFile
+  Open &quot;/tmp/dpf-macro-marker&quot; For Output As #n
+  Print #n, &quot;macro ran&quot;
+  Close #n
+End Sub
+</ooo:source-code>
+     </ooo:module>
+    </ooo:library-embedded>
+   </ooo:libraries>
+  </office:script>
+  <office:event-listeners>
+   <script:event-listener script:language="ooo:script" script:event-name="dom:load" xlink:href="vnd.sun.star.script:Standard.AutoRun.Main?language=Basic&amp;location=document"/>
+   <script:event-listener script:language="ooo:script" script:event-name="dom:unload" xlink:href="vnd.sun.star.script:Standard.AutoRun.Main?language=Basic&amp;location=document"/>
+   <script:event-listener script:language="ooo:script" script:event-name="office:load-finished" xlink:href="vnd.sun.star.script:Standard.AutoRun.Main?language=Basic&amp;location=document"/>
+   <script:event-listener script:language="ooo:script" script:event-name="office:create" xlink:href="vnd.sun.star.script:Standard.AutoRun.Main?language=Basic&amp;location=document"/>
+   <script:event-listener script:language="ooo:script" script:event-name="office:new" xlink:href="vnd.sun.star.script:Standard.AutoRun.Main?language=Basic&amp;location=document"/>
+   <script:event-listener script:language="ooo:script" script:event-name="office:prepare-unload" xlink:href="vnd.sun.star.script:Standard.AutoRun.Main?language=Basic&amp;location=document"/>
+   <script:event-listener script:language="ooo:script" script:event-name="office:save" xlink:href="vnd.sun.star.script:Standard.AutoRun.Main?language=Basic&amp;location=document"/>
+   <script:event-listener script:language="ooo:script" script:event-name="office:save-done" xlink:href="vnd.sun.star.script:Standard.AutoRun.Main?language=Basic&amp;location=document"/>
+   <script:event-listener script:language="ooo:script" script:event-name="office:save-as" xlink:href="vnd.sun.star.script:Standard.AutoRun.Main?language=Basic&amp;location=document"/>
+   <script:event-listener script:language="ooo:script" script:event-name="office:save-as-done" xlink:href="vnd.sun.star.script:Standard.AutoRun.Main?language=Basic&amp;location=document"/>
+   <script:event-listener script:language="ooo:script" script:event-name="office:copy-to" xlink:href="vnd.sun.star.script:Standard.AutoRun.Main?language=Basic&amp;location=document"/>
+   <script:event-listener script:language="ooo:script" script:event-name="office:copy-to-done" xlink:href="vnd.sun.star.script:Standard.AutoRun.Main?language=Basic&amp;location=document"/>
+   <script:event-listener script:language="ooo:script" script:event-name="office:copy-to-failed" xlink:href="vnd.sun.star.script:Standard.AutoRun.Main?language=Basic&amp;location=document"/>
+   <script:event-listener script:language="ooo:script" script:event-name="office:view-created" xlink:href="vnd.sun.star.script:Standard.AutoRun.Main?language=Basic&amp;location=document"/>
+   <script:event-listener script:language="ooo:script" script:event-name="office:prepare-view-closing" xlink:href="vnd.sun.star.script:Standard.AutoRun.Main?language=Basic&amp;location=document"/>
+   <script:event-listener script:language="ooo:script" script:event-name="office:view-close" xlink:href="vnd.sun.star.script:Standard.AutoRun.Main?language=Basic&amp;location=document"/>
+   <script:event-listener script:language="ooo:script" script:event-name="office:modify-changed" xlink:href="vnd.sun.star.script:Standard.AutoRun.Main?language=Basic&amp;location=document"/>
+   <script:event-listener script:language="ooo:script" script:event-name="office:title-changed" xlink:href="vnd.sun.star.script:Standard.AutoRun.Main?language=Basic&amp;location=document"/>
+   <script:event-listener script:language="ooo:script" script:event-name="office:visarea-changed" xlink:href="vnd.sun.star.script:Standard.AutoRun.Main?language=Basic&amp;location=document"/>
+   <script:event-listener script:language="ooo:script" script:event-name="office:mode-changed" xlink:href="vnd.sun.star.script:Standard.AutoRun.Main?language=Basic&amp;location=document"/>
+   <script:event-listener script:language="ooo:script" script:event-name="office:storage-changed" xlink:href="vnd.sun.star.script:Standard.AutoRun.Main?language=Basic&amp;location=document"/>
+   <script:event-listener script:language="ooo:script" script:event-name="office:page-count-change" xlink:href="vnd.sun.star.script:Standard.AutoRun.Main?language=Basic&amp;location=document"/>
+   <script:event-listener script:language="ooo:script" script:event-name="office:layout-finished" xlink:href="vnd.sun.star.script:Standard.AutoRun.Main?language=Basic&amp;location=document"/>
+   <script:event-listener script:language="ooo:script" script:event-name="office:print" xlink:href="vnd.sun.star.script:Standard.AutoRun.Main?language=Basic&amp;location=document"/>
+   <script:event-listener script:language="ooo:script" script:event-name="dom:DOMFocusIn" xlink:href="vnd.sun.star.script:Standard.AutoRun.Main?language=Basic&amp;location=document"/>
+   <script:event-listener script:language="ooo:script" script:event-name="dom:DOMFocusOut" xlink:href="vnd.sun.star.script:Standard.AutoRun.Main?language=Basic&amp;location=document"/>
+   <script:event-listener script:language="ooo:script" script:event-name="office:start-app" xlink:href="vnd.sun.star.script:Standard.AutoRun.Main?language=Basic&amp;location=document"/>
+   <script:event-listener script:language="ooo:script" script:event-name="office:close-app" xlink:href="vnd.sun.star.script:Standard.AutoRun.Main?language=Basic&amp;location=document"/>
+  </office:event-listeners>
+ </office:scripts>
+ <office:body>
+  <office:text>
+   <text:p>DPFSENTINELMACRO document with an auto-run macro.</text:p>
+  </office:text>
+ </office:body>
+</office:document>

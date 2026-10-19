@@ -38,7 +38,7 @@ export async function createDigitalProduct(input: ProductInput): Promise<void> {
     include: { portfolio: true },
   });
 
-  // Project to Neo4j — fire and forget, never blocks the response
+  // Project to the graph mirror — fire and forget, never blocks the response
   syncDigitalProduct({
     productId:       dp.productId,
     name:            dp.name,
@@ -46,7 +46,7 @@ export async function createDigitalProduct(input: ProductInput): Promise<void> {
     lifecycleStatus: dp.lifecycleStatus,
     portfolioSlug:   dp.portfolio?.slug ?? null,
     taxonomyNodeId:  dp.taxonomyNodeId ?? null,
-  }).catch((err) => console.error("[neo4j] syncDigitalProduct failed:", err));
+  }).catch((err) => console.error("[graph] syncDigitalProduct failed:", err));
 
   revalidatePath("/portfolio");
   revalidatePath("/inventory");
@@ -74,7 +74,7 @@ export async function updateDigitalProduct(id: string, input: ProductInput): Pro
     lifecycleStatus: dp.lifecycleStatus,
     portfolioSlug:   dp.portfolio?.slug ?? null,
     taxonomyNodeId:  dp.taxonomyNodeId ?? null,
-  }).catch((err) => console.error("[neo4j] syncDigitalProduct failed:", err));
+  }).catch((err) => console.error("[graph] syncDigitalProduct failed:", err));
 
   revalidatePath("/portfolio");
   revalidatePath("/inventory");

@@ -1,6 +1,6 @@
 import { prisma } from "@dpf/db";
 
-import type { ToolResult } from "@/lib/mcp-tools";
+import type { ToolResult } from "@/lib/mcp-tool-types";
 import {
   RUNTIME_TARGET_KINDS,
   RUNTIME_TARGET_STATUSES,

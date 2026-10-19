@@ -41,13 +41,46 @@ An action is damaging when it declares a consequence (outward, irreversible, aut
 
 A damaging action is decided by a person; a coworker's steering does not decide damage.
 
-Automated steering is a recorded, server-resolved fact about the action itself: independent-reviewer, room-authority, wwmd.
+Automated steering is a recorded, server-resolved fact about the action itself: independent-reviewer, room-authority, wwmd, scheduled-mandate, connection-delegation.
+
+A governed scheduled task steers only the tools its registry entry declares; it gets no licence for anything it did not declare.
+
+An external assistant steers only through its human's current OAuth consent, revalidated on the call and bounded by the consented scopes; a personal access token or an unbound connection steers nothing.
+
+A cadence is a recorded decision. Installing one declares what a coworker may write, how often, and with which tool, before any run exists — so a declared write on an unattended cadence is not put to a person who, by definition, is not there. A scheduled run carries no Workroom, so without this it could never reach any steering branch at all: the marketing coworker reached its brief-writing tool on 2026-09-21, was parked on a fifteen-minute approval envelope twice, and produced nothing, as it had every week since 2026-08-31.
+
+A consent is a recorded delegation. When a person connects an assistant over OAuth, they approve that exact assistant for listed scopes, and the platform rechecks that consent on every call. Asking the same person to approve each routine write inside it is a rubber stamp, not a control: on 2026-09-23 an assistant's Workroom evidence, runtime verification and a backlog item the person had just requested all parked on generic cards, while the same person on a personal token was never asked. Damage still reaches a person, and independent review stays a separate principal's decision (BI-12E5DD91).
 
 A non-damaging action with steering is decided automatically and mints no approval envelope.
 
 A non-damaging action with no steering reaches a human only when it has a side effect; an immediate read never escalates.
 
 A tool declared as a proposal is always put to a person, because that is its declared shape.
+
+A coworker set to propose, not act, puts every change it attempts to a person, and no recorded policy decides it on that person's behalf.
+
+## Decision outcomes
+
+A decision reaches a person if and only if it is damaging: critical risk, a declared consequence, a crossed threshold, or a regulation.
+
+Damage precedes a decisive corpus result and remains declared by the caller when evaluation fails.
+
+A non-damaging decision answered by the corpus stays decided; a decisive decline does not permit the step.
+
+Every other non-damaging decision routes to independent review with its corpus, vector, capability, policy-limit or evaluation-fault follow-on recorded.
+
+Legacy rows with no recorded escalation route retain their existing human-review and replay behavior.
+
+Novelty alone does not require a person. A new proposition aligned with recorded
+guidance may proceed within the existing delegated risk and confidence policy;
+its novelty remains recorded. Independent review remains outstanding under the
+current R3 interim, which permits the step within its existing authority.
+BI-E27F3600 owns reviewer execution and the qualified change from that interim.
+
+The route is recorded separately from the evaluation outcome. Human queues and
+capture actions read the route; uncertainty and craft-gap analysis retain the
+original evaluation outcome. Missing historical routes are never backfilled or
+recomputed to give old work new permission.
 
 ## Why
 
@@ -59,7 +92,10 @@ The emphatic half of the ruling is a second path TO a human, never a path away f
 
 Two authorities stay separate on purpose. The operator decides, per coworker, whether ordinary side effects need approval at all; a graduated coworker keeps acting alone and this rule does not touch that. This rule decides only, among the actions that configuration would have escalated, which ones genuinely need a person. Its conformance guard proves exhaustively that it can only remove escalations, never add one — a fix for over-escalation that introduced new approval envelopes would be the same defect wearing the opposite coat.
 
-This page is generated against the gate it describes. `resolveEscalation` exports these sentences and `check-escalation-gate.ts` fails the build if this page does not state them verbatim, so doctrine and enforcement cannot drift apart on any install.
+This page is checked against the gate it describes. `describeEscalationRule`
+and `describeDecisionEscalationRule` export its rule sentences. The conformance
+tests in `apps/web/lib/govern/authority/escalation-gate.conformance.test.ts`
+require them verbatim, so doctrine and enforcement cannot drift apart.
 
 ## How to apply
 

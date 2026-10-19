@@ -1,4 +1,5 @@
-import type { ChatMessage } from "@/lib/inference/ai-inference";
+import type { ChatMessage } from "@/lib/routing/chat-message-types";
+import { invalidateLocalNativeContinuations, localNativeContinuationFingerprint } from "@/lib/routing/local-native-continuation";
 import type { ActivityContract } from "@/lib/routing/activity-contract";
 import {
   ContextMaskAuthorizationError,
@@ -55,13 +56,22 @@ export function createRoutedInferenceScreen(input: RoutedScreenInput) {
     ...baseInput,
     ...(routeBindings[0] ? { purpose: routeBindings[0].purpose } : {}),
   } satisfies ScreenInferencePayloadInput;
-  const rawScreen = screenInferencePayload(screenInput);
-  const directMaskDecision = rawScreen.decisions.find(hasMaskObligation);
-  const projectionScreen = directMaskDecision
+  let rawScreen = screenInferencePayload(screenInput);
+  let directMaskDecision = rawScreen.decisions.find(hasMaskObligation);
+  let projectionScreen = directMaskDecision
     ? null
     : screenInferencePayload({ ...screenInput, destinationClass: "in-process" });
-  const maskDecision = directMaskDecision ??
+  let maskDecision = directMaskDecision ??
     projectionScreen?.decisions.find(hasMaskObligation);
+
+  if (maskDecision && screenInput.messages.some(localNativeContinuationFingerprint)) {
+    invalidateLocalNativeContinuations(screenInput.messages);
+    rawScreen = screenInferencePayload(screenInput);
+    directMaskDecision = rawScreen.decisions.find(hasMaskObligation);
+    projectionScreen = directMaskDecision
+      ? null : screenInferencePayload({ ...screenInput, destinationClass: "in-process" });
+    maskDecision = directMaskDecision ?? projectionScreen?.decisions.find(hasMaskObligation);
+  }
 
   if (!maskDecision) {
     return { screenInput, screen: rawScreen, rehydrationHandle: undefined };

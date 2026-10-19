@@ -120,4 +120,16 @@ export const HYGIENE_JOB_CATALOG_ENTRIES: readonly ScheduledJobCatalogEntry[] = 
     tracksRunData: false,
     runNowEvent: null,
   },
+  {
+    jobId: "substrate-reconciler",
+    inngestId: "ops/substrate-reconciler",
+    honorsEnabledGate: true,
+    name: "Substrate reconciler",
+    purpose: "Restarts stopped required substrate (e.g. the sandbox reviewers infer through) and reports a wedged Docker VM (BI-903FB5F9).",
+    cron: "4,9,14,19,24,29,34,39,44,49,54,59 * * * *",
+    cadence: "Every 5 minutes (offset :04)",
+    category: "core",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
 ] as const;

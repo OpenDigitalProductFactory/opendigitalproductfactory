@@ -1,0 +1,62 @@
+{
+  "version": "1",
+  "accountableOwner": "Mark Bodman (markdbodman@gmail.com)",
+  "summary": "BI-97290291. Migration 20260918010000_animal_subject_care_appointment_rls adds one row-level security policy to each of CareAppointment and CareAppointmentStatusEvent so a veterinary visit for an animal can reuse the subject-neutral appointment substrate. NO column is added, removed or repurposed and no row is touched: the patient context policy admits a row only when its patientProfileId resolves to a same-organization PatientProfile, which an animal row (patientProfileId IS NULL, subjectKindSlug 'animal-profile') can never satisfy, so animal appointments were unreadable and unwritable under the forced RLS these tables carry. The new policy admits a row only when its organizationId matches app.organization_id, its subject kind is animal-profile and it carries no patient binding (for status events, through the appointment it belongs to). A patient row can never satisfy the animal policy and vice versa, so patient access is not broadened. The same change introduces the first application writers of CareAppointment rows for animal subjects (visit type, location, recovery footprint, status events) and of CareLocation rows marked as partner practices, plus Supplier rows for the practice's arrangement; all of those models already exist. Verified inside a rolled-back transaction on the contributor-preview database: both CREATE POLICY statements apply.",
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "CareAppointment",
+      "lifecycleDisposition": "domain-lifecycle-managed",
+      "fields": [
+        {
+          "name": "subjectRef",
+          "resolution": "governed",
+          "reason": "animal-profile:<AnimalProfile.id> for an animal visit. An opaque row id of a confidential animal record; the same field already carries patient references on the patient path and is unchanged in type.",
+          "provenance": "Derived server-side from the organization-owned AnimalProfile resolved inside the booking transaction; never caller-supplied.",
+          "flags": []
+        },
+        {
+          "name": "encounterRef",
+          "resolution": "governed",
+          "reason": "For an animal visit: a short operator note such as fasting instructions. Operational animal-care text, no person data; projected only on the care surface for the owning organization.",
+          "provenance": "Operator entry on the booking form, bounded to 200 characters.",
+          "flags": []
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "CareAppointmentStatusEvent",
+      "lifecycleDisposition": "domain-lifecycle-managed",
+      "fields": []
+    },
+    {
+      "kind": "model",
+      "assetId": "CareLocation",
+      "lifecycleDisposition": "domain-lifecycle-managed",
+      "fields": [
+        {
+          "name": "address",
+          "resolution": "governed",
+          "reason": "For a partner practice: the practice's contact name, phone, arrangement text and street line, plus the Supplier row id. Business contact details of an external organization's staff, not a data subject of the platform; shown only to operators on the care surface.",
+          "provenance": "Operator entry when registering the practice; the supplierId is written server-side from the Supplier created in the same transaction.",
+          "flags": []
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "Supplier",
+      "lifecycleDisposition": "domain-lifecycle-managed",
+      "fields": [
+        {
+          "name": "notes",
+          "resolution": "governed",
+          "reason": "The veterinary arrangement (charity rate, account, credit limit) as entered by the operator, prefixed so finance can tell a vet partner from other suppliers. Commercial terms, no person data.",
+          "provenance": "Operator entry when registering the practice.",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

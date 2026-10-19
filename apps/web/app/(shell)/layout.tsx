@@ -9,6 +9,9 @@ import { redirect } from "next/navigation";
 import { Header } from "@/components/shell/Header";
 import { loadInstallationBadge } from "@/lib/install/estate-identity";
 import { AgentCoworkerShell } from "@/components/agent/AgentCoworkerShell";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
+import { namespaceMessages } from "@dpf/i18n";
+import { getLocaleContext } from "@/lib/i18n/locale-context.server";
 import { QueueFlusher } from "@/components/feedback/QueueFlusher";
 import { StatusBanner } from "@/components/shell/StatusBanner";
 import { UpdatePendingBanner } from "@/components/shell/UpdatePendingBanner";
@@ -29,6 +32,9 @@ import { PhoneCountryProvider } from "@/components/ui/PhoneCountryContext";
 import { NAV_MODE_COOKIE, resolveNavModeFromCookie } from "@/lib/navigation/nav-mode";
 import { UxInitialLoadBoundary } from "@/components/shell/UxInitialLoadBoundary";
 import { resolveCustomerSurface } from "@/lib/owner-first/archetype-surface";
+import { resolveFinanceSurface } from "@/lib/finance/finance-surface";
+import { recordUserSeen } from "@/lib/identity/last-seen";
+import { PortalVitals } from "@/components/telemetry/PortalVitals";
 
 export default async function ShellLayout({ children }: { children: React.ReactNode }) {
   // First-run check — redirect to setup if no org exists.
@@ -47,6 +53,10 @@ export default async function ShellLayout({ children }: { children: React.ReactN
   if (session.user.type === "customer") redirect("/portal");
 
   const user = session.user;
+  const { language } = await getLocaleContext();
+  // Approvals route to one person; this is how an operator can tell whether
+  // that person is still around (BI-61DE8177). Throttled and best effort.
+  await recordUserSeen(prisma, user.id);
 
   const [
     latestDiscoveryRun,
@@ -80,7 +90,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
       return new Set<string>() as ReadonlySet<string>;
     }),
     prisma.storefrontConfig.findFirst({
-      select: { archetype: { select: { archetypeId: true } } },
+      select: { archetype: { select: { archetypeId: true, category: true } } },
     }),
   ]);
 
@@ -171,6 +181,14 @@ export default async function ShellLayout({ children }: { children: React.ReactN
     isSuperuser: user.isSuperuser,
   };
   const customerSurface = resolveCustomerSurface(storefrontConfig?.archetype.archetypeId, []);
+  // Rail and breadcrumb use the page's own title when the archetype renames a
+  // section, so a label never opens a page called something else (EP-2FB6C0CC).
+  const financeShellLabel =
+    resolveFinanceSurface(storefrontConfig?.archetype.category, storefrontConfig?.archetype.archetypeId).shellLabel ?? null;
+  const shellLabelOverrides: Record<string, string> = {
+    customer: customerSurface.shellLabel,
+    ...(financeShellLabel ? { finance: financeShellLabel } : {}),
+  };
   const shellNavSections = (activeSetup
     ? []
     : getShellNavSections(userContext, { activeOrgCapabilities, mode: navMode })).map((section) => ({
@@ -182,7 +200,9 @@ export default async function ShellLayout({ children }: { children: React.ReactN
               label: customerSurface.shellLabel,
               description: customerSurface.detailHint,
             }
-          : item,
+          : shellLabelOverrides[item.key]
+            ? { ...item, label: shellLabelOverrides[item.key]! }
+            : item,
       ),
     }));
   // The breadcrumb offers only what this principal can open. Same registry the
@@ -193,7 +213,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
     <PhoneCountryProvider country={phoneCountry}>
       <SystemEventProvider>
       {brandingCss && <style dangerouslySetInnerHTML={{ __html: brandingCss }} />}
-      <div className="min-h-screen flex flex-col bg-[var(--dpf-bg)]">
+      <div className="min-h-screen flex flex-col bg-[var(--dpf-bg)]" data-nav-mode={navMode}>
         {/* Common Shell Action-Result Contract (BI-9C0954D0) C6: the first
             focusable element skips the global header/rail chrome straight to the
             route task, so keyboard and assistive-tech owners reach their work
@@ -294,20 +314,26 @@ export default async function ShellLayout({ children }: { children: React.ReactN
                   {shellNavSections.length > 0 && (
                     <ShellBreadcrumb
                       capabilities={grantedCapabilities}
-                      labelOverrides={{ customer: customerSurface.shellLabel }}
+                      labelOverrides={shellLabelOverrides}
                     />
                   )}
+                  <PortalVitals />
                   <UxInitialLoadBoundary>{children}</UxInitialLoadBoundary>
                 </div>
               </div>
             </div>
           </main>
         </div>
-        <AgentCoworkerShell
-          userContext={{ userId: user.id, platformRole: user.platformRole, isSuperuser: user.isSuperuser }}
-          useUnifiedCoworker={useUnifiedCoworker}
-          cooConversationalName={organization?.cooConversationalName ?? null}
-        />
+        {/* The coworker's proposal cards translate with useT("approvals")
+            (BI-4E192035 leave decision card); no component under the
+            coworker reads another namespace. */}
+        <MessagesProvider locale={language} messages={{ approvals: namespaceMessages(language, "approvals") }}>
+          <AgentCoworkerShell
+            userContext={{ userId: user.id, platformRole: user.platformRole, isSuperuser: user.isSuperuser }}
+            useUnifiedCoworker={useUnifiedCoworker}
+            cooConversationalName={organization?.cooConversationalName ?? null}
+          />
+        </MessagesProvider>
         {/* FeedbackButton moved to Header — see HeaderFeedbackButton */}
         <QueueFlusher />
         <ModelWarmup />

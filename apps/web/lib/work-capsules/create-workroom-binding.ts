@@ -20,7 +20,7 @@
 // report of the result, which is exactly how the null binding stayed invisible
 // behind `success: true`.
 
-import type { ToolResult } from "@/lib/mcp-tools";
+import type { ToolResult } from "@/lib/mcp-tool-types";
 
 import type { BacklogBindingReader } from "./adopt-backlog-binding";
 import { adoptionBindingMismatch, resolveAdoptionBacklogBinding } from "./adopt-backlog-binding";

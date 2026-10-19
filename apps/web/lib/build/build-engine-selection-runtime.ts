@@ -2,9 +2,12 @@ import { prisma } from "@dpf/db";
 
 import { getLocalOnlyInference } from "@/lib/inference/local-only";
 import { previewRoute } from "@/lib/inference/routed-inference";
+import { BUILD_PHASE_ROUTE_OPTIONS } from "@/lib/build/build-phase-route-options";
 import { resolveCredentialProviderId } from "@/lib/inference/ai-provider-internals";
 import { loadProviderHealthBatch } from "@/lib/routing/provider-health-loader";
 import { cliAdapterTypeForProvider } from "@/lib/routing/provider-routing-eligibility";
+import { capacityProviderIds, indexProviderCapacityByProvider } from "@/lib/routing/provider-capacity/store";
+import { indexCliPoolResetTimes } from "@/lib/routing/cli-pool-status";
 import type { SensitivityLevel } from "@/lib/routing/types";
 import {
   qualifyBuildEngineCandidates,
@@ -111,6 +114,10 @@ export async function resolveBuildEngineSelection(
       .filter((entry) => entry[1].length > 0),
   );
   const structuralProviders = providers.filter((provider) => {
+    // Automatic mode ranks all qualified alternatives. A saved preference is
+    // not a hard provider pin: retaining only that provider can discard the
+    // healthy local fallback when the preferred account is unavailable.
+    if (opts.policy.mode === "auto") return true;
     if (provider.cliEngine === "claude" || provider.cliEngine === "codex" || provider.cliEngine === "grok" || provider.cliEngine === "opencode") {
       const preferred = preferredProviderIds.get(provider.cliEngine);
       return !preferred || preferred === provider.providerId;
@@ -120,7 +127,7 @@ export async function resolveBuildEngineSelection(
   const providerIds = structuralProviders.map((provider) => provider.providerId);
   const credentialIds = [...new Set(providerIds.map(resolveCredentialProviderId))];
 
-  const [credentials, engines, capacities, cliPools, healthByProvider, localOnlySetting] = await Promise.all([
+  const [credentials, engines, capacities, cliPools, healthByProvider, localOnlySetting, localConnections] = await Promise.all([
     prisma.credentialEntry.findMany({
       where: { providerId: { in: credentialIds } },
       select: {
@@ -137,20 +144,25 @@ export async function resolveBuildEngineSelection(
       select: { engineId: true, state: { select: { present: true } } },
     }),
     prisma.providerCapacityStatus.findMany({
-      where: { providerId: { in: providerIds } },
-      select: { providerId: true, state: true, retryAt: true },
+      where: { providerId: { in: capacityProviderIds(providerIds) } },
+      select: { providerId: true, state: true, retryAt: true, lastObservedAt: true },
     }),
     prisma.cliPoolStatus.findMany({
-      select: { adapterType: true, resetAt: true },
+      select: { adapterType: true, adapterKind: true, resetAt: true },
     }),
     loadProviderHealthBatch(providerIds, { now: nowMs }),
     getLocalOnlyInference(),
+    prisma.aiProviderConnection.findMany({
+      where: { connectionId: { in: ["provider-default-local", "provider-default-ollama"] } },
+      select: { providerId: true, status: true },
+    }),
   ]);
 
   const credentialById = new Map(credentials.map((row) => [row.providerId, row]));
   const engineById = new Map(engines.map((row) => [row.engineId, row]));
-  const capacityByProvider = new Map(capacities.map((row) => [row.providerId, row]));
-  const cliRetryByAdapter = new Map(cliPools.map((row) => [row.adapterType, row.resetAt?.getTime() ?? null]));
+  const capacityByProvider = indexProviderCapacityByProvider(capacities, nowMs);
+  const cliRetryByAdapter = indexCliPoolResetTimes(cliPools);
+  const localConnectionByProvider = new Map(localConnections.map(row => [row.providerId, row.status]));
 
   const candidates: BuildEngineCandidate[] = structuralProviders.flatMap((provider) => {
     const engine: BuildEngineId =
@@ -177,16 +189,20 @@ export async function resolveBuildEngineSelection(
     return [{
       engine,
       providerId: provider.providerId,
-      modelId: configuredModelForEngine(engine, config),
+      modelId: engine === "agentic" || preferredProviderIds.get(engine) === provider.providerId
+        ? configuredModelForEngine(engine, config)
+        : null,
       local: providerIsLocal(provider),
       registered: engine === "agentic" || engineRow !== undefined,
       present: engine === "agentic" || engineRow?.state?.present === true,
       providerStatus: provider.status,
+      providerConnectionStatus: localConnectionByProvider.get(provider.providerId),
       authMethod: provider.authMethod,
       credentialStatus: hasCredentialMaterial ? credential?.status ?? null : null,
       credentialExpiresAt: credential?.tokenExpiresAt?.getTime() ?? null,
       providerCapacityState: capacity?.state ?? null,
       providerRetryAt: capacity?.retryAt?.getTime() ?? null,
+      providerCapacityObservedAt: capacity?.lastObservedAt?.getTime() ?? null,
       cliRetryAt: cliAdapter ? cliRetryByAdapter.get(cliAdapter) ?? null : null,
       providerHealth,
     }];
@@ -222,6 +238,7 @@ export async function resolveBuildEngineSelection(
         // (founder ruling 2026-08-12) — default to the development clearance class.
         opts.sensitivity ?? "development",
         {
+          ...BUILD_PHASE_ROUTE_OPTIONS,
           taskType: "code-gen",
           tools: [{ name: "edit_sandbox_file" }, { name: "run_sandbox_tests" }],
           requireTools: true,

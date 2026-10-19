@@ -12,6 +12,15 @@ Documentation freshness is part of the delivery definition of done. Build Studio
 
 If you're looking for the one-page project overview, start at the repo-root [README.md](../README.md).
 
+## Install and host selection
+
+The [Linux pilot guide](install/linux.md) is the canonical readiness and setup
+reference for native Docker Engine. Start with Ubuntu Server 24.04 LTS x86-64;
+Docker Desktop is not required. The Bash installer is available, while customer
+acceptance remains pending. Use the [hardware guide](install/hardware.md) for
+sizing and the [verification runbook](install/verification-runbook.md) to record
+results. Windows, macOS and cloud paths remain linked from the [project overview](../README.md).
+
 ## User guide
 
 Entry points for people using the platform day-to-day:
@@ -63,7 +72,7 @@ Domain-specific operating guides (admin, AI workforce, build studio, compliance,
 - [AI Coworker Development Principles](architecture/ai-coworker-development-principles.md) — the contract AI coworkers are expected to honor.
 - `ea-diagrams/`, `tak-diagrams/` — Mermaid sources used by the architecture docs.
 
-Regenerate the TAK Word document after edits with `pnpm docs:tak`.
+Regenerate the TAK Word document after edits with `pnpm docs:tak` (or all four publications with `pnpm docs:agent-standards`). It converts through the `dpf-doctools` image, so it needs Docker and `DPF_DOCTOOLS_IMAGE` set to a digest-pinned `dpf-doctools` reference.
 
 ## Other tooling docs
 

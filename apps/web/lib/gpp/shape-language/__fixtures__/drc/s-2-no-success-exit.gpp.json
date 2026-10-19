@@ -1,0 +1,56 @@
+{
+  "format": "gpp-shape/0.1",
+  "key": "soundness-no-success-exit",
+  "version": "1.0.0",
+  "title": "Soundness fixture soundness-no-success-exit",
+  "description": "Seeded S-2: sequential, but no success stop, so the last stage has no exit to one.",
+  "triggers": [
+    "claim"
+  ],
+  "stages": [
+    {
+      "key": "a",
+      "title": "Stage a",
+      "accountablePrincipalRef": "role:shape-owner",
+      "advance": {
+        "kind": "status-change",
+        "condition": "Stage a recorded its evidence."
+      },
+      "evidence": [
+        "manual-check"
+      ]
+    },
+    {
+      "key": "b",
+      "title": "Stage b",
+      "accountablePrincipalRef": "role:shape-owner",
+      "advance": {
+        "kind": "status-change",
+        "condition": "Stage b recorded its evidence."
+      },
+      "evidence": [
+        "manual-check"
+      ]
+    }
+  ],
+  "stopConditions": [
+    {
+      "kind": "failure",
+      "condition": "A stage cannot produce its evidence.",
+      "disposition": "refused"
+    },
+    {
+      "kind": "budget",
+      "condition": "The cycle budget is spent.",
+      "disposition": "inconclusive"
+    }
+  ],
+  "grants": [],
+  "measures": [],
+  "budgets": [],
+  "reviewPoint": {
+    "everyDays": 7,
+    "description": "Weekly review."
+  },
+  "collaborationShape": null
+}

@@ -27,18 +27,34 @@
 // Invariant: if the Dockerfile copies a `.mjs` file into a stage, every file it
 // statically imports must also land in that stage — copied there directly, or
 // inherited from a stage it is built FROM.
+//
+// The check asserts a floor on how many copied scripts it read, so a parse
+// that silently finds nothing (a renamed Dockerfile, a COPY shape the parser
+// no longer recognises) fails instead of passing vacuously.
 
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { ROOT_CONTEXT_DOCKERFILES } from "./check-docker-patch-context.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(new URL(import.meta.url))), "..");
 
-/** Static `import ... from "x"` / `export ... from "x"`, plus bare `import "x"`. */
+/**
+ * Static `import ... from "x"` / `export ... from "x"`, plus bare `import "x"`.
+ * A `{ ... }` binding list may span lines: a multi-line import of
+ * ../lib/pnpm-lock.mjs once slipped past a single-line-only pattern.
+ */
 const STATIC_IMPORT_RE =
-  /(?:^|\n)\s*(?:import|export)\b[^;\n]*?\bfrom\s*["']([^"']+)["']|(?:^|\n)\s*import\s*["']([^"']+)["']/g;
+  /(?:^|\n)\s*(?:import|export)\b(?:[^;\n{]|\{[^}]*\})*?\bfrom\s*["']([^"']+)["']|(?:^|\n)\s*import\s*["']([^"']+)["']/g;
+
+/**
+ * Fewest Dockerfile-copied scripts a healthy parse reads. Measured 2026-10-07:
+ * 82 across the root-context Dockerfiles. Set well below that so deleting a
+ * script is not a guard edit, and well above zero so an empty parse fails.
+ */
+export const MIN_DOCKERFILE_COPIED_SCRIPTS = 40;
 
 /** Flags that may precede COPY operands. */
 const COPY_FLAG_RE = /^--(from|chown|chmod|link|parents)=?/;
@@ -167,10 +183,11 @@ export function staticRelativeImports(source) {
  * @param {string} dockerfileText
  * @param {(repoRelativePath: string) => string|null} readSource
  *        Returns file contents, or null when the path is not a readable repo file.
+ * @param {{ checked: number }} [stats]  incremented once per copied script read
  * @returns {Array<{ stage: string, importer: string, importerSrc: string,
  *                   specifier: string, missing: string }>}
  */
-export function findMissingCopiedImports(dockerfileText, readSource) {
+export function findMissingCopiedImports(dockerfileText, readSource, stats = { checked: 0 }) {
   const stages = parseStages(dockerfileText);
   const violations = [];
 
@@ -183,6 +200,7 @@ export function findMissingCopiedImports(dockerfileText, readSource) {
       if (!copy.imagePath.endsWith(".mjs")) continue;
       const source = readSource(copy.src);
       if (source == null) continue;
+      stats.checked++;
 
       for (const spec of staticRelativeImports(source)) {
         const target = path.posix.resolve(path.posix.dirname(copy.imagePath), spec);
@@ -200,23 +218,50 @@ export function findMissingCopiedImports(dockerfileText, readSource) {
   return violations;
 }
 
+/**
+ * Violations across every Dockerfile built from the repo root (the service
+ * images copy scripts by name too: each service image runs the deploy-lockfile
+ * assertion), tagged with the Dockerfile they came from.
+ *
+ * @param {string} [root]
+ * @param {{ checked: number }} [stats]
+ */
+export function findMissingCopiedImportsInRepo(root = REPO_ROOT, stats = { checked: 0 }) {
+  const readSource = (src) => {
+    const abs = path.join(root, src);
+    return existsSync(abs) ? readFileSync(abs, "utf8") : null;
+  };
+  const violations = [];
+  for (const dockerfile of ROOT_CONTEXT_DOCKERFILES) {
+    const text = readSource(dockerfile);
+    if (text == null) continue;
+    for (const v of findMissingCopiedImports(text, readSource, stats)) violations.push({ dockerfile, ...v });
+  }
+  return violations;
+}
+
 function main() {
   const dockerfilePath = path.join(REPO_ROOT, "Dockerfile");
   if (!existsSync(dockerfilePath)) {
     console.error(`[dockerfile-script-imports] cannot read ${dockerfilePath}`);
     process.exit(1);
   }
-  const violations = findMissingCopiedImports(
-    readFileSync(dockerfilePath, "utf8"),
-    (src) => {
-      const abs = path.join(REPO_ROOT, src);
-      return existsSync(abs) ? readFileSync(abs, "utf8") : null;
-    },
-  );
+  const stats = { checked: 0 };
+  const violations = findMissingCopiedImportsInRepo(REPO_ROOT, stats);
+
+  if (stats.checked < MIN_DOCKERFILE_COPIED_SCRIPTS) {
+    console.error(
+      `[dockerfile-script-imports] FAILED — read ${stats.checked} Dockerfile-copied scripts, floor ${MIN_DOCKERFILE_COPIED_SCRIPTS}.`,
+    );
+    console.error(
+      "The parse found too little to vouch for anything: a Dockerfile path or COPY shape changed under it.",
+    );
+    process.exit(1);
+  }
 
   if (violations.length === 0) {
     console.log(
-      "[dockerfile-script-imports] OK — every statically imported module of a Dockerfile-copied script is copied too.",
+      `[dockerfile-script-imports] OK — ${stats.checked} Dockerfile-copied scripts read; every statically imported module is copied too.`,
     );
     return;
   }
@@ -228,7 +273,7 @@ function main() {
     "The image build dies at `pnpm install` / first run with ERR_MODULE_NOT_FOUND. `next build` and PR CI cannot see this.\n",
   );
   for (const v of violations) {
-    console.error(`  stage ${v.stage}: ${v.importer}`);
+    console.error(`  ${v.dockerfile} stage ${v.stage}: ${v.importer}`);
     console.error(`    imports ${v.specifier} -> ${v.missing} (not copied)`);
     console.error(`    add: COPY ${path.posix.join(path.posix.dirname(v.importerSrc), v.specifier)} <dest>\n`);
   }

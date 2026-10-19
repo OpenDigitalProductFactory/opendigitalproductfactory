@@ -43,6 +43,32 @@ function room(over: Partial<BindablePullRequestRoom> = {}): BindablePullRequestR
 }
 
 describe("resolvePullRequestBindings", () => {
+  it("rebinds a reused branch only to its exact current full head", () => {
+    const headSha = "a".repeat(40);
+    const previous = room({ headSha, pullRequestNumber: 4242, pullRequestUrl: `https://github.com/${REPO}/pull/4242` });
+    const current = observation({ headSha, state: "open" });
+    const plan = resolvePullRequestBindings({ rooms: [previous], observations: [
+      observation({ number: 4242, headSha: "b".repeat(40) }), current,
+    ] });
+    expect(plan.bindings).toEqual([{ capsuleId: previous.capsuleId, pullRequestNumber: 5029, pullRequestUrl: current.url, state: "open" }]);
+    expect(resolvePullRequestBindings({ rooms: [previous], observations: [observation({ headSha: "b".repeat(40) })] }).bindings).toEqual([]);
+    expect(resolvePullRequestBindings({ rooms: [{ ...previous, headSha: "abc1234" }], observations: [observation()] }).bindings).toEqual([]);
+  });
+  it("fills a missing URL only from the already-bound PR", () => {
+    const plan = resolvePullRequestBindings({
+      rooms: [room({ pullRequestNumber: 5029 })],
+      observations: [observation(), observation({ number: 5030, state: "open" })],
+    });
+    expect(plan.bindings[0]?.pullRequestNumber).toBe(5029);
+    expect(plan.bindings[0]?.pullRequestUrl).toBe(`https://github.com/${REPO}/pull/5029`);
+  });
+
+  it("does not bind a reused branch with a different recorded head", () => {
+    expect(resolvePullRequestBindings({
+      rooms: [room({ headSha: "different-head" })],
+      observations: [observation()],
+    }).bindings).toEqual([]);
+  });
   // The exact row that motivated this: WC-1B73A988 read `live` for three days on
   // a branch whose PR #5029 had already merged, because nothing bound the two.
   it("binds a room to the pull request its branch produced", () => {
@@ -127,7 +153,7 @@ describe("resolvePullRequestBindings", () => {
     expect(first.bindings.map((b) => b.capsuleId)).toEqual(["WC-A", "WC-B"]);
 
     // Applying the plan and re-running binds nothing further.
-    const applied = rooms.map((r) => ({ ...r, pullRequestNumber: 5029 }));
+    const applied = rooms.map((r) => ({ ...r, pullRequestNumber: 5029, pullRequestUrl: observation().url }));
     expect(resolvePullRequestBindings({ rooms: applied, observations }).bindings).toEqual([]);
   });
 });
@@ -138,7 +164,7 @@ describe("describePullRequestBindingPlan", () => {
     const plan = resolvePullRequestBindings({
       rooms: [
         room({ capsuleId: "WC-BOUND" }),
-        room({ capsuleId: "WC-ALREADY", pullRequestNumber: 1 }),
+        room({ capsuleId: "WC-ALREADY", pullRequestNumber: 1, pullRequestUrl: `https://github.com/${REPO}/pull/1` }),
         room({ capsuleId: "WC-NOBRANCH", headBranch: null }),
         room({ capsuleId: "WC-NOPR", headBranch: "feat/never-opened" }),
       ],

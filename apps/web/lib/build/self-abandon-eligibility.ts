@@ -1,3 +1,4 @@
+import { closeOpenBuildPhaseRunsForTerminalBuild } from "@/lib/build/close-terminal-phase-runs";
 // apps/web/lib/build/self-abandon-eligibility.ts
 //
 // Governed agent self-abandon: let the agent driving a build free its OWN
@@ -189,10 +190,12 @@ export async function abandonOwnStalledBuild(params: {
   });
   if (!build) return { kind: "not_found" };
 
+  // BI-3AD07E7F: the resumer logs a row on every tick; that is not the build doing anything.
+  const { RECONCILER_ACTIVITY_TOOLS } = await import("./build-liveness");
   const [liveTaskRunCount, lastActivity] = await Promise.all([
     prisma.taskRun.count({ where: { buildId, status: { in: [...TASK_LIVE_STATES] } } }),
     prisma.buildActivity.findFirst({
-      where: { buildId },
+      where: { buildId, tool: { notIn: RECONCILER_ACTIVITY_TOOLS } },
       orderBy: { createdAt: "desc" },
       select: { createdAt: true },
     }),
@@ -232,6 +235,7 @@ export async function abandonOwnStalledBuild(params: {
         abandonReason: `Self-abandoned by owning agent via governed tool: ${reason}`,
       },
     });
+    await closeOpenBuildPhaseRunsForTerminalBuild(buildId, { db: tx, now });
     await tx.buildActivity.create({
       data: {
         buildId,

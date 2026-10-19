@@ -6,7 +6,7 @@
 // all its fields at the model-level default (coverage.ts): the live-schema
 // coverage gate requires every new model to be registered or baselined.
 
-import type { DataAssetDefinition } from "./assets";
+import type { DataAssetDefinition } from "./asset-types";
 import { MILEAGE_ASSETS } from "./mileage-assets";
 import { PAYROLL_ASSETS } from "./payroll-assets";
 

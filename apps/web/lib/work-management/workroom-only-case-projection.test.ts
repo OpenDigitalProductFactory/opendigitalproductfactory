@@ -1,10 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   loadWorkroomOnlyCaseDetail,
   type WorkroomOnlyPrismaClient,
   type WorkroomOnlyRecord,
 } from "./workroom-only-case-projection";
+
+const AUTH = { principalId: "PRN-OWNER", sensitivityClearance: ["internal"], isSuperuser: false };
 
 const NOW = new Date("2026-09-07T12:00:00.000Z");
 
@@ -19,6 +21,7 @@ function client(room: WorkroomOnlyRecord | null): WorkroomOnlyPrismaClient {
 }
 
 const room = (over: Partial<WorkroomOnlyRecord> = {}): WorkroomOnlyRecord => ({
+  createdByPrincipal: { principalId: "PRN-OWNER" },
   capsuleId: "WC-ALPHA",
   title: "Reconcile the ledger",
   status: "working",
@@ -29,7 +32,7 @@ const room = (over: Partial<WorkroomOnlyRecord> = {}): WorkroomOnlyRecord => ({
 });
 
 const load = (r: WorkroomOnlyRecord | null, sourceId = "WC-ALPHA") =>
-  loadWorkroomOnlyCaseDetail({
+  loadWorkroomOnlyCaseDetail({ authContext: AUTH,
     prismaClient: client(r),
     sourceId,
     // The route hands the loader the encoded key; buildWorkroomView enforces it.
@@ -38,6 +41,91 @@ const load = (r: WorkroomOnlyRecord | null, sourceId = "WC-ALPHA") =>
   });
 
 describe("loadWorkroomOnlyCaseDetail", () => {
+  it.each([
+    { label: "not admitted", authContext: { ...AUTH, principalId: "PRN-OTHER" } },
+    { label: "insufficient clearance", authContext: { ...AUTH, sensitivityClearance: ["public"] } },
+    { label: "missing caller", authContext: undefined },
+  ])("does not read execution for a caller who is $label", async ({ authContext }) => {
+    const findMany = vi.fn();
+    const detail = await loadWorkroomOnlyCaseDetail({ authContext,
+      prismaClient: { ...client(room()), workroomActivity: { findMany }, taskRun: { findMany } },
+      sourceId: "WC-ALPHA", caseKey: "work-capsule%3AWC-ALPHA", now: NOW,
+    });
+    expect(detail).toBeNull();
+    expect(findMany).not.toHaveBeenCalled();
+  });
+
+  it("admits the selected active participant using canonical principal identity", async () => {
+    const detail = await loadWorkroomOnlyCaseDetail({ authContext: { ...AUTH, principalId: "PRN-MEMBER" },
+      prismaClient: client(room({ participants: [{ principal: { principalId: "PRN-MEMBER" } }] })),
+      sourceId: "WC-ALPHA", caseKey: "work-capsule%3AWC-ALPHA", now: NOW,
+    });
+    expect(detail).not.toBeNull();
+  });
+
+  it("applies the declared sensitivity ceiling even to the creator", async () => {
+    const findMany = vi.fn();
+    const detail = await loadWorkroomOnlyCaseDetail({ authContext: AUTH,
+      prismaClient: { ...client(room({ scopeClaims: [{ workroomBoundary: { sensitivityCeiling: "restricted" } }] })),
+        workroomActivity: { findMany }, taskRun: { findMany } },
+      sourceId: "WC-ALPHA", caseKey: "work-capsule%3AWC-ALPHA", now: NOW,
+    });
+    expect(detail).toBeNull();
+    expect(findMany).not.toHaveBeenCalled();
+  });
+
+  it("retains the standalone room's execution evidence and versioned shape", async () => {
+    const findMany = vi.fn().mockResolvedValue([{
+      id: "journal-1", workCapsuleId: "row-1", kind: "evidence-recorded",
+      summary: "Provider failure recorded", recordedAt: NOW, payload: {},
+    }]);
+    const db = {
+      ...client(room({ id: "row-1", scopeClaims: [{ workShape: "delivery-small@1.0.0" }],
+        workspaceState: { workroomDrive: { action: "attention", stageKey: "implement",
+          pendingAttention: { stageKey: "implement", principalRef: "role:author" } } } })),
+      workroomActivity: { findMany },
+      taskRun: { findMany: vi.fn().mockResolvedValue([]) },
+    };
+    const detail = await loadWorkroomOnlyCaseDetail({ authContext: AUTH, prismaClient: db,
+      sourceId: "WC-ALPHA", caseKey: "work-capsule%3AWC-ALPHA", now: NOW });
+    expect(detail!.room!.processOverseer.shapeKey).toBe("delivery-small");
+    expect(detail!.summary.attentionReason).toContain("Stage implement is waiting on role:author.");
+    expect(detail!.room!.receipts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ rawRef: { table: "WorkroomActivity", id: "journal-1" }, status: "observed" }),
+    ]));
+    expect(detail!.room!.activity.some(event => event.summary === "Provider failure recorded")).toBe(true);
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { workCapsuleId: { in: ["row-1"] } }, take: 21,
+    }));
+  });
+
+  it("reports unreadable execution as partial rather than empty success", async () => {
+    const detail = await loadWorkroomOnlyCaseDetail({ authContext: AUTH,
+      prismaClient: { ...client(room({ id: "row-1" })),
+        workroomActivity: { findMany: async () => { throw new Error("unavailable"); } } },
+      sourceId: "WC-ALPHA", caseKey: "work-capsule%3AWC-ALPHA", now: NOW,
+    });
+    expect(detail!.room!.projection.sourceHealth).toBe("partial");
+    expect(detail!.room!.boundary.scopeIncluded).toEqual([]);
+  });
+
+  it("keeps a failed reviewer visible in both the case summary and room", async () => {
+    const detail = await loadWorkroomOnlyCaseDetail({ authContext: AUTH,
+      prismaClient: { ...client(room({ id: "row-1" })),
+        workroomActivity: { findMany: vi.fn().mockResolvedValue([]) },
+        taskRun: { findMany: vi.fn().mockResolvedValue([{
+          id: "run-row", taskRunId: "TR-REVIEW", userId: null, status: "failed",
+          updatedAt: NOW, lastHeartbeatAt: NOW, nodes: [],
+          progressPayload: { semanticReview: { reason: "provider-unavailable" } },
+        }]) } },
+      sourceId: "WC-ALPHA", caseKey: "work-capsule%3AWC-ALPHA", now: NOW,
+    });
+    expect(detail!.summary.attentionRequired).toBe(true);
+    expect(detail!.summary.attentionReason).toContain("provider-unavailable");
+    expect(detail!.room!.work.attentionReason).toBe(detail!.summary.attentionReason);
+    expect(detail!.room!.work.nextAction).toContain("Observed execution");
+    expect(detail!.room!.receipts[0].status).toBe("observed");
+  });
   it("opens a room that anchors no WorkItem instead of leaving it unreachable", async () => {
     // 290 of 464 rooms on the live install have no workItemId (BI-2C31C399);
     // every one of them served the not-found boundary from the activity tree.
@@ -65,13 +153,14 @@ describe("loadWorkroomOnlyCaseDetail", () => {
 
   it("says an objective was not recorded rather than restating the title as intent", async () => {
     const detail = await load(room({ objective: null }));
-    expect(detail!.room!.purpose).toContain("No objective was recorded");
+    expect(detail!.room!.purpose).toBeNull();
+    expect(detail!.room!.boundary.gaps).toEqual(expect.arrayContaining(["purpose", "outcome"]));
     expect(detail!.summary.description).toBeNull();
   });
 
   it("treats whitespace as no objective", async () => {
     const detail = await load(room({ objective: "   " }));
-    expect(detail!.room!.purpose).toContain("No objective was recorded");
+    expect(detail!.room!.purpose).toBeNull();
   });
 
   it("carries the room's own objective as its purpose when one is recorded", async () => {

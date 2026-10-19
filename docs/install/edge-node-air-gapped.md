@@ -77,15 +77,13 @@ export DPF_IMAGE_TAG=v0.4.0   # example; use whichever release you're staging
 
 # Pull each release image and capture its digest.
 for img in \
-  dpf-portal dpf-sandbox dpf-promoter dpf-browser-use dpf-adp dpf-edge-node; do
+  dpf-portal dpf-sandbox dpf-promoter dpf-doctools dpf-browser-use dpf-adp dpf-edge-node; do
   docker pull "ghcr.io/opendigitalproductfactory/${img}:${DPF_IMAGE_TAG}"
 done
 
 # Plus the third-party base images from docker-compose.yml.
 for img in \
   postgres:16-alpine \
-  neo4j:5-community \
-  qdrant/qdrant:latest \
   prom/prometheus:latest \
   grafana/grafana-oss:latest \
   gcr.io/cadvisor/cadvisor:latest \
@@ -98,7 +96,7 @@ done
 
 # Capture digest-pinned manifest.
 docker images --no-trunc --format '{{.Repository}}:{{.Tag}}@{{.Digest}}' \
-  | grep -E '(opendigitalproductfactory|postgres|neo4j|qdrant|prom|grafana|cadvisor|redis|inngest)' \
+  | grep -E '(opendigitalproductfactory|postgres|prom|grafana|cadvisor|redis|inngest)' \
   | sort -u > images-manifest.txt
 
 cat images-manifest.txt

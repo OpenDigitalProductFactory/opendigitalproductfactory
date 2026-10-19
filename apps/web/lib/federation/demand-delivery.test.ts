@@ -11,6 +11,7 @@ import {
   queueDemandWithdrawal,
   retryDelayMs,
   type DemandDeliveryDb,
+  classifyDeliveryFailure,
 } from "./demand-delivery";
 
 const identity = { installationId: `inst_${"a".repeat(32)}`, projectionSecret: "b".repeat(64) };
@@ -21,6 +22,9 @@ const source = {
   workType: "feature",
   occurrenceCount: 2,
   product: "dpf-portal",
+  scopeKind: "platform",
+  archetypeCategories: [],
+  archetypeIds: [],
   createdAt: new Date("2026-07-20T06:00:00.000Z"),
   updatedAt: new Date("2026-07-20T06:05:00.000Z"),
 };
@@ -264,7 +268,10 @@ describe("dispatchDueDemand", () => {
       now: new Date("2026-07-20T06:10:00.000Z"), send, decryptToken: () => "dpflink_token",
     });
 
-    expect(result).toEqual({ attempted: 1, delivered: 1, deferred: 0, deadLettered: 0 });
+    expect(result).toEqual({
+      attempted: 1, delivered: 1, deferred: 0, deadLettered: 0,
+      unreachable: 0, quarantinedLinks: [],
+    });
     expect(update).toHaveBeenCalledWith({ where: { mirrorId: "fdmo_1" }, data: expect.objectContaining({
       syncStatus: "synced", acknowledgedVersion: 7,
     }) });
@@ -285,9 +292,16 @@ describe("dispatchDueDemand", () => {
     }) });
   });
 
-  it("moves exhausted delivery to a visible dead-letter state", async () => {
+  // This test used to assert that a `status: 0` network error dead-letters after
+  // eight attempts. That was the defect, not the contract. With a 30s..30m
+  // backoff the budget exhausts in about an hour, so an install that simply
+  // could not see its peer — a laptop away from the home LAN — wrote off every
+  // queued item an hour after enqueueing it. Observed 2026-09-15 with 1,323
+  // failed items against a peer that was merely out of reach. Dead-lettering is
+  // now reserved for a peer that ANSWERED and refused.
+  it("moves exhausted delivery to a visible dead-letter state when the peer REJECTS it", async () => {
     const { db, update, workItemUpdate } = deliveryDb({ ...outbox, deliveryAttempts: 7 });
-    const send = vi.fn().mockResolvedValue({ ok: false, status: 0, error: "network error" });
+    const send = vi.fn().mockResolvedValue({ ok: false, status: 500 });
 
     const result = await dispatchDueDemand(db, {
       now: new Date("2026-07-20T06:10:00.000Z"), send, decryptToken: () => "dpflink_token",
@@ -299,11 +313,149 @@ describe("dispatchDueDemand", () => {
     }) });
     expect(workItemUpdate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "failed", attemptCount: 8 }) }));
   });
+
+  it("never dead-letters an item it could not deliver because the peer was unreachable", async () => {
+    // Same exhausted budget as above (7 prior attempts), but the peer was never
+    // reached. Distance is not evidence about the payload, so the item holds.
+    const { db, update, workItemUpdate } = deliveryDb({ ...outbox, deliveryAttempts: 7 });
+    const send = vi.fn().mockResolvedValue({ ok: false, status: 0, error: "network error" });
+
+    const result = await dispatchDueDemand(db, {
+      now: new Date("2026-07-20T06:10:00.000Z"), send, decryptToken: () => "dpflink_token",
+    });
+
+    expect(result.deadLettered).toBe(0);
+    expect(result.unreachable).toBe(1);
+    expect(update).not.toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ syncStatus: "dead-letter" }),
+    }));
+    // Still queued past the point that previously dead-lettered it. The attempt
+    // is counted and the backoff widens, but the item can now wait out an
+    // absence of any length and drain intact on return.
+    expect(workItemUpdate).toHaveBeenCalledWith({ where: { itemId: "job-1" }, data: expect.objectContaining({
+      status: "queued", attemptCount: 8,
+    }) });
+  });
+
+  it("quarantines a link once a retried item is still refused on auth", async () => {
+    // The observed install carried 1,083 consecutive 401/403 rejections across
+    // eight links and quarantined none: the column existed, nothing set it. A
+    // credential refusal is settled — retrying cannot change it.
+    const { db } = deliveryDb({ ...outbox, deliveryAttempts: 1 });
+    const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+    (db.federationLink as { updateMany?: unknown }).updateMany = updateMany;
+    const send = vi.fn().mockResolvedValue({ ok: false, status: 403 });
+
+    const result = await dispatchDueDemand(db, {
+      now: new Date("2026-07-20T06:10:00.000Z"), send, decryptToken: () => "dpflink_token",
+    });
+
+    expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ linkState: "trusted", quarantinedAt: null }),
+      data: expect.objectContaining({ quarantinedAt: new Date("2026-07-20T06:10:00.000Z") }),
+    }));
+    expect(result.quarantinedLinks).toEqual(["link_1"]);
+  });
+
+  it("gives a first-attempt auth rejection one retry before quarantining", async () => {
+    // A token mid-rotation should not fence the link on its very first refusal.
+    const { db } = deliveryDb({ ...outbox, deliveryAttempts: 0 });
+    const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+    (db.federationLink as { updateMany?: unknown }).updateMany = updateMany;
+    const send = vi.fn().mockResolvedValue({ ok: false, status: 401 });
+
+    const result = await dispatchDueDemand(db, {
+      now: new Date("2026-07-20T06:10:00.000Z"), send, decryptToken: () => "dpflink_token",
+    });
+
+    expect(updateMany).not.toHaveBeenCalled();
+    expect(result.quarantinedLinks).toEqual([]);
+  });
+
+  it("classifies the two failure shapes the drain must treat differently", () => {
+    expect(classifyDeliveryFailure(0)).toBe("unreachable");
+    expect(classifyDeliveryFailure(401)).toBe("rejected-auth");
+    expect(classifyDeliveryFailure(403)).toBe("rejected-auth");
+    expect(classifyDeliveryFailure(404)).toBe("rejected-other");
+    expect(classifyDeliveryFailure(500)).toBe("rejected-other");
+  });
 });
 
 describe("retryDelayMs", () => {
   it("caps retry at thirty minutes", () => {
     expect(retryDelayMs(1, () => 0.5)).toBe(30_000);
     expect(retryDelayMs(20, () => 0.5)).toBe(30 * 60_000);
+  });
+});
+
+describe("dispatchDueDemand queue churn (BI-5993AE7F)", () => {
+  // The legacy-mirror bridge used to call ensureFederationDeliveryJob for EVERY
+  // pending mirror on EVERY sweep, and each of those re-upserted the same single
+  // WorkQueue row. Against a backlog that cannot drain while the peer is offline
+  // that measured ~708 writes/sec on a five-row table. These pin both halves of
+  // the fix: resolve the queue once, and bridge only mirrors that lack a job.
+  function churnDb(pendingMirrorIds: string[], alreadyBridged: string[]) {
+    const workQueueUpsert = vi.fn().mockResolvedValue({ id: "queue-db-id" });
+    const workItemUpsert = vi.fn().mockResolvedValue({ itemId: "job-x" });
+    const workItemFindMany = vi.fn()
+      // 1st: the bridge's "which of these mirrors already have a job" probe.
+      .mockResolvedValueOnce(alreadyBridged.map((sourceId) => ({
+        itemId: `job-${sourceId}`, sourceId, attemptCount: 0,
+        createdAt: new Date("2026-07-20T06:00:00.000Z"), claimedAt: null,
+      })))
+      // 2nd: the due-jobs query. Nothing due — this test is about the bridge.
+      .mockResolvedValueOnce([]);
+    return {
+      db: {
+        workQueue: { upsert: workQueueUpsert },
+        workItem: {
+          upsert: workItemUpsert, update: vi.fn().mockResolvedValue({}),
+          updateMany: vi.fn().mockResolvedValue({ count: 0 }), findMany: workItemFindMany,
+        },
+        federationLink: { findMany: vi.fn().mockResolvedValue([]) },
+        federatedRecordMirror: {
+          findMany: vi.fn()
+            .mockResolvedValueOnce(pendingMirrorIds.map((mirrorId) => ({ mirrorId })))
+            .mockResolvedValue([]),
+          update: vi.fn().mockResolvedValue({}), findUnique: vi.fn(), create: vi.fn(),
+        },
+      } as unknown as DemandDeliveryDb,
+      workQueueUpsert,
+      workItemUpsert,
+    };
+  }
+
+  const now = new Date("2026-07-20T06:10:00.000Z");
+
+  it("never touches the queue row when every pending mirror already has a job", async () => {
+    const { db, workQueueUpsert, workItemUpsert } = churnDb(["m1", "m2", "m3"], ["m1", "m2", "m3"]);
+
+    await dispatchDueDemand(db, { now });
+
+    // Steady state with an unreachable peer: the backlog cannot drain, so this
+    // path runs every sweep forever. It must cost zero writes.
+    expect(workQueueUpsert).not.toHaveBeenCalled();
+    expect(workItemUpsert).not.toHaveBeenCalled();
+  });
+
+  it("resolves the queue once, not once per unbridged mirror", async () => {
+    const { db, workQueueUpsert, workItemUpsert } = churnDb(["m1", "m2", "m3"], []);
+
+    await dispatchDueDemand(db, { now });
+
+    expect(workQueueUpsert).toHaveBeenCalledTimes(1);
+    expect(workItemUpsert).toHaveBeenCalledTimes(3);
+  });
+
+  it("bridges only the mirrors that are missing a job", async () => {
+    const { db, workQueueUpsert, workItemUpsert } = churnDb(["m1", "m2", "m3"], ["m1", "m3"]);
+
+    await dispatchDueDemand(db, { now });
+
+    expect(workQueueUpsert).toHaveBeenCalledTimes(1);
+    expect(workItemUpsert).toHaveBeenCalledTimes(1);
+    expect(workItemUpsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: { sourceKey: "federation-demand:m2" },
+    }));
   });
 });

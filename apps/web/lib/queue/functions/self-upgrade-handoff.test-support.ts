@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { expect, it, vi } from "vitest";
 import { signTransitionPayload } from "@/lib/platform-runtime/transition-protocol";
 import { ok } from "@/lib/shared/action-result";
+// Mocked by self-upgrade.test.ts, which registers these tests.
+import { prePullReleaseDoctoolsImage } from "@/lib/self-upgrade/doctools-release-image";
 
 type TestContext = { mocks: any; runSelfUpgrade: (input: any) => Promise<any>; installState: string; installStateHash: string };
 
@@ -89,6 +91,19 @@ export function registerReleaseWorkerTargetRecoveryTests(input: {
       expect(input.mocks.deferAdmittedRunForRedispatch).toHaveBeenCalledWith("SUR-RECONCILE", "release-target-registry-unavailable");
       expect(input.mocks.skipRun).not.toHaveBeenCalled();
       expect(input.mocks.startQuiescence).not.toHaveBeenCalled();
+    } finally { vi.unstubAllEnvs(); }
+  });
+
+  it("pre-pulls the target release's dpf-doctools, and a pull that does not land fails the run before the drain (BI-698B7F9A)", async () => {
+    configure();
+    vi.mocked(prePullReleaseDoctoolsImage).mockResolvedValueOnce({ outcome: "failed", reason: "could not download the v2.0.0 document converter: toomanyrequests" });
+    try {
+      await expect(input.runSelfUpgrade({ triggeredBy: "ops" }))
+        .resolves.toMatchObject({ ok: false, status: "failed", reason: "doctools-prepull-failed" });
+      expect(prePullReleaseDoctoolsImage).toHaveBeenCalledWith(expect.objectContaining({ tag: "v2.0.0", ghcrOwner: "opendigitalproductfactory" }));
+      expect(input.mocks.failRun).toHaveBeenCalledWith(expect.any(String), expect.stringContaining("doctools-prepull-failed"), expect.stringContaining("doctools-prepull-failed"));
+      expect(input.mocks.startQuiescence).not.toHaveBeenCalled();
+      expect(input.mocks.runPromoter).not.toHaveBeenCalled();
     } finally { vi.unstubAllEnvs(); }
   });
 

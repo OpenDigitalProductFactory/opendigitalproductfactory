@@ -2,7 +2,7 @@
 
 import { prisma } from "@dpf/db";
 import { getBuiltInToolsOverview } from "@/lib/actions/built-in-tools";
-import { getAgentToolGrantsAsync, getToolGrantMapping } from "@/lib/tak/agent-grants";
+import { getAgentToolGrantsAsync, getToolGrantMapping, grantsSatisfyRequirement } from "@/lib/tak/agent-grants";
 import {
   NATIVE_INTEGRATIONS,
   getNativeIntegrationCredentialIds,
@@ -87,9 +87,11 @@ function summarize(entries: ToolMarketplaceEntry[]): ToolMarketplaceSummary {
   };
 }
 
+// The grants still needed, judged by the runtime rule (BI-378D3659): required
+// grants are alternatives, expanded through GRANT_IMPLICATIONS. When none is
+// held every alternative is listed — any one of them would make the tool ready.
 function resolveGrantState(requiredGrantKeys: string[], agentGrantKeys: string[]) {
-  if (requiredGrantKeys.length === 0) return [];
-  return requiredGrantKeys.filter((grantKey) => !agentGrantKeys.includes(grantKey));
+  return grantsSatisfyRequirement(requiredGrantKeys, agentGrantKeys) ? [] : [...requiredGrantKeys];
 }
 
 function nativeReadinessEntry(

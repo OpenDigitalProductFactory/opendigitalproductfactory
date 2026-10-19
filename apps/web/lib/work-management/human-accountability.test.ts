@@ -110,7 +110,7 @@ describe("resolveEffectiveHumanAccountability", () => {
       edges: [contains("WC-A", "WC-LEAF"), contains("WC-B", "WC-LEAF")],
       organizationTopAccountablePrincipalId: OWNER,
     });
-    expect(result).toMatchObject({ principalId: OWNER, source: "organization-owner" });
+    expect(result).toMatchObject({ state: "setup-required", reason: "conflicting-responsibility-parents" });
   });
 
   it("reports a responsibility cycle instead of looping", () => {

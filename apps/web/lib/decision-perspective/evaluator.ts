@@ -1,10 +1,18 @@
 import {
-  isMaterialApplicable,
+  computeMaterialDecidability,
   resolveProfileMaterial,
   resolveProfileMaterialForOrg,
-  scorePerspectiveMaterial,
 } from "./material";
+
+/**
+ * Confidence a consult must reach before it may recommend rather than escalate.
+ * Named because BI-5843CD9C measures material ceilings against it — an inline
+ * 0.7 cannot be compared to anything.
+ */
+const RECOMMENDATION_BAND = 0.7;
 import { createDecisionInteractionId, findExistingDecisionInteraction, persistDecisionInteraction } from "./persistence";
+import { decisionAllowsStep, decisionEscalationMessage, withDecisionEscalation } from "./decision-escalation";
+import type { DecisionDeclarations } from "@/lib/govern/authority/escalation-gate";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { MARK_DPF_PLATFORM_PROFILE } from "./default-profile";
 import { resolveGateRecommendedOptionId } from "./option-recommendation";
@@ -16,6 +24,8 @@ import { contentAwareDirectionalOutcome } from "./directional-outcome";
 // Re-exported for existing importers; owned by ./override-count (BI-ACF0D6D4).
 export { RECENT_OVERRIDE_WINDOW_DAYS } from "./override-count";
 import {
+  RISK_PENALTY,
+  delegatedRiskLimit,
   hasPrincipleConflict,
   orderedProfileChain,
   riskWithin,
@@ -105,7 +115,17 @@ export function evaluateDecisionPerspective(
     })
     .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
 
+  // BI-5843CD9C: report whether this material COULD have recommended, not only
+  // what it decided. An escalation from weighed evidence and an escalation from
+  // an unreachable ceiling look identical without this.
+  const decidability = computeMaterialDecidability({
+    materials: selectedCoverage.applicableMaterials,
+    riskPenalty: RISK_PENALTY[input.riskTier],
+    recommendationBand: RECOMMENDATION_BAND,
+  });
+
   const baseResult = {
+    decidability,
     selectedProfileId: selectedProfile.profileId,
     fallbackProfileId,
     profileVersionId: selectedProfile.currentVersion.versionId,
@@ -163,12 +183,21 @@ export function evaluateDecisionPerspective(
     };
   }
 
-  if (input.riskTier === "high" || input.riskTier === "critical") {
+  // BI-7FFFBEE3 (operator rule 2026-10-07): the delegated policy bounds the risk
+  // a decision may proceed at; there is no hard-coded tier that goes to a person.
+  // Beyond the policy's limit the decision escalates, and says which limit.
+  const policy = selectedProfile.autonomyPolicy;
+  const maxRiskForRecommendation = policy.maxRiskForRecommendation ?? "medium";
+  const delegatedLimit = delegatedRiskLimit(policy);
+  if (!riskWithin(input.riskTier, delegatedLimit)) {
     return {
       ...baseResult,
       outcomeType: "escalate",
       rationale:
-        `Escalate this high-risk decision to the accountable resolver even though profile confidence is ${confidence}.`,
+        `Escalate: ${input.riskTier} risk exceeds the delegated policy of ${selectedProfile.profileId} `
+        + `(maxRiskForArbitration=${policy.maxRiskForArbitration}${policy.allowArbitration ? "" : ", arbitration off"}; `
+        + `maxRiskForRecommendation=${maxRiskForRecommendation}).`,
+      policyLimitExceeded: true,
     };
   }
 
@@ -192,12 +221,25 @@ export function evaluateDecisionPerspective(
     };
   }
 
-  if (confidence < 0.7) {
+  if (confidence < RECOMMENDATION_BAND) {
+    // Distinguish "more or better material would help" from "this material can
+    // never clear the band". Both escalate; only one is worth acting on by
+    // authoring more, and conflating them sends operators to do the one thing
+    // that cannot work.
     return {
       ...baseResult,
       outcomeType: "escalate",
-      rationale:
-        `Escalate because profile confidence ${confidence} is below the recommendation band.`,
+      ...(decidability.canReachRecommendation
+        ? {
+            gapReason: "material-below-confidence" as const,
+            rationale:
+              `Escalate because profile confidence ${confidence} is below the recommendation band of ${RECOMMENDATION_BAND}.`,
+          }
+        : {
+            gapReason: "ceiling-below-recommendation-band" as const,
+            rationale:
+              `Escalate because this material cannot reach the recommendation band at ${input.riskTier} risk: its ceiling is ${decidability.ceiling} against a band of ${RECOMMENDATION_BAND}. ${decidability.remedy ?? ""}`.trim(),
+          }),
     };
   }
 
@@ -214,12 +256,14 @@ export function evaluateDecisionPerspective(
     };
   }
 
-  if (confidence < 0.9 && input.riskTier !== "low") {
+  if (confidence < policy.minimumConfidenceForArbitration && input.riskTier !== "low") {
     return {
       ...baseResult,
       outcomeType: "escalate",
       rationale:
-        `Escalate because profile confidence ${confidence} is not high enough for a ${input.riskTier}-risk decision.`,
+        `Escalate: profile confidence ${confidence} is below the delegated policy's `
+        + `minimumConfidenceForArbitration=${policy.minimumConfidenceForArbitration} for a ${input.riskTier}-risk decision `
+        + `(${selectedProfile.profileId}).`,
     };
   }
 
@@ -280,12 +324,13 @@ export function failClosedEvaluation(input: {
   const className = errorClass(input.error);
   const isWwwd = input.isWwwd ?? false;
   const rationale = isWwwd
-    ? `WWWD fail-closed escalation: ${className}. The decision could not be safely evaluated, so it routes to the owner.`
-    : `WWMD fail-closed escalation: ${className}. The decision kernel could not safely evaluate this advancement request.`;
+    ? `WWWD evaluation fault: ${className}. Caller risk and declarations determine the review route.`
+    : `WWMD evaluation fault: ${className}. Caller risk and declarations determine the review route.`;
 
   return {
     outcomeType: "escalate",
     selectedProfileId: input.profile.profileId,
+    evaluationFault: true,
     fallbackProfileId: null,
     profileVersionId: input.profile.currentVersion.versionId,
     confidenceBefore: 0,
@@ -312,6 +357,8 @@ export function operatorMessageFor(
   orgProfileSelected = false,
   isWwwd = false,
 ): string {
+  const routedMessage = decisionEscalationMessage(evaluation);
+  if (routedMessage) return routedMessage;
   if (isWwwd) {
     const scope = orgProfileSelected
       ? "your organization's recorded stance"
@@ -362,6 +409,7 @@ export async function evaluatePerspectiveGate(input: {
   scoredOptions?: DecisionScoredOption[];
   domainClass: DecisionDomainClass;
   riskTier: DecisionRiskTier;
+  declarations?: DecisionDeclarations;
   routeContext: string;
   build?: PerspectiveGateBuild | null;
   phaseFrom?: string | null;
@@ -377,6 +425,11 @@ export async function evaluatePerspectiveGate(input: {
   coverageGapRationale?: string;
   onComplete?: (interactionId: string) => Promise<void> | void;
   alignmentCorpora?: AlignmentCorpora;
+  /**
+   * BI-7FFFBEE3 slice B: "shadow" when the caller will not act on this verdict.
+   * Recorded on the row so the owner inbox never lists it as a decision.
+   */
+  enforcement?: "shadow" | "enforce";
 }): Promise<{
   allowed: boolean;
   interactionId: string;
@@ -417,7 +470,7 @@ export async function evaluatePerspectiveGate(input: {
       profile = resolved.selectedProfile ?? MARK_DPF_PLATFORM_PROFILE;
     }
   } catch (error) {
-    const evaluation = failClosedEvaluation({
+    const evaluation = withDecisionEscalation(failClosedEvaluation({
       profile,
       question: input.question,
       options: input.options,
@@ -426,7 +479,7 @@ export async function evaluatePerspectiveGate(input: {
       error,
       resolvedProfileChain: [input.profileId ?? profile.profileId],
       isWwwd,
-    });
+    }), input.declarations);
 
     const invokeEvent = isWwwd ? "wwwd.org-gate.invoked" : "wwmd.gate.invoked";
     console.info(
@@ -462,9 +515,10 @@ export async function evaluatePerspectiveGate(input: {
       phaseTo: input.phaseTo === undefined ? (input.build ? "build" : null) : input.phaseTo,
       gateKey,
       gateFallbackUsed: isWwwd && !orgProfileSelected,
-      outcomePayloadExtra: isWwwd
-        ? { orgProfileSelected, caller: input.caller ?? null }
-        : undefined,
+      outcomePayloadExtra: {
+        ...(isWwwd ? { orgProfileSelected, caller: input.caller ?? null } : {}),
+        ...(input.enforcement === "shadow" ? { enforcement: "shadow" } : {}),
+      },
     });
 
     console.info(
@@ -475,7 +529,7 @@ export async function evaluatePerspectiveGate(input: {
     );
 
     return {
-      allowed: false,
+      allowed: decisionAllowsStep(evaluation),
       interactionId,
       evaluation,
       operatorMessage: operatorMessageFor(evaluation, orgProfileSelected, isWwwd),
@@ -528,7 +582,7 @@ export async function evaluatePerspectiveGate(input: {
         })}`
       );
       return {
-        allowed: existing.evaluation.outcomeType === "recommend" || existing.evaluation.outcomeType === "arbitrate",
+        allowed: decisionAllowsStep(existing.evaluation),
         interactionId: existing.interactionId,
         evaluation: existing.evaluation,
         operatorMessage: operatorMessageFor(existing.evaluation, orgProfileSelected, isWwwd),
@@ -636,6 +690,7 @@ export async function evaluatePerspectiveGate(input: {
   if (isWwwd && input.alignmentCorpora) applyConstitutionalAlignment({
     evaluation, question: input.question, corpora: input.alignmentCorpora,
   });
+  evaluation = withDecisionEscalation({ ...evaluation, riskTier: input.riskTier }, input.declarations);
   evaluation.recommendedOptionId = await resolveGateRecommendedOptionId({
     db: input.db,
     scoredOptions: input.scoredOptions,
@@ -666,10 +721,13 @@ export async function evaluatePerspectiveGate(input: {
     phaseTo: input.phaseTo === undefined ? (input.build ? "build" : null) : input.phaseTo,
     gateKey,
     gateFallbackUsed: isWwwd && !orgProfileSelected,
-    outcomePayloadExtra: isWwwd ? {
-      orgProfileSelected, constitutionalAlignment: evaluation.constitutionalAlignment ?? null,
-      caller: input.caller ?? null,
-    } : undefined,
+    outcomePayloadExtra: {
+      ...(isWwwd ? {
+        orgProfileSelected, constitutionalAlignment: evaluation.constitutionalAlignment ?? null,
+        caller: input.caller ?? null,
+      } : {}),
+      ...(input.enforcement === "shadow" ? { enforcement: "shadow" } : {}),
+    },
   });
 
   console.info(
@@ -691,7 +749,7 @@ export async function evaluatePerspectiveGate(input: {
   }
 
   return {
-    allowed: evaluation.outcomeType === "recommend" || evaluation.outcomeType === "arbitrate",
+    allowed: decisionAllowsStep(evaluation),
     interactionId: persisted.interactionId,
     evaluation,
     operatorMessage: operatorMessageFor(evaluation, orgProfileSelected, isWwwd),

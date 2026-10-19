@@ -19,8 +19,102 @@ const roomsPayload = (rooms) =>
   JSON.stringify({
     jsonrpc: "2.0",
     id: 1,
-    result: { content: [{ type: "text", text: JSON.stringify({ workrooms: rooms }) }] },
+    result: { content: [{ type: "text", text: JSON.stringify({ workrooms: rooms, total: rooms.length, truncated: false }) }] },
   });
+
+const pagePayload = (rooms, extra = {}) => JSON.stringify({ success: true, data: {
+  capsules: rooms, page: { version: 1, observationId: "observation-1",
+    observedAt: "2026-10-12T00:00:00.000Z", ownershipScope: "installation",
+    populationCount: rooms.length, pageCount: rooms.length,
+    nextCursor: null, disposition: "complete", ...extra },
+} });
+const room = (id, worktreePath = null) => ({ capsuleId: id, status: "working", worktreePath });
+
+describe("complete ownership observation", () => {
+  it("accepts an explicit empty population", () => {
+    assert.equal(parseActiveWorktreePaths(pagePayload([])).available, true);
+  });
+
+  it("never accepts a partial page as the whole ownership inventory", () => {
+    assert.equal(parseActiveWorktreePaths(pagePayload([room("one", "D:/wt/one")], {
+      populationCount: 2, nextCursor: "next", disposition: "more",
+    })).available, false);
+  });
+
+  it("protects an owner on a later page and keeps the same unfiltered traversal", async () => {
+    const args = [];
+    const result = await loadActiveWorkroomPaths({ env: { DPF_MCP_BEARER_TOKEN: "t" },
+      fetchImpl: async (_url, init) => {
+        args.push(JSON.parse(init.body).params.arguments);
+        return new Response(args.length === 1
+          ? pagePayload([room("one")], { populationCount: 2, nextCursor: "next", disposition: "more" })
+          : pagePayload([room("two", "D:/wt/later")], { populationCount: 2 }));
+      },
+    });
+    assert.equal(result.available, true);
+    assert.ok(result.activePaths.has("d:/wt/later"));
+    assert.deepEqual(args, [{ limit: 100 }, { limit: 100, cursor: "next" }]);
+  });
+
+  it("drops every partial claim if continuation fails", async () => {
+    let calls = 0;
+    const result = await loadActiveWorkroomPaths({ env: { DPF_MCP_BEARER_TOKEN: "t" },
+      fetchImpl: async () => ++calls === 1
+        ? new Response(pagePayload([room("one", "D:/wt/one")], { populationCount: 2, nextCursor: "next", disposition: "more" }))
+        : new Response(JSON.stringify({ success: false, error: "snapshot_expired" })),
+    });
+    assert.equal(result.available, false);
+    assert.equal(result.activePaths.size, 0);
+  });
+
+  it("uses the shared credential resolver, including refreshing client credentials", async () => {
+    let resolved, tokenReads = 0, authorization;
+    const result = await loadActiveWorkroomPaths({ env: {},
+      resolveCredential: options => {
+        resolved = options;
+        return { bearer: { get: async () => { tokenReads++; return "client-credential-token"; } } };
+      },
+      fetchImpl: async (_url, init) => {
+        authorization = init.headers.Authorization;
+        return new Response(pagePayload([]));
+      },
+    });
+    assert.equal(result.available, true);
+    assert.equal(resolved.mcpUrl, "http://127.0.0.1:3000/api/mcp/v1");
+    assert.equal(tokenReads, 1);
+    assert.equal(authorization, "Bearer client-credential-token");
+  });
+
+  it("refuses malformed identities, shortened paths, scoped populations and truncated wrappers", () => {
+    const valid = JSON.parse(pagePayload([room("one", "D:/wt/one")]));
+    for (const bad of [
+      { ...valid, success: false },
+      { ...valid, data: { ...valid.data, _truncated: true } },
+      JSON.parse(pagePayload([{ capsuleId: "one", status: "working" }])),
+      JSON.parse(pagePayload([{ ...room("one", "D:/wt/one"), shortenedFields: ["worktreePath"] }])),
+      JSON.parse(pagePayload([room("one")], { ownershipScope: "caller-visible" })),
+      JSON.parse(pagePayload([room("one")], { populationCount: 3 })),
+    ]) assert.equal(parseActiveWorktreePaths(JSON.stringify(bad)).available, false);
+  });
+
+  it("refuses changed snapshots, repeated rooms, count drift and cursor loops", async () => {
+    for (const second of [
+      pagePayload([room("two")], { populationCount: 2, observationId: "other" }),
+      pagePayload([room("one")], { populationCount: 2 }),
+      pagePayload([room("two")], { populationCount: 3 }),
+      pagePayload([room("two")], { populationCount: 3, nextCursor: "next", disposition: "more" }),
+    ]) {
+      let calls = 0;
+      const result = await loadActiveWorkroomPaths({ env: { DPF_MCP_BEARER_TOKEN: "t" },
+        fetchImpl: async () => new Response(++calls === 1
+          ? pagePayload([room("one")], { populationCount: 2, nextCursor: "next", disposition: "more" }) : second),
+      });
+      assert.equal(result.available, false);
+      assert.equal(result.activePaths.size, 0);
+      assert.ok(calls <= 2);
+    }
+  });
+});
 
 describe("parseActiveWorktreePaths", () => {
   it("collects worktrees of rooms that still own their work", () => {
@@ -86,38 +180,56 @@ describe("parseActiveWorktreePaths", () => {
 });
 
 describe("loadActiveWorkroomPaths — fail safe, never fail open", () => {
-  it("is UNAVAILABLE without a token, rather than an empty success", () => {
+  it("is UNAVAILABLE without a token, rather than an empty success", async () => {
     // The lease loader returns "" here, which reads downstream as "nothing is
     // leased" and protects nothing. This must not repeat that.
-    const result = loadActiveWorkroomPaths({ env: {}, run: () => { throw new Error("unused"); } });
+    const result = await loadActiveWorkroomPaths({ env: {},
+      resolveCredential: () => { throw new Error("No MCP token or client credential configured"); },
+      fetchImpl: () => { throw new Error("unused"); },
+    });
     assert.equal(result.available, false);
     assert.match(result.reason, /token/i);
   });
 
-  it("is UNAVAILABLE when the query fails", () => {
-    const result = loadActiveWorkroomPaths({
+  it("is UNAVAILABLE when the query returns an HTTP error", async () => {
+    const result = await loadActiveWorkroomPaths({
       env: { DPF_MCP_BEARER_TOKEN: "t" },
-      run: () => ({ status: 7, stdout: "", stderr: "connection refused" }),
+      fetchImpl: async () => new Response("unauthorized", { status: 401 }),
     });
     assert.equal(result.available, false);
+    assert.match(result.reason, /HTTP 401/);
   });
 
-  it("is UNAVAILABLE when the runner throws", () => {
-    const result = loadActiveWorkroomPaths({
+  it("is UNAVAILABLE when the transport fails", async () => {
+    const result = await loadActiveWorkroomPaths({
       env: { DPF_MCP_BEARER_TOKEN: "t" },
-      run: () => { throw new Error("curl missing"); },
+      fetchImpl: async () => { throw new Error("connection refused"); },
     });
     assert.equal(result.available, false);
-    assert.match(result.reason, /curl missing/);
+    assert.match(result.reason, /connection refused/);
   });
 
-  it("is AVAILABLE and returns claims on success", () => {
-    const result = loadActiveWorkroomPaths({
+  it("asks the default loopback endpoint and sends the tool call", async () => {
+    let seen = null;
+    await loadActiveWorkroomPaths({
       env: { DPF_MCP_BEARER_TOKEN: "t" },
-      run: () => ({
-        status: 0,
-        stdout: roomsPayload([{ capsuleId: "WC-8", status: "working", worktreePath: "D:/wt/live" }]),
-      }),
+      fetchImpl: async (url, init) => {
+        seen = { url, body: JSON.parse(init.body) };
+        return new Response("", { status: 500 });
+      },
+    });
+    assert.equal(seen.url, "http://127.0.0.1:3000/api/mcp/v1");
+    assert.equal(seen.body.method, "tools/call");
+    assert.equal(seen.body.params.name, "list_workrooms");
+  });
+
+  it("is AVAILABLE and returns claims on success", async () => {
+    const result = await loadActiveWorkroomPaths({
+      env: { DPF_MCP_BEARER_TOKEN: "t" },
+      fetchImpl: async () =>
+        new Response(roomsPayload([{ capsuleId: "WC-8", status: "working", worktreePath: "D:/wt/live" }]), {
+          status: 200,
+        }),
     });
     assert.equal(result.available, true);
     assert.ok(pathHasActiveClaim(result.activePaths, "D:/wt/live"));

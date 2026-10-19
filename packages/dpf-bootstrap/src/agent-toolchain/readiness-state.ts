@@ -15,6 +15,10 @@ export type ReadinessCopy = {
 };
 
 const COPY: Record<ReadinessState, ReadinessCopy> = {
+  authorization_pending: {
+    message: "MCP configuration is written. Sign in through your client and verify the connection; bootstrap has not verified OAuth.",
+    primaryAction: "Sign in to DPF MCP",
+  },
   ready: {
     message: "Claude Code and Codex are ready for DPF work.",
     primaryAction: "Open readiness",
@@ -70,6 +74,8 @@ export function computeReadinessState(
     return "missing_cli";
   }
 
+  if (state.mcpAuthorization?.mode === "oauth" && !state.mcpAuthorization.verified) return "authorization_pending";
+
   const mcp = state.mcpReadiness;
   if (mcp && !mcp.ok) {
     if (mcp.reason === "no_token" || mcp.reason === "scope_insufficient") {
@@ -81,10 +87,13 @@ export function computeReadinessState(
     if (mcp.reason === "mcp-unavailable") {
       return "mcp-unavailable";
     }
+    if (mcp.reason === "coworker_grants_insufficient") return "needs_refresh";
     if (mcp.reason === "endpoint_unreachable" || mcp.reason === "unexpected_shape") {
       return "needs_refresh";
     }
   }
+
+  if (!mcp || (mcp.ok && mcp.delivery?.ready !== true)) return "needs_refresh";
 
   if (state.smokeTest && state.smokeTest.result === "failed") {
     return "failed_smoke";

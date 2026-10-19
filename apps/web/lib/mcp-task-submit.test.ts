@@ -1,6 +1,8 @@
+import { SOURCE_READ_MAX_CHARS, SOURCE_READ_MAX_LINES } from "./source-page-lines";
 import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const db = vi.hoisted(() => ({
+  findBacklogItem: vi.fn(),
   findFirst: vi.fn(),
   findUnique: vi.fn(),
   findModelConfig: vi.fn(),
@@ -21,6 +23,7 @@ const records = vi.hoisted(() => ({ create: vi.fn() }));
 const queue = vi.hoisted(() => ({ send: vi.fn() }));
 vi.mock("@dpf/db", () => ({
   prisma: {
+    backlogItem: { findUnique: (...args: unknown[]) => db.findBacklogItem(...args) },
     taskRun: {
       findFirst: (...args: unknown[]) => db.findFirst(...args),
       findUnique: (...args: unknown[]) => db.findUnique(...args),
@@ -43,10 +46,11 @@ vi.mock("@/lib/tak/autonomous-work-run", () => ({
 vi.mock("@/lib/tak/task-records", () => ({
   createTaskMessage: (...args: unknown[]) => records.create(...args),
 }));
-vi.mock("@/lib/queue/inngest-client", () => ({
-  inngest: { send: (...args: unknown[]) => queue.send(...args) },
+vi.mock("@/lib/jobs", () => ({
+  jobs: { send: (...args: unknown[]) => queue.send(...args) },
 }));
 import { submitRemoteCoworkerTask } from "./mcp-task-submit";
+import * as taskAuthority from "./auth/oauth-task-authority";
 const userContext = { platformRole: "developer", isSuperuser: false };
 const immutableParams = {
   agentId: "AGT-WS-REVIEW",
@@ -66,8 +70,27 @@ function submit(tokenId: string, params: Record<string, unknown> = immutablePara
     params,
   });
 }
+
+it("keeps OAuth idempotency stable through refresh while separating concurrent tasks", async () => {
+  const authority = vi.spyOn(taskAuthority, "resolveMcpTaskAuthorityKey").mockResolvedValue("oauth-family:approved-family");
+  try {
+    for (const [tokenId, idempotencyKey] of [["before", "task-a"], ["after", "task-a"], ["after", "task-b"]]) {
+      await submitRemoteCoworkerTask({ token: { tokenId, userId: "user-1", capability: "write", source: "oauth" },
+        userContext, params: { ...immutableParams, idempotencyKey } });
+    }
+    const requests = autonomous.create.mock.calls.map(([request]) => request);
+    expect(requests).toHaveLength(3);
+    expect(requests[0].taskRunId).toBe(requests[1].taskRunId);
+    expect(requests[2].taskRunId).not.toBe(requests[0].taskRunId);
+    expect(requests[1].metadata).toMatchObject({ taskAuthorityKey: "oauth-family:approved-family", apiTokenId: "after" });
+    expect(db.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({
+      userId: "user-1", AND: expect.arrayContaining([{ a2aMetadata: { path: ["taskAuthorityKey"], equals: "oauth-family:approved-family" } }]),
+    }) }));
+  } finally { authority.mockRestore(); }
+});
 beforeEach(() => {
   vi.clearAllMocks();
+  db.findBacklogItem.mockResolvedValue({ workType: "feature", featureBuilds: [], activeBuild: null, activities: [] });
   vi.unstubAllEnvs();
   vi.stubEnv("DPF_EXTERNAL_MCP_TASK_ASYNC", "0");
   db.findFirst.mockResolvedValue(null);
@@ -79,6 +102,11 @@ beforeEach(() => {
     budgetClass: "quality_first",
     pinnedProviderId: "local",
     pinnedModelId: "huggingface.co/ggml-org/qwen3.8-27b-gguf:Q4_K_M",
+    // BI-8CFA1CA8: residency is stated on the config, not inferred from the
+    // local pin. The migration writes exactly this for every config that was
+    // local-pinned, so this fixture is what a real post-migration row holds —
+    // and the local_only assertion below still guards the same guarantee.
+    residencyPolicy: "local_only",
   });
   db.upsertThread.mockResolvedValue({ id: "thread-external" });
   db.update.mockResolvedValue({});
@@ -181,8 +209,8 @@ describe("submitRemoteCoworkerTask idempotency", () => {
       },
     });
 
-    expect(db.update).toHaveBeenCalledWith({
-      where: { taskRunId: expect.stringMatching(/^TR-MCP-/) },
+    expect(db.updateMany).toHaveBeenCalledWith({
+      where: expect.objectContaining({ taskRunId: expect.stringMatching(/^TR-MCP-/), status: "working" }),
       data: {
         status: "input-required",
         completedAt: null,
@@ -247,24 +275,28 @@ describe("submitRemoteCoworkerTask idempotency", () => {
     }));
   });
 
-  it("replays only the same immutable request", async () => {
+  it.each(["completed", "input-required"])("replays only the same immutable request (%s)", async (status) => {
     await submit("PAT-A");
     const metadata = (autonomous.create.mock.calls[0]?.[0] as { metadata: Record<string, unknown> }).metadata;
     vi.clearAllMocks();
     db.findFirst.mockResolvedValue({
       taskRunId: "TR-MCP-EXISTING",
-      status: "completed",
-      progressPayload: { summary: "approved" },
+      status,
+      progressPayload: status === "completed" ? { summary: "approved" } : {
+        executionUncertainty: { schemaVersion: 1, settlement: "unknown" },
+        terminalWriterWait: { schemaVersion: 1, kind: "missing-terminal-writer", writerToolName: "record_initiative_design_review", resumeMode: "same-taskrun", attempt: 1, observedAt: "2026-10-15T22:15:48.811Z" },
+      },
       a2aMetadata: metadata,
     });
 
     const outcome = await submit("PAT-A");
 
-    expect(outcome).toMatchObject({
-      kind: "result",
-      result: { taskRunId: "TR-MCP-EXISTING", idempotentReplay: true },
-    });
+    expect(outcome).toMatchObject({ kind: "result", result: {
+      taskRunId: "TR-MCP-EXISTING", idempotentReplay: true } });
     expect(autonomous.create).not.toHaveBeenCalled();
+    if (status === "input-required") expect(outcome).toMatchObject({ result: { resumable: false, requiresApproval: false, waitReason: "execution-uncertain" } });
+    expect(autonomous.execute).not.toHaveBeenCalled();
+    expect(queue.send).not.toHaveBeenCalled();
   });
 
   it("rejects reuse of a request key with a changed immutable packet", async () => {
@@ -357,6 +389,7 @@ describe("submitRemoteCoworkerTask idempotency", () => {
         budgetClass: true,
         pinnedProviderId: true,
         pinnedModelId: true,
+        residencyPolicy: true,
       },
     });
   });
@@ -462,8 +495,8 @@ describe("submitRemoteCoworkerTask idempotency", () => {
         version: { type: "string", enum: [initiativeReviewBinding.artifactRef.commitSha] },
         startLine: expect.objectContaining({ type: "number", minimum: 1 }),
         cursor: expect.objectContaining({ type: "string" }),
-        maxLines: expect.objectContaining({ type: "number", maximum: 200 }),
-        maxChars: expect.objectContaining({ type: "number", maximum: 3200 }),
+        maxLines: expect.objectContaining({ type: "number", maximum: SOURCE_READ_MAX_LINES }),
+        maxChars: expect.objectContaining({ type: "number", maximum: SOURCE_READ_MAX_CHARS }),
         expectedBlobId: { type: "string", enum: [initiativeReviewBinding.artifactRef.providerBlobId] },
       },
       required: ["repositoryFullName", "path", "version", "expectedBlobId"],
@@ -488,6 +521,7 @@ describe("submitRemoteCoworkerTask idempotency", () => {
     expect(execution.terminalToolPolicy).toEqual({
       writerToolName: "record_initiative_evidence",
       readerToolNames: ["read_source_at_version", "search_source_at_version"],
+      immutableReaderToolName: "read_source_at_version",
       minimumSuccessfulReaderCalls: 1,
       maximumReaderCalls: 6,
       immutableReaderArguments: {
@@ -721,17 +755,13 @@ describe("submitRemoteCoworkerTask idempotency", () => {
       toolsForProvider: Array<{ function?: { name?: string; parameters?: { properties?: Record<string, unknown> } } }>;
       terminalToolPolicy?: Record<string, unknown>;
     };
-    expect(execution.tools.map((tool) => tool.name)).toEqual([
-      "read_source_at_version",
-      "record_initiative_design_review",
-    ]);
-    expect(execution.toolsForProvider.map((tool) => tool.function?.name)).toEqual([
-      "read_source_at_version",
-      "record_initiative_design_review",
-    ]);
+    const expectedTools = ["read_source_at_version", "record_initiative_design_review"];
+    expect(execution.tools.map((tool) => tool.name)).toEqual(expectedTools);
+    expect(execution.toolsForProvider.map((tool) => tool.function?.name)).toEqual(expectedTools);
     expect(execution.terminalToolPolicy).toEqual({
       writerToolName: "record_initiative_design_review",
       readerToolNames: ["read_source_at_version"],
+      immutableReaderToolName: "read_source_at_version",
       minimumSuccessfulReaderCalls: 1,
       maximumReaderCalls: 6,
       immutableReaderArguments: {
@@ -743,6 +773,8 @@ describe("submitRemoteCoworkerTask idempotency", () => {
     });
     const boundWriter = execution.tools.find((tool) => tool.name === writer.name)!;
     const providerWriter = execution.toolsForProvider.find((tool) => tool.function?.name === writer.name)!;
+    expect(boundWriter.inputSchema.properties.profile).toEqual({ type: "string", enum: ["feature"] });
+    expect(providerWriter.function?.parameters?.properties?.profile).toEqual({ type: "string", enum: ["feature"] });
     expect(boundWriter.inputSchema.properties).not.toHaveProperty("expectedCurrentBaselineId");
     expect(providerWriter.function?.parameters?.properties).not.toHaveProperty("expectedCurrentBaselineId");
     expect(autonomous.create).toHaveBeenCalledWith(expect.objectContaining({
@@ -762,6 +794,6 @@ describe("submitRemoteCoworkerTask idempotency", () => {
     });
 
     expect(autonomous.execute.mock.calls[0]?.[0]).not.toHaveProperty("effortWarrant");
-    expect(db.findUnique).not.toHaveBeenCalled();
+    expect(db.findUnique).toHaveBeenCalledWith(expect.objectContaining({ select: expect.objectContaining({ status: true }) }));
   });
 });

@@ -1,11 +1,11 @@
-import { prisma } from "@dpf/db";
+import { prisma, type Prisma } from "@dpf/db";
 
 import { notifyAttentionLive } from "@/lib/attention/notify-live";
 import type {
   ToolLifecycleDecision,
   ToolLifecycleEvent,
   ToolLifecycleHook,
-} from "@/lib/mcp-governed-execute";
+} from "@/lib/mcp-governed-execute-types";
 
 import {
   resolveCompletionEvidence,
@@ -45,7 +45,7 @@ type CircuitNotificationInput = CircuitIdentity & {
   blockers: CompletionEvidenceBlocker[];
 };
 
-type CompletionEvidenceHookDeps = {
+export type CompletionEvidenceHookDeps = {
   resolve: (input: {
     itemId: string;
     rawManifest: unknown;
@@ -116,15 +116,19 @@ function denialReason(
   );
 }
 
+/** The client the live deps read and write through: the shared one, or a read-only probe transaction. */
+export type CompletionEvidenceHookDb = Pick<Prisma.TransactionClient, "toolExecution" | "backlogItemActivity">;
+
 async function countRecentInvalidAttemptsLive(
   input: InvalidAttemptCountInput,
+  db: CompletionEvidenceHookDb,
 ): Promise<number> {
   const identityWhere = input.apiTokenId
     ? { apiTokenId: input.apiTokenId }
     : input.agentId
       ? { agentId: input.agentId }
       : { userId: input.userId };
-  return prisma.toolExecution.count({
+  return db.toolExecution.count({
     where: {
       ...identityWhere,
       toolName: "update_backlog_item_status",
@@ -138,8 +142,8 @@ async function countRecentInvalidAttemptsLive(
   });
 }
 
-async function recordShadowLive(input: ShadowInput): Promise<void> {
-  const recent = await prisma.backlogItemActivity.findFirst({
+async function recordShadowLive(input: ShadowInput, db: CompletionEvidenceHookDb): Promise<void> {
+  const recent = await db.backlogItemActivity.findFirst({
     where: {
       backlogItemId: input.itemRowId,
       kind: "completion_gate_shadow",
@@ -149,7 +153,7 @@ async function recordShadowLive(input: ShadowInput): Promise<void> {
     select: { id: true },
   });
   if (recent) return;
-  await prisma.backlogItemActivity.create({
+  await db.backlogItemActivity.create({
     data: {
       backlogItemId: input.itemRowId,
       kind: "completion_gate_shadow",
@@ -180,20 +184,21 @@ async function notifyCircuitLive(input: CircuitNotificationInput): Promise<void>
   });
 }
 
-function liveDeps(): CompletionEvidenceHookDeps {
+function liveDeps(db: CompletionEvidenceHookDb): CompletionEvidenceHookDeps {
   return {
     resolve: (input) =>
-      resolveCompletionEvidence(prisma as unknown as CompletionEvidenceRuntimeDb, input),
-    countRecentInvalidAttempts: countRecentInvalidAttemptsLive,
-    recordShadow: recordShadowLive,
+      resolveCompletionEvidence(db as unknown as CompletionEvidenceRuntimeDb, input),
+    countRecentInvalidAttempts: (input) => countRecentInvalidAttemptsLive(input, db),
+    recordShadow: (input) => recordShadowLive(input, db),
     notifyCircuit: notifyCircuitLive,
   };
 }
 
 export function createCompletionEvidenceGovernanceHook(
   overrides: Partial<CompletionEvidenceHookDeps> = {},
+  db: CompletionEvidenceHookDb = prisma,
 ): ToolLifecycleHook {
-  const deps = { ...liveDeps(), ...overrides };
+  const deps = { ...liveDeps(db), ...overrides };
   const now = deps.now ?? (() => new Date());
   return {
     id: "completion-evidence-governance",

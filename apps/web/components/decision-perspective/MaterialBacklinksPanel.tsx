@@ -67,7 +67,7 @@ export function MaterialBacklinksPanel({ result }: { result: MaterialBacklinksRe
               <Link
                 key={decision.interactionId}
                 className="block border-b border-[var(--dpf-border)] pb-2 text-sm last:border-b-0 last:pb-0"
-                href={`/platform/ai/decisions/${encodeURIComponent(decision.interactionId)}`}
+                href={`/coworker-decisions/decisions/${encodeURIComponent(decision.interactionId)}`}
               >
                 <span className="block font-medium">{decision.question}</span>
                 <span className="mt-1 block text-xs text-[var(--dpf-muted)]">{decision.outcomeType ?? "outcome"}</span>

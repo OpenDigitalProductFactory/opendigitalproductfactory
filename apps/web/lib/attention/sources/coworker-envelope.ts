@@ -15,8 +15,12 @@
 //      is a required query predicate here, not a post-filter. No user id, no
 //      query, no items.
 //   2. Only live proposals are actionable. Resolved and expired envelopes are
-//      excluded in the query AND re-checked in the pure projector, so a stale
-//      render cannot present a control the state machine would refuse.
+//      excluded from the live query AND re-checked in the pure projector, so a
+//      stale render cannot present a control the state machine would refuse.
+//   3. A request nobody answered does not vanish (BI-0012E6CA). Expired and
+//      lapsed-proposed envelopes from the last seven days come back as a
+//      non-urgent "Expired unanswered" item with "Ask again" and no decision
+//      controls, until the coworker or the person raises it again.
 //
 // Spec: docs/superpowers/specs/2026-06-23-human-attention-surface-design.md §4.1.
 
@@ -26,12 +30,16 @@ import { observeEnvelopeBacklog } from "@/lib/coworker/envelope-observability";
 import {
   envelopeApproveRoute,
   envelopeDeclineRoute,
+  envelopeReraiseRoute,
 } from "@/lib/coworker/envelope-routes";
+import { EXPIRED_APPROVAL_RESURFACE_MS } from "@/lib/coworker/approval-lifetime";
+import { isRecord } from "@/lib/shared/coerce";
+import { SOURCE_CATALOG } from "@dpf/i18n";
 import {
   coworkerEnvelopesAwaitingDecision,
   coworkerEnvelopesExpiredUnactioned,
 } from "@/lib/operate/metrics";
-import { parseInitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
+import { immutableArtifactIdentity, parseInitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
 
 import { attentionAuthorForAgent } from "../attribution";
 import {
@@ -59,14 +67,73 @@ export type CoworkerEnvelopeRow = {
   taskRunId: string | null;
   expiresAt: Date | null;
   createdAt: Date;
+  /** Present on authority envelopes; ties a re-raised request to its source. */
+  approvalBindingFingerprint?: string | null;
   argsJson?: unknown;
   proposedParameters?: unknown;
+  /** The tool's declared consequence, resolved from the tool registry. */
+  consequence?: string | null;
   taskRun: { a2aMetadata: unknown } | null;
 };
 
 /** The one status that can still be decided. Every other value in the
  *  envelope state machine is either mid-flight or terminal. */
 const DECIDABLE_STATUS = "proposed";
+const APPROVAL_PAGE_SIZE = 25;
+
+/** A cursor is only a position: every query still checks the reading owner. */
+function approvalCursor(value: string): { createdAt: Date; id: string } {
+  if (value.length > 160) throw new Error("Invalid approval cursor.");
+  const [iso, id, extra] = value.split("|");
+  const createdAt = new Date(iso ?? "");
+  if (extra !== undefined || !id || !/^[\w-]{1,128}$/.test(id)
+    || !Number.isFinite(createdAt.getTime()) || createdAt.toISOString() !== iso) {
+    throw new Error("Invalid approval cursor. Open the latest requests to continue.");
+  }
+  return { createdAt, id };
+}
+
+export type ApprovalQueuePage = { items: AttentionItem[]; total: number; nextCursor: string | null };
+
+/** Bounded owner-scoped traversal, independent of whether the anchor still exists. */
+export async function loadCoworkerEnvelopePage(
+  db: Db, delegatingUserId: string | undefined, nowMs: number = Date.now(), before?: string,
+): Promise<ApprovalQueuePage> {
+  if (!delegatingUserId) return { items: [], total: 0, nextCursor: null };
+  const position = before === undefined ? undefined : approvalCursor(before);
+  const [loaded, total] = await Promise.all([
+    loadCoworkerEnvelopeItems(db, delegatingUserId, nowMs, undefined, { position }),
+    db.coworkerActionEnvelope.count({ where: {
+      delegatingUserId, status: DECIDABLE_STATUS,
+      OR: [{ expiresAt: null }, { expiresAt: { gt: new Date(nowMs) } }],
+    } }),
+  ]);
+  const live = loaded.filter(item => item.envelope?.actionable);
+  const shown = live.slice(0, APPROVAL_PAGE_SIZE);
+  const last = shown.at(-1);
+  return {
+    items: [...shown, ...loaded.filter(item => !item.envelope?.actionable)], total,
+    nextCursor: live.length > APPROVAL_PAGE_SIZE && last
+      ? `${last.createdAtIso}|${last.envelope!.envelopeId}` : null,
+  };
+}
+
+const EXPIRED_COPY = SOURCE_CATALOG.approvals.expiredUnanswered;
+
+/**
+ * Nobody answered this request before its window closed: it is `expired`, or
+ * still `proposed` past `expiresAt` because no sweep has settled it yet. A row
+ * carrying a person's approval (humanApproval) or a policy authorization
+ * (policyAuthority) WAS answered — an approved call that lapsed before it ran
+ * is not "unanswered" and is reported through its outcome instead.
+ */
+export function isExpiredUnanswered(row: CoworkerEnvelopeRow, nowMs: number): boolean {
+  const lapsed = row.status === "expired"
+    || (row.status === DECIDABLE_STATUS && row.expiresAt !== null && row.expiresAt.getTime() <= nowMs);
+  if (!lapsed) return false;
+  const args = isRecord(row.argsJson) ? row.argsJson : null;
+  return !(args && ("humanApproval" in args || "policyAuthority" in args));
+}
 
 /** The immutable artifact the reviewer was bound to, when the task carries one.
  *  Reuses the canonical parser rather than re-reading the shape locally. */
@@ -79,13 +146,14 @@ function reviewBindingOf(
     (metadata as Record<string, unknown>).initiativeReviewBinding,
   );
   if (!binding) return undefined;
+  const identity = immutableArtifactIdentity(binding.artifactRef);
   return {
     gate: binding.gate,
     itemId: binding.itemId,
-    repositoryFullName: binding.artifactRef.repositoryFullName,
-    commitSha: binding.artifactRef.commitSha,
-    path: binding.artifactRef.path,
-    providerBlobId: binding.artifactRef.providerBlobId,
+    repositoryFullName: identity.repositoryFullName,
+    commitSha: identity.version,
+    path: identity.path,
+    providerBlobId: identity.expectedBlobId,
   };
 }
 
@@ -105,6 +173,7 @@ export function coworkerEnvelopeToAttentionItem(
   nowMs: number,
 ): AttentionItem {
   const expired = row.expiresAt !== null && row.expiresAt.getTime() <= nowMs;
+  const expiredUnanswered = isExpiredUnanswered(row, nowMs);
   const reviewBinding = reviewBindingOf(row);
   const decision = summarizeCoworkerEnvelopeDecision({
     toolName: row.manifestActionId,
@@ -113,6 +182,8 @@ export function coworkerEnvelopeToAttentionItem(
     reviewBinding,
     recommenderAgentId: row.coworkerAgentId,
     authorizerUserId: row.delegatingUserId,
+    consequence: row.consequence ?? null,
+    rationale: row.rationale,
   });
   const approval: AttentionEnvelopeApproval = {
     envelopeId: row.id,
@@ -124,11 +195,48 @@ export function coworkerEnvelopeToAttentionItem(
     taskRunId: row.taskRunId,
     expiresAtIso: row.expiresAt?.toISOString() ?? null,
     actionable: row.status === DECIDABLE_STATUS && !expired,
+    expiredUnanswered,
     decision,
     ...(reviewBinding ? { reviewBinding } : {}),
     approveHref: envelopeApproveRoute(row.id),
     declineHref: envelopeDeclineRoute(row.id),
+    reraiseHref: envelopeReraiseRoute(row.id),
   };
+
+  if (expiredUnanswered) {
+    return {
+      id: `coworker-envelope:${row.id}`,
+      source: "coworker-envelope",
+      title: `${EXPIRED_COPY.label}: ${row.manifestActionId} for ${row.coworkerAgentId}`,
+      context: `${EXPIRED_COPY.context} ${row.rationale}`,
+      decisionClass: { scorability: "unscorable" },
+      riskClass: "read",
+      triage: {
+        // Nothing is waiting on it any more: the coworker was told to carry on
+        // and the window is closed, so there is no deadline to report.
+        timeToAct: "none",
+        residueReason: "policy-approval",
+        blastRadius: "the coworker work that asked for this approval",
+        decideEffort: "review",
+        // Asking again only puts the same request back in front of you.
+        irreversible: false,
+      },
+      createdAtIso: row.createdAt.toISOString(),
+      portfolio: "for-employees",
+      // No Authorize/Decline: a lapsed request can never be decided from a
+      // stale card. "Ask again" is an in-place mutation on the card, so it
+      // carries no href (the generic owner layer turns hrefs into buttons).
+      actions: [{ kind: "answer", label: EXPIRED_COPY.askAgain }],
+      deepLink: "/workspace/inbox",
+      audience: { operator: true },
+      technical: {
+        detectedBy: row.coworkerAgentId,
+        ...(approval.reviewBinding ? { backlogItemId: approval.reviewBinding.itemId } : {}),
+      },
+      author: attentionAuthorForAgent(row.coworkerAgentId, { trustLevel: "propose" }),
+      envelope: approval,
+    } satisfies AttentionItem;
+  }
 
   const deadline = row.expiresAt?.toISOString();
   return {
@@ -180,17 +288,24 @@ export async function loadCoworkerEnvelopeItems(
   db: Db,
   delegatingUserId: string | undefined,
   nowMs: number = Date.now(),
+  envelopeId?: string,
+  page?: { position?: { createdAt: Date; id: string } },
 ): Promise<AttentionItem[]> {
   if (!delegatingUserId) return [];
   const now = new Date(nowMs);
   const rows = await db.coworkerActionEnvelope.findMany({
     where: {
       delegatingUserId,
+      ...(envelopeId ? { id: envelopeId } : {}),
       status: DECIDABLE_STATUS,
       OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+      ...(page?.position ? { AND: [{ OR: [
+        { createdAt: { lt: page.position.createdAt } },
+        { createdAt: page.position.createdAt, id: { lt: page.position.id } },
+      ] }] } : {}),
     },
-    orderBy: { createdAt: "desc" },
-    take: 25,
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: page ? APPROVAL_PAGE_SIZE + 1 : APPROVAL_PAGE_SIZE,
     select: {
       id: true,
       coworkerAgentId: true,
@@ -205,9 +320,15 @@ export async function loadCoworkerEnvelopeItems(
       taskRun: { select: { a2aMetadata: true } },
     },
   });
-  const proposedByEnvelopeId = await loadProposedParameters(
-    db,
-    rows as unknown as CoworkerEnvelopeRow[],
+  const lapsed = await loadExpiredUnanswered(db, delegatingUserId, nowMs, envelopeId);
+  const liveIds = new Set((rows as unknown as CoworkerEnvelopeRow[]).map((row) => row.id));
+  const allRows = [
+    ...(rows as unknown as CoworkerEnvelopeRow[]),
+    ...lapsed.filter((row) => !liveIds.has(row.id)),
+  ];
+  const proposedByEnvelopeId = await loadProposedParameters(db, allRows);
+  const consequenceByTool = await loadDeclaredConsequences(
+    allRows.map((row) => row.manifestActionId),
   );
   // Fire-and-forget backlog observation (BI-78D3CF1E). The query above
   // deliberately EXCLUDES expired envelopes, because an expired one is not
@@ -242,50 +363,185 @@ export async function loadCoworkerEnvelopeItems(
     // Observability must never affect the inbox it rides on.
   });
 
-  return (rows as unknown as CoworkerEnvelopeRow[]).map((row) =>
+  return allRows.map((row) =>
     coworkerEnvelopeToAttentionItem(
       {
         ...row,
         ...(proposedByEnvelopeId.has(row.id)
           ? { proposedParameters: proposedByEnvelopeId.get(row.id) }
           : {}),
+        consequence: consequenceByTool.get(row.manifestActionId) ?? null,
       },
       nowMs,
     ),
   );
 }
 
+/**
+ * BI-7BCC87BB (plan B8, AC-OVERRIDE; WWMD DI-18258852EB33): another person's
+ * waiting request, opened by an admin through its exact link. The caller (the
+ * inbox page) has already checked the user-management capability; this only
+ * loads the one request, never a list, so the delegate-isolation rule above
+ * still holds for every queue. The card it projects offers "Decide on their
+ * behalf" instead of Authorize / Decline, and names the owner as the
+ * accountable authorizer.
+ */
+export async function loadOnBehalfEnvelopeItem(
+  db: Db,
+  envelopeId: string,
+  readerUserId: string,
+  nowMs: number = Date.now(),
+): Promise<AttentionItem[]> {
+  const now = new Date(nowMs);
+  const row = await db.coworkerActionEnvelope.findFirst({
+    where: {
+      id: envelopeId,
+      status: DECIDABLE_STATUS,
+      NOT: { delegatingUserId: readerUserId },
+      OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+    },
+    select: {
+      id: true, coworkerAgentId: true, delegatingUserId: true, manifestActionId: true, rationale: true,
+      status: true, taskRunId: true, expiresAt: true, createdAt: true, argsJson: true,
+      taskRun: { select: { a2aMetadata: true } },
+    },
+  }) as unknown as CoworkerEnvelopeRow | null;
+  if (!row) return [];
+  const [owner, proposed, consequences] = await Promise.all([
+    db.user.findUnique({ where: { id: row.delegatingUserId }, select: { email: true } }).catch(() => null),
+    loadProposedParameters(db, [row]),
+    loadDeclaredConsequences([row.manifestActionId]),
+  ]);
+  const ownerLabel = owner?.email ?? row.delegatingUserId;
+  const item = coworkerEnvelopeToAttentionItem({
+    ...row,
+    ...(proposed.has(row.id) ? { proposedParameters: proposed.get(row.id) } : {}),
+    consequence: consequences.get(row.manifestActionId) ?? null,
+  }, nowMs);
+  if (!item.envelope) return [item];
+  return [{
+    ...item,
+    envelope: { ...item.envelope, onBehalf: { ownerLabel }, decision: { ...item.envelope.decision, authorizerLabel: ownerLabel } },
+  }];
+}
+
+/**
+ * The reader's requests that closed unanswered in the last seven days and have
+ * not been asked again (BI-0012E6CA).
+ *
+ * A request counts as asked again when a newer envelope exists for the same
+ * exact binding — the coworker re-asked, or the person pressed "Ask again"
+ * (which copies the binding). The unanswered predicate is re-checked in code
+ * (isExpiredUnanswered) rather than trusted from the query.
+ */
+async function loadExpiredUnanswered(
+  db: Db,
+  delegatingUserId: string,
+  nowMs: number,
+  envelopeId: string | undefined,
+): Promise<CoworkerEnvelopeRow[]> {
+  const now = new Date(nowMs);
+  const candidates = await db.coworkerActionEnvelope.findMany({
+    where: {
+      delegatingUserId,
+      ...(envelopeId ? { id: envelopeId } : {}),
+      status: { in: ["expired", DECIDABLE_STATUS] },
+      expiresAt: { lte: now },
+      createdAt: { gte: new Date(nowMs - EXPIRED_APPROVAL_RESURFACE_MS) },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 25,
+    select: {
+      id: true,
+      coworkerAgentId: true,
+      delegatingUserId: true,
+      manifestActionId: true,
+      rationale: true,
+      status: true,
+      taskRunId: true,
+      expiresAt: true,
+      createdAt: true,
+      argsJson: true,
+      approvalBindingFingerprint: true,
+      taskRun: { select: { a2aMetadata: true } },
+    },
+  }) as unknown as CoworkerEnvelopeRow[];
+  const unanswered = candidates.filter((row) =>
+    row.delegatingUserId === delegatingUserId && isExpiredUnanswered(row, nowMs));
+  const fingerprints = [...new Set(unanswered.flatMap((row) =>
+    row.approvalBindingFingerprint ? [row.approvalBindingFingerprint] : []))];
+  if (fingerprints.length === 0) return unanswered;
+
+  const oldest = unanswered.reduce((min, row) => (row.createdAt < min ? row.createdAt : min), unanswered[0]!.createdAt);
+  const successors = await db.coworkerActionEnvelope.findMany({
+    where: {
+      delegatingUserId,
+      approvalBindingFingerprint: { in: fingerprints },
+      createdAt: { gt: oldest },
+    },
+    select: { id: true, approvalBindingFingerprint: true, createdAt: true },
+  }) as unknown as Array<{ id: string; approvalBindingFingerprint: string | null; createdAt: Date }>;
+  return unanswered.filter((row) => !successors.some((later) =>
+    later.id !== row.id
+    && later.approvalBindingFingerprint === row.approvalBindingFingerprint
+    && later.createdAt > row.createdAt));
+}
+
 type ProposedExecutionRow = {
   taskRunId: string | null;
   toolName: string;
+  userId?: string;
   parameters: unknown;
   result: unknown;
 };
 
+/**
+ * The pending call the envelope was minted for, found by the envelope id the
+ * governed executor wrote into its result. Every surface writes that id, so
+ * this finds external MCP envelopes (which carry no TaskRun) as well as task
+ * envelopes (BI-12E5DD91). Only the delegating user's own execution of the
+ * same tool is accepted.
+ */
 async function loadProposedParameters(
   db: Db,
   rows: CoworkerEnvelopeRow[],
 ): Promise<Map<string, unknown>> {
-  const taskRunIds = rows
-    .map((row) => row.taskRunId)
-    .filter((id): id is string => typeof id === "string" && id.length > 0);
-  if (taskRunIds.length === 0) return new Map();
+  if (rows.length === 0) return new Map();
   const executions = await db.toolExecution.findMany({
     where: {
-      taskRunId: { in: taskRunIds },
       success: false,
+      toolName: { in: [...new Set(rows.map((row) => row.manifestActionId))] },
+      OR: rows.map((row) => ({ result: { path: ["data", "envelopeId"], equals: row.id } })),
     },
     orderBy: { createdAt: "desc" },
-    select: { taskRunId: true, toolName: true, parameters: true, result: true },
+    select: { taskRunId: true, toolName: true, userId: true, parameters: true, result: true },
   }) as ProposedExecutionRow[];
   const proposed = new Map<string, unknown>();
   for (const row of rows) {
     const match = executions.find((execution) =>
-      execution.taskRunId === row.taskRunId
-      && execution.toolName === row.manifestActionId
-      && envelopeIdFromExecutionResult(execution.result) === row.id,
+      execution.toolName === row.manifestActionId
+      && envelopeIdFromExecutionResult(execution.result) === row.id
+      && (execution.userId === undefined || execution.userId === row.delegatingUserId)
+      && (!row.taskRunId || execution.taskRunId === row.taskRunId),
     );
     if (match) proposed.set(row.id, match.parameters);
   }
   return proposed;
+}
+
+/** Declared consequences, read from the tool registry. Display only: an
+ *  unavailable registry leaves the card saying none is declared. */
+async function loadDeclaredConsequences(toolNames: string[]): Promise<Map<string, string>> {
+  const wanted = new Set(toolNames);
+  const out = new Map<string, string>();
+  if (wanted.size === 0) return out;
+  try {
+    const { PLATFORM_TOOLS } = await import("@/lib/mcp-tools");
+    for (const tool of PLATFORM_TOOLS) {
+      if (wanted.has(tool.name) && tool.consequence) out.set(tool.name, tool.consequence);
+    }
+  } catch {
+    // Display-only enrichment; the card falls back to "none declared".
+  }
+  return out;
 }

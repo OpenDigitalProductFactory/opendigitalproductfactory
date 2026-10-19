@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { listWorkroomObservation } from "./list-observation";
 import { WorkroomObservations } from "./observation-pages";
 import { clampToolResultForModel } from "@/lib/tak/tool-result-budget";
+vi.mock("./handler-actor", () => ({ workCapsuleActor: vi.fn(async () => ({ principalId: "human-u", agentPrincipalId: "assistant" })) }));
 
 const context = { userContext: { userId: "u", platformRole: "HR-000", isSuperuser: true } };
 const fixture = () => Array.from({ length: 251 }, (_, i) => ({
@@ -12,6 +13,16 @@ const fixture = () => Array.from({ length: 251 }, (_, i) => ({
 }));
 
 describe("Workroom observation loading and transport", () => {
+  it("constrains OAuth observations and their totals to the human and assistant", async () => {
+    const tx = { $executeRawUnsafe: vi.fn(), workroom: { findMany: vi.fn().mockResolvedValue([]) }, featureBuild: { findMany: vi.fn().mockResolvedValue([]) } };
+    const db = { $transaction: vi.fn(async (fn: (arg: typeof tx) => Promise<unknown>) => fn(tx)) };
+    const result = await listWorkroomObservation(db as never, {}, "u", { ...context, authSource: "oauth", agentId: "claude" }, new WorkroomObservations());
+    expect((result.data as any).page.ownershipScope).toBe("caller-visible");
+    expect(tx.workroom.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { AND: [
+      { OR: [{ leaseHolderPrincipalId: "human-u" }, { createdByPrincipalId: "human-u" }, { requestedByPrincipalId: "human-u" }] },
+      { OR: [{ leaseHolderPrincipalId: "assistant" }, { createdByPrincipalId: "assistant" }, { requestedByPrincipalId: "assistant" }] },
+    ] } }));
+  });
   it("filters stale rooms before paging and takes one read-only consistent observation", async () => {
     const source = fixture();
     const tx = { $executeRawUnsafe: vi.fn(), workroom: { findMany: vi.fn().mockResolvedValue(source) }, featureBuild: { findMany: vi.fn().mockResolvedValue([]) } };
@@ -19,7 +30,7 @@ describe("Workroom observation loading and transport", () => {
     const result = await listWorkroomObservation(db as never, { staleOnly: true, limit: 1 }, "u", context, new WorkroomObservations());
     expect(result.success).toBe(true);
     expect((result.data as any).capsules.map((r: any) => r.capsuleId)).toEqual(["WC-200"]);
-    expect((result.data as any).page).toMatchObject({ populationCount: 1, nextCursor: null });
+    expect((result.data as any).page).toMatchObject({ populationCount: 1, nextCursor: null, ownershipScope: "installation" });
     expect(tx.$executeRawUnsafe).toHaveBeenCalledWith("SET TRANSACTION READ ONLY");
     expect(db.$transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: "RepeatableRead", timeout: 5000, maxWait: 1000 });
     expect(tx.workroom.findMany).toHaveBeenCalledWith(expect.objectContaining({ take: 10001, orderBy: [{ updatedAt: "desc" }, { capsuleId: "asc" }] }));

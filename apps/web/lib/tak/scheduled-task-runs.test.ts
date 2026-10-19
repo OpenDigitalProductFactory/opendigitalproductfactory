@@ -73,7 +73,17 @@ describe("detectScheduledRequiredToolFailure", () => {
     ).toBe("required governed tool promote_to_build_studio executed zero times");
   });
 
-  it("does not mistake a pending action proposal for an executed governed mutation", async () => {
+  it("does not call a diverted proposal a failed run (BI-4F64C5D3)", async () => {
+    // This case used to report "executed zero times". A proposal is genuinely
+    // not delivery — but when the run's actionBoundary is "propose", diverting
+    // the call is the run behaving correctly, and calling that a failure put
+    // every propose-boundary coworker into the BI-754C9E82 retry cadence, which
+    // re-proposed what it had already proposed. Measured on the reference
+    // install 2026-09-12: 183 proposals since 2026-08-26, none approved,
+    // including 55 copies of a single run_hive_scout_ingest.
+    //
+    // The distinction the old boolean could not carry now lives in
+    // classifyScheduledRequiredTools: absent is a failure, proposed is not.
     const { detectScheduledRequiredToolFailure } = await import("./scheduled-task-runs");
     expect(
       detectScheduledRequiredToolFailure({
@@ -89,7 +99,168 @@ describe("detectScheduledRequiredToolFailure", () => {
           },
         ],
       }),
-    ).toBe("required governed tool promote_to_build_studio executed zero times");
+    ).toBeNull();
+  });
+});
+
+describe("classifyScheduledRequiredTools (BI-4F64C5D3)", () => {
+  const REQUIRED = [{ name: "run_hive_scout_ingest", sideEffect: true }];
+  const PROMPT = "Invoke run_hive_scout_ingest once before writing any summary.";
+
+  it("calls a landed mutation executed", async () => {
+    const { classifyScheduledRequiredTools } = await import("./scheduled-task-runs");
+    expect(
+      classifyScheduledRequiredTools({
+        prompt: PROMPT,
+        authorizedTools: REQUIRED,
+        executedTools: [{ name: "run_hive_scout_ingest", result: { success: true } }],
+      }),
+    ).toEqual({ kind: "executed" });
+  });
+
+  it("calls a diverted mutation proposed, and names the tool", async () => {
+    // The live shape: the coworker said "the daily external catalog scout pass
+    // has been proposed and is now awaiting your approval", and the platform
+    // filed the run as a failure.
+    const { classifyScheduledRequiredTools } = await import("./scheduled-task-runs");
+    expect(
+      classifyScheduledRequiredTools({
+        prompt: PROMPT,
+        authorizedTools: REQUIRED,
+        executedTools: [
+          {
+            name: "run_hive_scout_ingest",
+            result: { success: true, data: { proposalId: "prop-1", status: "proposed" } },
+          },
+        ],
+      }),
+    ).toEqual({ kind: "proposed", toolName: "run_hive_scout_ingest" });
+  });
+
+  it("calls a mutation that was never attempted absent — still a failure", async () => {
+    const { classifyScheduledRequiredTools } = await import("./scheduled-task-runs");
+    expect(
+      classifyScheduledRequiredTools({
+        prompt: PROMPT,
+        authorizedTools: REQUIRED,
+        executedTools: [{ name: "get_marketing_summary", result: { success: true } }],
+      }),
+    ).toEqual({ kind: "absent", toolName: "run_hive_scout_ingest" });
+  });
+
+  it("a failed attempt is absent, not proposed", async () => {
+    const { classifyScheduledRequiredTools } = await import("./scheduled-task-runs");
+    expect(
+      classifyScheduledRequiredTools({
+        prompt: PROMPT,
+        authorizedTools: REQUIRED,
+        executedTools: [{ name: "run_hive_scout_ingest", result: { success: false } }],
+      }),
+    ).toEqual({ kind: "absent", toolName: "run_hive_scout_ingest" });
+  });
+
+  it("one landed attempt beats an earlier diverted one", async () => {
+    const { classifyScheduledRequiredTools } = await import("./scheduled-task-runs");
+    expect(
+      classifyScheduledRequiredTools({
+        prompt: PROMPT,
+        authorizedTools: REQUIRED,
+        executedTools: [
+          {
+            name: "run_hive_scout_ingest",
+            result: { success: true, data: { proposalId: "p", status: "proposed" } },
+          },
+          { name: "run_hive_scout_ingest", result: { success: true } },
+        ],
+      }),
+    ).toEqual({ kind: "executed" });
+  });
+
+  it("a genuinely absent mutation outranks a diverted one elsewhere", async () => {
+    // A run that proposed one thing and never attempted another has still
+    // failed: the retry cadence is the right home for the missing one.
+    const { classifyScheduledRequiredTools } = await import("./scheduled-task-runs");
+    expect(
+      classifyScheduledRequiredTools({
+        prompt: "Call run_hive_scout_ingest, then create_backlog_item.",
+        authorizedTools: [
+          { name: "run_hive_scout_ingest", sideEffect: true },
+          { name: "create_backlog_item", sideEffect: true },
+        ],
+        executedTools: [
+          {
+            name: "run_hive_scout_ingest",
+            result: { success: true, data: { proposalId: "p", status: "proposed" } },
+          },
+        ],
+      }),
+    ).toEqual({ kind: "absent", toolName: "create_backlog_item" });
+  });
+
+  it("calls an approval-envelope rejection proposed, not absent", async () => {
+    // The live marketing repro, TR-SCHED-76846488 on 2026-09-07: the coworker
+    // read its context, then called create_marketing_campaign_brief, which was
+    // rejected with error "approval_required" and an envelope expiring 15
+    // minutes later. Nobody was watching a Monday 16:10 autonomous run, so the
+    // envelope lapsed; the coworker saw a failed call and retried until it hit
+    // its safety limit. The run was filed as an error, and its last words were
+    // "couldn't complete a final answer before hitting my safety limit".
+    //
+    // 425 tool failures on this install carry that error since 2026-08-25.
+    const { classifyScheduledRequiredTools } = await import("./scheduled-task-runs");
+    expect(
+      classifyScheduledRequiredTools({
+        prompt: "If there is NO recent brief, create one with create_marketing_campaign_brief.",
+        authorizedTools: [{ name: "create_marketing_campaign_brief", sideEffect: true }],
+        executedTools: [
+          {
+            name: "create_marketing_campaign_brief",
+            result: { success: false, error: "approval_required" },
+          },
+        ],
+      }),
+    ).toEqual({ kind: "proposed", toolName: "create_marketing_campaign_brief" });
+  });
+
+  it("a failure that is not an approval request is still absent", async () => {
+    // Only a pending human decision earns the third verdict. A validation
+    // error, a denied grant or a crash is a real failure and must keep its
+    // retry.
+    const { classifyScheduledRequiredTools } = await import("./scheduled-task-runs");
+    expect(
+      classifyScheduledRequiredTools({
+        prompt: PROMPT,
+        authorizedTools: REQUIRED,
+        executedTools: [
+          { name: "run_hive_scout_ingest", result: { success: false, error: "grant_denied" } },
+        ],
+      }),
+    ).toEqual({ kind: "absent", toolName: "run_hive_scout_ingest" });
+  });
+
+  it("a later successful call beats an earlier approval rejection", async () => {
+    const { classifyScheduledRequiredTools } = await import("./scheduled-task-runs");
+    expect(
+      classifyScheduledRequiredTools({
+        prompt: PROMPT,
+        authorizedTools: REQUIRED,
+        executedTools: [
+          { name: "run_hive_scout_ingest", result: { success: false, error: "approval_required" } },
+          { name: "run_hive_scout_ingest", result: { success: true } },
+        ],
+      }),
+    ).toEqual({ kind: "executed" });
+  });
+
+  it("a read-only tool is never required", async () => {
+    const { classifyScheduledRequiredTools } = await import("./scheduled-task-runs");
+    expect(
+      classifyScheduledRequiredTools({
+        prompt: "Call get_marketing_summary first.",
+        authorizedTools: [{ name: "get_marketing_summary" }],
+        executedTools: [],
+      }),
+    ).toEqual({ kind: "executed" });
   });
 });
 
@@ -190,5 +361,161 @@ describe("createTaskRunForScheduledTask", () => {
       trigger: "scheduled",
       proactivity,
     });
+  });
+});
+
+describe("a tool name is a token, not a substring (BI-4F64C5D3 follow-on)", () => {
+  // The live pair: create_marketing_campaign (marketing-pack) is a prefix of
+  // create_marketing_campaign_brief (marketing-ops-pack). On 2026-09-23 the
+  // coworker wrote "Foster Carer Recruitment Drive" and the run was still
+  // filed `error` for "create_marketing_campaign executed zero times".
+  const PROMPT =
+    "If there is NO active or recent campaign brief, create one with create_marketing_campaign_brief.";
+  const BOTH = [
+    { name: "create_marketing_campaign", sideEffect: true },
+    { name: "create_marketing_campaign_brief", sideEffect: true },
+  ];
+
+  it("does not demand a tool whose name is merely a prefix of the one asked for", async () => {
+    const { classifyScheduledRequiredTools } = await import("./scheduled-task-runs");
+    expect(
+      classifyScheduledRequiredTools({
+        prompt: PROMPT,
+        authorizedTools: BOTH,
+        executedTools: [
+          { name: "create_marketing_campaign_brief", result: { success: true } },
+        ],
+      }),
+    ).toEqual({ kind: "executed" });
+  });
+
+  it("still demands the prefix tool when the prompt names it on its own", async () => {
+    const { classifyScheduledRequiredTools } = await import("./scheduled-task-runs");
+    expect(
+      classifyScheduledRequiredTools({
+        prompt: "Run create_marketing_campaign for the quarter.",
+        authorizedTools: BOTH,
+        executedTools: [],
+      }),
+    ).toEqual({ kind: "absent", toolName: "create_marketing_campaign" });
+  });
+
+  it("matches a name followed by punctuation, not only whitespace", async () => {
+    const { classifyScheduledRequiredTools } = await import("./scheduled-task-runs");
+    expect(
+      classifyScheduledRequiredTools({
+        prompt: "Call `create_marketing_campaign`, then stop.",
+        authorizedTools: BOTH,
+        executedTools: [],
+      }),
+    ).toEqual({ kind: "absent", toolName: "create_marketing_campaign" });
+  });
+
+  it("is not fooled by a longer name that merely contains the tool", async () => {
+    const { classifyScheduledRequiredTools } = await import("./scheduled-task-runs");
+    expect(
+      classifyScheduledRequiredTools({
+        prompt: "Use xx_create_marketing_campaign_yy only.",
+        authorizedTools: [{ name: "create_marketing_campaign", sideEffect: true }],
+        executedTools: [],
+      }),
+    ).toEqual({ kind: "executed" });
+  });
+});
+
+// BI-43C3E914 — a Workroom stage's declared tools are pinned alongside the
+// writers the prompt names. Pinning only prompt-named tools was a GPP C-6
+// "Reach reconciliation" gap in the reverse direction.
+describe("scheduledToolsNeedingPin with a stage's declared tools", () => {
+  const PROMPT = "Record what you did by calling record_workroom_evidence.";
+  const WRITER = { name: "record_workroom_evidence", sideEffect: true };
+  const MANIFEST = { name: "read_codebase_manifest", sideEffect: false };
+  const POSTURE = { name: "list_patch_posture", sideEffect: false };
+
+  it("pins declared tools after the prompt's writer when a declared tool is deferred", async () => {
+    const { scheduledToolsNeedingPin } = await import("./scheduled-task-runs");
+    expect(scheduledToolsNeedingPin({
+      prompt: PROMPT,
+      attached: [WRITER],
+      deferred: [MANIFEST, POSTURE],
+      declaredStageTools: ["read_codebase_manifest", "list_patch_posture"],
+    })).toEqual(["record_workroom_evidence", "read_codebase_manifest", "list_patch_posture"]);
+  });
+
+  it("pins nothing when every required and declared tool is already attached", async () => {
+    const { scheduledToolsNeedingPin } = await import("./scheduled-task-runs");
+    expect(scheduledToolsNeedingPin({
+      prompt: PROMPT,
+      attached: [WRITER, MANIFEST],
+      deferred: [POSTURE],
+      declaredStageTools: ["read_codebase_manifest"],
+    })).toEqual([]);
+  });
+
+  it("an undeclared stage pins exactly as before", async () => {
+    const { scheduledToolsNeedingPin } = await import("./scheduled-task-runs");
+    const before = { prompt: PROMPT, attached: [MANIFEST], deferred: [WRITER, POSTURE] };
+    expect(scheduledToolsNeedingPin(before)).toEqual(["record_workroom_evidence"]);
+    expect(scheduledToolsNeedingPin({ ...before, declaredStageTools: [] })).toEqual(["record_workroom_evidence"]);
+    // The scheduler passes the task's taskConfig; its workroomStage record supplies the tools.
+    expect(
+      scheduledToolsNeedingPin({
+        ...before,
+        taskConfig: { workroomStage: { shapeKey: "s", shapeVersion: "1", stageKey: "x", tools: ["read_codebase_manifest"] } },
+      }),
+    ).toContain("read_codebase_manifest");
+    expect(scheduledToolsNeedingPin({ prompt: "nothing named", attached: [], deferred: [POSTURE] })).toEqual([]);
+  });
+
+  it("does not repeat a declared tool the prompt also requires", async () => {
+    const { scheduledToolsNeedingPin } = await import("./scheduled-task-runs");
+    expect(scheduledToolsNeedingPin({
+      prompt: PROMPT,
+      attached: [],
+      deferred: [WRITER],
+      declaredStageTools: ["record_workroom_evidence"],
+    })).toEqual(["record_workroom_evidence"]);
+  });
+});
+
+// ─── BI-D48B3B0F: the verdict judges what the run persisted ──────────────────
+//
+// Live, 2026-10-01: four Workroom stages recorded their evidence (ToolExecution
+// success=true) and the run was still failed for "record_workroom_evidence
+// executed zero times", because a later turn's provider failure returned only
+// the apology and none of the earlier attempt's calls.
+describe("withPersistedExecutions (BI-D48B3B0F)", () => {
+  const prompt = "Record the stage with record_workroom_evidence.";
+  const authorizedTools = [{ name: "record_workroom_evidence", sideEffect: true }];
+  const apology = "I couldn't verify this against live data just now — I don't want to guess.";
+
+  it("fails a run whose loop result carries no executions (the old verdict, reproduced)", async () => {
+    const { detectScheduledRunFailure } = await import("./scheduled-task-runs");
+    expect(detectScheduledRunFailure({ prompt, authorizedTools, executedTools: [], content: apology }))
+      .toMatch(/record_workroom_evidence executed zero times/);
+  });
+
+  it("passes the same run when the governed write was persisted under its taskRunId", async () => {
+    const { detectScheduledRunFailure, withPersistedExecutions } = await import("./scheduled-task-runs");
+    const executedTools = withPersistedExecutions([], [{ toolName: "record_workroom_evidence", result: { success: true, message: "Recorded evidence" } }]);
+    expect(detectScheduledRunFailure({ prompt, authorizedTools, executedTools, content: apology })).toBeNull();
+  });
+
+  it("still fails when nothing was persisted", async () => {
+    const { detectScheduledRunFailure, withPersistedExecutions } = await import("./scheduled-task-runs");
+    expect(detectScheduledRunFailure({ prompt, authorizedTools, executedTools: withPersistedExecutions([], []), content: apology }))
+      .toMatch(/executed zero times/);
+  });
+
+  it("counts a persisted tool once and never overrides the loop's own record of it", async () => {
+    const { withPersistedExecutions } = await import("./scheduled-task-runs");
+    const own = { name: "record_workroom_evidence", result: { success: false, error: "approval_required" } };
+    const merged = withPersistedExecutions([own], [
+      { toolName: "record_workroom_evidence", result: {} },
+      { toolName: "list_bills", result: {} },
+      { toolName: "list_bills", result: {} },
+    ]);
+    expect(merged.map((tool) => tool.name)).toEqual(["record_workroom_evidence", "list_bills"]);
+    expect(merged[0]).toBe(own);
   });
 });

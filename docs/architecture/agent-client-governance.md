@@ -84,6 +84,8 @@ compatibility adapter while external clients can construct the same receipt.
 
 A receipt is fresh only while all of its semantic identity remains unchanged:
 
+- requested artifact role;
+
 - Workroom;
 - base and head trees;
 - diff digest;
@@ -102,8 +104,8 @@ portal timelines, local hooks, CI, and promotion controls to project the same
 evidence in later rollout phases.
 
 External delivery surfaces invoke the native `review_semantic_change` operation
-only after the complete concern is committed locally and before pregate or the
-first push. Build Studio invokes the same operation contract once over the
+only after the complete concern is committed locally and has its required gate
+evidence, before the first push. Build Studio invokes the same operation contract once over the
 assembled task diff, before UX verification and promotion; its existing
 task-level reviews remain intact. Runtime code activates the Change Reviewer,
 while a docs-only low-risk change can receive an explicit auto-pass receipt.
@@ -120,11 +122,28 @@ validates an exact-tree git-dir sidecar with no model, portal, database, or
 network call. Explicit exemptions are policy-versioned, evidence-linked, and
 expiry-bound.
 
+New requests use the role-bound v2 contract and emit v3 receipts. Legacy requests
+retain their original execution contract, and historical receipts remain readable
+for audit. They cannot satisfy the new contract. Publication supplies its expected
+artifact role independently: Git hooks expect `code-change`; document callers
+explicitly request their role when recording and validating a receipt. A spec or
+plan review cannot authorize code publication, even when the bytes match. The
+policy remains in shadow mode; activating the role contract does not change
+enforcement or grant authority.
+
 Reviewer execution status is not a semantic verdict. Capacity, admission,
 transport, or response-parsing failure produces `inconclusive` and a retry
 action; it never fabricates a critical code finding. GitHub/CI correlation is
 written to the same evidence streams as `semantic-change-review.outcome`, and
 inconclusive samples are excluded from precision and unique-yield denominators.
+
+An external requester can submit confirmed recovery through `retry_semantic_review`
+using the returned TaskRun identity. This calls the portal's existing native
+recovery function. The authenticated user must be the original requester; saved
+authority, current grants, deadline, attempt budget, quiescence and the concurrent
+generation fence still apply. Confirmation acknowledges that replacement inference
+can incur another provider charge. The adapter does not renew an expired request,
+override a refusal, accept a payload user identity or dispatch unrelated tasks.
 
 Nor can a reviewer pass a change it could not read. Where the change is not
 present in what the reviewer can see, it answers `cannot-verify`, which is
@@ -168,7 +187,8 @@ then bounded by regulation and intrinsic authority.
 The platform asks for attention only when attention changes the outcome:
 
 - evidence is genuinely missing;
-- a newer failure invalidates an older pass;
+- a newer failure invalidates an older pass (in any dimension, on every close
+  path, merged or not; BI-4A222439);
 - repeated unsupported mutations suggest a runaway client;
 - a regulatory or authority ceiling requires a human; or
 - bounded autonomous recovery is exhausted.

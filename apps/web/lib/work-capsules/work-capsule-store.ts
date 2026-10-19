@@ -23,22 +23,24 @@ import {
   buildWorkCapsuleScopeClaims,
 } from "@/lib/work-capsules";
 import { admitRuntimeGuardedWork } from "@/lib/platform-runtime/work-admission";
+import { clearBuildPrDeliveryState } from "@/lib/build/build-pr-delivery-state";
 import { planCapsuleChangeImpact, type CapsuleChangeImpactContract } from "./change-impact-contract";
 import { assertWorkroomPublishable } from "./publication-refusal";
+import { assertScopeClaimLease } from "./scope-claim-lease";
 import { completeGovernedWorkCapsuleStatus } from "./work-capsule-terminal-status";
 import {
   CapsuleBranchOccupiedError,
-  isExternalLeaseExecutor,
   isReusableLiveCapsule,
   isTerminalCapsuleStatus,
-  leaseUntil,
   planTerminalCapsuleResume,
+  planLiveCapsuleBinding,
   readBranchIdentityCapsule,
   TERMINAL_CAPSULE_STATUSES,
   defaultPlatformRepositoryFullName,
   type CapsuleAdoptionInput,
 } from "./work-capsule-branch-identity";
-import type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
+import type { CapsuleDb, ClaimBacklogWorkspaceInput, WorkCapsuleActor } from "./work-capsule-store-types";
+import { assertOAuthWorkroomOwner, workroomOwnershipData } from "./oauth-workroom-ownership";
 import { recordWorkCapsuleActivity as recordActivity } from "./work-capsule-activity-store";
 import { intentsConflict, scopeValuesOverlap } from "./work-capsule-scope-overlap";
 import {
@@ -55,6 +57,8 @@ export {
 } from "./work-capsule-terminal-status";
 export { recordWorkCapsuleEvidence } from "./work-capsule-activity-store";
 export { declareWorkCapsuleIntent } from "./work-capsule-intent-store";
+export { heartbeatWorkCapsule, reassignWorkCapsuleExecutor } from "./workroom-lease";
+export { releaseWorkCapsuleScope } from "./scope-release-store";
 
 type CapsuleCreateInput = {
   title: string;
@@ -75,10 +79,7 @@ type CapsuleCreateInput = {
   // the creating actor. Optional.
   requestedByPrincipalId?: string | null;
 };
-
-
 type ScopeClaimInput = Pick<ScopeClaim, "kind" | "value" | "intent">;
-type ScopeReleaseInput = Pick<ScopeClaim, "kind" | "value">;
 
 type CapsuleWorkspacePlanInput = {
   capsuleId: string;
@@ -128,7 +129,7 @@ export async function createWorkCapsule(args: {
   const existing = await args.db.workroom.findUnique({
     where: { idempotencyKey: args.input.idempotencyKey },
   });
-  if (existing) { assertScopeReadback(existing, args.input.scope); return existing; }
+  if (existing) { assertOAuthWorkroomOwner(existing, args.actor); assertScopeReadback(existing, args.input.scope); return existing; }
 
   const now = new Date();
   try {
@@ -143,7 +144,7 @@ export async function createWorkCapsule(args: {
           source: args.input.source,
           executorKind: args.input.executorKind ?? null,
           executorRef: args.input.executorRef ?? null,
-          repositoryFullName: capsuleRepositoryFullName(args.input.source, args.input.repositoryFullName, defaultPlatformRepositoryFullName),
+          repositoryFullName: capsuleRepositoryFullName(args.input.source, args.input.repositoryFullName, defaultPlatformRepositoryFullName, args.input.idempotencyKey),
           backlogItemId: args.input.backlogItemId ?? null,
           epicId: args.input.epicId ?? null,
           featureBuildId: args.input.featureBuildId ?? null,
@@ -159,12 +160,7 @@ export async function createWorkCapsule(args: {
           scopeClaims: buildWorkCapsuleScopeClaims(scope, now),
           workspaceState: args.input.workspaceState ?? {},
           idempotencyKey: args.input.idempotencyKey,
-          leaseHolderPrincipalId: isExternalLeaseExecutor(args.input.executorKind)
-            ? args.actor.principalId
-            : null,
-          leaseExpiresAt: isExternalLeaseExecutor(args.input.executorKind) ? leaseUntil(now) : null,
-          createdByPrincipalId: args.actor.principalId,
-          requestedByPrincipalId: args.input.requestedByPrincipalId ?? null,
+          ...workroomOwnershipData(args.actor, args.input.executorKind, now, args.input.requestedByPrincipalId),
           status,
         },
       });
@@ -181,7 +177,7 @@ export async function createWorkCapsule(args: {
       const winner = await args.db.workroom.findUnique({
         where: { idempotencyKey: args.input.idempotencyKey },
       });
-      if (winner) { assertScopeReadback(winner, args.input.scope); return winner; }
+      if (winner) { assertOAuthWorkroomOwner(winner, args.actor); assertScopeReadback(winner, args.input.scope); return winner; }
     }
     throw error;
   }
@@ -198,7 +194,7 @@ export async function adoptWorktreeCapsule(args: {
   const scope = normalizePersistedScope(args.input.scope);
 
   const { existing, repositoryUnbound } = await readBranchIdentityCapsule(args.db, args.input);
-
+  if (existing) assertOAuthWorkroomOwner(existing, args.actor);
   const now = new Date();
   const resumePlan = planTerminalCapsuleResume({ existing, input: args.input, actor: args.actor, now });
   if (resumePlan) {
@@ -216,7 +212,7 @@ export async function adoptWorktreeCapsule(args: {
 
   if (existing && isReusableLiveCapsule(existing, args.input)) {
     // Re-adoption advances supplied identity fields and preserves omitted scope.
-    const lateBind = Boolean(args.input.backlogItemId) && existing.backlogItemId == null;
+    const binding = planLiveCapsuleBinding(existing, args.input);
     const repoBound = repositoryUnbound;
     const headSynced = Boolean(args.input.headSha) && args.input.headSha !== existing.headSha;
     const baseSynced = Boolean(args.input.baseSha) && args.input.baseSha !== existing.baseSha;
@@ -225,22 +221,17 @@ export async function adoptWorktreeCapsule(args: {
     if (Object.keys(scopePatch).length && existing.executorRef && existing.executorRef !== args.input.executorRef) {
       throw new CapsuleBranchOccupiedError(existing);
     }
-    if (lateBind || headSynced || baseSynced || repoBound || worktreeMoved || Object.keys(scopePatch).length) {
+    if (binding.changed || headSynced || baseSynced || repoBound || worktreeMoved || Object.keys(scopePatch).length) {
       const bound = await inTransaction(args.db, async (tx) => {
         const updated = await tx.workroom.update({
-          where: scopeWriteWhere(existing),
+          where: { ...scopeWriteWhere(existing), ...binding.where },
           data: {
             ...scopePatch,
-            ...(lateBind
-              ? {
-                backlogItemId: args.input.backlogItemId,
-                ...(args.input.epicId && existing.epicId == null ? { epicId: args.input.epicId } : {}),
-                ...(args.input.executorRef && existing.executorRef == null ? { executorRef: args.input.executorRef } : {}),
-              }
-              : {}),
+            ...binding.data,
             ...(worktreeMoved ? { worktreePath: args.input.worktreePath } : {}),
             ...(repoBound ? { repositoryFullName: args.input.repositoryFullName } : {}),
-            ...(headSynced ? { headSha: args.input.headSha } : {}),
+            ...(headSynced ? { headSha: args.input.headSha, pullRequestNumber: null, pullRequestUrl: null,
+              workspaceState: clearBuildPrDeliveryState(existing.workspaceState) } : {}),
             ...(baseSynced ? { baseSha: args.input.baseSha } : {}),
             ...(headSynced || baseSynced ? { lastSyncedAt: now } : {}),
           },
@@ -248,15 +239,16 @@ export async function adoptWorktreeCapsule(args: {
         await recordActivity(tx, {
           workCapsuleId: existing.id,
           kind: "adopted",
-          summary: lateBind ? `Late-bound ${existing.capsuleId} to ${args.input.backlogItemId}`
+          summary: binding.backlogBound ? `Late-bound ${existing.capsuleId} to ${args.input.backlogItemId}`
             : repoBound ? `Bound ${existing.capsuleId} to ${args.input.repositoryFullName} for ${args.input.headBranch}`
             : `Synced ${existing.capsuleId} branch state for ${args.input.headBranch}`,
           payload: {
             scopeChanges: scopeChangeEvidence(existing, updated),
-            ...(lateBind ? { backlogItemId: args.input.backlogItemId, lateBind: true } : {}),
+            ...binding.evidence,
             ...(repoBound ? { repositoryFullName: args.input.repositoryFullName, repositoryLateBind: true } : {}),
             ...(worktreeMoved ? { worktreePath: args.input.worktreePath, previousWorktreePath: existing.worktreePath ?? null } : {}),
-            ...(headSynced ? { headSha: args.input.headSha, previousHeadSha: existing.headSha ?? null } : {}),
+            ...(headSynced ? { headSha: args.input.headSha, previousHeadSha: existing.headSha ?? null,
+              previousPullRequestNumber: existing.pullRequestNumber ?? null, previousPullRequestUrl: existing.pullRequestUrl ?? null } : {}),
             ...(baseSynced ? { baseSha: args.input.baseSha, previousBaseSha: existing.baseSha ?? null } : {}),
           },
           actor: args.actor,
@@ -300,11 +292,7 @@ export async function adoptWorktreeCapsule(args: {
           outcomeAnchor: scope.outcomeAnchor ?? {},
           servesPortfolioRoles: scope.servesPortfolioRoles,
           dependsOnPortfolioRoles: scope.dependsOnPortfolioRoles,
-          leaseHolderPrincipalId: isExternalLeaseExecutor(args.input.executorKind)
-            ? args.actor.principalId
-            : null,
-          leaseExpiresAt: isExternalLeaseExecutor(args.input.executorKind) ? leaseUntil(now) : null,
-          createdByPrincipalId: args.actor.principalId,
+          ...workroomOwnershipData(args.actor, args.input.executorKind, now),
           lastSyncedAt: now,
         },
       });
@@ -327,6 +315,7 @@ export async function adoptWorktreeCapsule(args: {
         orderBy: { updatedAt: "desc" },
       });
       if (winner && isReusableLiveCapsule(winner, args.input)) {
+        assertOAuthWorkroomOwner(winner, args.actor);
         assertScopeReadback(winner, args.input.scope);
         return winner;
       }
@@ -362,19 +351,7 @@ export type BacklogWorkspaceConflict = {
  */
 export async function claimBacklogItemWorkspace(args: {
   db: CapsuleDb;
-  input: {
-    backlogItemId: string;
-    repositoryFullName: string;
-    headBranch: string;
-    worktreePath: string;
-    baseBranch?: string | null;
-    executorKind?: WorkCapsuleExecutorKind | null;
-    executorRef?: string | null;
-    title?: string;
-    objective?: string;
-    force?: boolean;
-    overrideReason?: string | null;
-  };
+  input: ClaimBacklogWorkspaceInput;
   actor: WorkCapsuleActor;
   now?: Date;
 }): Promise<{
@@ -439,6 +416,8 @@ export async function claimBacklogItemWorkspace(args: {
       headBranch: args.input.headBranch,
       worktreePath: args.input.worktreePath,
       baseBranch: args.input.baseBranch ?? "main",
+      baseSha: args.input.baseSha ?? null,
+      headSha: args.input.headSha ?? null,
       backlogItemId: item.itemId,
       epicId: item.epicId ?? null,
       executorKind: args.input.executorKind ?? null,
@@ -586,97 +565,6 @@ export async function planCapsuleWorkspace(args: {
   });
 }
 
-export async function heartbeatWorkCapsule(args: {
-  db: CapsuleDb;
-  capsuleId: string;
-  actor: WorkCapsuleActor;
-  now?: Date;
-}) {
-  const nextLease = leaseUntil(args.now ?? new Date());
-  return inTransaction(args.db, async (tx) => {
-    const capsule = await tx.workroom.update({
-      where: { capsuleId: args.capsuleId },
-      data: {
-        leaseHolderPrincipalId: args.actor.principalId,
-        leaseExpiresAt: nextLease,
-      },
-    });
-    await recordActivity(tx, {
-      workCapsuleId: capsule.id,
-      kind: "lease-renewed",
-      summary: `Lease renewed until ${nextLease.toISOString()}`,
-      actor: args.actor,
-    });
-    return capsule;
-  });
-}
-
-/**
- * Cross-agent handoff (EP-WORK-CONVERGENCE / BI-A443B9CC): change the capsule's
- * executor, transfer the lease to the receiving principal, and record an
- * `executor-changed` activity carrying the full provenance + handoff manifest
- * (from/to executor, lease transfer, reason, next action / open risks / evidence
- * digest). This is the writer for the `executor-changed` activity kind, which
- * previously had zero writers. Renders as "Claude started this; Grok is
- * finishing it" — a plain status event, not raw agent plumbing.
- */
-export async function reassignWorkCapsuleExecutor(args: {
-  db: CapsuleDb;
-  capsuleId: string;
-  toExecutorKind: WorkCapsuleExecutorKind;
-  toExecutorRef?: string | null;
-  /** The receiving/acting principal — becomes the new lease holder. */
-  actor: WorkCapsuleActor;
-  reason?: string;
-  /** next action, open risks, evidence digest, branch/worktree, suggested receiver. */
-  handoffManifest?: Record<string, unknown>;
-  now?: Date;
-}) {
-  if (!isWorkCapsuleExecutorKind(args.toExecutorKind)) {
-    throw new Error("Invalid executor kind");
-  }
-  const nextLease = leaseUntil(args.now ?? new Date());
-  return inTransaction(args.db, async (tx) => {
-    const current = await tx.workroom.findUnique({
-      where: { capsuleId: args.capsuleId },
-      select: {
-        id: true,
-        executorKind: true,
-        executorRef: true,
-        leaseHolderPrincipalId: true,
-      },
-    });
-    if (!current) throw new Error(`Work Capsule ${args.capsuleId} not found`);
-
-    const updated = await tx.workroom.update({
-      where: { capsuleId: args.capsuleId },
-      data: {
-        executorKind: args.toExecutorKind,
-        executorRef: args.toExecutorRef ?? null,
-        leaseHolderPrincipalId: args.actor.principalId,
-        leaseExpiresAt: nextLease,
-      },
-    });
-
-    await recordActivity(tx, {
-      workCapsuleId: updated.id,
-      kind: "executor-changed",
-      summary: `Executor changed ${current.executorKind ?? "none"} → ${args.toExecutorKind}${args.reason ? `: ${args.reason}` : ""}`,
-      payload: {
-        fromExecutorKind: current.executorKind ?? null,
-        fromExecutorRef: current.executorRef ?? null,
-        toExecutorKind: args.toExecutorKind,
-        toExecutorRef: args.toExecutorRef ?? null,
-        fromLeaseHolderPrincipalId: current.leaseHolderPrincipalId ?? null,
-        toLeaseHolderPrincipalId: args.actor.principalId,
-        reason: args.reason ?? null,
-        handoffManifest: args.handoffManifest ?? null,
-      },
-      actor: args.actor,
-    });
-    return updated;
-  });
-}
 
 
 /**
@@ -825,9 +713,8 @@ export async function claimWorkCapsuleScope(args: {
   });
   if (!capsule) throw new Error(`Work Capsule ${args.capsuleId} not found`);
 
-  // BI-95E37EA1: never append scope claims to a terminal or foreign capsule.
-  // The abandoned-main false-success path used to land claims on an unrelated
-  // WC; refuse here so even a stale capsuleId cannot pollute its audit trail.
+  // BI-95E37EA1: never append scope claims to a terminal or foreign capsule
+  // (the abandoned-main false-success path landed claims on an unrelated WC).
   if (isTerminalCapsuleStatus(capsule.status) || capsule.archivedAt != null) {
     throw new Error(
       `Work Capsule ${args.capsuleId} is ${capsule.status ?? "terminal"} and cannot accept scope claims. ` +
@@ -844,9 +731,9 @@ export async function claimWorkCapsuleScope(args: {
     claims: args.claims,
     now: args.now,
   });
-  if (conflicts.length > 0 && !args.force) {
-    throw new ScopeOverlapError(conflicts);
-  }
+  if (conflicts.length > 0 && !args.force) throw new ScopeOverlapError(conflicts);
+  // BI-2D65BD1B: the rule the authority gate used to call this claim ordinary.
+  assertScopeClaimLease(capsule, args.actor.principalId ?? null, args.force === true, args.now ?? new Date());
 
   const recordedAt = (args.now ?? new Date()).toISOString();
   const nextClaims = new Map<string, ScopeClaim>();
@@ -910,38 +797,6 @@ export async function claimWorkCapsuleScope(args: {
   });
 }
 
-export async function releaseWorkCapsuleScope(args: {
-  db: CapsuleDb;
-  capsuleId: string;
-  claims: ScopeReleaseInput[];
-  actor: WorkCapsuleActor;
-}) {
-  const capsule = await args.db.workroom.findUnique({
-    where: { capsuleId: args.capsuleId },
-  });
-  if (!capsule) throw new Error(`Work Capsule ${args.capsuleId} not found`);
-
-  const releaseKeys = new Set(args.claims.map((claim) => `${claim.kind}:${claim.value}`));
-  const existing = parseScopeClaims(capsule.scopeClaims);
-  const scopeClaims = replaceOwnershipClaims(capsule.scopeClaims, existing.filter((claim) => !releaseKeys.has(`${claim.kind}:${claim.value}`)));
-  const released = existing.filter((claim) => releaseKeys.has(`${claim.kind}:${claim.value}`));
-
-  return inTransaction(args.db, async (tx) => {
-    const updated = await tx.workroom.update({
-      where: scopeWriteWhere(capsule),
-      data: { scopeClaims },
-    });
-    await recordActivity(tx, {
-      workCapsuleId: capsule.id,
-      kind: "scope-released",
-      summary: `Released ${released.length} scope item(s).`,
-      payload: { released },
-      actor: args.actor,
-    });
-    return updated;
-  });
-}
-
 export async function updateWorkCapsuleStatus(args: {
   db: CapsuleDb;
   capsuleId: string;
@@ -958,7 +813,7 @@ export async function updateWorkCapsuleStatus(args: {
   if (!capsule) throw new Error(`Work Capsule ${args.capsuleId} not found`);
 
   const hasGovernedLink = Boolean(capsule.backlogItemId || capsule.featureBuildId || capsule.taskRunId);
-  await assertWorkroomPublishable({ capsuleId: args.capsuleId, status: args.status, repositoryFullName: capsule.repositoryFullName });
+  await assertWorkroomPublishable({ ...capsule, capsuleId: args.capsuleId, status: args.status, backlogItem: args.db.backlogItem });
   if (args.status === "complete" && hasGovernedLink) {
     return completeGovernedWorkCapsuleStatus({
       db: args.db,

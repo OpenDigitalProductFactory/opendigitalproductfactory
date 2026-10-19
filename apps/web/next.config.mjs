@@ -1,6 +1,23 @@
 import { fileURLToPath } from "url";
+import { currentPageBuildBudget } from "./build-memory-budget.mjs";
 
 const turbopackRoot = fileURLToPath(new URL("../..", import.meta.url));
+
+// prom-client and its runtime dependency closure (tdigest -> bintrees,
+// @opentelemetry/api), as globs relative to this project dir. Two layouts, both
+// pinned: the Docker build installs with pnpm's default isolated layout (no
+// .npmrc in the build context), where apps/web/node_modules/prom-client is a
+// symlink into node_modules/.pnpm/<pkg>@<ver>/node_modules; developer clones and
+// CI use node-linker=hoisted, where each package sits at the repo-root
+// node_modules. A glob that matches nothing in the current layout is a no-op.
+export const PROM_CLIENT_TRACE_PACKAGES = ["prom-client", "tdigest", "bintrees", "@opentelemetry/api"];
+export const PROM_CLIENT_TRACE_INCLUDES = [
+  "./node_modules/prom-client/**",
+  ...PROM_CLIENT_TRACE_PACKAGES.flatMap((name) => [
+    `../../node_modules/${name}/**`,
+    `../../node_modules/.pnpm/${name.replace("/", "+")}@*/node_modules/**`,
+  ]),
+];
 
 /** @type {import('next').NextConfig} */
 const config = {
@@ -28,28 +45,28 @@ const config = {
   // typedRoutes is ever enabled, this needs revisiting — the Typecheck job would
   // then have to generate those types first.
   typescript: { ignoreBuildErrors: true },
-  transpilePackages: ["@dpf/db", "@dpf/storefront-templates", "@dpf/validators"],
-  // Server-only document parsers loaded via dynamic `import()` in the upload
-  // route (lib/shared/file-parsers.ts). They MUST stay external (not bundled)
-  // so Next's standalone output traces them into the shipped node_modules —
-  // otherwise `import("pdf-parse")` / "mammoth" / "read-excel-file" throw
-  // "Cannot find package" at runtime in the production image and every document
-  // upload 500s. (These are app-level deps; their symlink lives in
-  // apps/web/node_modules, which the standalone trace omits without this.)
-  serverExternalPackages: ["pdf-parse", "mammoth", "read-excel-file"],
+  transpilePackages: ["@dpf/db", "@dpf/i18n", "@dpf/storefront-templates", "@dpf/validators"],
   turbopack: {
     root: turbopackRoot,
   },
   experimental: {
+    ...currentPageBuildBudget(),
     // Turbopack filesystem cache for `next build` — persists compilation
     // artifacts under `.next/cache` so a warm CI cache skips recompiling
-    // unchanged modules. Still EXPERIMENTAL for production builds in Next 16.2,
-    // so it is gated behind an env var and enabled ONLY in the CI verification
-    // build (see .github/workflows/ci.yml). The shipped Docker release build
-    // (publish-image.yml) leaves it OFF and is unaffected. Flip the env to
-    // measure/disable; remove the gate once the feature is stable.
-    turbopackFileSystemCacheForBuild:
-      process.env.DPF_TURBOPACK_BUILD_CACHE === "1" || undefined,
+    // unchanged modules. Enabled ONLY in the CI verification build (see
+    // .github/workflows/ci.yml); the shipped Docker release build runs without
+    // it.
+    //
+    // This MUST stay an explicit `false`, never `undefined`. It used to read
+    // `=== "1" || undefined`, which yields `undefined` when the env is unset —
+    // and `undefined` does not mean OFF, it means "unspecified", so Next applies
+    // its own default. That was harmless while the default was OFF (Next 16.2,
+    // when the comment above was written and when it claimed the release build
+    // "leaves it OFF and is unaffected"). Next 16.3 turned the build cache ON by
+    // default, so the same expression silently flipped the release image onto an
+    // experimental cache nobody intended to ship. An option whose default can
+    // move is not a gate; spell the off-state out.
+    turbopackFileSystemCacheForBuild: process.env.DPF_TURBOPACK_BUILD_CACHE === "1",
   },
   outputFileTracingExcludes: {
     "**/*": ["./node_modules/@swc/core*", "./node_modules/esbuild*"],
@@ -60,7 +77,19 @@ const config = {
   // search_design_intelligence / generate_design_system call returns empty
   // in production (the loader also falls back to the apps/web-src copy).
   outputFileTracingIncludes: {
-    "**/*": ["./data/design-intelligence/**"],
+    // BI-PIR-53d2c42d: lib/operate/metrics.ts loads prom-client through a
+    // guarded require (so web-src scripts without it degrade to no-ops). Pin
+    // prom-client and its runtime dependency closure into the standalone
+    // output so the server never silently loses its metrics if tracing stops
+    // seeing that require (see PROM_CLIENT_TRACE_INCLUDES for both layouts).
+    // Pinned by lib/verify/next-config-prom-client-trace.guard.test.ts.
+    "**/*": ["./data/design-intelligence/**", ...PROM_CLIENT_TRACE_INCLUDES],
+    // BI-814F86E1: the MapLibre worker and its shared chunk are read from the
+    // pinned package at runtime and served by /api/map-assets/runtime/[file].
+    "/api/map-assets/runtime/[file]": [
+      "./node_modules/maplibre-gl/dist/maplibre-gl-worker.mjs",
+      "./node_modules/maplibre-gl/dist/maplibre-gl-shared.mjs",
+    ],
   },
   // EP-0AF96937 Phase 5: the decision-governance surface moved from /wiki to
   // /coworker-decisions. Permanently redirect the old paths so existing

@@ -2,9 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma, type Prisma } from "@dpf/db";
 import { parseOrgAddress, sanitizeOrgAddressInput, serializeOrgAddress } from "@/lib/shared/org-address";
+import { extractOrgLatLng } from "@/lib/api/nearby-geo";
+import { requestOrganizationGeocode } from "@/lib/geocoding/request.server";
 import { isRiskPosture } from "@/lib/govern/risk-posture";
 import { applyRiskEnvelopeToOrgProfile } from "@/lib/onboarding/apply-risk-envelope-to-profile";
 import { isDataHandlingPredicate } from "@dpf/db/regulation-applicability";
+import { applyOrgCountry } from "@/lib/actions/currency";
+import { sanitizeOfferPositioning } from "@/lib/onboarding/offer-positioning";
+import { apiErrorResponse } from "@/lib/api/error";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -31,6 +36,8 @@ export async function POST(req: NextRequest) {
     listingStatus,
     riskPosture,
     address,
+    valueProposition,
+    customerSegments,
   } = (await req.json()) as {
     description?: string;
     mission?: string;
@@ -50,7 +57,13 @@ export async function POST(req: NextRequest) {
     listingStatus?: string | null;
     riskPosture?: string;
     address?: unknown;
+    valueProposition?: unknown;
+    customerSegments?: unknown;
   };
+
+  // Offer positioning (BI-C1E83871): validated in one shared place; absent = no change.
+  const offer = sanitizeOfferPositioning({ valueProposition, customerSegments });
+  if (!offer.ok) return apiErrorResponse("INVALID_OFFER_POSITIONING", offer.error, 400);
 
   // Compliance scope is captured as a unit: when any dimension is present in the
   // payload, persist the whole profile and stamp the capture time. Sanitize to
@@ -137,6 +150,10 @@ export async function POST(req: NextRequest) {
     },
   });
 
+  // Put the business itself on the map, and give the walk-up front door's
+  // nearby discovery its centre (BI-C318C227 §2.1, §2.4).
+  if (addressJson && !extractOrgLatLng(addressJson)) await requestOrganizationGeocode(org.id);
+
   // Upsert BusinessContext — the canonical source of truth for business strategy
   const businessContext = await prisma.businessContext.upsert({
     where: { organizationId: org.id },
@@ -149,7 +166,8 @@ export async function POST(req: NextRequest) {
       companySize: companySize ?? null,
       geographicScope: geographicScope ?? null,
       revenueModel: revenueModel ?? null,
-      customerSegments: [],
+      valueProposition: offer.data.valueProposition ?? null,
+      customerSegments: offer.data.customerSegments ?? [],
       ...(addressStateCode ? { stateCode: addressStateCode } : {}),
       ...complianceScope,
       ...riskPostureUpdate,
@@ -162,11 +180,22 @@ export async function POST(req: NextRequest) {
       ...(companySize !== undefined && { companySize }),
       ...(geographicScope !== undefined && { geographicScope }),
       ...(revenueModel !== undefined && { revenueModel }),
+      ...(offer.data.valueProposition !== undefined && { valueProposition: offer.data.valueProposition }),
+      ...(offer.data.customerSegments !== undefined && { customerSegments: offer.data.customerSegments }),
       ...(addressStateCode ? { stateCode: addressStateCode } : {}),
       ...complianceScope,
       ...riskPostureUpdate,
     },
   });
+
+  // The country captured here is the operator's own; carry it to the org's
+  // currency/locale settings. Only tax setup did this before, so an org that
+  // chose Mexico here kept USD/en-US (BI-6030131C). applyOrgCountry only
+  // initializes currency/locale on the first country, so an explicit operator
+  // currency choice is never overwritten. Non-fatal, like the tax-setup call.
+  if (sanitizedAddress?.countryCode) {
+    await applyOrgCountry(sanitizedAddress.countryCode).catch(() => null);
+  }
 
   // When the operator changes the posture, keep the org WWWD profile's autonomy
   // policy in sync (P1). Fail-open inside the helper; balanced = no change.

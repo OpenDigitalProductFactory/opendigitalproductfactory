@@ -3,7 +3,7 @@
  *
  * Spec: docs/superpowers/specs/2026-05-17-postgres-daily-backup-design.md
  *
- * Postgres-only: BET-5 (BI-A1E864A5) retired the Neo4j and Qdrant stores onto
+ * Postgres-only: BET-5 (BI-A1E864A5) moved the graph and vector stores into
  * Postgres, and BI-B1977CEE removed their backup/restore engines.
  */
 

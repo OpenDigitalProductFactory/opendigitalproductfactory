@@ -23,9 +23,11 @@ sources:
 
 Every new feature spec includes a Research & Benchmarking section before finalization. Compare 2-3 open-source leaders (read their data models, not just feature lists) and 2-3 commercial products. Document patterns adopted, patterns rejected, anti-patterns identified, and gaps the design fills. Reference specific projects, not abstract "best practices."
 
+Research serves a **second purpose that is not a comparison at all: establishing the current-state baseline** — how the work being changed is actually done today, counted. Name the steps a human takes now, and how many. This is the as-is map, and it is what makes an improvement claim measurable rather than asserted.
+
 ## Why
 
-A design that hasn't been compared to working systems is a design that's about to discover what other systems already learned the hard way. Research-anchored specs are cheaper to ship (reuse existing patterns), cheaper to maintain (align with conventions adopters already know), and cheaper to defend in review (the alternatives have been considered explicitly, not waved away). The cost of writing the research section is a few hours; the cost of skipping it shows up over years as the design accumulates patches for problems someone else solved a decade ago.
+Research answers two different questions, and a spec that answers only the first is half-researched. The first is *what has the field already learned* — a design that hasn't been compared to working systems is about to discover what other systems learned the hard way. The second is *how is this work done today, and at what cost* — without that, there is no baseline, and every claim of improvement is unfalsifiable. This second purpose comes from **value stream mapping**: the current-state map is what turns work from something discussed into something measured and improvable. It is the reason the platform researches at all, and the baseline every intervention-cost delta is measured from ([[principles/automation-is-measured-by-the-human-steps-it-removes]]). Research-anchored specs are cheaper to ship (reuse existing patterns), cheaper to maintain (align with conventions adopters already know), and cheaper to defend in review (the alternatives have been considered explicitly, not waved away). The cost of writing the research section is a few hours; the cost of skipping it shows up over years as the design accumulates patches for problems someone else solved a decade ago.
 
 ## Applies To
 

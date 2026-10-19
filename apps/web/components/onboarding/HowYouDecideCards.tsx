@@ -1,18 +1,25 @@
 "use client";
 // "How you decide" — the company-stance confirmation cards (BI-D6DC2432).
 //
-// Cognitive-load contract (AGENTS.md §12, UX-fit ledger on the PR): five
-// scenario cards, every one pre-answered from the archetype, one-click
-// "Confirm all" fast path (<60s), per-card inline adjust as the only second
-// level. No platform vocabulary — no classes, weights, or grades. Mounted in
-// two places: the "how-you-decide" setup step routes to
-// /coworker-decisions/stance, and the same cards stay there afterwards for
-// later adjustment.
+// Cognitive-load contract (AGENTS.md §12, UX-fit ledger on the PR): scenario
+// cards, every one pre-answered from the archetype, one-click "Confirm all"
+// fast path (<60s), per-card inline adjust as the only second level. No
+// platform vocabulary — no classes, weights, or grades. Mounted in two places:
+// the "how-you-decide" setup step routes to /coworker-decisions/stance, and the
+// same cards stay there afterwards for later adjustment.
+//
+// Each card shows its LEAD SENTENCE, with the rest behind a disclosure
+// (BI-7728C3B7). The contract was written for five cards whose full prose fit
+// on arrival; at eight it became a wall — 1381 words against a 450-word budget,
+// which is not a page anyone reads before clicking "confirm all". The lead
+// sentence carries the decision, so confirming stays informed rather than
+// blind, and the detail is one click away for the person who wants it.
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import { confirmStanceVectors } from "@/lib/actions/stance-confirm";
+import { splitStanceLead } from "@/lib/onboarding/stance-lead";
 
 export type StanceCard = {
   key: string;
@@ -85,9 +92,9 @@ export function HowYouDecideCards({ cards }: { cards: StanceCard[] }) {
     <section className="mb-8">
       <h2 className="text-lg font-semibold text-[var(--dpf-text)] mb-1">How you decide</h2>
       <p className="text-xs text-[var(--dpf-muted)] mb-3">
-        Your AI checks these answers before acting on business calls. We&rsquo;ve
-        pre-filled them for a business like yours — confirm them, or adjust any
-        card first. Big or unusual decisions always come to you regardless.
+        Your AI checks these before acting. We&rsquo;ve pre-filled them for a
+        business like yours — confirm, or adjust any card first. Big or unusual
+        decisions always come to you.
       </p>
 
       <ul className="flex flex-col gap-2 mb-4">
@@ -139,12 +146,27 @@ export function HowYouDecideCards({ cards }: { cards: StanceCard[] }) {
                 )}
               </div>
             ) : (
-              <p className="text-xs text-[var(--dpf-muted)] mt-1.5">
-                {card.stance}
-                {card.ceilingUsd != null && (
-                  <span> Up to ${card.ceilingUsd} per case without asking.</span>
-                )}
-              </p>
+              (() => {
+                const { lead, rest } = splitStanceLead(card.stance);
+                return (
+                  <div className="mt-1.5">
+                    <p className="text-xs text-[var(--dpf-muted)]">
+                      {lead}
+                      {card.ceilingUsd != null && (
+                        <span> Up to ${card.ceilingUsd} per case without asking.</span>
+                      )}
+                    </p>
+                    {rest && (
+                      <details className="mt-1">
+                        <summary className="text-xs text-[var(--dpf-accent)] cursor-pointer hover:underline">
+                          More on this
+                        </summary>
+                        <p className="text-xs text-[var(--dpf-muted)] mt-1">{rest}</p>
+                      </details>
+                    )}
+                  </div>
+                );
+              })()
             )}
           </li>
         ))}
@@ -166,8 +188,7 @@ export function HowYouDecideCards({ cards }: { cards: StanceCard[] }) {
           {pending ? "Confirming…" : unconfirmed.length === drafts.length ? "These look right — confirm all" : "Confirm remaining"}
         </button>
         <span className="text-xs text-[var(--dpf-muted)]">
-          Based on your mission and who you serve. You can fine-tune any stance
-          here later.
+          Based on your mission and who you serve. Fine-tune any stance later.
         </span>
       </div>
     </section>

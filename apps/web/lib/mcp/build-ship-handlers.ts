@@ -8,7 +8,7 @@
 
 import { prisma } from "@dpf/db";
 
-import type { ToolResult } from "@/lib/mcp-tools";
+import type { ToolResult } from "@/lib/mcp-tool-types";
 import {
   resolveActiveBuildId,
   extractBuildIdHint,
@@ -83,9 +83,12 @@ export async function deployFeature(params: Record<string, unknown>, userId: str
   // staged-but-uncommitted changes and returns empty for any build whose
   // agent committed before deploy_feature ran.
   const { extractAndCategorizeDiff, scanForDestructiveOps, isNowInWindow } = await import("@/lib/build/sandbox/sandbox-promotion");
-  const { getClientIdentity } = await import("@/lib/build/sandbox/build-branch");
+  const { getClientIdentity, resolveBuildWorkdir } = await import("@/lib/build/sandbox/build-branch");
   const { clientBranch } = await getClientIdentity();
-  const extracted = await extractAndCategorizeDiff(build.sandboxId, { baseRef: clientBranch });
+  // BI-5C4933EB: read the build's own worktree (isolation on), not the shared
+  // root, which stays on client/<id>. /workspace when isolation is off.
+  const buildWorkdir = resolveBuildWorkdir(buildId);
+  const extracted = await extractAndCategorizeDiff(build.sandboxId, { baseRef: clientBranch, workspace: buildWorkdir });
   if (!extracted.fullDiff.trim()) {
     await prisma.featureBuild.update({
       where: { buildId },
@@ -135,7 +138,7 @@ export async function deployFeature(params: Record<string, unknown>, userId: str
   // empty for committed-work builds and contribute_to_hive cannot
   // attribute the PR's commits back to specific FBs.
   const { listSandboxCommitsAheadOfBase } = await import("@/lib/build/sandbox/sandbox");
-  const commitHashes = await listSandboxCommitsAheadOfBase(build.sandboxId, clientBranch);
+  const commitHashes = await listSandboxCommitsAheadOfBase(build.sandboxId, clientBranch, buildWorkdir);
 
   await prisma.featureBuild.update({
     where: { buildId },
@@ -342,9 +345,9 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
     select: {
       id: true, title: true, diffPatch: true, buildBranch: true, sandboxId: true,
       description: true, gitCommitHashes: true, updatedAt: true, buildExecState: true,
-      verificationOut: true, acceptanceMet: true, phase: true,
+      verificationOut: true, acceptanceMet: true, phase: true, kind: true, plan: true,
       designDoc: true, buildPlan: true,
-      disposition: true, dispositionSuggestionReason: true,
+      disposition: true, dispositionSuggestionReason: true, dispositionSource: true,
       productVersions: {
         take: 1,
         orderBy: { shippedAt: "desc" },
@@ -434,7 +437,16 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
       // carry a change confirmed "shareable". Own-repo PRs skip this — that
       // is the install's private home.
       const { mayShareToPublicHive, privateDispositionBlockMessage } = await import("@/lib/build/disposition");
-      if (!mayShareToPublicHive(build.disposition)) {
+      const { INSTALLATION_OPERATING_INTENT_KEY } = await import("@/lib/installation-journey/operating-intent");
+      const intent = await prisma.platformConfig.findUnique({
+        where: { key: INSTALLATION_OPERATING_INTENT_KEY },
+        select: { value: true },
+      });
+      const purpose = (intent?.value as { primaryPurpose?: unknown } | null | undefined)?.primaryPurpose;
+      if (!mayShareToPublicHive(build.disposition, {
+        dispositionSource: build.dispositionSource,
+        installationPurpose: typeof purpose === "string" ? purpose : null,
+      })) {
         logBuildActivity(buildId, "create_portal_pr", "blocked: change disposition is private (public-hive target)");
         return {
           success: false,
@@ -518,7 +530,7 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
 
   const prTitle = `feat(${buildId}): ${build.title}`;
   const labels = ["build-studio", "automated"];
-  const { publishBranchCommit, openPullRequest } = await import("@/lib/build/github-api-commit");
+  const { publishBranchCommit, openPullRequest, buildTreeFileReader } = await import("@/lib/build/github-api-commit");
 
   const {
     buildPublishedReadinessCommand,
@@ -542,8 +554,24 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
     testsFailed,
     acceptanceMet: acMet,
     acceptanceTotal: acTotal,
+    // BI-D9287821: ask for acceptance only where the build's own policy does.
+    acceptanceRequired: (await import("@/lib/explore/build-process-matrix"))
+      .getProcessPolicy(build.kind, (build.plan as { processSize?: string } | null)?.processSize)
+      .gates["review->ship"]?.includes("acceptance-evaluated") ?? true,
   });
-  const prePublishBlockers = [...verificationReadiness.blockers];
+  // BI-0700B79C: the guard gauntlet's result only has force if publishing
+  // depends on it. On the external path `git push` is refused without a gate
+  // record; this is the in-platform equivalent, and it requires the record to be
+  // for the EXACT tree — a pass on an earlier version of this build is not a
+  // pass on what is about to be published.
+  const preflightRequirement = await requireInPlatformPreflightRecord({
+    buildId,
+    sandboxId: build.sandboxId,
+    repoOwner,
+    repoName,
+    overrideCode: params.preflight_override_reason,
+  });
+  const prePublishBlockers = [...verificationReadiness.blockers, ...preflightRequirement.blockers];
   if (prePublishBlockers.length > 0) {
     logBuildActivity(
       buildId,
@@ -559,6 +587,10 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
     };
   }
 
+  // BI-6B57D85F: publish each file's committed content from the build's own
+  // tree, not the shared sandbox mount (which sits on the client branch).
+  const { resolveBuildWorkdir } = await import("@/lib/build/sandbox/build-branch");
+  const { execInSandbox } = await import("@/lib/build/sandbox/sandbox");
   const published = await publishBranchCommit({
     headOwner: repoOwner,
     headRepo: repoName,
@@ -566,6 +598,9 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
     commitMessage,
     diff: shareableDiff,
     token,
+    ...(build.sandboxId
+      ? { readFile: buildTreeFileReader({ containerId: build.sandboxId, workdir: resolveBuildWorkdir(buildId), exec: execInSandbox }) }
+      : {}),
   });
   let canonicalReadiness = {
     ready: false,
@@ -583,6 +618,8 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
           prBodyBase64: Buffer.from(prBody, "utf8").toString("base64"),
           repositoryOwner: repoOwner,
           repositoryName: repoName,
+          // BI-5C4933EB: check the published tree in the build's own worktree.
+          workdir: (await import("@/lib/build/sandbox/build-branch")).resolveBuildWorkdir(buildId),
         }),
         `${token}\n`,
       );
@@ -653,6 +690,7 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
       prNumber: prResult.prNumber,
       prUrl: prResult.prUrl,
       token,
+      publishedHeadSha: published.commitSha,
       eligible: true,
     });
     deliveryState = outcome.state.status;
@@ -685,4 +723,64 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
       readiness: canonicalReadiness,
     },
   };
+}
+
+/**
+ * Resolve the tree about to be published and require a passing preflight record
+ * for it (BI-0700B79C). The I/O lives here so the decision itself stays pure and
+ * testable in preflight-record-requirement.ts.
+ */
+async function requireInPlatformPreflightRecord(input: {
+  buildId: string;
+  sandboxId: string | null;
+  repoOwner: string;
+  repoName: string;
+  overrideCode?: unknown;
+}): Promise<{ blockers: string[]; evidenceRecordId?: string }> {
+  const { evaluatePreflightRequirement, isPreflightOverrideCode } = await import(
+    "@/lib/build/preflight-record-requirement"
+  );
+
+  // An allowlisted override short-circuits before any I/O, so a recorded,
+  // deliberate bypass never depends on the sandbox being reachable.
+  if (isPreflightOverrideCode(input.overrideCode)) {
+    logBuildActivity(input.buildId, "preflight-requirement", `overridden: ${String(input.overrideCode)}`);
+    return { blockers: [] };
+  }
+
+  if (!input.sandboxId) {
+    return {
+      blockers: ["The sandbox is unavailable, so the change being published cannot be identified or verified."],
+    };
+  }
+
+  const { runGuardGauntletIdentity } = await import("@/lib/build/sandbox/guard-gauntlet-identity");
+  const identity = await runGuardGauntletIdentity({
+    containerId: input.sandboxId,
+    buildId: input.buildId,
+    repository: `${input.repoOwner}/${input.repoName}`,
+  });
+
+  const records = await prisma.externalEvidenceRecord.findMany({
+    where: { operationType: "local_integration_ci", buildId: input.buildId },
+    orderBy: { createdAt: "desc" },
+    take: 20,
+    select: { id: true, details: true },
+  });
+
+  const result = evaluatePreflightRequirement({
+    repository: identity.repository,
+    treeSha: identity.treeSha,
+    guardPlanDigest: identity.guardPlanDigest,
+    toolchainFingerprint: identity.toolchainFingerprint,
+    records,
+  });
+  logBuildActivity(
+    input.buildId,
+    "preflight-requirement",
+    result.blockers.length === 0
+      ? `satisfied by ${result.evidenceRecordId ?? "record"} for tree ${result.treeSha?.slice(0, 12) ?? "unknown"}`
+      : `blocked: ${result.blockers.join(" | ").slice(0, 400)}`,
+  );
+  return result;
 }

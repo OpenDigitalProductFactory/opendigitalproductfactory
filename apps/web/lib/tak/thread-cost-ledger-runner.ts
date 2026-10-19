@@ -17,7 +17,13 @@ async function loadSpendRows(threadIds: string[]): Promise<SpendRow[]> {
   const [inference, tools] = await Promise.all([
     prisma.adapterRunTelemetry.findMany({
       where: { threadId: { in: threadIds } },
-      select: { inputTokens: true, outputTokens: true, estimatedCostUsd: true },
+      select: {
+        inputTokens: true,
+        outputTokens: true,
+        estimatedCostUsd: true,
+        cacheCreationInputTokens: true,
+        cachedInputTokens: true,
+      },
     }),
     prisma.toolExecution.findMany({
       where: { threadId: { in: threadIds } },
@@ -32,6 +38,9 @@ async function loadSpendRows(threadIds: string[]): Promise<SpendRow[]> {
       outputTokens: r.outputTokens,
       // estimatedCostUsd is a Prisma Decimal | null.
       costUsd: r.estimatedCostUsd != null ? Number(r.estimatedCostUsd) : null,
+      cacheCreationInputTokens: r.cacheCreationInputTokens,
+      // Persisted by BI-731F7FA2; NULL until that lands and folds as 0.
+      cachedInputTokens: r.cachedInputTokens,
     });
   }
   for (const r of tools) {

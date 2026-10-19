@@ -18,9 +18,11 @@ import { runArchitectureParitySteward } from "@/lib/ea/architecture-parity-stewa
 import { runConsolidationParitySteward } from "@/lib/ea/consolidation-parity-steward";
 import { computeNextCronRun, isOneShotCron } from "@/lib/operate/cron-next-run";
 import { extractScheduledTaskSummary } from "./agent-task-scheduler-summary";
+import { formatScheduledTurnPrompt } from "./scheduled-turn-prompt";
 import {
+  classifyScheduledRequiredTools, scheduledToolsNeedingPin, scheduledRunLastStatus,
   createTaskRunForScheduledTask,
-  detectScheduledRunFailure,
+  detectScheduledRunFailure, withPersistedExecutions,
   type ScheduledTaskRunRef,
 } from "@/lib/tak/scheduled-task-runs";
 import { createTaskMessage } from "@/lib/tak/task-records";
@@ -46,9 +48,11 @@ import { proposeProductIntelligenceWatch } from "@/lib/product-management/produc
 import {
   PRODUCT_MANAGEMENT_PLAYBOOK_TASK_KIND,
 } from "@/lib/product-management/product-management-playbook";
-import { BUSINESS_ANALYSIS_WATCH_TASK_KIND, BOOKKEEPING_CYCLE_TASK_KIND } from "@/lib/operate/scheduled-jobs/agent-task-kind";
+import { ACCEPTANCE_SWEEP_TASK_KIND, BUSINESS_ANALYSIS_WATCH_TASK_KIND } from "@/lib/operate/scheduled-jobs/agent-task-kind";
 import { executeBusinessAnalysisWatchRun } from "@/lib/performance/business-analysis-watch-run";
-import { executeBookkeepingCycleTask } from "@/lib/finance/bookkeeping/bookkeeping-cycle-task";
+import { runDeterministicScheduledTaskKind } from "./agent-task-scheduler-deterministic";
+import { claimScheduledTaskCadence } from "./agent-task-claim";
+import { holdWorkroomQueueAfterFailure } from "@/lib/work-capsules/workroom-queue-hold";
 import {
   completeProductManagementPlaybookRun,
   prepareProductManagementPlaybookRun,
@@ -144,37 +148,14 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
   });
   if (!task || !task.isActive) return;
 
-  // BI-D1CD3A11: idempotent claim BEFORE execution. The 5-min dispatch poll
-  // selects every task whose nextRunAt is due; an agent run routinely exceeds
-  // 5 minutes, so without advancing nextRunAt first the NEXT poll re-selects the
-  // still-running task and dispatches it a SECOND time (duplicate autonomous
-  // runs, doubled spend, racing writes). Atomically move nextRunAt forward here,
-  // guarded on it still being due — exactly ONE caller wins the claim; a
-  // concurrent poll (or an Inngest step retry) that loses gets count 0 and
-  // returns without re-running. The per-branch post-run updates below refine
-  // lastRunAt/lastStatus (and re-stamp the same nextRunAt) once work completes.
-  {
-    const claimNow = new Date();
-    // Mirror the terminal scheduling the post-run branches apply: a one-shot
-    // ("Once") task deactivates instead of re-arming (BI-D72CC945); a recurring
-    // task advances to its next cron time.
-    const oneShot = isOneShotCron(task.schedule);
-    const claimedNextRunAt = oneShot ? null : computeNextCronRun(task.schedule, claimNow);
-    const claim = await prisma.scheduledAgentTask.updateMany({
-      where: { taskId, isActive: true, nextRunAt: { lte: claimNow } },
-      data: oneShot ? { nextRunAt: null, isActive: false } : { nextRunAt: claimedNextRunAt },
-    });
-    if (claim.count === 0) {
-      // Already claimed by another dispatch of this due tick, or no longer due.
-      return;
-    }
-    await prisma.scheduledJob
-      .updateMany({
-        where: { jobId: taskId },
-        data: oneShot ? { nextRunAt: null } : { nextRunAt: claimedNextRunAt },
-      })
-      .catch(() => {});
+  // Acceptance owns a task-row lease and preserves upgrade wakeups while it
+  // runs. The generic cadence claim below must not consume its due time first.
+  if (task.taskKind === ACCEPTANCE_SWEEP_TASK_KIND) {
+    await runDeterministicScheduledTaskKind(task);
+    return;
   }
+
+  if (!await claimScheduledTaskCadence(prisma, task)) return;
 
   // Phase 7 product-intelligence watches are deterministic proposal producers.
   // A cadence tick creates (or deduplicates to) a PENDING ResearchProposal and
@@ -241,11 +222,8 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
     return;
   }
 
-  // S-TRIG (BI-DC738330): the weekly books cadence — deterministic, off the LLM path.
-  if (task.taskKind === BOOKKEEPING_CYCLE_TASK_KIND) {
-    await executeBookkeepingCycleTask(task);
-    return;
-  }
+  // Deterministic kinds (books cadence, decision review, acceptance sweep) run off the LLM path.
+  if (await runDeterministicScheduledTaskKind(task)) return;
 
   // EP-DATA-ARCH Phase 6: the data-model mirror is deterministic — run it
   // directly instead of through the LLM agentic loop.
@@ -419,13 +397,13 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       update: {},
       create: { userId: task.ownerUserId, contextKey },
     });
-
+    const scheduledPrompt = formatScheduledTurnPrompt(task.title, executionPrompt);
     // Persist the user prompt as a message
     await prisma.agentMessage.create({
       data: {
         threadId: thread.id,
         role: "user",
-        content: `[Scheduled task: ${task.title}]\n\n${executionPrompt}`,
+        content: scheduledPrompt,
         agentId: task.agentId,
         routeContext: task.routeContext,
       },
@@ -469,7 +447,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       taskRunRecordId: taskRunRef.id,
       contextId: taskRunRef.contextId,
       role: "user",
-      content: `[Scheduled task: ${task.title}]\n\n${executionPrompt}`,
+      content: scheduledPrompt,
       metadata: {
         source: "scheduled",
         taskId: task.taskId,
@@ -494,7 +472,6 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       userContext,
     });
 
-    const scheduledPrompt = `[Scheduled task: ${task.title}]\n\n${executionPrompt}`;
     const chatHistory = [
       {
         role: "user" as const,
@@ -514,16 +491,26 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
     const boundary = proactivity.actionBoundary;
     // BI-0A59F936: unattended turns resolve external access from standing grants.
     const externalAccess = await resolveScheduledTurnExternalAccess(task.agentId);
-    const { tools, toolsForProvider, deferredTools } = await resolveAutonomousWorkTools({
+    // BI-CAP-F2D39F8F budgets attachment to the serving model. A prompt that NAMES
+    // a governed writer declares a dependency on it, so it is pinned inside the
+    // budget rather than left to runtime discovery (BI-4A394B21).
+    const toolArgs = {
       userContext,
-      mode: boundary === "advise" ? "advise" : "act",
+      mode: (boundary === "advise" ? "advise" : "act") as "advise" | "act",
       agentId: task.agentId,
       externalAccessEnabled: externalAccess.enabled,
-      // BI-CAP-F2D39F8F: budget the attachment to the serving model; the task
-      // prompt ranks which tools stay attached, the rest load on demand.
       routeContext: task.routeContext,
       intentQuery: task.prompt,
+    };
+    let { tools, toolsForProvider, deferredTools } = await resolveAutonomousWorkTools(toolArgs);
+    const pinned = scheduledToolsNeedingPin({
+      prompt: task.prompt, attached: tools, deferred: deferredTools, taskConfig: task.taskConfig,
     });
+    if (pinned.length > 0) {
+      ({ tools, toolsForProvider, deferredTools } = await resolveAutonomousWorkTools({
+        ...toolArgs, requiredToolNames: pinned,
+      }));
+    }
     // A research task that cannot research fails loudly BEFORE the model runs.
     assertScheduledResearchCapability({
       taskKind: task.taskKind, prompt: task.prompt, agentId: task.agentId,
@@ -616,12 +603,12 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
     // friendly provider-failure apology with zero executed tools (live repro:
     // TR-SCHED-B7151A4C). That run did no work — throw so the catch below
     // records status=failed and the BI-754C9E82 retry cadence takes over,
-    // instead of completing quietly with a healthy lastStatus.
-    const runFailure = detectScheduledRunFailure({
-      prompt: task.prompt, authorizedTools: [...tools, ...deferredTools], executedTools, content: result.content,
-    });
+    // instead of completing quietly with a healthy lastStatus. BI-D48B3B0F: judge what the run PERSISTED too.
+    const verdictTools = withPersistedExecutions(executedTools, await prisma.toolExecution.findMany({ where: { taskRunId: taskRunRef.taskRunId, success: true }, select: { toolName: true, result: true } }));
+    const runFailure = detectScheduledRunFailure({ prompt: task.prompt, authorizedTools: [...tools, ...deferredTools], executedTools: verdictTools, content: result.content });
     if (runFailure) throw new Error(`Scheduled run produced no governed work (${runFailure}). ${result.content ?? ""}`.trim());
 
+    const requiredTools = classifyScheduledRequiredTools({ prompt: task.prompt, authorizedTools: [...tools, ...deferredTools], executedTools: verdictTools });
     const scheduledSummary = extractScheduledTaskSummary(executedTools);
     const taskMessageContent = scheduledSummary?.compactStatus ?? result.content ?? "(No response)";
     const playbookRunStatus =
@@ -683,8 +670,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       where: { taskId },
       data: {
         lastRunAt: now,
-        lastStatus:
-          preparedPlaybook && playbookRunStatus === "partial" ? "partial" : "ok",
+        lastStatus: scheduledRunLastStatus(requiredTools, preparedPlaybook, playbookRunStatus),
         lastError: null,
         lastThreadId: thread.id,
         taskRunId: taskRunRef.taskRunId,
@@ -736,8 +722,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       where: { jobId: taskId },
       data: {
         lastRunAt: now,
-        lastStatus:
-          preparedPlaybook && playbookRunStatus === "partial" ? "partial" : "ok",
+        lastStatus: scheduledRunLastStatus(requiredTools, preparedPlaybook, playbookRunStatus),
         lastError: null,
         nextRunAt,
       },
@@ -809,5 +794,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       where: { jobId: taskId },
       data: { lastRunAt: now, lastStatus: "error", lastError: errMsg, nextRunAt },
     }).catch(() => {});
+    // BI-2B6A8A74: a room's stage that no provider could answer holds the room's queue.
+    await holdWorkroomQueueAfterFailure({ taskId, ownerUserId: task.ownerUserId, taskConfig: task.taskConfig, error: errMsg, now }).catch(() => null);
   }
 }

@@ -6,6 +6,10 @@ import {
 } from "./workspace-room-access";
 
 describe("Workspace Work Room access", () => {
+  it("distinguishes absent admission restrictions from explicit deny-all", () => {
+    expect(readWorkspaceRoomPolicy([{ workroomPolicy: { sensitivityCeiling: "internal" } }]).actionPrincipalRefs).toBeUndefined();
+    expect(readWorkspaceRoomPolicy([{ workroomPolicy: { actionPrincipalRefs: [] } }]).actionPrincipalRefs).toEqual([]);
+  });
   it("separates explicit content admission from action authority", () => {
     const item = {
       assignedToUserId: "user-2",

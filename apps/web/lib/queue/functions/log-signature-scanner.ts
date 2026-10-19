@@ -14,8 +14,8 @@
 // an open report for a signature is never re-filed; a resolved one may re-file
 // (the problem recurred — worth knowing).
 
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 import {
   clusterBySignature,
@@ -23,10 +23,12 @@ import {
   severityForCount,
 } from "@/lib/observability/log-signature";
 import { queryLokiErrorLines } from "@/lib/observability/loki-query";
+import { recordMonitorSourceReachability } from "@/lib/observability/monitor-source-reachability";
+import type { MonitorIssueDb } from "@/lib/observability/monitor-issue-writer";
 
 const LOOKBACK_MIN = Number(process.env.DPF_LOG_SCAN_LOOKBACK_MIN ?? 20);
 // Only file for signatures seen at least this many times in the window. 1 =
-// surface even a single novel occurrence (the silent-Qdrant case). Operators
+// surface even a single novel occurrence (the silent vector-store case). Operators
 // can raise it to reduce noise. No hard pin.
 const MIN_COUNT = Number(process.env.DPF_LOG_SCAN_MIN_COUNT ?? 1);
 
@@ -61,9 +63,31 @@ export async function runLogSignatureScan(opts?: {
   } catch (err) {
     // Loki not running (e.g. monitoring stack down) — do not fail the job, do
     // not create false reports. The next cycle retries.
+    //
+    // But do NOT return a clean-looking result either (BI-ADB574AB): with the
+    // capture layer dark this scanner finds nothing on every run, and a silent
+    // no-op is indistinguishable from a healthy platform. File the blindness as
+    // its own issue so the operator sees the monitor is down, not the noise
+    // floor. The row resolves itself on the first run that reaches Loki.
     console.error("[log-signature-scanner] Loki unreachable; skipping scan", err);
+    await recordMonitorSourceReachability(prisma as unknown as MonitorIssueDb, {
+      monitorId: "ops/log-signature-scanner",
+      sourceId: "loki",
+      reached: false,
+      blindTo:
+        "novel container error signatures are not being detected — no log line from any container is reaching the platform",
+      error: err,
+    });
     return { scanned: 0, signatures: 0, reportsCreated: 0, skippedExisting: 0, lokiUnreachable: true };
   }
+
+  // Reached it — clear any standing blindness row from an earlier outage.
+  await recordMonitorSourceReachability(prisma as unknown as MonitorIssueDb, {
+    monitorId: "ops/log-signature-scanner",
+    sourceId: "loki",
+    reached: true,
+    blindTo: "",
+  });
 
   const buckets = clusterBySignature(lines).filter((b) => b.count >= MIN_COUNT);
   let reportsCreated = 0;
@@ -124,7 +148,7 @@ export async function runLogSignatureScan(opts?: {
   return { scanned: lines.length, signatures: buckets.length, reportsCreated, skippedExisting };
 }
 
-export const logSignatureScanner = inngest.createFunction(
+export const logSignatureScanner = jobs.createFunction(
   { id: "ops/log-signature-scanner", retries: 2, triggers: [cron("9,24,39,54 * * * *")] },
   async ({ step }) => {
     const gate = await gateAtEntry(step, "ops/log-signature-scanner");

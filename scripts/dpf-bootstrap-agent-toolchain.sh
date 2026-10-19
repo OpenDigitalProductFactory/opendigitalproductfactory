@@ -43,9 +43,10 @@ HEADLESS="${DPF_HEADLESS:-0}"
 RECONCILE_STALE=0
 SHOW_SUBSTRATE=0
 # Auto-mint: when no DPF_MCP_BEARER_TOKEN is present, issue one against the local
-# portal and persist it durably (POSIX). On by default for the contributor
-# bootstrap; pass --no-auto-mint for CI / non-contributor paths.
-AUTO_MINT="${DPF_AUTO_MINT:-1}"
+# portal and persist it durably (POSIX). Explicit compatibility only;
+# pending OAuth authorization must never trigger PAT minting.
+AUTO_MINT="${DPF_AUTO_MINT:-0}"
+AUTH_MODE="${DPF_MCP_AUTH_MODE:-oauth}"
 # Scope of the auto-minted token. `write` gives an external coding agent all the
 # side-effecting MCP tools (backlog, evidence, Build Studio handoff) without the
 # token-issuance powers of `admin`. Override with --mint-scope admin|read.
@@ -62,7 +63,8 @@ while [ $# -gt 0 ]; do
     --reconcile-stale-entries)  RECONCILE_STALE=1 ;;
     --install-antigravity)      INSTALL_ANTIGRAVITY=1 ;;
     --show-substrate)           SHOW_SUBSTRATE=1 ;;
-    --auto-mint)                AUTO_MINT=1 ;;
+    --auto-mint)                AUTO_MINT=1; AUTH_MODE=legacy ;;
+    --auth-mode)                AUTH_MODE="${2:?--auth-mode requires oauth or legacy}"; shift ;;
     --no-auto-mint)             AUTO_MINT=0 ;;
     --mint-scope)
       if [ -z "${2:-}" ]; then printf '  [FAIL] --mint-scope requires a value\n' >&2; exit 64; fi
@@ -80,7 +82,8 @@ Flags:
                               Antigravity's 'agy' CLI if it is not present,
                               then wire the DPF MCP config.
   --show-substrate            Show substrate detail under the banner.
-  --auto-mint                 Issue + persist an MCP token if none is present (default).
+  --auth-mode <oauth|legacy>  Credential mode (default: oauth).
+  --auto-mint                 Explicit legacy setup: issue and persist a PAT if needed.
   --no-auto-mint              Never issue a token; only wire what a present token allows.
   --mint-scope <read|write|admin>  Scope for the auto-minted token (default: write).
 
@@ -103,6 +106,10 @@ EOF
   esac
   shift
 done
+case "$AUTH_MODE" in oauth|legacy) ;; *) printf 'Invalid auth mode: use oauth or legacy\n' >&2; exit 64 ;; esac
+[ "$AUTH_MODE" = "oauth" ] && AUTO_MINT=0
+export DPF_MCP_AUTH_MODE="$AUTH_MODE"
+
 
 REPO_ROOT="${REPO_ROOT:-$PWD}"
 REPO_ROOT="$(cd "$REPO_ROOT" && pwd -P)"
@@ -184,7 +191,33 @@ GROK_CONFIG_PATH="$HOME/.grok/config.toml"
 KERNEL_PRINCIPLES_DIR="$REPO_ROOT/docs/founder-kernel/wiki/principles"
 CONTRIBUTOR_MEMORY_DIR="$HOME/.claude/projects"
 PROJECT_SLUG="$(printf '%s' "$REPO_ROOT" | sed -E 's:[/:]:-:g' | sed -E 's:^-+::')"
-MCP_ENDPOINT="${DPF_MCP_URL:-http://127.0.0.1:3000/api/mcp/v1}"
+# BI-2D545A0C (design 12.4.3): an explicit process DPF_MCP_URL selects the
+# endpoint before the saved https preference and install defaults. On HTTPS,
+# Node clients trust the organization CA (BI-FA2C46D7). The shared
+# installer/lib/mcp-client-env module owns resolution. Codex's saved endpoint
+# is not a selection for every client: the updater keeps it in Codex's own
+# config when no endpoint is named, so a loopback-http choice there never
+# reaches Claude's OAuth connector (BI-8FD7C0C9).
+# shellcheck source=installer/lib/mcp-client-env.sh
+. "$SCRIPT_DIR/installer/lib/mcp-client-env.sh"
+dpf_resolve_mcp_client_env "$REPO_ROOT"
+# MCP_ENDPOINT_NAMED is the endpoint the install or operator named (may be
+# empty); only it is forwarded to the updater, whose canonical https/OAuth
+# default governs otherwise (BI-772023BC). The probes and the plan bridge need
+# a concrete URL, so they read that same default from the updater's one line.
+MCP_ENDPOINT_NAMED="${DPF_MCP_CLIENT_URL:-}"
+MCP_ENDPOINT="$MCP_ENDPOINT_NAMED"
+if [ -z "$MCP_ENDPOINT" ]; then
+  MCP_ENDPOINT="$(sed -n 's/^DEFAULT_MCP_URL = "\(.*\)"$/\1/p' "$REPO_ROOT/packages/dpf-skill-pack/scripts/update_agent_toolchain.py" 2>/dev/null || true)"
+fi
+if [ -z "$MCP_ENDPOINT" ]; then
+  fail "Cannot read the default MCP endpoint from packages/dpf-skill-pack/scripts/update_agent_toolchain.py; set DPF_MCP_URL or restore the skill pack."
+  exit 1
+fi
+MCP_TRUST_BUNDLE="$DPF_MCP_CLIENT_CA_BUNDLE"
+if [ -n "$MCP_TRUST_BUNDLE" ]; then
+  export NODE_EXTRA_CA_CERTS="$MCP_TRUST_BUNDLE"
+fi
 SKILL_PACK_MANIFEST="$REPO_ROOT/packages/dpf-skill-pack/.claude-plugin/plugin.json"
 
 if [ ! -f "$SKILL_PACK_MANIFEST" ]; then
@@ -321,30 +354,30 @@ fi
 # persist it so a new shell, terminal-launched Claude Code, and GUI-launched
 # apps all pick it up. The plaintext is NEVER written to install-state or logs.
 
-# POSIX single-quote escaping via bash parameter expansion (no sed gymnastics):
-# each ' becomes '\'' so the value is safe inside a single-quoted shell string.
-mcp_token_envfile="$HOME/.dpf/agent-toolchain.env"
-
+# One managed env file (~/.dpf/agent-toolchain.env) carries everything a client
+# process needs to reach the portal: the bearer token (http installs), and on
+# https the endpoint plus the
+# organization root bundle so Node clients (Claude Code, Codex, the gate
+# scripts) trust the install's own CA (BI-FA2C46D7). The shared module
+# installer/lib/mcp-client-env.sh is the only writer of that file (the
+# installer persists the same transport lines); each value owns one line, so a
+# later mint never drops the transport lines, and vice versa. The token
+# plaintext is NEVER written to install-state or logs.
+persist_mcp_client_env_posix() {
+  _tok="${DPF_MCP_BEARER_TOKEN:-}"
+  dpf_set_client_env_export DPF_MCP_BEARER_TOKEN "$_tok"
+  dpf_source_client_env_from_profiles
+  # GUI-launched apps (e.g. Codex.app, Claude.app) are not started from a shell,
+  # so they do not read the profile; launchd carries the values for this boot.
+  dpf_launchd_setenv DPF_MCP_BEARER_TOKEN "$_tok"
+  # Only an https endpoint is persisted; a named plain-http endpoint reaches
+  # the clients through the updater's --mcp-url, never the shared environment
+  # Claude's OAuth connector reads (BI-8FD7C0C9).
+  dpf_persist_mcp_client_env || true
+}
 persist_mcp_token_posix() {
-  _tok="$1"
-  _esc=${_tok//\'/\'\\\'\'}
-  mkdir -p "$HOME/.dpf"
-  ( umask 077; printf '# DPF MCP bearer token — managed by dpf-bootstrap-agent-toolchain.sh\nexport DPF_MCP_BEARER_TOKEN='\''%s'\''\n' "$_esc" > "$mcp_token_envfile" )
-  chmod 600 "$mcp_token_envfile" 2>/dev/null || true
-  # Source the env file from login + non-login shells (idempotent managed line).
-  _src_line=". \"$mcp_token_envfile\"  # dpf-mcp-token"
-  for _prof in "$HOME/.zshenv" "$HOME/.profile"; do
-    if [ -f "$_prof" ] && grep -q 'dpf-mcp-token' "$_prof" 2>/dev/null; then
-      continue
-    fi
-    printf '%s\n' "$_src_line" >> "$_prof"
-  done
-  # GUI-launched apps (e.g. Codex.app) are not started from a shell, so they do
-  # not read the profile. launchctl setenv injects the var for the current boot.
-  # (Reboot persistence for GUI apps is a follow-up; terminal clients are durable.)
-  if [ "$(uname -s)" = "Darwin" ] && command -v launchctl >/dev/null 2>&1; then
-    launchctl setenv DPF_MCP_BEARER_TOKEN "$_tok" 2>/dev/null || true
-  fi
+  DPF_MCP_BEARER_TOKEN="$1"
+  persist_mcp_client_env_posix
 }
 
 # The token is minted INSIDE the portal container, not on the host: on a
@@ -361,6 +394,29 @@ resolve_portal_container() {
   printf 'dpf-portal-1\n'
 }
 
+# --- Reconcile a rejected token (BI-2F82F1A0) ---------------------------------
+#
+# "token present" != "token accepted". A persisted token can be EXPIRED (the
+# issuer's default TTL is 90 days), revoked, or unknown to this install; the
+# portal answers HTTP 401 and every gate downstream fails. Probe with the
+# read-only tools/list call and re-mint ONLY on 401 (the credential itself is
+# rejected). 403 is the scope probe's business; 0/5xx is unreachable — never
+# replace a present token on a hiccup. SSOT: interpretTokenAuthProbe /
+# TOKEN_AUTH_PROBE in @dpf/bootstrap.
+if [ "$HAS_TOKEN" -eq 1 ] && [ "$AUTO_MINT" -eq 1 ] && [ "$DRY_RUN" -eq 0 ] \
+   && command -v curl >/dev/null 2>&1; then
+  _auth_status="$(curl -s --max-time 5 -o /dev/null -w '%{http_code}' -X POST "$MCP_ENDPOINT" \
+    -H "Authorization: Bearer ${DPF_MCP_BEARER_TOKEN}" \
+    -H "Content-Type: application/json" \
+    -H "Accept: application/json, text/event-stream" \
+    --data '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' \
+    2>/dev/null || printf '000')"
+  if [ "$_auth_status" = "401" ]; then
+    warn "Present MCP token is rejected by $MCP_ENDPOINT (HTTP 401: expired, revoked or unknown to this install); re-minting."
+    HAS_TOKEN=0
+  fi
+fi
+
 # --- Reconcile an under-provisioned token (BI-A3DE9A31) ----------------------
 #
 # "token present" != "token sufficient". A token minted before the
@@ -373,7 +429,7 @@ resolve_portal_container() {
 # Markers mirror interpretScopeCoverageProbe in @dpf/bootstrap (SSOT).
 if [ "$HAS_TOKEN" -eq 1 ] && [ "$AUTO_MINT" -eq 1 ] && [ "$DRY_RUN" -eq 0 ] \
    && command -v curl >/dev/null 2>&1; then
-  _scope_probe="$(curl -s --max-time 5 -X POST "$MCP_ENDPOINT" \
+  _scope_probe="$(curl -s --max-time 5 ${NODE_EXTRA_CA_CERTS:+--cacert "$NODE_EXTRA_CA_CERTS"} -X POST "$MCP_ENDPOINT" \
     -H "Authorization: Bearer ${DPF_MCP_BEARER_TOKEN}" \
     -H "Content-Type: application/json" \
     -H "Accept: application/json, text/event-stream" \
@@ -395,27 +451,128 @@ if [ "$HAS_TOKEN" -eq 0 ] && [ "$AUTO_MINT" -eq 1 ]; then
     PORTAL_CONTAINER="$(resolve_portal_container)"
     info "No MCP token found; minting a '$MINT_SCOPE'-scoped token via portal container ($PORTAL_CONTAINER)."
     MINT_ERR="$(mktemp)"
-    # Run the shipped issuer inside the container (matches the just-migrated
-    # Prisma schema; reaches postgres over the compose network).
-    if MINT_OUT="$(docker exec "$PORTAL_CONTAINER" sh -c \
-          "cd /app/apps/web-src && /app/node_modules/.pnpm/node_modules/.bin/tsx scripts/issue-mcp-token.ts --scope '$MINT_SCOPE' --format raw" \
-          2>"$MINT_ERR")"; then
-      MINT_TOKEN="$(printf '%s\n' "$MINT_OUT" | grep -E '^dpfmcp_' | tail -n 1)"
-      if [ -n "$MINT_TOKEN" ]; then
-        persist_mcp_token_posix "$MINT_TOKEN"
-        export DPF_MCP_BEARER_TOKEN="$MINT_TOKEN"
-        HAS_TOKEN=1
-        ok "MCP token issued and persisted (${MINT_TOKEN%%_*}_… , scope=$MINT_SCOPE)."
-      else
-        warn "Token issuance produced no token; continuing without one. See diagnostics below."
-        sed -n '1,20p' "$MINT_ERR" >&2 || true
-      fi
+    if [ "$(docker inspect -f '{{.State.Running}}' "$PORTAL_CONTAINER" 2>/dev/null)" != "true" ]; then
+      warn "Portal container '$PORTAL_CONTAINER' is not running; cannot mint an MCP token. Continuing without one."
     else
-      warn "Token issuance failed (is the portal container running?); continuing without a token."
-      sed -n '1,20p' "$MINT_ERR" >&2 || true
+      # BI-3F16A430: the web-src snapshot in the image has no node_modules and
+      # /app/node_modules carries no @dpf/* links, so the issuer cannot resolve
+      # @dpf/db / @dpf/integration-shared. The image now links them at build
+      # (Dockerfile runner stage); re-run the same script here so an image built
+      # before that shipped is repaired in place. Idempotent, symlinks only.
+      _link_script="$REPO_ROOT/scripts/link-web-src-workspace.sh"
+      if [ -f "$_link_script" ]; then
+        docker exec -i "$PORTAL_CONTAINER" sh -s < "$_link_script" >/dev/null 2>>"$MINT_ERR" \
+          || warn "Could not link workspace packages into web-src (see diagnostics below); trying the issuer anyway."
+      fi
+      # Resolve tsx inside the container — never a pnpm-internal path (it moved
+      # once already). Probe the known runtime locations, fall back to the
+      # Node loader form, and fail with the real reason if none resolves.
+      # shellcheck disable=SC2016
+      _issuer_cmd='cd /app/apps/web-src || exit 2
+for t in /app/node_modules/.bin/tsx /app/packages/db/node_modules/.bin/tsx; do
+  if [ -x "$t" ]; then exec "$t" scripts/issue-mcp-token.ts "$@"; fi
+done
+if node -e "require.resolve(\"tsx\")" >/dev/null 2>&1; then exec node --import tsx scripts/issue-mcp-token.ts "$@"; fi
+echo "issue-mcp-token: no tsx runtime found in the portal image (probed /app/node_modules/.bin/tsx, /app/packages/db/node_modules/.bin/tsx, node --import tsx)" >&2
+exit 127'
+      if MINT_OUT="$(docker exec "$PORTAL_CONTAINER" sh -c "$_issuer_cmd" issuer --scope "$MINT_SCOPE" --format raw 2>"$MINT_ERR")"; then
+        MINT_TOKEN="$(printf '%s\n' "$MINT_OUT" | grep -E '^dpfmcp_' | tail -n 1)"
+        if [ -n "$MINT_TOKEN" ]; then
+          persist_mcp_token_posix "$MINT_TOKEN"
+          export DPF_MCP_BEARER_TOKEN="$MINT_TOKEN"
+          HAS_TOKEN=1
+          ok "MCP token issued and persisted (${MINT_TOKEN%%_*}_… , scope=$MINT_SCOPE)."
+        else
+          warn "Token issuance produced no token; continuing without one. Issuer diagnostics:"
+          sed -n '1,40p' "$MINT_ERR" >&2 || true
+        fi
+      else
+        warn "Token issuance failed inside '$PORTAL_CONTAINER'; continuing without a token. Issuer diagnostics:"
+        sed -n '1,40p' "$MINT_ERR" >&2 || true
+      fi
     fi
     rm -f "$MINT_ERR"
   fi
+fi
+
+# Persist the selected https endpoint (and the organization CA) for new
+# processes, even when no token was minted this run. Never at dry-run time.
+if [ "$DRY_RUN" -eq 0 ] && dpf_mcp_client_endpoint_can_persist "$MCP_ENDPOINT_NAMED"; then
+  persist_mcp_client_env_posix
+  ok "Saved the MCP endpoint preference for future sessions."
+fi
+
+# Grok credential (BI-5BCDB07C). Independent of the legacy PAT mint above:
+# a credentials client inside the portal, then a bearer_token_file refresh.
+# A refused client stops the refresher. This does not mint a personal access token.
+provision_grok_credential() {
+  [ "$GROK_PRESENT" -eq 1 ] || return 0
+  if [ "$DRY_RUN" -eq 1 ]; then
+    info "DRY-RUN: would create the Grok credentials client and refresh its bearer file."
+    return 0
+  fi
+  if ! command -v node >/dev/null 2>&1; then
+    warn "node not found; cannot refresh the Grok credential."
+    return 0
+  fi
+  if ! command -v docker >/dev/null 2>&1; then
+    warn "docker not found; cannot create the Grok credentials client."
+    return 0
+  fi
+  PORTAL_CONTAINER="$(resolve_portal_container)"
+  if [ "$(docker inspect -f '{{.State.Running}}' "$PORTAL_CONTAINER" 2>/dev/null)" != "true" ]; then
+    warn "Portal container '$PORTAL_CONTAINER' is not running; Grok credential was not created."
+    return 0
+  fi
+  _grok_err="$(mktemp)"
+  _link_script="$REPO_ROOT/scripts/link-web-src-workspace.sh"
+  if [ -f "$_link_script" ]; then
+    docker exec -i "$PORTAL_CONTAINER" sh -s < "$_link_script" >/dev/null 2>>"$_grok_err" \
+      || warn "Could not link workspace packages into web-src; trying the Grok client issuer anyway."
+  fi
+  # shellcheck disable=SC2016
+  _grok_issuer='cd /app/apps/web-src || exit 2
+for t in /app/node_modules/.bin/tsx /app/packages/db/node_modules/.bin/tsx; do
+  if [ -x "$t" ]; then exec "$t" scripts/issue-grok-credentials-client.ts "$@"; fi
+done
+if node -e "require.resolve(\"tsx\")" >/dev/null 2>&1; then exec node --import tsx scripts/issue-grok-credentials-client.ts "$@"; fi
+echo "issue-grok-credentials-client: no tsx runtime found in the portal image" >&2
+exit 127'
+  if _grok_out="$(docker exec "$PORTAL_CONTAINER" sh -c "$_grok_issuer" issuer 2>"$_grok_err")"; then
+    if printf '%s\n' "$_grok_out" | node "$REPO_ROOT/packages/dpf-skill-pack/scripts/refresh-grok-mcp-credential.mjs" write-client --config "$GROK_CONFIG_PATH"; then
+      # The updater receives only an operator-named endpoint. The refresher
+      # still calls the resolved URL, including the install default.
+      _grok_mcp_url="$MCP_ENDPOINT"
+      if node "$REPO_ROOT/packages/dpf-skill-pack/scripts/refresh-grok-mcp-credential.mjs" refresh --mcp-url "$_grok_mcp_url" --config "$GROK_CONFIG_PATH"; then
+        ok "Grok credential refreshed into bearer_token_file."
+      else
+        warn "Grok credential refresh did not complete."
+      fi
+    else
+      warn "Grok credentials client was not stored."
+    fi
+  else
+    warn "Grok credentials client was not created. Diagnostics:"
+    sed -n '1,40p' "$_grok_err" >&2 || true
+  fi
+  rm -f "$_grok_err"
+}
+
+provision_grok_credential
+
+# Refresh native plugin registrations before the config plan reads preferences.
+# The standalone updater owns this migration on every bootstrap path.
+PLUGIN_UPDATER="$REPO_ROOT/packages/dpf-skill-pack/scripts/update-agent-toolchain.sh"
+if [ ! -f "$PLUGIN_UPDATER" ]; then
+  fail "Standalone updater missing at $PLUGIN_UPDATER; cannot proceed."
+  exit 1
+fi
+plugin_update_args=(--codex-plugin-only)
+[ -n "$MCP_ENDPOINT_NAMED" ] && plugin_update_args+=(--mcp-url "$MCP_ENDPOINT_NAMED")
+[ "$DRY_RUN" -eq 1 ] && plugin_update_args+=(--dry-run)
+if ! bash "$PLUGIN_UPDATER" "${plugin_update_args[@]}"; then
+  fail "Plugin refresh failed; configuration planning stopped."
+  exit 1
 fi
 
 # --- Compute plan via Node bridge --------------------------------------------
@@ -437,6 +594,7 @@ bridge_args=(
   --contributor-memory    "$CONTRIBUTOR_MEMORY_DIR"
   --project-slug          "$PROJECT_SLUG"
   --mcp-endpoint          "$MCP_ENDPOINT"
+  --auth-mode             "$AUTH_MODE"
   --expected-dpf-platform-version "$EXPECTED_VERSION"
 )
 [ $CLAUDE_PRESENT  -eq 1 ] && bridge_args+=(--claude-cli-present)
@@ -454,19 +612,15 @@ trap 'rm -f "$PLAN_TMP"' EXIT
 if ! pnpm "${bridge_args[@]}" > "$PLAN_TMP" 2>&1; then
   warn "compute-plan failed; using standalone skill-pack updater fallback."
   cat "$PLAN_TMP" >&2
-  FALLBACK="$REPO_ROOT/packages/dpf-skill-pack/scripts/update-agent-toolchain.sh"
-  if [ -f "$FALLBACK" ]; then
-    fallback_args=(--mcp-url "$MCP_ENDPOINT")
-    [ "$DRY_RUN" -eq 1 ] && fallback_args+=(--dry-run)
-    if bash "$FALLBACK" "${fallback_args[@]}"; then
-      seed_worktree_core "post-fallback"
-      exit 0
-    fi
+  fallback_args=(--project-root "$REPO_ROOT")
+  [ -n "$MCP_ENDPOINT_NAMED" ] && fallback_args+=(--mcp-url "$MCP_ENDPOINT_NAMED")
+  [ "$DRY_RUN" -eq 1 ] && fallback_args+=(--dry-run)
+  if ! bash "$PLUGIN_UPDATER" "${fallback_args[@]}"; then
     fail "Standalone updater failed."
     exit 1
   fi
-  fail "Standalone updater missing at $FALLBACK; cannot proceed."
-  exit 1
+  seed_worktree_core "post-fallback"
+  exit 0
 fi
 if [ ! -s "$PLAN_TMP" ]; then
   fail "compute-plan produced empty output; cannot proceed."
@@ -516,6 +670,7 @@ shell_var("CODEX_CONVERGENCE", "\n".join(_conv_lines))
 shell_var("GROK_WRITES_COUNT", len((grok.get("config") or {}).get("writes", [])) if grok else 0)
 shell_var("MCP_CLIENT_WRITES_COUNT", len(mcp_client.get("writes", [])))
 shell_var("MEMORY_WRITES_COUNT", len(memory.get("writes", [])))
+shell_var("COMPATIBILITY_CLIENTS", ", ".join(plan.get("compatibilityClients", [])))
 shell_var("PREVIEW_STATE", plan.get("preview", {}).get("readinessState", "missing_cli"))
 shell_var("UPSTREAM_DRIFT_ADVISORY", (plan.get("upstreamDrift") or {}).get("advisory") or "")
 PY
@@ -572,7 +727,7 @@ EOF
     fi
   fi
   if [ "${PLAN_MCP_CLIENT_WRITES_COUNT:-0}" -gt 0 ]; then
-    info "DRY-RUN: write $PLAN_MCP_CLIENT_WRITES_COUNT MCP client config file(s) (.mcp.json / .vscode/mcp.json)"
+    info "DRY-RUN: write $PLAN_MCP_CLIENT_WRITES_COUNT MCP client config file(s) (.vscode/mcp.json; .mcp.json only on http or legacy -- the plugin owns the Claude connector on https)"
   fi
   if [ "${PLAN_MEMORY_WRITES_COUNT:-0}" -gt 0 ]; then
     info "DRY-RUN: seed $PLAN_MEMORY_WRITES_COUNT kernel principle(s) to memory"
@@ -591,7 +746,7 @@ for w in (plan.get("codex") or {}).get("writes", []):
     with open(w["path"], "wb") as f:
         f.write(w["content"].encode("utf-8"))
 
-# MCP client config writes (.mcp.json + .vscode/mcp.json — env-backed, no secret).
+# MCP client config writes (.vscode/mcp.json, and .mcp.json on http/legacy only -- env-backed, no secret).
 for w in (plan.get("mcpClientConfig") or {}).get("writes", []):
     os.makedirs(os.path.dirname(w["path"]), exist_ok=True)
     # Binary mode + explicit UTF-8 prevents CRLF translation on Windows,
@@ -673,7 +828,7 @@ EOF
   fi
 
   if [ "${PLAN_MCP_CLIENT_WRITES_COUNT:-0}" -gt 0 ]; then
-    ok "MCP client config written ($PLAN_MCP_CLIENT_WRITES_COUNT file(s): .mcp.json / .vscode/mcp.json)."
+    ok "MCP client config written ($PLAN_MCP_CLIENT_WRITES_COUNT file(s); the plugin owns the Claude connector on https)."
   else
     ok "MCP client config already converged."
   fi
@@ -755,12 +910,14 @@ fi
 # --- Compute final readiness from applied facts + probe results ------------
 
 # Mirrors computeReadinessState() in @dpf/bootstrap/readiness-state.ts.
-MCP_OK="$(printf '%s' "$MCP_READINESS" | python3 -c 'import json,sys; print(json.load(sys.stdin)["ok"])')"
+MCP_OK="$(printf '%s' "$MCP_READINESS" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["ok"] and d.get("delivery", {}).get("ready") is True)')"
 MCP_REASON="$(printf '%s' "$MCP_READINESS" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("reason",""))')"
 SMOKE_RESULT="$(printf '%s' "$SMOKE_TEST" | python3 -c 'import json,sys; print(json.load(sys.stdin)["result"])')"
 
 if [ "$CLAUDE_WIRED" -eq 0 ] && [ "$CODEX_WIRED" -eq 0 ] && [ "$GROK_WIRED" -eq 0 ]; then
   FINAL_STATE="missing_cli"
+elif [ "$AUTH_MODE" = "oauth" ]; then
+  FINAL_STATE="authorization_pending"
 elif [ "$MCP_OK" != "True" ]; then
   case "$MCP_REASON" in
     no_token|scope_insufficient) FINAL_STATE="missing_token" ;;
@@ -789,6 +946,7 @@ AGENT_TOOLCHAIN_JSON="$(cat <<JSON
   "grokWired": $([ $GROK_WIRED -eq 1 ] && echo true || echo false),
   "antigravityWired": $([ $AGY_WIRED -eq 1 ] && echo true || echo false),
   "memorySeededAt": $MEMORY_SEEDED_AT_JSON,
+  "mcpAuthorization": {"mode": "$AUTH_MODE", "verified": false},
   "mcpReadiness": $MCP_READINESS,
   "smokeTest": $SMOKE_TEST,
   "readinessState": "$FINAL_STATE"
@@ -803,7 +961,10 @@ fi
 
 # --- Readiness banner --------------------------------------------------------
 
+if [ -n "${COMPATIBILITY_CLIENTS:-}" ]; then warn "Compatibility credentials required for: $COMPATIBILITY_CLIENTS. Select legacy setup explicitly; OAuth consent will not mint a PAT."; fi
+
 case "$FINAL_STATE" in
+  authorization_pending) BANNER_MSG="MCP configuration is written. Sign in through your client and verify the connection; bootstrap has not verified OAuth."; BANNER_ACTION="Sign in to DPF MCP" ;;
   ready)         BANNER_MSG="Claude Code and Codex are ready for DPF work.";                                     BANNER_ACTION="Open readiness" ;;
   partial)       BANNER_MSG="One contributor client is ready; the other needs setup.";                           BANNER_ACTION="Repair toolchain" ;;
   missing_cli)   BANNER_MSG="Install the selected agent client to enable contributor sessions.";                 BANNER_ACTION="Open setup guide" ;;
@@ -811,6 +972,10 @@ case "$FINAL_STATE" in
   needs_refresh) BANNER_MSG="A token exists, but the running client has not picked it up yet.";                  BANNER_ACTION="Refresh client binding" ;;
   failed_smoke)  BANNER_MSG="The agent is installed but did not apply a DPF kernel principle.";                  BANNER_ACTION="View evidence" ;;
 esac
+if [ "$MCP_REASON" = "coworker_grants_insufficient" ]; then
+  BANNER_MSG="The acting coworker lacks approved delivery permissions. Platform install or upgrade must reconcile them."
+  BANNER_ACTION="Open readiness"
+fi
 
 printf '\n'
 printf '================================================================\n'

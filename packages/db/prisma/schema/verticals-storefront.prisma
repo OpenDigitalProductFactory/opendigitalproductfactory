@@ -331,6 +331,8 @@ model BookingHold {
   @@index([storefrontId, slotStart, slotEnd])
   @@index([hospitalityResourceId, slotStart, slotEnd])
   @@index([expiresAt])
+  @@index([itemId])
+  @@index([providerId])
 }
 
 /// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential basis=Sales/financial_record_retention minYears=7
@@ -476,6 +478,7 @@ model RentalAgreement {
   @@index([rentableUnitId, status])
   @@index([periodStart, periodEnd])
   @@index([customerEmail])
+  @@index([storefrontItemId])
 }
 
 model RentalConditionRecord {
@@ -682,6 +685,8 @@ model AnimalProfile {
   applications    AnimalAdoptionApplication[]
   placements      AnimalPlacement[]
 
+  controlledSubstanceMovements ControlledSubstanceMovement[]
+
   @@unique([organizationId, animalRef])
   @@unique([organizationId, externalSourceKey])
   @@unique([id, organizationId])
@@ -757,6 +762,8 @@ model AnimalAdoptionApplication {
   inquiryRef           String?
   applicantContactRef  String?
   applicantName        String?
+  /// Screening answers (housing, other pets, children, landlord permission, experience). Confidential applicant PII; never projected into the bounded queue.
+  screening            Json?
   status               AnimalAdoptionApplicationStatus @default(submitted)
   reviewerPrincipalRef String?
   decisionReason       String?
@@ -981,27 +988,9 @@ model CourseRegistration {
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
   courseInstance   CourseInstance @relation(fields: [courseInstanceId], references: [id])
-  examVoucher      ExamVoucher?
 
   @@index([courseInstanceId, paymentStatus])
   @@index([email])
   @@index([stripeRef])
   @@index([xeroRef])
-}
-
-model ExamVoucher {
-  id               String             @id @default(cuid())
-  registrationId   String             @unique
-  ogId             String?
-  voucherType      String?
-  voucherExpiry1   DateTime?
-  voucherExpiry2   DateTime?
-  ogStoreReference String?
-  status           String             @default("pending")
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @updatedAt
-  registration     CourseRegistration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
-
-  @@index([ogId])
-  @@index([status])
 }

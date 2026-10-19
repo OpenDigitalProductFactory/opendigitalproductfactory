@@ -1,0 +1,8 @@
+flowchart TB
+    intake(["Backlog item<br/>approved to start"]) -->|"WWMD ideate-start gate<br/>autonomous mode only"| ideate
+    ideate["IDEATE<br/>~52 tools: research, brief,<br/>design review, decomposition<br/>no sandbox write"] -->|"evidence: design doc,<br/>design review passed<br/>+ readiness 'plan'"| plan
+    plan["PLAN<br/>~42 tools: plan review,<br/>project reads<br/>no sandbox write"] -->|"WWMD plan-advancement gate<br/>BLOCKING<br/>+ WSID consults, advisory<br/>+ evidence + readiness"| build
+    build["BUILD<br/>~50 tools: sandbox read, write,<br/>edit, tests, schema checks"] -->|"evidence: typecheck passed<br/>+ releasable diff"| review
+    review["REVIEW<br/>~51 tools: sandbox still writable,<br/>page evaluation, semantic review"] -->|"rework"| build
+    review -->|"WWMD ship gate<br/>blocks in enforce mode only<br/>+ WSID consults, advisory<br/>+ acceptance evidence"| ship
+    ship["SHIP<br/>~45 tools: PR, deploy,<br/>promotion, release bundle"] -->|"merge queue +<br/>delivery-acceptance decision"| done(["Complete"])

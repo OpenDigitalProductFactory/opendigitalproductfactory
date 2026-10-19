@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ALL_ARCHETYPES } from "@dpf/storefront-templates";
+import { useT } from "@/lib/i18n/use-t";
 
 type Action = { href: string; label: string };
 
@@ -68,6 +69,7 @@ function NotFoundShell({
  * the correct fallback for a signed-in operator who mistyped a URL.
  */
 export default function NotFound() {
+  const t = useT("errors");
   const pathname = usePathname() ?? "";
   const segments = pathname.split("/").filter(Boolean);
   const firstSegment = segments[0] ?? "";
@@ -80,9 +82,9 @@ export default function NotFound() {
   if (unprovisionedArchetype) {
     return (
       <NotFoundShell
-        heading="This demo has not been generated yet"
-        body={`The ${unprovisionedArchetype.name} demo is registered but has not been provisioned into a live storefront route yet. Check back soon, or browse the demos that are live today.`}
-        primary={{ href: "/", label: "Browse live demos" }}
+        heading={t("notFound.demoPending.heading")}
+        body={t("notFound.demoPending.body", { name: unprovisionedArchetype.name })}
+        primary={{ href: "/", label: t("notFound.demoPending.primary") }}
       />
     );
   }
@@ -90,19 +92,19 @@ export default function NotFound() {
   if (firstSegment === "s") {
     return (
       <NotFoundShell
-        heading="We couldn't find that page"
-        body="The link may be out of date, expired, or mistyped."
-        primary={{ href: "/", label: "Go to homepage" }}
+        heading={t("notFound.storefront.heading")}
+        body={t("notFound.storefront.body")}
+        primary={{ href: "/", label: t("notFound.storefront.primary") }}
       />
     );
   }
 
   return (
     <NotFoundShell
-      heading="This page could not be found"
-      body="The link may be stale, or the route was renamed. Head back to the workspace and try a destination from the left rail."
-      primary={{ href: "/workspace", label: "Back to workspace" }}
-      secondary={{ href: "/docs", label: "Browse docs" }}
+      heading={t("notFound.workspace.heading")}
+      body={t("notFound.workspace.body")}
+      primary={{ href: "/workspace", label: t("notFound.workspace.primary") }}
+      secondary={{ href: "/docs", label: t("notFound.workspace.secondary") }}
     />
   );
 }

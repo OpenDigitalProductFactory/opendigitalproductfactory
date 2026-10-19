@@ -23,9 +23,9 @@ boot-time fail-loud for desired-state drift.
 ## Scrape targets
 
 `monitoring/prometheus/prometheus.yml` scrapes: `portal`, `sandbox`, `postgres`
-(exporter), `redis` (exporter), `qdrant`, `inngest`, `loki`, `alloy`, `windows-host`
+(exporter), `redis` (exporter), `inngest`, `loki`, `alloy`, `windows-host`
 (windows_exporter), `prometheus`. **Not scrapeable** (no `/metrics`): `dpf-tts`,
-`neo4j`, the model runner (DMR) — covered by portal-side probes below.
+the model runner (DMR) — covered by portal-side probes below.
 Speech-to-text runs no DPF-shipped container at all; it is provider-managed
 and observed through the portal-side `dpf_voice_stt_*` counters.
 
@@ -34,9 +34,9 @@ and observed through the portal-side `dpf_voice_stt_*` counters.
 | Gauge | Source | Alert |
 | --- | --- | --- |
 | `dpf_voice_tts_up` / `dpf_voice_tts_enabled` | `lib/voice-synthesis/service-status.ts` | `VoiceServiceDown` (enabled && down) |
-| `dpf_dependency_up{service="neo4j"}` | `lib/operate/dependency-health.ts` | `Neo4jDown` |
-| `dpf_dependency_up{service="model-runner"}` | same | gauge only (see follow-ups) |
+| `dpf_dependency_up{service="model-runner"}` | `lib/operate/dependency-health.ts` | gauge only (see follow-ups) |
 | `dpf_dependency_up{service="stt"}` | same | gauge only (see follow-ups) |
+| `dpf_dependency_up{service="doctools"}` | same, via `lib/documents/conversion/availability.ts` | gauge only. Optional: unset (never 0) when the install has no docker socket or no configured `doctoolsImage` |
 | `dpf_http_unhandled_errors_total` | `instrumentation.ts` `onRequestError` | `UnhandledServerErrors` |
 | `dpf_coworker_envelopes_awaiting_decision` | `lib/coworker/envelope-observability.ts` | gauge only |
 | `dpf_coworker_envelopes_expired_unactioned` | same | see below — worth an alert |
@@ -53,9 +53,11 @@ compose's `dpf-tts:8000` default (never running on macOS) and fires a phantom
 ### Coworker approval envelopes (BI-78D3CF1E)
 
 A `CoworkerActionEnvelope` is a coworker asking one named human to approve one
-side-effecting call. It expires 15 minutes after it is raised, and an envelope
-nobody answers transitions to nothing — no alert, no error, no row anywhere an
-operator looks. Seven lapsed unactioned on a live install before an approval
+side-effecting call. It expires after a lifetime set by the call's declared
+consequence (BI-0012E6CA, `apps/web/lib/coworker/approval-lifetime.ts`):
+15 minutes for an outward or unclassified call, seven days for everything else.
+Before BI-410ACCB8 and BI-0012E6CA, an envelope nobody answered transitioned to
+nothing — no alert, no error, no row anywhere an operator looked. Seven lapsed unactioned on a live install before an approval
 surface existed, and the only way to learn that was to read the table.
 
 `dpf_coworker_envelopes_expired_unactioned` is the one to watch, and it cannot be
@@ -88,7 +90,7 @@ keep the `node_*` rules; Windows installs get the `windows_*` rules.
   install that never runs a local model runner / STT never false-fires.
 - **Restart-loop detection (all platforms)** — DONE via `ServiceFlapping`
   (`changes(up[15m]) > 5`), which catches a crashing+recovering scraped service
-  (the qdrant loop `ContainerRestarting` missed) using the `up` series.
+  (the 2026-06-24 vector-store restart loop `ContainerRestarting` missed) using the `up` series.
 - **Per-container CPU/memory + restart_count on Windows** — NOT POSSIBLE, by
   platform constraint. cAdvisor/node-exporter require `/proc`, `/sys`,
   `/var/lib/docker` host mounts that Docker Desktop (WSL2/macOS) does not provide
@@ -140,3 +142,51 @@ verified. Before merging any new alert or portal-side probe:
 Prometheus has no Alertmanager here; firing alerts reach the portal via the Inngest
 poll-bridge (`apps/web/lib/queue/functions/alert-delivery-bridge.ts`) and surface in
 the System Health UI. The Grafana dashboard UI is opt-in (`observability-ui` profile).
+
+## Log capture runs by default (BI-F8024A9D)
+
+`loki` and `alloy` are **base compose services, not profile-gated**. They read
+container logs through the Docker socket with no host-path bind mount, so they run
+identically on macOS/Windows Docker Desktop and native Linux — unlike
+`cadvisor`/`node-exporter`, which do need Linux host paths and stay behind the
+`linux-monitoring` profile.
+
+This is load-bearing, not a convenience. They shipped gated, which left the capture
+layer dark on every install: nothing persisted container stderr, the Loki ruler's
+rate rules were never evaluated, and `ops/log-signature-scanner` woke every 15
+minutes, found nothing, and reported success. The macOS blind spot the Tier 2 spec
+was written to close had reopened on the install that authored it. Both services are
+bounded in `config/install-resource-budgets.json`, so a container flooding stdout
+costs disk and retention, never the host.
+
+If you are tempted to re-gate them, the question to answer first is: who tells the
+operator that log capture is off?
+
+## A monitor that cannot see must say so (BI-ADB574AB)
+
+Every scheduled monitor that depends on a data source it does not own reports that
+source's reachability through
+`apps/web/lib/observability/monitor-source-reachability.ts`. Unreachable opens a
+`monitor_source_unreachable` issue naming what the operator is now blind to;
+reaching it again resolves the row automatically.
+
+This is not optional politeness. Three monitors previously computed their own
+reachability and discarded it, so a dead source produced an empty result set that
+read as a quiet, healthy estate:
+
+| Monitor | Source | What its silence hid |
+| --- | --- | --- |
+| `ops/log-signature-scanner` | Loki | no novel error signature detected, on any container |
+| `ops/alert-delivery-bridge` | Loki ruler / Prometheus | error-rate and storm alerts never evaluated |
+| `ops/patch-assessment-sweep` | CISA KEV | which CVEs are actively exploited in the wild |
+
+The row is about the MONITOR, never the subject — see the
+`monitor_source_unreachable` contract in `packages/db/src/quality-issue-registry.ts`.
+A clean run from a blind monitor is not an all-clear, and the platform now says which
+one it is. Blindness is reported only for sources the install actually expects:
+Prometheus is reported only once an operator wires `PROMETHEUS_URL`, so an install
+that never deployed it stays quiet.
+
+Adding a monitor with a new external dependency? Call
+`recordMonitorSourceReachability` on both the success and failure paths. The new-alert
+checklist above applies to the blindness row too — prove it fires, prove it clears.

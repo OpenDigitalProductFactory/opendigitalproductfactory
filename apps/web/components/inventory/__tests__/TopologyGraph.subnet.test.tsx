@@ -323,7 +323,7 @@ describe("TopologyGraph subnet scope", () => {
     expect(onChange).toBeTypeOf("function");
 
     onChange?.({ target: { value: "subnet-a" } });
-    tree = renderTopologyGraph();
+    renderTopologyGraph();
 
     onChange?.({ target: { value: "subnet-b" } });
     tree = renderTopologyGraph();
@@ -382,7 +382,7 @@ describe("TopologyGraph subnet scope", () => {
       | undefined;
 
     onChange?.({ target: { value: "subnet-a" } });
-    tree = renderTopologyGraph();
+    renderTopologyGraph();
 
     const refreshedGraph: GraphData = {
       nodes: graphData.nodes.filter((node) => node.id !== "subnet-a"),

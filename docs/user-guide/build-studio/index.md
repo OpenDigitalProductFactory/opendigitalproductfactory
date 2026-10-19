@@ -14,6 +14,14 @@ Build Studio is the platform's guided way to turn a plain-language outcome into 
 
 Build Studio is not a separate code universe. It works from the install's shared development workspace. In customizable installs, that means Build Studio and VS Code operate on the same source tree while the portal continues to own review, evidence, and governed promotion.
 
+You do not need separate Claude or Codex apps to use embedded Build Studio for
+supported changes. It needs a configured AI provider and development workspace.
+Builds, tests, previews, and local coding models still consume resources wherever
+they execute, so size enabled build work separately from everyday business
+operations. The [hardware guide](../../install/hardware.md) distinguishes those
+workloads; a 32 GB operations configuration is not a guarantee for a full
+development workload.
+
 ### Development Workrooms
 
 Open `/build/work` when you need the engineering context behind Build Studio. The **Delivery task hub** groups recent Workrooms as Ready, Working, Waiting, Needs attention, or Complete and keeps the outcome, owner, current stage, age, progress, branch, and next action together. A card may also show the authorized durable async-operation status and platform handle; provider handles, prompts, raw results, and private failure detail stay out of this view.
@@ -66,7 +74,7 @@ through the real execution path, and the coworker factory explicitly promotes
 them. A normal seed or upgrade preserves that lifecycle state; deployment alone
 does not certify or activate a coworker.
 - **Quality Gates** — Automated checks between phases. Each gate requires specific evidence before the feature can advance (design review, plan review, documentation impact, test results, typecheck). After Build Studio assembles the task outputs, Change Reviewer independently checks that committed change before UX verification or promotion. Its receipt appears in the same Workroom activity story; no separate review workspace is added.
-  A review may be **inconclusive** when reviewer capacity or transport is unavailable. That state asks the system to retry; it is not displayed or counted as a code defect. Once calibrated enforcement is enabled, publication requires a fresh exact-change receipt or an explicit policy-versioned exemption. The publication check is local and deterministic, so it never waits for another AI call.
+  A review may be **inconclusive** when reviewer capacity or transport is unavailable. It is not displayed or counted as a code defect. A refusal before execution may be retried within its existing budget. When a native execution's effects remain unknown, the same task is held for reconciliation: it cannot automatically resume or switch reviewers, even with retry budget remaining. Diagnostics distinguish the local process closing from verified remote settlement and omit raw model output and credentials. A verified receipt for the original immutable request can settle that task without another model call. Once calibrated enforcement is enabled, publication requires a fresh exact-change receipt or an explicit policy-versioned exemption. The publication check is local and deterministic, so it never waits for another AI call.
 - **Promotion** — The governed process for moving a completed feature from the Build runtime into production where the install is configured for it. Includes evidence capture, backup/rebuild/health-check discipline, and rollback planning.
 
 ## What You Can Do
@@ -97,6 +105,8 @@ If a task stops before it finishes, Build Studio distinguishes *why*. When the c
 ### Review
 
 Quality gates verify the feature is ready: documentation evidence is present, all tests pass, typecheck is clean, acceptance criteria are met, and accessibility checks pass. The AI Coworker presents a plain-language summary of the results.
+
+If the repository's automated checks, the independent code review, or the build's own risk analysis find problems in the build's own change, such as a missing data-impact note, out-of-date generated files, a bug the reviewer spotted, or a risk the change does not guard against, Build Studio hands the build back to the AI Coworker with the findings to fix, then reviews it again. This happens at most twice. If the checks still fail, the build is escalated to you with the remaining findings instead of retrying forever.
 
 ### Ship
 

@@ -13,7 +13,8 @@ interface AllocationRow {
   quantity?: number;
 }
 
-interface OccupancyTransaction {
+export interface OccupancyTransaction {
+  animalProfile: { findFirst(args: unknown): Promise<{ animalRef: string } | null> };
   $executeRawUnsafe(query: string, value: string): Promise<unknown>;
   adoptableAnimal: { findFirst(args: unknown): Promise<{ animalRef: string; status: string } | null> };
   resource: {
@@ -104,8 +105,7 @@ function result(row: AllocationRow, occupied: number, total: number): OccupancyR
   };
 }
 
-export async function placeResourceOccupant(input: {
-  db: OccupancyClient;
+export interface PlaceResourceOccupantInput {
   organizationId: string;
   allowedKinds: readonly string[];
   command: {
@@ -114,8 +114,23 @@ export async function placeResourceOccupant(input: {
     placedAt: Date;
     idempotencyKey: string;
   };
-}): Promise<OccupancyResult> {
-  return serializable(input.db, async (transaction) => {
+}
+
+export async function placeResourceOccupant(input: PlaceResourceOccupantInput & { db: OccupancyClient }): Promise<OccupancyResult> {
+  return serializable(input.db, (transaction) => placeResourceOccupantWithin(transaction, input));
+}
+
+/**
+ * The placement body, callable from a caller-owned serializable transaction so
+ * an admission can open custody and allocate housing atomically (BI-7111AF0C).
+ * The subject is the canonical AnimalProfile; a public AdoptableAnimal listing
+ * that predates the profile spine is accepted as a fallback identity.
+ */
+export async function placeResourceOccupantWithin(
+  transaction: OccupancyTransaction,
+  input: PlaceResourceOccupantInput,
+): Promise<OccupancyResult> {
+  {
     for (const key of [
       `animal:${input.organizationId}:${input.command.animalRef}`,
       `resource:${input.organizationId}:${input.command.destinationResourceId}`,
@@ -123,7 +138,15 @@ export async function placeResourceOccupant(input: {
       await lock(transaction, key);
     }
 
-    const [animal, destination, replay] = await Promise.all([
+    const [profile, listing, destination, replay] = await Promise.all([
+      transaction.animalProfile.findFirst({
+        where: {
+          organizationId: input.organizationId,
+          animalRef: input.command.animalRef,
+          lifecycleStatus: { in: ["in_care", "placement_ready"] },
+        },
+        select: { animalRef: true },
+      }),
       transaction.adoptableAnimal.findFirst({
         where: {
           organizationId: input.organizationId,
@@ -163,6 +186,7 @@ export async function placeResourceOccupant(input: {
         },
       }),
     ]);
+    const animal = profile ?? listing;
     if (!animal) throw new OccupancyCommandError("animal_not_found", "Animal not found in current care.");
     if (!destination) throw new OccupancyCommandError("resource_not_found", "Housing destination not found.");
     if (
@@ -251,7 +275,7 @@ export async function placeResourceOccupant(input: {
       },
     });
     return result(created, otherOccupied + 1, destination.capacity);
-  });
+  }
 }
 
 export async function releaseResourceOccupant(input: {

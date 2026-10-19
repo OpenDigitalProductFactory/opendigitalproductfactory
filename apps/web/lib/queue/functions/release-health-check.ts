@@ -5,13 +5,13 @@
 // Two GitHub API reads per tick (runs list + jobs on a red run) — fits the
 // anonymous 60/hr budget at the 15-minute cadence even with no token bound.
 
-import { cron } from "inngest";
+import { cron } from "@/lib/jobs/triggers";
 
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 import { runReleaseHealthCheck } from "@/lib/release-health/runner";
 
-export const releaseHealthCheck = inngest.createFunction(
+export const releaseHealthCheck = jobs.createFunction(
   {
     id: "ops/release-health-check",
     retries: 1,

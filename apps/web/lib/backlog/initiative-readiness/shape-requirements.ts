@@ -15,6 +15,7 @@
  */
 
 import type {
+  ReadinessProfile,
   InitiativeReadinessFacts,
   ReadinessCode,
   ReadinessEvidenceState,
@@ -41,11 +42,62 @@ const BY_RANK: ReadinessShape[] = ["break-fix", "small", "medium", "large", "xla
  * review), and a high-sensitivity emergency is still an emergency. xlarge is
  * already the ceiling.
  */
-export function effectiveShape(shape: ReadinessShape, sensitivity: ReadinessSensitivity | null | undefined): ReadinessShape {
-  if (shape === "break-fix" || shape === "xlarge") return shape;
-  if (sensitivity === "high") return RANK[shape] < RANK.large ? "large" : shape;
-  if (sensitivity === "elevated") return BY_RANK[Math.min(RANK[shape] + 1, RANK.large)]!;
-  return shape;
+export function effectiveShape(
+  shape: ReadinessShape,
+  sensitivity: ReadinessSensitivity | null | undefined,
+  profile?: ReadinessProfile | null,
+  workType?: string | null,
+): ReadinessShape {
+  return shapeRaise(shape, sensitivity, profile, workType).effective;
+}
+
+/**
+ * The raise, and the part of it the ceiling refused (BI-243BC956). A raise
+ * past the ceiling would owe a gate with no reachable route, so it is refused
+ * and said so, never recorded as owed.
+ */
+export function shapeRaise(
+  shape: ReadinessShape,
+  sensitivity: ReadinessSensitivity | null | undefined,
+  profile?: ReadinessProfile | null,
+  workType?: string | null,
+): { effective: ReadinessShape; refused: ReadinessShape | null } {
+  if (shape === "break-fix" || shape === "xlarge") return { effective: shape, refused: null };
+  const ceiling = raiseCeilingFor(profile, workType);
+  const raised = sensitivity === "high"
+    ? (RANK[shape] < RANK.large ? "large" : shape)
+    : sensitivity === "elevated"
+      ? BY_RANK[Math.min(RANK[shape] + 1, RANK.large)]!
+      : shape;
+  return RANK[raised] > RANK[ceiling] && RANK[shape] <= RANK[ceiling]
+    ? { effective: ceiling, refused: raised }
+    : { effective: raised, refused: null };
+}
+
+/**
+ * How far sensitivity may raise an item of this profile (BI-BD60DC91).
+ *
+ * `large` delegates to the v2 profile tables, and the fix profile there owes
+ * OBJECTIVE_BASELINE_REQUIRED at completion while carrying no
+ * SPEC_APPROVAL_REQUIRED gate that could ever mint that baseline — spec-approval
+ * refuses a fix-profile item outright with CLASSIFICATION_REQUIRED. So raising a
+ * fix to large produced a requirement with no legal route: proven on
+ * BI-1F69D3F8, whose only remaining exit was to relabel a UX correction as a
+ * feature. Medium is the ceiling for a fix, and medium's baseline is the
+ * acceptance criteria in the item body, which its author can supply. The raise
+ * still bites — medium owes an independent acceptance receipt that small does
+ * not — it simply stays satisfiable.
+ *
+ * A `refactor` takes the same ceiling (BI-243BC956). Its work type maps to the
+ * feature profile, but it is behavior-preserving by definition, so it may not
+ * be raised past what a fix in the same files would get: BI-7DCA6159, a
+ * two-file import swap, went straight from small to large.
+ *
+ * Every other profile keeps the full range: a feature raised to large owes the
+ * spec approval it is already able to obtain.
+ */
+function raiseCeilingFor(profile: ReadinessProfile | null | undefined, workType?: string | null): ReadinessShape {
+  return profile === "fix" || workType === "refactor" ? "medium" : "large";
 }
 
 function req(
@@ -103,7 +155,8 @@ function medium(facts: InitiativeReadinessFacts, target: ReadinessTarget): Shape
     req("RESEARCH_REQUIRED", facts.research, "design-author"),
     // The item body is the design: acceptance criteria in the body mint the
     // baseline (design §4, "baseline from item, not from spec").
-    req("OBJECTIVE_BASELINE_REQUIRED", facts.objectiveBaseline, "product-owner"),
+    req("OBJECTIVE_BASELINE_REQUIRED", facts.objectiveBaseline,
+      facts.objectiveBaselineRequiresReview ? "design-checklist-reviewer" : "product-owner"),
   );
   if (target === "plan") return rows;
   rows.push(
@@ -131,13 +184,19 @@ export function shapeRequirements(
   target: ReadinessTarget,
   v2: (facts: InitiativeReadinessFacts, target: ReadinessTarget) => ShapeRequirement[],
 ): ShapeRequirement[] {
-  const shape = effectiveShape(facts.shape!, facts.sensitivity);
+  const shape = effectiveShape(facts.shape!, facts.sensitivity, facts.profile, facts.workType);
   if (shape === "break-fix") return breakFix(facts, target);
   if (shape === "small") return small(facts, target);
   if (shape === "medium") return medium(facts, target);
   if (shape === "large") return v2(facts, target);
   // xlarge
   if (target === "design" || target === "plan") return v2(facts, target);
+  if (target === "completion") return [
+    req("PLAN_COVERAGE_REQUIRED", facts.planCoverage === "pass" ? facts.decomposition ?? "missing" : facts.planCoverage, "portfolio-management"),
+    req("OBJECTIVE_BASELINE_REQUIRED", facts.objectiveBaseline, "design-checklist-reviewer"),
+    req("OBJECTIVE_RECONCILIATION_REQUIRED", facts.objectiveReconciliation, "acceptance-reviewer"),
+    ...v2(facts, "completion"),
+  ];
   return [
     ...v2(facts, "plan"),
     req("DECOMPOSITION_REQUIRED", "fail", "portfolio-owner"),

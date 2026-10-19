@@ -1,6 +1,63 @@
 import assert from "node:assert/strict";
 import { join, resolve } from "node:path";
 import test from "node:test";
+import * as pregate from "./pregate.mjs";
+import { readFileSync } from "node:fs";
+import { createServer } from "node:http";
+import { readEarlyQuiescenceStatus, readQuiescenceStatus, quiescenceBlocksWrites } from "./lib/gate-quiescence.mjs";
+
+test("wrapped pregate stops only when stdout is captured and no escape hatch is set", () => {
+  const captured = { stdoutIsTTY: false, env: {}, args: [] };
+  assert.match(pregate.wrappedForegroundReason(captured), /sole foreground command/);
+  assert.equal(pregate.wrappedForegroundReason({ ...captured, stdoutIsTTY: true }), null);
+  assert.equal(pregate.wrappedForegroundReason({ ...captured, env: { DPF_PREGATE_ALLOW_CAPTURE: "1" } }), null);
+  assert.equal(pregate.wrappedForegroundReason({ ...captured, env: { CI: "true" } }), null);
+  assert.equal(pregate.wrappedForegroundReason({ ...captured, env: { GITHUB_ACTIONS: "true" } }), null);
+  assert.equal(pregate.wrappedForegroundReason({ ...captured, args: ["--dry-run"] }), null);
+  assert.equal(pregate.wrappedForegroundReason({ ...captured, args: ["--help"] }), null);
+});
+
+test("parent preflight never advertises environment-limited checks as passed", async () => {
+  let output = "";
+  const result = await pregate.runHostPreflight({ env: {}, readStatusImpl: async () => ({level:"normal"}),
+    spawnSyncImpl: () => ({status:0,stdout:'DPF_HOST_PREFLIGHT_RESULT={"status":"inconclusive"}\n'}),
+    stdout: text => { output += text; }, stderr: () => {} });
+  assert.equal(result, 0, "canonical CI still enforces environment-skipped guards");
+  assert.doesNotMatch(output, /preflight passed/);
+  assert.match(output, /inconclusive/i);
+});
+
+test("parent preflight timeout remains unrun even if the child exits zero", async () => {
+  const result = await pregate.runHostPreflight({ env: {}, readStatusImpl: async () => ({level:"normal"}),
+    spawnSyncImpl: () => ({status:0,deadlineExceeded:true,stdout:""}), stdout: () => {}, stderr: () => {} });
+  assert.equal(result, 88);
+});
+
+test("parent preflight recording error remains unrun even if the child exits zero", async () => {
+  let output = "";
+  let diagnostics = "";
+  const result = await pregate.runHostPreflight({ env: {}, readStatusImpl: async () => ({level:"normal"}),
+    runObservedImpl: async () => ({status:0,error:new Error("progress recording failed"),
+      outputTail:'DPF_HOST_PREFLIGHT_RESULT={"status":"passed"}\n'}),
+    stdout: text => {output += text;}, stderr: text => {diagnostics += text;} });
+  assert.equal(result,88);
+  assert.doesNotMatch(output,/preflight passed/);
+  assert.match(diagnostics,/could not RUN/);
+});
+
+test("observed parent preflight passes cancellation and cleans its listeners", async () => {
+  const before = process.listenerCount("SIGINT");
+  let output = "";
+  const result = await pregate.runHostPreflight({ env: {}, readStatusImpl: async () => ({level:"normal"}),
+    runObservedImpl: async ({signal,shell}) => {
+      assert.equal(signal.aborted,false);
+      assert.equal(shell,false);
+      return {status:0,outputTail:'DPF_HOST_PREFLIGHT_RESULT={"status":"passed"}\n'};
+    }, stdout: text => {output += text;}, stderr: () => {} });
+  assert.equal(result,0);
+  assert.match(output,/preflight passed/);
+  assert.equal(process.listenerCount("SIGINT"),before);
+});
 
 import {
   EXIT_DURABLE_QUEUE_WAIT,
@@ -17,6 +74,126 @@ import {
   shouldUseShell,
   stripForceRerunFlag,
 } from "./pregate.mjs";
+
+test("confirmed quiescence parks before any expensive host preflight", async () => {
+  let launches = 0;
+  let output = "";
+  assert.equal(typeof pregate.runHostPreflight, "function", "preflight must own the early read ordering");
+  const status = await pregate.runHostPreflight({
+    args: [], env: {},
+    readStatusImpl: async () => ({ level: "draining", runId: "upgrade-fixture", retryAfterSeconds: 30 }),
+    spawnSyncImpl: () => { launches++; return { status: 0 }; },
+    stdout: () => {}, stderr: (text) => { output += text; },
+  });
+  assert.equal(status, 75);
+  assert.equal(launches, 0);
+  assert.equal(JSON.parse(output).code, "local_ci_quiescence_wait");
+});
+
+test("normal and unknown status retain preflight execution and its real exit code", async () => {
+  for (const status of [null, {}, { level: "unknown" }, { level: "normal" }]) {
+    const calls = [];
+    const result = await pregate.runHostPreflight({ args: [], env: {},
+      readStatusImpl: async () => { calls.push("read"); return status; },
+      spawnSyncImpl: () => { calls.push("preflight"); return { status: 9, stderr: "guard failed" }; },
+      stdout: () => {}, stderr: () => {},
+    });
+    assert.equal(result, 9);
+    assert.deepEqual(calls, ["read", "preflight"]);
+  }
+  assert.equal(quiescenceBlocksWrites({ level: "swapping" }), true);
+  assert.equal(quiescenceBlocksWrites({ level: "normal", writesRefused: true }), true);
+  assert.equal(quiescenceBlocksWrites({ level: "unexpected", writesRefused: false }), false);
+});
+
+test("record-exempt and audited skip paths do not probe or start preflight", async () => {
+  for (const args of [["--dry-run"], ["--finalize-evidence"], ["--help"], ["-h"], []]) {
+    const env = args.length ? {} : { DPF_SKIP_PREGATE_PREFLIGHT_REASON: "fixture-only" };
+    assert.equal(await pregate.runHostPreflight({ args, env,
+      readStatusImpl: () => assert.fail("must not probe"),
+      spawnSyncImpl: () => assert.fail("must not run preflight"),
+      stdout: () => {}, stderr: () => {},
+    }), 0);
+  }
+});
+
+test("malformed, denied, and transport-failed reads are inconclusive without leaking details", async () => {
+  for (const response of [{ success: false, error: "insufficient_token_scope" },
+    { success: true, data: {} }, { success: true, data: { level: "future-value" } }, null]) {
+    let warning = "";
+    assert.equal(await readQuiescenceStatus({ mcpCallImpl: async () => response,
+      warn: (text) => { warning += text; } }), null);
+    assert.match(warning, /inconclusive/);
+  }
+  let warning = "";
+  assert.equal(await readQuiescenceStatus({ mcpCallImpl: async () => { throw Error("secret-fixture"); },
+    warn: (text) => { warning += text; } }), null);
+  assert.doesNotMatch(warning, /secret-fixture/);
+});
+
+test("early native probe honors explicit and configured endpoints with bounded reads", async () => {
+  for (const explicit of [true, false]) {
+    const env = { DPF_MCP_URL: "https://configured.example/api/mcp/v1" };
+    const args = explicit ? ["--mcp-url=https://explicit.example/api/mcp/v1"] : [];
+    const expected = explicit ? "https://explicit.example/api/mcp/v1" : env.DPF_MCP_URL;
+    const result = await readEarlyQuiescenceStatus({ args, env,
+      resolveCredentialImpl: (options) => { assert.equal(options.mcpUrl, expected); return { bearer: "fake-fixture" }; },
+      mcpCallImpl: async (tool, payload, options) => {
+        assert.equal(tool, "get_quiescence_status");
+        assert.deepEqual(payload, {});
+        assert.equal(options.mcpUrl, expected);
+        assert.equal(options.timeoutMs, 2500);
+        assert.equal(options.allowNonLoopbackEndpoint, explicit);
+        return { success: true, data: { level: "normal" } };
+      },
+    });
+    assert.deepEqual(result, { level: "normal" });
+  }
+  let warning = "";
+  assert.equal(await readEarlyQuiescenceStatus({ resolveCredentialImpl: () => { throw Error("credential-secret"); },
+    warn: (text) => { warning += text; } }), null);
+  assert.match(warning, /unavailable/);
+  assert.doesNotMatch(warning, /credential-secret/);
+});
+
+test("real mock-only MCP drain read performs no preflight or write call", async (t) => {
+  const tools = [];
+  const server = createServer((req, res) => {
+    let body = "";
+    req.on("data", (chunk) => { body += chunk; });
+    req.on("end", () => {
+      const request = JSON.parse(body);
+      tools.push(request.params.name);
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ jsonrpc: "2.0", id: request.id, result: {
+        content: [{ type: "text", text: JSON.stringify({ success: true, data: { level: "draining", retryAfterSeconds: 30 } }) }],
+      } }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const result = await pregate.runHostPreflight({ args: [], env: {},
+    readStatusImpl: () => readEarlyQuiescenceStatus({
+      env: { DPF_MCP_URL: `http://127.0.0.1:${server.address().port}/api/mcp/v1` },
+      resolveCredentialImpl: () => ({ bearer: "mock-only-fixture" }),
+    }),
+    spawnSyncImpl: () => assert.fail("expensive preflight must not start"),
+    stdout: () => {}, stderr: () => {},
+  });
+  assert.equal(result, 75);
+  assert.deepEqual(tools, ["get_quiescence_status"]);
+});
+
+test("entry ordering retains PASS reuse before early check and late governed admission", () => {
+  const wrapper = readFileSync(new URL("./pregate.mjs", import.meta.url), "utf8");
+  const main = wrapper.slice(wrapper.indexOf("async function main()"), wrapper.indexOf("export async function runHostPreflight"));
+  assert.ok(main.indexOf("if (reuse.reuse)") < main.indexOf("await runHostPreflight"));
+  assert.ok(main.indexOf("await runHostPreflight") < main.indexOf("await runGateWithQueuedRevival"));
+  assert.match(main, /if \(preflightStatus !== 0\) process.exit\(preflightStatus\)/);
+  const gate = readFileSync(new URL("./gate-worktree.mjs", import.meta.url), "utf8");
+  assert.match(gate, /await readQuiescenceStatus/);
+  assert.match(gate, /claim_nonprod_environment_lease/);
+});
 
 test("pregate recovery uses the bare common directory as the canonical root", () => {
   const fixtureRoot = resolve(".pregate-bare-layout");

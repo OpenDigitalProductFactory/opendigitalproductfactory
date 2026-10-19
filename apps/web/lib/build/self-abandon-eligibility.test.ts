@@ -187,6 +187,28 @@ describe("abandonOwnStalledBuild", () => {
     expect(db.transaction).not.toHaveBeenCalled();
   });
 
+  // BI-3AD07E7F (live, 2026-09-24): the stranded-build resumer writes a BuildActivity row on
+  // every 10-minute tick, so a parked duplicate (FB-09FC85CF) always "had
+  // activity 0m ago" and could never be self-abandoned. The reconcilers' own
+  // rows are not the build doing anything (the BI-5BF650CB rule).
+  it("does not count the reconcilers' own rows as build activity", async () => {
+    db.featureBuildFindUnique.mockResolvedValue({
+      buildId: "FB-1", phase: "ideate", abandonedAt: null, createdById: "u1",
+      parentEpicId: null, supersededByEpicId: null, createdAt: new Date(NOW.getTime() - 60 * 60 * 1000),
+    });
+    db.taskRunCount.mockResolvedValue(0);
+    db.buildActivityFindFirst.mockResolvedValue({ createdAt: new Date(NOW.getTime() - 30 * 60 * 1000) });
+
+    const { abandonOwnStalledBuild } = await import("./self-abandon-eligibility");
+    await abandonOwnStalledBuild({ buildId: "FB-1", callerId: "u1", reason: "superseded by FB-2", now: NOW });
+    expect(db.buildActivityFindFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        buildId: "FB-1",
+        tool: { notIn: expect.arrayContaining(["resumeStrandedBuildsOnBoot", "recoverContradictoryBuildExecStatesOnBoot"]) },
+      }),
+    }));
+  });
+
   it("rejects abandoning a build with a live task run", async () => {
     db.featureBuildFindUnique.mockResolvedValue({
       buildId: "FB-1", phase: "build", abandonedAt: null, createdById: "u1",

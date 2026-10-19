@@ -10,7 +10,7 @@
  */
 
 import type { AdapterRequest, AdapterResult, ExecutionAdapterHandler } from "./adapter-types";
-import { InferenceError, classifyHttpError } from "@/lib/ai-inference";
+import { InferenceError, classifyHttpError } from "./inference-error";
 import {
   voiceSttCallsTotal,
   voiceSttDuration,

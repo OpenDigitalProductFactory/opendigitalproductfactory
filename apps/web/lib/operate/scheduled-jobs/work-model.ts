@@ -144,6 +144,8 @@ export interface ScheduledWorkView {
   nextRunAt: string | null;
   lastStatus: string | null;
   lastError: string | null;
+  /** Bounded, plain-language result from the authoritative runner. */
+  lastRunSummary?: string | null;
   health: WorkHealth;
   /** How far past due `nextRunAt` is, in ms. 0 when not overdue. */
   overdueByMs: number;
@@ -347,6 +349,39 @@ export function overdueGraceMs(schedule: string): number {
   return Math.min(Math.max(interval, 15 * 60_000), 24 * 3_600_000);
 }
 
+/**
+ * Every spelling of "this run did not succeed" that a runner actually writes to
+ * ScheduledJob.lastStatus.
+ *
+ * lastStatus is a free-form String in the schema (an AGENTS.md §8 closed-set
+ * violation — it should be a Prisma enum), so the vocabulary has drifted across
+ * runners. deriveHealth previously matched ONLY "error", which meant the health
+ * surface could not see a job reporting "failed" or "partial" at all.
+ *
+ * That was not hypothetical. On this install the single "failed" row was
+ * `postgres-trial-restore-daily` — the job whose entire purpose is proving the
+ * backups can be restored — reporting `pg_restore failed against the trial DB.`
+ * every night since 2026-06-09, and reading as healthy the whole time
+ * (BI-F3B80A1E). The single "partial" row was `model-discovery-refresh` with an
+ * expired Codex OAuth token.
+ *
+ * Add a spelling here the moment a runner introduces one; a status this set does
+ * not know is a status the operator never sees.
+ */
+export const FAILING_LAST_STATUSES: ReadonlySet<string> = new Set([
+  "error",
+  "failed",
+  /** A run that completed some work and could not finish the rest. Not ok. */
+  "partial",
+]);
+
+/**
+ * Not a failed run — the job never got to run because it has no configuration.
+ * Distinct from "error" (it did not break) and from "ok" (it did not work
+ * either). Today: `discovery-prometheus-poll`.
+ */
+const NOT_CONFIGURED_STATUS = "not-configured";
+
 export interface HealthInput {
   kind: WorkKind;
   enabled: boolean;
@@ -376,7 +411,13 @@ export function deriveHealth(input: HealthInput, now: Date): {
     if (!reportsRunData) return { health: "untracked", overdueByMs: 0 };
     return { health: enabled ? "never" : "spent", overdueByMs: 0 };
   }
-  if (lastStatus === "error") return { health: "error", overdueByMs: 0 };
+  if (lastStatus !== null && FAILING_LAST_STATUSES.has(lastStatus)) {
+    return { health: "error", overdueByMs: 0 };
+  }
+  // Unconfigured is not a failure, but it must not read as a healthy run either
+  // — the job produced no work. "untracked" is the existing state for "runs but
+  // tells us nothing"; this is the adjacent "cannot run until someone sets it up".
+  if (lastStatus === NOT_CONFIGURED_STATUS) return { health: "untracked", overdueByMs: 0 };
   if (!enabled || !nextRunAt) return { health: "ok", overdueByMs: 0 };
 
   const lateBy = now.getTime() - nextRunAt.getTime();
@@ -415,6 +456,7 @@ export interface JobRow {
   nextRunAt: Date | null;
   lastStatus: string | null;
   lastError: string | null;
+  lastRunSummary?: string | null;
   category: string;
   locked: boolean;
   enabled: boolean;
@@ -445,6 +487,7 @@ export const JOB_SELECT = {
   nextRunAt: true,
   lastStatus: true,
   lastError: true,
+  lastRunSummary: true,
   category: true,
   locked: true,
   enabled: true,
@@ -633,6 +676,7 @@ export function buildWorkView(
     nextRunAt: nextRunAt?.toISOString() ?? null,
     lastStatus,
     lastError,
+    lastRunSummary: !task ? job?.lastRunSummary?.slice(0, 400) ?? null : null,
     health,
     overdueByMs,
     killSwitchEnforced,
@@ -648,4 +692,3 @@ export function buildWorkView(
     inCatalog: entry != null,
   };
 }
-

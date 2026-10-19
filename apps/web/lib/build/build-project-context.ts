@@ -7,8 +7,12 @@
  * structure, conventions, or where things live.
  */
 
+import { DEVELOPMENT_INVESTMENT_GUIDANCE } from "../platform-dev-policy";
+
 export const PROJECT_CONTEXT = `
 --- Project Knowledge (equivalent to CLAUDE.md) ---
+
+${DEVELOPMENT_INVESTMENT_GUIDANCE}
 
 ARCHITECTURE:
 - Next.js 16 monorepo with pnpm workspaces
@@ -72,7 +76,6 @@ DEBUGGING — when something fails:
 - If a tool fails, try a different approach — do NOT call the same tool with the same arguments
 - If edit_sandbox_file fails to find text, read the file first to see exact content
 - If the schema is too large to read whole, use offset and limit parameters
-- Qdrant errors are irrelevant for most features — ignore them
 - "Sandbox not ready" usually means dependencies need installing: run_sandbox_command "pnpm install"
 
 VERIFICATION — before claiming done:

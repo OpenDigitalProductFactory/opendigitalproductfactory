@@ -49,7 +49,7 @@ export function BusinessDocumentUpload() {
         id="business-document-file"
         ref={inputRef}
         type="file"
-        accept=".pdf,.doc,.docx,.txt,.md,.rtf"
+        accept=".pdf,.doc,.docx,.odt,.rtf,.ppt,.pptx,.odp,.txt,.md"
         aria-label="Upload a business plan or key document"
         disabled={uploading}
         onChange={(e) => {

@@ -11,8 +11,8 @@
 // robust cross-surface remediation: session hooks fire wherever dpf-platform is
 // installed, whereas a portal cron can go dark or not see host worktrees.
 //
-// Fast-forward ONLY, and only when the root is on main + clean (see
-// scripts/lib/root-clone-refresh.mjs). It runs the SAFE `git merge --ff-only`
+// Fast-forward ONLY, and only when the root is on main and no uncommitted file is
+// one the incoming commits change (see scripts/lib/root-clone-refresh.mjs). It runs the SAFE `git merge --ff-only`
 // directly (not via the Bash tool), which is exactly the remedy root-clone-guard.mjs
 // tells the operator to run — so it complements that guard rather than fighting it.
 //
@@ -100,7 +100,7 @@ async function main() {
   }
 
   // Only speak up when it did something or when it REFUSED because the root is in a
-  // state that blocks every worktree's pregate (off-main / dirty) — that is
+  // state that blocks every worktree's pregate (off-main / conflicting edits) — that is
   // actionable. A clean "already current" skip stays silent.
   if (result.action === "ff") {
     emitContext(
@@ -110,7 +110,7 @@ async function main() {
     emitContext(
       `Root-clone freshness: ${result.reason} at ${rootClone}. ` +
         `While the root is behind/off-main, every junctioned worktree's pregate can abort with ` +
-        `"Stale root clone detected (BI-A900EA3F)". Return the root clone to a clean 'main' so it can fast-forward.`,
+        `"Stale root clone detected (BI-A900EA3F)". Return the root clone to 'main', and surface any uncommitted edit named above to the operator — it may be another session's work — so it can fast-forward.`,
     );
   } else if (result.action === "failed") {
     emitContext(`Root-clone freshness: ${result.reason} at ${rootClone}.`);

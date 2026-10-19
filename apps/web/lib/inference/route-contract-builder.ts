@@ -19,6 +19,7 @@ export function buildInitialRouteContext(input: {
     ...(posture?.routeContext ?? {}),
     sensitivity: input.sensitivity,
     interactionMode: options?.interactionMode,
+    requiresStreaming: options?.requiresStreaming,
     requiresCodeExecution: options?.requiresCodeExecution,
     requiresWebSearch: options?.requiresWebSearch,
     requiresComputerUse: options?.requiresComputerUse,
@@ -52,14 +53,14 @@ export async function buildEffectiveRequestContract(input: {
           input.taskType,
           input.messages,
           input.tools,
-          undefined,
+          input.options?.activityContract?.successShape === "json" ? {} : undefined,
           input.routeContext,
         )
       : await inferContract(
           input.taskType,
           input.messages,
           input.tools,
-          undefined,
+          input.options?.activityContract?.successShape === "json" ? {} : undefined,
           input.routeContext,
           input.taskRequirement,
         );

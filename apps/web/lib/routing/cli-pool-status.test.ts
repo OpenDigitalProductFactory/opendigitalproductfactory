@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // ── Mock Prisma ──────────────────────────────────────────────────────────────
 vi.mock("@dpf/db", () => {
@@ -6,28 +6,34 @@ vi.mock("@dpf/db", () => {
   return {
     prisma: {
       cliPoolStatus: {
-        upsert: vi.fn(async ({ where, create, update }: { where: { adapterType: string }; create: Record<string, unknown>; update: Record<string, unknown> }) => {
-          const existing = rows.get(where.adapterType);
+        upsert: vi.fn(async ({ where, create, update }: { where: { adapterType?: string; scopeKey?: string }; create: Record<string, unknown>; update: Record<string, unknown> }) => {
+          const key = where.scopeKey ?? where.adapterType!;
+          const existing = rows.get(key);
           const row = existing ? { ...existing, ...update } : { ...create };
-          rows.set(where.adapterType, row);
+          rows.set(key, row);
           return row;
         }),
-        findUnique: vi.fn(async ({ where }: { where: { adapterType: string } }) => {
-          return rows.get(where.adapterType) ?? null;
+        findUnique: vi.fn(async ({ where }: { where: { adapterType?: string; scopeKey?: string } }) => {
+          return rows.get(where.scopeKey ?? where.adapterType!) ?? null;
         }),
         findMany: vi.fn(async () => [...rows.values()]),
-        update: vi.fn(async ({ where, data }: { where: { adapterType: string }; data: Record<string, unknown> }) => {
-          const existing = rows.get(where.adapterType);
+        update: vi.fn(async ({ where, data }: { where: { adapterType?: string; scopeKey?: string }; data: Record<string, unknown> }) => {
+          const key = where.scopeKey ?? where.adapterType!;
+          const existing = rows.get(key);
           if (!existing) throw new Error("Record to update not found");
           const row = { ...existing, ...data };
-          rows.set(where.adapterType, row);
+          rows.set(key, row);
           return row;
         }),
-        deleteMany: vi.fn(async ({ where }: { where: { adapterType: string } }) => {
-          rows.delete(where.adapterType);
+        deleteMany: vi.fn(async ({ where }: { where: { adapterType?: string; scopeKey?: string } }) => {
+          rows.delete(where.scopeKey ?? where.adapterType!);
           return { count: 1 };
         }),
         _rows: rows,
+      },
+      providerCapacityStatus: {
+        upsert: vi.fn(async ({ create }: { create: Record<string, unknown> }) => create),
+        findMany: vi.fn(async () => []),
       },
     },
   };
@@ -35,6 +41,7 @@ vi.mock("@dpf/db", () => {
 
 import {
   parseRetryAfterSeconds,
+  parseAbsoluteResetAt,
   recordCliRateLimit,
   recordCliWeeklyQuota,
   captureAnthropicWeeklyQuota,
@@ -42,9 +49,20 @@ import {
   getCliPoolStatus,
   getAllCliPoolStatuses,
   clearCliRateLimit,
+  indexCliPoolResetTimes,
 } from "./cli-pool-status";
 import type { WeeklyQuotaSnapshot } from "./weekly-quota";
 import { prisma } from "@dpf/db";
+import { applyCapacitySoftExclusion, capacityRoutingExclusionReason } from "./capacity-routing-exclude";
+
+it("projects typed scoped CLI cooldowns conservatively alongside legacy aliases", () => {
+  const later = new Date("2026-10-15T00:00:00Z");
+  expect(indexCliPoolResetTimes([
+    { adapterType: "codex-cli", adapterKind: null, resetAt: new Date("2026-10-14T00:00:00Z") },
+    { adapterType: null, adapterKind: "codex", resetAt: later },
+    { adapterType: null, adapterKind: null, resetAt: later },
+  ])).toEqual(new Map([["codex-cli", later.getTime()]]));
+});
 
 function snap(overrides: Partial<WeeklyQuotaSnapshot> = {}): WeeklyQuotaSnapshot {
   return {
@@ -96,9 +114,84 @@ describe("parseRetryAfterSeconds", () => {
 });
 
 describe("recordCliRateLimit", () => {
+  it("does not clear a longer legacy cooldown when a scoped pool has a shorter observation", async () => {
+    clearMockRows();
+    const identity = { providerId: "codex", providerConnectionId: "extra-account" };
+    await recordCliRateLimit("codex-cli", "codex", "Retry-After: 120");
+    await recordCliRateLimit("codex-cli", "codex", "Retry-After: 10", identity);
+    expect((await getCliPoolStatus("codex-cli", identity))?.secondsUntilReset).toBeGreaterThan(100);
+    await clearCliRateLimit("codex-cli", identity);
+    expect((await getCliPoolStatus("codex-cli"))?.isExhausted).toBe(true);
+  });
   beforeEach(() => {
     clearMockRows();
     vi.clearAllMocks();
+  });
+
+  it("records a bounded unavailable observation without inventing the missing reset date", async () => {
+    const banner = "You've hit your weekly limit · resets 4pm (UTC)";
+    await recordCliRateLimit("claude-cli", "anthropic-sub", banner);
+    expect(prisma.providerCapacityStatus.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: { providerId: "anthropic-sub" },
+      create: expect.objectContaining({
+        state: "rate_limited", action: "retry_with_backoff", confidence: "heuristic",
+        retryAt: expect.any(Date), source: "cli",
+      }),
+    }));
+    expect(parseRetryAfterSeconds(banner)).toBeNull();
+    const state = await getCliPoolStatus("claude-cli");
+    expect(state?.isExhausted).toBe(true);
+    expect(state?.retryAfterSeconds).toBeNull();
+    const row = vi.mocked(prisma.providerCapacityStatus.upsert).mock.calls[0]![0].create;
+    const snapshot = { state: String(row.state), retryAtMs: new Date(row.retryAt!).getTime() };
+    const routes = [{ providerId: "anthropic-sub" }, { providerId: "local" }];
+    expect(applyCapacitySoftExclusion({ endpoints: routes,
+      capacityByProvider: new Map([["anthropic-sub", snapshot]]), nowMs: Date.now(),
+    }).eligible).toEqual([{ providerId: "local" }]);
+    expect(capacityRoutingExclusionReason(snapshot, snapshot.retryAtMs)).toBeNull();
+  });
+
+  it("waits for the provider observation before completing the quota record", async () => {
+    let release!: () => void;
+    vi.mocked(prisma.providerCapacityStatus.upsert).mockImplementationOnce(() =>
+      new Promise(resolve => { release = () => resolve({} as never); }) as never);
+    let complete = false;
+    const pending = recordCliRateLimit("claude-cli", "anthropic-sub", "Retry-After: 7200")
+      .then(() => { complete = true; });
+    await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+    expect(complete).toBe(false);
+    release();
+    await pending;
+    expect(complete).toBe(true);
+  });
+
+  it("makes a safe native quota observation available to future routing without inventing a reset", async () => {
+    const identity = { providerId: "anthropic-sub", providerConnectionId: "subscription-team" };
+    const message = "The native CLI reported a usage limit; its reset time is unknown.";
+    await recordCliRateLimit("claude-cli", identity.providerId, message, identity);
+    const status = await getCliPoolStatus("claude-cli", identity);
+    expect(status).toMatchObject({ isExhausted: true, retryAfterSeconds: null, errorSnippet: message });
+    expect(prisma.cliPoolStatus.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: { scopeKey: "cli:claude-cli:provider:anthropic-sub" },
+      create: expect.objectContaining({ adapterType: null, adapterKind: "claude_code", providerId: "anthropic-sub" }),
+    }));
+    const row = vi.mocked(prisma.providerCapacityStatus.upsert).mock.calls[0]![0].create;
+    expect(row).toMatchObject({ state: "rate_limited", confidence: "heuristic", source: "cli", rawSnippet: message });
+    expect(row.safeSummary).toContain("not a confirmed quota reset");
+    const endpoints = [{ providerId: "anthropic-sub", providerConnectionId: identity.providerConnectionId },
+      { providerId: "local", providerConnectionId: "local-default" }];
+    const result = applyCapacitySoftExclusion({ endpoints,
+      capacityByProvider: new Map([[identity.providerId, { state: "rate_limited", retryAtMs: status!.resetAt!.getTime() }]]),
+      nowMs: Date.now() });
+    expect(result.eligible).toEqual([endpoints[1]]);
+    expect(result.excluded.map(entry => entry.endpoint)).toEqual([endpoints[0]]);
+    expect((await getCliPoolStatus("codex-cli", { providerId: "codex", providerConnectionId: "other" }))).toBeNull();
+  });
+
+  it("still records the dispatch cooldown if provider capacity persistence fails", async () => {
+    vi.mocked(prisma.providerCapacityStatus.upsert).mockRejectedValueOnce(new Error("capacity store unavailable"));
+    await expect(recordCliRateLimit("claude-cli", "anthropic-sub", "429")).resolves.toBeUndefined();
+    expect((await getCliPoolStatus("claude-cli"))?.isExhausted).toBe(true);
   });
 
   it("writes a CliPoolStatus row on first call", async () => {
@@ -121,11 +214,13 @@ describe("recordCliRateLimit", () => {
     expect(status!.retryAfterSeconds).toBe(120);
   });
 
-  it("truncates errorSnippet to 300 characters", async () => {
-    const longError = "x".repeat(400);
+  it("bounds errorSnippet but keeps the tail, where the CLI states the limit (BI-EA13B5BA)", async () => {
+    const longError = `${"banner ".repeat(60)}ERROR: you've hit your usage limit; try again in 2h`;
     await recordCliRateLimit("codex-cli", "chatgpt", longError);
     const status = await getCliPoolStatus("codex-cli");
-    expect(status!.errorSnippet).toHaveLength(300);
+    expect(status!.errorSnippet!.length).toBeLessThanOrEqual(340);
+    expect(status!.errorSnippet).toContain("hit your usage limit");
+    expect(status!.errorSnippet).toContain("chars elided");
   });
 
   it("backs off with a default cooldown when Retry-After is unparseable", async () => {
@@ -145,12 +240,12 @@ describe("recordCliRateLimit", () => {
     expect(status!.retryAfterSeconds).toBeNull();
   });
 
-  it("caps the cooldown so a long/misparsed window can't wedge the provider", async () => {
+  it("honors a reported multi-hour reset", async () => {
     await recordCliRateLimit("codex-cli", "codex", "rate limit reached. try again in 5 hours");
     const status = await getCliPoolStatus("codex-cli");
-    // 5h would be 18000s; capped to MAX_CLI_COOLDOWN_SECONDS (3600).
-    expect(status!.secondsUntilReset).toBeGreaterThan(3500);
-    expect(status!.secondsUntilReset).toBeLessThanOrEqual(3600);
+    // Reported reset windows must not become hourly retry probes.
+    expect(status!.secondsUntilReset).toBeGreaterThan(17990);
+    expect(status!.secondsUntilReset).toBeLessThanOrEqual(18000);
   });
 
   it("swallows db errors without throwing", async () => {
@@ -339,5 +434,106 @@ describe("formatWeeklyAllocationHint", () => {
       NOW,
     );
     expect(hint).toBeNull();
+  });
+});
+
+describe("dated subscription cap (BI-38064739)", () => {
+  // BI-FC1B925E: the fixture's absolute reset (2026-09-26 08:57Z) must stay in
+  // the future, or recordCliRateLimit correctly records no cap and this block
+  // fails on every run after that date. Freeze only Date; vi.waitFor keeps real timers.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-25T20:00:00Z"));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const CAP_TEXT = "banner\nERROR: You’ve hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at Sep 26th, 2026 8:57 AM.";
+
+  it("parses an absolute 'try again at <date time>' phrase", () => {
+    const at = parseAbsoluteResetAt(CAP_TEXT);
+    expect(at?.toISOString()).toBe("2026-09-26T08:57:00.000Z");
+  });
+
+  it("turns the dated reset into seconds instead of misreading the clock as minutes", () => {
+    const secs = parseRetryAfterSeconds(CAP_TEXT);
+    const expected = Math.ceil((Date.parse("2026-09-26T08:57:00Z") - Date.now()) / 1000);
+    expect(secs).not.toBe(57 * 60);
+    expect(Math.abs((secs ?? 0) - Math.max(0, expected))).toBeLessThan(5);
+  });
+
+  it("records the cap as quota_resets_at capacity on both shared-account providers", async () => {
+    const { prisma } = await import("@dpf/db");
+    const upsert = (prisma as unknown as { providerCapacityStatus: { upsert: ReturnType<typeof vi.fn> } }).providerCapacityStatus.upsert;
+    upsert.mockClear();
+    await recordCliRateLimit("codex-cli", "codex", CAP_TEXT);
+    await vi.waitFor(() => expect(
+      upsert.mock.calls.filter((c) => ((c[0] as { create: { rawSnippet?: string | null } }).create.rawSnippet ?? "").includes("Sep 26th")).length,
+    ).toBeGreaterThanOrEqual(2));
+    type CapUpsert = { where: { providerId: string }; create: { state: string; retryAt: Date; rawSnippet: string | null } };
+    // Select this cap's calls so the assertions remain tied to this fixture.
+    const capCalls = upsert.mock.calls
+      .map((c) => c[0] as CapUpsert)
+      .filter((c) => c.create.state === "quota_resets_at" && (c.create.rawSnippet ?? "").includes("Sep 26th"));
+    expect([...new Set(capCalls.map((c) => c.where.providerId))].sort()).toEqual(["chatgpt", "codex"]);
+    for (const call of capCalls) {
+      // ceil-to-seconds of the parsed instant: within one second of the stated reset.
+      expect(Math.abs(call.create.retryAt.getTime() - Date.parse("2026-09-26T08:57:00Z"))).toBeLessThan(1_500);
+    }
+    // A known subscription reset must also govern the pool, beyond one hour.
+    const status = await getCliPoolStatus("codex-cli");
+    expect(status!.resetAt!.toISOString()).toBe("2026-09-26T08:57:00.000Z");
+  });
+});
+
+
+describe("known quota reset projection (BI-0319EE11)", () => {
+  beforeEach(() => {
+    clearMockRows();
+    vi.mocked(prisma.providerCapacityStatus.findMany).mockResolvedValue([]);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-15T00:00:00Z"));
+  });
+  afterEach(() => vi.useRealTimers());
+  it("keeps legacy capped observations unavailable until the shared provider quota resets", async () => {
+    await recordCliRateLimit("codex-cli", "codex", "Retry-After: 60");
+    vi.setSystemTime(new Date("2026-10-15T02:00:00Z"));
+    const resetAt = new Date("2026-10-20T16:00:00Z");
+    vi.mocked(prisma.providerCapacityStatus.findMany).mockResolvedValue([{
+      providerId: "chatgpt", state: "quota_resets_at", retryAt: resetAt,
+      lastObservedAt: new Date("2026-10-15T00:00:00Z"), ownedAccount: null,
+    }] as never);
+    for (const pool of [await getCliPoolStatus("codex-cli"), ...(await getAllCliPoolStatuses())]) {
+      expect(pool?.isExhausted).toBe(true);
+      expect(pool?.resetAt).toEqual(resetAt);
+      expect(pool?.secondsUntilReset).toBe(482400);
+    }
+    const { evaluateAndDrainCapacity } = await import("../capacity/evaluate-capacity-drain");
+    const result = await evaluateAndDrainCapacity({
+      prisma: { platformDevConfig: { findUnique: async () => ({ capacityDrainEnabled: true,
+        capacityResetDow: 4, capacityResetHourUtc: 3, capacityDrainWindowHours: 12 }) } } as never,
+      userId: "test-user", dryRun: true,
+    });
+    expect(result.poolExhausted).toBe(true);
+    expect(result.decision.drain).toBe(false);
+    expect(result.dispatched).toBe(0);
+    vi.setSystemTime(resetAt);
+    expect((await getCliPoolStatus("codex-cli"))?.isExhausted).toBe(false);
+  });
+  it("retains the observed pool cooldown when the canonical quota reader fails", async () => {
+    await recordCliRateLimit("codex-cli", "codex", "Retry-After: 7200");
+    vi.mocked(prisma.providerCapacityStatus.findMany).mockRejectedValue(new Error("quota read unavailable"));
+    expect((await getCliPoolStatus("codex-cli"))?.secondsUntilReset).toBe(7200);
+    expect((await getAllCliPoolStatuses())[0]?.isExhausted).toBe(true);
+  });
+  it("does not transfer another provider's quota or invent a weekly reset", async () => {
+    await recordCliRateLimit("claude-cli", "anthropic-sub", "429");
+    vi.setSystemTime(new Date("2026-10-15T02:00:00Z"));
+    vi.mocked(prisma.providerCapacityStatus.findMany).mockResolvedValue([{
+      providerId: "codex", state: "quota_resets_at", retryAt: new Date("2026-10-20T16:00:00Z"),
+      lastObservedAt: new Date("2026-10-15T00:00:00Z"), ownedAccount: null,
+    }] as never);
+    expect((await getAllCliPoolStatuses())[0]?.isExhausted).toBe(false);
   });
 });

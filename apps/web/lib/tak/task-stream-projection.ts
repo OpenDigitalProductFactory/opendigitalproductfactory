@@ -1,9 +1,6 @@
 import type { AgentEvent } from "@/lib/tak/agent-event-bus";
 import type { TaskState } from "@/lib/tak/task-states";
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === "object" && !Array.isArray(value);
-}
+import { isRecord } from "@/lib/shared/coerce";
 
 function isAgentEvent(value: unknown): value is AgentEvent {
   return isRecord(value) && typeof value.type === "string";

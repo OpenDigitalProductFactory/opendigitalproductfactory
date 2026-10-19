@@ -14,6 +14,7 @@ import {
 } from "./semantic-change-review-operation";
 import {
   assessSemanticReviewReceiptFreshness,
+  isSemanticReviewReceipt,
   type SemanticReviewReceipt,
 } from "./semantic-change-review";
 import {
@@ -27,7 +28,7 @@ import { recordWorkCapsuleEvidence } from "@/lib/work-capsules/work-capsule-stor
 import { gateRunDispositionsTotal } from "@/lib/operate/metrics";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 
-const SEMANTIC_REVIEW_DISPATCH_CONTRACT_VERSION = "routed-semantic-review.v1";
+import { ROLE_BOUND_SEMANTIC_REVIEW_DISPATCH_CONTRACT_VERSION } from "./semantic-review-request";
 
 export type BuildStudioSemanticReviewResult =
   | { kind: "reviewed"; outcome: SemanticChangeReviewOperationResult }
@@ -35,14 +36,6 @@ export type BuildStudioSemanticReviewResult =
 
 function reviewMode(): SemanticChangeReviewMode {
   return process.env.DPF_SEMANTIC_CHANGE_REVIEW_MODE === "enforce" ? "enforce" : "shadow";
-}
-
-function isReceipt(value: unknown): value is SemanticReviewReceipt {
-  return Boolean(
-    value &&
-    typeof value === "object" &&
-    (value as { schemaVersion?: unknown }).schemaVersion === "semantic-change-review-receipt.v2",
-  );
 }
 
 /**
@@ -87,7 +80,7 @@ export async function reviewBuildStudioAssembledChange(args: {
     take: 3,
   });
   const receipts: SemanticReviewReceipt[] = priorRows.flatMap(
-    (row: { details: unknown }) => isReceipt(row.details) ? [row.details] : [],
+    (row: { details: unknown }) => isSemanticReviewReceipt(row.details) ? [row.details] : [],
   );
   const priorReceipt = receipts[0] ?? null;
   const repairRound = Math.min(
@@ -126,7 +119,7 @@ export async function reviewBuildStudioAssembledChange(args: {
       ?? "OpenDigitalProductFactory/opendigitalproductfactory",
     identity: coordination.identity,
     risk: coordination.risk,
-    dispatchContractVersion: SEMANTIC_REVIEW_DISPATCH_CONTRACT_VERSION,
+    dispatchContractVersion: ROLE_BOUND_SEMANTIC_REVIEW_DISPATCH_CONTRACT_VERSION,
   });
   const store = createPrismaSemanticReviewSingleFlightStore(prisma as never);
   const singleFlight = await claimSemanticReviewSingleFlight({
@@ -141,7 +134,7 @@ export async function reviewBuildStudioAssembledChange(args: {
       select: { workCapsuleId: true, details: true },
     });
     return row?.workCapsuleId === capsule.id
-      && isReceipt(row.details)
+      && isSemanticReviewReceipt(row.details)
       && row.details.result.decision !== "inconclusive"
       && assessSemanticReviewReceiptFreshness(row.details, coordination.identity).fresh;
   });
@@ -159,13 +152,13 @@ export async function reviewBuildStudioAssembledChange(args: {
   }
 
   let coordinatedPriorReceipt = priorReceipt;
-  let coordinatedEvidenceId = priorRows.find((row) => isReceipt(row.details))?.id ?? null;
+  let coordinatedEvidenceId = priorRows.find((row) => isSemanticReviewReceipt(row.details))?.id ?? null;
   if (singleFlight.disposition === "reused") {
     const row = await prisma.externalEvidenceRecord.findUnique({
       where: { id: singleFlight.evidenceRecordId },
       select: { details: true },
     });
-    if (!isReceipt(row?.details)) {
+    if (!isSemanticReviewReceipt(row?.details)) {
       throw new Error("Canonical semantic-review evidence is missing or invalid");
     }
     coordinatedPriorReceipt = row.details;
@@ -194,8 +187,7 @@ export async function reviewBuildStudioAssembledChange(args: {
         resultClass: outcome.receipt.result.decision === "fail" ? "fail" : "pass",
       }, store);
     }
-    const { publishFailureReadinessStatus } = await import("./failure-readiness-status");
-    await publishFailureReadinessStatus(capsule.capsuleId);
+    await publishFailureReadinessWhenBound(capsule.capsuleId);
     return { kind: "reviewed", outcome };
   }
 
@@ -237,7 +229,38 @@ export async function reviewBuildStudioAssembledChange(args: {
     }, store);
   }
 
-  const { publishFailureReadinessStatus } = await import("./failure-readiness-status");
-  await publishFailureReadinessStatus(capsule.capsuleId);
+  await publishFailureReadinessWhenBound(capsule.capsuleId);
   return { kind: "reviewed", outcome };
+}
+
+/**
+ * The GitHub commit status is published only once the room is bound to a
+ * pushed commit. Before the ship lane pushes the build branch there is no
+ * commit on GitHub to carry a status, and throwing here failed the whole
+ * review-verification run for every Build Studio build — after the review
+ * itself had already been recorded. The receipt is the review's evidence; the
+ * status is its GitHub projection, and the ship/PR lane publishes it when the
+ * commit exists there.
+ */
+async function publishFailureReadinessWhenBound(capsuleId: string): Promise<void> {
+  const { isWorkroomStatusPublishable, publishFailureReadinessStatus } = await import("./failure-readiness-status");
+  const bound = await isWorkroomStatusPublishable(capsuleId);
+  if (!bound.publishable) {
+    console.info(`[semantic-review] ${capsuleId}: failure-readiness status not published yet — ${bound.reason}; the ship lane publishes it once the commit is on GitHub.`);
+    return;
+  }
+  try {
+    await publishFailureReadinessStatus(capsuleId);
+  } catch (err) {
+    // The Workroom head is stamped before review so evidence can bind to it,
+    // but the commit reaches GitHub only when the ship lane pushes it. GitHub
+    // answers 422 for a commit it does not have: that is the same lifecycle
+    // position as "no commit yet", not a failed review (FB-D671B016). Any other
+    // publication failure still fails loudly.
+    if (err instanceof Error && /\(422\)/.test(err.message)) {
+      console.info(`[semantic-review] ${capsuleId}: failure-readiness status not published yet — the commit is not on GitHub; the ship lane publishes it after the push.`);
+      return;
+    }
+    throw err;
+  }
 }

@@ -1,0 +1,12 @@
+{
+  "version": "1",
+  "decidedOption": "selected-room-participants",
+  "decisionInteractionId": "DI-0F2E1820E309",
+  "scope": {
+    "files": ["apps/web/components/workspace/workroom/WorkroomInviteAssistant.tsx"]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["selected-room-participants", "connection-settings-room-picker"]
+  }
+}

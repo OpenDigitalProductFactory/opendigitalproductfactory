@@ -12,7 +12,6 @@
 // legacy baseline; every NEW/CHANGED persistent surface must satisfy the full contract.
 
 import { readFileSync } from "node:fs";
-import { execFileSync } from "node:child_process";
 import { listChangedFiles } from "./lib/git-changed-files.mjs";
 
 // ── Persistent-surface classification (kept conservative for the first ship) ──
@@ -104,6 +103,11 @@ export function validateManifest(manifest) {
         }
         break;
       }
+      case "lifecycle": {
+        if (!change.executor) errors.push(`${at}: lifecycle change needs the retention executor it changes`);
+        if (!change.lifecycleDisposition) errors.push(`${at}: lifecycle change needs a lifecycleDisposition`);
+        break;
+      }
       default:
         errors.push(`${at}: unknown change kind ${JSON.stringify(change?.kind)}`);
     }
@@ -134,9 +138,6 @@ export function validateException(exception, { now } = {}) {
 }
 
 // ── CI entrypoint ──
-function git(args) {
-  return execFileSync("git", args, { encoding: "utf8" });
-}
 
 export function runGate({
   base = process.env.BASE_SHA || "origin/main",

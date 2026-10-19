@@ -5,8 +5,21 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { resolveGuardBash } from "../lib/guard-bash.mjs";
 
 const read = (path) => readFile(new URL(`../../${path}`, import.meta.url), "utf8");
+
+test('PKI stages custody before authority startup and CLI clients bypass CA initialization', async () => {
+  const shell = await read('scripts/bootstrap-organization-pki.sh');
+  const ps = await read('scripts/bootstrap-organization-pki.ps1');
+  assert.match(shell, /compose stage-password\s+compose up -d step-ca/);
+  assert.match(ps, /@\("stage-password"\)\s+Invoke-DpfPkiCompose -Arguments @\("up", "-d", "step-ca"\)/);
+  assert.match(shell, /--entrypoint "" --user "\$\(id -u\):\$\(id -g\)"/);
+  assert.match(shell, /--env HOME=\/tmp --env STEPPATH=\/tmp\/step/);
+  for (const line of ps.split(/\r?\n/).filter(line => line.includes('docker run --rm'))) {
+    assert.match(line, /--entrypoint (step|sh)/);
+  }
+});
 
 test("organization PKI compose pins the approved image and protects CA custody", async () => {
   const compose = await read("docker-compose.pki.yml");
@@ -17,7 +30,8 @@ test("organization PKI compose pins the approved image and protects CA custody",
     /smallstep\/step-ca:0\.30\.2@sha256:a2b17872915c193259b75a5474c398326f41bd199f0842093e52cf4182bc8270/,
   );
   assert.doesNotMatch(compose, /smallstep\/step-ca:latest/);
-  assert.match(compose, /DPF_PKI_PASSWORD_FILE/);
+  assert.doesNotMatch(compose, /DPF_PKI_PASSWORD_FILE|\/run\/secrets\/step-ca-password/);
+  assert.match(compose, /DOCKER_STEPCA_INIT_PASSWORD_FILE: \/home\/step\/secrets\/password/);
   assert.match(compose, /DOCKER_STEPCA_INIT_PASSWORD_FILE/);
   assert.doesNotMatch(compose, /DOCKER_STEPCA_INIT_PASSWORD:/);
   assert.match(compose, /DPF_PKI_BIND_ADDRESS:-127\.0\.0\.1/);
@@ -45,31 +59,41 @@ test("installers consume an organization join package without asking operators t
 });
 
 test("successful PKI bootstrap persists member trust and Edge actions for normal restart lifecycle", async () => {
-  const [shellBootstrap, windowsBootstrap, shellStart, windowsStart, windowsInstaller, composeLib] = await Promise.all([
+  const [shellBootstrap, windowsBootstrap, shellStart, windowsStartScript, windowsComposeChain, windowsInstaller, composeLib] = await Promise.all([
     read("scripts/bootstrap-organization-pki.sh"),
     read("scripts/bootstrap-organization-pki.ps1"),
     read("dpf-start.sh"),
     read("scripts/dpf-start.ps1"),
+    read("scripts/installer/lib/compose-chain.ps1"),
     read("install-dpf.ps1"),
     read("scripts/installer/lib/compose.sh"),
   ]);
+  // BI-B422ED03: the marker -> overlay rule lives in one table that compose.sh,
+  // compose-chain.ps1 and promote.sh all read.
+  const activationTable = await read("scripts/installer/lib/activation-overlays.txt");
+  // dpf-start.ps1 resolves its chain through Get-DPFComposeArgs, so the overlay
+  // names live in compose-chain.ps1; the start script must still route through it.
+  assert.match(windowsStartScript, /Get-DPFComposeArgs/);
+  const windowsStart = windowsComposeChain;
 
   for (const source of [shellBootstrap, windowsBootstrap]) {
     assert.match(source, /DPF_ORGANIZATION_TRUST_ENABLED/);
     assert.match(source, /DPF_PKI_TRUST_BUNDLE/);
     assert.match(source, /DPF_TLS_DIR/);
   }
-  assert.match(composeLib, /docker-compose\.organization-trust\.yml/);
-  assert.match(composeLib, /docker-compose\.tls\.yml/);
-  assert.match(composeLib, /DPF_EDGE_ACTION_DISPATCH_CONFIGURED/);
-  assert.match(composeLib, /docker-compose\.edge-actions\.yml/);
+  assert.match(composeLib, /activation-overlays\.txt/);
+  assert.match(activationTable, /^DPF_ORGANIZATION_TRUST_ENABLED docker-compose\.organization-trust\.yml docker-compose\.tls\.yml$/m);
+  assert.match(activationTable, /^DPF_EDGE_ACTION_DISPATCH_CONFIGURED docker-compose\.edge-actions\.yml$/m);
   assert.match(shellStart, /DPF_ORGANIZATION_TRUST_ENABLED|organization-trust/);
   assert.match(windowsStart, /docker-compose\.organization-trust\.yml/);
   assert.match(windowsStart, /docker-compose\.tls\.yml/);
   assert.match(windowsStart, /DPF_EDGE_ACTION_DISPATCH_CONFIGURED/);
   assert.match(windowsStart, /docker-compose\.edge-actions\.yml/);
-  assert.match(windowsInstaller, /DPF_EDGE_ACTION_DISPATCH_CONFIGURED/);
-  assert.match(windowsInstaller, /docker-compose\.edge-actions\.yml/);
+  // install-dpf.ps1 also resolves its chain through Get-DPFComposeArgs, so the
+  // Edge-actions overlay is wired once in compose-chain.ps1 for both entry points.
+  assert.match(windowsInstaller, /Get-DPFComposeArgs|compose-chain\.ps1/);
+  assert.match(windowsComposeChain, /DPF_EDGE_ACTION_DISPATCH_CONFIGURED/);
+  assert.match(windowsComposeChain, /docker-compose\.edge-actions\.yml/);
 });
 
 test("Windows consumer release carries the verified organization-join lifecycle assets", async () => {
@@ -82,6 +106,9 @@ test("Windows consumer release carries the verified organization-join lifecycle 
     "docker-compose.edge-actions.yml",
     "scripts/pki/edge-client.tpl",
     "scripts/bootstrap-organization-pki.ps1",
+    // BI-6DC1CD5B: the standalone https path the consumer installer runs.
+    "scripts/installer/lib/canonical-origin.ps1",
+    "scripts/installer/lib/machine-trust.ps1",
   ]) {
     assert.match(dockerfile, new RegExp(asset.replaceAll(".", "\\.")));
   }
@@ -153,7 +180,7 @@ test("Bash join rejects an expired package before Docker is invoked", async () =
     ].join("\n"), { mode: 0o600 });
     await chmod(packagePath, 0o600);
 
-    const result = spawnSync("bash", [script, "--mode", "join", "--hostname", "peer.local", "--join-package", packagePath], { encoding: "utf8" });
+    const result = spawnSync(resolveGuardBash(), [script, "--mode", "join", "--hostname", "peer.local", "--join-package", packagePath], { encoding: "utf8" });
     assert.equal(result.status, 77);
     assert.match(result.stderr, /expired/i);
     assert.doesNotMatch(`${result.stdout}\n${result.stderr}`, /Docker is required/i);
@@ -181,7 +208,7 @@ test("Bash join rejects a package intended for a different installation", async 
     ].join("\n"), { mode: 0o600 });
     await chmod(packagePath, 0o600);
 
-    const result = spawnSync("bash", [script, "--mode", "join", "--hostname", "peer.local", "--join-package", packagePath], { encoding: "utf8" });
+    const result = spawnSync(resolveGuardBash(), [script, "--mode", "join", "--hostname", "peer.local", "--join-package", packagePath], { encoding: "utf8" });
     assert.equal(result.status, 77);
     assert.match(result.stderr, /intended for another installation/i);
   } finally {
@@ -208,7 +235,7 @@ test("Bash join rejects a public CA origin before Docker is invoked", async () =
     ].join("\n"), { mode: 0o600 });
     await chmod(packagePath, 0o600);
 
-    const result = spawnSync("bash", [script, "--mode", "join", "--join-package", packagePath], { encoding: "utf8" });
+    const result = spawnSync(resolveGuardBash(), [script, "--mode", "join", "--join-package", packagePath], { encoding: "utf8" });
     assert.equal(result.status, 77);
     assert.match(result.stderr, /private or local/i);
     assert.doesNotMatch(`${result.stdout}\n${result.stderr}`, /Docker is required/i);
@@ -291,11 +318,69 @@ test("Caddy exposes a dedicated verified-client action listener and strips spoof
 
 test("Bash bootstrap rejects public binds and argument injection before Docker", () => {
   const script = fileURLToPath(new URL("../bootstrap-organization-pki.sh", import.meta.url));
-  const publicBind = spawnSync("bash", [script, "--hostname", "dpf.local", "--bind-address", "8.8.8.8"], { encoding: "utf8" });
+  const bash = resolveGuardBash();
+  const publicBind = spawnSync(bash, [script, "--hostname", "dpf.local", "--bind-address", "8.8.8.8"], { encoding: "utf8" });
   assert.equal(publicBind.status, 64);
   assert.match(publicBind.stderr, /private IPv4/i);
 
-  const injected = spawnSync("bash", [script, "--hostname", "dpf.local;touch-bad"], { encoding: "utf8" });
+  const injected = spawnSync(bash, [script, "--hostname", "dpf.local;touch-bad"], { encoding: "utf8" });
   assert.equal(injected.status, 64);
   assert.match(injected.stderr, /unsupported characters/i);
+});
+
+// BI-6DC1CD5B: canonical https on every install (design §12).
+function stepTokenCommands(source) {
+  const commands = [];
+  const bash = /step ca token[\s\S]*?\)"/g;
+  const powershell = /"step", "ca", "token"[^\n]*/g;
+  for (const match of source.matchAll(bash)) commands.push(match[0]);
+  for (const match of source.matchAll(powershell)) commands.push(match[0]);
+  return commands;
+}
+
+test("every organization-CA enrollment token names the local CA explicitly (BI-6DC1CD5B)", async () => {
+  // Without --ca-url, `step ca token` falls back to the CA's defaults.json,
+  // which carries the name the CA was FIRST initialised under. On DEV that was
+  // an unresolvable host, and every token request failed (no such host).
+  for (const path of ["scripts/bootstrap-organization-pki.sh", "scripts/bootstrap-organization-pki.ps1"]) {
+    const commands = stepTokenCommands(await read(path));
+    assert.ok(commands.length >= 4, `${path}: expected the portal, edge and join token requests`);
+    for (const command of commands) {
+      assert.match(command, /--ca-url"?,? "?https:\/\/127\.0\.0\.1:9000/, `${path}: token request without --ca-url: ${command.slice(0, 120)}`);
+    }
+  }
+});
+
+test("the PKI bootstrap composes with the install's own file set, never a source build (BI-6DC1CD5B)", async () => {
+  // A consumer install ships docker-compose.release.yml and no Dockerfile.
+  // Composing without the release overlay made `up portal portal-tls` try to
+  // BUILD portal-init ("open Dockerfile: no such file or directory").
+  for (const path of ["scripts/bootstrap-organization-pki.sh", "scripts/bootstrap-organization-pki.ps1"]) {
+    const source = await read(path);
+    assert.match(source, /docker-compose\.release\.yml/, `${path}: release overlay never considered`);
+    assert.match(source, /Dockerfile/, `${path}: release install not detected by the absence of a build context`);
+  }
+});
+
+test("a changed certificate name set reissues the portal leaf instead of renewing old names (BI-6DC1CD5B)", async () => {
+  // `step ca renew` keeps the subject alternative names of the old leaf, so
+  // adding a canonical host or alias would otherwise never reach the certificate.
+  const [shell, powershell] = await Promise.all([
+    read("scripts/bootstrap-organization-pki.sh"),
+    read("scripts/bootstrap-organization-pki.ps1"),
+  ]);
+  const shellReissue = shell.match(/portal_leaf_needs_reissue\(\) \{[\s\S]*?\n\}/)?.[0] ?? "";
+  const powershellReissue = powershell.match(/function Test-DpfPortalLeafNeedsReissue \{[\s\S]*?\n\}/)?.[0] ?? "";
+  assert.match(shellReissue, /subjectAltName/, "bash reissue check ignores the certificate names");
+  assert.match(powershellReissue, /subject_alt_name|dns_names/, "PowerShell reissue check ignores the certificate names");
+});
+
+test("portal-tls publishes its ports through the install bind address (BI-6DC1CD5B)", async () => {
+  const tlsCompose = await read("docker-compose.tls.yml");
+  for (const port of ["DPF_TLS_HTTP_PORT:-80", "DPF_TLS_HTTPS_PORT:-443", "DPF_EDGE_ACTION_HTTPS_PORT:-8443"]) {
+    assert.ok(
+      tlsCompose.includes(`"\${DPF_HOST_BIND_ADDRESS:-127.0.0.1}:\${${port}}`),
+      `docker-compose.tls.yml publishes ${port} on every interface`,
+    );
+  }
 });

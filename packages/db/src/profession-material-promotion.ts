@@ -58,6 +58,30 @@ function tierOf(row: { evidenceGrade: string; confidenceWeight: number }): Profe
 }
 
 /**
+ * Drop derived material from any domain class that already carries
+ * human-vouched material (BI-0EB9F1D2).
+ *
+ * The gate averages effective weights, so mixing a derived B/0.6 row with a
+ * confirmed A/0.9 row scores 0.675 and clears nothing: the platform-derived
+ * distillation would veto the human confirmation. Superseding within the
+ * class keeps the confirmed row at its own weight, while an all-derived class
+ * is left intact so the craft still answers from its OWN profile (and defers
+ * honestly) instead of falling through to another scope.
+ *
+ * Pure and exported so the seed and the runtime craft path share one rule.
+ */
+export function supersedeDerivedMaterial<
+  T extends { domainClass: string; evidenceGrade: string; confidenceWeight: number },
+>(materials: readonly T[]): T[] {
+  const vouched = new Set(
+    materials.filter((m) => tierOf(m) !== "derived").map((m) => m.domainClass),
+  );
+  return materials.filter(
+    (m) => tierOf(m) !== "derived" || !vouched.has(m.domainClass),
+  );
+}
+
+/**
  * The decision-bearing subset of the corpus (WSID spec §4.6): pages that
  * encode rules, trade-off heuristics, positions, or recorded decisions.
  * Context kinds (entity, summary, runbook) stay retrieval-only — they ground
@@ -94,25 +118,33 @@ export function isHighStakesProfession(contextSlugs: readonly string[]): boolean
  * demand signal this promotion exists to serve. Extend per family as the
  * next defer clusters fire.
  *
- * The mapping is TIER-AWARE by design: the gate's confidence is the MEAN of
- * applicable effective weights (evaluator.ts scoreProfileCoverage), so a
- * derived B/0.6 row scores 0.45 effective and arithmetically dilutes any
- * confirmed A/0.9 row sharing its domain class below the 0.7 recommend band.
- * Derived platform distillations therefore stay context-grade
- * (professional-practice only); human-vouched tiers (confirmed/ruled) carry
- * the family's decision classes and are what actually clear a tradeoff
- * consult. Confirming a platform page (BI-BE9C95D9's review surface)
- * upgrades its tier and thereby promotes it into the tradeoff class.
- */
+ * The mapping was TIER-AWARE until BI-0EB9F1D2. Derived material was held
+ * to `professional-practice` because the gate's confidence is the MEAN of
+ * applicable effective weights (coverage-scoring.ts), so a derived B/0.6
+ * row scoring 0.45 dragged a confirmed A/0.9 row below the recommend band.
+ *
+ * The cost of that guard was larger than the dilution it prevented: a
+ * profession whose only material is derived matched NOTHING in the class
+ * its own callers ask about, so the gate fell through to platform doctrine
+ * and answered a craft question as WWMD. Measured on this install, 654 of
+ * 654 enterprise-architecture consults in a fortnight resolved that way,
+ * and zero decisions in the whole ledger were made by a craft profile.
+ * Silent scope borrowing is the failure `decisions-belong-to-their-scope`
+ * exists to prevent; dilution merely lowers a score.
+ *
+ * So the class mapping is now tier-INDEPENDENT, and dilution is prevented
+ * where it actually occurs: `supersedeDerivedMaterial` drops derived rows
+ * from a class that already has human-vouched ones, so a confirmed page
+ * scores at its own weight and an all-derived family defers honestly FROM
+ * ITS OWN CRAFT instead of borrowing another scope's authority. */
 const PROFESSION_DOMAIN_CLASS_MAP: Record<string, readonly ProfessionDomainClass[]> = {
   "enterprise-architecture": ["architecture-tradeoff", "professional-practice"],
 };
 
 export function professionDomainClasses(
   professionKey: string,
-  tier: ProfessionMaterialTier,
+  _tier: ProfessionMaterialTier,
 ): readonly ProfessionDomainClass[] {
-  if (tier === "derived") return ["professional-practice"];
   return PROFESSION_DOMAIN_CLASS_MAP[professionKey] ?? ["professional-practice"];
 }
 

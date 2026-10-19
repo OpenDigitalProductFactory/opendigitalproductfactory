@@ -1,9 +1,17 @@
 // Direct JSON import — bundler resolves this at build time, works in both dev and Docker standalone
 import agentRegistryData from "../../../../packages/db/data/agent_registry.json";
+import { coworkerAuthorityAgentId, coworkerAuthorityWhere } from "@/lib/coworker-identity";
 import { AUTHORIZED_SURFACE_TOOL_GRANTS } from "@/lib/coworker/authorized-surface-coworker-contract";
 import { PRODUCT_MANAGEMENT_TOOL_GRANTS } from "./product-management-tool-grants";
 import { INITIATIVE_READINESS_TOOL_GRANTS } from "./initiative-readiness-tool-grants";
 import { BANKING_TOOL_GRANTS } from "./banking-tool-grants";
+import { DOCUMENT_TOOL_GRANTS } from "./document-tool-grants";
+import { CHANGE_REVIEW_TOOL_GRANTS } from "./change-review-tool-grants";
+import { CONTRIBUTOR_INVENTORY_TOOL_GRANTS } from "./contributor-inventory-tool-grants";
+import { PAYABLES_TOOL_GRANTS } from "./payables-tool-grants";
+import { PROVIDER_MANAGEMENT_TOOL_GRANTS } from "./provider-management-tool-grants";
+import { PLATFORM_UPDATE_TOOL_GRANTS } from "./platform-update-tool-grants";
+import { SURFACE_READINESS_TOOL_GRANTS } from "./surface-readiness-tool-grants";
 const agentRegistry = agentRegistryData as { agents: Array<Record<string, unknown>> };
 /**
  * Implications between agent grant categories. A grant on the left of the
@@ -38,7 +46,7 @@ export const GRANT_IMPLICATIONS: Readonly<Record<string, readonly string[]>> = {
   // EP-WORKROOM-COMMS (BI-4402DABB): a coworker that can write a work capsule (the
   // executors that claim/work rooms, incl. the external CLIs) may post to the room
   // it is admitted to. One-way — work_room_write never implies capsule write.
-  work_capsule_write: ["work_room_write"],
+  work_capsule_write: ["work_room_write", "workroom_evidence_write"],
   // CRM drafting (crm_write) implies CRM inspection (crm_read): a coworker that
   // can draft an opportunity or quote can always read the accounts/pipeline it
   // is drafting against. One-way — crm_read alone never implies crm_write.
@@ -70,6 +78,14 @@ export function expandGrants(grants: readonly string[]): string[] {
     }
   }
   return Array.from(expanded);
+}
+/** THE runtime reachability rule (BI-378D3659): required grants are ALTERNATIVES — any one held after
+ *  expansion suffices; [] is universal. Report it with this, never an every-grant test; the .mjs
+ *  capability measure mirrors it (grant-reachability-parity.test.ts). */
+export function grantsSatisfyRequirement(required: readonly string[], held: readonly string[]): boolean {
+  if (required.length === 0) return true;
+  const expanded = new Set(expandGrants(held));
+  return required.some((g) => expanded.has(g));
 }
 /**
  * Read-only baseline every coworker holds, regardless of its agent-specific
@@ -156,13 +172,18 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   sweep_duplicate_demand: ["backlog_read"],
   run_capacity_drain: ["backlog_write"],
   approve_demand_for_funding: ["backlog_write"],
+  propose_epic_portfolios: ["backlog_read"],
+  confirm_epic_portfolios: ["backlog_write"],
+  propose_portfolio_budgets: ["backlog_read"],
+  set_portfolio_budget: ["backlog_write"],
+  set_portfolio_owner: ["backlog_write"],
+  get_investment_balance: ["backlog_read"], set_investment_balance: ["backlog_write"], bind_investment_funding: ["backlog_write"],
   query_backlog: ["backlog_read"],
   report_quality_issue: ["backlog_write"],
   escalate_feedback_upstream: ["backlog_write"],
 
   // Workbooks / Universal Grid (EP-GRID-WORKBOOKS, #1582). These MCP tools
-  // shipped without a grant mapping, so every tool was default-deny (INV-1) and
-  // unreachable from any coworker. The handler's capability split is
+  // Previously default-denied without grants. The handler's capability split is
   // view_workbooks (read) / manage_workbooks (write); mirror it as read/write
   // grant categories. Held by no agent yet — workbook tools stay coworker-deny
   // until a role grants them, which is the correct conservative default for a
@@ -187,8 +208,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   record_execution_evidence: ["build_evidence"],
   // Non-build evidence stays on backlog_write because it coordinates the whole backlog surface.
   record_external_development_evidence: ["backlog_write"],
-  review_semantic_change: ["backlog_write"],
-  record_semantic_review_outcome: ["backlog_write"],
+  ...CHANGE_REVIEW_TOOL_GRANTS,
   record_local_integration_result: ["backlog_write"],
   record_functional_failure_evidence: ["backlog_write"],
   ...INITIATIVE_READINESS_TOOL_GRANTS,
@@ -201,14 +221,16 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // Work Capsule control harness (spec 2026-05-14)
   list_workrooms: ["work_capsule_read"],
   get_workroom: ["work_capsule_read"],
-  // EP-WORKROOM-COMMS (BI-3F21C4D5): read/post a Work Room's message feed. Room
-  // admission is enforced separately (room-agent-access); these are the coarse caps.
+  review_workroom_sensitivity: ["admin_read"],
+  correct_workroom_sensitivity: ["admin_write"],
+  // Room admission and coordinator rights are checked separately from these
+  // communication grants (EP-WORKROOM-COMMS, BI-3F21C4D5).
   read_room_messages: ["work_room_read"],
   post_room_message: ["work_room_write"],
-  // EP-WORKROOM-COMMS: invite a participant on demand (write); 360 coworker
-  // room-engagement (read). Room admission/coordinator right enforced separately.
   invite_room_participant: ["work_room_write"],
   appoint_room_coordinator: ["work_room_write"],
+  plan_account_handover: ["work_room_write"],
+  apply_account_handover: ["work_room_write"],
   get_coworker_room_engagement: ["work_room_read"],
   create_workroom: ["work_capsule_write"],
   plan_workroom_worktree: ["work_capsule_write"],
@@ -217,10 +239,14 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   start_external_work: ["work_capsule_adopt"],
   claim_workroom_scope: ["work_capsule_write"],
   declare_break_fix: ["work_capsule_write"],
-  record_workroom_evidence: ["work_capsule_write"],
+  record_workroom_evidence: ["workroom_evidence_write"],
   record_agent_activity: ["work_capsule_write"],
   heartbeat_workroom: ["work_capsule_write"],
   update_workroom_status: ["work_capsule_write"],
+  rebind_workroom_shape: ["work_capsule_write"],
+  resume_workroom_queue: ["work_capsule_write"],
+  drive_workroom_runtime: ["work_capsule_write"],
+  approve_runtime_permission: ["work_capsule_write"],
   release_workroom_scope: ["work_capsule_write"],
   reassign_workroom_executor: ["work_capsule_write"],
   get_runtime_coordination_map: ["work_capsule_read"],
@@ -237,14 +263,16 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   heartbeat_capsule: ["work_capsule_write"],
   update_work_capsule_status: ["work_capsule_write"],
   release_capsule_scope: ["work_capsule_write"],
-  record_capsule_evidence: ["work_capsule_write"],
+  record_capsule_evidence: ["workroom_evidence_write"],
   reassign_capsule_executor: ["work_capsule_write"],
   // Queue-awareness reads (EP-3516E23D): platform-coordination visibility over
   // the shared queue flow-telemetry — same read grant as the sibling ops-read
   // tool above.
   get_queue_status: ["work_capsule_read"],
   list_at_risk_queues: ["work_capsule_read"],
+  ...SURFACE_READINESS_TOOL_GRANTS,
   register_runtime_target: ["work_capsule_write"],
+  verify_archetype_projection: ["sandbox_execute"],
   heartbeat_runtime_target: ["work_capsule_write"],
   release_runtime_target: ["work_capsule_write"],
   record_runtime_verification: ["work_capsule_write"],
@@ -283,11 +311,14 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // it reports gaps and never changes authority.
   get_capability_completeness: ["registry_read"],
 
-  // Independent re-verification of a recorded decision's cited evidence
-  // (BI-8192557E phase 2b). Same `registry_read` tier as its siblings: auditing
-  // the evidence behind a decision must not need a higher grant than making the
-  // decision did, or the check is less reachable than the thing it checks.
+  // Re-verifying a decision's cited evidence (BI-8192557E) and reading the report-only
+  // decision trust measurement (BI-7D1E43DE): `registry_read`, as their siblings —
+  // auditing a decision must not need a higher grant than making it did.
   reverify_decision_evidence: ["registry_read"],
+  report_decision_trust_state: ["registry_read"],
+  // BI-F302B80E: appends what the caller did with a kernel recommendation.
+  // Same grant as propose_improvement — it records, it never re-decides.
+  record_decision_outcome: ["decision_record_create"],
 
   // Two more doors sealed the same way as evaluate_profession_decision, found
   // by the registry-wide sweep the BI-88B77204 fix added. Both packs already
@@ -376,7 +407,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
 
   // Multi-agent collaboration (EP-A2A) — targeted handoff / summon spawn a
   // child work thread, so they require the same thread_write grant as spawn.
-  request_coworker:          ["thread_write"],
+  request_coworker:          ["thread_write", "initiative_evidence_write"],
   summon_coworker:           ["thread_write"],
 
   // Registry / Products
@@ -386,7 +417,6 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   register_digital_product_from_build: ["registry_read", "backlog_write"],
   create_build_epic: ["backlog_write"],
 
-  // Web / External
   search_public_web: ["web_search"],
   fetch_public_website: ["web_search"],
   analyze_public_website_branding: ["web_search"],
@@ -394,13 +424,14 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   search_integrations: ["external_registry_search", "registry_read"],
   search_tool_marketplace: ["registry_read"],
   get_my_coworker_profile: ["registry_read"],
+  get_my_approval_status: ["registry_read"],
+  probe_pending_approval_conversion: ["approval_probe_read"], // BI-129EFFD1: read-only AC-PROBE, manage_platform
   assess_my_capabilities: ["registry_read"],
   submit_coworker_capability_need: ["registry_read"],
   list_my_capability_needs: ["registry_read"],
   // BI-F9E7B780: governance-surface variant — same grant tier (registry_read)
   // because both surfaces are read-only over the same CoworkerCapabilityNeed
-  // model; the scope difference is "your needs" vs "everyone's needs", not
-  // a privilege difference.
+  // model; the scope difference is "your needs" vs "everyone's needs", not a privilege difference.
   list_all_capability_needs: ["registry_read"],
   list_coworker_services: ["coworker_catalog_read"],
   list_coworker_offers: ["coworker_catalog_read"],
@@ -412,13 +443,8 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   search_knowledge_base: ["registry_read"],
   create_knowledge_article: ["registry_write"],
   flag_stale_knowledge: ["registry_read"],
-  doc_save: ["document_write", "registry_write"],
-  doc_load: ["document_read", "registry_read"],
-  doc_search: ["document_read", "registry_read"],
-  doc_link: ["document_write", "registry_write"],
-  doc_version_list: ["document_read", "registry_read"],
-  doc_state_change: ["document_publish", "registry_write"],
-  doc_list_references: ["document_read", "registry_read"],
+  // Managed documents (doc_* and create_presentation) — document-tool-grants.ts.
+  ...DOCUMENT_TOOL_GRANTS,
 
   // EP-WIKI-001 Phase 3b2: Founder kernel + per-org overlay wiki
   wiki_query: ["registry_read"],
@@ -545,7 +571,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   query_version_history: ["file_read"],
   generate_codebase_manifest: ["file_read"],
   read_codebase_manifest: ["file_read"],
-  read_source_at_version: ["file_read"],
+  read_source_at_version: ["file_read"], read_build_artifact_revision: ["file_read"], // BI-926A7E90: same immutable-reader grant
   search_source_at_version: ["file_read"],
   list_source_directory: ["file_read"],
   compare_versions: ["file_read"],
@@ -562,10 +588,8 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   find_related_tests: ["code_graph_read"],
 
   // Provider management
-  add_provider: ["agent_control_read"],
-  update_provider_category: ["agent_control_read"],
-  // Read-only AI-layer state aggregation for the posture-article refresh task
-  // (BI-5903D447) — same tier as the sibling provider-management tools.
+  ...PROVIDER_MANAGEMENT_TOOL_GRANTS,
+  // Read-only AI posture uses the same grant as provider management.
   get_ai_platform_posture: ["agent_control_read"],
   run_endpoint_tests: ["agent_control_read"],
   activity_harness_confidence_override: ["agent_control_read"],
@@ -610,8 +634,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // Tool evaluation (EP-GOVERN-002)
   evaluate_tool: ["tool_evaluation_create"],
 
-  // EA / Ontology Graph
-  create_ea_element:      ["ea_graph_write"],
+  create_ea_element:      ["ea_graph_write"], // EA / Ontology Graph
   create_ea_relationship: ["ea_graph_write"],
   classify_ea_element:    ["ea_graph_write"],
   import_archimate:       ["ea_graph_write"],
@@ -619,6 +642,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   run_traversal_pattern:  ["ea_graph_read"],
   export_archimate:       ["ea_graph_read"],
   describe_ea_view:       ["ea_graph_read"],
+  export_ea_view_drawing: ["ea_drawing_export"], // BI-4C17BF51: renders + stores a drawing document
 
   // Customer / CRM (EP-CRM-COWORKER). The customer workspace (accounts,
   // engagements, pipeline, opportunities, quotes, orders) had a rich backend
@@ -667,6 +691,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
 
   // Finance
   get_finance_period_summary:   ["financial_report_create"],
+  ...PAYABLES_TOOL_GRANTS,
 
   // Marketing / Storefront
   // Guest activity (orders / reservations / inquiries) is the storefront's
@@ -695,6 +720,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   create_marketing_campaign_brief: ["marketing_write"],
   create_marketing_asset_task:   ["marketing_write"],
   record_marketing_grounding:    ["marketing_write"],
+  retire_marketing_work:         ["marketing_write"],
   record_marketing_kpi_checkpoint: ["marketing_write"],
   create_marketing_automation_candidate: ["marketing_write"],
   draft_marketing_asset:         ["marketing_write"],
@@ -749,23 +775,21 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // Hive Mind / Platform updates
   assess_contribution:    ["backlog_read"],
   contribute_to_hive:     ["backlog_write"],
+  // BI-1281A164: the same egress grant as contribute_to_hive. It sends a
+  // captured FINDING rather than a build diff, so an external session with no
+  // build can complete step 4 of routing a learning to the commons.
+  contribute_finding_to_hive: ["backlog_write"],
   set_change_disposition: ["backlog_write"],
-  apply_platform_update:  ["admin_write"],
-  // BI-C26F7EE1: read-only operator preview of the upstream change set —
-  // paired with apply_platform_update's admin_write as the read tier.
-  summarize_upgrade_impact: ["admin_read"],
+  ...PLATFORM_UPDATE_TOOL_GRANTS,
 
-  // Contributor inventory sync — admin-scope on-demand trigger so agents
-  // that just pushed a branch / opened a PR can force the cron to run
-  // out-of-band rather than waiting up to 10 minutes (BI-063BDF1B Phase 5).
+  // Contributor inventory sync: on-demand trigger so an agent need not wait for the 10-minute cron (BI-063BDF1B Phase 5).
   trigger_contributor_inventory_sync: ["admin_write"],
+  ...CONTRIBUTOR_INVENTORY_TOOL_GRANTS,
   request_self_upgrade: ["admin_write"],
   issue_ux_verification_sign_in: ["sandbox_execute"], // BI-9369DEB5: UX verification sign-in; a development token already holds it
   import_organization_join_file: ["sandbox_execute"], // BI-4DD1E739: portal-mediated organization join; the same automation grant
   issue_organization_join_file: ["sandbox_execute"], // BI-AC7BCC58: the authority portal issues the join file itself
-  // Governed self-heal for the "promoter image not built" self-upgrade skip.
-  // Same admin_write scope as request_self_upgrade so the platform-engineer
-  // ("AI Ops Engineer") coworker can build the promoter image on request.
+  // Governed self-heal for the "promoter image not built" skip: admin_write like request_self_upgrade, so platform-engineer can build it.
   repair_promoter_image: ["admin_write"],
   get_self_upgrade_queue_status: ["release_plan_read"],
   get_quiescence_status: ["release_plan_read"],
@@ -808,20 +832,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
  * canonical name becomes a silent authorization failure. Deriving them makes the
  * two provably identical and deletes in one edit when the window closes.
  */
-export const WORKROOM_TOOL_ALIASES: Record<string, string> = {
-  list_work_capsules: "list_workrooms",
-  get_work_capsule: "get_workroom",
-  create_work_capsule: "create_workroom",
-  plan_capsule_worktree: "plan_workroom_worktree",
-  claim_capsule_scope: "claim_workroom_scope",
-  heartbeat_capsule: "heartbeat_workroom",
-  update_work_capsule_status: "update_workroom_status",
-  release_capsule_scope: "release_workroom_scope",
-  record_capsule_evidence: "record_workroom_evidence",
-  reassign_capsule_executor: "reassign_workroom_executor",
-};
-
-
+export { WORKROOM_TOOL_ALIASES } from "./workroom-tool-aliases";
 
 /**
  * The catalog of every grant KEY known to the authority registry, derived from
@@ -847,7 +858,7 @@ export function knownGrantKeys(): string[] {
   return Array.from(keys).sort();
 }
 
-const grantCache = new Map<string, string[]>();
+const registryGrantCache = new Map<string, string[]>();
 
 type AgentEntry = {
   agent_id: string;
@@ -862,53 +873,50 @@ type AgentEntry = {
 };
 
 /**
- * Load tool_grants for an agent (cached).
- * EP-AI-WORKFORCE-001: First tries DB (AgentToolGrant table), falls back to
- * agent_registry.json for agents not yet migrated.
+ * Load static agent_registry.json grants (cached). Runtime authorization must
+ * use getAgentToolGrantsAsync so stored additions and revocations take effect.
  */
 export function getAgentToolGrants(agentId: string): string[] | null {
-  if (grantCache.has(agentId)) return grantCache.get(agentId)!;
-  // Fallback: JSON registry lookup (synchronous, always available)
+  if (registryGrantCache.has(agentId)) return registryGrantCache.get(agentId)!;
   const agent = (agentRegistry.agents as AgentEntry[]).find(
     (a) => a.agent_id === agentId || a.agent_name === agentId,
   );
   if (!agent) return null;
   const grants = agent.config_profile.tool_grants;
-  grantCache.set(agentId, grants);
+  registryGrantCache.set(agentId, grants);
   return grants;
 }
 
+/** Shared persisted-state filter for runtime checks and authority projections. */
+export function persistedAgentToolGrants(agent: {
+  toolGrants: ReadonlyArray<{ grantKey: string }>;
+  toolGrantRevocations: ReadonlyArray<{ grantKey: string }>;
+} | null | undefined): string[] {
+  if (!agent) return [];
+  const revoked = new Set(agent.toolGrantRevocations.map(grant => grant.grantKey));
+  return agent.toolGrants.map(grant => grant.grantKey).filter(key => !revoked.has(key));
+}
+
 /**
- * EP-AI-WORKFORCE-001: Async DB-backed grant resolution.
- * Resolves grants from AgentToolGrant table, falling back to JSON registry.
- * Use this in async contexts (API routes, server actions).
+ * Reads current canonical grants on every lookup, including an empty set.
+ * Missing or unavailable authority grants nothing; seed defaults are not authority.
  */
 export async function getAgentToolGrantsAsync(agentId: string): Promise<string[]> {
-  if (grantCache.has(agentId)) return grantCache.get(agentId)!;
-
   try {
     const { prisma } = await import("@dpf/db");
     const agent = await prisma.agent.findFirst({
-      where: { OR: [{ agentId }, { slugId: agentId }] },
-      include: { toolGrants: true },
+      where: coworkerAuthorityWhere(agentId),
+      include: { toolGrants: true, toolGrantRevocations: true },
     });
-    if (agent && agent.toolGrants.length > 0) {
-      const grants = agent.toolGrants.map((g) => g.grantKey);
-      grantCache.set(agentId, grants);
-      return grants;
-    }
+    return persistedAgentToolGrants(agent);
   } catch {
-    // DB unavailable — fall through to JSON
+    // An unavailable authority cannot establish permission, even from defaults.
+    return [];
   }
-
-  // Fallback to JSON registry
-  return getAgentToolGrants(agentId) ?? [];
 }
 
-/** Check if a specific tool is allowed by an agent's grants. The agent's
- *  held grants are expanded through GRANT_IMPLICATIONS before the check, so
- *  a coarse legacy grant (e.g. `backlog_write`) still satisfies a tool that
- *  has been refactored to require a finer grant (e.g. `build_evidence`). */
+/** Check if a tool is allowed by an agent's grants (expanded, so a coarse legacy grant such as
+ *  `backlog_write` still satisfies a tool refactored to a finer grant such as `build_evidence`). */
 export function isToolAllowedByGrants(
   toolName: string,
   agentGrants: string[],
@@ -921,11 +929,7 @@ export function isToolAllowedByGrants(
     console.warn(`[agent-grants] Tool ${JSON.stringify(toolName)} has no TOOL_TO_GRANTS entry — denied by default`);
     return false;
   }
-  if (requiredGrants.length === 0) return true;
-  // Expand the agent's grants through GRANT_IMPLICATIONS, then check that the
-  // expanded set includes at least one of the required grants.
-  const expanded = expandGrants(agentGrants);
-  return requiredGrants.some((g) => expanded.includes(g));
+  return grantsSatisfyRequirement(requiredGrants, agentGrants);
 }
 
 export type EffectivePermission = {
@@ -945,7 +949,8 @@ export function getToolGrantMapping(): Record<string, string[]> {
 
 /**
  * EP-AI-WORKFORCE-001: Get agent grant summaries from DB (unified model).
- * Falls back to JSON registry if DB query fails.
+ * Aliases retain their metadata but share the canonical persisted grant owner.
+ * An unavailable read surfaces as an error; seed defaults are not live state.
  */
 export async function getAgentGrantSummaries(): Promise<Array<{
   agentId: string;
@@ -960,40 +965,26 @@ export async function getAgentGrantSummaries(): Promise<Array<{
   delegatesTo: string[];
 }>> {
   const TIER_LABELS: Record<number, string> = { 1: "orchestrator", 2: "specialist", 3: "cross-cutting" };
-  try {
-    const { prisma } = await import("@dpf/db");
-    const agents = await prisma.agent.findMany({
-      where: { archived: false },
-      orderBy: [{ tier: "asc" }, { name: "asc" }],
-      include: { toolGrants: true },
-    });
-    return agents.map((a) => ({
+  const { prisma } = await import("@dpf/db");
+  const agents = await prisma.agent.findMany({
+    where: { archived: false },
+    orderBy: [{ tier: "asc" }, { name: "asc" }],
+    include: { toolGrants: true, toolGrantRevocations: true },
+  });
+  const byId = new Map(agents.map(agent => [agent.agentId, agent]));
+  return agents.map(a => {
+    const grants = persistedAgentToolGrants(byId.get(coworkerAuthorityAgentId(a.agentId)));
+    return {
       agentId: a.agentId,
       agentName: a.name,
       tier: TIER_LABELS[a.tier] ?? "specialist",
       valueStream: a.valueStream ?? "cross-cutting",
-      grantCount: a.toolGrants.length,
-      grants: a.toolGrants.map((g) => g.grantKey),
+      grantCount: grants.length,
+      grants,
       supervisorId: a.humanSupervisorId ?? "",
       hitlTier: a.hitlTierDefault,
       escalatesTo: a.escalatesTo ?? "",
       delegatesTo: a.delegatesTo,
-    }));
-  } catch {
-    // Fallback to JSON registry
-    return (agentRegistry.agents as AgentEntry[]).map(
-      (a) => ({
-        agentId: a.agent_id,
-        agentName: a.agent_name,
-        tier: a.tier,
-        valueStream: a.value_stream,
-        grantCount: a.config_profile.tool_grants.length,
-        grants: a.config_profile.tool_grants as string[],
-        supervisorId: a.human_supervisor_id,
-        hitlTier: a.hitl_tier_default,
-        escalatesTo: a.escalates_to,
-        delegatesTo: a.delegates_to,
-      }),
-    );
-  }
+    };
+  });
 }

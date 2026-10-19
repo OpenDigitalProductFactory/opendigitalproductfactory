@@ -1,6 +1,6 @@
 import { adoptionScopePatch, scopeWriteWhere } from "./scope-input";
-import type { ToolResult } from "@/lib/mcp-tools";
-import { deriveDeliverableSensitivity } from "@/lib/explore/build-process-matrix";
+import type { ToolResult } from "@/lib/mcp-tool-types";
+import { assessDeliverySensitivity } from "@/lib/backlog/initiative-readiness/delivery-sensitivity";
 import { WORK_INTENTS, type WorkIntent } from "@/lib/work-capsules";
 import {
   DELIVERY_SHAPE_PICK_LIST,
@@ -13,7 +13,7 @@ import { ensureCapsuleWorkItemAnchorWithPrisma } from "@/lib/work-capsules/capsu
 import { providerToExecutorKind } from "./external-session-capture";
 import { claimGovernedBacklogWorkspace } from "./governed-work-claim";
 import { branchOccupiedResult } from "./mcp-result-errors";
-import { defaultPlatformRepositoryFullName } from "./work-capsule-branch-identity";
+import { defaultPlatformRepositoryFullName, invalidSourceCommitField } from "./work-capsule-branch-identity";
 import { BacklogItemAlreadyClaimedError } from "./backlog-workroom-ownership";
 import type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
 
@@ -47,7 +47,7 @@ async function resolveClaimShape(args: {
   const signals = {
     effortSize: item?.effortSize ?? null,
     workType: item?.workType ?? null,
-    sensitivity: deriveDeliverableSensitivity({ text: `${item?.title ?? ""}\n${item?.body ?? ""}`, workType: item?.workType ?? null }),
+    sensitivity: assessDeliverySensitivity({ title: item?.title, body: item?.body, workType: item?.workType }).level,
   };
   const resolution = resolveDeliveryShape({ declared: args.declared, signals });
   if (resolution.kind === "invalid") {
@@ -79,7 +79,7 @@ async function resolveClaimShape(args: {
   return { resolution, refusal: null };
 }
 
-async function persistClaimShape(db: CapsuleDb, capsuleId: string, resolution: DeliveryShapeResolution | null): Promise<void> {
+export async function persistClaimShape(db: CapsuleDb, capsuleId: string, resolution: DeliveryShapeResolution | null): Promise<void> {
   if (!resolution || (resolution.kind !== "declared" && resolution.kind !== "derived")) return;
   if (!db.workroom?.findUnique) return;
   const row = await db.workroom.findUnique({ where: { capsuleId }, select: { scopeClaims: true, updatedAt: true } });
@@ -108,6 +108,12 @@ export async function claimBacklogItemForWork(args: {
   if (!itemId || !worktreePath || !branchName || !provider || !sessionRef) {
     return { success: false, error: "invalid_input", message: "itemId, worktreePath, branchName, provider, and sessionRef are required." };
   }
+  const baseSha = stringParam(params, "baseSha");
+  const headSha = stringParam(params, "headSha");
+  const badSha = invalidSourceCommitField(params);
+  if (badSha) {
+    return { success: false, error: "invalid_input", message: `${badSha} must be a full 40-character commit SHA.` };
+  }
   if (requestedIntent && !WORK_INTENTS.includes(requestedIntent as WorkIntent)) {
     return { success: false, error: "invalid_work_intent", message: `workIntent must be one of: ${WORK_INTENTS.join(", ")}.` };
   }
@@ -128,6 +134,21 @@ export async function claimBacklogItemForWork(args: {
       ? { ...shape.refusal, data: { ...(shape.refusal.data as Record<string, unknown>), attentionRequired: true, executorKind } }
       : shape.refusal;
   }
+  // Admission by points in flight (BI-3430B3A4): an implementation claim is a
+  // start. An unattended executor is refused past the allowance; a person
+  // proceeds with the warning recorded. An item already in flight is admitted.
+  let admissionWarning: string | null = null;
+  if (((requestedIntent as WorkIntent | null) ?? "implementation") === "implementation") {
+    const unattended = UNATTENDED_EXECUTORS.has(executorKind) || Boolean(args.context?.taskRunId);
+    const { prisma } = await import("@dpf/db");
+    const { evaluateItemAdmission, recordAdmissionOutcome, blocksStart } = await import("@/lib/build/investment-admission");
+    const admission = await evaluateItemAdmission(prisma as never, { itemId, startKind: unattended ? "autonomous" : "human" });
+    await recordAdmissionOutcome(prisma as never, admission, { source: "claim_backlog_item_for_work", userId: args.userId, agentId: args.context?.agentId ?? null });
+    if (blocksStart(admission)) {
+      return { success: false, error: "wip_allowance_reached", message: admission.reason, data: { admission, attentionRequired: true, executorKind } };
+    }
+    if (admission.verdict !== "admit") admissionWarning = admission.reason;
+  }
   try {
     const governed = await claimGovernedBacklogWorkspace({
       db: args.db,
@@ -137,6 +158,8 @@ export async function claimBacklogItemForWork(args: {
         headBranch: branchName,
         worktreePath,
         baseBranch: stringParam(params, "baseBranch") ?? "main",
+        baseSha,
+        headSha,
         executorKind,
         executorRef: sessionRef,
         force: params["force"] === true,
@@ -154,6 +177,7 @@ export async function claimBacklogItemForWork(args: {
         data: {
           workIntent: governed.data.workIntent,
           readiness: governed.data.readiness,
+          governingPrinciples: governed.data.governingPrinciples,
           recovery: governed.data.recovery,
         },
       };
@@ -168,6 +192,9 @@ export async function claimBacklogItemForWork(args: {
       console.warn(`[work-convergence] WorkItem anchor skipped for ${result.capsuleId}: ${error instanceof Error ? error.message : "unknown"}`);
     });
     const base = `Bound ${result.backlogItemId} to ${result.headBranch} (${result.capsuleId}).`;
+    const investment = await (await import("../portfolio/investment-balance-server")).projectItemInvestment(
+      (await import("@dpf/db")).prisma, { itemId: result.backlogItemId, roomId: result.capsuleId },
+    );
     const conflicts = result.conflict
       ? [
           ...(result.conflict.backlogClaim ? [`${result.backlogItemId} already has an ACTIVE claim by another session; this call did NOT steal it`] : []),
@@ -177,11 +204,13 @@ export async function claimBacklogItemForWork(args: {
     return {
       success: true,
       entityId: result.capsuleId,
-      message: conflicts.length
+      message: (conflicts.length
         ? `${base} ADVISORY: ${conflicts.join("; ")}. Coordinate before pushing.`
-        : `${base} Claim-at-start recorded for this session.`,
+        : `${base} Claim-at-start recorded for this session.`) + (admissionWarning ? ` Warning: ${admissionWarning}` : ""),
       data: {
         ...result,
+        admissionWarning,
+        investment,
         workShape: shape.resolution && (shape.resolution.kind === "declared" || shape.resolution.kind === "derived")
           ? { ref: shape.resolution.ref, source: shape.resolution.kind, ...(shape.resolution.kind === "derived" ? { reasonCode: shape.resolution.reasonCode, signals: shape.resolution.signals } : {}) }
           : null,

@@ -63,9 +63,7 @@ import {
 import {
   assertEncryptionReadyForCredentialWrite,
   decryptSecret,
-  encryptSecret,
 } from "@/lib/govern/credential-crypto";
-import { envFlagEnabled } from "@/lib/runtime/env-flags";
 
 
 // ── Bootstrap (invitation) issuance ──────────────────────────────────────────

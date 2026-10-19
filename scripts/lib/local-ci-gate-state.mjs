@@ -46,6 +46,16 @@ export function isTerminalPassRecord(state) {
     && state.status === "passed";
 }
 
+/**
+ * BI-53B189C8. True when `state` was written by a `DPF_ALLOW_LOCAL_CI_STUB=1`
+ * run. The stub exercises the lease and evidence plumbing and builds nothing,
+ * yet it reaches status "passed" with gatePassed true, so without this mark its
+ * record reads exactly like a real PASS. A marked record is never push evidence.
+ */
+export function isTestStubGateRecord(state) {
+  return Boolean(state) && typeof state === "object" && state.testStub === true;
+}
+
 export function createLocalCiPassEvidenceValidity(options) {
   return createCiEvidenceValidity(options);
 }
@@ -114,7 +124,11 @@ export function writeLocalCiGateState(stateFile, {
   admission = null,
   failureReason = "",
   failureSummary = null,
+  mergeConflict = null,
   childExitCode = null,
+  testStub = false,
+  executionLane = null,
+  producerEvidence = null,
 }) {
   const previous = readLocalCiGateState(stateFile);
   // BI-FFCFCCE0. A verdict that was reached and reported must not be erased by
@@ -182,9 +196,40 @@ export function writeLocalCiGateState(stateFile, {
   // structured summary so `pregate:status` can quote THIS run.
   if (failureReason) payload.failureReason = failureReason;
   if (failureSummary) payload.failureSummary = failureSummary;
+  // BI-FCC1DCB2: the paths a candidate merge left unmerged, so pregate:status
+  // can name the merge the author has to do.
+  if (mergeConflict) payload.mergeConflict = mergeConflict;
   if (childExitCode !== null && childExitCode !== undefined) payload.childExitCode = childExitCode;
+  if (testStub) payload.testStub = true;
+  if (executionLane !== null) payload.executionLane = executionLane;
+  if (producerEvidence !== null) payload.producerEvidence = producerEvidence;
   writeGateStateAtomically(stateFile, serializeGateState(payload));
   return { written: true, preservedPass: false, status };
+}
+
+/** Documentation runs have no sandbox metadata producer. Bind their result in
+ * the same atomic record, after publication, rather than consulting another run.
+ * This is a consistency check, not a replacement for canonical server evidence.
+ */
+export function hasBoundDocumentationEvidence(state) {
+  const evidence = state?.producerEvidence;
+  const gitHash = (value) => typeof value === "string" && /^[a-f0-9]{40}$/.test(value);
+  return state?.executionLane === "documentation"
+    && evidence?.schemaVersion === 1
+    && evidence.producer === "documentation-evidence-lane"
+    && gitHash(state.sha)
+    && typeof state.branch === "string" && state.branch.length > 0
+    && evidence.candidateSha === state.sha
+    && evidence.candidateBranch === state.branch
+    && typeof state.evidenceRecordId === "string" && state.evidenceRecordId.trim().length > 0
+    && evidence.evidenceRecordId === state.evidenceRecordId
+    && gitHash(evidence.headTreeSha)
+    && gitHash(evidence.integrationTreeSha)
+    && typeof evidence.evidencePlanDigest === "string" && /^[a-f0-9]{64}$/.test(evidence.evidencePlanDigest)
+    && state.status === "passed"
+    && !state.leaseId
+    && Number.isFinite(Date.parse(state.recordedAt))
+    && Number.isFinite(Date.parse(state.expiresAt));
 }
 
 /**

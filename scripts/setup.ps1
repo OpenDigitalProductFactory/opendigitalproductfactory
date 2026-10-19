@@ -20,6 +20,9 @@ if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
     Write-Fail "Docker is not installed. Install Docker Desktop: https://www.docker.com/products/docker-desktop/"
 }
 Write-Ok "Docker found: $(docker --version)"
+# BI-75ECED42: Docker Desktop restarts the whole engine when it installs an
+# update of its own, killing a running upgrade or build mid-way.
+Write-Warn "Docker Desktop: turn off automatic updates for an operated install (Settings > Software updates). An update restarts every container, including mid-upgrade."
 
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
     Write-Fail "Node.js is not installed. Download v20+ from: https://nodejs.org/"
@@ -109,6 +112,58 @@ if (-not (Test-Path $rootEnv)) {
     (Get-Content $rootEnv) -replace '<generate with: openssl rand -hex 32>', $encKey |
         Set-Content $rootEnv
     Write-Ok "Created root .env with generated secrets"
+}
+
+# GitHub update signing secret (BI-C26D5DC5), GPP permit signing key
+# (BI-8541D491), the reach-link and delegation-receipt signing keys
+# (BI-F6929F50) and the self-upgrade target-binding and delivery-cursor keys
+# (BI-231A4BC7): generated when missing or still the example placeholder, never
+# rotated once set, never printed. Distinct per file on purpose: each is the
+# secret of the portal that reads that file.
+foreach ($envFile in @("apps\web\.env.local", $rootEnv)) {
+    if (-not (Test-Path $envFile)) { continue }
+    foreach ($secretKey in @("DPF_GIT_WEBHOOK_SECRET", "DPF_GPP_PERMIT_SECRET", "DPF_ATTENTION_REACH_SECRET", "DPF_DELEGATION_RECEIPT_SECRET", "DPF_SELF_UPGRADE_TARGET_BINDING_SECRET", "DPF_DELIVERY_TASK_CURSOR_SECRET")) {
+        $envText = Get-Content -Path $envFile -Raw
+        if ($null -eq $envText) { $envText = "" }
+        $match = [System.Text.RegularExpressions.Regex]::Match($envText, "(?m)^$secretKey=(.*)$")
+        $current = if ($match.Success) { $match.Groups[1].Value.Trim().Trim('"', "'") } else { "" }
+        if ($current.Length -gt 0 -and -not $current.StartsWith("<")) { continue }
+        $secretBytes = New-Object byte[] 32
+        [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($secretBytes)
+        $secretValue = -join ($secretBytes | ForEach-Object { $_.ToString("x2") })
+        if ($match.Success) {
+            $envText = [System.Text.RegularExpressions.Regex]::Replace($envText, "(?m)^$secretKey=.*$", "$secretKey=$secretValue")
+        } else {
+            if ($envText.Length -gt 0 -and -not $envText.EndsWith("`n")) { $envText += "`n" }
+            $envText += "$secretKey=$secretValue`n"
+        }
+        Set-Content -Path $envFile -Value $envText -NoNewline
+        Write-Ok "Generated $secretKey in $envFile"
+    }
+}
+
+# Inngest signing and event keys (BI-3267763F): the root .env feeds the compose
+# stack, which refuses to render without them. Generated when missing, a
+# placeholder, or the old public compose default; never rotated once set.
+if (Test-Path $rootEnv) {
+    foreach ($inngestKey in @("INNGEST_SIGNING_KEY", "INNGEST_EVENT_KEY")) {
+        $envText = Get-Content -Path $rootEnv -Raw
+        if ($null -eq $envText) { $envText = "" }
+        $match = [System.Text.RegularExpressions.Regex]::Match($envText, "(?m)^$inngestKey=(.*)$")
+        $current = if ($match.Success) { $match.Groups[1].Value.Trim().Trim('"', "'") } else { "" }
+        if ($current.Length -gt 0 -and -not $current.StartsWith("<") -and @("abcdef0123456789", "deadbeefcafebabe") -notcontains $current) { continue }
+        $inngestBytes = New-Object byte[] 32
+        [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($inngestBytes)
+        $inngestValue = -join ($inngestBytes | ForEach-Object { $_.ToString("x2") })
+        if ($match.Success) {
+            $envText = [System.Text.RegularExpressions.Regex]::Replace($envText, "(?m)^$inngestKey=.*$", "$inngestKey=$inngestValue")
+        } else {
+            if ($envText.Length -gt 0 -and -not $envText.EndsWith("`n")) { $envText += "`n" }
+            $envText += "$inngestKey=$inngestValue`n"
+        }
+        Set-Content -Path $rootEnv -Value $envText -NoNewline
+        Write-Ok "Generated $inngestKey in $rootEnv"
+    }
 }
 
 # -- Databases -------------------------------------------------------------------

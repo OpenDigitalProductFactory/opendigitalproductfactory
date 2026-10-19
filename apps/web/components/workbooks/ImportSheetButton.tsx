@@ -4,7 +4,7 @@ import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { importSheetAction } from "@/lib/actions/workbooks";
 
-/** Upload a spreadsheet (.xlsx or .csv/.tsv) and create a new workbook table from
+/** Upload a spreadsheet (.xlsx, .xls, .ods or .csv/.tsv) and create a new workbook table from
  *  it (columns + rows inferred). */
 export function ImportSheetButton({ workbookId }: { workbookId: string }) {
   const router = useRouter();
@@ -49,7 +49,7 @@ export function ImportSheetButton({ workbookId }: { workbookId: string }) {
       <input
         ref={inputRef}
         type="file"
-        accept=".xlsx,.csv,.tsv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
+        accept=".xlsx,.xls,.ods,.csv,.tsv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/vnd.oasis.opendocument.spreadsheet,text/csv"
         className="hidden"
         onChange={onFile}
       />

@@ -281,3 +281,19 @@ Traceability for the atomic deliverable:
 4. Preserve search as exploration only; it cannot establish complete-artifact review for initiative gates.
 5. Add an agent-loop fixture proving a six-page artifact reaches the last page before exactly the writer is exposed, while incomplete traversal creates no receipt.
 6. Run the focused terminal-policy/loop/submission suites, typecheck, preflight, fresh semantic review, exact-tree local CI, and the normal DCO/protected-merge path.
+
+## Phase 17 — Recover rejected initial cursor attempts
+
+BI-CAP-EF2B04BB / WC-AB6CDAB6 extends AC-DE-003/006 for the original routing
+plan TaskRun ending `2C1344595816`. Its five exact-bound reads failed
+`invalid_cursor`; no successful reader or native plan receipt exists.
+
+1. Reproduce the five rejected cursors before implementation; retain their audit rows.
+2. Reuse hydration's historical authority validation to classify bootstrap eligibility. Accept only rejected initial cursors with no successful evidence; preserve denial, mismatch, malformed result, identity/order and continuation refusals.
+3. Reuse the existing reservation, governed line-one read, persisted-row requery and coherent hydration. Failed history never substitutes for a new successful task-owned read.
+4. Verify failed-only hydration, completed exits, successful writers, live proposals, request binding, attempt limits and fresh approval remain closed. Refactor under the passing regression and run graph-linked plus adjacent submission/context/policy tests and types.
+5. Run source/style/docs guards, exact-tree shared CI and independent assessment; publish one DCO-signed protected PR and merge through the queue. Preserve native review infrastructure failures as inconclusive.
+6. Use the coordinated canonical advance and exact served readiness before one supported same-identity replay. Require actual grounded writer, current approval and native receipt before routing implementation admission.
+
+Rollback reverts bootstrap eligibility and its tests together; failed audit rows
+and original review identity are retained. No schema or grant changes are needed.

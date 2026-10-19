@@ -146,7 +146,7 @@ Derived at triage from signals already on the item; overridable with a recorded 
 2. Work type `doc|chore` → `small` unless effortSize says otherwise.
 3. `effortSize` drives `small|medium|large|xlarge` for everything else.
 4. Any of: new Prisma model or enum value, new MCP tool, new route, new agent role, new archetype → at least `large` (this is the `verify-substrate-before-proposing-new` principle turned into a classifier).
-5. Sensitivity keyword regex plus org risk posture → sensitivity floor (exists today).
+5. Sensitivity keyword regex plus org risk posture → sensitivity floor (exists today). *Superseded for the readiness gate by `2026-09-25-shape-raise-reads-the-change-design.md` (BI-243BC956): sensitivity is read from the change; the keyword regex is a labelled fallback only.*
 6. **Unclassified → `large` + `high`.** Never `small`. A shape must be an explicit act.
 7. `xlarge` cannot enter implementation. The only legal transition is decomposition.
 
@@ -169,6 +169,12 @@ Derived at triage from signals already on the item; overridable with a recorded 
 
 Principles encoded in the table:
 
+Implementation correction BI-DA407BD9 restores the xlarge completion row: valid
+decomposition coverage and completed children supply aggregate delivery, while
+the parent's actual outcome reconciliation supplies acceptance. The parent
+still cannot enter implementation, and its own PR merge or deployment cannot
+stand in for unfinished children or unverified outcomes.
+
 - **Delivery evidence is the trunk, not a manifest.** For every shape, "merged SHA reachable from `main` with green required checks" satisfies `DELIVERY_EVIDENCE_REQUIRED`. The current merge-through-gates hatch becomes the primary path and must not require a Workroom: it takes the PR's merge SHA from the item's linked PR when no Workroom exists.
 - **The objective baseline scales with the shape.** Today only a spec approval can mint one, so anything without a spec cannot reconcile. `small` and `medium` mint their baseline from the item's acceptance criteria at triage. `OBJECTIVE_RECONCILIATION_REQUIRED` applies to `large` and `xlarge` only; smaller shapes reconcile through acceptance.
 - **The expedite lane is real, narrow and audited.** `break-fix` skips pre-authorisation and owes a post-implementation review receipt within 48 hours. A missed PIR flips the item to `input-required` and blocks the author's next `break-fix` declaration. The share of `break-fix` among merged work is a Right Now / governance signal; above 20% in a rolling week it is a finding, not a number.
@@ -188,6 +194,12 @@ Per founder direction, the five open questions were put to the kernel (`principl
 | 5 | The 33 pre-taxonomy `done` items? | **Leave them; null shape = pre-taxonomy** | high · 1.70 | Propose, Acknowledge, Reassign; Human-in-the-Loop at Phase Boundaries |
 
 Consequences folded into §4: the `medium` row's independent review is an eligible independent reviewer's acceptance receipt (a coworker qualifies; this is not a board), and the `small` + `high` sensitivity cell carries `large` gates. **Decision 2 is taken at its conservative default: only a human operator with `view_platform` may declare `break-fix`.** The kernel's tie broke that way and it is the safer floor. The founder may widen it to the operations coworker (when an incident record exists) by a one-line amendment to this section; nothing in the plan depends on which way that goes.
+
+Human consent may be executed through a coworker after the operator approves the exact declaration in the existing action inbox (BI-E6E2E704). The governing executor must reserve the matching, unexpired action envelope before the handler runs. The declaration retains the approving person's user identity, the acting coworker and the envelope reference; this does not give the coworker independent declaring authority. Policy-derived approvals and client-supplied envelope references are insufficient. WIP-1, overdue PIR and independent review requirements still apply. A claim's shape marker is not a declaration receipt.
+
+The existing bound-authority envelope stores its binding and human-decision metadata in `argsJson`; execution recovers tool parameters from the recorded pending call and verifies the input fingerprint. Only envelopes with an `approvalBindingFingerprint` and stored binding receive that metadata. Screen-action envelopes instead store executable arguments in `argsJson`, which approval leaves unchanged. The overdue-PIR rule remains per author as specified in §4 and in the preexisting declaration query; this repair does not change that policy.
+
+This repair adds human-decision metadata to the existing action envelope, with no schema migration or grant changes. Existing envelopes without that metadata require a fresh human decision; do not backfill consent. Fresh and upgraded installations use the same execution path. Regression coverage includes exact-call execution, expired/replayed/mismatched and forged approvals, preserved input binding, shape-only claims, WIP-1 and overdue PIR refusals. Canonical-runtime acceptance must repeat an inbox-approved declaration and confirm both identities in its audit receipt before this repair is reported as live-verified.
 
 **Gap surfaced by the ratification itself (BI-218EC195):** every call returned `ledger.recorded: false, reason: profile-not-provisioned` for `dpf-organizational-principles`. The kernel can rule but cannot seal a decision record on this install, so its rulings are advisory until that is fixed. That is a precondition for "WWMD automates approvals", not a nice-to-have: an approval nothing can cite is advice.
 

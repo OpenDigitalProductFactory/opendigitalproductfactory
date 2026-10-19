@@ -13,7 +13,7 @@
 // persistence; that's what this function does.
 //
 // Implementation: thin wrapper. The downstream pipeline
-// (deduplication, projection to InventoryEntity, Neo4j sync) is
+// (deduplication, projection to InventoryEntity, graph sync) is
 // shared with the bootstrap path — only the source of the
 // CollectorOutput differs and the runMeta carries an `edgeNodeId` so
 // the resulting DiscoveryRun row attributes back to the agent.

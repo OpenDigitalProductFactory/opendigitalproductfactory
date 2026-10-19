@@ -4,9 +4,13 @@ import {
   buildBoundedResumePacket,
   formatCheckpointMessage,
   CHECKPOINT_FOLD_BATCH,
+  CHECKPOINT_FOLD_TOKEN_BUDGET,
   CHECKPOINT_SUMMARY_CHAR_CAP,
+  checkpointLoadTake,
   type AdvanceDeps,
+  type AdvanceResult,
   type CheckpointMessage,
+  type FoldOutcome,
   type ThreadCheckpointState,
 } from "./thread-checkpoint";
 
@@ -115,22 +119,38 @@ function makeDeps(over: Partial<AdvanceDeps> & { state: ThreadCheckpointState | 
   deps: AdvanceDeps;
   saved: { value: ThreadCheckpointState | null };
   summarizeSpy: ReturnType<typeof vi.fn>;
+  outcomes: FoldOutcome[];
+  takes: Array<number | undefined>;
 } {
   const saved = { value: null as ThreadCheckpointState | null };
+  const outcomes: FoldOutcome[] = [];
+  const takes: Array<number | undefined> = [];
   const summarizeSpy = vi.fn(async ({ priorSummary, transcript }: { priorSummary: string | null; transcript: string }) =>
     `${priorSummary ? priorSummary + " | " : ""}folded(${transcript.split("\n\n").length})`,
   );
   const deps: AdvanceDeps = {
-    loadState: async () => over.state,
-    loadMessagesAfter: async (_t, after) =>
-      after ? over.messages.filter((m) => m.createdAt.getTime() > after.getTime()) : over.messages,
+    loadState: async () => saved.value ?? over.state,
+    // Mirrors the prisma binding: strictly-newer-than-watermark, oldest-first, bounded by `take`.
+    loadMessagesAfter: async (_t, after, take) => {
+      takes.push(take);
+      const newer = after ? over.messages.filter((m) => m.createdAt.getTime() > after.getTime()) : over.messages;
+      return typeof take === "number" ? newer.slice(0, take) : newer;
+    },
     saveState: async (_t, s) => {
       saved.value = s;
     },
     summarize: summarizeSpy,
+    recordFoldOutcome: async (outcome) => {
+      outcomes.push(outcome);
+    },
     ...over,
   };
-  return { deps, saved, summarizeSpy };
+  return { deps, saved, summarizeSpy, outcomes, takes };
+}
+
+/** Number of "Who: text" entries in a rendered transcript. */
+function transcriptEntries(transcript: string): number {
+  return transcript.split("\n\n").length;
 }
 
 const EMPTY_STATE: ThreadCheckpointState = {
@@ -222,7 +242,182 @@ describe("advanceThreadCheckpoint", () => {
       },
     });
     const r = await advanceThreadCheckpoint("t1", keep, deps);
-    expect(r).toEqual({ advanced: false, reason: "error" });
+    expect(r).toMatchObject({ advanced: false, reason: "error" });
+  });
+});
+
+// BI-FDECBE0A re-opened (design 2026-09-16 §1 D1, §7 Phase 2): the fold that
+// bounds a thread must itself be bounded, and its failures must be visible.
+describe("advanceThreadCheckpoint — bounded fold (D1)", () => {
+  const keep = 8;
+  function thread(count: number, chars = 40): CheckpointMessage[] {
+    return Array.from({ length: count }, (_, i) => ({
+      id: `m${i}`,
+      role: i % 2 ? "assistant" : "user",
+      content: `${i % 2 ? "assistant" : "user"} message ${i} `.padEnd(chars, "x"),
+      createdAt: new Date(1000 + i),
+    }));
+  }
+
+  it("AC-3: loads a bounded page per advance — one batch plus the recency window, never the whole span", async () => {
+    const { deps, takes, summarizeSpy } = makeDeps({ state: EMPTY_STATE, messages: thread(1_100) });
+    const r = await advanceThreadCheckpoint("t1", keep, deps);
+    expect(r.advanced).toBe(true);
+    expect(takes).toEqual([checkpointLoadTake(keep)]);
+    expect(checkpointLoadTake(keep)).toBe(CHECKPOINT_FOLD_BATCH + keep);
+    // The summarizer never sees more than one batch.
+    const [{ transcript }] = summarizeSpy.mock.calls[0]!;
+    expect(transcriptEntries(transcript)).toBe(CHECKPOINT_FOLD_BATCH);
+  });
+
+  it("AC-3: folds at most one batch per advance and moves the watermark to the end of THAT batch", async () => {
+    const messages = thread(1_100);
+    const { deps, saved } = makeDeps({ state: EMPTY_STATE, messages });
+    const r = await advanceThreadCheckpoint("t1", keep, deps);
+    if (!r.advanced) throw new Error(`expected advance, got ${r.reason}`);
+    expect(r.foldedCount).toBe(CHECKPOINT_FOLD_BATCH);
+    expect(r.watermarkAt.getTime()).toBe(messages[CHECKPOINT_FOLD_BATCH - 1]!.createdAt.getTime());
+    expect(saved.value?.compactedTurnCount).toBe(CHECKPOINT_FOLD_BATCH);
+    expect(r.moreEligible).toBe(true);
+  });
+
+  it("AC-1/AC-3: a 1,100-message thread converges across repeated advances instead of failing forever", async () => {
+    const messages = thread(1_100);
+    const { deps, saved, summarizeSpy } = makeDeps({ state: EMPTY_STATE, messages });
+    let last: AdvanceResult | null = null;
+    let advances = 0;
+    let previousWatermark = 0;
+    for (;;) {
+      last = await advanceThreadCheckpoint("t1", keep, deps);
+      if (!last.advanced) break;
+      advances += 1;
+      expect(last.foldedCount).toBeLessThanOrEqual(CHECKPOINT_FOLD_BATCH);
+      expect(last.watermarkAt.getTime()).toBeGreaterThan(previousWatermark);
+      previousWatermark = last.watermarkAt.getTime();
+      if (advances > 1_000) throw new Error("did not converge");
+    }
+    // 1,092 aged-out messages fold in batches of 10; the final 2 wait for more to accumulate.
+    const eligible = 1_100 - keep;
+    const fullBatches = Math.floor(eligible / CHECKPOINT_FOLD_BATCH);
+    expect(last).toEqual({ advanced: false, reason: "not-enough" });
+    expect(advances).toBe(fullBatches);
+    expect(summarizeSpy).toHaveBeenCalledTimes(fullBatches);
+    expect(saved.value?.compactedTurnCount).toBe(fullBatches * CHECKPOINT_FOLD_BATCH);
+    expect(saved.value?.compactedSummary).not.toBeNull();
+    // The prior summary is threaded through every fold (recursive summarization).
+    expect(summarizeSpy.mock.calls.at(-1)![0].priorSummary).not.toBeNull();
+  });
+
+  it("AC-4: bounds summarizer input in estimated tokens — whole messages that fit, fewer than a batch when they are large", async () => {
+    // ~1,000 estimated tokens each: only budget/1,000 whole messages fit in one fold.
+    const perMessageChars = 4_000;
+    const messages = thread(40, perMessageChars);
+    const { deps, summarizeSpy } = makeDeps({ state: EMPTY_STATE, messages });
+    const r = await advanceThreadCheckpoint("t1", keep, deps);
+    if (!r.advanced) throw new Error(`expected advance, got ${r.reason}`);
+    const expectedFit = Math.floor(CHECKPOINT_FOLD_TOKEN_BUDGET / Math.ceil((perMessageChars + 6) / 4));
+    expect(expectedFit).toBeLessThan(CHECKPOINT_FOLD_BATCH);
+    expect(r.foldedCount).toBe(expectedFit);
+    const [{ transcript }] = summarizeSpy.mock.calls[0]!;
+    expect(transcriptEntries(transcript)).toBe(expectedFit);
+    expect(Math.ceil(transcript.length / 4)).toBeLessThanOrEqual(CHECKPOINT_FOLD_TOKEN_BUDGET);
+    expect(r.skipped).toEqual([]);
+  });
+
+  it("AC-4: the observed 17,027-char maximum message fits the budget and is folded whole, not skipped", async () => {
+    const messages = thread(30, 60);
+    messages[0] = { ...messages[0]!, content: "x".repeat(17_027) };
+    const { deps, outcomes } = makeDeps({ state: EMPTY_STATE, messages });
+    const r = await advanceThreadCheckpoint("t1", keep, deps);
+    if (!r.advanced) throw new Error(`expected advance, got ${r.reason}`);
+    expect(r.skipped).toEqual([]);
+    expect(outcomes).toEqual([]);
+    expect(r.foldedCount).toBeGreaterThanOrEqual(1);
+  });
+
+  it("AC-4: a single message larger than the whole budget is SKIPPED with a recorded reason, and the watermark still moves past it", async () => {
+    const oversizedChars = CHECKPOINT_FOLD_TOKEN_BUDGET * 4 + 1_000;
+    const messages = thread(30, 60);
+    messages[0] = { ...messages[0]!, content: "y".repeat(oversizedChars) };
+    const { deps, saved, outcomes, summarizeSpy } = makeDeps({ state: EMPTY_STATE, messages });
+    const r = await advanceThreadCheckpoint("t1", keep, deps);
+    if (!r.advanced) throw new Error(`expected advance, got ${r.reason}`);
+
+    expect(r.skipped).toHaveLength(1);
+    expect(r.skipped[0]).toMatchObject({ messageId: "m0", chars: oversizedChars, budgetTokens: CHECKPOINT_FOLD_TOKEN_BUDGET });
+    expect(r.skipped[0]!.estimatedTokens).toBeGreaterThan(CHECKPOINT_FOLD_TOKEN_BUDGET);
+    // Durable, queryable signal carrying the reason — never a silent stall.
+    expect(outcomes).toEqual([
+      expect.objectContaining({ kind: "message-skipped", threadId: "t1", reason: "exceeds-token-budget", messageId: "m0" }),
+    ]);
+    // The rest of the batch still folds, the omission is announced to the summarizer,
+    // and the watermark passes the skipped message so it can never wedge the thread.
+    expect(summarizeSpy).toHaveBeenCalledTimes(1);
+    const [{ transcript }] = summarizeSpy.mock.calls[0]!;
+    expect(transcript).toContain("omitted");
+    expect(transcript).not.toContain("yyyyyyyy");
+    expect(saved.value?.compactionWatermarkAt!.getTime()).toBeGreaterThan(messages[0]!.createdAt.getTime());
+    expect(saved.value?.compactedTurnCount).toBe(r.foldedCount + 1);
+  });
+
+  it("AC-4: when every eligible message is oversized the watermark still advances and the checkpoint announces the omission", async () => {
+    const oversizedChars = CHECKPOINT_FOLD_TOKEN_BUDGET * 4 + 1_000;
+    const messages = thread(CHECKPOINT_FOLD_BATCH + keep, 60).map((m, i) =>
+      i < CHECKPOINT_FOLD_BATCH ? { ...m, content: "z".repeat(oversizedChars) } : m,
+    );
+    const { deps, saved, outcomes, summarizeSpy } = makeDeps({ state: EMPTY_STATE, messages });
+    const r = await advanceThreadCheckpoint("t1", keep, deps);
+    if (!r.advanced) throw new Error(`expected advance, got ${r.reason}`);
+    expect(r.foldedCount).toBe(0);
+    expect(r.skipped).toHaveLength(CHECKPOINT_FOLD_BATCH);
+    expect(outcomes).toHaveLength(CHECKPOINT_FOLD_BATCH);
+    expect(summarizeSpy).not.toHaveBeenCalled();
+    expect(saved.value?.compactionWatermarkAt!.getTime()).toBe(messages[CHECKPOINT_FOLD_BATCH - 1]!.createdAt.getTime());
+    expect(saved.value?.compactedTurnCount).toBe(CHECKPOINT_FOLD_BATCH);
+    expect(saved.value?.compactedSummary).toContain("omitted");
+  });
+
+  it("AC-5: a summarizer failure is returned WITH its stage and message and recorded durably — the catch stays, the silence goes", async () => {
+    const { deps, outcomes, saved } = makeDeps({
+      state: EMPTY_STATE,
+      messages: thread(30),
+      summarize: async () => {
+        throw new Error("model down");
+      },
+    });
+    const r = await advanceThreadCheckpoint("t1", keep, deps);
+    expect(r).toEqual({ advanced: false, reason: "error", stage: "summarize", message: "model down" });
+    expect(outcomes).toEqual([
+      expect.objectContaining({ kind: "fold-failed", threadId: "t1", stage: "summarize", message: "model down" }),
+    ]);
+    expect(saved.value).toBeNull();
+  });
+
+  it("AC-5: a store failure is attributed to its stage", async () => {
+    const { deps, outcomes } = makeDeps({
+      state: EMPTY_STATE,
+      messages: thread(30),
+      saveState: async () => {
+        throw new Error("db gone");
+      },
+    });
+    const r = await advanceThreadCheckpoint("t1", keep, deps);
+    expect(r).toEqual({ advanced: false, reason: "error", stage: "save", message: "db gone" });
+    expect(outcomes[0]).toMatchObject({ kind: "fold-failed", stage: "save", message: "db gone" });
+  });
+
+  it("AC-5: a failing outcome recorder never breaks the advance or the turn", async () => {
+    const { deps } = makeDeps({
+      state: EMPTY_STATE,
+      messages: thread(30),
+      summarize: async () => {
+        throw new Error("model down");
+      },
+      recordFoldOutcome: async () => {
+        throw new Error("signal store down");
+      },
+    });
+    await expect(advanceThreadCheckpoint("t1", keep, deps)).resolves.toMatchObject({ advanced: false, reason: "error", stage: "summarize" });
   });
 });
 

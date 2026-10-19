@@ -391,6 +391,7 @@ export default async function CustomerMarketingPage() {
               connectedChannels={snapshot.connectedChannels}
               inboundMessages={snapshot.inboundMessages}
               category={snapshot.storefront.category}
+              ownOffer={snapshot.storefront.ownOffer}
             />
           </div>
         </details>

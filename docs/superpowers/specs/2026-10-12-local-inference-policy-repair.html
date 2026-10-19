@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>AI location policy control prototype</title>
+<style>:root{color-scheme:light dark;font:16px system-ui}body{max-width:680px;margin:48px auto;padding:16px}fieldset{border:1px solid;padding:24px;border-radius:8px}label{display:block;padding:12px 0}p{line-height:1.5}button{padding:8px}small{display:block}</style>
+<p>Interactive prototype — no platform settings are changed.</p>
+<fieldset><legend>Where AI may run</legend>
+<p>This applies to DPF coding and coworker tasks.</p>
+<label><input type="radio" name="policy" value="cloud" checked> Local and allowed cloud providers</label>
+<label><input type="radio" name="policy" value="local"> Local only</label>
+<p id="help">DPF chooses from enabled providers within your other routing rules.</p>
+<p>Local only is not required for coding. It blocks cloud providers and stops work when no local model fits.</p>
+<p role="status" id="status">Saved: Local and allowed cloud providers</p></fieldset>
+<label><input id="fail" type="checkbox"> Simulate save failure</label>
+<script>let saved='cloud';document.querySelectorAll('[name=policy]').forEach(r=>r.onchange=async()=>{const next=r.value;document.querySelectorAll('[name=policy]').forEach(x=>{x.disabled=true;x.checked=x.value===saved});document.querySelector('#status').textContent='Saving…';await new Promise(r=>setTimeout(r,800));if(document.querySelector('#fail').checked){document.querySelector('#status').textContent='Could not save. Your previous setting is unchanged.'}else{saved=next;document.querySelector('#status').textContent='Saved: '+(saved==='local'?'Local only':'Local and allowed cloud providers')}document.querySelectorAll('[name=policy]').forEach(x=>{x.disabled=false;x.checked=x.value===saved})})</script></html>

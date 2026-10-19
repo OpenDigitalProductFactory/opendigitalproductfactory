@@ -189,3 +189,105 @@ test("tests, declarations, and imports outside the governed context set are excl
     assert.deepEqual(result.edges, []);
   });
 });
+
+// M11 step 2 PR-3: lib may not import the layers above it.
+const outerLayers = {
+  app: { owner: "web-application", path: "apps/web/app", description: "Routes." },
+  components: { owner: "web-application", path: "apps/web/components", description: "UI components." },
+};
+
+let pinnedTs;
+async function guardTs() {
+  if (!pinnedTs) {
+    const { loadPinnedGuardTypeScript } = await import("./lib/load-pinned-guard-typescript.mjs");
+    pinnedTs = loadPinnedGuardTypeScript();
+  }
+  return pinnedTs;
+}
+
+test("registry validates outer layers", () => {
+  const failures = validateBoundaryRegistry(registry({
+    outerLayers: {
+      domain: { owner: "x", path: "apps/web/domain", description: "Collides." },
+      ui: { owner: "", path: "", description: "" },
+    },
+  })).join("\n");
+  assert.match(failures, /Outer layer domain collides/);
+  assert.match(failures, /Outer layer ui requires an owner/);
+  assert.match(failures, /Outer layer ui requires a description/);
+  assert.match(failures, /Outer layer ui requires a repository-relative path/);
+  assert.deepEqual(validateBoundaryRegistry(registry({ outerLayers })), []);
+});
+
+test("analyzer flags every import kind from lib into app/ or components/", async () => {
+  await withFixture({
+    "apps/web/lib/domain/value.ts": 'import { NAV } from "@/components/admin/admin-nav";\n',
+    "apps/web/lib/domain/type-only.ts": 'import type { Tile } from "@/components/shell/Tiles";\n',
+    "apps/web/lib/domain/dynamic.ts": 'export const load = () => import("@/app/(shell)/page");\n',
+    "apps/web/lib/domain/type-query.ts": 'export type T = import("../../components/twin/types").Twin;\n',
+    "apps/web/lib/ungoverned/reexport.ts": 'export * from "@/components/ui/report-kit";\n',
+  }, async (repoRoot) => {
+    const result = await analyzeApplicationBoundaries({
+      repoRoot,
+      registry: registry({ outerLayers }),
+      ts: await guardTs(),
+    });
+    assert.deepEqual(
+      result.newForbiddenEdges.map(({ key }) => key),
+      [
+        "apps/web/lib/domain/dynamic.ts|@/app/(shell)/page|app",
+        "apps/web/lib/domain/type-only.ts|@/components/shell/Tiles|components",
+        "apps/web/lib/domain/type-query.ts|../../components/twin/types|components",
+        "apps/web/lib/domain/value.ts|@/components/admin/admin-nav|components",
+        "apps/web/lib/ungoverned/reexport.ts|@/components/ui/report-kit|components",
+      ],
+    );
+  });
+});
+
+test("outer-layer pass ignores prompt text, tests, and lib-internal imports", async () => {
+  await withFixture({
+    "apps/web/lib/build/prompts.ts":
+      'export const PROMPT = `- Spinner: import { Spinner } from "@/components/ui/Spinner"`;\n',
+    "apps/web/lib/domain/view.test.ts": 'import { View } from "@/components/View";\n',
+    "apps/web/lib/domain/clean.ts": 'import { nav } from "@/lib/navigation/admin-nav";\nimport { x } from "../app-like/x";\n',
+  }, async (repoRoot) => {
+    const result = await analyzeApplicationBoundaries({
+      repoRoot,
+      registry: registry({ outerLayers }),
+      ts: await guardTs(),
+    });
+    assert.deepEqual(result.outerLayerEdges, []);
+    assert.deepEqual(result.newForbiddenEdges, []);
+  });
+});
+
+test("an owned exception freezes an outer-layer edge and goes stale once it is removed", async () => {
+  const exception = {
+    key: "apps/web/lib/domain/leak.ts|@/components/ui/View|components",
+    owner: "web-application",
+    rationale: "Needs a design decision; remove through BI-EXAMPLE.",
+    reviewBy: "2099-01-01",
+  };
+  await withFixture({
+    "apps/web/lib/domain/leak.ts": 'import { View } from "@/components/ui/View";\n',
+  }, async (repoRoot) => {
+    const result = await analyzeApplicationBoundaries({
+      repoRoot,
+      registry: registry({ outerLayers, exceptions: [exception] }),
+      ts: await guardTs(),
+    });
+    assert.deepEqual(result.newForbiddenEdges, []);
+    assert.deepEqual(result.staleExceptions, []);
+  });
+  await withFixture({
+    "apps/web/lib/domain/leak.ts": "export const View = null;\n",
+  }, async (repoRoot) => {
+    const result = await analyzeApplicationBoundaries({
+      repoRoot,
+      registry: registry({ outerLayers, exceptions: [exception] }),
+      ts: await guardTs(),
+    });
+    assert.deepEqual(result.staleExceptions, [exception.key]);
+  });
+});

@@ -38,6 +38,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Every open item in the stream is read, and anything unreadable is named rather than omitted.",
         },
         evidence: ["assurance-run"],
+        tools: ["list_epics", "list_backlog_items"],
       },
       {
         key: "delegate",
@@ -50,6 +51,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
             + "work with no owner is surfaced as unowned rather than silently retained.",
         },
         evidence: ["assurance-finding"],
+        tools: ["find_coworker", "get_backlog_item"],
       },
       {
         key: "direct",
@@ -64,9 +66,9 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "Every open item in the stream is delegated, surfaced as unowned, or covered by an owner decision." },
-      { kind: "failure", condition: "The stream's work cannot be read — the cycle reports and stops, rather than presenting an empty survey as a quiet stream." },
-      { kind: "budget", condition: "More than 100 items in one cycle — the orchestrator escalates the volume rather than routing a queue nobody can absorb." },
+      { kind: "success", condition: "Every open item in the stream is delegated, surfaced as unowned, or covered by an owner decision.", disposition: "proceed" },
+      { kind: "failure", condition: "The stream's work cannot be read — the cycle reports and stops, rather than presenting an empty survey as a quiet stream.", disposition: "inconclusive" },
+      { kind: "budget", condition: "More than 100 items in one cycle — the orchestrator escalates the volume rather than routing a queue nobody can absorb.", disposition: "awaiting-person" },
     ],
     grants: ["tool:read", "tool:work_route_propose"],
     measures: [
@@ -98,6 +100,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Every open item in the stream is read, and anything unreadable is named rather than omitted.",
         },
         evidence: ["assurance-run"],
+        tools: ["list_epics", "list_backlog_items"],
       },
       {
         key: "delegate",
@@ -110,6 +113,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
             + "work with no owner is surfaced as unowned rather than silently retained.",
         },
         evidence: ["assurance-finding"],
+        tools: ["find_coworker", "get_backlog_item"],
       },
       {
         key: "direct",
@@ -124,9 +128,9 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "Every open item in the stream is delegated, surfaced as unowned, or covered by an owner decision." },
-      { kind: "failure", condition: "The stream's work cannot be read — the cycle reports and stops, rather than presenting an empty survey as a quiet stream." },
-      { kind: "budget", condition: "More than 100 items in one cycle — the orchestrator escalates the volume rather than routing a queue nobody can absorb." },
+      { kind: "success", condition: "Every open item in the stream is delegated, surfaced as unowned, or covered by an owner decision.", disposition: "proceed" },
+      { kind: "failure", condition: "The stream's work cannot be read — the cycle reports and stops, rather than presenting an empty survey as a quiet stream.", disposition: "inconclusive" },
+      { kind: "budget", condition: "More than 100 items in one cycle — the orchestrator escalates the volume rather than routing a queue nobody can absorb.", disposition: "awaiting-person" },
     ],
     grants: ["tool:read", "tool:work_route_propose"],
     measures: [
@@ -158,6 +162,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Every open item in the stream is read, and anything unreadable is named rather than omitted.",
         },
         evidence: ["assurance-run"],
+        tools: ["list_epics", "list_backlog_items"],
       },
       {
         key: "delegate",
@@ -170,6 +175,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
             + "work with no owner is surfaced as unowned rather than silently retained.",
         },
         evidence: ["assurance-finding"],
+        tools: ["find_coworker", "get_backlog_item"],
       },
       {
         key: "direct",
@@ -184,9 +190,9 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "Every open item in the stream is delegated, surfaced as unowned, or covered by an owner decision." },
-      { kind: "failure", condition: "The stream's work cannot be read — the cycle reports and stops, rather than presenting an empty survey as a quiet stream." },
-      { kind: "budget", condition: "More than 100 items in one cycle — the orchestrator escalates the volume rather than routing a queue nobody can absorb." },
+      { kind: "success", condition: "Every open item in the stream is delegated, surfaced as unowned, or covered by an owner decision.", disposition: "proceed" },
+      { kind: "failure", condition: "The stream's work cannot be read — the cycle reports and stops, rather than presenting an empty survey as a quiet stream.", disposition: "inconclusive" },
+      { kind: "budget", condition: "More than 100 items in one cycle — the orchestrator escalates the volume rather than routing a queue nobody can absorb.", disposition: "awaiting-person" },
     ],
     grants: ["tool:read", "tool:work_route_propose"],
     measures: [
@@ -218,6 +224,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Every open item in the stream is read, and anything unreadable is named rather than omitted.",
         },
         evidence: ["assurance-run"],
+        tools: ["list_epics", "list_backlog_items"],
       },
       {
         key: "delegate",
@@ -230,6 +237,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
             + "work with no owner is surfaced as unowned rather than silently retained.",
         },
         evidence: ["assurance-finding"],
+        tools: ["find_coworker", "get_backlog_item"],
       },
       {
         key: "direct",
@@ -244,9 +252,9 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "Every open item in the stream is delegated, surfaced as unowned, or covered by an owner decision." },
-      { kind: "failure", condition: "The stream's work cannot be read — the cycle reports and stops, rather than presenting an empty survey as a quiet stream." },
-      { kind: "budget", condition: "More than 100 items in one cycle — the orchestrator escalates the volume rather than routing a queue nobody can absorb." },
+      { kind: "success", condition: "Every open item in the stream is delegated, surfaced as unowned, or covered by an owner decision.", disposition: "proceed" },
+      { kind: "failure", condition: "The stream's work cannot be read — the cycle reports and stops, rather than presenting an empty survey as a quiet stream.", disposition: "inconclusive" },
+      { kind: "budget", condition: "More than 100 items in one cycle — the orchestrator escalates the volume rather than routing a queue nobody can absorb.", disposition: "awaiting-person" },
     ],
     grants: ["tool:read", "tool:work_route_propose"],
     measures: [
@@ -278,6 +286,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Every open item in the stream is read, and anything unreadable is named rather than omitted.",
         },
         evidence: ["assurance-run"],
+        tools: ["list_epics", "list_backlog_items"],
       },
       {
         key: "delegate",
@@ -290,6 +299,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
             + "work with no owner is surfaced as unowned rather than silently retained.",
         },
         evidence: ["assurance-finding"],
+        tools: ["find_coworker", "get_backlog_item"],
       },
       {
         key: "direct",
@@ -304,9 +314,9 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "Every open item in the stream is delegated, surfaced as unowned, or covered by an owner decision." },
-      { kind: "failure", condition: "The stream's work cannot be read — the cycle reports and stops, rather than presenting an empty survey as a quiet stream." },
-      { kind: "budget", condition: "More than 100 items in one cycle — the orchestrator escalates the volume rather than routing a queue nobody can absorb." },
+      { kind: "success", condition: "Every open item in the stream is delegated, surfaced as unowned, or covered by an owner decision.", disposition: "proceed" },
+      { kind: "failure", condition: "The stream's work cannot be read — the cycle reports and stops, rather than presenting an empty survey as a quiet stream.", disposition: "inconclusive" },
+      { kind: "budget", condition: "More than 100 items in one cycle — the orchestrator escalates the volume rather than routing a queue nobody can absorb.", disposition: "awaiting-person" },
     ],
     grants: ["tool:read", "tool:work_route_propose"],
     measures: [
@@ -338,6 +348,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Every open item in the stream is read, and anything unreadable is named rather than omitted.",
         },
         evidence: ["assurance-run"],
+        tools: ["list_epics", "list_backlog_items"],
       },
       {
         key: "delegate",
@@ -350,6 +361,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
             + "work with no owner is surfaced as unowned rather than silently retained.",
         },
         evidence: ["assurance-finding"],
+        tools: ["find_coworker", "get_backlog_item"],
       },
       {
         key: "direct",
@@ -364,9 +376,9 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "Every open item in the stream is delegated, surfaced as unowned, or covered by an owner decision." },
-      { kind: "failure", condition: "The stream's work cannot be read — the cycle reports and stops, rather than presenting an empty survey as a quiet stream." },
-      { kind: "budget", condition: "More than 100 items in one cycle — the orchestrator escalates the volume rather than routing a queue nobody can absorb." },
+      { kind: "success", condition: "Every open item in the stream is delegated, surfaced as unowned, or covered by an owner decision.", disposition: "proceed" },
+      { kind: "failure", condition: "The stream's work cannot be read — the cycle reports and stops, rather than presenting an empty survey as a quiet stream.", disposition: "inconclusive" },
+      { kind: "budget", condition: "More than 100 items in one cycle — the orchestrator escalates the volume rather than routing a queue nobody can absorb.", disposition: "awaiting-person" },
     ],
     grants: ["tool:read", "tool:work_route_propose"],
     measures: [
@@ -398,6 +410,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Every open item in the stream is read, and anything unreadable is named rather than omitted.",
         },
         evidence: ["assurance-run"],
+        tools: ["list_epics", "list_backlog_items"],
       },
       {
         key: "delegate",
@@ -410,6 +423,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
             + "work with no owner is surfaced as unowned rather than silently retained.",
         },
         evidence: ["assurance-finding"],
+        tools: ["find_coworker", "get_backlog_item"],
       },
       {
         key: "direct",
@@ -424,9 +438,9 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "Every open item in the stream is delegated, surfaced as unowned, or covered by an owner decision." },
-      { kind: "failure", condition: "The stream's work cannot be read — the cycle reports and stops, rather than presenting an empty survey as a quiet stream." },
-      { kind: "budget", condition: "More than 100 items in one cycle — the orchestrator escalates the volume rather than routing a queue nobody can absorb." },
+      { kind: "success", condition: "Every open item in the stream is delegated, surfaced as unowned, or covered by an owner decision.", disposition: "proceed" },
+      { kind: "failure", condition: "The stream's work cannot be read — the cycle reports and stops, rather than presenting an empty survey as a quiet stream.", disposition: "inconclusive" },
+      { kind: "budget", condition: "More than 100 items in one cycle — the orchestrator escalates the volume rather than routing a queue nobody can absorb.", disposition: "awaiting-person" },
     ],
     grants: ["tool:read", "tool:work_route_propose"],
     measures: [
@@ -458,6 +472,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Every open item in the stream is read, and anything unreadable is named rather than omitted.",
         },
         evidence: ["assurance-run"],
+        tools: ["list_epics", "list_backlog_items"],
       },
       {
         key: "delegate",
@@ -470,6 +485,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
             + "work with no owner is surfaced as unowned rather than silently retained.",
         },
         evidence: ["assurance-finding"],
+        tools: ["find_coworker", "get_backlog_item"],
       },
       {
         key: "direct",
@@ -484,9 +500,9 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "Every open item in the stream is delegated, surfaced as unowned, or covered by an owner decision." },
-      { kind: "failure", condition: "The stream's work cannot be read — the cycle reports and stops, rather than presenting an empty survey as a quiet stream." },
-      { kind: "budget", condition: "More than 100 items in one cycle — the orchestrator escalates the volume rather than routing a queue nobody can absorb." },
+      { kind: "success", condition: "Every open item in the stream is delegated, surfaced as unowned, or covered by an owner decision.", disposition: "proceed" },
+      { kind: "failure", condition: "The stream's work cannot be read — the cycle reports and stops, rather than presenting an empty survey as a quiet stream.", disposition: "inconclusive" },
+      { kind: "budget", condition: "More than 100 items in one cycle — the orchestrator escalates the volume rather than routing a queue nobody can absorb.", disposition: "awaiting-person" },
     ],
     grants: ["tool:read", "tool:work_route_propose"],
     measures: [
@@ -519,6 +535,7 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
             + "measurable from them is named as unknown with what would have to be recorded.",
         },
         evidence: ["assurance-run"],
+        tools: ["get_finance_period_summary"],
       },
       {
         key: "act",
@@ -533,14 +550,106 @@ export const ORCHESTRATION_SHAPES: Record<string, WorkShapeDefinition> = {
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "The position is reported with knowns and unknowns distinguished." },
-      { kind: "failure", condition: "Finance records cannot be read — it reports that, and never presents an absent number as zero." },
-      { kind: "budget", condition: "More than 50 findings in one run." },
+      { kind: "success", condition: "The position is reported with knowns and unknowns distinguished.", disposition: "proceed" },
+      { kind: "failure", condition: "Finance records cannot be read — it reports that, and never presents an absent number as zero.", disposition: "inconclusive" },
+      { kind: "budget", condition: "More than 50 findings in one run.", disposition: "awaiting-person" },
     ],
     grants: ["tool:read"],
     measures: [{ key: "unknowns-named", description: "Figures reported as unknown with the record that would resolve them." }],
     budgets: [{ kind: "findings-per-run", limit: 50, unit: "findings" }],
     reviewPoint: { everyDays: 30, description: "Monthly." },
     collaborationShape: "approval-sign-off",
+  },
+
+  // ── COO (AGT-ORCH-000) — the cross-cutting orchestrator ───────────────────
+  //
+  // The eight shapes above are one per IT4IT value stream. This is the one that
+  // sits ACROSS them. Grants: portfolio_read, registry_read, backlog_read,
+  // backlog_write, agent_control_read, email_config, thread_write.
+  //
+  // Note what is absent: agent_control_read is READ. The COO can see what the
+  // workforce is doing and can open work (backlog_write, thread_write); it
+  // cannot start, stop or re-staff a coworker. So the shape is see the whole →
+  // name what is not moving → the owner decides what changes. An orchestrator
+  // that could also reassign would be deciding the organisation's priorities
+  // rather than surfacing them.
+  "cross-cutting-portfolio-standup": {
+    key: "cross-cutting-portfolio-standup",
+    version: "1.0.0",
+    title: "Cross-cutting portfolio standup",
+    description:
+      "A standing read across every value stream: what is moving, what is stalled, and what is "
+      + "unowned — reported to the owner with unknowns stated as unknown. It opens work; it does "
+      + "not reprioritise the business or restaff anyone.",
+    triggers: ["cadence"],
+    stages: [
+      {
+        key: "read-across",
+        title: "Read across the streams",
+        accountablePrincipalRef: "agent:coo",
+        advance: {
+          kind: "status-change",
+          condition:
+            "Portfolio and backlog state is read across streams, and anything not measurable from "
+            + "the record is named as unknown rather than estimated.",
+        },
+        evidence: ["assurance-run"],
+        tools: ["list_epics", "list_backlog_items", "search_portfolio_context"],
+      },
+      {
+        key: "name-the-stalls",
+        title: "Name what is not moving, and what is unowned",
+        accountablePrincipalRef: "agent:coo",
+        advance: {
+          kind: "status-change",
+          condition:
+            "Each stall is named with how long it has been stalled and who, if anyone, is "
+            + "accountable. 'Unowned' is a finding, not a blank.",
+        },
+        evidence: ["backlog-items"],
+        tools: ["list_backlog_items", "query_backlog"],
+      },
+      {
+        key: "owner-directs",
+        title: "Decide what changes",
+        // agent_control_read is read-only by design: seeing the workforce is
+        // not authority over it. Reprioritising and restaffing are the owner's.
+        accountablePrincipalRef: "role:owner",
+        advance: {
+          kind: "governed-decision",
+          condition:
+            "The owner decides what is reprioritised, restaffed, or accepted as stalled for now. "
+            + "The COO records the decision; it does not make it.",
+          decisionScope: "portfolio-direction",
+        },
+        evidence: ["decision-record"],
+      },
+    ],
+    stopConditions: [
+      { kind: "success", condition: "Every stall and unowned item has an owner decision, including a decision to accept it.", disposition: "proceed" },
+      {
+        kind: "failure",
+        condition:
+          "Portfolio or backlog state cannot be read. The standup reports that and never presents "
+          + "an unread stream as a healthy one.", disposition: "inconclusive" },
+      {
+        kind: "budget",
+        condition:
+          "More than 60 stalls in one run — stop and escalate. A standup that hands the owner "
+          + "everything has told them nothing.", disposition: "awaiting-person" },
+    ],
+    grants: ["tool:portfolio_read", "tool:registry_read", "tool:backlog_read", "tool:backlog_write", "tool:agent_control_read"],
+    measures: [
+      { key: "stalls-resolved", description: "Stalls that moved after being named." },
+      { key: "unowned-closed", description: "Items that gained an accountable owner." },
+    ],
+    budgets: [{ kind: "findings-per-run", limit: 60, unit: "stalls" }],
+    reviewPoint: {
+      everyDays: 30,
+      description:
+        "Monthly. A standup that never names a stall is not evidence of health — it is the first "
+        + "thing to check when the portfolio looks quiet.",
+    },
+    collaborationShape: "specialist-alignment",
   },
 };

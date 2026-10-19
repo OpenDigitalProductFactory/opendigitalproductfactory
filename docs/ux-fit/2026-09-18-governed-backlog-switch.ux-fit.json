@@ -1,0 +1,21 @@
+{
+  "version": "1",
+  "decidedOption": "platform-development-settings-card",
+  "decisionInteractionId": "DI-802CD325A4A4",
+  "scope": { "files": ["apps/web/components/admin/GovernedBacklogSettings.tsx"] },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "decisionInteractionId": "DI-802CD325A4A4",
+    "consideredOptions": [
+      "platform-development-settings-card",
+      "build-studio-header-toggle",
+      "ops-self-upgrade-page"
+    ]
+  },
+  "notes": {
+    "decision": "Fits with guardrails. The governed backlog switch is a settings card on Admin > Platform Development, beside the contribution policy that persists to the same PlatformDevConfig singleton. One toggle and one Save; the daily cap and the Living Playbook explanation sit under a disclosure. No new route or navigation.",
+    "persona": "The platform operator turns Build Studio's governed backlog lane on so triaged items start without a click per draft, sets how many the daily sweep tees up, and sees in one place which host switch governs phase advancement.",
+    "reuse": "The existing Platform Development page and its server-action pattern (savePlatformDevConfig), the ui/Button primitive for the primary action, theme tokens only.",
+    "sourceTruth": "PlatformDevConfig.governedBacklogEnabled and backlogTeeUpDailyCap, read by promoteBacklogItemToBuildDraft, the daily tee-up sweep, capacity drain and the build actions; DPF_BUILD_AUTONOMOUS_PLAYBOOK_MODE read by getAutonomousPlaybookMode."
+  }
+}

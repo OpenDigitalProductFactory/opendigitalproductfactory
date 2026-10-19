@@ -3,8 +3,9 @@ import { createHash, randomBytes } from "node:crypto";
 import { constants } from "node:fs";
 import { access, mkdir, mkdtemp, open, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { basename, isAbsolute, join, relative, resolve } from "node:path";
-import { promisify } from "node:util";
+import { isAbsolute, join, relative, resolve } from "node:path";
+import { parseArgs as utilParseArgs, promisify } from "node:util";
+import { scriptArgv } from "./lib/script-argv.mjs";
 import { pathToFileURL } from "node:url";
 import { signTransitionPayload } from "./lib/transition-signing.mjs";
 
@@ -14,13 +15,32 @@ const DIGEST = /^sha256:[0-9a-f]{64}$/i;
 const PROJECT = /^dpf-n1-[a-z0-9][a-z0-9_-]*$/i;
 export const PROMOTER_READINESS_PROTOCOL_FLOOR_SHA = "21969d012ad8ab382d47a2c59ffc955530796bd2";
 
+// BI-DC04048A: the promoter's live output carries `step=<name>` lines. Remember
+// the last one so a child that is killed — by the harness's own timeout or by
+// anything else — is reported as "died during <step>" instead of a bare
+// signal code with nothing between the last line and the kill.
+export function lastStepIn(text, previous = null) {
+  const matches = String(text).match(/(?:^|\s)step=([^\s]+)/g);
+  if (!matches) return previous;
+  return matches[matches.length - 1].replace(/^\s*step=/, "");
+}
+
 export function execFileWithLiveOutput(command, args, options = {}, launch = execFileCallback, sinks = process) {
   return new Promise((resolvePromise, rejectPromise) => {
+    let lastStep = null;
     const child = launch(command, args, options, (error, stdout, stderr) => {
-      if (error) rejectPromise(Object.assign(error, { stdout, stderr }));
-      else resolvePromise({ stdout, stderr });
+      if (error) {
+        const where = lastStep ? ` (last promoter step seen: ${lastStep})` : "";
+        if (error.killed || error.signal) {
+          const bound = options.timeout ? ` after the harness's ${options.timeout}ms bound` : "";
+          error.message = `${command} was stopped by ${error.signal ?? "a signal"}${bound}${where}: ${error.message}`;
+        } else if (where) {
+          error.message = `${error.message}${where}`;
+        }
+        rejectPromise(Object.assign(error, { stdout, stderr, lastStep }));
+      } else resolvePromise({ stdout, stderr, lastStep });
     });
-    child.stdout?.on("data", (chunk) => sinks.stdout.write(chunk));
+    child.stdout?.on("data", (chunk) => { lastStep = lastStepIn(chunk, lastStep); sinks.stdout.write(chunk); });
     child.stderr?.on("data", (chunk) => sinks.stderr.write(chunk));
   });
 }
@@ -220,6 +240,8 @@ async function ensureNMinusOneHostEnvironment(workspace, project) {
   if (workspace.harnessEnvironment && workspace.harnessEnvFile) return workspace.harnessEnvironment;
   const authSecret = `dpf_n1_${randomBytes(32).toString("base64url")}`;
   const credentialKey = randomBytes(32).toString("hex");
+  const inngestSigningKey = randomBytes(32).toString("hex");
+  const inngestEventKey = randomBytes(32).toString("hex");
   const env = {
     ...process.env,
     COMPOSE_PROJECT_NAME: project,
@@ -234,6 +256,8 @@ async function ensureNMinusOneHostEnvironment(workspace, project) {
     DPF_N1_HARNESS: "1",
     AUTH_SECRET: authSecret,
     CREDENTIAL_ENCRYPTION_KEY: credentialKey,
+    INNGEST_SIGNING_KEY: inngestSigningKey,
+    INNGEST_EVENT_KEY: inngestEventKey,
   };
   const envFile = join(workspace.root, "n-minus-one.env");
   await writeFile(envFile, [
@@ -245,11 +269,30 @@ async function ensureNMinusOneHostEnvironment(workspace, project) {
     "DPF_N1_HARNESS=1",
     `AUTH_SECRET=${authSecret}`,
     `CREDENTIAL_ENCRYPTION_KEY=${credentialKey}`,
+    `INNGEST_SIGNING_KEY=${inngestSigningKey}`,
+    `INNGEST_EVENT_KEY=${inngestEventKey}`,
     "",
   ].join("\n"), { mode: 0o600 });
   workspace.harnessEnvironment = env;
   workspace.harnessEnvFile = envFile;
   return env;
+}
+
+/**
+ * The Compose labels that make the N-1 health sentinel a first-class `portal`
+ * service container of `project`, so the promoter's `compose up --force-recreate
+ * portal` replaces it instead of colliding with its name (BI-BC7AE37B).
+ */
+export function sentinelComposeLabels(project) {
+  return [
+    "--label", `com.docker.compose.project=${project}`,
+    "--label", "com.docker.compose.service=portal",
+    "--label", "com.docker.compose.container-number=1",
+    "--label", "com.docker.compose.oneoff=False",
+    // Any value Compose will never compute for the real service config: it only
+    // has to DIFFER so the candidate is recreated, never adopted as current.
+    "--label", "com.docker.compose.config-hash=dpf-n1-sentinel",
+  ];
 }
 
 export async function prepareNMinusOneBaseline({ workspace, project, portalUrl }, deps = {}) {
@@ -270,9 +313,20 @@ export async function prepareNMinusOneBaseline({ workspace, project, portalUrl }
   // evidence and can exceed bounded hosted-runner leases. A Compose-labelled
   // health sentinel occupies the exact portal identity until the governed
   // promoter replaces it with the real candidate image.
+  //
+  // BI-BC7AE37B: for Compose to REPLACE the sentinel rather than try to create a
+  // second container of the same name, it must recognise it as this project's
+  // `portal` service container. Compose selects service containers by
+  // project + service + `oneoff=False`, and decides recreate-vs-keep from
+  // `config-hash`; without those two labels `up --force-recreate portal`
+  // filtered the sentinel out, tried to create `<project>-portal-1` afresh and
+  // the daemon refused with a name Conflict — every acceptance step after the
+  // baseline was skipped. Measured on Compose v5.5.1: project+service+number
+  // alone conflicts; adding `oneoff=False` alone still conflicts; adding
+  // `oneoff=False` + `config-hash` makes Compose adopt the sentinel and
+  // recreate it with the candidate image. `version` is not required.
   await run("docker", ["run", "-d", "--name", `${project}-portal-1`, "--network", `${project}_default`,
-    "--label", `com.docker.compose.project=${project}`, "--label", "com.docker.compose.service=portal",
-    "--label", "com.docker.compose.container-number=1", "-p", "3000:3000", "node:24-alpine", "node", "-e",
+    ...sentinelComposeLabels(project), "-p", "3000:3000", "node:24-alpine", "node", "-e",
     "require('http').createServer((_,r)=>{r.writeHead(200);r.end('ok')}).listen(3000)"], { cwd: workspace.source, env });
   let lastStatus = 0;
   for (let attempt = 0; attempt < 90; attempt += 1) {
@@ -397,7 +451,10 @@ function createRuntimeDependencies(options) {
       };
       const signature = signTransitionPayload(envelope, secret);
       const args = buildPromoterPromotionDockerArgs({ candidateDigest, source: candidateSource, state: workspace.state, backups: workspace.backups, secret: transitionSecret, composeEnvFile: workspace.harnessEnvFile, targetSha: options.candidateSha, project: options.project, envelope, signature });
-      const result = await execFileWithLiveOutput("docker", args, { cwd: candidateSource, maxBuffer: 20 * 1024 * 1024 });
+      // BI-DC04048A: apply the bound the CLI already parses. A promoter that
+      // hangs is stopped by the harness with the last step named, instead of
+      // by whatever reaps the runner later with no diagnosis at all.
+      const result = await execFileWithLiveOutput("docker", args, { cwd: candidateSource, maxBuffer: 20 * 1024 * 1024, timeout: options.timeoutMs, killSignal: "SIGTERM" });
       promotionCompleted = { envelope, signature, stdout: result.stdout, stderr: result.stderr };
       return { requested: true, runId: envelope.runId };
     },
@@ -436,29 +493,38 @@ function createRuntimeDependencies(options) {
 }
 
 function parseArgs(argv) {
-  const values = {};
-  for (let index = 0; index < argv.length; index += 1) {
-    const key = argv[index];
-    if (key === "--inject-readiness-failure" || key === "--bridge-mode") values[key.slice(2).replaceAll("-", "_")] = true;
-    else if (key.startsWith("--")) values[key.slice(2).replaceAll("-", "_")] = argv[++index];
-  }
-  const rawPrNumber = values.pr_number ?? process.env.GITHUB_EVENT_PULL_REQUEST_NUMBER ?? "";
+  // strict: false keeps the old tolerance: unknown flags are ignored.
+  const { values } = utilParseArgs({
+    args: scriptArgv(argv),
+    strict: false,
+    allowPositionals: true,
+    options: {
+      ...Object.fromEntries([
+        "base-sha", "candidate-sha", "repository", "project", "evidence-dir", "pr-number", "event-kind",
+        "candidate-ref", "required-checks", "timeout-ms", "portal-url", "cleanup-project",
+      ].map((name) => [name, { type: "string" }])),
+      "inject-readiness-failure": { type: "boolean" },
+      "bridge-mode": { type: "boolean" },
+    },
+  });
+  const text = (name) => (typeof values[name] === "string" ? values[name] : undefined);
+  const rawPrNumber = text("pr-number") ?? process.env.GITHUB_EVENT_PULL_REQUEST_NUMBER ?? "";
   const parsedPrNumber = /^\d+$/.test(rawPrNumber) ? Number(rawPrNumber) : 0;
   return {
-    baseSha: values.base_sha, candidateSha: values.candidate_sha, repository: values.repository,
-    project: values.project, evidenceDir: values.evidence_dir, prNumber: parsedPrNumber,
-    eventKind: values.event_kind, candidateRef: values.candidate_ref,
-    requiredChecks: (values.required_checks ?? "Production Build,Unit Tests").split(",").map((v) => v.trim()),
-    injectReadinessFailure: Boolean(values.inject_readiness_failure), bridgeMode: Boolean(values.bridge_mode),
-    timeoutMs: Number(values.timeout_ms ?? 1_200_000), portalUrl: values.portal_url,
+    baseSha: text("base-sha"), candidateSha: text("candidate-sha"), repository: text("repository"),
+    project: text("project"), evidenceDir: text("evidence-dir"), prNumber: parsedPrNumber,
+    eventKind: text("event-kind"), candidateRef: text("candidate-ref"),
+    requiredChecks: (text("required-checks") ?? "Production Build,Unit Tests").split(",").map((v) => v.trim()),
+    injectReadinessFailure: Boolean(values["inject-readiness-failure"]), bridgeMode: Boolean(values["bridge-mode"]),
+    timeoutMs: Number(text("timeout-ms") ?? 1_200_000), portalUrl: text("portal-url"),
+    cleanupRequested: values["cleanup-project"] !== undefined, cleanupProject: text("cleanup-project"),
   };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const options = parseArgs(process.argv.slice(2));
-  const cleanupIndex = process.argv.indexOf("--cleanup-project");
-  if (cleanupIndex !== -1) {
-    await cleanupProject(process.argv[cleanupIndex + 1]);
+  if (options.cleanupRequested) {
+    await cleanupProject(options.cleanupProject);
     process.stdout.write("safe cleanup complete\n");
     process.exit(0);
   }

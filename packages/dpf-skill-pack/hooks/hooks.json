@@ -21,6 +21,11 @@
           },
           {
             "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/raw-tool-guard.mjs\"",
+            "statusMessage": "Redirect raw tsc, root-level vitest and npx to the checked-in routines"
+          },
+          {
+            "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/portal-image-guard.mjs\"",
             "statusMessage": "Keep portal image changes on the verified release path"
           },
@@ -108,13 +113,52 @@
         ]
       }
     ],
+    "PostToolUse": [
+      {
+        "matcher": "^mcp__.+__(adopt_worktree|heartbeat_workroom|claim_workroom_scope|claim_backlog_item_for_work|create_workroom)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/workroom-claim-refresh.mjs\"",
+            "statusMessage": "Cache the renewed Workroom claim for this worktree"
+          }
+        ]
+      }
+    ],
     "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/install-folder-contract.mjs\"",
+            "statusMessage": "Load the source contract when the session opens in the install folder"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/uncommitted-work-guard.mjs\" --snapshot",
+            "statusMessage": "Note work that was already uncommitted when the session started"
+          }
+        ]
+      },
       {
         "hooks": [
           {
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/process-spine-health-check.mjs\" --hook",
             "statusMessage": "Check required DPF skills are installed and exposed"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/pretooluse-guard-selftest.mjs\"",
+            "statusMessage": "Check the safety guards can block in this session"
           }
         ]
       },
@@ -160,6 +204,15 @@
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/worktree-readiness-banner.mjs\"",
             "statusMessage": "Report which checks this worktree is ready to run"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/toolchain-freshness.mjs\"",
+            "statusMessage": "Check the installed DPF tools match the portal's release"
           }
         ]
       }

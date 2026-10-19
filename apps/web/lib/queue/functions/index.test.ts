@@ -10,6 +10,7 @@ import { issueReportTriage } from "./issue-report-triage";
 import { routeWorkItem } from "./route-work-item";
 import { SCHEDULED_JOB_CATALOG } from "@/lib/operate/scheduled-jobs/catalog";
 import { asyncOperationTaskHub } from "./async-operation-task-hub";
+import { buildResumeAfterUpgradePause } from "./build-resume-after-upgrade-pause";
 
 describe("getInngestFunctionsForRuntime", () => {
   it("omits scheduled cron functions unless explicitly enabled", () => {
@@ -23,6 +24,12 @@ describe("getInngestFunctionsForRuntime", () => {
     expect(eventFunctions).toContain(asyncOperationTaskHub);
     expect(scheduledFunctions).not.toContain(asyncOperationTaskHub);
     expect(getInngestFunctionsForRuntime({})).toContain(asyncOperationTaskHub);
+  });
+
+  // BI-E9DAA23F: an event function, so it runs even when crons are off.
+  it("always registers the resume-after-upgrade-pause subscriber as an event function", () => {
+    expect(eventFunctions).toContain(buildResumeAfterUpgradePause);
+    expect(getInngestFunctionsForRuntime({})).toContain(buildResumeAfterUpgradePause);
   });
 
   it("includes scheduled cron functions when explicitly enabled", () => {
@@ -74,5 +81,15 @@ describe("every-minute cron allowlist (BI-915C40C6)", () => {
   it("keeps the taskrun-watchdog on the every-minute liveness cadence", () => {
     const watchdog = SCHEDULED_JOB_CATALOG.find((e) => e.inngestId === "ops/taskrun-watchdog");
     expect(watchdog?.cron).toBe("* * * * *");
+  });
+});
+
+describe("document rendition functions (BI-9D43CBEF)", () => {
+  it("register as event functions, so every install runs them without the scheduled flag", () => {
+    const ids = getInngestFunctionsForRuntime({}).map((fn) => (fn as { id: () => string }).id());
+    expect(ids).toContain("documents/rendition-generate");
+    expect(ids).toContain("documents/rendition-backfill");
+    const scheduledIds = scheduledFunctions.map((fn) => (fn as { id: () => string }).id());
+    expect(scheduledIds).not.toContain("documents/rendition-generate");
   });
 });

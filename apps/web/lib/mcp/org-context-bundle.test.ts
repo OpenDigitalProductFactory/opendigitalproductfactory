@@ -60,7 +60,7 @@ describe("buildOrgContextBundle (BI-HDLEMP-02)", () => {
     // not the generic profile).
     expect(bundle!.businessProfile.howWeDecide).toMatch(/clinical|patient/i);
     // All five stance vectors are present.
-    expect(Object.keys(bundle!.stanceVectors)).toHaveLength(5);
+    expect(Object.keys(bundle!.stanceVectors)).toHaveLength(9);
   });
 
   it("falls back industry to BusinessContext.industry when no archetype category", async () => {
@@ -115,6 +115,27 @@ describe("formatOrgContextInstructions (BI-HDLEMP-02)", () => {
 
   it("returns exactly the base string when the bundle is null", () => {
     expect(formatOrgContextInstructions(BASE, null)).toBe(BASE);
+  });
+
+  it("bounds long organization fields without truncating authority routes", async () => {
+    const bundle = (await bundleFor())!;
+    const long = "x".repeat(10_000);
+    const out = formatOrgContextInstructions(BASE, {
+      ...bundle, organizationName: long, mission: long, archetypeName: long, industry: long,
+      locale: { locale: long, currency: long, countryCode: long },
+    });
+    expect(out.length - BASE.length).toBeLessThanOrEqual(1000);
+    expect(out).toContain("evaluate_profession_decision");
+    expect(out).toContain("Cross-scope doctrine is advisory");
+  });
+
+  it("keeps the connection briefing below 1000 characters without losing decision routes", async () => {
+    const out = formatOrgContextInstructions(BASE, await bundleFor());
+    expect(out.length - BASE.length).toBeLessThanOrEqual(1000);
+    expect(out).toContain("evaluate_org_business_decision");
+    expect(out).toContain("evaluate_profession_decision");
+    expect(out).toContain("principle_decide");
+    expect(out).not.toContain("Standing stances");
   });
 
   it("renders mission, archetype, locale, doctrine, and the decision-routing directive", async () => {

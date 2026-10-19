@@ -388,6 +388,22 @@ Action receipts and operational surveillance feed subsequent qualification and a
 The standards family therefore connects pre-deployment evaluation to runtime behavior and
 post-deployment revalidation rather than treating testing as a one-time gate.
 
+### 10.7 Approval Is a Decision, Not a Keystroke
+
+The working-draft [Gated Permissions Process (`GPP`)](gated-permissions-process.md) binds each
+consequential capability class to a gate in a named owning authority scope, attached to a
+work-shape stage. External work on agent authorization covers parts of this:
+
+- MCP OAuth scopes and tool annotations work at the server or scope level.
+- Cedar- and OPA-based gateways decide principal × tool × context per call.
+- Identity platforms record an accountable sponsor.
+
+None of these records which authority may decide that a class of action is admissible for a given
+piece of work. `GPP` supplies that binding and composes the others beneath it. It can compile to a
+policy engine, and it is carried by the protocol's own authorization. The evidence base, nearest
+prior work (including arXiv 2606.03518 and ITIL change enablement) and its limits are recorded in
+the informative [market and thought-leadership landscape](agent-governance-market-landscape-2026.md).
+
 ## 11. Standards-Contribution Profile
 
 A contribution derived from this family should contain:
@@ -454,6 +470,31 @@ The following questions require multistakeholder resolution:
 
 These questions are intentionally not resolved by unilateral DPF implementation. They identify
 where standards-body consensus is required.
+
+## MBSE Composition Mapping
+
+This informative working-draft mapping supports EP-B932453F. It identifies useful
+views of the same governed system; it does not require every implementation to
+deploy every language. The [composition design](../superpowers/specs/2026-09-27-principle-directed-agent-composition-design.md)
+binds these views to TAK/GAID/JSI owners and proposed assessment cases.
+
+| External source | Proposed mapping | Semantic boundary to retain |
+|---|---|---|
+| [SysML 2.0](https://www.omg.org/spec/SysML/2.0) | Requirements, system parts, behaviors and verification relationships | A model link is not evidence of deployed enforcement; exchange profiles identify the supported language subset. |
+| [BPMN 2.0.2](https://www.omg.org/spec/BPMN/2.0.2) | Planned process stages, events and coordination | Process progression cannot stand in for authorization or make an external effect transactional. |
+| [CMMN 1.1](https://www.omg.org/spec/CMMN/1.1) | Event-driven case work and discretionary activities | Discretion remains bounded by the declared authority, data and qualification envelope. |
+| [DMN 1.5](https://www.omg.org/spec/DMN/1.5) | Decision dependencies and policy inputs/results | Distinguish deterministic policy from uncertain judgment; neither a decision table nor a model recommendation creates a grant. |
+| [SACM 2.3](https://www.omg.org/spec/SACM/2.3) | Claims, arguments and supporting evidence | A populated claim/evidence graph does not itself establish the argument's validity or independent assessment. |
+| [PROV-O](https://www.w3.org/TR/prov-o/) | Entities, activities, agents and derivation/attribution relationships | Provenance does not authorize disclosure; identifiers and integrity require their own verified bindings. |
+| [STPA handbook](https://psas.scripts.mit.edu/home/books-and-handbooks/) | Derive unsafe control actions, constraints and feedback scenarios | Hazard analysis informs the assessment; it is not a runtime or a universal safety certificate. |
+
+An adapter implementation statement names the source and target versions,
+supported elements and links, rejected constructs and semantic losses. Unsupported
+controls are reported explicitly. Round-trip fixtures must show which meanings
+survive translation before an interchange claim is made. Existing ArchiMate, UML,
+C4 and process views can remain useful projections without being declared
+semantically interchangeable. No modeling import is permitted to manufacture an
+authority, qualification or evidence record that its source did not establish.
 
 ## 14. Summary
 

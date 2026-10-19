@@ -1,0 +1,54 @@
+{
+  "format": "gpp-shape/0.1",
+  "key": "drc-c3-binding-without-gate",
+  "version": "1.0.0",
+  "title": "DRC fixture drc-c3-binding-without-gate",
+  "description": "Seeded C-3: a stage binding whose stage has no typed gate, so the binding names no owning scope.",
+  "triggers": [
+    "claim"
+  ],
+  "stages": [
+    {
+      "key": "a",
+      "title": "Stage a",
+      "accountablePrincipalRef": "role:shape-owner",
+      "advance": {
+        "kind": "status-change",
+        "condition": "Stage a recorded its evidence."
+      },
+      "evidence": [
+        "manual-check"
+      ],
+      "binding": {
+        "id": "drc-fixture-binding",
+        "version": 1,
+        "enforcement": "shadow"
+      }
+    }
+  ],
+  "stopConditions": [
+    {
+      "kind": "success",
+      "condition": "Every stage recorded its evidence.",
+      "disposition": "proceed"
+    },
+    {
+      "kind": "failure",
+      "condition": "A stage cannot produce its evidence.",
+      "disposition": "refused"
+    },
+    {
+      "kind": "budget",
+      "condition": "The cycle budget is spent.",
+      "disposition": "inconclusive"
+    }
+  ],
+  "grants": [],
+  "measures": [],
+  "budgets": [],
+  "reviewPoint": {
+    "everyDays": 7,
+    "description": "Weekly review."
+  },
+  "collaborationShape": null
+}

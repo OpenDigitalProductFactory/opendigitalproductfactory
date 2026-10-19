@@ -24,6 +24,7 @@ const CLAUDE_PATH = "C:\\Users\\Test\\.claude\\plugins\\installed_plugins.json";
 /** Build an FS shim that satisfies the bridge's needs for a happy-path test. */
 function buildFs(args: {
   codexText?: string;
+  projectText?: string;
   claudeJsonText?: string;
   liveDirs?: Set<string>;
 }) {
@@ -33,12 +34,14 @@ function buildFs(args: {
 
   return {
     readFileSync: (path: string, _encoding: BufferEncoding): string => {
+      if (path === join(REPO, ".codex", "config.toml")) return args.projectText ?? "";
       if (path === CODEX_PATH) return codexText ?? "";
       if (path === CLAUDE_PATH) return claudeJsonText ?? "";
       // Fall through to real FS for kernel principle fixtures.
       return readFileSync(path, "utf8");
     },
     existsSync: (path: string): boolean => {
+      if (path === join(REPO, ".codex", "config.toml")) return args.projectText !== undefined;
       if (path === CODEX_PATH) return codexText !== undefined;
       if (path === CLAUDE_PATH) return claudeJsonText !== undefined;
       // Live-dirs whitelist for the stale-entry detection path.
@@ -73,6 +76,37 @@ function baseOptions(
 }
 
 describe("computeAgentToolchainPlan", () => {
+  it.each(["https://localhost", "https://localhost/", "http://127.0.0.1:3000?tenant=demo"])(
+    "keeps the MCP path when the selected input is a portal origin: %s", (mcpEndpoint) => {
+      const plan = computeAgentToolchainPlan(baseOptions({ mcpEndpoint }));
+      const codex = plan.codex!.writes.find(write => write.path === CODEX_PATH)!.content;
+      expect(codex).toContain("/api/mcp/v1");
+      expect("endpoint" in plan.mcpProbe && new URL(plan.mcpProbe.endpoint).pathname).toBe("/api/mcp/v1");
+      const vscode = JSON.parse(plan.mcpClientConfig!.writes.find(write => write.path.includes(".vscode/"))!.content);
+      expect(new URL(vscode.servers.dpf.url).pathname).toBe("/api/mcp/v1");
+      if (mcpEndpoint.includes("tenant=demo")) expect(codex).toContain("tenant=demo");
+    },
+  );
+
+  it("preserves an explicit proxy endpoint path and query", () => {
+    const endpoint = "https://proxy.example/tenant/mcp/?tenant=demo&empty=";
+    const plan = computeAgentToolchainPlan(baseOptions({ mcpEndpoint: endpoint }));
+    expect("endpoint" in plan.mcpProbe && plan.mcpProbe.endpoint).toBe(endpoint);
+    expect(plan.codex!.writes[0].content).toContain("/tenant/mcp/?tenant=demo&empty=&tier=full");
+  });
+
+  it.each(["not-an-endpoint", "ftp://localhost", "https:localhost", "https:///localhost", "https://localhost\\evil",
+    "https://localhost:invalid", "https://u:p@example.test", "https://localhost?api_key=synthetic-secret"])(
+    "refuses unsafe input before reading configuration: %s", (mcpEndpoint) => {
+      let reads = 0;
+      expect(() => computeAgentToolchainPlan(baseOptions({ mcpEndpoint, fs: {
+        existsSync: () => { reads++; return false; },
+        readFileSync: () => { reads++; return ""; },
+      } }))).toThrow(/MCP endpoint/);
+      expect(reads).toBe(0);
+    },
+  );
+
   it("produces a full plan for a fully-present host with fresh configs", () => {
     const plan: AgentToolchainPlan = computeAgentToolchainPlan(baseOptions());
 
@@ -86,7 +120,7 @@ describe("computeAgentToolchainPlan", () => {
     expect(plan.claude!.writes).toHaveLength(1);
     expect(plan.memory.writes.length).toBeGreaterThan(0);
     expect("skipReason" in plan.mcpProbe).toBe(false);
-    expect(plan.preview.readinessState).toBe("ready");
+    expect(plan.preview.readinessState).toBe("authorization_pending");
   });
 
   it("skips codex plan entirely when Codex CLI is absent", () => {
@@ -96,7 +130,7 @@ describe("computeAgentToolchainPlan", () => {
 
     expect(plan.codex).toBeNull();
     expect(plan.claude).not.toBeNull();
-    expect(plan.preview.readinessState).toBe("partial");
+    expect(plan.preview.readinessState).toBe("authorization_pending");
   });
 
   it("skips claude plan entirely when Claude CLI is absent", () => {
@@ -106,7 +140,7 @@ describe("computeAgentToolchainPlan", () => {
 
     expect(plan.claude).toBeNull();
     expect(plan.codex).not.toBeNull();
-    expect(plan.preview.readinessState).toBe("partial");
+    expect(plan.preview.readinessState).toBe("authorization_pending");
   });
 
   it("returns missing_cli preview when neither CLI is present", () => {
@@ -121,14 +155,14 @@ describe("computeAgentToolchainPlan", () => {
     expect(plan.preview.readinessState).toBe("missing_cli");
   });
 
-  it("returns missing_token preview when no token is configured", () => {
+  it("returns authorization_pending without requiring a PAT", () => {
     const plan = computeAgentToolchainPlan(baseOptions({ hasToken: false }));
 
     expect("skipReason" in plan.mcpProbe).toBe(true);
     if ("skipReason" in plan.mcpProbe) {
       expect(plan.mcpProbe.skipReason).toBe("no_token");
     }
-    expect(plan.preview.readinessState).toBe("missing_token");
+    expect(plan.preview.readinessState).toBe("authorization_pending");
   });
 
   it("emits zero writes when Claude is already installed at the expected version (idempotent)", () => {
@@ -179,7 +213,7 @@ describe("summarizePlan", () => {
     expect(summary).toMatch(/claude=present/);
     expect(summary).toMatch(/codex=present/);
     expect(summary).toMatch(/token=present/);
-    expect(summary).toMatch(/preview-state=ready/);
+    expect(summary).toMatch(/preview-state=authorization_pending/);
 
     // No bearer-shaped content.
     expect(summary).not.toMatch(/Bearer\s+\w/);
@@ -195,6 +229,21 @@ describe("summarizePlan", () => {
     expect(summary).toMatch(/claude=missing/);
     expect(summary).toMatch(/token=missing/);
     expect(summary).toMatch(/mcp-probe=skip:no_token/);
-    expect(summary).toMatch(/preview-state=missing_token/);
+    expect(summary).toMatch(/preview-state=authorization_pending/);
+  });
+});
+
+
+describe("project Codex configuration", () => {
+  it("includes a repair for an existing project override in the shared adapter plan", () => {
+    const plan = computeAgentToolchainPlan(baseOptions({
+      mcpEndpoint: "https://localhost/api/mcp/v1",
+      fs: buildFs({ projectText: '[mcp_servers.dpf]\nurl="http://localhost:3000/mcp"' }),
+    }));
+    const projectWrite = plan.codex?.writes.find(w => w.path === join(REPO, ".codex", "config.toml"));
+    expect(projectWrite?.content).toContain("https://localhost/api/mcp/v1?tier=full");
+  });
+  it("does not return a ready plan for malformed project TOML", () => {
+    expect(() => computeAgentToolchainPlan(baseOptions({ fs: buildFs({ projectText: '[mcp_servers.dpf]\nurl="unfinished' }) }))).toThrow(/project.*TOML/i);
   });
 });

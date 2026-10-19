@@ -20,12 +20,27 @@
 import { createHash, randomUUID } from "node:crypto";
 import { prisma } from "@dpf/db";
 
-export type CorrectiveFailureSource =
-  | "build-failure"
-  | "self-upgrade-failure"
+/**
+ * Every source this module may write.
+ *
+ * A VALUE, not a bare type union, so a guard can check it at runtime against
+ * the database's own closed set (BI-4C6934CF). It was a type-only union, and
+ * `data-growth` was added here without being added to the
+ * `BacklogItem_source_closed_set` CHECK constraint. The type compiled, mocked
+ * tests passed, and every real insert failed with Postgres 23514 — swallowed by
+ * this module's own best-effort catch. Eleven nights of detected findings were
+ * filed nowhere. `backlog-source-closed-set.test.ts` now fails if these two
+ * vocabularies drift apart again.
+ */
+export const CORRECTIVE_FAILURE_SOURCES = [
+  "build-failure",
+  "self-upgrade-failure",
   // EP-A33A5C61 slice 5: a growth / payload-anatomy finding that persisted for
   // PERSISTENT_NIGHTS consecutive steward samples (lib/ea/table-growth.ts).
-  | "data-growth";
+  "data-growth",
+] as const;
+
+export type CorrectiveFailureSource = (typeof CORRECTIVE_FAILURE_SOURCES)[number];
 
 export type CorrectiveFailureInput = {
   source: CorrectiveFailureSource;

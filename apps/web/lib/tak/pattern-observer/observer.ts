@@ -21,6 +21,7 @@ import {
   classifyToolSurfaceOverload,
 } from "./classifiers";
 import { capabilityNeedKey, evidenceFingerprint } from "./fingerprint";
+import { isRecord } from "@/lib/shared/coerce";
 
 const DEFAULT_WINDOW_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_TAKE = 200;
@@ -229,10 +230,6 @@ function stringifyEvidence(value: unknown): string {
 
 function executionText(execution: PatternObserverToolExecutionRow): string {
   return [execution.summary ?? "", stringifyEvidence(execution.result)].join(" ").trim();
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function stringField(source: unknown, field: string): string | null {

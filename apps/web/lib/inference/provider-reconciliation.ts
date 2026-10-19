@@ -1,3 +1,5 @@
+import { ProviderAccountSelectionChangedError } from "../routing/provider-account-candidates";
+
 const INTERFACE_DRIFT_PATTERNS = [
   /unsupported parameter/i,
   /unknown parameter/i,
@@ -41,7 +43,8 @@ export async function withProviderReconciliationRetry<T>(
   try {
     return await attempt();
   } catch (error) {
-    if (!isProviderReconciliationRequiredError(error)) throw error;
+    if (!isProviderReconciliationRequiredError(error)
+      && !(error instanceof ProviderAccountSelectionChangedError)) throw error;
     beforeRetry();
     return attempt();
   }

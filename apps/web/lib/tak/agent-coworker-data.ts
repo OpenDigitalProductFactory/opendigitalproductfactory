@@ -4,6 +4,7 @@ import type {
   AgentMessageProvider,
   AgentMessageRow,
   AttachmentInfo,
+  InlineApprovalRequest,
 } from "@/lib/agent-coworker-types";
 
 type AttachmentRow = {
@@ -47,6 +48,7 @@ function serializeMessage(
     resultError: string | null;
   } | null,
   provider?: AgentMessageProvider,
+  approvalRequests?: InlineApprovalRequest[],
 ): AgentMessageRow {
   const row: AgentMessageRow = {
     id: m.id,
@@ -68,19 +70,58 @@ function serializeMessage(
     }));
   }
   if (proposal) {
+    // A still-proposed row carries a resultError only when the reference
+    // monitor refused its approval (convert-and-run, BI-04E5A511): it can no
+    // longer run as proposed, so the card offers Decline only, even after a reload.
+    const refusedReason = proposal.status === "proposed" && proposal.resultError ? proposal.resultError : null;
     row.proposal = {
       proposalId: proposal.proposalId,
       actionType: proposal.actionType,
       parameters: proposal.parameters as Record<string, unknown>,
       status: proposal.status,
       ...(proposal.resultEntityId ? { resultEntityId: proposal.resultEntityId } : {}),
-      ...(proposal.resultError ? { resultError: proposal.resultError } : {}),
+      ...(refusedReason ? { noLongerRunnable: refusedReason }
+        : proposal.resultError ? { resultError: proposal.resultError } : {}),
     };
   }
   if (provider) {
     row.provider = provider;
   }
+  if (approvalRequests && approvalRequests.length > 0) {
+    row.approvalRequests = approvalRequests;
+  }
   return row;
+}
+
+/**
+ * BI-C8EC05C9: the approval requests each assistant message raised, keyed by
+ * message id. No envelope carries a chatMessageId before PR-B, so this is
+ * empty and every message renders as before.
+ */
+async function loadInlineApprovalRequests(
+  messages: Array<{ id: string; role: string }>,
+): Promise<Map<string, InlineApprovalRequest[]>> {
+  const assistantIds = messages.filter((m) => m.role === "assistant").map((m) => m.id);
+  const byMessage = new Map<string, InlineApprovalRequest[]>();
+  if (assistantIds.length === 0) return byMessage;
+  const envelopes = await prisma.coworkerActionEnvelope.findMany({
+    where: { chatMessageId: { in: assistantIds } },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, chatMessageId: true, manifestActionId: true, status: true, expiresAt: true, rationale: true },
+  });
+  for (const envelope of envelopes) {
+    if (!envelope.chatMessageId) continue;
+    const list = byMessage.get(envelope.chatMessageId) ?? [];
+    list.push({
+      envelopeId: envelope.id,
+      toolName: envelope.manifestActionId,
+      status: envelope.status,
+      expiresAt: envelope.expiresAt?.toISOString() ?? null,
+      rationale: envelope.rationale,
+    });
+    byMessage.set(envelope.chatMessageId, list);
+  }
+  return byMessage;
 }
 
 /**
@@ -209,11 +250,14 @@ export const getRecentMessages = cache(
         },
       },
     });
-    const providerInfo = await loadProviderInfo(messages);
+    const [providerInfo, approvalRequests] = await Promise.all([
+      loadProviderInfo(messages),
+      loadInlineApprovalRequests(messages),
+    ]);
     return messages
       .reverse()
-      .map((m) => serializeMessage(m, m.proposal, providerInfo.get(m.id)));
+      .map((m) => serializeMessage(m, m.proposal, providerInfo.get(m.id), approvalRequests.get(m.id)));
   },
 );
 
-export { serializeMessage, loadProviderInfo, selectVisibleTelemetry };
+export { serializeMessage, loadProviderInfo, loadInlineApprovalRequests, selectVisibleTelemetry };

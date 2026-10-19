@@ -1,4 +1,4 @@
-import { prisma, QDRANT_COLLECTIONS, scrollPoints } from "@dpf/db";
+import { prisma, VECTOR_COLLECTIONS, scrollPoints } from "@dpf/db";
 
 import { storeWikiPage } from "./embeddings";
 import { isEmbeddingAvailable } from "@/lib/inference/embedding";
@@ -45,7 +45,7 @@ export async function reconcilePublishedWikiEmbeddings(input: {
       take: limit,
       orderBy: { updatedAt: "desc" },
     }),
-    scrollPoints(QDRANT_COLLECTIONS.WIKI_PAGES, {
+    scrollPoints(VECTOR_COLLECTIONS.WIKI_PAGES, {
       must: [{ key: "entityType", match: { value: "wiki-page" } }],
     }, Math.max(VECTOR_SCAN_LIMIT, limit)),
   ]);

@@ -22,12 +22,14 @@ vi.mock("./support", () => ({
 
 import { resolveReleaseBatchStatus } from "./release-batch-status";
 import type { SelfUpgradeConfig } from "./config";
+import { DEFAULT_DRAIN_WAIT_BUDGET_MS } from "./drain-wait";
 
 const CONFIG: SelfUpgradeConfig = {
   enabled: true,
   channel: "stable",
   checkIntervalHours: 24,
   cooldownMinutes: 30,
+  drainWaitBudgetMs: DEFAULT_DRAIN_WAIT_BUDGET_MS,
   batchMinPendingPrs: 10,
   batchMaxWaitHours: 168,
   healthTarget: 100,

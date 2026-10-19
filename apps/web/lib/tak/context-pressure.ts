@@ -1,6 +1,8 @@
-import type { ChatMessage } from "../ai-inference";
+import type { ChatMessage } from "../routing/chat-message-types";
 import { summarizeDroppedMessages } from "./compaction-digest";
 import { resolveToolResultCharCap } from "./tool-result-budget";
+import { invalidateLocalNativeContinuations, localNativeContinuationChars,
+  transferLocalNativeContinuation } from "../routing/local-native-continuation";
 
 // apps/web/lib/tak/context-pressure.ts
 //
@@ -72,6 +74,7 @@ export function estimateContextTokens(
 ): number {
   let chars = systemPrompt.length;
   for (const m of messages) {
+    chars += localNativeContinuationChars(m);
     chars +=
       typeof m.content === "string"
         ? m.content.length
@@ -215,7 +218,7 @@ export function compactAgenticMessages(
   const evidenceCallIds = new Set(scopedMessages.flatMap((message) =>
     (message.toolCalls ?? []).filter((call) => evidenceReaderNames.includes(call.name)).map((call) => call.id)));
 
-  return scopedMessages
+  const compacted = scopedMessages
     .filter((message) =>
       message.role !== "tool" ||
       !message.toolCallId ||
@@ -239,4 +242,13 @@ export function compactAgenticMessages(
         content: truncateMessageContent(message.content, caps.textCap, "message context"),
       };
     });
+  const changed = messages.length > caps.maxHistory || compacted.length !== messages.length ||
+    compacted.some((message, index) => message.content !== messages[index]?.content);
+  if (changed) {
+    // The loop retains its uncompressed originals. Erase those too so a later
+    // assembly cannot revive state whose preceding history was rewritten.
+    invalidateLocalNativeContinuations([...messages, ...compacted]);
+    return compacted;
+  }
+  return compacted.map((message, index) => transferLocalNativeContinuation(messages[index]!, message));
 }

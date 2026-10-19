@@ -77,7 +77,19 @@ All four steps are complete. `BI-30165EB4`.
 
 **The report found one affected cell, and the block is a false positive.** `feature`/`medium`/`deep` at `ideate->plan`, blocking because `verificationOut.typecheckPassed` is absent — at a transition that runs *before any build*, so that evidence cannot exist. Filed as `BI-4FF872FB`.
 
-**Phase 3 must not start yet.** Two preconditions: `BI-4FF872FB` lands first, and the ledger acquires a sample worth calibrating against (3 decisions from 1 build is not a blast radius). Binding the requirement as it stands would deadlock every high-sensitivity build at its first transition.
+**Phase 3 must not start yet.** Preconditions, updated 2026-09-15 after the retrospective run (report §4.1):
+
+1. ~~`BI-4FF872FB`~~ — **addressed.** The depth check is phase-aware; decision `DI-A940A9467E9E`.
+2. **`BI-397F87A9`** — `verificationOut` has no canonical shape. `testsFailed` is absent from two of four producer schemas, so the check spuriously blocks 33% of the only post-build sample that exists. Phase 3 binds exactly this field.
+3. **`BI-E4E70B9A`** — `typecheckPassed` can read `true` beside `typecheck: "not_run"`. A build shipped on it. Phase 3's `shallow` tier rests on that flag, and unlike the rest of this plan **that gate is blocking today**.
+4. ~~**A real sample.**~~ **Delivered differently.** The pipeline is quiet, not slow — one activity row in 48 hours, and the auto-resume loop already capped by its own age-out guard, so waiting produces nothing. The blast radius did not need a sample: §4.2 enumerates the full cross-product (1,152 cells) with the real gate and the real depth check, and pins it in `verification-depth-blast-radius.test.ts`. **256 cells would newly block, all of them post-build, and 25% of those are false positives from `BI-397F87A9` alone.**
+
+Two structural answers Phase 3 now owes, both from §4.2:
+
+- **The requirement does not right-size.** It is insensitive to `kind` and `processSize`, so a `doc/small` build is held to the `feature/xlarge` bar. Adding it to a policy cell is all-or-nothing. For a matrix whose premise is right-sizing, that must be answered deliberately.
+- **The tightening lands at `review->ship`, not `build->review`.** `build->review` already requires `verification-typecheck-passed`; ship requires nothing. "Tests block at review" mis-states where the change bites.
+
+Phase 3 as written — "read `testsFailed` at `shallow` and above" — is **not** the conclusion this evidence supports.
 
 ### Phase 2 execution record — 2026-08-29
 

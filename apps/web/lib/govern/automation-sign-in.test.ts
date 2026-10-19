@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { SignJWT, decodeJwt } from "jose";
 
 import {
   AUTOMATION_PERSONA_EMAIL,
+  AUTOMATION_SIGN_IN_AUDIENCE,
   AUTOMATION_SIGN_IN_CONSUMED_KEY,
   AUTOMATION_SIGN_IN_GRANT_KEY,
   AUTOMATION_SIGN_IN_PATH,
@@ -29,7 +31,14 @@ type FakeState = {
 };
 
 function fakeDb(state: FakeState): AutomationSignInDb & { state: FakeState } {
-  return {
+  let tail: Promise<unknown> = Promise.resolve();
+  const db: AutomationSignInDb & { state: FakeState } = {
+    $transaction: body => {
+      const next = tail.then(() => body(db));
+      tail = next.catch(() => undefined);
+      return next;
+    },
+    $executeRaw: async () => 0,
     state,
     user: {
       findUnique: async (args: unknown) => {
@@ -68,6 +77,7 @@ function fakeDb(state: FakeState): AutomationSignInDb & { state: FakeState } {
       },
     },
   };
+  return db;
 }
 
 function installState(environmentClass: string) {
@@ -148,6 +158,32 @@ describe("mint + consume", () => {
     expect(state.config.get(AUTOMATION_SIGN_IN_CONSUMED_KEY)).toBeTruthy();
   });
 
+  it("mints a link token for the automation audience only (BI-7B4B5F5D)", async () => {
+    const minted = await mintAutomationSignIn({ baseUrl: "http://portal:3000", requestedBy: "mcp:test" }, depsFor(fakeDb(state)));
+    if (!minted.issued) throw new Error("expected a link");
+    const claims = decodeJwt(decodeURIComponent(minted.path.split("token=")[1]!));
+    expect(claims.aud).toBe(AUTOMATION_SIGN_IN_AUDIENCE);
+  });
+
+  it("refuses a correctly signed token without the automation audience (BI-7B4B5F5D)", async () => {
+    const db = fakeDb(state);
+    const deps = depsFor(db);
+    const persona = await ensureAutomationPersona(deps);
+    const nowSeconds = Math.floor(at.getTime() / 1000);
+    const noAudience = await new SignJWT({ purpose: "dpf.automation-sign-in/1", next: "/" })
+      .setProtectedHeader({ alg: "HS256" })
+      .setSubject(persona.userId)
+      .setJti("jti-without-audience")
+      .setIssuedAt(nowSeconds)
+      .setExpirationTime(nowSeconds + 600)
+      .sign(new TextEncoder().encode(env.AUTH_SECRET));
+    await expect(consumeAutomationSignIn(noAudience, deps)).resolves.toMatchObject({
+      accepted: false,
+      reason: "token-invalid-or-expired",
+    });
+    expect(state.config.get(AUTOMATION_SIGN_IN_CONSUMED_KEY)).toBeUndefined();
+  });
+
   it("refuses the same link a second time", async () => {
     const db = fakeDb(state);
     const deps = depsFor(db);
@@ -155,7 +191,66 @@ describe("mint + consume", () => {
     if (!minted.issued) throw new Error("expected a link");
     const token = decodeURIComponent(minted.path.split("token=")[1]!);
     await expect(consumeAutomationSignIn(token, deps)).resolves.toMatchObject({ accepted: true });
-    await expect(consumeAutomationSignIn(token, deps)).resolves.toEqual({ accepted: false, reason: "token-already-used" });
+    await expect(consumeAutomationSignIn(token, deps)).resolves.toMatchObject({ accepted: false, reason: "token-already-used" });
+  });
+  it("accepts at most one of two concurrent exchanges", async () => {
+    const db = fakeDb(state);
+    const read = db.platformConfig.findUnique;
+    let reads = 0;
+    let release!: () => void;
+    const bothReading = new Promise<void>(resolve => { release = resolve; });
+    db.platformConfig.findUnique = async args => {
+      const row = await read(args);
+      if ((args as { where: { key: string } }).where.key === AUTOMATION_SIGN_IN_CONSUMED_KEY) {
+        if (++reads === 2) release();
+        await Promise.race([bothReading, new Promise(resolve => setTimeout(resolve, 30))]);
+      }
+      return row;
+    };
+    const deps = depsFor(db);
+    const minted = await mintAutomationSignIn({ baseUrl: "http://portal:3000", requestedBy: "mcp:test" }, deps);
+    if (!minted.issued) throw new Error("expected a link");
+    const token = decodeURIComponent(minted.path.split("token=")[1]!);
+    const results = await Promise.all([consumeAutomationSignIn(token, deps), consumeAutomationSignIn(token, deps)]);
+    expect(results.filter(result => result.accepted)).toHaveLength(1);
+  });
+
+  it("tells the caller which session an already-used link belongs to, so the redirect can be replayed", async () => {
+    const db = fakeDb(state);
+    const deps = depsFor(db);
+    const minted = await mintAutomationSignIn(
+      { nextPath: "/platform/federation-links", baseUrl: "http://portal:3000", requestedBy: "mcp:test" },
+      deps,
+    );
+    if (!minted.issued) throw new Error("expected a link");
+    const token = decodeURIComponent(minted.path.split("token=")[1]!);
+
+    const first = await consumeAutomationSignIn(token, deps);
+    if (!first.accepted) throw new Error("expected the first exchange to be accepted");
+
+    const second = await consumeAutomationSignIn(token, deps);
+    expect(second).toMatchObject({
+      accepted: false,
+      reason: "token-already-used",
+      replay: { sub: first.claims.sub, nextPath: "/platform/federation-links" },
+    });
+  });
+
+  it("offers no replay for any refusal other than an already-used link", async () => {
+    const db = fakeDb(state);
+    const deps = depsFor(db);
+    const minted = await mintAutomationSignIn({ baseUrl: "http://portal:3000", requestedBy: "mcp:test" }, deps);
+    if (!minted.issued) throw new Error("expected a link");
+    const token = decodeURIComponent(minted.path.split("token=")[1]!);
+
+    const expired = await consumeAutomationSignIn(token, { ...deps, now: () => new Date(at.getTime() + 11 * 60 * 1000) });
+    const tampered = await consumeAutomationSignIn(`${token}x`, deps);
+    const production = await consumeAutomationSignIn(token, { ...deps, readText: installState("production") });
+    for (const refusal of [expired, tampered, production]) {
+      expect(refusal.accepted).toBe(false);
+      if (refusal.accepted) continue;
+      expect(refusal.replay).toBeUndefined();
+    }
   });
 
   it("refuses an expired link, a tampered link and a link for a production installation", async () => {

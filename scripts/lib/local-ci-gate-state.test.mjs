@@ -8,6 +8,7 @@ import {
   createLocalCiPassEvidenceValidity,
   isInconclusiveLocalCiGateStatus,
   isRecoverableInterruptedGateState,
+  isTestStubGateRecord,
   projectReusedPassMetadata,
   readLocalCiGateState,
   readReusedEvidenceValidity,
@@ -423,4 +424,57 @@ test("the evidence clock and the lease clock are recorded as two separate fields
   assert.equal(state.expiresAt, "2026-09-13T07:52:00.000Z");
   assert.equal(state.leaseExpiresAt, "2026-09-12T08:08:05.061Z");
   assert.ok(Date.parse(state.expiresAt) > Date.parse(state.leaseExpiresAt));
+});
+
+// BI-53B189C8. The stub's record must say what it is, and keep saying it through
+// every rewrite that carries a record forward.
+test("a test-stub run is recorded as one, and a later infrastructure event keeps the mark", () => {
+  const stateFile = join(mkdtempSync(join(tmpdir(), "dpf-gate-state-stub-")), "gate.json");
+  const sha = "d".repeat(40);
+  writeLocalCiGateState(stateFile, {
+    branch: "fix/admitted-owner-recovery",
+    sha,
+    gatePassed: true,
+    leaseId: "NPEL-STUB",
+    evidenceId: "EVIDENCE-STUB",
+    status: "passed",
+    expiresAt: "2999-01-01T00:00:00.000Z",
+    resilience: null,
+    leaseEvents: [],
+    testStub: true,
+  });
+  assert.equal(readLocalCiGateState(stateFile).testStub, true);
+  assert.equal(isTestStubGateRecord(readLocalCiGateState(stateFile)), true);
+
+  writeLocalCiGateState(stateFile, {
+    branch: "fix/admitted-owner-recovery",
+    sha,
+    gatePassed: false,
+    leaseId: "NPEL-STUB",
+    evidenceId: "",
+    status: "blocked_control_plane_starvation",
+    expiresAt: "",
+    resilience: null,
+    leaseEvents: [],
+  });
+  assert.equal(isTestStubGateRecord(readLocalCiGateState(stateFile)), true);
+});
+
+test("a real run's record carries no test-stub mark", () => {
+  const stateFile = join(mkdtempSync(join(tmpdir(), "dpf-gate-state-real-")), "gate.json");
+  writeLocalCiGateState(stateFile, {
+    branch: "feat/real",
+    sha: "e".repeat(40),
+    gatePassed: true,
+    leaseId: "NPEL-REAL",
+    evidenceId: "EXT-REAL",
+    status: "passed",
+    expiresAt: "2999-01-01T00:00:00.000Z",
+    resilience: null,
+    leaseEvents: [],
+  });
+  const state = readLocalCiGateState(stateFile);
+  assert.equal("testStub" in state, false);
+  assert.equal(isTestStubGateRecord(state), false);
+  assert.equal(isTestStubGateRecord(null), false);
 });

@@ -1,5 +1,5 @@
 import type { PurposeContractSource } from "../page-purpose";
-import type { PurposeContractModule } from ".";
+import type { PurposeContractModule } from "../page-purpose";
 
 type RescueRouteDefinition = {
   routePath: `/workspace/rescue${string}`;

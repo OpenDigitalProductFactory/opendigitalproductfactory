@@ -15,7 +15,7 @@
 
 import { prisma } from "@dpf/db";
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { logBuildActivity } from "@/lib/mcp/build-tool-helpers";
 
@@ -423,7 +423,9 @@ async function runReleaseGate(params: Record<string, unknown>): Promise<ToolResu
     } else if (build.sandboxId) {
       try {
         const { extractDiff } = await import("@/lib/sandbox");
-        const diff = await extractDiff(build.sandboxId);
+        const { resolveBuildWorkdir } = await import("@/lib/build/sandbox/build-branch");
+        // BI-5C4933EB: read the build's own worktree, not the shared root.
+        const diff = await extractDiff(build.sandboxId, { workspace: resolveBuildWorkdir(build.buildId) });
         diffs.push(diff);
       } catch {
         // Build has no extractable diff — may be fine if it's code-only

@@ -19,6 +19,7 @@ const dispatchedAt = at("2026-09-07T10:00:00Z");
 const evidence = (over: Partial<RecordedEvidence> = {}): RecordedEvidence => ({
   stageKey: "sweep",
   kind: "assurance-run",
+  outcome: "completed",
   recordedAt: at("2026-09-07T10:05:00Z"),
   ...over,
 });
@@ -41,6 +42,18 @@ describe("stageHasCompletingEvidence", () => {
     // A note on the room is not a stage outcome. Accepting it would let any
     // unrelated write advance the shape.
     expect(stageHasCompletingEvidence({ ...base, evidence: [evidence({ stageKey: null })] })).toBe(false);
+  });
+
+  it("rejects a recorded BLOCKER — the coworker saying it could not do the work is not the work", () => {
+    // Observed on the live install 2026-09-24 00:05 UTC: a repository-policy
+    // drift room recorded `assurance-run` for `read` with the summary "blocked:
+    // no tool available", and the stage advanced to `diff`. The brief tells a
+    // blocked coworker to record the blocker; that record must never complete.
+    expect(stageHasCompletingEvidence({ ...base, evidence: [evidence({ outcome: "blocked" })] })).toBe(false);
+  });
+
+  it("rejects stage evidence that states no outcome — fail closed", () => {
+    expect(stageHasCompletingEvidence({ ...base, evidence: [evidence({ outcome: null })] })).toBe(false);
   });
 
   it("rejects an evidence kind the stage never declared", () => {
@@ -104,5 +117,45 @@ describe("earnEvidenceReceipts", () => {
     // recorded evidence. A "completed" run with no evidence earns nothing.
     const existing: Array<{ stageKey: string; kind: string }> = [];
     expect(earnEvidenceReceipts({ ...base, evidence: [], existing })).toBe(existing);
+  });
+});
+
+// GPP Phase 3c PR-3c-1 (BI-8875C9DF): evidence across iterations on a graph shape.
+describe("earnEvidenceReceipts with an iteration (Phase 3c)", () => {
+  const reworkDispatch = at("2026-09-08T09:00:00Z");
+
+  it("an iteration-0 receipt does not short-circuit iteration 1", () => {
+    const existing = [{ stageKey: "sweep", kind: STAGE_EVIDENCE_RECEIPT_KIND }];
+    const earned = earnEvidenceReceipts({
+      ...base,
+      dispatchedAt: reworkDispatch,
+      iteration: 1,
+      evidence: [evidence({ recordedAt: at("2026-09-08T09:05:00Z") })],
+      existing,
+    });
+    expect(earned).toEqual([...existing, { stageKey: "sweep", kind: STAGE_EVIDENCE_RECEIPT_KIND, iteration: 1 }]);
+  });
+
+  it("evidence older than iteration 1's own dispatch does not earn iteration 1", () => {
+    const existing = [{ stageKey: "sweep", kind: STAGE_EVIDENCE_RECEIPT_KIND }];
+    const earned = earnEvidenceReceipts({
+      ...base,
+      dispatchedAt: reworkDispatch,
+      iteration: 1,
+      evidence: [evidence()],
+      existing,
+    });
+    expect(earned).toBe(existing);
+  });
+
+  it("a receipt at the current iteration short-circuits, returning the same array", () => {
+    const existing = [{ stageKey: "sweep", kind: STAGE_EVIDENCE_RECEIPT_KIND, iteration: 1 }];
+    expect(earnEvidenceReceipts({ ...base, dispatchedAt: reworkDispatch, iteration: 1, evidence: [], existing })).toBe(existing);
+  });
+
+  it("without an iteration the function is unchanged: the earned receipt carries no iteration key", () => {
+    const earned = earnEvidenceReceipts({ ...base, evidence: [evidence()], existing: [] });
+    expect(earned).toEqual([{ stageKey: "sweep", kind: STAGE_EVIDENCE_RECEIPT_KIND }]);
+    expect(Object.hasOwn(earned[0]!, "iteration")).toBe(false);
   });
 });

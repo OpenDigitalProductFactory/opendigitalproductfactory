@@ -170,6 +170,9 @@ export const CONTRIBUTOR_MCP_READINESS_REQUIRED_GRANTS = [
   "work_capsule_adopt",
   "sandbox_execute",
   "iac_execute",
+  // Author research note (BI-B9B196FD). Readiness stays a subset of the
+  // development template, which is the one-click coding connection.
+  "initiative_evidence_write",
 ] as const;
 
 const DEVELOPMENT_TEMPLATE_GRANTS = [
@@ -216,7 +219,38 @@ const DEVELOPMENT_TEMPLATE_GRANTS = [
   "tool_evaluation_create",
   "document_write",
   "coworker_engagement_write",
+  // Author research note (BI-B9B196FD). Desktop coding coworkers already hold
+  // this one grant. The one-click development connection did not, so a medium
+  // fix could not record its research note. Independent review grants stay off.
+  "initiative_evidence_write",
 ] as const;
+
+/**
+ * Grants to append when a development connection already in use holds an
+ * earlier prefix of the current development template (BI-E9F1C116).
+ *
+ * The stored set must be exactly the leading grants, in any order. A hole, a
+ * grant from outside the template, an empty set, or a set that already matches
+ * the template returns nothing. Callers still refuse a read connection, an
+ * admin connection, an OAuth connection, and a non-operator token. This
+ * function only answers the prefix question, so a read connection whose grants
+ * happen to be that prefix is not widened here.
+ */
+export function developmentTemplateGrantsToFollow(held: readonly string[]): readonly string[] {
+  if (held.length === 0) return [];
+  const indexByGrant = new Map<string, number>(
+    DEVELOPMENT_TEMPLATE_GRANTS.map((grant, index) => [grant, index]),
+  );
+  const heldIndexes = new Set<number>();
+  for (const grant of held) {
+    const index = indexByGrant.get(grant);
+    if (index === undefined) return [];
+    heldIndexes.add(index);
+  }
+  const highest = Math.max(...heldIndexes);
+  if (heldIndexes.size !== highest + 1) return [];
+  return DEVELOPMENT_TEMPLATE_GRANTS.slice(highest + 1);
+}
 
 const EMPLOYEE_FINANCE_TEMPLATE_GRANTS = [
   "browser_drive",
@@ -321,7 +355,7 @@ export const MCP_TOKEN_TEMPLATES: readonly McpTokenTemplate[] = [
     category: "development",
     tier: "write",
     description:
-      "Coding agent: read code/specs/backlog, write backlog and workrooms, run sandbox, ship via Build Studio (sandbox_execute + iac_execute).",
+      "Coding agent: read code/specs/backlog, write backlog and workrooms, record the author's research note, run sandbox, ship via Build Studio (sandbox_execute + iac_execute).",
     grants: DEVELOPMENT_TEMPLATE_GRANTS,
   },
   {

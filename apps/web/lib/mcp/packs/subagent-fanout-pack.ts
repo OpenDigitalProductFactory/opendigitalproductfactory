@@ -9,7 +9,7 @@
 // real authority action, unlike the self-scoped memory/goal doors. The parent is
 // resolved from context.agentId; targets are resolved coworkers.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 import { MAX_FANOUT_WIDTH } from "@/lib/tak/subagent-fanout";
 

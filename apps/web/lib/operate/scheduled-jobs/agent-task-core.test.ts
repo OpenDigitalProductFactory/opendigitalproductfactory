@@ -70,6 +70,100 @@ describe("scheduleAgentTaskFor", () => {
     );
   });
 
+  it("BI-0A82D3B4 creates a six-hour task and mirror at the next matching UTC fire", async () => {
+    const { prisma } = await import("@dpf/db");
+    const create = prisma.scheduledAgentTask.create as ReturnType<typeof vi.fn>;
+    const upsert = prisma.scheduledJob.upsert as ReturnType<typeof vi.fn>;
+    (prisma.scheduledAgentTask.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+    create.mockClear();
+    upsert.mockClear();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-18T19:44:22.000Z"));
+
+    try {
+      const input = {
+        ...baseInput,
+        schedule: "23 */6 * * *",
+        timezone: "UTC",
+        taskConfig: { trigger: { kind: "user-request" } },
+      };
+      const result = await scheduleAgentTaskFor("u1", input);
+      expect(result.success).toBe(true);
+      if (!result.success) throw new Error(result.error);
+      const nextRunAt = new Date("2026-10-19T00:23:00.000Z");
+
+      expect(create).toHaveBeenCalledOnce();
+      expect(create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          taskId: result.taskId,
+          ownerUserId: "u1",
+          schedule: input.schedule,
+          timezone: "UTC",
+          taskConfig: input.taskConfig,
+          nextRunAt,
+        }),
+      });
+      expect(upsert).toHaveBeenCalledOnce();
+      expect(upsert).toHaveBeenCalledWith({
+        where: { jobId: result.taskId },
+        create: {
+          jobId: result.taskId,
+          name: `Agent: ${input.title}`,
+          schedule: input.schedule,
+          nextRunAt,
+        },
+        update: {
+          name: `Agent: ${input.title}`,
+          schedule: input.schedule,
+          nextRunAt,
+        },
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("BI-0A82D3B4 preserves both hours when creating a compound cron that collides at 03:00", async () => {
+    const { prisma } = await import("@dpf/db");
+    const create = prisma.scheduledAgentTask.create as ReturnType<typeof vi.fn>;
+    const upsert = prisma.scheduledJob.upsert as ReturnType<typeof vi.fn>;
+    (prisma.scheduledAgentTask.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { schedule: "0 3 * * *" },
+    ]);
+    create.mockClear();
+    upsert.mockClear();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-19T04:00:00.000Z"));
+
+    try {
+      const schedule = "0 3,9 * * *";
+      const result = await scheduleAgentTaskFor("u1", { ...baseInput, schedule, timezone: "UTC" });
+      expect(result.success).toBe(true);
+      if (!result.success) throw new Error(result.error);
+      expect(result.note).toBeUndefined();
+      const nextRunAt = new Date("2026-10-19T09:00:00.000Z");
+
+      expect(create).toHaveBeenCalledOnce();
+      expect(create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          taskId: result.taskId,
+          ownerUserId: "u1",
+          schedule,
+          nextRunAt,
+        }),
+      });
+      expect(upsert).toHaveBeenCalledOnce();
+      expect(upsert).toHaveBeenCalledWith({
+        where: { jobId: result.taskId },
+        create: { jobId: result.taskId, name: `Agent: ${baseInput.title}`, schedule, nextRunAt },
+        update: { name: `Agent: ${baseInput.title}`, schedule, nextRunAt },
+      });
+    } finally {
+      vi.useRealTimers();
+      (prisma.scheduledAgentTask.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+    }
+  });
+
   it("stores a typed business-product scope without putting it in prompt text", async () => {
     const { prisma } = await import("@dpf/db");
     const create = prisma.scheduledAgentTask.create as ReturnType<typeof vi.fn>;

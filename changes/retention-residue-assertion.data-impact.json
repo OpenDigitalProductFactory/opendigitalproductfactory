@@ -1,0 +1,13 @@
+{
+  "version": "1",
+  "accountableOwner": "Mark Bodman (markdbodman@gmail.com)",
+  "summary": "NOTE ON `kind`: this is a change to the retention LIFECYCLE executor, and the surface classifier in check-data-impact.mjs classifies lib/operate/retention/ as kind \"lifecycle\" \u2014 but the manifest validator accepts only model | projection | mdm-domain | destructive | policy. One manifest already in changes/ uses \"lifecycle\" and would fail validation today (the gate only re-validates manifests in the current diff, so it was never caught). Recorded under \"model\" with an empty fields[] \u2014 the established pattern for a change that alters no field \u2014 because that is the closest accepted kind, not because a model changed. The vocabulary gap is filed separately.\n\nObservability-only change to the retention lifecycle executor. It adds NO new purge, widens NO window, and deletes nothing it did not already delete -- the set of rows removed by a sweep is byte-for-byte unchanged. No model, field or column is touched, so the field resolution below is empty by construction. Two additions. (1) RESIDUE ASSERTION: after each policy runs, the sweep counts how many rows are STILL eligible and records it (residualEligible), surfacing incompletePolicies and hasStalledPolicy on the report. A policy that ran to completion, deleted zero rows, and still has eligible rows is STALLED -- previously that reported lastStatus ok because nothing threw, which is exactly how a stalled DiscoveryRun purge went unnoticed for months while the declared retention=30d window was silently not enforced. lastStatus now reflects whether declared windows are honoured, not merely whether the code threw; a policy merely capped (catching up over several nights, the designed behaviour for a backlog) stays ok. Residue is null, never zero, when it could not be counted -- custom-purge policies and policies that threw -- because 'I could not check' must not be recorded as 'nothing left'. (2) NO-PROGRESS GUARD: purgeByTimestamp now stops when a full page deletes zero rows. Previously that spun forever (findMany returns the same undeletable ids, deleted never advances toward the cap), hanging the sweep and stranding every later policy. Breaking out can only cause FEWER deletions in that pathological case, never more, and the residue check then reports it. The residue count is one bounded count() per policy per run against an already-indexed cutoff column, written only to the existing ScheduledJob.metadata heartbeat which is already the durable record of what a sweep did.",
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data-retention-sweep",
+      "lifecycleDisposition": "domain-lifecycle-managed",
+      "fields": []
+    }
+  ]
+}

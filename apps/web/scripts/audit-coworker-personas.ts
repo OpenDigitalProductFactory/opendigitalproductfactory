@@ -260,7 +260,6 @@ const ALWAYS_REQUIRED_SECTIONS = [
 ] as const;
 const LEGACY_TAIL_SECTIONS = ["# Tools Available", "# Operating Rules"] as const;
 const OPERATOR_CONTRACT_TAIL_SECTIONS = ["# Operator Contract"] as const;
-const REQUIRED_SECTIONS = [...ALWAYS_REQUIRED_SECTIONS, ...LEGACY_TAIL_SECTIONS] as const;
 
 function findSectionIndex(body: string, heading: string): number {
   // Match heading at start of line (anchor), case-sensitive, allow trailing whitespace.

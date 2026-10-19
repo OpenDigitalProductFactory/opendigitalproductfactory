@@ -1,3 +1,5 @@
+import { ensureGlobalSafeDirectoryCommand } from "@/lib/shared/git-safe-directory";
+
 export type SandboxSourceCurrencyStatus =
   | "current"
   | "behind"
@@ -63,6 +65,8 @@ const SOURCE_DIFF_EXCLUDES = [
   ":!pnpm-lock*",
   ":!**/generated/client/**",
   ":!packages/db/generated/**",
+  // The sandbox's own Auth.js secret (BI-F1C680C7) is never source.
+  ":!.dpf-sandbox-auth-secret*",
 ] as const;
 
 /**
@@ -189,7 +193,8 @@ export function buildSandboxSourceCurrencyProbeCommand(args: {
 
   return [
     `cd ${quotedWorkspace}`,
-    `git config --global --add safe.directory ${quotedWorkspace} >/dev/null 2>&1 || true`,
+    ensureGlobalSafeDirectoryCommand(quotedWorkspace),
+    ensureGlobalSafeDirectoryCommand("'*'"),
     `if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then printf 'reason=not-git-repo\\n'; exit 0; fi`,
     `branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)`,
     `headSha=$(git rev-parse HEAD 2>/dev/null || true)`,

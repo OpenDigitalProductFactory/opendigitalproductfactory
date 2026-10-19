@@ -2,66 +2,99 @@
   "quick-vs-proper-normal": {
     "id": "quick-vs-proper-normal",
     "winner": "proper-seed-fix",
-    "margin": 0.47819,
+    "margin": 0.901636,
     "confidence": "high",
-    "principlesConsidered": 42,
+    "principlesConsidered": 49,
     "composites": {
-      "quick-runtime-patch": 9.869565,
-      "proper-seed-fix": 10.347754
+      "quick-runtime-patch": 9.514435,
+      "proper-seed-fix": 10.41607
     },
     "topContributors": [
       {
-        "principle": "no-hardcoded-colors",
-        "contribution": 0.842857
-      },
-      {
         "principle": "research-and-use-standards",
-        "contribution": 0.840909
+        "contribution": 0.720588
       },
       {
-        "principle": "no-assumptions",
-        "contribution": 0.777778
+        "principle": "no-hardcoded-colors",
+        "contribution": 0.642105
       },
       {
-        "principle": "architecture-over-shortcuts",
-        "contribution": 0.707143
+        "principle": "classify-ambiguous-requests-before-acting",
+        "contribution": 0.613636
       },
       {
-        "principle": "ship-real-functionality",
-        "contribution": 0.635
+        "principle": "consult-specs-first",
+        "contribution": 0.597059
+      },
+      {
+        "principle": "single-source-of-truth",
+        "contribution": 0.588889
       }
     ]
   },
   "cheap-sound-vs-rebuild-guard": {
     "id": "cheap-sound-vs-rebuild-guard",
     "winner": "cheap-sound-additive",
-    "margin": 3.880393,
+    "margin": 3.199706,
     "confidence": "high",
-    "principlesConsidered": 42,
+    "principlesConsidered": 49,
     "composites": {
-      "cheap-sound-additive": 12.766054,
-      "expensive-rebuild": 8.885662
+      "cheap-sound-additive": 12.672163,
+      "expensive-rebuild": 9.472457
     },
     "topContributors": [
-      {
-        "principle": "ship-real-functionality",
-        "contribution": 0.81
-      },
       {
         "principle": "worktree-is-source-control-not-runtime",
         "contribution": 0.783333
       },
       {
         "principle": "research-and-use-standards",
-        "contribution": 0.761364
+        "contribution": 0.770588
+      },
+      {
+        "principle": "ship-real-functionality",
+        "contribution": 0.63871
+      },
+      {
+        "principle": "classify-ambiguous-requests-before-acting",
+        "contribution": 0.621591
+      },
+      {
+        "principle": "structural-verification-is-not-functional",
+        "contribution": 0.607692
+      }
+    ]
+  },
+  "adopt-vs-absorb-capability": {
+    "id": "adopt-vs-absorb-capability",
+    "winner": "absorb-into-spine",
+    "margin": 0.354416,
+    "confidence": "high",
+    "principlesConsidered": 49,
+    "composites": {
+      "adopt-upstream-stack": 11.129361,
+      "absorb-into-spine": 11.483777
+    },
+    "topContributors": [
+      {
+        "principle": "absorb-dont-adopt",
+        "contribution": 0.886207
+      },
+      {
+        "principle": "research-and-use-standards",
+        "contribution": 0.6875
       },
       {
         "principle": "no-hardcoded-colors",
-        "contribution": 0.754762
+        "contribution": 0.640351
       },
       {
-        "principle": "no-assumptions",
-        "contribution": 0.647222
+        "principle": "classify-ambiguous-requests-before-acting",
+        "contribution": 0.610227
+      },
+      {
+        "principle": "consult-specs-first",
+        "contribution": 0.582353
       }
     ]
   }

@@ -1,6 +1,6 @@
 import type { CartesianSceneLayout } from "@dpf/storefront-templates";
 
-import type { Intent } from "@/components/ui/report-kit";
+import type { Intent } from "@/lib/ui-model/statusColors";
 import type { CartesianScenePresentationMap } from "@/lib/twin/cartesian-scene";
 
 export type RoomsDomain = "lodging" | "boarding" | "care";

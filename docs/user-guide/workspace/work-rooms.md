@@ -8,6 +8,10 @@ relatedCode:
   - apps/web/components/workspace/WorkCaseAttentionLens.tsx
   - apps/web/components/workspace/WorkCaseDetailView.tsx
   - apps/web/components/workspace/workroom/WorkroomCycles.tsx
+  - apps/web/components/workspace/workroom/WorkroomFlowMap.tsx
+  - apps/web/components/ops/workrooms/AreaFlowPanel.tsx
+  - apps/web/components/workspace-home/MainStreamHero.tsx
+  - apps/web/lib/work-management/room-ai-spend.ts
   - apps/web/components/workspace/workroom/WorkroomParticipants.tsx
   - apps/web/lib/work-management/coworker-engagement-case-projection.ts
   - apps/web/lib/work-management/room-channel-continuity.ts
@@ -23,11 +27,16 @@ relatedCode:
 
 A Workroom is not an unbounded chat channel. It has a work boundary: purpose, outcome, scope, accountability, authority, sensitivity, measures, timing, and a closure rule. The platform keeps the underlying governed Work Case and its evidence; the room presents that structure in language suited to doing the work.
 
-From **Platform > Workrooms**, select a room ID to open this same canonical Workroom. A room has one case, never two: a room tied to backlog work resolves to that backlog case even when you arrive by its room ID, and a room without a backlog item opens its own Work Capsule case. Either way the inventory never leads to a dead route, and a link you saved or shared by room ID keeps working.
+From **Platform > Workrooms**, select a room ID to open its canonical case. A room tied to backlog work resolves to that backlog case while retaining the selected room in the URL. Its process, room journal, reviewer evidence, participants and workforce stay scoped to that room. Shared case messages are labelled **Case context**; case receipts do not prove completion of an individual room step. A stale selection or a room belonging to another case is unavailable rather than silently showing a different room. A room without a backlog item opens its own Work Capsule case.
 
 Coworker service engagements can also appear as Work Cases. When a requested coworker service needs approval, is accepted, or is in progress, the room opens around the engagement itself: the requested outcome is the room boundary, the provider coworker appears as a contributor, and approval context or audit references stay attached as evidence. These rooms do not show the WorkItem comment box until a WorkItem exists, because there is no task message thread to post into yet.
 
 ## What You See First
+
+For development work, a verified repository observation can update the room's
+pull request when it matches the room's current commit. The room journal retains
+the previous link. Reusing a branch name alone does not establish current
+delivery, and a merged pull request does not complete the whole initiative.
 
 The top of a Workroom answers four questions:
 
@@ -49,6 +58,24 @@ the work.
 
 ## Activity and Participants
 
+### Delegation and recovery
+
+The workforce panel's **Delegation and recovery** disclosure shows recorded parent
+and child responsibility links, their coordinators, and the route to a named person.
+Opening it keeps you in the selected room. The route does not grant access, approve
+work or establish that someone received a notification; check the activity timeline
+for actual events and decisions.
+
+**Recovery path needs attention** means the route cannot be resolved. Open it for
+the missing assignment, conflicting links or access guidance. A parent's contents
+remain private unless you are admitted with sufficient clearance. Dependency links
+do not make another room responsible for this one.
+
+A room held for an hour uses the recorded recovery route for its stall notice.
+Missing recipient bindings or a failed notification write leave the notice unsent
+for retry. A recorded notice does not mean the blockage is resolved or the room
+has completed; the room keeps its existing stage and closure rules.
+
 ### Inspecting the process
 
 The process view separates the versioned **Intended process** from **Observed
@@ -56,6 +83,36 @@ execution** records. Select a step to see its position, reason, next action,
 owner, supporting evidence, and affected work. Required evidence is not proof
 that the evidence has been recorded. Where a receipt cannot be linked to an
 individual step, the view reports that gap and keeps it in the room evidence.
+
+The recent activity feed shows a bounded window. A step's latest matching evidence
+remains available when newer activity pushes it outside that window, provided it
+still matches the room's current source and process definition. An observed receipt
+does not by itself establish that the step passed or completed.
+
+Stage-scoped development evidence recorded for the room's current source and
+process version can appear under that step's required evidence. A link means the
+record was observed; it does not grant approval or verify completion. After the
+room changes source or process version, older records remain in its history and
+do not satisfy the current step's evidence binding. Earlier records without a
+source binding remain uncorrelated.
+
+**Observed execution** counts activity events and receipts separately. Expand a
+record for its source identity, actor and timestamp. An event records what was
+observed; it does not verify a step. A process pause appears in the room's
+attention summary, and a step's intended advance condition does not override
+the current permitted-transition check.
+
+A recorded wait names the stage and the role or person expected to act in the
+attention summary. That wait remains visible until the runner records another
+action; refreshing the page does not mean the work has progressed.
+
+When a standing room is waiting on a decision, its **Attention** card says what
+is waiting and who decides. If that is you — the room's accountable owner — a
+**Decide** button opens the choices (for example Accept, Patch or Defer), a
+date when you defer, an optional one-line reason, and a short summary of what
+the earlier stages found. Your decision is recorded as the stage's evidence and
+the room moves on at its next run. Anyone else sees who decides, not the
+control.
 
 Use **Map** or **List**, search by step or owner, and filter by state. Arrow keys
 move between visible steps; Home and End select the first and last. The selected
@@ -66,6 +123,19 @@ Selecting a step inspects it; it does not execute a transition or approve work.
 exists without a verified completion verdict. **Cancelled** is distinct from
 success. The projection check time and latest evidence time are separate; an
 unknown timestamp does not imply a fresh observation.
+
+After a minute, the process snapshot is marked stale. **Refresh state** reads
+the room again while keeping your selected step and filters. The warning clears
+only when a newer server read arrives. Refreshing does not resume work, approve
+a transition, or prove progress. A missing or future read time remains unknown.
+
+If your browser reports offline, **Refresh state** keeps the displayed snapshot
+and announces that you need to reconnect. When the browser reports a restored
+connection, refresh manually to check for changes. Reconnecting alone does not
+refresh the page or establish that the server is reachable. A connection lost
+during a request may still require a browser reload after reconnection.
+
+Native reviews submitted through OAuth use the same current permission checks as other authenticated reviews. Before dispatch or recovery, the worker checks token expiry, token and client revocation, tool grants, and task ownership. A failed authority check pauses the review before a provider call; it does not grant permission or silently switch credentials.
 
 Native reviewer runs also appear under **Observed execution** while queued or
 waiting, before a final receipt exists. Expand a run or checkpoint for its recorded
@@ -80,7 +150,7 @@ The **Activity** stream distinguishes messages, asks, coworker handoffs, work ch
 People and AI coworkers appear together as named participants. Their room role and current work state are separate:
 
 - **Accountable** owns the room outcome.
-- **Coordinator** keeps the room on-task to its outcome—curating who is in the room, sequencing turns, and driving to a decision, close, or escalation. A room has exactly one Coordinator; it may be the same person or coworker as the Accountable, or a different one. When no one is named, the Accountable coordinates by default.
+- **Coordinator** keeps the room on-task to its outcome—curating who is in the room, sequencing turns, and driving to a decision, close, or escalation. An executable room requires one explicitly named Coordinator; it may be the same person or coworker as the Accountable, or a different one. Missing assignment pauses execution.
 - **Contributor** performs work in the room.
 - **Reviewer** verifies work or an outcome.
 - **Observer** follows the room without changing it.
@@ -112,9 +182,82 @@ the required job-specific qualification and delegated authority. When either is 
 asks for attention instead of assuming eligibility. Rooms without a declared activity shape keep
 their legacy behavior and the panel reports oversight as not applicable.
 
+### Reading the flow map
+
+When a room has a work shape, the **Shape** view opens with a picture of it, above the step list:
+
+- **Lanes** show who does each step: AI coworkers, people, and outside touchpoints (a step that talks with a customer or supplier).
+- **Steps** are boxes, left to right. A step's border and mark show its state:
+  - **▶** being worked
+  - **◷** waiting on a person
+  - **!** blocked, with the reason (for example *missing explicit coordinator (conformance pause)*). A room that was stopped before it started any step shows this on its first step.
+  - **✓** done
+- **A diamond** after a step means a person decides the way out of it.
+- **Under each step** is how long this room has spent there, next to the shape's **typical** time over the last four weeks. A step well over its typical time is marked **slow**. Until a step has finished at least five times, it says *not enough history yet* instead of showing a number.
+- **The line above the map** describes the same shape in words: what starts it, its steps, who decides, and how it ends.
+
+Choose a step on the map to open the same inspection as the step list. A shape that runs steps in parallel is listed as steps, not drawn as a line, until the map can draw the branches exactly.
+
+### How work flows in each area
+
+Each area's **Work** view opens with the same five measures, so the four portfolios can be compared:
+
+| Measure | What it means |
+|---|---|
+| **In flow now** | Rooms being worked, waiting on a person, or blocked. |
+| **Flow time** | How long a run takes, from its first step to its stop. This is the median over the last four weeks, with the change from the four weeks before and a weekly trend line. A delivery room is one run however many days it takes. For a recurring room, each cycle is a run. A cycle that is still open when the next one starts did not finish, so it counts as abandoned and never as a finished run. |
+| **Flow efficiency** | The share of step time spent working rather than waiting. |
+| **Finished per week** | Runs that reached a success stop. |
+| **Cost** | Points in flight, points delivered this quarter, and the AI used by this area's rooms over the last four weeks. AI use is counted only from conversations and dispatched work that name a room, so it is never guessed. Recorded dollars are shown when a provider records a cost. Work on a subscription records no per-call cost, so it shows as subscription tokens (for example *subscription: $0 recorded, 832.3k tokens*) and never as a bare $0. |
+
+**Flow time**, **flow efficiency** and **finished per week** each have a small trend line for the last eight weeks, and their change against the four weeks before. **In flow now** shows today's count only, with no trend yet: a room that ends without a recorded stop does not yet close its history, so a past count would overstate it.
+
+Below the measures:
+
+- **A bar** shows the mix of work in flow: features, defects, risks and debt.
+- **A table** lists the area's work shapes. For each one it shows how many rooms are in flow and where most of them wait.
+
+Choose a shape to see it drawn across all of its rooms:
+
+- Each step shows how many rooms are there and how many are waiting.
+- A version picker lets you compare the same shape before and after a change.
+- Choose a step to list the rooms at that step, then open any room.
+
+Under the picture, **Where the time goes, step by step** puts the numbers on each step:
+
+- **A box per step** shows how many rooms are waiting there (▽) and how many are in the step. It also shows the step's usual **dwell** (how long a room stays), **process** time (how long it is actually worked) and **first pass** (how often it finished without being sent back). A step that has finished fewer than five times says *too few to measure* instead of showing a number.
+- **Slower lately** or **Faster lately** appears on a step whose last seven days differ from its usual time by a quarter or more, with both times shown.
+- **The timeline** lays the measured steps side by side, with process time on the upper line and waiting time on the lower line. Below it is the total of each and the shape's **flow efficiency**: the share of the time the work was actually being worked.
+
+**Products** (`/portfolio`) shows the four portfolios side by side on the same measures. Rooms with no portfolio are shown in their own **Unplaced** column and never counted in another.
+
+### The main value stream on your home page
+
+Below **What needs you**, the home page shows your business's **main value stream**. This is the work of the portfolio your business type puts first. For a repair shop it might be the jobs you deliver; for a software business it is the changes you build and release.
+
+The panel shows four things:
+
+- **One sentence** naming where the most work is held right now, and why. For example: *5 rooms are held at merge in Small change (waiting on a person).*
+- **Four numbers**: in flow now, flow time, flow efficiency, and finished per week.
+- **The busiest work shape**, drawn live.
+
+Choose a step on the map to open that step in the area's Work view, where you can see the rooms waiting there.
+
+### When work keeps piling up
+
+Every morning the platform reviews where rooms are held. When three or more rooms wait at the same step of the same shape, the platform notes the pile as an improvement signal.
+
+A pile that is still there on later reviews is filed once in the backlog, for its owner to fix. The backlog item names the step, the shape and the reason. A pile that clears on its own is never filed. This keeps the backlog to problems that persist.
+
 ## Access and Other Channels
 
 Room access has separate discovery, content, and action boundaries. Assignment or an explicit room policy admits a principal; a presence heartbeat never does. Sensitivity clearance is checked on the server before messages, participants, or context load. A person without content access receives the same not-found experience as an unknown room.
+
+A room's sensitivity comes from the boundary set on the room. If no boundary is set, it comes from the backlog item the room serves:
+
+- **Platform work is public by default.** This means items scoped to the platform itself (planning scope *platform* or *common*, or the DPF portal product). DPF is open source, so any coworker cleared for public information can help with it.
+- **Other work stays internal**, such as work on your own organization's products and operations.
+- **An item marked *confidential* or *restricted* stays closed**, even when it is platform work. To keep a platform item private, mark it confidential. Every change to an item's sensitivity is recorded on the item.
 
 When an existing communication adapter attaches a Teams, Slack, email, or other external conversation to a Workroom, DPF remains the canonical context:
 
@@ -131,6 +274,8 @@ Unresolved external identities or room attachments are quarantined from room act
 
 - A **finite room** closes when its bounded outcome and closure rule are satisfied.
 - A **standing room** supports recurring work. Each cycle still has its own objective, measures, stop conditions, and structured outcome.
+- Each new run of a standing room starts fresh. Every stage has to earn its evidence again, and every decision is asked for again, so yesterday's decision never completes today's run. A run still in progress at midnight carries on where it was.
+- A room started for a single piece of work, not on a schedule, runs once. When its run succeeds it stays finished; it is not started again the next day.
 
 Completion produces an Outcome Packet from governed decisions, artifacts, actions, receipts, evidence, and unresolved work. Conversation alone cannot complete a room.
 
@@ -228,6 +373,36 @@ doing. Three choices, in the order that matters:
 Anything you set here applies to everyone working in that room, and you can clear it again
 to go back to following the work.
 
+### What "how hard should it push" now reaches
+
+That second setting no longer governs only the room's own turns. It also sets the pace of
+the **standing work its coworkers do on their own** — the recurring tasks that run without
+anyone asking.
+
+Before, that pace came from a per-coworker setting that had been removed from the product,
+so a coworker's recurring work ran at a rhythm nobody could change. Now the room that
+carries the work sets it, which is the same place you already decide everything else about
+that work.
+
+Two things follow from that, and both are deliberate:
+
+- **A coworker in more than one room takes the fastest.** It has one set of recurring tasks,
+  not one per room, so a room set to "pushes" is served at that pace. A quiet room does not
+  slow down what another room is pushing on.
+- **A finished room stops setting anything.** Once a room is complete or abandoned, its pace
+  no longer counts — work that is over should not keep driving a coworker.
+
+- **A coworker with no recurring work yet can be started by its room.** This is new. Until
+  now, setting a room's pace could only change the rhythm of a coworker that was *already*
+  running something — and whether it was depended on a leftover setting from before the
+  per-coworker control was removed, which nobody could create any more. So some coworkers
+  could be sped up or slowed down, and others could not be started at all, for reasons that
+  had nothing to do with the work. Now the room carrying the work is enough: set its pace to
+  "follows up" or "pushes" and the coworkers in it pick up their standing work.
+
+If no live room carries a coworker's standing work at all, its recurring tasks keep running
+as they were. Nothing is switched off behind your back.
+
 One rule is worth knowing before you use the third setting: **stricter always applies.**
 Choosing a looser option cannot give a coworker more freedom than its own permissions
 already allow. If a coworker is only permitted to propose, setting the room to "acts alone"
@@ -283,7 +458,42 @@ room behaves for reasons nobody chose.
 Most rooms created before this existed are unshaped. Giving them a shape is worthwhile for
 any room where pace or verification actually matters.
 
+### A shape is a model the platform checks
+
+A shape is more than a label. It is a small engineering model of the work:
+
+- the stages the work moves through
+- who answers for each stage
+- which decision moves it forward, and which authority owns that decision: the platform (WWMD),
+  your business (WWWD) or the profession (WSID)
+- which tools each stage may use
+
+The platform runs the room *from* that model and checks the room *against* it. A tool the current
+stage does not admit is not offered to a coworker at all, rather than offered and then asked about.
+That is why one well-placed decision can replace a stream of approval prompts.
+
+This way of working, where the model *is* the system rather than a diagram beside it, is called
+model-based systems engineering. The standard that defines it for AI coworkers is the
+[Gated Permissions Process](../../architecture/gated-permissions-process.md). Its
+[Build Studio walkthrough](../../architecture/gated-permissions-process.md#annex-c-informative-build-studio-as-a-gpp-model)
+shows the stages, decisions and tool permissions of a delivery room end to end.
+
 ## Incomplete or Unavailable Rooms
+
+In **Define this room > More room details**, **Sensitivity limit** offers public,
+internal, confidential and restricted classifications, or an explicit unset value.
+An older declaration outside those classifications shows **Needs classification
+review**. Editing the room's purpose or outcome preserves that declaration and
+does not restore access automatically.
+
+A platform administrator can ask their assistant to review the classification
+state of that exact room. This administrative check returns no room contents.
+After the administrator verifies the actual information classification, the
+assistant can propose a correction with the current review reference and a reason.
+The normal approval applies; if the room changed meanwhile, it must be reviewed
+again. Correction retains the original declaration in the room's audit and changes
+no coworker's global clearance. Existing valid classifications cannot be lowered
+through this recovery operation.
 
 If a room boundary is incomplete, the page identifies the missing elements instead of inventing them. If the source is unavailable, the last available projection is marked clearly and the page gives one recovery direction. If an AI coworker's current status is unavailable, the participant panel says so and directs you back to the room's next action instead of implying that the coworker is still working.
 
@@ -296,6 +506,14 @@ that answer came from: recorded on this room, inherited from a room further up, 
 the organization's recorded owner. Knowing which one it is matters, because it tells you where to
 go to change it.
 
+The header and workforce panel use the same accountability result, including
+its recorded or inherited source.
+
+The organization's recorded owner is set when the install is first set up — the owner account
+is recorded unless an owner already exists — and an administrator can change it under
+**Admin > Settings** (**Accountable owner · Change**). Changing it re-points every room that
+inherits from the organization; rooms with their own recorded owner are unaffected.
+
 If nobody is recorded, the room says setup is required rather than naming whoever happens to be
 handy. The install's first administrator, the person who created the room and whoever holds the
 lease are all available, and all of them would be a guess presented as a decision.
@@ -303,6 +521,34 @@ lease are all available, and all of them would be a guess presented as a decisio
 Accountability is answerability for the work. It is deliberately separate from who coordinates
 the room and from what any AI coworker is permitted to do — a coworker doing the work does not
 become accountable for it.
+
+### Who an AI coworker's stage runs for
+
+When a room reaches a stage an AI coworker carries out, the platform schedules that work under a
+person's account. It uses the person the room was requested by or created by. Some rooms record
+neither, for example rooms started from Build Studio. For those, the work runs for the room's
+accountable person, found the same way as above: recorded on the room, inherited from a room
+further up, or the organization's recorded owner. The room's activity says which of those it used.
+
+If no accountable person with an active account can be named, nothing is scheduled. The room
+shows as paused at that stage, with the reason that no accountable person can be named. It does
+not show as dispatched. After an hour it is reported as stuck like any other paused room. Record an
+accountable person on the room, or set the organization's owner, and the next drive cycle schedules
+the work.
+
+### When an account stops being used
+
+Rooms, Build Studio builds and scheduled coworker tasks belong to an account. If that account stops
+being used (a person leaves, or work was set up under a setup account by mistake), everything it
+owns keeps sending its approvals to an inbox nobody reads.
+
+An administrator can hand all of it over in one step. Ask your AI coworker to plan a handover for
+that account. It shows every live room the account alone coordinates, every live build it
+created and every scheduled task it owns, and who each will go to: the accountable person of the
+item's portfolio, or Foundational's, or the organization's owner. Anything with nobody chosen is
+listed as refused rather than guessed. Approve the handover in your inbox and exactly that list
+moves; if anything changed in between, nothing moves and the plan has to be run again. Every room,
+build and task records who handed it over and why.
 
 Beneath that, the room lists the workers in it. An AI coworker reached through several tools is
 one worker, not one row per tool, and any subagents it delegated appear grouped beneath it. Where
@@ -326,3 +572,71 @@ A room like that shows what it holds and states what it does not. If no
 objective was recorded, it says so rather than repeating the room's title as
 though that were the objective, and urgency, effort and assignment read as not
 recorded rather than showing a value nobody set.
+
+These standalone rooms also show their recorded process shape, driver observations,
+recent activity and reviewer evidence. A failed reviewer appears as attention
+needed even when the room itself has not been marked blocked. Inspect **Observed
+execution** for its recorded reason and required action. A task status or journal
+entry is an observation, not proof that the room's outcome has been verified.
+
+An unavailable evidence source or a history longer than the displayed window is
+marked partial. Missing purpose and scope remain boundary gaps. Access to a room's
+contents requires admission and sufficient sensitivity clearance; following a
+coordination link does not grant that access.
+
+For a review marked **auth-required**, open **Activity projection details** in the
+Operations Map and select the review. Its requester must inspect the authority
+saved with the request. Signing in again does not replace those saved credentials.
+The inspector retains the original deadline and recovery count; the server checks
+authority again before accepting recovery.
+
+You can also inspect a reviewer under the room's **Observed execution**. Expand
+its request to see the recorded state, reason, next action, requester and history.
+Checkpoint rows identify the reviewing agents; completed checkpoints alone do not
+prove a successful verdict. The read time and heartbeat show how fresh the view is.
+For a waiting request, the shared recovery controls show its original deadline
+and attempts. Only the original requester can submit recovery, and the server
+rechecks saved authority. An expired window or exhausted limit cannot be reset
+from the room. Intended steps remain separate from these execution observations.
+
+Requests are labeled current, historical, or version unknown. Current means the
+latest request issued for the room's recorded source commit. Older requests keep
+their evidence but do not drive current attention or offer recovery here. Missing
+identity is a projection gap. A working request describes server continuation,
+not its previous wait. Brief checkpoint database retries reuse the provider result;
+they do not spend an additional provider call. Successful sibling checkpoints are
+saved before a failed branch puts the review into a wait.
+
+Independent initiative reviews also appear in **Observed execution**. A receipt
+can appear under a process step when its subject, repository and exact source
+commit match the room and its evidence kind matches that version's requirement.
+It identifies the reviewer, verdict and source commit. Historical or unresolved
+source versions stay in the evidence history. A matching review supports the
+requirement; it does not by itself prove the step or Workroom has completed.
+
+For nested rooms, accountability follows recorded responsibility links. Competing
+parents or a lineage that exceeds the read limit appear as setup gaps. They do
+not silently assign the organization owner. An explicit accountable assignment
+on the room or a known ancestor still takes precedence.
+
+When a case has several Workrooms, choose a room to inspect its own process and
+owners. Links from the operation view keep the selected room and navigation
+context. The case does not combine coordinators from different rooms.
+From Enterprise Architecture's Workrooms view, open Coordination and choose
+**Find a room** to search by title or room ID, filter by operation, or filter by
+room status. **Next rooms** continues through open rooms; the count is for the
+displayed page. Selecting **Operation** from a room's process returns to the
+same filters and page. Recorded stage waits are shown when the drive has named
+the stage and responsible role.
+
+In **Details**, expand **Review requirements** to see what this source of work
+requires. Each requirement names its expected outcome, comparison population,
+evidence fields and inherited sources. Technical profile identity and unresolved
+references stay in a second disclosure. A profile that composes correctly has
+not necessarily been assessed; organization fit and missing evidence remain
+explicit. Conflicting or unsupported requirements need reconciliation.
+
+**Did the change help?** explains when no independent assessment is available
+in this view. A receipt, completed cycle or deployed change alone does not prove
+improvement. Assessment requires an applied version, a comparison window and an
+independent reviewer. An unknown result is not a success percentage.

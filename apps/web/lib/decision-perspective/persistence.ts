@@ -11,8 +11,17 @@ import {
   type DecisionEvaluationSource,
   type PerspectiveMaterialFreshness,
 } from "./types";
-import type { DecisionSubjectKind } from "@dpf/db";
+import type { DecisionSubjectKind, DecisionEscalationRoute } from "@dpf/db";
+import {
+  DECISION_BASES, DECISION_ESCALATION_REASON_CODES,
+  type DecisionEscalation, type DecisionEscalationReasonCode,
+} from "@/lib/govern/authority/escalation-gate";
 import { normalizeLocator } from "@/lib/deliberation/evidence";
+import {
+  syncDecisionShadowLedger,
+  type DecisionShadowLedgerDb,
+  type ShadowLedgerSyncOutcome,
+} from "@/lib/decision/decision-shadow-ledger-bridge";
 
 type DecisionInteractionClient = {
   decisionInteraction: {
@@ -47,7 +56,48 @@ type PersistedDecisionInteractionRow = {
   outcomePayload?: unknown;
   humanOutcome?: unknown;
   escalationCapture?: unknown;
+  escalationRoute?: DecisionEscalationRoute | null;
+  escalationReason?: string | null;
+  escalationFollowOn?: string | null;
 };
+
+/** Decode recorded facts only. Invalid non-legacy evidence cannot grant a step. */
+function recordedEscalation(row: Pick<PersistedDecisionInteractionRow, "escalationRoute" | "escalationReason" | "escalationFollowOn" | "riskTier">): DecisionEscalation | undefined {
+  if (row.escalationRoute == null) return undefined;
+  const route = row.escalationRoute === "independent_review" ? "independent-review" : row.escalationRoute;
+  const reason = row.escalationReason;
+  const followOn = row.escalationFollowOn ?? null;
+  if (!reason || !DECISION_ESCALATION_REASON_CODES.includes(reason as DecisionEscalationReasonCode)) {
+    throw new Error("Recorded escalation reason is invalid");
+  }
+  if (!DECISION_RISK_TIERS.includes(row.riskTier as DecisionRiskTier)
+    || (row.riskTier === "critical") !== (reason === "damaging-critical-risk")) {
+    throw new Error("Recorded escalation risk and reason are inconsistent");
+  }
+  if (route === "human" && reason.startsWith("damaging-") && followOn === null) {
+    return { route, reasonCode: reason as DecisionEscalationReasonCode, damaging: true, followOn: null };
+  }
+  if (route === "decided" && reason === "decided" && followOn === null) {
+    return { route, reasonCode: "decided", damaging: false, followOn: null };
+  }
+  if (route === "independent-review" && reason === "independent-review-required"
+    && followOn && DECISION_BASES.some((basis) => basis !== "decided" && basis === followOn)) {
+    return { route, reasonCode: "independent-review-required", damaging: false,
+      followOn: followOn as Exclude<DecisionEscalation["followOn"], null> };
+  }
+  throw new Error("Recorded escalation route and evidence are inconsistent");
+}
+
+function escalationFields(evaluation: Pick<DecisionPerspectiveEvaluationResult, "escalation" | "riskTier">) {
+  const escalation = evaluation.escalation;
+  const fields = {
+    escalationRoute: escalation ? (escalation.route === "independent-review" ? "independent_review" : escalation.route) : null,
+    escalationReason: escalation?.reasonCode ?? null,
+    escalationFollowOn: escalation?.followOn ?? null,
+  } satisfies Pick<PersistedDecisionInteractionRow, "escalationRoute" | "escalationReason" | "escalationFollowOn">;
+  recordedEscalation({ ...fields, riskTier: evaluation.riskTier });
+  return fields;
+}
 
 const EMPTY_FRESHNESS_DISTRIBUTION: Record<PerspectiveMaterialFreshness, number> = {
   current: 0,
@@ -144,7 +194,16 @@ export function decisionInteractionRowToEvaluation(
       ? row.confidenceAfter
       : 0;
 
+  const escalation = recordedEscalation(row);
+  const stanceAlignment = payload.stanceAlignment;
   return {
+    ...(escalation ? { escalation, heldForIndependentReview: escalation.route === "independent-review" } : {}),
+    ...(stanceAlignment === "approve" || stanceAlignment === "decline" || stanceAlignment === "mixed" || stanceAlignment === "none"
+      ? { stanceAlignment } : {}),
+    ...(payload.relevanceMethod === "semantic" || payload.relevanceMethod === "lexical" ? { relevanceMethod: payload.relevanceMethod } : {}),
+    ...(typeof payload.novelProposition === "boolean" ? { novelProposition: payload.novelProposition } : {}),
+    ...(typeof payload.evaluationFault === "boolean" ? { evaluationFault: payload.evaluationFault } : {}),
+    ...(typeof payload.policyLimitExceeded === "boolean" ? { policyLimitExceeded: payload.policyLimitExceeded } : {}),
     outcomeType: normalizeOutcomeType(row.outcomeType),
     selectedProfileId: row.profileId,
     fallbackProfileId: row.fallbackProfileId ?? null,
@@ -202,7 +261,11 @@ export async function findExistingDecisionInteraction(input: {
 }
 
 export async function persistDecisionInteraction(input: {
-  db: DecisionInteractionClient;
+  /**
+   * The ledger client is only needed when `agentId` is supplied: that is the
+   * one case where the decision is bridged into the shadow ledger.
+   */
+  db: DecisionInteractionClient & Partial<DecisionShadowLedgerDb>;
   /** Optional: the build a decision belongs to. Omit for non-build (e.g. org/WWWD) decisions. */
   build?: { buildId: string } | null;
   evaluation: DecisionPerspectiveEvaluationResult;
@@ -240,6 +303,13 @@ export async function persistDecisionInteraction(input: {
    */
   autonomous?: boolean;
   /**
+   * The coworker that made this decision (BI-6082C235), already resolved to an
+   * existing Agent.agentId (see resolveDecisionAgentId) — the column is a real
+   * foreign key. Omit or pass null when no coworker made it. When present, the
+   * decision is also recorded in the shadow ledger, at `shadow`, record only.
+   */
+  agentId?: string | null;
+  /**
    * Trust-envelope immutability seal (BI-81CC5D8E). When present, the row is
    * written as the next append-only entry in a hash chain. Omitted for callers
    * that do not seal (behavior unchanged — all chain columns stay NULL).
@@ -250,8 +320,14 @@ export async function persistDecisionInteraction(input: {
     chainEntryHash: string;
     sealedAt: Date;
   } | null;
-}): Promise<{ interactionId: string; row: Record<string, unknown> }> {
+}): Promise<{
+  interactionId: string;
+  row: Record<string, unknown>;
+  /** Null when the decision names no coworker, so there was nothing to bridge. */
+  shadowLedger: ShadowLedgerSyncOutcome | null;
+}> {
   const interactionId = input.interactionId ?? createDecisionInteractionId();
+  const agentId = input.agentId?.trim() || null;
   const row = await input.db.decisionInteraction.create({
     data: {
       interactionId,
@@ -281,17 +357,21 @@ export async function persistDecisionInteraction(input: {
       confidenceBefore: input.evaluation.confidenceBefore,
       confidenceAfter: input.evaluation.confidenceAfter,
       outcomeType: input.evaluation.outcomeType,
+      ...escalationFields(input.evaluation),
       principleConflict: input.evaluation.principleConflict,
       gateKey: input.gateKey ?? null,
       gateFallbackUsed: input.gateFallbackUsed ?? false,
       subjectKind: input.subject?.kind ?? null,
       subjectRef: input.subject?.id ?? null,
       autonomous: input.autonomous ?? false,
+      agentId,
       chainId: input.chain?.chainId ?? null,
       prevHash: input.chain?.prevHash ?? null,
       chainEntryHash: input.chain?.chainEntryHash ?? null,
       sealedAt: input.chain?.sealedAt ?? null,
       outcomePayload: {
+        // Extra descriptive metadata never overrides evaluated decision facts.
+        ...(input.outcomePayloadExtra ?? {}),
         outcomeType: input.evaluation.outcomeType,
         domainClass: input.evaluation.domainClass,
         confidenceScore: input.evaluation.confidenceScore,
@@ -300,10 +380,50 @@ export async function persistDecisionInteraction(input: {
         resolvedProfileChain: input.evaluation.resolvedProfileChain,
         materialCount: input.evaluation.materialCount,
         freshnessDistribution: input.evaluation.freshnessDistribution,
-        ...(input.outcomePayloadExtra ?? {}),
+        evaluationFault: input.evaluation.evaluationFault ?? false,
+        policyLimitExceeded: input.evaluation.policyLimitExceeded ?? false,
+        novelProposition: input.evaluation.novelProposition ?? false,
+        stanceAlignment: input.evaluation.stanceAlignment ?? null,
+        relevanceMethod: input.evaluation.relevanceMethod ?? null,
+        gapReason: input.evaluation.gapReason ?? null,
       },
     },
   }) as Record<string, unknown>;
 
-  return { interactionId, row };
+  const shadowLedger = agentId
+    ? await bridgeNewDecision(input.db, {
+        interactionId,
+        agentId,
+        domainClass: input.evaluation.domainClass,
+        riskTier: input.evaluation.riskTier,
+        outcomeType: input.evaluation.outcomeType,
+        recommendedOptionId: input.evaluation.recommendedOptionId ?? null,
+        options: input.evaluation.options,
+        rationale: input.evaluation.rationale || null,
+        // A decision is born unresolved; slice 1 fills the outcome half later.
+        chosenOptionId: null,
+        humanOutcome: null,
+        taskRunId: input.taskRunId ?? null,
+        autonomous: input.autonomous ?? false,
+        subjectKind: input.subject?.kind ?? null,
+        subjectRef: input.subject?.id ?? null,
+      })
+    : null;
+
+  return { interactionId, row, shadowLedger };
+}
+
+/**
+ * The decision is already recorded when this runs, and its ledger row is a
+ * measurement of it: a missing ledger client or a failed write is reported in
+ * the result, never thrown back over a decision that succeeded.
+ */
+async function bridgeNewDecision(
+  db: Partial<DecisionShadowLedgerDb>,
+  row: Parameters<typeof syncDecisionShadowLedger>[1],
+): Promise<ShadowLedgerSyncOutcome> {
+  if (!db.decisionShadowLedger) {
+    return { written: false, reason: "write-failed", detail: "No shadow-ledger client was supplied." };
+  }
+  return syncDecisionShadowLedger({ decisionShadowLedger: db.decisionShadowLedger }, row);
 }

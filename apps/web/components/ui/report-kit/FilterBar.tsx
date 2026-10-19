@@ -45,6 +45,8 @@ interface ClientProps extends CommonProps {
 
 interface UrlProps extends CommonProps {
   mode: "url";
+  /** Explicit context to retain on form submission; omit pagination keys to reset paging. */
+  preserveKeys?: readonly string[];
   /** Route the filter links/forms target, e.g. "/finance/payments". */
   basePath: string;
   onChange?: never;
@@ -185,6 +187,9 @@ export function FilterBar(props: FilterBarProps) {
       {formFacets.length > 0 ? (
         isUrl ? (
           <form action={basePath} method="get" className="flex flex-wrap items-center gap-3">
+            {props.mode === "url" ? [...new Set(props.preserveKeys ?? [])]
+              .filter((key) => value[key] && !facets.some((facet) => facet.key === key))
+              .map((key) => <input key={key} type="hidden" name={key} value={value[key]} />) : null}
             {/* preserve pill selections across a select/search submit */}
             {pillFacets
               .filter((f) => value[f.key])

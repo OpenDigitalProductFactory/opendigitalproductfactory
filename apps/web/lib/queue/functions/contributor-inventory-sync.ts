@@ -24,7 +24,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { cron } from "inngest";
+import { cron } from "@/lib/jobs/triggers";
 
 import {
   CONTRIBUTOR_INVENTORY_JOB_ID,
@@ -32,7 +32,7 @@ import {
   CONTRIBUTOR_INVENTORY_SCHEDULE,
 } from "@dpf/db";
 
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 
 // Re-exported for callers and tests; mirrors the canonical seed-side constant
@@ -267,6 +267,43 @@ export async function runContributorInventorySync(
     });
     insertedRows += created.count;
     summary.snapshotRunId = syncRunId;
+  }
+
+  if (githubRes.ok && githubRes.rows.length > 0) {
+    try {
+      const { applyObservedPullRequestsToBacklog } = await import(
+        "@/lib/backlog/pr-submit-awaiting-acceptance"
+      );
+      const observations = githubRes.rows.flatMap((row) => {
+        const payload = row.payload as {
+          repositoryFullName?: string;
+          number?: number;
+          url?: string;
+          title?: string;
+          headBranch?: string;
+          state?: "open" | "merged" | "closed";
+          isDraft?: boolean;
+        } | null;
+        if (!payload?.repositoryFullName || typeof payload.number !== "number" || !payload.url || !payload.headBranch) {
+          return [];
+        }
+        if (payload.state !== "open" && payload.state !== "merged" && payload.state !== "closed") {
+          return [];
+        }
+        return [{
+          repositoryFullName: payload.repositoryFullName,
+          number: payload.number,
+          url: payload.url,
+          title: payload.title,
+          headBranch: payload.headBranch,
+          state: payload.state,
+          isDraft: payload.isDraft === true,
+        }];
+      });
+      await applyObservedPullRequestsToBacklog(observations);
+    } catch (err) {
+      console.error("[contributor-inventory-sync] awaiting-acceptance reconcile failed", err);
+    }
   }
 
   const okCount = [worktreeRes, branchRes, githubRes].filter((r) => r.ok).length;
@@ -685,7 +722,16 @@ function cuid(): string {
 
 // ─── Inngest function wrappers ──────────────────────────────────────────────
 
-export const contributorInventorySyncCron = inngest.createFunction(
+export async function syncAndBind(step: Pick<Parameters<typeof gateAtEntry>[0], "run">, stepId: string, options: RunSyncOptions) {
+  const sync = await step.run(stepId, () => runContributorInventorySync(options)) as RunSyncResult;
+  const bindings = await step.run("bind-workroom-pr-observations", async () => {
+    const { reconcileInventoryPullRequestBindings } = await import("@/lib/work-capsules/pull-request-binding-runtime");
+    return reconcileInventoryPullRequestBindings(sync.syncRunId);
+  });
+  return { ...sync, workroomBindings: bindings };
+}
+
+export const contributorInventorySyncCron = jobs.createFunction(
   {
     id: "ops/contributor-inventory-sync-cron",
     retries: 2,
@@ -696,13 +742,11 @@ export const contributorInventorySyncCron = inngest.createFunction(
     const gate = await gateAtEntry(step, "ops/contributor-inventory-sync-cron");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
-    return await step.run("run-sync-cron", () =>
-      runContributorInventorySync({ triggeredBy: "cron", reapStuckRuns: true }),
-    );
+    return syncAndBind(step, "run-sync-cron", { triggeredBy: "cron", reapStuckRuns: true });
   },
 );
 
-export const contributorInventorySyncOnDemand = inngest.createFunction(
+export const contributorInventorySyncOnDemand = jobs.createFunction(
   {
     id: "ops/contributor-inventory-sync-on-demand",
     retries: 2,
@@ -716,8 +760,6 @@ export const contributorInventorySyncOnDemand = inngest.createFunction(
     const triggeredBy =
       (event.data as { triggeredBy?: string } | undefined)?.triggeredBy ?? "mcp";
 
-    return await step.run("run-sync-on-demand", () =>
-      runContributorInventorySync({ triggeredBy, reapStuckRuns: false }),
-    );
+    return syncAndBind(step, "run-sync-on-demand", { triggeredBy, reapStuckRuns: false });
   },
 );

@@ -13,7 +13,7 @@
 // readers and this reader is tolerant of both the array form and a legacy
 // object form.
 
-import { getWorkShape, type WorkShapeDefinition } from "./work-shapes";
+import { getWorkShape, getWorkShapeVersion, type WorkShapeDefinition } from "./work-shapes";
 import { WORKROOM_SHAPE_KEYS, type WorkroomShapeKey } from "./room-shapes";
 
 export type WorkroomShapeClaimEntry = {
@@ -112,6 +112,12 @@ export function readWorkShapeClaim(scopeClaims: unknown): WorkShapeRef | null {
   return workShapeRefFrom(scopeClaims);
 }
 
+/** The room's declared shape as `key@version`, or null. The one reader every flow surface uses (EP-B70E718D). */
+export function readWorkShapeClaimRef(scopeClaims: unknown): string | null {
+  const ref = readWorkShapeClaim(scopeClaims);
+  return ref ? `${ref.key}@${ref.version}` : null;
+}
+
 export function buildWorkShapeClaim(
   ref: WorkShapeRef | string,
   now: Date = new Date(),
@@ -135,12 +141,53 @@ export function withWorkShapeClaim(
 }
 
 /**
- * Resolve the declared `key@version` against the canonical registry.
- * Unknown key, version mismatch, or unparseable claim → null, never throws.
+ * Resolve the declared `key@version` against the canonical registry, including
+ * a superseded version a live room still pins, so a version bump never silently
+ * stops a room (BI-CB5C0DCE). Unknown key or version, or an unparseable claim
+ * → null, never throws.
  */
 export function resolveWorkShapeClaim(scopeClaims: unknown): WorkShapeDefinition | null {
+  const ref = readWorkShapeClaim(scopeClaims);
+  return ref ? getWorkShapeVersion(ref.key, ref.version) : null;
+}
+
+/** Resolve only the registry's CURRENT version. Creating a room or adopting a
+ *  claim must never pin a superseded version. */
+export function resolveCurrentWorkShapeClaim(scopeClaims: unknown): WorkShapeDefinition | null {
   const ref = readWorkShapeClaim(scopeClaims);
   if (!ref) return null;
   const shape = getWorkShape(ref.key);
   return shape && shape.version === ref.version ? shape : null;
+}
+
+/**
+ * A room's binding of shape roles to principals (BI-C1781121), carried on the
+ * same scopeClaims array as the shape claim. A shape names the role that
+ * answers for a stage (`role:acceptance-verifier`); a room created for one
+ * piece of work names who holds that role in it (`agent:AGT-...`). The drive
+ * reads it (drive-resolution.ts roleBindings); parseScopeClaims ignores it.
+ */
+export type WorkShapeRoleBindingsClaimEntry = {
+  workShapeRoleBindings: Record<string, string>;
+  recordedAt: string;
+};
+
+export function buildWorkShapeRoleBindingsClaim(
+  bindings: Readonly<Record<string, string>>,
+  now: Date = new Date(),
+): WorkShapeRoleBindingsClaimEntry {
+  return { workShapeRoleBindings: { ...bindings }, recordedAt: now.toISOString() };
+}
+
+/** The room's role bindings, or an empty map. Never throws; non-string values are dropped. */
+export function readWorkShapeRoleBindings(scopeClaims: unknown): Record<string, string> {
+  const entries = Array.isArray(scopeClaims) ? scopeClaims : [scopeClaims];
+  for (const entry of entries) {
+    const bindings = asRecord(asRecord(entry)?.workShapeRoleBindings);
+    if (!bindings) continue;
+    return Object.fromEntries(
+      Object.entries(bindings).filter((pair): pair is [string, string] => typeof pair[1] === "string" && pair[1].length > 0),
+    );
+  }
+  return {};
 }

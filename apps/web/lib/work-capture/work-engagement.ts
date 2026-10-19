@@ -190,6 +190,10 @@ export type CreateRecurringInput = {
   title: string;
   requestedOutcome?: string;
   createdByAgentId?: string | null;
+  /** Optional subject the work is about (e.g. `animal-profile` + the profile id) and where it happens. */
+  subjectKindSlug?: string | null;
+  subjectRef?: string | null;
+  locationResourceRef?: string | null;
   rrule: string;
   timezone: string;
   anchorAt: Date;
@@ -229,6 +233,9 @@ export async function createRecurringWorkEngagement(
         title: input.title,
         requestedOutcome: input.requestedOutcome ?? null,
         createdByAgentId: input.createdByAgentId ?? null,
+        subjectKindSlug: input.subjectKindSlug ?? null,
+        subjectRef: input.subjectRef ?? null,
+        locationResourceRef: input.locationResourceRef ?? null,
         recurrenceScheduleId: schedule.id,
         status: "planned",
       },
@@ -240,6 +247,9 @@ export async function createRecurringWorkEngagement(
           organizationId: input.organizationId,
           title: input.title,
           createdByAgentId: input.createdByAgentId ?? null,
+          subjectKindSlug: input.subjectKindSlug ?? null,
+          subjectRef: input.subjectRef ?? null,
+          locationResourceRef: input.locationResourceRef ?? null,
           recurrenceScheduleId: schedule.id,
           parentWorkEngagementId: parent.id,
           instanceNumber: o.instanceNumber,
@@ -252,4 +262,69 @@ export async function createRecurringWorkEngagement(
     }
     return { parentId: parent.id, scheduleId: schedule.id, instances: occurrences.length };
   });
+}
+
+/**
+ * Top up a recurring engagement's instances over [windowStart, windowEnd).
+ * Idempotent per occurrence: existing keys are planned around, a cancelled or
+ * overridden occurrence stays skipped, and the unique (schedule, occurrenceAt)
+ * index backstops any race. Returns how many new instance rows were written.
+ */
+export async function materializeRecurringInstances(input: {
+  parentId: string;
+  windowStart: Date;
+  windowEnd: Date;
+  maxOccurrences: number;
+}): Promise<{ created: number } | { error: string; message: string }> {
+  const parent = await prisma.workEngagement.findUnique({
+    where: { id: input.parentId },
+    select: {
+      id: true, organizationId: true, title: true, createdByAgentId: true,
+      subjectKindSlug: true, subjectRef: true, locationResourceRef: true, status: true,
+      recurrence: { select: { id: true, rrule: true, timezone: true, anchorAt: true, until: true, active: true } },
+    },
+  });
+  if (!parent?.recurrence) {
+    return { error: "not-found", message: `WorkEngagement ${input.parentId} is not a recurring parent.` };
+  }
+  const schedule = parent.recurrence;
+  if (!schedule.active || parent.status === "cancelled" || parent.status === "completed") {
+    return { created: 0 };
+  }
+  const occurrences = expandOccurrences({
+    rrule: schedule.rrule,
+    timezone: schedule.timezone,
+    anchorAt: schedule.anchorAt,
+    until: schedule.until,
+    windowStart: input.windowStart,
+    windowEnd: input.windowEnd,
+    maxOccurrences: input.maxOccurrences,
+  });
+  const existing = await prisma.workEngagement.findMany({
+    where: { recurrenceScheduleId: schedule.id, occurrenceAt: { gte: input.windowStart, lt: input.windowEnd } },
+    select: { occurrenceAt: true },
+  });
+  const planned = planMaterialization(
+    occurrences,
+    new Set(existing.map((row) => row.occurrenceAt!.toISOString())),
+  );
+  if (planned.length === 0) return { created: 0 };
+  const result = await prisma.workEngagement.createMany({
+    data: planned.map((o) => ({
+      organizationId: parent.organizationId,
+      title: parent.title,
+      createdByAgentId: parent.createdByAgentId,
+      subjectKindSlug: parent.subjectKindSlug,
+      subjectRef: parent.subjectRef,
+      locationResourceRef: parent.locationResourceRef,
+      recurrenceScheduleId: schedule.id,
+      parentWorkEngagementId: parent.id,
+      instanceNumber: o.instanceNumber,
+      occurrenceAt: o.occurrenceAt,
+      dueAt: o.occurrenceAt,
+      status: "planned",
+    })),
+    skipDuplicates: true,
+  });
+  return { created: result.count };
 }

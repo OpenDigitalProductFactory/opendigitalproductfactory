@@ -15,11 +15,10 @@ describe("workspace tile derivation", () => {
     expect(tiles.some((t) => t.key === "agents")).toBe(false);
   });
 
-  it("Admin tile only appears for HR-000", () => {
+  it("offers no Admin tile: Admin is reached from the Run the platform area's Setup (EP-2FB6C0CC)", () => {
     const hr000 = getWorkspaceTiles({ platformRole: "HR-000", isSuperuser: false });
-    const hr300 = getWorkspaceTiles({ platformRole: "HR-300", isSuperuser: false });
-    expect(hr000.some((t) => t.key === "admin")).toBe(true);
-    expect(hr300.some((t) => t.key === "admin")).toBe(false);
+    expect(hr000.some((t) => t.key === "platform")).toBe(true);
+    expect(hr000.some((t) => t.key === "admin")).toBe(false);
   });
 
   it("surfaces the document library from Workspace for platform operators", () => {

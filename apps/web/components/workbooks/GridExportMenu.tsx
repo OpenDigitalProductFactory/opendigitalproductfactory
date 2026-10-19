@@ -3,9 +3,10 @@
 // Universal Grid & Workbooks — the "Export" dropdown (EP-GRID-WORKBOOKS).
 //
 // One export control instead of a button per format: an "Export" button that opens
-// a small menu to pick CSV or Excel (.xlsx). The Grid owns the actual download for
-// each format and passes the handlers here; this is pure UI over them. Mirrors the
-// GridViewsMenu pattern (plain toggle + click-away layer) for a consistent feel.
+// a small menu to pick CSV, Excel (.xlsx) or OpenDocument (.ods). The Grid owns the
+// actual download for each format and passes the handlers here; this is pure UI
+// over them. Mirrors the GridViewsMenu pattern (plain toggle + click-away layer).
+// UX fit: docs/ux-fit/2026-09-25-office-export-workbooks.ux-fit.json (DI-32119188EA19).
 
 import { useState, type ReactNode } from "react";
 import { Download } from "lucide-react";
@@ -14,12 +15,13 @@ export interface GridExportMenuProps {
   disabled?: boolean;
   onExportCsv: () => void;
   onExportXlsx: () => void;
+  onExportOds: () => void;
 }
 
 const ITEM =
   "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)]";
 
-export function GridExportMenu({ disabled, onExportCsv, onExportXlsx }: GridExportMenuProps): ReactNode {
+export function GridExportMenu({ disabled, onExportCsv, onExportXlsx, onExportOds }: GridExportMenuProps): ReactNode {
   const [open, setOpen] = useState(false);
 
   const pick = (fn: () => void) => {
@@ -57,6 +59,10 @@ export function GridExportMenu({ disabled, onExportCsv, onExportXlsx }: GridExpo
             <button type="button" role="menuitem" onClick={() => pick(onExportXlsx)} className={ITEM}>
               <Download size={15} aria-hidden className="text-[var(--dpf-muted)]" />
               Excel (.xlsx)
+            </button>
+            <button type="button" role="menuitem" onClick={() => pick(onExportOds)} className={ITEM}>
+              <Download size={15} aria-hidden className="text-[var(--dpf-muted)]" />
+              OpenDocument (.ods)
             </button>
           </div>
         </>

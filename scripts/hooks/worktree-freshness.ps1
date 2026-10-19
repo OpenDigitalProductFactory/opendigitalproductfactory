@@ -3,6 +3,11 @@
 #
 # SessionStart freshness advisory (Windows). Counterpart of worktree-freshness.sh.
 #
+# Also reports INSTRUCTION-PLANE drift (BI-9A46E89C): CLAUDE.md imports AGENTS.md
+# from the WORKTREE, so a stale base governs the session by a superseded rulebook
+# and every "does this already exist?" check can return a false negative. Kept in
+# parity with worktree-freshness.sh.
+#
 # Why: a topic worktree whose base is a stale `main` is the root cause of the
 # worst git accidents in this repo. When `main` has moved far past the worktree's
 # base AND the checkout is a shallow clone, a bare `git rebase origin/main`
@@ -80,7 +85,27 @@ try {
         }
     }
 
-    if (-not $stale) { exit 0 }
+    # Instruction-plane drift (BI-9A46E89C): has the rulebook this session is
+    # GOVERNED BY moved on? CLAUDE.md imports AGENTS.md from the WORKTREE, so a
+    # stale base silently swaps the operating contract for a superseded one, and
+    # the stale copy cannot report that it is stale. Reported independently of
+    # the commit-count threshold: one commit can add a commandment.
+    $principlesDir  = 'docs/founder-kernel/wiki/principles'
+    $agentsMoved     = $false
+    $principlesMoved = 0
+    if (-not [string]::IsNullOrWhiteSpace($mergebase)) {
+        $agentsDiff = (Git @('diff','--name-only',$mergebase,'origin/main','--','AGENTS.md'))
+        if (-not [string]::IsNullOrWhiteSpace($agentsDiff)) { $agentsMoved = $true }
+        $principlesDiff = (Git @('diff','--name-only',$mergebase,'origin/main','--',$principlesDir))
+        if (-not [string]::IsNullOrWhiteSpace($principlesDiff)) {
+            $principlesMoved = @(($principlesDiff -split "`n") | Where-Object { $_.Trim() -ne '' }).Count
+        }
+    }
+    $planeMoved = ($agentsMoved -or ($principlesMoved -gt 0))
+
+    if (-not $stale -and -not $planeMoved) { exit 0 }
+
+    if ($stale) {
 
     Write-Output "WARNING: DPF WORKTREE FRESHNESS -- this worktree ($branch) looks stale:"
     Write-Output "    $reason."
@@ -97,6 +122,26 @@ try {
         Write-Output 'Rebase your commits onto current main:  git rebase origin/main'
     }
     Write-Output 'See AGENTS.md section 4 (Branching) -> worktree freshness. Silence: DPF_SKIP_WORKTREE_FRESHNESS=1.'
+    }
+
+    if ($planeMoved) {
+        Write-Output 'WARNING: DPF INSTRUCTION PLANE -- the rules governing this session are NOT current.'
+        if ($agentsMoved) {
+            Write-Output "    AGENTS.md has changed on origin/main since this worktree's base."
+            Write-Output '    CLAUDE.md imports AGENTS.md FROM THIS WORKTREE, so you are reading the old copy.'
+        }
+        if ($principlesMoved -gt 0) {
+            Write-Output "    $principlesMoved kernel principle file(s) have changed since this base."
+        }
+        Write-Output "Consequence: every 'does this already exist?' check you run against this tree"
+        Write-Output 'can return a FALSE NEGATIVE -- a rule, principle, helper or guard that exists on'
+        Write-Output 'main may read as absent here, so you may rebuild or re-propose what is already'
+        Write-Output 'canonical. A stale rulebook cannot report that it is stale.'
+        Write-Output 'Refresh BEFORE any substrate check or new-work proposal:'
+        Write-Output '    git fetch origin main   (then rebase as above, or re-branch from origin/main)'
+        Write-Output 'Review what moved:'
+        Write-Output "    git diff `$(git merge-base HEAD origin/main) origin/main -- AGENTS.md $principlesDir"
+    }
 }
 catch {
     # never fail a session start

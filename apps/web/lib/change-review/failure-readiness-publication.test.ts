@@ -2,9 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { failureAnalysisFixture } from "./failure-analysis.test-fixtures";
 import { validateFailureAnalysis } from "./failure-analysis";
 import { CHANGE_REVIEW_POLICY_VERSION, CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION } from "./semantic-change-review";
-const mocks = vi.hoisted(() => ({ room: vi.fn(), rows: vi.fn(), evidence: vi.fn() }));
+const mocks = vi.hoisted(() => ({ room: vi.fn(), rows: vi.fn(), evidence: vi.fn(), exemption: vi.fn(), failed: vi.fn() }));
 vi.mock("@dpf/db", () => ({ prisma: { workroom: { findUnique: mocks.room }, externalEvidenceRecord: { findMany: mocks.rows } } }));
 vi.mock("./failure-analysis-evidence", () => ({ resolveFailureAnalysisEvidence: mocks.evidence }));
+vi.mock("./semantic-review-policy-exemption", () => ({ resolveWorkroomReviewExemption: mocks.exemption, findCurrentSemanticFailure: mocks.failed }));
 import { checkWorkroomFailureReadiness } from "./failure-readiness-publication";
 const identity = { capsuleId: "room", headTreeHash: "a".repeat(40), diffDigest: "b".repeat(64) };
 const fixture = failureAnalysisFixture(identity);
@@ -19,8 +20,33 @@ beforeEach(() => {
   mocks.room.mockResolvedValue({ id: "room-row", headSha: receipt.sourceHeadSha, repositoryFullName: "owner/repo" });
   mocks.rows.mockResolvedValue([{ id: "review", details: receipt }]);
   mocks.evidence.mockResolvedValue(fixture.resolvedFailureEvidence);
+  mocks.exemption.mockResolvedValue(null);
+  mocks.failed.mockResolvedValue(null);
 });
 describe("server publication boundary", () => {
+  it("blocks an exact-head failure hidden beyond the recent receipt window", async () => {
+    mocks.rows.mockResolvedValue([]);
+    mocks.exemption.mockResolvedValue({ evidenceId: "exception", sourceHeadSha: receipt.sourceHeadSha });
+    mocks.failed.mockResolvedValue({ id: "older-current-failure" });
+    expect((await checkWorkroomFailureReadiness("room")).mayPublish).toBe(false);
+  });
+  it("consumes an audited exception without reporting an independent review pass", async () => {
+    mocks.rows.mockResolvedValue([]);
+    mocks.exemption.mockResolvedValue({ evidenceId: "exception", sourceHeadSha: receipt.sourceHeadSha });
+    const result = await checkWorkroomFailureReadiness("room");
+    expect(result).toMatchObject({ mayPublish: true, evidenceId: "exception" });
+    expect(result.reason).toContain("UNRUN");
+  });
+  it("allows an infrastructure-inconclusive review under the same audited exception", async () => {
+    mocks.rows.mockResolvedValue([{ id: "unrun", details: { ...receipt, disposition: "infrastructure-inconclusive", result: { decision: "inconclusive" } } }]);
+    mocks.exemption.mockResolvedValue({ evidenceId: "exception", sourceHeadSha: receipt.sourceHeadSha });
+    expect(await checkWorkroomFailureReadiness("room")).toMatchObject({ mayPublish: true, evidenceId: "exception" });
+  });
+  it("never applies an exception to a failed current review", async () => {
+    mocks.rows.mockResolvedValue([{ id: "fail", details: { ...receipt, result: { decision: "fail" } } }]);
+    mocks.exemption.mockResolvedValue({ evidenceId: "exception", sourceHeadSha: receipt.sourceHeadSha });
+    expect((await checkWorkroomFailureReadiness("room")).mayPublish).toBe(false);
+  });
   it("permits the independently reviewed final change", async () => {
     expect(await checkWorkroomFailureReadiness("room")).toMatchObject({ mayPublish: true, evidenceId: "review" });
   });

@@ -10,7 +10,7 @@
 // hold a calm "reconnecting" state instead of escalating to the (shell) error
 // boundary.
 import "@/test-setup";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { act, render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/navigation", () => ({
@@ -24,6 +24,7 @@ vi.mock("@/lib/actions/promotions", () => ({
 }));
 
 import { triggerSelfUpgrade, forceActiveRun } from "@/lib/actions/promotions";
+import { withMessages } from "@/test-support/with-messages";
 import SelfUpgradeTriggerControl from "./SelfUpgradeTriggerControl";
 import { isExpectedDuringSwap } from "@/lib/self-upgrade/is-expected-during-swap";
 
@@ -86,8 +87,12 @@ const drainingQuiescence = {
   blockers: [],
 };
 
+const fetchMock = vi.fn();
+
 beforeEach(() => {
   vi.clearAllMocks();
+  fetchMock.mockReset();
+  vi.stubGlobal("fetch", fetchMock);
 });
 
 // ─── isExpectedDuringSwap (pure) ───────────────────────────────────────────
@@ -137,7 +142,9 @@ describe("SelfUpgradeTriggerControl – forced upgrade swap resilience", () => {
     });
 
     expect(screen.getByRole("button", { name: /upgrade now/i })).toBeDisabled();
-    expect(screen.getByText(/do not click again/i)).toBeInTheDocument();
+    // The button is disabled, so the copy no longer tells the operator not to press it (BI-CE244260).
+    expect(screen.getByText(/Checking the server record/i)).toBeInTheDocument();
+    expect(screen.queryByText(/do not click again/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Not admitted:/i)).not.toBeInTheDocument();
   });
 
@@ -157,7 +164,7 @@ describe("SelfUpgradeTriggerControl – forced upgrade swap resilience", () => {
   });
 
   it("treats a severed Force-now request during a drain as applying, not a crash", async () => {
-    forceMock.mockRejectedValue(new TypeError("Failed to fetch"));
+    fetchMock.mockRejectedValue(new TypeError("Failed to fetch"));
 
     render(
       <SelfUpgradeTriggerControl
@@ -177,20 +184,48 @@ describe("SelfUpgradeTriggerControl – forced upgrade swap resilience", () => {
     });
   });
 
-  it("clears the indeterminate admission latch once a durable run appears", async () => {
-    triggerMock.mockRejectedValue(makeE394());
+  // BI-F9EE05E5 slice C: the drain controls post to a route the proxy admits
+  // during a drain; a server action to the page is refused exactly then.
+  it("sends Force now through the drain control route", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    render(withMessages(<SelfUpgradeTriggerControl {...baseProps} latestRun={makeRun("running")} quiescence={drainingQuiescence} />));
+    fireEvent.click(screen.getByRole("button", { name: /Force upgrade run QR-DRAIN now/i }));
+    fireEvent.click(screen.getByRole("button", { name: /confirm force/i }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe("/api/ops/self-upgrade/control");
+    expect(JSON.parse(String((init as RequestInit).body))).toEqual({ runId: "QR-DRAIN", action: "force" });
+    expect(forceMock).not.toHaveBeenCalled();
+  });
+
+  it("offers Keep waiting only once the upgrade pauses for the operator, and says why", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    const { rerender } = render(withMessages(<SelfUpgradeTriggerControl {...baseProps} latestRun={makeRun("running")} quiescence={drainingQuiescence} />));
+    expect(screen.queryByRole("button", { name: /Keep waiting/i })).toBeNull();
+    expect(screen.getByText(/Waiting for running work to finish before installing/i)).toBeInTheDocument();
+
+    const paused = { ...drainingQuiescence, run: { ...drainingQuiescence.run, status: "awaiting-operator" } };
+    rerender(withMessages(<SelfUpgradeTriggerControl {...baseProps} latestRun={makeRun("running")} quiescence={paused} />));
+    expect(screen.getByText(/Work is still running after .* min. New work stays paused/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Keep waiting/i }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(JSON.parse(String((fetchMock.mock.calls[0]![1] as RequestInit).body))).toEqual({ runId: "QR-DRAIN", action: "keep-waiting" });
+  });
+
+  it.each(["response-first", "run-first"] as const)("clears the indeterminate admission latch once a durable run appears (%s)", async (order) => {
+    let rejectAdmission!: (error: Error) => void;
+    triggerMock.mockImplementationOnce(() => new Promise((_resolve, reject) => {
+      rejectAdmission = reject;
+    }));
 
     const { rerender } = render(<SelfUpgradeTriggerControl {...baseProps} />);
 
     fireEvent.click(screen.getByRole("checkbox", { name: /emergency override/i }));
     fireEvent.click(screen.getByRole("button", { name: /upgrade now/i }));
 
-    await waitFor(() => {
-      expect(screen.getByText(/Admission response interrupted:/i)).toBeInTheDocument();
-    });
+    expect(triggerMock).toHaveBeenCalledOnce();
 
-    // The poll reaches the new container: a fresh run is now visible.
-    rerender(
+    const observeDurableRun = () => rerender(
       <SelfUpgradeTriggerControl
         {...baseProps}
         latestRun={makeRun("succeeded", {
@@ -198,10 +233,25 @@ describe("SelfUpgradeTriggerControl – forced upgrade swap resilience", () => {
         })}
       />,
     );
+    if (order === "run-first") {
+      await act(async () => { observeDurableRun(); });
+      expect(screen.getByRole("button", { name: /upgrade now/i })).toBeDisabled();
+    }
 
-    await waitFor(() => {
-      expect(screen.queryByText(/Admission response interrupted:/i)).not.toBeInTheDocument();
-    });
+    await act(async () => { rejectAdmission(makeE394()); });
+    if (order === "response-first") {
+      expect(screen.getByText(/Admission response interrupted:/i)).toBeInTheDocument();
+      const trigger = screen.getByRole("button", { name: /upgrade now/i });
+      expect(trigger).toBeDisabled();
+      fireEvent.click(trigger);
+      expect(triggerMock).toHaveBeenCalledOnce();
+      // Flush the observed server update and its effects as one React interaction.
+      await act(async () => { observeDurableRun(); });
+    }
+
+    expect(screen.queryByText(/Admission response interrupted:/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /upgrade now/i })).toBeEnabled();
+    expect(triggerMock).toHaveBeenCalledOnce();
   });
 
   it("keeps a normal queued trigger working (no false reconnecting state)", async () => {

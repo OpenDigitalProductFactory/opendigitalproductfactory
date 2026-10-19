@@ -1,12 +1,29 @@
 import { headers } from "next/headers";
+import { prisma } from "@dpf/db";
+import { namespaceMessages } from "@dpf/i18n";
 
+import { AcceptanceSweepCloseAuthorisationCard } from "@/components/admin/AcceptanceSweepCloseAuthorisationCard";
 import { AdminTabNav } from "@/components/admin/AdminTabNav";
+import { AuthorStagePreauthorisationCard } from "@/components/admin/AuthorStagePreauthorisationCard";
 import { ForkSetupPanel } from "@/components/admin/ForkSetupPanel";
 import LegacyTokenOverrideBanner from "@/components/admin/LegacyTokenOverrideBanner";
+import { McpOAuthClientManager } from "@/components/admin/McpOAuthClientManager";
 import { McpTokenManager } from "@/components/admin/McpTokenManager";
+import { GovernedBacklogSettings } from "@/components/admin/GovernedBacklogSettings";
 import { PlatformDevelopmentForm } from "@/components/admin/PlatformDevelopmentForm";
+import { getAutonomousPlaybookMode } from "@/lib/build/build-studio-config";
+import { auth } from "@/lib/auth";
+import { mayManageCloseAuthorisation } from "@/lib/backlog/acceptance-sweep/close-authorisation-access";
+import { loadCloseAuthorisationView, type CloseAuthorisationViewDb } from "@/lib/backlog/acceptance-sweep/close-authorisation-view";
+import {
+  loadAuthorStagePreauthorisationView,
+  mayManageAuthorStagePreauthorisation,
+  type AuthorStagePreauthorisationViewDb,
+} from "@/lib/work-management/author-stage-preauthorisation-view";
 import { PrivatePathsEditor } from "@/components/admin/PrivatePathsEditor";
 import TokenExpiryBanner from "@/components/admin/TokenExpiryBanner";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
+import { getLocaleContext } from "@/lib/i18n/locale-context.server";
 import {
   getGitHubConnectedState,
   getPlatformDevConfig,
@@ -43,6 +60,18 @@ export default async function AdminPlatformDevelopmentPage() {
   const proto = hdrs.get("x-forwarded-proto") ?? "http";
   const host = hdrs.get("x-forwarded-host") ?? hdrs.get("host") ?? "localhost:3000";
   const baseUrl = `${proto}://${host}`;
+  const { language } = await getLocaleContext();
+  // BI-C2467A2E: the acceptance sweep's close switch, only for people who may change it.
+  const session = await auth();
+  const closeAuthorisationView = session?.user
+    && mayManageCloseAuthorisation({ platformRole: session.user.platformRole, isSuperuser: session.user.isSuperuser })
+    ? await loadCloseAuthorisationView(prisma as unknown as CloseAuthorisationViewDb)
+    : null;
+  // BI-8A32EBFF: the drive's author-stage pre-authorisation, only for people who may change it.
+  const authorStageView = session?.user
+    && mayManageAuthorStagePreauthorisation({ platformRole: session.user.platformRole, isSuperuser: session.user.isSuperuser })
+    ? await loadAuthorStagePreauthorisationView(prisma as unknown as AuthorStagePreauthorisationViewDb)
+    : null;
 
   return (
     <div>
@@ -64,6 +93,28 @@ export default async function AdminPlatformDevelopmentPage() {
         contributorForkRepo={config?.contributorForkRepo ?? null}
         hasContributionToken={hasContribToken}
       />
+      <div className="mb-6">
+        <GovernedBacklogSettings
+          enabled={config?.governedBacklogEnabled === true}
+          dailyCap={config?.backlogTeeUpDailyCap ?? 3}
+          capacityDrainEnabled={config?.capacityDrainEnabled === true}
+          playbookMode={getAutonomousPlaybookMode()}
+        />
+      </div>
+      {closeAuthorisationView && (
+        <div className="mb-6">
+          <MessagesProvider locale={language} messages={{ admin: namespaceMessages(language, "admin") }}>
+            <AcceptanceSweepCloseAuthorisationCard view={closeAuthorisationView} />
+          </MessagesProvider>
+        </div>
+      )}
+      {authorStageView && (
+        <div className="mb-6">
+          <MessagesProvider locale={language} messages={{ admin: namespaceMessages(language, "admin") }}>
+            <AuthorStagePreauthorisationCard view={authorStageView} />
+          </MessagesProvider>
+        </div>
+      )}
       <PlatformDevelopmentForm
         policyState={policyState}
         currentMode={policyState === "policy_pending" ? null : policyState}
@@ -84,6 +135,13 @@ export default async function AdminPlatformDevelopmentPage() {
       <McpTokenManager
         baseUrl={baseUrl}
       />
+      {/* BI-EDB67A2B: headless (client_credentials) clients live beside the
+          PAT manager — the design's "operator-issued from Admin > Platform
+          Development, listed and revocable beside browser-authorized clients". */}
+      {/* The People panel reads admin; the source-client form reads setup. */}
+      <MessagesProvider locale={language} messages={{ admin: namespaceMessages(language, "admin"), setup: namespaceMessages(language, "setup") }}>
+        <McpOAuthClientManager />
+      </MessagesProvider>
     </div>
   );
 }

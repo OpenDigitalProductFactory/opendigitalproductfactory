@@ -112,6 +112,94 @@ As a non-blocking step in the `build/review.verify` Inngest job, between
 `resolve-changed-files` and `semantic-change-review` — the point where the
 assembled change exists and before ship is dispatched.
 
+### Slice 3 - the record acquires teeth
+
+`apps/web/lib/build/preflight-record-requirement.ts` and
+`apps/web/lib/build/sandbox/guard-gauntlet-identity.ts`.
+
+Slices 1 and 2 make the checks run and make their result count. Neither has force
+on its own. On the external path `git push` is refused without a gate record, and
+that refusal IS the mechanism - the record only matters because publishing is
+impossible without it. `create_portal_pr` had no equivalent, so the in-platform
+path could put a branch on a shared repository with no verification having run.
+
+Publishing now requires a PASSING in-platform preflight record for the EXACT tree
+being published. Two properties carry the weight, and both are the way to get
+this wrong:
+
+**Exact tree.** "A gate ran for this build" is not the contract; "a gate passed
+for THIS tree" is. A record for an earlier tree of the same build does not
+satisfy it - that is precisely the case where someone fixed the guards, changed
+the code again, and published the unverified version.
+
+**Unreadable is not permission.** If the tree cannot be identified, or the plan
+or toolchain is unknown, or the key cannot be derived, publication is refused.
+The safe direction is to stop, because the cost of a wrong "yes" is unverified
+code on a shared repository.
+
+This is also where the tree keying from slice 2 pays for itself. The consumer has
+to derive the SAME key the producer wrote, before it knows anything about the
+result, purely from what is on disk now - which is why the plan digest hashes the
+plan and never the outcome. `guard-gauntlet-identity.ts` does that recomputation,
+and every field of the identity is independently nullable so a partial read is
+refused rather than silently completed with a guess.
+
+An override is an allowlisted, recorded reason mirroring the closed set the
+pre-push hook already uses, never a silent bypass, and it short-circuits before
+any I/O so a deliberate bypass does not depend on the sandbox being reachable.
+
+Sequenced last of the three deliberately: it is the only slice that can block
+real work, and a refusal arriving before the checks are trustworthy would meet a
+non-developer with a wall they did not earn.
+
+### Slice 4 - the failure speaks to the reader
+
+`apps/web/lib/build/guard-failure-explanation.ts`.
+
+Slices 1 to 3 make the in-platform path as SAFE as an external agent's. This is
+the slice that makes it USABLE by the person it is for, and without it those
+slices produce a path that is rigorous and unusable - which is worse than the
+status quo, because it fails people late and confidently.
+
+The guards do not speak to a non-developer. Verbatim from a real run:
+
+```
+Module-size ratchet failed (BI-OPT-RATCHETS).
+Baselined files that GREW - the baseline only allows shrinking:
+  - apps/web/lib/tak/agentic-loop.ts (2642 -> 2680)
+Reduce the file, or ... run `node scripts/check-module-size.mjs --update` to re-baseline.
+```
+
+An engineer reads that and knows the options. A non-developer stops, and
+stopping there is the flywheel not turning.
+
+**The split that carries the weight** is between two kinds of guard. The DECISION
+gates - docs impact, data impact, convergence, design grounding, seed fit, UX fit
+- ask about the INTENT of a change: does this affect what users see, does it touch
+stored data, how does it reach installations that are already running. The person
+who asked for the change is genuinely the best-placed person to answer those, so
+routing them to a maintainer would be both wrong and wasteful. Everything else is
+a fact about the code's shape and is not theirs to fix.
+
+Conflating the two loses the contributor either way: a fixable problem that reads
+as a wall, or an unfixable one that costs them an hour before they find out. So
+the explanation states which it is, and an unknown guard defaults to
+maintainer - the cautious direction, because a wrong "this is yours" is the
+expensive error.
+
+**Two rules it holds to.** It never replaces the evidence: the raw output is
+carried through verbatim, because whoever does read guard output still needs it,
+and translation only fronts it. And it never fabricates: an unrecognised guard
+degrades to the raw text plus an honest "a maintainer needs to look at this",
+because a confidently wrong translation is worse than the original, which at
+least signals "this is for someone else".
+
+Pinned to the guard's registry identity rather than to its prose, since guard
+output is not a stable contract and will drift.
+
+No guard verdict is altered by this slice. The translation sits strictly above
+the decision.
+
 ## Scope boundary
 
 Parity is of the FAST tier plus the cloud safety net, not of the image build.
@@ -150,6 +238,13 @@ the cloud already covers.
 - AC-IPGP-005 A verification run writes a gate record keyed to the tree it checked, via the existing writer.
 - AC-IPGP-006 The record states which tier ran and does not imply coverage it lacks.
 - AC-IPGP-007 A fast-tier record derives a different gate key than the heavy tier for the same tree.
+- AC-IPGP-011 Publishing without a passing record for the exact tree is refused, with a message naming what is missing.
+- AC-IPGP-012 A record for a different tree, including an earlier tree of the same build, does not satisfy the requirement.
+- AC-IPGP-013 Any override is an allowlisted, recorded reason; an unrecognised code does not bypass the requirement.
+
+- AC-IPGP-008 A non-developer meeting a gate failure is told what happened, whether they can act, and what to do next, without reading a script name or a shell command.
+- AC-IPGP-009 Self-fixable and maintainer-needed failures are distinguished, and an unrecognised guard degrades to the raw output with an honest handoff rather than a fabricated explanation.
+- AC-IPGP-010 The raw guard output remains available and is never discarded.
 
 ## Tests
 

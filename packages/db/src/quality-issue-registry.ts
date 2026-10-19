@@ -293,6 +293,18 @@ const REGISTRY = {
     summary:
       "The watchdog could not check one or more journeys. This reports the watchdog's own readiness, never the health of the business — nothing was established about whether those journeys work.",
   },
+  monitor_source_unreachable: {
+    resolvedBy: "monitor-clears",
+    subject: "scope",
+    raisedBySubjectAbsence: false,
+    autoResolveWhen:
+      "the same monitor reaches the same source on a later run — the run that raised it is the run that clears it, so a recovered source closes its own row without operator bookkeeping",
+    operatorActionable: true,
+    expectedSteadyState: 0,
+    owner: "operator",
+    summary:
+      "A scheduled monitor could not reach the data source it inspects. This reports the MONITOR's own blindness, never the health of what it watches — nothing was established about the subject, and a clean run from this monitor must not be read as an all-clear.",
+  },
 } satisfies Record<string, QualityIssueContract>;
 
 /**

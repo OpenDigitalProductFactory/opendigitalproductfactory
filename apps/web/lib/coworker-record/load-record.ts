@@ -68,6 +68,7 @@ export type CoworkerRecord = {
     assignedSkillIds: string[];
     heldGrantKeys: string[];
   };
+  authority: { id: string; agentId: string; heldGrantKeys: string[] };
   gaid: string | null;
   profession: CoworkerProfessionFacet;
   voice: CoworkerVoice;
@@ -89,6 +90,7 @@ async function loadAgentWithRelations(idOrSlug: string) {
       executionConfig: true,
       skills: { orderBy: { sortOrder: "asc" } },
       toolGrants: { orderBy: { grantKey: "asc" } },
+      toolGrantRevocations: { select: { grantKey: true } },
       performanceProfiles: { orderBy: { taskType: "asc" } },
       degradationMappings: { orderBy: { featureRoute: "asc" } },
       promptContext: true,
@@ -207,6 +209,12 @@ export async function loadCoworkerRecord(
 
   return {
     agent,
+    authority: {
+      id: agent.id,
+      agentId: agent.agentId,
+      heldGrantKeys: agent.toolGrants.map((grant) => grant.grantKey)
+        .filter((key) => !agent.toolGrantRevocations.some((revoked) => revoked.grantKey === key)),
+    },
     runtime: {
       id: runtimeAgent.id,
       agentId: runtimeAgent.agentId,

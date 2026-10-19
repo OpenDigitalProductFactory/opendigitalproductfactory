@@ -300,7 +300,119 @@ export function jurisdictionCountryScope(
   return { countryCode: { in: [...codes].sort() } };
 }
 
-export async function loadTaxWorkspaceState(profile: TaxProfileRecord, ownerUserId: string) {
+const TAX_WORKSPACE_REGISTRATION_INCLUDE = {
+  jurisdictionReference: {
+    select: {
+      id: true,
+      jurisdictionRefId: true,
+      authorityName: true,
+      countryCode: true,
+      stateProvinceCode: true,
+      authorityType: true,
+      taxTypes: true,
+    },
+  },
+} satisfies Prisma.TaxRegistrationInclude;
+
+const TAX_WORKSPACE_PERIOD_INCLUDE = {
+  components: { select: { componentKind: true, amount: true } },
+  registration: {
+    include: {
+      jurisdictionReference: {
+        select: {
+          authorityName: true,
+          jurisdictionRefId: true,
+          countryCode: true,
+          stateProvinceCode: true,
+        },
+      },
+    },
+  },
+  artifacts: {
+    orderBy: { createdAt: "desc" },
+  },
+  liabilityEntries: {
+    orderBy: [{ occurredAt: "asc" }, { createdAt: "asc" }],
+  },
+  remittanceRuns: {
+    orderBy: [{ createdAt: "desc" }],
+  },
+} satisfies Prisma.TaxObligationPeriodInclude;
+
+const TAX_JURISDICTION_OPTION_SELECT = {
+  id: true,
+  jurisdictionRefId: true,
+  authorityName: true,
+  countryCode: true,
+  stateProvinceCode: true,
+  authorityType: true,
+  taxTypes: true,
+} satisfies Prisma.TaxJurisdictionReferenceSelect;
+
+const TAX_MONITORING_TASK_SELECT = {
+  taskId: true,
+  title: true,
+  schedule: true,
+  isActive: true,
+  nextRunAt: true,
+  lastRunAt: true,
+  lastStatus: true,
+} satisfies Prisma.ScheduledAgentTaskSelect;
+
+const TAX_AUTHORITY_CREDENTIAL_SELECT = {
+  id: true,
+  credentialId: true,
+  registrationId: true,
+  authorityName: true,
+  portalBaseUrl: true,
+  credentialOwnerMode: true,
+  status: true,
+  authMode: true,
+  secretRef: true,
+  mfaMode: true,
+  lastVerifiedAt: true,
+  lastFailureAt: true,
+  lastFailureReason: true,
+  notes: true,
+  createdAt: true,
+  updatedAt: true,
+} satisfies Prisma.TaxAuthorityCredentialSelect;
+
+export type TaxWorkspaceRegistration = Prisma.TaxRegistrationGetPayload<{
+  include: typeof TAX_WORKSPACE_REGISTRATION_INCLUDE;
+}>;
+export type TaxWorkspacePeriod = Prisma.TaxObligationPeriodGetPayload<{
+  include: typeof TAX_WORKSPACE_PERIOD_INCLUDE;
+}>;
+export type TaxJurisdictionOption = Prisma.TaxJurisdictionReferenceGetPayload<{
+  select: typeof TAX_JURISDICTION_OPTION_SELECT;
+}>;
+export type TaxMonitoringTask = Prisma.ScheduledAgentTaskGetPayload<{
+  select: typeof TAX_MONITORING_TASK_SELECT;
+}>;
+export type TaxAuthorityCredentialView = Omit<
+  Prisma.TaxAuthorityCredentialGetPayload<{ select: typeof TAX_AUTHORITY_CREDENTIAL_SELECT }>,
+  "secretRef"
+> & { hasSecret: boolean };
+
+export type TaxWorkspaceState = {
+  registrations: TaxWorkspaceRegistration[];
+  periods: TaxWorkspacePeriod[];
+  jurisdictionOptions: TaxJurisdictionOption[];
+  openIssues: Awaited<ReturnType<typeof reconcileTaxIssues>>;
+  authorityCredentials: TaxAuthorityCredentialView[];
+  coworkerGuide: ReturnType<typeof buildCoworkerGuide>;
+  monitoring: {
+    dueSoonCount: number;
+    overdueCount: number;
+    monitoringTask: TaxMonitoringTask | null;
+  };
+};
+
+export async function loadTaxWorkspaceState(
+  profile: TaxProfileRecord,
+  ownerUserId: string,
+): Promise<TaxWorkspaceState> {
   // Resolved BEFORE the parallel reads: the jurisdiction picker's scope depends
   // on which countries this org already holds registrations in, so it cannot be
   // computed inside the same Promise.all that fetches them.
@@ -315,19 +427,7 @@ export async function loadTaxWorkspaceState(profile: TaxProfileRecord, ownerUser
   const [registrations, periods, jurisdictionOptions, monitoringTask, rawAuthorityCredentials] = await Promise.all([
     prisma.taxRegistration.findMany({
       where: { organizationTaxProfileId: profile.id },
-      include: {
-        jurisdictionReference: {
-          select: {
-            id: true,
-            jurisdictionRefId: true,
-            authorityName: true,
-            countryCode: true,
-            stateProvinceCode: true,
-            authorityType: true,
-            taxTypes: true,
-          },
-        },
-      },
+      include: TAX_WORKSPACE_REGISTRATION_INCLUDE,
       orderBy: [{ registrationStatus: "asc" }, { createdAt: "asc" }],
     }),
     prisma.taxObligationPeriod.findMany({
@@ -336,30 +436,7 @@ export async function loadTaxWorkspaceState(profile: TaxProfileRecord, ownerUser
           organizationTaxProfileId: profile.id,
         },
       },
-      include: {
-        components: { select: { componentKind: true, amount: true } },
-        registration: {
-          include: {
-            jurisdictionReference: {
-              select: {
-                authorityName: true,
-                jurisdictionRefId: true,
-                countryCode: true,
-                stateProvinceCode: true,
-              },
-            },
-          },
-        },
-        artifacts: {
-          orderBy: { createdAt: "desc" },
-        },
-        liabilityEntries: {
-          orderBy: [{ occurredAt: "asc" }, { createdAt: "asc" }],
-        },
-        remittanceRuns: {
-          orderBy: [{ createdAt: "desc" }],
-        },
-      },
+      include: TAX_WORKSPACE_PERIOD_INCLUDE,
       orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
       take: 12,
     }),
@@ -382,15 +459,7 @@ export async function loadTaxWorkspaceState(profile: TaxProfileRecord, ownerUser
       where: jurisdictionCountryScope(profile, registeredCountryCodes),
       orderBy: [{ countryCode: "asc" }, { stateProvinceCode: "asc" }, { authorityName: "asc" }],
       take: 200,
-      select: {
-        id: true,
-        jurisdictionRefId: true,
-        authorityName: true,
-        countryCode: true,
-        stateProvinceCode: true,
-        authorityType: true,
-        taxTypes: true,
-      },
+      select: TAX_JURISDICTION_OPTION_SELECT,
     }),
     prisma.scheduledAgentTask.findFirst({
       where: {
@@ -398,36 +467,11 @@ export async function loadTaxWorkspaceState(profile: TaxProfileRecord, ownerUser
         routeContext: "/finance/settings/tax",
         title: "Tax Remittance Monitor",
       },
-      select: {
-        taskId: true,
-        title: true,
-        schedule: true,
-        isActive: true,
-        nextRunAt: true,
-        lastRunAt: true,
-        lastStatus: true,
-      },
+      select: TAX_MONITORING_TASK_SELECT,
     }),
     prisma.taxAuthorityCredential.findMany({
       where: { organizationTaxProfileId: profile.id },
-      select: {
-        id: true,
-        credentialId: true,
-        registrationId: true,
-        authorityName: true,
-        portalBaseUrl: true,
-        credentialOwnerMode: true,
-        status: true,
-        authMode: true,
-        secretRef: true,
-        mfaMode: true,
-        lastVerifiedAt: true,
-        lastFailureAt: true,
-        lastFailureReason: true,
-        notes: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+      select: TAX_AUTHORITY_CREDENTIAL_SELECT,
       orderBy: [{ updatedAt: "desc" }],
     }),
   ]);

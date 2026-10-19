@@ -117,11 +117,11 @@ bash scripts/dpf-bootstrap-agent-toolchain.sh
 The bootstrap is **idempotent** (re-running on a converged install is a no-op) and writes the **shared client configuration that both the desktop app and the CLI read** (`~/.claude`, `~/.codex/config.toml`, `~/.grok/config.toml`, and the Antigravity MCP config it can detect/write). It:
 
 1. **Detects** which of Claude / Codex / Grok / Antigravity are installed — resolving GUI-app and non-PATH install locations, not just `which`.
-2. **Mints and persists a legacy DPF MCP token** if one isn't present (a client that speaks the browser flow no longer needs this — see [How a client authenticates](#how-a-client-authenticates-all-clients)) (issued inside the portal container, persisted to `~/.dpf/agent-toolchain.env` and your shell profile, never logged). Default scope is `write` so the agent can use side-effecting MCP tools (backlog, evidence, Build Studio handoff). On macOS it also injects the token via `launchctl` so GUI-launched apps — which don't read your shell profile — still pick it up.
-3. **Connects the DPF MCP server** in each client (`.mcp.json` / `.vscode/mcp.json` for Claude, `[mcp_servers.dpf]` in Codex/Grok config, and Antigravity's `mcpServers.dpf` config when available), all referencing `${DPF_MCP_BEARER_TOKEN}`.
+2. **Defaults supported interactive clients to OAuth**, without automatically minting a PAT while sign-in is pending. Codex supports HTTPS and HTTP loopback. Setup names clients that still require compatibility credentials. Select `-AuthMode legacy` on PowerShell, or `--auth-mode legacy` on Bash, only for explicit compatibility; Bash `--auto-mint` also selects legacy mode. Existing credentials are not revoked.
+3. **Connects the DPF MCP server** using the client-specific credential policy. Supported OAuth configuration contains the endpoint without a managed bearer override. Rerunning setup preserves that choice and unrelated client settings. The endpoint is the install's own https address, read from `PUBLIC_URL` in the install's `.env` (`<PUBLIC_URL>/api/mcp/v1?tier=full`); it is saved for your user as `DPF_MCP_URL`, beside `NODE_EXTRA_CA_CERTS` so clients trust the install's certificate. The installer saves the same two values on every run, so a fresh install needs no hand-set address. When the install names no https address and `DPF_MCP_URL` is unset, setup uses the canonical `https://localhost/api/mcp/v1` with OAuth, the same default the skill-pack updater uses; it no longer falls back to the old `http://127.0.0.1:3000` address.
 4. **Installs the `dpf-platform` plugin** for each client from its local marketplace/registry — this is the single package that carries the shared **skill pack** and the cross-client hook/MCP contracts (see [The plugin](#the-plugin-skills-hooks-and-mcp-in-one-package) below). For Codex, the bootstrap registers and verifies the qualified plugin key `dpf-platform@personal`; copying plugin files alone is not considered installed.
 5. **Seeds kernel-tier memory** so the agent is kernel-aware from the first turn, before any MCP retrieval round-trip.
-6. **Runs read-only MCP + kernel smoke probes**, checks whether the DPF-native process-spine replacement skills are installed and visible to the current session, and prints a single **readiness banner**. On Grok, this check is **verified** (`grok plugin list --json`, run automatically by the bootstrap before the health check) rather than merely inferred from install state; Codex and Antigravity have no non-interactive way to list actively loaded skills yet, so their exposure stays `unknown` until their CLIs expose one — see the [process-spine skill exposure health design](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/specs/2026-07-19-process-spine-skill-exposure-health-design.md).
+6. **Runs read-only MCP + kernel smoke probes**, checks whether the DPF-native process-spine replacement skills are installed and visible to the current session, and prints a single **readiness banner**. On Grok, this check is **verified** (`grok plugin list --json`, run automatically by the bootstrap before the health check) rather than merely inferred from install state; Codex and Antigravity have no non-interactive way to list actively loaded skills yet, so their exposure stays `unknown` until their CLIs expose one — see the [process-spine skill exposure health design](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/specs/2026-07-19-process-spine-skill-exposure-health-design.md). OAuth setup reports authorization pending until the client connection is verified; a PAT probe is not proof of OAuth readiness.
 
 After it finishes, **restart the client** (desktop app or CLI) so it reloads the MCP connection and the plugin.
 
@@ -134,7 +134,7 @@ After it finishes, **restart the client** (desktop app or CLI) so it reloads the
 | `ready` | Client(s) wired, MCP reachable, kernel principle fired | Start working |
 | `partial` | One client is ready; another needs setup | Repair toolchain (re-run bootstrap) |
 | `missing_cli` | No supported agent detected | Install Claude / Codex / Grok / Antigravity |
-| `missing_token` | No DPF MCP token | Issue a development token (Admin → Platform Development → MCP) |
+| `missing_token` | No DPF MCP token | Issue a development token (Improve & deliver › Setup › Contributing & GitHub (MCP tokens)) |
 | `needs_refresh` | Token exists but the running client hasn't picked it up | Restart the client / refresh the binding |
 | `failed_smoke` | Installed but did not apply a kernel principle | View evidence under `--show-substrate` |
 
@@ -228,10 +228,10 @@ In your client's GitHub / PR settings, **disable any "create pull requests as dr
 
 After restarting, verify the `dpf` connector is present:
 - **Claude** — run `/mcp`; you should see the `dpf` server and its tools.
-- **Codex / Grok** — the `[mcp_servers.dpf]` block is in your config; the server appears once the client restarts with the token in its environment.
+- **Codex / Grok** — confirm the configured `dpf` server appears and complete the client-supported sign-in flow.
 - **Antigravity** — confirm `agy` can see an MCP server named `dpf`; if not, use the [Antigravity onboarding runbook](../../operations/antigravity-cli-onboarding.md) to let `agy` add the server from the active session.
 
-If it's missing, the token probably isn't in the running client's environment yet — restart the client (GUI apps need a full restart to pick up a freshly minted token), or re-run the bootstrap.
+If the server is missing, restart the client to load its configuration or re-run the current bootstrap. Supported OAuth clients need the endpoint and browser approval; they do not need a bearer-token environment variable.
 
 #### Let the client load project instructions
 
@@ -252,13 +252,13 @@ DPF relies on local guardrails — the pre-commit secret scan + typecheck hook (
 
 #### Codex
 
-- Desktop/IDE app and CLI both read `~/.codex/config.toml`. The bearer token is referenced via `bearer_token_env_var = "DPF_MCP_BEARER_TOKEN"`, never stored in the file.
+- Desktop/IDE app and CLI both read `~/.codex/config.toml`. Interactive OAuth uses the endpoint without a bearer override. The client stores and refreshes the approved connection.
 - The bootstrap publishes the repo-local package to Codex's personal marketplace, runs the equivalent of `codex plugin add dpf-platform@personal`, and verifies that the registry reports it installed and enabled. The canonical config key is `[plugins."dpf-platform@personal"]`; the bootstrap migrates the older invalid bare key without overriding an explicit user disable.
 - Codex's current plugin manifest exposes the skills and default prompts. The bootstrap separately wires the shared governance hooks and DPF MCP server in Codex's global configuration because those fields are not accepted in the Codex plugin manifest schema. **Check the draft-PR default** (above).
 
 #### Grok
 
-- **CLI only — no GUI client yet.** Reads the DPF MCP server block from `~/.grok/config.toml` (HTTP transport, same `${DPF_MCP_BEARER_TOKEN}` pattern); the plugin installs from `.grok-plugin/plugin.json`.
+- **CLI only — no GUI client yet.** Reads the DPF MCP server block from `~/.grok/config.toml`. Setup creates a client_credentials client and refreshes `~/.grok/dpf-mcp-token` before it expires; Grok re-reads that file. No pasted token. The plugin installs from `.grok-plugin/plugin.json`.
 - **Authentication to xAI** is separate from the DPF MCP token. Preferred path is the OAuth **device-code** flow — `grok login --device-auth` opens `accounts.x.ai/oauth2/device`; you sign in with Google / X / Apple and the credential lands in `~/.grok/auth.json`. An `XAI_API_KEY` is the fallback. (Build Studio's containerized Grok dispatch uses the same credential model — see the [Grok device-code OAuth spec](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/specs/2026-06-07-grok-device-code-oauth-design.md).)
 
 #### Antigravity
@@ -274,26 +274,50 @@ DPF relies on local guardrails — the pre-commit secret scan + typecheck hook (
 
 **Point the client at the MCP URL and approve it once in your browser.** The client gets a `401` that tells it where to look, discovers this installation's authorization server, and runs the standard OAuth flow. A portal page opens naming the client, this installation, and what it is asking to do; you approve, and the client refreshes its own access from then on. **No environment variable, no copy-paste, no client restart.**
 
+Setup keeps your selected https connection address for later sessions. An explicit `DPF_MCP_URL` overrides it; otherwise setup uses the saved https preference, then the installation's HTTPS default. A plain-http address is never saved for every client, because Claude's sign-in refuses plain http. Codex and Grok keep their own address in their own settings. A saved address does not grant access or prove sign-in works. If the client still uses an older address, verify its saved connection before starting another sign-in.
+
+The approval page names the assistant role this connection will act as and
+has one **Connect** button; you do not pick the role. The server chooses it
+from the roles you are allowed to authorize, after checking that they carry
+the same permissions, and reuses the role you approved last time for the same
+client. A client's self-chosen name only labels the connection; it cannot
+select a different role or widen what it can do. **Change** lets you pick
+another approved role, and **Adjust permissions** shows one checkbox per
+permission if you want to grant less. You are asked to choose only when the
+roles you could authorize differ in what they can do; the one with the least
+authority is preselected. All work remains within your current permissions,
+the permissions you approved, and the assistant's allowed tools. Build Studio
+access and access to each workroom are checked separately. Signing in does not
+admit the assistant to every room.
+
+The same connection supports multiple tasks and normal token refresh without
+another sign-in. Each task keeps its own target and evidence. If an older
+connection says it needs an assistant role, use your AI client's DPF reconnect
+action once and approve the role. Your existing browser login can be reused.
+Ordinary reconnects after that do not need a new role approval. A revoked
+authorization or a request for more permissions may require approval again.
+
 - **Permissions are six plain-language scopes**, not the platform's internal grant names: read your platform, do governed work, run Build Studio, act on business records, operate the platform, administer the platform. You can untick any of them on the approval screen — that grants less, never more.
 - **Least privilege is the default.** A client that asks for "everything advertised" gets read access only. Anything beyond read is a separate approval at the moment it is first needed.
 - **Needing more mid-task is a prompt, not a dead end.** When a client hits a tool it lacks permission for, it asks you to approve exactly that additional permission and retries. You are never asked to go and mint something by hand.
 - **Self-registered clients are labelled.** On a local installation a client may register itself, which means it chose its own display name. The approval screen says so. Approve it only if you started the connection.
-- **Revoke any time** in Admin → Platform Development → MCP. Revoking a client immediately revokes everything it holds.
+- **Revoke any time** in Improve & deliver › Setup › Contributing & GitHub (MCP tokens). Revoking a client immediately revokes everything it holds.
+- **End one person's access without disconnecting everyone.** A client such as Claude Code is shared by everyone who connects it to this install. An administrator can open **People** on that client's row, see who holds access and when they last used it, and choose **Revoke this person's access** with a reason. Everyone else stays connected; the person can reconnect by signing in again. You cannot revoke your own access there — disconnect from your own client instead.
 
 #### Headless callers (CI, cron, containers)
 
-Anything with no browser cannot approve a screen, so an operator grants its permissions once, up front: create a client in Admin → Platform Development, choose its scopes, and give it the client id and secret. It exchanges those for short-lived access at the same endpoint every other client uses. Same permissions vocabulary, same revocation, same audit trail — a different way in, not a different system.
+Anything with no browser cannot approve a screen, so an operator grants its permissions once, up front: create a client in Improve & deliver › Setup › Contributing & GitHub, choose its scopes, and give it the client id and secret. It exchanges those for short-lived access at the same endpoint every other client uses. Same permissions vocabulary, same revocation, same audit trail — a different way in, not a different system.
 
 #### The legacy `dpfmcp_` token
 
 Older clients authenticate with a `DPF_MCP_BEARER_TOKEN` environment variable, referenced (never inlined) from each client's config. **This still works and nothing breaks.** It is being retired: new tokens stop being issued when the operator closes issuance, and existing ones keep working until the operator sets a horizon. Prefer connecting a client over the browser flow instead.
 
-- **Scopes.** Coarse `read` / `write` / `admin` plus granular per-tool grants. Default is `read` and cannot call side-effecting tools. Use **Issue write token** in Admin → Platform Development → MCP when an agent must create/update backlog items, evidence, workrooms, or coordination records.
+- **Scopes.** Coarse `read` / `write` / `admin` plus granular per-tool grants. Default is `read` and cannot call side-effecting tools. Use **Issue development token** in Improve & deliver › Setup › Contributing & GitHub (MCP tokens) when an agent must create/update backlog items, evidence, workrooms, or coordination records. A newly issued development connection can also record the author's research note. A write connection already in use whose grants are an earlier prefix of that template gains grants the template gained later, on its next use, without a new secret. A read connection, an admin connection, an OAuth connection, and a custom set with a gap keep the grants they were issued with. The running install shows this only after it picks up the release.
 - **Scope escalation.** If a tool returns `insufficient_token_scope`, *stop* — do not fall back to `psql`/Prisma/direct DB edits. Issue a scoped token in the portal, update the client, call `/api/mcp/token/refresh`, and retry through MCP. (A client connected over the browser flow never sees this; it gets the approval prompt described above.)
 - **Rotation** (no file edits): set the `DPF_MCP_BEARER_TOKEN` user environment variable to the new value, `POST /api/mcp/token/refresh` with the new token, then retry in the running session.
-- **Endpoint trust.** A gate script that falls back to reading the token out of `.mcp.json` checks the endpoint that file names first, and accepts only loopback (`127.0.0.1`, `localhost`, `[::1]`). A config naming any other host stops the run rather than sending your token there — set `DPF_MCP_BEARER_TOKEN` and `DPF_MCP_URL` to reach a portal deliberately fronted off loopback. Full rule: [MCP tool authorization runbook](../../architecture/mcp-tool-authorization-runbook.md).
+- **Endpoint trust.** Gate scripts take the address from `DPF_MCP_URL` (else the local endpoint) and accept only loopback (`127.0.0.1`, `localhost`, `[::1]`) or your install's own configured address (the origin of `PUBLIC_URL` or `DPF_MCP_URL`) before sending a token; they no longer read a token out of `.mcp.json`. Full rule: [MCP tool authorization runbook](../../architecture/mcp-tool-authorization-runbook.md).
 
-`.mcp.json` and `.vscode/mcp.json` remain **gitignored credential files** — never commit them. A client connected over the browser flow stores its own credential and needs neither file for authentication.
+**One `dpf` connector per client.** Claude Code's `dpf` server comes from the `dpf-platform` plugin and signs in over the browser flow. Nothing writes a project `.mcp.json` beside it on an https install: Claude Code matches servers by address, so a second `dpf` entry at a different address would show up as a second connector. If an older `.mcp.json` in your checkout still has a `dpf` entry from before this change, the session-start check retires that entry for you (it keeps a backup and any other servers), and the next session shows one `dpf` server. `.mcp.json` and `.vscode/mcp.json` stay **gitignored** — never commit them.
 
 ---
 
@@ -354,7 +378,7 @@ cd ~/dpf-worktrees/<slug>
 
 `new-dev-worktree.sh` resolves the true root clone, bases the new branch on `origin/main`, places the worktree at the canonical sibling base (`~/dpf-worktrees/<slug>` / `D:/DPF-worktrees/<topic>`), and runs the MCP + toolchain seed so the `dpf` connector and an **isolated Docker Compose stack** work immediately. Each worktree gets its own `COMPOSE_PROJECT_NAME=dpf-<topic>` so its containers and volumes can't join the root `dpf` project.
 
-> **`.mcp.json` does not travel with a worktree** — it's gitignored (it carries your local token). The seed step copies it in. If you create a worktree by hand, run `scripts/dpf-bootstrap-agent-toolchain.sh` from inside it, then restart the client.
+> **The `dpf` connector travels with every worktree** — it is the `dpf-platform` plugin, not a per-worktree file, so no `.mcp.json` is copied in. The seed step copies `.vscode/mcp.json` (VS Code's config) when the root clone has one. If you create a worktree by hand, run `scripts/dpf-bootstrap-agent-toolchain.sh` from inside it, then restart the client.
 
 #### Commit and push fast
 
@@ -381,6 +405,27 @@ Full TypeScript and Vitest runs, Next builds, Docker builds, previews, local inf
 When capacity is unavailable, the command records its queue position and exits with code `75` instead of leaving a waiting Node process alive. Retry after the active heavyweight command releases its lease. Do not start duplicate copies to race the queue, and do not kill processes based only on a familiar executable name; the runner supervises only the child whose PID and process-start identity it owns.
 
 If memory cannot be measured, heavyweight admission fails closed. Cheap repository guards still run without claiming the lane. For current resource classes, memory floors, queue inspection, and recovery, see [Local CI and host-resource lanes](../../operations/local-ci-sandbox-slots.md).
+
+#### Recover a review blocked by endpoint eligibility
+
+An endpoint eligibility refusal means no model met the review's requirements.
+Tasks and the Workroom show the effective data class, residency and grouped
+exclusion counts. A proven refusal stops before provider dispatch and produces
+no review verdict. An uncertain or partially dispatched execution retains that
+uncertainty and its checkpoint history.
+
+The existing **Resume review** action stays disabled for an unchanged eligibility
+refusal. Have the platform verify an eligible route for the complete immutable
+review, preserving screening and the required data boundary. Record fresh scoped
+runtime health evidence for the same Workroom, task and request digest, including
+`semanticReviewRecovery.eligibilityVerified=true` and settlement of any uncertain
+executions. General provider health does not prove this review is eligible.
+
+The requester can then use the existing `retry_semantic_review` operation with
+the verification reference, exact request digest and confirmation. Within the
+original window it retains the request, deadline and remaining attempts. After
+expiry, only the existing qualified bounded-successor contract applies. Neither
+task completion nor successful source tests substitute for an independent verdict.
 
 #### Clean up when merged
 
@@ -414,7 +459,7 @@ sequenceDiagram
 
 Two things follow from this design:
 
-- **Webhooks are a platform-level integration, not a per-session setup step.** The operator configures the GitHub repository webhook and `DPF_GIT_WEBHOOK_SECRET` once. As a contributor you don't wire it per thread — you just push, and the loop picks it up.
+- **Webhooks are a platform-level integration, not a per-session setup step.** The installer generates `DPF_GIT_WEBHOOK_SECRET` into the install `.env`, and an upgrade adds it when missing. The operator pastes that value into the GitHub repository webhook once. As a contributor you don't wire it per thread — you just push, and the loop picks it up. A development install on loopback cannot be reached by GitHub; `gh webhook forward` relays deliveries to it (see the build gate runbook).
 - **No surface hand-advances the live install.** The webhook feeds the *promotion pipeline*; it does not deploy. Promotion still runs the sandbox verification and the gate evidence before anything reaches the running portal. This is the automated counterpart to the manual rule below (*"the live install advances only via the self-upgrade pipeline"*).
 
 Don't confuse this server-side **webhook** with the client-side **[hooks](#hooks-local-guardrails-not-to-be-confused-with-webhooks)** — hooks guard tool calls on your machine; the webhook carries git events between GitHub and the portal.
@@ -442,16 +487,18 @@ The full operating contract is [AGENTS.md](https://github.com/OpenDigitalProduct
 
 | Symptom | Fix |
 | ------- | --- |
-| `/mcp` (or the client's MCP panel) doesn't list `dpf` | Restart the client in the repo root; GUI apps need a full restart to pick up a new token; re-run the bootstrap if still missing |
-| Banner shows `missing_token` | Issue a write token in Admin → Platform Development → MCP, then re-run the bootstrap |
-| Banner shows `needs_refresh` | Restart the client; if rotated, `POST /api/mcp/token/refresh` with the new token |
+| `/mcp` (or the client's MCP panel) doesn't list `dpf` | Restart the client to load its configured server; re-run the current bootstrap if still missing |
+| OAuth authorization is pending | Connect DPF from the client's MCP panel and approve it in your browser |
+| Connection needs an assistant role | Reconnect DPF once and approve an offered assistant role; no legacy token is needed |
+| Every MCP call returns `401 unauthorized: invalid or expired token` | Let the client refresh; if authorization was revoked, reconnect and review the new approval |
+| An old banner asks for `missing_token` or `needs_refresh` | Update the DPF plugin and rerun setup in OAuth mode for a supported client |
 | Skills / plugin not showing up | Re-run the bootstrap and inspect `--show-substrate`; on Codex, confirm the qualified `dpf-platform@personal` registry entry is installed and enabled, then restart the client |
 | Retired generic process skills are visible but DPF replacements are missing | Stop before project work, restart the client, and re-run the bootstrap; the readiness banner distinguishes plugin files installed from replacement skills loaded in the active session |
 | PRs keep opening as drafts | Disable the "create PRs as draft" default in your client's GitHub settings (DPF uses ready-for-review PRs only) |
-| Tool returns `insufficient_token_scope` | Issue a scoped token, refresh, retry — do **not** bypass with direct DB edits |
+| Tool returns `insufficient_token_scope` | Review the connection's approved permissions through OAuth. A role or room denial requires access from its owner, not another token |
 | New worktree has no `dpf` connector | Run `scripts/dpf-bootstrap-agent-toolchain.sh` inside the worktree, then restart |
 | Dev-server launch refused (a hook blocked it) | Use a lease for the shared runtime, or run in an isolated worktree compose stack |
-| Pushed branch isn't triggering promotion | That's the server-side webhook — confirm the GitHub repo webhook and `DPF_GIT_WEBHOOK_SECRET` are configured (operator task), not a per-session step |
+| Pushed branch isn't triggering promotion | That's the server-side webhook — confirm the GitHub repo webhook uses the install's `DPF_GIT_WEBHOOK_SECRET` and can reach the portal (operator task), not a per-session step. A 503 "secret is not configured" means the install predates BI-C26D5DC5; the next self-upgrade adds it |
 | Codex/Grok/Antigravity missing a hook guard | Expected on some surfaces — comply by construction: claim the lease before launching |
 
 ---

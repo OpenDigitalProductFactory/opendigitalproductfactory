@@ -84,12 +84,20 @@ test("canonical broker converts probe failure into fail-closed pressure", async 
     evidenceIsolationHealthy: async () => true,
   });
 
+  // Still fail closed, but the probes that answered keep their values and the
+  // one that failed is named, so the pool's reason points at it (2026-09-24).
   assert.deepEqual(pressure, {
     observedAt: "2026-07-30T08:00:00.000Z",
+    availableMemoryBytes: undefined,
+    dockerAvailableMemoryBytes: undefined,
+    builderMemoryUsageBytes: [0, 0],
+    sustainedCpuPercent: 10,
+    diskFreeBytes: 400 * 1024 ** 3,
     dockerHealthy: false,
     convergenceActive: true,
     fencesHealthy: false,
     evidenceIsolationHealthy: false,
+    probeFailures: ["availableMemoryBytes"],
   });
 });
 

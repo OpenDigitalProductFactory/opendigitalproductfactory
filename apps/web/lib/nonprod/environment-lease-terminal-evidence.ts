@@ -1,12 +1,13 @@
 import { prisma } from "@dpf/db";
 import { resolveLocalCiTerminalEvidence } from "@/lib/gates/gate-run-identity";
 import type { LocalCiTerminalEvidenceProjection } from "@/lib/gates/gate-run-identity";
+import { reconcileLocalCiEvidenceWorkroom } from "./local-ci-evidence-workroom";
 
 type LeaseModel = typeof prisma.nonProductionEnvironmentLease;
 type LeaseRow = NonNullable<Awaited<ReturnType<LeaseModel["findUnique"]>>>;
 type EvidenceTx = Pick<
   typeof prisma,
-  "nonProductionEnvironmentLease" | "externalEvidenceRecord"
+  "nonProductionEnvironmentLease" | "externalEvidenceRecord" | "workroom"
 >;
 
 /**
@@ -44,18 +45,21 @@ export async function settleTerminalGateLease(input: {
   now: Date;
   ttlMs: number;
 }): Promise<TerminalGateLeaseOutcome> {
+  const evidence = input.lease.evidenceRecordId && input.tx.externalEvidenceRecord
+    ? await input.tx.externalEvidenceRecord.findUnique({
+      where: { id: input.lease.evidenceRecordId },
+      select: { id: true, operationType: true, target: true, workCapsuleId: true, details: true },
+    }) : null;
   const projection = await resolveLocalCiTerminalEvidence({
     claimKey: input.claimKey,
     evidenceRecordId: input.lease.evidenceRecordId,
     now: input.now,
-    loadEvidence: async (id) => input.tx.externalEvidenceRecord
-      ? input.tx.externalEvidenceRecord.findUnique({
-        where: { id },
-        select: { id: true, operationType: true, details: true },
-      })
-      : null,
+    loadEvidence: async () => evidence,
   });
 
+  if (projection.status === "reused") {
+    await reconcileLocalCiEvidenceWorkroom(input.tx, evidence, input.lease);
+  }
   if (projection.status !== "rerunnable") {
     return { kind: "settled", projection };
   }

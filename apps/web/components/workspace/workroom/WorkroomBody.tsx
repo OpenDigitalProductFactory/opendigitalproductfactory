@@ -23,9 +23,11 @@ import {
   roomLabel,
 } from "./presentation";
 import { WorkroomCycles } from "./WorkroomCycles";
+import { WorkroomReviewRequirements } from "./WorkroomReviewRequirements";
 import { WorkroomShapeSection } from "./WorkroomShapeSection";
 import { WorkroomParticipants } from "./WorkroomParticipants";
 import { WorkroomPosture } from "./WorkroomPosture";
+import type { WorkroomFlowMapModel } from "@/lib/work-management/workroom-flow-map";
 import { WorkroomProcessOverseer } from "./WorkroomProcessOverseer";
 import { WorkroomBoundaryControl } from "./WorkroomBoundaryControl";
 import {
@@ -36,6 +38,8 @@ import {
 type Props = {
   detail: WorkspaceWorkCaseDetailView;
   room: WorkroomView;
+  /** EP-B70E718D F3: the room's flow map, when its shape resolves. */
+  flowMap?: WorkroomFlowMapModel | null;
 };
 
 const BOUNDARY_GAP_LABEL: Record<WorkroomBoundaryGap, string> = {
@@ -129,14 +133,14 @@ function BoundaryNotice({ room }: { room: WorkroomView }) {
   );
 }
 
-function ContextPanels({ room }: { room: WorkroomView }) {
+function ContextPanels({ room, workroomId }: { room: WorkroomView; workroomId?: string | null }) {
   const decisions = room.activity.filter((event) =>
     event.kind === "decision-proposed" || event.kind === "decision-resolved",
   );
 
   return (
     <div className="space-y-3">
-      <WorkroomParticipants room={room} />
+      <WorkroomParticipants room={room} workroomId={workroomId} />
 
       <WorkroomProcessOverseer room={room} />
 
@@ -272,6 +276,7 @@ function WorkroomDetailsContent({ detail, room }: Props) {
   return (
     <>
       <WorkroomCycles room={room} />
+      <WorkroomReviewRequirements profile={room.reviewProfile} />
 
       <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.65fr)_minmax(18rem,0.75fr)]">
         <section
@@ -318,7 +323,7 @@ function WorkroomDetailsContent({ detail, room }: Props) {
         </section>
 
         <aside aria-label="Work Room context" className="space-y-3">
-          <ContextPanels room={room} />
+      <ContextPanels room={room} workroomId={detail.workroomRowId} />
         </aside>
       </div>
 
@@ -340,6 +345,7 @@ function WorkroomDetailsContent({ detail, room }: Props) {
 export function WorkroomBodyContent({
   detail,
   room,
+  flowMap,
   mode,
   onModeChange,
 }: Props & {
@@ -353,6 +359,7 @@ export function WorkroomBodyContent({
       <WorkroomShapeSection
         graph={projectRoomShape(room)}
         room={room}
+        flowMap={flowMap ?? null}
         mode={mode}
         onModeChange={onModeChange}
       />
@@ -364,12 +371,13 @@ export function WorkroomBodyContent({
   );
 }
 
-export function WorkroomBody({ detail, room }: Props) {
+export function WorkroomBody({ detail, room, flowMap }: Props) {
   const [mode, setMode] = useWorkroomViewMode();
   return (
     <WorkroomBodyContent
       detail={detail}
       room={room}
+      flowMap={flowMap}
       mode={mode}
       onModeChange={setMode}
     />

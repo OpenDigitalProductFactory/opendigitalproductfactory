@@ -32,6 +32,23 @@ function capsuleDb(): CapsuleDb {
 }
 
 describe("work capsule branch adoption", () => {
+  it("records the human owner and separate assistant on OAuth adoption", async () => {
+    db.workroom.findFirst.mockResolvedValue(null);
+    db.workroom.create.mockImplementation(async ({ data }) => ({ id: "oauth-room", ...data }));
+    const room = await adoptWorktreeCapsule({ db: capsuleDb(),
+      input: { title: "OAuth work", objective: "Authorized work", repositoryFullName: "org/repo", headBranch: "fix/oauth", worktreePath: "D:/work/oauth", executorKind: "claude-desktop" },
+      actor: { userId: "alice", agentId: "claude", principalId: "human-alice", agentPrincipalId: "assistant" },
+    });
+    expect(room).toMatchObject({ leaseHolderPrincipalId: "human-alice", createdByPrincipalId: "assistant", requestedByPrincipalId: "human-alice" });
+  });
+  it("refuses adoption of another human's room even with the same assistant and session", async () => {
+    db.workroom.findFirst.mockResolvedValue({ id: "foreign", capsuleId: "WC-FOREIGN", status: "ready", headBranch: "fix/oauth", leaseHolderPrincipalId: "human-bob", requestedByPrincipalId: "human-bob", createdByPrincipalId: "assistant" });
+    await expect(adoptWorktreeCapsule({ db: capsuleDb(),
+      input: { title: "OAuth work", objective: "Authorized work", repositoryFullName: "org/repo", headBranch: "fix/oauth", worktreePath: "D:/work/oauth" },
+      actor: { userId: "alice", agentId: "claude", principalId: "human-alice", agentPrincipalId: "assistant" },
+    })).rejects.toThrow("not authorized");
+    expect(db.workroom.update).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
     db.workroom.create.mockReset();
     db.workroom.findFirst.mockReset();
@@ -324,6 +341,64 @@ describe("work capsule branch adoption", () => {
 
     expect(db.workroom.update).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ worktreePath: "D:/DPF-learned" }),
+    }));
+  });
+
+  it("retires the prior PR delivery binding when re-adoption advances the authored head", async () => {
+    const oldHead = "a".repeat(40);
+    const newHead = "b".repeat(40);
+    const previousPullRequestUrl = "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/5990";
+    const existing = {
+      id: "row-recovery",
+      capsuleId: "WC-RECOVERY",
+      status: "blocked",
+      backlogItemId: "BI-RECOVERY",
+      executorRef: "session-1",
+      worktreePath: "D:/DPF-recovery",
+      headSha: oldHead,
+      pullRequestNumber: 5990,
+      pullRequestUrl: previousPullRequestUrl,
+      workspaceState: {
+        keep: "unrelated",
+        prDelivery: { schemaVersion: 1, status: "deployed", prNumber: 5990 },
+        buildStudio: { buildId: "FB-1", delivery: { schemaVersion: 1, prNumber: 5990 } },
+      },
+    };
+    db.workroom.findFirst.mockResolvedValueOnce(existing);
+    db.workroom.update.mockImplementationOnce(async ({ data }) => ({ ...existing, ...data }));
+
+    await adoptWorktreeCapsule({
+      db: capsuleDb(),
+      input: {
+        title: "Repair review transport",
+        objective: "Continue the same work on a newly rebased immutable head.",
+        repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+        headBranch: "fix/recovery",
+        headSha: newHead,
+        worktreePath: "D:/DPF-recovery",
+        backlogItemId: "BI-RECOVERY",
+        executorRef: "session-1",
+      },
+      actor: { userId: "user-1", agentId: "codex", principalId: "principal-1" },
+    });
+
+    expect(db.workroom.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        headSha: newHead,
+        pullRequestNumber: null,
+        pullRequestUrl: null,
+        workspaceState: { keep: "unrelated", buildStudio: { buildId: "FB-1" } },
+      }),
+    }));
+    expect(db.workroomActivity.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        kind: "adopted",
+        payload: expect.objectContaining({
+          previousHeadSha: oldHead,
+          previousPullRequestNumber: 5990,
+          previousPullRequestUrl,
+        }),
+      }),
     }));
   });
 

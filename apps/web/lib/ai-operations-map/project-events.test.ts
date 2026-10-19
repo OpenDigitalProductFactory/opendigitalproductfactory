@@ -30,6 +30,45 @@ import type {
 } from "./types";
 
 describe("AI operations map projection", () => {
+  it("keeps a proven automatic capacity wait observable without offering duplicate manual recovery", () => {
+    const projection = projectTaskRun(makeTaskRun({ status: "input-required", a2aMetadata: { gateKind: "semantic-review" },
+      progressPayload: { semanticReview: { schemaVersion: 1, reason: "review-capacity-deferred", requestDigest: "a".repeat(64),
+        deadlineAt: "2099-01-01T00:00:00Z", recoveryAttempt: 1,
+        capacityRecovery: { schemaVersion: 1, requestDigest: "a".repeat(64), checks: 0, nextCheckAt: "2098-12-31T23:30:00Z" } } } }));
+    expect(projection.recovery).toBeUndefined();
+    expect(projection.summary).toContain("server will recheck");
+    expect(projection.links.historyHref).toBeTruthy();
+    expect(projection.reviewBudget?.recoveryAttempt).toBe(1);
+  });
+
+  it("explains native authorization waits and preserves their recovery limits", () => {
+    const projection = projectTaskRun(makeTaskRun({ status: "auth-required", a2aMetadata: { gateKind: "semantic-review" },
+      progressPayload: { semanticReview: { schemaVersion: 1, deadlineAt: "2000-01-01T00:00:00Z", recoveryAttempt: 2 } } }));
+    expect(projection.recovery).toBe("semantic-review");
+    expect(projection.summary).toContain("The original requester must inspect the submitting authority");
+    expect(projection.summary).toContain("Signing in again does not replace this request's saved credentials");
+    expect(projection.reviewBudget).toEqual({ deadlineAt: "2000-01-01T00:00:00Z", recoveryAttempt: 2 });
+    expect(projectTaskRun(makeTaskRun({ status: "auth-required" })).recovery).toBeUndefined();
+  });
+  it("projects only recorded native review budget fields", () => {
+    const projection = projectTaskRun(makeTaskRun({ status: "input-required", a2aMetadata: { gateKind: "semantic-review" },
+      progressPayload: { semanticReview: { schemaVersion: 1, deadlineAt: "2000-01-01T00:00:00Z", recoveryAttempt: 3, requestDigest: "not-for-display" } } }));
+    expect(projection.reviewBudget).toEqual({ deadlineAt: "2000-01-01T00:00:00Z", recoveryAttempt: 3 });
+    expect(projection.links.historyHref).toBeTruthy();
+  });
+  it("keeps missing or invalid native budget evidence unknown", () => {
+    expect(projectTaskRun(makeTaskRun({ a2aMetadata: { gateKind: "semantic-review" } })).reviewBudget).toEqual({ deadlineAt: null, recoveryAttempt: null });
+    expect(projectTaskRun(makeTaskRun({ progressPayload: { semanticReview: { deadlineAt: "2099-01-01T00:00:00Z" } } })).reviewBudget).toBeUndefined();
+  });
+  it.each(["completed", "failed", "rejected"])("keeps %s reviewer evidence inspectable without offering recovery", (status) => {
+    const waiting = projectTaskRun(makeTaskRun({ status: "input-required", a2aMetadata: { gateKind: "semantic-review" } }));
+    const terminal = projectTaskRun(makeTaskRun({ status, a2aMetadata: { gateKind: "semantic-review" } }));
+    expect(terminal.id).toBe(waiting.id);
+    expect(terminal.refs.taskRunId).toBe(waiting.refs.taskRunId);
+    expect(terminal.links.historyHref).toBe(waiting.links.historyHref);
+    expect(terminal.summary).toContain(`(${status})`);
+    expect(terminal.recovery).toBeUndefined();
+  });
   it("offers native recovery only for a recorded reviewer wait", () => {
     expect(projectTaskRun(makeTaskRun({ status: "input-required", a2aMetadata: { gateKind: "semantic-review" } })).recovery).toBe("semantic-review");
     expect(projectTaskRun(makeTaskRun({ status: "input-required" })).recovery).toBeUndefined();
@@ -234,7 +273,7 @@ describe("AI operations map projection", () => {
     expect(projection.location.stationId).toBe("release");
     expect(projection.label).toBe("github ci-check");
     expect(projection.refs.externalEvidenceRecordId).toBe("external-1");
-    expect(projection.links.historyHref).toBe("/platform/ai/history?externalEvidenceRecordId=external-1");
+    expect(projection.links.historyHref).toBe("/platform/audit/ledger?externalEvidenceRecordId=external-1");
   });
 
   it("filters projections by selected source and severity without mutating the event stream", () => {

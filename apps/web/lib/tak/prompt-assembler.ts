@@ -9,6 +9,7 @@ import {
   type QuestionPacket,
 } from "./question-packet";
 import { withCoworkerInteractionContract } from "./coworker-interaction-contract";
+import { UNTRUSTED_CONTENT_RULE } from "./tool-result-provenance";
 import { DECISION_ROUTING_BLOCK } from "./decision-routing-block";
 import { LIMITATION_RESPONSE_BLOCK } from "./limitation-response-block";
 import { ESCALATION_LADDER_BLOCK, COORDINATOR_BLOCK } from "./escalation-ladder";
@@ -111,7 +112,7 @@ OPERATING PRINCIPLES:
 2. Prefer tool use over narration. Avoid filler like "Action:", "Step 1:", "What you need to do next:", "I will now...", or "Here's my plan:" unless the user explicitly asks for a plan.
 3. NEVER ask for confirmation before using a tool. The approval card IS the confirmation. Call the tool and let the employee approve or reject.
 4. Keep responses brief and practical. Respond in 2-4 sentences max unless the user asks for more detail.
-5. AUDIENCE IS A BUSINESS EXPERT, NOT A DEVELOPER. The employee is competent in their domain (sales, ops, finance, customer support, etc.) but is NOT a software engineer. They do not know what a tool name, schema field, route, container, model ID, error code, branch, commit, or database table is. NEVER mention any of: tool names (e.g. "saveBuildEvidence", "reviewDesignDoc", "run_sandbox_command"), schema/field names (e.g. "buildPlan", "fileStructure", "taskResults", "verificationOut"), provider/model IDs (e.g. "anthropic-sub", "claude-haiku-4-5-20251001", "Docker Model Runner", "Gemini"), infrastructure (e.g. "Inngest", "Prisma", "sandbox container", "MCP", "Docker", "Neo4j", "Qdrant"), error codes (e.g. "P2002", "503", "ECONNREFUSED"), file paths (e.g. "apps/web/lib/..."), branch or commit SHAs, or system terms ("agentic loop", "authoritative state", "persisted evidence"). If a tool returns a technical error, TRANSLATE it: name the user-visible thing that went wrong ("I couldn't save your changes", "the deployment hasn't started yet", "I need a contact email"), explain in one short sentence what the user can do ("try again", "fill in the missing field", "ask an admin"), and STOP. Never echo tool output verbatim. Never include keywords from internal messages like "REJECTED:", "fail.", "stuck", "iteration", or "dispatch".
+5. AUDIENCE IS A BUSINESS EXPERT, NOT A DEVELOPER. The employee is competent in their domain (sales, ops, finance, customer support, etc.) but is NOT a software engineer. They do not know what a tool name, schema field, route, container, model ID, error code, branch, commit, or database table is. NEVER mention any of: tool names (e.g. "saveBuildEvidence", "reviewDesignDoc", "run_sandbox_command"), schema/field names (e.g. "buildPlan", "fileStructure", "taskResults", "verificationOut"), provider/model IDs (e.g. "anthropic-sub", "claude-haiku-4-5-20251001", "Docker Model Runner", "Gemini"), infrastructure (e.g. "Inngest", "Prisma", "sandbox container", "MCP", "Docker", "pgvector"), error codes (e.g. "P2002", "503", "ECONNREFUSED"), file paths (e.g. "apps/web/lib/..."), branch or commit SHAs, or system terms ("agentic loop", "authoritative state", "persisted evidence"). If a tool returns a technical error, TRANSLATE it: name the user-visible thing that went wrong ("I couldn't save your changes", "the deployment hasn't started yet", "I need a contact email"), explain in one short sentence what the user can do ("try again", "fill in the missing field", "ask an admin"), and STOP. Never echo tool output verbatim. Never include keywords from internal messages like "REJECTED:", "fail.", "stuck", "iteration", or "dispatch".
 6. If an employee asks for MULTIPLE things, handle each one. Create separate tool calls for each action. Don't ask which one to do first.
 7. If you can't do something with your available tools, be honest, then work the escalation ladder below before you file anything. Don't pretend, and don't hand the employee a backlog id when a colleague could have moved the work now.
 8. Tools are invisible to the employee. Call them silently, never announce or narrate.
@@ -352,6 +353,8 @@ export async function assembleSystemPromptWithProvenance(
       ...staticBlocks,
       ...generatedInstruction,
       ...(readingLevelSpan ? [readingLevelSpan] : []),
+      // The contract carries the untrusted-content rule; it is instruction, not data (BI-1045525F).
+      UNTRUSTED_CONTENT_RULE,
       ...(input.instructionSpans ?? []),
     ].filter((span): span is string => Boolean(span && span.trim())),
   };

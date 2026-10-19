@@ -1,9 +1,11 @@
+import { envelopeApproveRoute, envelopeDeclineRoute } from "@/lib/coworker/envelope-routes";
 import { prisma } from "@dpf/db";
+import { coworkerAuthorityAgentId } from "@/lib/coworker-identity";
 
 import { resolveAIDocForAgent, type InternalAIDoc } from "@/lib/identity/aidoc-resolver";
 import { projectActionProposalPresentation } from "@/lib/governance/action-proposal-presentation";
 
-import { getToolGrantMapping } from "./agent-grants";
+import { getToolGrantMapping, isToolAllowedByGrants, persistedAgentToolGrants } from "./agent-grants";
 import type {
   InternalAgentCard,
   InternalAgentCardSecurityScheme,
@@ -12,7 +14,7 @@ import type {
   RuntimeSupervisorDecisionState,
 } from "./agent-card-types";
 
-type AgentCardDb = Pick<typeof prisma, "agent" | "agentActionProposal" | "toolExecution">;
+type AgentCardDb = Pick<typeof prisma, "agent" | "agentActionProposal" | "coworkerActionEnvelope" | "user" | "toolExecution">;
 
 type AgentCardAgent = {
   agentId: string;
@@ -34,6 +36,7 @@ type AgentCardAgent = {
   } | null;
   skills: InternalAgentCardSkill[];
   toolGrants: Array<{ grantKey: string }>;
+  toolGrantRevocations: Array<{ grantKey: string }>;
 };
 
 export type ResolveInternalAgentCardOptions = {
@@ -49,6 +52,7 @@ export type ListInternalAgentCardsOptions = Omit<ResolveInternalAgentCardOptions
 
 export type InternalAgentCardProjectionSource = {
   agent: AgentCardAgent;
+  authorityGrants?: string[];
   aidoc: InternalAIDoc | null;
   supervisorDecisionState?: RuntimeSupervisorDecisionState;
   routeContext?: string | null;
@@ -96,6 +100,9 @@ const SECURITY_REQUIREMENTS = [
 const EMPTY_SUPERVISOR_DECISION_STATE: RuntimeSupervisorDecisionState = {
   pendingProposalCount: 0,
   latestPendingProposal: null,
+  pendingEnvelopeCount: 0,
+  latestPendingEnvelope: null,
+  latestPendingKind: null,
   recentReceiptCount: 0,
   latestReceipt: null,
 };
@@ -149,6 +156,7 @@ const AGENT_CARD_SELECT = {
       grantKey: true,
     },
   },
+  toolGrantRevocations: { select: { grantKey: true } },
 };
 
 function sortedUnique(values: Array<string | null | undefined>): string[] {
@@ -156,14 +164,10 @@ function sortedUnique(values: Array<string | null | undefined>): string[] {
 }
 
 function deriveExposedTools(grantKeys: string[], aidoc: InternalAIDoc | null): string[] {
-  if (aidoc) {
-    return [...aidoc.tool_surface].sort();
-  }
-
-  const grantSet = new Set(grantKeys);
-  return Object.entries(getToolGrantMapping())
-    .filter(([, requiredGrants]) => requiredGrants.some((grantKey) => grantSet.has(grantKey)))
-    .map(([toolName]) => toolName)
+  if (grantKeys.length === 0) return [];
+  const advertised = aidoc ? new Set(aidoc.tool_surface) : null;
+  return Object.keys(getToolGrantMapping())
+    .filter(toolName => (!advertised || advertised.has(toolName)) && isToolAllowedByGrants(toolName, grantKeys))
     .sort();
 }
 
@@ -238,7 +242,10 @@ function buildAuthoritySnapshot(params: {
 export function projectInternalAgentCard(
   source: InternalAgentCardProjectionSource,
 ): InternalAgentCard {
-  const grantKeys = sortedUnique(source.agent.toolGrants.map((grant) => grant.grantKey));
+  const grantKeys = sortedUnique(source.authorityGrants ?? (
+    coworkerAuthorityAgentId(source.agent.agentId) === source.agent.agentId
+      ? persistedAgentToolGrants(source.agent) : []
+  ));
   const capabilities = sortedUnique(source.agent.skills.map((skill) => skill.capability));
   const exposedTools = deriveExposedTools(grantKeys, source.aidoc);
   const authorizationClasses = source.aidoc?.authorization_classes ?? [];
@@ -374,6 +381,8 @@ async function getSupervisorDecisionStateForAgents(
     });
   }
 
+  await addPendingEnvelopes(stateByAgentId, agentIds, db);
+
   for (const execution of receiptExecutions) {
     if (!execution.receipt) continue;
     const current = stateByAgentId.get(execution.agentId) ?? createEmptySupervisorDecisionState();
@@ -400,6 +409,67 @@ async function getSupervisorDecisionStateForAgents(
   return stateByAgentId;
 }
 
+/**
+ * BI-7BCC87BB (founder decision DI-FFD78D222548): the agent's waiting approval
+ * requests beside its legacy proposals, and which of the two is newest. A
+ * request is decided through the envelope routes (lib/coworker/envelope-routes),
+ * never the v1 proposal endpoint.
+ */
+async function addPendingEnvelopes(
+  stateByAgentId: Map<string, RuntimeSupervisorDecisionState>,
+  agentIds: string[],
+  db: AgentCardDb,
+): Promise<void> {
+  const now = new Date();
+  const waiting = { status: "proposed", OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] };
+  // Counted per agent, and the newest read per agent, so a busy agent neither
+  // caps its own count nor pushes another agent's request out of the read.
+  const counts = await db.coworkerActionEnvelope.groupBy({
+    by: ["coworkerAgentId"],
+    where: { coworkerAgentId: { in: agentIds }, ...waiting },
+    _count: { _all: true },
+  });
+  const countByAgent = new Map(counts.map((row) => [row.coworkerAgentId, row._count._all]));
+  const envelopes = countByAgent.size === 0 ? [] : await db.coworkerActionEnvelope.findMany({
+    where: { coworkerAgentId: { in: [...countByAgent.keys()] }, ...waiting },
+    orderBy: { createdAt: "desc" },
+    distinct: ["coworkerAgentId"],
+    select: { id: true, coworkerAgentId: true, delegatingUserId: true, manifestActionId: true, rationale: true, createdAt: true, expiresAt: true },
+  });
+  const ownerIds = [...new Set(envelopes.map((envelope) => envelope.delegatingUserId))];
+  const owners = ownerIds.length > 0
+    ? await db.user.findMany({ where: { id: { in: ownerIds } }, select: { id: true, email: true } })
+    : [];
+  const ownerLabel = new Map(owners.map((owner) => [owner.id, owner.email]));
+  for (const envelope of envelopes) {
+    const current = stateByAgentId.get(envelope.coworkerAgentId) ?? createEmptySupervisorDecisionState();
+    stateByAgentId.set(envelope.coworkerAgentId, {
+      ...current,
+      pendingEnvelopeCount: countByAgent.get(envelope.coworkerAgentId) ?? 1,
+      latestPendingEnvelope: current.latestPendingEnvelope ?? {
+        envelopeId: envelope.id,
+        delegatingUserId: envelope.delegatingUserId,
+        ownerLabel: ownerLabel.get(envelope.delegatingUserId) ?? envelope.delegatingUserId,
+        toolName: envelope.manifestActionId,
+        actionLabel: envelope.manifestActionId.replace(/_/g, " "),
+        rationale: envelope.rationale,
+        proposedAt: envelope.createdAt.toISOString(),
+        expiresAt: envelope.expiresAt?.toISOString() ?? null,
+        approveHref: envelopeApproveRoute(envelope.id),
+        declineHref: envelopeDeclineRoute(envelope.id),
+      },
+    });
+  }
+  for (const [agentId, state] of stateByAgentId) {
+    const proposal = state.latestPendingProposal;
+    const envelope = state.latestPendingEnvelope ?? null;
+    const latestPendingKind = proposal && envelope
+      ? (Date.parse(envelope.proposedAt) >= Date.parse(proposal.proposedAt) ? "envelope" : "proposal")
+      : proposal ? "proposal" : envelope ? "envelope" : null;
+    stateByAgentId.set(agentId, { ...state, latestPendingKind });
+  }
+}
+
 export async function resolveInternalAgentCard(
   agentId: string,
   options: ResolveInternalAgentCardOptions = {},
@@ -414,13 +484,21 @@ export async function resolveInternalAgentCard(
     return null;
   }
 
-  const aidoc = await resolveAIDocForAgent(agent.agentId);
+  const ownerId = coworkerAuthorityAgentId(agent.agentId);
+  const owner = ownerId === agent.agentId ? agent : await db.agent.findUnique({
+    where: { agentId: ownerId },
+    select: { toolGrants: { select: { grantKey: true } }, toolGrantRevocations: { select: { grantKey: true } } },
+  });
+
+  const authorityGrants = persistedAgentToolGrants(owner);
+  const aidoc = await resolveAIDocForAgent(agent.agentId, undefined, authorityGrants);
   const supervisorDecisionState = (await getSupervisorDecisionStateForAgents([agent.agentId], db)).get(
     agent.agentId,
   );
 
   return projectInternalAgentCard({
     agent,
+    authorityGrants,
     aidoc,
     supervisorDecisionState,
     routeContext: options.routeContext,
@@ -437,21 +515,24 @@ export async function listInternalAgentCards(
     orderBy: { name: "asc" },
     select: AGENT_CARD_SELECT,
   });
+  const byId = new Map(agents.map(agent => [agent.agentId, agent]));
   const supervisorStateByAgentId = await getSupervisorDecisionStateForAgents(
     agents.map((agent) => agent.agentId),
     db,
   );
 
   return Promise.all(
-    agents.map(async (agent) =>
-      projectInternalAgentCard({
+    agents.map(async (agent) => {
+      const authorityGrants = persistedAgentToolGrants(byId.get(coworkerAuthorityAgentId(agent.agentId)));
+      return projectInternalAgentCard({
         agent,
-        aidoc: await resolveAIDocForAgent(agent.agentId),
+        authorityGrants,
+        aidoc: await resolveAIDocForAgent(agent.agentId, undefined, authorityGrants),
         supervisorDecisionState: supervisorStateByAgentId.get(agent.agentId),
         routeContext: options.routeContext,
         actingPrincipalRef: options.actingPrincipalRef,
         actingPrincipalGaid: options.actingPrincipalGaid,
-      }),
-    ),
+      });
+    }),
   );
 }

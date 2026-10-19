@@ -1,10 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { SOURCE_READ_MAX_CHARS, SOURCE_READ_MAX_LINES } from "../source-page-lines";
+import { DEFAULT_TOOL_RESULT_CHAR_CAP } from "./tool-result-budget";
 import {
   applyTerminalToolSurface,
   buildTerminalToolReminder,
   createInitiativeReviewTerminalToolPolicy,
   enterTerminalWriterPhase,
   normalizeTerminalToolArguments,
+  readerPageCharsForModelView,
   resolveTerminalTextExit,
   resolveTerminalToolCall,
   summarizeTerminalToolProgress,
@@ -117,7 +120,7 @@ describe("terminal tool policy", () => {
       path: policy.immutableReaderArguments!.path,
       commitSha: policy.immutableReaderArguments!.version,
       providerBlobId: policy.immutableReaderArguments!.expectedBlobId,
-    })).toEqual({ ...policy, readerToolNames: ["read_source_at_version"] });
+    })).toEqual({ ...policy, readerToolNames: ["read_source_at_version"], immutableReaderToolName: "read_source_at_version" });
     expect(createInitiativeReviewTerminalToolPolicy(
       policy.writerToolName,
       [policy.writerToolName],
@@ -154,9 +157,37 @@ describe("terminal tool policy", () => {
         maxChars: 3200,
       },
     });
-    expect(normalizeTerminalToolArguments(policy, "read_source_at_version", { maxLines: 201 })).toMatchObject({
+    expect(normalizeTerminalToolArguments(policy, "read_source_at_version", {
+      maxLines: SOURCE_READ_MAX_LINES + 1,
+    })).toMatchObject({
       kind: "refuse",
       result: { error: "terminal_reader_pagination_invalid" },
+    });
+    expect(normalizeTerminalToolArguments(policy, "read_source_at_version", {
+      maxChars: SOURCE_READ_MAX_CHARS + 1,
+    })).toMatchObject({
+      kind: "refuse",
+      result: { error: "terminal_reader_pagination_invalid" },
+    });
+  });
+
+  // BI-E8237EAE. #5079 raised the reader's own page to 12,000 chars by default
+  // and 16,000 at most, but this guard still refused anything above 3,200 chars
+  // or 200 lines. A reviewer that asked for a page size was held to the old
+  // 3,200-char page, and six reads (the whole budget) covered 19,200 chars: a
+  // 14.5k design spent every read before the writer on 2026-09-22. The guard
+  // must accept exactly what the reader serves — one source of truth.
+  it("accepts every page size the immutable reader itself serves", () => {
+    expect(normalizeTerminalToolArguments(policy, "read_source_at_version", {
+      maxLines: SOURCE_READ_MAX_LINES,
+      maxChars: SOURCE_READ_MAX_CHARS,
+    })).toEqual({
+      kind: "allow",
+      arguments: {
+        ...policy.immutableReaderArguments,
+        maxLines: SOURCE_READ_MAX_LINES,
+        maxChars: SOURCE_READ_MAX_CHARS,
+      },
     });
   });
 
@@ -627,8 +658,10 @@ describe("agent loop terminal writer integration", () => {
       .mockResolvedValueOnce(response("", [{ id: "writer", name: policy.writerToolName, arguments: {} }]) as never)
       .mockResolvedValueOnce(response("Writer rejected.") as never);
     const result = await runAgenticLoop(params);
-    expect(result.executedTools[0]?.args).toEqual(policy.immutableReaderArguments);
-    expect(vi.mocked(governedExecuteTool).mock.calls[0]![0].rawParams).toEqual(policy.immutableReaderArguments);
+    // BI-E8237EAE: the server-bound read also carries the page the model can see whole.
+    const boundRead = { ...policy.immutableReaderArguments, maxChars: readerPageCharsForModelView(DEFAULT_TOOL_RESULT_CHAR_CAP) };
+    expect(result.executedTools[0]?.args).toEqual(boundRead);
+    expect(vi.mocked(governedExecuteTool).mock.calls[0]![0].rawParams).toEqual(boundRead);
     const nextHistory = vi.mocked(routeAndCall).mock.calls[1]![0];
     expect(nextHistory.find((message) => message.role === "assistant")?.toolCalls?.[0]).toEqual(nativeCall);
     expect(nextHistory.find((message) => message.role === "tool")?.content).toContain(policy.immutableReaderArguments!.version);
@@ -669,10 +702,28 @@ describe("agent loop terminal writer integration", () => {
       name: "read_source_at_version",
       result: { success: true },
     });
+    // BI-50B0C471: still the banked writer wait, but it names the busy model
+    // that stopped it instead of reporting that the writer failed.
     expect(result.failure).toEqual({
       kind: "terminal-writer-missing",
       message: expect.stringContaining("No receipt was created"),
+      deferredBy: "busy",
     });
+    expect(result.failure?.message).not.toContain("could not be dispatched");
+  });
+
+  it("names a local-CI capacity reservation after a banked read (BI-50B0C471)", async () => {
+    const deferral = new Error("Local provider dispatch deferred: local-ci-active-capacity-reservation");
+    deferral.name = "LocalProviderCapacityDeferredError";
+    vi.mocked(routeAndCall)
+      .mockResolvedValueOnce(response("", [{ id: "read", name: "read_source_at_version", arguments: {} }]) as never)
+      .mockRejectedValueOnce(deferral);
+
+    const result = await runAgenticLoop(params);
+
+    expect(result.failure).toMatchObject({ kind: "terminal-writer-missing", deferredBy: "capacity" });
+    expect(result.content).toContain("banked");
+    expect(result.content).not.toContain("could not be dispatched");
   });
 
   it("starts a resumed terminal-writer turn with only the governed writer", async () => {

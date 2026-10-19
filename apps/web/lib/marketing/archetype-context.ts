@@ -39,6 +39,7 @@ export type MarketingStorefrontSection = {
 
 export type MarketingArchetypeContext = {
   storefrontId: string;
+  organizationId: string;
   archetype: MarketingArchetype;
   playbook: MarketingPlaybook;
   items: MarketingStorefrontItem[];
@@ -84,13 +85,21 @@ export async function resolveMarketingArchetypeContext(options?: {
 
   return {
     storefrontId: config.id,
+    organizationId: config.organizationId,
     archetype: {
       archetypeId: config.archetype.archetypeId,
       name: config.archetype.name,
       category: config.archetype.category,
       ctaType: config.archetype.ctaType,
     },
-    playbook: getPlaybook(config.archetype.category, config.archetype.ctaType),
+    // Leaf archetypeId is passed so a leaf whose category answer is wrong for it
+    // (pet-rescue under the donor-centric nonprofit-community playbook) gets its
+    // own. Every other leaf falls through to the category exactly as before.
+    playbook: getPlaybook(
+      config.archetype.category,
+      config.archetype.ctaType,
+      config.archetype.archetypeId,
+    ),
     items: ((config as { items?: MarketingStorefrontItem[] }).items ?? []) as MarketingStorefrontItem[],
     sections: ((config as { sections?: MarketingStorefrontSection[] }).sections ?? []) as MarketingStorefrontSection[],
   };

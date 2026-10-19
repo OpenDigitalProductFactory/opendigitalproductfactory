@@ -1,154 +1,165 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { findUnique, create, update } = vi.hoisted(() => ({
-  findUnique: vi.fn(),
-  create: vi.fn(),
+const { upsert, update, ingestBacklogItem } = vi.hoisted(() => ({
+  upsert: vi.fn(),
   update: vi.fn(),
+  ingestBacklogItem: vi.fn(),
 }));
 
-vi.mock("@dpf/db", () => ({
-  prisma: {
-    improvementSignal: { findUnique, create, update },
-  },
-}));
+vi.mock("@dpf/db", () => ({ prisma: { improvementSignal: { upsert, update } } }));
+vi.mock("@/lib/operate/backlog-ingest", () => ({ ingestBacklogItem }));
 
-import {
-  SIGNAL_BACKLOG_THRESHOLD,
-  createOrTouchImprovementSignal,
-  signalSourceTypeToWorkType,
-} from "./signals";
+import { createOrTouchImprovementSignal } from "./signals";
 
-describe("signalSourceTypeToWorkType", () => {
-  it("maps skill/curation, tool, doc, and defaults the rest to bug", () => {
-    expect(signalSourceTypeToWorkType("skill_curation")).toBe("skill");
-    expect(signalSourceTypeToWorkType("tool_failure")).toBe("tool");
-    expect(signalSourceTypeToWorkType("doc_gap")).toBe("doc");
-    expect(signalSourceTypeToWorkType("user_correction")).toBe("bug");
+type Row = { signalId: string; recurrenceCount: number; backlogItemId: string | null; evidence: unknown; title: string };
+const input = { sourceType: "platform_issue_report", sourceId: "PIR-ONE", title: "One observation" };
+
+// Small persistence adapter exercises outcomes across repeated/concurrent calls.
+// SQL uniqueness/atomicity still requires the shared integration gate.
+function memoryStore(seed?: Row) {
+  const rows = new Map<string, Row>();
+  if (seed) rows.set(JSON.stringify([input.sourceType, input.sourceId]), { ...seed });
+  upsert.mockImplementation(async ({ where, create, update }) => {
+    const key = JSON.stringify([where.sourceType_sourceId.sourceType, where.sourceType_sourceId.sourceId]);
+    const prior = rows.get(key);
+    if (prior) {
+      const count = prior.recurrenceCount + (update.recurrenceCount?.increment ?? 0);
+      Object.assign(prior, update, { recurrenceCount: count });
+      return { ...prior };
+    }
+    const row = { recurrenceCount: 1, backlogItemId: null, ...create } as Row;
+    rows.set(key, row);
+    return { ...row };
   });
-});
+  update.mockImplementation(async ({ where, data }) => {
+    const key = JSON.stringify([where.sourceType_sourceId.sourceType, where.sourceType_sourceId.sourceId]);
+    const row = rows.get(key);
+    if (!row) throw new Error("missing signal");
+    const count = row.recurrenceCount + (data.recurrenceCount?.increment ?? 0);
+    Object.assign(row, data, { recurrenceCount: count });
+    return { ...row };
+  });
+  return rows;
+}
 
 describe("createOrTouchImprovementSignal", () => {
-  beforeEach(() => {
-    findUnique.mockReset();
-    create.mockReset();
-    update.mockReset();
+  beforeEach(() => { upsert.mockReset(); update.mockReset(); ingestBacklogItem.mockReset(); });
+
+  it.each(["workroom-flow-bottleneck", "curator-finding"])("preserves existing persistent-observer intake for %s", async (sourceType) => {
+    const rows = memoryStore();
+    ingestBacklogItem.mockResolvedValue({ itemId: "BI-PERSISTENT" });
+    const observation = { ...input, sourceType };
+    await createOrTouchImprovementSignal(observation);
+    await createOrTouchImprovementSignal(observation);
+    expect(ingestBacklogItem).not.toHaveBeenCalled();
+    expect(await createOrTouchImprovementSignal(observation)).toMatchObject({ backlogItemId: "BI-PERSISTENT", isNew: false });
+    await createOrTouchImprovementSignal(observation);
+    expect(ingestBacklogItem).toHaveBeenCalledTimes(1);
+    expect([...rows.values()][0]?.recurrenceCount).toBe(4);
   });
 
-  it("creates a new signal when (sourceType, sourceId) is not present", async () => {
-    findUnique.mockResolvedValue(null);
-    create.mockResolvedValue({});
+  // BI-891E4E11: the observer keys its signal per agent+route, but a repeated
+  // tool failure belongs to the tool. Both agents' signals must file under the
+  // same tool-scoped origin so backlog ingest folds them into one item.
+  it("projects repeated tool-failure signals from different coworkers onto one tool-scoped origin", async () => {
+    memoryStore();
+    ingestBacklogItem.mockResolvedValue({ itemId: "BI-TOOL" });
+    const evidence = { signal: "tool-failure", toolName: "read_source_at_version" };
+    for (const agentId of ["AGT-WS-REVIEW", "AGT-WS-BUILD"]) {
+      const observation = {
+        sourceType: "work_pattern_observer",
+        sourceId: `tool-failure:${agentId.toLowerCase()}|/build|tool|stabilize repeated read_source_at_version tool failure`,
+        title: "Stabilize repeated read_source_at_version tool failure",
+        evidence,
+        agentId,
+      };
+      for (let n = 0; n < 3; n += 1) await createOrTouchImprovementSignal(observation);
+    }
+    expect(ingestBacklogItem).toHaveBeenCalledTimes(2);
+    for (const [call] of ingestBacklogItem.mock.calls) {
+      expect(call.origin).toEqual({ kind: "tool-defect", id: "read_source_at_version" });
+    }
+  });
 
-    const result = await createOrTouchImprovementSignal({
-      sourceType: "platform_issue_report",
-      sourceId: "PIR-AB12C",
-      title: "Coworker repeated create_backlog_item",
-      evidence: { count: 3 },
-      agentId: "AGT-1",
-      threadId: "thread-1",
-      routeContext: "/customer",
-    });
+  it("recovers one unique-key collision using the same source identity", async () => {
+    memoryStore({ signalId: "IS-WINNER", recurrenceCount: 1, backlogItemId: null, evidence: {}, title: input.title });
+    upsert.mockRejectedValueOnce(Object.assign(new Error("unique collision"), { code: "P2002" }));
+    expect(await createOrTouchImprovementSignal(input)).toEqual({ signalId: "IS-WINNER", isNew: false });
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ data: { lastSeenAt: expect.any(Date) } }));
+  });
 
+  it("does not claim collision recovery when the exact source winner is absent", async () => {
+    memoryStore();
+    upsert.mockRejectedValueOnce(Object.assign(new Error("unique collision"), { code: "P2002" }));
+    await expect(createOrTouchImprovementSignal(input)).rejects.toThrow("missing signal");
+    expect(upsert).toHaveBeenCalledTimes(1);
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(ingestBacklogItem).not.toHaveBeenCalled();
+  });
+
+  it("keeps failed observer intake available for a later projection", async () => {
+    memoryStore();
+    const fileBacklogItem = vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce({ itemId: "BI-RECOVERED" });
+    const observation = { ...input, sourceType: "workroom-flow-bottleneck" };
+    for (let n = 0; n < 3; n += 1) await createOrTouchImprovementSignal(observation, { fileBacklogItem });
+    expect(fileBacklogItem).toHaveBeenCalledTimes(1);
+    expect(await createOrTouchImprovementSignal(observation, { fileBacklogItem })).toMatchObject({ backlogItemId: "BI-RECOVERED" });
+    await createOrTouchImprovementSignal(observation, { fileBacklogItem });
+    expect(fileBacklogItem).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not turn ten deliveries of one source into independent recurrence or backlog work", async () => {
+    const rows = memoryStore({ signalId: "IS-REPLAY", recurrenceCount: 1, backlogItemId: null, evidence: {}, title: input.title });
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      const result = await createOrTouchImprovementSignal(input);
+      expect(result).toEqual({ signalId: "IS-REPLAY", isNew: false });
+    }
+    expect([...rows.values()][0]?.recurrenceCount).toBe(1);
+    expect(ingestBacklogItem).not.toHaveBeenCalled();
+  });
+
+  it("creates a source with its original evidence and attribution", async () => {
+    const rows = memoryStore();
+    const result = await createOrTouchImprovementSignal({ ...input, evidence: { count: 3 }, agentId: "AGT-1", threadId: "thread-1", routeContext: "/customer" });
     expect(result.isNew).toBe(true);
-    expect(result.signalId.startsWith("IS-")).toBe(true);
-    expect(create).toHaveBeenCalledTimes(1);
-    expect(update).not.toHaveBeenCalled();
-    const data = create.mock.calls[0]?.[0]?.data as Record<string, unknown>;
-    expect(data.sourceType).toBe("platform_issue_report");
-    expect(data.sourceId).toBe("PIR-AB12C");
-    expect(data.evidence).toEqual({ count: 3 });
-    expect(data.routeContext).toBe("/customer");
+    expect([...rows.values()]).toEqual([expect.objectContaining({ signalId: result.signalId, evidence: { count: 3 }, agentId: "AGT-1", threadId: "thread-1", routeContext: "/customer", recurrenceCount: 1 })]);
   });
 
-  it("increments recurrenceCount on a duplicate (sourceType, sourceId)", async () => {
-    findUnique.mockResolvedValue({ signalId: "IS-EXISTING" });
-    update.mockResolvedValue({});
-
-    const result = await createOrTouchImprovementSignal({
-      sourceType: "platform_issue_report",
-      sourceId: "PIR-AB12C",
-      title: "Coworker repeated create_backlog_item",
-    });
-
-    expect(result).toEqual({ signalId: "IS-EXISTING", isNew: false });
-    expect(create).not.toHaveBeenCalled();
-    expect(update).toHaveBeenCalledTimes(1);
-    const updateCall = update.mock.calls[0]?.[0] as {
-      where: { sourceType_sourceId: { sourceType: string; sourceId: string } };
-      data: { recurrenceCount: { increment: number }; lastSeenAt: Date };
-    };
-    expect(updateCall.where.sourceType_sourceId).toEqual({
-      sourceType: "platform_issue_report",
-      sourceId: "PIR-AB12C",
-    });
-    expect(updateCall.data.recurrenceCount).toEqual({ increment: 1 });
-    expect(updateCall.data.lastSeenAt).toBeInstanceOf(Date);
+  it("preserves evidence, title and ambiguous historical counts rather than backfilling or filing", async () => {
+    const original = { signalId: "IS-OLD", recurrenceCount: 37, backlogItemId: null, evidence: { original: true }, title: "Original" };
+    const rows = memoryStore(original);
+    await createOrTouchImprovementSignal({ ...input, evidence: { replacement: true } });
+    expect([...rows.values()][0]).toEqual(expect.objectContaining(original));
+    expect([...rows.values()][0]).toHaveProperty("lastSeenAt", expect.any(Date));
+    expect(ingestBacklogItem).not.toHaveBeenCalled();
   });
 
-  it("preserves the original evidence on duplicate (does not overwrite)", async () => {
-    findUnique.mockResolvedValue({ signalId: "IS-EXISTING" });
-    update.mockResolvedValue({});
-
-    await createOrTouchImprovementSignal({
-      sourceType: "platform_issue_report",
-      sourceId: "PIR-AB12C",
-      title: "...",
-      evidence: { newFieldThatShouldBeIgnored: true },
-    });
-
-    const updateCall = update.mock.calls[0]?.[0] as { data: Record<string, unknown> };
-    expect(updateCall.data).not.toHaveProperty("evidence");
+  it("returns an existing backlink without re-filing", async () => {
+    memoryStore({ signalId: "IS-LINKED", recurrenceCount: 8, backlogItemId: "BI-EXISTING", evidence: {}, title: input.title });
+    expect(await createOrTouchImprovementSignal(input)).toEqual({ signalId: "IS-LINKED", isNew: false, backlogItemId: "BI-EXISTING" });
+    expect(ingestBacklogItem).not.toHaveBeenCalled();
   });
 
-  it("files once when recurrence reaches the threshold and back-links the signal", async () => {
-    findUnique.mockResolvedValue({ signalId: "IS-EXISTING" });
-    update
-      .mockResolvedValueOnce({ recurrenceCount: SIGNAL_BACKLOG_THRESHOLD, backlogItemId: null })
-      .mockResolvedValueOnce({});
-    const fileBacklogItem = vi.fn(async () => ({ itemId: "BI-SIG-1" }));
-
-    const result = await createOrTouchImprovementSignal(
-      { sourceType: "platform_issue_report", sourceId: "PIR-AB12C", title: "Persistent friction" },
-      { fileBacklogItem },
-    );
-
-    expect(fileBacklogItem).toHaveBeenCalledWith(
-      expect.objectContaining({ signalId: "IS-EXISTING", recurrenceCount: SIGNAL_BACKLOG_THRESHOLD }),
-    );
-    expect(result).toEqual({ signalId: "IS-EXISTING", isNew: false, backlogItemId: "BI-SIG-1" });
-    // Second update persists the back-link.
-    expect(update).toHaveBeenNthCalledWith(2, expect.objectContaining({ data: { backlogItemId: "BI-SIG-1" } }));
+  it("adapter-simulated concurrent deliveries converge on one identity and one new result", async () => {
+    const rows = memoryStore();
+    const results = await Promise.all(Array.from({ length: 10 }, () => createOrTouchImprovementSignal(input)));
+    expect(rows.size).toBe(1);
+    expect(new Set(results.map((r) => r.signalId)).size).toBe(1);
+    expect(results.filter((r) => r.isNew)).toHaveLength(1);
+    expect([...rows.values()][0]?.recurrenceCount).toBe(1);
   });
 
-  it("does not re-file a signal that already has a backlog item", async () => {
-    findUnique.mockResolvedValue({ signalId: "IS-EXISTING" });
-    update.mockResolvedValue({
-      recurrenceCount: SIGNAL_BACKLOG_THRESHOLD + 5,
-      backlogItemId: "BI-SIG-EXISTING",
-    });
-    const fileBacklogItem = vi.fn();
-
-    const result = await createOrTouchImprovementSignal(
-      { sourceType: "platform_issue_report", sourceId: "PIR-AB12C", title: "Already filed" },
-      { fileBacklogItem },
-    );
-
-    expect(fileBacklogItem).not.toHaveBeenCalled();
-    expect(result.backlogItemId).toBe("BI-SIG-EXISTING");
-    expect(update).toHaveBeenCalledTimes(1);
+  it("keeps different source identities distinct", async () => {
+    const rows = memoryStore();
+    await createOrTouchImprovementSignal(input);
+    await createOrTouchImprovementSignal({ ...input, sourceId: "PIR-TWO" });
+    await createOrTouchImprovementSignal({ ...input, sourceType: "user_correction" });
+    expect(rows.size).toBe(3);
   });
 
-  it("stays non-fatal when projection fails — signal recorded, no back-link", async () => {
-    findUnique.mockResolvedValue({ signalId: "IS-EXISTING" });
-    update.mockResolvedValue({ recurrenceCount: SIGNAL_BACKLOG_THRESHOLD, backlogItemId: null });
-    const fileBacklogItem = vi.fn(async () => null);
-
-    const result = await createOrTouchImprovementSignal(
-      { sourceType: "platform_issue_report", sourceId: "PIR-AB12C", title: "Projection fails" },
-      { fileBacklogItem },
-    );
-
-    expect(fileBacklogItem).toHaveBeenCalledOnce();
-    expect(result).toEqual({ signalId: "IS-EXISTING", isNew: false });
-    expect(update).toHaveBeenCalledTimes(1); // no link write
+  it("propagates persistence failure without claiming a recorded signal", async () => {
+    upsert.mockRejectedValue(new Error("database unavailable"));
+    await expect(createOrTouchImprovementSignal(input)).rejects.toThrow("database unavailable");
   });
 });

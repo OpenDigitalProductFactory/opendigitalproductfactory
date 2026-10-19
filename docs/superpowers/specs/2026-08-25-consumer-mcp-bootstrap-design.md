@@ -45,6 +45,16 @@ The installer must not print the plaintext token, write it into install state, e
 
 Before minting, the bootstrap checks the current process environment and the OS-specific persisted store. It probes the token against the local MCP endpoint with a read-only, no-argument tool call. A successful MCP response reuses the token and refreshes descriptors; an explicit authentication/expiry failure permits replacement. Network ambiguity does not destroy or replace a present token.
 
+Concretely (BI-2F82F1A0): a present token is probed with the read-only `tools/list` call and replaced only when the portal answers HTTP 401 — the credential itself is expired, revoked or unknown to the install. HTTP 403 is left to the scope-coverage probe (`interpretScopeCoverageProbe`); HTTP 0/5xx keeps the token. The status set is the SSOT `TOKEN_AUTH_PROBE` in `@dpf/bootstrap`, mirrored by both shell adapters.
+
+## In-container issuance
+
+The token is minted inside the portal container, never on the host: the host cannot reach the compose-internal database and consumer installs may lack Node. The bootstrap runs `apps/web/scripts/issue-mcp-token.ts` from the image's `/app/apps/web-src` source snapshot (BI-3F16A430):
+
+- **tsx resolution.** The runner image's `tsx` is probed at `/app/node_modules/.bin/tsx` and `/app/packages/db/node_modules/.bin/tsx`, with `node --import tsx` as the fallback. A pnpm-internal path is never hardcoded; if no runtime resolves the issuer exits with the real reason.
+- **Workspace resolution.** `web-src` ships without `node_modules`, and the runner's `/app/node_modules` is the pruned `@dpf/db...` runtime set with no `@dpf/*` links, so the issuer's `@dpf/db` and `@dpf/integration-shared` imports cannot resolve on their own. `scripts/link-web-src-workspace.sh` symlinks every `/app/packages/*` workspace package into `/app/apps/web-src/node_modules/@dpf/`; the Dockerfile runs it at build and the bootstrap pipes the same script into the container before minting so an image built before it shipped is repaired in place.
+- **Diagnostics.** The issuer's stderr is surfaced verbatim on failure. "Portal container not running" is reported only when `docker inspect` says so, never as a guess for an issuer failure.
+
 No token is minted when Docker or the portal container cannot be resolved. Bootstrap failure remains non-fatal to the portal install, but the installer must report a single actionable `MCP access not ready` state and must not mark `mcp_seed` complete. A rerun therefore retries instead of preserving a false success marker.
 
 The scripts support a dry-run mode that performs no token issuance, persistence, or file writes. They never auto-revoke an existing operator token.

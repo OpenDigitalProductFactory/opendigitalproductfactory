@@ -108,6 +108,108 @@ describe("reconcileTerminalCapsuleBacklogs (BI-C2EB2C6B)", () => {
       }),
     }));
   });
+
+  // BI-62FB6505: Build Studio rooms store the item's ROW id in backlogItemId; the
+  // sweep looked items up by itemId only, found nothing, and never cleared the
+  // pointer — 8 items on the dev install were pinned to abandoned builds and
+  // refused every re-promotion ("Item already has an active build").
+  it("finds the item when the room stores its row id", async () => {
+    const findFirst = vi.fn(async (args: { where: { OR?: Array<Record<string, string>> } & Record<string, unknown> }) => {
+      const keys = (args.where.OR ?? [args.where]) as Array<Record<string, unknown>>;
+      return keys.some((k) => k.id === "row-bi" || k.itemId === "BI-DEAD")
+        ? { id: "row-bi", itemId: "BI-DEAD", status: "open", activeBuildId: "fb-row" }
+        : null;
+    });
+    const db = {
+      workroom: {
+        findMany: vi.fn().mockResolvedValue([{ capsuleId: "WC-BS", status: "abandoned", backlogItemId: "row-bi", featureBuildId: "fb-row" }]),
+      },
+      featureBuild: { findMany: vi.fn().mockResolvedValue([{ id: "fb-row", phase: "abandoned" }]) },
+      backlogItem: { findFirst, update: vi.fn().mockResolvedValue({}) },
+      backlogItemActivity: { count: vi.fn().mockResolvedValue(0), create: vi.fn().mockResolvedValue({}) },
+    };
+
+    const result = await reconcileTerminalCapsuleBacklogs({ db: db as never, dryRun: false, now: NOW });
+
+    expect(result).toEqual({ scanned: 1, reconciled: 1 });
+    expect(db.backlogItem.update).toHaveBeenCalledWith({ where: { id: "row-bi" }, data: { activeBuildId: null } });
+  });
+
+  // BI-B940FE36 (live regression, 2026-09-24): BI-F73AE8D1 had an OLD abandoned room
+  // (WC-A1945DAF -> FB-12E10A82) and a LIVE build FB-09FC85CF. The room sweep
+  // cleared the item's pointer to the live build because the OLD room was
+  // terminal; the 14:00 tee-up then saw no active build and created a duplicate.
+  it("leaves a pointer to a different, live build alone", async () => {
+    const db = {
+      workroom: {
+        findMany: vi.fn().mockResolvedValue([{ capsuleId: "WC-OLD", status: "abandoned", backlogItemId: "row-bi", featureBuildId: "fb-old-row" }]),
+      },
+      featureBuild: {
+        findMany: vi.fn().mockResolvedValue([{ id: "fb-old-row", buildId: "FB-OLD", phase: "abandoned" }]),
+      },
+      backlogItem: {
+        findFirst: vi.fn().mockResolvedValue({ id: "row-bi", itemId: "BI-F73AE8D1", status: "open", activeBuildId: "fb-live-row" }),
+        update: vi.fn().mockResolvedValue({}),
+      },
+      backlogItemActivity: { count: vi.fn().mockResolvedValue(0), create: vi.fn().mockResolvedValue({}) },
+    };
+
+    const result = await reconcileTerminalCapsuleBacklogs({ db: db as never, dryRun: false, now: NOW });
+
+    expect(result.reconciled).toBe(0);
+    expect(db.backlogItem.update).not.toHaveBeenCalled();
+  });
+
+  it("still clears a pointer that names the room's own build by its FB id", async () => {
+    const db = {
+      workroom: {
+        findMany: vi.fn().mockResolvedValue([{ capsuleId: "WC-OWN", status: "abandoned", backlogItemId: "row-bi", featureBuildId: "fb-own-row" }]),
+      },
+      featureBuild: {
+        findMany: vi.fn().mockResolvedValue([{ id: "fb-own-row", buildId: "FB-OWN", phase: "abandoned" }]),
+      },
+      backlogItem: {
+        findFirst: vi.fn().mockResolvedValue({ id: "row-bi", itemId: "BI-X", status: "open", activeBuildId: "FB-OWN" }),
+        update: vi.fn().mockResolvedValue({}),
+      },
+      backlogItemActivity: { count: vi.fn().mockResolvedValue(0), create: vi.fn().mockResolvedValue({}) },
+    };
+
+    await reconcileTerminalCapsuleBacklogs({ db: db as never, dryRun: false, now: NOW });
+
+    expect(db.backlogItem.update).toHaveBeenCalledWith({ where: { id: "row-bi" }, data: { activeBuildId: null } });
+  });
+
+  // BI-62FB6505 (live, 2026-09-24): abandon_stalled_build and the 7-day ideate
+  // age-out abandon the BUILD without closing its room, so 4 of the 8 pinned
+  // items had a room still "working" — no terminal room, nothing for the
+  // room-driven sweep to find.
+  it("releases an item whose build is terminal even while its room still says working", async () => {
+    const db = {
+      workroom: { findMany: vi.fn().mockResolvedValue([]) },
+      featureBuild: {
+        findMany: vi.fn().mockResolvedValue([{ id: "row-fb", buildId: "FB-8255C0E5", phase: "abandoned" }]),
+      },
+      backlogItem: {
+        findFirst: vi.fn(),
+        findMany: vi.fn().mockResolvedValue([
+          { id: "row-bi", itemId: "BI-44EDF9A4", status: "open", activeBuildId: "FB-8255C0E5" },
+          { id: "row-live", itemId: "BI-LIVE", status: "in-progress", activeBuildId: "FB-LIVE" },
+        ]),
+        update: vi.fn().mockResolvedValue({}),
+      },
+      backlogItemActivity: { count: vi.fn().mockResolvedValue(0), create: vi.fn().mockResolvedValue({}) },
+    };
+
+    const result = await reconcileTerminalCapsuleBacklogs({ db: db as never, dryRun: false, now: NOW });
+
+    expect(result.reconciled).toBe(1);
+    expect(db.backlogItem.update).toHaveBeenCalledTimes(1);
+    expect(db.backlogItem.update).toHaveBeenCalledWith({ where: { id: "row-bi" }, data: { activeBuildId: null } });
+    expect(db.backlogItemActivity.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ backlogItemId: "row-bi", kind: "execution_reconciled" }),
+    }));
+  });
 });
 
 function capsule(overrides: Record<string, unknown> = {}) {
@@ -302,6 +404,31 @@ describe("annotateProviderDeliverySignals (BI-9FF39058)", () => {
     expect(fresh.pullRequestObservation?.state).toBe("open");
     expect(stale.pullRequestObservation).toBeUndefined();
   });
+
+  // BI-ED6EA694: 48 merged rooms on the dev install never recorded a head.
+  it("marks a headless room delivered when its own PR merged from its own branch", async () => {
+    const { createPullRequestObservation } = await import(
+      "../contributor-change-lanes/pull-request-observation"
+    );
+    const payload = createPullRequestObservation(merged as never);
+    const open = createPullRequestObservation({ ...merged, number: 5091, state: "open", mergeCommitSha: null, mergedAt: null } as never);
+    const room = (overrides: Record<string, unknown>) => capsule({
+      repositoryFullName: merged.repositoryFullName, pullRequestNumber: 5090, headBranch: merged.headBranch, headSha: null, ...overrides,
+    }) as any;
+    const rows = [
+      room({ capsuleId: "WC-HEADLESS" }),
+      room({ capsuleId: "WC-OTHER-BRANCH", headBranch: "fix/something-else" }),
+      room({ capsuleId: "WC-OPEN", pullRequestNumber: 5091 }),
+    ];
+
+    await annotateProviderDeliverySignals(rows, [payload, open], NOW);
+
+    expect(rows[0].deliveredSignal).toEqual({ merged: true });
+    expect(rows[1].deliveredSignal).toBeUndefined();
+    // Without a head, an open PR proves nothing about this room's liveness.
+    expect(rows[2].deliveredSignal).toBeUndefined();
+    expect(rows[2].pullRequestObservation).toBeUndefined();
+  });
 });
 
 function makeDb() {
@@ -344,6 +471,32 @@ describe("reapStaleWorkCapsules", () => {
     // No mutation on the default path.
     expect(db.workroom.update).not.toHaveBeenCalled();
     expect(db.workroomActivity.create).not.toHaveBeenCalled();
+  });
+
+  // BI-62FB6505: observe-only governs REAPING rooms. Clearing a pointer to a
+  // build that is already terminal reaps nothing; on the dev install (no
+  // DPF_WORKCAPSULE_REAPER_AUTO_REAP) the repair never ran at all.
+  it("still repairs stale backlog pointers while reaping is observe-only", async () => {
+    const withBacklog = {
+      ...db,
+      backlogItem: {
+        findFirst: vi.fn(),
+        findMany: vi.fn().mockResolvedValue([{ id: "row-bi", itemId: "BI-1", status: "open", activeBuildId: "FB-DEAD" }]),
+        update: vi.fn().mockResolvedValue({}),
+      },
+      backlogItemActivity: { count: vi.fn().mockResolvedValue(0), create: vi.fn().mockResolvedValue({}) },
+    };
+    db.workroom.findMany.mockResolvedValueOnce(deadRows()).mockResolvedValueOnce([]);
+    // The dead rows carry no build, so the only featureBuild read is the repair's.
+    db.featureBuild.findMany.mockResolvedValueOnce([{ id: "row-fb", buildId: "FB-DEAD", phase: "abandoned" }]);
+
+    const result = await reapStaleWorkCapsules({ db: withBacklog as unknown as CapsuleDb, now: NOW });
+
+    expect(result.dryRun).toBe(true);
+    expect(result.reaped).toBe(0);
+    expect(result.backlogReconciled).toBe(1);
+    expect(withBacklog.backlogItem.update).toHaveBeenCalledWith({ where: { id: "row-bi" }, data: { activeBuildId: null } });
+    expect(db.workroom.update).not.toHaveBeenCalled();
   });
 
   it("transitions dead capsules to abandoned only when dryRun=false", async () => {
@@ -393,6 +546,33 @@ describe("reapStaleWorkCapsules", () => {
         where: { capsuleId: "WC-MERGED" },
         data: expect.objectContaining({ status: "archived" }), // NOT abandoned
       }),
+    );
+  });
+
+  // BI-ED6EA694: observe-only guards abandoning UNMERGED work. Archiving a merged
+  // room is DB-only and reversible, so it runs while reaping is observe-only.
+  it("closes delivered rooms while abandoning stays observe-only", async () => {
+    db.workroom.findMany.mockResolvedValueOnce([
+      ...deadRows(),
+      capsule({
+        capsuleId: "WC-MERGED",
+        executorKind: "codex-desktop",
+        leaseExpiresAt: new Date("2026-08-01T00:00:00.000Z"),
+        deliveredSignal: { merged: true },
+      }),
+    ]);
+    db.featureBuild.findMany.mockResolvedValueOnce([]);
+    db.workroom.findUnique.mockResolvedValue({ id: "row-merged", capsuleId: "WC-MERGED", workspaceState: {} });
+    db.workroom.update.mockResolvedValue({ id: "row-merged", capsuleId: "WC-MERGED" });
+
+    const result = await reapStaleWorkCapsules({ db: db as unknown as CapsuleDb, now: NOW, closeDelivered: true });
+
+    expect(result.dryRun).toBe(true);
+    expect(result.reaped).toBe(1);
+    expect(result.candidates.map((c) => c.capsuleId).sort()).toEqual(["WC-LEASE-DEAD", "WC-MERGED"]);
+    expect(db.workroom.update).toHaveBeenCalledTimes(1);
+    expect(db.workroom.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { capsuleId: "WC-MERGED" }, data: expect.objectContaining({ status: "archived" }) }),
     );
   });
 

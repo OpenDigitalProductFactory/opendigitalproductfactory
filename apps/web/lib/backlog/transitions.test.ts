@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { BACKLOG_STATUS_VALUES } from "@/lib/explore/backlog";
 import {
   BACKLOG_STATUSES,
   describeTransition,
@@ -8,6 +9,10 @@ import {
 } from "./transitions";
 
 describe("isBacklogStatus", () => {
+  it("stays in lockstep with BACKLOG_STATUS_VALUES", () => {
+    expect([...BACKLOG_STATUSES]).toEqual([...BACKLOG_STATUS_VALUES]);
+  });
+
   it("accepts canonical values", () => {
     for (const s of BACKLOG_STATUSES) expect(isBacklogStatus(s)).toBe(true);
   });
@@ -30,6 +35,7 @@ describe("isLegalTransition", () => {
     expect(isLegalTransition("triaging", "deferred")).toBe(true);
     expect(isLegalTransition("triaging", "in-progress")).toBe(false);
     expect(isLegalTransition("triaging", "done")).toBe(false);
+    expect(isLegalTransition("triaging", "awaiting-acceptance")).toBe(true);
     expect(isLegalTransition("triaging", "retired")).toBe(true);
   });
 
@@ -38,6 +44,8 @@ describe("isLegalTransition", () => {
     expect(isLegalTransition("in-progress", "open")).toBe(true);
     expect(isLegalTransition("open", "done")).toBe(true);
     expect(isLegalTransition("in-progress", "done")).toBe(true);
+    expect(isLegalTransition("open", "awaiting-acceptance")).toBe(true);
+    expect(isLegalTransition("in-progress", "awaiting-acceptance")).toBe(true);
     expect(isLegalTransition("open", "deferred")).toBe(true);
     expect(isLegalTransition("in-progress", "deferred")).toBe(true);
   });
@@ -56,6 +64,15 @@ describe("isLegalTransition", () => {
     expect(isLegalTransition("retired", "triaging")).toBe(true);
     expect(isLegalTransition("retired", "in-progress")).toBe(false);
     expect(isLegalTransition("retired", "done")).toBe(false);
+  });
+
+  it("keeps awaiting-acceptance out of the coding pool except withdrawn-PR reopen", () => {
+    expect(isLegalTransition("awaiting-acceptance", "done")).toBe(true);
+    expect(isLegalTransition("awaiting-acceptance", "open")).toBe(true);
+    expect(isLegalTransition("awaiting-acceptance", "in-progress")).toBe(true);
+    expect(isLegalTransition("awaiting-acceptance", "retired")).toBe(true);
+    expect(isLegalTransition("awaiting-acceptance", "triaging")).toBe(false);
+    expect(isLegalTransition("awaiting-acceptance", "deferred")).toBe(false);
   });
 
   it("permits reopen from done to open or triaging", () => {

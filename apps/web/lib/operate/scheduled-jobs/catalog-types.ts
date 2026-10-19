@@ -12,7 +12,7 @@ export interface ScheduledJobCatalogEntry {
    *  IS that row's jobId; for the rest it is a stable synthetic id (an
    *  edit/enable upserts a row under this id on first mutation). */
   jobId: string;
-  /** The Inngest function id (id passed to inngest.createFunction). */
+  /** The Inngest function id (id passed to jobs.createFunction). */
   inngestId: string;
   /** Human-readable job name. */
   name: string;

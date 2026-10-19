@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
+// Provider catalog and live control eligibility have their own loader tests.
+// Keep this route integration fixture at those read-model boundaries.
+vi.mock("@/lib/inference/ai-provider-data", () => ({ getProviders: vi.fn(async () => []) }));
+vi.mock("@/lib/inference/provider-routing-control-data", () => ({ loadProviderRoutingControls: vi.fn(async () => new Map()) }));
+
 vi.mock("@dpf/db", () => ({
   prisma: {
     storefrontConfig: { findFirst: vi.fn() },
@@ -23,6 +28,7 @@ vi.mock("@dpf/db", () => ({
     phaseHandoff: { findMany: vi.fn() },
     deliberationRun: { findMany: vi.fn() },
     agentActionProposal: { findMany: vi.fn() },
+    userFact: { findMany: vi.fn() },
   },
 }));
 
@@ -138,6 +144,7 @@ describe("AI operations map page", () => {
     vi.mocked(prisma.phaseHandoff.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.deliberationRun.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.agentActionProposal.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.userFact.findMany).mockResolvedValue([] as never);
     const emptyCreatedBounds = { _min: { createdAt: null }, _max: { createdAt: null } };
     vi.mocked(prisma.routeDecisionLog.aggregate).mockResolvedValue(emptyCreatedBounds as never);
     vi.mocked(prisma.tokenUsage.aggregate).mockResolvedValue(emptyCreatedBounds as never);
@@ -168,7 +175,11 @@ describe("AI operations map page", () => {
         expect.objectContaining({ coworkerId: "build-specialist", providerId: "anthropic", state: "active" }),
       ]),
     );
-    expect(props.recentWindowLabel).toBe("Last 40 records per evidence source");
+    expect(props.recentWindowLabel).toBe("Up to 400 records per evidence source in the selected window");
+    expect(props.routingManagement.receipts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "decision-1", sensitivity: "confidential", correlation: "missing", costUsd: null, quality: null }),
+    ]));
+    expect(props.routingManagement.controls).toEqual([]);
     expect(element.props.initialArchitectureMode).toBe("compare");
     expect(element.props.initialFocusStageId).toBe("data-policy-gateway");
   });

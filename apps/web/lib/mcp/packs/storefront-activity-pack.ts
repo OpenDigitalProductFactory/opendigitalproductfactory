@@ -4,7 +4,7 @@
 // One consolidated, read-only door keeps the tool surface small while giving
 // operations coworkers the demand signal (what is selling, who is waiting).
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 
 const MAX_ROWS = 25;

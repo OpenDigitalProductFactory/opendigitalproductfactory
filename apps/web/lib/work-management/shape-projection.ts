@@ -17,7 +17,7 @@
 //      the ledger, because when they disagree the picture is what people believe.
 
 import type { ReceiptEnvelope } from "./receipt-envelope";
-import type { WorkCaseState } from "./case-types";
+import type { WorkCaseActorRef, WorkCaseState } from "./case-types";
 import type { WorkroomView } from "./room-types";
 import type { WorkCaseSourceRef } from "./case-types";
 import { getWorkShape } from "./work-shapes";
@@ -46,6 +46,7 @@ export interface ShapeRow {
    * so a rendered verdict can always be traced back to what recorded it.
    */
   receiptRef: { table: string; id: string } | null;
+  sourceRef?: WorkCaseSourceRef;
   /** Who acted, when the receipt named an actor. */
   actor: string | null;
   occurredAt?: string;
@@ -85,6 +86,8 @@ export interface ShapeGraph {
     sourceHealth: WorkroomView["projection"]["sourceHealth"];
     gaps: string[];
     receipts: ShapeRow[];
+    events?: ShapeRow[];
+    reviewerRuns?: WorkroomView["reviewerRuns"];
   };
 }
 
@@ -139,11 +142,9 @@ function receiptState(receipt: ReceiptEnvelope): ShapeNodeState {
   return receipt.status === "valid" ? "passed" : "observed";
 }
 
-function actorLabel(receipt: ReceiptEnvelope): string | null {
-  const actor = receipt.actorRef;
+function actorLabel(actor: WorkCaseActorRef | null | undefined): string | null {
   if (!actor) return null;
-  const named = actor as { displayName?: string | null; id?: string | null; kind?: string | null };
-  return named.displayName ?? named.id ?? named.kind ?? null;
+  return actor.displayName ?? actor.actorId ?? actor.actorKind ?? null;
 }
 
 function rowFromReceipt(receipt: ReceiptEnvelope): ShapeRow {
@@ -153,7 +154,7 @@ function rowFromReceipt(receipt: ReceiptEnvelope): ShapeRow {
     state: receiptState(receipt),
     detail: receipt.sourceRef.status ?? receipt.status,
     receiptRef: receipt.rawRef,
-    actor: actorLabel(receipt),
+    actor: actorLabel(receipt.actorRef),
     occurredAt: receipt.occurredAt,
     summary: receipt.summary,
   };
@@ -240,6 +241,10 @@ export function projectRoomShape(
   const candidate = check?.shapeKey ? getWorkShape(check.shapeKey) : null;
   const definition = candidate?.version === check?.shapeVersion ? candidate : null;
   const currentStageKey = definition ? check.currentStageKey : STAGES[currentIndex]?.key ?? null;
+  // A graph room can hold several current stages at once (GPP Phase 3c
+  // PR-3c-2): each one the marking holds reads "current". A sequential room
+  // has only currentStageKey, exactly as before.
+  const isCurrent = (key: string) => key === currentStageKey || (definition !== null && (check.currentStageKeys ?? []).includes(key));
   const affected = view.sourceRefs.filter((ref) => ref.kind === "work-capsule" || ref.kind === "work-item" || ref.kind === "task-run");
   const ownerName = (ref: string | null | undefined) => view.participants.find((person) => person.principalRef === ref)?.displayName ?? ref ?? "Owner not recorded";
   const gaps = [...(check?.deviations ?? []).map((deviation) => deviation.summary)];
@@ -250,24 +255,36 @@ export function projectRoomShape(
     const permittedStage = definition.stages.find((stage) => stage.key === check.nextPermittedStageKey);
     const permission = permittedStage ? `Permitted stage: ${permittedStage.title}.` : "No permitted transition recorded.";
     const recordedAction = view.work.nextAction ? ` Recorded action: ${view.work.nextAction}` : "";
-    // Definition order is stable. A receipt kind alone cannot bind a receipt to
-    // one of these steps; leave uncorrelated receipts in the evidence lane.
-    stages = definition.stages.map((stage) => ({
-      key: stage.key, label: stage.title, parallel: false, rows: [],
-      state: stage.key !== currentStageKey ? "unknown"
-        : view.state === "cancelled" ? "cancelled"
-        : check.disposition === "pause" || check.disposition === "escalate" ? "holding"
-        : check.disposition === "stop" ? "denied" : "observed",
-      inspection: {
-        position: stage.key === currentStageKey ? "Current stage reported by the process check" : "Intended step; execution not verified",
-        reason: stage.key === currentStageKey ? check.interventionReason ?? view.work.attentionReason ?? "The process check reports this stage." : "No step-linked execution receipt is available.",
-        next: stage.key === currentStageKey
-          ? `${permission}${recordedAction}`
-          : `Intended advance condition: ${stage.advance.condition}`,
-        owner: ownerName(stage.accountablePrincipalRef), expectedEvidence: stage.evidence, affected,
-      },
-    }));
-    if (view.receipts.length) gaps.push("Receipts are linked to this room, but their definition-step correlation is not verified.");
+    const correlated = new Set<string>();
+    stages = definition.stages.map((stage) => {
+      const rows = view.receipts.filter(receipt => {
+        const binding = receipt.processEvidence;
+        return binding?.definitionRef === `${definition.key}@${definition.version}`
+          && binding.stageKey === stage.key && binding.relationship === "required-evidence"
+          && (stage.evidence as readonly string[]).includes(binding.evidenceKind);
+      }).map(receipt => {
+        correlated.add(receipt.receiptId);
+        // Requirement evidence is not the runner's stage-completion verdict.
+        return { ...rowFromReceipt(receipt), state: "observed" as const };
+      });
+      return {
+        key: stage.key, label: stage.title, parallel: false, rows,
+        state: !isCurrent(stage.key) ? rows.length ? "observed" : "unknown"
+          : view.state === "cancelled" ? "cancelled"
+          : check.disposition === "pause" || check.disposition === "escalate" ? "holding"
+          : check.disposition === "stop" ? "denied" : "observed",
+        inspection: {
+          position: isCurrent(stage.key) ? "Current stage reported by the process check" : "Intended step; execution not verified",
+          reason: isCurrent(stage.key) ? check.interventionReason ?? view.work.attentionReason ?? "The process check reports this stage."
+            : rows.length ? "Current-source evidence matches this requirement; stage completion is not recorded." : "No step-linked execution receipt is available.",
+          next: isCurrent(stage.key)
+            ? `${permission}${recordedAction}`
+            : `Intended advance condition: ${stage.advance.condition} ${permission}`,
+          owner: ownerName(stage.accountablePrincipalRef), expectedEvidence: stage.evidence, affected,
+        },
+      };
+    });
+    if (view.receipts.some(receipt => !correlated.has(receipt.receiptId))) gaps.push("Some room receipts have no verified definition-step correlation.");
   } else {
     stages = stages.map((stage) => ({ ...stage, inspection: {
       position: stage.key === currentStageKey ? `Current lifecycle stage: ${stage.label}` : `Lifecycle stage: ${stage.label}`,
@@ -301,6 +318,13 @@ export function projectRoomShape(
       sourceHealth: view.projection.sourceHealth,
       gaps,
       receipts: view.receipts.map(rowFromReceipt),
+      reviewerRuns: view.reviewerRuns ?? [],
+      events: view.activity.map((event) => ({
+        key: event.eventId, label: event.summary, summary: event.summary,
+        state: "observed", detail: event.kind, receiptRef: null, sourceRef: event.sourceRef,
+        actor: actorLabel(event.actorRef),
+        ...(event.occurredAt ? { occurredAt: event.occurredAt } : {}),
+      })),
     },
   };
 }

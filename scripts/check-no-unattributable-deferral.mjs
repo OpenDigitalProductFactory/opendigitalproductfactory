@@ -31,7 +31,7 @@
 //
 //   node scripts/check-no-unattributable-deferral.mjs
 
-import { execFileSync } from "node:child_process";
+import { gitText } from "./lib/git.mjs";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -80,7 +80,7 @@ export function findUnattributableDeferrals(path, text) {
 }
 
 function trackedFiles() {
-  return execFileSync("git", ["ls-files"], { cwd: REPO_ROOT, encoding: "utf8" })
+  return gitText(["ls-files"], { cwd: REPO_ROOT, trim: false })
     .split(/\r?\n/)
     .filter((p) => SCOPE_RE.test(p) && !TEST_RE.test(p));
 }

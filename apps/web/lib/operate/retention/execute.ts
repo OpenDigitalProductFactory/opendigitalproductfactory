@@ -34,6 +34,18 @@ export interface PolicyResult {
   affected: number;
   /** True when the per-policy cap was hit (more remain for the next run). */
   capped: boolean;
+  /**
+   * Rows STILL eligible after this policy ran — the sweep checking its own work.
+   * null when the residue could not be counted (custom-purge policies expose no
+   * count path, and a policy that errored has nothing to verify).
+   *
+   * A declared window is a promise. Before this existed the sweep could delete
+   * ZERO rows while thousands stayed eligible and still report ok, which is
+   * exactly how a stalled DiscoveryRun purge went unnoticed for months
+   * (BI-BFFB9211 / the unindexed-cascade incident). Counting what is left is the
+   * difference between "I ran" and "I did what my policy says".
+   */
+  residualEligible: number | null;
   durationMs: number;
   error?: string;
 }
@@ -51,6 +63,22 @@ export interface RetentionSweepReport {
   results: PolicyResult[];
   /** Count of regulated datasets explicitly excluded from purge this run. */
   retainedDatasetCount: number;
+  /**
+   * Models whose declared window is NOT being honoured: rows are still eligible
+   * now that the policy has run. Being capped is an expected, self-healing kind
+   * of incomplete (a fresh install catches up over several nights); making NO
+   * progress while rows remain is not, and is called out separately.
+   */
+  incompletePolicies: Array<{
+    model: string;
+    residualEligible: number;
+    affected: number;
+    capped: boolean;
+    /** Ran to completion, deleted nothing, and eligible rows remain. */
+    stalled: boolean;
+  }>;
+  /** True when any policy is stalled — the signature of a purge that cannot finish. */
+  hasStalledPolicy: boolean;
 }
 
 export interface RunRetentionSweepOptions {
@@ -111,9 +139,44 @@ async function purgeByTimestamp(
       where: { id: { in: rows.map((r) => r.id) } },
     });
     deleted += res.count;
+    // No-progress guard. A full page that deletes NOTHING would otherwise spin
+    // forever: findMany keeps returning the same undeletable ids and `deleted`
+    // never advances toward the cap. Stop and let the residue check report it,
+    // rather than hanging the sweep (and with it every later policy).
+    if (res.count === 0) break;
     if (rows.length < take) break; // last partial page — nothing more matches
   }
   return { deleted, capped: deleted >= cap };
+}
+
+/**
+ * Count rows STILL eligible after a policy has run — the sweep auditing itself.
+ *
+ * Bounded by one extra page beyond the cap so a huge residue costs a bounded
+ * query rather than a full count: the exact number past that point does not
+ * change the verdict, only the size of the number reported.
+ *
+ * Returns null when the policy has no countable timestamp path (custom-purge
+ * handlers own their own cascade), because "I could not check" must never be
+ * recorded as "nothing left".
+ */
+async function countResidualEligible(
+  policy: PurgePolicy,
+  prisma: RetentionPrismaClient,
+  cutoff: Date,
+): Promise<number | null> {
+  if (policy.customPurge) return null;
+  try {
+    const { deleted } = await countEligible(
+      policy,
+      prisma,
+      cutoff,
+      RETENTION_PER_POLICY_CAP,
+    );
+    return deleted;
+  } catch {
+    return null;
+  }
 }
 
 /** Dry-run count of rows a policy would purge. */
@@ -199,6 +262,11 @@ export async function runRetentionSweep(
       }
 
       totalAffected += outcome.deleted;
+      // Verify the promise, do not assume it. A dry run has deleted nothing, so
+      // its "residue" is just its own count and would be noise.
+      const residualEligible = dryRun
+        ? null
+        : await countResidualEligible(policy, prisma, cutoff);
       results.push({
         model: policy.model,
         label: policy.label,
@@ -208,6 +276,7 @@ export async function runRetentionSweep(
         cutoff: cutoff.toISOString(),
         affected: outcome.deleted,
         capped: outcome.capped,
+        residualEligible,
         durationMs: Date.now() - policyStart,
       });
     } catch (err) {
@@ -221,6 +290,8 @@ export async function runRetentionSweep(
         cutoff: cutoff.toISOString(),
         affected: 0,
         capped: false,
+        // A policy that threw verified nothing; null is "unknown", not "clean".
+        residualEligible: null,
         durationMs: Date.now() - policyStart,
         error: getErrorMessage(err),
       });
@@ -229,6 +300,20 @@ export async function runRetentionSweep(
   }
 
   const finishedAt = new Date();
+  // A declared window that still has eligible rows after its own sweep is not
+  // being honoured, whatever the error count says. `stalled` is the sharper
+  // signal: the policy ran to completion, deleted NOTHING, and rows remain --
+  // the signature of a purge that cannot finish rather than one catching up.
+  const incompletePolicies = results
+    .filter((r) => !r.error && r.residualEligible !== null && r.residualEligible > 0)
+    .map((r) => ({
+      model: r.model,
+      residualEligible: r.residualEligible as number,
+      affected: r.affected,
+      capped: r.capped,
+      stalled: r.affected === 0 && !r.capped,
+    }));
+
   return {
     dryRun,
     industryKey,
@@ -239,5 +324,7 @@ export async function runRetentionSweep(
     errorCount,
     results,
     retainedDatasetCount,
+    incompletePolicies,
+    hasStalledPolicy: incompletePolicies.some((policy) => policy.stalled),
   };
 }

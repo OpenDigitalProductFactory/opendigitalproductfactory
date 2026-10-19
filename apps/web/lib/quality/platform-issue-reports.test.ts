@@ -10,7 +10,7 @@ const prismaMock = vi.hoisted(() => ({
 vi.mock("@dpf/db", () => ({ prisma: prismaMock }));
 
 const inngestMock = vi.hoisted(() => ({ send: vi.fn() }));
-vi.mock("@/lib/queue/inngest-client", () => ({ inngest: inngestMock }));
+vi.mock("@/lib/jobs", () => ({ jobs: inngestMock }));
 
 import { createPlatformIssueReport } from "./platform-issue-reports";
 import { ISSUE_REPORT_STATUS } from "./issue-report-status";

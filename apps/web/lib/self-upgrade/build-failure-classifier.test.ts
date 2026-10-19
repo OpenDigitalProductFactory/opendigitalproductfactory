@@ -24,6 +24,24 @@ const BUNDLE_BOUNDARY_LOG = `Tracing apps/web/next.config.mjs
   -> api/inngest/route.ts
 Error: duplicate emitted asset static/chunks/self-upgrade.js (conflict)`;
 
+// Verbatim from SUR-7F02CA27 (2026-09-16), the run that made this classifier
+// misreport. Next 16's Turbopack reworded the duplicate-asset error, and the
+// build ALSO carries a benign `Cannot find module` from the git-hooks
+// convergence script (scripts/ is not COPYed into the portal deps stage). With
+// the old wording-only regex the duplicate-asset branch missed, execution fell
+// through to MODULE_NOT_FOUND, and the operator was told to declare
+// `converge-hooks-dir.mjs` as a dependency — a file the portal build never
+// imports, with the wrong playbook attached.
+const TURBOPACK_16_DUPLICATE_ASSET_LOG = `#129 12.01 Error: Cannot find module '/app/scripts/lib/converge-hooks-dir.mjs'
+#129 75.55 > Build error occurred
+#129 75.55 Error: Turbopack build failed with 2 errors:
+#129 75.55 [output]/apps/web/.next/server/chunks/ssr/apps_web_lib_1nqemst._.js
+#129 75.55 Error: Two or more assets with different content were emitted to the same output path
+#129 75.55 file content differs, written to:
+#129 75.55   [output]/apps/web/.next/d03806d02ae8abdc.js
+#129 75.55   [output]/apps/web/.next/7cb6fedc8a4255b1.js
+#129 75.74  ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command failed with exit code 1: next build`;
+
 const BUNDLE_BOUNDARY_UNEXPECTED_NFT_LOG = `./apps/web/next.config.mjs
 Encountered unexpected file in NFT list
 A file was traced that indicates that the whole project was traced unintentionally.
@@ -253,6 +271,18 @@ describe("classifyBuildFailure", () => {
     const c = classifyBuildFailure({ log: NFT_LOG });
     expect(c.class).toBe("turbopack-nft-duplicate-asset");
     expect(c.failingTrace).toContain("Multiple assets emit");
+  });
+
+  it("classifies Next 16 Turbopack's reworded duplicate-asset error (SUR-7F02CA27)", () => {
+    const c = classifyBuildFailure({ log: TURBOPACK_16_DUPLICATE_ASSET_LOG });
+    expect(c.class).toBe("turbopack-nft-duplicate-asset");
+    expect(c.failingTrace).toContain("same output path");
+  });
+
+  it("does not blame an unrelated module-not-found when the real failure is a duplicate asset", () => {
+    const c = classifyBuildFailure({ log: TURBOPACK_16_DUPLICATE_ASSET_LOG });
+    expect(c.class).not.toBe("host-docker-hoist-divergence");
+    expect(c.summary).not.toContain("converge-hooks-dir");
   });
 
   it("prefers bundle-boundary when a duplicate-asset trace fingerprints a host-only module", () => {

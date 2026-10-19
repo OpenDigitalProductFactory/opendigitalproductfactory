@@ -18,7 +18,8 @@ import {
   sandboxExec,
   writeSandboxFile,
 } from "./sandbox/agent-cli-runtime";
-import type { ChatMessage } from "@/lib/inference/ai-inference";
+import type { ChatMessage } from "@/lib/routing/chat-message-types";
+import { providerSetupLocation } from "@/lib/ai-provider-routes";
 const IDEATE_TIMEOUT_MS = 600_000; // 10 minutes — complex features need time for codebase research
 
 // Local models often wrap the design JSON in prose or emit malformed JSON that
@@ -35,6 +36,17 @@ export type IdeateResult = {
   success: boolean;
   durationMs: number;
   error?: string;
+  /**
+   * BI-0B95D268: true when the engine process was killed or lost its runtime
+   * (exit 137/143/124, a signal, or no output at all) — the harness failed,
+   * the model gave no verdict. The caller re-dispatches once the sandbox is
+   * back instead of treating it as an inference failure.
+   */
+  infrastructure?: boolean;
+  /** BI-5098ECEC: the host was busy (local-CI reservation / admission timeout).
+   *  Retrying now cannot help; the reconciler re-drives the build later, and
+   *  no design-repair round is consumed. */
+  capacityDeferred?: boolean;
 };
 
 /**
@@ -85,7 +97,7 @@ async function ensureGrokAuth(providerId: string): Promise<void> {
   const apiKey = credential?.secretRef ?? credential?.cachedToken;
 
   if (!apiKey) {
-    throw new Error(`No xAI API key for provider "${providerId}". Configure via Admin > AI Workforce > External Services.`);
+    throw new Error(`No xAI API key for provider "${providerId}". Configure via ${providerSetupLocation(providerId)}.`);
   }
 
   // Write the key to a temp file and export it in the runner script.
@@ -126,7 +138,7 @@ async function resolveClaudeAuth(providerId: string): Promise<ClaudeAuth> {
   // request after tokenExpiresAt, causing a 401 from the CLI.
   const result = await getProviderBearerToken(providerId);
   if ("error" in result) {
-    throw new Error(`OAuth token refresh failed for "${providerId}": ${result.error}. Re-authenticate via Admin > AI Providers > Anthropic Subscription.`);
+    throw new Error(`OAuth token refresh failed for "${providerId}": ${result.error}. Re-authenticate via ${providerSetupLocation(providerId)}.`);
   }
   return { mode: "oauth", token: result.token };
 }
@@ -435,6 +447,65 @@ async function gatherCodeGraphContext(
   }
 }
 
+/**
+ * The directory ideate research runs FROM inside the sandbox.
+ *
+ * Deliberately NOT /workspace. `claude` discovers CLAUDE.md (which imports the
+ * whole AGENTS.md rulebook), settings and hooks by walking UP from cwd, so
+ * running from the repo root turned this single-shot "return a design document"
+ * call into a continuing agentic session that replied with session
+ * meta-commentary instead — surfacing to the operator as "Could not parse
+ * design document from research output".
+ */
+export const IDEATE_WORKING_DIR = "/tmp/ideate-cwd";
+
+/** The repository, handed to the CLI as an allowed directory rather than as its project root. */
+export const IDEATE_SOURCE_DIR = "/workspace";
+
+/**
+ * Build the sandbox runner script for one ideate dispatch engine.
+ *
+ * Pure and exported so the cwd/source-access contract can be asserted without
+ * standing up a sandbox: this is the line that decides whether research reads
+ * the repository or inherits it as a project, and those are not the same thing.
+ */
+export function buildIdeateRunnerScript(
+  engine: "claude" | "grok" | "codex",
+  opts: {
+    model?: string | null;
+    claudeAuthExport?: string;
+    /** Auth-mode flag fragment from ensureClaudeAuth; empty for OAuth. */
+    claudeBareFlag?: string;
+    providerId?: string;
+  },
+): string {
+  if (engine === "claude") {
+    const modelFlag = opts.model ? `--model ${opts.model}` : "";
+    return [
+      "#!/bin/sh",
+      `mkdir -p ${IDEATE_WORKING_DIR}`,
+      `cd ${IDEATE_WORKING_DIR}`,
+      `export ${opts.claudeAuthExport ?? ""}`,
+      `claude ${opts.claudeBareFlag ?? ""}-p - --dangerously-skip-permissions --add-dir ${IDEATE_SOURCE_DIR} --output-format json ${modelFlag} < /tmp/ideate-prompt.txt | tee /tmp/ideate-output.json`,
+    ].join("\n");
+  }
+  if (engine === "grok") {
+    const modelFlag = opts.model ? `--model ${opts.model}` : "";
+    return [
+      "#!/bin/sh",
+      `cd ${IDEATE_SOURCE_DIR}`,
+      `export XAI_API_KEY=$(cat /tmp/grok-key-${opts.providerId ?? ""}.txt 2>/dev/null || echo '')`,
+      `grok ${modelFlag} --prompt-file /tmp/ideate-prompt.txt --always-approve`,
+    ].join("\n");
+  }
+  const modelFlag = opts.model ? `-m ${opts.model}` : "";
+  return [
+    "#!/bin/sh",
+    `cd ${IDEATE_SOURCE_DIR}`,
+    `exec codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check ${modelFlag} < /tmp/ideate-prompt.txt 2>/dev/null`,
+  ].join("\n");
+}
+
 export async function dispatchIdeateResearch(params: {
   featureTitle: string;
   featureDescription: string;
@@ -483,16 +554,17 @@ export async function dispatchIdeateResearch(params: {
       );
       const basePrompt = buildResearchPrompt(params) + codeGraphContext;
       const { routeAndCall } = await import("@/lib/inference/routed-inference");
+      const { buildPhaseRouteOptions } = await import("@/lib/build/build-phase-route-options");
       const systemPrompt =
         "You are a senior software architect producing a structured design document. Respond with the design document content only — no preamble.";
       const { designDoc, rawOutput } = await runLocalIdeateWithRetry(
         async (messages) => {
-          const response = await routeAndCall(messages, systemPrompt, params.sensitivity ?? "development", {
+          const response = await routeAndCall(messages, systemPrompt, params.sensitivity ?? "development", buildPhaseRouteOptions({
             budgetClass: "quality_first",
             ...(providerId ? { allowedProviders: [providerId] } : {}),
             ...(params.modelTier ? { modelTier: params.modelTier } : {}),
             ...(params.buildId ? { buildId: params.buildId } : {}),
-          });
+          }));
           return response.content ?? "";
         },
         basePrompt,
@@ -511,6 +583,19 @@ export async function dispatchIdeateResearch(params: {
           : "Routed ideate output could not be parsed into a design document.",
       };
     } catch (err) {
+      const { describeCapacityDeferral } = await import("./capacity-deferral");
+      const deferral = describeCapacityDeferral(err);
+      if (deferral) {
+        return {
+          designDoc: null,
+          rawOutput: "",
+          success: false,
+          durationMs: Date.now() - startMs,
+          infrastructure: true,
+          capacityDeferred: true,
+          error: deferral.message,
+        };
+      }
       return {
         designDoc: null,
         rawOutput: "",
@@ -528,7 +613,7 @@ export async function dispatchIdeateResearch(params: {
       rawOutput: "",
       success: false,
       durationMs: 0,
-      error: `No provider configured for ${dispatchEngine} dispatch. Configure via Admin > AI Workforce > External Services.`,
+      error: `No provider configured for ${dispatchEngine} dispatch. Configure via ${providerSetupLocation()}.`,
     };
   }
 
@@ -572,50 +657,18 @@ export async function dispatchIdeateResearch(params: {
     // node user (after their auth temp files are written); codex runs as root via
     // its auth.json injection.
     const runnerScript = "/tmp/ideate-run.sh";
-    let runAsNode: boolean;
-    if (dispatchEngine === "claude") {
-      const modelFlag = model ? `--model ${model}` : "";
-      // Write a runner script that handles auth env var expansion inside the sandbox.
-      // Tee output to a file so we can recover it if the process is killed on timeout.
-      const script = [
-        "#!/bin/sh",
-        `cd /workspace`,
-        `export ${claudeAuthEnv.replace(/\\\$/g, "$")}`,
-        `claude ${claudeBareFlag}-p - --dangerously-skip-permissions --output-format json ${modelFlag} < /tmp/ideate-prompt.txt | tee /tmp/ideate-output.json`,
-      ].join("\n");
-      await writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: runnerScript, content: script, mode: "755" });
-      runAsNode = true;
-    } else if (dispatchEngine === "grok") {
-      // Grok (xAI) specific path for Ideate research dispatch (distinct from the full
-      // specialist task dispatch in grok-dispatch.ts used by Build Studio orchestrator).
-      //
-      // Unique aspects (parity maintained with main dispatch):
-      // - Auth: Simple XAI_API_KEY env var (no auth.json or OAuth refresh like Claude/Codex).
-      // - Invocation: the SAME headless form grok-dispatch.ts proved against grok
-      //   0.2.32 — `--prompt-file <file> --always-approve`. The old
-      //   `-p - --no-auto-update < file` form passed "-" as the literal prompt and
-      //   ignored the file (and `--no-auto-update` is not a valid flag), so this
-      //   ideate path never actually ran — a latent failure now fixed. (BI-OPT-DISPATCH)
-      // - Strengths: Real-time knowledge for research-oriented Ideate flows.
-      const modelFlag = model ? `--model ${model}` : "";
-      const script = [
-        "#!/bin/sh",
-        `cd /workspace`,
-        `export XAI_API_KEY=$(cat /tmp/grok-key-${providerId}.txt 2>/dev/null || echo '')`,
-        `grok ${modelFlag} --prompt-file /tmp/ideate-prompt.txt --always-approve`,
-      ].join("\n");
-      await writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: runnerScript, content: script, mode: "755" });
-      runAsNode = true;
-    } else {
-      const modelFlag = model ? `-m ${model}` : "";
-      const script = [
-        "#!/bin/sh",
-        `cd /workspace`,
-        `exec codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check ${modelFlag} < /tmp/ideate-prompt.txt 2>/dev/null`,
-      ].join("\n");
-      await writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: runnerScript, content: script, mode: "755" });
-      runAsNode = false;
-    }
+    // The cwd/source-access contract lives in buildIdeateRunnerScript above —
+    // one definition, asserted by test, rather than three inline copies that
+    // drift apart. Only the claude branch runs from a neutral directory today;
+    // see that function for why, and for what is still unmeasured on the others.
+    const runAsNode = dispatchEngine !== "codex";
+    const script = buildIdeateRunnerScript(dispatchEngine, {
+      model,
+      claudeAuthExport: claudeAuthEnv.replace(/\\\$/g, "$"),
+      claudeBareFlag,
+      providerId,
+    });
+    await writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: runnerScript, content: script, mode: "755" });
 
     // Shared spawn-docker-exec loop (streams stderr for progress, matching the
     // main dispatchers). Resolves on close when exit==0 OR stdout is non-empty.
@@ -676,7 +729,7 @@ export async function dispatchIdeateResearch(params: {
             success: false,
             durationMs,
             error: isAuth
-              ? "Claude authentication failed (401). The Anthropic OAuth token has expired — go to Admin > AI Providers > Anthropic Subscription and reconnect."
+              ? `Claude authentication failed (401). The Anthropic OAuth token has expired — go to ${providerSetupLocation(providerId)} and reconnect.`
               : `Claude CLI error: ${errText.slice(0, 150)}`,
           };
         }
@@ -755,12 +808,36 @@ export async function dispatchIdeateResearch(params: {
       } catch { /* no file */ }
     }
 
+    // BI-0B95D268: a process the harness killed (sandbox restart during a
+    // self-upgrade swap, OOM, SIGTERM) is not a model failure and must not be
+    // labelled as one — nor as "Codex" when Claude was the engine.
+    const exitCode = typeof (execErr as { code?: unknown }).code === "number"
+      ? (execErr as { code: number }).code
+      : null;
+    const signal = typeof (execErr as { signal?: unknown }).signal === "string"
+      ? (execErr as { signal: string }).signal
+      : null;
+    const { classifyBlockedCause } = await import("./blocked-cause");
+    const cause = classifyBlockedCause({
+      content: `${execErr.stdout ?? ""}\n${execErr.stderr ?? ""}`,
+      exitCode,
+    });
+    if (cause === "infrastructure") {
+      return {
+        designDoc: null,
+        rawOutput: execErr.stdout ?? "",
+        success: false,
+        durationMs,
+        infrastructure: true,
+        error: `${dispatchEngine} engine process was killed or lost its runtime (exit ${exitCode ?? "?"}${signal ? `, ${signal}` : ""}) — an infrastructure failure, not a model verdict.`,
+      };
+    }
     return {
       designDoc: null,
       rawOutput: execErr.stdout ?? "",
       success: false,
       durationMs,
-      error: `Codex CLI error: ${execErr.message?.slice(0, 500) ?? "Unknown"}`,
+      error: `${dispatchEngine} CLI error: ${execErr.message?.slice(0, 500) ?? "Unknown"}`,
     };
   }
 }

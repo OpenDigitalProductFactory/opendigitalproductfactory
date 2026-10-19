@@ -15,9 +15,10 @@
 import * as crypto from "crypto";
 import { prisma } from "@dpf/db";
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import {
   EXECUTION_EVIDENCE_KINDS,
+  evidenceKindMetadata,
   isExecutionEvidenceKind,
   validateExecutionEvidenceStructure,
 } from "@/lib/backlog/execution-evidence";
@@ -48,7 +49,7 @@ function redactFunctionalFailureText(text: string): string {
 const definitions: ToolDefinition[] = [
   {
     name: "record_execution_evidence",
-    description: "Attach typed evidence to a backlog item (tests, production build, UX, migration, source provenance, spec review, manual check, or supporting link). Positive completion evidence is later resolved server-side; a supplied ToolExecution reference must identify a successful execution owned by the same user.",
+    description: "Attach typed evidence to a backlog item (tests, production build, UX, migration, source provenance, spec review, manual check, or supporting link). A supplied ToolExecution must belong to the same user. Failed executions may be linked only by failure evidence kinds; these never earn completion credit. Other kinds require successful execution, including manual checks.",
     inputSchema: {
       type: "object",
       properties: {
@@ -169,11 +170,13 @@ async function recordExecutionEvidenceHandler(
       where: { id: toolExecutionId },
       select: { id: true, success: true, userId: true },
     });
-    if (!toolExecution?.success || toolExecution.userId !== userId) {
+    const allowsFailedExecution = evidenceKindMetadata(kindRaw).polarity === "fail";
+    if (!toolExecution || toolExecution.userId !== userId
+      || (!toolExecution.success && !allowsFailedExecution)) {
       return {
         success: false,
         error: "invalid_tool_execution",
-        message: `ToolExecution ${toolExecutionId} does not resolve to a successful execution owned by this user`,
+        message: `ToolExecution ${toolExecutionId} must exist, belong to this user, and be successful unless the evidence kind records a failure`,
       };
     }
   }
@@ -206,7 +209,7 @@ async function recordLocalIntegrationResultHandler(
   userId: string,
   context?: { routeContext?: string },
 ): Promise<ToolResult> {
-  const { recordLocalIntegrationResult } = await import("@/lib/nonprod/local-integration");
+  const { recordLocalIntegrationResult, TEST_STUB_EVIDENCE_REFUSED } = await import("@/lib/nonprod/local-integration");
   const stringValue = (key: string) => (typeof params[key] === "string" ? String(params[key]).trim() : "");
   const provider = stringValue("provider");
   const externalSessionId = stringValue("externalSessionId");
@@ -243,21 +246,30 @@ async function recordLocalIntegrationResultHandler(
     return { success: false, error: "invalid_status", message: `Unsupported local integration status: ${status}` };
   }
 
-  const result = await recordLocalIntegrationResult({
-    actorUserId: userId,
-    provider,
-    externalSessionId,
-    routeContext,
-    buildId: stringValue("buildId") || undefined,
-    taskRunId: stringValue("taskRunId") || undefined,
-    candidateBranch,
-    mode: mode as "single-branch" | "sibling-set" | "post-merge-main",
-    status: status as "passed" | "failed" | "conflict" | "blocked_sandbox_drift" | "blocked_control_plane_starvation",
-    summary,
-    gateKey: stringValue("gateKey") || undefined,
-    leaseId: stringValue("leaseId") || undefined,
-    evidence: evidence as import("@dpf/db").Prisma.InputJsonValue,
-  });
+  let result: { id: string };
+  try {
+    result = await recordLocalIntegrationResult({
+      actorUserId: userId,
+      provider,
+      externalSessionId,
+      routeContext,
+      buildId: stringValue("buildId") || undefined,
+      taskRunId: stringValue("taskRunId") || undefined,
+      candidateBranch,
+      mode: mode as "single-branch" | "sibling-set" | "post-merge-main",
+      status: status as "passed" | "failed" | "conflict" | "blocked_sandbox_drift" | "blocked_control_plane_starvation",
+      summary,
+      gateKey: stringValue("gateKey") || undefined,
+      leaseId: stringValue("leaseId") || undefined,
+      evidence: evidence as import("@dpf/db").Prisma.InputJsonValue,
+    });
+  } catch (error) {
+    // BI-F5344F65: the writer refuses DPF_ALLOW_LOCAL_CI_STUB payloads; name it.
+    if ((error as { code?: unknown } | null)?.code === TEST_STUB_EVIDENCE_REFUSED) {
+      return { success: false, error: TEST_STUB_EVIDENCE_REFUSED, message: (error as Error).message };
+    }
+    throw error;
+  }
   return {
     success: true,
     entityId: result.id,

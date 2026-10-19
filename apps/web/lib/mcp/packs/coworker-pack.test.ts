@@ -5,6 +5,10 @@ const collab = vi.hoisted(() => ({
   summonCoworker: vi.fn(),
 }));
 const external = vi.hoisted(() => ({ dispatch: vi.fn() }));
+const authority = vi.hoisted(() => ({ authorize: vi.fn() }));
+const approvalStatus = vi.hoisted(() => ({ read: vi.fn(), list: vi.fn() }));
+vi.mock("@/lib/coworker/approval-outcome-store", () => ({ readApprovalOutcome: approvalStatus.read, listPendingApprovalOutcomes: approvalStatus.list }));
+vi.mock("@/lib/mcp/independent-review-request", () => ({ authorizeCoworkerRequest: authority.authorize }));
 vi.mock("@/lib/tak/coworker-collaboration", () => ({
   requestCoworker: (...a: unknown[]) => collab.requestCoworker(...a),
   summonCoworker: (...a: unknown[]) => collab.summonCoworker(...a),
@@ -14,9 +18,9 @@ vi.mock("@/lib/mcp/external-coworker-task-adapter", () => ({
 }));
 
 import { coworkerPack } from "./coworker-pack";
-import { TOOL_TO_GRANTS } from "@/lib/tak/agent-grants";
+import { TOOL_TO_GRANTS, isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 
-const EXPECTED_TOOLS = ["request_coworker", "summon_coworker", "find_coworker"];
+const EXPECTED_TOOLS = ["request_coworker", "summon_coworker", "find_coworker", "get_my_approval_status", "probe_pending_approval_conversion"];
 
 const initiativeReviewBinding = {
   writerToolName: "record_initiative_evidence",
@@ -40,6 +44,7 @@ const objectiveMappingBinding = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  authority.authorize.mockResolvedValue({ bounded: false });
   external.dispatch.mockResolvedValue({
     success: false,
     error: "external_handoff_context_required",
@@ -48,6 +53,43 @@ beforeEach(() => {
 });
 
 describe("coworker pack — registration", () => {
+  it("discovers pending requests without an ID using only authenticated identity", async () => {
+    approvalStatus.list.mockResolvedValue({ approvals: [{ envelopeId: "e1" }], hasMore: false });
+    const result = await coworkerPack.handlers.get_my_approval_status(
+      { mode: "pending", userId: "victim", agentId: "other" }, "u1", { agentId: "a1" },
+    );
+    expect(result.success).toBe(true);
+    expect(approvalStatus.list).toHaveBeenCalledWith("u1", "a1");
+    expect(approvalStatus.read).not.toHaveBeenCalled();
+    expect(result.data).toMatchObject({ approvals: [{ envelopeId: "e1" }], hasMore: false });
+  });
+  it.each([{ mode: "pending", envelopeId: "e1" }, { mode: "unknown" }, {}])(
+    "refuses ambiguous discovery parameters %j", async (params) => {
+      expect(await coworkerPack.handlers.get_my_approval_status(params, "u1", { agentId: "a1" }))
+        .toMatchObject({ success: false, error: "invalid_params" });
+      expect(approvalStatus.list).not.toHaveBeenCalled();
+      expect(approvalStatus.read).not.toHaveBeenCalled();
+    },
+  );
+  it("does not discover requests without a verified assistant", async () => {
+    expect(await coworkerPack.handlers.get_my_approval_status({ mode: "pending" }, "u1", {}))
+      .toMatchObject({ success: false, error: "approval_identity_required" });
+    expect(approvalStatus.list).not.toHaveBeenCalled();
+  });
+  it("reads an exact approval using verified user and assistant, ignoring supplied identity", async () => {
+    approvalStatus.read.mockResolvedValue({ state: "expired", label: "Approval window closed" });
+    const handler = coworkerPack.handlers.get_my_approval_status;
+    expect(handler).toBeTypeOf("function");
+    const result = await handler({ envelopeId: "e1", userId: "victim", agentId: "other" }, "u1", { agentId: "a1" });
+    expect(approvalStatus.read).toHaveBeenCalledWith("e1", "u1", "a1");
+    expect(result.success).toBe(true);
+  });
+  it("discloses review requests to evidence authors without granting general summons or review receipts", () => {
+    const grants = ["initiative_evidence_write"];
+    expect(isToolAllowedByGrants("request_coworker", grants)).toBe(true);
+    expect(isToolAllowedByGrants("summon_coworker", grants)).toBe(false);
+    expect(isToolAllowedByGrants("record_initiative_post_implementation_review", grants)).toBe(false);
+  });
   it("exposes exactly the collaboration + discovery tools with a handler each", () => {
     expect(coworkerPack.definitions.map((d) => d.name).sort()).toEqual([...EXPECTED_TOOLS].sort());
     expect(Object.keys(coworkerPack.handlers).sort()).toEqual([...EXPECTED_TOOLS].sort());
@@ -60,8 +102,8 @@ describe("coworker pack — registration", () => {
   });
 
   it("mirrors the agent-grant gating source exactly (R3 no-drift)", () => {
-    // request_coworker/summon_coworker are advise-safe coordination, ungated in
-    // TOOL_TO_GRANTS — pack.grants is empty, so there is nothing to drift against.
+    // The central grant map owns collaboration disclosure; this pack does not
+    // duplicate it. Its runtime guard narrows the additional author lane.
     expect(coworkerPack.grants).toEqual({});
     for (const [name, grants] of Object.entries(coworkerPack.grants)) {
       expect(TOOL_TO_GRANTS[name], name).toEqual(grants);
@@ -108,7 +150,44 @@ describe("coworker pack — registration", () => {
   );
 });
 
+// BI-FAD98137: the delegating turn's mode travels with the delegation.
+describe("coworker pack — the delegating turn's mode reaches the child", () => {
+  it.each([
+    ["request_coworker", "requestCoworker"],
+    ["summon_coworker", "summonCoworker"],
+  ] as const)("%s passes the turn's coworkerMode as runtimeMode", async (tool, fn) => {
+    authority.authorize.mockResolvedValue({ bounded: false });
+    collab[fn].mockResolvedValue({ childThreadId: "child-1", taskRunId: "TR-1", targetAgentId: "agent-mkt", targetLabel: "Marketing" });
+    await coworkerPack.handlers[tool]!(
+      { targetAgent: "marketing", objective: "draft" },
+      "u1",
+      { threadId: "parent-1", agentId: "coo", coworkerMode: "advise" } as never,
+    );
+    expect(collab[fn]).toHaveBeenCalledWith(expect.objectContaining({ runtimeMode: "advise" }), "u1");
+  });
+});
+
 describe("coworker pack — handler behavior (delegation preserved)", () => {
+  it("cannot use a portal thread to escape the bounded review lane", async () => {
+    authority.authorize.mockResolvedValue({ bounded: true });
+    await coworkerPack.handlers.request_coworker({ targetAgent: "reviewer", objective: "review" }, "u1", { threadId: "portal" });
+    expect(external.dispatch).toHaveBeenCalledOnce();
+    expect(collab.requestCoworker).not.toHaveBeenCalled();
+  });
+  it("passes a review-request notice to the author with the dispatched task (BI-4592CF69)", async () => {
+    authority.authorize.mockResolvedValue({ bounded: true, notice: "This design is 70,000 characters." });
+    external.dispatch.mockResolvedValue({ success: true, message: "Task submitted.", data: { taskRunId: "TR-1" } });
+    const result = await coworkerPack.handlers.request_coworker({ targetAgent: "reviewer", objective: "review" }, "u1", {});
+    expect(result).toMatchObject({ success: true, message: "Task submitted. This design is 70,000 characters.",
+      data: { taskRunId: "TR-1", reviewDocumentNotice: "This design is 70,000 characters." } });
+  });
+  it("returns the authority refusal without dispatching on either surface", async () => {
+    const refusal = { success: false, error: "independent_review_request_denied", message: "Not admitted" };
+    authority.authorize.mockResolvedValue({ bounded: true, refusal });
+    expect(await coworkerPack.handlers.request_coworker({ targetAgent: "reviewer", objective: "review" }, "u1", { threadId: "portal" })).toEqual(refusal);
+    expect(external.dispatch).not.toHaveBeenCalled();
+    expect(collab.requestCoworker).not.toHaveBeenCalled();
+  });
   it("request_coworker fails closed when neither a portal thread nor verified external context exists", async () => {
     const res = await coworkerPack.handlers.request_coworker(
       { targetAgent: "ea-architect", objective: "review schema" },

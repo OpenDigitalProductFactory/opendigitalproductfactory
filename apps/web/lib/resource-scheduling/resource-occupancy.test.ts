@@ -10,6 +10,7 @@ import {
 function fixture() {
   const tx = {
     $executeRawUnsafe: vi.fn(async () => 0),
+    animalProfile: { findFirst: vi.fn() },
     adoptableAnimal: { findFirst: vi.fn() },
     resource: { findFirst: vi.fn() },
     resourceCapacityAllocation: {
@@ -22,6 +23,7 @@ function fixture() {
   const db = {
     $transaction: vi.fn(async (work: (value: typeof tx) => unknown) => work(tx)),
   };
+  tx.animalProfile.findFirst.mockResolvedValue(null);
   tx.adoptableAnimal.findFirst.mockResolvedValue({ animalRef: "animal-1", status: "hold" });
   tx.resource.findFirst.mockResolvedValue({
     id: "foster-1",
@@ -209,5 +211,32 @@ describe("resource occupancy commands", () => {
       data: expect.objectContaining({ releaseReason: "left-care" }),
     });
     expect((tx.resourceCapacityAllocation as Record<string, unknown>).delete).toBeUndefined();
+  });
+});
+
+describe("placement subject identity", () => {
+  it("accepts a canonical animal profile with no public listing", async () => {
+    const { db, tx } = fixture();
+    tx.animalProfile.findFirst.mockResolvedValue({ animalRef: "animal-1" });
+    tx.adoptableAnimal.findFirst.mockResolvedValue(null);
+    const placement = await placeResourceOccupant({
+      db: db as unknown as OccupancyClient,
+      organizationId: "org-1",
+      allowedKinds: ["foster-home"],
+      command: { animalRef: "animal-1", destinationResourceId: "foster-1", placedAt: new Date("2026-09-04T12:00:00Z"), idempotencyKey: "k" },
+    });
+    expect(placement.animalRef).toBe("animal-1");
+  });
+
+  it("still refuses an animal that is neither a profile in care nor a live listing", async () => {
+    const { db, tx } = fixture();
+    tx.animalProfile.findFirst.mockResolvedValue(null);
+    tx.adoptableAnimal.findFirst.mockResolvedValue(null);
+    await expect(placeResourceOccupant({
+      db: db as unknown as OccupancyClient,
+      organizationId: "org-1",
+      allowedKinds: ["foster-home"],
+      command: { animalRef: "ghost", destinationResourceId: "foster-1", placedAt: new Date(), idempotencyKey: "k" },
+    })).rejects.toMatchObject({ code: "animal_not_found" });
   });
 });

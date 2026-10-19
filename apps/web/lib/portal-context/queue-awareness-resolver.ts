@@ -52,7 +52,14 @@ export async function resolveQueueAttention(
     const read =
       deps.readAtRiskQueues ??
       (await import("@/lib/queue/queue-snapshot-service")).readAtRiskQueues;
-    const atRisk = await read({ getFinder: deps.getFinder, now: deps.now });
+    // WorkItem is the only record of when a consumer last TOUCHED a queue, and
+    // the stall signal needs it to tell a stopped consumer from a blocked one.
+    const { prisma } = await import("@dpf/db");
+    const atRisk = await read({
+      getFinder: deps.getFinder,
+      now: deps.now,
+      workItemFinder: prisma.workItem,
+    });
     const limit = Math.min(Math.max(deps.limit ?? 5, 1), 20);
     return atRisk
       .slice(0, limit)

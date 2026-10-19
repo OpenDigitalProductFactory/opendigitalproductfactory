@@ -2,7 +2,7 @@ import { prisma } from "@dpf/db";
 import { DEMAND_SCORE_FRAMEWORKS, INVESTMENT_BUCKET_VALUES } from "@/lib/explore/backlog";
 import type { DemandTransitionDb } from "@/lib/demand/transition-repository";
 import { fundingRiskTier } from "@/lib/demand/funding-risk";
-import type { ToolResult } from "@/lib/mcp-tools";
+import type { ToolResult } from "@/lib/mcp-tool-types";
 import { queueProductManagementPlaybookRefreshForBacklogItem } from "@/lib/product-management/product-management-playbook-refresh";
 import { createAuthorizationDecisionLog } from "@/lib/governance-data";
 import {
@@ -104,7 +104,12 @@ const MAX_BACKLOG_DELIVERY_BUDGET = 50;
  * ideate/plan/review; it does not raise execution parallelism.
  */
 export async function setBacklogDeliveryBudgetHandler(params: Record<string, unknown>): Promise<ToolResult> {
-  const data: { backlogTeeUpDailyCap?: number; governedBacklogEnabled?: boolean } = {};
+  const data: {
+    backlogTeeUpDailyCap?: number;
+    governedBacklogEnabled?: boolean;
+    wipAdmissionMode?: "shadow" | "enforce";
+    capacityDrainEnabled?: boolean;
+  } = {};
 
   const rawBudget = params["dailyBudget"];
   if (typeof rawBudget === "number" && Number.isFinite(rawBudget)) {
@@ -123,6 +128,22 @@ export async function setBacklogDeliveryBudgetHandler(params: Record<string, unk
     data.governedBacklogEnabled = rawEnabled;
   }
 
+  // BI-9AC1F99B: the use-it-or-lose-it capacity drain (DI-5FED0D945EBB) is
+  // opt-in, and this is its operator writer. Same approval and audit as the rest
+  // of the delivery config; a non-boolean value leaves the stored switch alone.
+  const rawDrain = params["capacityDrainEnabled"];
+  if (typeof rawDrain === "boolean") {
+    data.capacityDrainEnabled = rawDrain;
+  }
+
+  const rawMode = params["wipAdmissionMode"];
+  if (rawMode !== undefined) {
+    if (rawMode !== "shadow" && rawMode !== "enforce") {
+      return { success: false, error: "invalid_input", message: "wipAdmissionMode must be shadow or enforce." };
+    }
+    data.wipAdmissionMode = rawMode;
+  }
+
   if (Object.keys(data).length > 0) {
     await prisma.platformDevConfig.upsert({
       where: { id: "singleton" },
@@ -133,29 +154,35 @@ export async function setBacklogDeliveryBudgetHandler(params: Record<string, unk
 
   const fresh = await prisma.platformDevConfig.findUnique({
     where: { id: "singleton" },
-    select: { backlogTeeUpDailyCap: true, governedBacklogEnabled: true },
+    select: { backlogTeeUpDailyCap: true, governedBacklogEnabled: true, wipAdmissionMode: true, capacityDrainEnabled: true },
   });
 
-  const { BUILD_WIP_CAP, TERMINAL_BUILD_PHASES } = await import("@/lib/build/wip-cap");
+  const { sandboxPoolSize, TERMINAL_BUILD_PHASES } = await import("@/lib/build/wip-cap");
   const activeBuilds = await prisma.featureBuild.count({
     where: { phase: { notIn: [...TERMINAL_BUILD_PHASES] }, abandonedAt: null, parentEpicId: null },
   });
 
   const dailyBudget = fresh?.backlogTeeUpDailyCap ?? 3;
   const enabled = fresh?.governedBacklogEnabled === true;
+  const capacityDrainEnabled = fresh?.capacityDrainEnabled === true;
+  // Intake budget, admission and execution are three different limits: this
+  // budget sets intake per day; each start is admitted by its portfolio's points
+  // in flight (BI-3430B3A4); the sandbox pool is the physical execution limit.
+  const poolSize = sandboxPoolSize();
+  const admissionMode = fresh?.wipAdmissionMode === "enforce" ? "enforce" : "shadow";
   const parallelismNote =
-    activeBuilds >= BUILD_WIP_CAP
-      ? ` Build Studio's shared sandbox is already at its ${BUILD_WIP_CAP}-build execution limit (${activeBuilds} active) — new intake will queue behind it, not run in parallel. For more parallel throughput, use external worktree builds (unbounded — AGENTS.md §17), not a bigger budget.`
-      : ` ${activeBuilds}/${BUILD_WIP_CAP} of Build Studio's shared-sandbox execution slots are in use.`;
+    ` ${activeBuilds} Build Studio build(s) are active; the sandbox pool executes ${poolSize} at a time and queues the rest.` +
+    ` Each start is admitted by its portfolio's points in flight, not by this budget (admission is in ${admissionMode} mode${admissionMode === "shadow" ? ": decisions are recorded, nothing is blocked" : ""}).` +
+    " For more parallel throughput, use external worktree builds, not a bigger budget.";
 
   return {
     success: true,
     entityId: "singleton",
     message:
       Object.keys(data).length > 0
-        ? `Backlog delivery budget set to ${dailyBudget}/day (governed promotion ${enabled ? "enabled" : "disabled"}).${parallelismNote}`
-        : `Backlog delivery budget is ${dailyBudget}/day (governed promotion ${enabled ? "enabled" : "disabled"}).${parallelismNote}`,
-    data: { dailyBudget, enabled, activeBuilds, buildWipCap: BUILD_WIP_CAP },
+        ? `Backlog delivery budget set to ${dailyBudget}/day (governed promotion ${enabled ? "enabled" : "disabled"}, capacity drain ${capacityDrainEnabled ? "on" : "off"}).${parallelismNote}`
+        : `Backlog delivery budget is ${dailyBudget}/day (governed promotion ${enabled ? "enabled" : "disabled"}, capacity drain ${capacityDrainEnabled ? "on" : "off"}).${parallelismNote}`,
+    data: { dailyBudget, enabled, activeBuilds, sandboxPoolSize: poolSize, wipAdmissionMode: admissionMode, capacityDrainEnabled },
   };
 }
 
@@ -253,7 +280,7 @@ export async function sweepDuplicateDemandHandler(params: Record<string, unknown
 export async function approveDemandForFundingHandler(
   params: Record<string, unknown>,
   userId: string,
-  context?: { routeContext?: string; agentId?: string; threadId?: string; callerClient?: string; apiTokenId?: string; authSource?: string },
+  context?: { routeContext?: string; agentId?: string; threadId?: string; taskRunId?: string; callerClient?: string; apiTokenId?: string; authSource?: string },
 ): Promise<ToolResult> {
   const itemId = String(params["itemId"] ?? "");
   const item = await prisma.backlogItem.findUnique({
@@ -330,8 +357,24 @@ export async function approveDemandForFundingHandler(
     };
   }
 
+  // Budget first (BI-EF265C9A): an approval past the portfolio's allocation is
+  // refused for an autonomous caller and needs a recorded reason from a person.
+  const budgetReservation = await import("@/lib/portfolio/budget-reservation");
+  const reservationPlan = await budgetReservation.planFundingReservation(prisma as never, {
+    itemId,
+    now: new Date(),
+    autonomous: budgetReservation.isAutonomousCaller(context),
+    overrideReason: typeof params["overrideReason"] === "string" ? params["overrideReason"] : null,
+  });
+  if (reservationPlan.kind === "refuse") {
+    return { success: false, error: reservationPlan.code, message: reservationPlan.message };
+  }
+
   const { evaluateOrgBusinessDecisionGate } = await import("@/lib/decision-perspective/org-business-gate");
   const rationale = typeof params["rationale"] === "string" ? (params["rationale"] as string).trim() : "";
+  // No organization currency funding threshold is configured by this model.
+  // The existing quarterly points allocation above remains its own control;
+  // points are not currency and cannot supply a guessed threshold declaration.
   const decision = await evaluateOrgBusinessDecisionGate({
     db: prisma,
     organizationId: item.organizationId,
@@ -352,7 +395,8 @@ export async function approveDemandForFundingHandler(
     },
   });
 
-  // Only advance to `ready` (funded) when the org's stance recommends/arbitrates.
+  // Advance only through the gate's canonical permission projection, including
+  // damaging holds, decisive declines and the recorded independent-review interim.
   const funded = decision.allowed;
   let volunteered: { offered: boolean; agentId: string | null } = { offered: false, agentId: null };
   if (funded) {
@@ -373,6 +417,9 @@ export async function approveDemandForFundingHandler(
         error: transition.code,
         message: transition.message,
       };
+    }
+    if (reservationPlan.kind === "reserve") {
+      await budgetReservation.commitFundingReservation(prisma as never, reservationPlan, { userId, agentId: context?.agentId ?? null });
     }
     // AI-led execution (EP-DELIVERY-FLOW BI-A6648529): crossing the bet pulls a
     // coworker forward. Kernel decision (high conf) = ask-first — raise a
@@ -408,6 +455,7 @@ export async function approveDemandForFundingHandler(
         orgProfileSelected: decision.orgProfileSelected,
         demandScore: item.demandScore,
         investmentBucket: item.investmentBucket,
+        budget: budgetOutcome(reservationPlan, funded),
       },
       recordedById: userId,
       recordedByAgentId: context?.agentId ?? null,
@@ -433,13 +481,25 @@ export async function approveDemandForFundingHandler(
       interactionId: decision.interactionId,
       outcomeType: decision.evaluation.outcomeType,
       orgProfileSelected: decision.orgProfileSelected,
+      budget: budgetOutcome(reservationPlan, funded),
     },
   };
 }
 
+/** What funding did to the portfolio budget, for the decision record and the caller. */
+function budgetOutcome(
+  plan: Awaited<ReturnType<typeof import("@/lib/portfolio/budget-reservation").planFundingReservation>>,
+  funded: boolean,
+) {
+  if (plan.kind === "reserve") {
+    return { reserved: funded, points: plan.points, portfolioId: plan.portfolioId, overrideReason: plan.overrideReason, warning: plan.warning };
+  }
+  return { reserved: false, reason: plan.kind === "none" ? plan.reason : plan.code, message: plan.message };
+}
+
 export async function runCapacityDrainHandler(params: Record<string, unknown>, userId: string): Promise<ToolResult> {
   const dryRun = params["dryRun"] !== false; // default true (report only)
-  const { evaluateAndDrainCapacity } = await import("@/lib/capacity/evaluate-drain");
+  const { evaluateAndDrainCapacity } = await import("@/lib/capacity/evaluate-capacity-drain");
   const r = await evaluateAndDrainCapacity({ prisma, userId, dryRun });
   const suffix = r.drained
     ? ` — dispatched ${r.dispatched} build(s)`

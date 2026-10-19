@@ -6,6 +6,8 @@ import {
   type ConductorDeps,
   type TriageSubject,
 } from "./triage-conductor";
+import { buildPanelBrief } from "./triage-panel-brief";
+import { planTriageStaffing } from "./triage-staffing";
 
 const SUBJECT: TriageSubject = {
   interactionRowId: "row-1",
@@ -60,6 +62,11 @@ function deps(overrides: Partial<ConductorDeps> = {}): ConductorDeps & { created
 }
 
 describe("isPanelWorthy", () => {
+  it("uses the recorded route for human-panel eligibility", () => {
+    expect(isPanelWorthy({ ...SUBJECT, outcomeType: "recommend", escalationRoute: "human" }).eligible).toBe(true);
+    expect(isPanelWorthy({ ...SUBJECT, escalationRoute: "independent_review" }).eligible).toBe(false);
+    expect(isPanelWorthy({ ...SUBJECT, escalationRoute: "decided" }).eligible).toBe(false);
+  });
   it("spends a panel on an unresolved, consequential, answerable decision", () => {
     expect(isPanelWorthy(SUBJECT).eligible).toBe(true);
   });
@@ -86,6 +93,38 @@ describe("isPanelWorthy", () => {
 });
 
 describe("conductTriage", () => {
+  it("does not spend inference on the observed empty signin question", async () => {
+    const d = deps();
+    expect((await conductTriage(d, { ...SUBJECT, question: "grok signin start: " })).status).toBe("not-worth-a-panel");
+    expect(d.runPanel).not.toHaveBeenCalled();
+    expect(d.created).toHaveLength(0);
+    expect(isPanelWorthy({ ...SUBJECT, question: "Sign in: should this account have access?" }).eligible).toBe(true);
+  });
+
+  it("blocks an unfinished panel even if the question has changed", async () => {
+    const d = deps();
+    expect((await conductTriage(d, { ...SUBJECT, previousPanel: { id: "old", completedAt: null, brief: "old case" } })).status).toBe("panel-pending");
+    expect(d.runPanel).not.toHaveBeenCalled();
+  });
+
+  it("blocks the same completed case but admits changed evidence", async () => {
+    const plan = planTriageStaffing({ domainClass: SUBJECT.domainClass, gateKey: SUBJECT.gateKey, question: SUBJECT.question });
+    const previousPanel = { id: "old", completedAt: new Date(), brief: buildPanelBrief({ subject: SUBJECT, plan, optionIds: [] }) };
+    const d = deps();
+    expect((await conductTriage(d, { ...SUBJECT, previousPanel })).status).toBe("case-unchanged");
+    expect(d.runPanel).not.toHaveBeenCalled();
+    expect((await conductTriage(d, { ...SUBJECT, previousPanel, evidenceBundle: { dpaSigned: true } })).status).toBe("proposed");
+    expect(d.runPanel).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not treat JSON key ordering as new evidence", async () => {
+    const original = { ...SUBJECT, evidenceBundle: { a: 1, b: 2 } };
+    const plan = planTriageStaffing({ domainClass: SUBJECT.domainClass, gateKey: SUBJECT.gateKey, question: SUBJECT.question });
+    const previousPanel = { id: "old", completedAt: new Date(), brief: buildPanelBrief({ subject: original, plan, optionIds: [] }) };
+    const d = deps();
+    expect((await conductTriage(d, { ...SUBJECT, evidenceBundle: { b: 2, a: 1 }, previousPanel })).status).toBe("case-unchanged");
+    expect(d.runPanel).not.toHaveBeenCalled();
+  });
   it("drafts a proposal from an admissible verdict", async () => {
     const d = deps();
     const outcome = await conductTriage(d, SUBJECT);

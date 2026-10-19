@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, afterEach } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { MARK_DPF_PLATFORM_PROFILE } from "./default-profile";
 import { evaluateBuildStudioPlanAdvancementGate } from "./build-studio-gate";
@@ -139,6 +139,22 @@ function makeDb() {
 }
 
 describe("evaluateBuildStudioPlanAdvancementGate", () => {
+  // BI-7FFFBEE3 slice B: a verdict that cannot block is recorded as shadow, so
+  // the owner inbox (attention/sources/ai-decision) never lists it.
+  it("records a shadow-enforcement verdict as shadow", async () => {
+    const db = makeDb();
+    vi.spyOn(console, "info").mockImplementation(() => {});
+    await evaluateBuildStudioPlanAdvancementGate({
+      db: db as never,
+      build: makeBuild(),
+      triggeredByUserId: "user-1",
+      now: new Date("2026-05-17T12:00:00.000Z"),
+      enforcement: "shadow",
+    });
+    const data = (db.decisionInteraction.create.mock.calls[0]![0] as { data: { outcomePayload: Record<string, unknown> } }).data;
+    expect(data.outcomePayload).toMatchObject({ enforcement: "shadow" });
+  });
+
   it("persists a decision interaction and allows a high-confidence recommendation", async () => {
     const db = makeDb();
     const trace = vi.spyOn(console, "info").mockImplementation(() => {});
@@ -175,7 +191,7 @@ describe("evaluateBuildStudioPlanAdvancementGate", () => {
     trace.mockRestore();
   });
 
-  it("blocks advancement when the profile has a coverage gap", async () => {
+  it("records outstanding independent review when the profile has a coverage gap", async () => {
     const db = makeDb();
     db.perspectiveMaterial.findMany.mockResolvedValue([]);
 
@@ -184,9 +200,10 @@ describe("evaluateBuildStudioPlanAdvancementGate", () => {
       build: makeBuild(),
     });
 
-    expect(result.allowed).toBe(false);
+    expect(result.allowed).toBe(true);
     expect(result.evaluation.outcomeType).toBe("defer");
-    expect(result.operatorMessage).toContain("coverage gap");
+    expect(result.evaluation.escalation).toMatchObject({ route: "independent-review", followOn: "corpus-gap" });
+    expect(result.operatorMessage).toMatch(/Independent review/);
   });
 
   it("returns an existing open interaction for the same build and profile version without creating a duplicate", async () => {
@@ -288,9 +305,10 @@ describe("evaluateBuildStudioPlanAdvancementGate", () => {
         interaction: { select: { recommendedOptionId: true, chosenOptionId: true } },
       },
     });
-    expect(result.allowed).toBe(false);
+    expect(result.allowed).toBe(true);
     expect(result.evaluation.outcomeType).toBe("escalate");
     expect(result.evaluation.confidenceScore).toBe(0.6);
+    expect(result.evaluation.escalation?.route).toBe("independent-review");
   });
 
   // The regression BI-ACF0D6D4 fixes: three ANSWERS that agreed with the gate
@@ -336,7 +354,7 @@ describe("evaluateBuildStudioPlanAdvancementGate", () => {
     );
   });
 
-  it("fails closed and writes an escalation interaction when evaluation throws", async () => {
+  it("records independent review when a non-damaging evaluation throws", async () => {
     const db = makeDb();
     const trace = vi.spyOn(console, "info").mockImplementation(() => {});
 
@@ -350,8 +368,9 @@ describe("evaluateBuildStudioPlanAdvancementGate", () => {
       },
     });
 
-    expect(result.allowed).toBe(false);
+    expect(result.allowed).toBe(true);
     expect(result.evaluation.outcomeType).toBe("escalate");
+    expect(result.evaluation.escalation).toMatchObject({ route: "independent-review", followOn: "evaluation-fault" });
     expect(result.evaluation.rationale).toContain("MalformedPerspectiveInputError");
     expect(db.decisionInteraction.create).toHaveBeenCalledWith(
       expect.objectContaining({

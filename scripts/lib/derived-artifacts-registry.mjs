@@ -71,6 +71,44 @@ export const DERIVED_ARTIFACTS = [
     check: ["node", "scripts/gen-doc-index.mjs", "--check"],
   },
   {
+    // BI-545943EE: the operating contract the process-spine SessionStart hook
+    // carries inline when a client cannot prove the DPF skills are loaded.
+    id: "operating-contract",
+    description: "Inline operating contract for an unproven process spine (kernel principleDirection + AGENTS.md doctrine-store rule)",
+    sourceGlobs: [
+      "docs/founder-kernel/wiki/principles/decisions-belong-to-their-scope.md",
+      "docs/founder-kernel/wiki/principles/escalation-is-a-gate-not-a-trust-tier.md",
+      "docs/founder-kernel/wiki/principles/consult-scopes-before-asking.md",
+      "AGENTS.md",
+      "packages/dpf-skill-pack/scripts/generate-operating-contract.mjs",
+    ],
+    artifactPaths: ["packages/dpf-skill-pack/hooks/operating-contract.generated.mjs"],
+    generate: ["node", "packages/dpf-skill-pack/scripts/generate-operating-contract.mjs"],
+    check: ["node", "packages/dpf-skill-pack/scripts/generate-operating-contract.mjs", "--check"],
+  },
+  {
+    // BI-64795FD0: every statement of a client capability derives from one
+    // profile. The credential policy's data copy, its test fixture and the
+    // rendered matrix in the parity tracker are regenerated from it.
+    id: "client-capabilities",
+    description: "Client capability profile -> credential-policy data, policy fixture and parity matrix",
+    sourceGlobs: [
+      "packages/dpf-skill-pack/client-capabilities.json",
+      "packages/dpf-skill-pack/scripts/gen-client-capabilities.mjs",
+      "packages/dpf-skill-pack/hooks/pretooluse-guard-selftest.mjs",
+      "packages/dpf-skill-pack/scripts/toolchain_convergence.py",
+      "packages/integration-shared/src/client-capability-rules.cjs",
+      "docs/architecture/agent-client-capability-parity.md",
+    ],
+    artifactPaths: [
+      "packages/integration-shared/src/client-capability-profile.generated.ts",
+      "packages/dpf-skill-pack/scripts/mcp-credential-policy-cases.json",
+      "docs/architecture/agent-client-capability-parity.md",
+    ],
+    generate: ["node", "packages/dpf-skill-pack/scripts/gen-client-capabilities.mjs"],
+    check: ["node", "packages/dpf-skill-pack/scripts/gen-client-capabilities.mjs", "--check"],
+  },
+  {
     id: "doc-impact",
     description: "Doc-impact manifest (route/code -> user-guide page edges)",
     sourceGlobs: [
@@ -105,7 +143,10 @@ export const DERIVED_ARTIFACTS = [
     id: "doc-diagrams",
     description: "Rendered Mermaid diagram SVGs + manifest",
     sourceGlobs: ["docs/user-guide/**/*.md", "docs/architecture/**/*.md"],
-    artifactPaths: ["docs/user-guide/assets/diagrams/**"],
+    artifactPaths: [
+      "docs/user-guide/assets/diagrams/**",
+      "apps/web/lib/docs/diagram-versions.generated.mjs",
+    ],
     generate: ["node", "scripts/render-doc-diagrams.mjs"],
     check: ["node", "scripts/render-doc-diagrams.mjs", "--check"],
     // Rendering needs a Mermaid renderer (scripts/lib/mermaid-renderer.mjs:
@@ -287,7 +328,7 @@ export const DERIVED_ARTIFACTS = [
   {
     id: "sbom-baseline",
     description: "SBOM dependency-shape drift baseline (first-party version splits)",
-    sourceGlobs: ["pnpm-lock.yaml", "pnpm-workspace.yaml"],
+    sourceGlobs: ["pnpm-lock.yaml", "pnpm-workspace.yaml", "apps/mobile/pnpm-lock.yaml", "apps/mobile/pnpm-workspace.yaml"],
     artifactPaths: ["sbom/baseline.json"],
     generate: ["node", "scripts/sbom/check-sbom-drift.mjs", "--update-baseline"],
     check: ["node", "scripts/sbom/check-sbom-drift.mjs"],

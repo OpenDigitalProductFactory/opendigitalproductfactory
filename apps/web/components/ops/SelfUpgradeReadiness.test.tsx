@@ -23,4 +23,37 @@ describe("SelfUpgradeReadiness", () => {
     expect(html).toContain("Validation owner: unavailable");
     expect(html).not.toContain("Pre-drain readiness: ready");
   });
+
+  // BI-DB87D925: a required service step 7d could not create used to leave no trace.
+  const reconcile = (outcome: "degraded" | "complete") => ({
+    targetSha: "def5678",
+    at: "2026-10-02T17:00:55.000Z",
+    outcome,
+    required: ["portal", "prometheus", "dpf-tts"],
+    created: ["prometheus"],
+    failed: outcome === "degraded" ? ["dpf-tts"] : [],
+  });
+
+  it("marks a run degraded and names the services that could not be started", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeReadiness completionEvidence={{ serviceReconcile: reconcile("degraded") }} />,
+    );
+    expect(html).toContain('data-service-reconcile="degraded"');
+    expect(html).toContain("Degraded — 1 required service could not be started");
+    expect(html).toContain("Not running: dpf-tts.");
+    expect(html).toContain("Started this time: prometheus.");
+  });
+
+  it("shows the degraded notice alongside readiness evidence, and nothing when the reconcile completed", () => {
+    const readiness = { stage: "preflight", owner: "portal", mode: "enforced", result: "ready", failures: [] };
+    const degraded = renderToStaticMarkup(
+      <SelfUpgradeReadiness completionEvidence={{ readiness, serviceReconcile: reconcile("degraded") }} />,
+    );
+    expect(degraded).toContain('data-service-reconcile="degraded"');
+    expect(degraded).toContain("Pre-drain readiness: ready");
+    const complete = renderToStaticMarkup(
+      <SelfUpgradeReadiness completionEvidence={{ readiness, serviceReconcile: reconcile("complete") }} />,
+    );
+    expect(complete).not.toContain("data-service-reconcile");
+  });
 });

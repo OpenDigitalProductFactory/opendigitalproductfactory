@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { completeFixture } from "./fixtures/gate-completion.mjs";
+import { writeExecutionCheckpoint } from "../../scripts/lib/gate-execution-checkpoint.mjs";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,6 +9,8 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
+const execPrefix = process.platform === "win32" ? "" : "exec ";
+const completionSource = `import { completeFixture } from ${JSON.stringify(new URL("./fixtures/gate-completion.mjs", import.meta.url).href)}; await completeFixture();`;
 const script = fileURLToPath(new URL("../../scripts/gate-worktree.sh", import.meta.url));
 const nativeShellProbe = spawnSync("sh", ["-c", "printf ok"], { encoding: "utf8" });
 const shellContractSkipReason = nativeShellProbe.error
@@ -63,9 +67,11 @@ shellContractTest("gate-worktree.sh exposes push-before-lease only as an explici
   assert.match(result.stdout, /pushBeforeLease=true/);
 });
 
-shellContractTest("gate-worktree.sh exits non-zero when DPF_MCP_BEARER_TOKEN is missing", () => {
-  const env = { ...process.env };
+shellContractTest("gate-worktree.sh exits non-zero when no MCP credential is configured (BI-78B653D5)", () => {
+  const env = { ...process.env, DPF_MCP_CLIENT_CREDENTIALS_FILE: join(tmpdir(), "dpf-no-such-credentials.json") };
   delete env.DPF_MCP_BEARER_TOKEN;
+  delete env.DPF_MCP_CLIENT_ID;
+  delete env.DPF_MCP_CLIENT_SECRET;
   env.DPF_ALLOW_LOCAL_CI_STUB = "1";
   const result = runGate([
     "--branch",
@@ -78,7 +84,7 @@ shellContractTest("gate-worktree.sh exits non-zero when DPF_MCP_BEARER_TOKEN is 
   ], { env });
 
   assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /DPF_MCP_BEARER_TOKEN is required/);
+  assert.match(result.stderr, /No MCP credential is configured/);
 });
 
 shellContractTest("gate-worktree.sh discovers the checked-in default runner when DPF_LOCAL_CI_COMMAND is unset (BI-157DC9B2)", () => {
@@ -179,6 +185,15 @@ printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\
     packages: [{ name: "next", lockedVersion: "16.2.9", resolvedVersion: "16.2.7" }],
     convergence: { attempted: true, command: "pnpm install --frozen-lockfile", exitCode: 1 },
   });
+  // The gate runs DPF_LOCAL_CI_COMMAND through the platform shell, which is
+  // cmd.exe on Windows, so the command is a node script rather than POSIX shell
+  // syntax (BI-1B4910B4).
+  const driftCommand = join(temp, "write-drift-report.mjs");
+  writeFileSync(driftCommand, `import { writeFileSync } from "node:fs";
+writeFileSync(process.env.DPF_LOCAL_CI_FRESHNESS_REPORT_FILE, ${JSON.stringify(freshnessReport)});
+await new Promise(resolve => setTimeout(resolve, 1000));
+process.exit(3);
+`);
 
   const result = runGate([
     "--branch",
@@ -196,7 +211,7 @@ printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\
       // and the gate refuses to claim a lease it cannot attribute.
       DPF_GATE_OWNER_PROVIDER: "codex",
       DPF_GATE_OWNER_SESSION_ID: "contract-thread",
-      DPF_LOCAL_CI_COMMAND: `printf '%s' '${freshnessReport}' > "$DPF_LOCAL_CI_FRESHNESS_REPORT_FILE"; exit 3`,
+      DPF_LOCAL_CI_COMMAND: `${execPrefix}"${process.execPath}" "${driftCommand}"`,
       DPF_GATE_GIT_BIN: gitStub,
       DPF_GATE_CURL_BIN: curlStub,
     },
@@ -257,7 +272,7 @@ EOF
 )"
 case "$tool" in
   claim_nonprod_environment_lease)
-    printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"NPEL-TEST\\"}"}]}}'
+    printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"data\\":{\\"gateKey\\":\\"synthetic-contract-gate\\"},\\"entityId\\":\\"NPEL-TEST\\"}"}]}}'
     ;;
   renew_nonprod_environment_lease)
     printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"NPEL-TEST\\"}"}]}}'
@@ -349,7 +364,7 @@ EOF
 )"
 case "$tool" in
   claim_nonprod_environment_lease)
-    printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"NPEL-TEST\\"}"}]}}'
+    printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"data\\":{\\"gateKey\\":\\"synthetic-contract-gate\\"},\\"entityId\\":\\"NPEL-TEST\\"}"}]}}'
     ;;
   renew_nonprod_environment_lease)
     printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"NPEL-TEST\\"}"}]}}'
@@ -406,6 +421,7 @@ esac
 
 shellContractTest("gate-worktree.sh preserves a passed gate when evidence recording is quiescence-blocked", () => {
   const temp = mkdtempSync(join(tmpdir(), "dpf-local-ci-quiescence-"));
+  writeFileSync(join(temp, "complete.mjs"), completionSource);
   const callsFile = join(temp, "calls.ndjson");
   const gitStub = join(temp, "git");
   const curlStub = join(temp, "curl");
@@ -443,7 +459,7 @@ case "$tool" in
     printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"data\\":{\\"level\\":\\"normal\\",\\"writesRefused\\":false}}"}]}}'
     ;;
   claim_nonprod_environment_lease)
-    printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"NPEL-Q\\"}"}]}}'
+    printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"data\\":{\\"gateKey\\":\\"synthetic-contract-gate\\"},\\"entityId\\":\\"NPEL-Q\\"}"}]}}'
     ;;
   renew_nonprod_environment_lease)
     printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"NPEL-Q\\"}"}]}}'
@@ -478,7 +494,7 @@ esac
       // and the gate refuses to claim a lease it cannot attribute.
       DPF_GATE_OWNER_PROVIDER: "codex",
       DPF_GATE_OWNER_SESSION_ID: "contract-thread",
-      DPF_LOCAL_CI_COMMAND: "exit 0",
+      DPF_LOCAL_CI_COMMAND: `${execPrefix}"${process.execPath}" "${join(temp, "complete.mjs")}"`,
       DPF_GATE_GIT_BIN: gitStub,
       DPF_GATE_CURL_BIN: curlStub,
     },
@@ -507,7 +523,7 @@ esac
   assert.ok(existsSync(join(temp, "dpf-local-ci-pending-evidence.json")));
 });
 
-shellContractTest("gate-worktree.sh --finalize-evidence records pending evidence without rerunning the expensive gate", () => {
+shellContractTest("gate-worktree.sh --finalize-evidence records pending evidence without rerunning the expensive gate", async () => {
   const temp = mkdtempSync(join(tmpdir(), "dpf-local-ci-finalize-"));
   const callsFile = join(temp, "calls.ndjson");
   const gitStub = join(temp, "git");
@@ -553,17 +569,23 @@ esac
   chmodSync(gitStub, 0o755);
   chmodSync(curlStub, 0o755);
 
+  const context = {
+    path: join(temp, "output.log.NPEL-REPLAY.execution.json"), metadataFile: join(temp, "metadata.json"), artifactFile: join(temp, "artifact.json"),
+    branch: "feat/local-ci-sandbox", sha: "abc123", leaseId: "NPEL-REPLAY", gateKey: "fixture-gate", provider: "codex", ownerSessionId: "contract-thread",
+  };
+  const stateFile = join(temp, "fixture-state.json");
+  writeFileSync(stateFile, JSON.stringify({ branch: context.branch, sha: context.sha }));
+  const content = await completeFixture({ DPF_LOCAL_CI_GATE_STATE_FILE: stateFile, DPF_LOCAL_CI_METADATA_FILE: context.metadataFile,
+    DPF_LOCAL_CI_ARTIFACT_FILE: context.artifactFile, DPF_NONPROD_LEASE_ID: context.leaseId });
+  writeExecutionCheckpoint(context, 0);
   writeFileSync(join(temp, "dpf-local-ci-pending-evidence.json"), JSON.stringify({
-    schema: "dpf-local-ci-pending-evidence/v1",
-    branch: "feat/local-ci-sandbox",
-    sha: "abc123",
+    schema: "dpf-local-ci-pending-evidence/v1", branch: context.branch, sha: context.sha,
     expiresAt: new Date(Date.now() + 60_000).toISOString(),
     recordArgs: {
-      branch: "feat/local-ci-sandbox",
-      sha: "abc123",
-      status: "passed",
-      summary: "local-CI passed; evidence replay",
-      evidence: { gatePassed: true },
+      candidateBranch: context.branch, externalSessionId: context.ownerSessionId, provider: context.provider,
+      leaseId: context.leaseId, gateKey: context.gateKey, status: "passed",
+      summary: "synthetic local-CI completion; evidence replay",
+      evidence: { sha: context.sha, gatePassed: true, buildExitCode: 0, content, fullLogFile: join(temp, "output.log") },
     },
   }));
 
@@ -637,7 +659,7 @@ EOF
 )"
 case "$tool" in
   claim_nonprod_environment_lease)
-    printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"NPEL-TEST\\"}"}]}}'
+    printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"data\\":{\\"gateKey\\":\\"synthetic-contract-gate\\"},\\"entityId\\":\\"NPEL-TEST\\"}"}]}}'
     ;;
   renew_nonprod_environment_lease)
     printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"NPEL-TEST\\"}"}]}}'
@@ -668,6 +690,7 @@ writeFileSync(process.env.DPF_LOCAL_CI_METADATA_FILE, JSON.stringify({
   toolchainFingerprint: "toolchain-sha",
   toolchain: { nodeVersion: "v24.0.0" }
 }) + "\\n");
+${completionSource}
 `);
   chmodSync(gitStub, 0o755);
   chmodSync(curlStub, 0o755);
@@ -687,7 +710,7 @@ writeFileSync(process.env.DPF_LOCAL_CI_METADATA_FILE, JSON.stringify({
       // and the gate refuses to claim a lease it cannot attribute.
       DPF_GATE_OWNER_PROVIDER: "codex",
       DPF_GATE_OWNER_SESSION_ID: "contract-thread",
-      DPF_LOCAL_CI_COMMAND: `"${process.execPath}" "${writerScript}"`,
+      DPF_LOCAL_CI_COMMAND: `${execPrefix}"${process.execPath}" "${writerScript}"`,
       DPF_GATE_GIT_BIN: gitStub,
       DPF_GATE_CURL_BIN: curlStub,
     },
@@ -697,19 +720,8 @@ writeFileSync(process.env.DPF_LOCAL_CI_METADATA_FILE, JSON.stringify({
   const calls = readFileSync(callsFile, "utf8").trim().split("\n").map((line) => JSON.parse(line));
   const evidenceCall = calls.find((call) => call.params.name === "record_local_integration_result");
   assert.ok(evidenceCall, "expected evidence to be recorded");
-  assert.deepEqual(evidenceCall.params.arguments.evidence.content, {
-    schemaVersion: 1,
-    bi: "BI-76551B2D",
-    candidateRef: "feat/local-ci-sandbox",
-    candidateSha: "candidate-sha",
-    baseRef: "origin/main",
-    fetchBase: false,
-    baseSha: "base-sha",
-    integrationCommitSha: "integration-sha",
-    synthesizedTreeSha: "tree-sha",
-    toolchainFingerprint: "toolchain-sha",
-    toolchain: { nodeVersion: "v24.0.0" },
-  });
+  assert.deepEqual(evidenceCall.params.arguments.evidence.content, JSON.parse(readFileSync(join(temp, "dpf-local-ci-metadata.json"), "utf8")));
+  assert.equal(evidenceCall.params.arguments.evidence.content.baseSha, "b".repeat(40));
   assert.deepEqual(evidenceCall.params.arguments.evidence.resilience, {
     publicationMode: "deferred",
     acceptedBaseMode: "local-ref",
@@ -774,7 +786,7 @@ EOF
 )"
 case "$tool" in
   claim_nonprod_environment_lease)
-    printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"NPEL-OFFLINE\\"}"}]}}'
+    printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"data\\":{\\"gateKey\\":\\"synthetic-contract-gate\\"},\\"entityId\\":\\"NPEL-OFFLINE\\"}"}]}}'
     ;;
   renew_nonprod_environment_lease)
     printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"NPEL-OFFLINE\\"}"}]}}'
@@ -804,6 +816,7 @@ writeFileSync(process.env.DPF_LOCAL_CI_METADATA_FILE, JSON.stringify({
   synthesizedTreeSha: "tree-sha",
   toolchainFingerprint: "toolchain-sha"
 }) + "\\n");
+${completionSource}
 `);
   chmodSync(gateGitStub, 0o755);
   chmodSync(curlStub, 0o755);
@@ -824,7 +837,7 @@ writeFileSync(process.env.DPF_LOCAL_CI_METADATA_FILE, JSON.stringify({
       // and the gate refuses to claim a lease it cannot attribute.
       DPF_GATE_OWNER_PROVIDER: "codex",
       DPF_GATE_OWNER_SESSION_ID: "contract-thread",
-      DPF_LOCAL_CI_COMMAND: `"${process.execPath}" "${writerScript}"`,
+      DPF_LOCAL_CI_COMMAND: `${execPrefix}"${process.execPath}" "${writerScript}"`,
       DPF_GATE_GIT_BIN: gateGitStub,
       DPF_GATE_CURL_BIN: curlStub,
     },
@@ -1203,6 +1216,15 @@ shellContractTest("local-ci-runner.mjs refuses to gate main or a detached HEAD",
 // branches share real ancestry on the remote. local-ci-runner.mjs must
 // unshallow the root once, up front, before that merge ever runs.
 
+// These stub git by putting an extensionless POSIX script first on PATH. On
+// Windows, local-ci-runner's execFileSync("git") only ever resolves git.exe, so
+// the stub never runs and the real git answers instead (BI-1B4910B4).
+const pathStubGitSkipReason = shellContractSkipReason || (process.platform === "win32"
+  ? "Windows resolves execFileSync(\"git\") to git.exe only, so a POSIX git stub on PATH is never run; covered by CI/Linux"
+  : false);
+const pathStubGitTest = (name, fn) =>
+  test(name, { skip: pathStubGitSkipReason, timeout: 30_000 }, fn);
+
 function stubGitFor(shallow) {
   const stubDir = mkdtempSync(join(tmpdir(), "dpf-local-ci-shallow-stub-"));
   const callsFile = join(stubDir, "calls.log");
@@ -1231,7 +1253,7 @@ esac
   return { stubDir, callsFile };
 }
 
-shellContractTest("local-ci-runner.mjs unshallows the root clone before merging when the root is shallow", () => {
+pathStubGitTest("local-ci-runner.mjs unshallows the root clone before merging when the root is shallow", () => {
   const { stubDir, callsFile } = stubGitFor(true);
   const metadataFile = join(stubDir, "metadata.json");
 
@@ -1257,7 +1279,7 @@ shellContractTest("local-ci-runner.mjs unshallows the root clone before merging 
   assert.match(result.stderr, /candidate ref not found locally/);
 });
 
-shellContractTest("local-ci-runner.mjs skips the unshallow fetch when the root clone is already full", () => {
+pathStubGitTest("local-ci-runner.mjs skips the unshallow fetch when the root clone is already full", () => {
   const { stubDir, callsFile } = stubGitFor(false);
   const metadataFile = join(stubDir, "metadata.json");
 
@@ -1276,7 +1298,7 @@ shellContractTest("local-ci-runner.mjs skips the unshallow fetch when the root c
   assert.doesNotMatch(calls, /fetch --unshallow/);
 });
 
-shellContractTest("local-ci-runner.mjs --dry-run never fetches --unshallow even on a shallow root", () => {
+pathStubGitTest("local-ci-runner.mjs --dry-run never fetches --unshallow even on a shallow root", () => {
   const { stubDir, callsFile } = stubGitFor(true);
   const metadataFile = join(stubDir, "metadata.json");
 

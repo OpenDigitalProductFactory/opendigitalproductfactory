@@ -1,7 +1,11 @@
 import { describeReadinessRefusal } from "@/lib/build/readiness-refusal-message";
+import { type BoundWorkShapeDb, readBoundEditPaths, readBoundWorkShapeRef } from "@/lib/backlog/initiative-readiness/bound-work-shape";
+import { assessDeliverySensitivity, buildPlanPaths } from "@/lib/backlog/initiative-readiness/delivery-sensitivity";
+import { type InheritanceDb, loadInheritedInitiativeScope } from "@/lib/backlog/initiative-readiness/parent-scope-inheritance";
 import { randomUUID } from "node:crypto";
 
 import { prisma } from "@dpf/db";
+import { CLAIM_READINESS_ACTIVITY_KINDS } from "@/lib/work-capsules/governed-work-claim";
 
 import {
   projectBacklogItemReadiness,
@@ -13,8 +17,11 @@ import {
 
 type BuildEntryGateDb = {
   featureBuild: { findUnique(args: unknown): Promise<any> };
-  backlogItemActivity: { create(args: unknown): Promise<any> };
+  backlogItemActivity: { create(args: unknown): Promise<any>; findMany?(args: unknown): Promise<any[]> };
   buildActivity: { create(args: unknown): Promise<any> };
+  /** BI-1E8EAD10: the bound delivery shape lives on the Workroom. */
+  workroom?: { findFirst(args: unknown): Promise<{ scopeClaims?: unknown } | null> };
+  backlogItem?: { findFirst(args: unknown): Promise<{ itemId: string } | null> };
 };
 
 type ProjectReadiness = typeof projectBacklogItemReadiness;
@@ -63,8 +70,82 @@ function orphanDecision(args: {
   };
 }
 
+/** How many acceptance criteria a Build Studio design document states. */
+function designAcceptanceCriteriaCount(designDoc: unknown): number {
+  const list = designDoc && typeof designDoc === "object" && !Array.isArray(designDoc)
+    ? (designDoc as Record<string, unknown>).acceptanceCriteria
+    : null;
+  if (!Array.isArray(list)) return 0;
+  return list.filter((entry) => {
+    const text = typeof entry === "string"
+      ? entry
+      : entry && typeof entry === "object"
+        ? (entry as Record<string, unknown>).text ?? (entry as Record<string, unknown>).criterion
+        : null;
+    return typeof text === "string" && text.trim().length > 0;
+  }).length;
+}
+
+function designReviewPassed(designReview: unknown): boolean {
+  return Boolean(designReview && typeof designReview === "object"
+    && (designReview as Record<string, unknown>).decision === "pass");
+}
+
 function codes(decision: InitiativeReadinessDecision) {
   return [...decision.blockers, ...decision.unmet].map((entry) => entry.code);
+}
+
+export type BuildReadinessFactsInput = {
+  kind: string;
+  designDoc: unknown;
+  designReview: unknown;
+  buildPlan: unknown;
+  originator: { id: string; itemId: string; title: string; body: string | null; workType: string | null };
+};
+
+/**
+ * The facts a Build Studio build's readiness is judged on, read once for every
+ * gate that judges a build (BI-1E8EAD10, BI-0E2E3BC5, and BI-3555F94E for the
+ * terminal transition).
+ *
+ * - The Workroom's bound delivery shape, and the parent's scope a
+ *   decomposition child inherits.
+ * - Sensitivity read from the change: the item, the room's declared paths and
+ *   the plan's files (operator direction 2026-10-07).
+ * - The build's own reviewed design. For small and medium shapes that design
+ *   is the recorded research and, absent body criteria, the baseline.
+ *
+ * A missing room or parent leaves the value null.
+ */
+export async function loadBuildReadinessFacts(db: BuildEntryGateDb, build: BuildReadinessFactsInput) {
+  const originator = build.originator;
+  const [workShape, inheritedScope, declaredPaths] = await Promise.all([
+    db.workroom
+      ? readBoundWorkShapeRef(db as BoundWorkShapeDb, originator.itemId).catch(() => null)
+      : Promise.resolve(null),
+    db.backlogItemActivity.findMany && db.backlogItem
+      ? loadInheritedInitiativeScope(db as InheritanceDb, { childItemId: originator.itemId, childRowId: originator.id })
+        .catch(() => null)
+      : Promise.resolve(null),
+    db.workroom
+      ? readBoundEditPaths(db as BoundWorkShapeDb, originator.itemId).catch(() => [] as string[])
+      : Promise.resolve([] as string[]),
+  ]);
+  return {
+    workShape,
+    inheritedScope,
+    deliverySensitivity: assessDeliverySensitivity({
+      title: originator.title,
+      body: originator.body,
+      workType: originator.workType,
+      declaredPaths,
+      planPaths: buildPlanPaths(build.buildPlan),
+    }),
+    buildDesign: {
+      reviewPassed: designReviewPassed(build.designReview),
+      acceptanceCriteriaCount: designAcceptanceCriteriaCount(build.designDoc),
+    },
+  };
 }
 
 export async function enforceBuildInitiativeReadiness(args: {
@@ -85,14 +166,21 @@ export async function enforceBuildInitiativeReadiness(args: {
       buildId: true,
       kind: true,
       originatingBacklogItemId: true,
+      designDoc: true,
+      designReview: true,
+      buildPlan: true,
       originator: {
         select: {
-          id: true, itemId: true, type: true, source: true, workType: true, scopeKind: true,
+          id: true, itemId: true, title: true, type: true, source: true, workType: true, scopeKind: true,
+          body: true,
           archetypeCategories: true, archetypeIds: true,
+          // BI-7027C26E: the same rows the claim reads. A small fix may leave
+          // ideate with no design review (FIX_SMALL_GATES), and then its research
+          // is its recorded reproduction — `evidence` rows (BI-6EB2DBBB). No cap:
+          // evidence rows must not crowd receipts out of the projection.
           activities: {
-            where: { kind: { in: ["initiative_gate_receipt", "initiative_scope_baseline", "plan_backlog_coverage"] } },
+            where: { kind: { in: [...CLAIM_READINESS_ACTIVITY_KINDS] } },
             orderBy: [{ recordedAt: "desc" }, { id: "desc" }],
-            take: 100,
             select: { id: true, kind: true, gateKey: true, recordedAt: true, payload: true },
           },
         },
@@ -110,9 +198,17 @@ export async function enforceBuildInitiativeReadiness(args: {
     return { allowed: false, error: "classification_required", message: "Build has no canonical originating backlog subject.", decision };
   }
 
+  const facts = await loadBuildReadinessFacts(db, build);
   const projected = (args.dependencies?.projectReadiness ?? projectBacklogItemReadiness)({
-    item: { ...build.originator, activeBuildKind: build.kind },
+    item: {
+      ...build.originator,
+      activeBuildKind: build.kind,
+      workShape: facts.workShape,
+      deliverySensitivity: facts.deliverySensitivity,
+    },
+    buildDesign: facts.buildDesign,
     activities: build.originator.activities as InitiativeReadinessActivity[],
+    inheritedScope: facts.inheritedScope,
     target: args.target,
     transitionObject: {
       kind: "feature-build",

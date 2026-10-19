@@ -35,6 +35,8 @@ import { fileURLToPath } from "node:url";
 import { DERIVED_ARTIFACTS, affectedEntries, matchesAnyGlob } from "./lib/derived-artifacts-registry.mjs";
 import { resolveHostCommandInvocation } from "./lib/host-command-invocation.mjs";
 import { availableMermaidRenderer } from "./lib/mermaid-renderer.mjs";
+import { gitText, gitTextOrNull } from "./lib/git.mjs";
+import { classifySpawnResult, SPAWN_OUTCOME } from "./check-guards.mjs";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -93,7 +95,11 @@ export function evaluatePushExemption(diffFiles, registry = DERIVED_ARTIFACTS, r
   }
 
   const affected = affectedEntries(diffFiles, registry);
-  const stale = affected.filter((entry) => !runCheck(entry));
+  const checked = affected.map((entry) => ({
+    entry,
+    outcome: normalizeDerivedCheckResult(runCheck(entry)),
+  }));
+  const stale = checked.filter((row) => row.outcome === "stale").map((row) => row.entry);
   if (stale.length > 0) {
     return {
       exempt: false,
@@ -101,8 +107,96 @@ export function evaluatePushExemption(diffFiles, registry = DERIVED_ARTIFACTS, r
       staleArtifacts: stale.map((e) => e.id),
     };
   }
+  const unrun = checked.filter((row) => row.outcome === "unrun").map((row) => row.entry);
+  if (unrun.length > 0) {
+    return {
+      exempt: true,
+      reason: "docs diff, affected checks could not run on this host — not a staleness verdict",
+      unrunArtifacts: unrun.map((e) => e.id),
+    };
+  }
 
   return { exempt: true, reason: affected.length > 0 ? "docs diff, all affected artifacts fresh" : "docs-only diff, no registered artifact touched" };
+}
+
+/** A boolean check stays compatible; "unrun" is an environment result, not stale. */
+export function normalizeDerivedCheckResult(value) {
+  if (value === true || value === "fresh") return "fresh";
+  if (value === "unrun") return "unrun";
+  return "stale";
+}
+
+function checkOutput(value) {
+  if (typeof value === "string") return value;
+  if (value && typeof value.toString === "function" && !Array.isArray(value)) {
+    try { return value.toString("utf8"); } catch { return String(value); }
+  }
+  return "";
+}
+
+const TOOLCHAIN_MISSING = /command not found|not recognized as an internal or external command|Cannot find module|ERR_MODULE_NOT_FOUND/i;
+
+/**
+ * A checker that never started, or started and could not find its toolchain,
+ * is "unrun". A checker that ran and exited non-zero is "stale".
+ * Uses classifySpawnResult so a spawn ENOENT is not the same verdict as exit 1
+ * (BI-20B40955, BI-BD7E0319).
+ */
+export function classifyDerivedArtifactCheck(error) {
+  if (!error) return "fresh";
+  const stdout = checkOutput(error.stdout);
+  const stderr = checkOutput(error.stderr);
+  const ran = typeof error.status === "number";
+  const spawnResult = ran
+    ? { status: error.status, signal: error.signal ?? null, stdout, stderr }
+    : { error, status: null, signal: error.signal ?? null, stdout, stderr };
+  const classified = classifySpawnResult(spawnResult);
+  if (classified.outcome === SPAWN_OUTCOME.RUNNER_FAILURE) return "unrun";
+  if (classified.outcome === SPAWN_OUTCOME.OK) return "fresh";
+  if (error.status === 127 || TOOLCHAIN_MISSING.test(`${stdout}\n${stderr}`)) return "unrun";
+  return "stale";
+}
+
+/**
+ * Whether this diff should take the single local-CI sandbox slot.
+ * Docs-only (the pre-push predicate) does not. A mixed code file is named.
+ */
+export function decideSandboxAdmission(exemption) {
+  if (!exemption || exemption.exempt) {
+    const reason = exemption?.reason ?? "docs-only diff";
+    return {
+      claim: false,
+      message: `docs-only diff — sandbox not claimed (${reason}). Mixing a code file into this change is what would cost the exemption.`,
+    };
+  }
+  if (Array.isArray(exemption.files) && exemption.files.length > 0) {
+    return {
+      claim: true,
+      message: `sandbox required — these non-docs files forfeit the docs-only exemption: ${exemption.files.join(", ")}`,
+    };
+  }
+  const stale = Array.isArray(exemption.staleArtifacts) && exemption.staleArtifacts.length > 0
+    ? `: ${exemption.staleArtifacts.join(", ")}`
+    : "";
+  return {
+    claim: true,
+    message: `sandbox required (${exemption.reason}${stale}).`,
+  };
+}
+
+/** Null when the merge base cannot be resolved — the caller must not treat that as exempt. */
+export function sandboxDecisionForHead({
+  cwd = REPO_ROOT,
+  git = (args) => gitTextOrNull(args, { cwd }),
+  runCheck = (entry) => runCheckLive(entry, cwd),
+  registry = DERIVED_ARTIFACTS,
+} = {}) {
+  const mergeBase = git(["merge-base", "HEAD", "origin/main"]);
+  if (!mergeBase) return null;
+  const diff = git(["diff", "--name-only", mergeBase, "HEAD"]);
+  if (diff == null) return null;
+  const files = String(diff).split(/\r?\n/).filter(Boolean);
+  return decideSandboxAdmission(evaluatePushExemption(files, registry, runCheck));
 }
 
 /**
@@ -130,17 +224,16 @@ export function isMergeQueueContext(env = process.env) {
  */
 export function evaluateCheckAll(registry = DERIVED_ARTIFACTS, runCheck = () => true, { mergeQueue = false } = {}) {
   return registry.map((entry) => {
-    const ok = runCheck(entry);
-    const tolerated = !ok && mergeQueue === true && entry.mergeQueueRaceTolerant === true;
-    return { entry, ok, tolerated };
+    const outcome = normalizeDerivedCheckResult(runCheck(entry));
+    const ok = outcome !== "stale";
+    const tolerated = outcome === "stale" && mergeQueue === true && entry.mergeQueueRaceTolerant === true;
+    return { entry, ok, tolerated, outcome };
   });
 }
 
 // ── IO-touching implementations used by the CLI ────────────────────────────
 
-function git(args) {
-  return execFileSync("git", args, { cwd: REPO_ROOT, encoding: "utf8" }).trim();
-}
+const git = (args) => gitText(args, { cwd: REPO_ROOT });
 
 function stagedFiles() {
   const out = git(["diff", "--cached", "--name-only", "--diff-filter=ACMR"]);
@@ -172,10 +265,10 @@ export function resolveDerivedArtifactInvocation(
   return resolveHostCommandInvocation(argv[0], argv.slice(1), { platform, env });
 }
 
-function execDerivedArtifactCommand(argv, stdio) {
+function execDerivedArtifactCommand(argv, stdio, cwd = REPO_ROOT) {
   const invocation = resolveDerivedArtifactInvocation(argv);
   return execFileSync(invocation.command, invocation.args, {
-    cwd: REPO_ROOT,
+    cwd,
     stdio,
   });
 }
@@ -184,12 +277,12 @@ function runCommand(argv) {
   execDerivedArtifactCommand(argv, "inherit");
 }
 
-function runCheckLive(entry) {
+function runCheckLive(entry, cwd = REPO_ROOT) {
   try {
-    execDerivedArtifactCommand(entry.check, "pipe");
-    return true;
-  } catch {
-    return false;
+    execDerivedArtifactCommand(entry.check, "pipe", cwd);
+    return "fresh";
+  } catch (error) {
+    return classifyDerivedArtifactCheck(error);
   }
 }
 
@@ -252,6 +345,9 @@ function cmdPushExempt(baseRef) {
     return 0;
   }
   console.log(`[pre-push-gate] derived-artifact registry: NOT exempt (${result.reason}).`);
+  if (result.files?.length) {
+    console.log(`[pre-push-gate]   non-docs: ${result.files.join(", ")}`);
+  }
   if (result.staleArtifacts) {
     for (const id of result.staleArtifacts) {
       const entry = DERIVED_ARTIFACTS.find((e) => e.id === id);
@@ -265,7 +361,11 @@ function cmdCheckAll() {
   const mergeQueue = isMergeQueueContext();
   const results = evaluateCheckAll(DERIVED_ARTIFACTS, runCheckLive, { mergeQueue });
   let failed = false;
-  for (const { entry, ok, tolerated } of results) {
+  for (const { entry, ok, tolerated, outcome } of results) {
+    if (outcome === "unrun") {
+      console.log(`[derived-artifacts] ${entry.id}: UNRUN — the checker could not run on this host; this is not a staleness verdict`);
+      continue;
+    }
     if (ok) {
       console.log(`[derived-artifacts] ${entry.id}: fresh`);
       continue;

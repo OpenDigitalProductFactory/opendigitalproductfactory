@@ -28,10 +28,65 @@ import { describe, expect, it } from "vitest";
 import {
   DAMAGING_SENSITIVITIES,
   describeEscalationRule,
+  describeDecisionEscalationRule,
   ESCALATION_STEERING,
   resolveEscalation,
+  resolveDecisionEscalation,
+  DECISION_BASES,
+  DAMAGING_CONSEQUENCES,
   type EscalationInput,
 } from "./escalation-gate";
+
+describe("decision routing conformance (BI-74B2A8CD)", () => {
+  it("walks all 384 shapes: a person if and only if damage is declared", () => {
+    let checked = 0;
+    for (const basis of ["decided", "corpus-gap", "vector-gap", "capability-gap", "policy-limit", "evaluation-fault"] as const) {
+      for (const riskTier of ["low", "medium", "high", "critical"] as const) {
+        for (const consequence of [null, "outward", "irreversible", "authority"] as const) {
+          for (const thresholdExceeded of [false, true]) {
+            for (const regulated of [false, true]) {
+              const damage = riskTier === "critical" || consequence !== null || thresholdExceeded || regulated;
+              const result = resolveDecisionEscalation({ basis, riskTier, declarations: { consequence, thresholdExceeded, regulated } });
+              expect(result.damaging).toBe(damage);
+              expect(result.route === "human").toBe(damage);
+              if (!damage) {
+                expect(result.route).toBe(basis === "decided" ? "decided" : "independent-review");
+                expect(result.followOn).toBe(basis === "decided" ? null : basis);
+              }
+              checked += 1;
+            }
+          }
+        }
+      }
+    }
+    expect(checked).toBe(384);
+  });
+
+  it("keeps the closed six bases and shared damaging vocabulary", () => {
+    expect(DECISION_BASES).toEqual(["decided", "corpus-gap", "vector-gap", "capability-gap", "policy-limit", "evaluation-fault"]);
+    expect(DAMAGING_CONSEQUENCES).toEqual(["outward", "irreversible", "authority"]);
+  });
+
+  it.each([
+    ["critical", "authority", true, true, "damaging-critical-risk"],
+    ["high", "authority", true, true, "damaging-consequence"],
+    ["high", null, true, true, "damaging-threshold"],
+    ["high", null, false, true, "damaging-regulated"],
+  ] as const)("damage wins over a decided corpus with an attributable reason (%s/%s)", (riskTier, consequence, thresholdExceeded, regulated, reasonCode) => {
+    expect(resolveDecisionEscalation({ basis: "decided", riskTier, declarations: { consequence, thresholdExceeded, regulated } }))
+      .toMatchObject({ route: "human", damaging: true, reasonCode });
+  });
+
+  it("with no declarations, only removes the legacy human escalations", () => {
+    for (const basis of ["decided", "corpus-gap", "vector-gap", "capability-gap", "policy-limit", "evaluation-fault"] as const) {
+      for (const riskTier of ["low", "medium", "high", "critical"] as const) {
+        const legacyUnresolved = basis !== "decided" || riskTier === "critical";
+        const result = resolveDecisionEscalation({ basis, riskTier, declarations: {} });
+        if (result.route === "human") expect(legacyUnresolved).toBe(true);
+      }
+    }
+  });
+});
 
 // `new URL(...).pathname` returns "/D:/..." on Windows and breaks readFileSync.
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -42,6 +97,41 @@ const PRINCIPLE_PATH = join(
 );
 const EVALUATOR_PATH = join(HERE, "coworker-authority-decision.ts");
 
+// These surfaces select or accept a HUMAN answer. Raw outcomes remain valid
+// elsewhere for uncertainty/craft demand (craft-consult-demand,
+// acumen-gap-nomination), historical policy evidence (policy-authority-projector),
+// and cleanup of old unresolved rows (retract-superseded, escalation-hygiene).
+// Those readers do not infer new owner permission and are intentionally outside
+// this guard. Canvas uncertainty labels likewise retain their raw outcome;
+// its owner action is covered by the canvas behavior tests.
+const HUMAN_REVIEW_READERS = [
+  "lib/decision-perspective/owner-ruling-queue.ts",
+  "lib/attention/sources/ai-decision.ts",
+  "lib/decision/concierge-sweep-runner.ts",
+  "lib/decision/triage-conductor.ts",
+  "lib/mcp/packs/founder-review-pack.ts",
+  "lib/tak/decision-governance-route-context.ts",
+  "lib/wiki/decision-audit.ts",
+  "lib/wiki/decision-help.ts",
+  "lib/actions/decision-perspective.ts",
+  "lib/actions/org-decision-capture.ts",
+  "app/(shell)/platform/ai/founder-review/page.tsx",
+  "app/(shell)/coworker-decisions/page.tsx",
+  "app/(shell)/coworker-decisions/decisions/page.tsx",
+  "app/(shell)/coworker-decisions/review/page.tsx",
+  "app/(shell)/coworker-decisions/review/actions.ts",
+  "components/build/DecisionPerspectiveGatePanel.tsx",
+];
+
+describe("human review has one route predicate", () => {
+  it.each(HUMAN_REVIEW_READERS)("keeps legacy outcome filters out of %s", (path) => {
+    const source = readFileSync(join(REPO_ROOT, "apps/web", path), "utf8");
+    expect(source).toMatch(/humanEscalationWhere|isHumanEscalation|humanCaptureOutcome/);
+    expect(source).not.toMatch(/outcomeType:\s*\{\s*in:\s*(?:\[[^\]]*["'](?:defer|escalate)["']|(?:UNRESOLVED|WIKI_UNRESOLVED))/);
+    expect(source).not.toMatch(/(?:row|subject|interaction)\.outcomeType\s*!==\s*["']escalate["']\s*&&\s*(?:row|subject|interaction)\.outcomeType\s*!==\s*["']defer["']/);
+  });
+});
+
 const CONSEQUENCES = [null, "outward", "irreversible", "authority"] as const;
 const SENSITIVITIES = ["public", "internal", "confidential", "restricted"] as const;
 const EXECUTION_MODES = ["immediate", "proposal"] as const;
@@ -50,14 +140,21 @@ const EXECUTION_MODES = ["immediate", "proposal"] as const;
  * The rule the platform ran BEFORE this gate: a proposal escalates, a read
  * never does, and otherwise the acting coworker's HITL-derived approval policy
  * alone decided. Encoded so the walk can prove the new rule adds nothing.
+ *
+ * A propose boundary (BI-C8EC05C9) was always a person: propose-interception
+ * diverted every side-effecting call under it to an AgentActionProposal BEFORE
+ * the monitor, whatever the coworker's tier. The gate branch reproduces that
+ * diversion, so it is encoded here as the platform's prior behaviour.
  */
 function retiredTierOnlyRule(shape: {
   sideEffect: boolean;
   executionMode: "proposal" | "immediate";
   operatorRequiresApproval: boolean;
+  proposeBoundary: boolean;
 }): "automated" | "human" {
   if (shape.executionMode === "proposal") return "human";
   if (!shape.sideEffect) return "automated";
+  if (shape.proposeBoundary) return "human";
   return shape.operatorRequiresApproval ? "human" : "automated";
 }
 
@@ -72,12 +169,14 @@ function everyCase(): Case[] {
           for (const sensitivity of SENSITIVITIES) {
             for (const steering of ESCALATION_STEERING) {
               for (const operatorRequiresApproval of [true, false]) {
+                for (const proposeBoundary of [true, false]) {
                 cases.push({
                   input: {
                     action: { sideEffect, executionMode, consequence, workCaseConsequential },
                     dataPolicy: { sensitivity },
                     operatorRequiresApproval,
                     steering,
+                    proposeBoundary,
                   },
                   damaging:
                     workCaseConsequential
@@ -86,8 +185,10 @@ function everyCase(): Case[] {
                   shape:
                     `sideEffect=${sideEffect} mode=${executionMode} consequence=${consequence} `
                     + `workCase=${workCaseConsequential} sensitivity=${sensitivity} `
-                    + `steering=${steering} operatorRequiresApproval=${operatorRequiresApproval}`,
+                    + `steering=${steering} operatorRequiresApproval=${operatorRequiresApproval} `
+                    + `proposeBoundary=${proposeBoundary}`,
                 });
+                }
               }
             }
           }
@@ -103,7 +204,7 @@ const CASES = everyCase();
 describe("escalation gate conformance — exhaustive domain proof", () => {
   it("covers the gate's entire input space", () => {
     expect(CASES.length).toBe(
-      2 * 2 * CONSEQUENCES.length * 2 * SENSITIVITIES.length * ESCALATION_STEERING.length * 2,
+      2 * 2 * CONSEQUENCES.length * 2 * SENSITIVITIES.length * ESCALATION_STEERING.length * 2 * 2,
     );
   });
 
@@ -113,6 +214,7 @@ describe("escalation gate conformance — exhaustive domain proof", () => {
         sideEffect: input.action.sideEffect,
         executionMode: input.action.executionMode,
         operatorRequiresApproval: input.operatorRequiresApproval,
+        proposeBoundary: input.proposeBoundary === true,
       });
       return resolveEscalation(input).verdict === "human" && retired === "automated"
         ? shape
@@ -127,6 +229,7 @@ describe("escalation gate conformance — exhaustive domain proof", () => {
         sideEffect: input.action.sideEffect,
         executionMode: input.action.executionMode,
         operatorRequiresApproval: input.operatorRequiresApproval,
+        proposeBoundary: input.proposeBoundary === true,
       });
       return retired === "human" && resolveEscalation(input).verdict === "automated";
     });
@@ -137,6 +240,17 @@ describe("escalation gate conformance — exhaustive domain proof", () => {
       expect(input.action.sideEffect).toBe(true);
       expect(input.action.executionMode).toBe("immediate");
       expect(input.operatorRequiresApproval).toBe(true);
+      expect(input.proposeBoundary).not.toBe(true);
+    }
+  });
+
+  it("the propose boundary decides exactly the side-effecting immediate calls under it", () => {
+    for (const { input, shape } of CASES) {
+      const decision = resolveEscalation(input);
+      const expected = input.proposeBoundary === true
+        && input.action.sideEffect
+        && input.action.executionMode === "immediate";
+      expect(decision.reasonCode === "propose-boundary", shape).toBe(expected);
     }
   });
 
@@ -185,6 +299,11 @@ describe("escalation gate conformance — wiring", () => {
 });
 
 describe("escalation gate conformance — the principle follows the process", () => {
+  it("states every decision-routing rule without the retired guard name", () => {
+    const principle = readFileSync(PRINCIPLE_PATH, "utf8");
+    expect(describeDecisionEscalationRule().filter((rule) => !principle.includes(rule))).toEqual([]);
+    expect(principle).not.toContain("check-escalation-gate.ts");
+  });
   it("states every rule the gate enforces, verbatim", () => {
     const principle = readFileSync(PRINCIPLE_PATH, "utf8");
     const missing = describeEscalationRule().filter((rule) => !principle.includes(rule));

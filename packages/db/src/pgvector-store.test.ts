@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { buildFilterSql, hashToNumber } from "./pgvector-store";
 
-describe("pgvector-store buildFilterSql (Qdrant filter DSL → SQL)", () => {
+describe("pgvector-store buildFilterSql (filter DSL → SQL)", () => {
   it("returns empty string for an empty filter", () => {
     const params: unknown[] = [];
     expect(buildFilterSql({}, params)).toBe("");
@@ -108,7 +108,7 @@ describe("pgvector-store buildFilterSql (Qdrant filter DSL → SQL)", () => {
   });
 });
 
-describe("pgvector-store hashToNumber (parity with qdrant.ts)", () => {
+describe("pgvector-store hashToNumber (stable ids)", () => {
   it("is deterministic and non-negative", () => {
     expect(hashToNumber("wiki-page:BI-1")).toBe(hashToNumber("wiki-page:BI-1"));
     expect(hashToNumber("anything")).toBeGreaterThanOrEqual(0);

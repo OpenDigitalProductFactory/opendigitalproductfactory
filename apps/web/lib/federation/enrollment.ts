@@ -201,7 +201,61 @@ export interface FederationLinkRowInput {
 interface FederationLinkTx {
   principal: { create(args: unknown): Promise<{ id: string }> };
   principalAlias: { create(args: unknown): Promise<unknown> };
-  federationLink: { create(args: unknown): Promise<{ id: string }> };
+  federationLink: {
+    create(args: unknown): Promise<{ id: string }>;
+    findMany?(args: unknown): Promise<Array<{ linkId: string }>>;
+  };
+  federatedRecordMirror?: {
+    updateMany(args: unknown): Promise<{ count: number }>;
+  };
+}
+
+/** Mirror states that still have somewhere to go. `synced` and `withdrawn` are
+ *  done; these three are work the peer has not taken yet. */
+export const NON_TERMINAL_MIRROR_STATUSES = ["pending", "dead-letter", "conflict"] as const;
+
+/**
+ * Re-point undelivered mirrors from this peer's PREVIOUS links onto the new one.
+ *
+ * BI-6C33AF7C. The digest exchange walks mirrors by `federationLinkId` for the
+ * CURRENT link only, so anything still owed on a link that was later revoked is
+ * never visited again by any cycle -- not dead, just unreachable. Re-enrolling a
+ * peer therefore silently orphaned that peer's whole in-flight backlog.
+ *
+ * Matched on `peerInstallationId`, NOT on peerAuthorityUrl. The URL is an
+ * address, not an identity: on this install three revoked links share one
+ * address but carry two different installation ids plus a null, because the peer
+ * was reinstalled. Migrating by address would hand records addressed to one
+ * installation to a different one. A link with no recorded installation id, or a
+ * different one, is deliberately left alone for an operator to decide -- see the
+ * stranded-mirror report.
+ *
+ * Returns how many mirrors moved so the caller can log it: resuming delivery is
+ * a real change of who receives data and should never be silent.
+ */
+export async function migrateMirrorsFromPriorLinks(
+  tx: FederationLinkTx,
+  input: { newLinkId: string; peerInstallationId: string | null | undefined },
+): Promise<{ movedMirrors: number; fromLinkIds: string[] }> {
+  const { peerInstallationId } = input;
+  if (!peerInstallationId || !tx.federationLink.findMany || !tx.federatedRecordMirror) {
+    return { movedMirrors: 0, fromLinkIds: [] };
+  }
+  const priorLinks = await tx.federationLink.findMany({
+    where: { peerInstallationId, linkId: { not: input.newLinkId } },
+    select: { linkId: true },
+  });
+  const fromLinkIds = priorLinks.map((link) => link.linkId);
+  if (fromLinkIds.length === 0) return { movedMirrors: 0, fromLinkIds: [] };
+
+  const moved = await tx.federatedRecordMirror.updateMany({
+    where: {
+      federationLinkId: { in: fromLinkIds },
+      syncStatus: { in: [...NON_TERMINAL_MIRROR_STATUSES] },
+    },
+    data: { federationLinkId: input.newLinkId },
+  });
+  return { movedMirrors: moved.count, fromLinkIds };
 }
 
 /**
@@ -227,7 +281,7 @@ export async function createFederationLinkRow(tx: FederationLinkTx, input: Feder
     revokedAt: null,
     quarantinedAt: null,
   });
-  return tx.federationLink.create({
+  const created = await tx.federationLink.create({
     data: {
       linkId: input.linkId,
       principalId: principal.id,
@@ -249,6 +303,21 @@ export async function createFederationLinkRow(tx: FederationLinkTx, input: Feder
       metadata: input.metadata as never,
     },
   });
+
+  // Re-enrolling a peer must not orphan what we still owe it (BI-6C33AF7C).
+  const migrated = await migrateMirrorsFromPriorLinks(tx, {
+    newLinkId: input.linkId,
+    peerInstallationId: input.peerInstallationId,
+  });
+  if (migrated.movedMirrors > 0) {
+    // Not silent: this resumes delivery of records that had stopped moving.
+    console.info(
+      `[federation] link ${input.linkId} adopted ${migrated.movedMirrors} undelivered `
+        + `mirror(s) from prior link(s) ${migrated.fromLinkIds.join(", ")} for the same `
+        + `peer installation.`,
+    );
+  }
+  return created;
 }
 
 // ── Dual approval + lifecycle (operator / peer actions) ──────────────────────

@@ -36,8 +36,8 @@ vi.mock("@/lib/tak/autonomous-work-run", () => ({
 vi.mock("@/lib/tak/task-records", () => ({
   createTaskMessage: (...args: unknown[]) => records.create(...args),
 }));
-vi.mock("@/lib/queue/inngest-client", () => ({
-  inngest: { send: (...args: unknown[]) => queue.send(...args) },
+vi.mock("@/lib/jobs", () => ({
+  jobs: { send: (...args: unknown[]) => queue.send(...args) },
 }));
 
 import {

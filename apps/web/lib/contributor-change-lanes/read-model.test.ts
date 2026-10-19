@@ -7,7 +7,7 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { loadContributorChangeLaneReadModel } from "./read-model";
+import { loadContributorChangeLaneReadModel, loadContributorInventorySource } from "./read-model";
 
 const NOW = new Date("2026-05-26T22:00:00.000Z");
 const RECENT = new Date("2026-05-26T21:58:00.000Z"); // 2 min ago — fresh
@@ -421,5 +421,43 @@ describe("loadContributorChangeLaneReadModel — snapshotRunId pointer (BI-BFFB9
       (c) => (c[0] as { where: { syncRunId?: string } }).where.syncRunId === "civs-holder",
     );
     expect(holderCall).toBeDefined();
+  });
+});
+
+describe("loadContributorInventorySource — one snapshot source for read tools", () => {
+  it("returns the latest successful rows for one source, with that source's freshness, without the lane projection", async () => {
+    const db = makeDb();
+    const branch = { name: "feat/a", headSha: "abc", remote: "origin", isMerged: false, lastCommitAt: "2026-05-26T21:00:00.000Z" };
+    db.contributorInventorySyncRun.findFirst.mockResolvedValue(
+      syncRunRow({ syncRunId: "civs-1", completedAt: RECENT, snapshots: [{ payload: branch }] }),
+    );
+
+    const result = await loadContributorInventorySource("git-branch", { db: db as never, now: NOW });
+
+    expect(result.rows).toEqual([branch]);
+    expect(result.freshness).toMatchObject({ source: "git-branch", state: "ok", count: 1 });
+    expect(db.workroom.findMany).not.toHaveBeenCalled();
+    expect(db.credentialEntry.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("reports github-pr as not-configured, with no rows, when no GitHub credential is bound", async () => {
+    const db = makeDb();
+    db.credentialEntry.findFirst.mockResolvedValue(null);
+
+    const result = await loadContributorInventorySource("github-pr", { db: db as never, now: NOW });
+
+    expect(result.rows).toEqual([]);
+    expect(result.freshness.state).toBe("not-configured");
+    expect(db.contributorInventorySyncRun.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("reports warming-up when no run has succeeded for the source", async () => {
+    const db = makeDb();
+    db.contributorInventorySyncRun.findFirst.mockResolvedValue(null);
+
+    const result = await loadContributorInventorySource("git-worktree", { db: db as never, now: NOW });
+
+    expect(result.rows).toEqual([]);
+    expect(result.freshness.state).toBe("warming-up");
   });
 });

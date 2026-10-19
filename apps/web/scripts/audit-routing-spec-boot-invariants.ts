@@ -84,10 +84,6 @@ function readSourceFile(relativePath: string): string {
   return readFileSync(join(ROOT, relativePath), "utf8");
 }
 
-function fileExists(relativePath: string): boolean {
-  return existsSync(join(ROOT, relativePath));
-}
-
 // ─── Invariant 1: every PLATFORM_TOOLS entry has a TOOL_TO_GRANTS mapping ─
 
 function checkInv1(): void {

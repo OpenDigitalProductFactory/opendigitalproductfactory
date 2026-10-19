@@ -17,7 +17,7 @@
 // Advisory by default — an existing install can legitimately be mid-migration —
 // and strict under --strict for CI once a repo is converged.
 
-import { execFileSync } from "node:child_process";
+import { gitText } from "./lib/git.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
 import { dirname, resolve } from "node:path";
 
@@ -52,7 +52,7 @@ function main(argv) {
   const strict = argv.includes("--strict");
   let porcelain;
   try {
-    porcelain = execFileSync("git", ["worktree", "list", "--porcelain"], { encoding: "utf8" });
+    porcelain = gitText(["worktree", "list", "--porcelain"], { cwd: process.cwd(), trim: false });
   } catch (err) {
     // Not a repository, or git unavailable: nothing to assert about bases.
     console.log("[single-worktree-base] no git worktree list available — skipping.");

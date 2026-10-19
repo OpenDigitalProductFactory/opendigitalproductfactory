@@ -18,6 +18,13 @@ PACKAGE_OUTPUT=""
 PACKAGE_TTL_SECONDS=900
 ORG_NAME="${DPF_PKI_NAME:-DPF Organization CA}"
 START_TLS=1
+# The portal leaf certificate lifetime. The dpf-installer provisioner shipped
+# with step-ca's 24h default, so authority.crt expired one day after every
+# bootstrap and nothing renewed it: LDAPS refused verifying clients and an https
+# front for MCP OAuth would have died overnight (BI-5727522F, BI-FA2C46D7). The
+# provisioner claims below are raised to match, and a leaf shorter than this is
+# re-issued rather than renewed (renewal keeps the original 24h lifetime).
+PORTAL_CERT_DURATION="${DPF_PKI_PORTAL_CERT_DURATION:-8760h}"
 SANS=""
 EDGE_ACTION_CONFIGURED=0
 
@@ -70,11 +77,31 @@ valid_private_ca_url() {
   private_ipv4_or_loopback "$ca_host"
 }
 
+# POSIX mode 0600 is a real control where the filesystem can represent it.
+# NTFS reports chmod 0600 back as 666, so requiring it there hides every later
+# join check (BI-33D63506). Probe a scratch file; do not rewrite the package.
+filesystem_can_represent_mode_0600() {
+  probe="$(mktemp "${TMPDIR:-/tmp}/dpf-mode-probe.XXXXXX")" || return 0
+  chmod 600 "$probe" 2>/dev/null || { rm -f "$probe"; return 0; }
+  probe_mode="$(stat -c '%a' "$probe" 2>/dev/null || stat -f '%Lp' "$probe" 2>/dev/null || echo unknown)"
+  rm -f "$probe"
+  [ "$probe_mode" = "600" ]
+}
+
 read_join_package() {
   package_path="$1"
   [ -f "$package_path" ] || { echo "Join package was not found" >&2; exit 64; }
-  package_mode="$(stat -f '%Lp' "$package_path" 2>/dev/null || stat -c '%a' "$package_path" 2>/dev/null || echo unknown)"
-  [ "$package_mode" = "600" ] || { echo "Join package must have mode 0600" >&2; exit 77; }
+  # GNU first: `stat -f` is a filesystem query on GNU (it succeeds with the
+  # wrong output), while `stat -c` is an illegal option on BSD (it fails and
+  # falls through). The BSD-first order read every package as not-0600 on Linux.
+  package_mode="$(stat -c '%a' "$package_path" 2>/dev/null || stat -f '%Lp' "$package_path" 2>/dev/null || echo unknown)"
+  if [ "$package_mode" != "600" ]; then
+    if filesystem_can_represent_mode_0600; then
+      echo "Join package must have mode 0600" >&2
+      exit 77
+    fi
+    echo "Join package mode 0600 is not representable on this filesystem; the Unix mode control does not apply here." >&2
+  fi
 
   package_header=""
   package_id=""
@@ -201,7 +228,6 @@ chmod 0700 "$OUT_DIR" "$OUT_DIR/secrets"
 ROOT_CERT="$OUT_DIR/root_ca.crt"
 FINGERPRINT_FILE="$OUT_DIR/root_ca.fingerprint"
 PASSWORD_FILE="$OUT_DIR/secrets/step-ca-password"
-PASSWORD_FILE_EFFECTIVE="$PASSWORD_FILE"
 AUTHORITY_CERT="$OUT_DIR/authority.crt"
 AUTHORITY_KEY="$OUT_DIR/authority.key"
 CADDYFILE="$OUT_DIR/Caddyfile"
@@ -226,18 +252,43 @@ if [ "$MODE" = "join" ] && [ -n "$JOIN_PACKAGE" ]; then
 fi
 
 compose() {
-  local compose_files=(-f "$REPO_ROOT/docker-compose.yml" -f "$REPO_ROOT/docker-compose.organization-trust.yml")
+  local compose_files=(-f "$REPO_ROOT/docker-compose.yml")
+  # A consumer (release) install ships docker-compose.release.yml and no
+  # Dockerfile; without the release overlay compose tries to BUILD portal-init
+  # (BI-6DC1CD5B).
+  if [ -f "$REPO_ROOT/docker-compose.release.yml" ] && [ ! -f "$REPO_ROOT/Dockerfile" ]; then
+    compose_files+=( -f "$REPO_ROOT/docker-compose.release.yml" )
+  fi
+  compose_files+=( -f "$REPO_ROOT/docker-compose.organization-trust.yml" )
   if [ "$MODE" = "authority" ] || [ "$MODE" = "issue-join" ]; then
     compose_files+=( -f "$REPO_ROOT/docker-compose.pki.yml" )
   fi
-  DPF_PKI_PASSWORD_FILE="$PASSWORD_FILE_EFFECTIVE" \
   DPF_PKI_TRUST_BUNDLE="$ROOT_CERT" \
   DPF_PKI_BIND_ADDRESS="$BIND_ADDRESS" \
   DPF_PKI_DNS_NAMES="$HOSTNAME_VALUE,$SANS,$BIND_ADDRESS,localhost,127.0.0.1" \
   DPF_PKI_NAME="$ORG_NAME" \
   DPF_TLS_DIR="$OUT_DIR" \
-  docker compose --project-directory "$REPO_ROOT" \
-    "${compose_files[@]}" "$@"
+  run_pki_compose "${compose_files[@]}" -- "$@"
+}
+
+# Keep the same Compose project/environment for staging and normal lifecycle.
+run_pki_compose() {
+  local files=()
+  while [ "$1" != "--" ]; do files+=("$1"); shift; done
+  shift
+  if [ "$1" = "stage-password" ]; then
+    node "$REPO_ROOT/scripts/installer/stage-ca-password.mjs" "$PASSWORD_FILE" \
+      --project-directory "$REPO_ROOT" "${files[@]}"
+  else
+    docker compose --project-directory "$REPO_ROOT" "${files[@]}" "$@"
+  fi
+}
+
+# Private host paths stay owned by their invoking POSIX user. The authority
+# service itself keeps the pinned image's non-root user and named volume.
+step_client() {
+  docker run --rm --entrypoint "" --user "$(id -u):$(id -g)" \
+    --env HOME=/tmp --env STEPPATH=/tmp/step "$@"
 }
 
 persist_organization_trust() {
@@ -259,6 +310,13 @@ persist_organization_trust() {
     printf 'DPF_PKI_DIR=%s\n' "$OUT_DIR"
     printf 'DPF_ORGANIZATION_CA_URL=%s\n' "${CA_URL:-https://$HOSTNAME_VALUE:9000}"
     if [ "$EDGE_ACTION_CONFIGURED" = "1" ]; then
+      # BI-28EFE18A: with the trust bundle in place, turn the action channel on
+      # so the install's own node can carry host upkeep. Execution still needs a
+      # trusted node, its enabled capability, an allowlisted type and, for the VM
+      # restart, an approved ChangeRequest. An operator's explicit value is kept.
+      if ! grep -q '^DPF_REMOTE_ACTION_DISPATCH_ENABLED=' "$env_tmp" 2>/dev/null; then
+        printf 'DPF_REMOTE_ACTION_DISPATCH_ENABLED=1\n'
+      fi
       printf 'DPF_EDGE_ACTION_DISPATCH_CONFIGURED=1\n'
       printf 'DPF_EDGE_ACTION_URL=https://%s:8443\n' "$HOSTNAME_VALUE"
       printf 'DPF_EDGE_ACTION_CA_FILE=%s\n' "$ROOT_CERT"
@@ -290,7 +348,7 @@ wait_for_step_ca() {
 run_local_step_client() {
   ca_container_id="$(compose ps -q step-ca | tr -d '\r\n')"
   [ -n "$ca_container_id" ] || { echo "Organization CA container is unavailable" >&2; exit 70; }
-  docker run --rm --network "container:$ca_container_id" \
+  step_client --network "container:$ca_container_id" \
     --mount "type=bind,src=$OUT_DIR,dst=/work" "$STEP_IMAGE" step "$@"
 }
 
@@ -301,7 +359,7 @@ ensure_edge_client_provisioner() {
   fi
   compose exec -T step-ca step ca provisioner add dpf-edge-client \
     --type JWK --create --ssh=false \
-    --password-file /run/secrets/step-ca-password \
+    --password-file /home/step/secrets/password \
     --x509-template /etc/dpf/pki/edge-client.tpl \
     --x509-min-dur 5m --x509-default-dur 720h --x509-max-dur 720h \
     --ca-config /home/step/config/ca.json >/dev/null
@@ -309,21 +367,71 @@ ensure_edge_client_provisioner() {
   wait_for_step_ca
 }
 
+# The dpf-installer provisioner is created by the container's init with no
+# claims, i.e. step-ca's 24h TLS default. Raise it once so the portal leaf can
+# be issued for PORTAL_CERT_DURATION; idempotent, restarts the CA only on change.
+ensure_installer_provisioner_claims() {
+  installer_block="$(compose exec -T step-ca step ca provisioner list --ca-url https://127.0.0.1:9000 \
+    --root /home/step/certs/root_ca.crt 2>/dev/null \
+    | awk '/"name"[[:space:]]*:[[:space:]]*"dpf-installer"/{f=1} f&&/"name"[[:space:]]*:/&&!/dpf-installer/{f=0} f{print}')"
+  wanted="$(printf '%s' "$PORTAL_CERT_DURATION" | sed -E 's/^([0-9]+)h$/\1h0m0s/')"
+  if printf '%s' "$installer_block" | grep -q "\"maxTLSCertDuration\"[[:space:]]*:[[:space:]]*\"$wanted\""; then
+    return 0
+  fi
+  compose exec -T step-ca step ca provisioner update dpf-installer \
+    --x509-min-dur 5m --x509-default-dur "$PORTAL_CERT_DURATION" --x509-max-dur "$PORTAL_CERT_DURATION" \
+    --ca-config /home/step/config/ca.json >/dev/null
+  compose restart step-ca >/dev/null
+  wait_for_step_ca
+}
+# True when the host copy of the portal leaf was issued for less than
+# PORTAL_CERT_DURATION (a legacy 24h leaf), has under 30 days left, or names a
+# different host set than requested: such a leaf must be re-issued, because
+# `step ca renew` preserves its lifetime and its names.
+# Reads comma/space separated host names on stdin; prints them lower-cased,
+# de-duplicated and sorted as one comma-joined line, so two name sets compare
+# as strings regardless of order or case.
+normalized_name_set() {
+  tr ', ' '\n\n' | tr 'A-Z' 'a-z' | sed '/^$/d' | sort -u | paste -sd, -
+}
+
+portal_leaf_needs_reissue() {
+  [ -f "$AUTHORITY_CERT" ] || return 0
+  start="$(openssl x509 -in "$AUTHORITY_CERT" -noout -startdate 2>/dev/null | sed 's/^notBefore=//')"
+  end="$(openssl x509 -in "$AUTHORITY_CERT" -noout -enddate 2>/dev/null | sed 's/^notAfter=//')"
+  [ -n "$start" ] && [ -n "$end" ] || return 0
+  start_s="$(date -j -f '%b %e %H:%M:%S %Y %Z' "$start" +%s 2>/dev/null || date -d "$start" +%s 2>/dev/null || echo 0)"
+  end_s="$(date -j -f '%b %e %H:%M:%S %Y %Z' "$end" +%s 2>/dev/null || date -d "$end" +%s 2>/dev/null || echo 0)"
+  [ "$start_s" -gt 0 ] && [ "$end_s" -gt 0 ] || return 0
+  wanted_s="$(( $(printf '%s' "$PORTAL_CERT_DURATION" | sed -E 's/h$//') * 3600 ))"
+  lifetime_s="$(( end_s - start_s ))"
+  remaining_s="$(( end_s - $(date +%s) ))"
+  [ "$lifetime_s" -lt "$(( wanted_s - 3600 ))" ] && return 0
+  [ "$remaining_s" -lt "$(( 30 * 24 * 3600 ))" ] && return 0
+  # `step ca renew` keeps the old subject alternative names, so a changed
+  # canonical host or alias set must be re-issued, not renewed (BI-6DC1CD5B).
+  current_names="$(openssl x509 -in "$AUTHORITY_CERT" -noout -ext subjectAltName 2>/dev/null \
+    | tail -n +2 | sed -E 's/(DNS|IP Address)://g' | normalized_name_set)"
+  wanted_names="$(printf '%s,%s' "$HOSTNAME_VALUE" "$SANS" | normalized_name_set)"
+  [ "$current_names" != "$wanted_names" ] && return 0
+  return 1
+}
+
 generate_local_action_material() {
   if [ ! -f "$ACTION_SIGNING_PASSWORD" ]; then
     umask 077
-    docker run --rm "$STEP_IMAGE" step crypto rand --format hex 64 > "$ACTION_SIGNING_PASSWORD"
+    step_client "$STEP_IMAGE" step crypto rand --format hex 64 > "$ACTION_SIGNING_PASSWORD"
   fi
   if [ ! -f "$ACTION_SIGNING_PUBLIC" ] || [ ! -f "$ACTION_SIGNING_PRIVATE" ]; then
     rm -f "$ACTION_SIGNING_PUBLIC" "$ACTION_SIGNING_PRIVATE"
-    docker run --rm --mount "type=bind,src=$OUT_DIR,dst=/work" "$STEP_IMAGE" \
+    step_client --mount "type=bind,src=$OUT_DIR,dst=/work" "$STEP_IMAGE" \
       step crypto keypair /work/edge-action-signing-public.pem \
       /work/secrets/edge-action-signing-private.pem --kty OKP --curve Ed25519 \
       --password-file /work/secrets/edge-action-signing-password >/dev/null
   fi
   if [ ! -f "$MTLS_PROXY_SECRET" ]; then
     umask 077
-    docker run --rm "$STEP_IMAGE" step crypto rand --format hex 64 > "$MTLS_PROXY_SECRET"
+    step_client "$STEP_IMAGE" step crypto rand --format hex 64 > "$MTLS_PROXY_SECRET"
   fi
   chmod 0644 "$ACTION_SIGNING_PUBLIC"
   chmod 0600 "$ACTION_SIGNING_PRIVATE" "$ACTION_SIGNING_PASSWORD" "$MTLS_PROXY_SECRET"
@@ -339,9 +447,11 @@ if [ "$MODE" = "authority" ]; then
   # A populated CA volume is always reused. Replacing it implicitly would
   # invalidate every enrolled installation, so there is deliberately no force
   # or reinitialize option in this installer-facing command.
+  compose stage-password
   compose up -d step-ca
   wait_for_step_ca
   ensure_edge_client_provisioner
+  ensure_installer_provisioner_claims
   compose cp step-ca:/home/step/certs/root_ca.crt "$ROOT_CERT" >/dev/null
   FINGERPRINT="$(compose exec -T step-ca step certificate fingerprint /home/step/certs/root_ca.crt | tr -d '\r\n')"
 
@@ -351,18 +461,21 @@ if [ "$MODE" = "authority" ]; then
   for san in $SANS; do san_args="$san_args --san $san"; done
   IFS="$old_ifs"
   if compose exec -T step-ca test -f /home/step/certs/dpf-portal.crt && \
-     compose exec -T step-ca test -f /home/step/secrets/dpf-portal.key; then
+     compose exec -T step-ca test -f /home/step/secrets/dpf-portal.key && \
+     ! portal_leaf_needs_reissue; then
     compose exec -T step-ca step ca renew /home/step/certs/dpf-portal.crt \
       /home/step/secrets/dpf-portal.key --ca-url https://127.0.0.1:9000 \
       --root /home/step/certs/root_ca.crt --force >/dev/null
   else
+    # First issuance, or a leaf issued for less than PORTAL_CERT_DURATION:
+    # issue fresh for the full lifetime instead of renewing a 24h certificate.
     # shellcheck disable=SC2086 # Values passed by word splitting were validated above.
     token="$(compose exec -T step-ca step ca token "$HOSTNAME_VALUE" $san_args \
-      --provisioner dpf-installer --password-file /run/secrets/step-ca-password)"
+      --provisioner dpf-installer --password-file /home/step/secrets/password --ca-url https://127.0.0.1:9000 --root /home/step/certs/root_ca.crt)"
     # shellcheck disable=SC2086
     compose exec -T step-ca step ca certificate "$HOSTNAME_VALUE" \
       /home/step/certs/dpf-portal.crt /home/step/secrets/dpf-portal.key \
-      --token "$token" --ca-url https://127.0.0.1:9000 \
+      --token "$token" --not-after "$PORTAL_CERT_DURATION" --ca-url https://127.0.0.1:9000 \
       --root /home/step/certs/root_ca.crt --force >/dev/null
     unset token
   fi
@@ -376,7 +489,7 @@ if [ "$MODE" = "authority" ]; then
   else
     edge_token="$(compose exec -T step-ca step ca token "$edge_subject" \
       --not-after 15m --cert-not-after 720h --provisioner dpf-edge-client \
-      --password-file /run/secrets/step-ca-password)"
+      --password-file /home/step/secrets/password --ca-url https://127.0.0.1:9000 --root /home/step/certs/root_ca.crt)"
     run_local_step_client \
       ca certificate "$edge_subject" /work/edge-client.crt /work/edge-client.key \
       --token "$edge_token" --ca-url https://127.0.0.1:9000 \
@@ -386,6 +499,7 @@ if [ "$MODE" = "authority" ]; then
   EDGE_ACTION_CONFIGURED=1
 elif [ "$MODE" = "issue-join" ]; then
   [ -f "$PASSWORD_FILE" ] || { echo "Organization CA is not initialized on this installation" >&2; exit 69; }
+  compose stage-password
   compose up -d step-ca
   wait_for_step_ca
   ensure_edge_client_provisioner
@@ -397,11 +511,11 @@ elif [ "$MODE" = "issue-join" ]; then
   IFS="$old_ifs"
   # shellcheck disable=SC2086 # Values passed by word splitting were validated above.
   token="$(compose exec -T step-ca step ca token "$HOSTNAME_VALUE" $san_args \
-    --not-after "${PACKAGE_TTL_SECONDS}s" --provisioner dpf-installer --password-file /run/secrets/step-ca-password)"
+    --not-after "${PACKAGE_TTL_SECONDS}s" --provisioner dpf-installer --password-file /home/step/secrets/password --ca-url https://127.0.0.1:9000 --root /home/step/certs/root_ca.crt)"
   edge_subject="dpf-edge-$(printf '%s' "$HOSTNAME_VALUE" | tr ':' '-')"
   edge_token="$(compose exec -T step-ca step ca token "$edge_subject" \
     --not-after "${PACKAGE_TTL_SECONDS}s" --cert-not-after 720h --provisioner dpf-edge-client \
-    --password-file /run/secrets/step-ca-password)"
+    --password-file /home/step/secrets/password --ca-url https://127.0.0.1:9000 --root /home/step/certs/root_ca.crt)"
   package_id="$(openssl rand -hex 16)"
   expires_at="$(( $(date +%s) + PACKAGE_TTL_SECONDS ))"
   umask 077
@@ -425,23 +539,20 @@ else
   [ -n "$CA_URL" ] || { echo "join mode requires --ca-url" >&2; exit 64; }
   [ -n "$FINGERPRINT" ] || { echo "join mode requires --fingerprint" >&2; exit 64; }
   case "$CA_URL" in https://*) ;; *) echo "join mode requires an HTTPS --ca-url" >&2; exit 64 ;; esac
-    if [ -f "$AUTHORITY_CERT" ] && [ -f "$AUTHORITY_KEY" ]; then
-    PASSWORD_FILE_EFFECTIVE="$AUTHORITY_KEY"
-  else
+  if [ ! -f "$AUTHORITY_CERT" ] || [ ! -f "$AUTHORITY_KEY" ]; then
     [ -f "$TOKEN_FILE" ] || { echo "first join requires an existing --token-file" >&2; exit 64; }
-    token_mode="$(stat -f '%Lp' "$TOKEN_FILE" 2>/dev/null || stat -c '%a' "$TOKEN_FILE" 2>/dev/null || echo unknown)"
+    token_mode="$(stat -c '%a' "$TOKEN_FILE" 2>/dev/null || stat -f '%Lp' "$TOKEN_FILE" 2>/dev/null || echo unknown)"
     [ "$token_mode" = "600" ] || { echo "Enrollment token file must have mode 0600" >&2; exit 77; }
-    PASSWORD_FILE_EFFECTIVE="$TOKEN_FILE"
   fi
 
-  docker run --rm --mount "type=bind,src=$OUT_DIR,dst=/work" "$STEP_IMAGE" \
+  step_client --mount "type=bind,src=$OUT_DIR,dst=/work" "$STEP_IMAGE" \
     step ca root /work/root_ca.crt --ca-url "$CA_URL" --fingerprint "$FINGERPRINT" --force >/dev/null
   if [ -f "$AUTHORITY_CERT" ] && [ -f "$AUTHORITY_KEY" ]; then
-    docker run --rm --mount "type=bind,src=$OUT_DIR,dst=/work" "$STEP_IMAGE" \
+    step_client --mount "type=bind,src=$OUT_DIR,dst=/work" "$STEP_IMAGE" \
       step ca renew /work/authority.crt /work/authority.key --ca-url "$CA_URL" \
       --root /work/root_ca.crt --force >/dev/null
   else
-    docker run --rm --mount "type=bind,src=$OUT_DIR,dst=/work" \
+    step_client --mount "type=bind,src=$OUT_DIR,dst=/work" \
       --mount "type=bind,src=$TOKEN_FILE,dst=/run/secrets/enrollment-token,readonly" \
       "$STEP_IMAGE" sh -c 'step ca certificate "$1" /work/authority.crt /work/authority.key --token "$(cat /run/secrets/enrollment-token)" --ca-url "$2" --root /work/root_ca.crt --force' \
       sh "$HOSTNAME_VALUE" "$CA_URL" >/dev/null
@@ -449,11 +560,11 @@ else
   if [ -f "$EDGE_TOKEN_FILE" ]; then
     edge_subject="dpf-edge-$(printf '%s' "$HOSTNAME_VALUE" | tr ':' '-')"
     if [ -f "$EDGE_CLIENT_CERT" ] && [ -f "$EDGE_CLIENT_KEY" ]; then
-      docker run --rm --mount "type=bind,src=$OUT_DIR,dst=/work" "$STEP_IMAGE" \
+      step_client --mount "type=bind,src=$OUT_DIR,dst=/work" "$STEP_IMAGE" \
         step ca renew /work/edge-client.crt /work/edge-client.key --ca-url "$CA_URL" \
         --root /work/root_ca.crt --force >/dev/null
     else
-      docker run --rm --mount "type=bind,src=$OUT_DIR,dst=/work" \
+      step_client --mount "type=bind,src=$OUT_DIR,dst=/work" \
         --mount "type=bind,src=$EDGE_TOKEN_FILE,dst=/run/secrets/edge-enrollment-token,readonly" \
         "$STEP_IMAGE" sh -c 'step ca certificate "$1" /work/edge-client.crt /work/edge-client.key --token "$(cat /run/secrets/edge-enrollment-token)" --ca-url "$2" --root /work/root_ca.crt --force' \
         sh "$edge_subject" "$CA_URL" >/dev/null

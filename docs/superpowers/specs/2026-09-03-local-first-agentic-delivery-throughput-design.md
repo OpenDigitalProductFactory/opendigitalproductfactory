@@ -250,6 +250,33 @@ The following is target behavior; a shape declaration alone does not implement i
    for obtaining a missing scope baseline. Return the executable baseline-review
    prerequisite without changing the work's classification just to trigger a gate.
 
+#### Native launch identity and interrupted outcomes
+
+OBJ-EXEC-02 and AC-EXEC-03/04/05 require a durable launch identity as well as a
+review packet. The October 16 live review75512C999571 correlated its TaskRun to
+a CLI dispatch log but retained no immutable container/exec binding. A later
+canonical retirement receipt therefore cannot settle that attempt. Keep its
+unknown outcome, original request digest, budget and authority unchanged.
+
+For future managed Claude/Codex launches, extend the existing AsyncInferenceOp
+lifecycle with an explicit typed native handle and version boundary; preserve
+remote version1 provider operation IDs. Kernel decision DI-418EB31838D7 selects
+this canonical extension over a separate artifact-only execution projection.
+The [prospective CLI contract](2026-10-15-maintenance-epoch-recovery-evidence.md#prospective-cli-launch-binding--october-16-design-amendment)
+is the single detailed home for its compatibility matrix, preparation/create/
+start/observe boundaries, cancellation and current-authority checks, bounded
+observations and rollback requirements. That linked section is an explicit
+BI-06AE6833 design amendment; the earlier maintenance-epoch contribution remains
+BI-8B8731EE's separately delivered evidence producer.
+
+This amendment refines the existing execution objectives; it adds no recovery
+authority or historical settlement. Both the native adapter/storage fit and the
+exact canonical design still owe their normal review, mapping and implementation
+admission. Source-local compatibility fixtures and runtime implementation are
+unrun. A failing or unavailable current-source binding returns its supported
+repair action; never force a different room, archive unrelated work or fabricate
+an independent review packet to make a gate routable.
+
 ### 8.2 Work-shape evolution and encoded boundaries
 
 Extend the existing `pull-request-flow-watch` activity family under `BI-06AE6833`.
@@ -772,6 +799,31 @@ fallback-profile fixes must be reused; end-to-end recovery still needs the cases
 above. This amendment is design evidence, not their passing result.
 
 ## 16. Architecture review (advisory)
+
+### September 12 implementation: provider observation binding
+
+WC-20D2C1BC continues BI-06AE6833 and BI-0B3FED3D. The existing authenticated
+contributor inventory observes GitHub every ten minutes, but its pure Workroom
+binding resolver has no production caller. The current install also lacks a
+production webhook secret; a webhook-only path cannot provide continuity there.
+
+After each existing scheduled or on-demand inventory checkpoint, run a separately
+checkpointed binding pass. Reuse verified provider observations, their retained
+snapshot pointer on unchanged responses, and the repository/branch resolver.
+Require fresh successful source confirmation and an exact recorded head when
+one exists. Fill a missing PR URL only from that same PR. Bound the batch, report
+coverage gaps, and atomically compare-and-swap the binding with its evidence
+journal. Duplicate or restarted execution must not append duplicate receipts or
+overwrite concurrent ownership, scope, status, or another PR binding.
+
+This is observation, not authority to merge, deploy, close a room, or invoke an
+AI worker. It adds no scheduler, provider poll, public endpoint, or schema. Reuse
+the existing Build Studio readiness/actuation boundary for subsequent work.
+Verification covers initial binding, partial binding, repeated delivery, stale
+or failed observation, repository/head mismatch, concurrent writes, and journal
+failure. Live acceptance after canonical release must show an external Workroom
+acquiring its PR binding without an attached client. Source tests alone do not
+complete that acceptance.
 
 **Alignment:** well aligned after amendment. The design extends canonical Workroom,
 TaskRun, federation, evidence, closeout, and deployment-provider contracts; campaign

@@ -1,12 +1,13 @@
 // Hardcoded coworker tool grants (LIFE-001).
+import registry from "../data/agent_registry.json" with { type: "json" };
 //
 // Split out of workforce-seed.ts, which crossed the 800-LOC module ceiling when
 // the value-stream orchestrators were seeded. That file owns WHO the coworkers
 // are; this one owns what each may call. They were one module only by history.
 //
-// This map is the DURABLE grant source: grants written to the database are
-// re-seeded from here on every boot, so an entry removed here is a grant
-// revoked, not merely a row edited.
+// This map owns workforce-only defaults. External execution identities below
+// project their canonical registry profiles; they are not separately seeded
+// permission owners. Live explicit removals remain authoritative on every boot.
 //
 // Grant counts are deliberately small. `specialization-over-generalization`
 // (core kernel) caps a coworker at 10 tools relevant to its current task and
@@ -14,8 +15,47 @@
 // capability" — so a long list here is a defect even when every entry is
 // individually defensible.
 
+// Approved external development role; human scopes and room admission remain independent.
+// No iac_execute or admin_write: deployment and administration are not implied.
+// decision_record_create (BI-3BF3CBDF): the shipped dpf-record-decision-outcome
+// and dpf-route-learning-to-commons skills direct external agents to
+// record_decision_outcome and propose_improvement; without it both dead-end.
+// BI-E0F19DBA, the same class for the rest of the shipped skills:
+// - backlog_triage: dpf-file-backlog-item finishes filing with
+//   triage_backlog_item / size_backlog_item. Ordinary backlog writes, still
+//   gated by the user's manage_backlog capability.
+// - document_write: dpf-elicit-tacit-knowledge and dpf-route-learning-to-commons
+//   save WWWD notes with doc_save. An ordinary managed-document write; it also
+//   reaches doc_link and create_presentation, both document writes. Publishing
+//   (document_publish) stays off.
+// - ea_graph_read: dpf-data-architecture-steward and
+//   dpf-sysml-architecture-substrate read the EA graph with
+//   query_ontology_graph. Read-only; ea_graph_write stays off.
+// All three are already in the development token template, so a write-scoped
+// development token reaches them once the agent holds the grant.
+// - approval_probe_read (BI-129EFFD1): the read-only AC-PROBE dry run, so the
+//   coordinating session can record it as evidence. The tool still requires
+//   the human's platform-administration capability. All three external roles
+//   hold it: a grant on one only would split their authority signature and
+//   stop OAuth from resolving the external profile by client name.
+// Deliberately NOT granted: agent_control_read. establish_coworker and
+// manage_coworker_tool_grant change coworker authority, so dpf-establish-coworker
+// and dpf-add-archetype keep those steps in-portal and do not list them on
+// Surface A. marketing_read is not a development grant either; the
+// create-presentation skill's marketing-context reads stay in-portal.
+// One default owner per canonical profile. Missing provisioning fails closed;
+// the role-floor tests reject a missing/inconsistent external registry entry.
+const externalDevelopmentGrants = (id: string): readonly string[] =>
+  registry.agents.find(agent => agent.agent_id === id)?.config_profile.tool_grants ?? [];
+
 export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
-  "portfolio-advisor": ["portfolio_read", "registry_read", "backlog_read"],
+  // BI-38678404: agent_registry.json already grants AGT-WS-PORTFOLIO
+  // initiative_evidence_write, but THIS map is the durable source and re-seeds
+  // the database on every boot, so the registry's intent was reverted at each
+  // restart and the grant reached nobody. record_initiative_evidence is the one
+  // readiness lane declared `independent: false`, with portfolio-management
+  // among its accountable roles — an author recording its own research receipt.
+  "portfolio-advisor": ["portfolio_read", "registry_read", "backlog_read", "workroom_evidence_write", "initiative_evidence_write"],
   "external-catalog-scout": ["backlog_read", "backlog_write", "registry_read"],
   // The Digital Product Estate Specialist stewards the product estate (discovery
   // triage, portfolio quality) via registry_read/registry_write + backlog. It does
@@ -69,13 +109,21 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
   // grants resolve from THIS map (the slug agent row the coworker queries by
   // agentId "customer-advisor"), not from agent_registry.json — so the CRM
   // grants must live here to actually reach the coworker's tool surface.
-  "customer-advisor": ["crm_read", "crm_write", "consumer_read", "registry_read", "backlog_read", "web_search"],
+  // storefront_read (BI-43C3E914): inquiry-response-watch's draft stage reads the
+  // waiting inquiries through list_storefront_activity. Without it the stage's
+  // declared tool was unreachable and the coworker reported no way to read them.
+  // Read-only; agent_registry.json AGT-WS-CUSTOMER carries the same grant.
+  "customer-advisor": ["crm_read", "crm_write", "consumer_read", "registry_read", "backlog_read", "web_search", "workroom_evidence_write", "storefront_read"],
   // The Data Steward owns master-data quality: it runs the dedup/staleness
   // sweep, merges duplicates, and proposes enrichment. crm_write reaches the
   // mdm-stewardship pack tools (run_mdm_steward_sweep, merge_customer_*,
   // list_mdm_steward_tasks); web_search gates the enrich_customer_account door.
   "data-steward": ["crm_read", "crm_write", "consumer_read", "registry_read", "backlog_read", "web_search", "tool_script_exec"],
-  "marketing-specialist": ["marketing_read", "marketing_write", "consumer_read", "registry_read"],
+  // document_write reaches create_presentation (BI-543819B1): the strategist
+  // produces branded decks, and the report, letter, sheet and drawing tools
+  // (BI-012487AA) for campaign reports, sponsor letters and simple diagrams.
+  // agent_registry.json AGT-WS-MARKETING carries it too.
+  "marketing-specialist": ["marketing_read", "marketing_write", "consumer_read", "registry_read", "document_write"],
   "storefront-advisor": [
     "consumer_read",
     "registry_read",
@@ -93,7 +141,9 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
   // issues it detects. Its runtime grants resolve from THIS map (not
   // agent_registry.json, which already intends backlog access), so backlog_read/
   // backlog_write must live here to reach its tool surface (BI-CAP-CBC41758).
-  "platform-engineer": ["agent_control_read", "admin_read", "admin_write", "registry_read", "telemetry_read", "backlog_read", "backlog_write", "tool_script_exec"],
+  // contributor_inventory_read: contributor-intake-watch reads the recorded
+  // inventory it keeps current (read_contributor_inventory).
+  "platform-engineer": ["agent_control_read", "admin_read", "admin_write", "registry_read", "telemetry_read", "backlog_read", "backlog_write", "tool_script_exec", "workroom_evidence_write", "contributor_inventory_read"],
   "build-specialist": [
     "file_read",
     "code_graph_read",
@@ -113,6 +163,12 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
     // Already sandbox-native (sandbox_execute); code_graph/file reads are the
     // canonical read-heavy filtering case (EP-27FD96BC BI-9893614D).
     "tool_script_exec",
+    "workroom_evidence_write",
+    // BI-38678404: mirrors AGT-WS-BUILD in agent_registry.json. Without it the
+    // builder cannot record the research receipt RESEARCH_REQUIRED demands, so
+    // work it has merged, released and verified on the live install can never
+    // leave awaiting-acceptance.
+    "initiative_evidence_write",
   ],
   // Read-only by construction. The reviewer may inspect the change and its
   // governed context, but cannot edit code, advance a build, waive findings,
@@ -128,6 +184,12 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
     // boot, so both sources must carry these or the grants revert on restart.
     "initiative_design_review",
     "initiative_domain_review",
+    // Standing-room stage evidence. Does not edit code, advance a build, waive
+    // findings, or publish a release (BI-CAP-AB63E190).
+    "workroom_evidence_write",
+    // pull-request-flow-watch reads recorded pull-request health
+    // (list_pull_requests). Read-only; the merge stays a human stage.
+    "contributor_inventory_read",
   ],
   // EP-A33A5C61 slice 7: the Data Architect owns data lifecycle, not only
   // schema structure — it reads growth/conformance findings and telemetry,
@@ -147,7 +209,12 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
     "policy_read",
     "spec_plan_read",
   ],
-  "admin-assistant": ["admin_read", "admin_write", "agent_control_read", "registry_read", "web_search", "file_read"],
+  // document_write reaches create_letter and create_report (BI-012487AA): the
+  // admin assistant writes the organization's correspondence and briefing
+  // documents. It also reaches doc_save, doc_link and the other render-family
+  // tools; publishing (document_publish) stays off. agent_registry.json
+  // AGT-WS-ADMIN carries it too.
+  "admin-assistant": ["admin_read", "admin_write", "agent_control_read", "registry_read", "web_search", "file_read", "approval_probe_read", "document_write"],
   coo: ["portfolio_read", "registry_read", "backlog_read", "backlog_write", "agent_control_read", "email_config", "thread_write"],
   "doc-specialist": ["file_read", "registry_read", "portfolio_read", "document_read", "document_write", "document_publish"],
   "compliance-officer": [
@@ -177,7 +244,14 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
     "registry_read",
   ],
   "legal-operations-counsel": ["file_read", "document_read", "document_write", "registry_read"],
-  "finance-controller": ["registry_read", "backlog_read", "portfolio_read"],
+  // payables_read: payables-watch and vendor-renewal-watch read recorded bills
+  // and supplier agreements (list_bills, list_supplier_contracts). Paying,
+  // renewing and cancelling stay human stages.
+  // document_write reaches create_report, create_sheet and create_letter
+  // (BI-012487AA): the controller produces the board pack, budget workbooks and
+  // supplier or donor letters as branded managed documents. Publishing stays
+  // off. agent_registry.json AGT-WS-FINANCE carries it too.
+  "finance-controller": ["registry_read", "backlog_read", "portfolio_read", "workroom_evidence_write", "payables_read", "document_write"],
   // Bookkeeper (S-BK): the day-to-day books loop. banking_read/banking_write drive
   // the governed banking tools (S-FIN); enrichment_write resolves vendor→supplier
   // (BI-B2497DFB); crm_read/write for counterparties; document_read for
@@ -261,6 +335,7 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
     // and principle_decide. Its `security` profession family carries 8 corpus
     // pages that were unreachable without it (BI-728FD7F2).
     "registry_read",
+    "workroom_evidence_write",
   ],
   // MCP & Integration Engineer — must match the establish_coworker factory-door
   // grants exactly (BI-CC44E74F). registry_read reaches the WSID craft-decision
@@ -278,15 +353,15 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
   // LicenseRequirementReference corpus — the platform's existing precedent for an
   // acquired external corpus carrying citations — so the same hand that maintains
   // licence references maintains statutory rate references.
-  "licensing-specialist": ["registry_read", "backlog_read", "backlog_write", "consumer_read", "policy_write", "policy_read", "initiative_compliance_review", "spec_plan_read", "web_search", "statutory_reference_propose"],
+  "licensing-specialist": ["registry_read", "backlog_read", "backlog_write", "consumer_read", "policy_write", "policy_read", "initiative_compliance_review", "file_read", "spec_plan_read", "web_search", "statutory_reference_propose"],
   "ux-accessibility-agent": ["file_read", "sandbox_execute", "work_capsule_read", "work_capsule_write", "work_capsule_adopt", "registry_read", "backlog_write", "decision_record_create", "initiative_ux_review", "web_search"],
   "soc-triage-analyst": ["siem_read", "siem_investigate", "registry_read"],
   "soc-investigator": ["siem_read", "siem_investigate", "siem_tune", "registry_read"],
   "soc-threat-hunter": ["siem_read", "siem_tune", "registry_read"],
   "soc-incident-commander": ["siem_read", "siem_investigate", "incident_respond", "registry_read"],
-  "external-claude-code": ["work_room_read", "work_room_write", "registry_read"],
-  "external-codex": ["work_room_read", "work_room_write", "registry_read"],
-  "external-grok": ["work_room_read", "work_room_write", "registry_read"],
+  "external-claude-code": externalDevelopmentGrants("AGT-EXT-CLAUDE"),
+  "external-codex": externalDevelopmentGrants("AGT-EXT-CODEX"),
+  "external-grok": externalDevelopmentGrants("AGT-EXT-GROK"),
   // Value-stream orchestrators and the cross-cutting finance specialist
   // (LIFE-001). These lists are RECONCILED with config_profile.tool_grants in
   // agent_registry.json rather than hand-picked: the registry entry was authored

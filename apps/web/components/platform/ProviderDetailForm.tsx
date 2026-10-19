@@ -1,14 +1,17 @@
 "use client";
 
-import { useState, useTransition, useEffect, useId } from "react";
+import { useState, useTransition, useEffect, useId, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useSearchParams } from "next/navigation";
-import { configureProvider, testProviderAuth, discoverModels, profileModels } from "@/lib/actions/ai-providers";
+import Link from "next/link";
+import { configureProvider, testProviderAuth, discoverModels } from "@/lib/actions/ai-providers";
 import { startProviderOAuth, disconnectProviderOAuth } from "@/lib/actions/provider-oauth";
 import { ConnectGrokCard } from "./ConnectGrokCard";
+import { probeQuiescence } from "@/components/auth/UpgradeHold";
+import { useT } from "@/lib/i18n/use-t";
+import { ProviderWorkspaceField } from "./ProviderWorkspaceField";
 import type { ProviderWithCredential, DiscoveredModelRow, ModelProfileRow } from "@/lib/ai-provider-types";
 import { ModelSection } from "@/components/platform/ModelSection";
-import { ProviderStatusToggle } from "@/components/platform/ProviderStatusToggle";
 
 // EP-INF-006: Routing profile shape passed through to ModelSection → ModelCard
 type RoutingProfile = {
@@ -32,6 +35,9 @@ type RoutingProfile = {
 };
 
 type Props = {
+  defaultConnectionId?: string;
+  /** Supply only when the server has validated shared sign-in ownership. */
+  sharedAuthRecovery?: { help: string; label: string };
   pw: ProviderWithCredential;
   canWrite: boolean;
   models: DiscoveredModelRow[];
@@ -39,18 +45,25 @@ type Props = {
   hasActiveProvider: boolean;
   // EP-INF-006: Routing profiles merged into model cards
   routingProfiles?: RoutingProfile[];
+  executionRecipes?: ReactNode;
 };
 
-export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActiveProvider, routingProfiles }: Props) {
+export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActiveProvider, routingProfiles, sharedAuthRecovery, defaultConnectionId, executionRecipes }: Props) {
+  const t = useT("setup");
   const { provider, credential } = pw;
   const router = useRouter();
   const fieldId = useId();
   const [isPending, startTransition] = useTransition();
   const isClaudeSubscription = provider.providerId === "anthropic-sub";
   const isZaiCodingProvider = provider.providerId === "zai-coding";
+  const isSharedOpenAiConsumer = provider.providerId === "chatgpt" && Boolean(sharedAuthRecovery);
+  const signInLabel = credential?.status === "ok" && credential.tokenExpiresAt
+    && new Date(credential.tokenExpiresAt).getTime() > Date.now()
+    ? t("providerConnection.reconnect") : `Sign in with ${provider.name}`;
 
   // Secrets are write-only — never sent from server. Empty = no change on save.
   const [secretRef, setSecretRef]                   = useState("");
+  const [providerWorkspaceId, setProviderWorkspaceId] = useState(credential?.providerWorkspaceId ?? "");
   const [endpoint, setEndpoint]                     = useState(provider.endpoint ?? "");
   const [computeWatts, setComputeWatts]             = useState(String(provider.computeWatts ?? 150));
   const [electricityRate, setElectricityRate]       = useState(String(provider.electricityRateKwh ?? 0.12));
@@ -103,6 +116,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
       enabledFamilies,
       ...(shouldPersistAuthMethod && { authMethod: selectedAuthMethod }),
       ...(selectedAuthMethod === "api_key" && secretRef ? { secretRef } : {}),
+      ...(provider.providerId === "anthropic" && selectedAuthMethod === "api_key" ? { providerWorkspaceId } : {}),
       ...(selectedAuthMethod === "oauth2_client_credentials" && clientId       ? { clientId }       : {}),
       ...(selectedAuthMethod === "oauth2_client_credentials" && clientSecret   ? { clientSecret }   : {}),
       ...(selectedAuthMethod === "oauth2_client_credentials" && tokenEndpoint  ? { tokenEndpoint }  : {}),
@@ -112,58 +126,66 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
     };
   }
 
+  async function reportSetupFailure() {
+    const state = await probeQuiescence();
+    setTestResult({ ok: false, message: state.level === "draining" || state.level === "swapping"
+      ? t("providerConnection.upgradePaused")
+      : t("providerConnection.setupUnavailable") });
+  }
+
+  function handleSignIn() {
+    startTransition(async () => {
+      setTestResult(null);
+      try {
+        const result = defaultConnectionId ? await startProviderOAuth(provider.providerId, defaultConnectionId) : await startProviderOAuth(provider.providerId);
+        if ("authorizeUrl" in result) window.open(result.authorizeUrl, "_self");
+        else setTestResult({ ok: false, message: result.error });
+      } catch {
+        await reportSetupFailure();
+      }
+    });
+  }
+
   function handleReadyProvider() {
     startTransition(async () => {
       setPipelineStatus("Saving provider settings...");
+      setSaveMessage(null);
       setTestResult(null);
       setDiscoveryResult(null);
       setProfilingResult(null);
 
-      const result = await configureProvider(buildSaveInput());
-      if (result.error) {
-        setSaveMessage(`Error: ${result.error}`);
-        setPipelineStatus(null);
-        return;
-      }
-      setSaveMessage("Settings saved");
-
-      setPipelineStatus("Checking connection...");
-      const test = await testProviderAuth(provider.providerId);
-      setTestResult(test);
-      if (!test.ok) {
+      try {
+        const result = await configureProvider(buildSaveInput());
+        if (result.error) {
+          setTestResult({ ok: false, message: result.error });
+          return;
+        }
+        setSaveMessage("Settings saved");
+        // Saving already discovers models and prepares routing profiles.
+        setPipelineStatus("Checking connection...");
+        setTestResult(await testProviderAuth(provider.providerId, false));
+      } catch {
+        await reportSetupFailure();
+      } finally {
         setPipelineStatus(null);
         router.refresh();
-        return;
       }
-
-      setPipelineStatus("Refreshing model catalog...");
-      const discovery = await discoverModels(provider.providerId);
-      setDiscoveryResult(discovery);
-      if (discovery.discovered > 0) {
-        setPipelineStatus("Preparing routing metadata...");
-        const profResult = await profileModels(provider.providerId);
-        setProfilingResult(profResult);
-      }
-
-      setPipelineStatus(null);
-      router.refresh();
     });
   }
 
   function handleRefreshModels() {
     startTransition(async () => {
       setPipelineStatus("Discovering models...");
-      const discovery = await discoverModels(provider.providerId);
-      setDiscoveryResult(discovery);
-
-      if (discovery.discovered > 0) {
-        setPipelineStatus("Syncing routing profiles...");
-        const profResult = await profileModels(provider.providerId);
-        setProfilingResult(profResult);
+      try {
+        const discovery = await discoverModels(provider.providerId);
+        setDiscoveryResult(discovery);
+        setProfilingResult(discovery.discovered > 0 ? { profiled: discovery.profiled, failed: 0, error: discovery.error } : null);
+      } catch {
+        setTestResult({ ok: false, message: "Refresh failed. Retry." });
+      } finally {
+        setPipelineStatus(null);
+        router.refresh();
       }
-
-      setPipelineStatus(null);
-      router.refresh();
     });
   }
 
@@ -172,11 +194,15 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
     || credential?.secretHint
     || (selectedAuthMethod === "oauth2_authorization_code" && credential?.status === "ok")
     || secretRef;
-  const readinessState = provider.status === "active" && hasProfiles && hasCredential
-    ? { label: "Ready", tone: "var(--dpf-success)", detail: "Connection, catalog, and routing metadata are prepared." }
+  const readinessState = testResult?.ok === false
+    ? { label: "Failed", tone: "var(--dpf-warning)", detail: "Review the error and retry." }
+    : testResult?.ok === true
+    ? { label: "Connection verified", tone: "var(--dpf-success)", detail: "Workload rules still apply when work runs." }
+    : provider.status === "active" && hasProfiles && hasCredential
+    ? { label: "Configured", tone: "var(--dpf-text)", detail: "Saved profiles do not confirm current access." }
     : hasCredential
-      ? { label: "Needs readiness check", tone: "var(--dpf-warning)", detail: "Save once and DPF will test, discover, and prepare models automatically." }
-      : { label: "Needs credentials", tone: "var(--dpf-muted)", detail: "Add credentials, then DPF will handle the readiness checks." };
+      ? { label: "Needs readiness check", tone: "var(--dpf-warning)", detail: "Save to verify and prepare models." }
+      : { label: "Needs credentials", tone: "var(--dpf-muted)", detail: "Connect your account to continue." };
 
   const inputStyle: React.CSSProperties = {
     width: "100%",
@@ -200,7 +226,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
       <div style={{ maxWidth: 560 }}>
       <div style={{ marginBottom: 20 }}>
         <div style={{ color: "var(--dpf-muted)", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>
-          Technical readiness
+          Connection
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           <span style={{
@@ -220,15 +246,10 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
           <span style={{ color: "var(--dpf-muted)", fontSize: 12 }}>{readinessState.detail}</span>
         </div>
         <p style={{ color: "var(--dpf-muted)", fontSize: 12, margin: "6px 0 0" }}>
-          Data-use eligibility is evaluated separately for each workload and connected account.
+          Workload data-use rules apply.
         </p>
       </div>
 
-      {/* Status + toggle */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 20 }}>
-        <ProviderStatusToggle providerId={provider.providerId} initialStatus={provider.status} />
-        <span style={{ color: "var(--dpf-muted)", fontSize: 12 }}>{provider.costModel === "compute" ? "compute-priced" : "token-priced"}</span>
-      </div>
 
       {/* Model families — hidden during initial setup, shown as advanced after profiling */}
       {showDiagnostics && hasProfiles && (
@@ -371,7 +392,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
               isAnthropicSub
                 ? "Paste subscription token (sk-ant-oat...)"
                 : isAnthropicApi
-                  ? "Paste API key (sk-ant-api...)"
+                  ? "Paste Anthropic API key"
                   : isZaiCodingProvider && credential?.secretHint ? "Advanced override only"
                   : credential?.secretHint ? "Enter new key to replace" : "Enter API key"
             }
@@ -382,6 +403,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
               ...(isAnthropicApi && secretRef ? { borderColor: "color-mix(in srgb, var(--dpf-accent) 38%, transparent)" } : {}),
             }}
           />
+          {isAnthropicApi && <ProviderWorkspaceField id={`${fieldId}-workspace`} value={providerWorkspaceId} onChange={setProviderWorkspaceId} disabled={!canWrite || isPending} />}
           {isAnyAnthropic && secretRef && (
             <div style={{ fontSize: 11, marginTop: 4, color:
               (isAnthropicSub && !secretRef.startsWith("sk-ant-oat")) || (isAnthropicApi && !secretRef.startsWith("sk-ant-api"))
@@ -464,7 +486,12 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
         </>
       )}
 
-      {selectedAuthMethod === "oauth2_authorization_code" && (
+      {selectedAuthMethod === "oauth2_authorization_code" && isSharedOpenAiConsumer && sharedAuthRecovery && (
+        <p className="mb-3 text-sm text-[var(--dpf-muted)]">
+          {sharedAuthRecovery.help}{" "}<Link className="text-[var(--dpf-accent)] underline underline-offset-2" href="/platform/ai/providers/codex">{sharedAuthRecovery.label}</Link>
+        </p>
+      )}
+      {selectedAuthMethod === "oauth2_authorization_code" && !isSharedOpenAiConsumer && (
         <div style={{ marginBottom: 16 }}>
           {/* BI-2DD7042A: judge connected/expired by the tokenExpiresAt TIMESTAMP,
               not the stored status enum — the enum only flips to "expired" when a
@@ -477,19 +504,20 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
                 <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--dpf-success)", display: "inline-block" }} />
                 <span style={{ color: "var(--dpf-text)", fontSize: 13 }}>
-                  Connected · token expires {new Date(credential.tokenExpiresAt).toLocaleString()}
+                  Sign-in saved · token expires {new Date(credential.tokenExpiresAt).toLocaleString()}
                 </span>
               </div>
+              <details style={{ marginTop: 12 }}><summary style={{ color: "var(--dpf-muted)", fontSize: 12 }}>{t("providerConnection.accountActions")}</summary>
               {disconnectConfirm ? (
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                   <span style={{ fontSize: 12, color: "var(--dpf-muted)" }}>
-                    Disconnect this account? Linked services will be deactivated.
+                    {defaultConnectionId ? "Disconnect this account?" : "Disconnect this account? Linked services will be deactivated."}
                   </span>
                   <button
                     type="button"
-                    disabled={isPending}
+                    disabled={!canWrite || isPending}
                     onClick={() => startTransition(async () => {
-                      const result = await disconnectProviderOAuth(provider.providerId);
+                      const result = defaultConnectionId ? await disconnectProviderOAuth(provider.providerId, defaultConnectionId) : await disconnectProviderOAuth(provider.providerId);
                       if (result.error) {
                         setTestResult({ ok: false, message: result.error });
                         setDisconnectConfirm(false);
@@ -512,13 +540,14 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
               ) : (
                 <button
                   type="button"
-                  disabled={isPending}
+                  disabled={!canWrite || isPending}
                   onClick={() => setDisconnectConfirm(true)}
                   style={{ background: "transparent", border: "1px solid var(--dpf-error)", color: "var(--dpf-error)", padding: "6px 14px", borderRadius: 6, cursor: "pointer", fontSize: 12 }}
                 >
                   Disconnect
                 </button>
               )}
+              </details>
             </div>
           ) : credential?.status === "expired" ||
               (credential?.tokenExpiresAt && new Date(credential.tokenExpiresAt).getTime() <= Date.now()) ? (
@@ -528,44 +557,19 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
                   ? "Access token expired — it refreshes automatically on next use, or sign in again now"
                   : "Token expired — sign in again"}
               </div>
-              <button
-                type="button"
-                disabled={isPending}
-                onClick={() => startTransition(async () => {
-                  const result = await startProviderOAuth(provider.providerId);
-                  if ("authorizeUrl" in result) {
-                    window.open(result.authorizeUrl, "_self");
-                  } else {
-                    setTestResult({ ok: false, message: result.error });
-                  }
-                })}
-                style={{ background: "var(--dpf-accent)", color: "#fff", border: "none", padding: "8px 18px", borderRadius: 6, cursor: "pointer", fontSize: 13 }}
-              >
-                Sign in with {provider.name}
-              </button>
             </div>
           ) : (
             <div>
               <div style={{ color: "var(--dpf-muted)", fontSize: 13, marginBottom: 8 }}>
                 No account linked
               </div>
-              <button
-                type="button"
-                disabled={isPending}
-                onClick={() => startTransition(async () => {
-                  const result = await startProviderOAuth(provider.providerId);
-                  if ("authorizeUrl" in result) {
-                    window.open(result.authorizeUrl, "_self");
-                  } else {
-                    setTestResult({ ok: false, message: result.error });
-                  }
-                })}
-                style={{ background: "var(--dpf-accent)", color: "#fff", border: "none", padding: "8px 18px", borderRadius: 6, cursor: "pointer", fontSize: 13 }}
-              >
-                Sign in with {provider.name}
-              </button>
             </div>
           )}
+          {!disconnectConfirm && <button type="button" disabled={!canWrite || isPending}
+            onClick={handleSignIn}
+            style={{ background: "var(--dpf-accent)", color: "var(--dpf-on-accent)", border: "none", padding: "8px 18px", borderRadius: 6, cursor: "pointer", fontSize: 13 }}>
+            {signInLabel}
+          </button>}
         </div>
       )}
 
@@ -605,7 +609,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
             disabled={isPending}
             style={{ padding: "8px 16px", background: "var(--dpf-surface-2)", border: "1px solid var(--dpf-accent)", color: "var(--dpf-accent)", borderRadius: 4, fontSize: 13, cursor: "pointer" }}
           >
-            {isPending ? "Preparing..." : "Save & ready provider"}
+            {isPending ? "Preparing..." : "Save & verify connection"}
           </button>
           {saveMessage && <span style={{ fontSize: 12, color: saveMessage.startsWith("Error") ? "var(--dpf-error)" : "var(--dpf-success)" }}>{saveMessage}</span>}
           {testResult && (
@@ -624,10 +628,11 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
       <div style={{ marginTop: 12 }}>
         <button
           type="button"
+          aria-expanded={showDiagnostics}
           onClick={() => setShowDiagnostics((value) => !value)}
           style={{ background: "transparent", border: "1px solid var(--dpf-border)", color: "var(--dpf-muted)", fontSize: 12, padding: "6px 10px", borderRadius: 4, cursor: "pointer" }}
         >
-          {showDiagnostics ? "Hide diagnostics" : "Advanced diagnostics"}
+          {t("providerConnection.modelsExecution")}
         </button>
       </div>
 
@@ -669,13 +674,13 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
 
       {models.length > 0 && (
         <p style={{ color: "var(--dpf-muted)", fontSize: 12, marginTop: 8 }}>
-          {models.length} model{models.length !== 1 ? "s" : ""} discovered
+          {profiles.length} saved model profile{profiles.length !== 1 ? "s" : ""}. Access checked during work.
         </p>
       )}
 
       </div>{/* end max-width form wrapper */}
 
-      {models.length > 0 && (
+      {showDiagnostics && models.length > 0 && (
         <div style={{ marginTop: 24 }}>
           <div style={{ color: "var(--dpf-accent)", fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 12 }}>
             Discovered Models
@@ -693,6 +698,8 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
           />
         </div>
       )}
+      {showDiagnostics && models.length === 0 && <p className="mt-3 text-sm text-[var(--dpf-muted)]">{t("providerConnection.modelsEmpty")}</p>}
+      {showDiagnostics && executionRecipes}
     </div>
   );
 }

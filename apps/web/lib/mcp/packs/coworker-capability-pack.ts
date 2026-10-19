@@ -8,18 +8,21 @@
 // self-assessment services and reproduces the former switch case verbatim, so
 // behaviour is identical when a tool is invoked over MCP.
 //
-// The profile/needs helpers (requireCurrentCoworker, loadCoworkerProfile and its
+// The profile/needs helpers (loadCoworkerProfile and its
 // route-defined fallback, parseCapabilityNeeds) are used only by these handlers,
 // so they move here with them. Definitions moved verbatim out of the inline
 // PLATFORM_TOOLS array; grants mirror agent-grants.ts TOOL_TO_GRANTS, which stays
 // the gating source.
 
 import { prisma } from "@dpf/db";
+import { coworkerAuthorityWhere } from "@/lib/coworker-identity";
+import { loadAgentHostContext } from "@/lib/mcp/agent-host-context";
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { CapabilityKey } from "@/lib/permissions";
 import { ROUTE_AGENT_MAP_ENTRIES } from "@/lib/tak/agent-routing";
 import { getToolMarketplaceReadiness } from "@/lib/actions/tool-marketplace-readiness";
+import { expandGrants } from "@/lib/tak/agent-grants";
 import {
   listCoworkerCapabilityNeeds,
   submitCoworkerSelfAssessment,
@@ -39,11 +42,35 @@ import {
 } from "@/lib/coworker-self-assessment/types";
 
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
-import { requireCurrentCoworker } from "./coworker-scope";
+import { coworkerNotBoundRefusal, coworkerNotBoundResult, currentCoworkerId } from "./coworker-scope";
 
 // ─── Helpers (moved verbatim; used only by these handlers) ──────────────────
-// requireCurrentCoworker now lives in ./coworker-scope so the backlog-lens pack
-// shares one identity-resolution path (BI-474A1F55). Re-imported above.
+// Identity resolution lives in ./coworker-scope so the backlog-lens pack shares
+// one path (BI-474A1F55); an agentless connection gets a structured answer.
+
+/**
+ * The grants the runtime actually checks, beside the raw rows (BI-378D3659).
+ * Stored rows are expanded through GRANT_IMPLICATIONS; over MCP the call is
+ * further bounded by the token's (already expanded) grant scopes. Required
+ * grants are alternatives at runtime — holding any one opens a tool.
+ */
+function describeEffectiveGrants(agentGrantRows: string[], tokenGrantScopes: string[] | undefined) {
+  const agentGrantsExpanded = [...expandGrants(agentGrantRows)].sort();
+  const tokenScopes = tokenGrantScopes ? [...new Set(tokenGrantScopes)].sort() : null;
+  const effective = tokenScopes
+    ? agentGrantsExpanded.filter((grant) => tokenScopes.includes(grant))
+    : agentGrantsExpanded;
+  return {
+    label:
+      "Effective grants: what the runtime checks. The coworker's stored grant rows expanded through grant implications"
+      + (tokenScopes ? ", intersected with this connection's token grant scopes." : "; no token scopes bound this call.")
+      + " This shows grant eligibility; human capabilities, token scope, room permissions and execution policy still apply.",
+    agentGrantRows: [...agentGrantRows].sort(),
+    agentGrantsExpanded,
+    tokenGrantScopes: tokenScopes,
+    effective,
+  };
+}
 
 function routeValueStream(capability: CapabilityKey | null): string {
   return capability?.replace(/^(view|manage)_/, "") || "cross-cutting";
@@ -87,7 +114,7 @@ async function loadRouteDefinedCoworkerProfile(agentId: string, routeContext?: s
 
 async function loadCoworkerProfile(agentId: string, routeContext?: string | null) {
   const agent = await prisma.agent.findFirst({
-    where: { OR: [{ agentId }, { slugId: agentId }] },
+    where: coworkerAuthorityWhere(agentId),
     include: {
       skills: {
         orderBy: { sortOrder: "asc" },
@@ -103,6 +130,7 @@ async function loadCoworkerProfile(agentId: string, routeContext?: string | null
         select: { grantKey: true },
         orderBy: { grantKey: "asc" },
       },
+      toolGrantRevocations: { select: { grantKey: true } },
       coworkerAssessments: {
         orderBy: { createdAt: "desc" },
         take: 1,
@@ -142,7 +170,8 @@ async function loadCoworkerProfile(agentId: string, routeContext?: string | null
       escalatesTo: agent.escalatesTo,
       delegatesTo: agent.delegatesTo,
       routeContext: routeContext ?? null,
-      grants: agent.toolGrants.map((grant) => grant.grantKey),
+      grants: agent.toolGrants.map((grant) => grant.grantKey)
+        .filter((key) => !agent.toolGrantRevocations.some((revoked) => revoked.grantKey === key)),
       skills: agent.skills,
     },
     latestAssessment,
@@ -178,7 +207,7 @@ function parseCapabilityNeeds(rawNeeds: unknown): CoworkerCapabilityNeedInput[] 
 const definitions: ToolDefinition[] = [
   {
     name: "get_my_coworker_profile",
-    description: "Read the current coworker's registry identity, skills, grants, latest self-assessment, and route context. Use before answering whether the coworker has the tools/capabilities to do a job.",
+    description: "Read the current coworker's identity, skills, effective grants and installation operating context. Use first when connection instructions are missing or before treating an install as production: installationContext states its declared environment, host, credential/teardown/peer limits and granted-work guidance. Coworker lifecycleStage is not the installation environment. Context never widens grants.",
     inputSchema: {
       type: "object",
       properties: {},
@@ -301,12 +330,27 @@ const definitions: ToolDefinition[] = [
 async function getMyCoworkerProfileHandler(
   context: Parameters<ToolPackHandler>[2],
 ): Promise<ToolResult> {
-  const agentId = requireCurrentCoworker(context);
+  const agentId = currentCoworkerId(context);
+  if (!agentId) {
+    const result = coworkerNotBoundResult();
+    const scope = context?.tokenScope;
+    const installationContext = await loadAgentHostContext({
+      scope: scope === "admin" || scope === "write" ? scope : "read",
+      scopes: context?.tokenGrantScopes ?? [],
+    });
+    return { ...result, data: { ...result.data as Record<string, unknown>, installationContext } };
+  }
   const profile = await loadCoworkerProfile(agentId, context?.routeContext ?? null);
+  const effectiveGrants = describeEffectiveGrants(profile.profile.grants, context?.tokenGrantScopes);
+  const scope = context?.tokenScope;
+  const installationContext = await loadAgentHostContext({
+    scope: scope === "admin" || scope === "write" ? scope : "read",
+    scopes: effectiveGrants.effective,
+  });
   return {
     success: true,
     message: `Loaded coworker profile for ${profile.profile.name}.`,
-    data: profile,
+    data: { ...profile, effectiveGrants, installationContext },
   };
 }
 
@@ -314,7 +358,8 @@ async function assessMyCapabilitiesHandler(
   params: Record<string, unknown>,
   context: Parameters<ToolPackHandler>[2],
 ): Promise<ToolResult> {
-  const agentId = requireCurrentCoworker(context);
+  const agentId = currentCoworkerId(context);
+  if (!agentId) return coworkerNotBoundResult();
   const profile = await loadCoworkerProfile(agentId, context?.routeContext ?? null);
   const readiness = await getToolMarketplaceReadiness({
     query: typeof params["query"] === "string" ? params["query"] : undefined,
@@ -327,6 +372,7 @@ async function assessMyCapabilitiesHandler(
     message: `Prepared self-assessment context for ${profile.profile.name}.`,
     data: {
       ...profile,
+      effectiveGrants: describeEffectiveGrants(profile.profile.grants, context?.tokenGrantScopes),
       readiness,
       responseShape: {
         verdict: [...COWORKER_ASSESSMENT_VERDICTS],
@@ -347,7 +393,9 @@ async function submitCoworkerCapabilityNeedHandler(
   params: Record<string, unknown>,
   context: Parameters<ToolPackHandler>[2],
 ): Promise<ToolResult> {
-  const agentId = requireCurrentCoworker(context);
+  const agentId = currentCoworkerId(context);
+  // A write with no coworker to attribute it to: refuse, never pretend it landed.
+  if (!agentId) return coworkerNotBoundRefusal();
   const needs = parseCapabilityNeeds(params["needs"]);
   if (needs.length === 0) {
     return {
@@ -390,7 +438,8 @@ async function listMyCapabilityNeedsHandler(
   params: Record<string, unknown>,
   context: Parameters<ToolPackHandler>[2],
 ): Promise<ToolResult> {
-  const agentId = requireCurrentCoworker(context);
+  const agentId = currentCoworkerId(context);
+  if (!agentId) return coworkerNotBoundResult();
   const status = COWORKER_CAPABILITY_NEED_STATUSES.includes(params["status"] as CoworkerCapabilityNeedStatus)
     ? params["status"] as CoworkerCapabilityNeedStatus
     : undefined;

@@ -104,3 +104,25 @@ This is a **commandment-tier** principle. The collisions PAR prevents are not bu
 - [`human-in-the-loop-at-phase-boundaries`](human-in-the-loop-at-phase-boundaries.md) — phase-boundary approval is the canonical operator-acknowledgement surface.
 - [`do-the-work-dont-task-the-operator`](do-the-work-dont-task-the-operator.md) — when reassigning back to the operator, propose a concrete next step, not a generic "your call."
 - [`mention-uncommitted-changes`](mention-uncommitted-changes.md) — surfaces the working-tree state PAR needs to compute "who owns this right now."
+
+## Amendment 2026-09-22 — a genuine fork is a button, not a sentence to answer
+
+The reassign step above ends a turn with a proposed next step the owner can accept
+in one word. Two clauses on its shape.
+
+**One proposal, not a menu.** A list of options at the end of a turn makes the
+owner compose a decision before any work can resume. Propose the smallest tractable
+next step and name it; keep the status report before the proposal, never instead of
+it.
+
+**When there IS a real fork, present it as a choice to click, not prose to type.**
+Recommend one option, put it first, keep the options mutually exclusive and
+concrete. A one-word reply typed to approve something is pure interface tax, and
+[[principles/automation-is-measured-by-the-human-steps-it-removes]] counts it.
+
+Do not raise a fork for a step with one correct outcome, and do not raise one at
+all when a standing directive already said to proceed — that re-asks a question the
+owner has answered, which is the inversion this principle exists to prevent.
+
+Founder direction, CEO.
+

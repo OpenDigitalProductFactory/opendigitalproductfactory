@@ -5,7 +5,6 @@ import { AlertBanner } from "./AlertBanner";
 import { ServiceStatusGrid } from "./ServiceStatusGrid";
 import { MetricGauge } from "./MetricGauge";
 import { MetricTimeSeries } from "./MetricTimeSeries";
-import { MetricStat } from "./MetricStat";
 import { MetricTable } from "./MetricTable";
 import { ContainerResourceTable } from "./ContainerResourceTable";
 import { AiCoworkerHealthPanel } from "./AiCoworkerHealthPanel";
@@ -13,6 +12,7 @@ import { LogIssuesPanel } from "./LogIssuesPanel";
 import { RecentAlertsPanel } from "./RecentAlertsPanel";
 import { HOST_RESOURCE_QUERIES, isHostTelemetryConfigured } from "./health-summary";
 import { useMetricQuery } from "./useMetricQuery";
+import { MonitoringOffNotice } from "./MonitoringOffNotice";
 
 export function SystemHealthDashboard() {
   return (
@@ -23,7 +23,9 @@ export function SystemHealthDashboard() {
 }
 
 function MonitoringOfflineBanner() {
-  const { online, checked } = useMonitoringStatus();
+  const { online, checked, off } = useMonitoringStatus();
+
+  if (off) return <MonitoringOffNotice />;
 
   if (!checked) {
     return (
@@ -49,8 +51,18 @@ function MonitoringOfflineBanner() {
 }
 
 function SystemHealthContent() {
-  const { online, checked } = useMonitoringStatus();
+  const { online, checked, off } = useMonitoringStatus();
   const { data: upTargets } = useMetricQuery("up");
+
+  if (off) {
+    // Loki is always on, so log issues stay visible with metrics switched off.
+    return (
+      <div className="space-y-6">
+        <MonitoringOfflineBanner />
+        <LogIssuesPanel />
+      </div>
+    );
+  }
 
   if (!checked || !online) {
     return (

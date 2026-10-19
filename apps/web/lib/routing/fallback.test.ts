@@ -36,6 +36,9 @@ vi.mock("@/lib/ai-inference", () => {
   };
 });
 
+const { mockAutoDisableProvider } = vi.hoisted(() => ({ mockAutoDisableProvider: vi.fn().mockResolvedValue({ attempt: 0, nextRunAt: new Date() }) }));
+vi.mock("./provider-auto-disable", () => ({ autoDisableProvider: mockAutoDisableProvider }));
+
 vi.mock("./rate-tracker", () => ({
   recordRequest: vi.fn(),
   learnFromRateLimitResponse: vi.fn(),
@@ -364,6 +367,7 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
 
       // Provider NOT updated
       expect(mockPrisma.modelProvider.update).not.toHaveBeenCalled();
+      expect(mockAutoDisableProvider).not.toHaveBeenCalled();
     });
 
     // BI-OPT-ROUTING-CACHE: degrading a model changes what loadEndpointManifests
@@ -506,6 +510,7 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
       ).rejects.toThrow();
 
       expect(mockPrisma.modelProvider.update).not.toHaveBeenCalled();
+      expect(mockAutoDisableProvider).not.toHaveBeenCalled();
     });
 
     it("triggers provider reconciliation after retirement", async () => {
@@ -573,10 +578,7 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
         ),
       ).rejects.toThrow();
 
-      expect(mockPrisma.modelProvider.update).toHaveBeenCalledWith({
-        where: { providerId: "prov1" },
-        data: { status: "disabled" },
-      });
+      expect(mockAutoDisableProvider).toHaveBeenCalledWith(expect.objectContaining({ providerId: "prov1", cause: "auth" }));
     });
 
     it("does NOT change model status", async () => {
@@ -615,6 +617,7 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
       expect(mockRefreshOAuthToken).toHaveBeenCalledWith("prov1");
       expect(mockCallProvider).toHaveBeenCalledTimes(2);
       expect(mockPrisma.modelProvider.update).not.toHaveBeenCalled();
+      expect(mockAutoDisableProvider).not.toHaveBeenCalled();
       expect(result.content).toBe("hello");
     });
 
@@ -636,10 +639,7 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
       ).rejects.toThrow();
 
       expect(mockRefreshOAuthToken).toHaveBeenCalledWith("prov1");
-      expect(mockPrisma.modelProvider.update).toHaveBeenCalledWith({
-        where: { providerId: "prov1" },
-        data: { status: "disabled" },
-      });
+      expect(mockAutoDisableProvider).toHaveBeenCalledWith(expect.objectContaining({ providerId: "prov1", cause: "auth" }));
     });
 
     it("disables the OAuth provider if the retry still auth-fails (refresh once, then give up)", async () => {
@@ -661,10 +661,7 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
 
       expect(mockRefreshOAuthToken).toHaveBeenCalledTimes(1);
       expect(mockCallProvider).toHaveBeenCalledTimes(2);
-      expect(mockPrisma.modelProvider.update).toHaveBeenCalledWith({
-        where: { providerId: "prov1" },
-        data: { status: "disabled" },
-      });
+      expect(mockAutoDisableProvider).toHaveBeenCalledWith(expect.objectContaining({ providerId: "prov1", cause: "auth" }));
     });
 
     // ── BI-F4D3B9E9(a): a LOCAL serving engine has no credentials, so an
@@ -685,6 +682,7 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
       ).rejects.toThrow();
 
       expect(mockPrisma.modelProvider.update).not.toHaveBeenCalled();
+      expect(mockAutoDisableProvider).not.toHaveBeenCalled();
       expect(mockPrisma.modelProfile.updateMany).toHaveBeenCalledWith({
         where: { providerId: "local", modelId: "docker.io/ai/qwen3-coder:latest" },
         data: { modelStatus: "degraded" },
@@ -705,6 +703,7 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
       ).rejects.toThrow();
 
       expect(mockPrisma.modelProvider.update).not.toHaveBeenCalled();
+      expect(mockAutoDisableProvider).not.toHaveBeenCalled();
       expect(mockPrisma.modelProfile.updateMany).toHaveBeenCalledWith({
         where: { providerId: "local", modelId: "docker.io/ai/qwen3-coder:latest" },
         data: { modelStatus: "degraded" },
@@ -724,10 +723,7 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
         ),
       ).rejects.toThrow();
 
-      expect(mockPrisma.modelProvider.update).toHaveBeenCalledWith({
-        where: { providerId: "prov1" },
-        data: { status: "disabled" },
-      });
+      expect(mockAutoDisableProvider).toHaveBeenCalledWith(expect.objectContaining({ providerId: "prov1", cause: "billing" }));
     });
   });
 
@@ -755,6 +751,7 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
       });
       expect(mockAutoDiscoverAndProfile).toHaveBeenCalledWith("prov1");
       expect(mockPrisma.modelProvider.update).not.toHaveBeenCalled();
+      expect(mockAutoDisableProvider).not.toHaveBeenCalled();
     });
   });
 
@@ -799,6 +796,7 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
       });
       expect(mockScheduleRecovery).toHaveBeenCalledWith("prov1", "model1");
       expect(mockPrisma.modelProvider.update).not.toHaveBeenCalled();
+      expect(mockAutoDisableProvider).not.toHaveBeenCalled();
     });
 
     it("does not retry transient on a fallback endpoint", async () => {
@@ -865,10 +863,7 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
         ),
       ).rejects.toThrow();
 
-      expect(mockPrisma.modelProvider.update).toHaveBeenCalledWith({
-        where: { providerId: "prov1" },
-        data: { status: "disabled" },
-      });
+      expect(mockAutoDisableProvider).toHaveBeenCalledWith(expect.objectContaining({ providerId: "prov1", cause: "billing" }));
     });
 
     it("does not degrade the model", async () => {
@@ -945,6 +940,7 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
       });
       expect(mockScheduleRecovery).toHaveBeenCalledWith("prov1", "model1");
       expect(mockPrisma.modelProvider.update).not.toHaveBeenCalled();
+      expect(mockAutoDisableProvider).not.toHaveBeenCalled();
     });
 
     it("retries the pinned endpoint once after 15 s on overload then succeeds", async () => {

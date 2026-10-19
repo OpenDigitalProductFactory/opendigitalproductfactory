@@ -6,6 +6,17 @@ import {
 } from "@/lib/work-capsules";
 import type { WorkCapsuleActor } from "./work-capsule-store-types";
 
+/** Syntax only: a full supplied or persisted SHA is not proof of observed Git state. */
+export function isFullSourceCommitSha(value: unknown): value is string {
+  return typeof value === "string" && /^[0-9a-f]{40}$/i.test(value);
+}
+
+/** Omission permits source-less planning; a supplied unusable value is refused. */
+export function invalidSourceCommitField(input: { baseSha?: unknown; headSha?: unknown }) {
+  return (["baseSha", "headSha"] as const).find(field => input[field] != null
+    && !isFullSourceCommitSha(typeof input[field] === "string" ? input[field].trim() : input[field])) ?? null;
+}
+
 export type CapsuleAdoptionInput = {
   title: string;
   objective: string;
@@ -23,6 +34,9 @@ export type CapsuleAdoptionInput = {
 };
 
 type BranchCapsuleRecord = {
+  leaseHolderPrincipalId?: string | null;
+  createdByPrincipalId?: string | null;
+  requestedByPrincipalId?: string | null;
   id: string;
   capsuleId: string;
   status?: string | null;
@@ -33,6 +47,9 @@ type BranchCapsuleRecord = {
   baseBranch?: string | null;
   baseSha?: string | null;
   headSha?: string | null;
+  pullRequestNumber?: number | null;
+  pullRequestUrl?: string | null;
+  workspaceState?: unknown;
   headBranch?: string | null;
   epicId?: string | null;
   worktreePath?: string | null;
@@ -73,6 +90,28 @@ export function isReusableLiveCapsule(
   const existingSession = existing.executorRef ?? null;
   const incomingSession = input.executorRef ?? null;
   return existingSession == null || incomingSession == null || existingSession === incomingSession;
+}
+
+/** Independent missing bindings: a pre-bound backlog must not prevent session binding. */
+export function planLiveCapsuleBinding(existing: Pick<BranchCapsuleRecord, "backlogItemId" | "executorRef" | "epicId">, input: CapsuleAdoptionInput) {
+  const backlogBound = Boolean(input.backlogItemId) && existing.backlogItemId == null;
+  const sessionBound = Boolean(input.executorRef) && existing.executorRef == null;
+  return {
+    changed: backlogBound || sessionBound,
+    backlogBound,
+    // A concurrent session assignment must refuse rather than be overwritten.
+    where: sessionBound ? { executorRef: null } : {},
+    data: {
+      ...(backlogBound ? { backlogItemId: input.backlogItemId,
+        ...(input.epicId && existing.epicId == null ? { epicId: input.epicId } : {}),
+      } : {}),
+      ...(sessionBound ? { executorRef: input.executorRef } : {}),
+    },
+    evidence: {
+      ...(backlogBound ? { backlogItemId: input.backlogItemId, lateBind: true } : {}),
+      ...(sessionBound ? { executorRef: input.executorRef, sessionLateBind: true } : {}),
+    },
+  };
 }
 
 /**

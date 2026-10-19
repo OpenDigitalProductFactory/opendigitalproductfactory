@@ -1,0 +1,14 @@
+{
+  "version": "1",
+  "decidedOption": "tab-counts-honest-empty-state",
+  "decisionInteractionId": "DI-E1DE87E572EB",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/knowledge/page.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["tab-counts-honest-empty-state", "default-to-all-statuses", "drafts-banner-above-published"]
+  }
+}

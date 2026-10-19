@@ -4,6 +4,30 @@ status: draft
 
 # External MCP coworker handoff through auth-bound tasks
 
+## OAuth handoff parity (2026-09-21, BI-6804F720)
+
+The live OAuth-authenticated caller reproduces `external_handoff_context_required`
+before dispatch even though the MCP transport admitted the call. This supersedes
+the PAT-only wording below: both admitted OAuth access tokens and PATs use the
+same adapter and task authority contract. The adapter preserves the authenticated
+token source and capability; it does not relabel OAuth as PAT or accept a
+threadless session JWT. No caller-supplied identity or grant expansion is added.
+
+Background dispatch and capacity-event resume revalidate the original token row.
+OAuth additionally uses the existing `isCurrentOAuthAccessToken` predicate,
+including access-token kind, lifetime, and present, unrevoked client. Expired or
+revoked authority remains a refusal; this change neither refreshes credentials
+nor resets review budgets. The same immutable request key, digest, task identity,
+and execution fencing remain authoritative.
+
+Acceptance: OAuth and PAT handoff preserve token source and scope; invalid
+external contexts fail before submission; an OAuth capacity wait resumes the
+original task; revoked/deleted clients, expired tokens, refresh tokens and lost
+write capability cannot start execution. Reuse the current auth-bound task and
+OAuth authentication designs; no migration, new tool or parallel task store.
+The live check must dispatch a named independent reviewer through OAuth and read
+back its durable outcome after this source change has merged and been deployed.
+
 **Backlog item:** BI-6804F720
 **Workroom:** WC-4DC4E103
 **Blocks:** BI-2C50F548

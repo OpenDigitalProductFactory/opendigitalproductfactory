@@ -10,6 +10,7 @@ import {
 import {
   collectToolchainFingerprint,
   defaultBuildStrategy,
+  resolveLocalCiTestProfile,
 } from "./local-integration-ci.mjs";
 
 const WORKSPACE_REQUIRED_DOCS = new Set([
@@ -75,21 +76,83 @@ function readCandidateFiles(gitBin, worktreePath, sha) {
     : null;
 }
 
+const TREE_SHA = /^[0-9a-f]{40}$/i;
+
+/**
+ * BI-45553400 / BI-1F11D17A. `git merge-tree --write-tree` exits non-zero for
+ * a conflict and also for a missing object. Only the conflict text is a
+ * merge conflict. Anything else is "we could not build an integration tree",
+ * which a resumed gate still reports as source drift.
+ */
+export function classifyMergeTreeResult({ status, stdout = "", stderr = "" } = {}) {
+  const tree = String(stdout || "").trim().split(/\s+/)[0] || "";
+  if (status === 0 && TREE_SHA.test(tree)) return { kind: "clean", tree };
+  const text = `${stdout || ""}\n${stderr || ""}`;
+  if (status !== 0 && status !== null && status !== undefined && /conflict/i.test(text)) {
+    const paths = [];
+    for (const match of text.matchAll(/Merge conflict in (\S+)/g)) paths.push(match[1]);
+    return { kind: "conflict", paths };
+  }
+  return { kind: "unavailable" };
+}
+
+export function resolveIntegrationTree({
+  sha,
+  ancestorStatus,
+  mergeStatus,
+  mergeStdout = "",
+  mergeStderr = "",
+}) {
+  if (ancestorStatus === 0) return { kind: "ancestor", ref: sha };
+  const classified = classifyMergeTreeResult({
+    status: mergeStatus,
+    stdout: mergeStdout,
+    stderr: mergeStderr,
+  });
+  if (classified.kind === "clean") return { kind: "merged", ref: classified.tree };
+  if (classified.kind === "conflict") return { kind: "conflict", paths: classified.paths };
+  return { kind: "unavailable" };
+}
+
+/**
+ * What the gate should do with a pre-admission result. A merge conflict stops
+ * as status conflict for every invocation. A resumed gate that lost its
+ * identity for any other reason still stops as source drift.
+ */
+export function preAdmissionDisposition(documentationResult, { resumed = false } = {}) {
+  if (documentationResult?.mergeConflict) {
+    return {
+      action: "conflict",
+      exitCode: 10,
+      mergeConflict: documentationResult.mergeConflict,
+    };
+  }
+  if (resumed && !documentationResult?.gateIdentity) {
+    return { action: "source-drift", reasons: ["gate-identity-unavailable"] };
+  }
+  return { action: "continue", gateIdentity: documentationResult?.gateIdentity ?? null };
+}
+
 function integrationTreeRef(gitBin, worktreePath, sha) {
   const currentBase = spawnSync(
     gitBin,
     ["merge-base", "--is-ancestor", "origin/main", sha],
     { cwd: worktreePath, shell: false },
   );
-  if (currentBase.status === 0) return sha;
-  const merge = spawnSync(
-    gitBin,
-    ["merge-tree", "--write-tree", "origin/main", sha],
-    { cwd: worktreePath, encoding: "utf8", shell: false },
-  );
-  if (merge.status !== 0) return "";
-  const tree = (merge.stdout || "").trim().split(/\s+/)[0] || "";
-  return /^[0-9a-f]{40}$/i.test(tree) ? tree : "";
+  const merge = currentBase.status === 0
+    ? null
+    : spawnSync(
+      gitBin,
+      ["merge-tree", "--write-tree", "origin/main", sha],
+      { cwd: worktreePath, encoding: "utf8", shell: false },
+    );
+  return resolveIntegrationTree({
+    sha,
+    ancestorStatus: currentBase.status,
+    mergeStatus: merge?.status,
+    mergeStdout: merge?.stdout ?? "",
+    mergeStderr: merge?.stderr ?? "",
+  });
 }
 
 function runDocumentationCommands(worktreePath, env) {
@@ -139,9 +202,17 @@ export async function runPreAdmissionDocumentationLane({
   plannerPath,
   env = process.env,
 }) {
+  resolveLocalCiTestProfile(env);
   if (!exactCandidateIsEligible({ gitBin, worktreePath, sha })) return { handled: false };
-  const integrationRef = integrationTreeRef(gitBin, worktreePath, sha);
-  if (!integrationRef) return { handled: false };
+  const integration = integrationTreeRef(gitBin, worktreePath, sha);
+  if (integration.kind === "conflict") {
+    return {
+      handled: false,
+      mergeConflict: { baseRef: "origin/main", paths: integration.paths ?? [] },
+    };
+  }
+  if (integration.kind !== "ancestor" && integration.kind !== "merged") return { handled: false };
+  const integrationRef = integration.ref;
   const changedFiles = readCandidateFiles(gitBin, worktreePath, integrationRef);
   if (!changedFiles) return { handled: false };
 
@@ -165,8 +236,9 @@ export async function runPreAdmissionDocumentationLane({
     gitOutput(gitBin, ["remote", "get-url", "origin"], worktreePath),
   );
   const toolchain = collectToolchainFingerprint({
-    buildStrategy: defaultBuildStrategy(process.platform),
+    buildStrategy: defaultBuildStrategy(process.platform, env),
     cwd: worktreePath,
+    env,
   });
   const gateIdentity = repository
     ? createPreAdmissionGateIdentity({
@@ -185,7 +257,30 @@ export async function runPreAdmissionDocumentationLane({
     return { handled: false, plan, gateIdentity };
   }
 
+  const producerEvidence = {
+    schemaVersion: 1,
+    producer: "documentation-evidence-lane",
+    candidateSha: sha,
+    candidateBranch: branch,
+    headTreeSha: gitOutput(gitBin, ["rev-parse", `${sha}^{tree}`], worktreePath),
+    integrationTreeSha: plan.headTreeSha,
+    evidencePlanDigest: plan.digest,
+  };
+  const writeState = (result) => writeLocalCiGateState(stateFile, {
+    branch, sha, leaseId: "", resilience: null, executionLane: "documentation",
+    leaseEvents: [{ type: "documentation-lane", at: new Date().toISOString() }],
+    ...result,
+    producerEvidence: { ...producerEvidence, evidenceRecordId: result.evidenceId || "" },
+  });
+  // A crash or publication outage must leave an unfinished attempt, never a
+  // newly successful local projection. Completed server evidence is retained.
+  writeState({ gatePassed: false, evidenceId: "", status: "running", expiresAt: "" });
   const execution = runDocumentationCommands(worktreePath, env);
+  const failureSummary = { failedCommand: execution.failedCommand, output: execution.output };
+  if (!exactCandidateIsEligible({ gitBin, worktreePath, sha })) {
+    writeState({ gatePassed: false, evidenceId: "", status: "blocked_source_changed", expiresAt: "", failureReason: "Documentation source changed during verification.", failureSummary });
+    return { handled: true, status: 1, plan, gateIdentity, evidenceId: "" };
+  }
   const passed = execution.exitCode === 0;
   const issuedAt = new Date().toISOString();
   const evidenceValidity = passed
@@ -228,32 +323,31 @@ export async function runPreAdmissionDocumentationLane({
       output: execution.output,
     },
   };
+  writeState({ gatePassed: false, evidenceId: "", status: passed ? "running" : "failed", expiresAt: evidenceValidity?.expiresAt || issuedAt, evidencePending: true, evidencePendingReason: "documentation-publication", failureReason: execution.failedCommand || "", failureSummary });
   const evidenceResponse = await mcpCall(
     "record_local_integration_result",
     evidenceArgs,
     { mcpUrl, bearerToken },
   );
-  if (evidenceResponse?.success !== true) {
+  if (evidenceResponse?.success !== true || typeof evidenceResponse.entityId !== "string" || !evidenceResponse.entityId.trim()) {
     throw new Error(`failed to record documentation evidence: ${JSON.stringify(evidenceResponse)}`);
   }
 
   const evidenceId = evidenceResponse.entityId || "";
-  writeLocalCiGateState(stateFile, {
-    branch,
-    sha,
-    gatePassed: passed,
-    leaseId: "",
+  const sourceUnchanged = exactCandidateIsEligible({ gitBin, worktreePath, sha });
+  writeState({
+    gatePassed: passed && sourceUnchanged,
     evidenceId,
-    status: passed ? "passed" : "failed",
+    status: sourceUnchanged ? (passed ? "passed" : "failed") : "blocked_source_changed",
     expiresAt: evidenceValidity?.expiresAt || issuedAt,
     evidenceValidity,
-    resilience: null,
-    leaseEvents: [{ type: "documentation-lane", at: issuedAt }],
     evidencePending: false,
+    failureSummary,
+    failureReason: sourceUnchanged ? execution.failedCommand || "" : "Documentation source changed during evidence publication.",
   });
   return {
     handled: true,
-    status: passed ? 0 : execution.exitCode,
+    status: !sourceUnchanged ? 1 : passed ? 0 : execution.exitCode,
     plan,
     gateIdentity,
     evidenceId,

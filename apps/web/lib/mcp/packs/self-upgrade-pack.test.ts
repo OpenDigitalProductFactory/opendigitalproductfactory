@@ -131,12 +131,14 @@ describe("self-upgrade MCP tools", () => {
     });
   });
 
-  it("surfaces the human override requirement without queueing a run", async () => {
+  it("BI-2128872C AC-1: says when a request deferred to the maintenance window will run", async () => {
     mockRequestSelfUpgrade.mockResolvedValueOnce({
       success: true,
-      status: "human_override_required",
+      status: "deferred_to_window",
       reason: "outside-window",
-      message: "Self-upgrade is outside the allowed maintenance window. Use /ops/self-upgrade for a human override.",
+      runAt: "2026-10-07T22:00:00.000Z",
+      nextWindowStart: "2026-10-07T22:00:00.000Z",
+      message: "Agent-requested upgrades run only in the maintenance window. The request is queued for the next window and the scheduled upgrade will pick it up at 2026-10-07T22:00:00.000Z.",
     });
 
     const { executeTool } = await import("@/lib/mcp-tools");
@@ -144,15 +146,33 @@ describe("self-upgrade MCP tools", () => {
 
     expect(result).toMatchObject({
       success: true,
-      message: "Self-upgrade is outside the allowed maintenance window. Use /ops/self-upgrade for a human override.",
       data: {
-        status: "human_override_required",
+        status: "deferred_to_window",
         reason: "outside-window",
+        runAt: "2026-10-07T22:00:00.000Z",
       },
     });
+    expect(result.message).toContain("2026-10-07T22:00:00.000Z");
     expect(mockRequestSelfUpgrade).toHaveBeenCalledWith({
       requestedBy: "mcp:codex",
       actorKind: "agent",
+    });
+  });
+
+  it("surfaces a human override requirement (no computable window) without queueing a run", async () => {
+    mockRequestSelfUpgrade.mockResolvedValueOnce({
+      success: true,
+      status: "human_override_required",
+      reason: "no-window-needs-timezone",
+      message: "Self-upgrade cannot determine a safe off-hours window because the install needs a timezone. Use /ops/self-upgrade for a human override.",
+    });
+
+    const { executeTool } = await import("@/lib/mcp-tools");
+    const result = await executeTool("request_self_upgrade", {}, "user-1", { agentId: "codex" });
+
+    expect(result).toMatchObject({
+      success: true,
+      data: { status: "human_override_required", reason: "no-window-needs-timezone" },
     });
   });
 });

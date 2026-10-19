@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
+import { localNativeContinuationFingerprint } from "@/lib/routing/local-native-continuation";
+import { SOURCE_CONTACT_EXEMPTION_PATTERN } from "./source-contact-evidence";
 
-import type { ContentBlock } from "@/lib/inference/ai-inference";
+import type { ContentBlock } from "@/lib/routing/chat-message-types";
 import type {
   GovernedPayloadHint,
   MessageOrigin,
@@ -52,12 +54,6 @@ type ClassRule = {
 // Split by precision (BI-CD13D818). The first set names employment data and
 // nothing else; the second is real HR vocabulary that is ALSO everyday English
 // on an AI-operations, capacity, or product surface, so it needs corroboration.
-// Addresses that identify a COMMIT AUTHOR or the acting account, not a customer.
-// Matched with the surrounding trailer/identifier so a bare address elsewhere in
-// the same payload is still classified normally (BI-EBE25715).
-const GIT_AUTHORSHIP_EMAIL_PATTERN =
-  /(?:signed-off-by|co-authored-by|author|committer|reported-by|reviewed-by|acked-by|createdby(?:id)?|actorid)\s*:?\s*[^\n<]*<?[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}>?|<(?:noreply|no-reply|do-not-reply)@[A-Z0-9.-]+\.[A-Z]{2,}>/i;
-
 const EMPLOYEE_RECORD_VALUE_PATTERN =
   /\b(?:salary|performance review|disciplinary|manager-only|payroll record|employee record|personnel file)\b/i;
 // BARE `payroll` moved here from the precise set (BI-67CAF494). It names a
@@ -108,7 +104,7 @@ const CLASS_RULES: readonly ClassRule[] = [
     // Scope is deliberately narrow: the address must sit in a recognised
     // trailer/identifier position. A bare address anywhere else still matches,
     // so a real customer email pasted into a message is unaffected.
-    textExemptionPattern: GIT_AUTHORSHIP_EMAIL_PATTERN,
+    textExemptionPattern: SOURCE_CONTACT_EXEMPTION_PATTERN,
   },
   {
     dataClass: "customer-records",
@@ -346,8 +342,10 @@ export function classifyInferencePayload(
       .map((match) => match.dataClass),
   );
   const overallSensitivity = inferOverallSensitivity(dedupedMatches, input.governedData);
+  const continuations = input.messages.map(message => localNativeContinuationFingerprint(message) ?? null);
   const inputHash = hashCanonical({
     messages: input.messages,
+    ...(continuations.some(Boolean) ? { localNativeContinuations: continuations } : {}),
     systemPrompt: input.systemPrompt,
     systemPromptInstructionSpans: input.systemPromptInstructionSpans ?? [],
     tools: input.tools ?? [],

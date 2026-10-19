@@ -67,9 +67,16 @@ export async function appendGovernedSpecialistCorpus(
   if (!governedSpecialistCorpusEnabled(opts.env)) {
     return { prompt: basePrompt, injected: false, pages: 0 };
   }
+  // BI-39C7D449: the registry binds families to ROLE SLUGS, and
+  // findProfessionFamilyForAgentIdentity documents the contract — "Registry-
+  // driven agents use AGT-* as Agent.agentId and their role slug as
+  // Agent.name". Passing the id alone resolved `missed-unmapped` for every
+  // build specialist (AGT-BUILD-DA and friends are in no family's roles), so
+  // this injection could never fire even with the flag on. `opts.role` is
+  // already the role slug the registry knows, so hand over the full tuple.
   const corpus = await resolveProfessionCorpusContext({
     db: opts.db ?? (prisma as unknown as ProfessionCorpusClient),
-    identity: { agentId: opts.agentId },
+    identity: { agentId: opts.agentId, roleSlug: opts.role ?? null },
     query: opts.query,
   }).catch((e) => {
     console.warn("[build-specialist-corpus] resolve failed (fail-open):", e);

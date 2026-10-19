@@ -1,4 +1,10 @@
-import { orderForDisplay, useVisitorStore } from "./visitor.store";
+import {
+  MENU_NOT_FOUND_MESSAGE,
+  MENU_UNAVAILABLE_MESSAGE,
+  NEARBY_UNAVAILABLE_MESSAGE,
+  orderForDisplay,
+  useVisitorStore,
+} from "./visitor.store";
 import type { NearbyBusiness, PublicMenu } from "@dpf/types";
 
 const mockNearby = jest.fn();
@@ -37,6 +43,12 @@ function reset() {
   mockMenu.mockReset();
 }
 
+let warn: jest.SpyInstance;
+beforeEach(() => {
+  warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+});
+afterEach(() => warn.mockRestore());
+
 describe("useVisitorStore.fetchNearby", () => {
   beforeEach(reset);
 
@@ -48,11 +60,21 @@ describe("useVisitorStore.fetchNearby", () => {
     expect(useVisitorStore.getState().isLoadingNearby).toBe(false);
   });
 
-  it("surfaces a nearby error and clears loading", async () => {
-    mockNearby.mockRejectedValueOnce(new Error("HTTP 500"));
+  // What React Native's fetch throws when the server can't be reached; this
+  // exact text used to reach the "Right here" screen.
+  it("maps a network failure to a plain-language message and clears loading", async () => {
+    mockNearby.mockRejectedValueOnce(
+      new TypeError("fetch failed: Could not connect to the server."),
+    );
     await useVisitorStore.getState().fetchNearby({ latitude: 1, longitude: 2 });
-    expect(useVisitorStore.getState().nearbyError).toContain("500");
+    expect(useVisitorStore.getState().nearbyError).toBe(NEARBY_UNAVAILABLE_MESSAGE);
     expect(useVisitorStore.getState().isLoadingNearby).toBe(false);
+  });
+
+  it("maps an API error to the same message", async () => {
+    mockNearby.mockRejectedValueOnce({ code: "INTERNAL", message: "HTTP 500" });
+    await useVisitorStore.getState().fetchNearby({ latitude: 1, longitude: 2 });
+    expect(useVisitorStore.getState().nearbyError).toBe(NEARBY_UNAVAILABLE_MESSAGE);
   });
 });
 
@@ -78,11 +100,23 @@ describe("useVisitorStore.fetchMenu", () => {
     expect(useVisitorStore.getState().menu?.slug).toBe("other");
   });
 
-  it("surfaces a menu error", async () => {
-    mockMenu.mockRejectedValueOnce(new Error("HTTP 404"));
+  it("maps a menu failure to a plain-language message", async () => {
+    mockMenu.mockRejectedValueOnce(
+      new TypeError("fetch failed: Could not connect to the server."),
+    );
     await useVisitorStore.getState().fetchMenu("gone");
-    expect(useVisitorStore.getState().menuError).toContain("404");
+    expect(useVisitorStore.getState().menuError).toBe(MENU_UNAVAILABLE_MESSAGE);
     expect(useVisitorStore.getState().menu).toBeNull();
+  });
+
+  // The connection is fine here; the business has no published menu.
+  it("says the menu isn't available when the API reports it not found", async () => {
+    mockMenu.mockRejectedValueOnce({
+      code: "NOT_FOUND",
+      message: "Storefront not found or not published",
+    });
+    await useVisitorStore.getState().fetchMenu("gone");
+    expect(useVisitorStore.getState().menuError).toBe(MENU_NOT_FOUND_MESSAGE);
   });
 });
 

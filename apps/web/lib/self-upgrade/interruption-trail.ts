@@ -157,5 +157,6 @@ const SWAP_AND_LATER_STEPS: ReadonlySet<string> = new Set([
   "release-identity-commit",
   "sandbox-refresh",
   "decommission-legacy-stores",
+  "service-reconcile",
   "cleanup",
 ]);

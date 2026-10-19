@@ -7,6 +7,8 @@
 // testable so the "client data never crosses the link" claim is provable with
 // negative-egress assertions.
 
+import { isRecord } from "@dpf/validators";
+
 export type RetentionClass = "ephemeral" | "short" | "standard" | "compliance-hold";
 
 export interface ProjectionContractSpec {
@@ -52,16 +54,12 @@ export interface ProjectionResult {
   };
 }
 
-function isPlainObject(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
-}
-
 /** Recursively strip forbidden-named fields anywhere in a subtree. */
 function stripForbidden(value: unknown, path: string, forbidden: string[]): unknown {
   if (Array.isArray(value)) {
     return value.map((v, i) => stripForbidden(v, `${path}[${i}]`, forbidden));
   }
-  if (isPlainObject(value)) {
+  if (isRecord(value)) {
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value)) {
       if (isForbiddenField(k)) {
@@ -96,7 +94,7 @@ export function projectEstatePayload(
     }
     let sliceValue = value;
     const allow = contract.fieldAllowList?.[slice];
-    if (allow && isPlainObject(value)) {
+    if (allow && isRecord(value)) {
       const filtered: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(value)) {
         if (allow.includes(k)) filtered[k] = v;
@@ -131,7 +129,7 @@ export function assertNoExcludedEgress(
   const walk = (value: unknown, path: string) => {
     if (Array.isArray(value)) {
       value.forEach((v, i) => walk(v, `${path}[${i}]`));
-    } else if (isPlainObject(value)) {
+    } else if (isRecord(value)) {
       for (const [k, v] of Object.entries(value)) {
         if (isForbiddenField(k)) violations.push(`forbidden-field:${path ? `${path}.` : ""}${k}`);
         walk(v, path ? `${path}.${k}` : k);

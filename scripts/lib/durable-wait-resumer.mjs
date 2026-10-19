@@ -1,5 +1,11 @@
 import { spawn } from "node:child_process";
 
+import { spawnOutsideCallerJob } from "./win32-job-breakaway.mjs";
+
+// BI-27A37D27: on Windows a node child cannot leave its caller's job object, so
+// the default spawner there creates the resumer through WMI instead.
+const DEFAULT_SPAWN = process.platform === "win32" ? spawnOutsideCallerJob : spawn;
+
 // BI-D35B85BF. `gate-worktree.mjs` and `host-resource-runner.mjs` both exited 75
 // on a queued claim, each believing the comment it carried: "the event/reconciler
 // wakes this exact claimant, which then makes one fresh pressure-aware claim
@@ -68,11 +74,34 @@ function noResumeReason(env) {
 }
 
 /**
+ * The flags that pin a resumed gate to the candidate it queued (BI-D35B85BF).
+ *
+ * Replaying argv alone re-resolved HEAD, the branch, the worktree and the owner
+ * on every attempt, so a refreshed main or a moved branch silently changed what
+ * would run and minted a second queue row. These are appended AFTER the replay:
+ * the gate's parser keeps the last value of a repeated flag, so the pin wins.
+ * An empty field is left out rather than pinned to an empty string.
+ */
+export function pinnedGateFlags(pin = {}) {
+  const flags = [];
+  const add = (flag, value) => {
+    if (typeof value === "string" && value.trim()) flags.push(flag, value.trim());
+  };
+  add("--branch", pin.branch);
+  add("--sha", pin.sha);
+  add("--worktree", pin.worktree);
+  add("--owner-provider", pin.ownerProvider);
+  add("--owner-session-id", pin.ownerSessionId);
+  add("--resume-lease-id", pin.resumeLeaseId);
+  return flags;
+}
+
+/**
  * The command line that re-runs THIS gate.
  *
- * `gateArgv` is the caller's own `process.argv` — the resumer replays the exact
- * invocation rather than reconstructing one from parsed options, so a flag the
- * gate grows tomorrow is carried without touching this file.
+ * `gateArgv` is the caller's own `process.argv`, replayed so a flag the gate
+ * grows tomorrow is still carried; `pin` then fixes the candidate, owner and
+ * lease so the replay cannot drift (see pinnedGateFlags).
  */
 export function buildResumerInvocation({
   runnerPath,
@@ -81,6 +110,9 @@ export function buildResumerInvocation({
   branch,
   sha,
   ownerSessionId,
+  pin = null,
+  gateFlags = [],
+  gateFlagsBeforeTerminator = false,
   execPath = process.execPath,
   intervalMs = DEFAULT_RESUME_INTERVAL_MS,
   deadlineMs = DEFAULT_RESUME_DEADLINE_MS,
@@ -97,11 +129,17 @@ export function buildResumerInvocation({
   const observerFlags = observerDirectory
     ? [
       "--observer-dir", observerDirectory,
-      "--branch", String(branch ?? ""),
-      "--sha", String(sha ?? ""),
-      "--owner-session-id", String(ownerSessionId ?? ""),
+      "--branch", String(pin?.branch || branch || ""),
+      "--sha", String(pin?.sha || sha || ""),
+      "--owner-session-id", String(pin?.ownerSessionId || ownerSessionId || ""),
     ]
     : [];
+  // Every attempt runs from the pinned worktree, not whatever cwd the resumer inherited.
+  const cwdFlags = pin?.worktree ? ["--gate-cwd", pin.worktree] : [];
+  const replay = gateArgv.slice(1);
+  const flags = [...pinnedGateFlags(pin ?? {}), ...gateFlags];
+  const separator = gateFlagsBeforeTerminator ? replay.indexOf("--") : -1;
+  replay.splice(separator < 0 ? replay.length : separator, 0, ...flags);
   return {
     command: execPath,
     // argv[0] is the node binary the resumer supplies itself; argv[1] onward is
@@ -111,8 +149,9 @@ export function buildResumerInvocation({
       "--interval-ms", String(intervalMs),
       "--deadline-ms", String(deadlineMs),
       ...observerFlags,
+      ...cwdFlags,
       "--",
-      ...gateArgv.slice(1),
+      ...replay,
     ],
   };
 }
@@ -132,11 +171,14 @@ export function spawnDurableWaitResumer({
   branch,
   sha,
   ownerSessionId,
+  pin = null,
+  gateFlags = [],
+  gateFlagsBeforeTerminator = false,
   cwd,
   env = process.env,
   intervalMs = DEFAULT_RESUME_INTERVAL_MS,
   deadlineMs = DEFAULT_RESUME_DEADLINE_MS,
-  spawnFn = spawn,
+  spawnFn = DEFAULT_SPAWN,
 }) {
   if (!shouldSpawnResumer(env)) {
     return { spawned: false, reason: noResumeReason(env), pid: null };
@@ -148,6 +190,9 @@ export function spawnDurableWaitResumer({
     branch,
     sha,
     ownerSessionId,
+    pin,
+    gateFlags,
+    gateFlagsBeforeTerminator,
     execPath: env.DPF_RESUMER_NODE || process.execPath,
     intervalMs,
     deadlineMs,
@@ -157,12 +202,22 @@ export function spawnDurableWaitResumer({
       cwd,
       detached: true,
       stdio: "ignore",
+      // A background waiter must never surface a window on Windows.
+      windowsHide: true,
       env: { ...env, [RESUME_MARKER_ENV]: "1" },
     });
     // Without unref the parent's event loop stays alive for the child and the
     // gate never actually exits 75.
     if (typeof child?.unref === "function") child.unref();
-    return { spawned: true, reason: null, pid: child?.pid ?? null };
+    // `survivesSession` is what the caller actually needs to know: a waiter
+    // that will die with the client session is not a durable wait.
+    return {
+      spawned: true,
+      reason: child?.breakawayError ? `session-bound: ${child.breakawayError}` : null,
+      pid: child?.pid ?? null,
+      via: child?.via ?? "detached",
+      survivesSession: child?.sessionBound !== true,
+    };
   } catch (error) {
     // A resumer that cannot start must never take the gate down with it: the
     // claim is already queued and a human or a later re-run can still drive it.

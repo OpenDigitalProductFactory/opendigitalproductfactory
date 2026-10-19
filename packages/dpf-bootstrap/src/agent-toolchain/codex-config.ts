@@ -28,6 +28,7 @@
 
 import { parse, stringify } from "smol-toml";
 import { withDpfMcpCatalogTier } from "@dpf/integration-shared/mcp-catalog-tier";
+import { mcpClientBearerHeaderRequired, type McpAuthMode } from "@dpf/integration-shared/mcp-client-credential-policy";
 
 export type CodexConfigConvergenceChange = {
   /** Substrate kind that changed. */
@@ -94,18 +95,57 @@ const GENERIC_MCP_SERVERS_TO_DISABLE = ["nanobanana-mcp", "youtube_transcript"] 
 const LEGACY_WORKTREE_BASE_FALLBACK = "D:\\DPF-worktrees";
 
 /** Desired `[mcp_servers.dpf]` shape (secret-free -- references the env var). */
-function desiredMcpServerBlock(mcpEndpoint: string): Record<string, string> {
-  return { url: mcpEndpoint, bearer_token_env_var: MCP_BEARER_TOKEN_ENV_VAR };
+function desiredMcpServerBlock(mcpEndpoint: string, authMode: McpAuthMode): Record<string, string> {
+  return { url: mcpEndpoint, ...(mcpClientBearerHeaderRequired(mcpEndpoint, "codex", authMode)
+    ? { bearer_token_env_var: MCP_BEARER_TOKEN_ENV_VAR } : {}) };
 }
 
 function mcpBlockConverged(
   existing: { url?: string; bearer_token_env_var?: string } | undefined,
   mcpEndpoint: string,
+  authMode: McpAuthMode,
 ): boolean {
   return (
     existing?.url === mcpEndpoint &&
-    existing?.bearer_token_env_var === MCP_BEARER_TOKEN_ENV_VAR
+    (existing?.bearer_token_env_var === desiredMcpServerBlock(mcpEndpoint, authMode).bearer_token_env_var ||
+      (!!existing?.bearer_token_env_var && existing.bearer_token_env_var !== MCP_BEARER_TOKEN_ENV_VAR))
   );
+}
+
+/** Converge only an existing repository override; never seed global defaults here. */
+export function planCodexProjectConfig(
+  text: string,
+  configPath: string,
+  mcpEndpoint: string,
+  authMode: McpAuthMode = "oauth",
+): CodexConfigPlan {
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = parse(text.replace(/^\uFEFF/, "")) as Record<string, unknown>;
+  } catch {
+    // Do not expose file contents: a malformed line may contain a credential.
+    throw new Error(`Invalid project Codex TOML at ${configPath}; configuration unchanged.`);
+  }
+  const plan: CodexConfigPlan = { writes: [], deletes: [], rationale: "Project override already converged or absent", preservedUserIntent: false, convergence: [] };
+  const servers = parsed.mcp_servers as Record<string, unknown> | undefined;
+  const existing = servers?.dpf as Record<string, unknown> | undefined;
+  if (!existing) return plan;
+  if (typeof existing !== "object" || Array.isArray(existing)) {
+    throw new Error(`Invalid project Codex TOML DPF table at ${configPath}; configuration unchanged.`);
+  }
+  const endpoint = withDpfMcpCatalogTier(mcpEndpoint, "full");
+  plan.preservedUserIntent = existing.enabled === false;
+  if (mcpBlockConverged(existing, endpoint, authMode)) return plan;
+  const next = { ...existing, ...desiredMcpServerBlock(endpoint, authMode) };
+  if (existing.bearer_token_env_var && existing.bearer_token_env_var !== MCP_BEARER_TOKEN_ENV_VAR) {
+    next.bearer_token_env_var = existing.bearer_token_env_var;
+  } else if (!mcpClientBearerHeaderRequired(endpoint, "codex", authMode)) {
+    delete next.bearer_token_env_var;
+  }
+  parsed.mcp_servers = { ...servers, dpf: next };
+  plan.writes.push({ path: configPath, content: stringify(parsed) });
+  plan.rationale = "Converge existing project [mcp_servers.dpf] override";
+  return plan;
 }
 
 type TomlRepairResult = {
@@ -247,6 +287,7 @@ export function planCodexConfig(
    * its clients, never the reverse.
    */
   worktreeBase?: string,
+  authMode: McpAuthMode = "oauth",
 ): CodexConfigPlan {
   const canonicalWorktreeBase =
     worktreeBase && worktreeBase.trim().length > 0
@@ -286,7 +327,7 @@ export function planCodexConfig(
     ? withDpfMcpCatalogTier(mcpEndpoint!, "full")
     : undefined;
   const mcpConverged =
-    !wantMcp || mcpBlockConverged(existingMcp, desiredMcpEndpoint!);
+    !wantMcp || mcpBlockConverged(existingMcp, desiredMcpEndpoint!, authMode);
 
   // --- Compute convergence deltas (idempotent, conservative) ----------------
 
@@ -373,8 +414,13 @@ export function planCodexConfig(
     if (wantMcp && !mcpConverged) {
       nextMcpServers["dpf"] = {
         ...(existingMcp ?? {}),
-        ...desiredMcpServerBlock(desiredMcpEndpoint!),
+        ...desiredMcpServerBlock(desiredMcpEndpoint!, authMode),
+        ...(existingMcp?.bearer_token_env_var && existingMcp.bearer_token_env_var !== MCP_BEARER_TOKEN_ENV_VAR
+          ? { bearer_token_env_var: existingMcp.bearer_token_env_var } : {}),
       };
+      if (!mcpClientBearerHeaderRequired(desiredMcpEndpoint!, "codex", authMode) && existingMcp?.bearer_token_env_var === MCP_BEARER_TOKEN_ENV_VAR) {
+        delete (nextMcpServers["dpf"] as Record<string, unknown>).bearer_token_env_var;
+      }
       rationaleParts.push("upsert [mcp_servers.dpf]");
     }
     for (const name of genericMcpToDisable) {

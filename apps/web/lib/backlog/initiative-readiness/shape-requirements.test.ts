@@ -112,17 +112,40 @@ describe("initiative-readiness.v3 — gates keyed by (shape, sensitivity, target
     expect(xlarge.blockers.find((entry) => entry.code === "DECOMPOSITION_REQUIRED")?.nextAction).toMatch(/Decompose/);
   });
 
+  it("completes a decomposed xlarge initiative on child delivery and reconciled outcomes", () => {
+    const ready = Object.assign(facts({ shape: "xlarge", research: "pass", canonicalDesign: "pass",
+      specApproval: "pass", artifactAuthor: "pass", objectiveBaseline: "pass", plan: "pass",
+      planReview: "pass", planCoverage: "pass", deliveryEvidence: "pass", acceptanceEvidence: "pass",
+      objectiveReconciliation: "pass", specialistReviews: { architecture: "pass", data: "not-applicable",
+        ux: "not-applicable", security: "not-applicable", compliance: "not-applicable", domain: "not-applicable" } }),
+    { decomposition: "pass" as const });
+    expect(evaluateInitiativeReadiness(ready, "completion").verdict).toBe("allowed");
+    expect(codes(evaluateInitiativeReadiness(ready, "implementation"))).toContain("DECOMPOSITION_REQUIRED");
+    expect(codes(evaluateInitiativeReadiness({ ...ready, decomposition: "missing" }, "completion"))).toContain("PLAN_COVERAGE_REQUIRED");
+    expect(codes(evaluateInitiativeReadiness({ ...ready, deliveryEvidence: "missing" }, "completion"))).toContain("DELIVERY_EVIDENCE_REQUIRED");
+    expect(codes(evaluateInitiativeReadiness({ ...ready, objectiveReconciliation: "missing" }, "completion"))).toContain("OBJECTIVE_RECONCILIATION_REQUIRED");
+    expect(codes(evaluateInitiativeReadiness({ ...ready, planReview: "missing" }, "completion"))).toContain("PLAN_REVIEW_REQUIRED");
+  });
+
+  it("does not treat an xlarge completion as another implementation attempt", () => {
+    const decision = evaluateInitiativeReadiness(facts({ shape: "xlarge" }), "completion");
+    expect(codes(decision)).not.toContain("DECOMPOSITION_REQUIRED");
+    expect(codes(decision)).toEqual(expect.arrayContaining([
+      "PLAN_COVERAGE_REQUIRED", "DELIVERY_EVIDENCE_REQUIRED", "OBJECTIVE_RECONCILIATION_REQUIRED",
+    ]));
+  });
+
   // BI-BD60DC91: a delivery-small fix was gated as medium — owing an
   // independent objective baseline it could never mint — because its body
   // mentioned a keyword while describing the blast radius. The verdict was
   // correct policy; the silence about WHY was the defect.
   it("reports the shape that actually gated the evaluation, and whether sensitivity raised it", () => {
     const plain = evaluateInitiativeReadiness(facts({ shape: "small" }), "completion");
-    expect(plain.shapeDecision).toEqual({ declared: "small", effective: "small", sensitivity: null, raised: false });
+    expect(plain.shapeDecision).toEqual({ declared: "small", effective: "small", sensitivity: null, raised: false, trigger: null });
     expect(codes(plain)).not.toContain("OBJECTIVE_BASELINE_REQUIRED");
 
     const raised = evaluateInitiativeReadiness(facts({ shape: "small", sensitivity: "elevated" }), "completion");
-    expect(raised.shapeDecision).toEqual({ declared: "small", effective: "medium", sensitivity: "elevated", raised: true });
+    expect(raised.shapeDecision).toEqual({ declared: "small", effective: "medium", sensitivity: "elevated", raised: true, trigger: null });
     // The raise is what pulls in the medium-only baseline; naming it explains the refusal.
     expect(codes(raised)).toContain("OBJECTIVE_BASELINE_REQUIRED");
 
@@ -140,5 +163,83 @@ describe("initiative-readiness.v3 — gates keyed by (shape, sensitivity, target
         expect(decision.shapeDecision?.effective).toBe(effectiveShape(shape, sensitivity));
       }
     }
+  });
+});
+
+// BI-BD60DC91: raising a FIX to large produced a requirement with no legal
+// route. `large` delegates to the v2 profile tables, and the fix profile there
+// owes OBJECTIVE_BASELINE_REQUIRED at completion while carrying no
+// SPEC_APPROVAL_REQUIRED gate to mint it — spec-approval refuses a fix-profile
+// item with CLASSIFICATION_REQUIRED. Proven live on BI-1F69D3F8, where the only
+// remaining exit was to relabel a UX correction as a feature.
+describe("a sensitivity raise never lands a profile in a table it cannot satisfy", () => {
+  it("caps a fix at medium, whose baseline the author can supply from the item body", () => {
+    const highFix = evaluateInitiativeReadiness(facts({ shape: "small", sensitivity: "high", profile: "fix" }), "completion");
+    expect(highFix.shapeDecision).toMatchObject({ declared: "small", effective: "medium", raised: true });
+    // Medium's baseline lane, not large's spec-approval lane.
+    const baseline = highFix.unmet.find((entry) => entry.code === "OBJECTIVE_BASELINE_REQUIRED");
+    expect(baseline?.accountableRole).toBe("product-owner");
+    expect(baseline?.nextAction).toMatch(/item body/);
+    expect(codes(highFix)).not.toContain("SPEC_APPROVAL_REQUIRED");
+    // The raise still bites: medium owes an independent acceptance receipt.
+    expect(highFix.unmet.find((entry) => entry.code === "ACCEPTANCE_EVIDENCE_REQUIRED")?.accountableRole).toBe("acceptance-reviewer");
+  });
+
+  it("leaves every other profile's range untouched", () => {
+    expect(effectiveShape("small", "high", "feature")).toBe("large");
+    expect(effectiveShape("medium", "elevated", "feature")).toBe("large");
+    expect(effectiveShape("small", "high")).toBe("large");
+    // A fix already declared large is not lowered — sensitivity never lowers.
+    expect(effectiveShape("large", "high", "fix")).toBe("large");
+    expect(effectiveShape("medium", "elevated", "fix")).toBe("medium");
+    expect(effectiveShape("small", "elevated", "fix")).toBe("medium");
+    expect(effectiveShape("break-fix", "high", "fix")).toBe("break-fix");
+  });
+});
+
+// BI-243BC956: a raise names what raised it, a behavior-preserving refactor
+// gets the ceiling a fix in the same files would get, and a raise the profile
+// cannot satisfy is refused on the record rather than owed.
+describe("BI-243BC956 — a raise is legible, bounded and satisfiable", () => {
+  const schemaTrigger = { signal: "schema", source: "declared-scope", evidence: "packages/db/prisma/schema.prisma" } as const;
+
+  it("cites the trigger (signal and source) in shapeDecision", () => {
+    const decision = evaluateInitiativeReadiness(
+      facts({ shape: "small", profile: "fix", sensitivity: "elevated", sensitivityTrigger: schemaTrigger }),
+      "completion",
+    );
+    expect(decision.shapeDecision).toMatchObject({ declared: "small", effective: "medium", raised: true, trigger: schemaTrigger });
+  });
+
+  it("regression: sensitive prose over a CLI-modules-and-tests change stays small and owes no baseline", () => {
+    // What assessDeliverySensitivity returns for BI-1669E08A's body.
+    const decision = evaluateInitiativeReadiness(
+      facts({ shape: "small", profile: "fix", sensitivity: "low", sensitivityTrigger: null, research: "pass", deliveryEvidence: "pass" }),
+      "completion",
+    );
+    expect(decision.shapeDecision).toMatchObject({ declared: "small", effective: "small", raised: false });
+    expect(codes(decision)).not.toContain("OBJECTIVE_BASELINE_REQUIRED");
+  });
+
+  it("caps a behavior-preserving refactor at the fix ceiling", () => {
+    expect(effectiveShape("small", "high", "feature", "refactor")).toBe("medium");
+    expect(effectiveShape("small", "high", "fix", "bug")).toBe("medium");
+    // A genuine feature keeps the full range.
+    expect(effectiveShape("small", "high", "feature", "feature")).toBe("large");
+    const refactor = evaluateInitiativeReadiness(
+      facts({ shape: "small", profile: "feature", workType: "refactor", sensitivity: "high", research: "pass" }),
+      "implementation",
+    );
+    expect(refactor.shapeDecision).toMatchObject({ declared: "small", effective: "medium", raised: true });
+    expect(codes(refactor)).not.toContain("SPEC_APPROVAL_REQUIRED");
+    expect(codes(refactor)).not.toContain("PLAN_REQUIRED");
+  });
+
+  it("records the part of a raise it refused as unsatisfiable instead of owing it", () => {
+    const capped = evaluateInitiativeReadiness(facts({ shape: "small", profile: "fix", sensitivity: "high" }), "completion");
+    expect(capped.shapeDecision?.refusedRaise).toEqual({ shape: "large", reason: expect.stringMatching(/no reachable route/) });
+    expect(codes(capped)).not.toContain("SPEC_APPROVAL_REQUIRED");
+    const uncapped = evaluateInitiativeReadiness(facts({ shape: "small", profile: "feature", sensitivity: "high" }), "completion");
+    expect(uncapped.shapeDecision?.refusedRaise).toBeUndefined();
   });
 });

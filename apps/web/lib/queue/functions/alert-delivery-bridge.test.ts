@@ -8,6 +8,9 @@ const mocks = vi.hoisted(() => ({
   isVoiceNarrationEnabled: vi.fn(),
   notify: vi.fn(),
   resolveRecipient: vi.fn(),
+  isPrometheusConfigured: vi.fn(() => false),
+  qiUpsert: vi.fn(),
+  qiUpdateMany: vi.fn(),
 }));
 
 vi.mock("@/lib/attention/notify-live", () => ({
@@ -17,6 +20,7 @@ vi.mock("@/lib/attention/notify-live", () => ({
 
 vi.mock("@/lib/observability/alert-sources", () => ({
   fetchAlertSources: mocks.fetchAlertSources,
+  isPrometheusConfigured: mocks.isPrometheusConfigured,
 }));
 vi.mock("@/lib/observability/health-alert-issue", () => ({
   upsertHealthAlertIssue: mocks.upsert,
@@ -26,7 +30,15 @@ vi.mock("@/lib/voice-synthesis/service-status", () => ({
   isVoiceNarrationEnabled: mocks.isVoiceNarrationEnabled,
 }));
 vi.mock("@dpf/db", () => ({
-  prisma: { portfolioQualityIssue: { findMany: mocks.findMany } },
+  prisma: {
+    portfolioQualityIssue: {
+      findMany: mocks.findMany,
+      // The bridge now records per-source reachability through the
+      // monitor-clears writer (BI-ADB574AB), which needs these two.
+      upsert: mocks.qiUpsert,
+      updateMany: mocks.qiUpdateMany,
+    },
+  },
 }));
 
 import { runAlertDeliveryScan } from "./alert-delivery-bridge";
@@ -262,5 +274,56 @@ describe("runAlertDeliveryScan", () => {
     expect(res.firing).toBe(250);
     expect(res.delivered).toBe(200); // MAX_ALERTS_PER_CYCLE default
     expect(res.capped).toBe(true);
+  });
+
+  describe("source blindness (BI-ADB574AB)", () => {
+    it("files a monitor_source_unreachable issue when the Loki ruler is dark", async () => {
+      mocks.fetchAlertSources.mockResolvedValue({
+        alerts: [alert("Whatever", "prometheus", "firing")],
+        reached: { prometheus: true, "loki-ruler": false },
+      });
+      mocks.findMany.mockResolvedValue([]);
+
+      await runAlertDeliveryScan();
+
+      const blindness = mocks.qiUpsert.mock.calls.find(
+        (c) => c[0]?.where?.issueKey === "monitor-source-unreachable:ops/alert-delivery-bridge:loki-ruler",
+      );
+      expect(blindness).toBeDefined();
+      expect(blindness![0].create.issueType).toBe("monitor_source_unreachable");
+    });
+
+    it("resolves the blindness row once the ruler answers again", async () => {
+      mocks.fetchAlertSources.mockResolvedValue({
+        alerts: [],
+        reached: { prometheus: true, "loki-ruler": true },
+      });
+      mocks.findMany.mockResolvedValue([]);
+
+      await runAlertDeliveryScan();
+
+      expect(mocks.qiUpsert).not.toHaveBeenCalled();
+      const cleared = mocks.qiUpdateMany.mock.calls.find(
+        (c) => c[0]?.where?.issueKey === "monitor-source-unreachable:ops/alert-delivery-bridge:loki-ruler",
+      );
+      expect(cleared).toBeDefined();
+      expect(cleared![0].data.status).toBe("resolved");
+    });
+
+    it("stays silent about Prometheus on an install that never configured it", async () => {
+      mocks.isPrometheusConfigured.mockReturnValue(false);
+      mocks.fetchAlertSources.mockResolvedValue({
+        alerts: [],
+        reached: { prometheus: false, "loki-ruler": true },
+      });
+      mocks.findMany.mockResolvedValue([]);
+
+      await runAlertDeliveryScan();
+
+      const promRows = [...mocks.qiUpsert.mock.calls, ...mocks.qiUpdateMany.mock.calls].filter(
+        (c) => String(c[0]?.where?.issueKey ?? "").endsWith(":prometheus"),
+      );
+      expect(promRows).toHaveLength(0);
+    });
   });
 });

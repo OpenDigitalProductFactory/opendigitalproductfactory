@@ -5,6 +5,11 @@ node_modules
 # clean — in a dev worktree these are symlinks/junctions to the root clone
 # (the test "junction trick") that otherwise leak in and break `COPY packages/`.
 **/generated
+# Except generated SOURCE committed under apps/web/lib (shape compiler, GPP):
+# the portal imports it and nothing regenerates it in the image. Excluding it
+# broke `next build` with module-not-found on work-shapes.ts once #6014 imported
+# it, and every self-upgrade then failed at the prebuild (2026-10-06).
+!apps/web/lib/**/generated
 .next
 **/.next
 apps/web/.next

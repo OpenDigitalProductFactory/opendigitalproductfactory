@@ -27,6 +27,18 @@ describe("mapLocalPolicyToPortableClasses", () => {
     ]);
   });
 
+  it("does not treat workroom stage-evidence write as portable create/update", () => {
+    expect(
+      mapLocalPolicyToPortableClasses([
+        "portfolio_read",
+        "registry_read",
+        "backlog_read",
+        "workroom_evidence_write",
+      ]),
+    ).toEqual(["observe"]);
+    expect(mapLocalPolicyToPortableClasses(["workroom_evidence_write"])).toEqual([]);
+  });
+
   it("deduplicates classes and preserves canonical order", () => {
     expect(
       mapLocalPolicyToPortableClasses([

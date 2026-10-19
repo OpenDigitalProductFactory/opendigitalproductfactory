@@ -5,6 +5,8 @@ import {
   buildxBuildArgs,
   buildxCreateArgs,
   classifyBoundedBuildExit,
+  observedBuildWorkers,
+  killedBuildStep,
   databaseUrlFromContainerEnvironment,
   postgresContainerProbeArgs,
   validateBuilderInspection,
@@ -39,7 +41,13 @@ test("resource-limit termination is infrastructure evidence, not a product red",
     output: "ResourceExhausted: next build cannot allocate memory",
   }), {
     status: "blocked_control_plane_starvation",
-    exitCode: 5,
+    // BI-5A1FBCA6: 6, not 5. The status stays shared so a deployed portal keeps
+    // accepting the write, but the exit code now distinguishes the builder's own
+    // memory cap from the shared control plane degrading, so the summary an
+    // operator reads names the right system.
+    exitCode: 6,
+    observedWorkers: null,
+    killedStep: null,
     failures: ["builder:resource-exhausted"],
   });
   assert.deepEqual(classifyBoundedBuildExit({
@@ -101,4 +109,42 @@ test("effective builder inspection must match every declared ceiling", () => {
   });
   assert.equal(drift.ok, false);
   assert.deepEqual(drift.failures.sort(), ["cpu-quota", "driver", "memory"]);
+});
+
+// BI-5A1FBCA6: "out of memory" is only actionable with the numbers beside it.
+test("the build's own worker count is read back out of its output", () => {
+  assert.equal(observedBuildWorkers("#46 110.8   Collecting page data using 11 workers ..."), 11);
+  assert.equal(observedBuildWorkers("nothing to see here"), null);
+  assert.equal(observedBuildWorkers(""), null);
+  assert.equal(observedBuildWorkers(null), null);
+});
+
+test("the killed step is named, so the log points at the phase that died", () => {
+  const output = [
+    "#46 110.8   Collecting page data using 11 workers ...",
+    "#46 168.0  ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL  Command was killed with SIGKILL (Forced termination): next build",
+  ].join(String.fromCharCode(10));
+  assert.equal(killedBuildStep(output), "next build");
+  assert.equal(killedBuildStep("no kill here"), null);
+});
+
+test("a builder exhaustion carries the numbers a reader needs to act", () => {
+  const outcome = classifyBoundedBuildExit({
+    exitCode: 102,
+    output: [
+      "#46 110.8   Collecting page data using 11 workers ...",
+      "#46 168.0  Command was killed with SIGKILL (Forced termination): next build",
+      "ERROR: failed to solve: ResourceExhausted",
+    ].join(String.fromCharCode(10)),
+  });
+  assert.equal(outcome.observedWorkers, 11);
+  assert.equal(outcome.killedStep, "next build");
+  assert.equal(outcome.exitCode, 6);
+});
+
+test("an ordinary build failure is still a product verdict and carries no excuse", () => {
+  const outcome = classifyBoundedBuildExit({ exitCode: 1, output: "Type error in app/page.tsx" });
+  assert.equal(outcome.status, "failed");
+  assert.equal(outcome.exitCode, 1);
+  assert.deepEqual(outcome.failures, []);
 });

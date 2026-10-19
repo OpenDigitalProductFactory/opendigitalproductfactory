@@ -36,6 +36,7 @@ export async function generateChangeNarrative(
 
   try {
     const { routeAndCall } = await import("@/lib/inference/routed-inference");
+    const { buildPhaseRouteOptions } = await import("@/lib/build/build-phase-route-options");
     const goal = (inputs.goal ?? "").trim().slice(0, MAX_GOAL_CHARS);
     const plan = (inputs.planText ?? "").trim().slice(0, MAX_PLAN_CHARS);
 
@@ -60,7 +61,7 @@ export async function generateChangeNarrative(
       ],
       "You translate code changes into plain business language for a non-technical reviewer. Output only minified JSON — no prose, no code fences.",
       "internal",
-      { taskType: "analysis" },
+      buildPhaseRouteOptions({ taskType: "analysis" }),
     );
 
     const out = result as { content?: string; model?: string };

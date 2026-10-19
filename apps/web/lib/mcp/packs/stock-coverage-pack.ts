@@ -6,7 +6,7 @@
 // derived consumption, days of cover, suggested order) rather than making the
 // model stitch three calls together.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 import {
   computeStockCoverage,

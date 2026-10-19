@@ -19,7 +19,7 @@ import { prisma } from "@dpf/db";
 import { SANDBOX_RECOVERY_ACTIONS, isSandboxRecoveryAction } from "@/lib/build/sandbox/sandbox-admin-types";
 import { lazyFsPromises, lazyPath, lazyChildProcess, lazyUtil } from "@/lib/shared/lazy-node";
 import { resolveActiveBuildId, extractBuildIdHint, logBuildActivity } from "@/lib/mcp/build-tool-helpers";
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
 function optionalString(value: unknown): string | null {
@@ -117,7 +117,7 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "run_sandbox_tests",
-    description: "Run unit tests and typecheck inside the sandbox container. Set auto_fix to true to automatically diagnose and fix failures (up to 3 attempts).",
+    description: "Run the SCOPED tests and typecheck inside the sandbox container: the test files for the build's changed files and their sibling tests, never the whole suite (the full suite runs in cloud CI and the merge queue). Set auto_fix to true to automatically diagnose and fix failures (up to 3 attempts).",
     inputSchema: {
       type: "object",
       properties: {
@@ -223,7 +223,7 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "run_sandbox_command",
-    description: "Run a shell command inside the sandbox container. Use for build, test, lint, git diff, or any other verification. Returns stdout and stderr.",
+    description: "Run a shell command inside the sandbox container. Use for build, lint, git diff, a named test file, or any other verification. A test run that names no test files (bare `vitest run`, `pnpm test`, `jest`) is refused; use run_sandbox_tests. Returns stdout and stderr.",
     inputSchema: {
       type: "object",
       properties: {
@@ -645,7 +645,7 @@ async function runSandboxFileTool(
   // These use Node.js fs operations — no docker exec, no shell escaping.
   const { readFile, writeFile, mkdir } = lazyFsPromises();
   const { join, dirname } = lazyPath();
-  const SANDBOX_MOUNT = "/sandbox-workspace";
+  const { workdir: BUILD_WORKDIR, mount: SANDBOX_MOUNT } = await (await import("@/lib/build/sandbox/sandbox-tool-roots")).prepareSandboxToolRoots(buildId); // BI-972A386D
 
   const resolveSandboxPath = (p: string) => {
     const cleaned = p.replace(/^\/?workspace\//, "");
@@ -793,37 +793,13 @@ async function runSandboxFileTool(
     const command = String(params.command ?? "");
     if (!command) return { success: false, error: "command is required.", message: "Provide a command to run." };
 
-    // ── Command safety blocklist ─────────────────────────────────────────
-    // Commands run inside the sandbox container (docker exec), not the host OS.
-    // The container is isolated, but we still block commands that could:
-    //   - Destroy the workspace beyond git recovery
-    //   - Exfiltrate files to the internet
-    //   - Escape the container or affect the host Docker daemon
-    //   - Execute arbitrary code piped from the network
-    const BLOCKED_PATTERNS = [
-      /rm\s+-rf\s+\/(?!workspace)/i,       // rm -rf outside /workspace
-      /rm\s+-rf\s+\/workspace\s*$/i,        // rm -rf /workspace itself
-      /curl\s+.*\|\s*(ba)?sh/i,             // curl | sh (remote code exec)
-      /wget\s+.*\|\s*(ba)?sh/i,             // wget | sh
-      /curl\s+.*\|\s*node/i,                // curl | node
-      /docker\s+(run|exec|build|rm|rmi)/i,  // docker escape attempts
-      /--privileged/i,                       // container privilege escalation
-      /\/proc\/\d+\/fd/i,                   // procfs fd access
-      /nsenter/i,                            // namespace escape
-      /chroot/i,                             // chroot escape
-      /mount\b/i,                            // mount syscall
-      /chmod\s+[0-7]*7[0-7]*\s+\/(?!workspace)/i, // chmod outside workspace
-    ];
-    const blocked = BLOCKED_PATTERNS.find(p => p.test(command));
-    if (blocked) {
-      console.warn(`[run_sandbox_command] BLOCKED: ${JSON.stringify(command.slice(0, 200))}`);
-      return {
-        success: false,
-        error: "Command blocked by safety policy.",
-        message: `This command is not permitted: "${command.slice(0, 100)}". Commands must operate within /workspace. Destructive operations outside the workspace, remote code execution, and container escape attempts are blocked.`,
-      };
+    // Safety blocklist + test scope (BI-F5D4FA50): lib/build/sandbox/sandbox-command-guard.ts
+    const refusal = (await import("@/lib/build/sandbox/sandbox-command-guard")).sandboxCommandRefusal(command);
+    if (refusal) {
+      console.warn(`[run_sandbox_command] BLOCKED (${refusal.reason}): ${JSON.stringify(command.slice(0, 200))}`);
+      if (refusal.activity) logBuildActivity(buildId, "run_sandbox_command", refusal.activity);
+      return { success: false, error: refusal.error, message: refusal.message, data: { buildId, command, ...refusal.data } };
     }
-    // ─────────────────────────────────────────────────────────────────────
 
     // Smart output truncation: keep errors (at the end) rather than progress noise (at the start)
     const truncateOutput = (raw: string, limit: number = 15000): string => {
@@ -843,7 +819,7 @@ async function runSandboxFileTool(
     };
 
     try {
-      const output = await execInSandbox(sandboxId, `cd /workspace && ${command} 2>&1`);
+      const output = await execInSandbox(sandboxId, `cd ${BUILD_WORKDIR} && ${command} 2>&1`);
       logBuildActivity(buildId, "run_sandbox_command", `Ran: ${command.slice(0, 100)}`);
       return {
         success: true,

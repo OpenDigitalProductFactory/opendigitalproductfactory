@@ -21,7 +21,7 @@ import {
   offloadEvidenceOutput,
   utf8ByteLength,
   EVIDENCE_INLINE_CEILING_BYTES,
-} from "../lib/evidence/bounded-output";
+} from "../lib/evidence/bounded-evidence-output";
 
 const apply = process.argv.includes("--apply");
 const batch = 50;

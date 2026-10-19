@@ -158,7 +158,7 @@ export function readinessCodesForEvidenceDimension(
 export const ARTIFACT_AUTHOR_RECOVERY =
   "Verify the design commit carries the required author/DCO identity. If it is unsigned, sign and push the new sha; if it is already valid, preserve its bytes and sha. Then re-sync the workroom with adopt_worktree using the exact baseSha and headSha.";
 
-const GENERIC_REMEDIES: Partial<Record<ReadinessCode, string>> = {
+const GENERIC_REMEDIES: Record<ReadinessCode, string | null> = {
   CLASSIFICATION_REQUIRED:
     "Classify the item before shaping it: set the work type and scope so a readiness profile can be derived.",
   AUTHORIZATION_DENIED:
@@ -189,6 +189,20 @@ const GENERIC_REMEDIES: Partial<Record<ReadinessCode, string>> = {
     "A break-fix owes a post-implementation review within 48 hours of merge by someone other than the declarer: confirm the symptom is gone on the live install and record the PIR receipt.",
   DECOMPOSITION_REQUIRED:
     "An xlarge item never enters implementation. Decompose it into two or more shaped children (propose_decomposition, record_plan_backlog_coverage) and claim those.",
+
+  // BI-174DB909: null = no SHAPE-INDEPENDENT remedy. These are owned by SHAPE_REMEDIES (a small item's research is the reproduction; a medium's is the design note) or by the reviewer route, which names the writer tool and the eligible reviewer. Total by construction: a new readiness code must be decided here, and `null` is a decision, not a gap.
+  RESEARCH_REQUIRED: null,
+  CANONICAL_DESIGN_AMBIGUOUS: null,
+  REVIEW_REQUIRED: null,
+  REVIEW_FAILED: null,
+  BLOCKING_FINDINGS_OPEN: null,
+  PLAN_REQUIRED: null,
+  PLAN_COVERAGE_REQUIRED: null,
+  TRACEABILITY_INCOMPLETE: null,
+  DEPENDENCY_UNRESOLVED: null,
+  OBJECTIVE_BASELINE_CONFLICT: null,
+  ARCHETYPE_PROVISIONING_INCOMPLETE: null,
+  ARCHETYPE_COMPLETENESS_FAILED: null,
 };
 
 /**
@@ -197,9 +211,15 @@ const GENERIC_REMEDIES: Partial<Record<ReadinessCode, string>> = {
  * the item body and the live install, not the reviewer lane.
  */
 const SHAPE_REMEDIES: Partial<Record<ReadinessShape, Partial<Record<ReadinessCode, string>>>> = {
+  xlarge: {
+    PLAN_COVERAGE_REQUIRED:
+      "Use the initiative's current governed decomposition covering at least two distinct existing children. Repair the named coverage issue; do not create duplicate children or change the initiative's shape to close it.",
+    DELIVERY_EVIDENCE_REQUIRED:
+      "Complete every required child in the existing decomposition. The parent's PR merge or deployment cannot substitute for child delivery.",
+  },
   small: {
     RESEARCH_REQUIRED:
-      "For a small item, research is the reproduction: the defect or gap confirmed on a named ref and a failing-to-passing proof. Record it with record_initiative_evidence(gate: \"research\").",
+      "For a small item, research is the reproduction: the defect or gap confirmed on a named ref and a failing-to-passing proof. For a small fix, record both with record_execution_evidence (kind \"source_verified\" with the source URL, and kind \"test_pass\"); that satisfies research at claim. Otherwise record it with record_initiative_evidence(gate: \"research\").",
     ACCEPTANCE_EVIDENCE_REQUIRED:
       "A small item is accepted by a runtime check on the live install or by the failing-to-passing test. Record it with record_execution_evidence and cite it as acceptance.",
   },
@@ -218,6 +238,7 @@ function definitionSentence(definition: ReadinessRequirementDefinition): string 
 }
 
 export type RequirementGuidanceInput = {
+  accountableRole?: string;
   code: ReadinessCode;
   profile: ReadinessProfile;
   /** v3: the delivery shape, when the item carries one. */
@@ -270,7 +291,10 @@ export function requirementNextAction(input: RequirementGuidanceInput): string |
     parts.push(input.reasons.map(endWithStop).join(" "));
   }
 
-  const shapeRemedy = input.shape ? SHAPE_REMEDIES[input.shape]?.[input.code] : undefined;
+  const shapeRemedy = input.shape === "medium" && input.code === "OBJECTIVE_BASELINE_REQUIRED"
+    && input.accountableRole === "design-checklist-reviewer"
+    ? "The retained independently approved scope requires an independent spec-approval amendment against the current immutable design and existing baseline. Preserve the prior approval; use the server-issued review packet. Body criteria cannot replace it."
+    : input.shape ? SHAPE_REMEDIES[input.shape]?.[input.code] : undefined;
   const definition = requirementDefinition(input.code, input.profile);
   if (shapeRemedy) {
     parts.push(shapeRemedy);
@@ -328,6 +352,7 @@ export function readinessRequirement(input: {
     unreadEvidenceRefs,
     nextAction: requirementNextAction({
       code: input.code,
+      accountableRole: input.accountableRole,
       // Without a profile the profile-specific definitions do not apply and the
       // generic remedy is used, which is correct rather than merely tolerable.
       profile: input.profile ?? "doc-only",

@@ -27,8 +27,36 @@ test("PowerShell lifecycle commands share one complete compose-chain resolver", 
   }
 });
 
+test("Windows start publishes a host GPU snapshot for local admission", () => {
+  const publisher = read("scripts/publish-host-gpu.ps1");
+  assert.match(publisher, /nvidia-smi/);
+  assert.match(publisher, /host-gpu\.json/);
+  assert.doesNotMatch(publisher, /[^\x00-\x7F]/);
+  for (const caller of ["dpf-start.ps1", "scripts/dpf-start.ps1", "install-dpf.ps1"]) {
+    assert.match(read(caller), /publish-host-gpu\.ps1/, `${caller} does not start the GPU publisher`);
+  }
+});
+
 test("ordinary stop preserves volumes while uninstall makes purge explicit", () => {
   assert.doesNotMatch(read("dpf-stop.ps1"), /\s-(?:v|volumes)\b/i);
   assert.match(read("uninstall-dpf.ps1"), /\[switch\]\$Purge/);
   assert.match(read("uninstall-dpf.ps1"), /\[switch\]\$Yes/);
+});
+
+test("the Windows start chain adds exactly the overlays the shared activation table names (BI-B422ED03)", () => {
+  // compose.sh and promote.sh read scripts/installer/lib/activation-overlays.txt
+  // directly; the PowerShell resolver keeps its own branches, so pin them to the
+  // same table: each marker's Start branch adds that marker's overlays.
+  const table = read("scripts/installer/lib/activation-overlays.txt")
+    .split("\n").map((line) => line.trim()).filter((line) => line && !line.startsWith("#"))
+    .map((line) => line.split(/\s+/));
+  assert.ok(table.length > 0, "activation table is empty");
+  const helper = readFileSync(helperPath, "utf8");
+  const startPath = helper.slice(helper.indexOf("if ($IncludeRelease)"));
+  for (const [marker, ...overlays] of table) {
+    const branch = new RegExp(`if \\(Test-DPFEnvFlag -InstallDir \\$InstallDir -Name "${marker}"\\) \\{([\\s\\S]*?)\\n    \\}`).exec(startPath);
+    assert.ok(branch, `PowerShell start chain has no branch for ${marker}`);
+    const added = [...branch[1].matchAll(/-Name "([^"]+)"/g)].map((match) => match[1]).sort();
+    assert.deepEqual(added, [...overlays].sort(), `${marker} adds different overlays in PowerShell than in the activation table`);
+  }
 });

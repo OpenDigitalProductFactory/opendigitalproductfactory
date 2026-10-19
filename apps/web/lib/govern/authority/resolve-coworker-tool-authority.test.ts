@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   deriveAllowedRouteContexts,
@@ -7,6 +7,7 @@ import {
   resolveBoundInitiativeReviewBinding,
   resolveBoundInitiativeReviewItem,
   resolveInitiativeAuthorityContext,
+  resolveTrustedInitiativeItemId,
 } from "./resolve-coworker-tool-authority";
 
 describe("deriveAllowedRouteContexts", () => {
@@ -295,5 +296,51 @@ describe("deriveCoworkerApprovalPolicy", () => {
       hitlPolicy: "always",
       serverBoundInitiativeReview: true,
     })).toBe("all");
+  });
+});
+
+describe("resolveTrustedInitiativeItemId (BI-099A0BA3, security review L1)", () => {
+  const task = (taskRunId: string) => ({ taskRunId, parentTaskRunId: null, authorityScope: [], a2aMetadata: {} });
+
+  it("takes an external run's subject from its bound packet", async () => {
+    const loadStewardItemId = vi.fn();
+    await expect(resolveTrustedInitiativeItemId({
+      task: task("TR-MCP-1"), toolName: "record_initiative_evidence", boundItemId: "BI-BOUND", loadStewardItemId,
+    })).resolves.toBe("BI-BOUND");
+    expect(loadStewardItemId).not.toHaveBeenCalled();
+  });
+
+  it("takes a steward run's subject from the packet the platform issued its room, never from model arguments", async () => {
+    const loadStewardItemId = vi.fn(async () => "BI-ROUTED");
+    await expect(resolveTrustedInitiativeItemId({
+      task: task("TR-SCHED-ABCD1234"), toolName: "record_initiative_evidence", boundItemId: null, loadStewardItemId,
+    })).resolves.toBe("BI-ROUTED");
+    expect(loadStewardItemId).toHaveBeenCalledWith("TR-SCHED-ABCD1234");
+  });
+
+  it("asks nothing for another tool or a non-scheduled run", async () => {
+    const loadStewardItemId = vi.fn(async () => "BI-ROUTED");
+    await expect(resolveTrustedInitiativeItemId({ task: task("TR-SCHED-1"), toolName: "record_workroom_evidence", boundItemId: null, loadStewardItemId })).resolves.toBeNull();
+    await expect(resolveTrustedInitiativeItemId({ task: task("TR-CHAT-1"), toolName: "record_initiative_evidence", boundItemId: null, loadStewardItemId })).resolves.toBeNull();
+    await expect(resolveTrustedInitiativeItemId({ task: null, toolName: "record_initiative_evidence", boundItemId: null, loadStewardItemId })).resolves.toBeNull();
+    expect(loadStewardItemId).not.toHaveBeenCalled();
+  });
+});
+
+// Approval convergence A3 (BI-C8EC05C9, spec D2 S2): under a propose boundary
+// no policy projection may approve on a person's behalf. The flag is
+// server-only context; nothing a caller sends can set it.
+describe("proposeBoundaryAuthority", () => {
+  it("passes the boundary through and forbids policy projection under it", async () => {
+    const { proposeBoundaryAuthority } = await import("./resolve-coworker-tool-authority");
+    expect(proposeBoundaryAuthority({ proposeBoundary: true }, "side-effects")).toEqual({ proposeBoundary: true, policyProjectionAllowed: false });
+    expect(proposeBoundaryAuthority({ proposeBoundary: true }, "always")).toEqual({ proposeBoundary: true, policyProjectionAllowed: false });
+  });
+
+  it("changes nothing without it", async () => {
+    const { proposeBoundaryAuthority } = await import("./resolve-coworker-tool-authority");
+    expect(proposeBoundaryAuthority(undefined, "side-effects")).toEqual({ policyProjectionAllowed: true });
+    expect(proposeBoundaryAuthority({}, " Always ")).toEqual({ policyProjectionAllowed: false });
+    expect(proposeBoundaryAuthority({ proposeBoundary: false }, null)).toEqual({ policyProjectionAllowed: true });
   });
 });

@@ -4,7 +4,8 @@ import { useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { Surface } from "@/components/ui/Surface";
-import { FormStatus, TextField, TextareaField } from "@/components/ui/form";
+import { FormStatus, SelectField, TextField, TextareaField } from "@/components/ui/form";
+import { PRINCIPAL_SENSITIVITIES, isPrincipalSensitivity } from "@dpf/db/principal-sensitivity";
 import type { ActionResult } from "@/lib/shared/action-result";
 import { saveWorkroomBoundary } from "@/lib/actions/workroom-boundary";
 import type { WorkroomBoundaryClaim } from "@/lib/work-management/workroom-boundary-claim";
@@ -55,6 +56,7 @@ export function WorkroomBoundaryControl({ caseKey, roomRowId, current }: Props) 
   const [scopeExcluded, setScopeExcluded] = useState(lines(current?.scopeExcluded));
   const [authority, setAuthority] = useState(lines(current?.authoritySummary));
   const [sensitivity, setSensitivity] = useState(current?.sensitivityCeiling ?? "");
+  const unresolvedSensitivity = Boolean(sensitivity && !isPrincipalSensitivity(sensitivity));
   const [measures, setMeasures] = useState(lines(current?.measures));
   const [closure, setClosure] = useState(current?.closureRuleSummary ?? "");
 
@@ -66,7 +68,8 @@ export function WorkroomBoundaryControl({ caseKey, roomRowId, current }: Props) 
         scopeIncluded: toList(scopeIncluded),
         scopeExcluded: toList(scopeExcluded),
         authoritySummary: toList(authority),
-        sensitivityCeiling: sensitivity,
+        sensitivityCeiling: isPrincipalSensitivity(sensitivity) ? sensitivity : null,
+        preserveSensitivity: unresolvedSensitivity,
         measures: toList(measures),
         closureRuleSummary: closure,
       });
@@ -110,7 +113,6 @@ export function WorkroomBoundaryControl({ caseKey, roomRowId, current }: Props) 
           <TextareaField
             name="room-scope-in"
             label="In scope"
-            hint="One per line."
             value={scopeIncluded}
             onValueChange={setScopeIncluded}
           />
@@ -128,12 +130,15 @@ export function WorkroomBoundaryControl({ caseKey, roomRowId, current }: Props) 
             value={authority}
             onValueChange={setAuthority}
           />
-          <TextField
+          <SelectField
             name="room-sensitivity"
-            label="Most sensitive thing allowed"
+            label="Sensitivity limit"
             value={sensitivity}
             onValueChange={setSensitivity}
-            autoComplete="off"
+            disabled={unresolvedSensitivity}
+            options={unresolvedSensitivity
+              ? [{ value: sensitivity, label: "Needs classification review" }]
+              : [{ value: "", label: "Not declared" }, ...PRINCIPAL_SENSITIVITIES.map(value => ({ value, label: value }))]}
           />
           <TextareaField
             name="room-measures"
@@ -145,7 +150,7 @@ export function WorkroomBoundaryControl({ caseKey, roomRowId, current }: Props) 
           <TextareaField
             name="room-closure"
             label="When it stops"
-            hint="Including when it stops unfinished."
+            hint="Also when unfinished."
             rows={2}
             value={closure}
             onValueChange={setClosure}
@@ -153,7 +158,7 @@ export function WorkroomBoundaryControl({ caseKey, roomRowId, current }: Props) 
         </div>
       ) : (
         <Button size="sm" variant="ghost" onClick={() => setMore(true)}>
-          Add scope, authority, measures and closure
+          More room details
         </Button>
       )}
 

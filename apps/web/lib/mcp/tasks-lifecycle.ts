@@ -27,6 +27,7 @@ import {
 import type { AuthorizedAsyncOperationResult } from "@/lib/inference/async-operation-read-model";
 import { MCP_ROUTE_TOOL_RESULT_CHAR_CAP } from "@/lib/tak/tool-result-budget";
 import { withTaskRunApprovalLocation } from "./external-approval-location-lookup";
+import { readSemanticReviewRecovery } from "@/lib/change-review/semantic-review-recovery-readback";
 import { projectRemoteTaskReplay } from "../mcp-task-replay-projection";
 import {
   DURABLE_INFERENCE_TASK_CONTRACT_FAMILY,
@@ -272,7 +273,8 @@ export async function handleTasksGet(
     const operation = await readDurableTaskOperation(row, userId, durableIdentity);
     return { kind: "ok", value: durableTaskObject(row, operation) };
   }
-  const task = toMcpTaskObject(row);
+  const task = { ...toMcpTaskObject(row), ...(object(row.a2aMetadata)?.gateKind === "semantic-review"
+    ? { recovery: await readSemanticReviewRecovery(row, userId) } : {}) };
   if (row.status !== "input-required" && row.status !== "auth-required") {
     return { kind: "ok", value: task };
   }
@@ -291,6 +293,7 @@ export async function handleTasksGet(
 export async function handleTasksResult(
   userId: string,
   params: Record<string, unknown> | undefined,
+  currentActor?: { actingAgentId: string | null; tokenGrantScopes: readonly string[] },
 ): Promise<TaskLifecycleResult> {
   const taskId = requireTaskId(params);
   if (!taskId) return { kind: "invalid", message: "tasks/result requires params.taskId (string)" };
@@ -299,6 +302,31 @@ export async function handleTasksResult(
   if (row.userId !== userId) return { kind: "forbidden", message: "task belongs to a different auth context" };
 
   const meta = { "io.modelcontextprotocol/related-task": { taskId } };
+  // This projection is read-only. It never enters the receipt healer or the
+  // submission lane, including when a genuine receipt is already available.
+  if (object(row.a2aMetadata)?.initiativeReviewBinding) {
+    const { readOriginalReviewResult } = await import("../mcp-task-original-result");
+    const originalResult = await readOriginalReviewResult({
+      taskRunId: row.taskRunId, userId, actingAgentId: currentActor?.actingAgentId ?? null,
+      tokenGrantScopes: currentActor?.tokenGrantScopes,
+      expected: { requestDigest: typeof params?.["requestDigest"] === "string" ? params["requestDigest"]
+        : String(object(row.a2aMetadata)?.requestDigest ?? ""), updatedAt: row.updatedAt.toISOString() },
+    });
+    if (originalResult) {
+      const structured = { taskId, status: mcpTaskStateForWire(row.status),
+        terminal: isTerminalTaskStatus(row.status), originalResult, requiresApproval: false, resumable: false };
+      const located = row.status === "input-required" || row.status === "auth-required"
+        ? await withTaskRunApprovalLocation(structured, { taskRunId: row.taskRunId, callerUserId: userId })
+        : structured;
+      return {
+        kind: "ok", value: {
+          content: [{ type: "text", text: `Original review ${taskId}: ${originalResult.classification}. ${originalResult.reason}` }],
+          structuredContent: located,
+          isError: false, _meta: meta,
+        },
+      };
+    }
+  }
   const durableIdentity = durableTaskIdentity(row);
   if (durableIdentity?.projectedOperationId) {
     const operation = await readDurableTaskOperation(row, userId, durableIdentity);
@@ -346,10 +374,13 @@ export async function handleTasksResult(
     };
   }
   if (!isTerminalTaskStatus(row.status)) {
+    const recovery = object(row.a2aMetadata)?.gateKind === "semantic-review"
+      ? await readSemanticReviewRecovery(row, userId) : null;
     const structuredContent: Record<string, unknown> = {
       taskId,
       status: mcpTaskStateForWire(row.status),
       terminal: false,
+      ...(recovery ? { recovery } : {}),
     };
     const located = row.status === "input-required" || row.status === "auth-required"
       ? await withTaskRunApprovalLocation(
@@ -363,7 +394,8 @@ export async function handleTasksResult(
         content: [
           {
             type: "text",
-            text: `Task ${taskId} is not yet terminal (status: ${mcpTaskStateForWire(row.status)}). Poll tasks/get until it completes.`,
+            text: recovery && !recovery.pollUseful ? `Review ${taskId}: ${recovery.classification}. ${recovery.nextAction}`
+              : `Task ${taskId} is not yet terminal (status: ${mcpTaskStateForWire(row.status)}). Poll tasks/get until it completes.`,
           },
         ],
         structuredContent: located,
@@ -384,6 +416,7 @@ export async function handleTasksResult(
     completedAt: row.completedAt?.toISOString() ?? null,
   };
   if (object(row.a2aMetadata)?.gateKind === "semantic-review") {
+    structured.recovery = await readSemanticReviewRecovery(row, userId);
     const evidenceId = object(row.progressPayload)?.evidenceRecordId;
     const capsuleId = object(row.a2aMetadata)?.capsuleId;
     const evidence = typeof evidenceId === "string" && typeof capsuleId === "string"

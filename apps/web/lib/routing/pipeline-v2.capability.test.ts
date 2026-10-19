@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import { getExclusionReasonV2 } from "./pipeline-v2";
 import type { EndpointManifest } from "./types";
 import type { RequestContract } from "./request-contract";
+import { buildEffectiveRequestContract, buildInitialRouteContext } from "../inference/route-contract-builder";
+import { buildDefaultPlan } from "./execution-plan";
 
 function activeEp(overrides: Partial<EndpointManifest> = {}): EndpointManifest {
   return {
@@ -69,6 +71,30 @@ function contract(overrides: Partial<RequestContract> = {}): RequestContract {
 }
 
 describe("getExclusionReasonV2 — capability floor (EP-AGENT-CAP-002)", () => {
+  it("BI-87148687 admits a bound non-streaming reviewer without weakening other floors", async () => {
+    const options = { requiresStreaming: false, toolChoice: "required" as const,
+      terminalWriterToolName: "record_initiative_design_review" };
+    const routeContext = buildInitialRouteContext({ sensitivity: "internal", options,
+      posture: null, localOnlyInference: false });
+    const bound = await buildEffectiveRequestContract({ taskType: "external-mcp",
+      messages: [{ role: "user", content: "Review the design." }],
+      tools: [{ type: "function", function: { name: options.terminalWriterToolName, parameters: {} } }],
+      routeContext, options, taskRequirement: null });
+    const endpoint = activeEp({ supportsStreaming: false,
+      capabilities: { toolUse: true, streaming: false } as never });
+    expect(getExclusionReasonV2(endpoint, bound)).toBeNull();
+    expect(bound.interactionMode).toBe("sync");
+    expect(buildDefaultPlan(endpoint, bound)).toMatchObject({ executionAdapter: "codex-cli",
+      responsePolicy: { stream: false } });
+    expect(getExclusionReasonV2(endpoint, { ...bound, requiresStreaming: true }))
+      .toBe("Missing required capability: streaming");
+    expect(getExclusionReasonV2({ ...endpoint, supportsToolUse: false }, bound))
+      .toContain("toolUse");
+    expect(getExclusionReasonV2({ ...endpoint, sensitivityClearance: ["public"] }, bound))
+      .not.toBeNull();
+    expect(getExclusionReasonV2(endpoint, { ...bound, terminalWriterToolName: undefined }))
+      .toContain("cannot enforce required tool choice");
+  });
   it.each(["codex", "anthropic-sub"])("excludes %s before a PLAIN required tool call is dispatched", (providerId) => {
     const required = { ...contract({ requiresTools: true }), toolChoice: "required" } as RequestContract;
     expect(getExclusionReasonV2(activeEp({ providerId }), required)).toContain("cannot enforce required tool choice");

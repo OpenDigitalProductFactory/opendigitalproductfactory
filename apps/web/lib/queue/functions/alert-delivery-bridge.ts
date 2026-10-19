@@ -18,13 +18,16 @@
 // flooding 10k lines/sec yields exactly ONE ContainerErrorLogStorm issue, never
 // a per-line flood. MAX_ALERTS_PER_CYCLE is a belt-and-suspenders cap.
 
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 import {
   fetchAlertSources,
+  isPrometheusConfigured,
   type AlertSourceSystem,
 } from "@/lib/observability/alert-sources";
+import { recordMonitorSourceReachability } from "@/lib/observability/monitor-source-reachability";
+import type { MonitorIssueDb } from "@/lib/observability/monitor-issue-writer";
 import { screenAlertsForSelfDistrust } from "@/lib/observability/alert-self-distrust";
 import {
   upsertHealthAlertIssue,
@@ -40,6 +43,8 @@ import {
 // Defensive bound on issues touched per cycle. Real alert counts are tiny
 // (rules x services); this only matters under a pathological fan-out. No hard
 // pin — operator-tunable.
+const ALERT_BRIDGE_ID = "ops/alert-delivery-bridge";
+
 const MAX_ALERTS_PER_CYCLE = Number(process.env.DPF_ALERT_BRIDGE_MAX_PER_CYCLE ?? 200);
 
 export interface AlertDeliveryResult {
@@ -73,6 +78,33 @@ export async function runAlertDeliveryScan(): Promise<AlertDeliveryResult> {
 
   const { alerts: rawAlerts, reached } = await fetchAlertSources();
   const alerts = await screenAlertsForSelfDistrust(rawAlerts);
+
+  // Report each evaluator's reachability as its own issue (BI-ADB574AB). Until
+  // now `reached` was computed carefully and then discarded at the return
+  // boundary, so a dead evaluator produced an empty firing set that read as a
+  // quiet, healthy estate.
+  //
+  // Only sources this install actually EXPECTS are reported. The Loki ruler
+  // ships default-on in the base compose (BI-F8024A9D), so it is always
+  // expected; Prometheus stays profile-gated, so it is expected only once an
+  // operator wires PROMETHEUS_URL. Raising "unreachable" for a stack the
+  // install never deployed is noise, not signal.
+  await recordMonitorSourceReachability(prisma as unknown as MonitorIssueDb, {
+    monitorId: ALERT_BRIDGE_ID,
+    sourceId: "loki-ruler",
+    reached: reached["loki-ruler"],
+    blindTo:
+      "container error-rate and error-storm alerts are not being evaluated — a service can flood stderr with no alert reaching the operator",
+  });
+  if (isPrometheusConfigured()) {
+    await recordMonitorSourceReachability(prisma as unknown as MonitorIssueDb, {
+      monitorId: ALERT_BRIDGE_ID,
+      sourceId: "prometheus",
+      reached: reached.prometheus,
+      blindTo:
+        "metric-threshold alerts (5xx rate, latency, saturation) are not being evaluated",
+    });
+  }
 
   // Both evaluators down — do nothing. Critically, do NOT resolve anything: an
   // empty firing set here means "we couldn't see", not "everything cleared".
@@ -189,7 +221,7 @@ export async function runAlertDeliveryScan(): Promise<AlertDeliveryResult> {
 // Alert delivery does not need 60s latency — Prometheus/Loki already debounce
 // with `for:` windows — so poll every 5 minutes. taskrun-watchdog remains the
 // sole deliberate every-minute liveness guard (see catalog allowlist test).
-export const alertDeliveryBridge = inngest.createFunction(
+export const alertDeliveryBridge = jobs.createFunction(
   { id: "ops/alert-delivery-bridge", retries: 2, triggers: [cron("*/5 * * * *")] },
   async ({ step }) => {
     const gate = await gateAtEntry(step, "ops/alert-delivery-bridge");

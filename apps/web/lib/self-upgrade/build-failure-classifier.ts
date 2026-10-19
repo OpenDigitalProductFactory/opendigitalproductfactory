@@ -159,7 +159,14 @@ const DOCKER_CONTEXT_PLAYBOOK = "apps/web/lib/verify/dockerfile-build-context.gu
 // route/page/action/Inngest bundle. Their presence in a Turbopack/NFT trace is
 // the bundle-boundary fingerprint.
 const HOST_ONLY_MODULE = /(promoter|self-upgrade|child_process|node:child_process|dockerode|\/queue\/functions\/|api\/inngest)/i;
-const DUPLICATE_ASSET = /(duplicate\s+emitted\s+asset|multiple\s+assets\s+emit|conflict:.*emit|emit[^\n]*to the same (file|filename))/i;
+// Bundler wording drifts, and a miss here is not a silent one: the next branch
+// down is MODULE_NOT_FOUND, so an unmatched duplicate-asset failure gets blamed
+// on whatever benign `Cannot find module` the build happened to log (SUR-7F02CA27
+// blamed the git-hooks script the portal build never imports). Keep the webpack
+// era phrasings AND Next 16 Turbopack's "Two or more assets with different
+// content were emitted to the same output path".
+const DUPLICATE_ASSET =
+  /(duplicate\s+emitted\s+asset|multiple\s+assets\s+emit|two or more assets[^\n]*emitted|conflict:.*emit|emit[^\n]*to the same (file|filename|output path))/i;
 const UNEXPECTED_NFT_PROJECT_TRACE = /encountered unexpected file in NFT list|whole project was traced unintentionally/i;
 const MODULE_NOT_FOUND = /(cannot find module ['"]([^'"]+)['"]|module not found:\s*can't resolve ['"]([^'"]+)['"])/i;
 // A relative import climbing OUT of the importing package (one or more "../"),
@@ -550,6 +557,9 @@ export function formatClassifiedExcerpt(
  */
 export const FAILURE_REASON_MAX = 200;
 
+/** The verdict formatClassifiedExcerpt stamps at the top of a persisted excerpt. */
+const CLASSIFIED_HEADER = /^\[build-failure-class\]\s+([a-z0-9]+(?:-[a-z0-9]+)*)\s*\(/im;
+
 /** A structured leading token, matching the `class: detail` shape skip reasons use. */
 const STRUCTURED_PREFIX = /^([a-z][a-z0-9]*(?:-[a-z0-9]+)*(?:_[a-z0-9-]+)*):/;
 
@@ -574,6 +584,16 @@ const STRUCTURED_PREFIX = /^([a-z][a-z0-9]*(?:-[a-z0-9]+)*(?:_[a-z0-9-]+)*):/;
 export function deriveFailureReason(log: string): string {
   const text = (log ?? "").trim();
   if (!text) return "unknown";
+
+  // Prefer a verdict already stamped on the log over re-deriving one.
+  // formatClassifiedExcerpt runs on the FULL log; what reaches failRun is that
+  // excerpt truncated to head/tail slices, so the deciding line is frequently
+  // gone by now. Re-classifying the remains produced SUR-7F02CA27's
+  // "unknown: [build-failure-class] ..." — a reason whose first token keys
+  // nothing, so describeFailureReason fell through to the generic text and the
+  // class the pipeline had correctly computed never reached the operator.
+  const stamped = CLASSIFIED_HEADER.exec(text);
+  if (stamped?.[1]) return stamped[1];
 
   let className: BuildFailureClass = "unknown";
   try {

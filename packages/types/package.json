@@ -6,9 +6,9 @@
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "node ../../scripts/run-tsc.mjs --noEmit"
   },
   "devDependencies": {
-    "typescript": "^6.0.3"
+    "typescript": "catalog:"
   }
 }

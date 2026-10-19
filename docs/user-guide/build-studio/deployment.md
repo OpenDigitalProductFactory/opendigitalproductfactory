@@ -96,16 +96,25 @@ Build Studio reports these states in plain language:
 - **Deployed** — governed release evidence proves the change is live
 - **Needs your decision** — a true conflict, closed PR, or bounded recovery limit requires a person
 
+### When the platform moved on before the pull request opened
+
+A build can reach Ship and then wait while other changes land on the platform. Its change was checked against an older version, so publishing it as-is could undo those newer changes in the files it touched. Build Studio does not publish it. Instead it:
+
+1. Updates its copy of the platform and replays the build's changes on top.
+2. Sends the build back to **Review**, which checks the updated change from scratch: tests, typecheck, change review, guards and acceptance. It then returns to Ship and opens its pull request.
+
+If the build's changes clash with the newer platform changes, nothing is replayed. The build stays in Ship, its activity names the files that clash, and Build Studio tries again later.
+
 A merged pull request does not make the build complete. Completion waits for the
 governed release and live-version evidence. Build Studio does not directly
 merge, force-push, or silently edit a true conflict.
 
 ### Configuration
 
-Pull request creation requires a GitHub token. This is configured differently depending on whether your install is **Contributing** or **Private** (the two contribution states — see Admin > Platform Development):
+Pull request creation requires a GitHub token. This is configured differently depending on whether your install is **Contributing** or **Private** (the two contribution states — see Improve & deliver › Setup › Contributing & GitHub):
 
 - **Contributing install** — The platform uses a pre-provisioned token (`HIVE_CONTRIBUTION_TOKEN` environment variable) for anonymous contributions. No GitHub account is needed from the customer. When you ship a change, the platform suggests whether to keep it on your system or share it with the community, and you make the final call (nothing is shared without your confirmation).
-- **Private install** — Everything stays on your own system. If you want PR-based code tracking for your own repository, configure a personal access token in Admin > Platform Development.
+- **Private install** — Everything stays on your own system. If you want PR-based code tracking for your own repository, configure a personal access token in Improve & deliver › Setup › Contributing & GitHub.
 
 To set up the hive contribution token, add it to your `.env` file:
 

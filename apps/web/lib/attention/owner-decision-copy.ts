@@ -12,12 +12,14 @@ const HEADLINE: Record<AttentionSource, string> = {
   "approval-outbound": "Send this message?",
   "approval-bill": "Approve this bill?",
   "approval-expense": "Approve this expense?",
+  "approval-leave": "Approve this time off?",
   "compliance-submission": "File this report?",
   "research-proposal": "Approve this research?",
   "coworker-memory": "Review what your coworker learned?",
   "ai-readiness-blocker": "How should we fix your intelligence setup?",
   "platform-health": "How should we handle this outage?",
   "provider-credential": "Reconnect this service?",
+  "contribution-setup": "Share your changes?",
   "reservation-exception": "Handle this reservation?",
   "hospitality-capacity": "Resolve this capacity issue?",
   "storefront-inquiry": "Reply to this enquiry?",
@@ -27,6 +29,8 @@ const HEADLINE: Record<AttentionSource, string> = {
   "coworker-envelope": "Authorize this coworker record?",
   "skill-proposal": "Approve this change to a coworker skill?",
   "workroom-stall": "Who should own this stuck work?",
+  "workroom-rebind": "Should this room move to the newer version of its work?",
+  "orphaned-approval": "Who should answer these AI approvals?",
 };
 
 const SPECIALIST: Record<AttentionSource, string> = {
@@ -38,12 +42,14 @@ const SPECIALIST: Record<AttentionSource, string> = {
   "approval-outbound": "Marketing",
   "approval-bill": "Finance",
   "approval-expense": "Finance",
+  "approval-leave": "People",
   "compliance-submission": "Compliance",
   "research-proposal": "Research",
   "coworker-memory": "Digital workforce",
   "ai-readiness-blocker": "Technology",
   "platform-health": "Platform operations",
   "provider-credential": "Technology",
+  "contribution-setup": "Technology",
   "reservation-exception": "Front of house",
   "hospitality-capacity": "Hospitality operations",
   "storefront-inquiry": "Front of house",
@@ -53,6 +59,8 @@ const SPECIALIST: Record<AttentionSource, string> = {
   "coworker-envelope": "Digital workforce",
   "skill-proposal": "Digital workforce",
   "workroom-stall": "Digital workforce",
+  "workroom-rebind": "Digital workforce",
+  "orphaned-approval": "Digital workforce",
 };
 
 export function specialistFor(source: AttentionSource): string {
@@ -64,6 +72,7 @@ export function specialistFor(source: AttentionSource): string {
 const SELF_EXPLANATORY_SOURCES = new Set<AttentionSource>([
   "approval-bill",
   "approval-expense",
+  "approval-leave",
   "approval-outbound",
   "compliance-submission",
 ]);
@@ -113,6 +122,8 @@ export function whyItMattersFor(item: AttentionItem): string {
       return "Paying the right bills on time keeps your business supplied and avoids late fees.";
     case "approval-expense":
       return "This pays back a team member and keeps your business records accurate.";
+    case "approval-leave":
+      return "A team member is waiting to plan their time off, and the team's cover depends on it.";
     case "approval-outbound":
       return "Customers may see this message as soon as you approve it.";
     case "compliance-submission":
@@ -155,6 +166,8 @@ export function consequenceFor(item: AttentionItem): string {
       return "If you do nothing, the bill may become late and the supplier may follow up.";
     case "approval-expense":
       return "If you do nothing, the claim stays unpaid.";
+    case "approval-leave":
+      return "If you do nothing, the request stays pending and the team member cannot plan around it.";
     case "approval-outbound":
       return "If you do nothing, the message stays private and is not sent.";
     case "compliance-submission":
@@ -186,6 +199,8 @@ export function recommendationFor(item: AttentionItem): string {
       return "read the customer-facing copy once, then send it if it sounds like your business.";
     case "compliance-submission":
       return "check the recipient and due date before filing.";
+    case "approval-leave":
+      return "open the time-off page, read the advisor's recommendation if there is one, then approve or deny.";
     case "agent-proposal":
       return "accept only the stated boundary; this does not give the coworker new authority.";
     case "coworker-envelope":

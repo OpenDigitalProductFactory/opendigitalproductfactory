@@ -1,6 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { semanticReviewRecoveryBudget, SEMANTIC_REVIEW_MAX_ATTEMPTS, type SemanticReviewBudgetSnapshot } from "@/lib/change-review/semantic-review-recovery-policy";
+import { semanticReviewRecoveryPresentation, semanticReviewEligibilityLabels } from "@/lib/change-review/semantic-review-presentation";
+import { useSemanticReviewRecoveryBudget } from "./useSemanticReviewRecoveryBudget";
 import { useRouter } from "next/navigation";
 import { confirmDialog, promptDialog } from "@/components/ui/Dialog";
 import { Button } from "@/components/ui/Button";
@@ -18,18 +21,30 @@ export function StalledTaskRecoveryActions({
   taskRunId,
   phase,
   nativeReview = false,
+  reviewBudget,
 }: {
   taskRunId: string;
   phase: string | null;
   nativeReview?: boolean;
+  reviewBudget?: SemanticReviewBudgetSnapshot;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [status, setStatus] = useState<{ kind: "idle" } | { kind: "error"; message: string } | { kind: "success"; message: string }>({ kind: "idle" });
 
   const isShipPhase = phase === "ship";
+  const { budgetState, refreshBudget } = useSemanticReviewRecoveryBudget(reviewBudget, nativeReview);
+  const { title: budgetTitle, nextAction } = semanticReviewRecoveryPresentation(budgetState, reviewBudget?.eligibilityBlocked);
+  const deadline = reviewBudget?.deadlineAt ? Date.parse(reviewBudget.deadlineAt) : NaN;
+  const recoveryAttempt = reviewBudget?.recoveryAttempt;
+  const eligibilityBlocked = nativeReview && reviewBudget?.eligibilityBlocked === true;
 
   const onRetry = async () => {
+    if (eligibilityBlocked) return;
+    if (nativeReview && semanticReviewRecoveryBudget(reviewBudget?.deadlineAt, reviewBudget?.recoveryAttempt) !== "available") {
+      refreshBudget();
+      return;
+    }
     if (isShipPhase || nativeReview) {
       const ok = await confirmDialog({
         title: nativeReview ? "Resume review" : "Retry ship-phase task",
@@ -39,6 +54,10 @@ export function StalledTaskRecoveryActions({
         confirmLabel: "Retry",
       });
       if (!ok) return;
+    }
+    if (nativeReview && semanticReviewRecoveryBudget(reviewBudget?.deadlineAt, reviewBudget?.recoveryAttempt) !== "available") {
+      refreshBudget();
+      return;
     }
     startTransition(async () => {
       const result = await serverTaskrunRetry(taskRunId, { force: isShipPhase || nativeReview });
@@ -89,14 +108,22 @@ export function StalledTaskRecoveryActions({
 
   return (
     <div className="space-y-2">
-      <p className="text-xs font-semibold text-[var(--dpf-muted)]">
-        {nativeReview ? "Review awaiting recovery" : "Stalled — operator recovery"}
+      <p aria-live={nativeReview ? "polite" : undefined} className="text-xs font-semibold text-[var(--dpf-muted)]">
+        {nativeReview ? budgetTitle : "Stalled — operator recovery"}
       </p>
+      {nativeReview && <div className="space-y-1 text-xs text-[var(--dpf-muted)]">
+        {Number.isFinite(deadline) && <p>Deadline: <time dateTime={new Date(deadline).toISOString()}>{new Date(deadline).toLocaleString()}</time></p>}
+        {typeof recoveryAttempt === "number" && Number.isSafeInteger(recoveryAttempt) && recoveryAttempt >= 0 && <p>Recovery attempts: {recoveryAttempt} / {SEMANTIC_REVIEW_MAX_ATTEMPTS}</p>}
+        <p>{nextAction}</p>
+        {reviewBudget?.routingEligibility?.length ? <ul className="list-disc ps-4">
+          {semanticReviewEligibilityLabels(reviewBudget.routingEligibility).map((label, index) => <li key={index}>{label}</li>)}
+        </ul> : null}
+      </div>}
       <div className="flex flex-wrap gap-2">
         <Button variant="secondary" size="sm" className="min-h-11"
           type="button"
           onClick={onRetry}
-          disabled={pending}
+          disabled={pending || eligibilityBlocked || (nativeReview && budgetState !== "available")}
         >
           {nativeReview ? "Resume review" : "Retry"}
         </Button>

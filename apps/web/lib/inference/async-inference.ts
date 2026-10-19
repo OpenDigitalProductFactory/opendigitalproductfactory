@@ -15,6 +15,7 @@
  */
 
 import { prisma, type Prisma } from "@dpf/db";
+import { providerWorkspaceHeaders } from "./provider-workspace";
 import { agentEventBus } from "@/lib/agent-event-bus";
 import {
   getDecryptedCredential,
@@ -273,6 +274,7 @@ export async function pollAsyncProviderOperation(
   if (provider.authMethod === "api_key") {
     const cred = await getDecryptedCredential(providerId);
     if (cred?.secretRef && provider.authHeader) {
+      Object.assign(headers, providerWorkspaceHeaders(providerId, cred.providerWorkspaceId));
       headers[provider.authHeader] = provider.authHeader === "Authorization"
         ? `Bearer ${cred.secretRef}` : cred.secretRef;
     }

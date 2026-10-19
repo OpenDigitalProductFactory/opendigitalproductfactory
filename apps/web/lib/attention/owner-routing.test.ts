@@ -53,7 +53,7 @@ describe("classifyOwnerAttentionLane", () => {
   ])("routes platform plumbing to the custodian lane: %s", (source) => {
     const decision = classifyOwnerAttentionLane(
       item(source, {
-        title: "qdrant is offline",
+        title: "redis is offline",
         riskClass: "high-risk",
         triage: {
           timeToAct: "none",
@@ -222,5 +222,16 @@ describe("work the platform already knows is not the owner's", () => {
       expect(decision.lane, `${source} was demoted`).toBe("needs-you-now");
       expect(decision.hardFloor, `${source} lost its hard floor`).toBe(true);
     }
+  });
+
+  // BI-72679FE0: a stall naming an owner cannot clear is recovery, not a business choice.
+  it("routes a workroom stall an appointment cannot clear to the custodian", () => {
+    const stall = (decideEffort: "review" | "judgment") => item("workroom-stall", {
+      riskClass: "read",
+      triage: { timeToAct: "none", residueReason: "room-stalled", decideEffort, irreversible: false,
+        blastRadius: "this room's outcome, and anything nested under it" },
+    });
+    expect(classifyOwnerAttentionLane(stall("review")).lane).toBe("custodian");
+    expect(classifyOwnerAttentionLane(stall("judgment")).lane).toBe("needs-you-now");
   });
 });

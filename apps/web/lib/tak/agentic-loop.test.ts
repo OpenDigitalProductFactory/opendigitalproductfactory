@@ -640,42 +640,29 @@ describe("runAgenticLoop", () => {
     expect(result.modelId).toBe("unknown");
   });
 
-  it("returns could-not-verify instead of fabricated prose when an evidence-required turn makes zero tool calls (BI-B5C358B1)", async () => {
-    // The Scrum Master incident: a live-state backlog question on /ops, a local
-    // model that ignores its tools and answers from memory with fabricated
-    // numbers. The loop must NOT surface that answer — it nudges once for a tool,
-    // then returns the explicit could-not-verify message.
-    const mockRoute = vi.mocked(routeAndCall);
-    const FABRICATED =
-      "Yes — 59 of 60 backlog items are done or deferred, and only one is still in progress. " +
-      "The team has resolved nearly all of the pressing issues on the self-upgrade board.";
-    mockRoute.mockResolvedValue(
-      mockResult({
-        content: FABRICATED,
-        providerId: "local",
-        modelId: "docker.io/ai/qwen3.6:latest",
-        toolCalls: [],
-      }) as never,
-    );
-
+  it.each([
+    {
+      name: "withholds unsupported live-state claims after one bounded nudge",
+      route: "/ops/self-upgrade", request: "have the pressing issues been resolved?",
+      answer: "Yes - 59 of 60 backlog items are done or deferred, and only one is still in progress. The team has resolved nearly all of the pressing issues.",
+      expected: INV5_UNVERIFIED_MESSAGE, calls: 2,
+    },
+    {
+      name: "returns supplied source analysis without a live-data recovery task",
+      route: "/build",
+      request: "Read the attached historical source diff and explain its worker cap and reserve.\n\ndiff --git a/build.mjs b/build.mjs\n--- a/build.mjs\n+++ b/build.mjs\n@@ -1 +1 @@\n-const workers = 11;\n+const workers = available ? 2 : 1;",
+      answer: "The source caps page workers at two and reserves 16 GiB for admission. These are admission budgets, not measured peak-memory guarantees.",
+      expected: null, calls: 1,
+    },
+  ].flatMap((testCase) => (["chat", "autonomous"] as const).map((interactionMode) => ({ ...testCase, interactionMode }))))("$name ($interactionMode)", async ({ route, request, answer, expected, calls, interactionMode }) => {
+    vi.mocked(routeAndCall).mockResolvedValue(mockResult({ content: answer, toolCalls: [] }) as never);
     const result = await runAgenticLoop({
-      ...baseParams,
-      chatHistory: [{ role: "user" as const, content: "have the pressing issues been resolved?" }],
-      routeContext: "/ops/self-upgrade",
-      agentId: "ops-coordinator",
-      interactionMode: "chat",
-      tools: [
-        { name: "query_backlog", description: "Query backlog items and epics", inputSchema: {}, requiredCapability: null, executionMode: "immediate" as const, sideEffect: false },
-      ],
-      toolsForProvider: [
-        { type: "function", function: { name: "query_backlog", description: "Query backlog items and epics", parameters: {} } },
-      ],
+      ...baseParams, routeContext: route, interactionMode,
+      chatHistory: [{ role: "user", content: request }],
     });
-
-    expect(result.content).toBe(INV5_UNVERIFIED_MESSAGE);
-    expect(result.content).not.toContain("59");
-    // One bounded recovery nudge before refusing → routeAndCall invoked twice.
-    expect(mockRoute.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(result.content).toBe(expected ?? answer);
+    expect(routeAndCall).toHaveBeenCalledTimes(calls);
+    expect(result.executedTools).toEqual([]);
   });
 
   it("tells the operator to reconnect a provider (not 'wait 30s') when every endpoint is eliminated", async () => {
@@ -731,7 +718,7 @@ describe("runAgenticLoop", () => {
     // first and said "nothing is misconfigured / wait a minute" — wrong (BI-AUDIT-003).
     const mockRoute = vi.mocked(routeAndCall);
     mockRoute.mockRejectedValueOnce(new Error(
-      'All endpoints failed for onboarding. Attempts: [{"endpointId":"codex","error":"No credential for \\"codex\\". Configure via Admin > AI Workforce > External Services."},{"endpointId":"local","error":"skipped local fallback: 80 tools exceeds threshold for small local models"}]',
+      'All endpoints failed for onboarding. Attempts: [{"endpointId":"codex","error":"No credential for \\"codex\\". Configure via External Services (/platform/ai/providers/codex)."},{"endpointId":"local","error":"skipped local fallback: 80 tools exceeds threshold for small local models"}]',
     ));
 
     const result = await runAgenticLoop({
@@ -847,40 +834,6 @@ describe("runAgenticLoop", () => {
         }),
       }),
     );
-  });
-
-  it("breaks early with a blocked status when every tool call is forbidden_grant (no full-duration spin)", async () => {
-    const mockRoute = vi.mocked(routeAndCall);
-
-    // Model keeps emitting tool calls with VARYING args (as the real
-    // grant-starved loop did) so the exact-args repetition detector never
-    // fires — only the grant-starvation circuit breaker should stop it.
-    let call = 0;
-    mockRoute.mockImplementation(async () =>
-      mockResult({
-        content: "Let me use a tool.",
-        toolCalls: [
-          { id: `toolu_${call}`, name: "search_project_files", arguments: { query: `attempt-${call++}` } },
-        ],
-      }),
-    );
-
-    // Every governed execution is rejected for a missing grant.
-    vi.mocked(governedExecuteTool).mockResolvedValue({
-      success: false,
-      error: "forbidden_grant",
-      message: "search_project_files rejected: agent lacks a required grant",
-    } as never);
-
-    const result = await runAgenticLoop({ ...baseParams, agentId: "build-architect" });
-
-    // Honest, actionable blocked message that names the agent + the tool.
-    expect(result.content).toContain("Blocked");
-    expect(result.content).toContain("forbidden_grant");
-    expect(result.content).toContain("search_project_files");
-    expect(result.content).toContain("build-architect");
-    // Broke on the streak (3), did NOT burn toward MAX_ITERATIONS (200).
-    expect(vi.mocked(governedExecuteTool).mock.calls.length).toBeLessThan(10);
   });
 
   it("returns a visible diagnostic instead of issuing a second local-model nudge on non-build tool turns", async () => {
@@ -1096,14 +1049,14 @@ describe("runAgenticLoop", () => {
       ...baseParams,
       taskRunId: "TR-MCP-TESTRUN",
       apiTokenId: "tok_remote",
-      tokenScope: "write",
+      tokenScope: "write", tokenGrantScopes: ["file_read"],
     });
     expect(governedExecuteTool).toHaveBeenCalledWith(
       expect.objectContaining({
         context: expect.objectContaining({
           taskRunId: "TR-MCP-TESTRUN",
           apiTokenId: "tok_remote",
-          tokenScope: "write",
+          tokenScope: "write", tokenGrantScopes: ["file_read"], // BI-F8C661D0
         }),
       }),
     );

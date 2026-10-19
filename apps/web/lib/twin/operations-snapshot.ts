@@ -1,21 +1,21 @@
 import type { TwinTemplate } from "@dpf/storefront-templates";
 
+import type { TwinActor } from "./kit-types";
 import type {
-  TwinActor,
   TwinSnapshot,
   TwinZoneSnapshot,
   TwinQueueSnapshot,
   TwinCogSnapshot,
   TwinStageFlow,
   TwinOutcome,
-} from "@/components/twin";
+} from "./twin-snapshot";
 import type {
   CapacityChipData,
   FeedEventData,
   QuestData,
   UtilityMeterData,
   WorkItemData,
-} from "@/components/twin/types";
+} from "./kit-types";
 import type {
   OperationalDegradedSource,
   OperationalSourceWatermark,

@@ -9,7 +9,7 @@
 // about (it is joined to an evaluation only by an opaque evaluationRef), which is
 // the structural guardrail that keeps demographic data off the scoring path.
 
-import type { DataAssetDefinition } from "./assets";
+import type { DataAssetDefinition } from "./asset-types";
 import type { ClassificationProvenance } from "./taxonomy";
 
 const PROVENANCE: ClassificationProvenance = {

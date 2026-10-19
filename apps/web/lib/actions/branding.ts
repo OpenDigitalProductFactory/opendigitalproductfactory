@@ -2,7 +2,7 @@
 
 import { prisma, type Prisma } from "@dpf/db";
 import { revalidatePath } from "next/cache";
-import { slugify as kebab } from "@/lib/shared/slugify";
+import { slugify } from "@/lib/shared/slugify";
 import { deriveThemeTokens, validateTokenContrast, type Correction, type ThemeTokens } from "@/lib/branding-presets";
 import {
   fetchPublicWebsiteEvidence,
@@ -15,10 +15,6 @@ import { updateSetupContext } from "@/lib/actions/setup-progress";
 
 function readString(value: FormDataEntryValue | null): string {
   return typeof value === "string" ? value.trim() : "";
-}
-
-function slugify(value: string): string {
-  return kebab(value).slice(0, 64);
 }
 
 function buildThemeTokens(formData: FormData): Prisma.InputJsonValue {
@@ -84,7 +80,7 @@ function resolvePresetScope(formData: FormData): string {
   }
 
   const companyName = readString(formData.get("companyName"));
-  const slug = slugify(companyName || "custom");
+  const slug = slugify(companyName || "custom").slice(0, 64);
   return `theme-preset:${slug}`;
 }
 

@@ -323,3 +323,13 @@ test("branch_occupied guidance tells the operator how to tell the two cases apar
   assert.match(text, /rev-list --count/, "must name the check that distinguishes leftover from unresolved");
   assert.match(text, /unresolved, not finished/, "must name the case where the capsule closed over live work");
 });
+
+// BI-144E4F92 / BI-4BEEC539: a branch claimed over MCP, or a lease renewed by
+// heartbeat_workroom, leaves no local marker. The refusal must name the one
+// command that re-caches the caller's own claim.
+test("the refusal names the command that re-caches an existing claim", () => {
+  for (const marker of [null, { capsuleId: "WC-1", branch: "fix/a", leaseExpiresAt: "2026-08-27T03:00:00.000Z" }]) {
+    const text = denyGuidance(classifyClaim({ branch: "fix/a", marker, nowMs: NOW }));
+    assert.match(text, /node scripts\/bind-worktree-cli\.mjs/);
+  }
+});

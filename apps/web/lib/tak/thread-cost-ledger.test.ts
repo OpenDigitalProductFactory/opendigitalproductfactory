@@ -39,6 +39,35 @@ describe("summarizeThreadSpend", () => {
     expect(s.inferenceRuns).toBe(1);
     expect(s.toolCalls).toBe(1);
   });
+
+  // BI-CCF1ACBB: Anthropic's inputTokens is the UNCACHED input only. A turn
+  // served from a prompt-cache prefix reports ~17 there and carries the prompt
+  // the model actually read in the cache fields. The ledger must count all of
+  // it as input, and keep the cache split visible for pricing.
+  it("folds prompt-cache tokens into inputTokens and keeps the cache split visible", () => {
+    const rows: SpendRow[] = [
+      {
+        source: "inference",
+        inputTokens: 17,
+        outputTokens: 900,
+        costUsd: null,
+        cacheCreationInputTokens: 12_000,
+        cachedInputTokens: 30_000,
+      },
+      // A local model: no caching, fields absent — behaves exactly as before.
+      { source: "inference", inputTokens: 3_000, outputTokens: 700, costUsd: null },
+      // A tool row never carries cache fields.
+      { source: "tool", inputTokens: 10, outputTokens: 5, costUsd: 0.001, cachedInputTokens: null },
+    ];
+    const s = summarizeThreadSpend(rows);
+    expect(s.inputTokens).toBe(17 + 12_000 + 30_000 + 3_000 + 10);
+    expect(s.cacheCreationInputTokens).toBe(12_000);
+    expect(s.cachedInputTokens).toBe(30_000);
+    expect(s.outputTokens).toBe(1_605);
+    expect(s.totalTokens).toBe(s.inputTokens + s.outputTokens);
+    expect(s.inferenceRuns).toBe(2);
+    expect(s.toolCalls).toBe(1);
+  });
 });
 
 describe("combineThreadSpend", () => {
@@ -57,6 +86,19 @@ describe("combineThreadSpend", () => {
     expect(total.costUsd).toBeCloseTo(0.017, 6);
     expect(total.inferenceRuns).toBe(2);
     expect(total.toolCalls).toBe(1);
+  });
+
+  it("carries the cache split through an effort total", () => {
+    const a = summarizeThreadSpend([
+      { source: "inference", inputTokens: 10, outputTokens: 1, costUsd: null, cacheCreationInputTokens: 100, cachedInputTokens: 1_000 },
+    ]);
+    const b = summarizeThreadSpend([
+      { source: "inference", inputTokens: 20, outputTokens: 2, costUsd: null, cachedInputTokens: 2_000 },
+    ]);
+    const total = combineThreadSpend([a, b]);
+    expect(total.inputTokens).toBe(10 + 100 + 1_000 + 20 + 2_000);
+    expect(total.cacheCreationInputTokens).toBe(100);
+    expect(total.cachedInputTokens).toBe(3_000);
   });
 
   it("is empty for no threads", () => {

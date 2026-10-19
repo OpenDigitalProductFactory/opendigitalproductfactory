@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   describeEscalationRule,
+  escalationReasonSentence,
   isDamagingAction,
   resolveEscalation,
   type EscalationInput,
@@ -179,5 +180,151 @@ describe("describeEscalationRule", () => {
     expect(text).toContain("does not decide damage");
     expect(text).toContain("never widens that");
     expect(text).toContain("trust tier");
+  });
+});
+
+describe("scheduled-mandate steering (BI-6B3DA9DD)", () => {
+  const write = {
+    sideEffect: true,
+    executionMode: "immediate" as const,
+    consequence: null,
+  };
+
+  it("a declared write on a cadence is decided automatically, minting no envelope", () => {
+    // The marketing coworker reached its brief tool on 2026-09-21, was parked
+    // on a fifteen-minute envelope twice, and produced nothing — as it had
+    // every week since 2026-08-31. A scheduled run carries no Workroom, so it
+    // could never reach the room-authority branch.
+    const decision = resolveEscalation({
+      operatorRequiresApproval: true,
+      action: write,
+      dataPolicy: { sensitivity: "internal" },
+      steering: "scheduled-mandate",
+    });
+    expect(decision.verdict).toBe("automated");
+    expect(decision.reasonCode).toBe("steered-by-scheduled-mandate");
+  });
+
+  it("does not steer a damaging action — a cadence cannot authorize damage", () => {
+    const decision = resolveEscalation({
+      operatorRequiresApproval: true,
+      action: { ...write, consequence: "outward" },
+      dataPolicy: { sensitivity: "internal" },
+      steering: "scheduled-mandate",
+    });
+    expect(decision.verdict).toBe("human");
+    expect(decision.damaging).toBe(true);
+  });
+
+  it("does not steer a declared proposal — that shape is always put to a person", () => {
+    const decision = resolveEscalation({
+      operatorRequiresApproval: true,
+      action: { ...write, executionMode: "proposal" },
+      dataPolicy: { sensitivity: "internal" },
+      steering: "scheduled-mandate",
+    });
+    expect(decision.verdict).toBe("human");
+    expect(decision.reasonCode).toBe("declared-proposal");
+  });
+});
+
+describe("connection-delegation steering (BI-12E5DD91)", () => {
+  const write = { sideEffect: true, executionMode: "immediate" as const, consequence: null };
+
+  it("decides a routine write under the human's current OAuth consent automatically", () => {
+    // 2026-09-23: Workroom evidence, runtime verification and a requested
+    // backlog item from an OAuth-bound assistant all parked on generic cards.
+    const decision = resolveEscalation({
+      operatorRequiresApproval: true,
+      action: write,
+      dataPolicy: { sensitivity: "internal" },
+      steering: "connection-delegation",
+    });
+    expect(decision.verdict).toBe("automated");
+    expect(decision.reasonCode).toBe("steered-by-connection-delegation");
+  });
+
+  it.each(["outward", "irreversible", "authority"] as const)(
+    "still puts a %s consequence to a person — consent does not decide damage",
+    (consequence) => {
+      const decision = resolveEscalation({
+        operatorRequiresApproval: true,
+        action: { ...write, consequence },
+        dataPolicy: { sensitivity: "internal" },
+        steering: "connection-delegation",
+      });
+      expect(decision.verdict).toBe("human");
+      expect(decision.reasonCode).toBe("damaging-consequence");
+    },
+  );
+
+  it("still puts restricted data and declared proposals to a person", () => {
+    expect(resolveEscalation({
+      operatorRequiresApproval: true,
+      action: write,
+      dataPolicy: { sensitivity: "restricted" },
+      steering: "connection-delegation",
+    }).verdict).toBe("human");
+    expect(resolveEscalation({
+      operatorRequiresApproval: true,
+      action: { ...write, executionMode: "proposal" },
+      dataPolicy: { sensitivity: "internal" },
+      steering: "connection-delegation",
+    }).reasonCode).toBe("declared-proposal");
+  });
+
+  it("names the governing reason for every branch that asks a person", () => {
+    for (const reason of [
+      "declared-proposal",
+      "damaging-consequence",
+      "damaging-sensitivity",
+      "damaging-work-case",
+      "unsteered-side-effect",
+    ] as const) {
+      expect(escalationReasonSentence(reason)).toMatch(/\w/);
+    }
+    expect(escalationReasonSentence("steered-by-connection-delegation")).toBeNull();
+  });
+});
+
+// Approval convergence A3 (BI-C8EC05C9, spec D2 S2): a propose boundary is a
+// branch of the gate, right after a declared proposal. It is tighten-only: it
+// reproduces the diversion propose-interception makes today, before the
+// monitor, for every side-effecting call — and nothing else.
+describe("resolveEscalation — the propose boundary", () => {
+  const ALL_STEERING: EscalationSteering[] = [...STEERINGS, "scheduled-mandate", "connection-delegation", "none"];
+
+  it("puts a side-effecting call under a propose boundary in front of a person, whatever could steer it", () => {
+    for (const steering of ALL_STEERING) {
+      for (const operatorRequiresApproval of [true, false]) {
+        const decision = resolveEscalation({ ...input({ steering, operatorRequiresApproval }), proposeBoundary: true });
+        expect(decision.verdict).toBe("human");
+        expect(decision.reasonCode).toBe("propose-boundary");
+      }
+    }
+  });
+
+  it("ranks after a declared proposal and before everything else", () => {
+    expect(resolveEscalation({ ...input({ executionMode: "proposal" }), proposeBoundary: true }).reasonCode).toBe("declared-proposal");
+    expect(resolveEscalation({ ...input({ consequence: "outward" }), proposeBoundary: true }).reasonCode).toBe("propose-boundary");
+  });
+
+  it("never touches a read, which propose-interception never diverted", () => {
+    const decision = resolveEscalation({ ...input({ sideEffect: false }), proposeBoundary: true });
+    expect(decision).toMatchObject({ verdict: "automated", reasonCode: "routine-read" });
+  });
+
+  it("is absent unless the server set it", () => {
+    expect(resolveEscalation({ ...input({ steering: "wwmd" }) }).reasonCode).toBe("steered-by-wwmd");
+    expect(resolveEscalation({ ...input({ steering: "wwmd" }), proposeBoundary: false }).reasonCode).toBe("steered-by-wwmd");
+  });
+
+  it("states why a person is asked, and the rule says it", () => {
+    expect(escalationReasonSentence("propose-boundary")).toBe(
+      "This coworker is set to propose, not act, so a person decides each change it makes.",
+    );
+    expect(describeEscalationRule()).toContain(
+      "A coworker set to propose, not act, puts every change it attempts to a person, and no recorded policy decides it on that person's behalf.",
+    );
   });
 });

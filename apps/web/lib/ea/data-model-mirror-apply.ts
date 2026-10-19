@@ -6,7 +6,7 @@
 // rows, applies the plan, writes an EaSnapshot on material delta, and (when a
 // source key is duplicated) writes a conformance issue and stops.
 //
-// Neo4j sync is optional and injected so the Postgres reconcile is testable
+// graph sync is optional and injected so the Postgres reconcile is testable
 // without a live graph.
 
 import {
@@ -247,7 +247,7 @@ export async function reconcileDataModelMirror(deps: {
   /** /// @dpf declarations by model name (EP-A33A5C61 slice 4d-ii); optional for callers and tests without schema text. */
   declarations?: ReadonlyMap<string, ModelMetadata>;
   createdById?: string | null;
-  syncNeo4j?: (ctx: MirrorContext) => Promise<void>;
+  syncGraph?: (ctx: MirrorContext) => Promise<void>;
 }): Promise<MirrorResult> {
   const { prisma, facts } = deps;
   const ctx = await resolveMirrorContext(prisma);
@@ -334,11 +334,11 @@ export async function reconcileDataModelMirror(deps: {
     },
   });
 
-  if (deps.syncNeo4j) {
+  if (deps.syncGraph) {
     try {
-      await deps.syncNeo4j(ctx);
+      await deps.syncGraph(ctx);
     } catch {
-      // Neo4j projection is best-effort; Postgres remains the source of truth.
+      // graph projection is best-effort; Postgres remains the source of truth.
     }
   }
 

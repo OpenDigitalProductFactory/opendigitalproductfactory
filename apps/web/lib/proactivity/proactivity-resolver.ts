@@ -93,6 +93,22 @@ export function resolveProactivityPlanForLevel(
     if (defaults.channelPolicy === "urgent-channel") defaults.channelPolicy = "preferred-channel";
   }
 
+  if (input.activityFamily === "ecosystem-participation") {
+    // Cadence and drafting only. The coworker may decide WHEN to bring the
+    // ballot, and may draft a vote — it may never cast one unreviewed. Capping
+    // the boundary here makes it a real ceiling, because the posture ladder only
+    // ever tightens: no room declaration or agent preference downstream can
+    // loosen it back to "preauthorized" and spend this organisation's ecosystem
+    // voice without a human seeing it.
+    if (defaults.actionBoundary === "preauthorized") defaults.actionBoundary = "propose";
+    // How an organisation spends its voice in the ecosystem is the owner's call,
+    // not a queue's — the same reasoning marketing uses for brand voice.
+    defaults.escalationTarget = "owner";
+    // A ballot is never an outage. The urgent channel is for outages and
+    // compliance; spending it here trains the owner to ignore it.
+    if (defaults.channelPolicy === "urgent-channel") defaults.channelPolicy = "preferred-channel";
+  }
+
   if (input.regulated || input.activityFamily === "tax-compliance") {
     defaults.actionBoundary = input.regulated ? "advise" : "propose";
     defaults.spendClass = level === "assertive" ? "standard" : defaults.spendClass;
@@ -155,6 +171,15 @@ function resolveLevel(input: ProactivityResolverInput): ProactivityLevel {
       : "balanced";
   }
 
+  if (input.activityFamily === "ecosystem-participation") {
+    // A closing ballot is worth one nudge; the routine weekly digest is not.
+    // Two days rather than marketing's three: a vote takes a minute to cast, so
+    // the warning only needs to clear the weekend.
+    return typeof input.deadlineWindowDays === "number" && input.deadlineWindowDays <= 2
+      ? "assertive"
+      : "balanced";
+  }
+
   if (input.activityFamily === "security-incident") return "assertive";
 
   return "balanced";
@@ -188,6 +213,16 @@ function explanationFor(input: ProactivityResolverInput, level: ProactivityLevel
 
   if (input.activityFamily === "tax-compliance" && level === "assertive") {
     return "A compliance deadline is close enough to justify assertive reminders while keeping advice and filing approval-gated.";
+  }
+
+  if (input.activityFamily === "ecosystem-participation") {
+    if (level === "quiet") {
+      return "Quiet: show what you submitted and what clearly applies here, and stay out of the way otherwise.";
+    }
+    if (level === "assertive") {
+      return "A ballot is about to close, so the coworker should bring it forward sooner — still as a proposal, and never on the urgent channel.";
+    }
+    return "Each week the coworker brings what the ecosystem is asking for that applies here, drafts your vote for review, and reports what shipped. Casting the vote stays with you.";
   }
 
   if (input.activityFamily === "marketing-campaign") {

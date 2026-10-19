@@ -2,7 +2,7 @@
 //
 // Split out of principle-decide-pack.test.ts to keep both files under the
 // module-size ceiling. The mock scaffolding is the same shape as its sibling:
-// the pack lazy-imports Postgres, Qdrant and the embedding provider, so every
+// the pack lazy-imports Postgres, the vector store and the embedding provider, so every
 // one of them is stubbed and the handler runs its real validation path.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -29,7 +29,7 @@ vi.mock("@dpf/db", () => ({
       findFirst: (...a: unknown[]) => db.organizationFindFirst(...a),
     },
     // RC2 (BI-E1267C6D): core/contextual principles are relevance-ranked by
-    // Qdrant and then rehydrated from Postgres for their signed vector and
+    // the vector store and then rehydrated from Postgres for their signed vector and
     // weight override. Without this the rehydration throws into its own
     // catch and every test silently exercises the pre-fix path.
     wikiPage: {

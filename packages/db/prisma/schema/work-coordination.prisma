@@ -84,6 +84,14 @@ enum InvestmentBucket {
   transform
 }
 
+// EpicPortfolio.proposalConfidence — how strongly an epic's own items pointed at
+// the proposed portfolio (BI-A73A7DA3). high: one portfolio holds at least 80% of
+// three or more attributed items. low: anything else, including a text match.
+enum EpicPortfolioConfidence {
+  high
+  low
+}
+
 // Workroom.decisionScope — which decision surface governs the work.
 // Canonical union: apps/web/lib/work-capsules.ts
 enum DecisionScope {
@@ -101,7 +109,21 @@ enum WorkPortfolioRole {
   productsAndServicesSold
 }
 
+// Scheduled assessment disposition is separate from the work's triageOutcome.
+enum BacklogTriageAssessmentOutcome {
+  autoBuilt
+  needsReview
+  lowConfidence
+  invalidResponse
+  modelError
+  ledgerError
+  applyError
+  changed
+  inFlight
+}
+
 model BacklogItem {
+  investmentAttempts      AdapterRunTelemetry[] @relation("InvestmentAttemptItem")
   id                      String                        @id @default(cuid())
   itemId                  String                        @unique
   title                   String
@@ -132,6 +154,13 @@ model BacklogItem {
   triageOutcome           String?
   effortSize              String?
   proposedOutcome         String?
+  // BI-E3FBB0C4: operational eligibility survives pruning of activity audit.
+  triageAssessmentFingerprint String?
+  triageAssessmentOutcome BacklogTriageAssessmentOutcome?
+  triageAssessmentAttempts Int @default(0)
+  triageAssessmentRetryAt DateTime?
+  triageAssessmentClaim String?
+  triageAssessedAt DateTime?
   // Demand-management scoring (EP-DEMAND-MGMT Phase 1). Store the scoring
   // INPUTS as first-class nullable fields; the score is COMPUTED by a pluggable
   // framework (apps/web/lib/demand/scoring.ts). null = not yet scored. reach
@@ -150,6 +179,15 @@ model BacklogItem {
   demandScore             Float?
   demandScoreFramework    DemandScoreFramework?
   demandScoreComputedAt   DateTime?
+  // Value-input provenance (BI-00C68162): WHO supplied reach/impact/confidence.
+  // Reuses EstimateSource — ai = an agent proposed them (the demand-scoring
+  // steward or a coworker), human = an owner entered or overrode them, agreed =
+  // an owner confirmed. The steward never proposes over human|agreed. null =
+  // unattributed (rows scored before this column, or never scored).
+  // demandInputActorRef is the agent id (ai) or user id (human).
+  demandInputSource       EstimateSource?
+  demandInputActorRef         String?
+  demandInputAt           DateTime?
   // Investment bucket (EP-DEMAND-MGMT Phase 3): run | grow | transform. The
   // strategic-balance dimension so demand is prioritized against a target
   // allocation, not a flat list. Default derived from workType. §8.
@@ -224,6 +262,7 @@ model BacklogItem {
   activities              BacklogItemActivity[]
   demandEvidenceLinks     DemandEvidenceLink[]
   coworkerNeeds           CoworkerCapabilityNeed[]      @relation("BacklogItemCoworkerCapabilityNeeds")
+  budgetReservations      BudgetReservation[]
   businessCapabilityLinks BusinessCapabilityTraceLink[] @relation("BusinessCapabilityBacklogLinks")
   founderDemandClusters   FounderDemandCluster[]
   productObjectiveWork    ProductObjectiveWork[]
@@ -383,6 +422,9 @@ model Workroom {
   contributionMode        String                   @default("private")
   branchTaxonomy          String?
   idempotencyKey          String?                  @unique
+  /// BI-62514632: highest WorkroomActivity.sequence handed out for this room.
+  /// Advanced only by the WorkCapsuleActivity insert trigger.
+  activitySequence        Int                      @default(0)
   leaseHolderPrincipalId  String?
   leaseExpiresAt          DateTime?
   createdByPrincipalId    String?
@@ -449,12 +491,22 @@ model WorkroomActivity {
   recordedById      String?
   recordedByAgentId String?
   toolExecutionId   String?
+  /// BI-763D6E01: set on a command receipt row (kind command-accepted |
+  /// command-rejected). A retry with the same (scope, command key) replays it. Named
+  /// commandKey, not commandId: it is the client's idempotency key, not a reference.
+  commandScopeKey   String?
+  commandKey        String?
+  /// BI-62514632: the row's position in its room's log, assigned on insert by a
+  /// trigger under the room's row lock. NULL only on rows written before it.
+  sequence          Int?
   capsule           Workroom @relation(fields: [workCapsuleId], references: [id], onDelete: Cascade)
 
   @@index([workCapsuleId, recordedAt(sort: Desc)])
   @@index([workCapsuleId, kind, recordedAt(sort: Desc), id(sort: Desc)])
   @@index([kind, recordedAt(sort: Desc)])
   @@index([recordedAt]) // retention sweep cutoff scan, apps/web/lib/operate/retention/execute.ts:99
+  @@unique([commandScopeKey, commandKey]) // BI-763D6E01 command receipts; NULLs never collide
+  @@unique([workCapsuleId, sequence]) // BI-62514632 the room's log order; NULLs never collide
   @@map("WorkCapsuleActivity")
 }
 
@@ -568,9 +620,22 @@ model EpicPortfolio {
   portfolioId String
   epic        Epic      @relation(fields: [epicId], references: [id], onDelete: Cascade)
   portfolio   Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  /// Who confirmed this attribution and why (BI-A73A7DA3). Null on links written
+  /// by paths that record no actor, such as the epic edit form.
+  confirmedById      String?
+  confirmedBy        User?    @relation("EpicPortfolioConfirmedBy", fields: [confirmedById], references: [id], onDelete: SetNull)
+  confirmedByAgentId String?
+  confirmedByAgent   Agent?   @relation("EpicPortfolioConfirmedByAgent", fields: [confirmedByAgentId], references: [agentId], onDelete: SetNull)
+  confirmationReason String?
+  confirmedAt        DateTime?
+  /// Confidence of the proposal the person confirmed; null when no proposal was shown.
+  proposalConfidence EpicPortfolioConfidence?
 
   @@id([epicId, portfolioId])
   @@index([portfolioId]) // FK-leading (join table): portfolio-side lookups; @@id only covers epicId
+  @@index([confirmedById])
+  @@index([confirmedByAgentId])
+  @@index([epicId])
 }
 
 model ImprovementProposal {
@@ -898,15 +963,20 @@ model QueueMetricSnapshot {
   wip             Int      @default(0) // queued + in-progress at computedAt
   arrivals        Int      @default(0) // enqueued in window
   throughput      Int      @default(0) // finished in window
-  waitP50Ms       Int?
-  waitP95Ms       Int?
-  processP50Ms    Int?
-  processP95Ms    Int?
-  cycleP50Ms      Int?
-  cycleP95Ms      Int?
+  // Durations in milliseconds. Float, not Int: a 32-bit Int caps at ~24.8 days and
+  // Workroom stage items sit for weeks (BI-4ADFFEDB). Exact for whole ms up to 2^53.
+  waitP50Ms       Float?
+  waitP95Ms       Float?
+  processP50Ms    Float?
+  processP95Ms    Float?
+  cycleP50Ms      Float?
+  cycleP95Ms      Float?
   firstPassYield  Float? // 0..1 — % correct without rework
   slaAttainment   Float? // 0..1 — null when no finished item carried an SLA
   abandonmentRate Float? // 0..1
+  heldP50Ms       Float? // held time (waiting on a person or blocked) of items finished in the window — EP-B70E718D
+  heldP95Ms       Float?
+  processShare    Float? // 0..1 — Σ process ÷ Σ cycle: the queue's flow efficiency
   computedAt      DateTime @default(now())
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt

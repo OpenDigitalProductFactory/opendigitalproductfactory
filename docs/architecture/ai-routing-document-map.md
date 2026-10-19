@@ -12,13 +12,46 @@ records.
 | What code chooses and dispatches a route? | `apps/web/lib/inference/routed-inference.ts`, `apps/web/lib/routing/request-contract.ts`, and `apps/web/lib/routing/pipeline-v2.ts` |
 | What policy decides whether governed data may leave the install? | `apps/web/lib/govern/data/policy-decision.ts` and `apps/web/lib/govern/data/policy-enforcement.ts` |
 | How is provider/account suitability compiled into route constraints? | [AI provider suitability routing design](../superpowers/specs/2026-07-19-ai-provider-suitability-routing-design.md) and its implemented contracts |
+| How does routing distinguish multiple accounts of one provider? | [Provider account identity](provider-accounts.md), [account routing guide](../user-guide/ai-workforce/provider-account-routing.md), and [capacity refactor delivery plan](../superpowers/plans/2026-10-14-provider-account-capacity-refactor.md). The delivery plan distinguishes source qualification from served acceptance. |
 | How is the designed route projected into EA? | `apps/web/lib/ea/ai-routing-architecture-registry.ts`, `apps/web/lib/ea/ai-routing-architecture-extract.ts`, and `apps/web/lib/ea/reconcile-ai-routing-architecture.ts`; one versioned registry projects synchronized BPMN, SysML, and ArchiMate model kinds |
 | What happened operationally? | Route decisions, adapter attempts, inference outcomes, token usage, capacity state, and safe screen/suitability receipts in the live install, correlated by request-scoped `traceId` for new traffic |
 
 Current implementation truth comes from code plus live evidence. A diagram, design
 document, or seeded row does not override those sources.
 
+## Streaming versus result delivery
+
+`RouteAndCallOptions.requiresStreaming` expresses token-streaming demand; it
+does not change `interactionMode` or authorize asynchronous result handles.
+Autonomous agentic loops and semantic-review branches set it to `false` because
+they consume completed results. Omitted values retain the existing sync-chat/background
+defaults; explicit `true` still requires a streaming-capable endpoint.
+Tool capability, sensitive-data screening, provider policy and receipt checks
+continue to constrain eligible routes independently.
+
+Durable background operations remain a separate delivery contract. A caller
+must support their operation handles before selecting background mode.
+
+Durable semantic review binds autonomous inference origin around its reviewer
+execution subtree. Concurrent primary and specialist calls use the shared
+autonomous admission budget while interactive callers retain priority. This
+origin tag does not change synchronous result delivery or the review deadline.
+
+Reviewer delivery evidence remains bound to an immutable change and its
+Workroom. Canonical local-CI reuse can reconcile a missing Workroom link after
+executor identity is corrected, using only the recorded branch, commit and
+session. Ambiguous or foreign links are refused; reconciliation never changes
+the test verdict, expiry, lease or evidence contents.
+
 ## Approved adjacent delivery contract
+
+Governed reviewer responses cut off at the output-token limit use at most two
+in-turn continuations before the missing-receipt result is returned. Continuation
+preserves the current tool surface and immutable writer binding; it does not
+rotate a provider merely for truncation. Exhaustion reports the output budget,
+not completed-prose noncompliance, and therefore does not enter automatic
+prose-recovery replay. A writer already recorded or awaiting approval is not
+called again. Receipt verification remains the completion authority.
 
 [Pre-dispatch sensitive LLM routing](../superpowers/plans/2026-07-26-pre-dispatch-sensitive-llm-routing.md)
 defines the implementation sequence for classifying governed payloads, evaluating
@@ -32,6 +65,7 @@ every planned behavior is already live.
 
 | Artifact | Status and purpose |
 | --- | --- |
+| [Task-aware inference routing](../superpowers/specs/2026-10-11-task-aware-inference-routing-design.md) | Draft source-grounded review and delivery plan for task readiness, prompt scope, constraint explanations, cloud capacity, admission and owner visibility. Live backlog reconciliation and scoped decisions remain pending; no runtime behavior changes are delivered by this document. |
 | [AI Routing Architecture & Explainability](../superpowers/specs/2026-07-26-ai-routing-architecture-explainability-design.md) | Architecture authority. The deterministic Designed projection is implemented; Observed/Compare evidence, technical drill-through, and the completed owner-facing Operations Map remain later child BIs. |
 | [Routing Control Plane / Data Plane](../superpowers/specs/2026-04-27-routing-control-data-plane-design.md) | Proposed and deferred RIB/FIB target state; not the current per-request routing runtime |
 

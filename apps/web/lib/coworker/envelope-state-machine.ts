@@ -27,7 +27,21 @@ export type EnvelopeStatus =
   | "declined"
   | "executed"
   | "failed"
-  | "cancelled";
+  | "cancelled"
+  /**
+   * Nobody answered before `expiresAt` (BI-410ACCB8).
+   *
+   * Distinct from `cancelled` on purpose: cancelled says a person acted, and
+   * expired says the opposite. Counting lapsed decisions is the whole point of
+   * the observability projection, and it cannot be done if the two are the same
+   * mark — the user guide draws the same line for the room Shape panel, where
+   * "a decline is a settled answer to act on, an open question is not".
+   *
+   * envelope-observability.ts already derives this and records it as an
+   * outcome, while declining to write it: "the state machine owns that
+   * transition". This is the state machine owning it.
+   */
+  | "expired";
 
 /** All valid statuses, exposed for runtime validation (e.g. when reading a
  *  row that might predate a future schema migration). */
@@ -38,6 +52,7 @@ export const ENVELOPE_STATUSES: readonly EnvelopeStatus[] = [
   "executed",
   "failed",
   "cancelled",
+  "expired",
 ] as const;
 
 /** Terminal statuses — an envelope in one of these never transitions
@@ -48,17 +63,21 @@ export const TERMINAL_STATUSES: readonly EnvelopeStatus[] = [
   "executed",
   "failed",
   "cancelled",
+  "expired",
 ] as const;
 
 /** Legal transitions. The KEY is the current status; the VALUE is the
  *  set of statuses we can move to. */
 const TRANSITIONS: Readonly<Record<EnvelopeStatus, readonly EnvelopeStatus[]>> = {
-  proposed: ["approved", "declined", "cancelled"],
-  approved: ["executed", "failed", "cancelled"],
+  // An approved envelope can lapse too: approval is not execution, and an
+  // approved call whose window closed before it ran is expired, not failed.
+  proposed: ["approved", "declined", "cancelled", "expired"],
+  approved: ["executed", "failed", "cancelled", "expired"],
   declined: [],
   executed: [],
   failed: [],
   cancelled: [],
+  expired: [],
 };
 
 /** True when `to` is reachable from `from` via a single transition. */

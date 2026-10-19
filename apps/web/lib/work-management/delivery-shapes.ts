@@ -15,7 +15,26 @@
 // author never holds the receipt writer: acceptance and post-implementation
 // review are `role:` stages that the runner refuses to execute itself.
 
+import type { WorkShapeEvidenceKind } from "./work-shape-evidence-kinds";
 import type { WorkShapeDefinition, WorkShapeStage } from "./work-shapes";
+
+/**
+ * The room-authorized capability set of every delivery shape (BI-00588B51,
+ * WWMD DI-120A20542EBB), in the GPP §7.1 vocabulary. Each token resolves to
+ * enforceable grants in `roomGrantsFromWorkShape` (room-turn-authority.ts), so
+ * the room definition stays the single source of what a delivery coworker may
+ * do inside the room (BI-F114354D):
+ *   read           → the coworker read baseline
+ *   write-internal → the lifecycle receipts and evidence a delivery writes
+ *   write-source   → edit, run and commit source in the governed sandbox
+ * Deliberately absent: `authority`, `outward` and `irreversible` classes —
+ * promotion, publication and backlog status moves stay governed decisions.
+ */
+export const DELIVERY_ACTIVITY_GRANTS: readonly string[] = [
+  "tool:read",
+  "tool:write-internal",
+  "tool:write-source",
+];
 
 export const DELIVERY_BREAK_FIX_SHAPE_KEY = "delivery-break-fix";
 export const DELIVERY_SMALL_SHAPE_KEY = "delivery-small";
@@ -35,6 +54,9 @@ export type DeliveryShapeKey = (typeof DELIVERY_SHAPE_KEYS)[number];
 
 export const DELIVERY_SHAPE_VERSION = "1.0.0";
 
+/** The role that answers for the author's stages (`role:author`). */
+export const DELIVERY_AUTHOR_ROLE = "author";
+
 /** `key@version` references a claim may declare. */
 export const DELIVERY_SHAPE_REFS = DELIVERY_SHAPE_KEYS.map((key) => `${key}@${DELIVERY_SHAPE_VERSION}`);
 
@@ -42,7 +64,7 @@ export function isDeliveryShapeKey(value: unknown): value is DeliveryShapeKey {
   return typeof value === "string" && (DELIVERY_SHAPE_KEYS as readonly string[]).includes(value);
 }
 
-const merge = (evidence: readonly string[] = ["merged-sha"]): WorkShapeStage => ({
+const merge = (evidence: readonly WorkShapeEvidenceKind[] = ["merged-sha"]): WorkShapeStage => ({
   key: "merge",
   title: "Merge through branch protection",
   accountablePrincipalRef: "role:author",
@@ -54,7 +76,7 @@ const merge = (evidence: readonly string[] = ["merged-sha"]): WorkShapeStage => 
   evidence,
 });
 
-const acceptance = (condition: string, evidence: readonly string[]): WorkShapeStage => ({
+const acceptance = (condition: string, evidence: readonly WorkShapeEvidenceKind[]): WorkShapeStage => ({
   key: "accept",
   title: "Accept on the live install",
   accountablePrincipalRef: "role:acceptance-reviewer",
@@ -103,16 +125,16 @@ export const DELIVERY_SHAPES: Record<DeliveryShapeKey, WorkShapeDefinition> = {
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "PIR receipt recorded within 48 hours of merge." },
-      { kind: "failure", condition: "PIR missed: the item flips to input-required and the declarer's next break-fix declaration is refused." },
-      { kind: "budget", condition: "A second break-fix is declared while one is open on this installation — refused; the lane is WIP 1." },
+      { kind: "success", condition: "PIR receipt recorded within 48 hours of merge.", disposition: "proceed" },
+      { kind: "failure", condition: "PIR missed: the item flips to input-required and the declarer's next break-fix declaration is refused.", disposition: "awaiting-person" },
+      { kind: "budget", condition: "The 48-hour post-implementation review window expires without a receipt; escalate this item's overdue review.", disposition: "awaiting-person" },
     ],
-    grants: ["tool:read", "tool:write-source"],
+    grants: DELIVERY_ACTIVITY_GRANTS,
     measures: [
       { key: "break-fix-share", description: "Share of merged work declared break-fix in a rolling week; above 20% is a finding." },
       { key: "pir-latency-hours", description: "Hours from merge to PIR receipt." },
     ],
-    budgets: [{ kind: "cycles-per-window", limit: 1, unit: "open break-fix per installation" }],
+    budgets: [{ kind: "cycles-per-window", limit: 48, unit: "hours per item before post-implementation review" }],
     reviewPoint: { everyDays: 2, description: "Reviewed at the 48-hour PIR deadline whether or not the receipt landed." },
     collaborationShape: "escalation",
   },
@@ -150,11 +172,11 @@ export const DELIVERY_SHAPES: Record<DeliveryShapeKey, WorkShapeDefinition> = {
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "Merged SHA reachable from main plus a runtime check." },
-      { kind: "failure", condition: "The change needs new substrate or a second PR — reshape to medium rather than stretch the small lane." },
-      { kind: "budget", condition: "Appetite exceeded: more than two days or more than one PR — the room stops and the item is reshaped." },
+      { kind: "success", condition: "Merged SHA reachable from main plus a runtime check.", disposition: "proceed" },
+      { kind: "failure", condition: "The change needs new substrate or a second PR — reshape to medium rather than stretch the small lane.", disposition: "awaiting-input" },
+      { kind: "budget", condition: "Appetite exceeded: more than two days or more than one PR — the room stops and the item is reshaped.", disposition: "awaiting-input" },
     ],
-    grants: ["tool:read", "tool:write-source"],
+    grants: DELIVERY_ACTIVITY_GRANTS,
     measures: [{ key: "lead-time-hours", description: "Hours from claim to merged SHA on main." }],
     budgets: [{ kind: "cycles-per-window", limit: 1, unit: "PR per item" }],
     reviewPoint,
@@ -188,11 +210,11 @@ export const DELIVERY_SHAPES: Record<DeliveryShapeKey, WorkShapeDefinition> = {
       acceptance("An eligible independent acceptance reviewer verifies the acceptance criteria on the live install (UX verification where UI).", ["acceptance-receipt"]),
     ],
     stopConditions: [
-      { kind: "success", condition: "Acceptance criteria verified on the live install by an independent reviewer." },
-      { kind: "failure", condition: "The work adds a new domain concept or crosses a domain contract — reshape to large." },
-      { kind: "budget", condition: "Workroom cap or appetite exceeded: more than one week or more than three PRs — the room stops for reshaping." },
+      { kind: "success", condition: "Acceptance criteria verified on the live install by an independent reviewer.", disposition: "proceed" },
+      { kind: "failure", condition: "The work adds a new domain concept or crosses a domain contract — reshape to large.", disposition: "awaiting-input" },
+      { kind: "budget", condition: "Workroom cap or appetite exceeded: more than one week or more than three PRs — the room stops for reshaping.", disposition: "awaiting-input" },
     ],
-    grants: ["tool:read", "tool:write-source"],
+    grants: DELIVERY_ACTIVITY_GRANTS,
     measures: [{ key: "lead-time-days", description: "Days from claim to acceptance receipt." }],
     budgets: [{ kind: "cycles-per-window", limit: 3, unit: "PRs per item" }],
     reviewPoint,
@@ -248,11 +270,11 @@ export const DELIVERY_SHAPES: Record<DeliveryShapeKey, WorkShapeDefinition> = {
       acceptance("Acceptance evidence is recorded against the objective baseline by an eligible independent reviewer.", ["acceptance-receipt"]),
     ],
     stopConditions: [
-      { kind: "success", condition: "Acceptance receipt from an independent reviewer against the baseline." },
-      { kind: "failure", condition: "Spec approval or architecture review fails and is not resolved — the room stops and the item returns to design." },
-      { kind: "budget", condition: "Workroom cap or appetite exceeded: more than three weeks — the room stops for decomposition into an xlarge epic." },
+      { kind: "success", condition: "Acceptance receipt from an independent reviewer against the baseline.", disposition: "proceed" },
+      { kind: "failure", condition: "Spec approval or architecture review fails and is not resolved — the room stops and the item returns to design.", disposition: "awaiting-person" },
+      { kind: "budget", condition: "Workroom cap or appetite exceeded: more than three weeks — the room stops for decomposition into an xlarge epic.", disposition: "awaiting-input" },
     ],
-    grants: ["tool:read", "tool:write-source"],
+    grants: DELIVERY_ACTIVITY_GRANTS,
     measures: [{ key: "lead-time-days", description: "Days from claim to acceptance receipt." }],
     budgets: [{ kind: "cycles-per-window", limit: 21, unit: "days per item" }],
     reviewPoint,
@@ -298,9 +320,9 @@ export const DELIVERY_SHAPES: Record<DeliveryShapeKey, WorkShapeDefinition> = {
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "All children done and outcome reconciliation recorded." },
-      { kind: "failure", condition: "Circuit breaker: the appetite is spent before the hypothesis is confirmed — the epic stops and is re-planned or retired." },
-      { kind: "budget", condition: "Epic cap exceeded: more open initiatives than the portfolio allows — a new one is refused until one closes." },
+      { kind: "success", condition: "All children done and outcome reconciliation recorded.", disposition: "proceed" },
+      { kind: "failure", condition: "Circuit breaker: the appetite is spent before the hypothesis is confirmed — the epic stops and is re-planned or retired.", disposition: "awaiting-person" },
+      { kind: "budget", condition: "Epic cap exceeded: more open initiatives than the portfolio allows — a new one is refused until one closes.", disposition: "refused" },
     ],
     grants: ["tool:read"],
     measures: [{ key: "children-done-ratio", description: "Done children over filed children." }],

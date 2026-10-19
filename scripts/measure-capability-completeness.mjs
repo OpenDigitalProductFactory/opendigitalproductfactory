@@ -159,9 +159,23 @@ export const PLANE_CONTRACT = {
     ceiling: 3,
     blocker: null,
     criteria: {
-      0: "No recurring trigger — any Proactivity setting is a silent no-op.",
+      // These rungs described a PER-COWORKER "Proactivity setting" that
+      // BI-87C9C91C removed: it deleted the control, deleted the save path, and
+      // took the `agent:` scope out of the resolver ladder. Proactivity is
+      // room-owned (DI-81E47BDA59F1). The rungs still grade the same substrate
+      // — a self-task entry, then a cadence on the skill — but they no longer
+      // name a control that does not exist.
+      //
+      // WHY LEVEL 2 IS STILL WORTH REACHING, AND WHY IT IS NOT SUFFICIENT: an
+      // entry DECLARES that this coworker holds standing work at a rhythm.
+      // Whether that work can be switched on is a separate, open defect
+      // (BI-4CE4F52F): the reconciler still selects its level from
+      // `aiCoworkerProactivity:agent:*` facts no operator can write. Declaring
+      // entries before that is fixed would raise this plane while changing
+      // nothing about whether anything runs.
+      0: "No recurring trigger — nothing makes this coworker act unasked.",
       1: "Named by a scheduled job, but owns no self-task of its own.",
-      2: "Has a COWORKER_SELF_TASKS entry driven by its Proactivity setting.",
+      2: "Declares a self-task entry, so a rhythm exists to be driven.",
       3: "Self-task PLUS a cadence declared on the skill itself.",
     },
   },
@@ -230,9 +244,41 @@ export const SHAPE_SOURCE_FILES = [
   "apps/web/lib/work-management/work-shapes.ts",
   "apps/web/lib/work-management/standing-operations-shapes.ts",
   "apps/web/lib/work-management/coworker-standing-shapes.ts",
+  "apps/web/lib/work-management/coworker-standing-shapes-operate.ts",
+  "apps/web/lib/work-management/coworker-standing-shapes-craft.ts",
   "apps/web/lib/work-management/delivery-shapes.ts",
   "apps/web/lib/work-management/orchestration-shapes.ts",
 ];
+
+/**
+ * A shape compiled from a GPP shape document (GPP notation Phase 3b, BI-6DA17863)
+ * is declared in its generated module, not in a family file: the family file
+ * only references the generated constant. Every such module is a shape source,
+ * found by directory listing so a later migration needs no edit here.
+ */
+export const GENERATED_SHAPE_DIR = "apps/web/lib/work-management/generated";
+export const GENERATED_SHAPE_SUFFIX = ".shape.generated.ts";
+
+/** SHAPE_SOURCE_FILES, then every generated shape module under `root`, in code-unit order. */
+export function shapeSourceFiles(root = REPO_ROOT) {
+  const dir = path.join(root, GENERATED_SHAPE_DIR);
+  const generated = fs.existsSync(dir)
+    ? fs.readdirSync(dir).filter((name) => name.endsWith(GENERATED_SHAPE_SUFFIX)).sort().map((name) => `${GENERATED_SHAPE_DIR}/${name}`)
+    : [];
+  return [...SHAPE_SOURCE_FILES, ...generated];
+}
+
+/** Accountable agents named by `agent:` principals across the given shape source texts. */
+export function scanShapeAgents(sources) {
+  const shapesSrc = sources.map((src) => stripLineComments(src)).join("\n");
+  const shapeAgents = new Map();
+  for (const m2 of shapesSrc.matchAll(/accountablePrincipalRef:\s*"agent:([a-z0-9-]+)"/g)) {
+    const stagesDeclared = /stages:\s*\[/.test(shapesSrc);
+    const gatesDeclared = /kind:\s*"governed-decision"/.test(shapesSrc);
+    shapeAgents.set(m2[1], { stagesDeclared, gatesDeclared });
+  }
+  return shapeAgents;
+}
 
 /** Identity classes. Expectations differ by class; none is excluded. */
 export const IDENTITY_CLASSES = {
@@ -241,6 +287,13 @@ export const IDENTITY_CLASSES = {
   "roster-only": "On the workforce roster but absent from the canonical agent registry.",
   "defined-roster": "Declared in the canonical registry (not active) and seeded onto the roster.",
   "declared-only": "Declared in the canonical registry and never seeded anywhere.",
+  // Two postures carried on the registry entry itself (`staffing_posture`).
+  // NEITHER hides an identity: both appear in the report with their gaps
+  // listed. What changes is whether those gaps count as OPEN — a superseded
+  // role's capability is not missing (another identity holds it), and a
+  // deliberately-unstaffed role is a decision rather than a defect.
+  superseded: "Declared, but the work is done by another ACTIVE identity named in its posture.",
+  "deliberately-unstaffed": "Declared and consciously not staffed, with a recorded reason and review date.",
 };
 
 // ─────────────────────────── source readers ───────────────────────────
@@ -293,6 +346,48 @@ export function parseStringArrayMap(body) {
     if (!out.has(m[1])) out.set(m[1], values);
   }
   return out;
+}
+
+/** Resolve declared named spreads without executing the authorization module. */
+export function resolveStringArrayMap(source, identifier, { modulePath, readModule }, ancestors = new Set()) {
+  const identity = `${modulePath}:${identifier}`;
+  if (ancestors.has(identity)) throw new Error(`cyclic_grant_map:${identity}`);
+  const seen = new Set([...ancestors, identity]);
+  const clean = stripLineComments(source);
+  const declaration = new RegExp(`\\bconst\\s+${identifier}\\b`).exec(clean);
+  if (!declaration) throw new Error(`unresolved_grant_map:${identity}`);
+  const body = objectLiteralBody(clean.slice(declaration.index), identifier);
+  if (body === null) throw new Error(`unresolved_grant_map:${identity}`);
+  const result = new Map();
+  // Preserve JavaScript member order: later literals/spreads replace earlier keys.
+  const members = /\.\.\.([A-Za-z_$][\w$]*)|["']?([A-Za-z_][A-Za-z0-9_-]*)["']?\s*:\s*\[([^\]]*)\]/g;
+  for (const member of body.matchAll(members)) {
+    if (!member[1]) {
+      for (const [name, grants] of parseStringArrayMap(member[0])) result.set(name, grants);
+      continue;
+    }
+    const localName = member[1];
+    let imported;
+    for (const statement of clean.matchAll(/import\s*\{([^}]+)\}\s*from\s*["']([^"']+)["']/g)) {
+      const binding = statement[1].split(",").map(value => value.trim().match(/^([\w$]+)(?:\s+as\s+([\w$]+))?$/))
+        .find(value => value && (value[2] ?? value[1]) === localName);
+      if (binding) { imported = { name: binding[1], ...readModule(statement[2], modulePath) }; break; }
+    }
+    const child = imported ?? { name: localName, source: clean, modulePath };
+    for (const [name, grants] of resolveStringArrayMap(child.source, child.name, { modulePath: child.modulePath, readModule }, seen)) {
+      result.set(name, grants);
+    }
+  }
+  return result;
+}
+
+function readGrantSourceModule(specifier, from) {
+  if (!specifier.startsWith("@/") && !specifier.startsWith(".")) throw new Error(`unsupported_grant_import:${specifier}`);
+  const candidate = specifier.startsWith("@/") ? P("apps/web", specifier.slice(2)) : path.resolve(P(path.dirname(from)), specifier);
+  const relative = normalizeGeneratedPath(path.relative(REPO_ROOT, candidate));
+  if (relative.startsWith("../") || path.isAbsolute(relative)) throw new Error("grant_import_outside_repository");
+  const modulePath = fs.existsSync(candidate) ? relative : `${relative}.ts`;
+  return { modulePath, source: read(modulePath) };
 }
 
 /** Parse `"key": "value"` string pairs from an object body. */
@@ -358,13 +453,33 @@ export function expandGrants(held, implications) {
   return out;
 }
 
+/**
+ * The runtime's reachability rule, mirrored (BI-378D3659). isToolAllowedByGrants
+ * in agent-grants.ts admits a tool when ANY ONE of its required grants is held
+ * after expansion, and treats an empty requirement as universal. This measure
+ * used to demand EVERY grant, so it called tools unreachable that the runtime
+ * lets the coworker call. It cannot import the TypeScript predicate, so
+ * apps/web/lib/tak/grant-reachability-parity.test.ts runs the same fixtures
+ * through both. `expanded` is the Set returned by expandGrants().
+ */
+export function grantsSatisfy(required, expanded) {
+  return required.length === 0 || required.some((g) => expanded.has(g));
+}
+
+/** Plain-language form of an unmet requirement: one grant, or a list of alternatives. */
+export function describeMissingGrants(grants) {
+  if (grants.length === 0) return "grants undeclared";
+  return grants.length === 1 ? grants[0] : `any one of ${grants.join(", ")}`;
+}
+
 export function canCall(tool, expanded, toolToGrants) {
   const required = toolToGrants.get(tool);
   if (!required) return { reachable: false, reason: `tool "${tool}" not in TOOL_TO_GRANTS` };
-  const missing = required.filter((g) => !expanded.has(g));
-  return missing.length === 0
+  // Unreachable means NONE of the alternatives is held, so every one of them is
+  // a grant that would open the tool — all are reported, any one suffices.
+  return grantsSatisfy(required, expanded)
     ? { reachable: true, requires: required }
-    : { reachable: false, requires: required, missingGrants: missing };
+    : { reachable: false, requires: required, missingGrants: [...required] };
 }
 
 // ─────────────────────────── load substrate ───────────────────────────
@@ -432,7 +547,9 @@ export function loadSubstrate() {
   const onboardingAgents = new Set(onboardingGrants.keys());
 
   const grantImplications = parseStringArrayMap(objectLiteralBody(grantsSrc, "GRANT_IMPLICATIONS"));
-  const toolToGrants = parseStringArrayMap(objectLiteralBody(grantsSrc, "TOOL_TO_GRANTS"));
+  const toolToGrants = resolveStringArrayMap(grantsSrc, "TOOL_TO_GRANTS", {
+    modulePath: "apps/web/lib/tak/agent-grants.ts", readModule: readGrantSourceModule,
+  });
 
   // ── Namespace 3: profession families and their corpora.
   const professions = JSON.parse(read("docs/professions/registry.json"));
@@ -502,13 +619,9 @@ export function loadSubstrate() {
   // explicit. SHAPE_SOURCE_FILES is exported and guarded by a test that fails
   // when a work-management file declares an accountable agent and is not listed
   // here, so a third shape file cannot go unread the way the second one did.
-  const shapesSrc = SHAPE_SOURCE_FILES.map((file) => stripLineComments(read(file))).join("\n");
-  const shapeAgents = new Map();
-  for (const m2 of shapesSrc.matchAll(/accountablePrincipalRef:\s*"agent:([a-z0-9-]+)"/g)) {
-    const stagesDeclared = /stages:\s*\[/.test(shapesSrc);
-    const gatesDeclared = /kind:\s*"governed-decision"/.test(shapesSrc);
-    shapeAgents.set(m2[1], { stagesDeclared, gatesDeclared });
-  }
+  // Generated shape modules (a shape compiled from its GPP document) are read
+  // too, by directory listing (shapeSourceFiles).
+  const shapeAgents = scanShapeAgents(shapeSourceFiles().map((file) => read(file)));
 
   // ── Cadence sources.
   const selfTaskAgents = new Set(
@@ -639,8 +752,14 @@ export function buildInventory(s) {
 
   for (const ident of identities.values()) {
     const status = ident.registry?.status ?? null;
+    // A posture is only meaningful for a role that is NOT active; the guard in
+    // workforce-staffing-posture.test.ts refuses one on an active role, so a
+    // working coworker can never be classified out of the open-gap count.
+    const posture = status !== "active" ? ident.registry?.staffing_posture ?? null : null;
+    ident.staffingPosture = posture;
     ident.identityClass =
-      status === null ? "roster-only"
+      posture ? posture.state
+      : status === null ? "roster-only"
         : status === "active" ? (ident.onRoster ? "active-roster" : "active-registry-only")
         : ident.onRoster ? "defined-roster"
         : "declared-only";
@@ -711,7 +830,7 @@ export function scoreIdentity(ident, s) {
         ? `profession "${professionKey}" has no corpus pages`
         : wsid.reachable
           ? `${pages} corpus pages, reachable`
-          : `corpus exists (${pages} pages) but evaluate_profession_decision is unreachable — missing: ${(wsid.missingGrants ?? []).join(", ") || "grants undeclared"}`,
+          : `corpus exists (${pages} pages) but evaluate_profession_decision is unreachable — missing: ${describeMissingGrants(wsid.missingGrants ?? [])}`,
   };
 
   // ── Plane 3: Governance / WWWD ─────────────────────────────────────────
@@ -723,7 +842,7 @@ export function scoreIdentity(ident, s) {
   // ladder measures whether the agent can consult, this measures whether the
   // platform makes it. Folding them would blame the agent for a platform gap.
   const reachableSideEffecting = [...(s.toolDefs ?? new Map()).entries()]
-    .filter(([name, def]) => def.sideEffect && (s.toolToGrants.get(name) ?? []).every((g) => expanded.has(g)))
+    .filter(([name, def]) => def.sideEffect && canCall(name, expanded, s.toolToGrants).reachable)
     .map(([name]) => name);
   const reachableGated = reachableSideEffecting.filter((n) => (s.consequentialTools ?? new Set()).has(n));
 
@@ -740,7 +859,7 @@ export function scoreIdentity(ident, s) {
     detail: held.length === 0
       ? "holds no grants at all — no tool surface is authorised"
       : !wwmd.reachable
-        ? `principle_decide unreachable — missing: ${(wwmd.missingGrants ?? []).join(", ")}`
+        ? `principle_decide unreachable — missing: ${describeMissingGrants(wwmd.missingGrants ?? [])}`
         : escalates
           ? `principle_decide reachable; escalates to ${escalates}`
           : "principle_decide reachable, but no escalation target is declared",
@@ -775,18 +894,23 @@ export function scoreIdentity(ident, s) {
     level: cadenceLevel,
     detail: cadenceLevel === 3
       ? `self-task PLUS a cadence declared on skill "${cadenceSkill.name}" (${cadenceSkill.cadence})`
+      // These strings must say what the `cadence` rungs in PLANE_CONTRACT say.
+      // They drifted once already: the rungs were corrected to stop naming the
+      // per-coworker Proactivity control BI-87C9C91C deleted, and this second
+      // copy kept the old wording — one fix, two places, exactly the defect
+      // this measure exists to catch in other registries.
       : hasSelfTask
-        ? "COWORKER_SELF_TASKS entry driven by its Proactivity setting"
+        ? "declares a self-task entry, so a rhythm exists to be driven"
         : namedInJob
           ? "named by a scheduled job, but owns no self-task"
-          : "no recurring trigger — any Proactivity setting is a silent no-op",
+          : "no recurring trigger — nothing makes this coworker act unasked",
   };
 
   // ── Plane 6: Tools + Skills ────────────────────────────────────────────
   const direct = s.skills.filter((sk) => sk.assignTo.some((t) => ident.handles.has(t)));
   const wildcard = s.skills.filter((sk) => sk.assignTo.includes("*"));
   const reachableTools = [...s.toolToGrants.entries()]
-    .filter(([, req]) => req.every((g) => expanded.has(g))).length;
+    .filter(([, req]) => grantsSatisfy(req, expanded)).length;
   const skillNames = new Set([...s.skills.map((sk) => sk.name), ...s.packSkillNames]);
   const services = [...ident.handles].flatMap((h) => s.servicesByAgent.get(h) ?? []);
   const unbacked = [...new Set(
@@ -970,6 +1094,22 @@ export function measure(s) {
         note: "Joined via COWORKER_SLUG_TO_CANONICAL_AGENT_ID; a handle-only join over-counts.",
       },
       byClass,
+      // THE NUMBER THAT MATTERS, and the two it separates. Every gap stays
+      // listed on its agent; this says how many are a HOLE versus how many are
+      // a recorded decision. Before the posture classes existed these were one
+      // number, and a standards-derived role catalogue nobody had staffed read
+      // as four-fifths of the platform being broken.
+      gaps: (() => {
+        const excused = new Set(["superseded", "deliberately-unstaffed"]);
+        const count = (list) => list.reduce((n, a) => n + a.gaps.length, 0);
+        const postured = agents.filter((a) => excused.has(a.identityClass));
+        return {
+          listed: count(agents),
+          open: count(agents.filter((a) => !excused.has(a.identityClass))),
+          postured: count(postured),
+          posturedAgents: postured.length,
+        };
+      })(),
       atFullAttainable: agents.filter((a) => a.score.attainablePct === 100).length,
       medianAttainablePct: agents.length === 0 ? 0
         : agents.map((a) => a.score.attainablePct).sort((x, y) => x - y)[Math.floor(agents.length / 2)],
@@ -1215,6 +1355,12 @@ function main() {
   console.log("  class breakdown:");
   for (const [cls, v] of Object.entries(S.byClass)) {
     console.log(`    ${cls.padEnd(24)} ${String(v.count).padStart(3)}  median ${v.medianAttainablePct ?? "—"}%`);
+  }
+  if (S.gaps) {
+    console.log(
+      `  gaps: ${S.gaps.open} OPEN · ${S.gaps.postured} postured across ${S.gaps.posturedAgents} `
+      + `role(s) (superseded or deliberately unstaffed) · ${S.gaps.listed} listed in total`,
+    );
   }
   console.log("  plane levels (L0/L1/L2/L3, ceiling):");
   for (const [, v] of Object.entries(S.planeLevels)) {

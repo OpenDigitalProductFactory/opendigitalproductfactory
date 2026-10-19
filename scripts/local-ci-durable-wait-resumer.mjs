@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { parseArgs as utilParseArgs } from "node:util";
 import { spawn } from "node:child_process";
 import { appendFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
@@ -10,8 +11,11 @@ import {
 } from "./lib/durable-wait-resumer.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
 import {
+  EXIT_RUNNER_PREREQUISITE_UNAVAILABLE,
   EXIT_CHILD_SIGNAL_DEATH,
   EXIT_CONTROL_PLANE_STARVATION,
+  EXIT_SOURCE_DRIFT,
+  EXIT_WAIT_CANCELLED,
 } from "./lib/sandbox-freshness.mjs";
 import {
   createGateObserverIdentity,
@@ -54,6 +58,7 @@ export const EXIT_QUEUED = 75;
  */
 export const RETRYABLE_EXITS = Object.freeze([
   EXIT_QUEUED,
+  EXIT_RUNNER_PREREQUISITE_UNAVAILABLE,
   EXIT_CONTROL_PLANE_STARVATION,
   EXIT_CHILD_SIGNAL_DEATH,
   130, // 128 + SIGINT, stamped when the parent took the signal (BI-8392DA16)
@@ -65,6 +70,24 @@ export const INFRASTRUCTURE_BACKOFF_MS = 60_000;
 
 export function isRetryableExit(code) {
   return RETRYABLE_EXITS.includes(code);
+}
+
+/**
+ * What the resumer's wait ended as, in the evidence vocabulary (AC-DW-06):
+ * `unrun` (nothing ran against the diff), `inconclusive` (infrastructure ended
+ * it), `failed` or `passed`. The gate's own state file stays the verdict; this
+ * only keeps the resumer's log from being a bare number.
+ */
+export function classifyResumeOutcome(code) {
+  if (code === null || code === undefined) return { evidence: "unrun", reason: "unlaunched" };
+  if (code === 0) return { evidence: "passed", reason: "passed" };
+  if (code === EXIT_WAIT_CANCELLED) return { evidence: "unrun", reason: "cancelled" };
+  if (code === EXIT_SOURCE_DRIFT) return { evidence: "unrun", reason: "source-drift" };
+  if (code === EXIT_QUEUED) return { evidence: "unrun", reason: "still-queued" };
+  if (isRetryableExit(code) || code === 3 || code === 4 || code === 6) {
+    return { evidence: "inconclusive", reason: "infrastructure" };
+  }
+  return { evidence: "failed", reason: "failed" };
 }
 
 // A detached process with stdio "ignore" that leaves no trace is undiagnosable:
@@ -88,30 +111,36 @@ function makeLogger(directory, token) {
 }
 
 export function parseResumerArgs(argv) {
+  const option = { type: "string" };
+  // strict: false keeps the old tolerance: unknown flags are ignored. Everything
+  // after the first `--` is the gate's own argv, passed through untouched.
+  const { values, tokens } = utilParseArgs({
+    args: argv,
+    strict: false,
+    allowPositionals: true,
+    tokens: true,
+    options: {
+      "interval-ms": option,
+      "deadline-ms": option,
+      "observer-dir": option,
+      branch: option,
+      sha: option,
+      "owner-session-id": option,
+      "gate-cwd": option,
+    },
+  });
+  const terminator = tokens.find((token) => token.kind === "option-terminator");
+  const text = (value) => (typeof value === "string" ? value : undefined);
   const options = {
-    intervalMs: DEFAULT_RESUME_INTERVAL_MS,
-    deadlineMs: DEFAULT_RESUME_DEADLINE_MS,
-    observerDirectory: "",
-    branch: "",
-    sha: "",
-    ownerSessionId: "",
-    gateArgv: [],
+    intervalMs: values["interval-ms"] === undefined ? DEFAULT_RESUME_INTERVAL_MS : Number(text(values["interval-ms"])),
+    deadlineMs: values["deadline-ms"] === undefined ? DEFAULT_RESUME_DEADLINE_MS : Number(text(values["deadline-ms"])),
+    observerDirectory: values["observer-dir"] === undefined ? "" : text(values["observer-dir"]),
+    branch: values.branch === undefined ? "" : text(values.branch),
+    sha: values.sha === undefined ? "" : text(values.sha),
+    ownerSessionId: values["owner-session-id"] === undefined ? "" : text(values["owner-session-id"]),
+    gateCwd: values["gate-cwd"] === undefined ? "" : text(values["gate-cwd"]),
+    gateArgv: terminator === undefined ? [] : argv.slice(terminator.index + 1),
   };
-  const separator = argv.indexOf("--");
-  const flags = separator === -1 ? argv : argv.slice(0, separator);
-  options.gateArgv = separator === -1 ? [] : argv.slice(separator + 1);
-  for (let index = 0; index < flags.length; index += 2) {
-    const value = flags[index + 1];
-    switch (flags[index]) {
-      case "--interval-ms": options.intervalMs = Number(value); break;
-      case "--deadline-ms": options.deadlineMs = Number(value); break;
-      case "--observer-dir": options.observerDirectory = value; break;
-      case "--branch": options.branch = value; break;
-      case "--sha": options.sha = value; break;
-      case "--owner-session-id": options.ownerSessionId = value; break;
-      default: break;
-    }
-  }
   if (!Number.isFinite(options.intervalMs) || options.intervalMs <= 0) {
     options.intervalMs = DEFAULT_RESUME_INTERVAL_MS;
   }
@@ -128,11 +157,27 @@ export function parseResumerArgs(argv) {
 // re-claim, which looked identical to the defect it was written to fix.
 const sleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
 
-function runGateOnce({ gateArgv, env, spawnFn }) {
+// windowsHide is load-bearing on Windows. This process is detached, so it owns
+// no console, and a console child started without the flag is given a new
+// VISIBLE one: every re-claim opened a terminal window that stole the
+// operator's focus (observed 2026-09-22, six resumers, a window every few
+// seconds). The gate's own children inherit the hidden console.
+function runGateOnce({ gateArgv, env, spawnFn, cwd, log }) {
   return new Promise((resolve) => {
     const child = spawnFn(process.execPath, gateArgv, {
-      stdio: "ignore",
+      // Explicit, so a resumed gate runs in the pinned worktree (BI-D35B85BF).
+      ...(cwd ? { cwd } : {}),
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
       env: { ...env, [RESUME_MARKER_ENV]: "1" },
+    });
+    log("gate-start", { pid: child.pid ?? null });
+    let remaining = 65536;
+    for (const stream of ["stdout", "stderr"]) child[stream]?.on("data", chunk => {
+      if (remaining <= 0) return;
+      const text = String(chunk).slice(0, remaining);
+      remaining -= text.length;
+      log("gate-output", { pid: child.pid ?? null, stream, text, truncated: remaining === 0 });
     });
     child.once("error", () => resolve(null));
     child.once("exit", (code) => resolve(code));
@@ -152,25 +197,42 @@ export async function resumeUntilAdmitted({
   intervalMs,
   deadlineMs,
   env = process.env,
+  cwd = "",
   now = () => Date.now(),
   spawnFn = spawn,
   sleepFn = sleep,
   log = () => {},
+  random = Math.random,
 }) {
   const giveUpAt = now() + deadlineMs;
   let attempts = 0;
   let blockedAttempts = 0;
+  let blockedStreak = 0;
   for (;;) {
+    if (attempts > 0 && now() >= giveUpAt) {
+      return { code: EXIT_QUEUED, attempts, blockedAttempts, outcome: classifyResumeOutcome(EXIT_QUEUED) };
+    }
     attempts += 1;
-    const code = await runGateOnce({ gateArgv, env, spawnFn });
+    const code = await runGateOnce({ gateArgv, env, spawnFn, cwd, log });
     const blocked = code !== null && code !== EXIT_QUEUED && isRetryableExit(code);
     if (blocked) blockedAttempts += 1;
+    blockedStreak = blocked ? blockedStreak + 1 : 0;
     log("gate-attempt", { attempts, code, ...(blocked ? { blocked: true } : {}) });
     // A real verdict - the gate passed or the product failed - ends the wait.
     // Anything the classifier calls blocked-and-transient does not.
-    if (code !== null && !isRetryableExit(code)) return { code, attempts, blockedAttempts };
-    if (now() >= giveUpAt) return { code: EXIT_QUEUED, attempts, blockedAttempts };
-    await sleepFn(blocked ? Math.max(intervalMs, INFRASTRUCTURE_BACKOFF_MS) : intervalMs);
+    // A cancellation or a moved source is final too: both stop the wait unrun.
+    if (code !== null && !isRetryableExit(code)) {
+      return { code, attempts, blockedAttempts, outcome: classifyResumeOutcome(code) };
+    }
+    if (now() >= giveUpAt) {
+      return { code: EXIT_QUEUED, attempts, blockedAttempts, outcome: classifyResumeOutcome(EXIT_QUEUED) };
+    }
+    // Bounded equal jitter avoids synchronized retry storms, while remaining
+    // below the 120s admitted lease TTL. Queue polling resets the outage streak.
+    const ceilingMs = Math.min(90_000, Math.max(intervalMs, INFRASTRUCTURE_BACKOFF_MS)
+      * 2 ** Math.min(Math.max(0, blockedStreak - 1), 4));
+    const delayMs = blocked ? Math.floor(ceilingMs * (0.5 + 0.5 * random())) : intervalMs;
+    await sleepFn(Math.min(delayMs, Math.max(0, giveUpAt - now())));
   }
 }
 
@@ -205,13 +267,14 @@ async function main() {
   const log = makeLogger(options.observerDirectory, identity.token);
   log("start", { pid: process.pid, gateArgv: options.gateArgv, intervalMs: options.intervalMs });
   try {
-    const { code, attempts, blockedAttempts } = await resumeUntilAdmitted({
+    const { code, attempts, blockedAttempts, outcome } = await resumeUntilAdmitted({
       gateArgv: options.gateArgv,
       intervalMs: options.intervalMs,
       deadlineMs: options.deadlineMs,
+      cwd: options.gateCwd,
       log,
     });
-    log("finished", { code, attempts, blockedAttempts });
+    log("finished", { code, attempts, blockedAttempts, outcome });
     process.exitCode = code ?? EXIT_QUEUED;
   } catch (error) {
     log("crashed", { message: String(error?.message || error) });

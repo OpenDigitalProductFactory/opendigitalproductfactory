@@ -8,15 +8,58 @@
  * Format accepted: `<code>` or `<code>: <detail>` (also `—` / `-` separators).
  * Codes are the only machine-checked part; detail is audit prose.
  */
+/**
+ * BI-02E5F2A1 (DI-FC5699629694): the one code the pre-push hook accepts ONLY
+ * when it has itself captured machine evidence that the gate's infrastructure
+ * failed — a re-attempted local-CI lease claim that came back unauthorized,
+ * unreachable or server-errored. Prose in the reason is never that evidence,
+ * and the record it produces is gate-UNRUN, never a pass.
+ */
+export const GATE_INFRASTRUCTURE_UNAVAILABLE_CODE = "gate-infrastructure-unavailable";
+export const PUBLISHED_CORRECTION_CODE = "published-correction";
+
+/** Failure classes the probe may record as infrastructure evidence. */
+export const GATE_INFRASTRUCTURE_FAILURE_KINDS = Object.freeze([
+  "credential-rejected",
+  "transport-unreachable",
+  "server-error",
+  // BI-15E1576D: a queued claim against a pool whose effective capacity is 0
+  // is not a runnable gate.
+  "pool-closed",
+]);
+
 export const LOCAL_CI_OVERRIDE_REASON_CODES = Object.freeze([
   "docs-adjacent",
   "delete-or-tag-only",
   "operator-emergency",
   "external-contribution-no-install",
   "install-bootstrap-recovery",
+  GATE_INFRASTRUCTURE_UNAVAILABLE_CODE,
+  PUBLISHED_CORRECTION_CODE,
 ]);
 
 const LOCAL_CI_OVERRIDE_CODE_SET = new Set(LOCAL_CI_OVERRIDE_REASON_CODES);
+
+/**
+ * A cloud agent session (a claude.ai/code container, marked by
+ * CLAUDE_CODE_REMOTE=true) has no local DPF install and cannot reach the
+ * local-CI lease, so pregate can never run there. Rather than refuse every such
+ * push, the pre-push hook records it under the existing
+ * `external-contribution-no-install` code: never a pass, still PR-visible, and
+ * still subject to DCO and the guard-parity preflight. Cloud CI and the merge
+ * queue remain the gate. The shell hook mirrors this reason inline; keep the
+ * two in sync.
+ */
+export const CLOUD_AGENT_SESSION_OVERRIDE_REASON =
+  "external-contribution-no-install: cloud agent session (CLAUDE_CODE_REMOTE=true), no local DPF install or local-CI lease; cloud CI is the gate";
+
+/**
+ * @param {Record<string, string | undefined>} env
+ * @returns {string | null} the recorded override reason for a cloud agent session, else null
+ */
+export function cloudAgentSessionOverride(env) {
+  return env && env.CLAUDE_CODE_REMOTE === "true" ? CLOUD_AGENT_SESSION_OVERRIDE_REASON : null;
+}
 
 /**
  * @param {string | null | undefined} value
@@ -53,4 +96,44 @@ export function classifyLocalCiOverride(value) {
     };
   }
   return { ok: true, code, detail };
+}
+
+/**
+ * Is a recorded `gate-infrastructure-unavailable` skip backed by the machine
+ * evidence the hook's probe writes? A record carrying the code without a
+ * captured failure response is a prose override wearing the wrong code, and
+ * every reader (pr:health, the PreToolUse guard) treats it as a blocker.
+ *
+ * @param {unknown} evidence — the `infrastructureEvidence` field of a gate record
+ * @returns {{ ok: true, kind: string, message: string } | { ok: false, reason: string }}
+ */
+export function classifyGateInfrastructureEvidence(evidence) {
+  if (!evidence || typeof evidence !== "object") {
+    return {
+      ok: false,
+      reason:
+        `${GATE_INFRASTRUCTURE_UNAVAILABLE_CODE} requires machine-captured evidence ` +
+        "(the hook's re-attempted lease claim and its failure response); the record carries none — " +
+        "prose in the reason is not evidence",
+    };
+  }
+  const kind = typeof evidence.kind === "string" ? evidence.kind : "";
+  const message = typeof evidence.message === "string" ? evidence.message.trim() : "";
+  if (!GATE_INFRASTRUCTURE_FAILURE_KINDS.includes(kind)) {
+    return {
+      ok: false,
+      reason:
+        `${GATE_INFRASTRUCTURE_UNAVAILABLE_CODE} evidence kind ${JSON.stringify(kind)} is not a ` +
+        `recognised infrastructure failure (one of: ${GATE_INFRASTRUCTURE_FAILURE_KINDS.join(", ")})`,
+    };
+  }
+  if (evidence.tool !== "claim_nonprod_environment_lease" || !message) {
+    return {
+      ok: false,
+      reason:
+        `${GATE_INFRASTRUCTURE_UNAVAILABLE_CODE} evidence must name the re-attempted lease claim ` +
+        "and carry its failure response",
+    };
+  }
+  return { ok: true, kind, message };
 }

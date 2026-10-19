@@ -24,7 +24,12 @@ import {
   shellCommandFromInput,
 } from "./lib/hook-io.mjs";
 import { executableCommandText } from "./command-text.mjs";
-import { classifyLocalCiOverride } from "./lib/local-ci-override.mjs";
+import {
+  GATE_INFRASTRUCTURE_UNAVAILABLE_CODE,
+  classifyGateInfrastructureEvidence,
+  classifyLocalCiOverride,
+  cloudAgentSessionOverride,
+} from "./lib/local-ci-override.mjs";
 
 /** Commands that publish runtime code and must carry pregate evidence. */
 const PUBLISH_PATTERNS = [
@@ -157,15 +162,28 @@ export function evaluateGateVerdict(head, opts = {}) {
     return { ok: true };
   }
 
+  const correctionReader = head.topLevel ? join(head.topLevel, "scripts", "published-correction.mjs") : "";
+  if (correctionReader && existsSync(correctionReader)) {
+    const result = (opts.spawnImpl || spawnSync)(process.execPath, [correctionReader, "--status"], {
+      cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 15_000, windowsHide: true,
+    });
+    if (result.status === 0) return { ok: true, kind: "override" };
+  }
+
   const files = listSlotStateFiles(head.statePath);
   if (files.length === 0) {
-    return evaluateGateRecord(head.statePath, head.sha);
+    return evaluateGateRecord(head.statePath, head.sha, head.branch);
   }
   let firstMiss = null;
   for (const file of files) {
-    const verdict = evaluateGateRecord(file, head.sha);
-    if (verdict.ok) return verdict;
-    if (!firstMiss) firstMiss = verdict;
+    const verdict = evaluateGateRecord(file, head.sha, head.branch);
+    // BI-53B189C8: once the reader has answered, its verdict stands for every
+    // gate record. The fallback may add only what the reader does not grade:
+    // a recorded override. It used to accept any gatePassed record for the
+    // SHA, which let a lease-test fixture bound to another branch overturn the
+    // reader's STALE and publish.
+    if (verdict.ok && (!canonical || verdict.kind === "override")) return verdict;
+    if (!verdict.ok && !firstMiss) firstMiss = verdict;
   }
   if (canonical && canonical.reason) {
     return { ok: false, reason: `pregate:status ${canonical.verdict} — ${canonical.reason}` };
@@ -176,9 +194,10 @@ export function evaluateGateVerdict(head, opts = {}) {
 /**
  * @param {string} statePath
  * @param {string} headSha
- * @returns {{ ok: boolean, reason?: string }}
+ * @param {string} [headBranch] when given, a record bound to another branch is refused
+ * @returns {{ ok: boolean, reason?: string, kind?: "pass" | "override" }}
  */
-export function evaluateGateRecord(statePath, headSha) {
+export function evaluateGateRecord(statePath, headSha, headBranch = "") {
   if (!existsSync(statePath)) {
     return { ok: false, reason: "no dpf-local-ci-gate.json for this worktree" };
   }
@@ -191,10 +210,24 @@ export function evaluateGateRecord(statePath, headSha) {
   if (!rec || typeof rec !== "object") {
     return { ok: false, reason: "invalid gate record" };
   }
+  // BI-53B189C8: DPF_ALLOW_LOCAL_CI_STUB=1 records a pass without building
+  // anything. It is contract-test plumbing, never evidence for a publish.
+  if (rec.testStub === true) {
+    return {
+      ok: false,
+      reason: `gate record was written by the DPF_ALLOW_LOCAL_CI_STUB=1 test stub (branch ${rec.branch || "unknown"}) — no sandbox build ran, so it is not evidence; re-run pregate`,
+    };
+  }
   if (rec.sha && headSha && rec.sha !== headSha) {
     return {
       ok: false,
       reason: `gate record SHA ${String(rec.sha).slice(0, 12)} ≠ HEAD ${headSha.slice(0, 12)} — re-run pregate`,
+    };
+  }
+  if (rec.branch && headBranch && rec.branch !== headBranch) {
+    return {
+      ok: false,
+      reason: `gate record is bound to branch ${rec.branch}, not ${headBranch} — re-run pregate`,
     };
   }
   if (rec.gatePassed === true) {
@@ -204,12 +237,20 @@ export function evaluateGateRecord(statePath, headSha) {
         return { ok: false, reason: "local-CI gate record expired — re-run pregate" };
       }
     }
-    return { ok: true };
+    return { ok: true, kind: "pass" };
   }
   if (rec.skipped && rec.skipReason) {
     const c = classifyLocalCiOverride(rec.skipReason);
-    if (c.ok) return { ok: true };
-    return { ok: false, reason: c.reason };
+    if (!c.ok) return { ok: false, reason: c.reason };
+    if (c.code === "published-correction") {
+      return { ok: false, reason: "Published correction must pass fresh stage inspection; raw slot fields cannot substitute for it." };
+    }
+    if (c.code === GATE_INFRASTRUCTURE_UNAVAILABLE_CODE) {
+      // BI-02E5F2A1: evidence-gated — the record must carry the probe's capture.
+      const e = classifyGateInfrastructureEvidence(rec.infrastructureEvidence);
+      return e.ok ? { ok: true, kind: "override" } : { ok: false, reason: e.reason };
+    }
+    return { ok: true, kind: "override" };
   }
   return { ok: false, reason: "gate record present but not passed" };
 }
@@ -245,7 +286,8 @@ export function decide(command, env = {}, opts = {}) {
       env.DPF_SKIP_PREPUSH_GATE_REASON ||
       "";
     const c = classifyLocalCiOverride(reason);
-    if (c.ok) return { block: false };
+    if (c.ok && c.code !== "published-correction") return { block: false };
+    if (c.code === "published-correction") return { block: true, reason: "Published correction needs machine proof in the existing record; an environment reason alone is insufficient." };
     return {
       block: true,
       reason:
@@ -265,6 +307,18 @@ export function decide(command, env = {}, opts = {}) {
 
   const gate = evaluateGateVerdict(head, { cwd: head.topLevel || cwd });
   if (gate.ok) return { block: false };
+  // Only a Git push may defer execution to its mandatory Git hook. A PR
+  // creation still needs completed proof; eligibility is not a passing check.
+  const correction = head.topLevel ? join(head.topLevel, "scripts", "published-correction.mjs") : "";
+  if (/^git\s+push\b/.test(execText.trim()) && correction && existsSync(correction)) {
+    const result = spawnSync(process.execPath, [correction, "--eligible"], {
+      cwd: head.topLevel, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 15_000, windowsHide: true,
+    });
+    if (result.status === 0) return { block: false };
+  }
+  // A cloud agent session cannot run pregate; the git pre-push hook records
+  // the push under the same allowlisted code instead of refusing it.
+  if (cloudAgentSessionOverride(env)) return { block: false };
   return {
     block: true,
     reason: `${GUIDANCE} (${gate.reason})`,

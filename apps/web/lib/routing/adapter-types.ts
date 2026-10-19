@@ -5,16 +5,7 @@
  */
 
 import type { RoutedExecutionPlan } from "./recipe-types";
-import type { ChatMessage } from "../ai-inference";
-
-/** Named type for tool call entries (matches InferenceResult.toolCalls shape) */
-export type ToolCallEntry = {
-  id: string;
-  name: string;
-  arguments: Record<string, unknown>;
-  /** Opaque native continuation data; never authority to execute a tool. */
-  gemini?: { modelId: string; functionCallId?: string; thoughtSignature?: string };
-};
+import type { ChatMessage, ToolCallEntry } from "./chat-message-types";
 
 /** Pre-resolved provider connection info — callProvider resolves before dispatch */
 export interface ResolvedProvider {
@@ -33,6 +24,15 @@ export interface AdapterMcpSession {
   agentId?: string | null;
   threadId?: string | null;
   routeContext?: string | null;
+  /**
+   * BI-B949993E: the governed TaskRun this turn executes for, when any. The
+   * MCP route resolves the TaskRun's server-validated initiativeReviewBinding
+   * from it, so a governed writer called natively from the CLI is admitted on
+   * the same terms as one executed in-process — never from caller-supplied
+   * binding data.
+   */
+  taskRunId?: string | null;
+  taskExecutionFence?: import("@/lib/shared/task-execution-fence").TaskExecutionFence | null;
 }
 
 /** Input to an execution adapter */
@@ -48,6 +48,10 @@ export interface AdapterRequest {
    * use this field.
    */
   fetchImpl: typeof fetch;
+  /** Outer runtime layer supplies read-only evidence without reversing the routing dependency. */
+  readLocalThinkingBudgetEvidence?: (
+    apiRoot: string, modelId: string, fetchImpl: typeof fetch,
+  ) => Promise<import("./types").LocalThinkingBudgetEvidence | undefined>;
   messages: ChatMessage[];
   systemPrompt: string;
   tools?: Array<Record<string, unknown>>;
@@ -100,6 +104,8 @@ export interface AdapterResult {
    * returning the fragment (BI-1D144CC1). Absent/false means a clean stop.
    */
   truncated?: boolean;
+  /** Actual provider completion reason, absent when the provider did not supply one. */
+  finishReason?: string;
   /**
    * The model's own reasoning/scratchpad for this turn, when the provider emits
    * it as a channel SEPARATE from the answer — llama.cpp / Docker Model Runner

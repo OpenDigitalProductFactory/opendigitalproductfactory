@@ -30,6 +30,8 @@ export type WriteThroughDeps = {
   ruleWeight(input: { weightProposalId: string }): Promise<{ applied: boolean; error?: string }>;
   /** Close the decision with a recorded reason and change nothing else. */
   recordNoChange(input: { interactionRowId: string; reason: string }): Promise<void>;
+  /** approveHeldProfessionMaterial: release a craft's held material to the gate. */
+  releaseHeldMaterial(input: { profileId: string }): Promise<ActionResult<number>>;
 };
 
 function asString(payload: Record<string, unknown>, key: string): string | null {
@@ -92,10 +94,26 @@ export async function applyAcceptedProposal(
       return ok("Closed with your reason recorded. Nothing else changed.");
     }
 
-    // Designed, not yet wired. Refusing keeps the lifecycle honest: nothing
-    // may reach `accepted` on a path that would write nothing.
+    case "release_material": {
+      // BI-1A2FD647: the held-material release path (BI-5F3BFD13). Material is
+      // held only for families touching finance or compliance, which is why a
+      // person releases it.
+      const profileId = asString(payload, "profileId");
+      if (!profileId) return err("The proposal names no craft whose material to release.");
+      const released = await deps.releaseHeldMaterial({ profileId });
+      if (!released.ok) {
+        return err(
+          released.error === "no-held-material"
+            ? "There is no held material for this craft any more, so nothing was released."
+            : released.error,
+        );
+      }
+      return ok(`Released ${released.data} held material row(s). The craft's coworker now decides with them.`);
+    }
+
+    // Designed, not yet wired, and no writer emits it: the weekly review routes
+    // a missing stance as answer_gap. Refusing keeps the lifecycle honest.
     case "amend_stance":
-    case "release_material":
       return err(
         `Accepting a ${actionKind} proposal is not wired yet — rule on it where that material lives.`,
       );

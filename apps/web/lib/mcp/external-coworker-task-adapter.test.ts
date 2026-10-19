@@ -10,7 +10,7 @@ vi.mock("@/lib/mcp-task-submit", async (importOriginal) => ({
 
 import { dispatchExternalCoworkerTask } from "./external-coworker-task-adapter";
 import { createObjectiveMappingRequestKey } from "@/lib/mcp-task-objective-mapping-request-key";
-import { canonicalJson } from "@/lib/shared/canonical-json";
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 
 const verifiedContext = {
   apiTokenId: "PAT-1",
@@ -63,6 +63,25 @@ beforeEach(() => {
 });
 
 describe("dispatchExternalCoworkerTask", () => {
+  it.each(["pat", "oauth"])("preserves admitted %s identity and read scope on dispatch", async authSource => {
+    remote.submit.mockResolvedValue({ kind: "result", result: { taskRunId: "TR-1", isError: false } });
+    const result = await dispatchExternalCoworkerTask({ collaborationKind: "handoff",
+      targetAgent: "AGT-WS-REVIEW", objective: "Review the deployed fix.", requestKey: "stable-review",
+      userId: "user-1", context: { ...verifiedContext, authSource, tokenScope: "read" } });
+    expect(result.success).toBe(true);
+    expect(remote.submit).toHaveBeenCalledWith(expect.objectContaining({ token: {
+      tokenId: "PAT-1", userId: "user-1", capability: "read", source: authSource,
+    } }));
+  });
+
+  it.each(["session-jwt", "unknown"])("does not reclassify %s as external credentials", async authSource => {
+    const result = await dispatchExternalCoworkerTask({ collaborationKind: "handoff",
+      targetAgent: "AGT-WS-REVIEW", objective: "Review.", requestKey: "stable-review",
+      userId: "user-1", context: { ...verifiedContext, authSource } });
+    expect(result).toMatchObject({ success: false, error: "external_handoff_context_required" });
+    expect(remote.submit).not.toHaveBeenCalled();
+  });
+
   it("fails closed with a reachable action when verified PAT context is absent", async () => {
     const result = await dispatchExternalCoworkerTask({
       collaborationKind: "handoff",

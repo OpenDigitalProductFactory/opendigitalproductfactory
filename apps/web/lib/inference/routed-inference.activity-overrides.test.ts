@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ActivityContract } from "@/lib/routing/activity-contract";
+import { makeActivity } from "./routed-inference-test-fixture";
 import {
   ACTIVITY_HARNESS_CONFIDENCE_OVERRIDE_ACTION,
   activityHarnessProposalParameters,
@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@dpf/db", () => ({
   prisma: {
+    userFact: { findMany: async () => [] }, // BI-C8EC05C9 dual read: no override fact exists yet
     agentActionProposal: {
       findMany: mocks.agentActionProposalFindMany,
     },
@@ -80,6 +81,7 @@ vi.mock("@/lib/routing/provider-suitability/provider-onboarding-data", () => ({
 import { routeAndCall } from "./routed-inference";
 import { previewRoute } from "./routed-inference";
 import { ProviderReconciliationRequiredError } from "./provider-reconciliation";
+import { utilityInfer } from "./utility-inference";
 
 describe("routeAndCall activity harness overrides", () => {
   beforeEach(() => {
@@ -223,6 +225,16 @@ describe("routeAndCall activity harness overrides", () => {
     });
   });
 
+  it("carries the utility output allowance into the actual dispatch plan", async () => {
+    mocks.callWithFallbackChain.mockResolvedValue({ providerId: "openai", modelId: "gpt-4o-mini",
+      content: "A useful summary of the source.", toolCalls: [],
+      tokenUsage: { inputTokens: 12, outputTokens: 8 }, inferenceMs: 1, downgraded: false });
+    const result = await utilityInfer({ task: "summarize", input: "Synthetic source material.", maxOutputTokens: 128 });
+    expect(result.fallback).toBe(false);
+    expect(mocks.callWithFallbackChain.mock.calls[0]?.[4]?.maxTokens).toBe(128);
+    expect(mocks.callWithFallbackChain.mock.calls[0]?.[9]).toBeInstanceOf(AbortSignal);
+  });
+
   it("loads approved activity harness confidence overrides for live activity routing", async () => {
     await routeAndCall(
       [{ role: "user", content: "Summarize this transcript." }],
@@ -319,6 +331,19 @@ describe("routeAndCall activity harness overrides", () => {
     expect(mocks.callWithFallbackChain).toHaveBeenCalledTimes(2);
   });
 
+  it.each([false, true])("attests initial refusal only; prior reconciliation=%s", async priorDispatch => {
+    const selected = await mocks.routeEndpointV2();
+    if (priorDispatch) {
+      mocks.callWithFallbackChain.mockRejectedValueOnce(new ProviderReconciliationRequiredError(["openai"], []));
+      mocks.routeEndpointV2.mockResolvedValueOnce(selected);
+    }
+    mocks.routeEndpointV2.mockResolvedValueOnce({ ...selected, selectedEndpoint: null, excludedCount: 2,
+      excludedReasons: ["private-id: Sensitivity clearance missing for 'restricted'", "private-id: Activity completion allowance exceeds known model output capacity"] });
+    await expect(routeAndCall([{ role: "user", content: "Review" }], "Review", "internal", { taskType: "build-review" }))
+      .rejects.toMatchObject({ providerDispatch: priorDispatch ? "unknown" : "not-started", eligibility: { excludedCount: 2,
+        exclusions: [{ bucket: "sensitivity-clearance", count: 1 }, { bucket: "output-capacity", count: 1 }] } });
+    expect(mocks.callWithFallbackChain).toHaveBeenCalledTimes(priorDispatch ? 1 : 0);
+  });
   it("keeps preview routing deterministic by not loading approved overrides", async () => {
     await previewRoute(
       [{ role: "user", content: "Summarize this transcript." }],
@@ -703,30 +728,6 @@ describe("routeAndCall activity harness overrides", () => {
     expect(mocks.persistRouteDecision).not.toHaveBeenCalled();
   });
 });
-
-function makeActivity(overrides: Partial<ActivityContract> = {}): ActivityContract {
-  return {
-    activityId: "request:REQ-1:01:summarize",
-    parentRef: { taskRunId: "TASK-1" },
-    activityClass: "summarize",
-    title: "Distill source material",
-    distributionShape: "center",
-    riskClass: "low",
-    successShape: "text",
-    contextPolicy: "retrieval",
-    tokenEnvelope: {
-      maxInputTokens: 64000,
-      maxOutputTokens: 2000,
-      compression: "summarize",
-    },
-    evaluationPolicy: {
-      evaluator: "human-acceptance",
-      minimumSignal: "accepted",
-    },
-    requestContractHints: {},
-    ...overrides,
-  };
-}
 
 function localAndCloudSuitabilitySource() {
   return {

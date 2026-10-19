@@ -30,18 +30,21 @@ param(
     [switch]$ShowSubstrate,
     [switch]$DryRun,
     # Auto-mint an MCP token (in the portal container) and persist it durably
-    # when none is present. On by default for the contributor bootstrap.
+    # when none is present. Only enabled in explicit legacy compatibility mode.
     [switch]$NoAutoMint,
+    [ValidateSet("oauth", "legacy")]
+    [string]$AuthMode = $(if ($env:DPF_MCP_AUTH_MODE) { $env:DPF_MCP_AUTH_MODE } else { "oauth" }),
     # Scope of the auto-minted token: read | write | admin. `write` gives an
     # external coding agent all side-effecting MCP tools without admin powers.
     [string]$MintScope = "write",
     # Opt-in: install Google Antigravity's `agy` CLI (runs the official vendor
-    # installer) when absent, then wire the DPF MCP config. OFF by default — we
+    # installer) when absent, then wire the DPF MCP config. OFF by default -- we
     # never run a vendor installer silently (kernel DI-B91843F8C157).
     [switch]$InstallAntigravity
 )
 
 $ErrorActionPreference = "Stop"
+$env:DPF_MCP_AUTH_MODE = $AuthMode
 
 function Write-Ok    { param($msg) Write-Host "  [OK] $msg"     -ForegroundColor Green }
 function Write-Info  { param($msg) Write-Host "  [..] $msg"     -ForegroundColor Cyan }
@@ -61,7 +64,31 @@ $GrokConfigPath         = Join-Path $HOME ".grok\config.toml"  # platform-specif
 $KernelPrinciplesDir    = Join-Path $RepoRoot "docs\founder-kernel\wiki\principles"
 $ContributorMemoryDir   = Join-Path $HOME ".claude\projects"
 $ProjectSlug            = ($RepoRoot -replace '[:\\\/]+', '-').TrimStart('-')
-$McpEndpoint            = if ($env:DPF_MCP_URL) { $env:DPF_MCP_URL } else { "http://127.0.0.1:3000/api/mcp/v1" }
+# BI-2D545A0C (design 12.4.3): an explicit process DPF_MCP_URL selects the
+# endpoint before the saved https preference and install defaults. On HTTPS,
+# Node clients trust the organization CA (BI-FA2C46D7). The shared
+# installer/lib/mcp-client-env module owns resolution. Codex's saved endpoint
+# is not a selection for every client: the updater keeps it in Codex's own
+# config when no endpoint is named (BI-8FD7C0C9).
+. (Join-Path $ScriptDir "installer\lib\mcp-client-env.ps1")
+$McpClientEnv           = Resolve-DpfMcpClientEnv -InstallDir $RepoRoot
+# $McpEndpointNamed is the endpoint the install or operator named (may be
+# empty); only it is forwarded to the updater, whose canonical https/OAuth
+# default governs otherwise (BI-772023BC). The probes and the plan bridge need
+# a concrete URL, so they read that same default from the updater's one line.
+$McpEndpointNamed       = [string]$McpClientEnv.McpUrl
+$McpEndpoint            = $McpEndpointNamed
+if (-not $McpEndpoint) {
+    $updaterSource = Join-Path $RepoRoot "packages\dpf-skill-pack\scripts\update_agent_toolchain.py"
+    $defaultLine = if (Test-Path -LiteralPath $updaterSource) { Select-String -LiteralPath $updaterSource -Pattern '^DEFAULT_MCP_URL = "(.*)"$' | Select-Object -First 1 } else { $null }
+    if ($defaultLine) { $McpEndpoint = $defaultLine.Matches[0].Groups[1].Value }
+}
+if (-not $McpEndpoint) {
+    Write-Fail2 "Cannot read the default MCP endpoint from $updaterSource; set DPF_MCP_URL or restore the skill pack."
+    exit 1
+}
+$McpTrustBundle         = $McpClientEnv.CaBundle
+if ($McpTrustBundle) { $env:NODE_EXTRA_CA_CERTS = $McpTrustBundle }
 $SkillPackManifestPath  = Join-Path $RepoRoot "packages\dpf-skill-pack\.claude-plugin\plugin.json"
 
 if (-not (Test-Path -LiteralPath $SkillPackManifestPath)) {
@@ -119,7 +146,7 @@ if ((Test-Path -LiteralPath $ProcessSpineCheck) -and ($null -ne (Get-Command nod
 # container (it reaches the DB over the compose network and always matches the
 # migrated schema; the host may lack DB access). Mirrors the Edge Node bootstrap
 # pattern in fresh-install.ps1. The plaintext is never logged; only persisted.
-$AutoMint = -not $NoAutoMint.IsPresent
+$AutoMint = ($AuthMode -eq "legacy") -and -not $NoAutoMint.IsPresent
 
 function Resolve-PortalContainer {
     $c = (& docker compose -f (Join-Path $RepoRoot "docker-compose.yml") ps -q portal 2>$null | Select-Object -First 1)
@@ -127,6 +154,30 @@ function Resolve-PortalContainer {
     $c = (& docker ps --filter "name=portal" --filter "status=running" --format "{{.Names}}" 2>$null | Where-Object { $_ -match "portal" } | Select-Object -First 1)
     if ($c) { return $c }
     return "dpf-portal-1"
+}
+
+# Reconcile a rejected token (BI-2F82F1A0). "token present" != "token
+# accepted": a persisted token can be expired (issuer default TTL 90 days),
+# revoked, or unknown to this install; the portal answers HTTP 401 and every
+# gate downstream fails. Probe with the read-only tools/list call and re-mint
+# ONLY on 401. 403 is the scope probe's business; unreachable never replaces a
+# present token. SSOT: interpretTokenAuthProbe / TOKEN_AUTH_PROBE in @dpf/bootstrap.
+if ($HasToken -and $AutoMint -and -not $DryRun.IsPresent) {
+    $authStatus = 0
+    try {
+        $body = '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
+        $headers = @{ "Authorization" = "Bearer $($env:DPF_MCP_BEARER_TOKEN)"; "Accept" = "application/json, text/event-stream" }
+        $resp = Invoke-WebRequest -Uri $McpEndpoint -Method Post -ContentType "application/json" -Headers $headers -Body $body -TimeoutSec 5 -UseBasicParsing -ErrorAction Stop
+        $authStatus = [int]$resp.StatusCode
+    } catch {
+        if ($_.Exception.Response -and $_.Exception.Response.StatusCode) {
+            $authStatus = [int]$_.Exception.Response.StatusCode
+        }
+    }
+    if ($authStatus -eq 401) {
+        Write-Warn2 "Present MCP token is rejected by $McpEndpoint (HTTP 401: expired, revoked or unknown to this install); re-minting."
+        $HasToken = $false
+    }
 }
 
 # Reconcile an under-provisioned token (BI-A3DE9A31). "token present" !=
@@ -159,25 +210,162 @@ if (-not $HasToken -and $AutoMint) {
     } else {
         $portal = Resolve-PortalContainer
         Write-Info "No MCP token found; minting a '$MintScope'-scoped token via portal container ($portal)."
-        try {
-            $mintOut = & docker exec $portal sh -c "cd /app/apps/web-src && /app/node_modules/.pnpm/node_modules/.bin/tsx scripts/issue-mcp-token.ts --scope '$MintScope' --format raw" 2>$null
-            $mintToken = ($mintOut | ForEach-Object { $_.ToString().Trim() } | Where-Object { $_ -match '^dpfmcp_' } | Select-Object -Last 1)
-            if ($mintToken) {
-                # Durable persistence for new processes (Windows analog of the
-                # POSIX zshenv + launchctl path). Single source of truth for the
-                # exact line: buildSetupSnippets().envPowerShell.
-                [System.Environment]::SetEnvironmentVariable('DPF_MCP_BEARER_TOKEN', $mintToken, 'User')
-                $env:DPF_MCP_BEARER_TOKEN = $mintToken
-                $HasToken = $true
-                $prefix = ($mintToken -split '_')[0]
-                Write-Ok "MCP token issued and persisted (${prefix}_... , scope=$MintScope)."
-            } else {
-                Write-Warn2 "Token issuance produced no token; continuing without one."
+        $running = (& docker inspect -f '{{.State.Running}}' $portal 2>$null)
+        if ("$running".Trim() -ne 'true') {
+            Write-Warn2 "Portal container '$portal' is not running; cannot mint an MCP token. Continuing without one."
+        } else {
+            $mintErr = [System.IO.Path]::GetTempFileName()
+            try {
+                # BI-3F16A430: the web-src snapshot in the image has no node_modules
+                # and /app/node_modules carries no @dpf/* links, so the issuer cannot
+                # resolve @dpf/db / @dpf/integration-shared. The image links them at
+                # build (Dockerfile runner stage); re-run the same script here so an
+                # image built before that shipped is repaired in place. Idempotent.
+                $linkScript = Join-Path $RepoRoot "scripts\link-web-src-workspace.sh"
+                if (Test-Path -LiteralPath $linkScript) {
+                    $linkBody = (Get-Content -LiteralPath $linkScript -Raw) -replace "`r`n", "`n"
+                    $linkOut = ($linkBody | & docker exec -i $portal sh -s 2>&1)
+                    if ($LASTEXITCODE -ne 0) {
+                        Write-Warn2 "Could not link workspace packages into web-src; trying the issuer anyway. ($linkOut)"
+                    }
+                }
+                # Resolve tsx inside the container - never a pnpm-internal path (it
+                # moved once already). Probe the runtime locations, fall back to the
+                # Node loader form, and fail with the real reason if none resolves.
+                $issuerCmd = @'
+cd /app/apps/web-src || exit 2
+for t in /app/node_modules/.bin/tsx /app/packages/db/node_modules/.bin/tsx; do
+  if [ -x "$t" ]; then exec "$t" scripts/issue-mcp-token.ts "$@"; fi
+done
+if node -e "require.resolve(\"tsx\")" >/dev/null 2>&1; then exec node --import tsx scripts/issue-mcp-token.ts "$@"; fi
+echo "issue-mcp-token: no tsx runtime found in the portal image (probed /app/node_modules/.bin/tsx, /app/packages/db/node_modules/.bin/tsx, node --import tsx)" >&2
+exit 127
+'@ -replace "`r`n", "`n"
+                $mintOut = & docker exec $portal sh -c $issuerCmd issuer --scope $MintScope --format raw 2>$mintErr
+                $mintRc = $LASTEXITCODE
+                $mintToken = ($mintOut | ForEach-Object { $_.ToString().Trim() } | Where-Object { $_ -match '^dpfmcp_' } | Select-Object -Last 1)
+                if ($mintRc -eq 0 -and $mintToken) {
+                    # Durable persistence for new processes (Windows analog of the
+                    # POSIX zshenv + launchctl path). Single source of truth for the
+                    # exact line: buildSetupSnippets().envPowerShell.
+                    [System.Environment]::SetEnvironmentVariable('DPF_MCP_BEARER_TOKEN', $mintToken, 'User')
+                    $env:DPF_MCP_BEARER_TOKEN = $mintToken
+                    $HasToken = $true
+                    $prefix = ($mintToken -split '_')[0]
+                    Write-Ok "MCP token issued and persisted (${prefix}_... , scope=$MintScope)."
+                } else {
+                    if ($mintRc -eq 0) {
+                        Write-Warn2 "Token issuance produced no token; continuing without one. Issuer diagnostics:"
+                    } else {
+                        Write-Warn2 "Token issuance failed inside '$portal' (exit $mintRc); continuing without a token. Issuer diagnostics:"
+                    }
+                    if (Test-Path -LiteralPath $mintErr) {
+                        Get-Content -LiteralPath $mintErr -TotalCount 40 | ForEach-Object { Write-Host "    $_" }
+                    }
+                }
+            } catch {
+                Write-Warn2 "Token issuance failed: $($_.Exception.Message); continuing without a token."
+            } finally {
+                Remove-Item -LiteralPath $mintErr -Force -ErrorAction SilentlyContinue
             }
-        } catch {
-            Write-Warn2 "Token issuance failed (is the portal container running?); continuing without a token."
         }
     }
+}
+
+# Persist the selected https endpoint (and the organization CA) for new
+# processes, even while OAuth is pending; a plain-http endpoint is never
+# written to the User environment Claude reads (BI-8FD7C0C9). Never at dry-run.
+if (-not $DryRun) {
+    $transport = Set-DpfMcpClientEnv -ClientEnv $McpClientEnv
+    if ($transport -eq "persisted") {
+        Write-Ok "Saved the MCP endpoint preference for future sessions (User env)."
+    } elseif ($transport -eq "unchanged") {
+        Write-Ok "MCP client transport already persisted (User env): $McpEndpoint"
+    }
+}
+
+# Grok credential (BI-5BCDB07C). Independent of the legacy PAT mint above.
+# ASCII only. Does not mint a personal access token.
+if ($GrokPresent) {
+    if ($DryRun.IsPresent) {
+        Write-Info "DRY-RUN: would create the Grok credentials client and refresh its bearer file."
+    } elseif ($null -eq (Get-Command node -ErrorAction SilentlyContinue)) {
+        Write-Warn2 "node not found; cannot refresh the Grok credential."
+    } elseif ($null -eq (Get-Command docker -ErrorAction SilentlyContinue)) {
+        Write-Warn2 "docker not found; cannot create the Grok credentials client."
+    } else {
+        $portal = Resolve-PortalContainer
+        $running = (& docker inspect -f '{{.State.Running}}' $portal 2>$null)
+        if ("$running".Trim() -ne 'true') {
+            Write-Warn2 "Portal container '$portal' is not running; Grok credential was not created."
+        } else {
+            $grokErr = [System.IO.Path]::GetTempFileName()
+            try {
+                $linkScript = Join-Path $RepoRoot "scripts\link-web-src-workspace.sh"
+                if (Test-Path -LiteralPath $linkScript) {
+                    $linkBody = (Get-Content -LiteralPath $linkScript -Raw) -replace "`r`n", "`n"
+                    $linkOut = ($linkBody | & docker exec -i $portal sh -s 2>&1)
+                    if ($LASTEXITCODE -ne 0) {
+                        Write-Warn2 "Could not link workspace packages into web-src; trying the Grok client issuer anyway. ($linkOut)"
+                    }
+                }
+                $grokIssuer = @'
+cd /app/apps/web-src || exit 2
+for t in /app/node_modules/.bin/tsx /app/packages/db/node_modules/.bin/tsx; do
+  if [ -x "$t" ]; then exec "$t" scripts/issue-grok-credentials-client.ts "$@"; fi
+done
+if node -e "require.resolve(\"tsx\")" >/dev/null 2>&1; then exec node --import tsx scripts/issue-grok-credentials-client.ts "$@"; fi
+echo "issue-grok-credentials-client: no tsx runtime found in the portal image" >&2
+exit 127
+'@ -replace "`r`n", "`n"
+                # Feed the script on stdin (sh -s), as the link step above does.
+                # Passed as a native `sh -c` argument it arrived truncated, the
+                # issuer never ran, docker exited 0 with no output, and
+                # write-client failed on empty input (BI-8D152751).
+                $clientOut = ($grokIssuer | & docker exec -i $portal sh -s 2>$grokErr)
+                if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace("$clientOut")) {
+                    $clientOut | & node (Join-Path $RepoRoot "packages\dpf-skill-pack\scripts\refresh-grok-mcp-credential.mjs") write-client --config $GrokConfigPath
+                    if ($LASTEXITCODE -eq 0) {
+                        & node (Join-Path $RepoRoot "packages\dpf-skill-pack\scripts\refresh-grok-mcp-credential.mjs") refresh --mcp-url $McpEndpoint --config $GrokConfigPath
+                        if ($LASTEXITCODE -eq 0) {
+                            Write-Ok "Grok credential refreshed into bearer_token_file."
+                        } else {
+                            Write-Warn2 "Grok credential refresh did not complete."
+                        }
+                    } else {
+                        Write-Warn2 "Grok credentials client was not stored."
+                    }
+                } else {
+                    Write-Warn2 "Grok credentials client was not created (exit $LASTEXITCODE)."
+                    if (Test-Path -LiteralPath $grokErr) {
+                        Get-Content -LiteralPath $grokErr -TotalCount 40 | ForEach-Object { Write-Host "    $_" }
+                    }
+                }
+            } catch {
+                Write-Warn2 "Grok credential setup failed: $($_.Exception.Message)"
+            } finally {
+                Remove-Item -LiteralPath $grokErr -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+}
+
+# Refresh native plugin registrations before the config plan reads preferences.
+# The standalone updater owns this migration on every bootstrap path.
+$PluginUpdater = Join-Path $RepoRoot "packages\dpf-skill-pack\scripts\update-agent-toolchain.ps1"
+if (-not (Test-Path -LiteralPath $PluginUpdater)) {
+    Write-Fail2 "Standalone updater missing at $PluginUpdater; cannot proceed."
+    exit 1
+}
+try {
+    & $PluginUpdater -CodexPluginOnly -SkillPackPath (Join-Path $RepoRoot "packages\dpf-skill-pack") -McpUrl $McpEndpointNamed -DryRun:$DryRun
+} catch {
+    Write-Fail2 "Plugin refresh failed: $($_.Exception.Message)"
+    exit 1
+}
+if ($LASTEXITCODE -ne 0) {
+    Write-Fail2 "Plugin refresh failed; configuration planning stopped."
+    exit $LASTEXITCODE
 }
 
 # --- Compute plan via Node bridge --------------------------------------------
@@ -199,6 +387,7 @@ $nodeArgs = @(
     "--contributor-memory", $ContributorMemoryDir,
     "--project-slug", $ProjectSlug,
     "--mcp-endpoint", $McpEndpoint,
+    "--auth-mode", $AuthMode,
     "--expected-dpf-platform-version", $expectedVersion
 )
 if ($ClaudePresent)        { $nodeArgs += "--claude-cli-present" }
@@ -211,17 +400,13 @@ if ($ReconcileStaleEntries.IsPresent) { $nodeArgs += "--reconcile-stale-entries"
 $planJson = & pnpm @nodeArgs 2>$null
 if ($LASTEXITCODE -ne 0 -or -not $planJson) {
     Write-Warn2 "compute-plan failed; using standalone skill-pack updater fallback."
-    $fallback = Join-Path $RepoRoot "packages\dpf-skill-pack\scripts\update-agent-toolchain.ps1"
-    if (Test-Path -LiteralPath $fallback) {
-        & $fallback -SkillPackPath (Join-Path $RepoRoot "packages\dpf-skill-pack") -McpUrl $McpEndpoint -DryRun:$DryRun
-        exit $LASTEXITCODE
-    }
-    Write-Fail2 "Standalone updater missing at $fallback; cannot proceed."
-    exit 1
+    & $PluginUpdater -SkillPackPath (Join-Path $RepoRoot "packages\dpf-skill-pack") -McpUrl $McpEndpointNamed -ProjectRoot $RepoRoot -DryRun:$DryRun
+    exit $LASTEXITCODE
 }
 
 $plan = $planJson | ConvertFrom-Json
 Write-Info "Plan preview: $($plan.preview.readinessState)"
+if ($plan.compatibilityClients.Count -gt 0) { Write-Warn2 "Compatibility credentials required for: $($plan.compatibilityClients -join ', '). Select legacy setup explicitly; OAuth consent will not mint a PAT." }
 
 # --- Apply plan ---------------------------------------------------------------
 $claudeWired = $false
@@ -300,7 +485,7 @@ if ($plan.codex -and $plan.codex.writes.Count -gt 0) {
 
 # 2c. Grok CLI: dedicated config.toml wiring (like Codex) from grok config plan.
 # Writes the mcp_servers.dpf section (from grok.mcp.json) into the Grok TOML.
-# Generic MCP client config (above) covers .mcp.json side; this is the native Grok config.
+# Generic MCP client config (below) covers the repo-root files; this is the native Grok config.
 if ($plan.grok -and $plan.grok.config -and $plan.grok.config.writes.Count -gt 0) {
     foreach ($write in $plan.grok.config.writes) {
         if ($DryRun.IsPresent) {
@@ -334,7 +519,7 @@ if ($AgyPresent) {
     Write-Skip "Antigravity CLI not installed; skipping (pass -InstallAntigravity to opt in)."
 }
 
-# 2b. MCP client config (.mcp.json + .vscode/mcp.json) -- env-backed, no secret.
+# 2b. MCP client config (.vscode/mcp.json, and .mcp.json on http/legacy only; on https the plugin owns the Claude connector) -- env-backed, no secret.
 if ($plan.mcpClientConfig -and $plan.mcpClientConfig.writes.Count -gt 0) {
     foreach ($write in $plan.mcpClientConfig.writes) {
         if ($DryRun.IsPresent) {
@@ -347,7 +532,7 @@ if ($plan.mcpClientConfig -and $plan.mcpClientConfig.writes.Count -gt 0) {
             [System.IO.File]::WriteAllText($write.path, $write.content, [System.Text.Encoding]::UTF8)
         }
     }
-    Write-Ok "MCP client config written ($($plan.mcpClientConfig.writes.Count) file(s): .mcp.json / .vscode/mcp.json)."
+    Write-Ok "MCP client config written ($($plan.mcpClientConfig.writes.Count) file(s); the plugin owns the Claude connector on https)."
 } else {
     Write-Ok "MCP client config already converged."
 }
@@ -447,6 +632,7 @@ $state = [ordered]@{
     grokWired           = $grokWired
     antigravityWired    = $agyWired
     memorySeededAt      = $memorySeededAt
+    mcpAuthorization    = @{ mode = $AuthMode; verified = $false }
     mcpReadiness        = $mcpReadiness
     smokeTest           = $smokeResult
     readinessState      = if ($plan.preview.readinessState -eq 'ready' -and (-not $claudeWired -or -not $codexWired)) { 'partial' } else { $plan.preview.readinessState }
@@ -457,7 +643,9 @@ $state = [ordered]@{
 # is most-fundamental-first so the primary remediation is unambiguous.
 if (-not $claudeWired -and -not $codexWired -and -not $grokWired -and -not $agyWired) {
     $state.readinessState = "missing_cli"
-} elseif (-not $mcpReadiness.ok) {
+} elseif ($AuthMode -eq "oauth") {
+    $state.readinessState = "authorization_pending"
+} elseif ((-not $mcpReadiness.ok -or -not $mcpReadiness.delivery -or -not $mcpReadiness.delivery.ready)) {
     if ($mcpReadiness.reason -in @("no_token", "scope_insufficient")) {
         $state.readinessState = "missing_token"
     } elseif ($mcpReadiness.reason -in @("endpoint_unreachable", "unexpected_shape")) {
@@ -480,6 +668,7 @@ if (-not $DryRun.IsPresent) {
 
 # --- Readiness banner ---------------------------------------------------------
 $copyTable = @{
+    "authorization_pending" = @{ message = "MCP configuration is written. Sign in through your client and verify the connection; bootstrap has not verified OAuth."; primaryAction = "Sign in to DPF MCP" }
     "ready"          = @{ message = "Claude Code and Codex are ready for DPF work.";                                     primaryAction = "Open readiness" }
     "partial"        = @{ message = "One contributor client is ready; the other needs setup.";                           primaryAction = "Repair toolchain" }
     "missing_cli"    = @{ message = "Install the selected agent client to enable contributor sessions.";                 primaryAction = "Open setup guide" }
@@ -488,6 +677,9 @@ $copyTable = @{
     "failed_smoke"   = @{ message = "The agent is installed but did not apply a DPF kernel principle.";                  primaryAction = "View evidence" }
 }
 $copy = $copyTable[$state.readinessState]
+if ($mcpReadiness.reason -eq "coworker_grants_insufficient") {
+    $copy = @{ message = "The acting coworker lacks approved delivery permissions. Platform install or upgrade must reconcile them."; primaryAction = "Open readiness" }
+}
 
 $upstreamAdvisory = $null
 if ($plan.upstreamDrift -and $plan.upstreamDrift.advisory) {

@@ -376,6 +376,14 @@ delegate answerability; every other relation links two rooms without delegating
 anything, and walking one would inherit an owner from a room that never owned
 this work.
 
+Competing responsibility parents require correction; they do not establish the
+organization owner as the effective answer. The reader also preserves the
+unresolved frontier when its ten-level bound is reached. If no explicit
+assignment resolves before that frontier, the panel reports incomplete lineage.
+An explicit assignment at a known room still takes precedence. The drive and
+inspector share this resolution, so neither invents accountability from a partial
+graph.
+
 Coordination and execution are not accountability. A named worker is one
 identity across every surface it was reached through, its subagents are grouped
 under whoever delegated them, and none of that moves answerability from the

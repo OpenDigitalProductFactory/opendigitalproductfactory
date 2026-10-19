@@ -28,6 +28,7 @@ import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 import { caInternalUrl, caRequest as defaultCaRequest, type CaRequest } from "./ca-client";
 import { classifySan, membershipSanSet } from "./csr";
+import { readMembershipFacts } from "./membership-material";
 import { membershipRelayAvailable } from "./membership-relay";
 import { hostnameFromHostHeader, readReachedAtHosts, type ReachedAtDb } from "./reached-at";
 
@@ -164,6 +165,29 @@ export async function issueOrganizationJoinFile(
   if (!SAFE_PEER.test(intendedPeer)) return { issued: false, reason: "invalid-intended-peer" };
   const extraSans = (input.extraSans ?? []).map((s) => s.trim()).filter(Boolean);
   if (extraSans.some((s) => !SAFE_PEER.test(s))) return { issued: false, reason: "invalid-intended-peer", detail: "an extra name is not a hostname" };
+
+  // A member holds the authority's root — it pinned it when it joined — and it
+  // has a provisioner password of its own, because every installation ships a
+  // step-ca. So the relay check below cannot tell a member from the authority,
+  // and a member used to fall through to the CA call and fail there with
+  // `ca-unreachable (unable to get local issuer certificate)`: an
+  // infrastructure story for what is really a role mismatch. Worse, both CAs
+  // are named `O=DPF Organization CA, CN=DPF Organization CA Root CA`, so an
+  // operator comparing names sees a match and goes hunting for a broken CA
+  // (BI-860A9668).
+  //
+  // Membership is the discriminator, and it needs no socket: an authority
+  // never imports a join file, so it never has a membership facts row. One
+  // that does is a member, and the row already carries the address to send
+  // the operator to.
+  const membership = await readMembershipFacts({ env, readText });
+  if (membership) {
+    return {
+      issued: false,
+      reason: "not-the-authority",
+      detail: `this installation joined the organization at ${membership.caUrl} — issue the join file there`,
+    };
+  }
 
   // Only the authority holds the root and the provisioner password.
   const relay = await membershipRelayAvailable({ env, readText, exists: deps.exists });

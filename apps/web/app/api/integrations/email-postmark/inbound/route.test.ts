@@ -20,7 +20,7 @@ vi.mock("@/lib/marketing/channels/email-postmark/client", () => ({
   parseInboundPayload: h.parse,
 }));
 vi.mock("@/lib/mailroom/runtime.server", () => ({ ingestPostmarkInboundForMailbox: h.mailroom }));
-vi.mock("@/lib/queue/inngest-client", () => ({ inngest: { send: h.send } }));
+vi.mock("@/lib/jobs", () => ({ jobs: { send: h.send } }));
 vi.mock("@/lib/integrations/kernel/audit", () => ({
   createDurableConnectorAudit: () => ({ record: h.audit }),
   executeCallbackTransaction: h.execute,

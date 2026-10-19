@@ -42,10 +42,12 @@ import {
   isHappyPathIntakeReady,
   normalizeHappyPathState,
 } from "@/lib/feature-build-types";
+import { closeOpenBuildPhaseRunsForTerminalBuild } from "@/lib/build/close-terminal-phase-runs";
 
 export type ResumePreBuildOutcome =
   | { kind: "resumed"; phase: string; via: string; detail: string }
-  | { kind: "skipped"; phase: string; reason: string }
+  /** `quiet`: nothing changed since the last identical refusal; write no activity (BI-6F2872FC). */
+  | { kind: "skipped"; phase: string; reason: string; quiet?: boolean }
   | { kind: "failed"; phase: string; error: string };
 
 /**
@@ -162,6 +164,7 @@ export async function abandonStrandedPreBuild(params: {
             `re-stranding it on the next upgrade (BI-A009313E). Re-promote the backlog item to retry.`,
         },
       });
+      await closeOpenBuildPhaseRunsForTerminalBuild(buildId, { db: tx, now });
       await tx.buildActivity.create({
         data: {
           buildId,
@@ -182,6 +185,11 @@ export async function abandonStrandedPreBuild(params: {
 function hasPlanTasks(buildPlan: unknown): boolean {
   const plan = buildPlan as { tasks?: unknown[] } | null;
   return Array.isArray(plan?.tasks) && plan!.tasks!.length > 0;
+}
+
+/** The plan→build gate's wording for a missing research receipt (RESEARCH_REQUIRED). */
+export function isResearchReceiptGateBlock(reason: string): boolean {
+  return /research behind this design has not been recorded|RESEARCH_REQUIRED/i.test(reason);
 }
 
 function hasDesignDoc(designDoc: unknown): boolean {
@@ -219,6 +227,80 @@ export const REVIEW_INCOMPLETE_BACKOFF_MAX_MS = 6 * 60 * 60 * 1000;
 const REVIEW_INCOMPLETE_ACTIVITY_RE = /^No reviewer could complete a design review/;
 /** The fix loop's intermediate retry line — part of the same attempt, not a new outcome. */
 const REVIEW_INCOMPLETE_RETRY_RE = /^Design review could not be completed — re-reviewing/;
+
+// ─── Unchanged plan→build refusals (BI-6F2872FC) ─────────────────────────────
+//
+// A build whose plan review passed is re-run through plan→build on every
+// 10-minute resume tick. When initiative readiness refuses it, nothing about
+// the refusal changes until a receipt, baseline, coverage or evidence row lands
+// on the item, or the platform itself changes (a deploy restarts this
+// process). On the live install 113 such builds wrote ~460k activity rows in a
+// month, each tick re-running the full readiness projection for an identical
+// verdict. An identical refusal with no new input backs off: 10m → 20m → … →
+// 6h, and any new input or a restart makes the next tick due at once.
+
+export const UNCHANGED_REFUSAL_BACKOFF_BASE_MS = 10 * 60 * 1000;
+export const UNCHANGED_REFUSAL_BACKOFF_MAX_MS = 6 * 60 * 60 * 1000;
+const PROCESS_STARTED_AT = new Date();
+
+/** Count the newest run of identical `phase:gate-blocked` refusals. Rows newest-first. */
+export function countUnchangedRefusalStreak(
+  rows: ReadonlyArray<{ summary: string | null; createdAt: Date }>,
+): { streak: number; lastAt: Date | null } {
+  const first = rows[0];
+  if (!first?.summary) return { streak: 0, lastAt: null };
+  let streak = 0;
+  for (const row of rows) {
+    if (row.summary !== first.summary) break;
+    streak += 1;
+  }
+  return { streak, lastAt: first.createdAt };
+}
+
+/** Pure: is a re-run due? Any input newer than the last refusal makes it due. */
+export function unchangedRefusalBackoff(args: {
+  streak: number;
+  lastAt: Date | null;
+  inputsChangedAt: Date | null;
+  now: Date;
+}): { due: true } | { due: false; nextAt: Date; waitMs: number } {
+  const { streak, lastAt, inputsChangedAt, now } = args;
+  if (streak <= 0 || !lastAt) return { due: true };
+  if (inputsChangedAt && inputsChangedAt.getTime() >= lastAt.getTime()) return { due: true };
+  const delayMs = Math.min(UNCHANGED_REFUSAL_BACKOFF_MAX_MS, UNCHANGED_REFUSAL_BACKOFF_BASE_MS * 2 ** (streak - 1));
+  const nextAt = new Date(lastAt.getTime() + delayMs);
+  if (now.getTime() >= nextAt.getTime()) return { due: true };
+  return { due: false, nextAt, waitMs: nextAt.getTime() - now.getTime() };
+}
+
+/** The receipt-bearing activity kinds a readiness verdict can change on. */
+const READINESS_INPUT_KINDS = [
+  "initiative_gate_receipt", "initiative_scope_baseline", "plan_backlog_coverage",
+  "initiative_objective_mapping", "evidence", "dependency_disposition",
+] as const;
+
+async function unchangedRefusalHold(buildId: string, originatorRowId: string | null) {
+  const [refusals, input] = await Promise.all([
+    prisma.buildActivity.findMany({
+      where: { buildId, tool: "phase:gate-blocked" },
+      orderBy: { createdAt: "desc" },
+      take: 40,
+      select: { summary: true, createdAt: true },
+    }),
+    originatorRowId
+      ? prisma.backlogItemActivity.findFirst({
+          where: { backlogItemId: originatorRowId, kind: { in: [...READINESS_INPUT_KINDS] } },
+          orderBy: { recordedAt: "desc" },
+          select: { recordedAt: true },
+        })
+      : Promise.resolve(null),
+  ]);
+  const { streak, lastAt } = countUnchangedRefusalStreak(refusals);
+  const inputsChangedAt = [input?.recordedAt ?? null, PROCESS_STARTED_AT]
+    .filter((at): at is Date => at instanceof Date)
+    .reduce<Date | null>((latest, at) => (!latest || at > latest ? at : latest), null);
+  return { streak, ...unchangedRefusalBackoff({ streak, lastAt, inputsChangedAt, now: new Date() }) };
+}
 
 export type ReviewIncompleteStreak = { streak: number; lastAt: Date | null };
 
@@ -357,10 +439,35 @@ export async function resumePreBuildPhase(params: {
         plan: true,
         originatingBacklogItemId: true,
         parentEpicId: true,
+        // BI-0B7C1A9E: author of record for the child's backfilled design
+        // artifact, so the minted revision carries real provenance.
+        createdById: true,
       },
     });
     if (!build) {
       return { kind: "failed", phase, error: "build not found" };
+    }
+
+    // Self-heal (BI-C60EB507): readiness gates a build by the delivery shape
+    // bound to its Workroom; a build with no room (decomposition children) or
+    // a room with no workShape claim falls to the unshaped gate table and is
+    // refused at plan→build with PLAN_REQUIRED — a committed plan document the
+    // automated lane never produces. Attach/bind before any phase work.
+    // Idempotent: no-op once a shape is bound or when there is no governed
+    // subject. Fixed forward at child-creation time in approve-decomposition.ts.
+    // BI-454451F1: runs before the ideate branch, which returns on every path —
+    // placed after it, an ideate build's room was never shaped, so the design
+    // it passed was gated as unshaped work (FB-9E4AA7F8, room WC-ED7E3226).
+    if (build.originatingBacklogItemId) {
+      try {
+        const { healBuildWorkroomShape } = await import("@/lib/build/heal-build-workroom-shape");
+        const shapeHeal = await healBuildWorkroomShape({ buildId, userId });
+        if (shapeHeal.healed) {
+          return { kind: "resumed", phase, via: "healBuildWorkroomShape", detail: shapeHeal.detail };
+        }
+      } catch (err) {
+        console.warn("[resume-pre-build-phase] workroom shape heal failed:", { buildId }, err);
+      }
     }
 
     if (phase === "ideate") {
@@ -538,6 +645,27 @@ export async function resumePreBuildPhase(params: {
             };
           }
         }
+        // BI-9B2E7154: a passed design blocked only by phase readiness is not
+        // stranded, and re-reviewing it cannot clear the refusal. Each re-run
+        // fed the reviewers the prior round's issues until the verdict drifted to
+        // fail on an unchanged document, and the fix loop escalated and abandoned
+        // the build (FB-650326BC: passed at 01:36, re-reviewed every ~30 min,
+        // abandoned at 17:06). Ask the gate first; re-review only once it would
+        // let the build through, since the review is what advances it.
+        const { enforceBuildInitiativeReadiness } = await import("@/lib/build/build-entry-gate");
+        const readiness = await enforceBuildInitiativeReadiness({
+          buildId,
+          target: "plan",
+          targetPhase: "plan",
+          expectedPhase: "ideate",
+        });
+        if (!readiness.allowed) {
+          return {
+            kind: "skipped",
+            phase,
+            reason: `design passed review; parked on phase readiness (NOT re-running reviewDesignDoc): ${readiness.message}`,
+          };
+        }
       }
       const { executeTool } = await import("@/lib/mcp-tools");
       const result = await executeTool("reviewDesignDoc", { buildId }, userId, { featureBuildId: buildId });
@@ -584,6 +712,37 @@ export async function resumePreBuildPhase(params: {
           // Non-fatal — fall through to the normal plan resume path.
           console.warn("[resume-pre-build-phase] child intake heal failed:", { buildId }, err);
         }
+
+        // Self-heal (BI-0B7C1A9E): the same gap, one field over. A child's
+        // designDoc lives on the column but never as a BuildArtifactRevision,
+        // and initiative readiness reads only the revision — so the child
+        // blocks on CANONICAL_DESIGN_REQUIRED forever. Mint the artifact from
+        // the design it already carries. Idempotent: no-op once an accepted
+        // revision exists. Fixed forward at child-creation time in
+        // approve-decomposition.ts; this heals children created before it.
+        try {
+          const { healDecompositionChildDesignArtifact } = await import(
+            "@/lib/build/decomposition-child-design-artifact"
+          );
+          const healed = await healDecompositionChildDesignArtifact({
+            child: {
+              buildId,
+              parentEpicId: build.parentEpicId,
+              designDoc: (build as { designDoc?: unknown }).designDoc ?? null,
+              createdById: (build as { createdById?: string | null }).createdById ?? null,
+            },
+          });
+          if (healed) {
+            return {
+              kind: "resumed",
+              phase,
+              via: "healDecompositionChildDesignArtifact",
+              detail: "minted the child's canonical design artifact; readiness can now resolve it",
+            };
+          }
+        } catch (err) {
+          console.warn("[resume-pre-build-phase] child design artifact heal failed:", { buildId }, err);
+        }
       }
       if (!hasPlanTasks(build.buildPlan)) {
         // No plan yet — re-dispatch plan generation. The dispatcher auto-runs
@@ -591,6 +750,9 @@ export async function resumePreBuildPhase(params: {
         const { dispatchPlanForApprovedBuild } = await import("@/lib/build/plan-on-approval");
         const outcome = await dispatchPlanForApprovedBuild({ buildId, userId });
         return { kind: "resumed", phase, via: "dispatchPlanForApprovedBuild", detail: outcome.kind };
+      }
+      if ((build.planReview as { reviewIncomplete?: boolean } | null)?.reviewIncomplete) {
+        return { kind: "skipped", phase, reason: "Plan review incomplete; preserve the plan and retry review after reviewer execution recovers." };
       }
       // Plan exists. If its last review FAILED, REGENERATE via the fix loop —
       // re-reviewing the same bad plan just re-fails forever (the live jam: a plan
@@ -619,6 +781,15 @@ export async function resumePreBuildPhase(params: {
       const planReviewPassed =
         (build.planReview as { decision?: string } | null)?.decision === "pass";
       if (planReviewPassed) {
+        const hold = await unchangedRefusalHold(buildId, build.originatingBacklogItemId ?? null);
+        if (!hold.due) {
+          return {
+            kind: "skipped",
+            phase,
+            quiet: true,
+            reason: `plan → build refused ${hold.streak}x unchanged; next check ${hold.nextAt.toISOString()}`,
+          };
+        }
         const { performPlanToBuildTransition } = await import("@/lib/build/plan-to-build-transition");
         const outcome = await performPlanToBuildTransition({ buildId, userId });
         switch (outcome.kind) {
@@ -647,7 +818,35 @@ export async function resumePreBuildPhase(params: {
               via: "performPlanToBuildTransition",
               detail: `abandoned — dead upstream dependency (${outcome.deadDependencyBuildIds.join(", ") || "unknown"}): ${outcome.reason}`,
             };
-          case "gate-blocked":
+          case "gate-blocked": {
+            // The research receipt is written when the design review passes.
+            // Every build reviewed while the room refused that write
+            // (BI-00588B51: the coworker was not a room member) carries a
+            // reviewed design and no receipt, and the gate reports exactly
+            // that. Re-attest from the design the reviewer already passed, then
+            // try the transition once more; anything else stays a skip.
+            if (isResearchReceiptGateBlock(outcome.reason) && hasDesignDoc(build.designDoc)) {
+              const { attestIdeateResearch } = await import("@/lib/build/record-ideate-research-receipt");
+              const research = await attestIdeateResearch(buildId, build.designDoc, userId, null);
+              if (!research.recorded) return { kind: "skipped", phase,
+                reason: `Research attestation held; no transition retry: ${research.reason}` };
+              const retried = await performPlanToBuildTransition({ buildId, userId });
+              if (retried.kind === "advanced") {
+                return {
+                  kind: "resumed",
+                  phase,
+                  via: "performPlanToBuildTransition",
+                  detail: "re-attested the research receipt from the reviewed design, then advanced plan → build",
+                };
+              }
+              return {
+                kind: "skipped",
+                phase,
+                reason: `plan → build ${retried.kind} after re-attesting research: ${(retried as { reason?: string }).reason ?? retried.kind}`,
+              };
+            }
+            return { kind: "skipped", phase, reason: `plan → build ${outcome.kind}: ${outcome.reason}` };
+          }
           case "wwmd-withheld":
             return { kind: "skipped", phase, reason: `plan → build ${outcome.kind}: ${outcome.reason}` };
           case "not-ready":

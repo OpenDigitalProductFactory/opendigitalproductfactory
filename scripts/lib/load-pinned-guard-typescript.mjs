@@ -1,4 +1,5 @@
 import { readFileSync, realpathSync } from "node:fs";
+import { findImporterDependency, parseImporters } from "./pnpm-lock.mjs";
 import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -25,14 +26,6 @@ export class GuardRuntimeEnvironmentError extends Error {
 
 function normalize(path) { return path.replaceAll("\\", "/"); }
 function escapeRegex(value) { return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
-function importerBlock(lockText) {
-  const marker = "  packages/repo-guard-runtime:";
-  const start = lockText.indexOf(marker);
-  if (start < 0) return "";
-  const remainder = lockText.slice(start + marker.length);
-  const nextImporter = /\n  \S/.exec(remainder);
-  return lockText.slice(start, nextImporter ? start + marker.length + nextImporter.index : undefined);
-}
 
 export function loadPinnedGuardTypeScript(options = {}) {
   const repoRoot = resolve(options.repoRoot ?? DEFAULT_REPO_ROOT);
@@ -44,9 +37,9 @@ export function loadPinnedGuardTypeScript(options = {}) {
     throw new Error("Repo guard TypeScript must be an exact version in packages/repo-guard-runtime/package.json.");
   }
   const lockText = options.lockText ?? readFileSync(resolve(repoRoot, "pnpm-lock.yaml"), "utf8");
-  const block = importerBlock(lockText);
   const exactPin = escapeRegex(pin);
-  if (!new RegExp(`typescript:\\s*\\n\\s*specifier: ${exactPin}\\s*\\n\\s*version: ${exactPin}(?:\\s|$)`).test(block)) {
+  const locked = findImporterDependency(parseImporters(lockText), "packages/repo-guard-runtime", "typescript");
+  if (!locked || locked.specifier !== pin || locked.version !== pin) {
     throw new Error(`Repo guard TypeScript ${pin} is not owned by the exact packages/repo-guard-runtime lock importer; run ${INSTALL_COMMAND}.`);
   }
 

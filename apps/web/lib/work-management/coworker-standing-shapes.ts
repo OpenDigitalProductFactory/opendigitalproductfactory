@@ -90,9 +90,9 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "The case reaches closed with a verdict and, where action was taken, an authorization record." },
-      { kind: "failure", condition: "Detection, asset, or identity context cannot be read — the ladder stops and reports rather than assigning a verdict from an empty read." },
-      { kind: "budget", condition: "More than 100 cases in one cycle — the ladder stops and escalates rather than triaging a queue nobody can review." },
+      { kind: "success", condition: "The case reaches closed with a verdict and, where action was taken, an authorization record.", disposition: "proceed" },
+      { kind: "failure", condition: "Detection, asset, or identity context cannot be read — the ladder stops and reports rather than assigning a verdict from an empty read.", disposition: "inconclusive" },
+      { kind: "budget", condition: "More than 100 cases in one cycle — the ladder stops and escalates rather than triaging a queue nobody can review.", disposition: "awaiting-person" },
     ],
     grants: ["tool:read", "tool:security_case_write", "tool:threat_intel_lookup"],
     measures: [
@@ -127,6 +127,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Techniques and asset classes with no detection are enumerated, not characterised.",
         },
         evidence: ["assurance-finding"],
+        tools: ["query_detections", "query_security_events"],
       },
       {
         key: "hunt",
@@ -137,6 +138,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Each hunt records what was looked for and what was found, including when nothing was.",
         },
         evidence: ["assurance-run"],
+        tools: ["query_security_events", "query_detections"],
       },
       {
         key: "activate-content",
@@ -151,9 +153,9 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "Every named gap has either proposed content or a recorded reason it was not pursued." },
-      { kind: "failure", condition: "The detection or threat-intel index cannot be read — the hunt reports rather than declaring the estate clean." },
-      { kind: "budget", condition: "More than 25 proposals in one cycle — content nobody can review is not coverage." },
+      { kind: "success", condition: "Every named gap has either proposed content or a recorded reason it was not pursued.", disposition: "proceed" },
+      { kind: "failure", condition: "The detection or threat-intel index cannot be read — the hunt reports rather than declaring the estate clean.", disposition: "inconclusive" },
+      { kind: "budget", condition: "More than 25 proposals in one cycle — content nobody can review is not coverage.", disposition: "awaiting-person" },
     ],
     grants: ["tool:read", "tool:threat_intel_lookup", "tool:detection_rule_propose"],
     measures: [
@@ -185,6 +187,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Both readings completed for every asset class in scope, with unreadable classes named.",
         },
         evidence: ["assurance-run"],
+        tools: ["summarize_estate_posture", "review_estate_identity"],
       },
       {
         key: "assess",
@@ -197,6 +200,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
             + "with the evidence for the classification.",
         },
         evidence: ["assurance-finding"],
+        tools: ["summarize_estate_posture", "explain_blast_radius"],
       },
       {
         key: "inventory",
@@ -207,6 +211,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Assets present in one reading and absent from the other are listed with their last-seen evidence.",
         },
         evidence: ["assurance-finding"],
+        tools: ["review_estate_identity", "summarize_estate_posture"],
       },
       {
         key: "accept-or-remediate",
@@ -221,9 +226,9 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "Every divergence carries a classification and an owner decision." },
-      { kind: "failure", condition: "Either reading is unavailable — the watch stops rather than reporting an empty diff as conformance." },
-      { kind: "budget", condition: "More than 200 divergences — the watch escalates the scale rather than filing them one by one." },
+      { kind: "success", condition: "Every divergence carries a classification and an owner decision.", disposition: "proceed" },
+      { kind: "failure", condition: "Either reading is unavailable — the watch stops rather than reporting an empty diff as conformance.", disposition: "inconclusive" },
+      { kind: "budget", condition: "More than 200 divergences — the watch escalates the scale rather than filing them one by one.", disposition: "awaiting-person" },
     ],
     grants: ["tool:read", "tool:schema_describe", "tool:asset_inventory_read"],
     measures: [
@@ -253,6 +258,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Each capability in scope is compared, and capabilities with no recorded architecture are named as such.",
         },
         evidence: ["assurance-finding"],
+        tools: ["query_ontology_graph", "describe_ea_view"],
       },
       {
         key: "ratify",
@@ -267,9 +273,9 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "Every compared capability has a ratified position." },
-      { kind: "failure", condition: "The recorded architecture is unreadable — the review stops rather than treating absence as alignment." },
-      { kind: "budget", condition: "More than 50 findings in one cycle." },
+      { kind: "success", condition: "Every compared capability has a ratified position.", disposition: "proceed" },
+      { kind: "failure", condition: "The recorded architecture is unreadable — the review stops rather than treating absence as alignment.", disposition: "inconclusive" },
+      { kind: "budget", condition: "More than 50 findings in one cycle.", disposition: "awaiting-person" },
     ],
     grants: ["tool:read", "tool:ea_view_describe"],
     measures: [{ key: "capabilities-compared", description: "Capabilities compared in one cycle." }],
@@ -301,6 +307,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
             + "source, and the check's outcome is recorded whether or not the rule changed.",
         },
         evidence: ["assurance-run"],
+        tools: ["search_public_web", "fetch_public_website"],
       },
       {
         key: "determine",
@@ -325,9 +332,9 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "No requirement in scope remains past its staleness budget without either a re-confirmation or an explicit unconfirmed marking." },
-      { kind: "failure", condition: "The issuing authority's source is unreachable — the requirement is marked unconfirmed and the watch reports, rather than silently retaining the old text as current." },
-      { kind: "budget", condition: "More than 100 re-verifications in one cycle." },
+      { kind: "success", condition: "No requirement in scope remains past its staleness budget without either a re-confirmation or an explicit unconfirmed marking.", disposition: "proceed" },
+      { kind: "failure", condition: "The issuing authority's source is unreachable — the requirement is marked unconfirmed and the watch reports, rather than silently retaining the old text as current.", disposition: "inconclusive" },
+      { kind: "budget", condition: "More than 100 re-verifications in one cycle.", disposition: "awaiting-person" },
     ],
     grants: ["tool:read", "tool:web_search", "tool:licence_record_write"],
     measures: [
@@ -387,9 +394,9 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "The person is admitted, or the cycle is closed with a recorded reason." },
-      { kind: "failure", condition: "A legally required credential is absent or unverifiable — the cycle stops at prepare and escalates; it does not proceed to admission." },
-      { kind: "budget", condition: "More than 50 open intakes at once." },
+      { kind: "success", condition: "The person is admitted, or the cycle is closed with a recorded reason.", disposition: "proceed" },
+      { kind: "failure", condition: "A legally required credential is absent or unverifiable — the cycle stops at prepare and escalates; it does not proceed to admission.", disposition: "awaiting-person" },
+      { kind: "budget", condition: "More than 50 open intakes at once.", disposition: "awaiting-person" },
     ],
     grants: ["tool:read", "tool:employee_record_write", "tool:curriculum_assign"],
     measures: [{ key: "intakes-completed", description: "Intakes carried to an admission decision." }],
@@ -443,9 +450,9 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "Every job in the window is committed, deferred with a reason, or escalated as unassignable." },
-      { kind: "failure", condition: "Technician availability cannot be read — the cycle stops rather than proposing a schedule against assumed capacity." },
-      { kind: "budget", condition: "More than 300 jobs in one window." },
+      { kind: "success", condition: "Every job in the window is committed, deferred with a reason, or escalated as unassignable.", disposition: "proceed" },
+      { kind: "failure", condition: "Technician availability cannot be read — the cycle stops rather than proposing a schedule against assumed capacity.", disposition: "inconclusive" },
+      { kind: "budget", condition: "More than 300 jobs in one window.", disposition: "awaiting-person" },
     ],
     grants: ["tool:read", "tool:schedule_write", "tool:customer_notify_propose"],
     measures: [
@@ -477,6 +484,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Each claim in the draft is traceable to something the business actually offers.",
         },
         evidence: ["manual-check"],
+        tools: ["get_marketing_summary", "get_content_calendar"],
       },
       {
         key: "storefront-fit",
@@ -497,6 +505,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "User-facing documentation affected by the change is updated, or recorded as unaffected with a reason.",
         },
         evidence: ["manual-check"],
+        tools: ["doc_search", "doc_load"],
       },
       {
         key: "accessibility",
@@ -509,6 +518,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
             + "blocking rather than advisory.",
         },
         evidence: ["ux-verified"],
+        tools: ["evaluate_page"],
       },
       {
         key: "publish",
@@ -523,9 +533,9 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "The content is published or withdrawn, with the accessibility outcome recorded either way." },
-      { kind: "failure", condition: "A blocking accessibility failure stands — the shape stops at review and does not reach publish." },
-      { kind: "budget", condition: "More than 20 items in one review cycle." },
+      { kind: "success", condition: "The content is published or withdrawn, with the accessibility outcome recorded either way.", disposition: "proceed" },
+      { kind: "failure", condition: "A blocking accessibility failure stands — the shape stops at review and does not reach publish.", disposition: "refused" },
+      { kind: "budget", condition: "More than 20 items in one review cycle.", disposition: "awaiting-person" },
     ],
     grants: ["tool:read", "tool:content_draft_write", "tool:accessibility_check"],
     measures: [
@@ -592,9 +602,9 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "Evidence is accepted and the work is admitted to the pipeline." },
-      { kind: "failure", condition: "Required evidence is absent — the handoff is refused, and absence is never read as a pass." },
-      { kind: "budget", condition: "More than 20 concurrent external handoffs." },
+      { kind: "success", condition: "Evidence is accepted and the work is admitted to the pipeline.", disposition: "proceed" },
+      { kind: "failure", condition: "Required evidence is absent — the handoff is refused, and absence is never read as a pass.", disposition: "refused" },
+      { kind: "budget", condition: "More than 20 concurrent external handoffs.", disposition: "awaiting-person" },
     ],
     grants: ["tool:read", "tool:workroom_evidence_write"],
     measures: [{ key: "handoffs-accepted", description: "External deliveries admitted on evidence." }],
@@ -622,6 +632,7 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
           condition: "Each candidate carries its source, licence, and what gap it would close.",
         },
         evidence: ["assurance-finding"],
+        tools: ["search_tool_marketplace", "search_integrations"],
       },
       {
         key: "adopt",
@@ -638,9 +649,9 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "Every candidate has an adoption decision or a recorded deferral." },
-      { kind: "failure", condition: "A candidate's licence or provenance cannot be established — it is dropped, not deferred." },
-      { kind: "budget", condition: "More than 30 candidates in one sweep." },
+      { kind: "success", condition: "Every candidate has an adoption decision or a recorded deferral.", disposition: "proceed" },
+      { kind: "failure", condition: "A candidate's licence or provenance cannot be established — it is dropped, not deferred.", disposition: "refused" },
+      { kind: "budget", condition: "More than 30 candidates in one sweep.", disposition: "awaiting-person" },
     ],
     grants: ["tool:read", "tool:web_search", "tool:tool_evaluation_write"],
     measures: [{ key: "candidates-surfaced", description: "Candidates surfaced with licence and provenance." }],
@@ -720,9 +731,9 @@ export const COWORKER_STANDING_SHAPES: Record<string, WorkShapeDefinition> = {
       },
     ],
     stopConditions: [
-      { kind: "success", condition: "Every message read this cycle is noise, quarantined, or routed with an acknowledge-by time; every lapsed item is on a Needs-you surface." },
-      { kind: "failure", condition: "A mailbox cannot be read — the poll records the provider error on the mailbox and stops without moving the cursor, so nothing is skipped." },
-      { kind: "budget", condition: "More than 500 new messages from one mailbox in one cycle — the poll stops at the page limit and the rest wait for the next tick." },
+      { kind: "success", condition: "Every message read this cycle is noise, quarantined, or routed with an acknowledge-by time; every lapsed item is on a Needs-you surface.", disposition: "proceed" },
+      { kind: "failure", condition: "A mailbox cannot be read — the poll records the provider error on the mailbox and stops without moving the cursor, so nothing is skipped.", disposition: "inconclusive" },
+      { kind: "budget", condition: "More than 500 new messages from one mailbox in one cycle — the poll stops at the page limit and the rest wait for the next tick.", disposition: "awaiting-person" },
     ],
     grants: ["tool:read", "tool:work_room_read", "tool:work_room_write"],
     measures: [

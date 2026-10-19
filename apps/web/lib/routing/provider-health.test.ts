@@ -138,6 +138,51 @@ describe("deriveProviderHealth", () => {
     expect(h.cooldownUntil).toBe(retryAt.getTime());
   });
 
+  it("a retryAt-less rate limit observed long ago no longer badges the provider", () => {
+    const h = base({
+      capacityStatus: {
+        state: "rate_limited",
+        action: "retry_with_backoff",
+        retryAt: null,
+        lastObservedAt: new Date(NOW - 60 * 24 * 60 * 60 * 1000),
+        safeSummary: "The provider is temporarily rate limited.",
+        isHumanActionRequired: false,
+      },
+      recentOutcomes: [outcome({ ageMs: 1_000, latencyMs: 1200 })],
+    });
+
+    expect(h.status).not.toBe("rate_limited");
+  });
+
+  it("a retryAt-less rate limit observed just now still badges the provider", () => {
+    const h = base({
+      capacityStatus: {
+        state: "rate_limited",
+        action: "retry_with_backoff",
+        retryAt: null,
+        lastObservedAt: new Date(NOW - 60_000),
+        safeSummary: "The provider is temporarily rate limited.",
+        isHumanActionRequired: false,
+      },
+    });
+
+    expect(h.status).toBe("rate_limited");
+  });
+
+  it("a passed retryAt no longer badges the provider", () => {
+    const h = base({
+      capacityStatus: {
+        state: "rate_limited",
+        action: "retry_at",
+        retryAt: new Date(NOW - 1),
+        safeSummary: "The provider is temporarily rate limited.",
+        isHumanActionRequired: false,
+      },
+    });
+
+    expect(h.status).not.toBe("rate_limited");
+  });
+
   // ── Disabled lifecycle (fallback.ts disables on auth/billing) ──
   it("disabled + recent billing error → billing", () => {
     const h = base({

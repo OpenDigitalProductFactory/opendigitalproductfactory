@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Compose bind-posture guard (BI-FEE77B68, kernel decision DI-946636F6E8F6).
 //
-// Every host-published port in docker-compose.yml must bind through
+// Every host-published port in docker-compose.yml and docker-compose.tls.yml
+// (BI-6DC1CD5B) must bind through
 // ${DPF_HOST_BIND_ADDRESS:-127.0.0.1}. Short syntax ("3000:3000") publishes on
 // every interface, which put the admin login, postgres and redis on the LAN of
 // every install (GitHub issue #4337). One variable governs the whole file so
@@ -13,7 +14,7 @@ import { dirname, join } from "node:path";
 export const BIND_VAR = "DPF_HOST_BIND_ADDRESS";
 export const BIND_DEFAULT = "127.0.0.1";
 export const REQUIRED_HOST_PART = `\${${BIND_VAR}:-${BIND_DEFAULT}}`;
-export const GUARDED_FILES = ["docker-compose.yml"];
+export const GUARDED_FILES = ["docker-compose.yml", "docker-compose.tls.yml"];
 
 /** Returns the `- "host:container"` port entries under each `ports:` block. */
 export function portEntries(text) {

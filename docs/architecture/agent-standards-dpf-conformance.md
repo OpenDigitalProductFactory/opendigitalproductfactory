@@ -25,6 +25,11 @@ The companion verification rubrics intended to make future conformance claims re
 
 ## TAK Conformance
 
+Tool grant reads and administrator edits resolve known coworker aliases to one
+canonical Agent row. Revocation tombstones take precedence; missing authority
+fails closed. Conflicting legacy rows are reconciled only through a fresh,
+administrator-approved preview, without merging their grants automatically.
+
 | Control Area | Status | Evidence Path | Notes | Recommended Next Step |
 |--------------|--------|---------------|-------|-----------------------|
 | Runtime authority mediation | Implemented | `apps/web/lib/mcp-tools.ts`, `apps/web/lib/tak/agent-grants.ts`, `apps/web/lib/coworker/authorized-surface-runtime.ts` | Tools declare `requiredCapability`; `getAvailableTools()` filters by user authority, mode, and external access posture; agent grant mapping adds a second control layer. Authorized Surface sessions also bind the principal and intersect role, coworker grants, work context, token scope, approval policy, revision, and TTL before projecting state or actions. | Extend the same explicit permission-intersection receipt beyond Authorized Surfaces to every remaining tool exposure decision. |
@@ -138,3 +143,16 @@ results carry a structured reason and finite next step, while reviewer-only
 initiative writers point to the server-issued `get_backlog_item` reviewer route.
 The discovery response never converts catalog visibility into a grant or
 collapses a separate reviewer identity into the requesting author.
+
+For a large readiness response, `get_backlog_item(itemId, recoveryGate)` returns
+one complete current request without the item's body or other request objects.
+The bounded projection checks exact Workroom content access and refuses an
+oversized request explicitly rather than returning a partial packet. Re-read the
+same gate after source or readiness changes; submit only the issued request,
+unchanged. Research recovery names the author-owned evidence writer and never
+creates an independent research reviewer. Packet delivery is not a review
+receipt or acceptance. A bounded plan read uses the current server-derived
+OAuth task family for existing retry history; caller input cannot select or
+reset that authority. The shared projection lives in
+`apps/web/lib/mcp/backlog-recovery-read.ts`; existing readiness and dispatch
+remain the authority for eligibility and immutable packet equality.

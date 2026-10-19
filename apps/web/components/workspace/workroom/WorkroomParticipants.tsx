@@ -4,8 +4,9 @@ import { Notice, StatusBadge } from "@/components/ui/report-kit";
 import type { WorkroomView } from "@/lib/work-management/room-types";
 
 import { roomLabel } from "./presentation";
+import { WorkroomInviteAssistant } from "./WorkroomInviteAssistant";
 
-export function WorkroomParticipants({ room }: { room: WorkroomView }) {
+export function WorkroomParticipants({ room, workroomId }: { room: WorkroomView; workroomId?: string | null }) {
   const hasUnavailableCoworker = room.participants.some(
     (participant) => participant.kind === "agent" && participant.presence === "unknown",
   );
@@ -77,6 +78,7 @@ export function WorkroomParticipants({ room }: { room: WorkroomView }) {
               No participants are listed yet. People and coworkers enter through assignment or governed work.
             </p>
           )}
+          {workroomId ? <WorkroomInviteAssistant workroomId={workroomId} /> : null}
         </div>
       </details>
     </section>

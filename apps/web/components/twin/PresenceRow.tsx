@@ -5,7 +5,7 @@
 // doctrine made visible (parent spec §3.3). Pure + server-usable.
 
 import { ActorMark } from "./ActorMark";
-import type { TwinActor } from "./types";
+import type { TwinActor } from "@/lib/twin/kit-types";
 
 export interface PresenceRowProps {
   members: TwinActor[];

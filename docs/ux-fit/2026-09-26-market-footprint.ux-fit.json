@@ -1,0 +1,19 @@
+{
+  "version": "1",
+  "decidedOption": "one-layer-switch-plus-table",
+  "decisionInteractionId": "DI-3C18856A3B8B",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/customer/footprint/page.tsx",
+      "apps/web/components/customer/footprint/FootprintView.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "one-layer-switch-plus-table",
+      "all-layers-overlaid",
+      "four-separate-maps"
+    ]
+  }
+}

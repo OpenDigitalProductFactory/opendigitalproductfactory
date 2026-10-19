@@ -38,13 +38,16 @@ import {
   panelReportedInsufficient,
   type TriageVerdict,
 } from "./triage-verdict";
+import { buildPanelBrief } from "./triage-panel-brief";
+import { isBareQuestion } from "./question-quality";
+import { isHumanEscalation, type HumanEscalationRow } from "@/lib/decision-perspective/human-escalation";
 
 /* -------------------------------------------------------------------------- */
 /* Shapes                                                                     */
 /* -------------------------------------------------------------------------- */
 
 /** The decision a panel is being convened for. */
-export type TriageSubject = {
+export type TriageSubject = HumanEscalationRow & {
   /** DecisionInteraction row id. */
   interactionRowId: string;
   interactionId: string;
@@ -57,6 +60,12 @@ export type TriageSubject = {
   outcomeType: string;
   /** True once a human has settled it, however that happened. */
   resolved: boolean;
+  options?: unknown;
+  evidenceBundle?: unknown;
+  sources?: unknown;
+  profileVersionId?: string | null;
+  updatedAt?: Date;
+  previousPanel?: { id: string; completedAt: Date | null; brief: string | null } | null;
 };
 
 export type PanelResult = {
@@ -85,6 +94,8 @@ export type ConductorOutcome =
     | "already-proposed"
     | "already-resolved"
     | "not-worth-a-panel"
+    | "panel-pending"
+    | "case-unchanged"
     | "panel-unavailable"
     | "panel-inconclusive"
     | "verdict-refused";
@@ -110,10 +121,10 @@ export function isPanelWorthy(subject: TriageSubject): Eligibility {
   if (subject.resolved) {
     return { eligible: false, reason: "A human has already settled this decision." };
   }
-  if (subject.outcomeType !== "escalate" && subject.outcomeType !== "defer") {
+  if (!isHumanEscalation(subject)) {
     return { eligible: false, reason: "This decision was settled by the gate, not left to a human." };
   }
-  if (subject.question.trim().length === 0) {
+  if (isBareQuestion(subject.question)) {
     return {
       eligible: false,
       reason: "The record carries no question, so there is nothing for a specialist to reason about.",
@@ -154,6 +165,15 @@ export async function conductTriage(
     professionKey: subject.professionKey ?? null,
     question: subject.question,
   });
+  const previous = subject.previousPanel;
+  if (previous && !previous.completedAt) {
+    return { status: "panel-pending", detail: "The previous panel is unfinished; it must be reconciled before another starts." };
+  }
+  const optionIds = Array.isArray(subject.options)
+    ? subject.options.filter((o): o is string => typeof o === "string") : [];
+  if (previous?.brief === buildPanelBrief({ subject, plan, optionIds })) {
+    return { status: "case-unchanged", detail: "The previous panel considered this same case; new evidence or a changed question is needed." };
+  }
   const { staffed } = resolveStaffedCoworkers(plan, await deps.roster());
 
   const panel = await deps.runPanel({

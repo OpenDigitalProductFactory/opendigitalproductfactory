@@ -95,7 +95,7 @@ outvote the ledger.
 
 Fields are parsed by the YAML subset shared with `seed-skills.ts` and `seed-prompt-templates.ts`. Scalars, inline arrays (`[a, b]`), and block-style lists (`- item`) all work. **No nested objects.** Quotes are optional; surrounding `"`/`'` are stripped.
 
-The `slug` is derived from the file path relative to `wiki/` (e.g. `wiki/stances/portfolio-as-anchor.md` → slug `stances/portfolio-as-anchor`). To override, set `slug:` in the frontmatter.
+The `slug` is derived from the file path relative to `wiki/` (e.g. `wiki/stances/portfolio-as-anchor.md` → slug `stances/portfolio-as-anchor`). To override, set `slug:` in the frontmatter. The rule is `kernelWikiPageSlug` in `packages/db/src/wiki-frontmatter.ts`; profession pages use `professionCorpusPageSlug` there (`professions/<profession>/<name>`, frontmatter `slug:` not honoured). Code that cites a page by slug (a gate's `principleSlug`, `apps/web/lib/kernel/governing-principles.ts`) is tested to resolve by that same rule, so renaming a cited page or changing its `slug:` fails a test rather than silently breaking the citation.
 
 ---
 
@@ -140,7 +140,7 @@ open http://localhost:3000/wiki/stances/portfolio-as-anchor
 #    Triggers can also be done via the wiki_lint MCP tool.
 ```
 
-The seed advances the revision chain **only when body content changes**, so re-running on unchanged files is a no-op. Same for link / source / Qdrant upserts — all idempotent.
+The seed advances the revision chain **only when body content changes**, so re-running on unchanged files is a no-op. Same for link / source / vector upserts — all idempotent.
 
 ---
 
@@ -253,8 +253,8 @@ Customers will be able to override kernel pages with their own takes via the `ke
 | Seed fails: `has pageKind "heuristic" but declares principle-only frontmatter` | A non-`principle` page declares `principleDimensionVector`, `principleTier`, or another `principle*` key. Those are read only from `pageKind: principle`. | Change `pageKind` to `principle` if the page is meant to move decision verdicts, or drop the `principle*` keys if it is a rule of thumb. See §3. |
 | Page doesn&#39;t appear at `/wiki/<slug>` after seed | Slug mismatch | Check the file path. Slug is `<path-under-wiki-without-ext>` unless overridden. |
 | Same page seeds with `version=1` every time | Body actually unchanged between runs | Expected behaviour — revision chain only advances on body change. |
-| Qdrant upsert returns `qdrant=no-sidecar` | `embeddings.jsonl` missing | Run `tsx scripts/build-kernel-embeddings.ts` to generate it. The seed still writes Postgres rows even without it. |
-| Wiki block doesn&#39;t show up in agent prompts | Qdrant index empty for this query, score below threshold (0.55), or the embedding model is down | Verify Qdrant has points (`/admin/wiki/lint` page count > 0), check the embedding endpoint, broaden the query. |
+| Vector upsert returns `vectors=no-sidecar` | `embeddings.jsonl` missing | Run `tsx scripts/build-kernel-embeddings.ts` to generate it. The seed still writes Postgres rows even without it. |
+| Wiki block doesn&#39;t show up in agent prompts | Vector index empty for this query, score below threshold (0.55), or the embedding model is down | Verify the vector index has points (`/admin/wiki/lint` page count > 0), check the embedding endpoint, broaden the query. |
 
 ---
 

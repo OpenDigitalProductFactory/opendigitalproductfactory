@@ -16,8 +16,8 @@ import { getErrorMessage } from "@/lib/shared/get-error-message";
  */
 export async function queueBuildReviewVerification(buildId: string): Promise<void> {
   try {
-    const { inngest } = await import("@/lib/queue/inngest-client");
-    await inngest.send({ name: "build/review.verify", data: { buildId } });
+    const { jobs } = await import("@/lib/jobs");
+    await jobs.send({ name: "build/review.verify", data: { buildId } });
   } catch (err) {
     const message = getErrorMessage(err);
     console.error(

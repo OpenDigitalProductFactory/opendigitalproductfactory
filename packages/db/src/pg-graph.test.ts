@@ -1,12 +1,11 @@
 import { describe, it, expect } from "vitest";
 import {
   IMPACT_RELATIONSHIP_TYPES,
-  IMPACT_REL_FILTER,
   nodeFromRow,
   reachabilitySql,
 } from "./pg-graph";
 
-describe("pg-graph IMPACT_RELATIONSHIP_TYPES (parity with neo4j-graph)", () => {
+describe("pg-graph IMPACT_RELATIONSHIP_TYPES", () => {
   it("lists the 10 traversed rel types in order", () => {
     expect([...IMPACT_RELATIONSHIP_TYPES]).toEqual([
       "DEPENDS_ON",
@@ -21,15 +20,9 @@ describe("pg-graph IMPACT_RELATIONSHIP_TYPES (parity with neo4j-graph)", () => {
       "PEER_OF",
     ]);
   });
-
-  it("derives the pipe-joined Cypher filter fragment", () => {
-    expect(IMPACT_REL_FILTER).toBe(
-      "DEPENDS_ON|HOSTS|RUNS_ON|LISTENS_ON|MONITORS|MEMBER_OF|ROUTES_THROUGH|CARRIED_BY|CONNECTS_TO|PEER_OF",
-    );
-  });
 });
 
-describe("pg-graph nodeFromRow (label/name/id mapping, parity with nodeFromRecord)", () => {
+describe("pg-graph nodeFromRow (label/name/id mapping)", () => {
   it("picks the primary label (labels[0]) and reads name from props", () => {
     const n = nodeFromRow({
       key: "prod-1",

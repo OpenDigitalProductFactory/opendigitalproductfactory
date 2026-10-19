@@ -41,7 +41,10 @@ import {
 import type { JobCategory, ScheduledJobCatalogEntry } from "./catalog-types";
 import { FLOW_JOB_CATALOG_ENTRIES } from "./catalog-flow";
 import { WATCH_JOB_CATALOG_ENTRIES } from "./catalog-watches";
+import { COMMONS_JOB_CATALOG_ENTRIES } from "./catalog-commons";
 import { HYGIENE_JOB_CATALOG_ENTRIES } from "./catalog-hygiene";
+import { ECOSYSTEM_JOB_CATALOG_ENTRIES } from "./catalog-ecosystem";
+import { PROVIDER_PAUSE_JOB_CATALOG_ENTRY } from "./catalog-provider-pause";
 
 // Re-exported so existing importers of the catalog keep working; the types are
 // owned by ./catalog-types (BI-ED117C82).
@@ -49,6 +52,8 @@ export type { JobCategory, ScheduledJobCatalogEntry };
 
 // Ordered roughly by operational prominence. core-locked jobs first.
 export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
+  PROVIDER_PAUSE_JOB_CATALOG_ENTRY,
+  ...ECOSYSTEM_JOB_CATALOG_ENTRIES,
   ...DECISION_GOVERNANCE_JOBS,
   ...FLOW_JOB_CATALOG_ENTRIES,
   {
@@ -211,6 +216,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     tracksRunData: false,
     runNowEvent: null,
   },
+  ...COMMONS_JOB_CATALOG_ENTRIES,
   ...HYGIENE_JOB_CATALOG_ENTRIES,
   {
     jobId: "alert-delivery-bridge",
@@ -352,20 +358,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     cron: "23 * * * *",
     cadence: "Hourly at :23",
     category: "editable",
-    tracksRunData: false,
-    runNowEvent: null,
-  },
-  {
-    jobId: "canonical-improvement-digest",
-    inngestId: "ops/canonical-improvement-digest",
-    honorsEnabledGate: true,
-    name: "Canonical improvement digest",
-    purpose:
-      "Batches [reference-doc] ImprovementProposal rows into one doc chore BI for human-approved canonical-source PRs (process-spine §6.5).",
-    cron: "17 6 * * 1",
-    cadence: "Weekly (Mon 06:17)",
-    category: "editable",
-    tracksRunData: false,
+    tracksRunData: true,
     runNowEvent: null,
   },
   {
@@ -427,6 +420,20 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
       "Off-hours WWMD-gated merge decision for assurance remediation PRs (patch-only-auto): escalates non-auto PRs to a human. Auto-merge actuation is dark (DPF_ASSURANCE_AUTOMERGE_ENABLED, default off). If it stops, remediation PRs await manual merge.",
     cron: "47 * * * *",
     cadence: "Hourly at :47 — acts only in the 02:00–06:00 UTC off-hours window",
+    category: "editable",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
+  {
+    jobId: "pr-submit-awaiting-acceptance-reconcile",
+    inngestId: "backlog/pr-submit-awaiting-acceptance-reconcile",
+    ungatedReason:
+      "Module does not call gateAtEntry yet — not wired to the kill switch (BI-7E49FA15).",
+    name: "PR-submit awaiting-acceptance reconcile",
+    purpose:
+      "Moves coding-pool backlog items whose Workroom already has a pull request number to awaiting-acceptance. Live PR submit is the GitHub webhook; this cron is the post-upgrade backstop.",
+    cron: "7,22,37,52 * * * *",
+    cadence: "Every 15 minutes, offset by 7 minutes",
     category: "editable",
     tracksRunData: false,
     runNowEvent: null,
@@ -495,6 +502,19 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     runNowEvent: null,
   },
   {
+    jobId: "budget-reservation-settle",
+    inngestId: "portfolio/budget-reservation-settle",
+    honorsEnabledGate: true,
+    name: "Budget reservation settlement",
+    purpose:
+      "BI-EF265C9A: settles open portfolio budget reservations against their items' status (done consumes, retired or deferred releases, a re-size adjusts and records the change), covering status writers that do not settle at once.",
+    cron: "11,26,41,56 * * * *",
+    cadence: "Every 15 minutes, offset by 11 minutes",
+    category: "editable",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
+  {
     jobId: "a2a-collaboration-health-scan",
     inngestId: "ops/a2a-collaboration-health-scan",
     honorsEnabledGate: true,
@@ -516,6 +536,19 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
       "Rolls up the QueueTelemetryEvent stream into per-queue QueueMetricSnapshot rows (wait/process/cycle time, throughput, first-pass yield). Without it, queue flow metrics never materialise for tiles or the coworker surface.",
     cron: "7 * * * *",
     cadence: "Hourly at :07",
+    category: "editable",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
+  {
+    jobId: "workroom-flow-review",
+    inngestId: "workroom/flow-review",
+    honorsEnabledGate: true,
+    name: "Workroom flow review",
+    purpose:
+      "Once a day, turns every place where Workrooms pile up (three or more held at one step) into an improvement signal. A pile that persists across reviews is filed once as a backlog item through the improvement facility; one that clears on its own never reaches the backlog (EP-B70E718D F8).",
+    cron: "23 6 * * *",
+    cadence: "Daily at 06:23",
     category: "editable",
     tracksRunData: false,
     runNowEvent: null,

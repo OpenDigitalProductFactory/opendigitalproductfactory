@@ -5,6 +5,7 @@ import { newId } from "@/lib/shared/new-id";
 import { ok, err as fail, type ActionResult } from "@/lib/shared/action-result";
 import { generateInvoiceFromStorefrontOrder } from "@/lib/actions/finance";
 import { isExclusionViolation } from "@/lib/db/exclusion-violation";
+import { getOrgBaseCurrency } from "@/lib/org-locale/org-currency.server";
 import {
   createProductSoldDraft,
   createTypedFulfillmentInstance,
@@ -570,7 +571,7 @@ export async function submitOrder(
   }, 0);
 
   const ref = makeRef("ORD");
-  const currency = data.currency ?? "GBP";
+  const currency = data.currency ?? (await getOrgBaseCurrency());
   const purchasedAt = new Date();
   const productManagementChanges = createProductManagementChangeCollector();
   const created = await prisma.$transaction(async (tx) => {
@@ -699,13 +700,6 @@ export async function submitOrder(
 
 // ── Donation ──────────────────────────────────────────────────────────────────
 
-/** The workspace's own base currency — the one source `/s/[slug]/donate` also
- *  renders its symbol from. Falls back to USD, matching `resolveInquiryFormSchema`. */
-async function resolveOrgBaseCurrency(): Promise<string> {
-  const settings = await prisma.orgSettings.findFirst({ select: { baseCurrency: true } });
-  return settings?.baseCurrency ?? "USD";
-}
-
 export async function submitDonation(
   slug: string,
   data: {
@@ -737,7 +731,7 @@ export async function submitDonation(
       // from the symbol the donor saw — the donate page derives that symbol from
       // this same `OrgSettings.baseCurrency`. An explicit currency still wins, so
       // a later multi-currency flow is not foreclosed.
-      currency: data.currency ?? (await resolveOrgBaseCurrency()),
+      currency: data.currency ?? (await getOrgBaseCurrency()),
       campaignId: data.campaignId,
       message: data.message,
       isAnonymous: data.isAnonymous ?? false,

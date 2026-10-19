@@ -64,9 +64,17 @@ dt{font-weight:600;flex:0 0 92px}
 dd{margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all}
 .actions{display:flex;gap:10px;margin-top:22px}
 button{flex:1;padding:10px 16px;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer}
+select{width:100%;padding:10px;border:1px solid GrayText;border-radius:6px;background:Field;color:FieldText;font:inherit}
 button.primary{background:Highlight;color:HighlightText;border:1px solid Highlight}
 button.secondary{background:ButtonFace;color:ButtonText;border:1px solid GrayText}
 .foot{font-size:12px;margin-top:18px}
+.consequence{color:CanvasText;margin:14px 0 0}
+details{margin:6px 0 0}
+summary{cursor:pointer;color:GrayText;font-size:13px}
+details[open] summary{margin-bottom:8px}
+ul.perms{margin:8px 0 0;padding-left:20px;color:CanvasText}
+ul.perms li{margin:4px 0}
+.choice{margin:4px 0 0;font-size:13px}
 `.trim();
 
 function shell(title: string, body: string): string {
@@ -89,12 +97,32 @@ export type ConsentView = {
   clientName: string;
   selfAsserted: boolean;
   installationName: string;
+  /** The signed-in account, as shown to the person (email, else id). */
   actingUser: string;
+  /** The session user id the person must confirm; the POST refuses any other. */
+  actingUserId: string;
+  /** Same-origin sign-in link that comes back to this exact request. */
+  switchAccountUrl: string;
   scopes: readonly PublicScope[];
   resource: string;
   redirectUri: string;
   /** Echoed back verbatim so the POST re-validates the same request. */
   hiddenParams: Array<[string, string]>;
+  nextAssistantsUrl?: string;
+  /** The server's answer to "which assistant does this connection act as". */
+  assistant: ConsentAssistant;
+  /** Set when the POST re-derived a different answer than the GET showed. */
+  driftNotice?: boolean;
+  /** Set when the person pressed Connect without choosing between assistants that differ in authority. */
+  choiceNotice?: boolean;
+  /** Set when Connect arrived without the account confirmed, or confirmed for a different session. */
+  accountNotice?: boolean;
+};
+
+export type ConsentAssistant = {
+  kind: "single" | "resolved" | "choice";
+  selected: { agentId: string; displayName: string };
+  candidates: Array<{ agentId: string; displayName: string; detail?: string }>;
 };
 
 export function renderConsentPage(view: ConsentView): string {
@@ -108,6 +136,7 @@ export function renderConsentPage(view: ConsentView): string {
     .join("");
 
   const hidden = view.hiddenParams
+    .filter(([key]) => key !== "acting_coworker" && key !== "default_coworker")
     .map(([k, v]) => `<input type="hidden" name="${esc(k)}" value="${esc(v)}">`)
     .join("");
 
@@ -117,29 +146,134 @@ export function renderConsentPage(view: ConsentView): string {
     ? `<p class="warn">This client registered itself and chose its own name. Approve it only if you started this connection.</p>`
     : "";
 
+  const assistantBlock = renderAssistant(view);
+  const permissionList = view.scopes
+    .map((s) => `<li><strong>${esc(PUBLIC_SCOPE_COPY[s].title)}</strong> — ${esc(PUBLIC_SCOPE_COPY[s].detail)}</li>`)
+    .join("");
+  const driftNotice = view.accountNotice
+    ? `<p class="warn">Confirm the account this connection works under. Nothing was connected.</p>`
+    : view.driftNotice
+    ? `<p class="warn">What this connection is allowed to act as changed while this page was open. Nothing was connected. Check the details below and connect again.</p>`
+    : view.choiceNotice
+      ? `<p class="warn">Choose which assistant this connection works as. Nothing was connected.</p>`
+      : "";
+
   return shell(
     `Connect ${view.clientName}`,
     `<p class="eyebrow">Connect an AI client</p>
 <h1>${esc(view.clientName)} wants to work in ${esc(view.installationName)}</h1>
-<p>Signed in as ${esc(view.actingUser)}. This client can never do more than your own role allows.</p>
+<p>This client can never do more than the account it connects under is allowed to do.</p>
 ${selfAssertedNote}
+${driftNotice}
 <form method="post" action="/api/oauth/authorize">
+<button type="submit" disabled hidden aria-hidden="true" tabindex="-1"></button>
 ${hidden}
-<fieldset><legend>It is asking to:</legend>
+${renderAccount(view)}
+${assistantBlock}
+<fieldset><legend>It will be able to:</legend>
+<ul class="perms">${permissionList}</ul>
+<p class="scope-detail">Within these permissions, your current connection covers routine reads and reversible work without another approval for each action. Changes to credentials or authority, destructive actions and restricted data keep their required approval checks. A development installation does not grant extra access.</p>
+<details><summary>Adjust permissions</summary>
 ${scopeRows}
 <p class="scope-detail">Unticking a permission grants less. You cannot grant more than was asked for.</p>
+</details>
 </fieldset>
 <dl>
 <div><dt>Connecting to</dt><dd>${esc(view.resource)}</dd></div>
 <div><dt>Returns to</dt><dd>${esc(view.redirectUri)}</dd></div>
 </dl>
 <div class="actions">
-<button class="primary" type="submit" name="decision" value="approve">Approve</button>
-<button class="secondary" type="submit" name="decision" value="deny">Cancel</button>
+<button class="primary" type="submit" name="decision" value="approve">Connect ${esc(truncate(view.clientName, 40))}</button>
+<button class="secondary" type="submit" name="decision" value="deny" formnovalidate>Cancel</button>
 </div>
 </form>
 <p class="foot">You can revoke this at any time in Admin &rsaquo; Platform Development &rsaquo; MCP.</p>`,
   );
+}
+
+/**
+ * The account this connection binds to, as a decision rather than a caption
+ * (BI-07D21B4A). A browser can hold a session the person forgot about — a
+ * setup account, a colleague's, a test persona — and consent used to take it
+ * silently, so every approval the assistant later asked for went to an inbox
+ * nobody reads. The person ticks the account by name; the checkbox carries the
+ * session's user id, and the POST binds only if it still matches.
+ */
+function renderAccount(view: ConsentView): string {
+  return `<fieldset><legend>Connect as</legend>
+<label class="scope"><input type="checkbox" name="confirm_account" value="${esc(view.actingUserId)}" required>
+<span><span class="scope-title">${esc(view.actingUser)}</span>
+<span class="scope-detail">It acts under this account, and its approval requests will come to this account's inbox.</span></span></label>
+<p class="choice">Not the account you meant? <a href="${esc(view.switchAccountUrl)}">Use a different account</a></p>
+</fieldset>`;
+}
+
+function truncate(value: string, max: number): string {
+  return value.length > max ? `${value.slice(0, max - 1)}…` : value;
+}
+
+/**
+ * The assistant line. One sentence states the consequence; the picker only
+ * exists behind a disclosure, and it is open only when the candidates differ
+ * in authority — a decision the human genuinely has to make.
+ */
+function renderAssistant(view: ConsentView): string {
+  const { assistant } = view;
+  const selected = assistant.selected;
+  const consequence = `<p class="consequence">It will work as <strong>${esc(selected.displayName)}</strong> under your account.</p>`;
+
+  if (assistant.kind === "choice") {
+    // Candidates differ in what they can do, so the person picks one; nothing
+    // is pre-selected and the server refuses a Connect without a pick.
+    const options = assistant.candidates.map((c) =>
+      `<option value="${esc(c.agentId)}">${esc(c.displayName)}${c.detail ? ` — ${esc(c.detail)}` : ""}</option>`,
+    ).join("");
+    return `<p class="consequence">Choose which assistant it will work as under your account.</p>
+<p class="choice">The assistants you may authorize differ in what they can do. They are listed with the least authority first; nothing is chosen for you.</p>
+<select name="acting_coworker" aria-label="Assistant role" required><option value="" selected disabled>Choose an assistant…</option>${options}</select>
+${view.nextAssistantsUrl ? `<p><a href="${esc(view.nextAssistantsUrl)}">More approved assistants</a></p>` : ""}`;
+  }
+
+  if (assistant.kind === "single") {
+    return `${consequence}<input type="hidden" name="acting_coworker" value="${esc(selected.agentId)}">
+<p class="scope-detail">This assigns a role to this connection. It does not verify the app's name or grant access to a workroom.</p>`;
+  }
+
+  const options = assistant.candidates.map((c) =>
+    `<option value="${esc(c.agentId)}"${c.agentId === selected.agentId ? " selected" : ""}>${esc(c.displayName)}${c.detail ? ` — ${esc(c.detail)}` : ""}</option>`,
+  ).join("");
+  const note = `<p class="scope-detail">This assigns a role to this connection. It does not verify the app's name or grant access to a workroom.</p>`;
+  return `${followingConsequence(assistant)}
+<input type="hidden" name="default_coworker" value="${esc(selected.agentId)}">
+<details><summary>Change</summary>
+${note}
+<select name="acting_coworker" aria-label="Assistant role">${options}</select>
+${view.nextAssistantsUrl ? `<p><a href="${esc(view.nextAssistantsUrl)}">More approved assistants</a></p>` : ""}
+</details>`;
+}
+
+/**
+ * The consequence line for a resolved default, kept truthful when the person
+ * picks a different assistant under Change. The page carries no script, so
+ * the line holds one name per candidate and CSS shows the one whose option is
+ * selected; without `:has()` support the default name stays, as before.
+ * Agent ids are server-owned; any id that is not a plain token is left out of
+ * the stylesheet rather than escaped into a selector.
+ */
+function followingConsequence(assistant: ConsentAssistant): string {
+  const safe = assistant.candidates.filter((c) => /^[A-Za-z0-9_-]+$/.test(c.agentId));
+  const names = safe.map((c) =>
+    `<strong class="who${c.agentId === assistant.selected.agentId ? " default" : ""}" data-agent="${c.agentId}">${esc(c.displayName)}</strong>`,
+  ).join("");
+  const rules = [
+    `.who{display:none}.who.default{display:inline}`,
+    `form:has(select[name="acting_coworker"] option:checked:not([value="${assistant.selected.agentId}"])) .who.default{display:none}`,
+    ...safe.map((c) => `form:has(select[name="acting_coworker"] option[value="${c.agentId}"]:checked) .who[data-agent="${c.agentId}"]{display:inline}`),
+  ].join("");
+  if (!safe.some((c) => c.agentId === assistant.selected.agentId)) {
+    return `<p class="consequence">It will work as <strong>${esc(assistant.selected.displayName)}</strong> under your account.</p>`;
+  }
+  return `<style>${rules}</style><p class="consequence">It will work as ${names} under your account.</p>`;
 }
 
 export function htmlResponse(body: string, status = 200): Response {

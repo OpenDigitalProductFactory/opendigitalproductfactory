@@ -95,6 +95,56 @@ describe("policy action judgment", () => {
     expect(routinePolicyActionEligibility(routine())).toEqual({ eligible: true });
   });
 
+  function authorRoutine() {
+    const input = routine();
+    input.task = null;
+    input.rawParams = { itemId: "BI-2014236E", gate: "research", decision: "pass",
+      artifactRef: { kind: "feature-build-revision", revisionId: "revision-author" },
+      reason: "Canonical research", findings: [], resolvedFindingRefs: [] };
+    Object.assign(input, { authorResearchBinding: {
+      itemId: "BI-2014236E", buildId: "FB-AUTHOR", revisionId: "revision-author",
+      valueDigest: "sha256:canonical", contentDigest: "sha256:rendered",
+      authorUserId: "user-mark", authorPrincipalId: "principal-mark", authorAgentId: null,
+      workroomId: "WC-48A3D214", reason: "Canonical research",
+      authorityVersion: null, roomPolicyDigest: "sha256:room",
+    } });
+    input.room = { workroomId: "WC-48A3D214", collaborationShape: null, workShapeKey: null };
+    return input;
+  }
+
+  it("admits canonical author research without inventing a TaskRun or reviewer", () => {
+    const input = authorRoutine();
+    expect(routinePolicyActionEligibility(input)).toEqual({ eligible: true });
+    expect(input.task).toBeNull();
+  });
+
+  it.each(["wrong-author", "wrong-principal", "foreign-room", "wrong-revision", "other-gate", "findings", "waiver",
+    "objective-mapping", "revoked-grant", "narrowed-room", "restricted", "propose", "always", "consequential"])("keeps author research closed for %s", (kind) => {
+    const input = authorRoutine();
+    if (kind === "wrong-author") input.authContext.actingHumanUserId = "other";
+    if (kind === "wrong-principal") input.authContext.principalId = "other";
+    if (kind === "foreign-room") input.room!.workroomId = "other";
+    if (kind === "wrong-revision") (input.rawParams.artifactRef as { revisionId: string }).revisionId = "old";
+    if (kind === "other-gate") input.rawParams.gate = "spec-approval";
+    if (kind === "findings") input.rawParams.findings = [{ issue: "open" }];
+    if (kind === "waiver") input.rawParams.resolvedFindingRefs = ["waive"];
+    if (kind === "objective-mapping") input.rawParams.operation = "objective-mapping";
+    if (kind === "revoked-grant") input.action.agentGrantAllowed = false;
+    if (kind === "narrowed-room") input.action.roomAuthorityAllowed = false;
+    if (kind === "restricted") input.dataPolicy.sensitivity = "restricted";
+    if (kind === "propose") input.action.executionMode = "proposal";
+    if (kind === "always") input.action.policyProjectionAllowed = false;
+    if (kind === "consequential") input.action.consequence = "authority";
+    expect(routinePolicyActionEligibility(input).eligible).toBe(false);
+  });
+
+  it("seals canonical author bytes separately from unchanged caller arguments", () => {
+    const input = authorRoutine();
+    const before = buildCoworkerApprovalBinding(input);
+    input.authorResearchBinding!.valueDigest = "sha256:changed";
+    expect(buildCoworkerApprovalBinding(input).inputFingerprint).not.toBe(before.inputFingerprint);
+  });
+
   it("admits recording a grounded negative design review without granting a waiver", () => {
     const input = routine({
       decision: "fail",
@@ -130,7 +180,7 @@ describe("policy action judgment", () => {
     expect(routinePolicyActionEligibility(missing)).toEqual({ eligible: false, reason: "workroom-binding-required" });
 
     const mismatch = routine();
-    mismatch.task!.initiativeReviewBinding!.artifactRef.commitSha = "different-head";
+    (mismatch.task!.initiativeReviewBinding!.artifactRef as { commitSha: string }).commitSha = "different-head";
     expect(routinePolicyActionEligibility(mismatch)).toEqual({ eligible: false, reason: "workroom-binding-mismatch" });
   });
 

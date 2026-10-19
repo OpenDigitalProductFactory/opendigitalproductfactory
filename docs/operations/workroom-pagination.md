@@ -9,6 +9,11 @@ status: draft
 the typed pagination change is installed; an older response without `page` does
 not prove that a complete population was enumerated.
 
+Legacy names resolve to their canonical Workroom name before token scope,
+quiescence, governance and dispatch checks. `load_tools` accepts a legacy name
+and returns its authorized canonical definition. Listings and execution audit
+names remain canonical; aliases do not add grants or extra advertised tools.
+
 Start with your filters and an optional `limit`. The default is five rows and the
 maximum request is 100. The actual page may contain fewer rows because the full
 serialized result must fit 4,000 UTF-16 units and 4,000 UTF-8 bytes. Long summaries
@@ -43,3 +48,20 @@ the principal, effective caller context and filters; a cursor grants no access.
 Cursor signing shares the existing delivery-hub primitive, while each domain
 keeps its own payload and key policy. Recovery and liveness projection remain
 owned by their existing shared modules.
+
+## Executor and invocation
+
+The roster pairs the recorded executor with an invocation summary. External
+sessions show their reference; linked TaskRuns show the agents and parent run;
+scheduled dispatches show the task, stage and recorded target. A2A requires
+distinct recorded initiating and current agents. A schedule alone is not A2A.
+Native governance and corpus maintenance identify their execution on each run.
+Historical records with missing attribution say what was not recorded; a draft
+without execution evidence says no invocation is recorded. These labels do not
+claim that an agent ran when the platform has no evidence of it.
+
+A later pause or attention state does not erase the last successful scheduled
+invocation. The roster reads retained successful dispatch activity and its recorded
+agent from its original dispatch ledger. Lease-held and
+missing-owner observations are not dispatch evidence. A task's later reassignment
+does not change the historical agent shown.

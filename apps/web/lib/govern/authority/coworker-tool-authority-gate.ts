@@ -6,14 +6,17 @@ import { randomUUID } from "crypto";
 import type {
   GovernedExecuteArgs,
   GovernedExecuteRejection,
-} from "@/lib/mcp-governed-execute";
-import type { ToolDefinition } from "@/lib/mcp-tools";
+} from "@/lib/mcp-governed-execute-types";
+import type { ToolDefinition } from "@/lib/mcp-tool-types";
 
 import {
+  buildCoworkerApprovalBinding,
   evaluateCoworkerAuthority,
   type CoworkerAuthorityDecision,
   type CoworkerAuthorityInput,
 } from "./coworker-authority-decision";
+import { escalationReasonSentence } from "./escalation-gate";
+import type { ApprovalClassification } from "@/lib/coworker/approval-lifetime";
 
 export type CoworkerAuthorityInputResolver = (args: {
   execution: GovernedExecuteArgs;
@@ -33,6 +36,12 @@ export type AuthorityApprovalEnvelopeCreate = (input: {
   authorityDecisionId: string;
   threadId: string | null;
   explanation: string;
+  /** Sizes the request's lifetime; never part of the binding (BI-0012E6CA). */
+  consequence?: ApprovalClassification;
+  /** Raised under a propose boundary: metadata, never part of the binding (BI-C8EC05C9). */
+  proposeBoundary?: boolean;
+  /** The chat message the request belongs to (BI-C8EC05C9). */
+  chatMessageId?: string;
 }) => Promise<{ id: string; status: string; expiresAt: Date | null }>;
 
 export type AuthorityApprovalTaskResume = (taskRunId: string) => Promise<void>;
@@ -42,7 +51,11 @@ export type AuthorityApprovalEnvelopeFinalize = (
   success: boolean,
 ) => Promise<void>;
 
-export type PolicyAuthorityEnvelopeReserve = (envelopeId: string) => Promise<boolean>;
+/** Claims the envelope by stamping `resolvedAt = reservedAt`; true when this run won. */
+export type PolicyAuthorityEnvelopeReserve = (envelopeId: string, reservedAt: Date) => Promise<boolean>;
+
+/** BI-5B34D277: hands back a reservation this run took but never spent. */
+export type AuthorityApprovalReservationRelease = (envelopeId: string, reservedAt: Date) => Promise<void>;
 
 export type PolicyAuthorityProjectionAttempt = (input: {
   execution: GovernedExecuteArgs;
@@ -71,14 +84,30 @@ type AuthorityGateOverrides = {
   authorityApprovalEnvelopeCreate?: AuthorityApprovalEnvelopeCreate | null;
   authorityApprovalTaskResume?: AuthorityApprovalTaskResume | null;
   authorityApprovalEnvelopeFinalize?: AuthorityApprovalEnvelopeFinalize | null;
+  authorityApprovalReservationRelease?: AuthorityApprovalReservationRelease | null;
   policyAuthorityProjectionAttempt?: PolicyAuthorityProjectionAttempt | null;
   policyAuthorityEnvelopeReserve?: PolicyAuthorityEnvelopeReserve | null;
+  authorityExecutedOutcome?: AuthorityExecutedOutcome | null;
 };
+
+/** BI-12E5DD91: the recorded outcome of an identical call that already ran on approval. */
+export type AuthorityExecutedOutcome = (
+  binding: Extract<CoworkerAuthorityDecision, { outcome: "require-approval" }>["approvalBinding"],
+) => Promise<{ envelopeId: string; status: "executed" | "failed"; result: unknown } | null>;
 
 export type CoworkerToolAuthorityGateResult =
   | {
+      /** The identical call already ran once on a person's approval. */
+      outcome: "settled";
+      envelopeId: string;
+      status: "executed" | "failed";
+      result: unknown;
+    }
+  | {
       outcome: "allow";
       approvedEnvelopeId: string | null;
+      /** The `resolvedAt` this run stamped when it reserved the approval (BI-5B34D277). */
+      reservedAt: Date | null;
       authorityDecisionId: string;
     }
   | {
@@ -126,12 +155,26 @@ export function setCoworkerToolAuthorityOverridesForTests(
     overrides.authorityApprovalEnvelopeFinalize =
       next.authorityApprovalEnvelopeFinalize ?? null;
   }
+  if ("authorityApprovalReservationRelease" in next) {
+    overrides.authorityApprovalReservationRelease = next.authorityApprovalReservationRelease ?? null;
+  }
   if ("policyAuthorityProjectionAttempt" in next) {
     overrides.policyAuthorityProjectionAttempt = next.policyAuthorityProjectionAttempt ?? null;
   }
   if ("policyAuthorityEnvelopeReserve" in next) {
     overrides.policyAuthorityEnvelopeReserve = next.policyAuthorityEnvelopeReserve ?? null;
   }
+  if ("authorityExecutedOutcome" in next) {
+    overrides.authorityExecutedOutcome = next.authorityExecutedOutcome ?? null;
+  }
+}
+
+async function executedOutcome(
+  binding: Parameters<AuthorityExecutedOutcome>[0],
+): Promise<{ envelopeId: string; status: "executed" | "failed"; result: unknown } | null> {
+  if (overrides.authorityExecutedOutcome) return overrides.authorityExecutedOutcome(binding);
+  const { findExecutedAuthorityOutcome } = await import("@/lib/coworker/authority-approval-envelope");
+  return findExecutedAuthorityOutcome(binding);
 }
 
 async function attemptPolicyAuthorityProjection(input: Parameters<PolicyAuthorityProjectionAttempt>[0]) {
@@ -140,13 +183,19 @@ async function attemptPolicyAuthorityProjection(input: Parameters<PolicyAuthorit
   return projector(input);
 }
 
-async function reservePolicyAuthorityEnvelope(envelopeId: string): Promise<boolean> {
+/**
+ * Claim an approved envelope for exactly one run: a compare-and-set on
+ * `resolvedAt`. Every approved run reserves (BI-12E5DD91), not only
+ * policy-derived ones, because a person's approval can now be spent by the
+ * platform's own replay and by a client retry at the same moment.
+ */
+async function reserveApprovedEnvelope(envelopeId: string, reservedAt: Date): Promise<boolean> {
   if (overrides.policyAuthorityEnvelopeReserve) {
-    return overrides.policyAuthorityEnvelopeReserve(envelopeId);
+    return overrides.policyAuthorityEnvelopeReserve(envelopeId, reservedAt);
   }
   const result = await prisma.coworkerActionEnvelope.updateMany({
     where: { id: envelopeId, status: "approved", resolvedAt: null },
-    data: { resolvedAt: new Date() },
+    data: { resolvedAt: reservedAt },
   });
   return result.count === 1;
 }
@@ -209,7 +258,27 @@ async function writeAuthorizationDecision(
         input.task?.taskRunId ?? execution.context?.taskRunId ?? null,
       subjectKind: input.subject?.kind ?? null,
       authorityOrganizationScope: input.organizationId ?? null,
+      ...(input.authorResearchBinding ? {
+        authorResearchBinding: input.authorResearchBinding,
+        artifactFingerprint: buildCoworkerApprovalBinding(input).inputFingerprint,
+        expiresAt: (input.approval?.expiresAt ?? new Date(Date.now() + 60_000)).toISOString(),
+      } : {}),
+      ...(input.action.consequenceRefinement
+        ? { consequenceRefinement: input.action.consequenceRefinement }
+        : {}),
+      // BI-12E5DD91: which escalation branch decided, so "why did this need a
+      // person?" is answerable from the record instead of re-derived.
+      ...("escalation" in decision && decision.escalation
+        ? {
+            escalationReason: decision.escalation.reasonCode,
+            escalationSteering: decision.escalation.steering,
+            damaging: decision.escalation.damaging,
+          }
+        : {}),
     },
+    // The OAuth consent this call ran under, when it ran under one.
+    authorityBindingId:
+      execution.context?.connectionDelegation?.authorityBindingId ?? null,
     endpointUsed: execution.source,
     mode: input.action.executionMode,
     routeContext: input.action.routeContext,
@@ -234,6 +303,16 @@ async function writeAuthorizationDecision(
     );
     return null;
   }
+}
+
+/** The envelope's stored reason: the rule, then the branch that decided it. */
+export function approvalExplanation(
+  decision: Extract<CoworkerAuthorityDecision, { outcome: "require-approval" }>,
+): string {
+  const why = decision.escalation
+    ? escalationReasonSentence(decision.escalation.reasonCode)
+    : null;
+  return why ? `${decision.explanation} ${why}` : decision.explanation;
 }
 
 async function ensureApproval(
@@ -271,6 +350,24 @@ export async function finalizeCoworkerAuthorityApproval(
     "@/lib/coworker/authority-approval-envelope"
   );
   await finalizeAuthorityApprovalEnvelope(envelopeId, success);
+}
+
+/**
+ * BI-5B34D277: return an unspent reservation, so a refusal that reached no
+ * verdict does not strand the person's approval until it expires.
+ */
+export async function releaseCoworkerAuthorityReservation(
+  envelopeId: string,
+  reservedAt: Date,
+): Promise<void> {
+  if (overrides.authorityApprovalReservationRelease) {
+    await overrides.authorityApprovalReservationRelease(envelopeId, reservedAt);
+    return;
+  }
+  const { releaseAuthorityApprovalReservation } = await import(
+    "@/lib/coworker/authority-approval-envelope"
+  );
+  await releaseAuthorityApprovalReservation(envelopeId, reservedAt);
 }
 
 export async function enforceCoworkerToolAuthority(
@@ -361,12 +458,21 @@ export async function enforceCoworkerToolAuthority(
   }
 
   if (decision.outcome === "require-approval") {
+    // A lookup failure only loses the shortcut; it falls back to asking.
+    const settled = await executedOutcome(decision.approvalBinding).catch(() => null);
+    if (settled) return { outcome: "settled", ...settled };
     try {
       const envelope = await ensureApproval({
         binding: decision.approvalBinding,
         authorityDecisionId: decisionId,
         threadId: execution.context?.threadId ?? null,
-        explanation: decision.explanation,
+        explanation: approvalExplanation(decision),
+        // The call's resolved consequence sizes how long the person has to
+        // answer: outward stays short, everything else waits for them.
+        ...(input.action.consequence !== undefined ? { consequence: input.action.consequence } : {}),
+        // Server-set context only (BI-C8EC05C9); absent for every existing caller.
+        ...(execution.context?.proposeBoundary === true ? { proposeBoundary: true } : {}),
+        ...(execution.context?.chatMessageId ? { chatMessageId: execution.context.chatMessageId } : {}),
       });
       return {
         outcome: "reject",
@@ -397,21 +503,35 @@ export async function enforceCoworkerToolAuthority(
   }
 
   const approvedEnvelopeId = input.approval?.envelopeId ?? null;
-  if (
-    projectedDecisionId
-    && approvedEnvelopeId
-    && !await reservePolicyAuthorityEnvelope(approvedEnvelopeId)
-  ) {
+  const reservedAt = approvedEnvelopeId ? new Date() : null;
+  if (approvedEnvelopeId && reservedAt && !await reserveApprovedEnvelope(approvedEnvelopeId, reservedAt)) {
+    // BI-5B34D277: the run that holds it may already have settled it; its
+    // recorded outcome is the answer, not "already used".
+    const binding = input.approval?.binding;
+    const settled = binding ? await executedOutcome(binding).catch(() => null) : null;
+    if (settled) return { outcome: "settled", ...settled };
     return {
       outcome: "reject",
       rejection: "authority_evidence_unavailable",
-      message: "the policy-derived single-use authorization was already consumed",
+      message: projectedDecisionId
+        ? "the policy-derived single-use authorization was already consumed"
+        : "the approval was already used by another run of this exact request",
     };
   }
-  if (approvedEnvelopeId && input.task?.taskRunId) {
+  // A propose-boundary request never paused its TaskRun, so there is nothing
+  // to resume, and resuming would flip a finished run back to working.
+  if (approvedEnvelopeId && reservedAt && input.task?.taskRunId && input.approval?.proposeBoundary !== true) {
     try {
       await resumeApprovedTask(input.task.taskRunId);
     } catch (error) {
+      // Nothing ran and nothing was decided: give the approval back (BI-5B34D277).
+      await releaseCoworkerAuthorityReservation(approvedEnvelopeId, reservedAt).catch((releaseError) => {
+        console.error(
+          "[governed-execute] approval reservation release failed envelope=%s: %s",
+          JSON.stringify(approvedEnvelopeId),
+          releaseError instanceof Error ? JSON.stringify(releaseError.message) : JSON.stringify(String(releaseError)),
+        );
+      });
       console.error(
         "[governed-execute] approved task resume failed task=%s tool=%s: %s",
         JSON.stringify(input.task.taskRunId),
@@ -428,5 +548,5 @@ export async function enforceCoworkerToolAuthority(
     }
   }
 
-  return { outcome: "allow", approvedEnvelopeId, authorityDecisionId: decisionId };
+  return { outcome: "allow", approvedEnvelopeId, reservedAt, authorityDecisionId: decisionId };
 }
