@@ -458,3 +458,48 @@ until this compatibility obligation has an executable owner and passing checks.
 Retain history/proof and unknown holds; never coerce qualified generations into
 legacy replay. Coordinate one canonical release through the existing producer;
 do not edit installed runtime assets.
+
+## October 19 bounded source recovery: original proof inventory
+
+The normal author research writer accepted preimplementation diagnostic research
+as `initiative-2f0151e8-426c-4d6f-9ce4-0159590516a7` against immutable
+`43f7c590105caa3877e690407bf6847da7642847`. This advances the author research
+lane; it does not pass P1's positive proof qualification, implement recovery, or
+settle the original executions. Plan coverage still lacks an independently
+approved scope baseline. Its original DED689F4DDF6 review remains UNKNOWN.
+
+AGENTS.md section 1 and the checked-in recovery-routing reference permit bounded
+source repair of unavailable admission machinery under the operator's existing
+repair instruction. The Workroom records the unavailable baseline/review gates
+and exact source claims. DCO, tests/typechecks, independent assessment, protected
+publication and canonical deployment remain required. No missing authority is
+waived, no baseline is invented and no new review request is issued.
+
+Fresh main already supplies `mcp-task-original-result.ts`: it authenticates the
+original requester/coworker and exact room, verifies immutable request identity,
+reads canonical writer receipts and rechecks authority. Extend that reader rather
+than create a second settlement or proof-import surface.
+
+The bounded contribution queries metadata-only inventories for TaskArtifact and
+AsyncInferenceOp through the TaskRun row identity, and ToolExecution and
+CoworkerActionEnvelope through the semantic task identity. Each source is capped
+at eight records plus an overflow sentinel. Raw artifact parts, tool parameters
+and results, approval arguments and provider output are not selected or returned.
+Two reads fingerprint the selected observation fields; changed, unavailable,
+overflowing or mismatched inventories withhold counts. Current read authority
+is checked again before any inventory is returned.
+
+This is a task-linked observation inventory, never a complete capture contract.
+Its output always declares capture completeness false and settlement unknown,
+and names the required original launch, capability, descendant, credential,
+effect-reconciliation and late-writer/approval-fence producers. Zero rows and
+printable completion claims cannot satisfy any of those contracts. Auxiliary
+inventory failure does not erase a separately authenticated canonical receipt;
+that receipt still grants no replay or effect-settlement authority.
+
+The first regression ran on the unrepaired reader and failed specifically on
+the missing structured inventory (61 other tests passed). Focused tests exercise
+bounded inventories, correct relation identities, access denial/revocation,
+late approvals, unavailable/overflowing sources, canonical-receipt precedence
+and rejection of printable proof claims. These are source behavior tests, not
+historical launch/closure proof or the positive recovery case in AC-HR-2/5.

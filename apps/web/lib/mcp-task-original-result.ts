@@ -14,6 +14,8 @@ import { INITIATIVE_READINESS_LANES } from "./tak/initiative-readiness-tool-gran
 import { readBoundReviewAuthorityTask } from "./backlog/initiative-readiness/bound-review-effect";
 import { validInitiativeGateReceipt } from "./backlog/initiative-readiness/receipt-validation";
 import { resolveAgentWorkroomAccess } from "./work-management/workroom-agent-access.server";
+import { collectOriginalProofInventory, reconcileOriginalProofInventory, ORIGINAL_PROOF_INVENTORY_LIMIT,
+  type OriginalProofInventory } from "./mcp-task-original-proof-inventory";
 
 export const ORIGINAL_REVIEW_RESULT_CHAR_CAP = 8_000;
 const MAX_WRITER_OBSERVATIONS = 8;
@@ -32,6 +34,7 @@ export type OriginalReviewResult = {
   observations: Observation[];
   receipt?: { receiptId: string; gate: string; decision: string };
   missingProof: string[];
+  proofInventory?: OriginalProofInventory;
 };
 type ReadInput = { taskRunId: string; userId: string; actingAgentId: string | null; tokenGrantScopes?: readonly string[];
   expected?: { requestDigest: string; updatedAt?: string } };
@@ -80,6 +83,24 @@ function fingerprint(row: Task) {
   return hash({ ...row, createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString() });
 }
 function writersFingerprint(rows: Writer[]) { return hash(rows.map(row => ({ ...row, createdAt: row.createdAt.toISOString() }))); }
+
+function loadProofInventory(task: Task) {
+  const take = ORIGINAL_PROOF_INVENTORY_LIMIT + 1;
+  const orderBy = [{ createdAt: "asc" as const }, { id: "asc" as const }];
+  return collectOriginalProofInventory({ taskRowId: task.id, taskRunId: task.taskRunId, userId: task.userId, ports: {
+    artifacts: () => prisma.taskArtifact.findMany({ where: { taskRunId: task.id }, take, orderBy,
+      select: { id: true, taskRunId: true, createdAt: true, producerAgentId: true, producerNodeId: true } }),
+    tools: () => prisma.toolExecution.findMany({ where: { taskRunId: task.taskRunId }, take, orderBy,
+      select: { id: true, taskRunId: true, userId: true, agentId: true, threadId: true, toolName: true,
+        success: true, executionMode: true, createdAt: true } }),
+    approvals: () => prisma.coworkerActionEnvelope.findMany({ where: { taskRunId: task.taskRunId }, take, orderBy,
+      select: { id: true, taskRunId: true, delegatingUserId: true, createdAt: true, status: true, resolvedAt: true,
+        expiresAt: true, authorityDecisionId: true, inputFingerprint: true, approvalBindingFingerprint: true } }),
+    operations: () => prisma.asyncInferenceOp.findMany({ where: { taskRunId: task.id }, take, orderBy,
+      select: { id: true, taskRunId: true, createdAt: true, updatedAt: true, status: true, providerId: true,
+        identityVersion: true, requestDigest: true, bindingDigest: true, operationId: true } }),
+  } });
+}
 
 /** Read authority is current owner + original acting coworker + exact-room content;
  * the expired origin token is used only to identify the original coworker. */
@@ -198,6 +219,7 @@ export async function readOriginalReviewResult(input: ReadInput): Promise<Origin
     }
     const writers = await loadWriters(task.taskRunId, binding.writerToolName, attemptStart);
     if (writers.length > MAX_WRITER_OBSERVATIONS) return unknown(input.taskRunId, "original-result-over-budget");
+    const proofBefore = await loadProofInventory(task);
     const receipts: Array<NonNullable<OriginalReviewResult["receipt"]>> = [];
     for (const writer of writers) {
       if (writer.taskRunId !== task.taskRunId || writer.userId !== input.userId || writer.threadId !== task.threadId
@@ -230,11 +252,14 @@ export async function readOriginalReviewResult(input: ReadInput): Promise<Origin
     }
     // Audit rows can arrive without updating the TaskRun. Fence both sources,
     // then recheck current read authority before returning protected evidence.
-    const [latest, latestWriters] = await Promise.all([loadTask(task.taskRunId), loadWriters(task.taskRunId, binding.writerToolName, attemptStart)]);
+    const [latest, latestWriters, proofAfter] = await Promise.all([
+      loadTask(task.taskRunId), loadWriters(task.taskRunId, binding.writerToolName, attemptStart), loadProofInventory(task),
+    ]);
     if (!latest || fingerprint(latest) !== fingerprint(task) || writersFingerprint(latestWriters) !== writersFingerprint(writers)) {
       return unknown(input.taskRunId, "original-snapshot-changed");
     }
     if (!await mayRead(input, latest, binding)) return unknown(input.taskRunId, "current-original-owner-content-access-required");
+    result.proofInventory = reconcileOriginalProofInventory(proofBefore, proofAfter);
     const uniqueReceipts = new Map(receipts.map(value => [value.receiptId, value]));
     if (resolution && (uniqueReceipts.size !== 1 || !uniqueReceipts.has(String(resolution.reviewReceiptId)))) {
       result.missingProof.push("historical-receipt-binding-mismatch");
