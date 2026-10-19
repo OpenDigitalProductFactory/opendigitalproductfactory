@@ -309,18 +309,23 @@ export async function handleTasksResult(
     const originalResult = await readOriginalReviewResult({
       taskRunId: row.taskRunId, userId, actingAgentId: currentActor?.actingAgentId ?? null,
       tokenGrantScopes: currentActor?.tokenGrantScopes,
-      ...(typeof params?.["requestDigest"] === "string"
-        ? { expected: { requestDigest: params["requestDigest"] } } : {}),
+      expected: { requestDigest: typeof params?.["requestDigest"] === "string" ? params["requestDigest"]
+        : String(object(row.a2aMetadata)?.requestDigest ?? ""), updatedAt: row.updatedAt.toISOString() },
     });
-    if (originalResult) return {
-      kind: "ok", value: {
-        content: [{ type: "text", text: `Original review ${taskId}: ${originalResult.classification}. ${originalResult.reason}` }],
-        structuredContent: { taskId, status: mcpTaskStateForWire(row.status),
-          terminal: isTerminalTaskStatus(row.status), originalResult,
-          requiresApproval: false, resumable: false },
-        isError: false, _meta: meta,
-      },
-    };
+    if (originalResult) {
+      const structured = { taskId, status: mcpTaskStateForWire(row.status),
+        terminal: isTerminalTaskStatus(row.status), originalResult, requiresApproval: false, resumable: false };
+      const located = row.status === "input-required" || row.status === "auth-required"
+        ? await withTaskRunApprovalLocation(structured, { taskRunId: row.taskRunId, callerUserId: userId })
+        : structured;
+      return {
+        kind: "ok", value: {
+          content: [{ type: "text", text: `Original review ${taskId}: ${originalResult.classification}. ${originalResult.reason}` }],
+          structuredContent: located,
+          isError: false, _meta: meta,
+        },
+      };
+    }
   }
   const durableIdentity = durableTaskIdentity(row);
   if (durableIdentity?.projectedOperationId) {

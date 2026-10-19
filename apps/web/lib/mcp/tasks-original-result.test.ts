@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ task: vi.fn(), collect: vi.fn() }));
-vi.mock("@dpf/db", () => ({ prisma: { taskRun: { findUnique: mocks.task } } }));
+const mocks = vi.hoisted(() => ({ task: vi.fn(), collect: vi.fn(), approval: vi.fn() }));
+vi.mock("@dpf/db", () => ({ prisma: { taskRun: { findUnique: mocks.task }, coworkerActionEnvelope: { findFirst: mocks.approval } } }));
 vi.mock("@/lib/inference/async-operation-runtime", () => ({
   readPrismaAuthorizedAsyncOperation: vi.fn(),
   requestPrismaAuthorizedAsyncOperationCancellation: vi.fn(),
@@ -13,7 +13,7 @@ import { handleTasksResult } from "./tasks-lifecycle";
 const row = {
   taskRunId: "TR-ORIGINAL", userId: "owner", title: "private title", objective: "private prompt",
   status: "input-required", progressPayload: { executionUncertainty: { settlement: "unknown" }, raw: "private output" },
-  a2aMetadata: { initiativeReviewBinding: { itemId: "BI-ORIGINAL" } },
+  a2aMetadata: { requestDigest: "saved-digest", initiativeReviewBinding: { itemId: "BI-ORIGINAL" } },
   createdAt: new Date("2026-10-18"), updatedAt: new Date("2026-10-18"), completedAt: null,
 };
 const projection = {
@@ -25,6 +25,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   mocks.task.mockResolvedValue(row);
   mocks.collect.mockResolvedValue(projection);
+  mocks.approval.mockResolvedValue(null);
 });
 
 it("returns bounded original evidence using server auth and never raw task output", async () => {
@@ -32,7 +33,7 @@ it("returns bounded original evidence using server auth and never raw task outpu
   const result = await handleTasksResult("owner", { taskId: row.taskRunId,
     requestDigest: "digest", actingAgentId: "AGT-OTHER", tokenGrantScopes: ["admin"] }, actor);
   expect(mocks.collect).toHaveBeenCalledWith({ taskRunId: row.taskRunId, userId: "owner",
-    ...actor, expected: { requestDigest: "digest" } });
+    ...actor, expected: { requestDigest: "digest", updatedAt: row.updatedAt.toISOString() } });
   expect(result).toMatchObject({ kind: "ok", value: { isError: false,
     structuredContent: { taskId: row.taskRunId, status: "input_required", terminal: false,
       originalResult: projection, requiresApproval: false, resumable: false } } });
@@ -55,6 +56,35 @@ it("does not let a terminal original task bypass protected collection", async ()
   const result = await handleTasksResult("owner", { taskId: row.taskRunId });
   expect(result).toMatchObject({ kind: "ok", value: { structuredContent: { terminal: true, originalResult: projection } } });
   expect(JSON.stringify(result)).not.toContain("private");
+});
+
+it("pins the first task checkpoint so concurrent collection cannot combine snapshots", async () => {
+  mocks.collect.mockResolvedValue({ ...projection, reason: "original-request-or-checkpoint-mismatch" });
+  const result = await handleTasksResult("owner", { taskId: row.taskRunId });
+  expect(mocks.collect).toHaveBeenCalledWith(expect.objectContaining({ expected: {
+    requestDigest: "saved-digest", updatedAt: row.updatedAt.toISOString(),
+  } }));
+  expect(result).toMatchObject({ kind: "ok", value: { structuredContent: { resumable: false,
+    originalResult: { classification: "unknown", reason: "original-request-or-checkpoint-mismatch" } } } });
+});
+
+it("retains ordinary bound task results when the collector identifies a non-independent lane", async () => {
+  mocks.task.mockResolvedValue({ ...row, status: "completed", a2aMetadata: {
+    initiativeReviewBinding: { writerToolName: "record_initiative_evidence", gate: "research" },
+  } });
+  mocks.collect.mockResolvedValue(null);
+  expect(await handleTasksResult("owner", { taskId: row.taskRunId })).toMatchObject({
+    kind: "ok", value: { structuredContent: { terminal: true, title: row.title, progressPayload: row.progressPayload } },
+  });
+});
+
+it("preserves a genuine live original-owner approval without authorizing replay", async () => {
+  mocks.approval.mockResolvedValue({ id: "approval-original", delegatingUserId: "owner",
+    taskRunId: row.taskRunId, status: "proposed", expiresAt: new Date(Date.now() + 60_000) });
+  expect(await handleTasksResult("owner", { taskId: row.taskRunId })).toMatchObject({
+    kind: "ok", value: { structuredContent: { requiresApproval: true, resumable: false,
+      approval: { envelopeId: "approval-original" }, originalResult: projection } },
+  });
 });
 
 it("rejects another owner before collecting observations", async () => {

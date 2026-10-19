@@ -126,7 +126,8 @@ describe("OAuth setup recovery", () => {
       originalResult: { classification: "unknown", replayAllowed: false }, resumable: false,
     } } });
     expect(readOriginalReviewResult).toHaveBeenCalledWith({ taskRunId: "TR-ORIGINAL", userId: "owner",
-      actingAgentId: "AGT-EXT-CODEX", tokenGrantScopes: ["backlog_read"] });
+      actingAgentId: "AGT-EXT-CODEX", tokenGrantScopes: ["backlog_read"],
+      expected: { requestDigest: "", updatedAt: new Date("2026-10-18").toISOString() } });
     expect(govMock).not.toHaveBeenCalled();
   });
 

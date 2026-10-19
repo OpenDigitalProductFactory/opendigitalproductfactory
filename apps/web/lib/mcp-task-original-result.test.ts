@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const db = vi.hoisted(() => ({ task: vi.fn(), token: vi.fn(), agent: vi.fn(), room: vi.fn(), writers: vi.fn(), activity: vi.fn(), item: vi.fn(), agentAccess: vi.fn(), humanAccess: vi.fn(), outcome: vi.fn() }));
+const db = vi.hoisted(() => ({ task: vi.fn(), token: vi.fn(), agent: vi.fn(), room: vi.fn(), writers: vi.fn(), activity: vi.fn(), item: vi.fn(), authority: vi.fn(), envelopes: vi.fn(), agentAccess: vi.fn(), humanAccess: vi.fn(), outcome: vi.fn() }));
 vi.mock("@dpf/db", () => ({ prisma: {
-  taskRun: { findUnique: db.task }, mcpApiToken: { findUnique: db.token }, agent: { findUnique: db.agent }, workroom: { findUnique: db.room },
+  taskRun: { findUnique: db.task }, mcpApiToken: { findUnique: db.token }, agent: { findUnique: db.agent, findFirst: db.agent }, workroom: { findUnique: db.room },
   toolExecution: { findMany: db.writers }, backlogItemActivity: { findUnique: db.activity }, backlogItem: { findUnique: db.item },
+  authorizationDecisionLog: { findUnique: db.authority }, coworkerActionEnvelope: { findMany: db.envelopes },
 } }));
 vi.mock("./work-management/workroom-agent-access.server", () => ({ resolveAgentWorkroomAccess: db.agentAccess, resolveHumanWorkroomAccess: db.humanAccess }));
 vi.mock("./mcp-task-review-outcome", () => ({ loadInitiativeReviewOutcome: db.outcome }));
@@ -46,10 +47,13 @@ const receipt = { schemaVersion: 1, receiptId, policyVersion: "initiative-readin
   reason: "Private reviewer explanation", findingRefs: ["finding-1"], resolvedFindingRefs: [] };
 const writer = { id: "writer-1", taskRunId, userId: "human", agentId: raw.agentId, threadId: "thread", toolName: raw.initiativeReviewBinding.writerToolName,
   success: true, executionMode: "internal-mcp-session", createdAt: new Date("2026-10-18T00:59:40Z"), result: { success: true, data: { receiptId }, message: "Private native output" } };
+const authority = { decisionId: "AUTH-1", decision: "allow", actionKey: raw.initiativeReviewBinding.writerToolName, organizationId: null,
+  rationale: { taskRunId }, policyVersion: "coworker-authority.v1" };
 
 beforeEach(() => {
   vi.resetAllMocks(); db.task.mockResolvedValue(structuredClone(row)); db.token.mockResolvedValue({ userId: "human", agentId: "AGT-AUTHOR" });
-  db.agent.mockResolvedValue({ status: "active", archived: false, toolGrants: [{ grantKey: "backlog_read" }] });
+  db.agent.mockResolvedValue({ status: "active", archived: false, toolGrants: [{ grantKey: "backlog_read" }], toolGrantRevocations: [] });
+  db.authority.mockResolvedValue(structuredClone(authority)); db.envelopes.mockResolvedValue([]);
   db.room.mockResolvedValue({ id: "room-row", backlogItemId: "BI-TEST", repositoryFullName: "org/repo", headBranch: "codex/original", headSha: "a".repeat(40) });
   db.agentAccess.mockResolvedValue({ decision: { level: "content" } }); db.humanAccess.mockResolvedValue({ decision: { level: "content" } });
   db.writers.mockResolvedValue([]); db.activity.mockResolvedValue({ id: receiptId, recordedAt: writer.createdAt, payload: structuredClone(receipt) });
@@ -96,10 +100,115 @@ describe("original review read-only evidence collection", () => {
     if (failure === "owner") db.task.mockResolvedValue({ ...row, userId: "other" });
     if (failure === "actor") db.token.mockResolvedValue({ userId: "human", agentId: "AGT-OTHER" });
     if (failure === "room" || failure === "revoked") db.agentAccess.mockResolvedValue({ decision: { level: "none" } });
-    if (failure === "agent-grant") db.agent.mockResolvedValue({ status: "active", archived: false, toolGrants: [] });
+    if (failure === "agent-grant") db.agent.mockResolvedValue({ status: "active", archived: false, toolGrants: [], toolGrantRevocations: [] });
     const result = await readOriginalReviewResult(failure === "scope" ? { ...input, tokenGrantScopes: [] } : input);
     expect(result).toMatchObject({ classification: "unknown", observations: [] });
     expect(result).not.toHaveProperty("binding"); expect(result).not.toHaveProperty("receipt"); expect(db.writers).not.toHaveBeenCalled();
+  });
+
+  it("uses canonical persisted grants and honors a revocation tombstone even while the grant row remains", async () => {
+    db.agent.mockResolvedValue({ toolGrants: [{ grantKey: "backlog_read" }], toolGrantRevocations: [{ grantKey: "backlog_read" }], status: "active", archived: false });
+    db.writers.mockResolvedValue([writer]);
+    expect(await readOriginalReviewResult(input)).toMatchObject({ classification: "unknown", observations: [] });
+    expect(db.writers).not.toHaveBeenCalled();
+  });
+
+  it("reads a canonical authority owner's grants for an admitted execution alias", async () => {
+    db.token.mockResolvedValue({ userId: "human", agentId: "AGT-EXT-CODEX" });
+    db.agent.mockImplementation(async ({ where }) => where.agentId === "AGT-EXT-CODEX"
+      ? { toolGrants: [{ grantKey: "backlog_read" }], toolGrantRevocations: [], status: "active", archived: false }
+      : { toolGrants: [], toolGrantRevocations: [], status: "active", archived: false });
+    db.writers.mockResolvedValue([writer]);
+    expect(await readOriginalReviewResult({ ...input, actingAgentId: "external-codex" })).toMatchObject({ classification: "receipt-complete" });
+    expect(db.agent).toHaveBeenCalledWith(expect.objectContaining({ where: { agentId: "AGT-EXT-CODEX" }, include: { toolGrants: true, toolGrantRevocations: true } }));
+  });
+
+  it("does not reinterpret an unbound external assistant as the human owner", async () => {
+    db.writers.mockResolvedValue([writer]);
+    expect(await readOriginalReviewResult({ ...input, actingAgentId: null })).toMatchObject({ classification: "unknown", observations: [] });
+    expect(db.humanAccess).not.toHaveBeenCalled(); expect(db.writers).not.toHaveBeenCalled();
+  });
+
+  it.each(["wait-schema", "wait-attempt", "wait-nonrecord", "dispatch-nonrecord", "resume-marker", "claim-marker"])("refuses a present malformed %s checkpoint even with a genuine writer receipt", async failure => {
+    const value = structuredClone(row);
+    if (failure === "wait-schema") value.progressPayload.terminalWriterWait.schemaVersion = 2;
+    if (failure === "wait-attempt") value.progressPayload.terminalWriterWait.attempt = 0;
+    if (failure === "wait-nonrecord") (value.progressPayload as Record<string, unknown>).terminalWriterWait = "malformed";
+    if (failure === "dispatch-nonrecord") (value.progressPayload as Record<string, unknown>).dispatch = "malformed";
+    if (failure === "resume-marker") (value.progressPayload as Record<string, unknown>).resumeReservedAt = "malformed";
+    if (failure === "claim-marker") value.progressPayload.dispatch.claimedAt = "malformed";
+    db.task.mockResolvedValue(value); db.writers.mockResolvedValue([writer]);
+    expect(await readOriginalReviewResult(input)).toMatchObject({ classification: "unknown", observations: [] });
+    expect(db.outcome).not.toHaveBeenCalled();
+  });
+
+  it("reads a genuine legacy UUID receipt through its exact independently recorded authority task link", async () => {
+    const legacyId = "initiative-a69b8865-6964-4f9e-8edc-274c0cbfc98e";
+    db.writers.mockResolvedValue([{ ...writer, result: { success: true, data: { receiptId: legacyId } } }]);
+    db.activity.mockResolvedValue({ id: legacyId, recordedAt: writer.createdAt, payload: { ...receipt, receiptId: legacyId } });
+    db.outcome.mockResolvedValue({ receiptId: legacyId, gate: "design-spec", decision: "fail", artifactRef: raw.initiativeReviewBinding.artifactRef });
+    expect(await readOriginalReviewResult(input)).toMatchObject({ classification: "receipt-complete", receipt: { receiptId: legacyId } });
+    expect(db.authority).toHaveBeenCalledWith(expect.objectContaining({ where: { decisionId: "AUTH-1" } }));
+  });
+
+  it("accepts the canonical approval-envelope authority carrier without inventing a direct task link", async () => {
+    db.authority.mockResolvedValue({ ...authority, rationale: {} }); db.envelopes.mockResolvedValue([{ taskRunId }]);
+    db.writers.mockResolvedValue([writer]);
+    expect(await readOriginalReviewResult(input)).toMatchObject({ classification: "receipt-complete" });
+  });
+
+  it.each(["stable", "legacy"])("requires exact authority evidence for %s receipts", async identity => {
+    const id = identity === "stable" ? receiptId : "initiative-a69b8865-6964-4f9e-8edc-274c0cbfc98e";
+    db.writers.mockResolvedValue([{ ...writer, result: { success: true, data: { receiptId: id } } }]);
+    db.activity.mockResolvedValue({ id, recordedAt: writer.createdAt, payload: { ...receipt, receiptId: id } });
+    db.outcome.mockResolvedValue({ receiptId: id, gate: "design-spec", decision: "fail", artifactRef: raw.initiativeReviewBinding.artifactRef });
+    for (const evidence of [null, { ...authority, rationale: {} }, { ...authority, rationale: { taskRunId: "TR-OTHER" } },
+      { ...authority, actionKey: "record_initiative_security_review" }, { ...authority, organizationId: "org-foreign" },
+      { ...authority, policyVersion: "other-policy" }, { ...authority, decision: "deny" }]) {
+      db.authority.mockResolvedValue(evidence);
+      expect(await readOriginalReviewResult(input)).toMatchObject({ classification: "unknown" });
+    }
+    db.authority.mockResolvedValue(authority); db.envelopes.mockResolvedValue([{ taskRunId: "TR-OTHER" }]);
+    expect(await readOriginalReviewResult(input)).toMatchObject({ classification: "unknown" });
+  });
+
+  it("matches an organization receipt to the authoritative decision's recorded organization", async () => {
+    db.writers.mockResolvedValue([writer]); db.authority.mockResolvedValue({ ...authority, organizationId: "org-1" });
+    db.activity.mockResolvedValue({ id: receiptId, recordedAt: writer.createdAt, payload: { ...receipt, authoritySnapshot: { ...receipt.authoritySnapshot, organizationId: "org-1" } } });
+    expect(await readOriginalReviewResult(input)).toMatchObject({ classification: "receipt-complete" });
+  });
+
+  it("preserves archived native uncertainty and writer checkpoint after genuine receipt healing", async () => {
+    const value = structuredClone(row);
+    const progress: Record<string, unknown> = value.progressPayload;
+    progress.executionUncertaintyResolution = { schemaVersion: 1, reviewReceiptId: receiptId, artifactRef: raw.initiativeReviewBinding.artifactRef,
+      prior: { executionUncertainty: progress.executionUncertainty, terminalWriterWait: progress.terminalWriterWait, terminalWriterEscalation: null } };
+    delete progress.executionUncertainty; delete progress.terminalWriterWait;
+    value.status = "completed"; db.task.mockResolvedValue(value); db.writers.mockResolvedValue([writer]);
+    const result = await readOriginalReviewResult(input);
+    expect(result).toMatchObject({ classification: "receipt-complete", receipt: { receiptId }, replayAllowed: false,
+      binding: { writerAttempt: null, dispatchAttempt: 1 } });
+    expect(result?.observations).toEqual(expect.arrayContaining([expect.objectContaining({
+      source: "TaskRun.progressPayload.executionUncertaintyResolution.prior.executionUncertainty", recordedAt: at.toISOString(),
+      facts: expect.objectContaining({ childProcessClosure: "unverified", outerProcessClosed: true }),
+    }), expect.objectContaining({ source: "TaskRun.progressPayload.executionUncertaintyResolution.prior.terminalWriterWait", facts: expect.objectContaining({ writerAttempt: 1, historical: true }) })]));
+  });
+
+  it.each(["artifact", "receipt", "schema", "checkpoint", "native-schema", "writer", "observed-at"])("keeps contradictory %s healing history unknown despite a genuine writer receipt", async failure => {
+    const value = structuredClone(row);
+    const resolution = { schemaVersion: 1, reviewReceiptId: receiptId, artifactRef: { ...raw.initiativeReviewBinding.artifactRef },
+      prior: { executionUncertainty: value.progressPayload.executionUncertainty, terminalWriterWait: { ...value.progressPayload.terminalWriterWait }, terminalWriterEscalation: null } };
+    if (failure === "artifact") resolution.artifactRef.providerBlobId = "c".repeat(40);
+    if (failure === "receipt") resolution.reviewReceiptId = "other-receipt";
+    if (failure === "schema") resolution.schemaVersion = 2;
+    if (failure === "checkpoint") resolution.prior.terminalWriterWait.attempt = 0;
+    if (failure === "native-schema") resolution.prior.executionUncertainty.schemaVersion = 2;
+    if (failure === "writer") resolution.prior.terminalWriterWait.writerToolName = "record_initiative_security_review";
+    if (failure === "observed-at") resolution.prior.terminalWriterWait.observedAt = "invalid";
+    (value.progressPayload as Record<string, unknown>).executionUncertaintyResolution = resolution;
+    db.task.mockResolvedValue(value); db.writers.mockResolvedValue([writer]);
+    const result = await readOriginalReviewResult(input);
+    expect(result?.classification).toBe("unknown"); expect(result).not.toHaveProperty("receipt");
   });
 
   it.each(["digest", "task", "reviewer", "writer", "artifact", "checkpoint", "attempt"])("refuses mismatched %s binding", async failure => {
@@ -190,7 +299,7 @@ describe("original review read-only evidence collection", () => {
 
   it("withholds collected evidence if the acting coworker's read grant is revoked", async () => {
     db.writers.mockResolvedValue([writer]);
-    db.agent.mockResolvedValueOnce({ status: "active", archived: false, toolGrants: [{ grantKey: "backlog_read" }] }).mockResolvedValue({ status: "active", archived: false, toolGrants: [] });
+    db.agent.mockResolvedValueOnce({ status: "active", archived: false, toolGrants: [{ grantKey: "backlog_read" }], toolGrantRevocations: [] }).mockResolvedValue({ status: "active", archived: false, toolGrants: [], toolGrantRevocations: [] });
     const result = await readOriginalReviewResult(input);
     expect(result).toMatchObject({ classification: "unknown", observations: [] }); expect(result).not.toHaveProperty("receipt");
   });
@@ -210,9 +319,16 @@ describe("original review read-only evidence collection", () => {
     expect(JSON.stringify(result).length).toBeLessThanOrEqual(ORIGINAL_REVIEW_RESULT_CHAR_CAP);
   });
 
-  it("returns null only for a non-review task, while malformed review metadata stays closed", async () => {
+  it("keeps non-review tasks untouched while malformed review metadata stays closed", async () => {
     db.task.mockResolvedValue({ ...row, a2aMetadata: {} }); expect(await readOriginalReviewResult(input)).toBeNull();
     db.task.mockResolvedValue({ ...row, a2aMetadata: { initiativeReviewBinding: {} } });
     expect(await readOriginalReviewResult(input)).toMatchObject({ classification: "unknown" });
+  });
+
+  it.each(["classification", "research", "dependency-disposition"])("leaves ordinary %s initiative evidence on its existing task result path", async gate => {
+    db.task.mockResolvedValue({ ...row, a2aMetadata: { ...row.a2aMetadata, initiativeReviewBinding: {
+      ...raw.initiativeReviewBinding, writerToolName: "record_initiative_evidence", gate,
+    } } });
+    expect(await readOriginalReviewResult(input)).toBeNull(); expect(db.writers).not.toHaveBeenCalled();
   });
 });
