@@ -79,6 +79,44 @@ export type CoworkerEnvelopeRow = {
 /** The one status that can still be decided. Every other value in the
  *  envelope state machine is either mid-flight or terminal. */
 const DECIDABLE_STATUS = "proposed";
+const APPROVAL_PAGE_SIZE = 25;
+
+/** A cursor is only a position: every query still checks the reading owner. */
+function approvalCursor(value: string): { createdAt: Date; id: string } {
+  if (value.length > 160) throw new Error("Invalid approval cursor.");
+  const [iso, id, extra] = value.split("|");
+  const createdAt = new Date(iso ?? "");
+  if (extra !== undefined || !id || !/^[\w-]{1,128}$/.test(id)
+    || !Number.isFinite(createdAt.getTime()) || createdAt.toISOString() !== iso) {
+    throw new Error("Invalid approval cursor. Open the latest requests to continue.");
+  }
+  return { createdAt, id };
+}
+
+export type ApprovalQueuePage = { items: AttentionItem[]; total: number; nextCursor: string | null };
+
+/** Bounded owner-scoped traversal, independent of whether the anchor still exists. */
+export async function loadCoworkerEnvelopePage(
+  db: Db, delegatingUserId: string | undefined, nowMs: number = Date.now(), before?: string,
+): Promise<ApprovalQueuePage> {
+  if (!delegatingUserId) return { items: [], total: 0, nextCursor: null };
+  const position = before === undefined ? undefined : approvalCursor(before);
+  const [loaded, total] = await Promise.all([
+    loadCoworkerEnvelopeItems(db, delegatingUserId, nowMs, undefined, { position }),
+    db.coworkerActionEnvelope.count({ where: {
+      delegatingUserId, status: DECIDABLE_STATUS,
+      OR: [{ expiresAt: null }, { expiresAt: { gt: new Date(nowMs) } }],
+    } }),
+  ]);
+  const live = loaded.filter(item => item.envelope?.actionable);
+  const shown = live.slice(0, APPROVAL_PAGE_SIZE);
+  const last = shown.at(-1);
+  return {
+    items: [...shown, ...loaded.filter(item => !item.envelope?.actionable)], total,
+    nextCursor: live.length > APPROVAL_PAGE_SIZE && last
+      ? `${last.createdAtIso}|${last.envelope!.envelopeId}` : null,
+  };
+}
 
 const EXPIRED_COPY = SOURCE_CATALOG.approvals.expiredUnanswered;
 
@@ -251,6 +289,7 @@ export async function loadCoworkerEnvelopeItems(
   delegatingUserId: string | undefined,
   nowMs: number = Date.now(),
   envelopeId?: string,
+  page?: { position?: { createdAt: Date; id: string } },
 ): Promise<AttentionItem[]> {
   if (!delegatingUserId) return [];
   const now = new Date(nowMs);
@@ -260,9 +299,13 @@ export async function loadCoworkerEnvelopeItems(
       ...(envelopeId ? { id: envelopeId } : {}),
       status: DECIDABLE_STATUS,
       OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+      ...(page?.position ? { AND: [{ OR: [
+        { createdAt: { lt: page.position.createdAt } },
+        { createdAt: page.position.createdAt, id: { lt: page.position.id } },
+      ] }] } : {}),
     },
-    orderBy: { createdAt: "desc" },
-    take: 25,
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: page ? APPROVAL_PAGE_SIZE + 1 : APPROVAL_PAGE_SIZE,
     select: {
       id: true,
       coworkerAgentId: true,
