@@ -20,6 +20,8 @@ A company runs its own DPF Authority Core. Employees, agents, phones and other d
 
 Operator direction on 2026-10-19 adds two constraints: publisher has no cloud presence, so initial internet forwarding must use an existing third-party service; and unfinished work may survive in branches, Workrooms or review queues without a PR. Recover evidence before commissioning replacement implementation. Start with a few customers and explicitly plan the transitions to larger fleets.
 
+**Installation and fleet continuation (2026-10-19):** Registration of identity and relationships must be considered during installation and remain available afterward. A company's production and development installations have separate identities and purposes while belonging to the same company. MSP installations and remote Edge Nodes participate in the same connectivity architecture. Remote identification, discovery and connection are a distinct concern intrinsic to every supported deployment topology, not an optional support-only add-on.
+
 This is the single program reference across the existing connectivity, federation and MSP designs. It governs their integration, evidence reconciliation, provider decision packet and growth triggers. Existing designs still own their detailed contracts. This document does not approve a subscription, accept vendor terms, deploy infrastructure, expose an installation, create support grants or certify a working feature.
 
 **OBJ-CONN-01:** Recover and reconcile prior work into one evidence-backed delivery map without losing source, ownership or review history.
@@ -34,6 +36,8 @@ This is the single program reference across the existing connectivity, federatio
 
 **OBJ-CONN-06:** Grow through measured operational and commercial thresholds without changing sovereign customer identity or creating an all-to-all network.
 
+**OBJ-CONN-07:** Establish installation identity, purpose, relationship registration and remote connection during setup and later maintenance for company instances, prod/dev companions, MSPs and Edge Nodes, using each participant's canonical enrollment and authority contract.
+
 Non-goals: a bespoke NAT traversal stack, a new remote-desktop product, mandatory customer cloud hosting, shared customer databases, automatic publisher access, or a general repair of DPF's delivery process. Existing review/process repairs remain with their owners.
 
 ## 2. Canonical references and precedence
@@ -47,6 +51,9 @@ Non-goals: a bespoke NAT traversal stack, a new remote-desktop product, mandator
 | [Discovery/pairing redesign](2026-08-07-federation-discovery-pairing-redesign.md) | LAN discovery and hub-mediated introduction | Hub introduction alone does not route traffic through two NATs |
 | [Public reachability](2026-09-02-install-public-reachability-design.md) | Vendor-neutral exposure contract and optional first provider | Third-party forwarding required initially; no publisher-operated payload relay is assumed |
 | [MSP delegated support](2026-10-12-msp-customer-setup-delegated-support-design.md) | External technician authority, setup, dispatch, sessions and revocation | Add the registry/exclusivity contract; retain its authority and UX delivery items |
+| [Installation estate identity](2026-08-25-installation-estate-identity-design.md) | Installation identification and purpose presentation | Distinguish company identity from the stable identity and purpose of each production/development instance |
+| [Same-organization federation](2026-09-02-zero-configuration-organization-federation-design.md) and [portal-mediated membership](2026-09-03-portal-mediated-organization-membership-design.md) | Durable installation identity, membership proof and trusted same-company pairing | Setup consumes the canonical join package; do not add redundant approvals or make an Edge Node a membership prerequisite |
+| [Binding Edge Node contract](2026-05-09-dpf-edge-node-design.md) and [remote provisioning topology](2026-06-19-edge-node-deployment-topology-and-remote-provisioning-design.md) | Machine identity, scoped enrollment, outbound communication and fleet lifecycle | Share reachability infrastructure while retaining node-specific credentials, capabilities and customer/site binding |
 
 EP-58240092 is the overarching program. EP-8B03CB06 retains connectivity delivery; EP-1FABA22D retains installation-purpose/federation integration; EP-0AC73AEA retains MSP operating readiness; EP-ZERO-CONFIG-FEDERATION retains same-organization membership work. Their items are dependencies in one map, not copied implementations. A BacklogItem has one owning epic; a cross-reference does not require reparenting it. In particular, mirrored records marked with a federated origin remain owned by their source installation.
 
@@ -103,6 +110,31 @@ MSP Authority Core <---- scoped federation/proposals ----> Company Core
 The relay provider supplies public connectivity, not DPF registry storage or support policy. Initial registry application hosting is proposed on a publisher-controlled production server behind its own narrowly exposed connector; no cloud VM is required. Feasibility, route isolation, backup and operating acceptance are delivery obligations, not claims that a registry is built. Development portals receive no public route.
 
 A private install can register outbound with a reachable registry without acquiring its own public IP or hostname. Later callbacks, mobile sessions and bilateral exchange still need an actual approved route. Support-message polling can be designed for an outbound-only private customer, but current peer HTTP calls must not be described as a persistent reverse tunnel. A private customer can use an enrolled private overlay instead of a public application endpoint. A phone on that path needs the corresponding network client; a public HTTPS phone path does not.
+
+### 4.1 Participant identity, topology and route resolution
+
+Use one connectivity approach with typed participants. Each relationship answers separately: **Who is this? Who owns it? What relationship exists? How can an authorized caller reach it? What may that caller do?** Stable identity survives endpoint changes; a DNS name, IP address, tunnel token or display name is not identity proof.
+
+| Participant / relationship | Identity and ownership | Connection direction and route | Authority boundary |
+| --- | --- | --- | --- |
+| Company production instance | Owning Organization plus its durable installation/device identity; production environment and declared purpose | Approved private route or selected HTTPS forwarding to the production Authority Core | Company policy; a production label grants no action rights |
+| Same-company development companion | Same organization membership, different installation ID/key and declared development purpose; explicit companion relationship | Prefer private overlay/LAN; use the shared provider abstraction for cross-site reachability without a public development route | Reuse membership-proof pairing; membership does not authorize direct production mutation or copying all production data |
+| MSP's own DPF instance | MSP Organization and installation identity, separate from each customer company | Reachable MSP endpoint or approved private overlay; scoped federation with each customer | External-provider link and customer delegation, never same-company membership to simplify support |
+| Customer under an MSP | Customer Organization/installation in sovereign-peer topology; CustomerAccount/CustomerSite estate in MSP-hosted topology | Approved customer/provider route from the shared connectivity stack | Explicit customer/site and projection scope; no cross-customer lateral reach |
+| Edge Node at a company/customer site | EdgeNode machine identity linked to Principal/Alias; issued by its owning Authority Core and bound to the appropriate organization/customer/site | Node initiates outbound HTTPS through the Authority's selected forwarding endpoint or private route; heartbeat, telemetry and supported action pull/results use the canonical node channel | Scoped node credentials/capabilities; enrolling or reaching a node grants no shell, desktop or arbitrary network access |
+| Mobile/device client | Human/agent-bound identity and device alias/session under company policy | Client reaches its company's verified endpoint using public HTTPS or an enrolled private route | User/agent authorization and independent device revocation |
+
+In sovereign-peer topology, the customer's Authority Core normally enrolls its site's Edge Nodes; the MSP acts through its scoped customer relationship. In MSP-hosted managed-estate topology, the MSP Authority Core enrolls nodes into the correct CustomerAccount/CustomerSite scope. Do not enroll a node into both authorities as a shortcut to direct MSP access; rehoming is an explicit revoke/re-enroll lifecycle with historical audit retained.
+
+Remote identification and route resolution form a shared integration contract above existing canonical records, not a universal credential or registry table. Reuse identity and endpoint/projection ownership; audit field gaps before adding types. Installation, Edge Node and mobile records retain their separate lifecycle and token namespaces, as required by the binding Edge Node design. A combined fleet view is an authorized read projection, not merged enrollment storage.
+
+### 4.2 Edge and companion connectivity contract
+
+An Edge Node behind NAT normally needs no inbound port, per-node public hostname or separate tunnel: it reaches its Authority through the same approved third-party/private path used by other clients. To identify or operate that node remotely, the authorized operator resolves its stable node identity within the owning Authority's scoped fleet and uses the existing governed node channel. A provider cannot turn an address lookup into direct access to the host's services. Interactive sessions or private-network gateway capabilities require their own explicit capability, customer consent, bounded credentials and termination evidence.
+
+Keep endpoint revision, credential rotation, reconnect/backoff and status terminology consistent across adapters. Transport failure is distinct from unknown identity, membership refusal, missing support consent, wrong customer/site, revoked node and unsupported capability. Shared provider failure may affect many participants; show that common cause without merging their permissions. A route change must revalidate destination identity and preserve audience/scope; production/development names must never silently redirect a node to the wrong Authority.
+
+The prod/dev pair is a required reference topology, not a special hardcoded installation. Test it on the same LAN and across different NATs. Use each install's operating-purpose contract and existing source-owned work boundaries. A development companion is neither a copy of the production identity nor an external MSP. Customer and MSP installs must support these same companion and scoped-edge patterns without inventing a second connectivity stack.
 
 ## 5. Research & Benchmarking
 
@@ -163,6 +195,8 @@ monthly service cost      = connectivity + registry hosting/backups/monitoring
 
 Count installs/environments, not phones, when sizing company-server tunnels. Count actual provider-managed devices/seats separately for the private overlay. Do not multiply every employee by every customer tunnel. The current Cloudflare platform capacity component is `max(0, provisioned tunnels - 1000) * $4.50/month`; inactive existing tunnels still count. That component alone would be $4,500/month at 2,000 tunnels, before other services; reprice before purchase. Tailscale's inspected public page lists Standard at $8/user/month and Premium at $18/user/month; use the quote's billing basis and resource limits. ngrok custom-domain pricing is $0.01/active hour, with plan and usage charges additional. These dated comparator prices are not a budget approval.
 
+Fleet planning also counts company instances, companion instances, Edge Nodes per customer/site, mobile clients, concurrent sessions and telemetry separately. Do not assume one Edge Node equals one billable tunnel or require all employees/nodes to join a provider mesh when an outbound HTTPS path suffices. Include node heartbeat/action-pull fan-in, telemetry cardinality and per-customer quotas in G1/G2 capacity reviews; use jitter/backpressure and incremental fleet projections. Introducers expose only eligible counterpart candidates, never the entire prod/dev/MSP/node topology to every participant.
+
 Before changing provider or registry host, preserve installation keys, consent/audit and ownership; export routing/registration records without copying business databases. Rotate provider-specific credentials, run overlap/cutover verification, update stable endpoints through an authenticated revision, retain rollback aliases only for the agreed window, then revoke the old connector. A hostname change cannot silently move support authority.
 
 ## 8. Registry and relationship visibility
@@ -180,6 +214,8 @@ The registry is an authenticated relationship projection, not a public list of c
 
 The minimal registration contains an installation public identifier/key proof, relationship/provider reference, endpoint only for an authorized audience, protocol/version compatibility, freshness and consent revision. Legal company name, contacts, topology, logs, tickets, device inventory and operational diagnostics are separate optional projections. No secrets or business-record replication. Choose retention/deletion and pseudonymous identifier linkage before collection; the implementation must define indexes, pagination, bounded delta cursors, tombstones and anti-enumeration controls.
 
+Company membership/enrollment and external publisher support registration are separate choices. A company may establish its prod/dev relationship and enroll Edge Nodes while declining external support registration. An MSP may register its own provider identity without publishing its customers or every customer's node inventory. Node identity and health remain at the owning Authority unless a permitted projection explicitly shares them. Environment/purpose and owning-authority identifiers must accompany authorized instance/fleet views so operators can distinguish production, development, provider and customer targets remotely.
+
 | Arrangement | Registry/discovery visibility | Support authority |
 | --- | --- | --- |
 | Direct publisher | Customer-approved publisher registration and scoped operational projection | Customer-approved publisher technicians/agents only |
@@ -192,6 +228,20 @@ An MSP-exclusive install need not reveal its legal customer identity to publishe
 Introductions and forwarding remain opt-in and constrained by their existing contracts. Audit `introductions.ts`, `channel-demand.ts` and `cross-org-sharing.ts`: platform-demand sharing, customer-identity disclosure and support-access escalation are three separate permissions. A public platform bug may be shared without opening the customer's diagnostics or business data; customer/provider identifiers in that bug must still follow its permitted projection. Revoked relationships invalidate cached discovery/projection eligibility and pending escalations. Re-pairing cannot resurrect old consent.
 
 ## 9. Customer, mobile and MSP experience
+
+### Installation and later relationship setup
+
+The installer/first-run journey must offer **Create a company**, **Join this company's existing installation group**, and **Set up with a support provider**, with an **Add or finish connections later** path. These are entry intents into the existing setup journey, not new authorization roles. The organization step establishes or verifies company identity; a separate instance step declares this installation's label, environment and purpose. Joining imports/verifies the existing organization package rather than asking a person to retype peer URLs/tokens or approve already-proven same-organization membership again. Same-company pairing still requires a usable route; setup must surface a route failure rather than claim success from membership alone.
+
+For the prod/dev example, show the verified production company/instance as the proposed companion, this distinct development identity and its intended role, selected private connectivity, permitted synchronization and outstanding verification. Preserve the canonical owner of each mirrored record. Restoring the same installation preserves its durable identity; cloning a second installation must mint a distinct identity and must not clone active node/instance credentials.
+
+Support registration is a separate section: identify seller/provider, direct versus MSP-exclusive arrangement, registry audience, data shared and permission duration. Offer a provider-issued invitation or verified add-later route; confirmation of a relationship candidate grants no support authority. An MSP installation uses the same journey for its own company and then adds customer relationships with their own consent. Present company membership, connection health and support readiness as separate outcomes.
+
+**Add an Edge Node** is an explicit option within the existing node provisioning flow, during setup or later. Select owning Authority and company/customer/site, inspect the node purpose/capabilities and issue the canonical bounded bootstrap package with the correct reachable Authority endpoint. The remote installer confirms the intended Authority identity before enrollment. The server derives scope from issued enrollment material, never a node's self-declared customer/site. Display pending enrollment, awaiting required trust, connected, limited, offline, quarantined and revoked states through existing node lifecycle projections. Do not create a full company install or employee account for a node, or require an Edge Node just to join two company instances.
+
+Show a simple relationship summary before completion: **Company -> this instance and purpose -> companion/provider -> covered sites and nodes**, filtered to the operator's rights. Provide explicit resume/retry for unavailable internet, blocked provider egress, wrong-company package, expired invite, duplicate/clone identity and incorrect site. One successful component does not turn the whole setup green. Existing installs can reach the same options through Connections and fleet/settings surfaces; unattended installers use the same typed contract and return pending steps for later completion without silently registering externally.
+
+### Ongoing connection and support views
 
 Reuse existing Connections, installation/setup, partner and MSP workbench surfaces. Show three primary facts: **Remote access**, **Support provider**, **Access granted**. Each has an independent status and recovery action. A healthy connector with missing customer consent is not support-ready. A trusted relationship with a disconnected origin is not remotely reachable.
 
@@ -213,6 +263,8 @@ Use existing theme tokens, keyboard order, screen-reader names, generous mobile 
 | Which API paths are public/private? | Private operator MCP/internal A2A by default; explicit authenticated customer/federation routes | Platform route-classification/security review; blocks exposure |
 | What are registration retention, staleness and offline limits? | Minimal purpose-bound retention; proposed §7 targets need ratification | Data/operations craft plus customer policy; blocks production collection |
 | When does managed hosting become necessary? | Earlier of availability commitments, quota/load/cost triggers or G2 review | publisher business/operations owner; blocks expansion past approved envelope |
+| How do instance/edge installation packages resolve their Authority remotely? | Reuse organization join material and node bootstrap; stable identity plus audience-scoped endpoint revision; private development routes | Platform installation/federation and Edge Node owners; blocks remote setup acceptance |
+| How are clone, restore and Authority handover distinguished? | Preserve identity only for restore of the same installation; distinct clone identity; explicit node rehome with revoke/re-enroll | Identity/installation and customer operations owners; blocks fleet lifecycle release |
 
 WWMD resolves platform contracts; WWWD resolves each organization's business commitments; WSID resolves data/security/operations craft. The active installation's unrelated organization mission is not a substitute for publisher or customer decisions. Funding allocation is unresolved on this Workroom; do not infer a token quota or spend authority. Refactoring work below is concrete integration work; its investment allocation belongs to the recorded funding owner.
 
@@ -232,6 +284,7 @@ These rows are delivery routing, not a newly approved implementation plan. Exist
 | R7 Delegated support authority/dispatch | BI-FF04B423, BI-E4E037F2 | Existing Oct12 design D1/D3; identity/scope/revision checks before queued and active work |
 | R8 Provider setup, controls and handover | BI-3CC2E798, BI-D07F2DE9, BI-FB8DCBC1 | R5/R7; direct/MSP-only/escalation/replacement runtime scenarios; retain customer independence |
 | R9 Purpose-aware integration | BI-AE128860 and existing successor BI-F8E2C191 | Reconcile owner/supersession in R1; profile confirmation never creates grants |
+| R10 Installation identity/relationship and scoped fleet connection | BI-9D674EA7 for registration/visibility integration; R9 for instance purpose; BI-BB919901 for node-install access/distribution; canonical Edge Node provisioning/lifecycle owner reconciled in R1 | §§4.1-4.2,9; reuse existing join/bootstrap writers; verify prod/dev, sovereign MSP and MSP-hosted scoped nodes before claiming setup readiness |
 
 The new R1 item is evidence recovery, not duplicate implementation of delivery-evidence utilities. R2 is procurement/readiness, not a second reachability adapter. R5 supplies registry/discovery privacy across provider boundaries; MSP setup and fleet controls remain R8. Historical EP-MSP-FEDERATION and EP-PARTNER-CHANNEL did not resolve in prior live reads: retain their historical references, never invent replacement state.
 
@@ -251,8 +304,13 @@ Refactoring/integration backlog within the owning slices: converge URL resolutio
 | AC-CONN-08 | OBJ-CONN-05 | Setup/support screens pass mobile, keyboard, screen-reader, light/dark and failure-state checks with understandable identity and access summaries. | R4/R8 served UX evidence |
 | AC-CONN-09 | OBJ-CONN-06 | The next growth stage passes load, quota/cost, relationship isolation, backup and availability review before expansion; no silent collection cap or all-to-all fan-out. | R2/R5 measured stage report |
 | AC-CONN-10 | OBJ-CONN-01, OBJ-CONN-06 | New provider or registry-host migration preserves stable installation identity, scope, revocation and rollback; replaced credentials are retired. | Owning stage migration rehearsal |
+| AC-CONN-11 | OBJ-CONN-03, OBJ-CONN-05, OBJ-CONN-07 | Fresh and existing installs can establish company identity, distinct instance purpose, verified prod/dev membership and optional provider registration through one resumable setup contract; membership alone grants no production mutation or external support access. | R9/R10 installer/API and served setup evidence, including wrong-company and offline cases |
+| AC-CONN-12 | OBJ-CONN-02, OBJ-CONN-04, OBJ-CONN-07 | Remote Edge Nodes enroll into the intended Authority/customer/site and reconnect through approved shared connectivity without inbound node ports; unauthorized MSP, wrong site, revoked enrollment and unsupported actions are refused. | R7/R10 remote-site runtime evidence for both MSP topologies |
+| AC-CONN-13 | OBJ-CONN-03, OBJ-CONN-06, OBJ-CONN-07 | Same-install restore, distinct prod/dev clone, endpoint rotation and node rehome preserve identity/audit boundaries; fleet views identify role, Authority and scope without exposing unapproved customer or node topology. | R5/R10 lifecycle, negative visibility and migration evidence |
 
 Document capture checks cover formatting, local references, generated doc index and source-policy gates. They do not satisfy runtime criteria above. Runtime delivery requires affected unit/API tests and typechecks plus the governed runtime build/served verification. Freeze direct customer, two unrelated MSPs, MSP-only customer, independent install and explicitly escalated customer fixtures. Include CGNAT, blocked egress, provider outage, origin outage, stale endpoint, key rotation, revoke during queued/active work and provider replacement. Record exact software release, provider configuration and observed limitations.
+
+Add a same-company production/development pair, one mobile device and multiple Edge Nodes at two customer sites to that fixture set. Test same-LAN and cross-NAT pairing; interrupted first install and add-later completion; expired/wrong-company packages; two sites using overlapping private addresses; a node pointed at the wrong Authority; remote identity/status lookup; and revoked node action pull. These checks are required even when no publisher support relationship exists. The shared transport is successful only when each participant's own enrollment, scope and revocation behavior also holds.
 
 This document adds no schema migration. Later persistent changes require normalized canonical ownership, field/index/retention audit, forward-compatible expand/backfill where needed, old-version behavior and rollback. Existing installs remain opt-in; backfill creates no support grants or public connectors. Discovery caches are disposable projections, not authority backups. Do not remove a provider by tearing down company data or identity.
 
