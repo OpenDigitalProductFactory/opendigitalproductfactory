@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createHash } from "node:crypto";
+import { stableStringify } from "@/lib/governance/reconcile-keyed-findings";
 
 const { mockRecordExternalEvidence } = vi.hoisted(() => ({
   mockRecordExternalEvidence: vi.fn().mockResolvedValue({ id: "external-1" }),
@@ -23,6 +25,81 @@ describe("recordLocalIntegrationResult", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     environmentLease.updateMany.mockResolvedValue({ count: 1 });
+  });
+
+  it.each([
+    ["short tail", "failed test\nraw\u0000tail\n"],
+    ["66382-byte tail with NUL retained by the old excerpt", `${"x".repeat(66_370)}\u0000failed tail`],
+  ])("persists %s as FAILED and replays the original immutable request", async (_name, rawTail) => {
+    const gateKey = "a".repeat(64);
+    const evidence = { sha: "b".repeat(40), gatePassed: false, buildExitCode: 1,
+      fullLogSha256: "c".repeat(64), content: { execution: { vitest: {
+        observations: [{ outputTail: rawTail }],
+      } } } };
+    const input = { actorUserId: "user-1", provider: "codex" as const,
+      externalSessionId: "session-1", routeContext: "/build", candidateBranch: "fix/nul-tail",
+      mode: "single-branch" as const, status: "failed" as const, summary: "Actual gate failed",
+      gateKey, leaseId: "NPEL-NUL", evidence };
+    const original = stableStringify(input);
+    const lease = { leaseId: input.leaseId, claimKey: `gate:${gateKey}`,
+      ownerSessionId: input.externalSessionId, ownerProvider: input.provider,
+      status: "released", evidenceRecordId: null as string | null };
+    environmentLease.findUnique.mockResolvedValue(lease);
+    const blobs: string[] = [];
+    const writeEvidenceBlob = vi.fn(async (text: string) => {
+      blobs.push(text);
+      const sha256 = createHash("sha256").update(text).digest("hex");
+      return { sha256, storageKey: `fixture/${sha256}`, sizeBytes: Buffer.byteLength(text), mimeType: "text/plain" as const };
+    });
+    // PostgreSQL JSONB rejects decoded NUL string values, including those
+    // JSON.stringify successfully represents as an escaped Unicode sequence.
+    const assertJsonbText = (value: unknown): void => {
+      if (typeof value === "string" && value.includes("\u0000")) {
+        throw new Error("22P05: unsupported Unicode escape sequence");
+      }
+      if (value && typeof value === "object") Object.values(value).forEach(assertJsonbText);
+    };
+    let stored: Awaited<ReturnType<typeof recordLocalIntegrationResult>>;
+    mockRecordExternalEvidence.mockImplementationOnce(async (value) => {
+      assertJsonbText(value.details);
+      stored = { ...value, id: "persisted-failed-nul" };
+      return stored;
+    });
+    const dependencies = { platformConfig, environmentLease, writeEvidenceBlob };
+    await expect(recordLocalIntegrationResult(input, dependencies)).resolves.toMatchObject({ id: "persisted-failed-nul" });
+    expect(stableStringify(input)).toBe(original);
+    expect(blobs).toEqual([rawTail]);
+    expect(stored!.details).toMatchObject({ status: "failed", gateKey, leaseId: input.leaseId,
+      inputFingerprint: createHash("sha256").update(original).digest("hex"),
+      evidence: { gatePassed: false, buildExitCode: 1, fullLogSha256: evidence.fullLogSha256 } });
+    const observation = (stored!.details as { evidence: { content: { execution: { vitest: {
+      observations: Array<{ outputTail: string; outputTailProjection: unknown }>;
+    } } } } }).evidence.content.execution.vitest.observations[0];
+    expect(observation.outputTail).not.toContain("\u0000");
+    expect(observation.outputTail).toContain("\\0");
+    expect(observation.outputTailProjection).toMatchObject({ encoding: "nul-visible-v1", nulCount: 1,
+      original: { sha256: createHash("sha256").update(rawTail).digest("hex"), sizeBytes: Buffer.byteLength(rawTail) } });
+    lease.evidenceRecordId = stored!.id;
+    const replayDependencies = { ...dependencies, findEvidence: vi.fn().mockResolvedValue(stored!) };
+    await expect(recordLocalIntegrationResult(input, replayDependencies)).resolves.toBe(stored!);
+    expect(mockRecordExternalEvidence).toHaveBeenCalledTimes(1);
+    expect(writeEvidenceBlob).toHaveBeenCalledTimes(1);
+    await expect(recordLocalIntegrationResult({ ...input, status: "passed" }, replayDependencies)).rejects.toThrow(/conflict/);
+    await expect(recordLocalIntegrationResult({ ...input, evidence: { ...evidence, fullLogSha256: "d".repeat(64) } }, replayDependencies)).rejects.toThrow(/conflict/);
+  });
+
+  it("never records or binds evidence when preserving original NUL bytes fails", async () => {
+    environmentLease.findUnique.mockResolvedValue({ claimKey: `gate:${"e".repeat(64)}`,
+      ownerSessionId: "session-1", ownerProvider: "codex", status: "released", evidenceRecordId: null });
+    await expect(recordLocalIntegrationResult({ actorUserId: "user-1", provider: "codex",
+      externalSessionId: "session-1", routeContext: "/build", candidateBranch: "fix/nul-tail",
+      mode: "single-branch", status: "failed", summary: "Actual gate failed",
+      gateKey: "e".repeat(64), leaseId: "NPEL-NUL", evidence: {
+        content: { execution: { vitest: { observations: [{ outputTail: "raw\u0000tail" }] } } },
+      },
+    }, { platformConfig, environmentLease, writeEvidenceBlob: async () => { throw new Error("blob unavailable"); } })).rejects.toThrow("blob unavailable");
+    expect(mockRecordExternalEvidence).not.toHaveBeenCalled();
+    expect(environmentLease.updateMany).not.toHaveBeenCalled();
   });
 
   it("replays an acknowledged result without creating a second evidence row", async () => {

@@ -19,12 +19,14 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileS
 import { dirname, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mcpCall } from "./lib/mcp-client.mjs";
+import { leaseRequestTiming } from "./lib/nonprod-lease-request.mjs";
 import { leaseQueueCallOptions } from "./lib/lease-queue-call-options.mjs";
 export { leaseQueueCallOptions } from "./lib/lease-queue-call-options.mjs";
 import { loadEvidencePolicy } from "./lib/ci-evidence-plan.mjs";
 import { resolveMcpCredential } from "./lib/mcp-credential.mjs";
 import { readQuiescenceStatus, quiescenceBlocksWrites, quiescenceWait } from "./lib/gate-quiescence.mjs";
 import { readFailureEvidenceBinding } from "./lib/semantic-review-gate.mjs";
+import { sandboxDecisionForHead } from "./derived-artifacts-gate.mjs";
 
 // BI-46B03CAE — the lease-queue MCP calls cost more than mcpCall's 10s default.
 //
@@ -1716,6 +1718,24 @@ async function main() {
     if (disposition.action === "source-drift") stopOnSourceDrift(disposition.reasons);
   }
 
+  // BI-A254A94C: a docs-only diff the pre-push gate would exempt must not take
+  // the single sandbox slot. A resumed claim already holds a place in line.
+  if (!options.finalizeEvidence && !options.resumeLeaseId) {
+    const sandbox = sandboxDecisionForHead({
+      cwd: worktreePath,
+      git: (args) => {
+        const result = git(gitBin, args, worktreePath);
+        return result.status === 0 ? result.stdout.trim() : null;
+      },
+    });
+    if (sandbox) {
+      process.stdout.write(`gate-worktree: ${sandbox.message}\n`);
+      if (!sandbox.claim) {
+        process.exit(0); // exit-0: docs-only diff; no lease claimed
+      }
+    }
+  }
+
   if (!options.finalizeEvidence && !commandSpec && !allowStub) {
     die("local-CI gate runner is not wired (scripts/local-ci-runner.mjs is missing); refusing to record passing stub evidence. Set DPF_LOCAL_CI_COMMAND to the canonical sandbox command, or use DPF_ALLOW_LOCAL_CI_STUB=1 only in contract tests.");
   }
@@ -1832,13 +1852,14 @@ async function main() {
       });
       nextQueueReconciliationAt = Date.now() + DEAD_QUEUE_RECONCILIATION_INTERVAL_MS;
     }
-    expiresAt = new Date(Date.now() + leaseTtlMs).toISOString();
     const hostPressure = await observeLocalCiHostPressure({
       rootClone,
       gitCommonDir,
       candidateGitDir,
     });
     hostPressureSamples.push(hostPressure);
+    const requestTiming = leaseRequestTiming({ now: new Date(), durationMs: leaseTtlMs, deadline });
+    expiresAt = requestTiming.expiresAt;
     let claimResponse;
     try {
       claimResponse = await mcpCall("claim_nonprod_environment_lease", {
@@ -1851,8 +1872,7 @@ async function main() {
         purpose: `Pre-PR local-CI gate for ${branch} @ ${sha}`,
         url,
         ports: [slotManifest.portal.port, slotManifest.postgres.hostPort],
-        expiresAt,
-        waitDeadlineAt: new Date(deadline).toISOString(),
+        ...requestTiming,
         worktreePath,
         gateClientRevision: GATE_CLIENT_REVISION,
         branchName: branch,

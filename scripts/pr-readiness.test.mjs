@@ -267,6 +267,13 @@ test("parsePrBodyTrailers ignores commented template examples", () => {
   ]);
 });
 
+test("validatePrBodyTrailers accepts the mechanism suffix a scoped seed-fit decision requires (BI-5C66AC6C)", () => {
+  const result = validatePrBodyTrailers(
+    "Seed-Fit-Decision: archetype-scoped mechanism=read-scope symbol=resolveMailroomProfile\n",
+  );
+  assert.equal(result.blockers.some((b) => /Invalid Seed-Fit-Decision/.test(b)), false);
+});
+
 test("validatePrBodyTrailers catches duplicate trailers and invalid seed-fit decisions", () => {
   const result = validatePrBodyTrailers(
     [

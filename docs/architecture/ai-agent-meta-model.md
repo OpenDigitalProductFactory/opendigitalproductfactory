@@ -375,3 +375,10 @@ authority before each recovered review call; approved calls recheck at execution
 so refusal closes the approval correctly. Discovery supplies the exact locator,
 never an authority grant. See the [original-review recovery procedure](mcp-tool-authorization-runbook.md#recovering-an-original-initiative-review-after-a-connection-change)
 for eligibility, refusal and receipt requirements.
+
+Original-review evidence collection is a separate read path. `tasks/result` and
+the issuer's reconciliation refusal project existing writer receipts and native
+observations under current original-owner read scopes and Workroom content
+access. The bounded result retains request, attempt and checkpoint provenance;
+missing child-closure or late-effect proof stays unknown. Reading a result does
+not heal task state, create a verdict or authorize replay.

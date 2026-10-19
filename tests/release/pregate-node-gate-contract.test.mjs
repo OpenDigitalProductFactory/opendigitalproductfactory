@@ -44,6 +44,10 @@ function makeTempRepo() {
   g(["add", "."]);
   g(["commit", "-q", "-m", "base"]);
   g(["update-ref", "refs/remotes/origin/main", "HEAD"]);
+  // Admission contracts need a code-bearing candidate, not an empty diff.
+  writeFileSync(join(dir, "runtime.mjs"), "export const candidate = true;\n");
+  g(["add", "runtime.mjs"]);
+  g(["commit", "-q", "-m", "code candidate"]);
   return { dir, g };
 }
 
@@ -241,7 +245,15 @@ test("gate-worktree.mjs refuses to run when neither an explicit command, the stu
   mkdirSync(join(temp, "scripts", "lib"), { recursive: true });
   mkdirSync(join(temp, "apps", "web", "lib", "nonprod"), { recursive: true });
   cpSync(gateScript, join(temp, "scripts", "gate-worktree.mjs"));
+  // BI-A254A94C: sandbox admission is a static import. The temp tree has to
+  // carry that module and the helpers it imports that this fixture does not
+  // already copy, or the refusal path dies before its assertion.
+  cpSync(join(repoRoot, "scripts", "derived-artifacts-gate.mjs"), join(temp, "scripts", "derived-artifacts-gate.mjs"));
+  cpSync(join(repoRoot, "scripts", "check-guards.mjs"), join(temp, "scripts", "check-guards.mjs"));
+  cpSync(join(repoRoot, "scripts", "lib", "mermaid-renderer.mjs"), join(temp, "scripts", "lib", "mermaid-renderer.mjs"));
+  cpSync(join(repoRoot, "scripts", "lib", "git-hook-env.mjs"), join(temp, "scripts", "lib", "git-hook-env.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "mcp-client.mjs"), join(temp, "scripts", "lib", "mcp-client.mjs"));
+  cpSync(join(repoRoot, "scripts", "lib", "nonprod-lease-request.mjs"), join(temp, "scripts", "lib", "nonprod-lease-request.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "lease-queue-call-options.mjs"), join(temp, "scripts", "lib", "lease-queue-call-options.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "script-argv.mjs"), join(temp, "scripts", "lib", "script-argv.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "mcp-credential.mjs"), join(temp, "scripts", "lib", "mcp-credential.mjs"));
@@ -483,6 +495,10 @@ test("gate-worktree.mjs reports active lease contention and stale main before ex
   const advancedMain = g(["rev-parse", "HEAD"]);
   g(["update-ref", "refs/remotes/origin/main", advancedMain]);
   g(["checkout", "-q", "feat/topic"]);
+  // Keep a topic-code diff while origin/main advances independently.
+  writeFileSync(join(dir, "topic.mjs"), "export const topic = true;\n");
+  g(["add", "topic.mjs"]);
+  g(["commit", "-q", "-m", "topic code candidate"]);
   const candidateSha = g(["rev-parse", "HEAD"]);
 
   const mcp = await startMockMcp({
@@ -806,7 +822,10 @@ test("gate-worktree.mjs does not clear freshness evidence until it owns the loca
         "--sha", "candidate-sha",
         "--worktree", dir,
         "--no-push",
-        "--lease-wait-seconds", "0",
+        // Reach the host fence with a live admission deadline. A zero deadline
+        // now correctly refuses before admission and cannot exercise this fence.
+        "--lease-wait-seconds", "15",
+        "--poll-seconds", "0.05",
         "--mcp-url", mcp.url,
       ],
       {

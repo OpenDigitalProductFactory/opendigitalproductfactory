@@ -1236,8 +1236,8 @@
         DPF gives one organization a customer experience, an operating workspace, and purposed
         AI coworkers on the same governed platform. Start from the business you run, keep
         important actions under human authority, and retain an evidence trail of what changed.
-        It is also the working test bed for four open standards for AI that is safe to delegate
-        to &mdash; implemented here first, for real businesses.
+        It is also the initial test bed for four working-draft standards for governed AI,
+        with implementation and assessment evidence still being developed.
       </p>
       <div class="actions">
         <a class="button primary" href="/business-types/">Find your business</a>
@@ -1712,61 +1712,61 @@
     <span id="gpp" class="anchor-alias" aria-hidden="true"></span>
     <span id="mbse" class="anchor-alias" aria-hidden="true"></span>
     <span id="test-bed" class="anchor-alias" aria-hidden="true"></span>
-    <p class="eyebrow">Open standards, proven in a working system</p>
-    <h2>Four cornerstones for AI you can safely delegate to.</h2>
+    <p class="eyebrow">Working drafts, with implementation evidence</p>
+    <h2>Four cornerstones for accountable AI delegation.</h2>
     <p class="section-intro">
-      DPF is two things at once. It is a workable platform that real businesses run on, and it is
-      the test bed where four open standards for governed AI are implemented first, measured
-      against real work, and contributed back to the wider ecosystem. Each standard answers one
-      question. None of them widens what another allows.
+      DPF is a working platform and the initial test bed for four proposed standards for governed
+      AI. Existing controls, partial implementations, shadow observations, and remaining assessment
+      work are recorded separately. Each standard answers one question. Publishing a draft does
+      not prove that its controls are implemented or effective.
     </p>
 
     <div class="workroom-block">
       <p class="eyebrow">The problem the standards answer</p>
-      <h3 class="workroom-title">Approving every tool call does not keep AI safe. People stop reading.</h3>
+      <h3 class="workroom-title">Repeated approval prompts can lose their value.</h3>
       <p class="section-intro">
-        Most AI agents offer two settings: ask a person before every action, or ask nothing. The
-        first fails quietly and the second fails loudly &mdash; and the first is what drives people
-        to the second.
+        Per-call approval asks people to inspect many routine actions. Blanket permission reduces
+        interruptions but leaves more work inside the agent&rsquo;s standing access. Both approaches
+        need controls that bound what the agent can reach and whose authority it may exercise.
       </p>
 
-      <div class="capability-grid" aria-label="Why per-call approval fails">
+      <div class="capability-grid" aria-label="Approval and access boundaries">
         <div class="capability">
-          <strong>Per-call approval decays</strong>
+          <strong>Prompt review has limits</strong>
           <p>
-            One vendor reports that users approve 93&ndash;97% of permission prompts, and that in a
-            controlled study people caught a disguised dangerous command 13.6% of the time
-            &mdash; falling to about 5% after fifty prompts. The same users rejected 39% of plans.
-            People judge decisions well and keystrokes badly.
+            Anthropic reports field rates of 97% approval for permission prompts and 39% rejection
+            for plans. Separately, its controlled study of 1,053 paid testers found that people
+            caught a dangerous command 13.6% of the time, falling to about 5% after fifty or more
+            prompts. These are different populations and tasks; they do not prove that plan review
+            or GPP is safe. See the
+            <a href="https://claude.com/resources/articles/auto-mode-default-in-claude-code">vendor report</a>.
           </p>
         </div>
         <div class="capability">
-          <strong>So people switch it off</strong>
+          <strong>Blanket access needs boundaries</strong>
           <p>
-            Agent tools ship &ldquo;YOLO&rdquo;, always-allow, and skip-permission modes. With them
-            the agent&rsquo;s standing credentials become its authority. The 2024&ndash;2026
-            incident record &mdash; deleted production databases, leaked repositories, and agents
-            that escaped evaluation and reached production infrastructure &mdash; is largely a record
-            of broad credentials meeting no gate.
+            Broad credentials increase what an agent can reach. Skipping prompts therefore needs
+            other enforced controls: isolation, scoped credentials, and an audit trail. A mode name
+            alone does not establish authority or containment.
           </p>
         </div>
         <div class="capability">
           <strong>A filter is not an authority</strong>
           <p>
-            The newest answer is a classifier that guesses which calls are safe enough to skip the
-            prompt. It helps, and it has a published miss rate and a published bypass. It also
-            cannot say who was entitled to decide.
+            A classifier can help triage tool calls, with performance that must be measured for its
+            setting. Its prediction is one input to a control system; the owning authority, policy,
+            and enforceable access boundary must still be established.
           </p>
         </div>
       </div>
 
       <p class="note">
-        <strong>DPF&rsquo;s approach: decide once, by the right authority, then enforce every
-        call.</strong> A person or governed policy decides whether a <em>class</em> of tool use is
-        admissible for a piece of work. The runtime then enforces that decision deterministically
-        on each call. Tools outside the decision are not offered for approval &mdash; they are
-        unreachable, so they cannot be approved by fatigue. Sources, dates, and the limits of each
-        figure are in the
+        <strong>Proposed GPP approach: a scoped decision, enforced at each call.</strong>
+        A person or governed policy decides whether a <em>class</em> of tool use is
+        admissible for a piece of work. The proposed GPP contract requires the runtime to enforce
+        the resulting envelope on each call. DPF currently records GPP permit verdicts in shadow
+        mode; no GPP binding is yet enforced. Existing authority checks and approvals remain
+        distinct controls. Sources, dates, and the limits of each figure are in the
         <a href="/architecture/agent-governance-market-landscape-2026">market and thought-leadership brief</a>.
       </p>
     </div>
@@ -1823,16 +1823,16 @@
         </a>
       </div>
 
-      <h4>The model is the system</h4>
+      <h4>Connect the model to the working system</h4>
       <p>
         Model-based systems engineering has long described complex systems as connected models of
-        requirements, structure, behaviour, and verification. AI agents have not been part of that
-        discipline &mdash; until now. In DPF the model is not a diagram beside the software. Work
-        shapes, their stages, the decision gates, the tools each gate admits, the coworkers that
-        perform the work, and the receipts they leave are model elements that the running platform
-        executes and checks itself against. GPP supplies the missing link: a modelled binding
-        between who may decide and what may run, with a SysML v2 mapping and a check that the
-        model still matches what the runtime actually allows.
+        requirements, structure, behaviour, and verification. DPF applies that approach to governed
+        agent work: work shapes, stages, scoped decisions, tool capabilities, coworkers, and
+        receipts are related model elements. Some declarations drive the platform today; the GPP
+        realization annex identifies which modeled controls are implemented, shadow-only, or still
+        missing. The proposed binding connects who may decide with what may run. Its SysML v2
+        mapping and model-to-runtime checks describe a path to verification, rather than a claim
+        of complete execution, full interchange, or historical novelty.
       </p>
       <p>
         Principles guide judgment within the scope that owns the question; policies determine which
@@ -1866,6 +1866,14 @@
       <a href="/architecture/2026-04-18-trusted-ai-agent-governance-white-paper">Trusted AI agent governance white paper</a>
     </div>
 
+    <p class="standards-posture">
+      <strong>Word editions are dated snapshots.</strong> The white paper is discussion
+      draft 2.2, generated on October 16, 2026. The other Word editions were generated on
+      October 1&ndash;2; use the linked Markdown drafts for the current sources.
+      The GPP Word edition contains draft 0.8 while its current Markdown source is draft 0.19.
+      Download delivery, source currency and runtime conformance are separate checks;
+      the remaining refreshed editions are tracked work.
+    </p>
     <div class="deep-links" aria-label="Word editions to download">
       <a href="/architecture/Trusted-AI-Agent-Governance-White-Paper.docx" download>White paper (Word)</a>
       <a href="/architecture/Trusted-AI-Kernel-Architecture.docx" download>TAK (Word)</a>
@@ -2078,9 +2086,11 @@
         <p>
           Because people stop reading. Vendor data shows users approve the overwhelming majority of
           per-call prompts and rarely catch a dangerous one buried among them, so many switch
-          approvals off. DPF asks for a decision where it carries information &mdash; once, for a
-          class of work, by the authority that owns it &mdash; and then enforces that decision on
-          every call. See the <a href="/architecture/agent-governance-market-landscape-2026">evidence brief</a>.
+          approvals off. The proposed GPP approach asks for a decision where it carries
+          information &mdash; for a bounded class of work, by the authority that owns it &mdash;
+          and requires enforcement on each call. DPF records GPP verdicts in shadow mode today;
+          existing authority checks and approvals are separate. See the
+          <a href="/architecture/agent-governance-market-landscape-2026">evidence brief</a>.
         </p>
       </details>
       <details>

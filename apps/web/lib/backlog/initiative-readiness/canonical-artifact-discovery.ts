@@ -75,7 +75,7 @@ export async function readCurrentDesignArtifact(binding: BoundDesign, ports?: {
   readBlob?: typeof import("./repository-artifact").readRepositoryProviderBlob;
 }): Promise<CurrentDesignEvidence> {
   const discovered = await (ports?.discoverArtifact ?? discoverCanonicalDesignArtifact)({ ...binding.room,
-    backlogBody: binding.selection });
+    backlogBody: binding.selection, subjectItemId: binding.itemId });
   // Source-only follow-up commits need not touch their already approved design.
   // Never use this fallback to override an explicit or ambiguous selection.
   if (!discovered.resolved && (discovered.code !== "no-canonical-design"
@@ -196,6 +196,9 @@ export async function discoverCanonicalReviewArtifact(args: {
   repositoryFullName: string;
   baseSha: string;
   headSha: string;
+  /** Server-resolved subject and persisted branch; neither is a caller path selector. */
+  subjectItemId?: string;
+  headBranch?: string;
   purpose?: "post-implementation-review";
   /** Read from the live item by the claim handler, never a caller-supplied blob identity. */
   backlogBody?: string | null;
@@ -263,7 +266,8 @@ export async function discoverCanonicalDesignArtifact(
 }
 
 async function discoverCanonicalDesignArtifactWithFetch(
-  args: { repositoryFullName: string; baseSha: string; headSha: string; backlogBody?: string | null; purpose?: "post-implementation-review" },
+  args: { repositoryFullName: string; baseSha: string; headSha: string; backlogBody?: string | null; purpose?: "post-implementation-review";
+    subjectItemId?: string; headBranch?: string; db?: CanonicalArtifactDb },
   repo: { owner: string; name: string },
   token: string | null,
   fetchImpl: typeof fetch,
@@ -278,11 +282,21 @@ async function discoverCanonicalDesignArtifactWithFetch(
     return { resolved: false, code: "no-canonical-design",
       nextAction: "The item references an invalid canonical design path. Use a repository-relative file under docs/superpowers/specs/ without traversal segments." };
   }
-  if (paths.length > 1) {
+  let selectedPath: string | undefined;
+  if (paths.length > 1 && args.subjectItemId && args.headBranch) {
+    try {
+      const binding = await loadCurrentDesignBinding(args.subjectItemId,
+        (args.db ?? prisma) as unknown as CurrentDesignDb, { repositoryFullName: args.repositoryFullName,
+          headBranch: args.headBranch, baseSha: args.baseSha, headSha: args.headSha });
+      if (binding.kind === "bound" && binding.selection === (args.backlogBody ?? "")
+        && paths.includes(binding.artifactRef.path)) selectedPath = binding.artifactRef.path;
+    } catch { /* Missing or unreadable binding never selects a historical reference. */ }
+  }
+  if (paths.length > 1 && !selectedPath) {
     return { resolved: false, code: "ambiguous-canonical-design",
       nextAction: `The item references more than one canonical design (${paths.join(", ")}). Identify one canonical design before requesting review.` };
   }
-  const declaredPath = paths[0];
+  const declaredPath = selectedPath ?? paths[0];
   let response: Response;
   try {
     response = await fetchImpl(

@@ -81,6 +81,8 @@ type DiscoverCanonicalArtifact = (args: {
   baseSha: string;
   headSha: string;
   backlogBody?: string | null;
+  subjectItemId?: string;
+  headBranch?: string;
 }) => Promise<InitiativeRecoveryCanonicalArtifact>;
 
 async function discoverCanonicalArtifactFromProvider(args: {
@@ -88,6 +90,8 @@ async function discoverCanonicalArtifactFromProvider(args: {
   baseSha: string;
   headSha: string;
   backlogBody?: string | null;
+  subjectItemId?: string;
+  headBranch?: string;
 }): Promise<InitiativeRecoveryCanonicalArtifact> {
   const { discoverCanonicalDesignArtifact } = await import(
     "@/lib/backlog/initiative-readiness/canonical-artifact-discovery"
@@ -175,6 +179,8 @@ async function resolveRecoveryOutsideTransaction(args: {
       repositoryFullName: sourceIdentity.context.repositoryFullName,
       baseSha: sourceIdentity.baseSha,
       headSha: sourceIdentity.context.headSha,
+      subjectItemId: pending.decision.subject.id,
+      headBranch: sourceIdentity.context.branchName,
       ...(pending.backlogBody ? { backlogBody: pending.backlogBody } : {}),
     })
     : {

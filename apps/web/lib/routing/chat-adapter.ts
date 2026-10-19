@@ -31,6 +31,8 @@ import { registerExecutionAdapter } from "./execution-adapter-registry";
 import { extractToolCalls as extractTextualToolUse } from "./extract-tool-calls";
 import { toWireSampling } from "./sampling-profile";
 import { localToolThinkingKwargs } from "./local-tool-thinking";
+import { captureLocalNativeContinuation, type LocalContinuationBinding } from "./local-native-continuation";
+import { prepareLocalNativeChatReplay } from "./local-native-chat-replay";
 import { buildAnthropicSystem } from "./anthropic-cache";
 import { parseOpenRouterRoutingEvidence } from "./provider-suitability/openrouter-policy";
 import { resolveOpenAiCompatibleApiBase } from "./openai-base";
@@ -478,6 +480,8 @@ export const chatAdapter: ExecutionAdapterHandler = {
 
     // ── Dispatch ────────────────────────────────────────────────────────────
     const startMs = Date.now();
+    let continuationBinding: LocalContinuationBinding | undefined;
+    let nativeReplay = false;
     let res: Response;
     try {
       // callProvider owns admission; governed queue wait consumes the parent budget.
@@ -490,6 +494,13 @@ export const chatAdapter: ExecutionAdapterHandler = {
         if (!actual || ["dialect", "modelDigest", "engineIdentity", "templateDigest", "configDigest"].some(
           key => actual[key as keyof typeof actual] !== expected[key as keyof typeof expected],
         )) throw new Error("Local thinking runtime evidence changed or unavailable");
+        await assertGovernedInferenceAuthority(currentInferenceSignal());
+      }
+      const continuation = await prepareLocalNativeChatReplay(request, chatUrl);
+      if (continuation) {
+        continuationBinding = continuation.binding;
+        nativeReplay = continuation.replayed;
+        body.messages = continuation.messages;
         await assertGovernedInferenceAuthority(currentInferenceSignal());
       }
       const execution = currentGovernedInferenceDeadline();
@@ -510,7 +521,8 @@ export const chatAdapter: ExecutionAdapterHandler = {
       // fallback chain treat the local model as broken instead of waiting.
       if (e instanceof Error && ["LocalProviderCapacityDeferredError", "GovernedInferenceDeadlineError"].includes(e.name)) throw e;
       throw new InferenceError(
-        `Network error calling ${providerId}: ${e instanceof Error ? e.message : String(e)}`,
+        nativeReplay ? `Network error calling ${providerId}: private dispatch details omitted`
+          : `Network error calling ${providerId}: ${e instanceof Error ? e.message : String(e)}`,
         "network",
         providerId,
       );
@@ -519,7 +531,19 @@ export const chatAdapter: ExecutionAdapterHandler = {
 
     if (!res.ok) {
       const errBody = await res.text().catch(() => "");
-      throw classifyHttpError(res.status, providerId, errBody, res.headers);
+      const error = classifyHttpError(res.status, providerId, errBody, res.headers);
+      // A server may echo the request. Keep its typed status/capacity decision,
+      // but never carry a private continuation into durable failure diagnostics.
+      if (nativeReplay) {
+        const retry = error.headers?.["retry-after"];
+        const seconds = retry && /^\d+(?:\.\d+)?$/.test(retry) ? retry : error.capacity?.retryAfterSeconds;
+        throw new InferenceError(
+          `${error.message.split(":", 1)[0]}: private dispatch details omitted`,
+          error.code, error.providerId, error.statusCode,
+          seconds === undefined ? undefined : { "retry-after": String(seconds) }, undefined, error.capacity,
+        );
+      }
+      throw error;
     }
 
     // Topology-free REAL weekly-quota capture: a subscription/OAuth Anthropic
@@ -561,7 +585,14 @@ export const chatAdapter: ExecutionAdapterHandler = {
       }
       data = lastCompleted ?? { output: [{ type: "message", content: [{ type: "output_text", text: lastDelta }] }] };
     } else {
-      data = await res.json() as Record<string, unknown>;
+      try {
+        data = await res.json() as Record<string, unknown>;
+      } catch (error) {
+        if (nativeReplay) throw new InferenceError(
+          `Invalid response from ${providerId}: private dispatch details omitted`, "provider_error", providerId,
+        );
+        throw error;
+      }
     }
 
     const openRouterRoutingEvidence = providerId === "openrouter"
@@ -592,6 +623,7 @@ export const chatAdapter: ExecutionAdapterHandler = {
     let finishReason: string | undefined;
     /** Separate thinking channel, when the provider emits one (BI-1E77BEE3). */
     let reasoning: string | undefined;
+    let nativeReasoning: string | undefined;
 
     if (isAnthropic(providerId)) {
       // Anthropic response
@@ -681,6 +713,7 @@ export const chatAdapter: ExecutionAdapterHandler = {
       // the field name: llama.cpp / Docker Model Runner emit `reasoning_content`,
       // other OpenAI-compatible providers emit `reasoning`.
       reasoning = msg?.reasoning_content || msg?.reasoning || undefined;
+      nativeReasoning = typeof msg?.reasoning_content === "string" ? msg.reasoning_content : undefined;
 
       // Thinking without an answer is incomplete work. Keep it available for
       // progress disclosure, but never promote scratchpad into a conclusion.
@@ -689,7 +722,14 @@ export const chatAdapter: ExecutionAdapterHandler = {
 
       if (msg?.tool_calls && msg.tool_calls.length > 0) {
         // Structured tool calls (standard OpenAI format)
-        toolCalls = extractOpenAIToolCalls(msg.tool_calls);
+        try {
+          toolCalls = extractOpenAIToolCalls(msg.tool_calls);
+        } catch (error) {
+          if (nativeReplay) throw new InferenceError(
+            `Invalid tool response from ${providerId}: private dispatch details omitted`, "provider_error", providerId,
+          );
+          throw error;
+        }
       } else if (text && (text.includes("<tool_call>") || text.includes("<|tool_call>"))) {
         // Fallback: model runner didn't translate native tool-call markers to structured format.
         // Handles Gemma/Llama template variants that leak <tool_call> or <|tool_call> as text.
@@ -725,7 +765,9 @@ export const chatAdapter: ExecutionAdapterHandler = {
       outputTokens = readUsage("output_tokens", "completion_tokens");
     }
 
-    return {
+    // Keep provider-supplied identity, never the requested model or response body.
+    const returnedModel = typeof data.model === "string" && data.model.trim() ? data.model : undefined;
+    const result: AdapterResult = {
       text,
       toolCalls,
       // Only present when the provider actually offered a separate channel;
@@ -735,10 +777,15 @@ export const chatAdapter: ExecutionAdapterHandler = {
       inferenceMs,
       truncated,
       ...(finishReason !== undefined && { finishReason }),
-      ...(openRouterRoutingEvidence
-        ? { raw: { openRouterRoutingEvidence } }
+      ...(returnedModel !== undefined || openRouterRoutingEvidence
+        ? { raw: {
+          ...(returnedModel !== undefined ? { model: returnedModel } : {}),
+          ...(openRouterRoutingEvidence ? { openRouterRoutingEvidence } : {}),
+        } }
         : {}),
     };
+    if (nativeReasoning) captureLocalNativeContinuation(result, nativeReasoning, continuationBinding);
+    return result;
   },
 };
 

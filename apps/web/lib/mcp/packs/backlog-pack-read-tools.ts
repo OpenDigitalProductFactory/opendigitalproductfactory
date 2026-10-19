@@ -531,10 +531,13 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
       if (!key) return { success: false, error: "review_task_authority_unavailable", message: "The current connection's review task authority could not be verified. No request was delivered." };
       for (const route of recovery.reviewerRoutes.filter(route => route.gate === requestedGate && route.independent)) {
         const issued = await issueOriginalReviewRecoveryTarget({ packet: route.requestCoworker,
-          userId: currentUserId, actingAgentId: currentAgentId, taskAuthorityKey: key });
+          userId: currentUserId, actingAgentId: currentAgentId, taskAuthorityKey: key,
+          tokenGrantScopes: context.tokenGrantScopes });
         if (issued.kind === "refused") return { success: false, error: "original_review_recovery_required",
           message: "The existing review needs reconciliation before any new dispatch. No replacement request was delivered.",
-          data: { reason: issued.reason, itemId: item.itemId, recoveryGate: requestedGate } };
+          data: { reason: issued.reason, itemId: item.itemId, recoveryGate: requestedGate,
+            ...(issued.originalResult ? { originalResult: issued.originalResult } : {}),
+            ...(issued.resultRead ? { resultRead: issued.resultRead } : {}) } };
         if (issued.kind === "target") route.requestCoworker = { ...route.requestCoworker, ...{ reviewRecovery: issued.target } };
       }
     }

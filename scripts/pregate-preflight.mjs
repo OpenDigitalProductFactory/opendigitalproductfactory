@@ -176,7 +176,7 @@ export async function main() {
   try { execution = await runWithGuardReceipt({
     directory: guardReceiptDirectory(),
     stage: "pregate-preflight",
-    identify: () => process.env[PREFLIGHT_SKIP_ENV] ? null : identifyGuardExecution({ plan: planned.entries }),
+    identify: () => process.env[PREFLIGHT_SKIP_ENV] ? null : identifyGuardExecution({ plan: planned.entries, env: guardEnv }),
     passed: result => !result.skipped && result.entries.length === planned.entries.length && result.entries.every(entry => entry.status === "passed"),
     execute: ({ progress }) => runPreflight({
     plan: planned.entries,
