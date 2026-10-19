@@ -110,13 +110,13 @@ export function Header({ platformRole, brandName, brandLogoUrl, brandLogoUrlLigh
                   <img
                     src={logoLight}
                     alt={`${companyName} logo`}
-                    className="logo-light block h-full w-auto max-w-[120px] object-contain sm:max-w-[220px]"
+                    className="logo-light block h-full w-auto max-w-20 object-contain sm:max-w-[220px]"
                     onError={() => { setLogoFailed(true); }}
                   />
                   <img
                     src={logoSource}
                     alt={`${companyName} logo`}
-                    className="logo-dark block h-full w-auto max-w-[120px] object-contain sm:max-w-[220px]"
+                    className="logo-dark block h-full w-auto max-w-20 object-contain sm:max-w-[220px]"
                     onError={() => { setLogoFailed(true); }}
                   />
                 </>
@@ -124,7 +124,7 @@ export function Header({ platformRole, brandName, brandLogoUrl, brandLogoUrlLigh
                 <img
                   src={logoSource}
                   alt={`${companyName} logo`}
-                  className="block h-full w-auto max-w-[120px] object-contain sm:max-w-[220px]"
+                  className="block h-full w-auto max-w-20 object-contain sm:max-w-[220px]"
                   onError={() => {
                     console.warn(`[Header] Logo failed to load: ${logoSource}`);
                     setLogoFailed(true);
