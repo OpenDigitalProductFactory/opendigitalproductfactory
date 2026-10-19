@@ -154,6 +154,8 @@ expressions to this full UTC evaluator, while its explicit malformed/impossible
 fallback remains documented. Operator validation rejects invalid expressions.
 The existing creation-time allocator nudges only concrete numeric minute/hour
 fields, preserving compound expressions rather than reducing them to one tick.
+This amendment changes backend timestamps, validation and recurrence, while
+chart classification, frequency presets and the cadence editor remain unchanged.
 This does not change job-engine state, worker flags, one-shot classification,
 task identity, or the requirement to verify merged bytes on the canonical install.
 - A Postgres-routed cron function keeps its `nextFireAt` in `JobCronState`. The worker's tick claims due rows with `FOR UPDATE SKIP LOCKED`, inserts the `inngest/scheduled.timer` event and run in the same transaction, and advances `nextFireAt`. A tick that finds several missed fire times fires once (Inngest does not backfill either).

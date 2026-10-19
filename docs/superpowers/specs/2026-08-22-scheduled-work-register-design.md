@@ -135,14 +135,16 @@ the exact source; source inspection alone is not a test result.
 - **REQ-CRON-UTC:** `computeNextCronRun` keeps its public `Date` return type and
   delegates valid five-field expressions to the existing full UTC evaluator.
   Fixed daily, weekday, weekly and monthly schedules retain their UTC intent;
-  wildcard, range, list and step expressions use the same semantics in every
-  caller. Tests use explicit UTC instants rather than the host's timezone.
+  wildcard, range, list and step expressions use the same semantics in backend
+  next-run callers. Tests use explicit UTC instants rather than the host's timezone.
 - **CONTRACT-CRON-PROJECTION:** For malformed or impossible expressions the
   internal compatibility API retains its explicit `from + 24h` fallback.
-  Operator validation requires a reachable future UTC match through the
-  existing evaluator rather than the permissive regex. This rejects invalid
-  fields and impossible dates such as February 31 instead of presenting the
-  fallback as a valid schedule. Disabled schedules continue to project `null`.
+  Operator validation requires a future UTC match within the existing
+  evaluator's bounded horizon rather than the permissive regex. This rejects
+  invalid fields and impossible dates such as February 31 instead of presenting
+  the fallback as a valid schedule. Backend projections use the full evaluator
+  directly, respect its `null` result and avoid duplicate validation searches.
+  Disabled schedules continue to project `null`.
 - **CONTRACT-TASK-IDENTITY:** Create/resume/claim/re-arm and schedule Save/Enable
   share the same projection. `ScheduledAgentTask` remains authoritative and
   its `ScheduledJob` mirror agrees on `nextRunAt`. The existing owner-checked
@@ -159,10 +161,6 @@ the exact source; source inspection alone is not a test result.
   one tick. The existing allocator remains a single-tick nudge, not a second
   cron engine. A collision at 03:00 must not turn `0 3,9 * * *` into a
   daily schedule or remove its 09:00 occurrence.
-- **CONTRACT-SCHEDULE-WINDOW:** Full-parser validity replaces the concrete
-  minute/hour projection restriction. The chart uses the full evaluator and
-  its `null` outcome rather than inventing invalid fires. It plots six-hour
-  occurrences; cadences finer than the chosen bucket remain continuous.
 - **FLOW-MONITOR-RECOVERY:** After deployed source identity is verified, restore
   the existing monitor through its ordinary owner-checked Resume route. Retain
   its id, prompt, cron, configuration and history. Verify the actual next cron
@@ -171,9 +169,9 @@ the exact source; source inspection alone is not a test result.
 
 ### Ordered implementation and verification
 
-One atomic deliverable implements all contracts above. The plan is internal
-sequencing: a parser change without re-arm and register agreement would leave
-the reported defect unresolved.
+One atomic deliverable implements the backend recurrence contracts above. The
+plan is internal sequencing: parser, creation allocation and lifecycle
+projection must agree to restore the existing monitor's recurrence.
 
 1. **VER-CRON-RED:** Add exact UTC regression assertions for the existing
    monitor's resume, unchanged Save, Enable and repeated guarded claim. Cover
@@ -181,21 +179,21 @@ the reported defect unresolved.
    agreement, no task recreation, preserved owner refusal and one-shot behavior.
    Add actual create and successful/failed completion re-arm assertions,
    compound-field allocator classifications and an actual CREATE collision
-   retaining `0 3,9 * * *` with its next 09:00 UTC fire. Add parser validation
-   and six-hour window tests. Convert affected legacy fixtures and assertions
-   to explicit UTC while retaining their original behavior checks. Run through
+   retaining `0 3,9 * * *` with its next 09:00 UTC fire. Add strict backend parser
+   validation tests. Convert affected legacy fixtures and assertions to explicit
+   UTC while retaining their original behavior checks. Run through
    the existing governed host-resource runner and observe the wrong 24-hour
    projection and creation-time loss of compound fields.
 2. **FLOW-CRON-SHARED:** Make `computeNextCronRun` a compatibility wrapper over
    `computeNextCronFire`; remove the obsolete parallel field parser. Align
-   cadence validation, projectability and schedule-window projection. Restrict
+   backend cadence validation and timestamp projection. Restrict
    the existing scheduling allocator to concrete numeric minute/hour fields;
-   pass compound fields through without introducing another parser. Keep preset
-   choices and one-shot classification unchanged; reconcile comments and
-   obsolete refusal wording. No schema, dependency or runtime changes.
+   pass compound fields through without introducing another parser. Keep the
+   existing retune policy and one-shot classification unchanged. No schema,
+   dependency, UI or runtime configuration changes.
 3. **VER-CRON-GREEN:** Run the same regressions, existing cron daily/monthly/
    weekday/union/leap-year/malformed cases, task core and scheduler completion/
-   failure/proactivity cases, allocator and register/window tests, both
+   failure/proactivity cases, allocator and existing control tests, both
    graph-linked AI Ops handoff tests and ecosystem triage. Exercise the affected
    UTC suites in UTC and America/Chicago. Graph advice
    naming the absent `scheduled-jobs/scheduled-jobs.test.ts` is
@@ -208,11 +206,23 @@ the reported defect unresolved.
    evidence of the correct next run and ordinary recurring dispatch. Enablement,
    source tests or a future timestamp alone do not prove repeated reliability.
 
+### Deferred UI and chart work
+
+The original plotting extension and later compound-clock preset/editor
+correction are deferred. Reliable backend recurrence does not require changing
+the chart's continuous-versus-plotted classification or choosing a new preset
+clock. Keep the UI component, controls, layout, work model, window classification
+and retuner policy unchanged in this delivery. The deferred tests and design
+notes are preserved outside the working diff, with their archive recorded in
+the Workroom. BI-F728E3EE records the separate preset/editor finding and is not
+a deliverable in this coverage graph. UX design and measured evidence remain
+required for that follow-up; this backend scope claims no UX-fit pass.
+
 ### Backlog coverage
 
 Implementation parent: `BI-0A82D3B4`. Atomic coverage will bind this immutable
 design to REQ-CRON-UTC, CONTRACT-CRON-PROJECTION, CONTRACT-TASK-IDENTITY,
-CONTRACT-CREATE-CADENCE, CONTRACT-SCHEDULE-WINDOW, FLOW-CRON-SHARED,
+CONTRACT-CREATE-CADENCE, FLOW-CRON-SHARED,
 FLOW-MONITOR-RECOVERY and VER-CRON-RED/GREEN/GATE/MONITOR-LIVE before
 implementation. No coverage receipt
 or passing execution is claimed by this draft.
