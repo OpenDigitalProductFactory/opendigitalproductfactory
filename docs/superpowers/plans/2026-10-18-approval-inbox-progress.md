@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Approval Inbox progress — BI-372D6E2E
 
 One atomic small bug repair; Workroom WC-B03C3E1C, branch codex/approval-inbox-progress.

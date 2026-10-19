@@ -20,6 +20,7 @@ export function AttentionInbox({
   digestDisposition = null,
   focusItemId,
   approvalQueue,
+  approvalCopy,
 }: {
   projection: OwnerAttentionProjection;
   failedSources: AttentionSource[];
@@ -28,6 +29,7 @@ export function AttentionInbox({
   /** The card an approval deep link asked for (BI-0012E6CA). */
   focusItemId?: string;
   approvalQueue?: { total: number; shown: number; nextCursor: string | null; browsingOlder: boolean } | null;
+  approvalCopy?: { summary: string; explanation: string; latest: string; older: string; unavailable: string };
 }) {
   return (
     <div className="space-y-4">
@@ -38,17 +40,17 @@ export function AttentionInbox({
       ) : null}
 
       <div>
-        <OwnerAttentionCount count={projection.count} displayed />
-        {approvalQueue ? (
+        <OwnerAttentionCount count={projection.count} />
+        {approvalQueue && approvalCopy ? (
           <div className="mt-2 space-y-2 text-sm text-[var(--dpf-text)]">
-            <p>{approvalQueue.total} pending {approvalQueue.total === 1 ? "approval" : "approvals"}; {approvalQueue.shown} shown.</p>
-            <p className="text-xs text-[var(--dpf-muted)]">Older requests replace completed ones. Other notices: {projection.needsYouNow.filter(entry => !entry.item.envelope).length}.</p>
+            <p>{approvalCopy.summary}</p>
+            <p className="text-xs text-[var(--dpf-muted)]">{approvalCopy.explanation}</p>
             <div className="flex gap-4 text-[var(--dpf-accent)]">
-              {approvalQueue.browsingOlder ? <Link href="/workspace/inbox">Latest requests</Link> : null}
-              {approvalQueue.nextCursor ? <Link href={`/workspace/inbox?approvalsBefore=${encodeURIComponent(approvalQueue.nextCursor)}`}>Older requests</Link> : null}
+              {approvalQueue.browsingOlder ? <Link href="/workspace/inbox">{approvalCopy.latest}</Link> : null}
+              {approvalQueue.nextCursor ? <Link href={`/workspace/inbox?approvalsBefore=${encodeURIComponent(approvalQueue.nextCursor)}`}>{approvalCopy.older}</Link> : null}
             </div>
           </div>
-        ) : approvalQueue === null ? <p className="mt-2 text-sm text-[var(--dpf-warning)]">Approvals unavailable. <Link href="/workspace/inbox" className="underline">Latest requests</Link></p> : null}
+        ) : approvalQueue === null && approvalCopy ? <p className="mt-2 text-sm text-[var(--dpf-warning)]">{approvalCopy.unavailable} <Link href="/workspace/inbox" className="underline">{approvalCopy.latest}</Link></p> : null}
         {projection.count === 0 && failedSources.length === 0 && !(approvalQueue && approvalQueue.total > 0) ? (
           <div className="mt-2">
             <OwnerAllCaughtUp

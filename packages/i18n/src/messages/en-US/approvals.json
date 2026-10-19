@@ -1,4 +1,11 @@
 {
+  "queue": {
+    "summary": ".input {$count :number}\n.match $count\none {{{$count} pending approval; {$shown} shown.}}\n* {{{$count} pending approvals; {$shown} shown.}}",
+    "explanation": "Older requests replace completed ones. Other notices: {$count}.",
+    "latest": "Latest requests",
+    "older": "Older requests",
+    "unavailable": "Approvals unavailable."
+  },
   "result": "Approval result",
   "recent": "Recent approval results",
   "unavailable": "This request is not available in your Inbox.",

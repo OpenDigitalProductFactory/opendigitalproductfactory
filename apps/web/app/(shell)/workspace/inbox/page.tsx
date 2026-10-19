@@ -97,6 +97,11 @@ export default async function WorkspaceInboxPage({ searchParams }: { searchParam
         nowMs={nowMs}
         digestDisposition={digestDisposition}
         focusItemId={focusItemId}
+        approvalCopy={{
+          summary: t("queue.summary", { count: approvalPage?.total ?? 0, shown: projection.needsYouNow.filter(entry => entry.item.envelope?.actionable && entry.item.envelope.delegatingUserId === session.user.id).length }),
+          explanation: t("queue.explanation", { count: projection.needsYouNow.filter(entry => !entry.item.envelope).length }),
+          latest: t("queue.latest"), older: t("queue.older"), unavailable: t("queue.unavailable"),
+        }}
         approvalQueue={approvalPage ? {
           total: approvalPage.total,
           shown: projection.needsYouNow.filter(entry => entry.item.envelope?.actionable

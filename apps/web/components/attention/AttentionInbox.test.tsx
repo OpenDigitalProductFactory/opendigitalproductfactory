@@ -3,7 +3,17 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 
-import { AttentionInbox } from "./AttentionInbox";
+import { AttentionInbox as Inbox } from "./AttentionInbox";
+import { translate } from "@dpf/i18n";
+import type { ComponentProps } from "react";
+
+function AttentionInbox(props: ComponentProps<typeof Inbox>) {
+  return <Inbox {...props} approvalCopy={{
+    summary: translate("en-US", "approvals", "queue.summary", { count: props.approvalQueue?.total ?? 0, shown: props.approvalQueue?.shown ?? 0 }),
+    explanation: translate("en-US", "approvals", "queue.explanation", { count: props.projection.needsYouNow.filter(entry => !entry.item.envelope).length }),
+    latest: translate("en-US", "approvals", "queue.latest"), older: translate("en-US", "approvals", "queue.older"), unavailable: translate("en-US", "approvals", "queue.unavailable"),
+  }} />;
+}
 import { buildOwnerAttentionProjection } from "@/lib/attention/owner-projection";
 import type { AttentionItem } from "@/lib/attention/types";
 
