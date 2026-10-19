@@ -95,4 +95,4 @@ This is bounded rework of AC-NAV/AC-VERIFY under BI-2BBD9D34 and reconciles only
 
 The separate floating global AI launcher can obscure metric text at 390px and provider content at 1280px. This has been recorded in the existing shared-shell item `BI-4F308244`, activity `cmvdjqxym0a2j01pdy4f2mxfh`; introduction is not attributed to the routing PR. Native UX coworker/WSID acceptance remains outstanding under the existing engagements and framework repair; external peer review does not substitute for that receipt.
 
-This changes target size only. Existing operator documentation remains accurate: controls, labels, destinations and submission behavior do not change.
+The Feedback follow-up changes target size only; its controls, labels, destinations and submission behavior do not change. The launcher relocation above updates the operator guide separately.

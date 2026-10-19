@@ -33,6 +33,8 @@ Choose a task, provider, data sensitivity and time window; the URL preserves tho
 
 ## Follow traffic
 
+Open **AI Coworker** from the header to discuss the current investigation. On phones, use its robot icon. Opening the panel sends no message; close it to return to the same routing view. The launcher stays out of the routing content.
+
 The default view groups assignments on the left and providers on the right. Counts describe the recorded decisions in your scope. Open **All** to search a larger assignment or provider catalog; model lists come from configured model profiles, including models that received no traffic. **Recent decisions** is a small preview; **View all** opens searchable traffic.
 
 On a narrow screen, traffic and evaluation rows keep their task and model together, with labeled outcome and cost values below. All four scope filters remain directly available.

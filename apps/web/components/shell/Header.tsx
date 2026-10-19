@@ -171,6 +171,7 @@ export function Header({ platformRole, brandName, brandLogoUrl, brandLogoUrlLigh
 
         <div className="relative flex shrink-0 items-center gap-1 sm:gap-2">
           <PlatformHealthIndicator />
+          <span data-agent-launcher-slot="true" className="inline-flex shrink-0 empty:hidden" />
           <button ref={accountButton} type="button" aria-label={t("nav.accountHelp")} aria-expanded={accountOpen} aria-controls="header-account-actions" onClick={() => setAccountOpen(open => !open)} className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md border border-[var(--dpf-border)] text-[var(--dpf-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--dpf-accent)] lg:hidden">
             <EllipsisVertical aria-hidden className="h-5 w-5" />
           </button>
