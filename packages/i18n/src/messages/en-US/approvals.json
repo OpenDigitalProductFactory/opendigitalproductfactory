@@ -1,5 +1,6 @@
 {
   "queue": {
+    "displayedCount": ".input {$count :number}\n.match $count\none {{{$count} item shown for your attention}}\n* {{{$count} items shown for your attention}}",
     "summary": ".input {$count :number}\n.match $count\none {{{$count} pending approval; {$shown} shown.}}\n* {{{$count} pending approvals; {$shown} shown.}}",
     "explanation": "Older requests replace completed ones. Other notices: {$count}.",
     "latest": "Latest requests",

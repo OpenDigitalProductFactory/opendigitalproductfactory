@@ -29,7 +29,7 @@ export function AttentionInbox({
   /** The card an approval deep link asked for (BI-0012E6CA). */
   focusItemId?: string;
   approvalQueue?: { total: number; shown: number; nextCursor: string | null; browsingOlder: boolean } | null;
-  approvalCopy?: { summary: string; explanation: string; latest: string; older: string; unavailable: string };
+  approvalCopy?: { displayedCount: string; summary: string; explanation: string; latest: string; older: string; unavailable: string };
 }) {
   return (
     <div className="space-y-4">
@@ -40,7 +40,7 @@ export function AttentionInbox({
       ) : null}
 
       <div>
-        <OwnerAttentionCount count={projection.count} />
+        <OwnerAttentionCount count={projection.count} label={approvalCopy?.displayedCount} />
         {approvalQueue && approvalCopy ? (
           <div className="mt-2 space-y-2 text-sm text-[var(--dpf-text)]">
             <p>{approvalCopy.summary}</p>

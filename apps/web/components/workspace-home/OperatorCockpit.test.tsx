@@ -43,7 +43,7 @@ describe("OperatorCockpitView", () => {
     );
 
     expect(html).toContain("What needs you now");
-    expect(html).toContain("2 items shown for your attention");
+    expect(html).toContain("2 things need you today");
     expect(html).toContain("Approve this bill?");
     expect(html).toContain("Send this message?");
     expect(html).toContain("AI recommendation");

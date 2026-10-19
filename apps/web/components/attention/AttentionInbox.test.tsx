@@ -9,6 +9,7 @@ import type { ComponentProps } from "react";
 
 function AttentionInbox(props: ComponentProps<typeof Inbox>) {
   return <Inbox {...props} approvalCopy={{
+    displayedCount: translate("en-US", "approvals", "queue.displayedCount", { count: props.projection.count }),
     summary: translate("en-US", "approvals", "queue.summary", { count: props.approvalQueue?.total ?? 0, shown: props.approvalQueue?.shown ?? 0 }),
     explanation: translate("en-US", "approvals", "queue.explanation", { count: props.projection.needsYouNow.filter(entry => !entry.item.envelope).length }),
     latest: translate("en-US", "approvals", "queue.latest"), older: translate("en-US", "approvals", "queue.older"), unavailable: translate("en-US", "approvals", "queue.unavailable"),
