@@ -18,7 +18,7 @@ import { describe, expect, it } from "vitest";
 import { WORK_SHAPE_PRIOR_VERSIONS } from "@/lib/work-management/work-shape-prior-versions";
 import { listWorkShapes, type WorkShapeDefinition } from "@/lib/work-management/work-shapes";
 
-import { decompile } from "./decompile";
+import { decompile } from "@/lib/gpp/shape-language/dpf-toolkit";
 import { GPP_DOCUMENT_ELEMENT_ID } from "@dpf/validators/gpp/diagnostics";
 import {
   elementIdsOf,
@@ -28,8 +28,8 @@ import {
   nearestElementId,
   type GppElementKind,
 } from "@dpf/validators/gpp/element-ids";
-import { gppLayoutSchema } from "./gpp-layout-schema";
-import { gppShapeDocumentSchema, type GppShapeDocument } from "./gpp-shape-schema";
+import { gppLayoutSchema } from "@dpf/validators/gpp/gpp-layout-schema";
+import { gppShapeDocumentSchema, type GppShapeDocument } from "@dpf/validators/gpp/gpp-shape-schema";
 
 const FIXTURES = join(__dirname, "__fixtures__");
 const WORKED_EXAMPLE = gppShapeDocumentSchema.parse(

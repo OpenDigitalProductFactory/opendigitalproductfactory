@@ -27,11 +27,11 @@ import { KNOWN_STAGE_TOOL_GAPS, stageToolGapKey } from "@/lib/work-management/st
 import { WORK_SHAPE_PRIOR_VERSIONS } from "@/lib/work-management/work-shape-prior-versions";
 import { listWorkShapes, type WorkShapeDefinition } from "@/lib/work-management/work-shapes";
 
-import { decompile } from "./decompile";
+import { decompile } from "@/lib/gpp/shape-language/dpf-toolkit";
 import type { GppDiagnostic } from "@dpf/validators/gpp/diagnostics";
-import { runDesignRules } from "./drc";
+import { runDesignRules } from "@/lib/gpp/shape-language/dpf-toolkit";
 import { GATE_RATIFICATION, type GateRatificationEntry } from "./gate-ratification";
-import { resolveShapeDocument, type GppResolveSources } from "./resolve";
+import { resolveShapeDocument, type GppResolveSources } from "@dpf/validators/gpp/resolve";
 import { defaultResolveSources, liveDirectExecuteSites } from "./resolve-sources";
 
 const PROOF_SCOPE = "outbound-customer-communication";

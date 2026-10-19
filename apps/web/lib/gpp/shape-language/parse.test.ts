@@ -15,7 +15,7 @@ import { WORK_SHAPE_PRIOR_VERSIONS } from "@/lib/work-management/work-shape-prio
 import { listWorkShapes, type WorkShapeDefinition } from "@/lib/work-management/work-shapes";
 
 import { serializeStableJson } from "../../../scripts/registry-generator-support";
-import { decompile } from "./decompile";
+import { decompile } from "@/lib/gpp/shape-language/dpf-toolkit";
 import {
   GPP_DOCUMENT_ELEMENT_ID,
   GPP_PARSE_CODES,
@@ -25,7 +25,7 @@ import {
   toJsonPointer,
   type GppDiagnostic,
 } from "@dpf/validators/gpp/diagnostics";
-import { parseShapeDocument, parseStrictJson } from "./parse";
+import { parseShapeDocument, parseStrictJson } from "@dpf/validators/gpp/parse";
 
 const WORKED_EXAMPLE_TEXT = readFileSync(
   join(__dirname, "__fixtures__", "inquiry-response-watch.worked-example.gpp.json"),

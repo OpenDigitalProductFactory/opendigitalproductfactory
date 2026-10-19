@@ -92,7 +92,7 @@
 //
 // OFFLINE TOOLING in Phase 3b: nothing in the running app imports this module.
 
-import { isCompletingWorkroomDriveReceipt } from "@dpf/validators/workroom/receipts";
+import { isCompletingWorkroomDriveReceipt } from "../workroom/receipts.js";
 
 import {
   backwardReach,
@@ -103,9 +103,9 @@ import {
   type GppGateMode,
   type InterpretableGate,
   type InterpretableShape,
-} from "@dpf/validators/workroom/flow-graph";
+} from "../workroom/flow-graph.js";
 
-import { flowEdgeElementId, stageElementId } from "@dpf/validators/gpp/element-ids";
+import { flowEdgeElementId, stageElementId } from "./element-ids.js";
 
 // The flow graph moved to work-management in Phase 3c (PR-3c-1, BI-8875C9DF)
 // so the drive reads the same graph; these re-exports keep every import of it
@@ -120,7 +120,7 @@ export {
   type GppFlowNodeKind,
   type GppGateMode,
   type InterpretableShape,
-} from "@dpf/validators/workroom/flow-graph";
+} from "../workroom/flow-graph.js";
 
 // ── input ───────────────────────────────────────────────────────────────────
 

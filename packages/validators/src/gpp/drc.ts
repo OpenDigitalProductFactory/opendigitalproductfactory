@@ -71,7 +71,8 @@
 //   co-occurrence cannot be computed. It is never reported as a pass.
 // - C-7's build-sandbox containment clause is `not-evaluated`: it applies only
 //   to Build Studio stages (Phase 5).
-// - C-8 is `info`: the drive is the only transition path for work shapes.
+// - C-8 records a host-declared single path as info, otherwise not-evaluated;
+//   the compiler does not establish runtime mediation.
 // - C-9 is `not-evaluated` when no direct-site facts are supplied.
 //
 // E-NOT-EXECUTABLE is checked for every construct whose flag in
@@ -99,13 +100,7 @@
 
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 
-import { COWORKER_AUTHORIZED_SURFACE_BASELINE_GRANTS } from "@/lib/coworker/authorized-surface-coworker-contract";
-import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
-import { roomGrantsFromWorkShape } from "@/lib/work-management/room-turn-authority";
-import { KNOWN_STAGE_TOOL_GAPS, stageToolGapKey } from "@/lib/work-management/stage-tool-gaps";
-import { governedDecisionStage } from "@/lib/work-management/workroom-stage-decision";
 
-import { bindingEnforcementEntry } from "../binding-enforcement";
 import {
   escapeJsonPointerToken,
   sortDiagnostics,
@@ -114,22 +109,25 @@ import {
   type GppDiagnosticCode,
   type GppDiagnosticSeverity,
   type GppRuleId,
-} from "@dpf/validators/gpp/diagnostics";
-import { constructsUsedBy } from "@dpf/validators/gpp/constructs-used-by";
-import { elementIdsOf, gateElementId, shapeElementId } from "@dpf/validators/gpp/element-ids";
-import { copyGate, lowerToDefinition } from "./emit";
-import { CONSTRUCT_EXECUTABLE, type GppConstruct } from "@dpf/validators/gpp/executable-constructs";
-import { GATE_RATIFICATION, ratifiedGateFor, type GateRatificationEntry } from "./gate-ratification";
-import type { GppLayoutSidecar } from "./gpp-layout-schema";
-import type { GppGate, GppShapeDocument } from "./gpp-shape-schema";
-import { buildShapeFlowGraph } from "./interpreter";
-import type { GppResolution, GppResolvedStage, GppResolvedTool } from "./resolve";
-import { checkSoundness } from "./soundness";
+} from "./diagnostics.js";
+import { constructsUsedBy } from "./constructs-used-by.js";
+import { elementIdsOf, gateElementId, shapeElementId } from "./element-ids.js";
+import { copyGate, lowerToDefinition } from "./emit.js";
+import { CONSTRUCT_EXECUTABLE, type GppConstruct } from "./executable-constructs.js";
+import { ratifiedGateFor, type GateRatificationEntry } from "./ratification.js";
+import { hasDesignRulePolicy, type GppDesignRulePolicy } from "./design-rule-policy.js";
+import type { GppLayoutSidecar } from "./gpp-layout-schema.js";
+import type { GppGate, GppShapeDocument } from "./gpp-shape-schema.js";
+import { buildShapeFlowGraph } from "../workroom/flow-graph.js";
+import type { GppResolution, GppResolvedStage, GppResolvedTool } from "./resolve.js";
+import { checkSoundness } from "./soundness.js";
 
 export type DesignRuleOptions = {
+  /** Current host-owned policy facts; missing facts are never a pass. */
+  policy?: GppDesignRulePolicy;
   /** The layout sidecar, when the document has one (W-ORPHAN-LAYOUT). */
   layout?: GppLayoutSidecar;
-  /** The gate ratification table (D-8). Defaults to GATE_RATIFICATION; tests inject one. */
+  /** Owning host's ratification facts (D-8). Absent means no scope is ratified. */
   ratification?: Readonly<Record<string, GateRatificationEntry>>;
   /**
    * C-9 facts: direct executeTool sites outside the reference monitor, keyed by
@@ -145,7 +143,6 @@ type Segment = string | number;
 type Stage = GppShapeDocument["stages"][number];
 
 const DOCTRINE_RESOLUTIONS: ReadonlySet<GppGate["resolution"]> = new Set(["doctrine", "doctrine-then-human"]);
-const GAP_KEYS: ReadonlySet<string> = new Set(KNOWN_STAGE_TOOL_GAPS.map((gap) => stageToolGapKey(gap.shapeKey, gap.stageKey)));
 
 function finding(
   rule: GppRuleId,
@@ -191,7 +188,7 @@ function gatePath(index: number, stage: Stage, ...rest: Segment[]): Segment[] {
  *   mapping. Evaluated only when the source could read the child; one finding
  *   per stage naming every excess.
  */
-function subShapeFindings(document: GppShapeDocument, stage: Stage, index: number, facts: GppResolvedStage | undefined): GppDiagnostic[] {
+function subShapeFindings(document: GppShapeDocument, stage: Stage, index: number, facts: GppResolvedStage | undefined, policy: GppDesignRulePolicy): GppDiagnostic[] {
   const stageId = `stage:${stage.key}`;
   const path: Segment[] = ["stages", index, "subShape"];
   const fact = facts?.subShape;
@@ -202,10 +199,10 @@ function subShapeFindings(document: GppShapeDocument, stage: Stage, index: numbe
     return [finding("D-10", "error", stageId, path, `Stage "${stage.key}" calls sub-shape "${fact.ref}", and the sub-shape calls form a cycle: ${fact.cycle.join(" -> ")}.`)];
   }
   if (!fact.grants) return [];
-  const ceiling = roomGrantsFromWorkShape(document.grants);
+  const ceiling = policy.roomGrantsFromWorkShape(document.grants);
   const allowed = new Set(ceiling);
-  const extraGrants = roomGrantsFromWorkShape(fact.grants).filter((grant) => !allowed.has(grant));
-  const extraTools = (fact.tools ?? []).filter((tool) => !isToolAllowedByGrants(tool.toolName, ceiling));
+  const extraGrants = policy.roomGrantsFromWorkShape(fact.grants).filter((grant) => !allowed.has(grant));
+  const extraTools = (fact.tools ?? []).filter((tool) => !policy.isToolAllowedByGrants(tool.toolName, ceiling));
   if (extraGrants.length === 0 && extraTools.length === 0) return [];
   const parts = [
     ...(extraGrants.length > 0 ? [`grants the parent does not hold (${extraGrants.join(", ")})`] : []),
@@ -223,7 +220,11 @@ export function runDesignRules(
   const out: GppDiagnostic[] = [];
   const shapeId = shapeElementId(document.key, document.version);
   const executable = options.executable ?? CONSTRUCT_EXECUTABLE;
-  const ratification = options.ratification ?? GATE_RATIFICATION;
+  const ratification = options.ratification ?? {};
+  const policy = options.policy;
+  if (!hasDesignRulePolicy(policy)) {
+    return [finding("C-4", "not-evaluated", shapeId, [], "Required host design-rule policy facts are unavailable. No authority check was evaluated; this is not a pass.")];
+  }
   const resolvedByKey = new Map<string, GppResolvedStage>(resolved.stages.map((stage) => [stage.stageKey, stage]));
 
   const notExecutable = (construct: GppConstruct, elementId: string, path: readonly Segment[], what: string) => {
@@ -259,10 +260,12 @@ export function runDesignRules(
     ),
     finding(
       "C-8",
-      "info",
+      policy.singleTransitionPath ? "info" : "not-evaluated",
       shapeId,
       [],
-      "C-8: the drive is the only transition path for work shapes; every stage transition of this shape goes through it.",
+      policy.singleTransitionPath
+        ? `C-8: the host declares ${policy.singleTransitionPath} as its single transition path; runtime mediation is not verified by this compiler.`
+        : "C-8 transition mediation was not evaluated: no host single-transition-path declaration was supplied. This is not a pass.",
     ),
   );
   if (!options.directSites) {
@@ -285,7 +288,7 @@ export function runDesignRules(
       document.triggers.includes("cadence") &&
       principal?.kind === "agent" &&
       (stage.tools === undefined || stage.tools.length === 0) &&
-      !GAP_KEYS.has(stageToolGapKey(document.key, stage.key))
+      !policy.knownStageToolGap(document.key, stage.key)
     ) {
       out.push(
         finding(
@@ -301,7 +304,7 @@ export function runDesignRules(
     // C-2, C-4, C-9 per tool.
     const agentKnown = principal?.kind === "agent" && principal.known;
     const effectiveGrants =
-      principal?.kind === "agent" ? [...new Set([...principal.grants, ...COWORKER_AUTHORIZED_SURFACE_BASELINE_GRANTS])] : [];
+      principal?.kind === "agent" ? [...new Set([...principal.grants, ...policy.baselineGrants])] : [];
     if (principal?.kind === "agent" && !principal.known) {
       out.push(
         finding("C-4", "error", stageId, [...base, "accountablePrincipalRef"], `Accountable agent "${principal.agentId}" is not a known agent, so no grant can be shown to be held.`),
@@ -319,7 +322,7 @@ export function runDesignRules(
         );
         return;
       }
-      if (agentKnown && principal?.kind === "agent" && !isToolAllowedByGrants(tool.toolName, effectiveGrants)) {
+      if (agentKnown && principal?.kind === "agent" && !policy.isToolAllowedByGrants(tool.toolName, effectiveGrants)) {
         out.push(
           finding(
             "C-4",
@@ -360,7 +363,7 @@ export function runDesignRules(
           ),
         );
       }
-      if (stage.binding.enforcement === "enforced" && !bindingEnforcementEntry(stage.binding.id)) {
+      if (stage.binding.enforcement === "enforced" && !policy.bindingEnforced(stage.binding.id)) {
         out.push(
           finding(
             "C-7",
@@ -386,12 +389,12 @@ export function runDesignRules(
     }
 
     // Sub-shape: D-9 widening, D-10 resolution (GPP Phase 3c PR-3c-5).
-    if (stage.subShape !== undefined) out.push(...subShapeFindings(document, stage, index, facts));
+    if (stage.subShape !== undefined) out.push(...subShapeFindings(document, stage, index, facts, policy));
 
     // Gates: C-7, D-4, D-7, D-8, onRefuse.
     if (stage.advance.kind === "governed-decision") {
       const gateId = gateElementId(stage.key);
-      if (!governedDecisionStage(lowered, stage.key)) {
+      if (!policy.governedDecisionStage(lowered, stage.key)) {
         out.push(
           finding(
             "D-4",

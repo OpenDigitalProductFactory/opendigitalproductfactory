@@ -9,7 +9,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import * as interpreter from "@/lib/gpp/shape-language/interpreter";
+import * as interpreter from "@dpf/validators/gpp/interpreter";
 
 import * as flowGraph from "@dpf/validators/workroom/flow-graph";
 

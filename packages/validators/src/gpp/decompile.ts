@@ -39,15 +39,15 @@
 //
 // OFFLINE TOOLING in Phase 3a: nothing in the running app imports this module.
 
-import { declaresRefuseRoute } from "@dpf/validators/workroom/flow-graph";
-import type { WorkShapeDefinition, WorkShapeStage } from "@/lib/work-management/work-shapes";
+import { declaresRefuseRoute } from "../workroom/flow-graph.js";
+import type { WorkShapeDefinition, WorkShapeStage } from "./work-shape-contracts.js";
 
-import { copyBinding, copyGate } from "./emit";
-import { GATE_RATIFICATION, ratifiedGateFor, type GateRatificationEntry } from "./gate-ratification";
-import { GPP_SHAPE_FORMAT, type GppShapeDocument } from "./gpp-shape-schema";
+import { copyBinding, copyGate } from "./emit.js";
+import { ratifiedGateFor, type GateRatificationEntry } from "./ratification.js";
+import { GPP_SHAPE_FORMAT, type GppShapeDocument } from "./gpp-shape-schema.js";
 
 export type DecompileOptions = {
-  /** The ratification table to read. Defaults to GATE_RATIFICATION; tests inject one. */
+  /** Owning host's ratification facts. Absent means no scope is ratified. */
   ratification?: Readonly<Record<string, GateRatificationEntry>>;
 };
 
@@ -82,7 +82,7 @@ function decompileAdvance(
 
 /** Definition → document. Pure; the definition and the table are only read. */
 export function decompile(definition: WorkShapeDefinition, options: DecompileOptions = {}): DecompileResult {
-  const table = options.ratification ?? GATE_RATIFICATION;
+  const table = options.ratification ?? {};
   const awaitingRatification: string[] = [];
 
   const stages = definition.stages.map((stage): DocumentStage => {

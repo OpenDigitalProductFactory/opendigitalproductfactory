@@ -1,4 +1,4 @@
-// apps/web/lib/gpp/shape-language/gpp-shape-schema.ts
+// packages/validators/src/gpp/gpp-shape-schema.ts
 //
 // The GPP shape document — one definition, in Zod, of the JSON-Schema superset
 // of WorkShapeDefinition that DI-035897A0F1D6 (WWMD) makes the source of truth
@@ -7,7 +7,7 @@
 // docs/superpowers/plans/2026-10-02-gpp-shape-notation-compiler-phase-3.md
 // (PR-3a-1, BI-6DA17863).
 //
-// The published contract, gpp-shape.schema.json beside this file, is GENERATED
+// The published contract at apps/web/lib/gpp/shape-language/gpp-shape.schema.json is GENERATED
 // from this module (`pnpm --filter web build:gpp-shapes`) and committed; a test
 // and `check:gpp-shapes` fail when it differs from a fresh generation. Edit
 // this file, never the JSON. The generated file is the contract; §4.2 is its
@@ -28,21 +28,20 @@
 // - `tools` absent and `tools: []` differ: absent is "undeclared", as today.
 // - Consequence class is never authored; element ids are derived, not stored.
 //
-// OFFLINE TOOLING in Phase 3a: nothing in the running app imports this module.
+// Portable schema contract; application-specific registries and policy stay in the host.
 
 import { z } from "zod";
 
-import { OUTCOME_DISPOSITIONS } from "@/lib/shared/outcome-disposition";
-import { WORKROOM_SHAPE_KEYS } from "@/lib/work-management/room-shapes";
-import { WORK_SHAPE_EVIDENCE_KINDS } from "@/lib/work-management/work-shape-evidence-kinds";
-import {
-  WORK_SHAPE_TRIGGER_CLASSES,
-  type WorkShapeBinding,
-  type WorkShapeBudget,
-  type WorkShapeDefinition,
-  type WorkShapeGate,
-  type WorkShapeStopCondition,
-} from "@/lib/work-management/work-shapes";
+import { DECISION_SCOPES } from "../decision-scopes.js";
+import { OUTCOME_DISPOSITIONS } from "../outcome-disposition.js";
+import { WORKROOM_SHAPE_KEYS, WORK_SHAPE_EVIDENCE_KINDS, WORK_SHAPE_TRIGGER_CLASSES } from "./work-vocabulary.js";
+import type {
+  WorkShapeBinding,
+  WorkShapeBudget,
+  WorkShapeDefinition,
+  WorkShapeGate,
+  WorkShapeStopCondition,
+} from "./work-shape-contracts.js";
 
 export const GPP_SHAPE_FORMAT = "gpp-shape/0.1";
 export const GPP_SHAPE_SCHEMA_ID = "urn:dpf:gpp-shape:0.1";
@@ -96,7 +95,7 @@ const slug = named("slug", z.string().regex(/^[a-z0-9][a-z0-9-]*$/));
 const semver = named("semver", z.string().regex(/^\d+\.\d+\.\d+$/));
 const principalRef = named("principalRef", z.string().regex(/^(agent|role|person):.+$/));
 const toolName = named("toolName", z.string().regex(/^[a-z][a-z0-9_]*$/));
-const authority = named("authority", z.enum(["wwmd", "wwwd", "wsid"]));
+const authority = named("authority", z.enum(DECISION_SCOPES));
 const evidenceKind = named(
   "evidenceKind",
   z.enum(WORK_SHAPE_EVIDENCE_KINDS),
@@ -272,7 +271,7 @@ export type GppShapeSchemaContracts = [
   AssertTrue<Equivalent<(typeof BUDGET_KINDS)[number], WorkShapeBudget["kind"]>>,
   // A document minus `format` is a WorkShapeDefinition: every field it adds is optional.
   AssertTrue<Omit<GppShapeDocument, "format"> extends WorkShapeDefinition ? true : false>,
-  // WorkShapeGate / WorkShapeBinding (work-shapes.ts, PR-3b-4) mirror the schema's
+  // WorkShapeGate / WorkShapeBinding (work-shape-contracts.ts) mirror the schema's
   // `gate` / `binding`: same fields, same closed value sets.
   AssertTrue<GppGate extends WorkShapeGate ? true : false>,
   AssertTrue<Equivalent<keyof GppGate, keyof WorkShapeGate>>,

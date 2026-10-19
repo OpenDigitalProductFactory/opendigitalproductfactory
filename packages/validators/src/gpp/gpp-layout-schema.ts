@@ -1,4 +1,4 @@
-// apps/web/lib/gpp/shape-language/gpp-layout-schema.ts
+// packages/validators/src/gpp/gpp-layout-schema.ts
 //
 // The GPP layout sidecar — presentation only, beside a shape document
 // (docs/superpowers/specs/2026-10-02-gpp-shape-notation-and-compiler-design.md
@@ -16,7 +16,7 @@
 
 import { z } from "zod";
 
-import { GPP_SHAPE_REF_PATTERN } from "./gpp-shape-schema";
+import { GPP_SHAPE_REF_PATTERN } from "./gpp-shape-schema.js";
 
 export const GPP_LAYOUT_FORMAT = "gpp-layout/0.1";
 

@@ -47,12 +47,12 @@
 //
 // OFFLINE TOOLING in Phase 3b: nothing in the running app imports this module.
 
-import { validateWorkShape } from "@/lib/work-management/work-shapes";
+import { validateStopExits } from "./stop-exits.js";
 
-import { toJsonPointer, sortDiagnostics, type GppDiagnostic } from "@dpf/validators/gpp/diagnostics";
-import { gateElementId, shapeElementId } from "@dpf/validators/gpp/element-ids";
-import type { GppShapeDocument } from "./gpp-shape-schema";
-import { buildShapeFlowGraph, forwardReach, type GppFlowEdge, type GppFlowGraph } from "@dpf/validators/workroom/flow-graph";
+import { toJsonPointer, sortDiagnostics, type GppDiagnostic } from "./diagnostics.js";
+import { gateElementId, shapeElementId } from "./element-ids.js";
+import type { GppShapeDocument } from "./gpp-shape-schema.js";
+import { buildShapeFlowGraph, forwardReach, type GppFlowEdge, type GppFlowGraph } from "../workroom/flow-graph.js";
 
 type SoundnessRule = "S-1" | "S-2" | "S-3" | "S-4" | "S-5" | "S-6";
 type Segment = string | number;
@@ -298,7 +298,7 @@ export function checkSoundness(document: GppShapeDocument): GppDiagnostic[] {
 
   // S-6: delegated to the runtime's own conformance rule.
   const shapeId = shapeElementId(document.key, document.version);
-  for (const issue of validateWorkShape(document)) {
+  for (const issue of validateStopExits(document)) {
     if (issue.includes(": no failure exit") || issue.includes(": no budget stop")) {
       out.push(finding("S-6", shapeId, ["stopConditions"], issue));
     }

@@ -31,7 +31,7 @@ import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { describe, expect, it } from "vitest";
 
 import { GATE_RATIFICATION } from "@/lib/gpp/shape-language/gate-ratification";
-import { legacyProjection } from "@/lib/gpp/shape-language/legacy";
+import { legacyProjection } from "@dpf/validators/gpp/legacy";
 
 import { INQUIRY_RESPONSE_WATCH_1_0_0 } from "./generated/inquiry-response-watch.shape.generated";
 import { INQUIRY_RESPONSE_WATCH_SHAPE_KEY } from "./standing-operations-shapes";

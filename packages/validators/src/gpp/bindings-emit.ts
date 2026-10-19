@@ -25,9 +25,9 @@
 // reads one at runtime, and the compiler never writes GPP_BINDING_ENFORCEMENT
 // or adds to GPP_BINDINGS.
 
-import type { PermitAuthority } from "../permit-claims";
-import type { GppShapeDocument } from "./gpp-shape-schema";
-import type { GppResolution } from "./resolve";
+import type { DecisionScope as PermitAuthority } from "../decision-scopes.js";
+import type { GppShapeDocument } from "./gpp-shape-schema.js";
+import type { GppResolution } from "./resolve.js";
 
 export type GppBindingRecordDraft = {
   bindingId: string;

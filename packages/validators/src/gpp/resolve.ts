@@ -25,11 +25,10 @@
 //
 // OFFLINE TOOLING in Phase 3b: nothing in the running app imports this module.
 
-import type { ConsequenceClass, ConsequentialToolClassification } from "@/lib/tak/consequential-tool-policy";
-import type { ToolConsequence } from "@/lib/tool-consequence";
+import type { ConsequenceClass, GppToolClassification as ConsequentialToolClassification, ToolConsequence } from "./tool-facts.js";
 
-import { bindingElementId, gateElementId, shapeElementId, stageElementId, toolElementId } from "@dpf/validators/gpp/element-ids";
-import type { GppShapeDocument } from "./gpp-shape-schema";
+import { bindingElementId, gateElementId, shapeElementId, stageElementId, toolElementId } from "./element-ids.js";
+import type { GppShapeDocument } from "./gpp-shape-schema.js";
 
 /** What resolve reads. Each member is one registry the runtime already owns. */
 export type GppResolveSources = {
@@ -57,8 +56,8 @@ export type GppResolveSources = {
   /**
    * The registered shape version's grants and stages (GPP Phase 3c PR-3c-5,
    * D-9 and D-10), or null when it is not registered. Optional: a source
-   * without it lets D-9 and the cycle walk check only what the document
-   * itself says.
+   * without it can preview the document, but compilation holds existing child
+   * references whose grant, stage or transitive graph facts are unavailable.
    */
   shapeDefinition?(ref: string): GppSubShapeDefinition | null;
 };
@@ -110,6 +109,8 @@ export type GppResolvedStage = {
     grants?: readonly string[];
     tools?: ReadonlyArray<{ stageKey: string; toolName: string }>;
     cycle?: readonly string[] | null;
+    /** Unread or traversal-bounded refs: absence of a cycle is not established. */
+    unavailableRefs?: readonly string[];
   };
 };
 
@@ -149,21 +150,30 @@ function resolveTool(stageKey: string, toolName: string, sources: GppResolveSour
  * registered versions' own `subShape` refs; a ref the source cannot read ends
  * its branch. Bounded by the number of distinct refs met.
  */
-function subShapeCycle(root: string, ref: string, sources: GppResolveSources): string[] | null {
+function subShapeCycle(root: string, ref: string, sources: GppResolveSources): { cycle: string[] | null; unavailableRefs: string[] } {
   const seen = new Set<string>();
-  const walk = (path: string[], next: string): string[] | null => {
-    if (path.includes(next)) return [...path, next];
-    if (seen.has(next)) return null;
+  const unavailableRefs = new Set<string>();
+  const pending = [{ path: [root], next: ref }];
+  // Source adapters may expose an unbounded registry. Exhaustion is unknown,
+  // never a successful cycle check; the stack also avoids recursive overflow.
+  while (pending.length) {
+    const { path, next } = pending.pop()!;
+    if (path.includes(next)) return { cycle: [...path, next], unavailableRefs: [...unavailableRefs] };
+    if (seen.has(next)) continue;
+    if (seen.size >= 1024) {
+      unavailableRefs.add(next);
+      break;
+    }
     seen.add(next);
     const definition = sources.shapeVersionExists(next) ? sources.shapeDefinition?.(next) ?? null : null;
-    for (const stage of definition?.stages ?? []) {
+    if (!definition) { unavailableRefs.add(next); continue; }
+    // Reverse push preserves the incumbent depth-first, stage-order result.
+    for (const stage of [...definition.stages].reverse()) {
       if (stage.subShape === undefined) continue;
-      const found = walk([...path, next], stage.subShape);
-      if (found) return found;
+      pending.push({ path: [...path, next], next: stage.subShape });
     }
-    return null;
-  };
-  return walk([root], ref);
+  }
+  return { cycle: null, unavailableRefs: [...unavailableRefs] };
 }
 
 /** Step 3. Pure over its sources; returns facts in document order. */
@@ -193,6 +203,7 @@ export async function resolveShapeDocument(document: GppShapeDocument, sources: 
     if (stage.subShape !== undefined) {
       const exists = sources.shapeVersionExists(stage.subShape);
       const child = exists ? sources.shapeDefinition?.(stage.subShape) ?? null : null;
+      const traversal = subShapeCycle(`${document.key}@${document.version}`, stage.subShape, sources);
       resolved.subShape = {
         ref: stage.subShape,
         exists,
@@ -202,7 +213,8 @@ export async function resolveShapeDocument(document: GppShapeDocument, sources: 
             tools: child.stages.flatMap((entry) => (entry.tools ?? []).map((toolName) => ({ stageKey: entry.key, toolName }))),
           }
           : {}),
-        cycle: subShapeCycle(`${document.key}@${document.version}`, stage.subShape, sources),
+        cycle: traversal.cycle,
+        ...(exists && traversal.unavailableRefs.length ? { unavailableRefs: traversal.unavailableRefs } : {}),
       };
     }
     stages.push(resolved);

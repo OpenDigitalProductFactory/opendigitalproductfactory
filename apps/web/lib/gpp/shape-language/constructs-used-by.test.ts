@@ -21,12 +21,12 @@ import { WORK_SHAPE_PRIOR_VERSIONS } from "@/lib/work-management/work-shape-prio
 import { listWorkShapes, readWorkShapeDefinitionContract } from "@/lib/work-management/work-shapes";
 
 import { constructsUsedBy } from "@dpf/validators/gpp/constructs-used-by";
-import { runDesignRules } from "./drc";
+import { runDesignRules } from "@/lib/gpp/shape-language/dpf-toolkit";
 import { CONSTRUCT_EXECUTABLE } from "@dpf/validators/gpp/executable-constructs";
-import { lowerToDefinition } from "./emit";
+import { lowerToDefinition } from "@/lib/gpp/shape-language/dpf-toolkit";
 import type { GateRatificationEntry } from "./gate-ratification";
-import { parseShapeDocument } from "./parse";
-import { resolveShapeDocument, type GppResolveSources } from "./resolve";
+import { parseShapeDocument } from "@dpf/validators/gpp/parse";
+import { resolveShapeDocument, type GppResolveSources } from "@dpf/validators/gpp/resolve";
 import { defaultResolveSources } from "./resolve-sources";
 
 const FIXTURE_DIR = join(__dirname, "__fixtures__", "drc");

@@ -16,7 +16,7 @@
 //
 // OFFLINE TOOLING in Phase 3a: nothing in the running app imports this module.
 
-import type { WorkShapeDefinition } from "@/lib/work-management/work-shapes";
+import type { WorkShapeDefinition } from "./work-shape-contracts.js";
 
 /** §4.4: fields a shape document adds to WorkShapeDefinition, by level. */
 export const LEGACY_DROPPED_SHAPE_FIELDS = ["flow"] as const;

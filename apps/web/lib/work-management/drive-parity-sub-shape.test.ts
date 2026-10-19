@@ -32,7 +32,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { decompile } from "@/lib/gpp/shape-language/decompile";
+import { decompile } from "@/lib/gpp/shape-language/dpf-toolkit";
 import {
   markedStageKeys as interpreterMarked,
   startShapeInstance,
@@ -40,8 +40,8 @@ import {
   type GppShapeEvent,
   type GppShapeMarking,
   type InterpretableShape,
-} from "@/lib/gpp/shape-language/interpreter";
-import { checkSoundness } from "@/lib/gpp/shape-language/soundness";
+} from "@dpf/validators/gpp/interpreter";
+import { checkSoundness } from "@dpf/validators/gpp/soundness";
 
 import { SUB_SHAPE_PARITY_FIXTURES } from "./__fixtures__/graph-shapes/sub-shape";
 import { CHILD_COMPLETION_EVIDENCE_KIND } from "./drive-graph-tick";
