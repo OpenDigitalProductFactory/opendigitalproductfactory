@@ -16,7 +16,7 @@ import {
 import { isAllowedMcpEndpoint } from "./lib/mcp-client.mjs";
 import { spawn, execFileSync } from "node:child_process";
 import { createServer } from "node:http";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { resolveHostAttempt, hostResumePin } from "./lib/host-resource-attempt.mjs";
 import { leaseRequestTiming } from "./lib/nonprod-lease-request.mjs";
 
@@ -200,7 +200,7 @@ test("a malformed claim response stops as unrun without automatic reconciliation
   assert.equal(calls, 1);
 });
 
-async function createHostClaimFixture(t, { claimDelayMs = 0, loseFirstResponse = false, releaseRefused = false, extraEnv = {} } = {}) {
+async function createHostClaimFixture(t, { claimDelayMs = 0, loseFirstResponse = false, releaseRefused = false, extraEnv = {}, memoryProbe } = {}) {
   const cwd = mkdtempSync(join(tmpdir(), "host-claim-test-"));
   const git = args => execFileSync("git", args, { cwd, windowsHide: true, stdio: "pipe" });
   git(["init"]);
@@ -256,8 +256,44 @@ async function createHostClaimFixture(t, { claimDelayMs = 0, loseFirstResponse =
     DPF_DURABLE_RESUMER: "off", DPF_GATE_OWNER_SESSION_ID: "fixture-claim-session",
     ...extraEnv,
   };
+  const preloadArgs = [];
+  if (memoryProbe) {
+    const preloadPath = join(cwd, "memory-observations.mjs");
+    writeFileSync(preloadPath, `
+import os from "node:os";
+import childProcess from "node:child_process";
+import fs from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
+
+os.freemem = () => 4 * 1024 ** 3;
+os.totalmem = () => 128 * 1024 ** 3;
+const execFileSync = childProcess.execFileSync;
+const readFileSync = fs.readFileSync;
+const meminfo = "MemFree: 4194304 kB\\nMemAvailable: 44040192 kB\\n";
+const vmStat = "Mach Virtual Memory Statistics: (page size of 4096 bytes)\\nPages free: 1048576.\\nPages inactive: 9961472.\\nPages speculative: 0.\\nPages purgeable: 0.\\n";
+const wslArgs = ["-d", "docker-desktop", "-e", "cat", "/proc/meminfo"]; // ambient-host-guard: allow child-only preload matches the existing WSL probe without reading the host
+const observe = value => {
+  if (${JSON.stringify(memoryProbe)} === "unavailable") throw new Error("fixture memory probe unavailable");
+  return value;
+};
+childProcess.execFileSync = function (...args) {
+  if (process.platform === "darwin" && args[0] === "vm_stat") return observe(vmStat);
+  if (process.platform === "win32" && args[0] === "wsl.exe" && Array.isArray(args[1])
+      && args[1].length === wslArgs.length && args[1].every((value, index) => value === wslArgs[index])) {
+    return observe(meminfo);
+  }
+  return Reflect.apply(execFileSync, this, args);
+};
+fs.readFileSync = function (...args) {
+  if (process.platform === "linux" && args[0] === "/proc/meminfo") return observe(meminfo); // ambient-host-guard: allow child-only preload replaces this exact read with fixture text
+  return Reflect.apply(readFileSync, this, args);
+};
+syncBuiltinESMExports();
+`);
+    preloadArgs.push("--import", pathToFileURL(preloadPath).href);
+  }
   const run = command => new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [fileURLToPath(new URL("./host-resource-runner.mjs", import.meta.url)),
+    const child = spawn(process.execPath, [...preloadArgs, fileURLToPath(new URL("./host-resource-runner.mjs", import.meta.url)),
       "--class", "vitest", "--", ...command],
     { cwd, env, windowsHide: true, stdio: ["ignore", "pipe", "pipe"], timeout: 45000 });
     let stdout = "", stderr = "";
@@ -267,6 +303,26 @@ async function createHostClaimFixture(t, { claimDelayMs = 0, loseFirstResponse =
     child.once("close", (code, signal) => resolve({ code, signal, stdout, stderr }));
   });
   return { calls, leases, run };
+}
+
+for (const [memoryProbe, availableGiB] of [["available", 42], ["unavailable", 4]]) {
+  test(`real claim carries ${memoryProbe === "available" ? "reclaimable-inclusive memory" : "OS-free fallback after a failed probe"}`, {
+    timeout: 60000,
+    skip: !["darwin", "linux", "win32"].includes(process.platform) && "existing available-memory probes cover Darwin, Linux and Windows",
+  }, async t => {
+    const fixture = await createHostClaimFixture(t, { memoryProbe });
+    const result = await fixture.run([process.execPath, "-e", "process.stdout.write('memory-fixture')"]);
+    assert.equal(result.signal, null);
+    assert.equal(result.code, 0, result.stderr);
+    assert.equal(result.stdout, "memory-fixture");
+    const claims = fixture.calls.filter(call => call.name === "claim_nonprod_environment_lease");
+    assert.equal(claims.length, 1);
+    assert.equal(claims[0].arguments.resourceClass, "vitest");
+    assert.equal(claims[0].arguments.expectedMemoryBytes, 8 * GiB);
+    assert.equal(claims[0].arguments.hostResource.totalMemoryBytes, 128 * GiB);
+    assert.equal(claims[0].arguments.hostResource.availableMemoryBytes, availableGiB * GiB);
+    assert.equal(fixture.calls.at(-1).name, "release_nonprod_environment_lease");
+  });
 }
 
 test("real response-loss recovery reconciles one admitted mock row and executes the command once", { timeout: 60000 }, async t => {

@@ -342,6 +342,34 @@ binds the immutable repository commit and blob containing this section; its
 current receipt must be checked before production edits. This plan does not
 assert a receipt, test pass, or implementation permission before it is recorded.
 
+Coverage receipt `cmvejojmq3vup01o7sz669hxt` was recorded and checked current
+against this plan at commit `45856b08e957eafd742471c08f711099c3b1d82b`, blob
+`4f47602ec7bda75c6c92b7dd3f0e7f878a7dae56`. Its atomic deliverable remains
+BI-EB6DBAF0 with no dependencies. This receipt records plan coverage only;
+research, test results, implementation readiness, and acceptance remain separate.
+
+The author research receipt
+`initiative-740d1f30-5b39-4c73-a263-c77314d69e22` recorded the actual
+pre-implementation reproduction with GREEN explicitly pending. Implementation
+was then allowed by `IRD-CC44F0B6B7DF`. The unchanged three-file lightweight
+Node command produced RED (71 passed, 1 failed, 1 Windows-only skipped) in
+`cmvejqywk3vx601o7d9ro1pn8`, then GREEN (72 passed, 0 failed, 1 Windows-only
+skipped) in `cmvejtlb43z5b01o7jq48xdk2` after only the existing-reader import
+and caller substitution. The captured main-path claim changed from 4 GiB to
+42 GiB; the failed-probe fallback stayed 4 GiB, and the expected Vitest memory
+stayed 8 GiB. Both helper suites and existing runner cases passed. This is an
+executed source-local failing-to-passing proof, not normal admission or runtime
+acceptance.
+
+Independent client assessments by the root client and its read-only reviewers
+reported no actionable findings for runner blob
+`323f6cdba3cf0efb9a30e17595d5ac009f43a310` and fixture blob
+`b3cafda7014e73aaff55dddc8308686f10771638`; the separate client record is
+`cmvejtrcy3z5f01o70eqv6e0w`. This is not a native semantic-review receipt.
+The assembled immutable change still owes normal preflight, exact-tree
+canonical pregate, applicable semantic-review policy, protected publication,
+and a fresh normally governed runner/scheduler acceptance invocation.
+
 ## 7. Workroom flow, WIP, and liveness
 
 Every Workroom projects one of these states:

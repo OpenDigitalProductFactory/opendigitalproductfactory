@@ -2,7 +2,7 @@
 
 import { parseArgs as utilParseArgs } from "node:util";
 import { readFileSync } from "node:fs";
-import { hostname, freemem, totalmem } from "node:os";
+import { hostname, totalmem } from "node:os";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn, spawnSync } from "node:child_process";
@@ -12,6 +12,7 @@ import { mcpCall } from "./lib/mcp-client.mjs";
 import { leaseRequestTiming } from "./lib/nonprod-lease-request.mjs";
 import { leaseQueueCallOptions, resolveLeaseQueueTimeoutMs } from "./lib/lease-queue-call-options.mjs";
 import { resolveHostCommandInvocation } from "./lib/host-command-invocation.mjs";
+import { availableMemoryBytes } from "./lib/host-available-memory.mjs";
 import { resolveMcpCredential } from "./lib/mcp-credential.mjs";
 import { admittedLeaseTtlMs, superviseLeaseRun } from "./lib/lease-supervisor.mjs";
 import { readProcessIdentity } from "./lib/local-sandbox-fence.mjs";
@@ -385,7 +386,7 @@ async function main() {
     processIdentity: readProcessIdentity(process.pid),
     now: new Date(),
     totalMemoryBytes: totalmem(),
-    availableMemoryBytes: freemem(),
+    availableMemoryBytes: availableMemoryBytes(),
     inferenceResident: processRows.some((row) => classifyHeavyProcess(row.commandLine) === "inference"),
     ungovernedProcesses: findings.slice(0, 20),
   });
