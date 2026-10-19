@@ -1,0 +1,6 @@
+DPF scoped judgment synthetic consumer
+Copyright OpenDigitalProductFactory contributors.
+Contains the exact source closure listed in closure.json, under Apache-2.0.
+No private platform, organization or profession doctrine is included.
+The runner prints SHA-256 digests of the source bytes it actually copies.
+No third-party runtime dependency is included. TypeScript is a separate build tool.

@@ -15,13 +15,10 @@
 // the MERGE-STATE corpus — catching the "green alone, red merged" gap on the PR
 // instead of in the queue.
 //
-// Math + scenarios MIRROR apps/web/lib/decision/{option-scoring,golden-decisions}.ts.
-// The formula (alignment = Σ option·vec / Σ|vec|; contribution = weight × alignment;
-// composite = Σ) is the core decision algorithm and is intentionally stable. The
-// SCENARIOS below mirror GOLDEN_SCENARIOS; scripts/check-golden-decisions.test.mjs
-// is a drift-guard that fails CI if the ids / margin floors / winners diverge, and
-// both engines (this scorer + the canonical vitest test) run in CI against the same
-// corpus, so any behavioral divergence surfaces as one going red.
+// Scoring imports the portable engine; no second math implementation is kept.
+// SCENARIOS below mirror GOLDEN_SCENARIOS; the existing test guards their ids,
+// margin floors and winners. The generated distribution keeps the guard
+// compatible with the repository's Node >=20 floor without runtime build tools.
 
 import { parseArgs as utilParseArgs } from "node:util";
 import { scriptArgv } from "./lib/script-argv.mjs";
@@ -29,6 +26,7 @@ import { gitText } from "./lib/git.mjs";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { buildOptionScores } from "./generated/judgment/option-scoring.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PRINCIPLES_DIR = join(HERE, "..", "docs", "founder-kernel", "wiki", "principles");
@@ -257,23 +255,13 @@ export function loadCommandmentsFromGitTree(tree, { git = defaultGit } = {}) {
   return parseCommandmentFiles(entries.map(({ sha, path }) => ({ slug: corpusSlug(path), raw: blobs.get(sha) ?? "" })));
 }
 
-// ─── Scoring (mirrors option-scoring.ts) ─────────────────────────────────────
-function alignment(features, vec) {
-  const dims = Object.keys(vec);
-  if (!dims.length) return 0; // empty vector -> semantic fallback -> 0 (no embeddings here)
-  let num = 0, den = 0;
-  for (const d of dims) { den += Math.abs(vec[d]); const f = features[d]; if (typeof f === "number") num += f * vec[d]; }
-  return den === 0 ? 0 : num / den;
-}
-function composite(features, commandments) {
-  return commandments.reduce((s, p) => s + p.weight * alignment(features, p.vec), 0);
-}
-
 export function runCheck(dir = PRINCIPLES_DIR, { commandments } = {}) {
   const resolvedCommandments = commandments ?? loadCommandments(dir);
   const results = SCENARIOS.map((s) => {
-    const scored = Object.entries(s.options)
-      .map(([id, f]) => [id, composite(f, resolvedCommandments)])
+    const scored = buildOptionScores(
+      Object.entries(s.options).map(([id, features]) => ({ id, description: id, features })),
+      resolvedCommandments.map((p) => ({ id: p.id, name: p.id, tier: "commandment", weight: p.weight, dimensionVector: p.vec })),
+    ).map((score) => [score.optionId, score.composite])
       .sort((a, b) => b[1] - a[1]);
     const margin = scored[0][1] - scored[1][1];
     const winnerOk = scored[0][0] === s.expectedWinner;
