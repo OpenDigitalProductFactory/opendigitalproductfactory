@@ -153,6 +153,12 @@ the exact source; source inspection alone is not a test result.
   cadence and history remain intact. `isOneShotCron` is unchanged, including
   its existing pinned-month/day classification; this fix does not reclassify
   date lists or redesign one-shot behavior.
+- **CONTRACT-CREATE-CADENCE:** Creation-time deconfliction may nudge only a
+  genuinely concrete numeric minute and hour. Wildcard, list, range and step
+  fields pass through unchanged rather than being reduced by `parseInt` to
+  one tick. The existing allocator remains a single-tick nudge, not a second
+  cron engine. A collision at 03:00 must not turn `0 3,9 * * *` into a
+  daily schedule or remove its 09:00 occurrence.
 - **CONTRACT-SCHEDULE-WINDOW:** Full-parser validity replaces the concrete
   minute/hour projection restriction. The chart uses the full evaluator and
   its `null` outcome rather than inventing invalid fires. It plots six-hour
@@ -173,18 +179,26 @@ the reported defect unresolved.
    monitor's resume, unchanged Save, Enable and repeated guarded claim. Cover
    00:23, 06:23, 12:23, 18:23 UTC and day rollover; assert authoritative/mirror
    agreement, no task recreation, preserved owner refusal and one-shot behavior.
-   Add parser validation and six-hour window tests. Run through the existing
-   governed host-resource runner and observe the wrong 24-hour projection.
+   Add actual create and successful/failed completion re-arm assertions,
+   compound-field allocator classifications and an actual CREATE collision
+   retaining `0 3,9 * * *` with its next 09:00 UTC fire. Add parser validation
+   and six-hour window tests. Convert affected legacy fixtures and assertions
+   to explicit UTC while retaining their original behavior checks. Run through
+   the existing governed host-resource runner and observe the wrong 24-hour
+   projection and creation-time loss of compound fields.
 2. **FLOW-CRON-SHARED:** Make `computeNextCronRun` a compatibility wrapper over
    `computeNextCronFire`; remove the obsolete parallel field parser. Align
-   cadence validation, projectability and schedule-window projection. Keep
-   preset choices and one-shot classification unchanged; reconcile comments
-   and obsolete refusal wording. No schema, dependency or runtime changes.
+   cadence validation, projectability and schedule-window projection. Restrict
+   the existing scheduling allocator to concrete numeric minute/hour fields;
+   pass compound fields through without introducing another parser. Keep preset
+   choices and one-shot classification unchanged; reconcile comments and
+   obsolete refusal wording. No schema, dependency or runtime changes.
 3. **VER-CRON-GREEN:** Run the same regressions, existing cron daily/monthly/
    weekday/union/leap-year/malformed cases, task core and scheduler completion/
-   failure/proactivity cases, register/window tests, both graph-linked AI Ops
-   handoff tests and ecosystem triage. Verify UTC independently of host timezone.
-   Graph advice naming the absent `scheduled-jobs/scheduled-jobs.test.ts` is
+   failure/proactivity cases, allocator and register/window tests, both
+   graph-linked AI Ops handoff tests and ecosystem triage. Exercise the affected
+   UTC suites in UTC and America/Chicago. Graph advice
+   naming the absent `scheduled-jobs/scheduled-jobs.test.ts` is
    stale; use the real colocated control/core suites rather than claiming it ran.
 4. **VER-CRON-GATE:** Run web source/test typechecks, impact-contract style guard,
    docs lint/index checks, and the exact-tree canonical gate. Obtain independent
@@ -198,6 +212,7 @@ the reported defect unresolved.
 
 Implementation parent: `BI-0A82D3B4`. Atomic coverage will bind this immutable
 design to REQ-CRON-UTC, CONTRACT-CRON-PROJECTION, CONTRACT-TASK-IDENTITY,
-CONTRACT-SCHEDULE-WINDOW, FLOW-CRON-SHARED, FLOW-MONITOR-RECOVERY and
-VER-CRON-RED/GREEN/GATE/MONITOR-LIVE before implementation. No coverage receipt
+CONTRACT-CREATE-CADENCE, CONTRACT-SCHEDULE-WINDOW, FLOW-CRON-SHARED,
+FLOW-MONITOR-RECOVERY and VER-CRON-RED/GREEN/GATE/MONITOR-LIVE before
+implementation. No coverage receipt
 or passing execution is claimed by this draft.
