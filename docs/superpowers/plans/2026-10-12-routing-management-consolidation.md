@@ -83,6 +83,16 @@ Native UX specialist review remains an explicit dependency. The external craft q
 
 The independent review accepted the header correction on deployed source `233d556713d4961e7ff4d088d67a90245321493b` and verified all 42 screenshot hashes. It found existing Feedback Submit/Cancel controls only 30px high across twelve observations. Apply the existing platform touch-target class to the form's select and Submit/Cancel/Close controls, preserving submission, retry and cancellation behavior. WWMD decision `DI-5F2AF0D978A5` chooses this bounded correction over replacing the reporting workflow. Verify existing form behavior tests, the exact-tree build gate and actual containing-release target geometry/overlay containment before accepting this follow-up.
 
+### Launcher acceptance correction — October 18
+
+Release 116 still has a percentage-positioned shared launcher over routing metrics and provider content. Decision `DI-0001AFFADC74` selects `header-slot` over `reposition-float`: reserve the existing launcher in the shared header action row, using a React portal so AgentCoworkerShell retains its existing visibility rules, callback and panel lifecycle. Remove floating positioning, dragging and the unsupported availability dot. A missing header falls back to normal document flow. Opening the panel sends no prompt. No authority, provider, inference or storage contract changes.
+
+1. Preserve a clickable header/panel correction with illustrative data in the existing prototype directory.
+2. Add a reserved slot in Header and render AgentFAB's existing action there. Keep a 44px target and icon-only phone presentation, existing accessible name and themed focus indicator. Retire obsolete position preferences without rewriting storage. Test actual portal ownership, activation, unmount cleanup and missing-slot behavior; run existing Header and AgentCoworkerShell behavior tests.
+3. Update the operator guide and exact-file UX-fit manifest. Run scoped tests/typecheck, required guards and governed exact-tree build before publication. Verify the containing release on Traffic/Evaluation/Providers at phone/tablet/desktop widths, light/dark, scroll positions, keyboard panel open/close/focus, retained context and distinct installation/health controls. A source prototype is not deployment proof.
+
+This is bounded rework of AC-NAV/AC-VERIFY under BI-2BBD9D34 and reconciles only the launcher observation in BI-4F308244. The original native UX/WSID engagements remain an acceptance dependency. Their file-read grant is now authorized, executed and canonically verified; the served framework's original-engagement completion facility remains unresolved. Neither the platform choice nor peer/source checks substitute for native acceptance.
+
 The separate floating global AI launcher can obscure metric text at 390px and provider content at 1280px. This has been recorded in the existing shared-shell item `BI-4F308244`, activity `cmvdjqxym0a2j01pdy4f2mxfh`; introduction is not attributed to the routing PR. Native UX coworker/WSID acceptance remains outstanding under the existing engagements and framework repair; external peer review does not substitute for that receipt.
 
 This changes target size only. Existing operator documentation remains accurate: controls, labels, destinations and submission behavior do not change.
