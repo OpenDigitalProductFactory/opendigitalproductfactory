@@ -4,7 +4,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { X509Certificate } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as tls from "node:tls";
 import { isIP } from "node:net";

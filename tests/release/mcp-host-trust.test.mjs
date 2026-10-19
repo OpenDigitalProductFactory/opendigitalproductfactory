@@ -8,7 +8,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { readHostClientEnv, readTrustBundle, resolveHostMcpTrust, probeMcpTransport, describeMcpTransportError, runWithHostMcpTrust } from "../../scripts/lib/mcp-host-trust.mjs";
-import { mcpCall, mcpPost } from "../../scripts/lib/mcp-client.mjs";
+import { mcpCall } from "../../scripts/lib/mcp-client.mjs";
 import { readEarlyQuiescenceStatus } from "../../scripts/lib/gate-quiescence.mjs";
 import { runHostPreflight } from "../../scripts/pregate.mjs";
 import { classifyGateExit } from "../../scripts/lib/gate-exit-classification.mjs";
