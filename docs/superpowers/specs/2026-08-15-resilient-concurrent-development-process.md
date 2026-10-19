@@ -242,6 +242,106 @@ All heavyweight developer processes must declare a lane and expected memory clas
 
 Capacity is computed from available RAM, committed memory, recent peak working sets, and a safety reserve. It is not a fixed number of clients. A resource-lane holder must terminate descendants before release; ungoverned matching processes block admission and produce one owner-visible diagnostic.
 
+### 6.1 Residual host-memory observation repair — BI-EB6DBAF0
+
+The generic host-resource client must use the same available-memory observation
+as canonical local CI. On source revision
+`574f7e92dcb12ab9f2679a5b566c55629cce68c4`,
+`scripts/host-resource-runner.mjs` still supplies `freemem()` as
+`availableMemoryBytes`; `scripts/lib/local-ci-host-pressure.mjs` already uses
+`scripts/lib/host-available-memory.mjs`. The latter is the existing owner of
+Darwin reclaimable-page, Linux MemAvailable, Windows Docker Desktop WSL cache,
+and failed-probe fallback behavior. No second parser or platform probe is needed.
+
+The current symptom is recorded on BI-EB6DBAF0 as evidence
+`cmvej72qq3nit01o7zfuwh8f9`: a same-host observation on 2026-10-19 reports
+9,470,623,744 free bytes versus 41,014,116,352 available bytes from `vm_stat`,
+while the scheduler's request was queued at that observation. That request was
+cancelled at 00:46:09Z; it is not a current queue hold. This is observed symptom
+evidence, not a passing test or proof that a particular workload can be admitted.
+The earlier Windows image-export fence remains covered by the existing D17 row
+in [the support watchlist](../../install/platform-support-watchlist.md).
+
+**MEM-REQ-1:** the actual generic runner claim must carry the existing helper's
+available-memory measurement, including reclaimable capacity, and retain the
+helper's conservative OS-free fallback when its platform probe fails.
+
+**MEM-CONTRACT-1:** preserve the checked-in resource profile, admission policy,
+reserves, lease and process identity, durable claim key, queue order, response-loss
+reconciliation, cleanup, and release behavior. The Vitest profile remains
+8 GiB expected memory; 8 GiB host reserve and 4 GiB inference-growth allowance
+make its combined requirement 20 GiB. The repair introduces no production
+environment override, capacity injection, new parser, or admission exception.
+
+**MEM-FLOW-1:** keep the existing runner-to-MCP claim flow. The test extends
+`createHostClaimFixture` in `scripts/host-resource-runner.test.mjs`, launches the
+real runner entrypoint, and captures the existing local mock MCP request.
+A fixture-only Node preload supplies OS free/total observations and the existing
+platform probe's input, synchronizes builtin ESM exports, and delegates all
+unrelated filesystem and process calls. It never changes `process.platform`,
+passes observations to a real admission endpoint, or runs a real heavy workload.
+
+**MEM-VERIFY-1:** run the existing lightweight Node suites for the generic runner
+and both available-memory helper test files. The real main-path claim must fail
+before the caller fix when fixture free memory is 4 GiB and reclaimable-inclusive
+available memory is 42 GiB, with 128 GiB total. Its Vitest expected-memory field
+must remain 8 GiB. A failed platform probe must still send 4 GiB in the captured
+claim. These numbers are deterministic fixture observations, not host-capacity
+measurements. Existing helper tests retain per-platform parser coverage.
+
+The ordered fix is one atomic deliverable under BI-EB6DBAF0:
+
+1. Commit this design and the D17 clarification; record immutable atomic plan
+   coverage for the current Workroom and declared scope. The scope impact
+   contract is resolved with empty `testImpact` and `guardObligations`; this does
+   not exempt the explicit verification below.
+2. Add the child-only fixture observations and actual main-path claim assertions.
+   Execute the lightweight suites and retain the genuine RED result; GREEN is
+   pending until the caller changes. Record the author-owned research with the
+   named source revision, observed symptom, and actual reproduction. If current
+   readiness requires unavailable GREEN before implementation, preserve the
+   refusal and stop rather than invent evidence or change governance.
+3. Only after valid plan coverage, implementation readiness, and the independent
+   client review permit it, replace the generic runner's `freemem()` caller with
+   the existing `availableMemoryBytes` helper. Preserve all other claim fields.
+4. Run the same Node suites for GREEN, the normal preflight and exact-tree
+   canonical pregate, and PR health before protected merge. The Node suites are
+   separate evidence: canonical pregate does not execute them. They are already
+   in the repository's cloud policy-guard registry. Check the derived doc index
+   with `node scripts/gen-doc-index.mjs --check` and run affected documentation
+   checks. A source-only worktree does not establish TypeScript or Vitest passes.
+5. After normal delivery, verify the actual runner/scheduler path through normal
+   governed admission using a fresh observation and a legitimate fresh source
+   invocation. Follow the normal durable queue protocol; never resume or reuse
+   the cancelled lease identity. Synthetic fixture admission is not runtime
+   acceptance. Record acceptance before claiming the scheduler blocker resolved.
+
+The implementation scope is `scripts/host-resource-runner.mjs`, its existing
+test file, this existing design, and the existing D17 watchlist row. The memory
+helper and its two test files are read-only unless new evidence requires an
+explicit scope revision. The generated documentation index follows its existing
+derived-artifact contract. All phases are internal sequencing: documentation,
+regression, caller fix, and governed acceptance prove one observation defect and
+are not independently shippable features. No new BI, workflow, harness, parser,
+or global configuration is part of this repair.
+
+The blast radius is host-heavy claim observation on macOS, Linux, and Windows;
+the admission authority stays server-owned. Rollback uses the normal protected
+source process and restores only the caller change, leaving evidence intact.
+If a lightweight suite or the ordinary gate encounters another infrastructure
+blocker, stop at that second boundary and report the exact result; do not widen
+this item into infrastructure repair.
+
+#### Backlog coverage
+
+The implementation parent is **BI-EB6DBAF0**, Workroom **WC-1D455A28**. Coverage
+is **atomic**, with one deliverable (`host-memory-observation`) mapped to that
+item, no dependencies, and traceability references `MEM-REQ-1`,
+`MEM-CONTRACT-1`, `MEM-FLOW-1`, and `MEM-VERIFY-1`. The governed coverage receipt
+binds the immutable repository commit and blob containing this section; its
+current receipt must be checked before production edits. This plan does not
+assert a receipt, test pass, or implementation permission before it is recorded.
+
 ## 7. Workroom flow, WIP, and liveness
 
 Every Workroom projects one of these states:
