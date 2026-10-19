@@ -95,7 +95,8 @@ failure/budget stops remain unsupported by the extracted marking implementation.
 Producer source derives from DPF baseline
 `e22a9996c58a21e6af868baa0f48ee2195573bc2` and this local extraction. `closure.json`
 is the complete runtime source manifest. Original source comments remain in those
-files. `LICENSE` is an unchanged copy of the repository's Apache-2.0 license.
+files. `LICENSE` and `NOTICE` preserve the repository's license and attribution
+notice; the runner carries both into the temporary consumer.
 No third-party runtime source is vendored by this example. This is provenance
 documentation, not a complete rights or supply-chain audit.
 

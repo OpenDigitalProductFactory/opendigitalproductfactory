@@ -91,6 +91,7 @@ try {
       "node_modules/@types/node": { version: manifest.dependencies.nodeTypes, dev: true, license: "MIT" },
       "node_modules/undici-types": { version: manifest.dependencies.undiciTypes, dev: true, license: "MIT" } } }, null, 2));
   await regularFiles(join(here, "src"));
+  for (const name of ["LICENSE", "NOTICE"]) await cp(join(here, name), join(temp, name));
   await cp(join(here, "src"), join(temp, "src"), { recursive: true, dereference: false });
   for (const name of ["tsconfig.browser.json", "tsconfig.node.json"]) await cp(join(here, name), join(temp, name));
   const sourceByTarget = new Map();

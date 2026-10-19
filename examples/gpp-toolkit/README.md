@@ -90,6 +90,18 @@ a binding label, a ratification fixture, a mapping result nor a validator stands
 in for that assessment or its attributable human decision. DPF's enforcement
 state and actual admission remain in its adapters; this example promotes neither.
 
+A negative fixture assigns untrusted-input, sensitive-read and state-change
+capabilities to three serial stages for the same explicit actor and session.
+Every stage and the combined structural model compile using supplied tool and
+grant facts, while C-5 remains `not-evaluated`. A fixture-local host guard has no
+admit branch for this unsupported, unqualified combination: favorable stage
+checks, a validator result and a `doctrine-then-human` label all leave it held.
+[GPP §8](../../docs/architecture/gated-permissions-process.md#8-capability-co-occurrence)
+still requires an actual attributable human decision admitting the distinct class
+and covering the accountable principal, binding versions, subject scope and
+validity. This demonstrates refusal of this known fixture, not a general
+aggregation engine or portable C-5 enforcement.
+
 ## Maintenance and rollback
 
 The portable production source remains in `packages/validators/src/gpp` and

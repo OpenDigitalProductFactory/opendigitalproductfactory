@@ -21,6 +21,7 @@ try {
   await writeFile(join(temp, "package-lock.json"), JSON.stringify({ name: "scoped-judgment-isolated-consumer", version: "0.0.0", lockfileVersion: 3, requires: true, packages: { "": { name: "scoped-judgment-isolated-consumer", version: "0.0.0" } } }, null, 2));
   await cp(join(here, "src"), join(temp, "src"), { recursive: true, dereference: false });
   await cp(join(here, "tsconfig.json"), join(temp, "tsconfig.json"));
+  for (const name of ["LICENSE", "NOTICE"]) await cp(join(here, name), join(temp, name));
   for (const source of manifest.sources) {
       const path = resolve(root, source);
       if (!(await lstat(path)).isFile()) throw new Error(`Closure source must be a regular file: ${source}`);
@@ -33,9 +34,9 @@ try {
       await mkdir(dirname(target), { recursive: true });
       await writeFile(target, contents);
   }
-  const build = spawnSync(node, [compiler, "--project", join(temp, "tsconfig.json")], { cwd: temp, encoding: "utf8", env: { ...process.env, NODE_PATH: "" } });
+  const build = spawnSync(node, [compiler, "--project", join(temp, "tsconfig.json")], { cwd: temp, encoding: "utf8", env: { ...process.env, NODE_PATH: "", NODE_OPTIONS: "" } });
   if (build.status !== 0) throw new Error(`Standalone NodeNext compilation failed:\n${build.stdout}${build.stderr}`);
-  const run = spawnSync(node, ["--input-type=module", "--eval", `const {runSmoke}=await import(${JSON.stringify(pathToFileURL(join(temp, "dist/src/smoke.js")).href)}); console.log(JSON.stringify(runSmoke(),null,2));`], { cwd: temp, encoding: "utf8", env: { ...process.env, NODE_PATH: "" } });
+  const run = spawnSync(node, ["--input-type=module", "--eval", `const {runSmoke}=await import(${JSON.stringify(pathToFileURL(join(temp, "dist/src/smoke.js")).href)}); console.log(JSON.stringify(runSmoke(),null,2));`], { cwd: temp, encoding: "utf8", env: { ...process.env, NODE_PATH: "", NODE_OPTIONS: "" } });
   if (run.status !== 0) throw new Error(`Standalone behavioral smoke failed:\n${run.stdout}${run.stderr}`);
   process.stdout.write(run.stdout);
   process.stdout.write(`${JSON.stringify({ node: version.stdout.trim(), typescript: compilerPackage.version, runtimeDependencies: [], copiedSourceSha256: sourceDigests }, null, 2)}\n`);
