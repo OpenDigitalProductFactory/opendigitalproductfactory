@@ -503,3 +503,13 @@ bounded inventories, correct relation identities, access denial/revocation,
 late approvals, unavailable/overflowing sources, canonical-receipt precedence
 and rejection of printable proof claims. These are source behavior tests, not
 historical launch/closure proof or the positive recovery case in AC-HR-2/5.
+
+Response-budget calibration found a real auxiliary failure: seven valid writer
+observations for the same genuine receipt, with current/prior native and capacity
+observations, produced a 7,961-character base result; attaching the inventory
+crossed the unchanged 8,000-character cap and erased the receipt. Qualify the
+complete base result first. When only the auxiliary inventory exceeds the cap,
+omit it and return `proofInventoryUnavailable: "budget"` if that marker fits;
+otherwise return the complete base without the marker. A valid locator three
+characters longer exercises the marker-omission boundary. Base overflow still
+returns the original over-budget refusal. Neither path authorizes replay.

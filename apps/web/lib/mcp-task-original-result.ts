@@ -35,6 +35,7 @@ export type OriginalReviewResult = {
   receipt?: { receiptId: string; gate: string; decision: string };
   missingProof: string[];
   proofInventory?: OriginalProofInventory;
+  proofInventoryUnavailable?: "budget";
 };
 type ReadInput = { taskRunId: string; userId: string; actingAgentId: string | null; tokenGrantScopes?: readonly string[];
   expected?: { requestDigest: string; updatedAt?: string } };
@@ -259,7 +260,6 @@ export async function readOriginalReviewResult(input: ReadInput): Promise<Origin
       return unknown(input.taskRunId, "original-snapshot-changed");
     }
     if (!await mayRead(input, latest, binding)) return unknown(input.taskRunId, "current-original-owner-content-access-required");
-    result.proofInventory = reconcileOriginalProofInventory(proofBefore, proofAfter);
     const uniqueReceipts = new Map(receipts.map(value => [value.receiptId, value]));
     if (resolution && (uniqueReceipts.size !== 1 || !uniqueReceipts.has(String(resolution.reviewReceiptId)))) {
       result.missingProof.push("historical-receipt-binding-mismatch");
@@ -273,6 +273,14 @@ export async function readOriginalReviewResult(input: ReadInput): Promise<Origin
     // never dispatched, or that every child/effect settled. Queue status,
     // printable claims and outer-process close cannot produce those verdicts.
     if (JSON.stringify(result).length > ORIGINAL_REVIEW_RESULT_CHAR_CAP) return unknown(input.taskRunId, "original-result-over-budget");
+    // Auxiliary diagnostics must never hide an otherwise fitting original
+    // receipt or observation. Preserve the complete base result and the cap.
+    result.proofInventory = reconcileOriginalProofInventory(proofBefore, proofAfter);
+    if (JSON.stringify(result).length > ORIGINAL_REVIEW_RESULT_CHAR_CAP) {
+      delete result.proofInventory;
+      result.proofInventoryUnavailable = "budget";
+      if (JSON.stringify(result).length > ORIGINAL_REVIEW_RESULT_CHAR_CAP) delete result.proofInventoryUnavailable;
+    }
     return result;
   } catch {
     return unknown(input.taskRunId, "original-result-read-unavailable");

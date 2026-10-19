@@ -15,6 +15,7 @@ import { readOriginalReviewResult, ORIGINAL_REVIEW_RESULT_CHAR_CAP } from "./mcp
 import { deterministicExternalTaskRunId, remoteTaskRequestDigest } from "./mcp-task-capacity-contract";
 import { boundReviewReceiptId } from "./backlog/initiative-readiness/bound-review-effect";
 import { parseRemoteTaskSubmitParams } from "./mcp-task-submit-params";
+import * as proofInventory from "./mcp-task-original-proof-inventory";
 
 const at = new Date("2026-10-18T01:00:00Z");
 const start = new Date("2026-10-18T00:59:00Z");
@@ -65,6 +66,51 @@ beforeEach(() => {
 });
 
 describe("original review read-only evidence collection", () => {
+  it.each(["docs/spec.md", "docs/spec-aa.md"])("preserves fitting base receipts at the auxiliary budget boundary (%s)", async path => {
+    const binding = { ...raw.initiativeReviewBinding, artifactRef: { ...raw.initiativeReviewBinding.artifactRef, path } };
+    const request = parseRemoteTaskSubmitParams({ ...raw, initiativeReviewBinding: binding });
+    if (typeof request === "string") throw Error(request);
+    const requestDigest = remoteTaskRequestDigest(request);
+    const boundReceiptId = boundReviewReceiptId({ boundReviewTask: { taskRunId, requestDigest }, actionKey: binding.writerToolName,
+      itemId: binding.itemId, gate: "design-spec", artifactRef: binding.artifactRef,
+      reviewerUserId: "human", reviewerAgentId: raw.agentId, authorityDecisionId: "AUTH-1" }, "artifact-digest")!;
+    const value = structuredClone(row);
+    Object.assign(value.a2aMetadata, { requestDigest, initiativeReviewBinding: binding });
+    db.activity.mockResolvedValue({ id: boundReceiptId, recordedAt: writer.createdAt,
+      payload: { ...receipt, receiptId: boundReceiptId, artifactRef: binding.artifactRef } });
+    db.outcome.mockResolvedValue({ receiptId: boundReceiptId, gate: binding.gate, decision: "fail", artifactRef: binding.artifactRef });
+    Object.assign(value.progressPayload, {
+      executionUncertaintyResolution: { schemaVersion: 1, reviewReceiptId: boundReceiptId, artifactRef: binding.artifactRef,
+        prior: { executionUncertainty: value.progressPayload.executionUncertainty, terminalWriterWait: value.progressPayload.terminalWriterWait } },
+      resourceWait: { schemaVersion: 1, kind: "provider-capacity", failureKind: "capacity", resumeMode: "same-taskrun",
+        attempt: 5, observedAt: at.toISOString(), nextAttemptAt: at.toISOString() },
+    });
+    db.task.mockResolvedValue(value);
+    for (let count = 1; count <= 8; count++) {
+      db.writers.mockResolvedValue(Array.from({ length: count }, (_, i) => ({ ...writer, id: `writer-${i}`,
+        result: { success: true, data: { receiptId: boundReceiptId } } })));
+      // The inventory is optional. Omitting only this auxiliary value measures
+      // the unchanged original reader's base response through every real fence.
+      const omit = vi.spyOn(proofInventory, "reconcileOriginalProofInventory").mockReturnValue(undefined as never);
+      const readInput = { ...input, expected: { ...input.expected, requestDigest } };
+      const base = await readOriginalReviewResult(readInput);
+      omit.mockRestore();
+      const augmented = await readOriginalReviewResult(readInput);
+      if (base?.classification === "receipt-complete") {
+        expect(augmented?.classification).toBe("receipt-complete");
+        expect(augmented?.receipt).toEqual(base.receipt);
+        expect(augmented?.observations).toEqual(base.observations);
+      }
+      if (count === 7) {
+        expect(JSON.stringify(base).length).toBe(path === "docs/spec.md" ? 7961 : 7964);
+        if (path === "docs/spec.md") expect(augmented).toMatchObject({ proofInventoryUnavailable: "budget" });
+        else expect(augmented).not.toHaveProperty("proofInventoryUnavailable");
+        expect(augmented).not.toHaveProperty("proofInventory");
+      }
+      if (count === 8) expect(augmented).toMatchObject({ classification: "unknown", reason: "original-result-over-budget" });
+      expect(JSON.stringify(augmented).length).toBeLessThanOrEqual(ORIGINAL_REVIEW_RESULT_CHAR_CAP);
+    }
+  });
   it("reports bounded task-linked records without treating empty inventories as complete effect proof", async () => {
     db.tools.mockResolvedValue([{ id: "tool-observation", taskRunId, userId: "human", createdAt: start }]);
     db.approvals.mockResolvedValue([{ id: "approval-observation", taskRunId, delegatingUserId: "human", createdAt: start }]);
