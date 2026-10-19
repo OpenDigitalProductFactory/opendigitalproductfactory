@@ -7,7 +7,7 @@ const NOW = Date.parse("2026-10-18T12:00:00.000Z");
 function fixture() {
   const rows = Array.from({ length: 30 }, (_, n) => ({
     id: `env-${String(n).padStart(3, "0")}`, delegatingUserId: "owner",
-    createdAt: new Date("2026-10-18T10:00:00.000Z"), expiresAt: null,
+    createdAt: new Date("2026-10-18T10:00:00.000Z"), expiresAt: null, // clock-bomb-guard: allow every loader call receives the fixed NOW argument above
     status: "proposed", coworkerAgentId: "build-specialist", manifestActionId: "record_workroom_evidence",
     rationale: "Recorded progress", taskRunId: null, taskRun: null, argsJson: {},
   }));
