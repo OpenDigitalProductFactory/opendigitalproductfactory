@@ -40,14 +40,20 @@ function sameArtifact(packet: Record<string, unknown>, artifact: InitiativeArtif
 }
 
 /** Read the durable task link from both supported authorization carriers. An
- * absent or conflicting link is ambiguous, never evidence of another task. */
-async function authorityTask(tx: Prisma.TransactionClient, decisionId: string, scope: BoundReviewScope,
-  organizationId: string | null, snapshot?: Record<string, unknown>): Promise<string | null> {
+ * absent or conflicting link is ambiguous, never evidence of another task.
+ * A read without a separate organization binding must supply its validated
+ * receipt snapshot, which must match the authoritative decision's organization. */
+export async function readBoundReviewAuthorityTask(
+  tx: Pick<Prisma.TransactionClient, "authorizationDecisionLog" | "coworkerActionEnvelope">,
+  decisionId: string, scope: Pick<BoundReviewScope, "actionKey">,
+  organizationId: string | null | undefined, snapshot?: Record<string, unknown>,
+): Promise<string | null> {
+  if (organizationId === undefined && !snapshot) return null;
   const authority = await tx.authorizationDecisionLog.findUnique({ where: { decisionId }, select: {
     decisionId: true, decision: true, actionKey: true, organizationId: true, rationale: true, policyVersion: true,
   } });
   if (!authority || authority.decision !== "allow" || authority.actionKey !== scope.actionKey
-    || authority.organizationId !== organizationId
+    || (organizationId !== undefined && authority.organizationId !== organizationId)
     || (snapshot && (snapshot.actionKey !== authority.actionKey
       || snapshot.policyVersion !== (authority.policyVersion ?? "coworker-authority.v1")
       || snapshot.organizationId !== (authority.organizationId ?? "platform")))) return null;
@@ -88,7 +94,7 @@ export async function lockBoundReviewEffect(tx: Prisma.TransactionClient, scope:
     return denied(refuse("The accepted review task, actor, artifact or cancellation state changed before publication."));
   }
   if (!scope.authorityDecisionId
-    || await authorityTask(tx, scope.authorityDecisionId, scope, organizationId) !== bound.taskRunId) {
+    || await readBoundReviewAuthorityTask(tx, scope.authorityDecisionId, scope, organizationId) !== bound.taskRunId) {
     return denied({ ok: false, code: "AUTHORIZATION_DENIED", error: "The writer allow decision does not identify this exact review task." });
   }
   return { refusal: null, execution: { status: task.status, progressPayload: task.progressPayload } };
@@ -131,7 +137,7 @@ export async function findBoundReviewWinner(tx: Prisma.TransactionClient, scope:
     const payload = object(row.payload);
     if (row.id !== stableId && payload.artifactDigest !== artifact.digest) continue;
     const taskId = typeof payload.authorityDecisionId === "string"
-      ? await authorityTask(tx, payload.authorityDecisionId, scope, organizationId, object(payload.authoritySnapshot)) : null;
+      ? await readBoundReviewAuthorityTask(tx, payload.authorityDecisionId, scope, organizationId, object(payload.authoritySnapshot)) : null;
     if (row.id !== stableId && taskId && taskId !== scope.boundReviewTask!.taskRunId) continue;
     if (taskId !== scope.boundReviewTask!.taskRunId
       || row.backlogItemId !== subjectRowId || row.kind !== "initiative_gate_receipt"

@@ -93,18 +93,9 @@ vi.mock("@/lib/optimization/self-optimization-sweep", () => ({
 
 import { executeScheduledAgentTask } from "./agent-task-scheduler";
 
-// Pin the wall clock. The daily-cron re-arm assertion below compares
-// nextRunAt against Date.now(), so a real clock makes it time-of-day
-// dependent: the `7 14 * * *` schedule's next tick can fall <60min out when
-// the suite runs shortly before the daily tick. computeNextCronRun resolves
-// "14:07" with host-LOCAL Date methods (setHours/getDate), so the danger
-// window is local time-of-day — a UTC-instant pin would still land inside it
-// on a host whose local clock reads ~13:xx. Constructing FIXED_NOW from local
-// components keeps the local time-of-day fixed at 09:00 on ANY host timezone,
-// leaving the next 14:07 tick ~5h out. Only Date is faked (not timers) so real
-// setTimeout/await in the code under test still resolves.
-// (Month is 0-indexed: 6 = July.)
-const FIXED_NOW = new Date(2026, 6, 12, 9, 0, 0, 0);
+// Keep the daily cron's next 14:07 UTC tick more than 60 minutes away in every
+// host timezone. Only Date is faked so asynchronous work keeps real timers.
+const FIXED_NOW = new Date("2026-07-12T09:00:00.000Z");
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -329,6 +320,138 @@ describe("executeScheduledAgentTask — proactivity plan enforcement (BI-754C9E8
     // Budget spent → back on the daily cron, not a near-term retry.
     const deltaMinutes = (data.nextRunAt.getTime() - before) / 60_000;
     expect(deltaMinutes).toBeGreaterThan(60);
+  });
+
+  it("BI-0A82D3B4 re-arms six-hour work after the real scheduler completes its loop", async () => {
+    vi.setSystemTime(new Date("2026-10-19T00:25:00.000Z"));
+    arrangeMarketingSelfTask();
+    const taskId = "self-marketing-specialist-user-1";
+    const task = {
+      taskId,
+      agentId: "marketing-specialist",
+      title: "Refresh the acquisition campaign brief",
+      prompt: "Keep a current acquisition campaign brief on the Campaigns page.",
+      routeContext: "/customer/marketing",
+      schedule: "23 */6 * * *",
+      timezone: "UTC",
+      isActive: true,
+      ownerUserId: "user-1",
+      attempts: 1,
+      lastThreadId: "thread-1",
+      taskRunId: "TR-PRIOR-MARKETING-RUN",
+      taskConfig: { trigger: { kind: "user-request" } },
+    };
+    const taskBefore = structuredClone(task);
+    mocks.prisma.scheduledAgentTask.findUnique.mockResolvedValue(task);
+    mocks.prisma.userFact.findMany.mockResolvedValue([]);
+    mocks.prisma.toolExecution.findMany.mockResolvedValue([]);
+    mocks.runAgenticLoop.mockResolvedValue({
+      content: "Saved the updated campaign brief.",
+      executedTools: [{
+        name: "create_marketing_campaign_brief",
+        args: {},
+        result: { success: true, message: "Saved campaign brief brief-1" },
+      }],
+    });
+
+    await executeScheduledAgentTask(taskId);
+
+    expect(mocks.runAgenticLoop).toHaveBeenCalledOnce();
+    expect(mocks.runAgenticLoop).toHaveBeenCalledWith(expect.objectContaining({
+      threadId: "thread-1",
+      taskRunId: "TR-SCHED-MKTG1",
+    }));
+    expect(mocks.prisma.taskRun.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: "task-run-row-1" },
+      data: expect.objectContaining({ status: "completed", completedAt: expect.any(Date) }),
+    }));
+    const completed = mocks.prisma.scheduledAgentTask.update.mock.calls.find(
+      ([arg]) => arg.where.taskId === taskId && arg.data.lastStatus === "ok",
+    );
+    expect(completed?.[0].data).toEqual({
+      lastRunAt: new Date("2026-10-19T00:25:00.000Z"),
+      lastStatus: "ok",
+      lastError: null,
+      lastThreadId: "thread-1",
+      taskRunId: "TR-SCHED-MKTG1",
+      nextRunAt: new Date("2026-10-19T06:23:00.000Z"),
+      attempts: 0,
+    });
+    expect(mocks.prisma.scheduledJob.update).toHaveBeenCalledWith({
+      where: { jobId: taskId },
+      data: {
+        lastRunAt: new Date("2026-10-19T00:25:00.000Z"),
+        lastStatus: "ok",
+        lastError: null,
+        nextRunAt: new Date("2026-10-19T06:23:00.000Z"),
+      },
+    });
+    expect(mocks.prisma.agentThread.upsert).toHaveBeenCalledWith({
+      where: { userId_contextKey: { userId: "user-1", contextKey: `scheduled:${taskId}` } },
+      update: {},
+      create: { userId: "user-1", contextKey: `scheduled:${taskId}` },
+    });
+    expect(task).toEqual(taskBefore);
+    expect(mocks.prisma.scheduledAgentTask.create).not.toHaveBeenCalled();
+  });
+
+  it("BI-0A82D3B4 returns exhausted retries to the six-hour cron after its loop fails", async () => {
+    vi.setSystemTime(new Date("2026-10-19T00:25:00.000Z"));
+    arrangeMarketingSelfTask();
+    const taskId = "self-marketing-specialist-user-1";
+    const task = {
+      taskId,
+      agentId: "marketing-specialist",
+      title: "Refresh the acquisition campaign brief",
+      prompt: "Keep a current acquisition campaign brief on the Campaigns page.",
+      routeContext: "/customer/marketing",
+      schedule: "23 */6 * * *",
+      timezone: "UTC",
+      isActive: true,
+      ownerUserId: "user-1",
+      attempts: 2,
+      lastThreadId: "thread-1",
+      taskRunId: "TR-PRIOR-MARKETING-RUN",
+      taskConfig: { trigger: { kind: "user-request" } },
+    };
+    const taskBefore = structuredClone(task);
+    mocks.prisma.scheduledAgentTask.findUnique.mockResolvedValue(task);
+    mocks.prisma.userFact.findMany.mockResolvedValue([assertiveOverrideFact("marketing-specialist")]);
+    mocks.runAgenticLoop.mockRejectedValue(new Error("LLM unavailable"));
+
+    await executeScheduledAgentTask(taskId);
+
+    expect(mocks.runAgenticLoop).toHaveBeenCalledOnce();
+    expect(mocks.prisma.taskRun.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: "task-run-row-1" },
+      data: expect.objectContaining({
+        status: "failed",
+        completedAt: expect.any(Date),
+        progressPayload: { error: "LLM unavailable" },
+      }),
+    }));
+    const failed = mocks.prisma.scheduledAgentTask.update.mock.calls.find(
+      ([arg]) => arg.where.taskId === taskId && arg.data.lastStatus === "error",
+    );
+    expect(failed?.[0].data).toEqual({
+      lastRunAt: new Date("2026-10-19T00:25:00.000Z"),
+      lastStatus: "error",
+      lastError: "LLM unavailable",
+      taskRunId: "TR-SCHED-MKTG1",
+      nextRunAt: new Date("2026-10-19T06:23:00.000Z"),
+      attempts: 0,
+    });
+    expect(mocks.prisma.scheduledJob.update).toHaveBeenCalledWith({
+      where: { jobId: taskId },
+      data: {
+        lastRunAt: new Date("2026-10-19T00:25:00.000Z"),
+        lastStatus: "error",
+        lastError: "LLM unavailable",
+        nextRunAt: new Date("2026-10-19T06:23:00.000Z"),
+      },
+    });
+    expect(task).toEqual(taskBefore);
+    expect(mocks.prisma.scheduledAgentTask.create).not.toHaveBeenCalled();
   });
 
   it("resets attempts on success", async () => {

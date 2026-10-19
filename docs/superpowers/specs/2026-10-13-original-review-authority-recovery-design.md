@@ -162,3 +162,88 @@ unsupported recovery state rather than silently restore the expired origin.
 Runtime verification, a native semantic receipt, independent design assessment,
 coverage and all implementation tests are unrun for this repair at capture time.
 Neither this design nor the deployed reader/deadline fixes completes EP-B932453F.
+
+## Original-result collection amendment — 2026-10-18
+
+Owning scope remains BI-C28A2C75. Current design work is bound to WC-988A6FFA,
+`codex/original-task-result-collector`, executor Codex chat
+`01a15241-2a2e-7a02-9b2f-ce0f198f8e63`, in the dedicated sibling worktree
+`/Users/markbodman/dpf-worktrees/original-task-result-collector`. Its source base
+is `e22a9996c58a21e6af868baa0f48ee2195573bc2`. Historical WC-F77F4FF2 and its
+reassigned physical checkout do not supply current admission. Design admission
+IRD-2EE4DA4F423B covers this amendment; implementation admission must be checked
+against its committed source before runtime-code edits.
+
+This amendment makes proposal `cmvdcpn2n620r01nq3fmzvgym` explicit in the owning
+design and resolves the missing contract recorded in `cmvepep1466bv01o7j9ursy2k`.
+The previous delivery closure retained missing acceptance; it does not prove this
+collector exists. The collector extends existing task readback and issuer recovery.
+It does not change execution eligibility in the authority-recovery design above.
+
+### Read contract and provenance
+
+Under current original-owner read authority, collect only existing observations
+for the exact original TaskRun, immutable request digest, execution attempt and
+writer checkpoint. Validate the saved deterministic task identity, reviewer,
+writer, immutable artifact, Workroom/source binding and receipt binding. Retain
+the observation's source and recorded time; report missing or incompatible proof
+explicitly. A task handle, an expired credential or administrator status grants
+no additional read authority. Do not expose raw prompts, provider output,
+credentials, arbitrary SQL or screen contents.
+
+Use the existing successful governed writer receipt and original native dispatch,
+outer-process and child-closure observations. Project four distinct states:
+
+- `receipt-complete`: an existing genuine successful writer receipt matches the
+  original request, writer, artifact and checkpoint. Return its recorded outcome.
+- `proven-not-dispatched`: exact original-attempt evidence establishes refusal
+  before dispatch and no unresolved or late effects.
+- `proven-settled-without-receipt`: original-attempt dispatch and closure evidence
+  proves all execution and child effects ended, with no matching writer receipt.
+- `unknown`: missing, truncated, stale, mismatched or contradictory evidence,
+  uncertain execution, unresolved children, or possible late effects.
+
+An outer process exiting, old heartbeat, transport timeout, canceled request or
+absence of a receipt is insufficient proof of settlement. Historical observations
+whose child closure is `unverified` remain unknown. Do not manufacture stronger
+native observations to obtain a preferred classification. Preserve a real
+budget/capacity refusal as its original observation, without converting it to a
+product failure or claiming another attempt is authorized.
+
+Read-only collection/projection is separate from receipt-backed CAS/history
+healing. Readback never writes a verdict, dispatches or replays a task, transfers
+execution authority, resets a deadline/attempt/approval, widens grants, changes
+identity, or turns no-receipt settlement into permission for a successor. Existing
+receipt healing may reconcile only a matching genuine receipt under its current
+version/status CAS. Concurrent changes invalidate the collected snapshot; return
+unknown rather than combine observations from different attempts or checkpoints.
+
+### Implementation and verification plan
+
+1. Bind this committed amendment to the current Workroom and obtain actual scoped
+   implementation readiness, retaining its exact refusal/remedy if unavailable.
+2. Add bounded typed collection/projection at the existing initiative-review
+   outcome and native observation seams. Use existing persisted task/evidence
+   records; add no table, queue, provider, authority system or generic proxy.
+3. Expose it through existing original-owner MCP Tasks/result and issuer recovery.
+   Keep replay admission independent and closed whenever its existing predicate
+   refuses. Support useful unknown readback without issuing another review.
+4. Test late effects, wrong task/digest/attempt/writer/artifact/checkpoint,
+   missing child closure, current-owner denial, concurrent reconciliation,
+   budget refusal and preservation of provenance. Test real matching receipt
+   projection independently from the existing CAS healer.
+5. Run affected tests/typechecks and required policy checks. Obtain independent
+   committed-change assessment under the checked-in publication procedure,
+   publish a protected DCO PR, merge through the queue, and request the canonical
+   upgrade. Record unavailable native gates as unrun, never passed.
+6. Verify served bytes and actual authorized original-task reader behavior with
+   provenance. Report exactly what is proved or unknown. Do not retry either
+   parent task or substitute another task family's receipt.
+
+The specific original design-spec task ends `D2E5E2765847`; its distinct original
+spec-approval task ends `4E1879A26F6B`. They belong to the parent's original OAuth
+family and must be read under that parent's current authority. This chat does
+not acquire their authority through the source repair. A supported reader may
+legitimately leave either result unknown. Collector delivery alone does not
+complete original AC5, cache useful-task acceptance, scheduler repair or daily
+AI Ops reporting.

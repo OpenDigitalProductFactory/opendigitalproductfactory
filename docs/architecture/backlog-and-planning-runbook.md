@@ -1,5 +1,13 @@
 # Backlog & planning runbook
 
+A medium repair that retains an independently approved repository scope keeps
+that scope's amendment authority. A stale design uses the existing independent
+spec-approval writer and current server-issued packet, bound to the prior
+baseline and immutable head. Body acceptance criteria cannot supersede that
+approval. Ordinary body-only medium work still needs no spec approval; inherited
+scope stays with its parent. This distinction restores routing without changing
+approval, author/reviewer separation, or original task settlement (BI-31159978).
+
 An already decomposed xlarge initiative can complete after child delivery and
 outcome reconciliation; its implementation prohibition still stands. Follow the
 [aggregate completion procedure](initiative-readiness-runbook.md#1-the-lifecycle-sequence)

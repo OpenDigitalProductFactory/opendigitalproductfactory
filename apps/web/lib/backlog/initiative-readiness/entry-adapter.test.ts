@@ -3,6 +3,52 @@ import { describe, expect, it } from "vitest";
 import { projectBacklogItemReadiness, projectBacklogItemReadinessSummary, readinessShapeFromWorkShape } from "./entry-adapter";
 
 import { baseline, item, readyActivities, receipt, transitionObject } from "./entry-adapter.test-fixtures";
+import { decisionForIndependentReview } from "./design-phase-recovery";
+
+describe("medium repair of an independently approved legacy scope", () => {
+  it("keeps a stale approved baseline with its independent amendment writer", () => {
+    const activities = readyActivities().map(activity => activity.kind === "initiative_scope_baseline"
+      ? { ...activity, payload: { ...baseline, profile: "fix", artifactRef: {
+        kind: "repo-blob-at-commit", repositoryFullName: "owner/repo", commitSha: "a".repeat(40),
+        providerBlobId: "b".repeat(40), path: "docs/superpowers/specs/existing.md",
+      } } } : activity);
+    const projection = projectBacklogItemReadiness({
+      item: { ...item, type: "product", workType: "bug", workShape: "delivery-medium@1.0.0",
+        body: "## Acceptance\n- preserve the approved scope" },
+      activities, target: "implementation", transitionObject, authorization: "pass", capsuleIdentity: "pass",
+      currentDesign: { state: "verified", digest: "sha256:amended" }, evaluatedAt: "2026-10-19T11:00:00.000Z",
+    });
+    const owed = projection.decision.unmet.find(entry => entry.code === "OBJECTIVE_BASELINE_REQUIRED");
+    expect(projection.baselineId).toBe("baseline-1");
+    expect(owed).toMatchObject({ state: "stale", accountableRole: "design-checklist-reviewer" });
+    expect(owed?.nextAction).not.toContain("No spec approval is needed");
+    expect(decisionForIndependentReview("record_initiative_design_review", {
+      implementation: projection.decision,
+    })?.unmet).toContainEqual(owed);
+  });
+
+  it.each(["body", "unapproved", "inherited"])("does not grant an amendment route for %s scope", scenario => {
+    const scope = { ...baseline, profile: "fix", origin: scenario === "body" ? "item-body" : undefined,
+      approvalReceiptId: scenario === "unapproved" ? "" : baseline.approvalReceiptId,
+      artifactRef: { kind: "repo-blob-at-commit", repositoryFullName: "owner/repo", commitSha: "a".repeat(40),
+        providerBlobId: "b".repeat(40), path: "docs/superpowers/specs/existing.md" } };
+    const activities = readyActivities().map(activity => activity.kind === "initiative_scope_baseline"
+      ? { ...activity, payload: scope } : activity);
+    const projection = projectBacklogItemReadiness({
+      item: { ...item, type: "product", workType: "bug", workShape: "delivery-medium@1.0.0",
+        body: "## Acceptance\n- preserve scope ownership" },
+      activities: scenario === "inherited" ? [] : activities,
+      ...(scenario === "inherited" ? { inheritedScope: { parentItemId: item.itemId,
+        coverageActivityId: "parent-coverage", activities } } : {}),
+      target: "implementation", transitionObject, authorization: "pass", capsuleIdentity: "pass",
+      currentDesign: { state: "verified", digest: "sha256:amended" }, evaluatedAt: "2026-10-19T11:00:00.000Z",
+    });
+    expect(projection.decision.unmet.find(entry => entry.code === "OBJECTIVE_BASELINE_REQUIRED")?.accountableRole)
+      .not.toBe("design-checklist-reviewer");
+    expect(decisionForIndependentReview("record_initiative_design_review", { implementation: projection.decision }))
+      .toBeNull();
+  });
+});
 
 function terminalFixture(payloadOverride: Record<string, unknown> = {}) {
   const decision = projectBacklogItemReadiness({

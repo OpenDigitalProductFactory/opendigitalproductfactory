@@ -63,6 +63,7 @@ export function readinessShapeFromWorkShape(ref: string | null | undefined): Rea
 
 type Baseline = {
   origin?: string;
+  approvalReceiptId?: string;
   baselineId: string;
   supersedesBaselineId: string | null;
   artifactDigest: string;
@@ -100,6 +101,7 @@ export function parseReadinessBaselines(activities: readonly InitiativeReadiness
     }
     parsed.push({
       origin: typeof payload.origin === "string" ? payload.origin : undefined,
+      approvalReceiptId: typeof payload.approvalReceiptId === "string" ? payload.approvalReceiptId : undefined,
       baselineId: payload.baselineId,
       supersedesBaselineId: payload.supersedesBaselineId as string | null,
       artifactDigest: payload.artifactDigest,
@@ -603,6 +605,12 @@ export function projectBacklogItemReadiness(args: {
     // The amended spec design must be approved before its baseline is current
     // again. A body baseline versions acceptance, not a spec, so it never is.
     objectiveBaseline: pass(currentDesignUnavailable ? "missing" : designAmended && digest !== null ? "stale" : baselineState),
+    // A proportional shape cannot turn an existing independent scope approval
+    // into author-owned body criteria. Restore its ordinary amendment route;
+    // the review writer still validates authority, prior baseline and source.
+    objectiveBaselineRequiresReview: !inherited && baseline.current?.origin !== "item-body"
+      && baseline.current?.artifactRef?.kind === "repo-blob-at-commit"
+      && Boolean(baseline.current.approvalReceiptId),
     objectiveBaselineConflict: args.completion?.objectiveBaselineConflict,
     objectiveReconciliation: args.completion?.objectiveReconciliation ?? "missing",
     archetypeProvisioning: {

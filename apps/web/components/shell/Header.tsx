@@ -110,13 +110,13 @@ export function Header({ platformRole, brandName, brandLogoUrl, brandLogoUrlLigh
                   <img
                     src={logoLight}
                     alt={`${companyName} logo`}
-                    className="logo-light block h-full w-auto max-w-[120px] object-contain sm:max-w-[220px]"
+                    className="logo-light block h-full w-auto max-w-20 object-contain sm:max-w-[220px]"
                     onError={() => { setLogoFailed(true); }}
                   />
                   <img
                     src={logoSource}
                     alt={`${companyName} logo`}
-                    className="logo-dark block h-full w-auto max-w-[120px] object-contain sm:max-w-[220px]"
+                    className="logo-dark block h-full w-auto max-w-20 object-contain sm:max-w-[220px]"
                     onError={() => { setLogoFailed(true); }}
                   />
                 </>
@@ -124,7 +124,7 @@ export function Header({ platformRole, brandName, brandLogoUrl, brandLogoUrlLigh
                 <img
                   src={logoSource}
                   alt={`${companyName} logo`}
-                  className="block h-full w-auto max-w-[120px] object-contain sm:max-w-[220px]"
+                  className="block h-full w-auto max-w-20 object-contain sm:max-w-[220px]"
                   onError={() => {
                     console.warn(`[Header] Logo failed to load: ${logoSource}`);
                     setLogoFailed(true);
@@ -171,6 +171,7 @@ export function Header({ platformRole, brandName, brandLogoUrl, brandLogoUrlLigh
 
         <div className="relative flex shrink-0 items-center gap-1 sm:gap-2">
           <PlatformHealthIndicator />
+          <span data-agent-launcher-slot="true" className="inline-flex shrink-0 empty:hidden" />
           <button ref={accountButton} type="button" aria-label={t("nav.accountHelp")} aria-expanded={accountOpen} aria-controls="header-account-actions" onClick={() => setAccountOpen(open => !open)} className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md border border-[var(--dpf-border)] text-[var(--dpf-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--dpf-accent)] lg:hidden">
             <EllipsisVertical aria-hidden className="h-5 w-5" />
           </button>
