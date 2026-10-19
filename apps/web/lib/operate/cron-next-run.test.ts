@@ -2,115 +2,167 @@ import { describe, expect, it } from "vitest";
 
 import { computeNextCronFire, computeNextCronRun, isOneShotCron, parseCronSchedule } from "./cron-next-run";
 
-// `from` dates are built with the local Date constructor and assertions read
-// local getters; computeNextCronRun uses the same host Date methods, so these
-// tests are timezone-independent. Date month arg is 0-based (5 === June).
+describe("BI-0A82D3B4 shared agent-task UTC projection", () => {
+  it("keeps every six-hour fire and day rollover instead of falling back to 24 hours", () => {
+    let from = new Date("2026-10-18T19:44:22.832Z");
+    for (const expected of [
+      "2026-10-19T00:23:00.000Z",
+      "2026-10-19T06:23:00.000Z",
+      "2026-10-19T12:23:00.000Z",
+      "2026-10-19T18:23:00.000Z",
+      "2026-10-20T00:23:00.000Z",
+    ]) {
+      from = computeNextCronRun("23 */6 * * *", from);
+      expect(from.toISOString()).toBe(expected);
+    }
+  });
+
+  it.each([
+    ["23 * * * *", "2026-10-18T20:23:00.000Z"],
+    ["23 0,6,12,18 * * *", "2026-10-19T00:23:00.000Z"],
+    ["23 18-23 * * *", "2026-10-18T20:23:00.000Z"],
+  ])("projects %s with the existing full evaluator's UTC semantics", (cron, expected) => {
+    expect(computeNextCronRun(cron, new Date("2026-10-18T19:44:22.832Z")).toISOString()).toBe(expected);
+  });
+
+  it.each(["not a cron", "60 * * * *", "0 0 31 2 *"])("retains the explicit 24-hour compatibility fallback for %s", (cron) => {
+    const from = new Date("2026-10-18T19:44:22.832Z");
+    expect(computeNextCronRun(cron, from).toISOString()).toBe("2026-10-19T19:44:22.832Z");
+  });
+
+  it.each(["23 */6/2 * * *", "0 1-3/2/9 * * *"])("rejects malformed extra slash segments in %s through the canonical evaluator", (cron) => {
+    const from = new Date("2026-10-18T19:44:22.832Z");
+    expect(parseCronSchedule(cron)).toBeNull();
+    expect(computeNextCronFire(cron, from)).toBeNull();
+    expect(computeNextCronRun(cron, from).toISOString()).toBe("2026-10-19T19:44:22.832Z");
+  });
+
+  it.each(["0 */0x2 * * *", "0 */+2 * * *", "0 */2e0 * * *", "0 */2.0 * * *"])("rejects nondecimal step spelling in %s", (cron) => {
+    const from = new Date("2026-10-19T01:00:00.000Z");
+    expect(parseCronSchedule(cron)).toBeNull();
+    expect(computeNextCronFire(cron, from)).toBeNull();
+    expect(computeNextCronRun(cron, from).toISOString()).toBe("2026-10-20T01:00:00.000Z");
+  });
+
+  it.each([
+    ["0 */02 * * *", "2026-10-19T02:00:00.000Z"],
+    ["0 1-3/02 * * *", "2026-10-19T03:00:00.000Z"],
+  ])("preserves decimal step digits and leading zeros in %s", (cron, expected) => {
+    const from = new Date("2026-10-19T01:00:00.000Z");
+    expect(parseCronSchedule(cron)).not.toBeNull();
+    expect(computeNextCronFire(cron, from)?.toISOString()).toBe(expected);
+    expect(computeNextCronRun(cron, from).toISOString()).toBe(expected);
+  });
+});
+
+// Every cron fixture and calendar assertion uses UTC so the same behavior is
+// required on hosts with different local timezones.
 
 describe("computeNextCronRun — day-of-month (the BI-D72CC945 regression)", () => {
   it("Monthly `0 9 1 * *` from mid-month lands on the 1st of NEXT month, not tomorrow", () => {
-    const from = new Date(2026, 5, 20, 10, 0, 0); // Sat Jun 20 2026, 10:00
+    const from = new Date("2026-06-20T10:00:00.000Z"); // Sat Jun 20 2026, 10:00
     const next = computeNextCronRun("0 9 1 * *", from);
-    expect(next.getFullYear()).toBe(2026);
-    expect(next.getMonth()).toBe(6); // July
-    expect(next.getDate()).toBe(1);
-    expect(next.getHours()).toBe(9);
-    expect(next.getMinutes()).toBe(0);
-    expect(next.getSeconds()).toBe(0);
+    expect(next.getUTCFullYear()).toBe(2026);
+    expect(next.getUTCMonth()).toBe(6); // July
+    expect(next.getUTCDate()).toBe(1);
+    expect(next.getUTCHours()).toBe(9);
+    expect(next.getUTCMinutes()).toBe(0);
+    expect(next.getUTCSeconds()).toBe(0);
     // The pre-fix bug returned Jun 21 (tomorrow) — guard against regressing.
-    expect(next.getMonth() === 5 && next.getDate() === 21).toBe(false);
+    expect(next.getUTCMonth() === 5 && next.getUTCDate() === 21).toBe(false);
   });
 
   it("Monthly fires the same day when the 1st's time is still ahead", () => {
-    const from = new Date(2026, 5, 1, 8, 0, 0); // Jun 1, 08:00 (before 09:00)
+    const from = new Date("2026-06-01T08:00:00.000Z"); // Jun 1, 08:00 (before 09:00)
     const next = computeNextCronRun("0 9 1 * *", from);
-    expect(next.getMonth()).toBe(5); // June
-    expect(next.getDate()).toBe(1);
-    expect(next.getHours()).toBe(9);
+    expect(next.getUTCMonth()).toBe(5); // June
+    expect(next.getUTCDate()).toBe(1);
+    expect(next.getUTCHours()).toBe(9);
   });
 
   it("Monthly rolls to next month once the 1st's time has passed", () => {
-    const from = new Date(2026, 5, 1, 10, 0, 0); // Jun 1, 10:00 (after 09:00)
+    const from = new Date("2026-06-01T10:00:00.000Z"); // Jun 1, 10:00 (after 09:00)
     const next = computeNextCronRun("0 9 1 * *", from);
-    expect(next.getMonth()).toBe(6); // July
-    expect(next.getDate()).toBe(1);
+    expect(next.getUTCMonth()).toBe(6); // July
+    expect(next.getUTCDate()).toBe(1);
   });
 
   it("honors year rollover (Dec -> Jan)", () => {
-    const from = new Date(2026, 11, 15, 12, 0, 0); // Dec 15 2026
+    const from = new Date("2026-12-15T12:00:00.000Z"); // Dec 15 2026
     const next = computeNextCronRun("0 9 1 * *", from);
-    expect(next.getFullYear()).toBe(2027);
-    expect(next.getMonth()).toBe(0); // January
-    expect(next.getDate()).toBe(1);
+    expect(next.getUTCFullYear()).toBe(2027);
+    expect(next.getUTCMonth()).toBe(0); // January
+    expect(next.getUTCDate()).toBe(1);
   });
 });
 
 describe("computeNextCronRun — daily / weekly / weekday", () => {
   it("daily `0 9 * * *` advances to tomorrow once today's time passed", () => {
-    const from = new Date(2026, 5, 20, 10, 0, 0);
+    const from = new Date("2026-06-20T10:00:00.000Z");
     const next = computeNextCronRun("0 9 * * *", from);
-    expect(next.getDate()).toBe(21);
-    expect(next.getHours()).toBe(9);
+    expect(next.getUTCDate()).toBe(21);
+    expect(next.getUTCHours()).toBe(9);
   });
 
   it("daily fires today when the time is still ahead", () => {
-    const from = new Date(2026, 5, 20, 8, 0, 0);
+    const from = new Date("2026-06-20T08:00:00.000Z");
     const next = computeNextCronRun("0 9 * * *", from);
-    expect(next.getDate()).toBe(20);
-    expect(next.getHours()).toBe(9);
+    expect(next.getUTCDate()).toBe(20);
+    expect(next.getUTCHours()).toBe(9);
   });
 
   it("weekly `0 9 * * 0` lands on a Sunday in the future", () => {
-    const from = new Date(2026, 5, 20, 10, 0, 0);
+    const from = new Date("2026-06-20T10:00:00.000Z");
     const next = computeNextCronRun("0 9 * * 0", from);
-    expect(next.getDay()).toBe(0); // Sunday
-    expect(next.getHours()).toBe(9);
+    expect(next.getUTCDay()).toBe(0); // Sunday
+    expect(next.getUTCHours()).toBe(9);
     expect(next.getTime()).toBeGreaterThan(from.getTime());
   });
 
   it("weekdays `30 8 * * 1-5` lands on a Mon–Fri at 08:30", () => {
-    const from = new Date(2026, 5, 20, 10, 0, 0); // Saturday
+    const from = new Date("2026-06-20T10:00:00.000Z"); // Saturday
     const next = computeNextCronRun("30 8 * * 1-5", from);
-    expect(next.getDay()).toBeGreaterThanOrEqual(1);
-    expect(next.getDay()).toBeLessThanOrEqual(5);
-    expect(next.getHours()).toBe(8);
-    expect(next.getMinutes()).toBe(30);
+    expect(next.getUTCDay()).toBeGreaterThanOrEqual(1);
+    expect(next.getUTCDay()).toBeLessThanOrEqual(5);
+    expect(next.getUTCHours()).toBe(8);
+    expect(next.getUTCMinutes()).toBe(30);
     expect(next.getTime()).toBeGreaterThan(from.getTime());
   });
 
   it("treats day-of-week 7 as Sunday", () => {
-    const from = new Date(2026, 5, 20, 10, 0, 0);
+    const from = new Date("2026-06-20T10:00:00.000Z");
     const next = computeNextCronRun("0 9 * * 7", from);
-    expect(next.getDay()).toBe(0);
+    expect(next.getUTCDay()).toBe(0);
   });
 });
 
 describe("computeNextCronRun — specific month (Once preset) & union rule", () => {
   it("`0 9 5 7 *` (Jul 5) lands on the next July 5", () => {
-    const from = new Date(2026, 5, 20, 10, 0, 0); // before Jul 5
+    const from = new Date("2026-06-20T10:00:00.000Z"); // before Jul 5
     const next = computeNextCronRun("0 9 5 7 *", from);
-    expect(next.getMonth()).toBe(6); // July
-    expect(next.getDate()).toBe(5);
-    expect(next.getFullYear()).toBe(2026);
+    expect(next.getUTCMonth()).toBe(6); // July
+    expect(next.getUTCDate()).toBe(5);
+    expect(next.getUTCFullYear()).toBe(2026);
   });
 
   it("`0 9 5 7 *` rolls to next year once the date has passed", () => {
-    const from = new Date(2026, 7, 1, 10, 0, 0); // Aug 1, after Jul 5
+    const from = new Date("2026-08-01T10:00:00.000Z"); // Aug 1, after Jul 5
     const next = computeNextCronRun("0 9 5 7 *", from);
-    expect(next.getFullYear()).toBe(2027);
-    expect(next.getMonth()).toBe(6);
-    expect(next.getDate()).toBe(5);
+    expect(next.getUTCFullYear()).toBe(2027);
+    expect(next.getUTCMonth()).toBe(6);
+    expect(next.getUTCDate()).toBe(5);
   });
 
   it("applies the cron union rule when BOTH day-of-month and day-of-week are set", () => {
-    const from = new Date(2026, 5, 1, 0, 0, 0);
+    const from = new Date("2026-06-01T00:00:00.000Z");
     const next = computeNextCronRun("0 9 13 * 5", from); // 13th OR Friday
-    expect(next.getDate() === 13 || next.getDay() === 5).toBe(true);
+    expect(next.getUTCDate() === 13 || next.getUTCDay() === 5).toBe(true);
   });
 });
 
 describe("computeNextCronRun — malformed input", () => {
   it("falls back to ~24h ahead for a non-5-field expression", () => {
-    const from = new Date(2026, 5, 20, 10, 0, 0);
+    const from = new Date("2026-06-20T10:00:00.000Z");
     const next = computeNextCronRun("not a cron", from);
     const deltaH = (next.getTime() - from.getTime()) / 3_600_000;
     expect(deltaH).toBeCloseTo(24, 5);
