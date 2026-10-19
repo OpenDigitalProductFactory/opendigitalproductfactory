@@ -33,6 +33,7 @@ export const GATE_EXIT = Object.freeze({
   WAIT_CANCELLED: 81,
   SOURCE_DRIFT: 82,
   CHILD_SIGNAL_DEATH: 87,
+  HOST_CONNECTION_UNAVAILABLE: 88,
   INTERRUPTED: 130,
 });
 
@@ -94,6 +95,10 @@ export function classifyGateExit({ code, output = "" }) {
       };
     case GATE_EXIT.INTERRUPTED:
       return { kind: "interrupted", retry: false, verdict: "none", summary: "interrupted" };
+    case GATE_EXIT.HOST_CONNECTION_UNAVAILABLE:
+      return { kind: "host-connection-unavailable", retry: false, verdict: "none",
+        summary: "host prerequisites or verified transport unavailable; gate unrun",
+        next: "correct the reported host configuration or transport problem, then run the same gate" };
     // BI-D35B85BF: both are final and unrun. Re-running the same command would
     // override a cancellation or test source nobody queued.
     case GATE_EXIT.WAIT_CANCELLED:

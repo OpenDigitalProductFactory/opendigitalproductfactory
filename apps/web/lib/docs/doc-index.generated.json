@@ -5738,6 +5738,7 @@
       "publishedPortal": false,
       "anchors": [
         "platform-support-watch-list-living-document",
+        "saved-host-ca-trust-and-stale-clients-bi-f89c7fbd",
         "contributor-preview-mount-identity-on-docker-desktop-bi-0acb97b5",
         "literal-windows-package-manager-arguments-bi-263055e3",
         "capability-reconciliation-on-release-installs-bi-5acbac50",
