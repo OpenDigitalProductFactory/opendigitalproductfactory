@@ -3073,7 +3073,7 @@ function writeState(stateFile, {
 // checkouts) where argv[1] and import.meta.url spell the same file differently.
 if (isEntryModule(import.meta.url)) {
   runWithHostMcpTrust(main).then(code => { if (typeof code === "number") process.exit(code); }).catch((error) => {
-    if (error?.code) {
+    if (error?.hostTrustPrerequisite) {
       process.stderr.write(`gate-worktree: ${error.message}\n`);
       process.exit(88);
     }

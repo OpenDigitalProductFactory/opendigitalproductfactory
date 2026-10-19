@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { readHostClientEnv, readTrustBundle, resolveHostMcpTrust, probeMcpTransport, describeMcpTransportError } from "../../scripts/lib/mcp-host-trust.mjs";
+import { readHostClientEnv, readTrustBundle, resolveHostMcpTrust, probeMcpTransport, describeMcpTransportError, runWithHostMcpTrust } from "../../scripts/lib/mcp-host-trust.mjs";
 import { mcpCall, mcpPost } from "../../scripts/lib/mcp-client.mjs";
 import { readEarlyQuiescenceStatus } from "../../scripts/lib/gate-quiescence.mjs";
 import { runHostPreflight } from "../../scripts/pregate.mjs";
@@ -70,6 +70,25 @@ test("public CA endpoints need no managed CA; explicit HTTP is preserved", () =>
   assert.equal(trust.env.NODE_EXTRA_CA_CERTS, undefined);
   assert.deepEqual(readHostClientEnv({ mcpUrl: "http://localhost:3000/api/mcp/v1", env: { NODE_EXTRA_CA_CERTS: "missing" }, installDir: fixture }),
     { McpUrl: "http://localhost:3000/api/mcp/v1", CaBundle: "" });
+});
+
+test("packaged shared HTTPS resolver has its declared Linux shell dependency", () => {
+  const runner = readFileSync(join(root, "Dockerfile"), "utf8").split("FROM base AS runner")[1];
+  assert.match(runner, /RUN apk add --no-cache[^\r\n]*\bbash\b/);
+});
+
+test("only pre-main trust failures are marked as unrun host prerequisites", async () => {
+  const lostAck = Object.assign(Error("record result acknowledgement lost"), { code: "ETIMEDOUT" });
+  let calls = 0;
+  await assert.rejects(runWithHostMcpTrust(() => { calls++; throw lostAck; }, {
+    args: [], env: {}, resolveImpl: () => ({ certificates: [], env: {}, mcpUrl: "http://localhost/api/mcp/v1" }),
+  }), error => error === lostAck && !error.hostTrustPrerequisite);
+  assert.equal(calls, 1, "an uncertain main request is never replayed");
+  const unreadable = Object.assign(Error("selected CA unreadable"), { code: "mcp_ca_unreadable" });
+  await assert.rejects(runWithHostMcpTrust(() => { calls++; }, {
+    args: [], env: {}, resolveImpl: () => { throw unreadable; },
+  }), error => error === unreadable && error.hostTrustPrerequisite === true);
+  assert.equal(calls, 1, "host prerequisite failure prevents main");
 });
 
 test("OS adapters consume existing saved-state resolvers without credential output", () => {

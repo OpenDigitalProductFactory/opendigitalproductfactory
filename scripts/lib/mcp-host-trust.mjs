@@ -118,26 +118,33 @@ export async function probeMcpTransport({ mcpUrl, tlsOptions = {}, timeoutMs = 2
 export async function runWithHostMcpTrust(main, { args = process.argv.slice(2), env = process.env,
   resolveImpl = resolveHostMcpTrust, spawnImpl = spawn } = {}) {
   if (args.includes("--help") || args.includes("-h") || args.includes("--dry-run")) return main();
-  const { values } = parseArgs({ args: scriptArgv(args), strict: false, allowPositionals: true,
-    options: { "mcp-url": { type: "string" } } });
-  const trust = resolveImpl({ mcpUrl: values["mcp-url"], env });
-  const loaded = new Set(tls.getCACertificates("extra").map(pem => new X509Certificate(pem).fingerprint256));
-  const wanted = trust.certificates.map(pem => new X509Certificate(pem).fingerprint256).join(",");
-  if (trust.certificates.some(pem => !loaded.has(new X509Certificate(pem).fingerprint256))) {
-    if (env.DPF_HOST_TRUST_REEXEC === wanted) throw trustError("mcp_ca_startup_unavailable",
-      "A fresh Node process could not load the selected CA. Check Node startup restrictions and the bundle's read permissions.");
-    const child = spawnImpl(process.execPath, [...process.execArgv, process.argv[1], ...args], {
-      env: { ...trust.env, DPF_HOST_TRUST_REEXEC: wanted }, stdio: "inherit", windowsHide: true });
-    const forward = signal => child.kill(signal);
-    const interrupt = () => forward("SIGINT"), terminate = () => forward("SIGTERM");
-    process.once("SIGINT", interrupt); process.once("SIGTERM", terminate);
-    try { return await new Promise((resolveChild, reject) => {
-      child.once("error", reject);
-      child.once("close", (code, signal) => resolveChild(code ?? (signal === "SIGINT" ? 130 : 88)));
-    }); } finally { process.removeListener("SIGINT", interrupt); process.removeListener("SIGTERM", terminate); }
+  try {
+    const { values } = parseArgs({ args: scriptArgv(args), strict: false, allowPositionals: true,
+      options: { "mcp-url": { type: "string" } } });
+    const trust = resolveImpl({ mcpUrl: values["mcp-url"], env });
+    const loaded = new Set(tls.getCACertificates("extra").map(pem => new X509Certificate(pem).fingerprint256));
+    const wanted = trust.certificates.map(pem => new X509Certificate(pem).fingerprint256).join(",");
+    if (trust.certificates.some(pem => !loaded.has(new X509Certificate(pem).fingerprint256))) {
+      if (env.DPF_HOST_TRUST_REEXEC === wanted) throw trustError("mcp_ca_startup_unavailable",
+        "A fresh Node process could not load the selected CA. Check Node startup restrictions and the bundle's read permissions.");
+      const child = spawnImpl(process.execPath, [...process.execArgv, process.argv[1], ...args], {
+        env: { ...trust.env, DPF_HOST_TRUST_REEXEC: wanted }, stdio: "inherit", windowsHide: true });
+      const forward = signal => child.kill(signal);
+      const interrupt = () => forward("SIGINT"), terminate = () => forward("SIGTERM");
+      process.once("SIGINT", interrupt); process.once("SIGTERM", terminate);
+      try { return await new Promise((resolveChild, reject) => {
+        child.once("error", reject);
+        child.once("close", (code, signal) => resolveChild(code ?? (signal === "SIGINT" ? 130 : 88)));
+      }); } finally { process.removeListener("SIGINT", interrupt); process.removeListener("SIGTERM", terminate); }
+    }
+    Object.assign(env, trust.env);
+    delete env.DPF_HOST_TRUST_REEXEC;
+    await probeMcpTransport({ ...trust, mcpUrl: trust.mcpUrl || env.DPF_MCP_URL || "http://127.0.0.1:3000/api/mcp/v1" });
+  } catch (error) {
+    // Only setup failures precede execution. main() may send effectful requests;
+    // a lost acknowledgement there must retain its existing recovery path.
+    error.hostTrustPrerequisite = true;
+    throw error;
   }
-  Object.assign(env, trust.env);
-  delete env.DPF_HOST_TRUST_REEXEC;
-  await probeMcpTransport({ ...trust, mcpUrl: trust.mcpUrl || env.DPF_MCP_URL || "http://127.0.0.1:3000/api/mcp/v1" });
   return main();
 }
