@@ -106,6 +106,18 @@ test("OS adapters consume existing saved-state resolvers without credential outp
   }
 });
 
+test("Windows host resolver preserves non-ASCII managed CA paths", { skip: process.platform !== "win32" }, () => {
+  const install = join(fixture, "caf\u00e9-\u8a3c\u660e\u66f8");
+  mkdirSync(install);
+  const bundle = join(install, "root_ca.crt");
+  writeFileSync(bundle, readFileSync(cert));
+  writeFileSync(join(install, ".env"), `DPF_PKI_TRUST_BUNDLE=${bundle}\n`);
+  const trust = resolveHostMcpTrust({ mcpUrl: "https://localhost/api/mcp/v1", installDir: install,
+    env: { ...process.env, DPF_MCP_CA_FILE: "", DPF_PKI_TRUST_BUNDLE: "", NODE_EXTRA_CA_CERTS: "" } });
+  assert.equal(trust.caBundle, bundle);
+  assert.equal(trust.certificates.length, 1);
+});
+
 test("TLS probe verifies chain and hostname without sending any HTTP request", async t => {
   let requests = 0;
   const mcpUrl = await server(t, (_req, res) => { requests++; res.end("unexpected"); });

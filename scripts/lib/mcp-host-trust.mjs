@@ -32,8 +32,9 @@ export function readHostClientEnv({ mcpUrl = "", env = process.env, home = homed
   let command, args;
   if (platform === "win32") {
     command = "powershell.exe";
+    // PowerShell 5.1 otherwise writes OEM text into Node's UTF-8 decoder.
     args = ["-NoProfile", "-NonInteractive", "-Command",
-      '$ErrorActionPreference="Stop"; . (Join-Path $env:DPF_TRUST_LIB "mcp-client-env.ps1"); Resolve-DpfMcpClientEnv -InstallDir $env:DPF_TRUST_INSTALL -ExplicitUrl $env:DPF_TRUST_URL -HomeDir $env:DPF_TRUST_HOME | ConvertTo-Json -Compress'];
+      '$ErrorActionPreference="Stop"; [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false); . (Join-Path $env:DPF_TRUST_LIB "mcp-client-env.ps1"); Resolve-DpfMcpClientEnv -InstallDir $env:DPF_TRUST_INSTALL -ExplicitUrl $env:DPF_TRUST_URL -HomeDir $env:DPF_TRUST_HOME | ConvertTo-Json -Compress'];
   } else if (platform === "darwin" || platform === "linux") {
     childEnv.DPF_TRUST_LIB = library.replaceAll("\\", "/");
     childEnv.DPF_TRUST_INSTALL = installDir.replaceAll("\\", "/");

@@ -33,7 +33,7 @@ function Get-DpfInstallEnvValue {
     param([Parameter(Mandatory)][string]$InstallDir, [Parameter(Mandatory)][string]$Name)
     $envPath = Join-Path $InstallDir ".env"
     if (-not (Test-Path -LiteralPath $envPath -PathType Leaf)) { return "" }
-    $line = Get-Content -LiteralPath $envPath | Where-Object { $_ -match "^$([Text.RegularExpressions.Regex]::Escape($Name))=" } | Select-Object -Last 1
+    $line = Get-Content -LiteralPath $envPath -Encoding UTF8 | Where-Object { $_ -match "^$([Text.RegularExpressions.Regex]::Escape($Name))=" } | Select-Object -Last 1
     if (-not $line) { return "" }
     return ($line.Substring($Name.Length + 1)).Trim().Trim('"')
 }
