@@ -674,6 +674,29 @@ need separate measured acceptance.
 
 ## Recovering an original initiative review after a connection change
 
+Original owners can collect existing review evidence through `tasks/result`
+without resubmitting the review. Initiative-review results return a bounded
+`originalResult` projection under the current connection's read scopes, original
+human/coworker identity and exact Workroom content access. An optional
+`requestDigest` pins readback to the saved request. The issuer's reconciliation
+refusal also returns the same projection and an exact `tasks/result` locator
+when the immutable original request matches. Neither route supplies dispatch
+authority or performs receipt-backed status healing.
+
+`receipt-complete` means an existing genuine governed writer receipt matches the
+original task, digest, attempt, checkpoint and immutable artifact; its recorded
+decision can be pass, fail or not-applicable. `proven-not-dispatched` and
+`proven-settled-without-receipt` require authoritative original-attempt proof.
+Missing or contradictory proof returns `unknown` with explicit missing facts.
+Current native observations record child closure as unverified, so outer close,
+timeout or a budget refusal alone cannot establish no late effects. Historical
+unknowns remain closed. Returned provenance contains bounded source identities,
+times, digests and observed facts; raw provider output and prompts are excluded.
+Concurrent checkpoint changes invalidate the collected snapshot. Collection
+never resets a deadline, attempt or approval, changes identity or grants, creates
+a verdict, or authorizes a retry. Existing receipt CAS/history healing remains a
+separate operation and accepts only its matching genuine receipt.
+
 Read `get_backlog_item` with the exact `itemId` and `recoveryGate`. For an owned,
 safely stopped review, its native `request_coworker` packet includes
 `reviewRecovery`: the original TaskRun, saved request digest and observed

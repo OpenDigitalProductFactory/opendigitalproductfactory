@@ -119,7 +119,11 @@ export async function revalidateReviewExecutionAuthority(input: {
 /** Readback supplies a locator only after the owning surface checks room content access. */
 export async function issueOriginalReviewRecoveryTarget(input: {
   packet: Record<string, unknown>; userId: string; actingAgentId: string; taskAuthorityKey: string;
-}): Promise<{ kind: "none" } | { kind: "refused"; reason: string } | {
+  tokenGrantScopes?: readonly string[];
+}): Promise<{ kind: "none" } | { kind: "refused"; reason: string;
+  originalResult?: import("./mcp-task-original-result").OriginalReviewResult;
+  resultRead?: { method: "tasks/result"; params: { taskId: string; requestDigest: string } };
+} | {
   kind: "target"; target: import("./mcp-task-submit-params").ReviewTaskRecoveryTarget;
 }> {
   const { parseRemoteTaskSubmitParams } = await import("./mcp-task-submit-params");
@@ -136,7 +140,6 @@ export async function issueOriginalReviewRecoveryTarget(input: {
   if (rows.length !== 1) return { kind: "refused", reason: "original-review-ambiguous" };
   const row = rows[0]!;
   const metadata = isRecord(row.a2aMetadata) ? row.a2aMetadata : {};
-  if (metadata.taskAuthorityKey === input.taskAuthorityKey) return { kind: "none" };
   const parsed = parseRemoteTaskSubmitParams({ agentId: packet.targetAgent, routeContext: "/build",
     title: packet.questionPacketSummary, objective: packet.objective, prompt: packet.objective,
     idempotencyKey: packet.requestKey, riskClass: "bounded-write", collaborationKind: "handoff",
@@ -147,11 +150,7 @@ export async function issueOriginalReviewRecoveryTarget(input: {
     || !metadata.taskAuthorityKey.startsWith("oauth-family:") || typeof metadata.apiTokenId !== "string"
     || matchingRemoteTaskRequestDigest(metadata, parsed) !== metadata.requestDigest
     || typeof metadata.requestDigest !== "string"
-    || deterministicExternalTaskRunId(metadata.taskAuthorityKey, packet.requestKey) !== row.taskRunId
-    || row.status !== "input-required" || !wait || hasExecutionUncertainty(row.progressPayload)
-    || recoverTerminalWriterEscalation(row.progressPayload)
-    || nextTerminalWriterAttempt(wait) > TERMINAL_WRITER_MAX_ATTEMPTS
-    || !recoveryWindowOpen(metadata, row.progressPayload)) {
+    || deterministicExternalTaskRunId(metadata.taskAuthorityKey, packet.requestKey) !== row.taskRunId) {
     return { kind: "refused", reason: "original-review-not-safely-resumable" };
   }
   const origin = await prisma.mcpApiToken.findUnique({ where: { id: metadata.apiTokenId }, select: { userId: true, agentId: true } });
@@ -159,6 +158,21 @@ export async function issueOriginalReviewRecoveryTarget(input: {
     || resolveCanonicalAgentId(origin.agentId) !== resolveCanonicalAgentId(input.actingAgentId)) {
     return { kind: "refused", reason: "original-human-or-coworker-mismatch" };
   }
+  if (row.status !== "input-required" || !wait || hasExecutionUncertainty(row.progressPayload)
+    || recoverTerminalWriterEscalation(row.progressPayload)
+    || nextTerminalWriterAttempt(wait) > TERMINAL_WRITER_MAX_ATTEMPTS
+    || !recoveryWindowOpen(metadata, row.progressPayload)) {
+    const { readOriginalReviewResult } = await import("./mcp-task-original-result");
+    const originalResult = await readOriginalReviewResult({
+      taskRunId: row.taskRunId, userId: input.userId, actingAgentId: input.actingAgentId,
+      tokenGrantScopes: input.tokenGrantScopes,
+      expected: { requestDigest: metadata.requestDigest, updatedAt: row.updatedAt.toISOString() },
+    });
+    return { kind: "refused", reason: "original-review-not-safely-resumable",
+      ...(originalResult ? { originalResult } : {}),
+      resultRead: { method: "tasks/result", params: { taskId: row.taskRunId, requestDigest: metadata.requestDigest } } };
+  }
+  if (metadata.taskAuthorityKey === input.taskAuthorityKey) return { kind: "none" };
   return { kind: "target", target: { taskRunId: row.taskRunId, requestDigest: metadata.requestDigest,
     expectedUpdatedAt: row.updatedAt.toISOString() } };
 }

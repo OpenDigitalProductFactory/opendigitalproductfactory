@@ -293,6 +293,7 @@ export async function handleTasksGet(
 export async function handleTasksResult(
   userId: string,
   params: Record<string, unknown> | undefined,
+  currentActor?: { actingAgentId: string | null; tokenGrantScopes: readonly string[] },
 ): Promise<TaskLifecycleResult> {
   const taskId = requireTaskId(params);
   if (!taskId) return { kind: "invalid", message: "tasks/result requires params.taskId (string)" };
@@ -301,6 +302,26 @@ export async function handleTasksResult(
   if (row.userId !== userId) return { kind: "forbidden", message: "task belongs to a different auth context" };
 
   const meta = { "io.modelcontextprotocol/related-task": { taskId } };
+  // This projection is read-only. It never enters the receipt healer or the
+  // submission lane, including when a genuine receipt is already available.
+  if (object(row.a2aMetadata)?.initiativeReviewBinding) {
+    const { readOriginalReviewResult } = await import("../mcp-task-original-result");
+    const originalResult = await readOriginalReviewResult({
+      taskRunId: row.taskRunId, userId, actingAgentId: currentActor?.actingAgentId ?? null,
+      tokenGrantScopes: currentActor?.tokenGrantScopes,
+      ...(typeof params?.["requestDigest"] === "string"
+        ? { expected: { requestDigest: params["requestDigest"] } } : {}),
+    });
+    if (originalResult) return {
+      kind: "ok", value: {
+        content: [{ type: "text", text: `Original review ${taskId}: ${originalResult.classification}. ${originalResult.reason}` }],
+        structuredContent: { taskId, status: mcpTaskStateForWire(row.status),
+          terminal: isTerminalTaskStatus(row.status), originalResult,
+          requiresApproval: false, resumable: false },
+        isError: false, _meta: meta,
+      },
+    };
+  }
   const durableIdentity = durableTaskIdentity(row);
   if (durableIdentity?.projectedOperationId) {
     const operation = await readDurableTaskOperation(row, userId, durableIdentity);
