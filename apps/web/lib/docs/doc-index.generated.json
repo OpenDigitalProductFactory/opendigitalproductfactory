@@ -2167,7 +2167,8 @@
         "approval-convergence-probe",
         "recovering-an-interrupted-independent-review",
         "parent-bounded-local-review-execution-bi-03ac2fd9",
-        "recovering-an-original-initiative-review-after-a-connection-change"
+        "recovering-an-original-initiative-review-after-a-connection-change",
+        "canonical-review-writer-execution-identity"
       ]
     },
     "docs/architecture/mcp-tool-packs.md": {

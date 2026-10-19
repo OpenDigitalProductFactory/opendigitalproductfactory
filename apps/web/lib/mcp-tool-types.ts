@@ -25,6 +25,8 @@ export type ToolExecutionContext = AuthorizedSurfaceToolExecutionContext & {
   agentId?: string;
   threadId?: string;
   taskRunId?: string;
+  /** Signed/server-captured identity; never populated from tool arguments. */
+  taskExecutionFence?: import("@/lib/shared/task-execution-fence").TaskExecutionFence | null;
   /** The calling coworker turn's mode; a delegate never runs wider (BI-FAD98137). */
   coworkerMode?: "advise" | "act";
   /**

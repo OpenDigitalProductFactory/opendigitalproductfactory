@@ -16,6 +16,8 @@ import {
 import { isStaleApprovalRecoveryRun } from "./mcp-task-approval-recovery-contract";
 import type { ExistingRemoteTask, RemoteTaskSubmitAuth, RemoteTaskSubmitOutcome } from "./mcp-task-submit-types";
 import type { RemoteTaskSubmitParams } from "./mcp-task-submit-params";
+import { GOVERNED_AUDIT_PARAMETER_KEYS, TASK_EXECUTION_FENCE_AUDIT_KEY } from "./attention/coworker-envelope-decision";
+import { parseTaskExecutionFence } from "./shared/task-execution-fence";
 
 /**
  * Resuming an approved writer and recovering an expired one are the same
@@ -35,13 +37,6 @@ type ApprovedRemoteTaskEnvelope = {
   threadId: string;
   manifestActionId: string;
 };
-
-const GOVERNED_AUDIT_PARAMETER_KEYS = new Set([
-  "_surface",
-  "_takAlignment",
-  "_takPrecondition",
-  "_approvalResume",
-]);
 
 function originalToolParameters(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
@@ -122,6 +117,7 @@ export async function resumeApprovedTask(input: ApprovedTaskResume): Promise<Rem
   });
   const args = originalToolParameters(proposedExecution?.parameters);
   if (!args) return null;
+  const executionFence = parseTaskExecutionFence((proposedExecution?.parameters as Record<string, unknown> | null)?.[TASK_EXECUTION_FENCE_AUDIT_KEY]);
 
   const reservation = await prisma.taskRun.updateMany({
     where: {
@@ -153,6 +149,7 @@ export async function resumeApprovedTask(input: ApprovedTaskResume): Promise<Rem
     threadId: envelope.threadId,
     taskRunId: input.existing.taskRunId,
     apiTokenId: input.tokenId,
+    ...(executionFence ? { taskExecutionFence: executionFence } : {}),
     tokenScope: input.tokenScope,
     externalAccessEnabled: true,
   });

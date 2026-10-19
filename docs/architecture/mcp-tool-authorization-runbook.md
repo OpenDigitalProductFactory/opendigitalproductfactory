@@ -751,3 +751,26 @@ current human, token, coworker and scope checks still run in the handler.
 Production, unreadable stance, unbound calls and supplied overrides retain
 authority approval. Other authority operations, including room invitations,
 are unaffected.
+
+## Canonical review writer execution identity
+
+For a task-bound initiative review, the admitted executor captures its request
+digest, reservation, dispatch claim and recorded execution-authority digest before
+starting provider work. Internal tool execution carries that captured identity;
+native MCP carries it in the signed session. Tool arguments and JSON-RPC metadata
+cannot supply it. Approval replay uses the original server-owned audit identity,
+never the task's latest generation.
+
+Both canonical review writers lock the original task before the subject. A new
+receipt, baseline or retention pin requires a working task, no execution
+uncertainty and the same captured identity under that transaction lock. A held,
+displaced or unversioned callback cannot append an effect. A genuine exact
+existing winner remains readable under the existing actor, artifact and authority
+checks; its receipt identifier does not include the execution generation.
+
+Legacy sessions without the captured identity cannot publish new task-bound
+reviews. This refusal does not settle an unknown execution, authorize inference,
+reset attempts or qualify historical recovery. Deploy compatible writers before
+admitting these sessions. Roll back by disabling admission while retaining the
+compatible fence and readers; a pre-fence binary requires separately proven
+capability retirement and reconciled effects.
