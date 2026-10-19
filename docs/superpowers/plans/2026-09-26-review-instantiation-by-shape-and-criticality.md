@@ -595,3 +595,59 @@ reconciliation is preparation, not permission to implement those phases before
 the amended baseline and coverage are satisfied. BI-5366EF78 owns the new
 bounded request/acknowledge/completion handoff; historical BI-B22C8E02 delivery
 does not prove that successor is implemented or accepted.
+
+## Forward source recovery, 2026-10-19
+
+The owner renewed DEV recovery and asked this existing framework thread to
+continue source repair. Historical formal-review uncertainty remains recorded;
+this direction neither settles an old execution nor supplies an independent
+approval. The routing UI is already deployed on d45c898a7045c60ea83755a8cf9c7f664f447bf7.
+Its engineering acceptance and an advisory UX contribution are different facts.
+The UX critic has no new gating authority. Its existing file-read proposal is
+now executed and its canonical grant verified; the earlier waiting statement
+above is a dated checkpoint, not a current request for consent. The separate
+generic named-coworker request still lacks actor thread_write authority. Keep
+that authority case on CWN-EB24742C / BI-CAP-C9F419AC; do not self-grant or
+repurpose an initiative receipt to dispatch advisory work.
+
+The branch now incorporates current main 67f2c72823f3429d3ac2114fcdb06d15e5400b79
+through signed merge a6c49dd39eccd7e7eb0df216ff9f2711f8a4c1f0. Both TypeScript
+programs passed in its normal commit checks. No new runtime image was built
+or installed by this merge.
+
+### Current-stage specialist preparation
+
+Reproduction on that merge found that prepareWorkroomReviewSpecialists flattened
+requiredProfessions from every stage of the pinned shape. A design-stage review
+therefore inherited later assurance obligations; missing shape/stage state could
+silently become path-only selection. Nine new behavior cases failed against the
+old implementation while five existing cases passed.
+
+The repair reads workspaceState from the authorized room and reuses the canonical
+drive marking reader. A recorded sequential stage contributes only its declared
+professions; a persisted parallel marking retains all active branches in document
+order. Missing shape/stage, unreadable marking and a concluded run refuse before
+the provider catalog is read. Observation uses a null cycle key, so preparation
+cannot create a new run or replace malformed state. The existing classifier still
+adds impacted crafts and preserves author exclusion and provider eligibility.
+The test for four simultaneous obligations uses the existing parallel-shape
+fixture. This consolidates stage interpretation in the existing drive machinery;
+profession requirements remain declarative, pinned shape data. It adds no hot
+configuration publishing, new authority or participant assignment.
+
+Source verification: the initial repaired preparation/selection/marking run
+passed 56 tests. The broader review and engagement run passed 651 tests in 46
+suites, including the first-association adapter contracts. Both TypeScript
+programs passed. After tightening the parallel fixture, its preparation/marking
+run passed 46 tests in two suites. Style/token and whitespace checks passed.
+These are source-local results, not canonical integration or live participation.
+
+Next: qualify the exact committed tree through the governed integration gate and
+independent source assessment. Full current-stage identity in immutable execution,
+atomic participant admission, attributable authoring versus independent-review
+obligations, returned contributions/disposition and served first-association
+execution remain owed. Preserve the separately owned writer-fence paths. Resolve
+the exact current native spec/architecture/baseline publication prerequisites
+through their supported issuer; no old unknown task is replayed and no historical
+receipt is credited to this source. A passing source check is not completion of
+the Workroom participation objectives.
