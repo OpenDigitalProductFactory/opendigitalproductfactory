@@ -18,8 +18,8 @@ import {
   type ResolvedWorkPosture,
   type RoomPostureDeclaration,
   type WorkStakesInput,
-} from "@/lib/work-posture";
-import type { ProactivityPlan } from "@/lib/proactivity/proactivity-types";
+} from "@dpf/validators/workroom-policy";
+import type { ProactivityPlan } from "@dpf/validators/workroom-policy/proactivity-types";
 import type { GoldenTrianglePreference } from "@/lib/golden-triangle";
 import type { WeeklySchedule } from "@/lib/operating-hours-types";
 import type { LowTrafficWindow } from "@/lib/self-upgrade/auto-window";

@@ -16,7 +16,7 @@ import {
   raiseDueDeadlines,
   unnotifiedDeadlines,
   withDeadlinesNotified,
-} from "./drive-deadlines";
+} from "@dpf/validators/workroom-policy/drive-deadlines";
 import type { DriveMarking } from "@dpf/validators/workroom/marking";
 import type { WorkShapeDefinition, WorkShapeStage } from "./work-shapes";
 

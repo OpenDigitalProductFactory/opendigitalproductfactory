@@ -100,7 +100,7 @@ import {
   workroomDriveBranchTaskId,
   workroomDriveTaskId,
 } from "./drive-plan-stage";
-import { raiseDueDeadlines } from "./drive-deadlines";
+import { raiseDueDeadlines } from "@dpf/validators/workroom-policy/drive-deadlines";
 import { hasSubShapeEffects, liveSubShapeChildren, subShapeEffects, subShapeTokenState, type SubShapeTokenState } from "./drive-child-rooms";
 import type { RecordedEvidence } from "./stage-evidence-receipts";
 import type { WorkShapeDefinitionContract } from "./work-shapes";

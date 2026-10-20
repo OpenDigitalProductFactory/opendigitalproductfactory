@@ -47,7 +47,7 @@ import { checkSoundness } from "@dpf/validators/gpp/soundness";
 
 import { DEADLINE_PARITY_FIXTURES, TWO_DAYS } from "./__fixtures__/graph-shapes/deadline";
 import { REWORK_1 } from "./__fixtures__/graph-shapes/rework";
-import { DAY_MS, deadlineKey, raiseDueDeadlines, unnotifiedDeadlines, withDeadlinesNotified } from "./drive-deadlines";
+import { DAY_MS, deadlineKey, raiseDueDeadlines, unnotifiedDeadlines, withDeadlinesNotified } from "@dpf/validators/workroom-policy/drive-deadlines";
 import { markedStageKeys, startDriveMarking, stepDriveMarking, type DriveMarking, type DriveMarkingStopped } from "@dpf/validators/workroom/marking";
 import type { WorkShapeDefinition } from "./work-shapes";
 import { WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND } from "@dpf/validators/workroom/receipts";

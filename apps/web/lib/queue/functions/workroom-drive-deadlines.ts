@@ -25,7 +25,7 @@
 // - Callers skip both on a tick that commits nothing (a held lease, a dispatch
 //   that never scheduled), so nothing is sent for an uncommitted state.
 
-import { unnotifiedDeadlines, withDeadlinesNotified, type PendingDeadlineNotice } from "@/lib/work-management/drive-deadlines";
+import { unnotifiedDeadlines, withDeadlinesNotified, type PendingDeadlineNotice } from "@dpf/validators/workroom-policy/drive-deadlines";
 import { readStoredDriveMarking, type DriveMarking } from "@dpf/validators/workroom/marking";
 import type { DrivePlan } from "@/lib/work-management/drive-resolution";
 import { WORKROOM_DRIVE_DEADLINE_KIND } from "@/lib/work-management/workroom-drive-constants";

@@ -13,21 +13,13 @@
 import type { QualityTier } from "../routing/quality-tiers";
 import type { RequestContract } from "../routing/request-contract";
 
-export type GoldenTrianglePreset = "fast" | "frugal" | "assured" | "balanced" | "custom";
-
-/** The human posture: soft cost/quality/time weights plus the active preset. */
-export interface GoldenTrianglePreference {
-  costWeight: number;
-  qualityWeight: number;
-  timeWeight: number;
-  preset: GoldenTrianglePreset;
-}
+import type { GoldenTrianglePreset, GoldenTrianglePreference, PolicyAdjustment, VerificationDepth } from "@dpf/validators/policy-types";
+export type { GoldenTrianglePreset, GoldenTrianglePreference, PolicyAdjustment, VerificationDepth } from "@dpf/validators/policy-types";
 
 export type BudgetClass = RequestContract["budgetClass"];
 export type ReasoningDepth = RequestContract["reasoningDepth"];
 export type ResidencyPolicy = NonNullable<RequestContract["residencyPolicy"]>;
 export type Effort = "low" | "medium" | "high" | "max";
-export type VerificationDepth = "none" | "shallow" | "deep";
 
 /**
  * Routing-shaped output. Fed into `inferContract()`'s `routeContext`
@@ -56,15 +48,6 @@ export interface OrchestrationBudget {
   deliberationPattern?: string;
 }
 
-export interface PolicyAdjustment {
-  field: string;
-  from: unknown;
-  to: unknown;
-  /** Stable machine-readable code (for receipts/learning). */
-  reasonCode: string;
-  /** Human-readable reason (for the decode panel). */
-  reason: string;
-}
 
 export type DecodedPolicyState = "ok" | "blocked" | "defer";
 

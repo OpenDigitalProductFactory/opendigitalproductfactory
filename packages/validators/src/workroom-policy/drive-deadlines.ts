@@ -6,7 +6,7 @@
  * docs/superpowers/plans/2026-10-02-gpp-phase-3c-drive-graph-execution.md
  * (PR-3c-4, drive-marking.ts / drive-resolution-graph.ts).
  *
- * Pure. Kept in the host rather than in the portable marking kernel, so the token step
+ * Pure. Kept outside the portable marking kernel, so the token step
  * stays one statement of the token game: a deadline never changes the
  * marking's tokens (parent §6.1 rule 8, "timers never change M"), so nothing
  * here touches `tokens`, `iterations` or `reworkTaken`.
@@ -34,14 +34,14 @@
  * - OPEN (openDeadlines). The entries whose token is still on that stage at
  *   that iteration in that run: what the attention inbox lists.
  */
-import { stageElementId } from "@dpf/validators/gpp/element-ids";
+import { stageElementId } from "../gpp/element-ids.js";
 
-import { iterationOf, stageToken, type DriveMarking } from "@dpf/validators/workroom/marking";
-import type { WorkShapeDefinitionContract } from "./work-shapes";
+import { iterationOf, stageToken, type DriveMarking } from "../workroom/marking.js";
+import type { WorkShapeDefinition } from "../gpp/work-shape-contracts.js";
 
 export const DAY_MS = 86_400_000;
 
-type DeadlineShape = Pick<WorkShapeDefinitionContract, "stages">;
+type DeadlineShape = Pick<WorkShapeDefinition, "stages">;
 type DeadlineStage = DeadlineShape["stages"][number];
 
 /** The notice key for one pass through one stage in one run (`cycleKey` is the marking's run key). */

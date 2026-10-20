@@ -3,8 +3,8 @@ import {
   createAutonomousWorkRun,
   type AutonomousWorkRunRef,
 } from "@/lib/tak/autonomous-work-run";
-import type { ProactivityPlan } from "@/lib/proactivity/proactivity-types";
-import type { ResolvedDelegatedPosture } from "@/lib/proactivity/delegated-posture";
+import type { ProactivityPlan } from "@dpf/validators/workroom-policy/proactivity-types";
+import type { ResolvedDelegatedPosture } from "@dpf/validators/workroom-policy/delegated-posture";
 import {
   classifyInferenceFailure,
   type InferenceFailureKind,

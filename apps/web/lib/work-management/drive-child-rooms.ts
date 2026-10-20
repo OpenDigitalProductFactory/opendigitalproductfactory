@@ -41,7 +41,7 @@
  * The runner writes an entry's `state` (`completed`, `abandoned`) only after
  * that effect committed, so a failed effect is simply decided again next tick.
  */
-import { deadlineKey } from "./drive-deadlines";
+import { deadlineKey } from "@dpf/validators/workroom-policy/drive-deadlines";
 import { iterationOf, stageToken, type DriveMarking, type DriveMarkingChild } from "@dpf/validators/workroom/marking";
 import type { WorkShapeDefinitionContract } from "./work-shapes";
 
