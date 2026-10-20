@@ -5,6 +5,8 @@ import { ALL_ARCHETYPES, deriveTwinProfile } from "@dpf/storefront-templates";
 
 import { buildDemoTwinSnapshot } from "@/lib/twin/demo-twin-snapshot";
 import { TwinView } from "./TwinView";
+import { projectCustomerOperations } from "@dpf/storefront-templates/operations";
+import { DPF_CUSTOMER_RECORD_LINKS, loadCustomerOperatingFacts } from "@/lib/twin/customer-operations-loader";
 
 const byCategory = (category: string) => ALL_ARCHETYPES.find((a) => a.category === category)!;
 
@@ -31,6 +33,26 @@ describe("buildDemoTwinSnapshot — totality + determinism", () => {
 });
 
 describe("TwinView — one renderer, both lenses", () => {
+  it("renders actual host-shaped customer work, record links and commitments with bounded density", async () => {
+    const profile = deriveTwinProfile(byCategory("software-platform"));
+    const facts = await loadCustomerOperatingFacts({
+      viewer: { platformRole: "HR-000", isSuperuser: false },
+      runtime: { read: async (_source, operation) => operation, unavailable: () => undefined },
+      db: {
+        customerAccount: { findMany: async () => Array.from({ length: 20 }, (_, i) => ({ id: `account-${i}`, name: `Synthetic customer ${i}`, status: "at_risk" })) },
+        subscription: { findMany: async () => [{ id: "renewal-1", accountId: "account-0", status: "active", autoRenew: false, renewalDate: new Date("2026-10-25") }] },
+        serviceTicket: { findMany: async () => [{ id: "work-1", customerAccountId: "account-0", title: "Restore customer report", ticketId: "TKT-1", status: "waiting-customer", priority: "high", slaDueAt: new Date("2026-10-19"), ownerPrincipalId: "principal-actual", description: "PRIVATE DETAILS" }] },
+      },
+    });
+    const snapshot = projectCustomerOperations(facts, new Date("2026-10-20"), DPF_CUSTOMER_RECORD_LINKS);
+    const html = renderToStaticMarkup(<TwinView profile={profile} snapshot={snapshot} />);
+    expect(html).toContain("Restore customer report"); expect(html).toContain("principal-actual"); expect(html).toContain("Priority: high"); expect(html).toContain("Manual renewal");
+    expect(html).toContain("Overdue SLA"); expect(html).toContain("Waiting for customer");
+    expect(html).toContain("<ol"); expect(html).toContain("<li"); expect(html).toContain("<h4");
+    expect(snapshot.zones[0].units).toHaveLength(12); expect(html).not.toContain("Synthetic customer 19");
+    expect(html).not.toContain("Confirm assignment"); expect(html).not.toContain("PRIVATE DETAILS");
+    expect(html).toContain('href="/platform/service-desk"'); expect(html).toContain('href="/customer/account-0"');
+  });
   it("renders a physical FLOOR twin with its profile vocabulary and queues", () => {
     const profile = deriveTwinProfile(byCategory("food-hospitality"));
     expect(profile.template).toBe("FLOOR");

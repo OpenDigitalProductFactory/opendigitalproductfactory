@@ -1,25 +1,6 @@
-import type { TwinTemplate } from "@dpf/storefront-templates";
-
-import type { TwinActor } from "./kit-types";
-import type {
-  TwinSnapshot,
-  TwinZoneSnapshot,
-  TwinQueueSnapshot,
-  TwinCogSnapshot,
-  TwinStageFlow,
-  TwinOutcome,
-} from "./twin-snapshot";
-import type {
-  CapacityChipData,
-  FeedEventData,
-  QuestData,
-  UtilityMeterData,
-  WorkItemData,
-} from "./kit-types";
-import type {
-  OperationalDegradedSource,
-  OperationalSourceWatermark,
-} from "@/lib/operate/source-health";
+import type { TwinTemplate } from "./template.js";
+import type { TwinActor, TwinSnapshot, TwinZoneSnapshot, TwinQueueSnapshot, TwinCogSnapshot, TwinStageFlow, TwinOutcome, CapacityChipData, FeedEventData, QuestData, UtilityMeterData, WorkItemData } from "./contracts.js";
+import type { OperationalDegradedSource, OperationalSourceWatermark } from "./source-health.js";
 
 export const OPERATIONS_SNAPSHOT_SCHEMA_VERSION = "operations.v1" as const;
 

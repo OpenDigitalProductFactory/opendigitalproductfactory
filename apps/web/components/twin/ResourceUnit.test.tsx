@@ -10,6 +10,12 @@ import { ResourceUnitGrid } from "./ResourceUnit";
 afterEach(cleanup);
 
 describe("ResourceUnitGrid", () => {
+  it("exposes contextual record links with a specific accessible name and native focus", () => {
+    render(<ResourceUnitGrid units={[{ key: "account-1", label: "Synthetic customer", state: "At risk", action: { label: "Open customer", href: "/customer/account-1" } }]} />);
+    const link = screen.getByRole("link", { name: "Open customer: Synthetic customer" }) as HTMLAnchorElement;
+    expect(link.getAttribute("href")).toBe("/customer/account-1"); expect(link.tabIndex).toBe(0);
+    link.focus(); expect(document.activeElement).toBe(link);
+  });
   it("exposes the same physical resources as an accessible list", () => {
     const units = restaurantBusyShiftFixture().zones[0].units;
     render(<ResourceUnitGrid units={units} />);

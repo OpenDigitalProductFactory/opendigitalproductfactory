@@ -9,13 +9,8 @@
 //
 // NOTE: unrelated to apps/web/lib/reporting-types.ts (compliance-posture math).
 
-export type Intent =
-  | "success"
-  | "warning"
-  | "danger"
-  | "info"
-  | "neutral"
-  | "accent";
+import type { Intent } from "@dpf/storefront-templates/operations";
+export type { Intent } from "@dpf/storefront-templates/operations";
 
 export interface IntentStyle {
   /** Foreground (text/icon) color — a CSS value, always a --dpf-* token. */
