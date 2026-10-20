@@ -2047,6 +2047,9 @@
     "packages/validators/src/hostile-content-fixtures.ts": [
       "docs/architecture/data-model-stewardship-runbook.md"
     ],
+    "packages/validators/src/operating-composition/legacy-fingerprint.ts": [
+      "docs/architecture/ai-agent-meta-model.md"
+    ],
     "packages/validators/src/readability.ts": [
       "docs/platform-usability-standards.md"
     ],
@@ -3028,7 +3031,8 @@
       "apps/web/lib/identity/aidoc-resolver.ts",
       "apps/web/lib/identity/principal-linking.ts",
       "apps/web/lib/mcp-governed-execute.ts",
-      "packages/db/src/seed-ea-sysml-agent-authority.ts"
+      "packages/db/src/seed-ea-sysml-agent-authority.ts",
+      "packages/validators/src/operating-composition/legacy-fingerprint.ts"
     ],
     "docs/architecture/ai-routing-document-map.md": [
       "apps/web/lib/ea/ai-routing-architecture-extract.ts",

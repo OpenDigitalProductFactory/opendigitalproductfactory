@@ -277,7 +277,9 @@ type InternalAIDoc = {
 };
 ```
 
-The `operating_profile_fingerprint` is the key idea for communication-at-scale: a hash of model binding + grants + prompt classes + HITL tier + sensitivity. When it changes, the agent's operating identity has *materially* changed — memory and assurance claims revalidate against it.
+The `operating_profile_fingerprint` is the existing hash of model binding + grants + prompt-class labels + default HITL tier + sensitivity. Its material and exact legacy serialization now live in `packages/validators/src/operating-composition/legacy-fingerprint.ts`; `routing/metadata-hash.ts` supplies Node SHA-256. Existing UserFact and semantic-memory fingerprints retain their bytes and meaning. This legacy field omits effective prompt/skill revisions, supervision/delegation details, doctrine, memory policy and harness identity, so equality does not prove complete composition or qualification.
+
+The separate `@dpf/validators/operating-composition` contract describes a versioned composition using exact source references, including job, role, supervision, instructions, skills, models, tools, doctrine, memory policy, configuration and harness/runtime. It computes a separate digest and assesses supplied current qualification facts with explicit holds for missing, stale, revoked or unsupported facts. Its output is assessment only; DPF retains effective source resolution, authentication, current authority and atomic receipt/effect storage. Existing active AIDoc state, freshness-only certification and absent-scheme coordinator compatibility do not become exact-composition qualification. See the [local consumer and limits](../../examples/operating-composition/README.md).
 
 **Rule of thumb:** author in the registry, communicate via the AIDoc, govern via TAK, name via GAID.
 
