@@ -490,7 +490,7 @@ async function contributeToHiveHandler(
         description: String(brief?.description ?? ""),
         portfolioContext: build.portfolioId,
         manifest: { ...manifest, dcoAttestation } as unknown as import("@dpf/db").Prisma.InputJsonValue,
-        status: "contributed",
+        status: "local",
       },
     });
   } else {
@@ -503,7 +503,7 @@ async function contributeToHiveHandler(
         version: "1.0.0",
         manifest: { ...manifest, dcoAttestation } as unknown as import("@dpf/db").Prisma.InputJsonValue,
         buildId: build.id,
-        status: "contributed",
+        status: "local",
       },
     });
   }
@@ -578,7 +578,7 @@ async function contributeToHiveHandler(
           prUrl = prResult.prUrl;
           await prisma.featurePack.update({
             where: { packId },
-            data: { manifest: { ...manifest, dcoAttestation, prUrl } as unknown as import("@dpf/db").Prisma.InputJsonValue },
+            data: { status: "contributed", manifest: { ...manifest, dcoAttestation, prUrl } as unknown as import("@dpf/db").Prisma.InputJsonValue },
           });
 
           // Run contribution review pipeline — sanitization, parameterization, vertical tagging

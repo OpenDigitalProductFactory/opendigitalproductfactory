@@ -1,15 +1,14 @@
-import { createHash } from "node:crypto";
-
-import { projectHiveResultBundle } from "@/lib/build/contribution-egress";
+import { isBoundedTrustedJson } from "../bounded-trusted-json.js";
+import { projectHiveResultBundle } from "./result-projection.js";
 
 const OPAQUE_RECEIPT_RE = /^(?!BI-|WC-|FB-|EP-)[A-Za-z0-9._:-]{8,200}$/i;
 const MAX_HIVE_RESULT_BYTES = 48 * 1024;
 
-function stableJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+function legacyHiveResultJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(legacyHiveResultJson).join(",")}]`;
   if (value && typeof value === "object") {
     const row = value as Record<string, unknown>;
-    return `{${Object.keys(row).sort().map((key) => `${JSON.stringify(key)}:${stableJson(row[key])}`).join(",")}}`;
+    return `{${Object.keys(row).sort().map((key) => `${JSON.stringify(key)}:${legacyHiveResultJson(row[key])}`).join(",")}}`;
   }
   return JSON.stringify(value);
 }
@@ -18,11 +17,13 @@ export type HiveResultIntake =
   | { ok: true; projected: Record<string, unknown>; payloadHash: string; sourceReceipt: string }
   | { ok: false; violations: string[] };
 
-export function normalizeHiveResultIntake(payload: unknown): HiveResultIntake {
+/** A trusted digest port hashes these exact legacy UTF-8 JSON bytes; no permission is implied. */
+export function normalizeHiveResultIntakeWithDigest(payload: unknown, digestHex: (bytes: string) => string): HiveResultIntake {
+  if (!isBoundedTrustedJson(payload)) return { ok: false, violations: ["payload:not-bounded-json"] };
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     return { ok: false, violations: ["payload:invalid"] };
   }
-  if (Buffer.byteLength(stableJson(payload), "utf8") > MAX_HIVE_RESULT_BYTES) {
+  if (new TextEncoder().encode(legacyHiveResultJson(payload)).byteLength > MAX_HIVE_RESULT_BYTES) {
     return { ok: false, violations: ["payload:too-large"] };
   }
   const { projected, violations } = projectHiveResultBundle(payload as Record<string, unknown>);
@@ -31,23 +32,26 @@ export function normalizeHiveResultIntake(payload: unknown): HiveResultIntake {
     violations.push("sourceReceipt:not-opaque");
   }
   if (violations.length > 0) return { ok: false, violations };
+  let hash: string;
+  try { hash = digestHex(legacyHiveResultJson(projected)); } catch { return { ok: false, violations: ["digest:unavailable"] }; }
+  if (!/^[a-f0-9]{64}$/.test(hash)) return { ok: false, violations: ["digest:invalid"] };
   return {
     ok: true,
     projected,
     sourceReceipt: sourceReceipt as string,
-    payloadHash: `sha256:${createHash("sha256").update(stableJson(projected)).digest("hex")}`,
+    payloadHash: `sha256:${hash}`,
   };
 }
 
-export function resolveHiveDeliveryAttempt(input:
+export function planHiveDeliveryAttempt(input:
   | { ok: true; remoteRef: string; attempts: number }
-  | { ok: false; error: string; attempts: number; now?: Date }
+  | { ok: false; error: string; attempts: number; now: Date }
 ) {
   const attempts = input.attempts + 1;
   if (input.ok) {
     return { status: "delivered" as const, attempts, remoteRef: input.remoteRef, lastError: null, nextAttemptAt: null };
   }
-  const now = input.now ?? new Date();
+  const now = input.now;
   const retryMinutes = Math.min(24 * 60, 5 * (2 ** Math.min(input.attempts, 8)));
   return {
     status: "retry" as const,

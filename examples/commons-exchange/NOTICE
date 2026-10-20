@@ -1,0 +1,6 @@
+DPF Commons exchange extraction
+Copyright 2026 OpenDigitalProductFactory contributors.
+Licensed under Apache License 2.0; see LICENSE.
+Sources are moved from the DPF finding/result exchange implementation, not private company corpora.
+Maintenance owner: @markdbodman, BI-0D316824. Keep source closure hashes and contract tests when copying.
+No external runtime dependency in the portable closure. Optional Node adapter uses node:crypto.
