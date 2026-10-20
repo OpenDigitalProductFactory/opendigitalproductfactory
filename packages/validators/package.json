@@ -14,6 +14,13 @@
     "./workroom/*": "./src/workroom/*.ts",
     "./gpp/*": "./src/gpp/*.ts",
     "./action-result": "./src/action-result.ts",
+    "./operating-composition": "./src/operating-composition/index.ts",
+    "./operating-composition/*": "./src/operating-composition/*.ts",
+    "./workroom-policy": "./src/workroom-policy/index.ts",
+    "./workroom-policy/*": "./src/workroom-policy/*.ts",
+    "./policy-types": "./src/policy-types.ts",
+    "./commons": "./src/commons/index.ts",
+    "./commons/*": "./src/commons/*.ts",
     "./*": "./*"
   },
   "scripts": {
