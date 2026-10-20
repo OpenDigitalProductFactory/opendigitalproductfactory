@@ -362,7 +362,7 @@ What runs proactively today is itself governed: roughly 35 scheduled watchers an
 
 Code references:
 
-- [`proactivity-resolver.ts`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/apps/web/lib/proactivity/proactivity-resolver.ts), [`proactivity-change-proposal.ts`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/apps/web/lib/proactivity/proactivity-change-proposal.ts)
+- [`proactivity-resolver.ts`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/packages/validators/src/workroom-policy/proactivity-resolver.ts), [`proactivity-change-proposal.ts`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/apps/web/lib/proactivity/proactivity-change-proposal.ts)
 - [`risk-posture.ts`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/apps/web/lib/govern/risk-posture.ts)
 - [`trust-graduation.ts`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/apps/web/lib/autonomy/trust-graduation.ts), [`regulatory-ceiling.ts`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/apps/web/lib/autonomy/regulatory-ceiling.ts)
 

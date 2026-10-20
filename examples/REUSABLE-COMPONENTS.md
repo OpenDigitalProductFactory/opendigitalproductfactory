@@ -19,13 +19,14 @@ contract or admission limit from those closures changed.
 | HX-01 | `758f615b6e20cc2fd802b53860c8efbab0ee54c5` | `@dpf/validators/commons`, optional `commons/node`; [Commons consumer](commons-exchange/README.md), seven-file core closure |
 
 WP and BS revisions contain source and examples. Their eight reviewed project
-documentation files are applied in the continuation working tree but their final
-commit is awaiting approval to co-claim `doc-index.generated.json`, which another
-active Workroom holds. The ordinary commit hook refreshes that index. It has not
-been bypassed or changed without approval. The code checkpoint above is usable
-for source inspection/absorption preparation; documentation finalization remains
-pending. OP/HX documentation is already committed. Only the earlier two planning
-documents have been published; none of this implementation has been pushed.
+documentation files are included in this final continuation, alongside the
+canonical index and impact-map updates. After the previous index owner's lease
+expired, DPF granted this Workroom ordinary ownership; no forced override or
+human approval was used. The canonical index is fresh at 758 pages and the impact
+map at 747 code / 87 route edges. Documentation and source links passed. The
+ordinary commit hooks remain enabled. OP/HX documentation was already committed.
+Only the earlier two planning documents have been published; none of this
+implementation has been pushed.
 
 WP moves the existing trigger normalization, delegated proactivity, temporal
 posture, HITL join, deadline attention and drive-hold rules. Actual scheduler,

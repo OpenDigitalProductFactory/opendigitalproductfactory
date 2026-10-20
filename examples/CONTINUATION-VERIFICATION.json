@@ -236,7 +236,6 @@
     "production qualification/enforcement/tenant isolation",
     "DPF2 acceptance"
   ],
-  "pending": "Reviewed WP/BS documentation is applied but its final commit and generated index refresh await native human co-claim approval. No publication.",
   "guards": {
     "passed": [
       "module size",
@@ -253,5 +252,21 @@
       "observedCause": "macOS /var vs /private/var canonical temp path assertion",
       "baseline": "Same failure reproduced at frozen 4faccd852a49bba58e40ad7146f3d9c585874cf0; gate/test/host-command-invocation source bytes unchanged. No fix or bypass included."
     }
+  },
+  "documentation": {
+    "status": "reviewed and finalized with this checkpoint",
+    "reviewedProjectFiles": 8,
+    "indexPages": 758,
+    "impactCodeEdges": 747,
+    "impactRouteEdges": 87,
+    "checks": [
+      "canonical doc-index --check passed",
+      "canonical doc-impact --check passed; no invalid edges",
+      "93 user-guide pages /758 indexed pages link check passed",
+      "docs-impact gate passed",
+      "diff whitespace passed"
+    ],
+    "coordination": "Old owner lease expired2026-10-20T15:45:10.625Z; DPF granted an ordinary non-forced index claim at15:45:26UTC. Prior force-co-claim human approval was not used. No gate/hook bypass.",
+    "publication": "unpublished local checkpoint"
   }
 }

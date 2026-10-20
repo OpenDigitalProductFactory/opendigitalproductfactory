@@ -1534,9 +1534,6 @@
     "apps/web/lib/work-management/drive-child-rooms.ts": [
       "docs/architecture/gated-permissions-process.md"
     ],
-    "apps/web/lib/work-management/drive-deadlines.ts": [
-      "docs/architecture/gated-permissions-process.md"
-    ],
     "apps/web/lib/work-management/human-accountability.ts": [
       "docs/architecture/workroom-vocabulary-boundary.md"
     ],
@@ -1601,12 +1598,6 @@
     ],
     "apps/web/lib/work-management/workspace-room-access.ts": [
       "docs/user-guide/workspace/work-rooms.md"
-    ],
-    "apps/web/lib/work-posture/derive.ts": [
-      "docs/user-guide/ai-workforce/how-governed-work-runs.md"
-    ],
-    "apps/web/lib/work-posture/temporal-band.ts": [
-      "docs/user-guide/ai-workforce/how-governed-work-runs.md"
     ],
     "apps/web/lib/workbooks/backlog-adapter-mapping.ts": [
       "docs/architecture/backlog-archetype-scope.md"
@@ -2056,6 +2047,15 @@
     "packages/validators/src/untrusted-text.ts": [
       "docs/architecture/data-model-stewardship-runbook.md",
       "docs/architecture/mcp-tool-authorization-runbook.md"
+    ],
+    "packages/validators/src/workroom-policy/derive.ts": [
+      "docs/user-guide/ai-workforce/how-governed-work-runs.md"
+    ],
+    "packages/validators/src/workroom-policy/drive-deadlines.ts": [
+      "docs/architecture/gated-permissions-process.md"
+    ],
+    "packages/validators/src/workroom-policy/temporal-band.ts": [
+      "docs/user-guide/ai-workforce/how-governed-work-runs.md"
     ],
     "packages/validators/src/workroom/marking.ts": [
       "docs/architecture/gated-permissions-process.md"
@@ -3332,7 +3332,6 @@
       "apps/web/lib/queue/functions/workroom-drive-deadlines.ts",
       "apps/web/lib/tak/scheduled-task-runs.ts",
       "apps/web/lib/work-management/drive-child-rooms.ts",
-      "apps/web/lib/work-management/drive-deadlines.ts",
       "apps/web/lib/work-management/stage-tool-parity.test.ts",
       "apps/web/lib/work-management/standing-operations-shapes.ts",
       "apps/web/lib/work-management/work-shape-grants-resolve.test.ts",
@@ -3345,6 +3344,7 @@
       "packages/validators/src/gpp/compiler.ts",
       "packages/validators/src/gpp/executable-constructs.ts",
       "packages/validators/src/gpp/work-shape-contracts.ts",
+      "packages/validators/src/workroom-policy/drive-deadlines.ts",
       "packages/validators/src/workroom/marking.ts",
       "scripts/installer/gpp-permit-secret-contract.test.mjs",
       "scripts/installer/install-release-assets.mjs"
@@ -4079,8 +4079,8 @@
       "apps/web/lib/work-management/room-participant-invitation-preflight.server.ts",
       "apps/web/lib/work-management/room-posture.ts",
       "apps/web/lib/work-management/room-shapes.ts",
-      "apps/web/lib/work-posture/derive.ts",
-      "apps/web/lib/work-posture/temporal-band.ts"
+      "packages/validators/src/workroom-policy/derive.ts",
+      "packages/validators/src/workroom-policy/temporal-band.ts"
     ],
     "docs/user-guide/ai-workforce/model-routing-lifecycle.md": [
       "docker-entrypoint.sh"
