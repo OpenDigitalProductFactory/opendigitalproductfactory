@@ -50,19 +50,19 @@ import { join } from "node:path";
 
 import { WORK_SHAPE_PRIOR_VERSIONS } from "../lib/work-management/work-shape-prior-versions";
 import { listWorkShapes, type WorkShapeDefinition } from "../lib/work-management/work-shapes";
-import { compileShapeDocument } from "../lib/gpp/shape-language/compile";
-import { decompile } from "../lib/gpp/shape-language/decompile";
-import { runDesignRules } from "../lib/gpp/shape-language/drc";
+import { compileShapeDocument } from "@/lib/gpp/shape-language/dpf-toolkit";
+import { decompile } from "@/lib/gpp/shape-language/dpf-toolkit";
+import { runDesignRules } from "@/lib/gpp/shape-language/dpf-toolkit";
 import {
   GENERATED_SHAPE_TYPE_IMPORT,
   GPP_SHAPE_COMPILER_ID,
   shapeConstantName,
-} from "../lib/gpp/shape-language/emit";
+} from "@/lib/gpp/shape-language/dpf-toolkit";
 import { GATE_RATIFICATION, type GateRatificationEntry } from "../lib/gpp/shape-language/gate-ratification";
-import { gppLayoutSchema } from "../lib/gpp/shape-language/gpp-layout-schema";
-import { gppShapeJsonSchema } from "../lib/gpp/shape-language/gpp-shape-schema";
+import { gppLayoutSchema } from "@dpf/validators/gpp/gpp-layout-schema";
+import { gppShapeJsonSchema } from "@dpf/validators/gpp/gpp-shape-schema";
 import { buildRatificationReport } from "../lib/gpp/shape-language/ratification-report";
-import { resolveShapeDocument, type GppResolveSources } from "../lib/gpp/shape-language/resolve";
+import { resolveShapeDocument, type GppResolveSources } from "@dpf/validators/gpp/resolve";
 import { defaultResolveSources, liveDirectExecuteSites } from "../lib/gpp/shape-language/resolve-sources";
 import { findRepoRoot, serializeStableJson, writeOrCheckGeneratedText } from "./registry-generator-support";
 
@@ -182,9 +182,12 @@ export async function buildGppShapeOutputs(root: string, context: GppShapesConte
       ...(layout?.success ? { layout: layout.data } : {}),
     });
     if (!result.accepted) {
-      for (const finding of result.diagnostics.filter((diagnostic) => diagnostic.severity === "error")) {
+      const blocking = result.diagnostics.filter((diagnostic) => diagnostic.severity === "error" || diagnostic.severity === "not-evaluated");
+      for (const finding of blocking) {
         refusals.push(`${file.relativePath}: ${finding.rule} at ${finding.elementId}${finding.path ? ` (${finding.path})` : ""}: ${finding.message}`);
       }
+      // accepted:false is itself a refusal, including any future diagnostic form.
+      if (blocking.length === 0) refusals.push(`${file.relativePath}: compilation was held; no generated artifacts may change.`);
       continue;
     }
     const { key, version } = result.definition;

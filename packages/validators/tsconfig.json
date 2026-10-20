@@ -3,6 +3,9 @@
   "compilerOptions": {
     "rootDir": "src",
     "outDir": "dist",
+    // The separate GPP compiler entry uses node:crypto. Browser closure checks
+    // compile with types: [] so this cannot qualify Node APIs for browser use.
+    "types": ["node"],
     // The federation-discovery endpoint rule parses with WHATWG `URL`, which is
     // a Web platform global rather than an ES2022 one. Declared here the same
     // way @dpf/api-client declares the platform types it uses, instead of

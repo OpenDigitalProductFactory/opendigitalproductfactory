@@ -26,7 +26,7 @@
 //   that never scheduled), so nothing is sent for an uncommitted state.
 
 import { unnotifiedDeadlines, withDeadlinesNotified, type PendingDeadlineNotice } from "@/lib/work-management/drive-deadlines";
-import { readStoredDriveMarking, type DriveMarking } from "@/lib/work-management/drive-marking";
+import { readStoredDriveMarking, type DriveMarking } from "@dpf/validators/workroom/marking";
 import type { DrivePlan } from "@/lib/work-management/drive-resolution";
 import { WORKROOM_DRIVE_DEADLINE_KIND } from "@/lib/work-management/workroom-drive-constants";
 

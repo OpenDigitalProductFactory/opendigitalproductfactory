@@ -17,7 +17,7 @@ import {
   unnotifiedDeadlines,
   withDeadlinesNotified,
 } from "./drive-deadlines";
-import type { DriveMarking } from "./drive-marking";
+import type { DriveMarking } from "@dpf/validators/workroom/marking";
 import type { WorkShapeDefinition, WorkShapeStage } from "./work-shapes";
 
 const T0 = new Date("2026-03-02T09:00:00.000Z");

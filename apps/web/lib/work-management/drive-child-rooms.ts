@@ -42,7 +42,7 @@
  * that effect committed, so a failed effect is simply decided again next tick.
  */
 import { deadlineKey } from "./drive-deadlines";
-import { iterationOf, stageToken, type DriveMarking, type DriveMarkingChild } from "./drive-marking";
+import { iterationOf, stageToken, type DriveMarking, type DriveMarkingChild } from "@dpf/validators/workroom/marking";
 import type { WorkShapeDefinitionContract } from "./work-shapes";
 
 type SubShapeShape = Pick<WorkShapeDefinitionContract, "stages">;

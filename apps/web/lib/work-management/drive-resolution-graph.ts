@@ -70,11 +70,11 @@
  * throws DriveConstructNotImplementedError; this planner turns it into the
  * same fail-closed pause, so the drive never throws for a room.
  */
-import { constructsUsedBy } from "@/lib/gpp/shape-language/constructs-used-by";
-import { stageElementId } from "@/lib/gpp/shape-language/element-ids";
-import { CONSTRUCT_EXECUTABLE } from "@/lib/gpp/shape-language/executable-constructs";
+import { constructsUsedBy } from "@dpf/validators/gpp/constructs-used-by";
+import { stageElementId } from "@dpf/validators/gpp/element-ids";
+import { CONSTRUCT_EXECUTABLE } from "@dpf/validators/gpp/executable-constructs";
 
-import type { DriveAction, DrivePlan, DriveResolutionInput } from "./drive-resolution";
+import type { DriveAction, DrivePlan, DriveResolutionInput, DriveTokenPlan } from "./drive-resolution";
 import {
   DriveConstructNotImplementedError,
   gateHolds,
@@ -89,8 +89,7 @@ import {
   type DriveGateVerdictKind,
   type DriveMarking,
   type DriveStepResult,
-  type DriveTokenPlan,
-} from "./drive-marking";
+} from "@dpf/validators/workroom/marking";
 import {
   cycleCompleted,
   emptyPlan,
@@ -107,7 +106,7 @@ import type { RecordedEvidence } from "./stage-evidence-receipts";
 import type { WorkShapeDefinitionContract } from "./work-shapes";
 import { evaluateWorkroomShapeConformance } from "./workroom-shape-conformance";
 import { STAGE_DECISION_EVIDENCE_KINDS } from "./workroom-stage-decision";
-import { isCompletingWorkroomDriveReceiptAt } from "./workroom-drive-receipts";
+import { isCompletingWorkroomDriveReceiptAt } from "@dpf/validators/workroom/receipts";
 
 /** Aggregate precedence, highest first (design §4.3). */
 const ACTION_PRECEDENCE: readonly DriveAction[] = ["stop", "escalate", "pause", "dispatch_agent", "attention", "do_not_wake"];

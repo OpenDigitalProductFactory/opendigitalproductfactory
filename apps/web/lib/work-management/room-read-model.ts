@@ -29,7 +29,7 @@ import {
   readWorkShapeDefinitionContract,
   type WorkShapeDefinition,
 } from "./work-shapes";
-import { isCompletingWorkroomDriveReceiptAt } from "./workroom-drive-receipts";
+import { isCompletingWorkroomDriveReceiptAt } from "@dpf/validators/workroom/receipts";
 import { readWorkShapeClaim, resolveWorkShapeClaim } from "./workroom-shape-claim";
 import {
   evaluateWorkroomShapeConformance,

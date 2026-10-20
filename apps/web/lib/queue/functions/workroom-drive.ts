@@ -80,7 +80,7 @@ import {
   priorDriveFromStored,
   readStoredWorkroomDriveState,
 } from "@/lib/work-management/workroom-drive-state";
-import { WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND } from "@/lib/work-management/workroom-drive-receipts";
+import { WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND } from "@dpf/validators/workroom/receipts";
 import { mergeWorkroomDriveSnapshot } from "@/lib/work-management/workroom-drive-snapshot-merge";
 import { scheduleWorkroomAgentTask } from "./workroom-drive-scheduling";
 export { mergeWorkroomDriveSnapshot } from "@/lib/work-management/workroom-drive-snapshot-merge";

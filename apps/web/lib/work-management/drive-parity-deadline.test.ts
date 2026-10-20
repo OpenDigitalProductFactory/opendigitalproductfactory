@@ -34,7 +34,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { decompile } from "@/lib/gpp/shape-language/decompile";
+import { decompile } from "@/lib/gpp/shape-language/dpf-toolkit";
 import {
   markedStageKeys as interpreterMarked,
   startShapeInstance,
@@ -42,15 +42,15 @@ import {
   type GppShapeEvent,
   type GppShapeMarking,
   type InterpretableShape,
-} from "@/lib/gpp/shape-language/interpreter";
-import { checkSoundness } from "@/lib/gpp/shape-language/soundness";
+} from "@dpf/validators/gpp/interpreter";
+import { checkSoundness } from "@dpf/validators/gpp/soundness";
 
 import { DEADLINE_PARITY_FIXTURES, TWO_DAYS } from "./__fixtures__/graph-shapes/deadline";
 import { REWORK_1 } from "./__fixtures__/graph-shapes/rework";
 import { DAY_MS, deadlineKey, raiseDueDeadlines, unnotifiedDeadlines, withDeadlinesNotified } from "./drive-deadlines";
-import { markedStageKeys, startDriveMarking, stepDriveMarking, type DriveMarking, type DriveMarkingStopped } from "./drive-marking";
+import { markedStageKeys, startDriveMarking, stepDriveMarking, type DriveMarking, type DriveMarkingStopped } from "@dpf/validators/workroom/marking";
 import type { WorkShapeDefinition } from "./work-shapes";
-import { WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND } from "./workroom-drive-receipts";
+import { WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND } from "@dpf/validators/workroom/receipts";
 
 const SEQUENCES_PER_FIXTURE = 200;
 /** Sequence n of fixture i uses BASE_SEED + 9_000_000 + i * 100_000 + n. */

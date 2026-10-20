@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "browserEntry": "kernel/gpp/browser.ts",
+  "nodeEntry": "kernel/gpp/compiler.ts",
+  "sources": [
+    "packages/validators/src/action-result.ts",
+    "packages/validators/src/outcome-disposition.ts",
+    "packages/validators/src/decision-scopes.ts",
+    "packages/validators/src/gpp/bindings-emit.ts",
+    "packages/validators/src/gpp/browser.ts",
+    "packages/validators/src/gpp/compile.ts",
+    "packages/validators/src/gpp/compiler.ts",
+    "packages/validators/src/gpp/constructs-used-by.ts",
+    "packages/validators/src/gpp/decompile.ts",
+    "packages/validators/src/gpp/design-rule-policy.ts",
+    "packages/validators/src/gpp/diagnostics.ts",
+    "packages/validators/src/gpp/drc.ts",
+    "packages/validators/src/gpp/element-ids.ts",
+    "packages/validators/src/gpp/emit.ts",
+    "packages/validators/src/gpp/executable-constructs.ts",
+    "packages/validators/src/gpp/gpp-layout-schema.ts",
+    "packages/validators/src/gpp/gpp-shape-schema.ts",
+    "packages/validators/src/gpp/interpreter.ts",
+    "packages/validators/src/gpp/legacy.ts",
+    "packages/validators/src/gpp/parse.ts",
+    "packages/validators/src/gpp/ratification.ts",
+    "packages/validators/src/gpp/resolve.ts",
+    "packages/validators/src/gpp/soundness.ts",
+    "packages/validators/src/gpp/stop-exits.ts",
+    "packages/validators/src/gpp/tool-facts.ts",
+    "packages/validators/src/gpp/work-shape-contracts.ts",
+    "packages/validators/src/gpp/work-vocabulary.ts",
+    "packages/validators/src/workroom/flow-graph.ts",
+    "packages/validators/src/workroom/index.ts",
+    "packages/validators/src/workroom/marking.ts",
+    "packages/validators/src/workroom/receipts.ts"
+  ],
+  "canonicalJsonSource": "packages/integration-shared/src/canonical-json.ts",
+  "dependencies": {
+    "zod": "4.6.7",
+    "nodeTypes": "26.6.5",
+    "undiciTypes": "8.9.0"
+  },
+  "toolchain": {
+    "node": "24.16.0",
+    "typescript": "6.0.3"
+  },
+  "license": "Apache-2.0",
+  "sourceBaseline": "91550be3e97ad8d99af3d01992323c07d2f1d1c5",
+  "qualification": "Synthetic compiler/model and mapping fixture only; no actual browser/CSP, authenticated evidence, job qualification, GPP 0.19 whole actor/session aggregation, tool execution or production admission."
+}
