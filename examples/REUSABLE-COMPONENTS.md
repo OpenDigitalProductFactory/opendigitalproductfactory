@@ -1,6 +1,121 @@
 # Local reusable component handoff
 
-Three working subsets are ready for a bounded absorption study: the Workroom
+## October 20 joined continuation
+
+The four remaining local working subsets are implemented, independently reviewed
+and joined with the preserved priority checkpoint on `codex/reusable-continuation`
+at `3b7a668a7693081c3b9c6342b7961e2696e8e014`, in
+`/Users/markbodman/dpf-worktrees/reusable-continuation`. This source checkpoint is
+unpublished. The earlier checkpoint at `4faccd852a49bba58e40ad7146f3d9c585874cf0`
+in `/Users/markbodman/dpf-worktrees/gpp-toolkit` remains intact. Its WK/GP/SJ source
+and example closures are byte-identical in the continuation; no exported
+contract or admission limit from those closures changed.
+
+| Slice | Exact implementation revision | Reusable entry and proof |
+| --- | --- | --- |
+| WP-01 | `84d1cb36aeee4693a83500236c71426e9adc29d5` | `@dpf/validators/workroom-policy`; [policy consumer](workroom-policies/README.md), 29-file closure |
+| OP-01 | `1b11e41fbc3f96fda04666cfc7b08afcbfb61f6a` | `@dpf/validators/operating-composition`; [composition consumer](operating-composition/README.md), seven-source closure |
+| BS-01 | `32d863f3bea06c2a07426e8e27a1bb0f1d608981` | `@dpf/storefront-templates/operations`; [business consumer](business-operations/README.md), eight-file closure |
+| HX-01 | `758f615b6e20cc2fd802b53860c8efbab0ee54c5` | `@dpf/validators/commons`, optional `commons/node`; [Commons consumer](commons-exchange/README.md), seven-file core closure |
+
+WP and BS revisions contain source and examples. Their eight reviewed project
+documentation files are applied in the continuation working tree but their final
+commit is awaiting approval to co-claim `doc-index.generated.json`, which another
+active Workroom holds. The ordinary commit hook refreshes that index. It has not
+been bypassed or changed without approval. The code checkpoint above is usable
+for source inspection/absorption preparation; documentation finalization remains
+pending. OP/HX documentation is already committed. Only the earlier two planning
+documents have been published; none of this implementation has been pushed.
+
+WP moves the existing trigger normalization, delegated proactivity, temporal
+posture, HITL join, deadline attention and drive-hold rules. Actual scheduler,
+attention, prompt, queue and Workroom callers import the canonical package.
+Displaced implementations are removed; one named ProactivityLevel type bridge
+retains the currently occupied agent-action caller. Existing budget/funding
+records, current authorization and durable queue/store owners remain in DPF.
+Its new funded-author conjunction creates no permission. The isolated fixture
+checks current facts before replay and returns snapshots, including eight
+regressions against caller mutation of internal attempts.
+
+OP moves the exact AIDoc fingerprint material and sorted-key serializer; real
+identity/memory/routing callers retain issued untagged SHA-256 bytes. A separate
+`operating-composition/0.1` contract binds versioned job, role, supervision,
+instruction, skill, model, tool, doctrine, memory, configuration, harness and
+runtime references. Its supplied qualification query is assessment-only.
+Authenticated facts, actual prompt assembly, grant/route eligibility and trusted
+effects remain host-owned. Shared bounded JSON and decision-scope leaves have
+one home; the strict existing trusted-agent interchange schema is unchanged.
+
+BS moves the versioned snapshot engine and portable view contracts. Workspace,
+snapshot API and admin preview use that engine; the legacy snapshot facade is
+removed. Customer projections use canonical accounts, subscription dates and
+authorized service work. Shelter counts use the same canonical animal/custody
+adapter as the rescue cockpit; listing-as-custody and invoice-as-delivery
+interpretations are retired. Current viewer checks precede protected reads.
+Consumer-owned record-link ports keep application routes outside the portable
+projection. Real renderers expose responsibility, priority and contextual links.
+Missing sources stay unavailable; renderer/axe unit proof is separate from
+unrun served keyboard/mobile or operator-comprehension qualification.
+
+HX moves finding rules and result projection/intake into the portable package;
+real stores import them and displaced app implementations are deleted. Existing
+opaque receipts, numeric-key/UTF-8/prototype-key hash bytes and the single ledger
+remain compatible. New bounded exact-content/destination review assessments
+return intents, never grants or writes. Actual failed PR delivery now keeps the
+current pack/findings local. Production exact-review persistence, durable
+uncertainty reservation, full curation/adoption and replacing the legacy
+FeatureBuild-only code ship source remain unavailable. Incoming review content
+cannot authorize anything; projected field names do not prove privacy.
+
+Existing draft `trusted-agent-contracts` / `trusted-agent-reference-loop` remain
+the reused trust family, with the same GAID/JSI/GPP/TAK ownership and qualification
+limits described below. They are not replaced by a second protocol or promoted
+to production enforcement by these extractions.
+
+The joined source run passed **387 application files / 4,789 tests**, with one
+database-dependent file skipped, four skipped tests and five todo tests.
+Validators passed 24 suites / 346 tests; storefront templates passed 28 / 392.
+Both web programs and both package TypeScript checks passed. All seven isolated
+consumers passed **66 scenario groups** on exact Node 24.16.0 / TypeScript 6.0.3.
+See [the exact selection and qualification record](CONTINUATION-VERIFICATION.json).
+Counts are from these joined runs, not sums of overlapping per-slice runs.
+Native review/coverage, shared runtime/build, production qualification and DPF2
+acceptance remain unrun. DPF2 was read-only in this chat.
+
+An additional tooling run passed 44 of 45 script tests. The existing Windows
+command fixture in `scripts/derived-artifacts-gate.test.mjs` fails on this macOS
+host because `/var` resolves to `/private/var`. The same failure was reproduced
+in the unchanged frozen checkout; all three involved source files are identical
+to that checkpoint. No component source or guard was weakened to hide it.
+
+### Next DPF2 absorption candidates
+
+The read-only October 20 consumer refresh found nine WK/GPP graph/schema files
+already copied from the frozen checkpoint under `packages/reusable/dpf`, used by
+`packages/core/src/reusable-components.ts`. That excludes marking, receipt
+predicates, the full compiler and SJ; it is not blanket adoption of all three
+families. DPF2 has no Git commit yet, so no immutable consumer revision is claimed.
+
+| Slice | Concrete existing consumer home and retirement condition |
+| --- | --- |
+| WP | Adapt posture/HITL interpretation in `packages/core/src/index.ts` with existing `Room.posture` and trusted command facts. Retire only the two replaced advise/propose interpretation branches after unchanged posture tests. Keep the current worker, UTC recurrence/coalescing, human decisions, grants and budget/resource reservations. Producer trigger normalization does not replace calendar recurrence. |
+| OP | Add exact composition refs through `QualifiedProfile`, `stage-eligibility.ts` and `packages/runtime/src/composition-plan.ts`. No AIDoc hash implementation exists there to retire. Replace fixture-only qualification interpretation only when a named adapter supplies exact scheme/source facts; retain the planner's account/channel/tool/context/cost eligibility. |
+| BS | Adapt the snapshot/freshness envelope within `packages/experience/src/operating-surface.ts` and the existing workspace response. `getBusinessOverview` is already retired; do not count it again. Retire only actually overlapping projection assembly and retain core dependency/CAS owners. DPF2 lacks canonical accounts/subscriptions/shelter records, so its commitments and fixture customers cannot masquerade as those facts. |
+| HX | Extend the existing `Contribution` and private submit/review/accept commands before implementing the existing `ContributionTransport` port. Preserve exact human revision review, separate steward acceptance and existing Store/outbox ownership. No remote normalization/transport exists there to claim retired; receiving content cannot authorize adoption. |
+
+Update DPF2's existing provenance/dependency disposition per exact consumed
+closure, reuse shared leaves, and preserve its current fixture equality format.
+New composition, legacy AIDoc and Hive hashing have distinct compatibility
+contracts. Candidate requirement links are WP R008/R009/R029/R039; OP R017/R018;
+BS R001/R010/R030/R031/R035; HX R003/R020/R032/R040; maintenance R028 throughout.
+Its current acceptance cases remain not_run; producer proof cannot advance them.
+Each consumer README supplies dependencies/notices, trusted ports, unsupported
+behavior, maintenance and rollback guidance. Maintainer: @markdbodman, under the
+four child BIs of BI-E23432C1. No DPF2 edit or other-chat message is authorized here.
+
+## Frozen three-component checkpoint (October 18)
+
+Three working subsets were ready for a bounded absorption study: the Workroom
 graph/evidence kernel, offline GPP toolkit and scoped judgment. They coexist in
 one DPF checkout on `codex/gpp-toolkit`. Real DPF callers use each extracted
 implementation, and the displaced source implementations are removed.
@@ -173,9 +288,9 @@ owner, tracking item and removal condition. Rollback restores a moved
 implementation together with every import/generator change; restore no parallel
 store, engine, authority or effect path.
 
-All seven families were audited. Workroom policy modules (BI-D30CD423), operating
+At the frozen three-component checkpoint, all seven families were audited and Workroom policy modules (BI-D30CD423), operating
 composition (BI-9874488F), business surface/canonical facts (BI-9A6163AD) and
-Commons/Hive exchange (BI-0D316824) remain planned implementation slices. Existing
+Commons/Hive exchange (BI-0D316824) remained planned implementation slices. The October 20 continuation above supersedes that implementation status. Existing
 portable trust contracts are retained rather than recreated. This checkpoint
 does not claim those later slices, a full Workroom platform or full standards
 conformance are complete.
