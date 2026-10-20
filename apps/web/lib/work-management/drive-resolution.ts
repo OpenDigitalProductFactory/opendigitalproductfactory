@@ -9,7 +9,7 @@
  * (`actionBoundary === "preauthorized"`): then the room DRIVES its own governed
  * review, dispatching the non-author agent reviewer who records the receipt.
  */
-import type { ProactivityActionBoundary, ProactivityLevel } from "@/lib/proactivity/proactivity-types";
+import type { ProactivityActionBoundary, ProactivityLevel } from "@dpf/validators/workroom-policy/proactivity-types";
 import type { WorkroomParticipantRole, WorkroomParticipantView } from "./room-types";
 import type {
   ProjectedWorkShapeCycle,
@@ -24,7 +24,7 @@ import {
 } from "./workroom-shape-conformance";
 import type { DriveReason, DriveReasonsByAction } from "./drive-conclusion";
 import type { DriveMarking, DriveRework } from "@dpf/validators/workroom/marking";
-import type { DueDeadline } from "./drive-deadlines";
+import type { DueDeadline } from "@dpf/validators/workroom-policy/drive-deadlines";
 import type { SubShapeChildObservation, SubShapeEffects } from "./drive-child-rooms";
 import type { RecordedEvidence } from "./stage-evidence-receipts";
 import { usesGraphConstructs } from "@dpf/validators/workroom/marking";

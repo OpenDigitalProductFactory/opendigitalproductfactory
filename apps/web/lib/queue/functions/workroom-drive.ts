@@ -26,7 +26,7 @@ import {
 import { TERMINAL_WORKROOM_STATUSES } from "@/lib/work-management/standing-room-nesting";
 import { buildStageBrief, stageBriefInputFromDefinition, stageEvidenceKinds } from "@/lib/work-management/stage-briefing";
 import { type WorkroomStageTaskConfig } from "@/lib/scheduling/workroom-stage-task-config";
-import { driveTickIsNews, nextDriveHold, readDriveHold, stallNoticeDue, type WorkroomDriveHold } from "@/lib/work-management/workroom-drive-hold";
+import { driveTickIsNews, nextDriveHold, readDriveHold, stallNoticeDue, type WorkroomDriveHold } from "@dpf/validators/workroom-policy/drive-hold";
 import { readWorkroomQueueHold } from "@/lib/work-capsules/workroom-queue-hold";
 
 import {
@@ -50,7 +50,7 @@ import { earnEvidenceReceipts, type RecordedEvidence } from "@/lib/work-manageme
 import { sequentialRunFor } from "@/lib/work-management/drive-sequential-run";
 
 import { gateAtEntry } from "../quiescence-gates";
-import type { ProactivityLevel } from "@/lib/proactivity/proactivity-types";
+import type { ProactivityLevel } from "@dpf/validators/workroom-policy/proactivity-types";
 import {
   WORKROOM_DRIVE_ACTIVITY_KIND,
   WORKROOM_DRIVE_ATTENTION_KIND,

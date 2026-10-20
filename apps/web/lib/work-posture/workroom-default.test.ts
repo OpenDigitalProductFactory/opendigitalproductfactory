@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveWorkPosture } from "./resolve";
-import type { ProactivityPlan } from "@/lib/proactivity/proactivity-types";
+import { resolveWorkPosture } from "@dpf/validators/workroom-policy/resolve";
+import type { ProactivityPlan } from "@dpf/validators/workroom-policy/proactivity-types";
 
 // EP-WORK-POSTURE — the DECREED DEFAULT for rooms.
 //

@@ -17,7 +17,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DEADLINE_FIXTURE } from "@/lib/work-management/__fixtures__/graph-shape-fixtures";
-import { DAY_MS } from "@/lib/work-management/drive-deadlines";
+import { DAY_MS } from "@dpf/validators/workroom-policy/drive-deadlines";
 import { resolveDrivePlan, workroomDriveTaskId } from "@/lib/work-management/drive-resolution";
 import { projectPersistedWorkroomRoster } from "@/lib/work-management/room-participant-assignment";
 import { readWorkShapeDefinitionContract } from "@/lib/work-management/work-shapes";

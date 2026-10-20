@@ -6,7 +6,7 @@ import type {
   ProactivityPlan,
   ProactivityResolverInput,
   ProactivitySpendClass,
-} from "./proactivity-types";
+} from "./proactivity-types.js";
 
 type PlanDefaults = {
   attentionWindowMinutes: number;

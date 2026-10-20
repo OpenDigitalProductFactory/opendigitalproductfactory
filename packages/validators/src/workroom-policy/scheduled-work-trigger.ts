@@ -21,7 +21,7 @@
  * `trigger` key — the same discipline the workroom shape and posture claims use
  * on `scopeClaims`. A task with no trigger recorded behaves exactly as today.
  */
-import type { TemporalBandInput } from "@/lib/work-posture";
+import type { TemporalBandInput } from "./temporal-band.js";
 
 export const SCHEDULED_WORK_TRIGGER_KINDS = [
   "time",

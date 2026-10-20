@@ -21,11 +21,11 @@
  * the posture layer's tighten-only invariant: a posture may restrict what a
  * participant does and can never widen it.
  */
-import type { RiskClass } from "@/lib/autonomy/trust-graduation";
-import type { ProactivityActionBoundary } from "@/lib/proactivity/proactivity-types";
-import type { VerificationDepth } from "@/lib/golden-triangle";
+import type { RiskClass } from "../policy-types.js";
+import type { ProactivityActionBoundary } from "./proactivity-types.js";
+import type { VerificationDepth } from "../policy-types.js";
 
-import type { WorkCaseAutonomyDecisionMode } from "./autonomy-envelope";
+import type { WorkCaseAutonomyDecisionMode } from "../policy-types.js";
 
 /** Descending autonomy. Lower rank = stricter = fewer things done unattended. */
 const DECISION_MODE_RANK: Record<WorkCaseAutonomyDecisionMode, number> = {

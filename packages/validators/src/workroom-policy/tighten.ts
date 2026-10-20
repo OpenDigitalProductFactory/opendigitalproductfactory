@@ -23,12 +23,12 @@
  * decreases what it may do unattended. Neither direction ever hands a coworker
  * authority it did not already have.
  */
-import type { QualityTier } from "@/lib/routing/quality-tiers";
+import type { QualityTier } from "../policy-types.js";
 import type {
   ProactivityActionBoundary,
   ProactivityLevel,
-} from "@/lib/proactivity/proactivity-types";
-import type { VerificationDepth } from "@/lib/golden-triangle";
+} from "./proactivity-types.js";
+import type { VerificationDepth } from "../policy-types.js";
 
 const PROACTIVITY_RANK: Record<ProactivityLevel, number> = {
   quiet: 0,
