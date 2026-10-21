@@ -169,9 +169,10 @@ agents into 341 such rooms, many untouched since 2026-09-25. Each run left no ev
 04:00Z 277 rooms were held on `executor_writeback_unavailable`, against a baseline of 6 a day,
 and the owner's "Needs you" showed ~56 of them. The item status now gates every plan
 (`drive-work-item-gate.ts`). When the item is `done`, `deferred` or `retired`, the room stands
-down entirely. When it is `awaiting-acceptance`, no agent runs and no agent-side pause is held,
-but a person stage (the acceptance itself) still asks. A conformance stop or escalation is never
-hidden. A stood-down tick is `do_not_wake`/`work_item_inactive`: it deactivates the room's task
+down entirely, escalations included, since there is no work left to coordinate. On 2026-10-21 a
+done item's room (`WC-F836CFFC`) had escalated for 1,234 ticks. When the item is
+`awaiting-acceptance`, no agent runs and no agent-side pause is held, but a person stage (the
+acceptance itself) and an escalation still ask. A conformance stop is never hidden. A stood-down tick is `do_not_wake`/`work_item_inactive`: it deactivates the room's task
 and replaces its pause, so an existing stall card clears on the next tick with no data repair.
 Reopening the item lets the next tick plan the room again. A room with no item, or an item whose
 status could not be read, is driven as before.
