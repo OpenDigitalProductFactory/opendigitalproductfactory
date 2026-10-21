@@ -3,7 +3,7 @@
 The supported host launch resolves existing saved CA trust before Node starts
 gate work, propagates it to children and verifies TLS before expensive checks.
 Transport prerequisites return unrun exit 88; authentication, authorization and
-quiescence retain separate diagnostics. See [saved host trust](../install/platform-support-watchlist.md#saved-host-ca-trust-and-stale-clients-bi-f89c7fbd)
+quiescence retain separate diagnostics. See [saved host trust](../install/platform-support-watchlist.md#saved-host-ca-trust-and-stale-clients)
 for precedence and recovery. No trust-store or credential change occurs at launch.
 
 ## Recovering an interrupted gate publication

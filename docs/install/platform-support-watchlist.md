@@ -1,6 +1,8 @@
 # Platform Support Watch-List (living document)
 
-## Saved host CA trust and stale clients (BI-F89C7FBD)
+## Saved host CA trust and stale clients
+
+The historical repair is evidenced by the merged [saved host trust change, PR 6497](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/6497).
 
 The supported Node gate launch (`pnpm run pregate`, including its native gate
 entry) reads existing authorized endpoint/trust through the installer client-env

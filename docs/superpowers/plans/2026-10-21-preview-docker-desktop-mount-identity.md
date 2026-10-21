@@ -113,6 +113,17 @@ unchanged main `28ab249373336c86b409a6cb129370867533c6fc`: queue claim returned
 shared-CI and native semantic review remain pending at this checkpoint. No
 runtime acceptance, deployment or merge is claimed.
 
+The first frozen pregate at `4ac996627ccfcba0f0a8a8402a0ed95b6dbab371`
+stopped before shared admission: 83 of 84 host guards passed, and the live
+documentation-citation guard could not resolve the watchlist's historical
+host-trust backlog citation. The historical change is verified by merged
+[PR 6497](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/6497).
+Its watchlist heading now uses a stable descriptive title and cites that merged
+source; four exact inbound links are updated to the supported heading fragment.
+The CA behavior text is unchanged. This documentation correction creates no
+backlog record and changes no guard, baseline, authorization or runtime behavior.
+The original lookup and refusal remain recorded in the Workroom timeline.
+
 ## Risks and stop condition
 
 Preserve all existing lease, source, environment and issuer restrictions.
