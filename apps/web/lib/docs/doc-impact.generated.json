@@ -1111,6 +1111,9 @@
       "docs/architecture/section-navigation.md",
       "docs/maintenance/staleness-report.md"
     ],
+    "apps/web/lib/nonprod/environment-lease-preview-yield.ts": [
+      "docs/architecture/build-gate-runbook.md"
+    ],
     "apps/web/lib/nonprod/gate-client-revision.ts": [
       "docs/architecture/dpf-patterns.md",
       "docs/install/platform-support-watchlist.md"
@@ -3096,6 +3099,7 @@
       "apps/web/lib/build/pr-follow-through.ts",
       "apps/web/lib/build/pull-request-merged-signal.ts",
       "apps/web/lib/build/sandbox/test-scope-guard.ts",
+      "apps/web/lib/nonprod/environment-lease-preview-yield.ts",
       "apps/web/lib/queue/functions/build-pr-delivery-reconcile.ts",
       "apps/web/lib/queue/functions/build-review-verification.ts",
       "packages/dpf-skill-pack/hooks/lib/local-ci-override.mjs",

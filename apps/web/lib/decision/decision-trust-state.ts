@@ -37,6 +37,7 @@ export const DECISION_TRUST_REPORT_CAVEATS = [
   "A human who rubber-stamps produces high agreement and no information.",
   "Only human-resolved decisions are samples. A coworker's report on its own decision is counted separately and never pooled into the rate.",
   "Every level shown is read from TrustState. This report authorizes no autonomy; it changes no level.",
+  "Outcome-resolved decisions (outcomeResolvedCount) were resolved from what happened downstream, such as a reviewed design being revised or built unchanged, not what a person chose. They are counted beside the human samples, never inside them, and the change may have had other causes.",
 ] as const;
 
 export type DecisionTrustLedgerRow = {
@@ -63,6 +64,12 @@ export type DecisionTrustAggregate = {
   /** An agent's report on its own decision. Never in the rate. */
   agentReportedCount: number;
   agentReportedAgreementCount: number;
+  /**
+   * Resolved from what happened downstream (BI-22601A38), not by a person.
+   * Never in the rate.
+   */
+  outcomeResolvedCount: number;
+  outcomeAgreementCount: number;
   /** A recommendation with no known agreement: unreported, or reported unresolved. */
   unresolvedCount: number;
   /** The kernel abstained, so there is nothing to agree with. */
@@ -90,6 +97,8 @@ export function aggregateDecisionTrust(rows: readonly DecisionTrustLedgerRow[]):
         agreementRate: null,
         agentReportedCount: 0,
         agentReportedAgreementCount: 0,
+        outcomeResolvedCount: 0,
+        outcomeAgreementCount: 0,
         unresolvedCount: 0,
         noRecommendationCount: 0,
         lastLedgerId: null,
@@ -110,6 +119,9 @@ export function aggregateDecisionTrust(rows: readonly DecisionTrustLedgerRow[]):
     } else if (row.resolvedBy === "human") {
       agg.sampleCount += 1;
       if (row.agreement) agg.agreementCount += 1;
+    } else if (row.resolvedBy === "outcome") {
+      agg.outcomeResolvedCount += 1;
+      if (row.agreement) agg.outcomeAgreementCount += 1;
     } else {
       agg.agentReportedCount += 1;
       if (row.agreement) agg.agentReportedAgreementCount += 1;
@@ -146,6 +158,11 @@ export type DecisionTrustReportRow = {
   agreementRate: number | null;
   rateDisplay: string;
   agentReportedCount: number;
+  /** Resolved from downstream outcome, not by a person; never in agreementRate. */
+  outcomeResolvedCount: number;
+  outcomeAgreementCount: number;
+  /** The outcome concordance, withheld below the same minimum as the human rate. */
+  outcomeRateDisplay: string;
   unresolvedCount: number;
   noRecommendationCount: number;
   lastEvaluatedAt: string | null;
@@ -189,6 +206,13 @@ export function buildDecisionTrustReport(input: {
         agreementRate: withheld ? null : state.agreementRate,
         rateDisplay: rateDisplay(state.sampleCount, state.agreementCount, state.agreementRate),
         agentReportedCount: agg?.agentReportedCount ?? 0,
+        outcomeResolvedCount: agg?.outcomeResolvedCount ?? 0,
+        outcomeAgreementCount: agg?.outcomeAgreementCount ?? 0,
+        outcomeRateDisplay: rateDisplay(
+          agg?.outcomeResolvedCount ?? 0,
+          agg?.outcomeAgreementCount ?? 0,
+          agreementRate({ samples: agg?.outcomeResolvedCount ?? 0, agreements: agg?.outcomeAgreementCount ?? 0 }),
+        ),
         unresolvedCount: agg?.unresolvedCount ?? 0,
         noRecommendationCount: agg?.noRecommendationCount ?? 0,
         lastEvaluatedAt: state.lastEvaluatedAt ? state.lastEvaluatedAt.toISOString() : null,

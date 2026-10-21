@@ -25,6 +25,55 @@ function row(over: Partial<DecisionTrustLedgerRow> = {}): DecisionTrustLedgerRow
   };
 }
 
+describe("outcome-derived resolutions (BI-22601A38)", () => {
+  it("are counted in their own bucket, never as human samples and never as an agent's own report", () => {
+    const [agg] = aggregateDecisionTrust([
+      row({ agreement: true, resolvedBy: "human" }),
+      row({ agreement: true, resolvedBy: "outcome" }),
+      row({ agreement: false, resolvedBy: "outcome" }),
+      row({ agreement: true, resolvedBy: "outcome" }),
+    ]);
+    expect(agg).toMatchObject({
+      sampleCount: 1,
+      agreementCount: 1,
+      agentReportedCount: 0,
+      outcomeResolvedCount: 3,
+      outcomeAgreementCount: 2,
+    });
+  });
+
+  it("reach the report beside, not inside, the human rate, which is withheld on its own sample", () => {
+    const report = buildDecisionTrustReport({
+      trustStates: [{
+        agentId: "AGT-A",
+        activityType: "governed_decision_kernel_consult",
+        riskClass: "internal-reversible",
+        currentLevel: "shadow",
+        sampleCount: 0,
+        agreementCount: 0,
+        agreementRate: null,
+        lastEvaluatedAt: null,
+      }],
+      ledger: aggregateDecisionTrust([
+        row({ agreement: true, resolvedBy: "outcome" }),
+        row({ agreement: false, resolvedBy: "outcome" }),
+      ]),
+      attributedDecisionsByAgent: { "AGT-A": 2 },
+    });
+    expect(report.rows[0]).toMatchObject({
+      sampleCount: 0,
+      agreementRate: null,
+      outcomeResolvedCount: 2,
+      outcomeAgreementCount: 1,
+      outcomeRateDisplay: `insufficient samples (2 of ${DECISION_TRUST_MIN_SAMPLES})`,
+    });
+  });
+
+  it("say they are what happened downstream, not what a person chose", () => {
+    expect(DECISION_TRUST_REPORT_CAVEATS.join(" ")).toContain("not what a person chose");
+  });
+});
+
 describe("aggregateDecisionTrust", () => {
   it("keys one aggregate per coworker x activity x risk class", () => {
     const out = aggregateDecisionTrust([

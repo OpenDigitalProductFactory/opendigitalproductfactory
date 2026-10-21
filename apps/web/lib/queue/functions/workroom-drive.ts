@@ -37,7 +37,7 @@ import {
   loadStandingRoomIds,
   loadWorkItemStatuses,
   reconcileCoordinationBindings,
-  reconcileStandingRoomNesting,
+  reconcileStandingRoomNesting, deactivateUndrivenRoomTasks, taskLeftBehind, workItemKeyOf, // BI-1DDCE164
 } from "./workroom-drive-data";
 export { loadStandingRoomIds, STANDING_ROOM_SCAN_LIMIT } from "./workroom-drive-data";
 import { earnGraphReceipts, graphSnapshotFields, hasStoredDriveMarking, withLatchedBlockedReceipts } from "@/lib/work-management/drive-graph-tick";
@@ -106,6 +106,7 @@ export type WorkroomDriveRoom = {
   receipts: { stageKey: string; kind: string; iteration?: number }[];
   /** The room's own objective, sent to the coworker in its stage brief. */
   objective?: string | null;
+  workItemKey?: string | null; // BI-1DDCE164: the item's semantic id (BI-*), named in the brief
   /** Stage-scoped evidence recorded through record_workroom_evidence — the only
    *  thing a completing receipt is earned from (BI-76B35820). */
   recordedEvidence?: RecordedEvidence[];
@@ -319,6 +320,7 @@ export async function applyDrivePlan(input: {
   }
 
   if (plan.action === "attention") {
+    const left = taskLeftBehind(room, plan); if (left) await effects.deactivateAgentTask(left); // BI-1DDCE164
     await persist({
       roomId: room.id,
       snapshot,
@@ -364,7 +366,7 @@ export async function applyDrivePlan(input: {
     if (!room.ownerUserId) return "skipped";
     // GPP element 2 "Attachment" + element 5 "Capability set": the brief and the
     // task carry the stage's declared tools; the scheduler pins them (BI-43C3E914).
-    const brief = stageBriefInputFromDefinition({ capsuleId: room.capsuleId, roomObjective: room.objective ?? null,
+    const brief = stageBriefInputFromDefinition({ capsuleId: room.capsuleId, roomObjective: room.objective ?? null, backlogItemKey: room.workItemKey ?? null,
       shapeKey: plan.shapeKey ?? "", shapeVersion: plan.shapeVersion ?? "", definition: plan.definition ?? null, stageKey: plan.stageKey ?? "" });
     const scheduled = await effects.upsertAgentTask({
       taskId: plan.taskId,
@@ -439,7 +441,7 @@ export async function runWorkroomDriveJob(
   if (deps?.listRooms) {
     rooms = await deps.listRooms();
   } else {
-    await reconcileCoordinationBindings();
+    await Promise.all([reconcileCoordinationBindings(), deactivateUndrivenRoomTasks()]); // BI-1DDCE164: stop tasks of unselected rooms
     const { prisma } = await import("@dpf/db");
     const [bindings, schemePresent] = [
       await loadCoordinationBindings(),
@@ -623,6 +625,7 @@ async function loadStandingRooms(
       id: row.id,
       capsuleId: row.capsuleId,
       backlogItemId: row.backlogItemId,
+      objective: row.objective, workItemKey: workItemKeyOf(row),
       coordinatorEligibility: resolveCoordinatorEligibility({
         shapeKey,
         bindings: (shapeKey ? coordinationBindings?.get(shapeKey) : undefined) ?? [],

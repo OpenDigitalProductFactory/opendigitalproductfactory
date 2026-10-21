@@ -72,6 +72,7 @@ import {
   STRANDED_ABANDON_MS,
   reviewIncompleteBackoff,
   countReviewIncompleteStreak,
+  countPlanReviewIncompleteStreak,
   REVIEW_INCOMPLETE_BACKOFF_BASE_MS,
   REVIEW_INCOMPLETE_BACKOFF_MAX_MS,
   countUnchangedRefusalStreak,
@@ -81,18 +82,49 @@ import {
 } from "./resume-pre-build-phase";
 
 describe("resumePreBuildPhase (BI-9257CF19)", () => {
-  it("preserves a saved plan when reviewer execution was incomplete", async () => {
-    findUniqueMock.mockResolvedValue({
-      designDoc: { x: 1 },
-      buildPlan: { tasks: [{ title: "Implement callback" }] },
-      planReview: { decision: "fail", reviewIncomplete: true, issues: [] },
-    });
+  // BI-8925E227: an incomplete plan review is a reviewer outage, not a verdict.
+  // Keep the plan, back off, then re-run the review — never skip it forever.
+  const incompletePlan = {
+    designDoc: { x: 1 },
+    buildPlan: { tasks: [{ title: "Implement callback" }] },
+    planReview: { decision: "fail", reviewIncomplete: true, issues: [] },
+  };
+  const incompleteRow = (minutesAgo: number) => ({
+    summary: "Plan review: fail. Review incomplete: 0 of 2 reviewers returned a usable verdict. Retry the review; do not revise the document for a reviewer outage.",
+    createdAt: new Date(Date.now() - minutesAgo * 60_000),
+  });
+
+  it("backs off after an incomplete plan review, preserving the plan", async () => {
+    findUniqueMock.mockResolvedValue(incompletePlan);
+    buildActivityFindManyMock.mockResolvedValue([incompleteRow(5)]);
     const result = await resumePreBuildPhase({ buildId: "FB-INCOMPLETE", phase: "plan", userId: "u" });
     expect(result).toMatchObject({ kind: "skipped" });
+    expect((result as { reason: string }).reason).toMatch(/could not be completed 1x.*next retry/);
     expect(dispatchPlanMock).not.toHaveBeenCalled();
     expect(performPlanToBuildTransitionMock).not.toHaveBeenCalled();
     expect(executeToolMock).not.toHaveBeenCalled();
   });
+
+  it("re-runs the review of the saved plan once the backoff is due, without regenerating it", async () => {
+    findUniqueMock.mockResolvedValue(incompletePlan);
+    buildActivityFindManyMock.mockResolvedValue([incompleteRow(31)]);
+    const result = await resumePreBuildPhase({ buildId: "FB-INCOMPLETE", phase: "plan", userId: "u" });
+    expect(executeToolMock).toHaveBeenCalledWith("reviewBuildPlan", { buildId: "FB-INCOMPLETE" }, "u", { featureBuildId: "FB-INCOMPLETE" });
+    expect(dispatchPlanMock).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ kind: "resumed", via: "executeTool:reviewBuildPlan" });
+  });
+
+  it("counts only consecutive incomplete plan reviews", () => {
+    const now = new Date();
+    expect(countPlanReviewIncompleteStreak([
+      { summary: incompleteRow(0).summary, createdAt: now },
+      { summary: incompleteRow(0).summary, createdAt: new Date(now.getTime() - 1) },
+      { summary: "Plan review: pass. ok", createdAt: new Date(now.getTime() - 2) },
+      { summary: incompleteRow(0).summary, createdAt: new Date(now.getTime() - 3) },
+    ])).toEqual({ streak: 2, lastAt: now });
+    expect(countPlanReviewIncompleteStreak([])).toEqual({ streak: 0, lastAt: null });
+  });
+
   beforeEach(() => {
     findUniqueMock.mockReset();
     queueBuildReviewVerificationMock.mockReset().mockResolvedValue(undefined);

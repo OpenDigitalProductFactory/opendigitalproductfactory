@@ -5,6 +5,7 @@ import { labelOnBehalfDecision } from "./on-behalf-decision";
 import type { ApprovedRequestRun } from "./approved-request-run-types";
 import { parseInitiativeReviewBinding, type InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
 import { isRecord } from "@/lib/shared/coerce";
+import { readApprovalActionEvidence, type ApprovalActionEvidence } from "./approval-action-evidence";
 
 type Db = typeof prisma;
 
@@ -41,12 +42,13 @@ export async function recordApprovalOutcome(
 /** Exact caller identity comes from the authenticated MCP context, never params. */
 export async function readApprovalOutcome(
   envelopeId: string, userId: string, agentId: string | undefined, db: Db = prisma, now = new Date(),
-): Promise<ApprovalOutcome | null> {
+): Promise<(ApprovalOutcome & { actionEvidence: ApprovalActionEvidence }) | null> {
   if (!userId || !agentId) return null;
   const row = await db.coworkerActionEnvelope.findFirst({
-    where: { id: envelopeId, delegatingUserId: userId, coworkerAgentId: agentId }, select,
+    where: { id: envelopeId, delegatingUserId: userId, coworkerAgentId: agentId },
+    select: { ...select, delegatingUserId: true, coworkerAgentId: true, threadId: true, manifestActionId: true, inputFingerprint: true },
   });
-  return row ? projectApprovalOutcome(row as ApprovalOutcomeRow, now) : null;
+  return row ? { ...projectApprovalOutcome(row as ApprovalOutcomeRow, now), actionEvidence: await readApprovalActionEvidence(row, db, now) } : null;
 }
 
 /** Recent history is separate from the actionable Inbox and never inflates its count.

@@ -9,6 +9,17 @@ import {
 } from "@/lib/build/github-oauth";
 import { validateGitHubToken } from "@/lib/actions/platform-dev-config";
 import { encryptSecret } from "@/lib/credential-crypto";
+import {
+  DEVICE_FLOW_PURPOSE_DB,
+  DEVICE_FLOW_PURPOSES,
+  credentialSlotForPurpose,
+  deviceFlowPurposeFromDb,
+  invalidateManagedRepositoryStatus,
+  parseManagedRepositoryInput,
+  readRepositoryVisibility,
+  scopeForVisibilities,
+  type DeviceFlowPurpose,
+} from "@/lib/forge/managed-repository-access";
 
 // Server-side orchestration for the OAuth Device Flow path described in
 // docs/superpowers/specs/2026-04-24-github-auth-2fa-readiness-design.md
@@ -18,6 +29,12 @@ import { encryptSecret } from "@/lib/credential-crypto";
 // verification URL. `pollDeviceFlow` is called by the UI on the GitHub-supplied
 // interval until GitHub releases an access_token, at which point the token is
 // validated, encrypted, and stored to CredentialEntry[hive-contribution].
+//
+// BI-985F4EC9: a session carries a purpose, recorded on the DeviceCodeSession
+// row at initiation. "repository-controller" logs in to the install's managed
+// repository and stores to CredentialEntry[github-repository-controller]; its
+// scope follows the repository's visibility (public_repo for a public one,
+// repo otherwise). The poll routes by the stored purpose, never by the caller.
 
 export interface InitiateResult {
   sessionId: string;
@@ -38,7 +55,9 @@ export type InitiateActionResult =
  *
  * Caller must hold `manage_platform`. Same gate as `savePlatformDevConfig`.
  */
-export async function initiateDeviceFlow(): Promise<InitiateActionResult> {
+export async function initiateDeviceFlow(
+  input: { purpose?: DeviceFlowPurpose } = {},
+): Promise<InitiateActionResult> {
   const session = await auth();
   const user = session?.user;
   if (!user?.id) return { success: false, error: "Not authenticated" };
@@ -47,9 +66,14 @@ export async function initiateDeviceFlow(): Promise<InitiateActionResult> {
     return { success: false, error: "Unauthorized" };
   }
 
+  const purpose = input.purpose ?? "hive-contribution";
+  if (!DEVICE_FLOW_PURPOSES.includes(purpose)) {
+    return { success: false, error: "Unknown login purpose." };
+  }
+
   let code: Awaited<ReturnType<typeof requestDeviceCode>>;
   try {
-    code = await requestDeviceCode("public_repo");
+    code = await requestDeviceCode(await scopeForPurpose(purpose));
   } catch (err) {
     return {
       success: false,
@@ -65,6 +89,7 @@ export async function initiateDeviceFlow(): Promise<InitiateActionResult> {
       expiresAt: new Date(Date.now() + code.expires_in * 1000),
       createdBy: user.id,
       consumed: false,
+      purpose: DEVICE_FLOW_PURPOSE_DB[purpose],
     },
   });
 
@@ -162,11 +187,12 @@ export async function pollDeviceFlow(sessionId: string): Promise<PollActionResul
     };
   }
 
+  const providerId = credentialSlotForPurpose(deviceFlowPurposeFromDb(devCodeSession.purpose));
   const encrypted = encryptSecret(pollResult.token);
   await prisma.credentialEntry.upsert({
-    where: { providerId: "hive-contribution" },
+    where: { providerId },
     create: {
-      providerId: "hive-contribution",
+      providerId,
       secretRef: encrypted,
       status: "active",
       scope: pollResult.scope,
@@ -184,8 +210,25 @@ export async function pollDeviceFlow(sessionId: string): Promise<PollActionResul
     where: { id: sessionId },
     data: { consumed: true },
   });
+  if (providerId !== "hive-contribution") invalidateManagedRepositoryStatus();
 
   return { status: "success", username: validation.username ?? "unknown" };
+}
+
+/**
+ * Scope for a login purpose. Contribution keeps `public_repo`. The controller
+ * reads the saved managed repository's visibility without a token: public →
+ * `public_repo`; private, missing or unreadable → `repo` (spec §3.3).
+ */
+async function scopeForPurpose(purpose: DeviceFlowPurpose): Promise<"public_repo" | "repo"> {
+  if (purpose === "hive-contribution") return "public_repo";
+  const cfg = await prisma.platformDevConfig.findUnique({
+    where: { id: "singleton" },
+    select: { upstreamRemoteUrl: true },
+  });
+  const repository = parseManagedRepositoryInput(cfg?.upstreamRemoteUrl ?? null);
+  if (!repository) return "repo";
+  return scopeForVisibilities([await readRepositoryVisibility(repository)]);
 }
 
 /**

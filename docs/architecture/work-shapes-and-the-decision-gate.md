@@ -170,12 +170,23 @@ agents into 341 such rooms, many untouched since 2026-09-25. Each run left no ev
 04:00Z 277 rooms were held on `executor_writeback_unavailable`, against a baseline of 6 a day,
 and the owner's "Needs you" showed ~56 of them. The item status now gates every plan
 (`drive-work-item-gate.ts`). When the item is `done`, `deferred` or `retired`, the room stands
-down entirely. When it is `awaiting-acceptance`, no agent runs and no agent-side pause is held,
-but a person stage (the acceptance itself) still asks. A conformance stop or escalation is never
-hidden. A stood-down tick is `do_not_wake`/`work_item_inactive`: it deactivates the room's task
+down entirely, escalations included, since there is no work left to coordinate. On 2026-10-21 a
+done item's room (`WC-F836CFFC`) had escalated for 1,234 ticks. When the item is
+`awaiting-acceptance`, no agent runs and no agent-side pause is held, but a person stage (the
+acceptance itself) and an escalation still ask. A conformance stop is never hidden. A stood-down tick is `do_not_wake`/`work_item_inactive`: it deactivates the room's task
 and replaces its pause, so an existing stall card clears on the next tick with no data repair.
 Reopening the item lets the next tick plan the room again. A room with no item, or an item whose
 status could not be read, is driven as before.
+
+**A stage task runs only while the drive wants it** ⟦runtime: 2026-10-21, `BI-1DDCE164`⟧. On
+2026-10-20/21, build-specialist ran 553 times in 14 hours across 14 room-stages. Each of those
+rooms had already moved to an attention stage, or had left the drive (a Build Studio executor
+since BI-B5751303, or archived), so no run's evidence was ever read. The drive now stops the
+task when a sequential room concludes attention on a stage other than the one it last enqueued.
+Each tick also stops the tasks of archived, terminal and Build Studio rooms. The stage brief
+names the room objective and the bound backlog item, with a pointer to read it through
+`get_backlog_item`. Before this, 737 of 1030 build-specialist stage records were `blocked`,
+mostly because the agent could not tell which work the room delivers.
 
 A room that never declared one gets a **derived** shape from what it already is
 (`derive-workroom-shape.ts`): a standing WSID room is craft stewardship by definition,
@@ -398,12 +409,19 @@ assuming coverage, because the honest scope is narrow by design:
 
 - **Tool coverage:** `CONSEQUENTIAL_DECISION_TOOLS` currently holds **two** tools —
   `triage_backlog_item` and `retire_backlog_item`.
-- **Surface:** only `source: "agentic-loop"` (in-portal coworker and Build Studio).
-  External CLI sessions are governed by the plane-1 `PreToolUse` hook instead; direct
-  REST/JSON-RPC is operator traffic and out of scope.
+- **Surface:** the agent surfaces, with one decision table for both:
+  `source: "agentic-loop"` (in-portal coworker and Build Studio) and, since
+  BI-638024F9, `source: "external-jsonrpc"` (external coding agents over
+  `/api/mcp/v1`). The plane-1 `PreToolUse` hook still runs on external clients, but
+  only as an accelerator. Direct REST/JSON-RPC and the portal's own MCP session are
+  operator traffic and out of scope.
 - **Consultation window:** a `principle_decide` call clears the gate for
   `CONSULT_WINDOW_MS` — 30 minutes. The intended bypass is "consult first".
-- **Mode:** `DPF_DECISION_GATE_MODE` = `enforce` (default) | `shadow` | `off`.
+- **Mode:** `DPF_DECISION_GATE_MODE` = `enforce` (default) | `shadow` | `off` for
+  internal agents. External agents follow `DPF_DECISION_GATE_EXTERNAL_MODE`, default
+  `shadow` while the rollout gathers audit data, and set to `enforce` to deny. A
+  global `off` turns the gate off for every source. Every audit line names its
+  `source`, so the shadow data can be read per surface.
 - **Fail-open:** any error allows. A governance guard must never wedge the loop.
 - **Ledger:** the consultation map is per-process and in-memory, so it holds for a
   single-portal deployment and would need a durable store for multi-instance portals.

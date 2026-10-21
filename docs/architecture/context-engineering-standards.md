@@ -2,7 +2,7 @@
 
 Host gates resolve saved authorized trust and probe TLS before expensive guards,
 so a stale desktop environment does not consume a full preflight before exposing
-a certificate failure. Use the shared [host trust contract](../install/platform-support-watchlist.md#saved-host-ca-trust-and-stale-clients-bi-f89c7fbd)
+a certificate failure. Use the shared [host trust contract](../install/platform-support-watchlist.md#saved-host-ca-trust-and-stale-clients)
 instead of repeating per-command CA diagnosis or embedding a host-specific path.
 
 **Status:** Active standard (advisory + eval-backed; specific items are CI-enforced — see "Enforcement").
