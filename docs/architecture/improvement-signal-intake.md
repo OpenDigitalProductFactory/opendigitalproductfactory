@@ -42,6 +42,12 @@ It does not retry indefinitely or claim success if that row is absent. Other
 database failures propagate. Source-local mock tests verify these branches;
 they do not establish actual database isolation or native-upsert execution.
 
+Filing is one critical section per signal (BI-13C8F888). Touches that cross
+the threshold together each read an empty backlink from their upsert, so the
+writer takes a transaction-scoped advisory lock on the signal id, re-reads the
+backlink, and files only when it is still empty. The others return the link
+the first one wrote. A failed filing leaves the link empty for a later touch.
+
 ## Remaining learning qualification
 
 This bounded repair is part of BI-64E86574 and the approved

@@ -85,6 +85,9 @@ function memoryDb() {
       },
     },
     workroomActivity: { create: async ({ data }: Row) => { const row = { id: `act-${++seq}`, recordedAt: new Date(), ...data }; state.activities.push(row); return row; } },
+    // No account here was handed over (BI-C66B6076 reads these before appointing).
+    principalAlias: { findFirst: async () => null },
+    user: { findFirst: async () => null },
     workroomParticipant: {
       findMany: async ({ where }: Row) => state.participants.filter((row) => row.workroomId === where.workroomId),
       create: async ({ data }: Row) => { state.participants.push({ id: `part-${++seq}`, ...data }); return data; },
