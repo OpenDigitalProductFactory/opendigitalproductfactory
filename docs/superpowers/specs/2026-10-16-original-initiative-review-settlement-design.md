@@ -5,6 +5,11 @@ backlog: BI-7906C73E
 
 # Recover an interrupted initiative review from verified execution evidence
 
+The [bounded reassessment amendment](#bounded-reassessment-amendment) is the
+current proposed scope. Earlier observations and the same-task recovery contract
+remain historical evidence. The amendment requires independent approval and
+immutable coverage before implementation; this document grants neither.
+
 BI-7906C73E is the historical-recovery contribution under BI-06AE6833. It blocks
 Workroom metrics BI-C684AF45. The operator explicitly requested this repair and
 completion of the original metrics outcome. This document is design evidence,
@@ -43,20 +48,23 @@ BI-E35E1183 cover packet completeness and provenance retry respectively.
 
 **OBJ-HISTORY:** Preserve the original review identity, evidence and unknown outcome while explaining exactly which recovery proof is missing.
 
-**OBJ-RECOVER:** Admit bounded recovery on that same task only after authenticated execution and complete relevant-effect reconciliation under current authority.
+> **OBJ-RECOVER:** Admit bounded recovery on that same task only after authenticated execution and complete relevant-effect reconciliation under current authority.
 
 **OBJ-FENCE:** Prevent stale callbacks, concurrent recovery and delayed approvals from publishing across the admitted execution generation.
 
-## Acceptance contract
+## Historical same-task acceptance contract
 
-| Criterion | Objectives | Observable result |
-| --- | --- | --- |
-| AC-HR-1 | OBJ-HISTORY, OBJ-RECOVER | Readback and admission bind the exact original TaskRun, immutable request digest, dispatch/reservation generation, source and current authorized owner. Cross-user, changed-source, stale or concurrent requests refuse before external effects. |
-| AC-HR-2 | OBJ-HISTORY, OBJ-RECOVER | The collector enumerates the actual reachable capabilities and every relevant effect with attributable evidence. Recovery requires authenticated original execution membership and closure, or genuine old-writer revocation plus complete reconciliation of all possibly started effects. Missing capability coverage, membership, closure or effect proof remains unknown. |
-| AC-HR-3 | OBJ-RECOVER, OBJ-FENCE | One same-task recovery reservation atomically binds verified proof, immutable request and remaining original budgets. Late execution results, writers and approval continuations cannot cross its fence. No client nonce, replacement request, reset budget or authority widening is introduced. |
-| AC-HR-4 | OBJ-HISTORY, OBJ-FENCE | A genuine canonical receipt is reconciled before requesting inference. Execution evidence, an empty audit, a client assessment and successful dispatch never become review approval. Historical uncertainty and proof remain available after an admitted recovery. |
-| AC-HR-5 | OBJ-RECOVER, OBJ-FENCE | Adversarial source tests, protected delivery and canonical served verification prove both supported recovery and refusal with missing proof. The original metrics work advances only after its genuine independent receipts and normal planning admission. |
+This quoted manifest remains normative for historical same-task recovery. It is
+archived outside the current amendment's delivery baseline: no current phase
+claims positive historical recovery or completion of OBJ-RECOVER.
 
+> | Criterion | Objectives | Observable result |
+> | --- | --- | --- |
+> | AC-HR-1 | OBJ-HISTORY, OBJ-RECOVER | Readback and admission bind the exact original TaskRun, immutable request digest, dispatch/reservation generation, source and current authorized owner. Cross-user, changed-source, stale or concurrent requests refuse before external effects. |
+> | AC-HR-2 | OBJ-HISTORY, OBJ-RECOVER | The collector enumerates the actual reachable capabilities and every relevant effect with attributable evidence. Recovery requires authenticated original execution membership and closure, or genuine old-writer revocation plus complete reconciliation of all possibly started effects. Missing capability coverage, membership, closure or effect proof remains unknown. |
+> | AC-HR-3 | OBJ-RECOVER, OBJ-FENCE | One same-task recovery reservation atomically binds verified proof, immutable request and remaining original budgets. Late execution results, writers and approval continuations cannot cross its fence. No client nonce, replacement request, reset budget or authority widening is introduced. |
+> | AC-HR-4 | OBJ-HISTORY, OBJ-FENCE | A genuine canonical receipt is reconciled before requesting inference. Execution evidence, an empty audit, a client assessment and successful dispatch never become review approval. Historical uncertainty and proof remain available after an admitted recovery. |
+> | AC-HR-5 | OBJ-RECOVER, OBJ-FENCE | Adversarial source tests, protected delivery and canonical served verification prove both supported recovery and refusal with missing proof. The original metrics work advances only after its genuine independent receipts and normal planning admission. |
 ## Architecture decision
 
 WWMD DI-08A2750D3287 selected `same-task-proof-gated` over a server-issued
@@ -513,3 +521,190 @@ omit it and return `proofInventoryUnavailable: "budget"` if that marker fits;
 otherwise return the complete base without the marker. A valid locator three
 characters longer exercises the marker-omission boundary. Base overflow still
 returns the original over-budget refusal. Neither path authorizes replay.
+
+## Bounded reassessment amendment
+
+### Owning direction and explicit supersession
+
+The live BI-7906C73E amendment cites WWMD DI-61A9ECAFBEDE, selecting
+`quarantine-and-reassess`. It supplies advisory platform direction, not approval
+or execution authority. Its Grade C engineering estimates are not measured
+security results. Current reverification returned eight unresolved citations:
+the runtime source resolver could not resolve their recorded spec locators.
+Retain that limitation. The earlier no-feature consult was unusable.
+
+AC-HR-1 through AC-HR-5 and DI-08A2750D3287 continue to govern **same-task
+historical recovery**. P1–P4 remain its historical plan. This amendment supersedes
+only the prior policy that every separately authorized present reassessment must
+first close all historical effects. It adds the distinct contract below without
+weakening the proof needed to resume an old attempt or declare effects settled.
+
+This contribution belongs to WC-A5703D01 and
+`codex/bounded-review-reassessment` in its own sibling worktree. Historical
+WC-FDAC8963 and peer trees retain their ownership. The parent owns BI-285EF102,
+WC-1EBA9720, frozen source `95d6ceeda08af9019d8b07e85515cfcac6334e8c` and
+application performance acceptance. Original design-spec D2E5E2765847 and
+spec-approval 4E1879A26F6B remain UNKNOWN, attempt 1, with replay disallowed.
+Their original digests, deadlines, budgets and checkpoints stay immutable.
+
+### Additional objectives and acceptance
+
+**OBJ-PRESENT:** Obtain one genuine independent verdict on the exact current review requirement without resuming an uncertain historical attempt.
+
+**OBJ-CONTAIN:** Enforce complete prospective execution and capability boundaries while preserving historical uncertainty as a separate unresolved effect incident.
+
+| Criterion | Objectives | Observable result |
+| --- | --- | --- |
+| AC-RA-1 | OBJ-HISTORY, OBJ-PRESENT | Current original owner, independent reviewer, exact subject, gate, immutable artifact, independently approved amendment baseline and issued packet bind admission. Bind the target's expectedCurrentBaselineId, including null for initial approval, and validate it atomically. A genuine existing receipt is reconciled first; stale source, owner or expectation refuses without inference. |
+| AC-RA-2 | OBJ-FENCE, OBJ-CONTAIN | Held, uncertain, canceled, unversioned and displaced original callbacks cannot dispatch a platform tool or append a canonical result. Delayed approvals retain their captured original generation and pass current checks before execution and commit; they cannot revive the old task by marking it working. Unknown prior external effects stay unknown. |
+| AC-RA-3 | OBJ-PRESENT, OBJ-CONTAIN | One transaction admits at most one present reassessment across all authorization families for the same subject, gate and artifact. Applicable prior attempts and spend count against the same recorded aggregate limits. Missing accounting or exhausted allowance refuses; a new task supplies no budget reset. |
+| AC-RA-4 | OBJ-CONTAIN | A qualified existing in-process provider composition exposes exactly read_source_at_version and the bound canonical writer. The backend enforces the names, immutable reader arguments and writer binding on every actual dispatch path. Native CLI, shell, browser, filesystem tools, account/credential preparation, alternate task APIs, discovery escalation and undeclared provider tools are unavailable. Schema filtering alone fails qualification. |
+| AC-RA-5 | OBJ-HISTORY, OBJ-CONTAIN | Before execution, authenticated capture binds task, request, reservation, generation, authority, exact tools, provider configuration and immutable artifact. Missing or invalid pre-effect capture refuses with zero starts. Post-start capture failure preserves uncertain consumption and blocks further effects while reconciling any genuine committed receipt first. No historical closure is inferred. |
+| AC-RA-6 | OBJ-PRESENT, OBJ-FENCE | Only the current independent canonical writer issues the new receipt. Durable supersession binds it to the current requirement and quarantined originals. It changes no original outcome, clears no unknown effect and authorizes no replay. Cancellation and receipt races retain one durable winner. |
+| AC-RA-7 | OBJ-FENCE, OBJ-CONTAIN | Canonical admission verifies compatible transport, approval, worker and writer versions. Mixed-version admission and unsafe downgrade refuse. Disabling admission retains compatible fences/readers and all unresolved histories. |
+| AC-RA-8 | OBJ-PRESENT, OBJ-CONTAIN | Source tests, real PostgreSQL races and canonical served acceptance prove both a restricted positive reassessment and refusal. D2/4E are never relaunched. Genuine current receipts and normal BI-285EF102 plan admission precede review-recovery completion; application under-load acceptance remains with the parent. |
+
+### Existing substrate and actual execution boundary
+
+Extend TaskRun metadata/progress and its reservation/dispatch CAS, TaskArtifact,
+ToolExecution, CoworkerActionEnvelope and canonical initiative receipts. No
+second attempt ledger, scheduler, grant engine, provider or result writer is
+introduced. Store reassessment relations and qualified capture on those existing
+records; result projections do not become a second authority store.
+
+Current source `ee1e80b0a46b893beea11b928cfe621849730ad4` supplies these homes:
+
+- `backlog/initiative-readiness/bound-review-effect.ts` owns task-before-subject
+  locking, genuine-receipt precedence and captured-generation writer checks.
+- `mcp-task-review-recovery.ts` owns historical recovery refusal. Its
+  `reviewRecoveryToolRefusal` currently permits legacy tasks without
+  `reviewExecutionAuthority` to proceed to other tool checks; consolidate a
+  common task-bound entry restriction instead of a parallel authority engine.
+- `mcp-task-submit-approval-recovery.ts` and `coworker/approved-task-run.ts`
+  must preserve that restriction before reservation or marking a task working.
+  Replace unconditional settlement with the existing generation-aware CAS in
+  `mcp-task-attempt-state.ts` and `observability/heartbeat.ts`.
+- `routing/cli-adapter.ts` converts displayed tools to broad grants and adds
+  `backlog_read`; the native session transport checks grants. That is not exact
+  callable reach. Present reassessment selects the existing in-process
+  provider/tool loop and refuses native or text-tool fallback. Ordinary review
+  routing is not implicitly requalified by this amendment.
+- `mcp/independent-review-request.ts` and `mcp-task-submit.ts` own issued-packet
+  validation and TaskRun admission. Extend them with a server-issued reassessment
+  relation; a client cannot invent a key, drop a locator or change source merely
+  to evade an old hold.
+
+Qualification binds the actual selected composition before dispatch and again
+after capacity admission. The provider can request only function calls for the
+two admitted names. The server rejects other names before lookup or execution,
+including nested calls, transport discovery/meta-tools and Tasks methods. The
+reader accepts only the bound repository, commit, path and blob, including paged
+reads of that artifact. The writer accepts only its exact subject, gate,
+baseline, actor and captured generation. No auxiliary tool, native launch,
+filesystem preparation or account renewal participates. Existing configured
+inference access grants no account mutation or credential creation authority.
+
+Persist configuration and call reservations before execution; authoritative
+ToolExecution/domain receipts supply outcomes. Missing audits cannot be replaced
+by counts or model text. Pre-start capture failure guarantees zero provider/tool
+starts. After a start, incomplete observation preserves the reservation and
+unknown consumption, holds further effects and reconciles any genuine already
+committed receipt first; observation failure cannot erase that verdict.
+Prospective capture and old callback fencing do not
+prove membership or closure for historical native process trees. An unsupported
+composition refuses without silently selecting another provider or route.
+
+### Atomic admission, original limits and concurrency
+
+Resolve authorized original readback and genuine exact receipts first. The
+server-owned membership key is tenant, canonical backlog item, gate and immutable
+repository/commit/path/blob identity, independent of credential family, reviewer
+and request key. Include every accepted matching request plus all explicitly
+linked predecessors/supersessions, held/canceled/completed rows and outstanding
+reservations. Resolve accepted request digests and canonical item/Workroom/task
+relations; a client-supplied lineage list is not authoritative. Legacy candidates
+linked to those owning relations whose immutable binding cannot be established
+return `reassessment-lineage-unproven`, never an assumed exclusion. Parent D2/4E
+must be present in their respective exact-artifact membership sets.
+
+Lock related TaskRuns in
+stable order before the owning review subject, preserving the canonical writer's
+task-before-subject order. Recheck lineage after acquiring the subject lock;
+every relevant creation route must serialize on that same subject. If the
+recheck finds changed membership, abort and restart from the refreshed ordered
+task set without provider execution; never acquire another existing task lock
+while holding the subject lock. Demonstrate the protocol in real PostgreSQL races.
+
+In that transaction, recheck current actor and normal grant intersection,
+exact artifact/baseline and packet, original immutable identities, cancellation,
+composition qualification, compatibility and remaining aggregate allowance.
+Current per-task writer attempts and saved inference/deadline ceilings are
+owned by accepted TaskRun requests and terminal-writer checkpoints. Provider
+usage and pending reservations come from task-linked AsyncInferenceOp,
+TaskArtifact and ToolExecution/effect owners; no absent row means zero usage.
+The current coworker daily-token gate is additional, not an original lineage
+allowance. Derive inherited limits and prior consumption from those authoritative
+records, counting outstanding reservations in full; an unknown historical
+amount may be conservatively charged at its authenticated enforced upper bound
+only when that bound itself is established. Unknown bounds or no remaining
+allowance return `reassessment-accounting-unproven` or the existing exhaustion
+refusal. Neither a new task nor a new credential resets an original
+deadline, attempt count or spend limit. Any distinct present execution window
+must be explicitly admitted under normal current authority and retained limits.
+
+At most one reassessment may exist for the bound requirement/artifact,
+irrespective of token, reviewer selection or family. Concurrent callers join the
+same durable winner or receive its refusal. The immutable new binding names the
+quarantined predecessors, current requirement and supersession authority.
+Workers, approvals, task settlement and canonical writers compare the captured
+identity at their existing CAS/commit boundaries. A pass, fail or not-applicable
+current verdict changes only that requirement; the historical incident stays
+open. Exact-subject lineage queries are paged; truncation/overflow refuses.
+The scale boundary is the existing per-install substrate under EP-ABB3AC9D,
+without full-install scans or a new cross-install coordination service.
+
+### Ordered amendment implementation and coverage
+
+R1–R4 replace P1–P4 **only for present reassessment**. Same-task recovery keeps
+its original proof prerequisites. BI-7906C73E stays `delivery-large@1.0.0`.
+Independent baseline approval, immutable coverage and current implementation
+admission precede source implementation; body text and WWMD are not receipts.
+
+| Deliverable | Implementation BI | Depends on | Objective requirementRefs | Contracts | Flow | Acceptance verificationRefs |
+| --- | --- | --- | --- | --- | --- | --- |
+| R1: shared callback and approval fencing | BI-7906C73E | Genuine amendment baseline and coverage | OBJ-HISTORY, OBJ-PRESENT, OBJ-FENCE, OBJ-CONTAIN | CONTRACT-RA-FENCE | FLOW-RA-CONTAIN | AC-RA-1, AC-RA-2, AC-RA-6 |
+| R2: restricted composition and capture | BI-7906C73E | R1 | OBJ-HISTORY, OBJ-FENCE, OBJ-CONTAIN | CONTRACT-RA-CAPTURE | FLOW-RA-QUALIFY | AC-RA-4, AC-RA-5, AC-RA-7 |
+| R3: atomic exact-artifact admission | BI-7906C73E | R2 | OBJ-HISTORY, OBJ-PRESENT, OBJ-FENCE, OBJ-CONTAIN | CONTRACT-RA-ADMIT | FLOW-RA-ADMIT | AC-RA-1, AC-RA-3, AC-RA-6 |
+| R4: protected delivery and served acceptance | BI-7906C73E | R3 | OBJ-PRESENT, OBJ-FENCE, OBJ-CONTAIN | CONTRACT-RA-RELEASE | FLOW-RA-VERIFY | AC-RA-7, AC-RA-8 |
+
+R1 consolidates checks in the existing shared homes and tests old/late callbacks,
+original delayed approvals, cancellation, stale authority and callbacks paused
+between authorization and commit. R2 claims exact loop/dispatch paths and proves
+both admitted tools execute while hidden tools, task/meta APIs, immutable-reader
+changes, native fallback, capability mismatch and overflow cannot execute. R3
+tests concurrent families, original aggregate exhaustion, stale owner/source/
+baseline, receipt precedence, cancellation and positive restricted reassessment.
+Resolve each claimed path's testImpact and guardObligations before edits;
+unresolved advice expands verification. At least one fifth of implementation
+consolidates existing generation, authority and effect predicates.
+
+R4 requires affected unit tests, real PostgreSQL races, package typechecks,
+exact committed-tree gates, independent assessment, DCO PR and protected merge.
+Only canonical `request_self_upgrade` advances the install. Served acceptance
+verifies compatible writer/approval/transport coverage, a restricted positive
+case and refusal cases. The parent obtains genuine current D2/4E requirement
+receipts and BI-285EF102 plan admission without replaying historical tasks;
+its application under-load evidence remains separate. No authenticated positive
+qualification for D2/4E is established yet. A missing membership or allowance
+producer is a concrete admission blocker, not a claim those originals can advance.
+
+Proposed coverage is atomic: these are sequencing steps in one admission
+contract. R1 cannot satisfy the present review, R2 without R3 admits nothing,
+and R3 without R2 must refuse. The shipped collector and writer-fence BIs retain
+their own records and are not reimplemented. This table asserts no baseline or
+coverage receipt; record the genuine returned receipts before implementation.
+
+Rollback disables new admission while retaining compatible fences, readers and
+histories. A pre-fence downgrade requires positive capability retirement and
+reconciliation of possibly started effects; missing proof refuses it. Neither
+rollback nor a current verdict clears the historical incident.
