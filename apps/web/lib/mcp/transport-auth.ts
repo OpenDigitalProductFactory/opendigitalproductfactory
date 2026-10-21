@@ -10,12 +10,14 @@ import { isPatResolutionDisabled } from "@/lib/auth/oauth-policy";
 import type { PublicScope } from "@/lib/auth/oauth-scope-map";
 import type { McpAuthSource } from "@/lib/mcp/tool-tier";
 import { ok, type ActionSuccess } from "@/lib/shared/action-result";
+import type { TaskExecutionFence } from "@/lib/shared/task-execution-fence";
 
 export type ResolvedMcpTransportAuth = ResolvedMcpToken & {
   threadId?: string | null;
   routeContext?: string | null;
   /** BI-B949993E: present only on session-JWT tokens minted for a governed TaskRun. */
   taskRunId?: string | null;
+  taskExecutionFence?: TaskExecutionFence | null;
   /** BI-05715F4C: the Workroom a room session token is bound to; set only on such a token. */
   workroomRef?: string | null;
   source: McpAuthSource;
@@ -26,12 +28,26 @@ export type McpAuthenticationResult =
   | (ActionSuccess & { token: ResolvedMcpTransportAuth; oauthGrantedScopes: PublicScope[] })
   | { ok: false; response: Response };
 
+/**
+ * BI-84C1F526 (AC-GROK): a refused credential carries the same repair the
+ * TOOLCHAIN notice names, so an agent whose client credential expired or went
+ * missing converges it through the portal instead of asking for a token.
+ */
+function toolchainRepairUrl(request: Request): string | null {
+  const origin = resolveResourceOrigin(request);
+  return origin ? `${origin}/api/agent-toolchain/manifest` : null;
+}
+
 function unauthorizedResponse(detail: string, request: Request): Response {
+  const repair = toolchainRepairUrl(request);
+  const message = repair
+    ? `unauthorized: ${detail}. Repair: run the DPF toolchain update from this portal (${repair}), then restart the client.`
+    : `unauthorized: ${detail}`;
   return new Response(
     JSON.stringify({
       jsonrpc: "2.0",
       id: null,
-      error: { code: -32600, message: `unauthorized: ${detail}` },
+      error: { code: -32600, message, ...(repair ? { data: { repair } } : {}) },
     }),
     {
       status: 401,
@@ -115,6 +131,7 @@ export async function authenticateMcpRequest(request: Request): Promise<McpAuthe
         threadId: session.threadId ?? null,
         routeContext: session.routeContext ?? null,
         taskRunId: session.taskRunId ?? null,
+        taskExecutionFence: session.taskExecutionFence,
         source: "session-jwt",
       },
       oauthGrantedScopes: [],

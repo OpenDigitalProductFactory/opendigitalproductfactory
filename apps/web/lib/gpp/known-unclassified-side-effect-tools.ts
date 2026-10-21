@@ -38,10 +38,14 @@ export const KNOWN_UNCLASSIFIED_SIDE_EFFECT_TOOLS: readonly string[] = [
   "create_customer_account",
   "create_customer_contact",
   "create_digital_product",
+  // Internal, versioned document writes like create_presentation (BI-012487AA): nothing leaves the install and a revision keeps every prior version.
+  "create_drawing",
   "create_ea_element",
   "create_ea_relationship",
   "create_epic",
   "create_knowledge_article",
+  // Internal, versioned document writes like create_presentation (BI-012487AA): nothing leaves the install and a revision keeps every prior version.
+  "create_letter",
   "create_licensing_readiness_issue",
   "create_marketing_asset_task",
   "create_marketing_automation_candidate",
@@ -49,10 +53,14 @@ export const KNOWN_UNCLASSIFIED_SIDE_EFFECT_TOOLS: readonly string[] = [
   "create_marketing_campaign_brief",
   "create_opportunity",
   "create_presentation",
+  // Internal, versioned document writes like create_presentation (BI-012487AA): nothing leaves the install and a revision keeps every prior version.
+  "create_report",
   "create_product_objective",
   "create_quote",
   "create_recurring_work_engagement",
   "create_release_bundle",
+  // Internal, versioned document writes like create_presentation (BI-012487AA): nothing leaves the install and a revision keeps every prior version.
+  "create_sheet",
   "create_workroom",
   "delete_bank_rule",
   "deliberate_on",

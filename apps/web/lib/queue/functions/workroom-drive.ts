@@ -35,6 +35,7 @@ import {
   loadStageDispatchTimes,
   loadStageDispatchTimesByStage,
   loadStandingRoomIds,
+  loadWorkItemStatuses,
   reconcileCoordinationBindings,
   reconcileStandingRoomNesting,
 } from "./workroom-drive-data";
@@ -70,6 +71,7 @@ import { readWorkroomPostureClaim } from "@/lib/work-management/workroom-posture
 import { readWorkShapeDefinitionContract } from "@/lib/work-management/work-shapes";
 import { readWorkShapeRoleBindings, resolveWorkShapeClaim } from "@/lib/work-management/workroom-shape-claim";
 import { loadAuthorStageAutonomy, NO_AUTHOR_STAGE_AUTONOMY, type AuthorStageAutonomyFor } from "@/lib/work-management/author-stage-autonomy-live";
+import { gateDrivePlanOnWorkItem } from "@/lib/work-management/drive-work-item-gate";
 import {
   EXECUTOR_WRITEBACK_UNAVAILABLE_REASON,
   resolveDrivePlan,
@@ -85,13 +87,15 @@ import { WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND } from "@/lib/work-management/workr
 import { mergeWorkroomDriveSnapshot } from "@/lib/work-management/workroom-drive-snapshot-merge";
 import { scheduleWorkroomAgentTask } from "./workroom-drive-scheduling";
 export { mergeWorkroomDriveSnapshot } from "@/lib/work-management/workroom-drive-snapshot-merge";
-import { repairUnownedDeliveryRooms, ROOM_OWNER_USER_INCLUDE, roomOwnerUserId } from "@/lib/work-management/delivery-room-ownership";
+import { loadHandedOverUserIds, repairUnownedDeliveryRooms, ROOM_OWNER_USER_INCLUDE, roomOwnerUserId } from "@/lib/work-management/delivery-room-ownership";
 
 export type WorkroomDriveRoom = {
   id: string;
   capsuleId: string;
   /** BI-8A32EBFF: the item the room delivers, for the author-stage budget check. */
   backlogItemId?: string | null;
+  /** BI-72679FE0: that item's status; a room whose item is not live work stands down. */
+  workItemStatus?: string | null;
   scopeClaims: unknown;
   workspaceState: unknown;
   leaseExpiresAt: Date | null;
@@ -445,12 +449,14 @@ export async function runWorkroomDriveJob(
     // Stage-scoped evidence (a review stage's: its readiness receipts, BI-80738C08) is
     // the ONLY thing a completing receipt is earned from; without it a room never advances.
     const evidenceByRoom = await loadRecordedEvidence(rooms.map((room) => room.capsuleId));
+    const statusByItem = await loadWorkItemStatuses(rooms.map((room) => room.backlogItemId ?? ""));
     const dispatchByRoom = await loadStageDispatchTimes(rooms.map((room) => room.capsuleId));
     const dispatchByStage = await loadStageDispatchTimesByStage(
       rooms.filter((room) => hasStoredDriveMarking(room.workspaceState)).map((room) => room.capsuleId));
     rooms = await withSubShapeChildren(await withReviewReceiptEvidence(rooms.map((room) => ({
       ...room,
       recordedEvidence: evidenceByRoom.get(room.capsuleId) ?? [],
+      workItemStatus: room.backlogItemId ? statusByItem.get(room.backlogItemId) ?? null : null,
       stageDispatchedAt: dispatchByRoom.get(room.capsuleId) ?? null,
       ...(dispatchByStage.has(room.capsuleId) ? { stageDispatchedAtByStage: dispatchByStage.get(room.capsuleId) } : {}),
     }))));
@@ -520,7 +526,9 @@ export async function runWorkroomDriveJob(
       authorStageWithheldBecause: author.withheldBecause,
     };
     const resolved = await resolveWithReview(room, driveInput);
-    const plan = admit(resolved.plan);
+    // BI-72679FE0: a room whose item is done, deferred or delivered gets no agent and raises no stall.
+    // BI-7C0B2BD6: then the capacity cap, so a stood-down room never takes a dispatch slot.
+    const plan = admit(gateDrivePlanOnWorkItem(resolved.plan, room.workItemStatus));
     const review = plan === resolved.plan ? resolved.review : null;
     plans.push({
       roomId: room.capsuleId,
@@ -603,6 +611,8 @@ async function loadStandingRooms(
       ...ROOM_OWNER_USER_INCLUDE,
     },
   });
+  // BI-858FDE5A: a handed-over requester/creator no longer names a new task's owner.
+  const handedOverUserIds = await loadHandedOverUserIds(prisma as never);
 
   return rows.flatMap((row) => {
     const shapeRef = resolveWorkShapeClaim(row.scopeClaims);
@@ -622,7 +632,7 @@ async function loadStandingRooms(
       workspaceState: row.workspaceState,
       leaseExpiresAt: row.leaseExpiresAt,
       leaseHolderPrincipalId: row.leaseHolderPrincipalId,
-      ownerUserId: roomOwnerUserId(row),
+      ownerUserId: roomOwnerUserId(row, handedOverUserIds),
       participants: row.participants.map((participant) => {
         const kind = participant.principal.kind === "agent"
           ? "agent" as const

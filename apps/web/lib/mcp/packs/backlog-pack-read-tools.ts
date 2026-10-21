@@ -1,6 +1,9 @@
-import type { ToolResult } from "@/lib/mcp-tool-types";
+import type { ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
 import { resolveEpicRowId, resolveListLimit } from "./backlog-read-helpers";
 import { addScopeFilters, backlogScopeSelect, scopeData } from "./backlog-scope-metadata";
+import { boundedBacklogRecoveryRead, canReadRecoveryPacket, isRecoveryReadGate, recoveryReadDecision } from "../backlog-recovery-read";
+import { designPhaseReviewDecision } from "@/lib/backlog/initiative-readiness/design-phase-recovery";
+import type { prepareCurrentDesignObservation as PrepareCurrentDesignObservation } from "@/lib/backlog/initiative-readiness/canonical-artifact-discovery";
 
 const INITIATIVE_READINESS_ACTIVITY_KINDS = [
   "initiative_gate_receipt",
@@ -383,7 +386,8 @@ export async function listBacklogItems(params: Record<string, unknown>): Promise
   };
 }
 
-export async function getBacklogItem(params: Record<string, unknown>, currentAgentId: string | null = null, currentUserId?: string): Promise<ToolResult> {
+export async function getBacklogItem(params: Record<string, unknown>, currentAgentId: string | null = null, currentUserId?: string, context?: ToolExecutionContext,
+  internal?: { currentDesignSource: NonNullable<Parameters<typeof PrepareCurrentDesignObservation>[0]["claimSource"]> }): Promise<ToolResult> {
   const { prisma } = await import("@dpf/db");
   const itemIdRaw = String(params["itemId"] ?? "").trim();
   if (!itemIdRaw)
@@ -447,9 +451,16 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
   // — any other status, or an evaluation that could not run — keeps the
   // existing projection.
   const { readBacklogItemCompletion } = await import("@/lib/backlog/initiative-readiness/backlog-completion-evaluation");
-  const gateCompletion = await readBacklogItemCompletion({ itemRowId: item.id, status: item.status, evaluatedAt });
+  const { prepareCurrentDesignObservation } = await import("@/lib/backlog/initiative-readiness/canonical-artifact-discovery");
+  // Only a server caller that already checked exact room access supplies this.
+  // Public tool params deliberately cannot select a room or design source.
+  const currentDesign = await prepareCurrentDesignObservation({ itemId: item.itemId,
+    ...(internal ? { claimSource: internal.currentDesignSource } : {}) });
+  const gateCompletion = await readBacklogItemCompletion({ itemRowId: item.id, status: item.status, evaluatedAt,
+    currentDesign: currentDesign.evidence });
   // BI-DEDAC950: the governing principle per unmet code, beside the decisions.
   const projectedReadiness = withReadinessGoverningPrinciples(projectBacklogItemReadinessSummary({
+    currentDesign: currentDesign.evidence,
     completionDecision: gateCompletion?.decision ?? null,
     inheritedScope,
     item: {
@@ -477,16 +488,61 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
   const readiness = gateCompletion
     ? { ...projectedReadiness, completionEvaluation: { source: "completion-gate" as const, mergeDelivery: gateCompletion.mergedThroughGates } }
     : projectedReadiness;
-  const completion = readiness.decisions?.completion;
-  const needsPirRecovery = completion && completion.verdict !== "allowed"
-    && [...completion.blockers, ...completion.unmet]
-      .some((entry) => entry.code === "POST_IMPLEMENTATION_REVIEW_REQUIRED");
-  const recovery = needsPirRecovery
+  const requestedGate = params["recoveryGate"];
+  if (requestedGate !== undefined && !isRecoveryReadGate(requestedGate)) {
+    return { success: false, error: "invalid_recovery_gate", message: "Choose a declared recoveryGate from get_backlog_item's schema. No review request was delivered." };
+  }
+  const completion = requestedGate !== undefined
+    ? await recoveryReadDecision(requestedGate, readiness.decisions ?? {}) : readiness.decisions?.completion;
+  const needsTerminalRecovery = currentDesign.evidence.state !== "unavailable" && completion && completion.verdict !== "allowed"
+    && (requestedGate !== undefined || [...completion.blockers, ...completion.unmet]
+      .some((entry) => ["POST_IMPLEMENTATION_REVIEW_REQUIRED", "PLAN_REVIEW_REQUIRED",
+        "ACCEPTANCE_EVIDENCE_REQUIRED", "OBJECTIVE_RECONCILIATION_REQUIRED"].includes(entry.code)));
+  let taskAuthority: { userId: string; taskAuthorityKey: string } | null = null;
+  // Admission regenerates these packets with trusted task history too. Omitting
+  // it changes a fresh request's identity even when an owned legacy task masks it.
+  const needsDesignTaskAuthority = needsTerminalRecovery && (requestedGate === undefined
+    ? completion && designPhaseReviewDecision(completion) !== null
+    : ["design-spec", "spec-approval", "architecture-review", "plan-review"].includes(requestedGate));
+  if (needsTerminalRecovery && needsDesignTaskAuthority && context?.authSource === "oauth") {
+    const taskAuthorityKey = currentUserId && context.apiTokenId
+      ? await (await import("@/lib/auth/oauth-task-authority")).resolveMcpTaskAuthorityKey({
+        tokenId: context.apiTokenId, userId: currentUserId, source: "oauth",
+      }) : null;
+    if (!taskAuthorityKey || !currentUserId) return { success: false, error: "review_task_authority_unavailable",
+      message: "The current connection's review task authority could not be verified. No replacement request was delivered; restore the authorized connection before reading independent design recovery." };
+    taskAuthority = { userId: currentUserId, taskAuthorityKey };
+  }
+  const recovery = needsTerminalRecovery
     ? await (await import("@/lib/backlog/initiative-readiness/terminal-recovery")).resolveTerminalInitiativeRecovery({
       currentUserId,
         decision: completion, currentAgentId, refusedWorkroomId: null,
+        ...(taskAuthority ? { taskAuthority } : {}),
       })
     : undefined;
+  if (requestedGate !== undefined) {
+    if (!await canReadRecoveryPacket({ gate: requestedGate, recovery, currentAgentId, currentUserId })) {
+      return { success: false, error: "workroom_data_access_required", message: "The current connection cannot read this Workroom's review packet. Follow the existing room admission remedy; item visibility grants no additional access." };
+    }
+    if (recovery && currentUserId && currentAgentId && context?.authSource === "oauth") {
+      const { issueOriginalReviewRecoveryTarget } = await import("@/lib/mcp-task-review-recovery");
+      const key = taskAuthority?.taskAuthorityKey ?? (context.apiTokenId ? await (await import("@/lib/auth/oauth-task-authority"))
+        .resolveMcpTaskAuthorityKey({ tokenId: context.apiTokenId, userId: currentUserId, source: "oauth" }) : null);
+      if (!key) return { success: false, error: "review_task_authority_unavailable", message: "The current connection's review task authority could not be verified. No request was delivered." };
+      for (const route of recovery.reviewerRoutes.filter(route => route.gate === requestedGate && route.independent)) {
+        const issued = await issueOriginalReviewRecoveryTarget({ packet: route.requestCoworker,
+          userId: currentUserId, actingAgentId: currentAgentId, taskAuthorityKey: key,
+          tokenGrantScopes: context.tokenGrantScopes });
+        if (issued.kind === "refused") return { success: false, error: "original_review_recovery_required",
+          message: "The existing review needs reconciliation before any new dispatch. No replacement request was delivered.",
+          data: { reason: issued.reason, itemId: item.itemId, recoveryGate: requestedGate,
+            ...(issued.originalResult ? { originalResult: issued.originalResult } : {}),
+            ...(issued.resultRead ? { resultRead: issued.resultRead } : {}) } };
+        if (issued.kind === "target") route.requestCoworker = { ...route.requestCoworker, ...{ reviewRecovery: issued.target } };
+      }
+    }
+    return boundedBacklogRecoveryRead({ itemId: item.itemId, status: item.status, workShape: boundWorkShape, gate: requestedGate, recovery });
+  }
   return {
     success: true,
     message: specPlanCaveat ? `Loaded ${item.itemId}. ${specPlanCaveat}` : `Loaded ${item.itemId}`,

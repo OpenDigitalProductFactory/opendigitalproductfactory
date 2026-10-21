@@ -97,6 +97,9 @@ services:
     command: ["/docker-entrypoint.sh"]
     volumes:
       - dpf-source-code:/workspace
+      # Fresh runtime capability rows use the same canonical host snapshot as
+      # the portal. A directory bind observes atomic install-state replacements.
+      - ${DPF_STATE_DIR:-${HOME}/.dpf}:/dpf-state:ro
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://dpf:dpf_dev@postgres:5432/dpf}
       DPF_HOST_PROFILE: ${DPF_HOST_PROFILE:-}

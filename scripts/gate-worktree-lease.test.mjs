@@ -164,6 +164,9 @@ function makeTempWorktree() {
   git(["add", "README.md"]);
   git(["commit", "-q", "-m", "init"]);
   git(["update-ref", "refs/remotes/origin/main", "HEAD"]);
+  writeFileSync(join(dir, "runtime.mjs"), "export const candidate = true;\n");
+  git(["add", "runtime.mjs"]);
+  git(["commit", "-q", "-m", "runtime candidate"]);
   return dir;
 }
 
@@ -931,7 +934,9 @@ test("queued admission writes recoverable gate state before waiting", async () =
       "scripts/gate-worktree.mjs",
       "--branch", "fix/sandbox-lease-fencing",
       "--worktree", worktree,
-      "--lease-wait-seconds", "0.02",
+      // Admission preparation is inside this deadline too; give the real
+      // process observer time instead of expecting a claim after expiry.
+      "--lease-wait-seconds", "6",
       "--expires-minutes", "0.05",
       "--poll-seconds", "0.01",
       "--mcp-url", `http://127.0.0.1:${address.port}`,

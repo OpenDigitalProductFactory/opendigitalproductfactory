@@ -155,7 +155,8 @@ function medium(facts: InitiativeReadinessFacts, target: ReadinessTarget): Shape
     req("RESEARCH_REQUIRED", facts.research, "design-author"),
     // The item body is the design: acceptance criteria in the body mint the
     // baseline (design §4, "baseline from item, not from spec").
-    req("OBJECTIVE_BASELINE_REQUIRED", facts.objectiveBaseline, "product-owner"),
+    req("OBJECTIVE_BASELINE_REQUIRED", facts.objectiveBaseline,
+      facts.objectiveBaselineRequiresReview ? "design-checklist-reviewer" : "product-owner"),
   );
   if (target === "plan") return rows;
   rows.push(
@@ -190,6 +191,12 @@ export function shapeRequirements(
   if (shape === "large") return v2(facts, target);
   // xlarge
   if (target === "design" || target === "plan") return v2(facts, target);
+  if (target === "completion") return [
+    req("PLAN_COVERAGE_REQUIRED", facts.planCoverage === "pass" ? facts.decomposition ?? "missing" : facts.planCoverage, "portfolio-management"),
+    req("OBJECTIVE_BASELINE_REQUIRED", facts.objectiveBaseline, "design-checklist-reviewer"),
+    req("OBJECTIVE_RECONCILIATION_REQUIRED", facts.objectiveReconciliation, "acceptance-reviewer"),
+    ...v2(facts, "completion"),
+  ];
   return [
     ...v2(facts, "plan"),
     req("DECOMPOSITION_REQUIRED", "fail", "portfolio-owner"),

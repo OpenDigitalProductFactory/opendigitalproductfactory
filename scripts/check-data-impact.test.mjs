@@ -44,6 +44,27 @@ test("destructive executor without a hold check fails", () => {
   assert.ok(errors.some((e) => /must check legal holds/.test(e)));
 });
 
+test("a lifecycle change is a known kind, not an unknown-kind error (BI-6296741B)", () => {
+  const bare = validateManifest({
+    version: "1",
+    accountableOwner: "operate",
+    changes: [{ kind: "lifecycle" }],
+  });
+  assert.equal(bare.some((e) => /unknown change kind/.test(e)), false);
+  assert.ok(bare.some((e) => /lifecycleDisposition/.test(e)));
+
+  const named = validateManifest({
+    version: "1",
+    accountableOwner: "operate",
+    changes: [{
+      kind: "lifecycle",
+      executor: "lib/operate/retention/retention-executor.ts",
+      lifecycleDisposition: "delete-after-retention",
+    }],
+  });
+  assert.deepEqual(named, []);
+});
+
 // ── green fixtures pass ──
 test("complete manifest passes with no errors", () => {
   assert.deepEqual(validateManifest(load("green-complete-manifest.data-impact.json")), []);

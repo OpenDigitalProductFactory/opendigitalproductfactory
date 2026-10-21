@@ -22,7 +22,38 @@ import {
   buildIsDelegated,
   defaultBuildStrategy,
   localBuildStrategy,
+  resolveLocalCiTestProfile,
 } from "./local-integration-ci.mjs";
+
+describe("bounded local-CI test profile", () => {
+  it("preserves default identity and clamps retry workers", () => {
+    const defaults = resolveLocalCiTestProfile({});
+    assert.deepEqual(defaults, { initialWorkers: 4, retryWorkers: 2 });
+    const original = createToolchainFingerprint({});
+    assert.equal(createToolchainFingerprint({ testProfile: defaults }).toolchainFingerprint, original.toolchainFingerprint);
+    assert.equal(createToolchainFingerprint({ testProfile: resolveLocalCiTestProfile({ DPF_LOCAL_CI_TEST_WORKERS: "4" }) }).toolchainFingerprint, original.toolchainFingerprint);
+    const fingerprints = new Set([original.toolchainFingerprint]);
+    for (const workers of [1, 2, 3]) {
+      const env = { DPF_LOCAL_CI_TEST_WORKERS: String(workers) };
+      const testProfile = resolveLocalCiTestProfile(env);
+      assert.deepEqual(testProfile, { initialWorkers: workers, retryWorkers: Math.min(2, workers) });
+      fingerprints.add(createToolchainFingerprint({ testProfile }).toolchainFingerprint);
+      const plan = createLocalIntegrationPlan({ candidateBranch: "feat/profile", siblingBranches: [], env });
+      const command = plan.commands.find((args) => args.includes("scripts/local-ci-vitest-runner.mjs"));
+      assert.equal(command[command.indexOf("--initial-workers") + 1], String(workers));
+      assert.equal(command[command.indexOf("--retry-workers") + 1], String(Math.min(2, workers)));
+    }
+    assert.equal(fingerprints.size, 4);
+  });
+
+  it("rejects invalid settings before constructing any execution plan", () => {
+    for (const value of ["", "0", "-1", "1.5", "5", "two", " 2", "02"]) {
+      const env = { DPF_LOCAL_CI_TEST_WORKERS: value };
+      assert.throws(() => resolveLocalCiTestProfile(env), /DPF_LOCAL_CI_TEST_WORKERS/);
+      assert.throws(() => createLocalIntegrationPlan({ candidateBranch: "feat/profile", siblingBranches: [], env }), /DPF_LOCAL_CI_TEST_WORKERS/);
+    }
+  });
+});
 
 describe("createLocalIntegrationPlan", () => {
   it("binds the production artifact to the exact integration tree", () => {
@@ -164,6 +195,7 @@ describe("createLocalIntegrationPlan", () => {
   it("disables Node host web-storage before Vitest starts jsdom workers (BI-3E989BEA)", () => {
     const plan = createLocalIntegrationPlan({
       candidateBranch: "fix/node-26-webstorage",
+      env: {},
       mode: "single-branch",
       siblingBranches: [],
       hostPlatform: "linux",
@@ -177,6 +209,7 @@ describe("createLocalIntegrationPlan", () => {
   it("caps Vitest workers in local-CI for repeatable sandbox evidence", () => {
     const plan = createLocalIntegrationPlan({
       candidateBranch: "feat/stabilize-sandbox-vitest",
+      env: {},
       mode: "single-branch",
       siblingBranches: [],
       hostPlatform: "linux",

@@ -1,8 +1,16 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { computeCapabilityStateVersion } from "./capability-state-hash.mjs";
 
-/** Canonical top-level serialization retained byte-for-byte for compatibility. */
+/** Version 1 bytes remain readable; version 2 binds every nested member. */
 export function canonicalTransitionPayload(value) {
+  if (value?.version === 2) {
+    if (value.kind !== "runtime-capability-transition") throw new Error("unsupported_runtime_transition_kind");
+    return recursiveCanonicalJson(value);
+  }
   if (value?.kind === "install-state-migration") return recursiveCanonicalJson(value);
+  if (value?.kind === "runtime-capability-transition") {
+    if (value.version !== 1 && value.version !== 2) throw new Error("unsupported_runtime_transition_version");
+  }
   return JSON.stringify(value, Object.keys(value).sort());
 }
 
@@ -90,4 +98,49 @@ export function verifyInstallStateMigrationEnvelope(envelope, signature, secret,
     throw new Error("install_state_envelope_expired");
   }
   return envelope;
+}
+
+/** Validate immutable dual baselines in the portal and packaged host alike.
+ * @param {any} input
+ * @param {{catalogHash: string, capabilityIds: readonly string[]}} catalog
+ */
+export function prepareRuntimeReconciliationIntent(input, catalog) {
+  const known = new Set(catalog.capabilityIds);
+  const keysValid = (keys) => Array.isArray(keys)
+    && keys.every(key => typeof key === "string" && known.has(key)) && new Set(keys).size === keys.length;
+  const host = input.observedHost;
+  if (!host || !Number.isInteger(host.schemaVersion) || host.schemaVersion < 1
+    || typeof host.installerVersion !== "string" || !host.installerVersion.trim()
+    || !["darwin", "linux", "win32"].includes(host.platform) || !["arm64", "amd64", "x86_64"].includes(host.arch)
+    || host.capabilityCatalogHash !== catalog.catalogHash || !/^[a-f0-9]{64}$/.test(catalog.catalogHash)
+    || !keysValid(host.enabledRuntimeCapabilities)
+    || JSON.stringify(host.enabledRuntimeCapabilities) !== JSON.stringify([...host.enabledRuntimeCapabilities].sort())
+    || host.capabilityStateVersion !== computeCapabilityStateVersion(catalog.catalogHash, host.enabledRuntimeCapabilities, catalog.capabilityIds)) {
+    throw new Error("reconciliation_host_baseline_invalid");
+  }
+  if (!keysValid(input.touchedKeys)) throw new Error("reconciliation_touched_keys_invalid");
+  if (!keysValid(input.desiredHostEnabledKeys)) throw new Error("reconciliation_desired_host_invalid");
+  const mapValid = (states) => states && typeof states === "object" && !Array.isArray(states)
+    && Object.keys(states).length === known.size && Object.keys(states).every(key => known.has(key))
+    && catalog.capabilityIds.every(key => Object.hasOwn(states, key) && typeof states[key] === "string");
+  if (!mapValid(input.observedDatabaseStates) || !mapValid(input.desiredDatabaseStates)) {
+    throw new Error("reconciliation_database_map_invalid");
+  }
+  const touched = new Set(input.touchedKeys);
+  for (const key of catalog.capabilityIds) {
+    if (!touched.has(key) && input.observedDatabaseStates[key] !== input.desiredDatabaseStates[key]) {
+      throw new Error("reconciliation_untouched_state_changed");
+    }
+    if (touched.has(key) && ![input.observedDatabaseStates[key], input.desiredDatabaseStates[key]]
+      .every(state => state === "active" || state === "disabled")) throw new Error("reconciliation_managed_state_invalid");
+  }
+  return {
+    observedHost: { ...structuredClone(host), enabledRuntimeCapabilities: [...host.enabledRuntimeCapabilities] },
+    observedDatabaseStates: { ...input.observedDatabaseStates },
+    desiredHostEnabledKeys: [...input.desiredHostEnabledKeys].sort(),
+    desiredDatabaseStates: { ...input.desiredDatabaseStates },
+    touchedKeys: [...input.touchedKeys].sort(),
+    residualDriftKeys: catalog.capabilityIds.filter(key => input.desiredDatabaseStates[key]
+      !== (input.desiredHostEnabledKeys.includes(key) ? "active" : "disabled")).sort(),
+  };
 }

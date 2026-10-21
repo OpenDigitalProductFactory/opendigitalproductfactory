@@ -58,7 +58,7 @@ function FamiliesNav({ config }: { config: FamiliesSectionNavConfig }) {
             {description ? <p className="text-xs text-[var(--dpf-muted)]">{description}</p> : null}
             <div className="mt-3 flex flex-wrap gap-2">
               {splitDiagnostic(subItems).primary.map((item) => (
-                <Link key={item.href} href={item.href} className={subItemClass("tab", item.active)}>
+                <Link key={item.href} href={item.href} aria-current={item.primary && item.active ? "page" : undefined} className={subItemClass("tab", item.active)}>
                   {item.label}
                 </Link>
               ))}
@@ -78,7 +78,7 @@ function FamiliesNav({ config }: { config: FamiliesSectionNavConfig }) {
         <p className={dense ? "sr-only" : "text-sm text-[var(--dpf-muted)]"}>{description}</p>
         <div className="flex flex-wrap gap-2">
           {splitDiagnostic(subItems).primary.map((item) => (
-            <Link key={item.href} href={item.href} className={subItemClass("pill", item.active)}>
+            <Link key={item.href} href={item.href} aria-current={item.primary && item.active ? "page" : undefined} className={subItemClass("pill", item.active)}>
               {item.label}
             </Link>
           ))}
@@ -160,12 +160,12 @@ function FlatNav({ config }: { config: FlatSectionNavConfig }) {
 // the route-audience registry sit behind one "More tools" disclosure instead of at
 // the same weight as daily tabs. The open page always stays visible. Simple mode
 // hides the disclosure entirely (globals.css, [data-advanced-tools]).
-type NavItem = { href: string; label: string; active: boolean };
+type NavItem = { href: string; label: string; active: boolean; primary?: boolean };
 
 function splitDiagnostic<T extends NavItem>(items: readonly T[]): { primary: T[]; more: T[] } {
   const primary: T[] = [];
   const more: T[] = [];
-  for (const item of items) (item.active || !isDiagnosticHref(item.href) ? primary : more).push(item);
+  for (const item of items) (item.primary || item.active || !isDiagnosticHref(item.href) ? primary : more).push(item);
   return { primary, more };
 }
 

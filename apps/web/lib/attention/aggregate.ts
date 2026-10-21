@@ -12,6 +12,7 @@ import { loadPausedAiItems } from "./sources/paused-ai";
 import { loadWorkroomStallItems } from "./sources/workroom-stall";
 import { loadWorkroomRebindItems } from "./sources/workroom-rebind";
 import { loadScheduledTaskItems } from "./sources/scheduled-task";
+import { loadScheduledJobAttentionItems, type ScheduledJobAttentionDb } from "./sources/scheduled-job";
 import { loadAgentProposalItems } from "./sources/agent-proposal";
 import { loadSkillProposalItems } from "./sources/skill-proposal";
 import { loadCoworkerEnvelopeItems } from "./sources/coworker-envelope";
@@ -34,6 +35,7 @@ import {
   loadOutboundItems,
   loadBillItems,
   loadExpenseItems,
+  loadLeaveApprovalItems,
   loadRegulatoryItems,
   loadResearchItems,
 } from "./sources/business-approvals";
@@ -93,6 +95,8 @@ export function filterAttentionForAudience(
 /** Options every caller resolves from the authenticated session. Both ids are
  *  the READING user: attention is projected for one person at a time. */
 export type AttentionLoadOptions = {
+  /** Inbox supplies its bounded envelope page separately, with total and cursor. */
+  includeCoworkerEnvelopes?: boolean;
   aiReadinessUserId?: string;
   /** The reader's user id, used to scope CoworkerActionEnvelope proposals to
    *  their delegating user. Omitted → the envelope source is not registered at
@@ -118,11 +122,14 @@ export function attentionSourceLoaders(
     { source: "workroom-stall", load: () => loadWorkroomStallItems(db) },
     { source: "workroom-rebind", load: () => loadWorkroomRebindItems(db) },
     { source: "scheduled-task", load: () => loadScheduledTaskItems(db) },
+    // Cron-backed ScheduledJob failures and an uncommissioned issue intake (BI-FD40397B).
+    { source: "scheduled-task", load: () => loadScheduledJobAttentionItems(db as unknown as ScheduledJobAttentionDb) },
     { source: "agent-proposal", load: () => loadAgentProposalItems(db) },
     { source: "skill-proposal", load: () => loadSkillProposalItems(db) },
     { source: "approval-outbound", load: () => loadOutboundItems(db) },
     { source: "approval-bill", load: () => loadBillItems(db) },
     { source: "approval-expense", load: () => loadExpenseItems(db) },
+    { source: "approval-leave", load: () => loadLeaveApprovalItems(db) },
     { source: "compliance-submission", load: () => loadRegulatoryItems(db) },
     { source: "research-proposal", load: () => loadResearchItems(db) },
     { source: "coworker-memory", load: () => loadCoworkerMemoryItems(db as unknown as CoworkerMemoryAttentionDb) },
@@ -161,7 +168,7 @@ export function attentionSourceLoaders(
         ),
     });
   }
-  if (opts.delegatingUserId) {
+  if (opts.delegatingUserId && opts.includeCoworkerEnvelopes !== false) {
     loaders.push({
       source: "coworker-envelope",
       load: () => loadCoworkerEnvelopeItems(db, opts.delegatingUserId),

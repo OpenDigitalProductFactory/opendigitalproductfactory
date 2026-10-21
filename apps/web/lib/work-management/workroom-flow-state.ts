@@ -43,6 +43,8 @@ const FLOW_STATE_BY_ACTION_AND_REASON: FlowStateTable = {
     no_posture: "blocked",
     quiet: "awaiting-trigger",
     cycle_complete: "awaiting-trigger",
+    // The item is not wanted now (done, deferred, delivered): no demand in the stream.
+    work_item_inactive: "awaiting-trigger",
     // Demand in hand that cannot start until agent capacity frees: wait time with
     // a cause, counted as wait rather than as absence of demand (BI-7C0B2BD6).
     awaiting_agent_capacity: "blocked",

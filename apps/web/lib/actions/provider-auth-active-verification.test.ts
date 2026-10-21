@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("@dpf/db", () => ({ prisma: mocks.prisma }));
 vi.mock("@/lib/govern/activate-provider", () => ({ activateProvider: mocks.activate }));
-vi.mock("@/lib/provider-oauth", () => ({ refreshOAuthToken: mocks.refresh }));
+vi.mock("@/lib/provider-oauth", () => ({ refreshOAuthToken: mocks.refresh, oauthTokenExpiryMs: () => null }));
 vi.mock("@/lib/credential-crypto", () => ({ decryptSecret: (value: string) => value.replace("enc:", "") }));
 vi.mock("@/lib/ai-provider-internals", () => ({ getProviderBearerToken: mocks.bearer, getDecryptedCredential: vi.fn(), getProviderExtraHeaders: () => ({}), isAnthropicProvider: () => false, ANTHROPIC_OAUTH_BETA_HEADERS: "" }));
 import { testProviderAuthInternal } from "./provider-auth-test";

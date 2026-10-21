@@ -121,7 +121,8 @@ test("identity drift while running prevents publication of reusable evidence", a
   const f = fixture(t);
   const execute = f.options.execute;
   f.options.execute = async () => { const result = await execute(); f.identity({ ...f.current(), tree: "new" }); return result; };
-  await runWithGuardReceipt(f.options);
+  const execution = await runWithGuardReceipt(f.options);
+  assert.equal(execution.identityVerified, false);
   f.options.execute = execute;
   assert.equal((await runWithGuardReceipt(f.options)).reused, false);
 });
@@ -161,6 +162,36 @@ test("thrown execution releases only its own claim, without caching a pass", asy
   assert.equal((await runWithGuardReceipt(f.options)).reused, false);
 });
 
+test("interrupted execution persists a terminal inconclusive outcome and keeps its last progress", async t => {
+  const f = fixture(t);
+  f.options.execute = async ({ progress } = {}) => {
+    progress?.({ guardId: "hanging-guard", phase: "started" });
+    throw new Error("runner interrupted");
+  };
+  await assert.rejects(runWithGuardReceipt(f.options), /runner interrupted/);
+  const { readdirSync } = await import("node:fs");
+  const path = join(f.options.directory, readdirSync(f.options.directory).find(name => name.endsWith(".json")));
+  const receipt = JSON.parse(readFileSync(path, "utf8"));
+  assert.equal(receipt.status, "inconclusive");
+  assert.equal(receipt.error.message, "runner interrupted");
+  assert.equal(receipt.observations.at(-1).guardId, "hanging-guard");
+  assert.ok(receipt.completedAt);
+});
+
+test("guard progress is durable before the command completes", async t => {
+  const f = fixture(t);
+  const { readdirSync } = await import("node:fs");
+  f.options.execute = async ({ progress }) => {
+    progress({ guardId: "slow-guard", phase: "started" });
+    const path = join(f.options.directory, readdirSync(f.options.directory).find(name => name.endsWith(".json")));
+    const receipt = JSON.parse(readFileSync(path, "utf8"));
+    assert.equal(receipt.status, "running");
+    assert.equal(receipt.observations.at(-1).guardId, "slow-guard");
+    return { ok: true, entries: [{ status: "passed" }] };
+  };
+  assert.equal((await runWithGuardReceipt(f.options)).reused, false);
+});
+
 test("precommit never shares fixed diagnostic logs across worktrees", () => {
   const hook = readFileSync(new URL("../../.githooks/pre-commit", import.meta.url), "utf8");
   assert.doesNotMatch(hook, /\/tmp\/pre-commit-(?:tc|prisma)\.log/);
@@ -192,6 +223,8 @@ test("real repository identity changes on metadata, main, plan, environment and 
   const first = identifyGuardExecution(input);
   assert.ok(first, "the real pinned pnpm/Git environment must be identifiable");
   assert.deepEqual(identifyGuardExecution(input), first);
+  assert.deepEqual(identifyGuardExecution({ ...input, env: { ...input.env, CODEX_TOOL_CALL_ID: "another-observability-call" } }), first,
+    "a per-call tracing identifier does not change executed guard inputs");
   assert.notDeepEqual(identifyGuardExecution({ ...input, plan: ["other-command"] }), first);
   assert.notDeepEqual(identifyGuardExecution({ ...input, env: { ...input.env, CI: "receipt-fixture" } }), first);
   git(["-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "--allow-empty", "-m", "metadata"]);

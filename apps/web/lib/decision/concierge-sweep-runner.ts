@@ -17,7 +17,6 @@ import {
   type SweepSummary,
 } from "./concierge-sweep";
 import {
-  UNRESOLVED_OUTCOMES,
   excludedFromOwnerRulingQueue,
 } from "@/lib/decision-perspective/owner-ruling-queue";
 import {
@@ -26,6 +25,7 @@ import {
 } from "@/lib/coworker/envelope-expiry";
 import { conductTriage, type TriageSubject } from "./triage-conductor";
 import { runGovernanceTriagePanel } from "./triage-panel-binding";
+import { humanEscalationWhere } from "@/lib/decision-perspective/human-escalation";
 import type { ProposalClient } from "./resolution-proposal-store";
 
 /** Stable identity of the standing governance room. */
@@ -53,7 +53,7 @@ const CANDIDATE_SCAN_LIMIT = 50;
  */
 function panelCandidateWhere(): Prisma.DecisionInteractionWhereInput {
   return {
-    outcomeType: { in: [...UNRESOLVED_OUTCOMES] },
+    AND: [humanEscalationWhere()],
     humanOutcome: { equals: Prisma.DbNull },
     question: { not: "" },
     NOT: excludedFromOwnerRulingQueue(),
@@ -76,6 +76,7 @@ async function loadCandidates(): Promise<TriageSubject[]> {
       gateKey: true,
       riskTier: true,
       outcomeType: true,
+      escalationRoute: true,
       options: true,
       evidenceBundle: true,
       sources: true,
@@ -94,6 +95,7 @@ async function loadCandidates(): Promise<TriageSubject[]> {
     gateKey: row.gateKey,
     riskTier: row.riskTier,
     outcomeType: row.outcomeType,
+    escalationRoute: row.escalationRoute,
     options: row.options,
     evidenceBundle: row.evidenceBundle,
     sources: row.sources,

@@ -56,6 +56,22 @@ describe("claimBacklogItemForWork MCP boundary", () => {
     mocks.evaluateItemAdmission.mockResolvedValue({ verdict: "admit", reason: "fits" });
   });
 
+  it.each(["baseSha", "headSha"])("rejects unusable supplied %s before admission or claim writes", async field => {
+    mocks.claimGovernedBacklogWorkspace.mockResolvedValue(okClaim());
+    for (const value of ["abc123", "", "  ", "z".repeat(40), 123]) {
+      const result = await claimBacklogItemForWork({
+        params: { itemId: "BI-ONE", worktreePath: "/two", branchName: "fix/two", provider: "codex", sessionRef: "session-two",
+          workShape: "delivery-small@1.0.0", [field]: value }, userId: "user-1", context: undefined, db: {} as CapsuleDb,
+        resolveActor: vi.fn().mockResolvedValue({ userId: "user-1", principalId: "PRN-1" }),
+      });
+      expect(result.success).toBe(false);
+      expect(result.error).toBe("invalid_input");
+      expect(result.message).toContain(field);
+      expect(mocks.evaluateItemAdmission).not.toHaveBeenCalled();
+      expect(mocks.claimGovernedBacklogWorkspace).not.toHaveBeenCalled();
+    }
+  });
+
   it("threads a deliberate co-claim and its audit reason", async () => {
     mocks.claimGovernedBacklogWorkspace.mockResolvedValue({
       ok: true,

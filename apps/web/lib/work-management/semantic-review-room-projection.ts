@@ -1,14 +1,16 @@
 import { projectRecordedTaskState } from "@/lib/tak/task-states";
 import type { PrismaClient } from "@dpf/db";
 import { isRecord } from "@/lib/shared/coerce";
-import { SEMANTIC_REVIEW_HEARTBEAT_STALE_MS } from "@/lib/change-review/semantic-review-request";
-import { CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION } from "@/lib/change-review/semantic-change-review";
+import { isSemanticReviewRequestRoleBinding, SEMANTIC_REVIEW_HEARTBEAT_STALE_MS } from "@/lib/change-review/semantic-review-request";
+import { CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION, LEGACY_CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION } from "@/lib/change-review/semantic-change-review";
 import type { ReceiptEnvelope } from "./receipt-envelope";
 import type { WorkCaseSourceRef } from "./case-types";
 import { isSemanticReviewRecoveryWait, semanticReviewRecoveryObservation, readSemanticReviewBudget, type SemanticReviewBudgetSnapshot } from "@/lib/change-review/semantic-review-recovery-policy";
 
 /** Read-only facts from existing tasks; neither a verdict nor a new execution ledger. */
 export type ReviewerExecutionObservation = {
+  capsuleId?: string | null;
+  requesterAgentId?: string | null;
   taskRunId: string; recordId: string; status: string; requesterId: string | null; requesterName?: string | null;
   reason: string | null; nextAction: string; readAt: string; lastHeartbeatAt: string | null;
   heartbeat: "historical" | "unknown" | "stale" | "recent";
@@ -30,23 +32,36 @@ export type ReviewerRoomClient = { taskRun?: { findMany(args: unknown): Promise<
 
 type RequestIdentity = {
   rowId: string; capsuleId: string; sourceHeadSha: string | null; currentHeadSha: string | null;
+  requesterAgentId?: string | null;
   issuedAt: string | null; requestBound: boolean;
   receiptId?: string | null; receiptDecision?: string | null; receiptSummary?: string | null;
   receiptCreatedAt?: Date | null;
+};
+type RequestIdentityRow = RequestIdentity & {
+  requestSchemaVersion: unknown; requestArtifactType: unknown;
+  identityArtifactType: unknown; identityArtifactTypePresent: boolean;
 };
 
 /** Project small identity fields, never the potentially multi-megabyte review prompt. */
 async function loadRequestIdentities(db: ReviewerRoomClient, rows: ReviewerRunSnapshot[]): Promise<RequestIdentity[]> {
   if (!rows.length || !db.$queryRaw) return [];
-  return db.$queryRaw<RequestIdentity[]>`
+  const identities = await db.$queryRaw<RequestIdentityRow[]>`
     SELECT t.id AS "rowId", w."capsuleId", w."headSha" AS "currentHeadSha",
+      CASE WHEN length(a.parts #>> '{0,data,actor,agentId}') BETWEEN 1 AND 256
+        THEN a.parts #>> '{0,data,actor,agentId}' END AS "requesterAgentId",
       e.id AS "receiptId", e.details #>> '{result,decision}' AS "receiptDecision",
       e."createdAt" AS "receiptCreatedAt",
       LEFT(e.details #>> '{result,summary}', 1200) AS "receiptSummary",
       a.parts #>> '{0,data,input,identity,sourceHeadSha}' AS "sourceHeadSha",
       a.parts #>> '{0,data,issuedAt}' AS "issuedAt",
-      COALESCE(a.parts #>> '{0,data,schemaVersion}' = '1'
-        AND a.parts #>> '{0,data,actor,userId}' = t."userId"
+      CASE WHEN jsonb_typeof(a.parts #> '{0,data,schemaVersion}') = 'number'
+        AND length(a.parts #>> '{0,data,schemaVersion}') <= 3
+        THEN a.parts #> '{0,data,schemaVersion}' END AS "requestSchemaVersion",
+      LEFT(a.parts #>> '{0,data,input,artifactType}', 257) AS "requestArtifactType",
+      CASE WHEN jsonb_typeof(a.parts #> '{0,data,input,identity,artifactType}') = 'string'
+        THEN LEFT(a.parts #>> '{0,data,input,identity,artifactType}', 257) END AS "identityArtifactType",
+      COALESCE((a.parts #> '{0,data,input,identity}') ? 'artifactType', false) AS "identityArtifactTypePresent",
+      COALESCE(a.parts #>> '{0,data,actor,userId}' = t."userId"
         AND lower(a.parts #>> '{0,data,repository}') = lower(w."repositoryFullName")
         AND a.parts #>> '{0,data,input,identity,capsuleId}' = w."capsuleId"
         AND a.parts #>> '{0,data,gateKey}' = t."a2aMetadata"->>'gateKey'
@@ -58,7 +73,10 @@ async function loadRequestIdentities(db: ReviewerRoomClient, rows: ReviewerRunSn
     LEFT JOIN "ExternalEvidenceRecord" e ON e.id = t."progressPayload"->>'evidenceRecordId'
       AND e."taskRunId" = t."taskRunId" AND e."workCapsuleId" = w.id AND e."actorUserId" = t."userId"
       AND e."operationType" = 'semantic-change-review.receipt'
-      AND e.details->>'schemaVersion' = ${CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION}
+      AND ((e.details->>'schemaVersion' = ${LEGACY_CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION}
+          AND NOT (e.details ? 'artifactType') AND NOT ((a.parts #> '{0,data,input,identity}') ? 'artifactType'))
+        OR (e.details->>'schemaVersion' = ${CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION}
+          AND e.details->>'artifactType' = a.parts #>> '{0,data,input,identity,artifactType}'))
       AND e.details->>'sourceHeadSha' = a.parts #>> '{0,data,input,identity,sourceHeadSha}'
       AND e.details->>'headTreeHash' = a.parts #>> '{0,data,input,identity,headTreeHash}'
       AND e.details->>'diffDigest' = a.parts #>> '{0,data,input,identity,diffDigest}'
@@ -66,6 +84,9 @@ async function loadRequestIdentities(db: ReviewerRoomClient, rows: ReviewerRunSn
       AND e.details->>'reviewerVersion' = a.parts #>> '{0,data,input,identity,reviewerVersion}'
     WHERE t.id = ANY(${rows.map(row => row.id)}::text[])
   `.catch(() => []);
+  return identities.map(identity => ({ ...identity, requestBound: identity.requestBound
+    && isSemanticReviewRequestRoleBinding(identity.requestSchemaVersion, identity.requestArtifactType,
+      identity.identityArtifactTypePresent ? identity.identityArtifactType : undefined) }));
 }
 
 /** Read-model snapshots of existing records, never new completion receipts or a task ledger. */
@@ -109,26 +130,27 @@ export async function loadSemanticReviewRoomProjection(db: ReviewerRoomClient, c
       : latest.get(identity.capsuleId)?.rowId === row.id ? "current" : "historical";
     if (identityScope === "unknown") partial = true;
     if (identity && validIdentity(identity) && !latest.has(identity.capsuleId)) {
-      partial = true;
       attentionReason ??= "No request for the current source version is in the displayed review history.";
     }
     const state = projectRecordedTaskState(row.status);
     const payload = isRecord(row.progressPayload) ? row.progressPayload : {};
     const progress = isRecord(payload.semanticReview) ? payload.semanticReview : {};
+    const recovery = semanticReviewRecoveryObservation(row.status, row.progressPayload, now.getTime());
     const recordedReason = row.status === "working" || row.status === "submitted" ? null
-      : typeof progress.reason === "string" ? progress.reason : null;
+      : recovery.capacityRecovery?.reason ?? (typeof progress.reason === "string" ? progress.reason : null);
     const reason = recordedReason ? `Last recorded reason: ${recordedReason}` : "No reason recorded";
     const next = state === "terminal" ? "Inspect the completion receipt; task status alone does not verify the Workroom outcome."
       : state === "waiting" ? "The requester must inspect the wait and current recovery authority."
         : state === "unknown" ? "Reconcile the unknown task state before acting."
           : "The server owns continuation; await its next recorded result.";
-    const recovery = semanticReviewRecoveryObservation(row.status, row.progressPayload, now.getTime());
     const recoveryAction = recovery.successorTaskRunId ? `Read successor review ${recovery.successorTaskRunId}.`
-      : isSemanticReviewRecoveryWait(row.status) && recovery.budget === "expired" ? recovery.nextAction : null;
+      : recovery.capacityRecovery || (isSemanticReviewRecoveryWait(row.status) && recovery.budget === "expired") ? recovery.nextAction : null;
     const heartbeat = row.lastHeartbeatAt ? row.lastHeartbeatAt.toISOString() : "unknown";
     const age = row.lastHeartbeatAt ? now.getTime() - row.lastHeartbeatAt.getTime() : null;
     const freshness = state === "terminal" ? "historical" : age === null || age < 0 ? "unknown" : age >= SEMANTIC_REVIEW_HEARTBEAT_STALE_MS ? "stale" : "recent";
-    runs.push({ taskRunId: row.taskRunId, recordId: row.id, status: row.status, requesterId: row.userId,
+    runs.push({ capsuleId: identity?.capsuleId ?? null,
+      requesterAgentId: identity?.requestBound ? identity.requesterAgentId ?? null : null,
+      taskRunId: row.taskRunId, recordId: row.id, status: row.status, requesterId: row.userId,
       requesterName: row.user?.employeeProfile?.displayName.trim() || null,
       identityScope, sourceHeadSha: identity?.requestBound ? identity.sourceHeadSha : null,
       ...(identity?.requestBound && identity.receiptId
@@ -139,7 +161,7 @@ export async function loadSemanticReviewRoomProjection(db: ReviewerRoomClient, c
       nextAction: recoveryAction ?? (row.status === "working" || row.status === "submitted" ? next : typeof progress.action === "string" ? progress.action
         : typeof progress.nextAction === "string" ? progress.nextAction : next),
       readAt: now.toISOString(), lastHeartbeatAt: row.lastHeartbeatAt?.toISOString() ?? null,
-      heartbeat: freshness, recoveryWait: isSemanticReviewRecoveryWait(row.status),
+      heartbeat: freshness, recoveryWait: recovery.manualRecoveryWait,
       budget: readSemanticReviewBudget(row.progressPayload),
       checkpoints: (row.nodes ?? []).slice(0, 12).map(node => ({ taskNodeId: node.taskNodeId,
         recordId: node.id, title: node.title, status: node.status,

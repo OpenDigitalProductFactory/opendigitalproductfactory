@@ -18,8 +18,8 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { isPinnedImageReference } from "@/lib/documents/conversion/command";
 import { runProcessWithBudget } from "@/lib/shared/run-process-with-budget";
-import { DOCTOOLS_IMAGE_NAME, resolveReleaseDoctoolsImage, type DoctoolsDockerRunner } from "./doctools-release-image";
-import { describeSourceLineage } from "./doctools-source-lineage";
+import { DOCTOOLS_IMAGE_NAME, resolveDoctoolsLineage, type DoctoolsDockerRunner } from "./doctools-release-image";
+import { describeSourceLineage, listAncestorReleaseTags } from "./doctools-source-lineage";
 
 const REPO_ROOT = resolve(__dirname, "../../../..");
 const GHCR_OWNER = "opendigitalproductfactory";
@@ -59,9 +59,21 @@ const runDocker: DoctoolsDockerRunner = (args, options) =>
 describe.skipIf(!ready)("customizable-install doctools lineage against the real registry (BI-D1B40D43 precondition)", () => {
   it("resolves this clone's release lineage to a published, digest-pinned dpf-doctools", async () => {
     if (!lineage) throw new Error("unreachable: the suite is skipped without a lineage");
-    const resolution = await resolveReleaseDoctoolsImage(lineage, runDocker);
+    const ancestorTags = await listAncestorReleaseTags({
+      sourcePath: REPO_ROOT,
+      tipRef: "HEAD",
+      runGit,
+    });
+    const resolution = await resolveDoctoolsLineage({
+      identity: lineage,
+      ancestorTags,
+      runDocker,
+    });
+    if (resolution.kind === "unavailable") {
+      throw new Error(`${lineage.imageTag}: registry unavailable, not a missing publish: ${resolution.detail}`);
+    }
     if (resolution.kind !== "published") {
-      throw new Error(`${lineage.imageTag}: expected a published ${DOCTOOLS_IMAGE_NAME}, got ${JSON.stringify(resolution)}`);
+      throw new Error(`${lineage.imageTag}: none of the recent release tags published ${DOCTOOLS_IMAGE_NAME}, got ${JSON.stringify(resolution)}`);
     }
     expect(resolution.image.startsWith(`ghcr.io/${GHCR_OWNER}/${DOCTOOLS_IMAGE_NAME}@sha256:`)).toBe(true);
     expect(isPinnedImageReference(resolution.image)).toBe(true);

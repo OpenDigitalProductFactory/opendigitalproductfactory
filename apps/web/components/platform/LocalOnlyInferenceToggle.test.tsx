@@ -43,8 +43,15 @@ describe("AI location policy control", () => {
     fireEvent.click(screen.getByRole("radio", { name: "Local and allowed cloud providers" }));
     expect((await screen.findByRole("alert")).textContent).toContain("last confirmed setting");
     expect((screen.getByRole("radio", { name: "Local only" }) as HTMLInputElement).checked).toBe(true);
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(save).toHaveBeenNthCalledWith(1, false);
+    const retry = screen.getByRole("radio", { name: "Local and allowed cloud providers" }) as HTMLInputElement;
+    await waitFor(() => expect(retry.disabled).toBe(false));
+    expect((screen.getByRole("radio", { name: "Local only" }) as HTMLInputElement).checked).toBe(true);
     save.mockResolvedValueOnce({ ok: true, enabled: false });
-    fireEvent.click(screen.getByRole("radio", { name: "Local and allowed cloud providers" }));
+    fireEvent.click(retry);
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(save).toHaveBeenNthCalledWith(2, false);
     await waitFor(() => expect((screen.getByRole("radio", { name: "Local and allowed cloud providers" }) as HTMLInputElement).checked).toBe(true));
   });
 

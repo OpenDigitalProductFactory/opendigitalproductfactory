@@ -64,7 +64,12 @@ beforeEach(() => {
 
 afterEach(() => rmSync(root, { recursive: true, force: true }));
 
-describe("build clone (W1, M1)", () => {
+// Each case runs real git (clone, rebase, hooks) through sh: 9-14 s on a
+// Windows host, so the default 15 s budget times out under a parallel gate run.
+// The budget measures a hang, not host speed (BI-F25D7E88).
+const GIT_FIXTURE_TIMEOUT_MS = 60_000;
+
+describe("build clone (W1, M1)", { timeout: GIT_FIXTURE_TIMEOUT_MS }, () => {
   it("creates an independent repository on the build branch, with the shared refs builds resolve", () => {
     sh(cloneCommand());
     expect(statSync(join(path, ".git")).isDirectory()).toBe(true);
@@ -143,7 +148,7 @@ describe("build clone (W1, M1)", () => {
 
 // BI-76BD65E6: a build that waited at ship while main moved on is rebased onto
 // the refreshed client branch before its PR is published.
-describe("build clone rebase onto a moved client branch", () => {
+describe("build clone rebase onto a moved client branch", { timeout: GIT_FIXTURE_TIMEOUT_MS }, () => {
   function moveClient(file: string, content: string) {
     git(shared, "checkout", "-q", "client/abc");
     writeFileSync(join(shared, file), content);

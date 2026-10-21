@@ -33,6 +33,13 @@ The request's link opens that result directly, including after a refresh. Open
 **Recent approval results** to review recent decisions separately from work that
 still needs you. Completed decisions do not increase the attention count.
 
+The Inbox displays a bounded list. Its approval summary shows how many requests
+are waiting in total and how many are shown. Use **Older requests** to continue
+through the queue and **Latest requests** to return to the newest requests.
+After a decision, another request may fill the cleared place; the pending total
+shows your progress. The displayed-item count also includes other notices and
+is not the full approval total. If the queue cannot be read, it says unavailable.
+
 An approval and a completed action are separate facts. The result says whether
 the action completed, failed, could not run, or expired, and explains the next
 step. Older decisions without a recorded result say the outcome is unknown.

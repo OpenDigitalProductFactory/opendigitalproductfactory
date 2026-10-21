@@ -1,0 +1,59 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-operator",
+  "affectedCopies": [
+    "Existing Workroom activitySequence committed high-water mark",
+    "Existing WorkroomActivity sequence immutable ingestion identity",
+    "Review-cycle frozen input boundary; existing evidence remains canonical"
+  ],
+  "migration": {
+    "name": "20261014012000_workroom_activity_ingestion_hardening",
+    "preparation": "20261014011900_prepare_workroom_activity_ingestion",
+    "recovery": "BI-BF20F828: the additive preparation assigns only NULL ingestion positions under exclusive parent/activity locks, preserving every other activity field and existing position. It verifies original guard definitions and attributes, allows only the sequence-only backfill inside its transaction, and restores the original refusal before commit. Already-hardened installs are a no-op. The promoter resolves only a single exact-checksum zero-step failed attempt after an always-rolled-back replay reproduces the append-only failure with unchanged schema and history. It preserves that failed ledger row and never marks it applied. Missing logs alone cannot authorize recovery; mixed failures, drift, partial effects and competing transactions remain blocked.",
+    "backfill": "Reuse BI-62514632 canonical integer counter and sequence. Preserve every existing position. Reconcile counter upward to existing maximum, then assign legacy NULL rows deterministic recordedAt/id positions after that maximum under parent/activity table locks. Skip a room whose legacy prefix exceeds integer headroom: retain its NULL evidence and unknown coverage. No history deletion or renumbering. DI-7588F40259CF supersedes the separate BIGINT candidate. Refreshed shared-sequence qualification 2026-10-14T01:17Z:10000 rooms142282 retained activities, migration8184.732ms,142282 unique positions,zero counter mismatches,existing positions5/9 unchanged,late arrival1976. Numeric indexed200-row page execution0.112ms. Separate real-PG regression retains overflow-room NULL evidence and rejects supplied/mutated positions. Synthetic populated qualification is not production or umbrella operational acceptance."
+  },
+  "tests": [
+    "packages/db/scripts/workroom-activity-migration-recovery.test.mjs",
+    "packages/db/scripts/workroom-activity-ingestion-recovery.postgres.test.mjs",
+    "packages/db/scripts/workroom-activity-recovery-prisma.postgres.test.mjs",
+    "packages/db/src/workroom-activity-ingestion.postgres.test.ts",
+    "apps/web/lib/work-management/delivery-room-ownership.test.ts",
+    "apps/web/lib/work-management/room-activity-ingestion.test.ts",
+    "apps/web/lib/work-management/room-review-ingestion.test.ts",
+    "apps/web/lib/work-management/room-review-ingestion.postgres.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:workroom",
+      "prismaModel": "Workroom",
+      "lifecycleDisposition": "Existing Workroom lifecycle unchanged. Rollback pauses ingestion readers and retains the additive counter; any correction uses a forward migration, never removal of evidence.",
+      "fields": [
+        {
+          "fieldId": "data:workroom#activitySequence",
+          "resolution": "governed",
+          "reason": "Extend the canonical database-owned counter already introduced by BI-62514632; no duplicate field or ordering ledger.",
+          "provenance": "BI-BF20F828; BI-62514632; DI-7588F40259CF",
+          "flags": [],
+          "fieldPolicy": "Existing Int and JSON contract preserved. Counter reconciles upward only and commits with insertion. Decimal-string ingestion projection; allocation gaps allowed. Capacity exhaustion requires an explicit compatible upgrade."
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:workroom-activity",
+      "prismaModel": "WorkroomActivity",
+      "lifecycleDisposition": "Existing telemetry-bounded retention remains unchanged. Sequence gaps never prove deleted events were reviewed; absent retained evidence remains unknown. No additional evidence copy or ledger is introduced.",
+      "fields": [
+        {
+          "fieldId": "data:workroom-activity#sequence",
+          "resolution": "governed",
+          "reason": "Harden existing canonical sequence against caller-supplied positions and mutation; backfill retained unsequenced history after existing positions.",
+          "provenance": "BI-BF20F828; BI-62514632; DI-7588F40259CF",
+          "flags": [],
+          "fieldPolicy": "Preserve all assigned integer positions. NULL legacy retained on overflow and remains unknown coverage. New inserts allocate under parent lock; sequence and room identity cannot change after assignment. No reconstruction of historical commit chronology."
+        }
+      ]
+    }
+  ]
+}

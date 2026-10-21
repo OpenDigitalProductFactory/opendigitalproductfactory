@@ -15,7 +15,8 @@ epics:
   - EP-CLIENT-CONFIG
 decisions:
   - DI-7FFCDEC4AB67 (delivery shape; principle_decide, high confidence, margin 5.84)
-  - DI-2399DE85DC6A (Grok credential; principle_decide, high confidence, margin 1.29)
+  - DI-2399DE85DC6A (Grok credential; principle_decide, high confidence, margin 1.29; superseded by DI-4B843FAF62F9)
+  - DI-4B843FAF62F9 (Grok uses its own OAuth credentials client; §15)
 architecture_review: advisory, independent agent, 2026-10-07 — 15 findings, all folded in (§14)
 extends:
   - docs/superpowers/specs/2026-05-26-agent-toolchain-bootstrap-design.md
@@ -180,7 +181,7 @@ Upstream supply-chain signing of the open-source image itself (for example Sigst
 
 ### 5.2 Report: every connection declares what it loaded
 
-**The declaration is baked into the shipped descriptors.** At pack generation, each per-client descriptor (`claude.mcp.json`, `antigravity.mcp.json`, Codex and Grok config shapes) gets three declaration fields:
+**Each connector declares what it loaded.** As built, the updater writes the declaration (carrier below). Each per-client descriptor (`claude.mcp.json`, `antigravity.mcp.json`, Codex and Grok config shapes) gets three declaration fields:
 
 - `dpf_pack`: the pack version
 - `dpf_digest`: the first 16 hex characters of `packDigest`
@@ -188,11 +189,11 @@ Upstream supply-chain signing of the open-source image itself (for example Sigst
 
 Descriptors are already excluded from `delivered_digest`, so writing the digest into them is not circular. **Nothing per-install is written into a cached copy.** A `claude plugin update` or a marketplace refresh therefore re-materializes the *same* declaration. It cannot erase it.
 
-Host identity is not declared. It comes from the **credential**: the OAuth client row (each client's DCR registration on each host) or the Grok `agent-client` token (§5.2d). A credential cannot be chosen by the caller's URL.
+Host identity is not declared. It comes from the **credential**: the OAuth client row (each client's DCR registration on each host) or Grok's own OAuth credentials client (§5.2e). A credential cannot be chosen by the caller's URL.
 
-**Carrier, measured rather than assumed (P1 spike).** The default carrier is query parameters placed **outside** any `${DPF_MCP_URL:-…}` expansion, so an endpoint override replaces only the origin and path. `pin-plugin-mcp-url.mjs` is changed to preserve the query.
+**Carrier, as built (P2b, #6329).** Claude Code, Codex and Antigravity carry the declaration in the `X-DPF-Toolchain` header. Grok carries it as query parameters on its literal URL. The server reads either. A query cannot follow a `${DPF_CLAUDE_MCP_URL:-…}` template: an override without its own query would end in `/v1&dpf_pack=`. The header also leaves the OAuth connector URL unchanged. The updater writes the declaration into the shared copy it converges, not into the checked-in descriptors. `pin-plugin-mcp-url.mjs` preserves the query.
 
-The spike measures, for Claude Code (CLI and desktop app), Codex and Antigravity:
+The P1 spike was never run live, so the carriers are encoded, not live-verified (§15). It was to measure, for Claude Code (CLI and desktop app), Codex and Antigravity:
 
 - whether a declaration change forces re-authorization;
 - whether OAuth fails with `invalid_target` (i.e. whether the client derives `resource` from protected-resource metadata or from the connector URL; `resourceMatches` rejects a query);
@@ -200,7 +201,7 @@ The spike measures, for Claude Code (CLI and desktop app), Codex and Antigravity
 - behaviour under a set `DPF_MCP_URL`;
 - the ordering of the pin hook and the updater.
 
-Where a client fails, its carrier falls back to a static header (`X-DPF-Toolchain: pack=…;digest=…;client=…`). The per-client carrier is recorded in the manifest's `clients` map. The server accepts either carrier.
+The header value is `pack=…;digest=…;client=…`. The per-client carrier is recorded in the manifest's `clients` map.
 
 **Verdict, computed at read time and never stored.** `resolveToolchainVerdict({ declaration, credential, authSource, endpoint, manifest, now })` is pure and unit-tested:
 
@@ -208,7 +209,7 @@ Where a client fails, its carrier falls back to a static header (`X-DPF-Toolchai
 |---|---|
 | `current` | Declared digest equals the release digest. |
 | `stale` | Declared, pack ≥ `minPackVersion`, digest differs (older or newer). |
-| `below-floor` | Declared pack < `minPackVersion`, **or** the declared client authenticated with a bearer although `mcpClientBearerHeaderRequired(endpoint, client)` is false for it (OAuth was available), **or** a Grok declaration authenticated with anything other than an `agent-client` token. |
+| `below-floor` | Declared pack < `minPackVersion`, **or** the declared client authenticated with a bearer although `mcpClientBearerHeaderRequired(endpoint, client)` is false for it (OAuth was available), **or**, after grace, a Grok declaration not on its own OAuth credentials client (during grace it is `stale`; §5.2e). |
 | `undeclared` | No declaration. This covers every pre-declaration copy (all packs ≤ 0.2.8), customer agents, scripts and Build Studio. A User-Agent hint from the existing `CLIENT_SIDE_LAZY_TOOL_CATALOG` classifier is recorded as `probableClient` **for display only**. A User-Agent is trivially forged and is also produced by SDK-built customer agents, so it never drives enforcement. |
 
 **(a) The agent is told.** `initialize` reads `params.clientInfo` and records it, which closes gap 1 of the conformance design. `buildAgentHostInstructions` gains a `TOOLCHAIN:` line after `INSTALLATION:`:
@@ -259,10 +260,11 @@ No human command is involved. Each client then either declares the new digest on
 
 `isToolAllowedBelowToolchainFloor(toolName, tool, grantMap)` is a **new**, default-deny test. It does not reuse the quiescence test. It allows a tool only when:
 
-- every grant the tool requires is a read grant (the same grant map `tools/call` already resolves), **or** `annotations.readOnlyHint === true`;
-- or the tool is one of the three repair-path tools: `load_tools`, `record_surface_readiness` (own row only), `issue_agent_client_token` (own client kind only, §5.2e).
+- the tool declares `annotations.readOnlyHint === true`;
+- or it declares `sideEffect: false` **and** every grant it requires ends in `_read` (the grant map `tools/call` already resolves);
+- or it is a repair-path tool: `load_tools`, `record_surface_readiness` (own row only), `issue_grok_credentials_client` (own client only, §5.2e).
 
-Everything else is refused. Unknown means refused.
+Everything else is refused. Unknown means refused. As built (P6, #6386), this is stricter than the first wording ("a read grant or `readOnlyHint`"). `sideEffect: false` alone would have admitted `start_build`, `write_sandbox_file` and `run_sandbox_command`. A fault inside the check fails open and is logged, because the floor is a conformance control, not a security boundary.
 
 `toolchainFloorRefusalResult` applies that test:
 
@@ -284,7 +286,7 @@ repair: { manifestUrl, reason }
 
 - Floor enforcement applies to **declared** clients only: `below-floor` from §5.2.
 - `undeclared` callers are never refused by the floor (AC-FLOOR-SCOPE).
-- Pre-declaration copies are handled by visibility (§5.2a–c) and convergence (§5.3), and finally by the existing install-wide switch `DPF_MCP_PAT_RESOLUTION_DISABLED`. That switch becomes safe to turn on once Grok has its own credential type (§5.2e) and no DPF-managed client still holds an operator PAT. Whether to also enforce on `undeclared` callers with a DPF User-Agent hint is a founder decision (§11, decision 1), and is off by default.
+- Pre-declaration copies are handled by visibility (§5.2a–c) and convergence (§5.3), and finally by the existing install-wide switch `DPF_MCP_PAT_RESOLUTION_DISABLED`. That switch becomes safe to turn on once Grok uses its own credentials client (§5.2e) and no DPF-managed client still holds an operator PAT. Whether to also enforce on `undeclared` callers with a DPF User-Agent hint is a founder decision (§11, decision 1), and is off by default.
 
 **Grace:**
 
@@ -300,22 +302,15 @@ The floor is a **conformance control, not a security boundary**:
 - Grants, scopes and the OAuth binding are unchanged.
 - A stale client that forges a "current" declaration gains nothing it did not already have.
 
-**(e) Grok, explicitly (DI-2399DE85DC6A).** Grok has no OAuth client, and `mcpClientBearerHeaderRequired` always returns `true` for it. So:
+**(e) Grok, explicitly (DI-4B843FAF62F9, superseding DI-2399DE85DC6A).** The first design added an `agent-client` token kind, a `McpApiToken.clientKind` column, an `issue_agent_client_token` tool and a PAT-switch exemption. None was built. #6208 (BI-5BCDB07C, merged 2026-10-12) already gave Grok an OAuth `client_credentials` client with a refresher. So, as built in P5 (#6385):
 
-- **A new `McpApiToken.kind: "agent-client"`.** It carries a dedicated `clientKind` column (`grok`). The `capability` column keeps its existing `read|write` meaning.
-  - **Expiry:** finite, default 90 days (§11 decision 3).
-  - **Scopes:** no wider than the OAuth clients' `dpf.read dpf.work dpf.build` equivalents.
-  - **Revocation:** per credential.
-- **Minting is by an authenticated MCP tool, `issue_agent_client_token`, called by the agent and not by a script.**
-  - **Caller authority:** it requires the caller's own credential and mints only for the caller's own declared client kind, scoped no wider than the caller.
-  - **One token per host:** it revokes the caller's previous `agent-client` token for that client and host label.
-  - **Repair path:** it is allowed below the floor, because it is the repair.
-  - **Delivery:** the updater receives the new token from the agent and writes it to `DPF_MCP_BEARER_TOKEN` for Grok only.
-- **`agent-client` tokens stay resolvable when `DPF_MCP_PAT_RESOLUTION_DISABLED` is on.** That switch retires *operator* PATs. Client-scoped, expiring tokens are the replacement. This is written into `transport-auth.ts` next to the existing check.
-- **Grok verdicts:**
-  - A Grok declaration on an operator PAT is `below-floor` once grace ends.
-  - An expired Grok token is refused by the existing expiry path, which now attaches the same repair link.
-- **When Grok gains OAuth,** `mcpClientBearerHeaderRequired`'s Grok case changes. This design needs no further edit.
+- **Own credential.** The verdict counts Grok as on its own credential only when the token was issued to its registered credentials client. On an operator PAT it is `stale` during grace and `below-floor` after.
+- **Issued by an MCP tool, `issue_grok_credentials_client`.** It returns, or creates once, the caller's own client through `ensureGrokCredentialsClient`. It refuses a portal session and any caller narrower than `dpf.read dpf.work dpf.build`. `secretResultKeys` keeps the secret out of the audit row. It is allowed below the floor, because it is the repair.
+- **Delivery.** The agent pipes the client to the updater on stdin (`--grok-client-stdin`). The updater points Grok at `bearer_token_file` and runs the first refresh. The secret never goes on a command line.
+- **Refresh.** The refresher ships in the skill pack. Grok's SessionStart entry refreshes the token when it is missing or near expiry. The token lifetime is finite.
+- **Repair.** A missing or expired credential gets a 401 whose `error.data.repair` names the manifest, the same repair as the `TOOLCHAIN:` line.
+- **PAT switch.** Grok's OAuth tokens are not PATs, so `DPF_MCP_PAT_RESOLUTION_DISABLED` needs no exemption.
+- **Acts as `AGT-EXT-GROK` (BI-8D152751).** The token endpoint carries the client's agent into each token, and `workCapsuleActor` refuses an OAuth workroom write without one. An unbound client could read but never claim, adopt or heartbeat a Workroom. `ensureGrokCredentialsClient` therefore creates the client with `OAuthClient.agentId` set, and binds an existing unbound client on the next setup run. It binds only when that agent is active, unarchived and holds `work_room_write`, and never rewrites a client bound to another agent (`apps/web/lib/auth/grok-agent-binding.ts`). The source-checkout bootstrap feeds the container issuer on stdin (`sh -s`): passed as a `sh -c` argument, the script arrived truncated and never ran.
 
 ### 5.3 Converge: the agent runs the updater, pulled from the portal
 
@@ -330,9 +325,9 @@ The updater gains `--from-portal <origin>`. The existing local-directory mode is
    - **Claude `local` scope:** existing behaviour.
    - **Claude project scope:** every project-scope record whose folder exists, plus retirement of a duplicate project `.mcp.json` `dpf` entry by backup and disable, never delete. This calls **BI-B9F359AC's** functions; it does not reimplement them. Records whose folder is gone are reported as prunable and not touched.
    - **Claude user scope:** a `dpf` server in `~/.claude.json` `mcpServers` (or in a project's `mcpServers` there) that targets the DPF endpoint path duplicates the plugin connector. Seen on this host on 2026-10-07: `http://127.0.0.1:3000/api/mcp/v1?tier=full` beside the plugin's OAuth connector, which surfaced as two `dpf` rows in the connector list. It is retired by `claude mcp remove dpf -s user|local`, after its definition is written to a backup file. Hand-editing the live settings file is never used.
-   - **Shared copy:** carries the declaration, because it is shipped.
+   - **Shared copy:** the updater writes the declaration into it.
    - **Codex:** managed copy, config and hooks.
-   - **Grok:** plugin, hooks and `config.toml`, plus the `agent-client` token from §5.2e.
+   - **Grok:** plugin, hooks and `config.toml`, plus its own credentials client from §5.2e (`--grok-client-stdin`).
    - **Antigravity:** MCP config and skills.
 5. **Plain-http installs.** `writeMcpJsonToHost` stops writing a `dpf` entry into `/host-dpf/.mcp.json` whenever the plugin connector covers that folder. In that case it writes the token only where the plugin connector reads it. Otherwise it re-creates the duplicate the updater retires.
 6. **Endpoints come from the manifest,** not from script defaults. This retires the `http://127.0.0.1:3000` defaults in:
@@ -403,9 +398,9 @@ Nothing notices when a client release changes what it can do.
 | `oauthHttps` | OAuth works over https |
 | `oauthLoopbackHttp` | OAuth works over loopback http |
 | `staticHeaders` | Static request headers supported |
-| `declarationCarrier` | `query` or `header`, from the P1 spike |
+| `declarationCarrier` | `query` or `header`, as built in P2b (§5.2) |
 | `pluginScopes` | Plugin scopes the client supports |
-| `hookPlane` | Hook plane the client offers |
+| `hookPlane` | Per client and per host (`cli`, `desktop`, `ide`): events that fire, deny envelope, permission modes, evidence. Unproven is shown as a gap (P8, founder 2026-10-13) |
 | `reloadRequired` | Whether a reload is needed to pick up changes |
 | `skillsLoad` | Whether skills load |
 
@@ -447,7 +442,7 @@ Nothing notices when a client release changes what it can do.
 | Claude Code, 0.2.5 project pin on a PAT (pre-declaration) | `undeclared` with probable client `claude-code`. It gets the repair line and is shown on `/ops/self-upgrade` as an operator-PAT DPF copy. It is not refused by the floor. After it converges it declares, and uses OAuth on https. |
 | Claude Code on a plain-http install | Bearer is required there by `mcpClientBearerHeaderRequired`, so bearer is **not** below floor. Only pack staleness applies. |
 | Codex | Same as Claude Code. `codex plugin add` already verifies the managed-copy digest, and the report now carries it. |
-| Grok | Declares its pack. On update, the agent mints a 90-day Grok `agent-client` token and the updater writes it. An operator PAT is `stale` during grace and `below-floor` after it. |
+| Grok | Declares its pack. On update, the agent fetches Grok's own credentials client and the updater sets it up; the token refreshes itself. An operator PAT is `stale` during grace and `below-floor` after it. |
 | Antigravity | Declares through `mcp_config.json`. Same verdicts. Still "unsupported-until-proven" for hooks. |
 | A client that never connects again | Behind after the release, stale after 7 days, pruned after 30. |
 | Customer agent, script, Build Studio | `undeclared`, never refused by this design. Governed by the 2026-07-24 conformance core-tier floor. |
@@ -463,7 +458,7 @@ Each phase is one PR and one clean revert.
 | P2 | Declaration baked into descriptors; `pin-plugin-mcp-url.mjs` preserves it. `--from-portal` with origin check, `--report-json`, manifest-sourced endpoints (BI-772023BC), `writeMcpJsonToHost` duplicate fix | P0, P1 |
 | P3 | `resolveToolchainVerdict`, `clientInfo` capture, `TOOLCHAIN:` instructions, `AgentToolchainObservation` + `AgentSurfaceReadiness` extension + migration + stewardship, cross-process coalesced writes, server-derived `surfaceKey`, paged roll-up | P1 |
 | P4 | `announceToolchainReleaseOnBoot`, `notifySelfUpgradeEvent` wired, `/ops/self-upgrade` clients section | P3 |
-| P5 | `agent-client` token kind + `issue_agent_client_token` + PAT-switch exemption; Grok convergence | P2, P3 |
+| P5 | Grok's own OAuth credentials client: verdict, `issue_grok_credentials_client`, updater and refresh (re-scoped, §15) | P2, P3 |
 | P6 | `isToolAllowedBelowToolchainFloor` + `toolchainFloorRefusalResult` in `tools/call` and `tasks/*`, behind grace; first floor = 0.3.0 | P3, P5 |
 | P7 | Node freshness wrapper in plugin `hooks.json` against the manifest; remove source-repo-only registration; retire `reconcile-claude-plugin`'s project repair after parity | P1, P2 |
 | P8 | `client-capabilities.json` as the single capability source; `mcpClientBearerHeaderRequired` and its test cases derived from it; tracker matrix rendered from it; unverified-version drift flag from recorded `clientInfo.version`; weekly re-verification `scheduledAgentTask` | P3 |
@@ -473,7 +468,7 @@ Each phase is one PR and one clean revert.
 **Added:**
 
 - inside the existing app: two read routes, one pure verdict function, one refusal test, one boot step, one MCP tool;
-- in the data model: one observation model, fields on two existing models, one token kind;
+- in the data model: one observation model, fields on two existing models (no new token kind, §15);
 - in the pack: one Node hook.
 
 **Not added:** no new service, image, package, daemon or subscription.
@@ -527,13 +522,13 @@ Each phase is one PR and one clean revert.
 | AC-VERDICT | OBJ-OBSERVE | resolveToolchainVerdict returns current, stale, below-floor or undeclared for each fixture case, deriving the auth rule from mcpClientBearerHeaderRequired, and never uses a User-Agent to decide enforcement. |
 | AC-OBSERVE-STORE | OBJ-OBSERVE | Each MCP connection records its credential, declared pack, digest, auth mode and clientInfo as an AgentToolchainObservation keyed by credential and loaded digest with at most one write per row per five minutes across processes, record_surface_readiness binds its row to the caller's own credential, and the fleet roll-up is paged. |
 | AC-INSTRUCT | OBJ-OBSERVE, OBJ-FLOOR | The initialize instructions of a non-current connection contain a TOOLCHAIN line naming what is stale, the portal repair and a restart request, and never a shell command for the user. |
-| AC-FLOOR-READONLY | OBJ-FLOOR | After the grace period, a declared client below the security floor cannot write: every tools/call that is not a read-grant or readOnlyHint tool, including start_build, write_sandbox_file and run_sandbox_command, and every tasks/submit is refused with agent_toolchain_below_floor and a repair link, while reads, load_tools, record_surface_readiness and issue_agent_client_token succeed. |
+| AC-FLOOR-READONLY | OBJ-FLOOR | After the grace period, a declared client below the security floor cannot write: every tools/call that is not a read tool, including start_build, write_sandbox_file and run_sandbox_command, and every tasks/submit is refused with agent_toolchain_below_floor and a repair link, while reads, load_tools, record_surface_readiness and issue_grok_credentials_client succeed. As built, a read tool is one with readOnlyHint, or with no side effect and only _read grants. |
 | AC-FLOOR-SCOPE | OBJ-FLOOR | An undeclared caller, including one whose User-Agent resembles a DPF client, is never refused by the toolchain floor, and a client for which mcpClientBearerHeaderRequired is true is never below floor for using a bearer. |
 | AC-AUTHENTIC | OBJ-CONVERGE | The served manifest carries an Ed25519 signature by the installation identity key over bytes that include the archive hash and pack digest, and the updater executes nothing unless the signature verifies and the signing key's device id equals both the device id from the authenticated MCP connection and the host pin, refusing and reporting otherwise. |
 | AC-CONVERGE-ALL | OBJ-CONVERGE | One --from-portal run each on Windows, macOS and Linux, each verified separately, brings Claude local scope, every existing Claude project-scope pin, the shared copy, Codex, Grok and Antigravity to the manifest digest; retire each duplicate project .mcp.json dpf entry by backup and disable; report missing-folder pins as prunable; refuse an origin that is not an already-configured DPF connector origin; and refuse an archive or tree whose hash mismatches. |
 | AC-REPORT-VERIFY | OBJ-CONVERGE, OBJ-OBSERVE | The updater's JSON report is recorded through record_surface_readiness, and a copy counts as current only when the client's next connection declares the new digest. |
 | AC-NO-RETIRED-DEFAULT | OBJ-CONVERGE | No updater, wrapper or host writer writes the http://127.0.0.1:3000 endpoint unless the manifest names it, and writeMcpJsonToHost no longer writes a dpf entry that duplicates the plugin connector. |
-| AC-GROK | OBJ-GROK, OBJ-FLOOR | Grok converges to an agent-client token for client grok with a finite expiry minted by issue_agent_client_token for the caller's own client only, the token stays resolvable when operator PAT resolution is disabled, a Grok declaration on an operator PAT is below floor after grace, and an expired Grok token returns the same repair link. |
+| AC-GROK | OBJ-GROK, OBJ-FLOOR | Grok converges to its own OAuth credentials client (client_credentials, finite token lifetime, refreshed automatically) set up by the updater for the caller's own client only; a Grok declaration on an operator PAT is below floor after grace; an expired or missing Grok credential returns the same repair link. Amended 2026-10-14 by DI-4B843FAF62F9. |
 | AC-CAPABILITY-SOURCE | OBJ-CAPABILITY | mcpClientBearerHeaderRequired, the floor's auth rule and the manifest clients map all derive from client-capabilities.json, whose rows each carry a verified version, date and evidence link, and CI fails when the generated policy cases or the rendered tracker matrix drift from it. |
 | AC-CAPABILITY-DRIFT | OBJ-CAPABILITY | A connection reporting a client version newer than that client's verified version marks the client capabilities-unverified in the fleet view and files one deduplicated re-verification item for that client and version, and a weekly scheduled task reads only each row's declared sources, files at most one proposal item per client without editing the profile, and marks a row verificationStale with its reason when a source fails. |
 | AC-USER-SCOPE-DUPLICATE | OBJ-CONVERGE | A dpf server in the Claude user or local settings that targets the DPF endpoint path is retired through the client's own remove command after its definition is backed up, and the updater pins a parseable connector URL for every converged project-scope record. |
@@ -567,9 +562,9 @@ Verification for each row is specified in the plan's Traceability table (single 
 
 The founder accepted every default below on 2026-10-07. Each is recorded so it can be revisited without re-deriving the design.
 
-1. **Floor on undeclared DPF-looking clients.** Should the floor also refuse writes from undeclared callers whose User-Agent looks like Claude Code or Codex (pre-declaration copies on operator PATs), after grace? The default proposal is **no**: visibility and convergence first, then turn on the existing PAT switch once Grok has its own token type. User-Agent matching would also catch customer agents built on the same SDKs.
+1. **Floor on undeclared DPF-looking clients.** Should the floor also refuse writes from undeclared callers whose User-Agent looks like Claude Code or Codex (pre-declaration copies on operator PATs), after grace? The default proposal is **no**: visibility and convergence first, then turn on the existing PAT switch once Grok uses its own credential. User-Agent matching would also catch customer agents built on the same SDKs.
 2. **Grace period** before a floor is enforced. The default proposal is 7 days.
-3. **Grok token lifetime.** The default proposal is 90 days, rotated on each update.
+3. **Grok token lifetime.** The default proposal was 90 days. Superseded by DI-4B843FAF62F9: Grok's OAuth token has a finite lifetime and refreshes itself.
 4. **Unattended remote hosts.** Defer the host-side agent (option A) until a host is found that needs convergence with no agent session ever running on it.
 5. **Standing approval.** Should agents ask every time, or may the founder pre-authorize "update the DPF toolchain on my hosts without asking"? It would be revocable and off by default.
 
@@ -593,7 +588,7 @@ Updated in the same branch as each phase:
 
 - `packages/dpf-skill-pack/README.md`: "Standalone install and update" and "Plugin manifests". This also fixes the Codex bearer drift at L152.
 - `docs/architecture/branch-and-worktree-runbook.md`: "Seeding a new worktree".
-- `docs/architecture/mcp-tool-authorization-runbook.md`: floor refusal, the `agent-client` token, and the PAT switch.
+- `docs/architecture/mcp-tool-authorization-runbook.md`: floor refusal, the Grok credentials client, and the PAT switch.
 - `docs/operations/install.md`.
 - AGENTS.md §1 "Self-provision before working": add a pointer to the portal manifest.
 
@@ -612,3 +607,12 @@ The governed design-spec review (Change Reviewer, AGT-WS-REVIEW) failed the desi
 An independent agent ran the advisory review on 2026-10-07 using `dpf-architecture-review`. All 15 findings are folded in:
 
 Advisory review findings 1–15 (independent agent, 2026-10-07): 3 blockers (the floor's write test, the auth-floor rule contradicting `mcpClientBearerHeaderRequired`, fragile per-install declaration), 6 major (User-Agent identity, row normalization, attention in the old process, digest vs archive hash, unauthenticated download, Grok minting authority), 4 important (caching and paging, data stewardship, the host writer duplicate, plus scale) and 2 minor (overstated retirements, the Python-only hook). Each is resolved in the section it names; the full table is in this file's git history at commit 527bcce3.
+
+## 15. As built (2026-10-14)
+
+What changed in delivery, and why. Sections above are marked where they changed.
+
+1. **Grok credential (P5, BI-84C1F526, #6385).** DI-4B843FAF62F9 supersedes DI-2399DE85DC6A. #6208 already gave Grok an OAuth `client_credentials` client, so no new token kind, column or PAT-switch exemption was added (§5.2e). AC-GROK is amended.
+2. **Declaration carrier (P2b, #6329).** Header for the OAuth clients, query for Grok; the server reads either. A query after a URL template breaks an endpoint with no query of its own (§5.2). The P1 spike was never run live, so the carriers are encoded, not live-verified.
+3. **Floor read test (P6, BI-DFC0270C, #6386).** Stricter default-deny (§5.2d), because `sideEffect: false` alone admits sandbox and build tools. It fails open on an internal fault. The first release sets no floor.
+4. **Hook parity (P8, BI-64795FD0, founder 2026-10-13).** `hookPlane` is per client and per host, and unproven is shown as a gap (§5.5).

@@ -24,6 +24,10 @@ export const SCHEDULED_AGENT_TASK_KINDS = [
   // inputs for a bounded batch of unscored triaged items from their recorded
   // signals and marks them agent-proposed; it never writes over an owner.
   "demand-scoring-steward",
+  // BI-64795FD0 — the weekly client-capability re-verification. Deterministic:
+  // it fetches each client's declared sources, compares them with the last
+  // snapshot and files at most one proposal per client; it never edits the profile.
+  "client-capability-reverify",
 ] as const;
 
 export type ScheduledAgentTaskKind =
@@ -45,6 +49,8 @@ export const ACCEPTANCE_SWEEP_TASK_KIND =
   SCHEDULED_AGENT_TASK_KINDS[6];
 export const DEMAND_SCORING_STEWARD_TASK_KIND =
   SCHEDULED_AGENT_TASK_KINDS[7];
+export const CLIENT_CAPABILITY_REVERIFY_TASK_KIND =
+  SCHEDULED_AGENT_TASK_KINDS[8];
 
 export function isScheduledAgentTaskKind(
   value: unknown,

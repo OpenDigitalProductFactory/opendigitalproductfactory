@@ -176,6 +176,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // One MCP JSON-RPC client for scripts: loopback check, credential
       // resolution and transport in one place (plan 2026-09-08 §10.5 S8).
       node("--test", "scripts/lib/mcp-client.test.mjs"),
+      node("--test", "tests/release/mcp-host-trust.test.mjs"),
       conformanceTest("scripts/check-no-hand-rolled-mcp-jsonrpc.test.mjs"),
       node("scripts/check-no-hand-rolled-mcp-jsonrpc.mjs"),
       // One argument parser for every script: node:util parseArgs
@@ -264,6 +265,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // then recorded as done by Save-Progress. Optional-script guards must say so.
       conformanceTest("scripts/check-installer-skip-visibility.test.mjs"),
       conformanceTest("scripts/check-setup-worktree-hygiene.test.mjs"),
+      // BI-8D152751: the Grok credential step must feed its issuer on stdin.
+      conformanceTest("scripts/bootstrap-grok-credential-issuer.test.mjs"),
     ], { inputs: ["code"] }),
     guard("installer-state-contract", "Installer State Contract", [
       // Drives real bash: install-dpf.sh runs under `set -euo pipefail`, and the
@@ -283,11 +286,22 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // BI-58C58CB6: these sat on the test-inventory allowlist, ran nowhere
         // in CI, and drifted on every host until BI-76334D21 caught them.
         "scripts/installer/install-state-transaction.test.mjs",
+        "scripts/installer/offline-recovery-authority.test.mjs",
+        "scripts/installer/offline-recovery-enrollment.test.mjs",
+        "scripts/installer/offline-recovery-kit.test.mjs",
+        "scripts/installer/offline-recovery-kit-prepare.test.mjs",
+        "scripts/installer/runtime-apply-lock.test.mjs",
         "scripts/installer/migrate-install-state.test.mjs",
         "scripts/installer/resolve-host-identity.test.mjs",
         "scripts/installer/validate-install-state.test.mjs",
         "scripts/installer/native-edge-host-contract.test.mjs",
+        // BI-31F11C37: the installers' monitoring question.
+        "scripts/installer/monitoring-choice.test.mjs",
       ),
+      conformanceTest("scripts/ci-runtime-install-state-fixture.test.mjs"),
+      // BI-31F11C37: both installers ask, accept the flag and record the
+      // choice before profiles resolve; reads the live installer sources.
+      conformanceTest("scripts/installer/monitoring-choice-installer-contract.test.mjs"),
       // BI-3267763F: no compose default, installer output or self-upgrade
       // leaves Inngest on the signing/event keys once published in this repo.
       conformanceTest("scripts/installer/inngest-keys-contract.test.mjs"),
@@ -359,12 +373,14 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/ci-coverage-config.test.mjs",
         "scripts/ci-evidence-workflow.test.mjs",
         "scripts/ci-build-artifact-workflow.test.mjs",
+        "scripts/ci-workroom-ingestion-scale.test.mjs",
         "scripts/ci-policy-guards.test.mjs",
         "scripts/daily-checkpoint-tag.test.mjs",
       ),
       node(
         "--test",
         "scripts/pr-health.test.mjs",
+        "scripts/published-correction.test.mjs",
         "scripts/check-stuck-auto-merge.test.mjs",
         "scripts/check-failure-readiness.test.mjs",
         "scripts/dev-postgres-pgvector-contract.test.mjs",
@@ -388,7 +404,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/ci-policy-test-inventory.test.mjs",
         "scripts/lib/git-shallow-preflight.test.mjs",
         "scripts/lib/ensure-compile-ready.test.mjs",
+        "scripts/lib/bootstrap-managed-install-proof.test.mjs",
+        "scripts/lib/bootstrap-worktree-deps.test.mjs",
         "scripts/pregate-preflight.test.mjs",
+        "scripts/pregate-preflight-effective-environment.test.mjs",
+        "scripts/lib/pull-request-body.test.mjs",
         "scripts/pregate.test.mjs",
         "scripts/lib/pregate-preflight-receipt.test.mjs",
         "scripts/gate-context.test.mjs",
@@ -422,6 +442,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // BI-5BCDB07C: the Grok refresher writes bearer_token_file and stops
       // when the credentials client is refused. Listed here so CI runs it.
       node("--test", "scripts/lib/grok-credential.test.mjs"),
+      // BI-84C1F526: Grok's SessionStart refreshes that file from the pack copy.
+      node("--test", "packages/dpf-skill-pack/hooks/grok-credential-refresh.test.mjs"),
       node("scripts/check-authoring-cost-dimensions.mjs"),
       node("scripts/check-ci-policy-test-inventory.mjs"),
     ]),
@@ -874,6 +896,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/root-clone-refresh.test.mjs",
         "scripts/lib/compose-safety.test.mjs",
         "scripts/lib/promoter-compose-mounts.test.mjs",
+        "scripts/lib/maintenance-epoch-receipt.test.mjs",
+        "scripts/promoter-epoch-evidence.test.mjs",
         "scripts/sandbox-entrypoint.test.mjs",
         "scripts/lib/local-integration-ci.test.mjs",
         // BI-ECAE03F7: the supervisor that fences a long gate run was
@@ -1105,6 +1129,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "--test",
         "packages/dpf-skill-pack/hooks/process-spine-health.test.mjs",
         "packages/dpf-skill-pack/scripts/generate-operating-contract.test.mjs",
+        "packages/dpf-skill-pack/scripts/gen-client-capabilities.test.mjs",
       ),
       node(
         "--test",
@@ -1191,6 +1216,7 @@ export async function runPolicyProfile({
   execute,
   logger = () => {},
   now = () => Date.now(),
+  shouldStop = () => false,
 }) {
   let env;
   const run = execute ?? ((command, args) => {
@@ -1203,13 +1229,18 @@ export async function runPolicyProfile({
   const results = [];
 
   for (const entry of entries) {
+    if (shouldStop()) {
+      results.push({ id: entry.id, legacyJobId: entry.legacyJobId, name: entry.name,
+        status: "cancelled", durationMs: 0, failedCommand: null });
+      continue;
+    }
     const startedAt = now();
     let status = "passed";
     let failedCommand = null;
     logger({ type: "start", entry });
 
     for (const [command, args] of entry.commands) {
-      const exitCode = run(command, args);
+      const exitCode = await run(command, args, { guardId: entry.id });
       if (exitCode !== 0) {
         status = "failed";
         failedCommand = [command, ...args].join(" ");

@@ -207,7 +207,7 @@ describe("submitRemoteCoworkerTask approval recovery", () => {
       threadId: "thread-bi47", contextId: "thread-bi47", status: "input-required",
       progressPayload: exhausted ? { terminalWriterWait: {
         schemaVersion: 1, kind: "missing-terminal-writer",
-        writerToolName: "record_initiative_evidence", resumeMode: "same-taskrun",
+        writerToolName: "record_initiative_evidence", resumeMode: "same-taskrun", dispatchContract: "required-tool-call",
         attempt: 3, observedAt: "2026-08-24T06:00:00.000Z",
       } } : null,
       a2aMetadata: { idempotencyKey: params.idempotencyKey, apiTokenId: "PAT-BI47", requestDigest },
@@ -264,7 +264,11 @@ describe("submitRemoteCoworkerTask approval recovery", () => {
     expect(autonomous.create).not.toHaveBeenCalled();
     expect(autonomous.executeTool).not.toHaveBeenCalled();
   });
-  it.each(["none", "legacy", "explicit"])("consumes an approved exact-call envelope with %s retry exhaustion", async (exhaustion) => {
+  it.each(["none", "legacy", "explicit", "captured-fence"])("consumes an approved exact-call envelope with %s retry exhaustion", async (exhaustion) => {
+    const taskExecutionFence = exhaustion === "captured-fence" ? {
+      schemaVersion: 1, reservation: "original-reservation", dispatchClaim: "original-dispatch",
+      authorityDigest: "a".repeat(64), requestDigest: "b".repeat(64),
+    } : undefined;
     const userContext = { platformRole: "developer", isSuperuser: false };
     const submit = (tokenId: string, params: Record<string, unknown>) => submitRemoteCoworkerTask({
       token: { tokenId, userId: "user-1", capability: "write", source: "pat" }, userContext, params,
@@ -274,7 +278,7 @@ describe("submitRemoteCoworkerTask approval recovery", () => {
     const retryProgress = exhaustion === "none" ? {} : {
       terminalWriterWait: {
         schemaVersion: 1, kind: "missing-terminal-writer",
-        writerToolName: "record_initiative_evidence", resumeMode: "same-taskrun",
+        writerToolName: "record_initiative_evidence", resumeMode: "same-taskrun", dispatchContract: "required-tool-call",
         attempt: 3, observedAt: "2026-08-24T06:00:00.000Z",
       },
       ...(exhaustion === "explicit" ? { terminalWriterEscalation: {
@@ -302,6 +306,7 @@ describe("submitRemoteCoworkerTask approval recovery", () => {
       updatedAt: new Date("2026-08-24T07:00:00.000Z"),
       progressPayload: {
         ...retryProgress,
+        ...(taskExecutionFence ? { resumeReservedAt: "later-reservation", dispatch: { claimedAt: "later-dispatch" } } : {}),
         requiresApproval: true,
         approvalRecovery: {
           schemaVersion: 1,
@@ -342,6 +347,7 @@ describe("submitRemoteCoworkerTask approval recovery", () => {
         note: "Independent research evidence is complete.",
         findings: [],
         _takAlignment: { verdict: "aligned" },
+        ...(taskExecutionFence ? { _taskExecutionFence: taskExecutionFence } : {}),
       },
       result: { data: { envelopeId: "ENV-APPROVED" } },
     });
@@ -369,6 +375,7 @@ describe("submitRemoteCoworkerTask approval recovery", () => {
       apiTokenId: "PAT-A",
       tokenScope: "write",
       externalAccessEnabled: true,
+      ...(taskExecutionFence ? { taskExecutionFence } : {}),
     });
     expect(db.updateMany).toHaveBeenCalledWith({
       where: {
@@ -379,6 +386,7 @@ describe("submitRemoteCoworkerTask approval recovery", () => {
       data: {
         progressPayload: {
           ...retryProgress,
+          ...(taskExecutionFence ? { resumeReservedAt: "later-reservation", dispatch: { claimedAt: "later-dispatch" } } : {}),
           approvalRecovery: {
             schemaVersion: 1,
             kind: "expired-approved-envelope",

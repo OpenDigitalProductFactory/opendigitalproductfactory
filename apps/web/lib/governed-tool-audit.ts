@@ -7,6 +7,8 @@ import { boundLargeStrings } from "./evidence/bounded-evidence-output";
 import { APPROVAL_RESUME_MARKER_KEY, buildApprovalResumeMarker } from "./coworker/approval-resume-marker";
 import type { GovernedExecuteContext, GovernedExecuteSource } from "./mcp-governed-execute-types";
 import type { ToolDefinition, ToolResult } from "./mcp-tool-types";
+import { TASK_EXECUTION_FENCE_AUDIT_KEY } from "./attention/coworker-envelope-decision";
+import { parseTaskExecutionFence } from "./shared/task-execution-fence";
 
 let createOverride: ((data: Record<string, unknown>) => Promise<unknown>) | null = null;
 let updateOverride: ((id: string, data: Record<string, unknown>) => Promise<unknown>) | null = null;
@@ -33,6 +35,15 @@ function redactWriteOnlyParameters(
     }
     return [key, entry];
   }));
+}
+
+/** The result as the audit row keeps it: declared secret keys never persist. */
+function auditableResult(result: ToolResult, tool: ToolDefinition | undefined): ToolResult {
+  const keys = tool?.secretResultKeys ?? [];
+  if (keys.length === 0 || !result.data) return result;
+  const data = { ...result.data };
+  for (const key of keys) if (key in data) data[key] = "[REDACTED]";
+  return { ...result, data };
 }
 
 export async function writeGovernedToolAudit(data: {
@@ -62,14 +73,17 @@ export async function writeGovernedToolAudit(data: {
   // by digest — never a multi-megabyte payload. Any string leaf above the
   // ceiling becomes {__dpfBounded, sha256, byteLength, head}; the durable full
   // copy is the evidence record's blob (same sha256), not this row.
-  const redactedParameters = boundLargeStrings(
+  const redactedParameters = { ...boundLargeStrings(
     redactWriteOnlyParameters(data.rawParams, data.tool?.inputSchema),
-  );
+  ) };
+  delete redactedParameters[TASK_EXECUTION_FENCE_AUDIT_KEY];
+  const executionFence = data.context?.taskRunId ? parseTaskExecutionFence(data.context.taskExecutionFence) : null;
   const row = {
     threadId: data.context?.threadId ?? "", agentId: data.context?.agentId ?? "unknown",
     userId: data.userId, taskRunId: data.context?.taskRunId ?? null, toolName: data.toolName,
     parameters: retainParameters ? {
       ...redactedParameters,
+      ...(executionFence ? { [TASK_EXECUTION_FENCE_AUDIT_KEY]: executionFence } : {}),
       ...(data.context?.surfaceInvocation ? { _surface: data.context.surfaceInvocation } : {}),
       ...(data.alignmentDecision ? { _takAlignment: {
         interactionId: data.alignmentDecision.interactionId,
@@ -88,7 +102,7 @@ export async function writeGovernedToolAudit(data: {
     // indistinguishable from a crash. Keep the code alone so the efficiency
     // scan can tell a governed refusal from a fault (BI-MCP-EFF query_detections,
     // surface_open, and the other read tools whose results were `{}`).
-    result: isMetricsOnly ? metricsOnlyResult(data.result) : data.result as unknown as object,
+    result: isMetricsOnly ? metricsOnlyResult(data.result) : auditableResult(data.result, data.tool) as unknown as object,
     success: data.result.success, executionMode: data.source,
     routeContext: data.context?.routeContext ?? null, durationMs: data.durationMs,
     auditClass, capabilityId: deriveCapabilityId(data.toolName),
@@ -125,8 +139,10 @@ export async function writeGovernedToolAudit(data: {
   }
 }
 
-export async function updateGovernedToolAudit(id: string, result: ToolResult, durationMs: number): Promise<void> {
-  const data = { result: result as unknown as object, success: result.success, durationMs };
+export async function updateGovernedToolAudit(
+  id: string, result: ToolResult, durationMs: number, tool?: ToolDefinition,
+): Promise<void> {
+  const data = { result: auditableResult(result, tool) as unknown as object, success: result.success, durationMs };
   try {
     if (updateOverride) await updateOverride(id, data);
     else await prisma.toolExecution.update({ where: { id }, data });

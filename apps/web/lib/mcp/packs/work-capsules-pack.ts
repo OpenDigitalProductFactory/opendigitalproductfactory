@@ -8,6 +8,7 @@
 // context). Definitions were moved verbatim out of the inline PLATFORM_TOOLS
 // array; grants mirror agent-grants.ts TOOL_TO_GRANTS.
 
+import { workroomRuntimeConsequence } from "@/lib/workroom-runtime/runtime-consequence";
 import type { ToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
 import { workCapsuleToolEnums } from "@/lib/work-capsules/mcp-handlers";
 import { DELIVERY_SHAPE_REFS } from "@/lib/work-management/delivery-shapes";
@@ -336,6 +337,7 @@ const definitions: ToolDefinition[] = [
     sideEffect: true,
     // Issues a room-scoped credential to a CLI and lets it act in the sandbox.
     consequence: "authority",
+    consequenceForCall: workroomRuntimeConsequence,
   },
   {
     name: "approve_runtime_permission",
@@ -410,6 +412,8 @@ const definitions: ToolDefinition[] = [
     sideEffect: true,
     // changes identity or authority → consult-gated (TAK §8.4.1).
     consequence: "authority",
+    consequenceForCall: (call) =>
+      import("@/lib/work-capsules/scope-release-consequence").then((module) => module.scopeReleaseConsequenceForCall(call)),
   },
   {
     name: "record_workroom_evidence",

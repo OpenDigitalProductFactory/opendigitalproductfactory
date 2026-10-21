@@ -15,6 +15,7 @@ import { getErrorMessage } from "@/lib/shared/get-error-message";
 // Static: the module is pure and dependency-free, so a lazy import buys nothing
 // and gives the bundler a second copy of the same chunk to place.
 import { admitToOrgBusinessGate } from "@/lib/decision-perspective/decision-scope-admission";
+import { TOOL_CONSEQUENCES, type ToolConsequence } from "@/lib/tool-consequence";
 
 const definitions: ToolDefinition[] = [
   {
@@ -48,7 +49,7 @@ const definitions: ToolDefinition[] = [
   {
     name: "evaluate_org_business_decision",
     description:
-      "Weigh a business decision against your organization's own recorded stance (its mission and how-we-decide profile), returning a confidence-scored recommendation and recording the outcome to the decision ledger. Falls back to platform defaults only as advisory when your organization has not recorded a stance for this kind of decision, and escalates to a human when confidence is low or no applicable guidance exists. Use this to ground a business call in what the organization would do, rather than deciding unaided.",
+      "Weigh a business decision against your organization's recorded stance and record its evaluation and escalation route. Damaging decisions require a person; unresolved non-damaging decisions require independent review. Platform fallback is advisory when the organization has no applicable stance. Declare known consequences and configured threshold crossings so they remain visible even when evaluation fails.",
     inputSchema: {
       type: "object",
       properties: {
@@ -70,6 +71,8 @@ const definitions: ToolDefinition[] = [
           enum: ["low", "medium", "high", "critical"],
           description: "How consequential the decision is; higher tiers require more confidence before a recommendation.",
         },
+        consequence: { type: "string", enum: [...TOOL_CONSEQUENCES], description: "Optional declared outward, irreversible or authority consequence of this decision." },
+        thresholdExceeded: { type: "boolean", description: "Optional known fact that this decision crosses an applicable configured threshold. Omit when no threshold is configured; do not invent one." },
         decisionScope: {
           type: "string",
           enum: ["wwmd", "wwwd", "wsid"],
@@ -122,6 +125,12 @@ async function evaluateOrgBusinessDecision(
   const options = Array.isArray(params["options"]) ? params["options"].map((o) => String(o)) : [];
   const domainClass = String(params["domainClass"] ?? "");
   const riskTier = String(params["riskTier"] ?? "");
+  const consequence = params["consequence"];
+  const thresholdExceeded = params["thresholdExceeded"];
+  if ((consequence !== undefined && consequence !== null && !TOOL_CONSEQUENCES.includes(consequence as ToolConsequence))
+    || (thresholdExceeded !== undefined && typeof thresholdExceeded !== "boolean")) {
+    return { success: false, error: "invalid_params", message: "Provide a valid declared consequence and a boolean thresholdExceeded fact when known." };
+  }
   if (
     !question ||
     options.length === 0 ||
@@ -169,6 +178,10 @@ async function evaluateOrgBusinessDecision(
     scoredOptions: parsedFeatures.scoredOptions,
     domainClass: domainClass as Parameters<typeof evaluateOrgBusinessDecisionGate>[0]["domainClass"],
     riskTier: riskTier as Parameters<typeof evaluateOrgBusinessDecisionGate>[0]["riskTier"],
+    declarations: {
+      ...(consequence !== undefined ? { consequence: consequence as ToolConsequence | null } : {}),
+      ...(thresholdExceeded !== undefined ? { thresholdExceeded: thresholdExceeded as boolean } : {}),
+    },
     routeContext: context?.routeContext ?? "/coworker-business",
     triggeredByUserId: userId,
     caller: callerFromContext(context),
@@ -183,6 +196,7 @@ async function evaluateOrgBusinessDecision(
       interactionId: decision.interactionId,
       allowed: decision.allowed,
       outcomeType: decision.evaluation.outcomeType,
+      escalation: decision.evaluation.escalation ?? null,
       confidenceScore: decision.evaluation.confidenceScore,
       // Content-aware directional verdict (BI-7E1F128A): approve/decline/mixed/none
       // and the [-1,1] alignment behind it, so an off-mission decision surfaces a

@@ -381,6 +381,18 @@ test("reconcile of nothing is NO-RECORD, never a pass", () => {
   assert.equal(reconcileSlots([]).verdict, "NO-RECORD");
 });
 
+test("same-source admitted progress wins over a queued sibling without inventing PASS", () => {
+  const queued = {slotKey:"slot-0",verdict:"INCONCLUSIVE",gateStatus:"queued",boundSha:HEAD,boundBranch:"fix/topic",recordedAt:"2026-10-13T00:00:00Z"};
+  const admitted = {...queued,slotKey:"slot-1",gateStatus:"admitted",recordedAt:"2026-10-13T01:00:00Z"};
+  for (const slots of [[queued, admitted], [admitted, queued]]) {
+    const result = reconcileSlots(slots);
+    assert.equal(result.slot,"slot-1");
+    assert.equal(result.verdict,"INCONCLUSIVE");
+    assert.equal(result.gateStatus,"admitted");
+  }
+  assert.equal(reconcileSlots([queued,{...admitted,boundSha:OLD}]).slot,"slot-0", "foreign source progress cannot replace this claim");
+});
+
 test("the report is short enough that nobody pipes it, and names the next step", () => {
   const lines = formatStatusReport(
     { verdict: "STALE", reason: "head moved", boundSha: OLD, boundBranch: "claude/topic", recordedAt: "2026-08-04T11:00:00.000Z", slot: "slot-0", logFile: "D:/x.log" },
@@ -420,6 +432,25 @@ test("failing record says outright that no reason was recorded", () => {
   const out = classifySlotRecord({ state: failingRecord(), metadata: null, ...atHead });
   assert.equal(out.verdict, "FAIL");
   assert.match(out.reason, /NO recorded reason/);
+});
+
+// BI-C1121FFB: the gate stores the failing test on failureSummary, and status
+// used to ignore it and print "NO recorded reason".
+test("failing record quotes the failure summary when no failureReason was stored", () => {
+  const out = classifySlotRecord({
+    state: failingRecord({
+      failureSummary: {
+        schema: "dpf-local-ci-failure-summary/v1",
+        failedTests: [{ line: 12, text: "FAIL apps/web/lib/foo.test.ts > the widget" }],
+        failedChecks: [],
+      },
+    }),
+    metadata: null,
+    ...atHead,
+  });
+  assert.equal(out.verdict, "FAIL");
+  assert.match(out.reason, /FAIL apps\/web\/lib\/foo.test.ts > the widget/);
+  assert.doesNotMatch(out.reason, /NO recorded reason/);
 });
 
 test("a started-then-released run requires reconciliation and has no product verdict", () => {

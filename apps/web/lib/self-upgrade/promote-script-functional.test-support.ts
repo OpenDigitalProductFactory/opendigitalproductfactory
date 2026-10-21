@@ -18,7 +18,10 @@ const gitBash = join(process.env.ProgramFiles ?? "C:\\Program Files", "Git", "bi
 export const BASH_COMMAND = process.platform === "win32" && existsSync(gitBash) ? gitBash : "bash";
 export const BASH_OK = spawnSync(BASH_COMMAND, ["--version"], { encoding: "utf8" }).status === 0;
 export const GIT_OK = spawnSync("git", ["--version"], { encoding: "utf8" }).status === 0;
-export const PROMOTE_TEST_TIMEOUT_MS = 30_000;
+// Measures a hang, not host speed (BI-F25D7E88): one case spawns Git Bash, a
+// real repo and a fake docker, which costs 11-25 s on Windows and over 30 s
+// when vitest runs two of these files side by side. A hung promote still fails.
+export const PROMOTE_TEST_TIMEOUT_MS = 120_000;
 
 let bashDrivePrefix: string | undefined;
 
@@ -118,7 +121,10 @@ if [ "\${1-}" = inspect ] || { [ "\${1-}" = image ] && [ "\${2-}" = inspect ]; }
   done
   case "$inspect_format" in
     "{{.Id}}")
-      if [ "$inspect_target" = dpf-sandbox:target ]; then printf 'sha256:sandbox-target'
+      if [ "$inspect_target" = dpf-sandbox:target ] || [ "$inspect_target" = bi547-source-check-sandbox ] || [ "$inspect_target" = bi547-source-check_sandbox ]; then
+        [ "\${DPF_TEST_SANDBOX_IMAGE_MODEL:-}" = uninspectable ] && exit 1
+        if [ "\${DPF_TEST_SANDBOX_IMAGE_MODEL:-}" = build-compatibility ] && [ "$inspect_target" = bi547-source-check-sandbox ]; then exit 1; fi
+        printf 'sha256:sandbox-target'
       else printf "%s" "\${DPF_TEST_RELEASE_ENGINE_ID:-$DPF_TEST_RELEASE_CONFIG_DIGEST}"; fi
       exit 0 ;;
     "{{range .RepoDigests}}{{println .}}{{end}}")
@@ -131,9 +137,29 @@ if [ "\${1-}" = inspect ] || { [ "\${1-}" = image ] && [ "\${2-}" = inspect ]; }
 fi
 case "$*" in
   *"ps -q sandbox"*) printf 'sandbox-container' ;;
-  *"config --images sandbox"*) printf 'dpf-sandbox:target\\n' ;;
+  *"config --images sandbox"*)
+    case "\${DPF_TEST_SANDBOX_IMAGE_MODEL:-}" in
+      dependencies-first) printf 'dpf-sandbox-init:target\\ndpf-sandbox:target\\npgvector/pgvector:pg16\\n' ;;
+      build-only) printf 'example/initializer:test\\nbi547-source-check-sandbox\\nbi547-source-check-sandbox\\npgvector/pgvector:pg16\\n' ;;
+      build-compatibility) printf 'pgvector/pgvector:pg16\\nbi547-source-check_sandbox\\nexample/initializer:test\\n' ;;
+      build-ambiguous) printf 'bi547-source-check-sandbox\\nbi547-source-check_sandbox\\n' ;;
+      *) printf 'dpf-sandbox:target\\n' ;;
+    esac
+    ;;
+  *"config --format json sandbox"*)
+    case "\${DPF_TEST_SANDBOX_IMAGE_MODEL:-}" in
+      malformed) printf 'not-json' ;;
+      missing) printf '{"services":{"sandbox-init":{"image":"dpf-sandbox-init:target"}}}' ;;
+      blank) printf '{"services":{"sandbox":{"image":" "}}}' ;;
+      build-only|build-compatibility|build-ambiguous) printf '{"name":"bi547-source-check","services":{"sandbox":{"build":{"context":"."},"depends_on":{"sandbox-init":{"condition":"service_completed_successfully"},"sandbox-postgres":{"condition":"service_started"}}},"sandbox-init":{"image":"example/initializer:test"},"sandbox-postgres":{"image":"pgvector/pgvector:pg16"}}}' ;;
+      build-no-name) printf '{"services":{"sandbox":{"build":{"context":"."}}}}' ;;
+      build-no-context) printf '{"name":"bi547-source-check","services":{"sandbox":{"build":{}}}}' ;;
+      *) printf '{"services":{"sandbox-init":{"image":"dpf-sandbox-init:target"},"sandbox":{"image":"dpf-sandbox:target","depends_on":{"sandbox-init":{"condition":"service_completed_successfully"},"sandbox-postgres":{"condition":"service_healthy"}}},"sandbox-postgres":{"image":"pgvector/pgvector:pg16"}}}' ;;
+    esac
+    ;;
   *"{{.State.Running}} {{.Image}}"*)
     case "\${DPF_TEST_SANDBOX_STATE:-running}" in
+      unreadable) exit 1 ;;
       exited) printf 'false sha256:sandbox-target' ;;
       stale) printf 'true sha256:sandbox-old' ;;
       *) printf 'true sha256:sandbox-target' ;;
@@ -152,6 +178,21 @@ case "$*" in
     fi
     ;;
   *"buildx imagetools inspect"*"--raw"*) case "$*" in *"@$DPF_TEST_RELEASE_PLATFORM_MANIFEST_DIGEST"*) printf '{"config":{"digest":"%s"}}' "\${DPF_TEST_RELEASE_REGISTRY_CONFIG_DIGEST:-$DPF_TEST_RELEASE_CONFIG_DIGEST}" ;; *) if [ "\${DPF_TEST_DUPLICATE_PLATFORM:-no}" = yes ]; then printf '{"manifests":[{"digest":"%s","platform":{"os":"%s","architecture":"%s"}},{"digest":"sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","platform":{"os":"%s","architecture":"%s"}}]}' "$DPF_TEST_RELEASE_PLATFORM_MANIFEST_DIGEST" "$DPF_TEST_RELEASE_OS" "$DPF_TEST_RELEASE_ARCHITECTURE" "$DPF_TEST_RELEASE_OS" "$DPF_TEST_RELEASE_ARCHITECTURE"; else printf '{"manifests":[{"digest":"%s","platform":{"os":"%s","architecture":"%s"}}]}' "$DPF_TEST_RELEASE_PLATFORM_MANIFEST_DIGEST" "$DPF_TEST_RELEASE_OS" "$DPF_TEST_RELEASE_ARCHITECTURE"; fi ;; esac ;;
+  *"recover-workroom-activity-migration.mjs --verify-rolled-back"*)
+    [ "\${DPF_TEST_ACTIVITY_VERIFY_FAIL:-no}" = "yes" ] && exit 1
+    printf "verified"
+    ;;
+  *"prisma migrate resolve --rolled-back 20261014012000_workroom_activity_ingestion_hardening"*)
+    [ "\${DPF_TEST_ACTIVITY_RESOLVE_FAIL:-no}" = "yes" ] && exit 1
+    ;;
+  *"recover-workroom-activity-migration.mjs"*)
+    [ "\${DPF_TEST_ACTIVITY_RECOVERY_DECISION:-not-needed}" = "blocked" ] && exit 1
+    if [ "\${DPF_TEST_ACTIVITY_RECOVERY_DECISION:-not-needed}" = "recover" ]; then
+      printf "recover:22222222-2222-4222-8222-222222222222"
+    else
+      printf "not-needed"
+    fi
+    ;;
   *"recover-human-principal-backfill-migration.mjs --verify-rolled-back"*)
     [ "\${DPF_TEST_PRINCIPAL_VERIFY_FAIL:-no}" = "yes" ] && exit 1
     printf "verified"
@@ -226,15 +267,20 @@ export function runPromote(opts: {
   composeEnvFile?: string;
   dockerLog?: string;
   recoveryDecision?: "recover" | "not-needed" | "blocked";
+  activityRecoveryDecision?: "recover" | "not-needed" | "blocked";
+  activityResolveFails?: boolean;
+  activityVerifyFails?: boolean;
   principalRecoveryDecision?: "recover" | "not-needed" | "blocked";
   /** Services the fake install has ever created (any state), for service-reconcile. */
   existingServices?: string[];
   createdService?: string;
   inspectFailService?: string;
   /** What the sandbox reads as after its recreate (BI-547B788D). Default: running on the target image. */
-  sandboxState?: "running" | "exited" | "stale";
+  sandboxState?: "running" | "exited" | "stale" | "unreadable";
   /** Make `up -d --no-deps --force-recreate sandbox` itself fail (BI-547B788D AC-3). */
   sandboxRecreateFails?: boolean;
+  /** Real Compose includes dependency images; vary the named service's readback independently. */
+  sandboxImageModel?: "dependencies-first" | "build-only" | "build-compatibility" | "build-ambiguous" | "build-no-name" | "build-no-context" | "malformed" | "missing" | "blank" | "uninspectable";
   /** Make the reconcile `up -d --no-recreate` fail, to prove it never aborts the upgrade. */
   reconcileFails?: boolean;
   /** Make only `up` of this one service fail (its image tag no longer resolves). */
@@ -304,6 +350,11 @@ export function runPromote(opts: {
     ...(opts.recoveryDecision
       ? [`export DPF_TEST_RECOVERY_DECISION=${shellQuote(opts.recoveryDecision)}`]
       : []),
+    ...(opts.activityRecoveryDecision
+      ? [`export DPF_TEST_ACTIVITY_RECOVERY_DECISION=${shellQuote(opts.activityRecoveryDecision)}`]
+      : []),
+    ...(opts.activityResolveFails ? ["export DPF_TEST_ACTIVITY_RESOLVE_FAIL=yes"] : []),
+    ...(opts.activityVerifyFails ? ["export DPF_TEST_ACTIVITY_VERIFY_FAIL=yes"] : []),
     ...(opts.principalRecoveryDecision
       ? [`export DPF_TEST_PRINCIPAL_RECOVERY_DECISION=${shellQuote(opts.principalRecoveryDecision)}`]
       : []),
@@ -314,6 +365,7 @@ export function runPromote(opts: {
     ...(opts.inspectFailService ? [`export DPF_TEST_INSPECT_FAIL_SERVICE=${shellQuote(opts.inspectFailService)}`] : []),
     ...(opts.sandboxState ? [`export DPF_TEST_SANDBOX_STATE=${shellQuote(opts.sandboxState)}`] : []),
     ...(opts.sandboxRecreateFails ? ["export DPF_TEST_SANDBOX_RECREATE_FAILS=1"] : []),
+    ...(opts.sandboxImageModel ? [`export DPF_TEST_SANDBOX_IMAGE_MODEL=${shellQuote(opts.sandboxImageModel)}`] : []),
     ...(opts.reconcileFails ? ["export DPF_TEST_RECONCILE_FAILS=1"] : []),
     ...(opts.reconcileFailService
       ? [`export DPF_TEST_RECONCILE_FAIL_SERVICE=${shellQuote(opts.reconcileFailService)}`]
