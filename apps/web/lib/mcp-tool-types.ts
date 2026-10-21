@@ -12,14 +12,21 @@
 import type { CapabilityKey } from "@/lib/permissions";
 import type { AuthorizedSurfaceToolExecutionContext } from "@/lib/coworker/authorized-surface-execution-types";
 import type { OutcomeDisposition } from "@/lib/shared/outcome-disposition";
+import type { RoomAuthorityContext } from "@/lib/work-management/room-turn-authority";
 import type { ToolCallConsequenceRefiner, ToolConsequence, ToolConsequenceScope } from "@/lib/tool-consequence";
 
 export type BuildPhaseTag = "ideate" | "plan" | "build" | "review" | "ship";
 export type ToolExecutionContext = AuthorizedSurfaceToolExecutionContext & {
+  /** Fresh catalog compiled by the original governed executor, never supplied by a tool caller. */
+  governedReadToolCatalog?: () => Promise<ToolDefinition[]>;
+  /** Original executor's room binding; known unroomed is null, absence is unverified. */
+  governedRoomAuthority?: () => RoomAuthorityContext | null;
   routeContext?: string;
   agentId?: string;
   threadId?: string;
   taskRunId?: string;
+  /** Signed/server-captured identity; never populated from tool arguments. */
+  taskExecutionFence?: import("@/lib/shared/task-execution-fence").TaskExecutionFence | null;
   /** The calling coworker turn's mode; a delegate never runs wider (BI-FAD98137). */
   coworkerMode?: "advise" | "act";
   /**

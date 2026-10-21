@@ -275,24 +275,28 @@ describe("submitRemoteCoworkerTask idempotency", () => {
     }));
   });
 
-  it("replays only the same immutable request", async () => {
+  it.each(["completed", "input-required"])("replays only the same immutable request (%s)", async (status) => {
     await submit("PAT-A");
     const metadata = (autonomous.create.mock.calls[0]?.[0] as { metadata: Record<string, unknown> }).metadata;
     vi.clearAllMocks();
     db.findFirst.mockResolvedValue({
       taskRunId: "TR-MCP-EXISTING",
-      status: "completed",
-      progressPayload: { summary: "approved" },
+      status,
+      progressPayload: status === "completed" ? { summary: "approved" } : {
+        executionUncertainty: { schemaVersion: 1, settlement: "unknown" },
+        terminalWriterWait: { schemaVersion: 1, kind: "missing-terminal-writer", writerToolName: "record_initiative_design_review", resumeMode: "same-taskrun", attempt: 1, observedAt: "2026-10-15T22:15:48.811Z" },
+      },
       a2aMetadata: metadata,
     });
 
     const outcome = await submit("PAT-A");
 
-    expect(outcome).toMatchObject({
-      kind: "result",
-      result: { taskRunId: "TR-MCP-EXISTING", idempotentReplay: true },
-    });
+    expect(outcome).toMatchObject({ kind: "result", result: {
+      taskRunId: "TR-MCP-EXISTING", idempotentReplay: true } });
     expect(autonomous.create).not.toHaveBeenCalled();
+    if (status === "input-required") expect(outcome).toMatchObject({ result: { resumable: false, requiresApproval: false, waitReason: "execution-uncertain" } });
+    expect(autonomous.execute).not.toHaveBeenCalled();
+    expect(queue.send).not.toHaveBeenCalled();
   });
 
   it("rejects reuse of a request key with a changed immutable packet", async () => {

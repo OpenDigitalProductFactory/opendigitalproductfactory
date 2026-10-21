@@ -801,7 +801,13 @@
     "apps/web/lib/documents/generation/brand-master.ts": [
       "docs/architecture/document-generation-facility.md"
     ],
+    "apps/web/lib/documents/generation/create-family-documents.ts": [
+      "docs/architecture/document-generation-facility.md"
+    ],
     "apps/web/lib/documents/generation/create-presentation.ts": [
+      "docs/architecture/document-generation-facility.md"
+    ],
+    "apps/web/lib/documents/generation/family-document.ts": [
       "docs/architecture/document-generation-facility.md"
     ],
     "apps/web/lib/documents/generation/render-flat.ts": [
@@ -888,6 +894,9 @@
     ],
     "apps/web/lib/govern/auth.ts": [
       "docs/strategy/2026-09-us-dependency-inventory-and-sovereign-channel.md"
+    ],
+    "apps/web/lib/govern/authority/escalation-gate.conformance.test.ts": [
+      "docs/founder-kernel/wiki/principles/escalation-is-a-gate-not-a-trust-tier.md"
     ],
     "apps/web/lib/govern/data/field-classification.ts": [
       "docs/architecture/backlog-and-planning-runbook.md"
@@ -1020,11 +1029,17 @@
       "docs/architecture/mcp-tool-surface-ergonomics-audit.md",
       "docs/user-guide/ai-workforce/how-governed-work-runs.md"
     ],
+    "apps/web/lib/mcp-task-persisted-request.ts": [
+      "docs/architecture/mcp-tool-authorization-runbook.md"
+    ],
     "apps/web/lib/mcp-task-submit-types.ts": [
       "docs/architecture/mcp-tool-packs.md"
     ],
     "apps/web/lib/mcp-tool-types.ts": [
       "docs/architecture/mcp-tool-packs.md"
+    ],
+    "apps/web/lib/mcp/backlog-recovery-read.ts": [
+      "docs/architecture/agent-standards-dpf-conformance.md"
     ],
     "apps/web/lib/mcp/external-coworker-task-adapter.ts": [
       "docs/architecture/initiative-readiness-runbook.md"
@@ -1046,6 +1061,9 @@
     ],
     "apps/web/lib/mcp/packs/deliberation-siem-pack.ts": [
       "docs/architecture/mcp-tool-packs.md"
+    ],
+    "apps/web/lib/mcp/packs/document-family-tools.ts": [
+      "docs/architecture/document-generation-facility.md"
     ],
     "apps/web/lib/mcp/packs/feedback-pack.ts": [
       "docs/architecture/mcp-tool-packs.md"
@@ -1132,6 +1150,9 @@
     ],
     "apps/web/lib/operate/sole-platform-readiness.ts": [
       "docs/architecture/2026-07-27-platform-adequacy-roadmap-backlog-map.md"
+    ],
+    "apps/web/lib/operate/tool-defect-origin.ts": [
+      "docs/architecture/improvement-signal-intake.md"
     ],
     "apps/web/lib/org-locale/locale-context.ts": [
       "docs/architecture/localization-runbook.md"
@@ -2966,6 +2987,7 @@
       "apps/web/lib/autonomy/trust-graduation.ts",
       "apps/web/lib/coworker/authorized-surface-runtime.ts",
       "apps/web/lib/identity/aidoc-resolver.ts",
+      "apps/web/lib/mcp/backlog-recovery-read.ts",
       "apps/web/lib/mcp/load-tools.ts",
       "apps/web/lib/mcp/tool-tier.ts",
       "apps/web/lib/performance/business-analysis-watch-run.ts",
@@ -3208,7 +3230,9 @@
     "docs/architecture/document-generation-facility.md": [
       "apps/web/lib/documents/document-previews.ts",
       "apps/web/lib/documents/generation/brand-master.ts",
+      "apps/web/lib/documents/generation/create-family-documents.ts",
       "apps/web/lib/documents/generation/create-presentation.ts",
+      "apps/web/lib/documents/generation/family-document.ts",
       "apps/web/lib/documents/generation/render-flat.ts",
       "apps/web/lib/documents/generation/render-store.ts",
       "apps/web/lib/documents/generation/render.ts",
@@ -3216,6 +3240,7 @@
       "apps/web/lib/documents/preview-manifest.ts",
       "apps/web/lib/ea/diagram-import/parse-flat-odg.ts",
       "apps/web/lib/ea/view-drawing.ts",
+      "apps/web/lib/mcp/packs/document-family-tools.ts",
       "tools/doctools/smoke.sh"
     ],
     "docs/architecture/dpf-patterns.md": [
@@ -3301,7 +3326,8 @@
       "scripts/installer/install-release-assets.mjs"
     ],
     "docs/architecture/improvement-signal-intake.md": [
-      "apps/web/lib/improvement-flywheel/signals.ts"
+      "apps/web/lib/improvement-flywheel/signals.ts",
+      "apps/web/lib/operate/tool-defect-origin.ts"
     ],
     "docs/architecture/initiative-readiness-runbook.md": [
       "apps/web/lib/backlog/acceptance-sweep/execution-evidence-owner.ts",
@@ -3341,6 +3367,7 @@
       "apps/web/lib/govern/manager-scope.ts",
       "apps/web/lib/gpp/binding-enforcement.ts",
       "apps/web/lib/gpp/permit-carriage.ts",
+      "apps/web/lib/mcp-task-persisted-request.ts",
       "apps/web/lib/mcp/protocol-versions.ts",
       "apps/web/lib/mcp/toolchain-floor.ts",
       "apps/web/lib/tak/mcp-tool-policy.ts",
@@ -3556,6 +3583,9 @@
     ],
     "docs/founder-kernel/wiki/principles/dco-sign-off-required.md": [
       "scripts/pre-push-dco-check.mjs"
+    ],
+    "docs/founder-kernel/wiki/principles/escalation-is-a-gate-not-a-trust-tier.md": [
+      "apps/web/lib/govern/authority/escalation-gate.conformance.test.ts"
     ],
     "docs/founder-kernel/wiki/principles/gates-proportional-to-shape.md": [
       "apps/web/lib/backlog/initiative-readiness/delivery-sensitivity.ts",

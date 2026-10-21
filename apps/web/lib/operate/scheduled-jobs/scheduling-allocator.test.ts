@@ -4,6 +4,19 @@ import { describe, it, expect } from "vitest";
 
 import { tickOf, occupiedTicks, deconflictCron } from "./scheduling-allocator";
 
+const compoundTimeCrons = [
+  "* 3 * * *",
+  "0,30 3 * * *",
+  "0-30 3 * * *",
+  "0/15 3 * * *",
+  "*/15 3 * * *",
+  "0 * * * *",
+  "0 3,9 * * *",
+  "0 3-9 * * *",
+  "0 3/6 * * *",
+  "0 */6 * * *",
+];
+
 describe("tickOf", () => {
   it("returns the HH:MM tick for a specific-time cron", () => {
     expect(tickOf("0 3 * * *")).toBe("03:00");
@@ -16,6 +29,14 @@ describe("tickOf", () => {
     expect(tickOf("9,24,39,54 * * * *")).toBeNull();
     expect(tickOf(null)).toBeNull();
     expect(tickOf("daily")).toBeNull();
+  });
+
+  it.each(compoundTimeCrons)("BI-0A82D3B4 does not reduce compound time fields in %s to one tick", (cron) => {
+    expect(tickOf(cron)).toBeNull();
+  });
+
+  it("BI-0A82D3B4 does not invent occupied ticks from compound time fields", () => {
+    expect(occupiedTicks(compoundTimeCrons)).toEqual(new Set());
   });
 });
 
@@ -42,5 +63,10 @@ describe("deconflictCron", () => {
   it("passes interval cadences through untouched", () => {
     const occ = occupiedTicks(["*/15 * * * *"]);
     expect(deconflictCron("*/15 * * * *", occ).moved).toBe(false);
+  });
+
+  it.each(compoundTimeCrons)("BI-0A82D3B4 preserves compound cadence %s even when 03:00 is occupied", (cron) => {
+    const occupied = occupiedTicks(["0 3 * * *"]);
+    expect(deconflictCron(cron, occupied)).toEqual({ cron, moved: false, note: null });
   });
 });

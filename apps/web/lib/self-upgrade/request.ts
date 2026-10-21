@@ -6,6 +6,8 @@ import {
   resolveCurrentSelfUpgradeTarget,
 } from "@/lib/self-upgrade/admission";
 import { readSelfUpgradeSupport } from "@/lib/self-upgrade/support";
+import { prisma } from "@dpf/db";
+import { loadInstanceStance, prismaInstanceStanceStore } from "@/lib/install/instance-stance";
 import {
   decideUpgradeTiming,
   deferUpgradeToWindow,
@@ -126,7 +128,15 @@ export async function requestSelfUpgrade(
     };
   }
 
-  const timing = await decideUpgradeTiming({ requester: input.actorKind, config, now });
+  let instanceStance: Awaited<ReturnType<typeof loadInstanceStance>> | undefined;
+  if (input.actorKind === "agent") {
+    try {
+      instanceStance = await loadInstanceStance(prismaInstanceStanceStore(prisma));
+    } catch {
+      // Unavailable context retains the existing cautious window policy.
+    }
+  }
+  const timing = await decideUpgradeTiming({ requester: input.actorKind, config, now, instanceStance });
   if (timing.kind === "needs-timezone") {
     return {
       success: true,
@@ -168,7 +178,7 @@ export async function requestSelfUpgrade(
     return { success: true, status: "deferred_to_window", ...deferral };
   }
 
-  // AC-2: an operator outside the window runs now; the trigger records the bypass.
+  // Preserve the actual requester on any allowed outside-window run.
   const triggeredBy = timing.windowBypassed ? withWindowBypass(requestedBy) : requestedBy;
 
   const target = await resolveCurrentSelfUpgradeTarget();

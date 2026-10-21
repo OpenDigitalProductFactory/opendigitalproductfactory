@@ -12,6 +12,15 @@ import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { dispatchExternalCoworkerTask } from "@/lib/mcp/external-coworker-task-adapter";
 import { authorizeCoworkerRequest } from "@/lib/mcp/independent-review-request";
 
+const originalReviewRecoveryProperty = {
+  reviewRecovery: {
+    type: "object", additionalProperties: false,
+    description: "Original-task recovery target issued with the exact readiness packet. A locator grants no authority; stale or ineligible targets refuse without creating a new task.",
+    properties: { taskRunId: { type: "string" }, requestDigest: { type: "string", pattern: "^[a-f0-9]{64}$" }, expectedUpdatedAt: { type: "string" } },
+    required: ["taskRunId", "requestDigest", "expectedUpdatedAt"],
+  },
+};
+
 const initiativeReviewProperties = {
   requiredToolNames: {
     type: "array",
@@ -100,6 +109,7 @@ const definitions: ToolDefinition[] = [
         enteredVia: { type: "string", enum: ["handoff", "escalation", "spawn"], description: "How the peer is entering (default 'handoff')." },
         requestKey: { type: "string", description: "Stable idempotency key required for threadless external MCP handoffs." },
         ...initiativeReviewProperties,
+        ...originalReviewRecoveryProperty,
       },
       required: ["targetAgent", "objective"],
     },
@@ -155,6 +165,13 @@ const definitions: ToolDefinition[] = [
   },
 ];
 
+/** BI-4592CF69: the author learns at request time what the reviewer would hit. */
+function withReviewDocumentNotice(result: ToolResult, notice: string | undefined): ToolResult {
+  if (!notice || !result.success) return result;
+  const data = result.data && typeof result.data === "object" && !Array.isArray(result.data) ? result.data : {};
+  return { ...result, message: [result.message, notice].filter(Boolean).join(" "), data: { ...data, reviewDocumentNotice: notice } };
+}
+
 async function requestCoworkerHandler(
   params: Record<string, unknown>,
   userId: string,
@@ -168,7 +185,7 @@ async function requestCoworkerHandler(
   const authority = await authorizeCoworkerRequest(params, userId, context);
   if (authority.refusal) return authority.refusal;
   if (authority.bounded || !context?.threadId) {
-    return dispatchExternalCoworkerTask({
+    const dispatched = await dispatchExternalCoworkerTask({
       collaborationKind: "handoff",
       targetAgent,
       objective,
@@ -176,9 +193,11 @@ async function requestCoworkerHandler(
       title: typeof params["questionPacketSummary"] === "string" ? params["questionPacketSummary"] : undefined,
       requiredToolNames: params["requiredToolNames"],
       initiativeReviewBinding: params["initiativeReviewBinding"],
+      reviewRecovery: params["reviewRecovery"],
       userId,
       context: authority.bounded ? { ...context, routeContext: "/build" } : context,
     });
+    return withReviewDocumentNotice(dispatched, authority.notice);
   }
   const tierParam = Number(params["tier"]);
   const enteredViaParam = typeof params["enteredVia"] === "string" ? params["enteredVia"] : undefined;
@@ -227,6 +246,7 @@ async function summonCoworkerHandler(
       requestKey: typeof params["requestKey"] === "string" ? params["requestKey"] : undefined,
       requiredToolNames: params["requiredToolNames"],
       initiativeReviewBinding: params["initiativeReviewBinding"],
+      reviewRecovery: params["reviewRecovery"],
       userId,
       context,
     });

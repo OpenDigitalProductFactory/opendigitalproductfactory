@@ -7,6 +7,7 @@ import {
   LOCAL_DOCTOOLS_TAG,
   buildLocalDoctoolsImage,
   describeSourceLineage,
+  listAncestorReleaseTags,
   loadSourceLineageContext,
   parseBuiltImageId,
   releaseTagFromPlatformVersion,
@@ -35,6 +36,40 @@ describe("releaseTagFromPlatformVersion (BI-4E18BC28)", () => {
     expect(releaseTagFromPlatformVersion("latest")).toBeNull();
     expect(releaseTagFromPlatformVersion("")).toBeNull();
     expect(releaseTagFromPlatformVersion(null)).toBeNull();
+  });
+});
+
+describe("listAncestorReleaseTags (BI-660D77EC)", () => {
+  it("keeps immutable release tags, newest first, and caps the walk", async () => {
+    const tags = await listAncestorReleaseTags({
+      sourcePath: "/host-dpf",
+      tipRef: "HEAD",
+      limit: 2,
+      runGit: async (args) => {
+        expect(args).toContain("for-each-ref");
+        expect(args).toContain("--merged");
+        return {
+          code: 0,
+          stdout: [
+            "v2026.10.15",
+            "not-a-release",
+            "v2026.10.01-shape.1",
+            "v2026.09.18",
+          ].join("\n"),
+          stderr: "",
+        };
+      },
+    });
+    expect(tags).toEqual(["v2026.10.15", "v2026.10.01-shape.1"]);
+  });
+
+  it("returns no tags when git cannot list them", async () => {
+    const tags = await listAncestorReleaseTags({
+      sourcePath: "/host-dpf",
+      tipRef: "HEAD",
+      runGit: async () => ({ code: 128, stdout: "", stderr: "fatal" }),
+    });
+    expect(tags).toEqual([]);
   });
 });
 

@@ -12,6 +12,7 @@ import { readFile } from "node:fs/promises";
 import { prisma } from "@dpf/db";
 
 import budgets from "../../../../config/install-resource-budgets.json";
+import catalogSeed from "../../../../scripts/capability-service-catalog.generated.json";
 
 import type { LiveCapabilityState } from "./capability-service-projection";
 import { diagnoseCapabilityStateDivergence } from "./capability-state-divergence";
@@ -45,8 +46,11 @@ export interface MonitoringSwitchView {
   lastChange: MonitoringLastChange | null;
 }
 
+const catalog = catalogSeed as unknown as { catalogHash: string; capabilities: Array<{ capabilityId: string }> };
+
 interface InstallStateFile {
   enabledRuntimeCapabilities?: unknown;
+  capabilityCatalogHash?: unknown;
   runtimeCapabilityDecisions?: Record<string, unknown>;
 }
 
@@ -169,15 +173,27 @@ export async function loadMonitoringSwitchView(deps: MonitoringLoaderDeps = {}):
 
   const dbState = capabilityStates?.find((row) => row.capabilityId === MONITORING_CAPABILITY)?.state ?? null;
 
-  // Only a directional disagreement (or no row for monitoring itself) locks the
-  // switch; the coordinator compares exactly these two authorities.
-  let divergent = false;
+  // BI-F0C2E8F5: the switch requests a reconciliation, which carries every
+  // record as observed and changes only monitoring, so drift no longer locks
+  // it. It locks only when reconciliation cannot be prepared at all — the same
+  // preconditions `prepareRuntimeReconciliationIntent` enforces: records for
+  // exactly the catalog's capabilities, an active or disabled monitoring
+  // record, and install-state written for this catalog. Checked here structurally; the packaged-protocol probe is a
+  // container launch, so its failure surfaces as the action's outcome instead.
+  let unreconcilable = false;
   let divergenceSummary: string | null = null;
-  if (enabledKeys && capabilityStates) {
-    const report = diagnoseCapabilityStateDivergence({ enabledRuntimeCapabilities: enabledKeys, capabilityStates });
-    divergent = report.divergences.some((entry) =>
-      entry.kind !== "missing-live-state" || entry.capabilityId === MONITORING_CAPABILITY);
-    divergenceSummary = divergent ? report.summary : null;
+  if (enabledKeys) {
+    const catalogIds = catalog.capabilities.map((entry) => entry.capabilityId);
+    const recordIds = capabilityStates?.map((row) => row.capabilityId) ?? [];
+    unreconcilable = capabilityStates === null
+      || installState?.capabilityCatalogHash !== catalog.catalogHash
+      || recordIds.length !== catalogIds.length
+      || !catalogIds.every((id) => recordIds.includes(id))
+      || (dbState !== "active" && dbState !== "disabled");
+    if (capabilityStates) {
+      const report = diagnoseCapabilityStateDivergence({ enabledRuntimeCapabilities: enabledKeys, capabilityStates });
+      divergenceSummary = report.diverged ? report.summary : null;
+    }
   }
 
   const pendingTransition = latest && (ACTIVE_RUNTIME_TRANSITION_STATUSES as readonly string[]).includes(latest.status)
@@ -189,7 +205,7 @@ export async function loadMonitoringSwitchView(deps: MonitoringLoaderDeps = {}):
     dbState,
     observed,
     decision: readDecision(installState),
-    divergent,
+    unreconcilable,
     pendingTransition,
   });
 

@@ -84,6 +84,11 @@ owner, supporting evidence, and affected work. Required evidence is not proof
 that the evidence has been recorded. Where a receipt cannot be linked to an
 individual step, the view reports that gap and keeps it in the room evidence.
 
+The recent activity feed shows a bounded window. A step's latest matching evidence
+remains available when newer activity pushes it outside that window, provided it
+still matches the room's current source and process definition. An observed receipt
+does not by itself establish that the step passed or completed.
+
 Stage-scoped development evidence recorded for the room's current source and
 process version can appear under that step's required evidence. A link means the
 record was observed; it does not grant approval or verify completion. After the
@@ -123,6 +128,12 @@ After a minute, the process snapshot is marked stale. **Refresh state** reads
 the room again while keeping your selected step and filters. The warning clears
 only when a newer server read arrives. Refreshing does not resume work, approve
 a transition, or prove progress. A missing or future read time remains unknown.
+
+If your browser reports offline, **Refresh state** keeps the displayed snapshot
+and announces that you need to reconnect. When the browser reports a restored
+connection, refresh manually to check for changes. Reconnecting alone does not
+refresh the page or establish that the server is reachable. A connection lost
+during a request may still require a browser reload after reconnection.
 
 Native reviews submitted through OAuth use the same current permission checks as other authenticated reviews. Before dispatch or recovery, the worker checks token expiry, token and client revocation, tool grants, and task ownership. A failed authority check pauses the review before a provider call; it does not grant permission or silently switch credentials.
 
@@ -617,3 +628,15 @@ room status. **Next rooms** continues through open rooms; the count is for the
 displayed page. Selecting **Operation** from a room's process returns to the
 same filters and page. Recorded stage waits are shown when the drive has named
 the stage and responsible role.
+
+In **Details**, expand **Review requirements** to see what this source of work
+requires. Each requirement names its expected outcome, comparison population,
+evidence fields and inherited sources. Technical profile identity and unresolved
+references stay in a second disclosure. A profile that composes correctly has
+not necessarily been assessed; organization fit and missing evidence remain
+explicit. Conflicting or unsupported requirements need reconciliation.
+
+**Did the change help?** explains when no independent assessment is available
+in this view. A receipt, completed cycle or deployed change alone does not prove
+improvement. Assessment requires an applied version, a comparison window and an
+independent reviewer. An unknown result is not a success percentage.

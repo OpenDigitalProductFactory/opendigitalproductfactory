@@ -46,6 +46,12 @@ describe("default account authentication convergence", () => {
       expect(value).not.toHaveProperty("evidenceStatus");
     }
   });
+  it("preserves an account-owned health observation instead of relinking the legacy provider row", async () => {
+    const db = fixture();
+    db.aiProviderConnection.findUnique.mockResolvedValue({ authMethod: "oauth", executionChannel: "subscription-cli", credentialEntryId: "credential", accessibleModelIds: ["oauth-model"], modelsVerifiedAt: new Date(), capacityStatus: { scopeKey: "account:owned" } } as never);
+    await refreshDefaultProviderConnectionOwners(db as unknown as PrismaClient, "codex");
+    expect(db.aiProviderConnection.updateMany.mock.calls[0]![0].data).not.toHaveProperty("capacityStatusId");
+  });
   it("clears model proof when the owned credential identity changes even if auth/channel agree", async () => {
     const db = fixture();
     db.aiProviderConnection.findUnique.mockResolvedValue({ authMethod: "oauth", executionChannel: "subscription-cli", credentialEntryId: "old-credential", accessibleModelIds: ["old-model"], modelsVerifiedAt: new Date() });

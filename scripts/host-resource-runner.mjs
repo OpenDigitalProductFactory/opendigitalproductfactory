@@ -2,15 +2,17 @@
 
 import { parseArgs as utilParseArgs } from "node:util";
 import { readFileSync } from "node:fs";
-import { hostname, freemem, totalmem } from "node:os";
+import { hostname, totalmem } from "node:os";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn, spawnSync } from "node:child_process";
 import { gitTextOrNull } from "./lib/git.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
 import { mcpCall } from "./lib/mcp-client.mjs";
+import { leaseRequestTiming } from "./lib/nonprod-lease-request.mjs";
 import { leaseQueueCallOptions, resolveLeaseQueueTimeoutMs } from "./lib/lease-queue-call-options.mjs";
 import { resolveHostCommandInvocation } from "./lib/host-command-invocation.mjs";
+import { availableMemoryBytes } from "./lib/host-available-memory.mjs";
 import { resolveMcpCredential } from "./lib/mcp-credential.mjs";
 import { admittedLeaseTtlMs, superviseLeaseRun } from "./lib/lease-supervisor.mjs";
 import { readProcessIdentity } from "./lib/local-sandbox-fence.mjs";
@@ -119,7 +121,7 @@ export function buildHostResourceClaim({
     purpose: `host-resource:${resourceClass}`,
     url: "host://localhost",
     ports: [],
-    expiresAt: new Date(now.getTime() + 10 * 60_000).toISOString(),
+    ...leaseRequestTiming({ now, durationMs: 10 * 60_000, deadline: now.getTime() + 10 * 60_000 }),
     worktreePath,
     branchName,
     resourceClass,
@@ -256,7 +258,11 @@ export function readProcessRows({ platform = process.platform, spawnSyncImpl = s
   const command = [
     "$ErrorActionPreference = 'Stop';",
     "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false);",
-    "$rows = @(Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,CommandLine);",
+    "$rows = @(Get-CimInstance Win32_Process | ForEach-Object {",
+    "  $line = [string]$_.CommandLine;",
+    "  if ($line) { $line = [regex]::Replace($line, '[\\u0000-\\u001F]', '') };",
+    "  [pscustomobject]@{ ProcessId = $_.ProcessId; ParentProcessId = $_.ParentProcessId; CommandLine = $line }",
+    "});",
     "ConvertTo-Json -InputObject $rows -Compress -Depth 3",
   ].join(" ");
   try {
@@ -272,7 +278,14 @@ export function readProcessRows({ platform = process.platform, spawnSyncImpl = s
   let rows;
   if (platform === "win32") {
     let parsed;
-    try { parsed = JSON.parse(text); } catch { unavailable("malformed-output"); }
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      // Windows PowerShell 5.1 emits raw U+0000–U+001F inside JSON strings.
+      // One such command line used to make the whole inventory unparseable.
+      try { parsed = JSON.parse(text.replace(/[\u0000-\u001F]/g, "")); }
+      catch { unavailable("malformed-output"); }
+    }
     rows = (Array.isArray(parsed) ? parsed : [parsed]).map(row => ({
       pid: row?.ProcessId, parentPid: row?.ParentProcessId, commandLine: row?.CommandLine ?? "",
     }));
@@ -373,7 +386,7 @@ async function main() {
     processIdentity: readProcessIdentity(process.pid),
     now: new Date(),
     totalMemoryBytes: totalmem(),
-    availableMemoryBytes: freemem(),
+    availableMemoryBytes: availableMemoryBytes(),
     inferenceResident: processRows.some((row) => classifyHeavyProcess(row.commandLine) === "inference"),
     ungovernedProcesses: findings.slice(0, 20),
   });

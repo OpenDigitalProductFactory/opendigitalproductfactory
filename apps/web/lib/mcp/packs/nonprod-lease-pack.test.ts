@@ -109,12 +109,66 @@ describe("nonprod-lease pack — registration", () => {
     expect(claim?.inputSchema.properties).toHaveProperty("resourceClass");
     expect(claim?.inputSchema.properties).toHaveProperty("hostResource");
     expect(claim?.inputSchema.properties).toHaveProperty("ownerProcessIdentity");
+    expect(claim?.inputSchema.properties).toHaveProperty("requestedTtlMs.type", "integer");
     expect(renew?.inputSchema.properties).toHaveProperty("slotBinding");
     expect(renew?.inputSchema.properties).toHaveProperty("hostPressure");
   });
 });
 
 describe("nonprod-lease pack — handler behavior (delegation preserved)", () => {
+  it("takes immediate admission's user only from the authenticated handler", async () => {
+    lease.claimNonprodEnvironmentLease.mockResolvedValueOnce({
+      status: "admitted", lease: { leaseId: "NPEL-NEW", taskRunId: null }, slotKey: "slot-0", waitAgeMs: 0,
+    });
+    await nonprodLeasePack.handlers.claim_nonprod_environment_lease({
+      environmentKey: "local-integration-ci", ownerProvider: "codex", ownerSessionId: "session-1",
+      purpose: "test", url: "http://localhost:3010", ports: [3010], slotManifestVersion: 1,
+      expiresAt: new Date(Date.now() + 60_000).toISOString(), authenticatedUserId: "foreign-user",
+    }, "authenticated-user");
+    expect(lease.claimNonprodEnvironmentLease).toHaveBeenCalledWith(expect.objectContaining({
+      authenticatedUserId: "authenticated-user",
+    }));
+  });
+
+  it("reports an expired approved request as refused without starting a wait", async () => {
+    lease.claimNonprodEnvironmentLease.mockRejectedValueOnce(new Error("nonprod_lease_request_expired"));
+    const result = await nonprodLeasePack.handlers.claim_nonprod_environment_lease({
+      environmentKey: "active-candidate", ownerProvider: "codex", ownerSessionId: "s1",
+      purpose: "preview", url: "http://localhost:3010", ports: [3010],
+      expiresAt: new Date(Date.now() - 120_000).toISOString(),
+    }, "u1");
+    expect(result).toMatchObject({ success: false, disposition: "refused", error: "nonprod_lease_request_expired" });
+    expect(result.message).toMatch(/new request/i);
+    expect(durableWait.checkpointNonprodLeaseWait).not.toHaveBeenCalled();
+  });
+
+  it("passes explicit duration and independent deadline through after delayed approval", async () => {
+    const deadline = new Date(Date.now() + 600_000);
+    lease.claimNonprodEnvironmentLease.mockResolvedValueOnce({
+      status: "terminal", reason: "cancelled", lease: { leaseId: "NPEL-STOP", taskRunId: null },
+    });
+    await nonprodLeasePack.handlers.claim_nonprod_environment_lease({
+      environmentKey: "active-candidate", ownerProvider: "codex", ownerSessionId: "s1",
+      purpose: "preview", url: "http://localhost:3010", ports: [3010],
+      expiresAt: new Date(Date.now() - 120_000).toISOString(),
+      requestedTtlMs: 120_000, waitDeadlineAt: deadline.toISOString(),
+    }, "u1");
+    expect(lease.claimNonprodEnvironmentLease).toHaveBeenCalledWith(expect.objectContaining({
+      requestedTtlMs: 120_000, waitDeadlineAt: deadline,
+    }));
+  });
+
+  it.each([0, -1, 0.5, 1.5, "120000", null, 1_200_001])("refuses malformed duration %s before invoking the service", async duration => {
+    const result = await nonprodLeasePack.handlers.claim_nonprod_environment_lease({
+      environmentKey: "active-candidate", ownerProvider: "codex", ownerSessionId: "s1",
+      purpose: "preview", url: "http://localhost:3010", ports: [3010],
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      requestedTtlMs: duration, waitDeadlineAt: new Date(Date.now() + 600_000).toISOString(),
+    }, "u1");
+    expect(result).toMatchObject({ success: false, disposition: "refused", error: "nonprod_lease_duration_invalid" });
+    expect(lease.claimNonprodEnvironmentLease).not.toHaveBeenCalled();
+  });
+
   it.each(["nonprod_resume_identity_mismatch", "nonprod_resume_lease_expired"])("projects %s as a refusal, not a thrown transport error", async code => {
     lease.claimNonprodEnvironmentLease.mockRejectedValueOnce(new Error(code));
     const result = await nonprodLeasePack.handlers.claim_nonprod_environment_lease({

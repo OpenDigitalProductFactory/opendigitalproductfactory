@@ -60,7 +60,7 @@ describe("FounderReviewPage", () => {
     expect(html).toContain('href="/build"');
     expect(html).toContain("Decision Governance");
     expect(html).toContain('href="/coworker-decisions/review"');
-    expect(html).toContain("These cards are created when an AI decision is deferred or escalated");
+    expect(html).toContain("These cards show AI decisions awaiting an owner response");
     expect(html).toContain("Showing 1 distinct review item from 1 unresolved AI decision row");
     expect(html).toContain("Principle gap");
     expect(html).toContain("Clarify founder principle");
@@ -80,14 +80,46 @@ describe("FounderReviewPage", () => {
     expect(prisma.decisionInteraction.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
-          outcomeType: { in: ["defer", "escalate"] },
+          AND: [{ OR: [
+            { escalationRoute: "human" },
+            { escalationRoute: null, outcomeType: { in: ["defer", "escalate"] } },
+          ] }],
           humanOutcome: { equals: "DbNull" },
         }),
         select: expect.objectContaining({
           domainClass: true,
+          escalationRoute: true,
+          escalationReason: true,
         }),
       }),
     );
+  });
+
+  it("explains a damaging recommendation as human review rather than a novelty gap", async () => {
+    vi.mocked(prisma.decisionInteraction.findMany).mockResolvedValue([
+      {
+        interactionId: "DI-CRITICAL-RECOMMENDATION",
+        question: "Should the owner review this critical-risk recommendation?",
+        options: ["Proceed", "Hold"],
+        outcomeType: "recommend",
+        escalationRoute: "human",
+        escalationReason: "damaging-critical-risk",
+        outcomePayload: { novelProposition: true },
+        buildId: null,
+        taskRunId: null,
+        routeContext: "/build",
+        domainClass: "risk-assessment",
+        createdAt: new Date("2026-05-26T12:00:00.000Z"),
+        profile: { profileId: "profile-mark", name: "WWMD Platform", kind: "platform" },
+      },
+    ] as never);
+
+    const { default: FounderReviewPage } = await import("./page");
+    const html = renderToStaticMarkup(await FounderReviewPage({}));
+    expect(html).toContain("Should the owner review this critical-risk recommendation?");
+    expect(html).toContain("Critical risk");
+    expect(html).not.toContain("Novel proposition");
+    expect(html).toContain("These cards show AI decisions awaiting an owner response");
   });
 
   it("renders owner/operator wording for WWWD review cards", async () => {

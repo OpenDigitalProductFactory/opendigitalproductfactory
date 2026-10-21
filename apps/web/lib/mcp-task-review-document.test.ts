@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import type { InitiativeReviewBinding } from "./mcp-task-review-contract";
 const resolve = vi.hoisted(() => vi.fn());
 vi.mock("./backlog/initiative-readiness/artifact-resolver", () => ({ resolveInitiativeArtifact: resolve }));
-import { validateReviewDocument } from "./mcp-task-review-document";
+import { reviewDocumentPreflight, validateReviewDocument } from "./mcp-task-review-document";
 import { renderBuildDesignText } from "./backlog/initiative-readiness/render-build-design-text";
 
 const binding: InitiativeReviewBinding = { writerToolName: "record_initiative_design_review", itemId: "BI-SCOPE",
@@ -45,5 +45,44 @@ describe("review document preflight", () => {
     expect(await validateReviewDocument(revision)).toBeNull();
     expect(await validateReviewDocument({ ...revision, artifactRef: { ...revision.artifactRef, valueDigest: "d".repeat(64) } }))
       .toMatchObject({ error: "IMMUTABLE_BLOB_MISMATCH", gateStatus: "unrun" });
+  });
+});
+
+// BI-4592CF69: a design over the terminal-writer recovery cap can never finish
+// a resumed review. Say so when the review is requested, not at the failed resume.
+describe("review document size at request time", () => {
+  const large = `${text}
+
+${"Long design prose. ".repeat(3_600)}
+`;
+  const largeArtifact = { ...artifact, bytes: Buffer.from(large) };
+
+  it("tells the author the design size and the recovery cap, and still allows the request", async () => {
+    resolve.mockResolvedValue({ ok: true, artifact: largeArtifact });
+    const result = await reviewDocumentPreflight(binding);
+    expect(result.refusal).toBeNull();
+    expect(result.notice).toContain(`${String(large.length).replace(/\B(?=(\d{3})+(?!\d))/g, ",")} characters`);
+    expect(result.notice).toContain("64,000 characters");
+  });
+
+  it("checks the design-spec review too, without requiring scope markers", async () => {
+    resolve.mockResolvedValue({ ok: true, artifact: { ...largeArtifact, bytes: Buffer.from("x".repeat(64_001)) } });
+    const result = await reviewDocumentPreflight({ ...binding, gate: "design-spec" });
+    expect(result).toMatchObject({ refusal: null, notice: expect.stringContaining("64,001 characters") });
+  });
+
+  it("says nothing for a design within the cap", async () => {
+    expect(await reviewDocumentPreflight(binding)).toEqual({ refusal: null, notice: null });
+    expect(await reviewDocumentPreflight({ ...binding, gate: "design-spec" })).toEqual({ refusal: null, notice: null });
+  });
+
+  it("never refuses a design-spec request because its size could not be read", async () => {
+    resolve.mockRejectedValue(new Error("network unavailable"));
+    expect(await reviewDocumentPreflight({ ...binding, gate: "design-spec" })).toEqual({ refusal: null, notice: null });
+  });
+
+  it("keeps the scope refusal for spec approval", async () => {
+    resolve.mockResolvedValue({ ok: true, artifact: { ...artifact, bytes: Uint8Array.of(0xff) } });
+    expect((await reviewDocumentPreflight(binding)).refusal).toMatchObject({ error: "manifest-invalid" });
   });
 });

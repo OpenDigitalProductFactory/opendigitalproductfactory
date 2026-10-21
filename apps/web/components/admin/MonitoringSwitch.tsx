@@ -1,20 +1,21 @@
 "use client";
 
 // BI-8BBFE50B: the one control on /admin/settings/monitoring. It asks the
-// existing governed server action for a runtime capability transition with the
-// current install-state key set plus or minus runtime:deep-observability; the
-// action re-checks manage_platform and admission. No dialog: the button names
-// the action exactly, and each coordinator result maps to plain copy
-// (monitoring-transition-outcome.ts). Copy lives in the "admin" catalog under
-// monitoringSettings; the page provides that namespace.
+// governed `requestMonitoringChange` server action to turn monitoring on or
+// off; the action re-checks manage_platform and admission and builds a
+// reconciliation-mode transition from the observed host and database
+// baselines (BI-F0C2E8F5). When only the monitoring record disagrees with what
+// is running, the button offers to match the record to the host instead of
+// flipping it. No dialog: the button names the action exactly, and each result
+// maps to plain copy (monitoring-transition-outcome.ts). Copy lives in the
+// "admin" catalog under monitoringSettings; the page provides that namespace.
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { MessageKey } from "@dpf/i18n";
 
 import { Button } from "@/components/ui/Button";
-import { requestRuntimeCapabilityTransition } from "@/lib/actions/runtime-capabilities";
-import { MONITORING_CAPABILITY } from "@/lib/platform-runtime/monitoring-switch-state";
+import { requestMonitoringChange } from "@/lib/actions/runtime-capabilities";
 import {
   mapMonitoringTransitionError,
   mapMonitoringTransitionOutcome,
@@ -31,8 +32,10 @@ const TONE_CLASS: Record<MonitoringOutcomeTone, string> = {
 };
 
 export interface MonitoringSwitchProps {
+  /** Install-state enables monitoring (the host's truth). */
   enabled: boolean;
-  enabledKeys: string[];
+  /** The monitoring record disagrees with the host; the button matches it. */
+  recordMismatch?: boolean;
   canToggle: boolean;
   /** Catalog key explaining why the switch is locked, when it is. */
   reasonKey: MessageKey<"admin"> | null;
@@ -46,12 +49,12 @@ export function newMonitoringTransitionId(): string {
   return `RCT-${Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
 }
 
-export function desiredMonitoringKeys(enabledKeys: readonly string[], turnOn: boolean): string[] {
-  const rest = enabledKeys.filter((key) => key !== MONITORING_CAPABILITY);
-  return turnOn ? [...rest, MONITORING_CAPABILITY] : rest;
+function buttonLabel(enabled: boolean, recordMismatch: boolean): MessageKey<"admin"> {
+  if (recordMismatch) return enabled ? "monitoringSettings.reconcileOn" : "monitoringSettings.reconcileOff";
+  return enabled ? "monitoringSettings.turnOff" : "monitoringSettings.turnOn";
 }
 
-export function MonitoringSwitch({ enabled, enabledKeys, canToggle, reasonKey, reasonArgs }: MonitoringSwitchProps) {
+export function MonitoringSwitch({ enabled, recordMismatch = false, canToggle, reasonKey, reasonArgs }: MonitoringSwitchProps) {
   const t = useT("admin");
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -59,11 +62,12 @@ export function MonitoringSwitch({ enabled, enabledKeys, canToggle, reasonKey, r
 
   const toggle = () => {
     const transitionId = newMonitoringTransitionId();
-    const desiredKeys = desiredMonitoringKeys(enabledKeys, !enabled);
+    // Matching the record keeps the host as it is; otherwise flip it.
+    const turnOn = recordMismatch ? enabled : !enabled;
     setOutcome(null);
     startTransition(async () => {
       try {
-        const result = await requestRuntimeCapabilityTransition({ transitionId, desiredKeys });
+        const result = await requestMonitoringChange({ transitionId, turnOn });
         setOutcome(mapMonitoringTransitionOutcome(result, transitionId));
       } catch (error) {
         setOutcome(mapMonitoringTransitionError(error, transitionId));
@@ -75,13 +79,13 @@ export function MonitoringSwitch({ enabled, enabledKeys, canToggle, reasonKey, r
   return (
     <div className="space-y-2" data-testid="monitoring-switch">
       <Button
-        variant={enabled ? "secondary" : "primary"}
+        variant={enabled || recordMismatch ? "secondary" : "primary"}
         onClick={toggle}
         disabled={!canToggle || isPending}
         aria-busy={isPending}
         aria-describedby={!canToggle && reasonKey ? "monitoring-switch-reason" : undefined}
       >
-        {isPending ? t("monitoringSettings.working") : t(enabled ? "monitoringSettings.turnOff" : "monitoringSettings.turnOn")}
+        {isPending ? t("monitoringSettings.working") : t(buttonLabel(enabled, recordMismatch))}
       </Button>
       {!canToggle && reasonKey && (
         <p id="monitoring-switch-reason" className="text-xs text-[var(--dpf-muted)]">

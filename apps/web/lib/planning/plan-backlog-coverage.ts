@@ -4,7 +4,8 @@ import type { BoundWorkShapeDb } from "@/lib/backlog/initiative-readiness/bound-
 
 import { prisma } from "@dpf/db";
 
-import { resolveRepositoryArtifact, type InitiativeArtifactRef } from "@/lib/backlog/initiative-readiness";
+import { resolveRepositoryArtifact } from "@/lib/backlog/initiative-readiness/repository-artifact";
+import type { InitiativeArtifactRef } from "@/lib/backlog/initiative-readiness/receipt-schema";
 import { deriveAuthoritativeReadinessProfile } from "@/lib/backlog/initiative-readiness/profiles";
 import { projectMissingBaselineRecovery } from "./plan-coverage-recovery";
 

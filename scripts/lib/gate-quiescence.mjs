@@ -23,6 +23,7 @@ export function quiescenceWait(status) {
 export async function readQuiescenceStatus({
   mcpUrl, bearerToken, timeoutMs = 10_000, allowNonLoopbackEndpoint = false,
   mcpCallImpl = mcpCall, warn = (text) => process.stderr.write(text),
+  strictConnection = false,
 } = {}) {
   try {
     const response = await mcpCallImpl("get_quiescence_status", {}, {
@@ -32,7 +33,10 @@ export async function readQuiescenceStatus({
     if (response?.success === true && (quiescenceBlocksWrites(status) || status?.level === "normal")) {
       return status;
     }
-  } catch {
+  } catch (error) {
+    // A slow read does not establish a TLS failure or an authoritative drain.
+    // Keep the existing unknown-state path; late admission still owns writes.
+    if (strictConnection && error?.code && error.code !== "ETIMEDOUT") throw error;
     // Do not echo failed payloads, credential paths, or transport secrets.
   }
   warn("gate-worktree: quiescence check inconclusive; continuing existing preflight/admission checks, not recording a verdict.\n");
@@ -42,6 +46,7 @@ export async function readQuiescenceStatus({
 export async function readEarlyQuiescenceStatus({
   args = [], env = process.env, warn,
   resolveCredentialImpl = resolveMcpCredential, mcpCallImpl = mcpCall,
+  strictConnection = false,
 } = {}) {
   try {
     const { values } = parseArgs({ args: scriptArgv(args), strict: false, allowPositionals: true,
@@ -51,8 +56,9 @@ export async function readEarlyQuiescenceStatus({
     const credential = resolveCredentialImpl({ mcpUrl, env,
       exchange: (options) => exchangeClientCredentials({ ...options, timeoutMs: 2_500 }) });
     return await readQuiescenceStatus({ mcpUrl, bearerToken: credential.bearer,
-      timeoutMs: 2_500, allowNonLoopbackEndpoint: Boolean(explicitUrl), mcpCallImpl, warn });
-  } catch {
+      timeoutMs: 2_500, allowNonLoopbackEndpoint: Boolean(explicitUrl), mcpCallImpl, warn, strictConnection });
+  } catch (error) {
+    if (strictConnection && error?.code && error.code !== "ETIMEDOUT") throw error;
     (warn ?? ((text) => process.stderr.write(text)))(
       "pregate: early quiescence check unavailable; continuing existing preflight/admission checks, not recording a verdict.\n",
     );

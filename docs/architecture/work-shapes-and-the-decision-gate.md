@@ -162,6 +162,20 @@ within budget: its portfolio has a budget this quarter and its delivered plus in
 fit it (`author-stage-autonomy.ts`, BI-8A32EBFF). `delivery-xlarge` never binds. When either
 condition fails the stage stays attention and the drive ledger names the missing condition.
 
+**The drive acts only on live work** ⟦runtime: 2026-10-14, `BI-72679FE0`⟧. A delivery room
+outlives its item, so a room whose item is finished or shelved is still non-terminal and still
+shaped. When the pre-authorisation came into force on 2026-10-13, the next tick dispatched
+agents into 341 such rooms, many untouched since 2026-09-25. Each run left no evidence. By
+04:00Z 277 rooms were held on `executor_writeback_unavailable`, against a baseline of 6 a day,
+and the owner's "Needs you" showed ~56 of them. The item status now gates every plan
+(`drive-work-item-gate.ts`). When the item is `done`, `deferred` or `retired`, the room stands
+down entirely. When it is `awaiting-acceptance`, no agent runs and no agent-side pause is held,
+but a person stage (the acceptance itself) still asks. A conformance stop or escalation is never
+hidden. A stood-down tick is `do_not_wake`/`work_item_inactive`: it deactivates the room's task
+and replaces its pause, so an existing stall card clears on the next tick with no data repair.
+Reopening the item lets the next tick plan the room again. A room with no item, or an item whose
+status could not be read, is driven as before.
+
 A room that never declared one gets a **derived** shape from what it already is
 (`derive-workroom-shape.ts`): a standing WSID room is craft stewardship by definition,
 `launch-readiness` is an approval sign-off, `governance` and `remediation` are consequential
@@ -566,6 +580,11 @@ counts a run of non-advancing actions, not a run of pauses.
   routes to its Process Overseer as well.
 - **The item names the room, the reason and the streak length.** Not "a room is
   stuck".
+- **A stall an appointment cannot clear is recovery, not an owner decision**
+  (`BI-72679FE0`). A writeback stall (the coworker ran and left no result) says
+  "Appointing an owner will not change this", so it carries `decideEffort: "review"`.
+  `owner-routing.ts` sends it to the custodian lane, not to "Needs you". Stalls that an
+  appointment does clear stay `judgment` and still reach the owner.
 
 Raw SQL against this trail must use the physical table name `"WorkCapsuleActivity"`
 (`@@map`), exactly as `Workroom` maps to `"WorkCapsule"`. The Prisma model name

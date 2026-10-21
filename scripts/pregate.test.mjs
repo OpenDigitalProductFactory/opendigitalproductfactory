@@ -6,6 +6,17 @@ import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { readEarlyQuiescenceStatus, readQuiescenceStatus, quiescenceBlocksWrites } from "./lib/gate-quiescence.mjs";
 
+test("wrapped pregate stops only when stdout is captured and no escape hatch is set", () => {
+  const captured = { stdoutIsTTY: false, env: {}, args: [] };
+  assert.match(pregate.wrappedForegroundReason(captured), /sole foreground command/);
+  assert.equal(pregate.wrappedForegroundReason({ ...captured, stdoutIsTTY: true }), null);
+  assert.equal(pregate.wrappedForegroundReason({ ...captured, env: { DPF_PREGATE_ALLOW_CAPTURE: "1" } }), null);
+  assert.equal(pregate.wrappedForegroundReason({ ...captured, env: { CI: "true" } }), null);
+  assert.equal(pregate.wrappedForegroundReason({ ...captured, env: { GITHUB_ACTIONS: "true" } }), null);
+  assert.equal(pregate.wrappedForegroundReason({ ...captured, args: ["--dry-run"] }), null);
+  assert.equal(pregate.wrappedForegroundReason({ ...captured, args: ["--help"] }), null);
+});
+
 test("parent preflight never advertises environment-limited checks as passed", async () => {
   let output = "";
   const result = await pregate.runHostPreflight({ env: {}, readStatusImpl: async () => ({level:"normal"}),

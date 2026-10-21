@@ -15,6 +15,9 @@ import type { InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
 import { resolveReviewerIdentity } from "./reviewer-identity";
 import { fingerprintCoworkerInput } from "@/lib/govern/authority/coworker-authority-decision";
 import { canonicalPlanMatchesArtifact, loadCanonicalPlanSource, sameCanonicalPlanSource } from "./canonical-plan-source";
+import { boundReviewReceiptId, checkBoundReviewWriteExecution, findBoundReviewWinner, lockBoundReviewEffect, publishBoundReviewEffect,
+  type BoundReviewTask } from "./bound-review-effect";
+import { ok, type ActionSuccess } from "@/lib/shared/action-result";
 
 type ReceiptHistoryRow = { payload: unknown };
 
@@ -35,7 +38,7 @@ function currentOpenFindings(rows: ReceiptHistoryRow[], artifactDigest: string):
 }
 
 export type RecordInitiativeGateReceiptResult =
-  | { ok: true; receiptId: string; receipt: Record<string, unknown> }
+  | (ActionSuccess & { receiptId: string; receipt: Record<string, unknown>; deduplicated?: true })
   | { ok: false; code: string; error: string };
 
 export async function recordInitiativeGateReceipt(args: {
@@ -49,6 +52,7 @@ export async function recordInitiativeGateReceipt(args: {
   artifactRef: InitiativeArtifactRef;
   /** Trusted TaskRun context passed only by the governed tool handler. */
   workroomRef?: InitiativeReviewBinding["workroomRef"];
+  boundReviewTask?: BoundReviewTask;
   expectedCurrentBaselineId?: string | null;
   reason: string;
   findings: Array<{ issue: string; severity: "critical" | "important" }>;
@@ -152,7 +156,9 @@ export async function recordInitiativeGateReceipt(args: {
   if (findingRefs.length !== new Set(findingRefs).size || args.findings.some((finding) => !finding.issue.trim())) {
     return { ok: false, code: "malformed-receipt", error: "Findings require unique non-empty issues." };
   }
-  return prisma.$transaction(async (tx) => {
+  return publishBoundReviewEffect<RecordInitiativeGateReceiptResult>(Boolean(args.boundReviewTask), (winnerOnly) => prisma.$transaction(async (tx) => {
+    const taskLock = await lockBoundReviewEffect(tx, args, item.organizationId);
+    if (taskLock.refusal) return taskLock.refusal;
     // Every receipt writer for a subject serializes on the subject row. Without
     // this seam, a concurrent fail could introduce a blocker after a pass had
     // read history but before either append committed.
@@ -172,6 +178,9 @@ export async function recordInitiativeGateReceipt(args: {
       },
     });
     if (!lockedItem) return { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: "The governed initiative no longer exists." };
+    if ((lockedItem.organizationId ?? null) !== (item.organizationId ?? null)) {
+      return { ok: false, code: "AUTHORIZATION_DENIED", error: "The initiative authority scope changed before publication." };
+    }
     if (canonicalPlanProof) {
       // Coverage/baseline writers serialize on their scope owner's item row.
       // The reviewed child is already locked; pin its parent before re-reading.
@@ -240,6 +249,14 @@ export async function recordInitiativeGateReceipt(args: {
         return { ok: false, code: "AUTHORIZATION_DENIED", error: "Author research evidence or current authority changed before publication." };
       }
     }
+    const winner = await findBoundReviewWinner(tx, args, artifact.artifact, item.id, item.organizationId, reviewerPrincipalId);
+    if (!winner.ok) return winner;
+    if (winner.receipt) return { ...ok(), receiptId: winner.receipt.receiptId,
+      receipt: winner.receipt as unknown as Record<string, unknown>, deduplicated: true };
+    if (winnerOnly) return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS",
+      error: "Concurrent publication did not leave a qualified canonical winner. No write was retried." };
+    const executionRefusal = checkBoundReviewWriteExecution(args, taskLock.execution);
+    if (executionRefusal) return executionRefusal;
     const history = await tx.backlogItemActivity.findMany({
       where: { backlogItemId: item.id, kind: "initiative_gate_receipt", gateKey },
       orderBy: [{ recordedAt: "asc" }, { id: "asc" }],
@@ -271,7 +288,7 @@ export async function recordInitiativeGateReceipt(args: {
         ],
       })
       : null;
-    const receiptId = `initiative-${randomUUID()}`;
+    const receiptId = boundReviewReceiptId(args, artifact.artifact.digest) ?? `initiative-${randomUUID()}`;
     const validated = validateInitiativeGateReceiptDraft({
       gate: args.gate,
       decision: args.decision,
@@ -326,5 +343,5 @@ export async function recordInitiativeGateReceipt(args: {
       },
     });
     return { ok: true, receiptId, receipt: validated.receipt as unknown as Record<string, unknown> };
-  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
 }
