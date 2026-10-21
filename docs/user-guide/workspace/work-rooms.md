@@ -235,6 +235,8 @@ Below the steps, **Flow reviews** compares the shape version with how it started
 - The step where the most waiting built up, weighing rooms held by how long work typically waits there.
 - For the latest review only, why most rooms at that step are held. Earlier reviews do not show a reason, because the daily step data does not record one.
 
+A review covers every room on that shape version, in every area, because the daily step data is not split by area. Its counts can therefore be larger than the rooms you see in this area.
+
 Until the baseline is complete, the panel says when the first review will be. A review with too few finished steps to compare says so rather than showing a number.
 
 **Products** (`/portfolio`) shows the four portfolios side by side on the same measures. Rooms with no portfolio are shown in their own **Unplaced** column and never counted in another.

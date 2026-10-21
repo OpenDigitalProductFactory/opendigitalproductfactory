@@ -12,11 +12,17 @@
  * QueueMetricSnapshot rows, not a stored record (DI-01E4DB4D7126), so any past
  * review reads the same from the same data. Daily snapshots do not record why
  * rooms are held, so only the latest review names a cause, from the live holds.
+ *
+ * Scope: stage snapshots are keyed by shape version, not by area, so a review
+ * covers every room on that version wherever it sits. The live holds that give
+ * the latest cause must cover the same rooms, never one area's share of them.
  */
 import { FLOW_WINDOW_DAYS, type StageHold } from "./portfolio-flow";
 import { topByWaitTimesQueue, typicalStepWaitMs, type StepSnapshot } from "./shape-step-measures";
+import { classifyDriveSegment } from "./workroom-flow-state";
 import { MIN_BASELINE_EXITS } from "./workroom-flow-map";
-import { workroomStageQueueKey } from "./workroom-stage-telemetry";
+import { holdCauseTag } from "./workroom-hold-cause";
+import { workroomStageQueueKey, type DriveObservation } from "./workroom-stage-telemetry";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** A version's baseline is its first four weeks of stage data. */
@@ -70,6 +76,25 @@ function measure(rows: readonly StepSnapshot[]): ReviewMeasures {
   }
   if (exits < MIN_BASELINE_EXITS) return { exits, stepDwellMs: null, flowEfficiency: null };
   return { exits, stepDwellMs: dwell / exits, flowEfficiency: paired > 0 ? process / paired : null };
+}
+
+/** Where rooms are held now and why most of them are, per step: the latest review's cause. */
+export function liveStageHolds(rooms: readonly { current: DriveObservation | null }[]): StageHold[] {
+  const byStage = new Map<string, Map<string, number>>();
+  for (const { current: obs } of rooms) {
+    if (!obs?.action || !obs.reason || !obs.stageKey) continue;
+    const classified = classifyDriveSegment({ action: obs.action, reason: obs.reason });
+    if (classified?.state !== "awaiting-person" && classified?.state !== "blocked") continue;
+    const cause = classified.state === "awaiting-person" ? "awaiting-person" : (holdCauseTag(classified.cause, obs.detail) ?? "blocked");
+    const causes = byStage.get(obs.stageKey) ?? new Map<string, number>();
+    causes.set(cause, (causes.get(cause) ?? 0) + 1);
+    byStage.set(obs.stageKey, causes);
+  }
+  return [...byStage].map(([stageKey, causes]) => ({
+    stageKey,
+    roomsHeld: [...causes.values()].reduce((sum, n) => sum + n, 0),
+    cause: [...causes.entries()].sort((a, b) => b[1] - a[1])[0]![0],
+  }));
 }
 
 export function computeFlowReviewHistory(input: {

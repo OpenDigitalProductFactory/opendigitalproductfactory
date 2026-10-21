@@ -213,6 +213,7 @@
     },
     "reviews": {
       "heading": "Flow reviews, every {$days} days",
+      "scope": "Reviews cover every room on this shape version, in every area: the daily step data is not split by area.",
       "baseline": "Baseline, {$from} to {$to}: a step typically takes {$dwell}, flow efficiency {$efficiency}, {$exits} steps finished.",
       "baselineTooFew": "Baseline, {$from} to {$to}: too few steps finished to measure ({$exits} of {$min}).",
       "firstDue": "The first review is on {$date}, once the four-week baseline is complete.",
