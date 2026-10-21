@@ -28,8 +28,11 @@ import { buildStageBrief, stageBriefInputFromDefinition, stageEvidenceKinds } fr
 import { type WorkroomStageTaskConfig } from "@/lib/scheduling/workroom-stage-task-config";
 import { driveTickIsNews, nextDriveHold, readDriveHold, stallNoticeDue, type WorkroomDriveHold } from "@/lib/work-management/workroom-drive-hold";
 import { readWorkroomQueueHold } from "@/lib/work-capsules/workroom-queue-hold";
+import { readDispatchCheckpoint } from "@/lib/work-management/workroom-drive-checkpoint";
+import { isRecord } from "@/lib/shared/coerce";
 
 import {
+  deactivateUndrivenRoomTasks,
   loadCoordinationBindings,
   loadRecordedEvidence,
   loadStageDispatchTimes,
@@ -38,6 +41,7 @@ import {
   loadWorkItemStatuses,
   reconcileCoordinationBindings,
   reconcileStandingRoomNesting,
+  workItemKeyOf,
 } from "./workroom-drive-data";
 export { loadStandingRoomIds, STANDING_ROOM_SCAN_LIMIT } from "./workroom-drive-data";
 import { earnGraphReceipts, graphSnapshotFields, hasStoredDriveMarking, withLatchedBlockedReceipts } from "@/lib/work-management/drive-graph-tick";
@@ -103,6 +107,8 @@ export type WorkroomDriveRoom = {
   receipts: { stageKey: string; kind: string; iteration?: number }[];
   /** The room's own objective, sent to the coworker in its stage brief. */
   objective?: string | null;
+  /** BI-1DDCE164: the semantic id of the item the room delivers, named in the brief. */
+  workItemKey?: string | null;
   /** Stage-scoped evidence recorded through record_workroom_evidence — the only
    *  thing a completing receipt is earned from (BI-76B35820). */
   recordedEvidence?: RecordedEvidence[];
@@ -313,6 +319,11 @@ export async function applyDrivePlan(input: {
   }
 
   if (plan.action === "attention") {
+    // BI-1DDCE164: the room left the stage its task was enqueued for, so that task stops.
+    // Same-stage attention keeps it: a later same-stage dispatch replays without reactivating.
+    const enqueued = readDispatchCheckpoint(isRecord(room.workspaceState) ? room.workspaceState.workroomDispatchCheckpoint : null);
+    if (plan.shapeKey && enqueued && enqueued.confirmedEffect.taskId === workroomDriveTaskId(room.capsuleId, plan.shapeKey)
+      && enqueued.stage.stageKey !== plan.stageKey) await effects.deactivateAgentTask(enqueued.confirmedEffect.taskId);
     await persist({
       roomId: room.id,
       snapshot,
@@ -358,7 +369,7 @@ export async function applyDrivePlan(input: {
     if (!room.ownerUserId) return "skipped";
     // GPP element 2 "Attachment" + element 5 "Capability set": the brief and the
     // task carry the stage's declared tools; the scheduler pins them (BI-43C3E914).
-    const brief = stageBriefInputFromDefinition({ capsuleId: room.capsuleId, roomObjective: room.objective ?? null,
+    const brief = stageBriefInputFromDefinition({ capsuleId: room.capsuleId, roomObjective: room.objective ?? null, backlogItemKey: room.workItemKey ?? null,
       shapeKey: plan.shapeKey ?? "", shapeVersion: plan.shapeVersion ?? "", definition: plan.definition ?? null, stageKey: plan.stageKey ?? "" });
     const scheduled = await effects.upsertAgentTask({
       taskId: plan.taskId,
@@ -430,6 +441,7 @@ export async function runWorkroomDriveJob(
     rooms = await deps.listRooms();
   } else {
     await reconcileCoordinationBindings();
+    await deactivateUndrivenRoomTasks(); // BI-1DDCE164: rooms the selection below leaves out
     const { prisma } = await import("@dpf/db");
     const [bindings, schemePresent] = [
       await loadCoordinationBindings(),
@@ -461,65 +473,78 @@ export async function runWorkroomDriveJob(
   let stopped = 0;
   let skipped = 0;
 
+  const failures: Array<{ roomId: string; error: unknown }> = [];
   for (const room of rooms) {
-    const shape = resolveWorkShapeClaim(room.scopeClaims);
-    const author = authorStage(room, shape?.key ?? null);
-    const stored = readStoredWorkroomDriveState(room.workspaceState);
-    const existing = room.receipts.length > 0 ? room.receipts : stored.receipts;
-    // BI-853120EE: a sequential room's receipts belong to its run; a new run starts with none.
-    const run = sequentialRunFor({ shape, workspaceState: room.workspaceState, now, prior: priorDriveFromStored(stored), receipts: existing });
-    const receipts = (earnGraphReceipts({ definition: shape ? readWorkShapeDefinitionContract(shape) : null, workspaceState: room.workspaceState,
-      evidence: room.recordedEvidence ?? [], dispatchedAtByStage: room.stageDispatchedAtByStage, existing,
-    }) ?? earnEvidenceReceipts({
-      stageKey: room.currentStageKey ?? stored.currentStageKey,
-      declaredKinds: stageEvidenceKinds(shape ? readWorkShapeDefinitionContract(shape) : null, room.currentStageKey ?? stored.currentStageKey),
-      evidence: room.recordedEvidence ?? [],
-      dispatchedAt: room.stageDispatchedAt ?? null,
-      existing: run?.receipts ?? existing,
-      ...(run ? { runKey: run.runKey } : {}),
-    })) as { stageKey: string; kind: string; iteration?: number; runKey?: string }[];
-    const driveInput: Parameters<typeof resolveDrivePlan>[0] = {
-      roomId: room.capsuleId,
-      definition: shape ? readWorkShapeDefinitionContract(shape) : null,
-      collaborationShape: shape?.collaborationShape ?? null,
-      postureLevel: postureLevelOf(room.scopeClaims),
-      participants: projectPersistedWorkroomRoster({
-        assignments: room.participants,
-        presencePrincipalRefs: [],
-      }),
-      currentStageKey: room.currentStageKey ?? stored.currentStageKey,
-      // Earned from governed, stage-scoped evidence only — never from a run's
-      // self-reported completion (BI-76B35820).
-      receipts,
-      budgetUsage: room.budgetUsage.length > 0 ? room.budgetUsage : stored.budgetUsage,
-      stopConditionHits: room.stopConditionHits.length > 0 ? room.stopConditionHits : stored.stopConditionHits,
-      reviewDue: room.reviewDue || stored.reviewDue,
-      substrateReachable: room.substrateReachable,
-      substrateEmpty: room.substrateEmpty,
-      coordinatorEligibility: room.coordinatorEligibility,
-      now,
-      priorDrive: priorDriveFromStored(stored),
-      workspaceState: room.workspaceState,
-      recordedEvidence: room.recordedEvidence ?? [],
-      ...(room.subShapeChildren ? { subShapeChildren: room.subShapeChildren } : {}),
-      roleBindings: { ...author.roleBindings, ...readWorkShapeRoleBindings(room.scopeClaims) },
-      authorStageWithheldBecause: author.withheldBecause,
-    };
-    const resolved = await resolveWithReview(room, driveInput);
-    // BI-72679FE0: a room whose item is done, deferred or delivered gets no agent and raises no stall.
-    const plan = gateDrivePlanOnWorkItem(resolved.plan, room.workItemStatus);
-    const review = plan === resolved.plan ? resolved.review : null;
-    plans.push({
-      roomId: room.capsuleId,
-      action: plan.action,
-      reason: plan.reason,
-      taskId: plan.taskId,
-    });
-    const outcome = await applyDrivePlan({ room: { ...room, receipts }, plan, now, effects, review, ...(run ? { runKey: run.runKey } : {}) });
-    if (outcome === "dispatched") dispatched += 1;
-    else if (outcome === "attention") attention += 1;
-    else if (outcome === "stopped") stopped += 1;
-    else skipped += 1;
+    try {
+      const shape = resolveWorkShapeClaim(room.scopeClaims);
+      const author = authorStage(room, shape?.key ?? null);
+      const stored = readStoredWorkroomDriveState(room.workspaceState);
+      const existing = room.receipts.length > 0 ? room.receipts : stored.receipts;
+      // BI-853120EE: a sequential room's receipts belong to its run; a new run starts with none.
+      const run = sequentialRunFor({ shape, workspaceState: room.workspaceState, now, prior: priorDriveFromStored(stored), receipts: existing });
+      const receipts = (earnGraphReceipts({ definition: shape ? readWorkShapeDefinitionContract(shape) : null, workspaceState: room.workspaceState,
+        evidence: room.recordedEvidence ?? [], dispatchedAtByStage: room.stageDispatchedAtByStage, existing,
+      }) ?? earnEvidenceReceipts({
+        stageKey: room.currentStageKey ?? stored.currentStageKey,
+        declaredKinds: stageEvidenceKinds(shape ? readWorkShapeDefinitionContract(shape) : null, room.currentStageKey ?? stored.currentStageKey),
+        evidence: room.recordedEvidence ?? [],
+        dispatchedAt: room.stageDispatchedAt ?? null,
+        existing: run?.receipts ?? existing,
+        ...(run ? { runKey: run.runKey } : {}),
+      })) as { stageKey: string; kind: string; iteration?: number; runKey?: string }[];
+      const driveInput: Parameters<typeof resolveDrivePlan>[0] = {
+        roomId: room.capsuleId,
+        definition: shape ? readWorkShapeDefinitionContract(shape) : null,
+        collaborationShape: shape?.collaborationShape ?? null,
+        postureLevel: postureLevelOf(room.scopeClaims),
+        participants: projectPersistedWorkroomRoster({
+          assignments: room.participants,
+          presencePrincipalRefs: [],
+        }),
+        currentStageKey: room.currentStageKey ?? stored.currentStageKey,
+        // Earned from governed, stage-scoped evidence only — never from a run's
+        // self-reported completion (BI-76B35820).
+        receipts,
+        budgetUsage: room.budgetUsage.length > 0 ? room.budgetUsage : stored.budgetUsage,
+        stopConditionHits: room.stopConditionHits.length > 0 ? room.stopConditionHits : stored.stopConditionHits,
+        reviewDue: room.reviewDue || stored.reviewDue,
+        substrateReachable: room.substrateReachable,
+        substrateEmpty: room.substrateEmpty,
+        coordinatorEligibility: room.coordinatorEligibility,
+        now,
+        priorDrive: priorDriveFromStored(stored),
+        workspaceState: room.workspaceState,
+        recordedEvidence: room.recordedEvidence ?? [],
+        ...(room.subShapeChildren ? { subShapeChildren: room.subShapeChildren } : {}),
+        roleBindings: { ...author.roleBindings, ...readWorkShapeRoleBindings(room.scopeClaims) },
+        authorStageWithheldBecause: author.withheldBecause,
+      };
+      const resolved = await resolveWithReview(room, driveInput);
+      // BI-72679FE0: a room whose item is done, deferred or delivered gets no agent and raises no stall.
+      const plan = gateDrivePlanOnWorkItem(resolved.plan, room.workItemStatus);
+      const review = plan === resolved.plan ? resolved.review : null;
+      plans.push({
+        roomId: room.capsuleId,
+        action: plan.action,
+        reason: plan.reason,
+        taskId: plan.taskId,
+      });
+      const outcome = await applyDrivePlan({ room: { ...room, receipts }, plan, now, effects, review, ...(run ? { runKey: run.runKey } : {}) });
+      if (outcome === "dispatched") dispatched += 1;
+      else if (outcome === "attention") attention += 1;
+      else if (outcome === "stopped") stopped += 1;
+      else skipped += 1;
+    } catch (error) {
+      // BI-1DDCE164: one room's throw used to abort the tick, so later rooms were never driven.
+      // The refusal still fails the run (below), after every other room is driven.
+      failures.push({ roomId: room.capsuleId, error });
+      console.error(`[workroom-drive] room ${room.capsuleId} tick failed; driving the rest:`, error);
+    }
+  }
+
+  if (failures.length > 0) {
+    console.error(`[workroom-drive] ${failures.length} room(s) failed this tick: ${failures.map((failure) => failure.roomId).join(", ")}`);
+    throw failures[0]!.error;
   }
 
   try {
@@ -594,6 +619,8 @@ async function loadStandingRooms(
       id: row.id,
       capsuleId: row.capsuleId,
       backlogItemId: row.backlogItemId,
+      objective: row.objective,
+      workItemKey: workItemKeyOf(row),
       coordinatorEligibility: resolveCoordinatorEligibility({
         shapeKey,
         bindings: (shapeKey ? coordinationBindings?.get(shapeKey) : undefined) ?? [],

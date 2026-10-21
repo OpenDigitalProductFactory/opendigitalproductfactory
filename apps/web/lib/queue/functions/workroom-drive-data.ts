@@ -12,7 +12,7 @@ import {
   COORDINATION_SCOPE_TYPE,
 } from "@/lib/work-management/coordinator-eligibility";
 import type { RecordedEvidence } from "@/lib/work-management/stage-evidence-receipts";
-import { planContainmentRelations, terminalStandingRoomIds } from "@/lib/work-management/standing-room-nesting";
+import { planContainmentRelations, TERMINAL_WORKROOM_STATUSES, terminalStandingRoomIds } from "@/lib/work-management/standing-room-nesting";
 
 /**
  * Write the declared standing-room tree, returning how many relations were newly
@@ -423,4 +423,54 @@ export async function loadWorkItemStatuses(
     console.warn("[workroom-drive] work item status read failed; rooms are driven as active:", error);
   }
   return byKey;
+}
+
+/**
+ * The semantic id (BI-*) of the item a room delivers, for its stage brief
+ * (BI-1DDCE164). A room stores either the semantic key or the row id; a row id
+ * means nothing to the coworker, so the workspace's recorded item is used
+ * instead, and no key is better than a row id.
+ */
+export function workItemKeyOf(room: { backlogItemId: string | null; workspaceState: unknown }): string | null {
+  const semantic = (value: unknown): value is string => typeof value === "string" && /^BI-[A-Z0-9-]+$/.test(value);
+  if (semantic(room.backlogItemId)) return room.backlogItemId;
+  const workspace = room.workspaceState && typeof room.workspaceState === "object" ? room.workspaceState as Record<string, unknown> : {};
+  const item = workspace.backlogItem && typeof workspace.backlogItem === "object" ? workspace.backlogItem as Record<string, unknown> : {};
+  return semantic(item.itemId) ? item.itemId : null;
+}
+
+/**
+ * Stop the stage tasks of rooms the drive no longer selects (BI-1DDCE164).
+ *
+ * loadStandingRoomIds leaves out archived and terminal rooms, and Build Studio
+ * rooms since #6391 (WWMD DI-80078CF9CB11). A room it leaves out is never
+ * visited again, so the 15-minute task the drive enqueued for it before kept firing:
+ * live, 41 Build Studio and 3 archived rooms ran build-specialist every 15
+ * minutes, recording evidence the drive would never read. The drive owns the
+ * stop (WWMD DI-6DB14CC7C8E9), so each tick ends those tasks here.
+ *
+ * Matches the same exclusions as loadStandingRoomIds. A failed write is logged
+ * and reported as zero: the tick still drives every selected room.
+ */
+export async function deactivateUndrivenRoomTasks(db?: {
+  $executeRaw: (q: TemplateStringsArray, ...v: unknown[]) => Promise<number>;
+}): Promise<number> {
+  try {
+    const source = db ?? (await import("@dpf/db")).prisma;
+    return await source.$executeRaw`
+      UPDATE "ScheduledAgentTask" AS t
+      SET "isActive" = false, "updatedAt" = NOW()
+      FROM "WorkCapsule" AS c
+      WHERE t."isActive" = true
+        AND t."taskId" LIKE 'workroom-' || c."capsuleId" || '-%'
+        AND (
+          c."archivedAt" IS NOT NULL
+          OR c."status" = ANY(${[...TERMINAL_WORKROOM_STATUSES]}::text[])
+          OR c."executorKind" = 'build-studio'
+        )
+    `;
+  } catch (error) {
+    console.warn("[workroom-drive] undriven room task stop skipped:", error);
+    return 0;
+  }
 }
