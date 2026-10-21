@@ -27,6 +27,7 @@
 // in-process semaphore is a correct bound for a single-portal install. A
 // distributed lane (for multi-replica portals) is a documented follow-up.
 
+import { AsyncLocalStorage } from "node:async_hooks";
 import { isLocalProviderId } from "@/lib/routing/provider-locality";
 import { currentInferenceSignal, type InferenceOrigin } from "@/lib/routing/governed-inference-deadline";
 export { currentInferenceOrigin, currentInferenceSignal, withInferenceOrigin,
@@ -36,6 +37,38 @@ export { currentInferenceOrigin, currentInferenceSignal, withInferenceOrigin,
  *  and get their own tight budget; every remote provider shares an aggregate
  *  outbound budget (a conservative cap on concurrent cost/rate-limit exposure). */
 export type EngineKey = "local" | "remote";
+
+export type InferenceAdmissionEvent = Readonly<{
+  engineKey: EngineKey;
+  origin: InferenceOrigin;
+  phase: "queued" | "acquired" | "released" | "canceled" | "timed-out";
+  at: number;
+}>;
+type AdmissionObserver = (event: InferenceAdmissionEvent) => void;
+// Next may evaluate handlers and instrumentation in distinct module caches.
+// The caller context must follow the process-wide resource lane across them.
+const OBSERVERS_KEY = Symbol.for("dpf.inference-admission.observers.v1");
+const observerGlobal = globalThis as typeof globalThis & {
+  [OBSERVERS_KEY]?: AsyncLocalStorage<AdmissionObserver>;
+};
+const admissionObservers = observerGlobal[OBSERVERS_KEY] ??= new AsyncLocalStorage<AdmissionObserver>();
+
+/** Observe this caller's existing semaphore; never creates or reserves a slot. */
+export function withInferenceAdmissionObserver<T>(observer: AdmissionObserver, execute: () => T): T {
+  return admissionObservers.run(observer, execute);
+}
+
+export function admissionObservation(engineKey: EngineKey, origin: InferenceOrigin) {
+  // Capture the caller, rather than the async context of whoever releases it.
+  const observer = admissionObservers.getStore();
+  return (phase: InferenceAdmissionEvent["phase"]) => {
+    if (!observer) return;
+    try {
+      // A thrown or accidentally asynchronous observer cannot affect admission.
+      void Promise.resolve(observer({ engineKey, origin, phase, at: Date.now() })).catch(() => undefined);
+    } catch { /* observation is advisory */ }
+  };
+}
 
 export function engineKeyForProvider(providerId: string): EngineKey {
   return isLocalProviderId(providerId) ? "local" : "remote";
@@ -167,11 +200,13 @@ export async function acquireInferenceSlot(
   signal?.throwIfAborted();
   const limit = resolveEngineLimit(engineKey);
   const s = engineState(engineKey);
+  const observe = admissionObservation(engineKey, origin);
 
   // Gating disabled for this engine, or capacity available: take a slot now.
   if (limit <= 0 || s.active < limit) {
     s.active++;
-    return makeRelease(engineKey);
+    observe("acquired");
+    return makeRelease(engineKey, observe);
   }
 
   // At capacity — queue with priority and wait.
@@ -188,23 +223,28 @@ export async function acquireInferenceSlot(
     waiter.timer = setTimeout(() => {
       removeWaiter(s, waiter);
       clearWaiter(waiter);
+      observe("timed-out");
       reject(createInferenceAdmissionTimeoutError(engineKey, origin, timeoutMs, opts));
     }, timeoutMs);
     (origin === "interactive" ? s.interactiveQ : s.autonomousQ).push(waiter);
+    observe("queued");
     if (signal) {
       const cancel = () => {
         removeWaiter(s, waiter);
         clearWaiter(waiter);
+        observe("canceled");
         reject(signal.reason);
       };
       waiter.cancelCleanup = () => signal.removeEventListener("abort", cancel);
       signal.addEventListener("abort", cancel, { once: true });
     }
   });
+  observe("acquired");
 
   // Cancellation can race the handoff before this continuation gets CPU time.
   if (signal?.aborted) {
-    makeRelease(engineKey)();
+    observe("canceled");
+    makeRelease(engineKey, observe)();
     signal.throwIfAborted();
   }
 
@@ -216,14 +256,15 @@ export async function acquireInferenceSlot(
     );
   }
   // Slot was handed to us by the releaser (which already incremented active).
-  return makeRelease(engineKey);
+  return makeRelease(engineKey, observe);
 }
 
-function makeRelease(engineKey: EngineKey): () => void {
+function makeRelease(engineKey: EngineKey, observe: (phase: InferenceAdmissionEvent["phase"]) => void): () => void {
   let released = false;
   return () => {
     if (released) return; // idempotent — double-release must not corrupt the count
     released = true;
+    observe("released");
     const s = engineState(engineKey);
     const next = nextWaiter(s);
     if (next) {

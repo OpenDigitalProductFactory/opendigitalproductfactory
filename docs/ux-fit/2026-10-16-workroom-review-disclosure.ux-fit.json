@@ -1,0 +1,14 @@
+{
+  "version": "1",
+  "decidedOption": "existing-details-disclosure",
+  "decisionInteractionId": "DI-400324AB0F36",
+  "scope": {
+    "files": [
+      "apps/web/components/workspace/workroom/WorkroomReviewRequirements.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["existing-details-disclosure", "dedicated-linked-evidence-detail"]
+  }
+}

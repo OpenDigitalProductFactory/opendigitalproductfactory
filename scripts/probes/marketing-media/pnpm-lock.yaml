@@ -15,7 +15,7 @@ importers:
     dependencies:
       '@puppeteer/browsers':
         specifier: 3.2.4
-        version: 3.2.4
+        version: 3.2.4(yauzl@3.4.0)
       ffmpeg-static:
         specifier: 5.3.0
         version: 5.3.0
@@ -26,8 +26,8 @@ importers:
         specifier: 3.15.0
         version: 3.15.0
       hyperframes:
-        specifier: 0.8.142
-        version: 0.8.142
+        specifier: 0.8.157
+        version: 0.8.157
 
 packages:
 
@@ -194,8 +194,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@hono/node-server@2.1.4':
-    resolution: {integrity: sha512-2g1qeHl4BduwDn6L8nkAvDrPUWPMlkQ//a5NhP/zIyaXKMjZNRV+cG9Csu+BiJFf6+68pqzjf4Hi5sJGKHuS1g==}
+  '@hono/node-server@2.1.5':
+    resolution: {integrity: sha512-MgP/I06GdvsilDspMk/qmRzpk8LOUStP6jFAbSRi40W09DhoyUn+Mj7eyKICPqeYKybOjVFLVIAQzvu1bfIa7Q==}
     engines: {node: '>=20'}
     peerDependencies:
       hono: ^4.12.34
@@ -527,8 +527,8 @@ packages:
     resolution: {integrity: sha512-dFcAjpTQFgoLMzC2VwU+C/CbS7uRL0lWmxDITmqm7C+7F0Odmj6s9l6alZc6AELXhrnggM2CeWSXHGOdX2YtwA==}
     engines: {node: '>= 6'}
 
-  hyperframes@0.8.142:
-    resolution: {integrity: sha512-Wv4hJ+ykGvI/m8Xd9cPYUFidyoA+ommiwk0p8rd02XDnleOsJ4JJ0RM4YgOjBvubEqDoof8AN+nU1p1JvTxqBw==}
+  hyperframes@0.8.157:
+    resolution: {integrity: sha512-Xinng95n3mk6iE1jzV9JemVk6J57KJCHQii/lFQVIXrH17KlS8aSAVSRQ+DlNvB3gctg9jc/IVsvhwl4Z0DdHA==}
     engines: {node: '>=22'}
     hasBin: true
 
@@ -581,15 +581,18 @@ packages:
   parse-cache-control@1.0.1:
     resolution: {integrity: sha512-60zvsJReQPX5/QP0Kzfd/VrpjScIQ7SHBW6bFCYfEP+fp0Eppr1SHhIO5nd1PjZtvclzSzES9D/p5nFJurwfWg==}
 
+  pend@1.2.0:
+    resolution: {integrity: sha512-F3asv42UuXchdzt+xXqfW1OGlVBe+mxa2mqI0pg5yAHZPvFmY3Y6drSf/GQ1A86WgWEN9Kzh/WrgKa6iGcHXLg==}
+
   picocolors@1.1.1:
     resolution: {integrity: sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==}
 
-  postcss@8.5.29:
-    resolution: {integrity: sha512-49cGhUbXj8Qenv0iTMxA1cFBzxXoctpC9Ujd77t1WcbJIr6nF/eI7g/8MgxrYldFRuAXvja7xQRwavoW7kgrxQ==}
+  postcss@8.5.30:
+    resolution: {integrity: sha512-zkd+e9S1AQHhmaBKye9zlFHWjOwVgqXl1q3ECYy8561K7qxR2cREf/STLskulBFd78k6AOFeA+ff1TtEzk9bAA==}
     engines: {node: ^10 || ^12 || >=14}
 
-  prettier@3.9.9:
-    resolution: {integrity: sha512-Z/CJHIkdujO/OtN7nXUii0Rf3VT5SRuhjBA82Xvu2XhBUgX3nhP67T0LHceBdQLex7OOFGTox+Q5Yg8Jk2Qivg==}
+  prettier@3.9.10:
+    resolution: {integrity: sha512-skGHTH1Yb9QvaTC4hWnRTzEYtCpApF0UMBPz+t/0ZPzP8ihefo/btKd+QA7pUE0fEwA1SbS/NmhyEcstdXOIdA==}
     engines: {node: '>=14'}
     hasBin: true
 
@@ -704,8 +707,12 @@ packages:
     resolution: {integrity: sha512-9OpKOLeaoNFecEp7P6iYbzze/5CqWoH7N3SMs/6y1XF4nMvFMspEGZzJ6uFi9MmQwXhyzqYoSEKO3tvA3Z/o2w==}
     engines: {node: ^20.19.0 || ^22.12.0 || >=23}
 
-  zod@4.6.5:
-    resolution: {integrity: sha512-v5l/aFXZQeai4awLbOpSoHecE9UiMrnfx75tEXLjNonXVARxQ5mOeipTjROUchszUNCqnE+hqAMujRsRHsut2Q==}
+  yauzl@3.4.0:
+    resolution: {integrity: sha512-jIH9yLR9wqr0wOS0TpBvo/g/2UgZH5qePVbjgRliiF0BYvOZyaBknKsF+x9Iht0O6sqgnB93rCICdOZFecJuDw==}
+    engines: {node: '>=12'}
+
+  zod@4.6.7:
+    resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
 
 snapshots:
 
@@ -799,7 +806,7 @@ snapshots:
   '@esbuild/win32-x64@0.25.12':
     optional: true
 
-  '@hono/node-server@2.1.4(hono@4.13.13)':
+  '@hono/node-server@2.1.5(hono@4.13.13)':
     dependencies:
       hono: 4.13.13
 
@@ -909,10 +916,12 @@ snapshots:
   '@img/sharp-win32-x64@0.35.5':
     optional: true
 
-  '@puppeteer/browsers@3.2.4':
+  '@puppeteer/browsers@3.2.4(yauzl@3.4.0)':
     dependencies:
       modern-tar: 0.8.5
       yargs: 18.2.0
+    optionalDependencies:
+      yauzl: 3.4.0
 
   '@swc/helpers@0.5.23':
     dependencies:
@@ -950,7 +959,7 @@ snapshots:
     dependencies:
       devtools-protocol: 0.0.1696802
       mitt: 3.0.1
-      zod: 4.6.5
+      zod: 4.6.7
 
   citty@0.2.2: {}
 
@@ -1076,10 +1085,10 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  hyperframes@0.8.142:
+  hyperframes@0.8.157:
     dependencies:
-      '@hono/node-server': 2.1.4(hono@4.13.13)
-      '@puppeteer/browsers': 3.2.4
+      '@hono/node-server': 2.1.5(hono@4.13.13)
+      '@puppeteer/browsers': 3.2.4(yauzl@3.4.0)
       adm-zip: 0.6.1
       citty: 0.2.2
       compare-versions: 6.1.1
@@ -1091,17 +1100,17 @@ snapshots:
       hono: 4.13.13
       ignore: 5.3.2
       open: 10.2.0
-      postcss: 8.5.29
-      prettier: 3.9.9
-      puppeteer-core: 25.13.0
+      postcss: 8.5.30
+      prettier: 3.9.10
+      puppeteer-core: 25.13.0(yauzl@3.4.0)
       sharp: 0.35.5
+      yauzl: 3.4.0
     transitivePeerDependencies:
       - '@types/node'
       - bufferutil
       - proxy-agent
       - supports-color
       - utf-8-validate
-      - yauzl
 
   ignore@5.3.2: {}
 
@@ -1138,21 +1147,23 @@ snapshots:
 
   parse-cache-control@1.0.1: {}
 
+  pend@1.2.0: {}
+
   picocolors@1.1.1: {}
 
-  postcss@8.5.29:
+  postcss@8.5.30:
     dependencies:
       nanoid: 3.3.20
       picocolors: 1.1.1
       source-map-js: 1.2.2
 
-  prettier@3.9.9: {}
+  prettier@3.9.10: {}
 
   progress@2.0.3: {}
 
-  puppeteer-core@25.13.0:
+  puppeteer-core@25.13.0(yauzl@3.4.0):
     dependencies:
-      '@puppeteer/browsers': 3.2.4
+      '@puppeteer/browsers': 3.2.4(yauzl@3.4.0)
       chromium-bidi: 157.0.8090-0(devtools-protocol@0.0.1696802)
       devtools-protocol: 0.0.1696802
       typed-query-selector: 2.12.3
@@ -1278,4 +1289,8 @@ snapshots:
       y18n: 5.0.8
       yargs-parser: 22.0.0
 
-  zod@4.6.5: {}
+  yauzl@3.4.0:
+    dependencies:
+      pend: 1.2.0
+
+  zod@4.6.7: {}

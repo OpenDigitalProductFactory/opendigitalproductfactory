@@ -19,16 +19,19 @@ function row(overrides: Partial<GrokClientRow> = {}): GrokClientRow {
     revokedAt: null,
     allowedScopes: [...GROK_CREDENTIAL_SCOPES],
     clientSecretEnc: "enc-same",
+    agentId: "agent-grok",
     ...overrides,
   };
 }
 
-function harness(initial: GrokClientRow[] = []) {
+function harness(initial: GrokClientRow[] = [], grokAgentRecordId: string | null = "agent-grok") {
   const rows = [...initial];
   const created: GrokClientCreate[] = [];
+  const bound: Array<{ oAuthClientId: string; agentRecordId: string }> = [];
   return {
     rows,
     created,
+    bound,
     deps: {
       ownerUserId: "user-1",
       rows: async () => rows,
@@ -42,7 +45,14 @@ function harness(initial: GrokClientRow[] = []) {
           revokedAt: null,
           allowedScopes: [...input.allowedScopes],
           clientSecretEnc: input.clientSecretEnc,
+          agentId: input.agentId,
         });
+      },
+      grokAgent: async () => grokAgentRecordId,
+      bindAgent: async (oAuthClientId: string, agentRecordId: string) => {
+        bound.push({ oAuthClientId, agentRecordId });
+        const target = rows.find((r) => r.oAuthClientId === oAuthClientId);
+        if (target) target.agentId = agentRecordId;
       },
       decrypt: (enc: string) => (enc === "enc-same" ? "dpfocs_same" : null),
       prepareSecret: () => SECRET,
@@ -57,8 +67,8 @@ describe("ensureGrokCredentialsClient", () => {
     const first = await ensureGrokCredentialsClient(deps);
     const second = await ensureGrokCredentialsClient(deps);
 
-    expect(first).toEqual({ clientId: "dpfoc_new", clientSecret: "dpfocs_same", created: true });
-    expect(second).toEqual({ clientId: "dpfoc_new", clientSecret: "dpfocs_same", created: false });
+    expect(first).toEqual({ clientId: "dpfoc_new", clientSecret: "dpfocs_same", created: true, agentBound: true });
+    expect(second).toEqual({ clientId: "dpfoc_new", clientSecret: "dpfocs_same", created: false, agentBound: true });
     expect(created).toHaveLength(1);
     expect(created[0]).toMatchObject({
       clientName: GROK_CREDENTIALS_CLIENT_NAME,
@@ -107,5 +117,37 @@ describe("ensureGrokCredentialsClient", () => {
     const { created, deps } = harness([row({ clientSecretEnc: "unreadable" })]);
     await expect(ensureGrokCredentialsClient(deps)).rejects.toThrow(/cannot be read/);
     expect(created).toHaveLength(0);
+  });
+
+  // BI-8D152751: a client_credentials token carries the client's agent
+  // (oauth/token route.ts). Unbound, every workroom write from Grok is refused.
+  it("creates the client bound to the Grok agent", async () => {
+    const { created, deps } = harness();
+    const result = await ensureGrokCredentialsClient(deps);
+    expect(created[0].agentId).toBe("agent-grok");
+    expect(result.agentBound).toBe(true);
+  });
+
+  it("binds an existing unbound client on the next setup, without minting a new one", async () => {
+    const { created, bound, deps } = harness([row({ agentId: null })]);
+    const result = await ensureGrokCredentialsClient(deps);
+    expect(created).toHaveLength(0);
+    expect(bound).toEqual([{ oAuthClientId: "dpfoc_existing", agentRecordId: "agent-grok" }]);
+    expect(result).toMatchObject({ clientId: "dpfoc_existing", created: false, agentBound: true });
+  });
+
+  it("leaves the client unbound, and says so, when the Grok agent is not eligible", async () => {
+    const { created, bound, deps } = harness([], null);
+    const result = await ensureGrokCredentialsClient(deps);
+    expect(created[0].agentId).toBeNull();
+    expect(bound).toHaveLength(0);
+    expect(result.agentBound).toBe(false);
+  });
+
+  it("never rebinds a client that is already bound to another agent", async () => {
+    const { bound, deps } = harness([row({ agentId: "agent-someone-else" })]);
+    const result = await ensureGrokCredentialsClient(deps);
+    expect(bound).toHaveLength(0);
+    expect(result.agentBound).toBe(false);
   });
 });

@@ -1,5 +1,6 @@
 import type { ToolCallConsequenceRefiner } from "@/lib/tool-consequence";
 import { isLocalProviderId } from "@/lib/routing/provider-locality";
+import { isActiveDefaultSubscription } from "@/lib/inference/active-provider-account-verification";
 
 /** Narrow account operations by their effect; all unproven cases retain authority. */
 export const providerAccountConsequence: ToolCallConsequenceRefiner = async ({ params }) => {
@@ -9,7 +10,7 @@ export const providerAccountConsequence: ToolCallConsequenceRefiner = async ({ p
     return { consequence: null, reason: "existing-account-catalog-discovery" };
   }
   const authority = { consequence: "authority" as const, reason: "account-authority-or-unclassified-operation" };
-  if (params.operation !== "disable" || !explicitAccount || !identityOnly ||
+  if (!["disable", "test"].includes(String(params.operation)) || !explicitAccount || !identityOnly ||
       (params.providerId !== undefined && typeof params.providerId !== "string")) return authority;
 
   const [{ prisma }, { loadInstanceStance, prismaInstanceStanceStore }] = await Promise.all([
@@ -20,8 +21,12 @@ export const providerAccountConsequence: ToolCallConsequenceRefiner = async ({ p
 
   const connection = await prisma.aiProviderConnection.findUnique({
     where: { connectionId: params.connectionId as string },
-    select: { connectionId: true, providerId: true, authMethod: true, executionChannel: true, credentialEntryId: true, organizationId: true },
+    select: { connectionId: true, providerId: true, authMethod: true, executionChannel: true, credentialEntryId: true, organizationId: true, status: true },
   });
+  if (params.operation === "test") {
+    return isActiveDefaultSubscription(connection) && (params.providerId === undefined || params.providerId === connection.providerId)
+      ? { consequence: null, reason: "delegated-development-active-subscription-verification" } : authority;
+  }
   // These are persisted identities, never a caller's assertion of DEV or locality.
   // Disable changes only routing status; credential/grant writers stay consequential.
   if (!connection || !isLocalProviderId(connection.providerId) ||

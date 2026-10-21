@@ -1,0 +1,12 @@
+{
+  "version": "1",
+  "decidedOption": "guard-known-offline",
+  "decisionInteractionId": "DI-376075678C78",
+  "scope": {
+    "files": ["apps/web/components/workspace/workroom/ProjectionFreshness.tsx"]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["guard-known-offline", "custom-transport", "global-experimental"]
+  }
+}

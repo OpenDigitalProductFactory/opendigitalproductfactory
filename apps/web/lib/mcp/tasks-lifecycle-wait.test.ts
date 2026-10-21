@@ -18,7 +18,7 @@ const row = {
 };
 const wait = {
   schemaVersion: 1, kind: "missing-terminal-writer", writerToolName: "record_initiative_evidence",
-  resumeMode: "same-taskrun", attempt: 1, observedAt: "2026-09-01T00:00:00Z",
+  resumeMode: "same-taskrun", dispatchContract: "required-tool-call", attempt: 1, observedAt: "2026-09-01T00:00:00Z",
 };
 
 beforeEach(() => {
@@ -40,6 +40,14 @@ describe.each([handleTasksGet, handleTasksResult])("task wait projection (%#)", 
     expect(await read()).toMatchObject({ requiresApproval: false, resumable: true, waitReason: "missing-terminal-writer" });
   });
 
+  it.each([1, 3])("holds a contractless legacy execution at attempt %s", async (attempt) => {
+    const { dispatchContract: _returned, ...legacyWait } = wait;
+    db.taskRun.findUnique.mockResolvedValue({ ...row, progressPayload: {
+      terminalWriterWait: { ...legacyWait, attempt },
+    } });
+    expect(await read()).toMatchObject({ requiresApproval: false, resumable: false, waitReason: "execution-uncertain" });
+  });
+
   it("does not invent approval for unspecified input or authentication", async () => {
     expect(await read()).toMatchObject({ requiresApproval: false });
     db.taskRun.findUnique.mockResolvedValue({ ...row, status: "auth-required" });
@@ -49,7 +57,7 @@ describe.each([handleTasksGet, handleTasksResult])("task wait projection (%#)", 
   it("projects provider capacity as a same-task technical wait", async () => {
     db.taskRun.findUnique.mockResolvedValue({ ...row, progressPayload: { resourceWait: {
       schemaVersion: 1, kind: "provider-capacity", failureKind: "busy",
-      resumeMode: "same-taskrun", attempt: 1, observedAt: wait.observedAt,
+      resumeMode: "same-taskrun", dispatchContract: "required-tool-call", attempt: 1, observedAt: wait.observedAt,
     } } });
     expect(await read()).toMatchObject({ requiresApproval: false, resumable: true, waitReason: "provider-capacity" });
   });

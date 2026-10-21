@@ -1,5 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
+import { DEFAULT_LOCALE, namespaceMessages, translate } from "@dpf/i18n";
+import type { ReactNode } from "react";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
 
 import type { CapabilityServiceHealthProjection } from "@/lib/platform-runtime/service-health";
 
@@ -36,6 +39,11 @@ vi.mock("./RecentAlertsPanel", () => ({ RecentAlertsPanel: () => null }));
 
 import { ServiceHealthDashboard } from "./ServiceHealthDashboard";
 
+function renderLocalized(element: ReactNode, locale = DEFAULT_LOCALE) {
+  return renderToStaticMarkup(
+    <MessagesProvider locale={locale} messages={{ admin: namespaceMessages(locale, "admin") }}>{element}</MessagesProvider>,
+  );
+}
 const projection: CapabilityServiceHealthProjection = {
   aggregate: { value: "Operational", tone: "success", detail: "Required services available" },
   items: [{
@@ -65,17 +73,23 @@ const missingRequired: CapabilityServiceHealthProjection = {
 };
 
 describe("ServiceHealthDashboard", () => {
+  it("uses the product page's catalog for the shared health view in a pseudo-locale", () => {
+    const html = renderLocalized(<ServiceHealthDashboard capabilityHealth={projection} />, "en-XA");
+    expect(html).toContain(translate("en-XA", "admin", "runtimeHealth.capabilityServices.heading"));
+    expect(html).toContain(translate("en-XA", "admin", "runtimeHealth.capabilityServices.inactiveSummary", { count: 1 }));
+    expect(html).toContain("speech-to-text");
+  });
   it("renders the shared capability projection on the product health surface", () => {
-    const html = renderToStaticMarkup(
+    const html = renderLocalized(
       <ServiceHealthDashboard capabilityHealth={projection} />,
     );
 
-    expect(html).toContain("Capability service requirements");
+    expect(html).toContain("Service requirements");
     expect(html).toContain("Optional — inactive");
   });
 
   it("propagates a missing required service into the product health summary", () => {
-    const html = renderToStaticMarkup(
+    const html = renderLocalized(
       <ServiceHealthDashboard
         capabilityHealth={missingRequired}
         openBacklogItems={0}
@@ -104,7 +118,7 @@ describe("ServiceHealthDashboard", () => {
       items: [{ ...projection.items[0]!, key: "adp" }],
     };
     try {
-      const html = renderToStaticMarkup(
+      const html = renderLocalized(
         <ServiceHealthDashboard
           capabilityHealth={adpInactive}
           openBacklogItems={0}

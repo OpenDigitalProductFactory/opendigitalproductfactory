@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Assistant connection — design prototype</title>
+<style>
+:root{color-scheme:light dark;--dpf-bg:light-dark(#f6f7fa,#15191f);--dpf-surface-1:light-dark(#fff,#20262e);--dpf-text:light-dark(#17202a,#e8edf3);--dpf-muted:light-dark(#536171,#b2bfcd);--dpf-border:light-dark(#c7d0da,#536171);--dpf-accent:light-dark(#245bc1,#8bb5ff)}
+*{box-sizing:border-box}body{margin:0;background:var(--dpf-bg);color:var(--dpf-text);font:16px/1.5 system-ui,sans-serif}main{max-width:680px;margin:48px auto;padding:0 20px}section{background:var(--dpf-surface-1);border:1px solid var(--dpf-border);border-radius:12px;padding:24px}h1{font-size:26px;margin:0 0 8px}h2{font-size:20px;margin:0 0 18px}p{color:var(--dpf-muted)}label,legend{font-weight:600}input[type=text],select{display:block;width:100%;padding:11px;margin:6px 0;border:1px solid var(--dpf-border);border-radius:6px;color:var(--dpf-text);background:var(--dpf-surface-1);font:inherit}small{display:block;color:var(--dpf-muted);margin:4px 0 22px}fieldset{border:0;padding:0;margin:20px 0}fieldset label{display:block;font-weight:400;margin:10px 0}input[type=checkbox]{width:18px;height:18px;vertical-align:middle;margin-right:8px}button{font:inherit;padding:11px 18px;border:1px solid var(--dpf-accent);border-radius:6px;background:var(--dpf-surface-1);color:var(--dpf-accent);cursor:pointer}button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--dpf-accent);outline-offset:3px}.actions{display:flex;gap:12px;flex-wrap:wrap}.eyebrow{font-size:13px;margin:0 0 10px}.notice{border-left:3px solid var(--dpf-accent);padding:10px 14px;margin:18px 0}output{display:block;margin-top:18px}a{color:var(--dpf-accent)}
+</style>
+<main><p class="eyebrow">Platform · MCP connections · Interactive prototype</p><h1>Connect a background client</h1><p>Give a named client the access it needs and choose which assistant it represents.</p>
+<section><form id="connection"><h2>Client access</h2>
+<label for="name">Client name</label><input id="name" name="clientName" type="text" value="Codex local verification" required maxlength="120"><small>Shown on this client’s connections and audit records.</small>
+<label for="assistant">Acts as assistant</label><select id="assistant" name="assistant"><option value="">Your account only</option><option value="codex">Codex</option><option value="claude">Claude Code</option></select>
+<small id="identity" aria-live="polite">This client has no assistant identity. It cannot join Workrooms.</small>
+<fieldset><legend>What it may do</legend><label><input type="checkbox" checked>Read permitted information</label><label><input type="checkbox" checked>Do governed work</label><label><input type="checkbox">Build and verify changes</label></fieldset>
+<p class="notice">Access remains limited by your account, the selected permissions, and the assistant’s current grants. Workroom admission is checked separately.</p>
+<div class="actions"><button type="submit">Preview connection</button><button type="reset">Reset</button></div><output id="result" aria-live="polite"></output>
+</form></section><p>This prototype creates no credential and sends no data. Names are representative design fixtures.</p></main>
+<script>
+const form=document.querySelector('#connection'),assistant=document.querySelector('#assistant'),identity=document.querySelector('#identity'),result=document.querySelector('#result');
+function describe(){identity.textContent=assistant.value?'This client represents '+assistant.options[assistant.selectedIndex].text+'. Its current grants still apply.':'This client has no assistant identity. It cannot join Workrooms.';result.textContent=''}
+assistant.addEventListener('change',describe);form.addEventListener('submit',event=>{event.preventDefault();result.textContent='Prototype preview: '+document.querySelector('#name').value+' — '+(assistant.value?assistant.options[assistant.selectedIndex].text:'your account only')+'. No credential created.'});form.addEventListener('reset',()=>setTimeout(describe,0));
+</script></html>

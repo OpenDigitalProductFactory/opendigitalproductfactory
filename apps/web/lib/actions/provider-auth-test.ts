@@ -6,9 +6,12 @@ import { findProviderCredential } from "@/lib/inference/provider-account-credent
 import { providerWorkspaceHeaders } from "@/lib/inference/provider-workspace";
 import { buildResponsesUrl, isChatGptBackend } from "@/lib/routing/responses-contract";
 import { assertResponsesCompleted } from "@/lib/routing/responses-readiness";
-import { clearProviderCapacityStatus } from "@/lib/routing/provider-capacity/store";
+import { clearProviderCapacityStatus, reconcileProviderQuotaObservation } from "@/lib/routing/provider-capacity/store";
 import { resolveResponsesProbeBaseUrl } from "@/lib/routing/responses-provider";
 import { refreshOAuthToken } from "@/lib/provider-oauth";
+import { captureProviderQuotaObservation } from "./provider-quota-revalidation";
+import type { ProviderQuotaObservation, ProviderQuotaReconciliation } from "@/lib/routing/provider-capacity/types";
+import { ACCOUNT_CHANGED, assertActiveAccountSnapshot, getActiveAccountBearerToken, isActiveDefaultSubscription, type ActiveAccountSnapshot } from "@/lib/inference/active-provider-account-verification";
 
 const OPENAI_OAUTH_LINKED_PROVIDERS = new Set(["codex", "chatgpt"]);
 const SHARED_ACCOUNT_LINKED_PROVIDERS = new Set(["zai"]);
@@ -46,22 +49,33 @@ function signInRecoveryMessage(providerId: string, connectionId?: string): strin
     : "Session expired. Sign in again to this account, then retry verification.";
 }
 
-export async function testProviderAuthInternal(providerId: string, refreshCatalog = true, connectionId?: string): Promise<{ ok: boolean; message: string }> {
+export async function testProviderAuthInternal(providerId: string, refreshCatalog = true, connectionId?: string, options: { verificationOnly?: boolean } = {}): Promise<{ ok: boolean; message: string }> {
 
   const catalog = await prisma.modelProvider.findUnique({ where: { providerId } });
   if (!catalog) return { ok: false, message: "Provider not found" };
-  const connection = connectionId === undefined ? null : await prisma.aiProviderConnection.findUnique({ where: { connectionId } });
+  const connection = connectionId === undefined ? null : await prisma.aiProviderConnection.findUnique({ where: { connectionId }, include: { credentialEntry: true } });
   if (connectionId !== undefined && (!connection || connection.providerId !== providerId)) return { ok: false, message: "Provider account not found" };
   if (connection?.status === "disabled") return { ok: false, message: "Enable this account before testing authentication" };
+  let activeSnapshot: ActiveAccountSnapshot | undefined;
+  if (options.verificationOnly) {
+    if (!isActiveDefaultSubscription(connection) || !connection.credentialEntry) return { ok: false, message: "This verification requires an already active, install-owned subscription account" };
+    activeSnapshot = { connectionId: connection.connectionId, providerId: connection.providerId, credentialEntryId: connection.credentialEntryId, updatedAt: connection.updatedAt,
+      credentialRevision: { updatedAt: connection.credentialEntry.updatedAt, cachedToken: connection.credentialEntry.cachedToken, refreshToken: connection.credentialEntry.refreshToken } };
+  }
   const accountAuth = connection?.authMethod;
   const provider = { ...catalog, authMethod: accountAuth === "oauth" ? "oauth2_authorization_code" : accountAuth === "api-key" ? "api_key" : accountAuth === "workload-identity" ? "oauth2_client_credentials" : catalog.authMethod };
-  const markAuthenticated = async () => {
+  const markAuthenticated = async (quotaObservation?: ProviderQuotaObservation | null): Promise<ProviderQuotaReconciliation | undefined> => {
+    if (activeSnapshot) {
+      await assertActiveAccountSnapshot(activeSnapshot);
+      return undefined;
+    }
     if (connectionId !== undefined) {
-      await prisma.$transaction(async (tx) => {
+      return prisma.$transaction(async (tx) => {
         if (!connection?.credentialEntryId) throw new Error("Account credential not found");
         const activated = await tx.aiProviderConnection.updateMany({ where: { connectionId, credentialEntryId: connection.credentialEntryId, updatedAt: connection.updatedAt, status: { not: "disabled" } }, data: { status: "active" } });
         if (activated.count !== 1) throw new Error("Account changed during authentication — retry with its current credentials");
         await tx.credentialEntry.update({ where: { id: connection.credentialEntryId }, data: { status: "ok" } });
+        return quotaObservation ? reconcileProviderQuotaObservation(tx, quotaObservation) : undefined;
       });
     } else await activateProvider(providerId, { trigger: "test_auth", skipDiscovery: !refreshCatalog, ...getLinkedActivationOptions(providerId, provider.authMethod) });
   };
@@ -112,7 +126,7 @@ export async function testProviderAuthInternal(providerId: string, refreshCatalo
     if ("error" in tokenResult) return { ok: false, message: tokenResult.error };
     headers["Authorization"] = `Bearer ${tokenResult.token}`;
   } else if (provider.authMethod === "oauth2_authorization_code") {
-    const tokenResult = await getProviderBearerToken(providerId, connectionId);
+    const tokenResult = activeSnapshot ? await getActiveAccountBearerToken(activeSnapshot) : await getProviderBearerToken(providerId, connectionId);
     if ("error" in tokenResult) return { ok: false, message: tokenResult.error };
     headers["Authorization"] = `Bearer ${tokenResult.token}`;
     if (isAnthropicProvider(provider.providerId)) {
@@ -122,6 +136,7 @@ export async function testProviderAuthInternal(providerId: string, refreshCatalo
   // authMethod === "none" → no headers needed
 
   try {
+    if (activeSnapshot) await assertActiveAccountSnapshot(activeSnapshot);
     let res: Response;
 
     // Agent providers (e.g. Codex) and ChatGPT subscription use the Responses
@@ -141,9 +156,19 @@ export async function testProviderAuthInternal(providerId: string, refreshCatalo
         select: { modelId: true },
       });
       if (!model) return { ok: false, message: "No active model found — refresh the model catalog and retry" };
+      let quotaObservation: ProviderQuotaObservation | null = null;
+      if (connection && !activeSnapshot) {
+        try {
+          quotaObservation = await captureProviderQuotaObservation(connection);
+        } catch {
+          return { ok: false, message: "DPF could not read this account's routing restriction. No provider verification request was sent; retry when DPF is available." };
+        }
+      }
       const streaming = isChatGptBackend(providerId, baseUrl);
       headers["Content-Type"] = "application/json";
-      const probe = () => fetch(attemptedUrl, {
+      const probe = async () => {
+        if (activeSnapshot) await assertActiveAccountSnapshot(activeSnapshot);
+        return fetch(attemptedUrl, {
         method: "POST",
         headers: { ...headers },
         body: JSON.stringify({
@@ -154,7 +179,8 @@ export async function testProviderAuthInternal(providerId: string, refreshCatalo
           ...(!streaming ? { max_output_tokens: 32 } : {}),
         }),
         signal: AbortSignal.timeout(30_000),
-      });
+        });
+      };
 
       res = await probe();
       let body = await res.text();
@@ -162,8 +188,10 @@ export async function testProviderAuthInternal(providerId: string, refreshCatalo
       // Renew once through the existing owner; explicit accounts never alias.
       if (isExpiredOAuthResponse(res.status, body)) {
         const refreshProviderId = providerId === "chatgpt" && connectionId === undefined ? "codex" : providerId;
-        const renewed = await refreshOAuthToken(refreshProviderId, connectionId);
-        if ("error" in renewed) return { ok: false, message: signInRecoveryMessage(providerId, connectionId) };
+        const renewed = activeSnapshot
+          ? await refreshOAuthToken(refreshProviderId, connectionId, activeSnapshot)
+          : await refreshOAuthToken(refreshProviderId, connectionId);
+        if ("error" in renewed) return { ok: false, message: renewed.error === ACCOUNT_CHANGED ? renewed.error : signInRecoveryMessage(providerId, connectionId) };
         headers.Authorization = `Bearer ${renewed.token}`;
         res = await probe();
         body = await res.text();
@@ -173,9 +201,24 @@ export async function testProviderAuthInternal(providerId: string, refreshCatalo
       }
       if (res.ok) {
         assertResponsesCompleted(body, streaming);
+        let quotaReconciled: ProviderQuotaReconciliation | undefined;
+        try {
+          quotaReconciled = await markAuthenticated(quotaObservation);
+        } catch (error) {
+          const detail = error instanceof Error && error.message.startsWith("Account changed")
+            ? error.message
+            : "DPF could not persist this verification. Routing status was not confirmed.";
+          return { ok: false, message: `Responses API verified. ${detail}` };
+        }
         if (connectionId === undefined) await clearProviderCapacityStatus({ providerId, source: "oauth" });
-        await markAuthenticated();
-        return { ok: true, message: "Connected via OAuth — Responses API verified" };
+        return {
+          ok: true,
+          message: quotaReconciled === "write-failed"
+            ? "Connected via OAuth — Responses API verified. DPF could not update routing; the account is authenticated, but routing status was not confirmed. Check its current status."
+            : quotaReconciled === "changed"
+              ? "Connected via OAuth — Responses API verified. Routing status changed during verification; check its current status."
+              : "Connected via OAuth — Responses API verified",
+        };
       }
 
       const scopeError = formatResponsesScopeError(body);

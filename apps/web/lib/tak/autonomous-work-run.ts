@@ -380,6 +380,7 @@ export async function executeAutonomousAgenticLoop(input: {
   agentId: string;
   threadId: string;
   taskRunId?: string | null;
+  taskExecutionFence?: import("@/lib/shared/task-execution-fence").TaskExecutionFence | null;
   taskType?: string;
   /** EP-27FD96BC · P1 — unified per-turn effort warrant, forwarded to the loop. */
   effortWarrant?: import("@/lib/tak/effort-warrant").EffortWarrant;
@@ -544,6 +545,7 @@ export async function executeAutonomousAgenticLoop(input: {
         agentId: input.agentId,
         threadId: input.threadId,
         taskRunId: input.taskRunId,
+        taskExecutionFence: input.taskExecutionFence,
         apiTokenId: input.apiTokenId,
         tokenScope: input.tokenScope,
         tokenGrantScopes: input.tokenGrantScopes,
@@ -701,6 +703,7 @@ export async function executeAutonomousWorkTool(input: {
   agentId: string;
   threadId: string;
   taskRunId: string;
+  taskExecutionFence?: import("@/lib/shared/task-execution-fence").TaskExecutionFence | null;
   apiTokenId?: string | null;
   tokenScope?: "read" | "write" | "admin";
   externalAccessEnabled?: boolean;
@@ -718,6 +721,7 @@ export async function executeAutonomousWorkTool(input: {
       agentId: input.agentId,
       threadId: input.threadId,
       taskRunId: input.taskRunId,
+      taskExecutionFence: input.taskExecutionFence,
       apiTokenId: input.apiTokenId ?? undefined,
       tokenScope: input.tokenScope,
       externalAccessEnabled: input.externalAccessEnabled,

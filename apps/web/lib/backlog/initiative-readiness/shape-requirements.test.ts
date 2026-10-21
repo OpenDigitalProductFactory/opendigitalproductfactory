@@ -112,6 +112,29 @@ describe("initiative-readiness.v3 — gates keyed by (shape, sensitivity, target
     expect(xlarge.blockers.find((entry) => entry.code === "DECOMPOSITION_REQUIRED")?.nextAction).toMatch(/Decompose/);
   });
 
+  it("completes a decomposed xlarge initiative on child delivery and reconciled outcomes", () => {
+    const ready = Object.assign(facts({ shape: "xlarge", research: "pass", canonicalDesign: "pass",
+      specApproval: "pass", artifactAuthor: "pass", objectiveBaseline: "pass", plan: "pass",
+      planReview: "pass", planCoverage: "pass", deliveryEvidence: "pass", acceptanceEvidence: "pass",
+      objectiveReconciliation: "pass", specialistReviews: { architecture: "pass", data: "not-applicable",
+        ux: "not-applicable", security: "not-applicable", compliance: "not-applicable", domain: "not-applicable" } }),
+    { decomposition: "pass" as const });
+    expect(evaluateInitiativeReadiness(ready, "completion").verdict).toBe("allowed");
+    expect(codes(evaluateInitiativeReadiness(ready, "implementation"))).toContain("DECOMPOSITION_REQUIRED");
+    expect(codes(evaluateInitiativeReadiness({ ...ready, decomposition: "missing" }, "completion"))).toContain("PLAN_COVERAGE_REQUIRED");
+    expect(codes(evaluateInitiativeReadiness({ ...ready, deliveryEvidence: "missing" }, "completion"))).toContain("DELIVERY_EVIDENCE_REQUIRED");
+    expect(codes(evaluateInitiativeReadiness({ ...ready, objectiveReconciliation: "missing" }, "completion"))).toContain("OBJECTIVE_RECONCILIATION_REQUIRED");
+    expect(codes(evaluateInitiativeReadiness({ ...ready, planReview: "missing" }, "completion"))).toContain("PLAN_REVIEW_REQUIRED");
+  });
+
+  it("does not treat an xlarge completion as another implementation attempt", () => {
+    const decision = evaluateInitiativeReadiness(facts({ shape: "xlarge" }), "completion");
+    expect(codes(decision)).not.toContain("DECOMPOSITION_REQUIRED");
+    expect(codes(decision)).toEqual(expect.arrayContaining([
+      "PLAN_COVERAGE_REQUIRED", "DELIVERY_EVIDENCE_REQUIRED", "OBJECTIVE_RECONCILIATION_REQUIRED",
+    ]));
+  });
+
   // BI-BD60DC91: a delivery-small fix was gated as medium — owing an
   // independent objective baseline it could never mint — because its body
   // mentioned a keyword while describing the blast radius. The verdict was

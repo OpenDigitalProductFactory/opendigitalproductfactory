@@ -11,7 +11,7 @@ export const providerAccountDefinitions: ToolDefinition[] = [
   },
   {
     name: "manage_provider_account",
-    description: "Add, configure, enable, disable, sign in, disconnect, test or discover models for a provider account. Every operation except add requires an explicit account identity. Discovery uses existing credentials to synchronize model availability. Delegated development maintenance may disable credentialless default local runtimes. Credential and account-activation changes retain approval checks; authentication never grants data clearance.",
+    description: "Add, configure, enable, disable, sign in, disconnect, test or discover models for a provider account. Every operation except add requires an explicit account identity. Discovery uses existing credentials to synchronize model availability. Delegated development maintenance may disable credentialless default local runtimes and verify already active, install-owned default ChatGPT/Codex OAuth accounts. Subscription verification cannot enable an account. Credential configuration and account activation retain approval checks; authentication never grants data clearance.",
     inputSchema: { type: "object", properties: {
       operation: { type: "string", enum: ["add", "configure", "enable", "disable", "sign-in", "disconnect", "test", "discover"] },
       providerId: { type: "string", description: "Required for add; otherwise checked against the selected account" },

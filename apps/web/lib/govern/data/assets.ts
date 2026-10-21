@@ -28,6 +28,7 @@ import { BUSINESS_PRODUCT_PORTFOLIO_ASSETS } from "./business-product-portfolio-
 import { HOSPITALITY_CAPACITY_ASSETS } from "./hospitality-capacity-assets";
 import { BEAUTY_CAPACITY_ASSETS } from "./beauty-capacity-assets";
 import { RESOURCE_SCHEDULING_ASSETS } from "./resource-scheduling-assets";
+import { AGENT_TOOLCHAIN_OBSERVATION_ASSETS } from "./agent-toolchain-assets";
 import { LIFECYCLE_GOVERNANCE_ASSETS } from "./lifecycle-governance-assets";
 import { STOCK_COVERAGE_ASSETS } from "./stock-coverage-assets";
 import { FINANCE_INVOICE_DOCUMENT_ASSETS } from "./finance-invoice-document-assets";
@@ -672,6 +673,7 @@ const SEED_ASSETS: readonly DataAssetDefinition[] = [
   ...HOSPITALITY_CAPACITY_ASSETS,
   ...BEAUTY_CAPACITY_ASSETS,
   ...RESOURCE_SCHEDULING_ASSETS,
+  ...AGENT_TOOLCHAIN_OBSERVATION_ASSETS,
   ...LIFECYCLE_GOVERNANCE_ASSETS,
   ...STOCK_COVERAGE_ASSETS,
   ...FINANCE_INVOICE_DOCUMENT_ASSETS, ...BUSINESS_PERFORMANCE_ASSETS,

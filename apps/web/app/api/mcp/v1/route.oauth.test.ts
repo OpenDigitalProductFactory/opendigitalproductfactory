@@ -58,6 +58,9 @@ vi.mock("@/lib/identity/load-effective-auth-context", () => ({
 }));
 
 vi.mock("@/lib/auth/oauth-tokens", () => ({ resolveOAuthAccessToken: vi.fn() }));
+vi.mock("@/lib/mcp-task-original-result", () => ({ readOriginalReviewResult: vi.fn() }));
+import { readOriginalReviewResult } from "@/lib/mcp-task-original-result";
+import { prisma } from "@dpf/db";
 import { resolveOAuthAccessToken } from "@/lib/auth/oauth-tokens";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { POST } from "./route";
@@ -104,6 +107,30 @@ function makeRequest(opts: {
 
 
 describe("OAuth setup recovery", () => {
+  it("binds original result collection to current OAuth actor and scopes, ignoring supplied authority", async () => {
+    vi.mocked(resolveOAuthAccessToken).mockResolvedValue({ resolved: {
+      tokenId: "current-oauth", userId: "owner", agentId: "AGT-EXT-CODEX", scope: "read", capability: "read",
+      scopes: ["backlog_read"],
+    }, publicScopes: ["dpf.read"], clientId: "client", identitySetupRequired: false });
+    vi.mocked(prisma.taskRun.findUnique).mockResolvedValue({ taskRunId: "TR-ORIGINAL", userId: "owner",
+      status: "input-required", a2aMetadata: { initiativeReviewBinding: {} }, progressPayload: {},
+      createdAt: new Date("2026-10-18"), updatedAt: new Date("2026-10-18"), completedAt: null } as never);
+    vi.mocked(readOriginalReviewResult).mockResolvedValue({ schemaVersion: 1, taskRunId: "TR-ORIGINAL",
+      classification: "unknown", readOnly: true, replayAllowed: false, reason: "Missing closure.",
+      observations: [], missingProof: ["child-closure"], bounded: true });
+    const res = await POST(makeRequest({ bearer: "dpfoat_current", body: {
+      jsonrpc: "2.0", id: 1, method: "tasks/result", params: { taskId: "TR-ORIGINAL",
+        actingAgentId: "AGT-OTHER", tokenGrantScopes: ["admin"] },
+    } }));
+    expect(await res.json()).toMatchObject({ result: { structuredContent: {
+      originalResult: { classification: "unknown", replayAllowed: false }, resumable: false,
+    } } });
+    expect(readOriginalReviewResult).toHaveBeenCalledWith({ taskRunId: "TR-ORIGINAL", userId: "owner",
+      actingAgentId: "AGT-EXT-CODEX", tokenGrantScopes: ["backlog_read"],
+      expected: { requestDigest: "", updatedAt: new Date("2026-10-18").toISOString() } });
+    expect(govMock).not.toHaveBeenCalled();
+  });
+
   it.each(["get_my_coworker_profile", "create_workroom", "read_room_messages"])(
     "returns a clear setup result for an unbound OAuth connection calling %s", async (name) => {
       vi.mocked(resolveOAuthAccessToken).mockResolvedValue({ resolved: {

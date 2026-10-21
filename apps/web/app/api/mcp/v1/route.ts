@@ -38,6 +38,9 @@ import {
   type ResolvedMcpToken,
 } from "@/lib/auth/mcp-api-token";
 import { deriveCallerClient } from "@/lib/mcp/caller-client";
+import { observeConnection } from "@/lib/agent-toolchain/connection-observation";
+import { toolchainNoticeFor } from "@/lib/agent-toolchain/toolchain-notice";
+import { refuseBelowToolchainFloor } from "@/lib/mcp/toolchain-floor";
 import { connectionDelegationFor } from "@/lib/mcp/connection-delegation";
 import { normalizeTokenScope, requiredTokenScopeForTool, tokenAdmitsTool, tokenScopeSatisfies } from "@/lib/mcp/token-tool-scope";
 import { buildMcpInitializeResult } from "@/lib/mcp/initialize";
@@ -369,7 +372,7 @@ async function handleTasksLifecycle(
       result = await handleTasksGet(token.userId, params);
       break;
     case "tasks/result":
-      result = await handleTasksResult(token.userId, params);
+      result = await handleTasksResult(token.userId, params, { actingAgentId: token.agentId ?? null, tokenGrantScopes: token.scopes });
       break;
     case "tasks/list":
       result = await handleTasksList(token.userId, params);
@@ -407,6 +410,7 @@ async function handleTasksSubmit(
 }
 
 async function handleInitialize(
+  request: Request,
   id: JsonRpcId,
   token: ResolvedAuth,
   params?: Record<string, unknown>,
@@ -415,6 +419,7 @@ async function handleInitialize(
     id,
     await buildMcpInitializeResult({
       params,
+      toolchainNotice: await toolchainNoticeFor(request, token),
       authority: {
         scope: normalizeTokenScope(token),
         scopes: token.scopes,
@@ -568,11 +573,9 @@ async function handleToolsCall(
       apiTokenId: token.tokenId,
       threadId: token.threadId ?? undefined,
       routeContext: token.routeContext ?? undefined,
-      // BI-B949993E: a session JWT minted for a governed TaskRun carries its
-      // id; governed execution resolves the TaskRun's immutable review
-      // binding from it (resolve-coworker-tool-authority), so a native CLI
-      // writer call is admitted routinely instead of parked on an envelope.
+      // Resolve the immutable review binding from the authenticated TaskRun.
       ...(token.taskRunId ? { taskRunId: token.taskRunId } : {}),
+      ...(token.taskExecutionFence ? { taskExecutionFence: token.taskExecutionFence } : {}),
       callerClient,
       authSource: token.source,
       tokenScope, tokenGrantScopes: expandedScopes,
@@ -679,9 +682,11 @@ export async function POST(request: Request): Promise<Response> {
       "request must have jsonrpc='2.0' and method string",
     );
   }
-
+  observeConnection({ request, token, method: body.method, params: body.params });
   // Notifications (no id) — return 202 Accepted, no body, per spec.
   const isNotification = body.id === undefined;
+  const floorRefusal = isNotification ? null : await refuseBelowToolchainFloor(request, token, body); // BI-DFC0270C
+  if (floorRefusal) return floorRefusal;
 
   // MCP 2025-11-25 protocol negotiation: a non-initialize request MAY carry an
   // MCP-Protocol-Version header. When present it must be a version we speak;
@@ -708,7 +713,7 @@ export async function POST(request: Request): Promise<Response> {
         if (isNotification) {
           return new Response(null, { status: 202 });
         }
-        return await handleInitialize(body.id ?? null, token, body.params);
+        return await handleInitialize(request, body.id ?? null, token, body.params);
 
       case "notifications/initialized":
         return new Response(null, { status: 202 });

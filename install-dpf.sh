@@ -158,6 +158,12 @@ Flags:
                 (docker-compose.edge-standalone.yml).
   --no-edge     Force-skip the local Edge Node even if a prior install
                 enabled it (Edge is already off by default).
+  --monitoring <on|off>
+                Answer the monitoring question without a prompt. Monitoring
+                (Prometheus + Grafana) watches this platform and its host;
+                change it later in Settings → Monitoring. --headless without
+                this flag leaves monitoring off and undecided. A choice
+                already recorded on this install is kept and never re-asked.
   --organization-join-package <file.dpfjoin>
                 Join an existing organization trust domain during install.
                 The private package is validated, consumed, and deleted on
@@ -188,6 +194,7 @@ DPF_INCLUDE_EDGE="${DPF_INCLUDE_EDGE:-}"    # opt-in; resolved after state init 
 # behavior). Future phases will turn this into a hard install/dev separation.
 DPF_DEV_WORKSPACE_PATH_ARG=""
 DPF_ORGANIZATION_JOIN_PACKAGE=""
+DPF_MONITORING=""       # on | off — answers the monitoring question (BI-31F11C37).
 DPF_INSTALL_CALLER_DIR="$PWD"
 SUBCOMMAND=""
 
@@ -207,6 +214,8 @@ while [ $# -gt 0 ]; do
     --no-autostart)         DPF_AUTOSTART=0 ;;
     --with-edge)            DPF_INCLUDE_EDGE=1 ;;
     --no-edge)              DPF_INCLUDE_EDGE=0 ;;
+    --monitoring)           shift; DPF_MONITORING="${1:-}" ;;
+    --monitoring=*)         DPF_MONITORING="${1#*=}" ;;
     --organization-join-package)
                             shift
                             [ -n "${1:-}" ] || { echo "--organization-join-package requires a file" >&2; exit 64; }
@@ -224,6 +233,14 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
+
+case "$DPF_MONITORING" in
+  ""|on|off) ;;
+  *)
+    echo "install-dpf.sh: --monitoring must be 'on' or 'off' (got '$DPF_MONITORING')" >&2
+    exit 64
+    ;;
+esac
 
 if [ -n "$DPF_ORGANIZATION_JOIN_PACKAGE" ]; then
   case "$DPF_ORGANIZATION_JOIN_PACKAGE" in
@@ -375,6 +392,52 @@ if [ -n "${DPF_ENVIRONMENT_CLASS:-}" ]; then
   esac
 else
   warn "No environment class declared; this install is treated as production until one is set."
+fi
+
+# Monitoring question (BI-31F11C37; design 2026-10-13 §5). Recorded BEFORE the
+# compose chain resolves capability profiles (dpf_compose_files ->
+# dpf_compose_profiles), so the first compose up starts monitoring when chosen.
+# A recorded enabled/disabled decision is never re-asked.
+step "Monitoring"
+monitoring_rc=0
+dpf_monitoring_prompt_needed "$REPO_ROOT" || monitoring_rc=$?
+if [ "$monitoring_rc" -eq 0 ]; then
+  if [ -n "$DPF_MONITORING" ]; then
+    monitoring_choice="$DPF_MONITORING"; monitoring_source="installer-flag"
+  elif [ "${DPF_HEADLESS:-0}" = "1" ] || [ "$DPF_DRY_RUN" = "1" ]; then
+    monitoring_choice="none"; monitoring_source="headless-default"
+  else
+    monitoring_cost="$(dpf_monitoring_cost_text "$REPO_ROOT")" || fail "Could not read the monitoring cost from config/install-resource-budgets.json"
+    echo ""
+    echo "  Monitoring (Prometheus + Grafana) watches this platform and its host."
+    echo "  It uses $monitoring_cost when on. You can change this later in Settings → Monitoring."
+    printf "  Turn monitoring on? [y/N]: "
+    read -r monitoring_answer || monitoring_answer=""
+    case "$monitoring_answer" in
+      y|Y|yes|YES|Yes) monitoring_choice="on" ;;
+      *) monitoring_choice="off" ;;
+    esac
+    monitoring_source="installer-prompt"
+  fi
+  if [ "$DPF_DRY_RUN" = "1" ]; then
+    info "Dry-run: would record monitoring choice '$monitoring_choice' ($monitoring_source)"
+  else
+    dpf_monitoring_choice_apply "$REPO_ROOT" "$monitoring_choice" "$monitoring_source" \
+      || fail "Could not record the monitoring choice in $(dpf_state_path) (see message above)"
+    case "$monitoring_choice" in
+      on)  ok "Monitoring: on" ;;
+      off) ok "Monitoring: off (turn it on later in Settings → Monitoring)" ;;
+      *)   warn "Monitoring: off and undecided; the portal will offer the choice." ;;
+    esac
+  fi
+elif [ "$monitoring_rc" -eq 1 ]; then
+  if [ -n "$DPF_MONITORING" ]; then
+    warn "Monitoring was already chosen on this install; --monitoring $DPF_MONITORING is ignored. Change it in Settings → Monitoring."
+  else
+    ok "Monitoring: keeping the choice already recorded on this install"
+  fi
+else
+  fail "Could not read the monitoring decision from $(dpf_state_path) (see message above)"
 fi
 
 # Edge Node deploy gate (opt-in; BI-72CFF89D / edge-topology design §5).

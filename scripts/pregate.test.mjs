@@ -6,6 +6,59 @@ import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { readEarlyQuiescenceStatus, readQuiescenceStatus, quiescenceBlocksWrites } from "./lib/gate-quiescence.mjs";
 
+test("wrapped pregate stops only when stdout is captured and no escape hatch is set", () => {
+  const captured = { stdoutIsTTY: false, env: {}, args: [] };
+  assert.match(pregate.wrappedForegroundReason(captured), /sole foreground command/);
+  assert.equal(pregate.wrappedForegroundReason({ ...captured, stdoutIsTTY: true }), null);
+  assert.equal(pregate.wrappedForegroundReason({ ...captured, env: { DPF_PREGATE_ALLOW_CAPTURE: "1" } }), null);
+  assert.equal(pregate.wrappedForegroundReason({ ...captured, env: { CI: "true" } }), null);
+  assert.equal(pregate.wrappedForegroundReason({ ...captured, env: { GITHUB_ACTIONS: "true" } }), null);
+  assert.equal(pregate.wrappedForegroundReason({ ...captured, args: ["--dry-run"] }), null);
+  assert.equal(pregate.wrappedForegroundReason({ ...captured, args: ["--help"] }), null);
+});
+
+test("parent preflight never advertises environment-limited checks as passed", async () => {
+  let output = "";
+  const result = await pregate.runHostPreflight({ env: {}, readStatusImpl: async () => ({level:"normal"}),
+    spawnSyncImpl: () => ({status:0,stdout:'DPF_HOST_PREFLIGHT_RESULT={"status":"inconclusive"}\n'}),
+    stdout: text => { output += text; }, stderr: () => {} });
+  assert.equal(result, 0, "canonical CI still enforces environment-skipped guards");
+  assert.doesNotMatch(output, /preflight passed/);
+  assert.match(output, /inconclusive/i);
+});
+
+test("parent preflight timeout remains unrun even if the child exits zero", async () => {
+  const result = await pregate.runHostPreflight({ env: {}, readStatusImpl: async () => ({level:"normal"}),
+    spawnSyncImpl: () => ({status:0,deadlineExceeded:true,stdout:""}), stdout: () => {}, stderr: () => {} });
+  assert.equal(result, 88);
+});
+
+test("parent preflight recording error remains unrun even if the child exits zero", async () => {
+  let output = "";
+  let diagnostics = "";
+  const result = await pregate.runHostPreflight({ env: {}, readStatusImpl: async () => ({level:"normal"}),
+    runObservedImpl: async () => ({status:0,error:new Error("progress recording failed"),
+      outputTail:'DPF_HOST_PREFLIGHT_RESULT={"status":"passed"}\n'}),
+    stdout: text => {output += text;}, stderr: text => {diagnostics += text;} });
+  assert.equal(result,88);
+  assert.doesNotMatch(output,/preflight passed/);
+  assert.match(diagnostics,/could not RUN/);
+});
+
+test("observed parent preflight passes cancellation and cleans its listeners", async () => {
+  const before = process.listenerCount("SIGINT");
+  let output = "";
+  const result = await pregate.runHostPreflight({ env: {}, readStatusImpl: async () => ({level:"normal"}),
+    runObservedImpl: async ({signal,shell}) => {
+      assert.equal(signal.aborted,false);
+      assert.equal(shell,false);
+      return {status:0,outputTail:'DPF_HOST_PREFLIGHT_RESULT={"status":"passed"}\n'};
+    }, stdout: text => {output += text;}, stderr: () => {} });
+  assert.equal(result,0);
+  assert.match(output,/preflight passed/);
+  assert.equal(process.listenerCount("SIGINT"),before);
+});
+
 import {
   EXIT_DURABLE_QUEUE_WAIT,
   WINDOWS_WRAPPER_TERMINATED_STATUS,

@@ -16,6 +16,11 @@ vi.mock("@/lib/tak/agent-grants", () => ({
   expandGrants: (grants: string[]) => grants,
 }));
 
+const recovery = vi.hoisted(() => ({ load: vi.fn(), reconstruct: vi.fn(), validate: vi.fn() }));
+vi.mock("@/lib/mcp-task-background-worker", () => ({ loadPersistedRemoteTask: recovery.load, reconstructPersistedRemoteTask: recovery.reconstruct }));
+vi.mock("@/lib/mcp-task-review-recovery", async original => ({
+  ...await original<typeof import("@/lib/mcp-task-review-recovery")>(), revalidateReviewExecutionAuthority: recovery.validate,
+}));
 import { runApprovedTaskRequest } from "./approved-task-run";
 
 const envelope = { taskRunId: "TR-1", delegatingUserId: "user-1", manifestActionId: "record_initiative_evidence" };
@@ -98,4 +103,23 @@ describe("runApprovedTaskRequest", () => {
       .resolves.toEqual({ status: "not-run", reason: "consent-changed" });
     expect(resume).not.toHaveBeenCalled();
   });
+});
+
+it("approved recovery uses separately recorded current authority and refuses revocation without reverting to origin", async () => {
+  const digest = "a".repeat(64);
+  const metadata = { apiTokenId: "tok-old", tokenSource: "oauth", tokenCapability: "write", taskAuthorityKey: "oauth-family:old",
+    requestDigest: digest, requestedAgentId: "AGT-WS-REVIEW", riskClass: "bounded-write",
+    initiativeReviewBinding: { writerToolName: "record_initiative_evidence" } };
+  const progress = { reviewExecutionAuthority: { schemaVersion: 1, tokenId: "tok-current", userId: "user-1", actingAgentId: "AGT-EXT-CODEX",
+    requestDigest: digest, originTokenId: "tok-old", expectedPriorUpdatedAt: UPDATED.toISOString(), recordedAt: UPDATED.toISOString() } };
+  const { db, resume } = fixtures({ task: { a2aMetadata: metadata, progressPayload: progress }, token: { id: "tok-current" } });
+  recovery.load.mockResolvedValue({ updatedAt: UPDATED });
+  recovery.reconstruct.mockReturnValue({ ok: true, data: { token: { tokenId: "tok-current", userId: "user-1", source: "oauth", capability: "write" }, parsed: {} } });
+  recovery.validate.mockResolvedValue(true);
+  expect(await runApprovedTaskRequest(envelope, { db: db as never, resume: resume as never })).toMatchObject({ status: "executed" });
+  expect(resume).toHaveBeenCalledWith(expect.objectContaining({ tokenId: "tok-current", existing: expect.objectContaining({ a2aMetadata: metadata }) }));
+  expect(db.mcpApiToken.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "tok-current" } }));
+  resume.mockClear(); recovery.validate.mockResolvedValue(false);
+  expect(await runApprovedTaskRequest(envelope, { db: db as never, resume: resume as never })).toMatchObject({ status: "not-run", reason: "task-bound" });
+  expect(resume).not.toHaveBeenCalled();
 });

@@ -54,6 +54,11 @@ function main() {
 
   const contexts = [];
 
+  // BI-84C1F526: refresh Grok's DPF credential when missing or near expiry
+  // (self-bounded to a few seconds; prints one plain repair line on failure).
+  const credential = runNode(join(hooksDir, "grok-credential-refresh.mjs"), [], env);
+  if (credential.stdout?.trim()) contexts.push(credential.stdout.trim());
+
   const spine = runNode(
     join(hooksDir, "process-spine-health-check.mjs"),
     ["--hook", "--skill-pack-root", skillPackRoot],

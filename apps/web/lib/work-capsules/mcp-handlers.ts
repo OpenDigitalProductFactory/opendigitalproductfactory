@@ -30,6 +30,7 @@ import {
   isWorkCapsulePortfolioRole,
   isWorkCapsuleSource,
   isWorkCapsuleStatus,
+  SCOPE_KIND_SET,
   WORK_CAPSULE_WORKROOM_SHAPES,
   type ScopeClaim,
   type WorkCapsuleEvidenceKind,
@@ -61,6 +62,8 @@ import { claimBacklogItemForWork } from "./claim-backlog-item-handler";
 import { createWorkroomBoundToBacklogItem } from "./create-workroom-binding";
 import { workCapsuleActor as actor } from "./handler-actor";
 import { commandDb } from "./receipted-tool";
+import { parseScopeReleaseClaims, scopeReleaseWasOrdinary } from "./scope-release-authorization";
+import { clampToolResultForModel, MCP_ROUTE_TOOL_RESULT_CHAR_CAP } from "@/lib/tak/tool-result-budget";
 type ToolContext = {
   routeContext?: string;
   agentId?: string;
@@ -116,7 +119,6 @@ async function runAutoRenewedCapsuleWrite(args: {
   return renewLeaseAfterCapsuleWrite(args.capsuleId, currentActor);
 }
 
-const SCOPE_KINDS = new Set<ScopeClaim["kind"]>(["path", "module", "package", "route", "skill", "prompt"]);
 const SCOPE_INTENTS = new Set<ScopeClaim["intent"]>(["edit", "read"]);
 
 function parseClaimInputs(params: Record<string, unknown>): Array<Pick<ScopeClaim, "kind" | "value" | "intent">> | null {
@@ -130,27 +132,10 @@ function parseClaimInputs(params: Record<string, unknown>): Array<Pick<ScopeClai
     const kind = typeof candidate.kind === "string" ? candidate.kind : "";
     const value = typeof candidate.value === "string" ? candidate.value.trim() : "";
     const intent = typeof candidate.intent === "string" ? candidate.intent : "";
-    if (!SCOPE_KINDS.has(kind as ScopeClaim["kind"]) || !SCOPE_INTENTS.has(intent as ScopeClaim["intent"]) || !value) {
+    if (!SCOPE_KIND_SET.has(kind as ScopeClaim["kind"]) || !SCOPE_INTENTS.has(intent as ScopeClaim["intent"]) || !value) {
       return null;
     }
     parsed.push({ kind: kind as ScopeClaim["kind"], value, intent: intent as ScopeClaim["intent"] });
-  }
-
-  return parsed.length > 0 ? parsed : null;
-}
-
-function parseReleaseInputs(params: Record<string, unknown>): Array<Pick<ScopeClaim, "kind" | "value">> | null {
-  const claims = params.claims;
-  if (!Array.isArray(claims)) return null;
-
-  const parsed: Array<Pick<ScopeClaim, "kind" | "value">> = [];
-  for (const claim of claims) {
-    if (!claim || typeof claim !== "object") return null;
-    const candidate = claim as Record<string, unknown>;
-    const kind = typeof candidate.kind === "string" ? candidate.kind : "";
-    const value = typeof candidate.value === "string" ? candidate.value.trim() : "";
-    if (!SCOPE_KINDS.has(kind as ScopeClaim["kind"]) || !value) return null;
-    parsed.push({ kind: kind as ScopeClaim["kind"], value });
   }
 
   return parsed.length > 0 ? parsed : null;
@@ -218,7 +203,13 @@ export async function getWorkCapsuleTool(params: Record<string, unknown>, userId
       message: `Work Capsule ${capsuleId} not found.`,
     };
   }
-  const { projectWorkroomRecovery } = await import("./workroom-recovery-projection");
+  const { loadWorkroomRecoveryItems, projectWorkroomRecovery, boundWorkroomRecoveryReadback } = await import("./workroom-recovery-projection");
+  const { loadSemanticReviewRoomProjection } = await import("@/lib/work-management/semantic-review-room-projection");
+  const reviews = await loadSemanticReviewRoomProjection(prisma as never, [capsule.capsuleId], new Date());
+  const recoveryItems = await loadWorkroomRecoveryItems(prisma, [capsule]);
+  const investment = capsule.backlogItemId
+    ? await (await import("../portfolio/investment-balance-server")).projectItemInvestment(prisma, { itemId: capsule.backlogItemId, roomId: capsule.id })
+    : null;
   const nestedCoordination = userId && context?.agentId
     ? await (await import("@/lib/work-management/nested-room-coordination.server")).loadNestedRoomCoordination(prisma as never, {
       roomId: capsule.id,
@@ -230,11 +221,18 @@ export async function getWorkCapsuleTool(params: Record<string, unknown>, userId
   // BI-62514632: the room's log from a position the caller already holds.
   const log = afterSequence === undefined ? null
     : { afterSequence, ...(await readActivityAfter(prisma as never, { workCapsuleId: capsule.id, afterSequence })) };
+  const message = `Loaded ${capsule.capsuleId}.`;
+  const data = boundWorkroomRecoveryReadback({ capsule: { ...capsule, recovery: projectWorkroomRecovery(capsule, reviews,
+    recoveryItems.get(capsule.backlogItemId ?? "") ?? null), nestedCoordination, investment },
+    ...(log ? { log } : {}) }, value => !clampToolResultForModel({ success: true, message, data: value },
+      { maxChars: MCP_ROUTE_TOOL_RESULT_CHAR_CAP, toolName: "get_workroom" }).truncated);
+  if (!data) return { success: false, error: "workroom_recovery_budget_exceeded",
+    message: "Exact Workroom identity and recovery exceed the response budget. No partial identity or passing readiness is reported; bounded-detail repair is required." };
   return {
     success: true,
     entityId: capsule.capsuleId,
-    message: `Loaded ${capsule.capsuleId}.`,
-    data: { capsule: { ...capsule, recovery: projectWorkroomRecovery(capsule), nestedCoordination }, ...(log ? { log } : {}) },
+    message,
+    data,
   };
 }
 
@@ -367,7 +365,7 @@ export async function updateWorkCapsuleStatusTool(
 export async function releaseCapsuleScopeTool(
   params: Record<string, unknown>,
   userId: string,
-  context: ToolContext,
+  context: ToolExecutionContext | undefined,
 ): Promise<ToolResult> {
   const capsuleId = stringParam(params, "capsuleId");
   // BI-MCP-EFF-6EBA2407: agents passed a single claim object or empty array and
@@ -383,7 +381,7 @@ export async function releaseCapsuleScopeTool(
       data: { retryable: false },
     };
   }
-  const claims = parseReleaseInputs(params);
+  const claims = parseScopeReleaseClaims(params.claims);
   if (!capsuleId || !claims) {
     return {
       success: false,
@@ -398,6 +396,7 @@ export async function releaseCapsuleScopeTool(
 
   const db = workCapsuleDb();
   try {
+    const ownScopeOnly = await scopeReleaseWasOrdinary(userId, context);
     const renewedCapsule = await runAutoRenewedCapsuleWrite({
       capsuleId,
       userId,
@@ -407,6 +406,7 @@ export async function releaseCapsuleScopeTool(
         capsuleId,
         claims,
         actor: currentActor,
+        ownScopeOnly,
       }),
     });
 

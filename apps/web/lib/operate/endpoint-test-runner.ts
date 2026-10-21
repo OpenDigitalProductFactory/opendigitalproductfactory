@@ -23,6 +23,7 @@ import { supportsTextGeneration } from "@/lib/routing/model-classifier";
 import { resolveDefaultExecutionAdapter } from "@/lib/routing/execution-plan";
 import { InferenceError } from "@/lib/routing/inference-error";
 import { createRoutingTraceId } from "@/lib/routing/routing-trace";
+import { assertEndpointConcurrencySelection, runEndpointConcurrencyDiagnostic } from "./endpoint-concurrency-diagnostic";
 import { awaitInferenceCancellation, currentInferenceSignal, GovernedInferenceDeadlineError, withInferenceCancellation } from "@/lib/routing/governed-inference-deadline";
 
 class DiagnosticIncompleteError extends Error {}
@@ -108,6 +109,7 @@ export type ModelTestResult = {
   scenarios: ScenarioRunResult[];
   instructionFollowing: string | null;
   codingCapability: string | null;
+  concurrency?: Awaited<ReturnType<typeof runEndpointConcurrencyDiagnostic>>;
 };
 
 // Keep backward compat alias
@@ -291,8 +293,10 @@ export async function runEndpointTests(opts: {
   modelId?: string;
   taskType?: string;
   probesOnly?: boolean;
+  concurrencyOnly?: boolean;
   triggeredBy: string;
 }): Promise<EndpointTestResult[]> {
+  if (opts.concurrencyOnly) assertEndpointConcurrencySelection(opts);
   // Reuse routing's structural predicate, including Responses transports.
   // Provider/account lifecycle is also revalidated at callProvider dispatch.
   const providers = await prisma.modelProvider.findMany({
@@ -326,6 +330,9 @@ export async function runEndpointTests(opts: {
   if (modelProfiles.length === 0 && (opts.modelId || opts.endpointId)) {
     throw new Error(`Diagnostic model ${opts.modelId ?? "(no compatible discovered model)"} is not available for the selected provider. No probe executed.`);
   }
+  if (opts.concurrencyOnly && modelProfiles.length !== 1) {
+    throw new Error("Concurrency diagnostics require exactly one available model profile. No call executed.");
+  }
 
   const results: EndpointTestResult[] = [];
 
@@ -340,10 +347,25 @@ export async function runEndpointTests(opts: {
         endpointId: providerId,
         modelId,
         taskType: opts.taskType ?? null,
-        probesOnly: opts.probesOnly ?? false,
+        probesOnly: opts.concurrencyOnly ? false : opts.probesOnly ?? false,
         triggeredBy: opts.triggeredBy,
       },
     });
+
+    if (opts.concurrencyOnly) {
+      const concurrency = await runEndpointConcurrencyDiagnostic(providerId, modelId);
+      await prisma.endpointTestRun.update({
+        where: { id: testRun.id },
+        data: {
+          status: concurrency.outcome === "deferred" ? "incomplete" : "completed",
+          completedAt: new Date(), avgScore: null,
+          results: { modelId, friendlyName, mode: "concurrency", concurrency } as unknown as import("@dpf/db").Prisma.InputJsonValue,
+        },
+      });
+      results.push({ testRunId: runId, endpointId: providerId, providerId, modelId, friendlyName,
+        probes: [], scenarios: [], instructionFollowing: null, codingCapability: null, concurrency });
+      continue;
+    }
 
     // Probes stay on the selected model; dispatch still enforces shared admission.
     const probeResults: ProbeRunResult[] = [];

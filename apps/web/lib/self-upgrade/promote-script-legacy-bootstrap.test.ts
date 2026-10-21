@@ -16,6 +16,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { PROMOTE_TEST_TIMEOUT_MS } from "./promote-script-functional.test-support";
 
 const REPO_ROOT = resolve(__dirname, "../../../..");
 const SCRIPT = join(REPO_ROOT, "scripts", "promote.sh");
@@ -27,7 +28,9 @@ const BASH_OK = spawnSync(BASH, ["--version"]).status === 0;
 const TARGET_SHA = "b".repeat(40);
 const RELEASE_TAG = "v2.0.0";
 const OWNER = "opendigitalproductfactory";
-const TEST_TIMEOUT_MS = 30_000;
+// This executes real Git Bash and candidate bootstrap; use the shared hang
+// budget rather than treating the observed 38-second Windows run as a failure.
+const TEST_TIMEOUT_MS = PROMOTE_TEST_TIMEOUT_MS;
 
 let bashDrivePrefix: string | undefined;
 function bashPath(value: string): string {
@@ -72,6 +75,8 @@ case "$*" in
     for destination in "$@"; do :; done
     cp -R "$DPF_TEST_RELEASE_ASSETS"/. "$destination"
     ;;
+  *"recover-workroom-activity-migration.mjs --verify-rolled-back"*) printf "verified" ;;
+  *"recover-workroom-activity-migration.mjs"*) printf "not-needed" ;;
   *"recover-human-principal-backfill-migration.mjs --verify-rolled-back"*) printf "verified" ;;
   *"recover-human-principal-backfill-migration.mjs"*) printf "not-needed" ;;
   *"recover-inventory-snapshot-migration.mjs --verify-rolled-back"*) printf "verified" ;;

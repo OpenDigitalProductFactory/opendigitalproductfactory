@@ -1,9 +1,10 @@
 // apps/web/app/(shell)/platform/ai/providers/[providerId]/page.tsx
 import { notFound, redirect } from "next/navigation";
+import { Suspense } from "react";
 import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
-import { getProviderById, getProviders, getDiscoveredModels, getModelProfiles, getRecipesForProvider, getModelClassCounts, getTokenSpendByProvider } from "@/lib/ai-provider-data";
+import { getProviderById, getProviderAccounts, getProviders, getDiscoveredModels, getModelProfiles, getRecipesForProvider, getModelClassCounts, getTokenSpendByProvider } from "@/lib/ai-provider-data";
 import { ProviderDetailForm } from "@/components/platform/ProviderDetailForm";
 import { ProviderRoutingControlPanel } from "@/components/platform/ProviderRoutingControlPanel";
 import { loadProviderRoutingControls } from "@/lib/inference/provider-routing-control-data";
@@ -30,10 +31,16 @@ import { connectionPosture, loadBusinessSuitabilityContext, providerCatalogFacts
 import { resolveProviderTrustFacts } from "@/lib/routing/provider-suitability/provider-trust";
 import { projectProviderConnectionReview } from "@/lib/routing/provider-suitability/provider-connection-review";
 import { shouldShowProviderAccountPosture } from "@/components/platform/local-models/provider-detail-policy";
+import { selectProviderAccount } from "@/lib/inference/provider-account-view";
+import { getProviderAccountCopy } from "@/lib/inference/provider-account-overview.server";
+import { ProviderAccountConnectionForm } from "@/components/platform/ProviderAccountConnectionForm";
+import { ProviderDetailSections } from "@/components/platform/ProviderDetailSections";
+import { ModelSection } from "@/components/platform/ModelSection";
+import { Notice } from "@/components/ui/report-kit";
 
-type Props = { params: Promise<{ providerId: string }> };
+type Props = { params: Promise<{ providerId: string }>; searchParams: Promise<{ account?: string | string[] }> };
 
-export default async function ProviderDetailPage({ params }: Props) {
+export default async function ProviderDetailPage({ params, searchParams }: Props) {
   // Guard: this route has no middleware — data-fetching server actions enforce
   // requireViewAccess() and will throw if called unauthenticated, crashing the
   // Server Component render. Redirect early before any data fetching occurs.
@@ -41,8 +48,19 @@ export default async function ProviderDetailPage({ params }: Props) {
   if (!earlySession?.user) redirect("/login");
 
   const { providerId } = await params;
+  const query = await searchParams;
+  if (Array.isArray(query.account)) notFound();
+  const requestedConnectionId = query.account ?? `provider-default-${providerId}`;
+  // Resolve ownership before refreshing; the canonical masked read must happen
+  // afterwards so React's request cache cannot preserve pre-refresh state.
+  const accountPeek = await prisma.aiProviderConnection.findUnique({
+    where: { connectionId: requestedConnectionId, providerId },
+    select: { providerId: true, authMethod: true, credentialEntry: { select: { tokenExpiresAt: true, refreshToken: true } } },
+  });
+  if (query.account !== undefined && !accountPeek) notFound();
+  const requestsAdditionalAccount = requestedConnectionId !== `provider-default-${providerId}`;
+  const copy = await getProviderAccountCopy();
   const now = new Date();
-  const currentMonth = { year: now.getUTCFullYear(), month: now.getUTCMonth() + 1 };
 
   // BI-2DD7042A: self-heal expired OAuth tokens on view. Token refresh is lazy —
   // getProviderBearerToken refreshes only when a dispatch actually uses the
@@ -55,7 +73,12 @@ export default async function ProviderDetailPage({ params }: Props) {
     where: { providerId },
     select: { authMethod: true },
   });
-  if (oauthPeek?.authMethod === "oauth2_authorization_code") {
+  if (requestsAdditionalAccount && accountPeek?.authMethod === "oauth") {
+    if (accountPeek.credentialEntry?.refreshToken && accountPeek.credentialEntry.tokenExpiresAt
+      && accountPeek.credentialEntry.tokenExpiresAt.getTime() <= now.getTime()) {
+      await getProviderBearerToken(providerId, requestedConnectionId).catch(() => null);
+    }
+  } else if (!requestsAdditionalAccount && oauthPeek?.authMethod === "oauth2_authorization_code") {
     const credPeek = await prisma.credentialEntry.findUnique({
       where: { providerId },
       select: { tokenExpiresAt: true, refreshToken: true },
@@ -64,20 +87,21 @@ export default async function ProviderDetailPage({ params }: Props) {
       await getProviderBearerToken(providerId).catch(() => null);
     }
   }
-  const [pw, models, profiles, allProviders, perfData, routingProfiles, routeDecisions, recipes, modelClassCounts, financeDetail, tokenSpend, providerConnection, businessSuitabilityContext] = await Promise.all([
+  const selectedAccount = selectProviderAccount(await getProviderAccounts(providerId), providerId, query.account);
+  if (query.account !== undefined && !selectedAccount) notFound();
+  const additionalAccount = selectedAccount && !selectedAccount.isDefault ? selectedAccount : null;
+  const accessibleModelIds = new Set(Array.isArray(additionalAccount?.accessibleModelIds)
+    ? additionalAccount.accessibleModelIds.filter((value): value is string => typeof value === "string") : []);
+  const selectedConnectionId = selectedAccount?.connectionId ?? `provider-default-${providerId}`;
+  const [pw, models, profiles, allProviders, routingProfiles, modelClassCounts, providerConnection, businessSuitabilityContext] = await Promise.all([
     getProviderById(providerId),
     getDiscoveredModels(providerId),
     getModelProfiles(providerId),
     getProviders(),
-    getEndpointPerformance(providerId),
     getRoutingProfiles(providerId),
-    getRecentRouteDecisions(providerId),
-    getRecipesForProvider(providerId),
-    getModelClassCounts(providerId),
-    getAiProviderFinanceDetail(providerId),
-    getTokenSpendByProvider(currentMonth),
+    additionalAccount ? Promise.resolve([]) : getModelClassCounts(providerId),
     prisma.aiProviderConnection.findUnique({
-      where: { connectionId: `provider-default-${providerId}` },
+      where: { connectionId: selectedConnectionId },
       include: {
         provider: { select: { providerId: true, category: true, endpointType: true, catalogEntry: true } },
         trustEvidence: true,
@@ -87,11 +111,8 @@ export default async function ProviderDetailPage({ params }: Props) {
     loadBusinessSuitabilityContext(),
   ]);
   if (!pw) notFound();
-  const costView = buildProviderCostView({
-    provider: pw.provider,
-    financeProfile: financeDetail,
-    internalUsage: tokenSpend.find((row) => row.providerId === providerId) ?? null,
-  });
+  if (additionalAccount && pw.provider.endpointType === "service") notFound();
+  const displayCredential = additionalAccount ? additionalAccount.credential : pw.credential;
   const factsResolution = providerConnection
     ? resolveProviderTrustEvidence({
       connection: connectionPosture(providerConnection),
@@ -138,7 +159,7 @@ export default async function ProviderDetailPage({ params }: Props) {
   const session = await auth();
   const user = session?.user;
   const canWrite = !!user && can({ platformRole: user.platformRole, isSuperuser: user.isSuperuser }, "manage_provider_connections");
-  const routingView = pw.provider.endpointType !== "service"
+  const routingView = !additionalAccount && pw.provider.endpointType !== "service"
     ? (await loadProviderRoutingControls([pw], new Map([[providerId, models.length]]), now)).get(providerId)
     : null;
   const showPosture = shouldShowProviderAccountPosture(providerId, pw.provider.endpointType);
@@ -171,7 +192,7 @@ export default async function ProviderDetailPage({ params }: Props) {
     <div>
       <div style={{ marginBottom: 20 }}>
         <Link href="/platform/ai/providers" style={{ color: "var(--dpf-muted)", fontSize: 12 }}>← Providers</Link>
-        <h1 style={{ fontSize: 20, fontWeight: 700, color: "var(--dpf-text)", margin: "6px 0 2px" }}>{pw.provider.name}</h1>
+        <h1 style={{ fontSize: 20, fontWeight: 700, color: "var(--dpf-text)", margin: "6px 0 2px" }}>{additionalAccount ? `${pw.provider.name} · ${additionalAccount.label ?? pw.provider.name}` : pw.provider.name}</h1>
         <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 4 }}>
           <span style={{ fontSize: 12, color: "var(--dpf-muted)", fontFamily: "monospace" }}>{pw.provider.providerId}</span>
           {pw.provider.docsUrl && (
@@ -186,7 +207,7 @@ export default async function ProviderDetailPage({ params }: Props) {
           )}
         </div>
         {/* Capability summary */}
-        {modelClassCounts.length > 0 && (
+        {!additionalAccount && modelClassCounts.length > 0 && (
           <div style={{ fontSize: 12, color: "var(--dpf-muted)", marginTop: 6 }}>
             Capabilities: {modelClassCounts.map((c, i) => (
               <span key={c.modelClass}>
@@ -200,6 +221,9 @@ export default async function ProviderDetailPage({ params }: Props) {
       </div>
 
       {routingView && <ProviderRoutingControlPanel pw={pw} view={routingView} canWrite={canWrite} />}
+      {connectionReview && <Notice title={copy.allowedWork}>
+        <strong>{connectionReview.headline}</strong> {connectionReview.summary}
+      </Notice>}
 
       {hardwareInfo && (
         <OllamaHardwareInfo
@@ -236,8 +260,12 @@ export default async function ProviderDetailPage({ params }: Props) {
         <McpServiceDetail provider={pw.provider} connectionStatus={providerConnection?.status ?? null} />
       ) : showPosture ? (
         <>
+          <details className="my-3 rounded border border-[var(--dpf-border)] p-3">
+          <summary className="cursor-pointer py-2 text-sm font-semibold">{copy.allowedWork}</summary>
           <ProviderAccountPostureForm
+            key={selectedConnectionId}
             providerId={providerId}
+            connectionId={selectedConnectionId}
             canWrite={canWrite}
             requiredRegions={connectionReview?.requiredRegions ?? []}
             initial={providerConnection ? {
@@ -285,55 +313,112 @@ export default async function ProviderDetailPage({ params }: Props) {
               actions={connectionReview?.actions ?? []}
             />
           )}
+          </details>
+          <details className="mb-3 rounded border border-[var(--dpf-border)] p-3">
+          <summary className="cursor-pointer py-2 text-sm font-semibold">{copy.providerOverrides}</summary>
           <ProviderClearanceOverridePanel
             providerId={providerId}
             canWrite={canWrite}
             genuinelyCleared={(pw.provider.sensitivityClearance ?? []) as string[]}
             overrides={clearanceOverrides}
           />
+          </details>
           {/* BI-87D93A71 (Minimum): surface OAuth callback port mismatch
               BEFORE the user clicks Connect — eliminates the silent
               :3000 → :1455 origin divergence that the shared OpenAI
               Codex/ChatGPT OAuth client requires today. */}
-          {providerId !== "chatgpt" && <OAuthPortMismatchBanner
+          {(!additionalAccount || additionalAccount.authMethod === "oauth") && <OAuthPortMismatchBanner
             oauthRedirectUri={pw.provider.oauthRedirectUri ?? null}
             providerLabel={pw.provider.name ?? pw.provider.providerId}
           />}
-          {pw.credential && providerId !== "chatgpt" && (
+          {displayCredential && (
             <OAuthConnectionStatus
-              credential={pw.credential}
-              authMethod={pw.provider.authMethod}
-              authorizeUrl={pw.provider.authorizeUrl ?? null}
+              key={selectedConnectionId}
+              credential={displayCredential}
+              authMethod={additionalAccount ? additionalAccount.authMethod === "oauth" ? "oauth2_authorization_code" : additionalAccount.authMethod : pw.provider.authMethod}
+              authorizeUrl={null}
               providerId={pw.provider.providerId}
+              connectionId={additionalAccount?.connectionId}
+              canWrite={canWrite}
             />
           )}
-          <div style={{ background: "var(--dpf-surface-1)", border: "1px solid var(--dpf-border)", borderRadius: 8, padding: 20 }}>
-            <ProviderDetailForm pw={pw} canWrite={canWrite} models={models} profiles={profiles} hasActiveProvider={hasActiveProvider} routingProfiles={routingProfiles} />
-          </div>
-          <div style={{ marginTop: 16 }}>
-            <ProviderCostSourcePanel view={costView} />
-          </div>
-          <div style={{ marginTop: 16 }}>
-            <AiProviderFinancePanel detail={financeDetail} />
-          </div>
-          {/* Execution Recipes */}
-          <RecipePanel recipes={recipes} />
+          {additionalAccount ? <div className="my-3 space-y-2">
+            <ProviderAccountConnectionForm key={additionalAccount.connectionId} account={additionalAccount} canWrite={canWrite} copy={copy} />
+            <ProviderDetailSections sections={[{ key: "models", title: copy.modelsExecution, content: <>
+              <p className="text-xs text-[var(--dpf-muted)]">{copy.accountAccessHint}</p>
+              {additionalAccount.modelsVerifiedAt ? <ModelSection providerId={providerId}
+                models={models.filter(model => accessibleModelIds.has(model.modelId))}
+                profiles={profiles.filter(profile => accessibleModelIds.has(profile.modelId))}
+                routingProfiles={routingProfiles.filter((profile: { modelId: string }) => accessibleModelIds.has(profile.modelId))} canWrite={false} hasActiveProvider={hasActiveProvider}
+                latestDiscovery={new Date(additionalAccount.modelsVerifiedAt)} /> : <p>{copy.notVerified}</p>}
+              <Suspense fallback={<Notice>{copy.loadingRecipes}</Notice>}>
+                <ProviderExecutionRecipes providerId={providerId} additional copy={copy} />
+              </Suspense>
+            </> }, { key: "settings", title: copy.providerSettings, content: <>
+              <p className="text-xs text-[var(--dpf-muted)]">{copy.providerSettingsHint}</p>
+              <Link href={`/platform/ai/providers/${encodeURIComponent(providerId)}`} className="inline-block py-2 text-sm text-[var(--dpf-accent)]">{copy.providerSettings}</Link>
+            </> }]} />
+          </div> : <div style={{ background: "var(--dpf-surface-1)", border: "1px solid var(--dpf-border)", borderRadius: 8, padding: 12 }}>
+            <ProviderDetailForm key={`provider-default-${providerId}`} pw={pw} canWrite={canWrite} models={models} profiles={profiles} hasActiveProvider={hasActiveProvider} routingProfiles={routingProfiles} defaultConnectionId={providerId === "chatgpt" ? selectedConnectionId : undefined}
+              executionRecipes={<Suspense fallback={<Notice>{copy.loadingRecipes}</Notice>}><ProviderExecutionRecipes providerId={providerId} copy={copy} /></Suspense>} />
+          </div>}
+          <Suspense fallback={<Notice>{copy.loadingUsage}</Notice>}>
+            <ProviderUsageDetails provider={pw.provider} additional={Boolean(additionalAccount)} now={now} copy={copy} />
+          </Suspense>
+        </>
+      ) : !additionalAccount && (providerId === "local" || providerId === "ollama") ? (
+        <>
+          <ProviderDetailSections sections={[{ key: "settings", title: copy.providerSettings, content:
+            <ProviderDetailForm key={`provider-default-${providerId}`} pw={pw} canWrite={canWrite}
+              models={models} profiles={profiles} hasActiveProvider={hasActiveProvider} routingProfiles={routingProfiles}
+              executionRecipes={<Suspense fallback={<Notice>{copy.loadingRecipes}</Notice>}><ProviderExecutionRecipes providerId={providerId} copy={copy} /></Suspense>} />,
+          }]} />
+          <Suspense fallback={<Notice>{copy.loadingUsage}</Notice>}>
+            <ProviderUsageDetails provider={pw.provider} additional={false} now={now} copy={copy} />
+          </Suspense>
         </>
       ) : null}
 
-      <EndpointPerformancePanel
-        endpointId={providerId}
-        performances={perfData.performances}
-        recentEvals={perfData.recentEvals}
-        testRuns={perfData.testRuns}
-        profile={perfData.profile}
-      />
-
-      {routeDecisions.length > 0 && (
-        <RouteDecisionLog decisions={routeDecisions} />
-      )}
+      <Suspense fallback={<Notice>{copy.loadingDiagnostics}</Notice>}>
+        <ProviderDiagnosticsDetails providerId={providerId} additional={Boolean(additionalAccount)} copy={copy} />
+      </Suspense>
     </div>
   );
+}
+
+async function ProviderExecutionRecipes({ providerId, additional = false, copy }: {
+  providerId: string; additional?: boolean; copy: Record<string, string>;
+}) {
+  try {
+    const recipes = await getRecipesForProvider(providerId);
+    if (recipes.length === 0) return null;
+    return <>{additional && <p className="text-xs text-[var(--dpf-muted)]">{copy.sharedRecipes}</p>}<RecipePanel recipes={recipes} /></>;
+  } catch { return <Notice variant="warn">{copy.recipesUnavailable}</Notice>; }
+}
+
+async function ProviderUsageDetails({ provider, additional, now, copy }: {
+  provider: import("@/lib/ai-provider-types").ProviderRow; additional: boolean; now: Date; copy: Record<string, string>;
+}) {
+  try {
+    const [finance, spend] = await Promise.all([getAiProviderFinanceDetail(provider.providerId),
+      getTokenSpendByProvider({ year: now.getUTCFullYear(), month: now.getUTCMonth() + 1 })]);
+    const costView = buildProviderCostView({ provider, financeProfile: finance, internalUsage: spend.find(row => row.providerId === provider.providerId) ?? null });
+    return <div className="mt-3"><ProviderDetailSections sections={[{ key: "usage", title: copy.usage, content: <>
+      {additional && <p className="text-xs text-[var(--dpf-muted)]">{copy.sharedUsage}</p>}
+      <ProviderCostSourcePanel view={costView} /><AiProviderFinancePanel detail={finance} />
+    </> }]} /></div>;
+  } catch { return <Notice variant="warn">{copy.usageUnavailable}</Notice>; }
+}
+
+async function ProviderDiagnosticsDetails({ providerId, additional, copy }: { providerId: string; additional: boolean; copy: Record<string, string> }) {
+  try {
+    const [performance, decisions] = await Promise.all([getEndpointPerformance(providerId), getRecentRouteDecisions(providerId)]);
+    return <div className="mt-3"><ProviderDetailSections sections={[{ key: "diagnostics", title: copy.diagnostics, content: <>
+      {additional && <p className="text-xs text-[var(--dpf-muted)]">{copy.sharedDiagnostics}</p>}
+      <EndpointPerformancePanel endpointId={providerId} performances={performance.performances} recentEvals={performance.recentEvals} testRuns={performance.testRuns} profile={performance.profile} />
+      {decisions.length > 0 && <RouteDecisionLog decisions={decisions} />}
+    </> }]} /></div>;
+  } catch { return <Notice variant="warn">{copy.diagnosticsUnavailable}</Notice>; }
 }
 
 function McpServiceDetail({ provider, connectionStatus }: { provider: import("@/lib/ai-provider-types").ProviderRow; connectionStatus?: string | null }) {

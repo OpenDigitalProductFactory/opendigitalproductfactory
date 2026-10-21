@@ -201,6 +201,34 @@ class PinRecordDescriptorsTest(unittest.TestCase):
 class ReportJsonTest(unittest.TestCase):
     """End to end through main(): every scope reported, every CLI faked."""
 
+    def test_explicit_updated_action_cannot_override_stale_observed_content(self) -> None:
+        declared = _Declared()
+        key = ("claude-code", "project:fixture")
+        stale = {"version": declared.pack, "digest": "old", "authMode": "oauth"}
+        current = {**stale, "digest": declared.digest}
+        for after, expected in ((stale, "failed"), (current, "converged")):
+            with self.subTest(expected=expected), patch.object(convergence, "snapshot", side_effect=[{key: stale}, {key: after}]), patch.object(convergence, "cli_versions", return_value={}):
+                report = convergence.ConvergenceReport(Path("fixture"), declared, None)
+                report.add(*key, action="updated")
+                observed = report.finish(False)
+                self.assertEqual(observed["result"], expected)
+                self.assertEqual(observed["clients"][0]["action"], "failed" if expected == "failed" else "updated")
+
+    def test_disappeared_installed_record_cannot_reuse_the_before_digest(self) -> None:
+        declared = _Declared()
+        key = ("claude-code", "local:fixture")
+        current = {"version": declared.pack, "digest": declared.digest, "authMode": "oauth"}
+        with patch.object(convergence, "snapshot", side_effect=[{key: current}, {}]), patch.object(convergence, "cli_versions", return_value={}):
+            report = convergence.ConvergenceReport(Path("fixture"), declared, None)
+            report.add(*key, action="unchanged")
+            self.assertEqual(report.finish(False)["result"], "failed")
+
+    def test_missing_local_record_keeps_failed_install_in_the_report(self) -> None:
+        with patch.object(convergence, "snapshot", return_value={}), patch.object(convergence, "cli_versions", return_value={}), patch.object(updater, "claude_plugin_records", return_value=[]):
+            report = convergence.ConvergenceReport(Path("fixture"), _Declared(), None)
+            convergence.record_claude_scopes(report, Path("fixture"), "failed: local content unverified", {}, None, [])
+            self.assertEqual(report.finish(False)["result"], "failed")
+
     def test_report_names_each_client_and_scope(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -214,7 +242,8 @@ class ReportJsonTest(unittest.TestCase):
                 {"scope": "project", "projectPath": str(gone), "version": "0.2.5", "installPath": str(root / "nowhere")},
             ], {"mcpServers": {"dpf": dpf}, "projects": {str(stale): {"mcpServers": {"dpf": dpf}}}})
             report_path = root / "report.json"
-            env = {"DPF_AGENT_TOOLCHAIN_HOME": str(home), "DPF_MCP_URL": ""}
+            env = {"DPF_AGENT_TOOLCHAIN_HOME": str(home), "DPF_MCP_URL": "",
+                   "DPF_CLAUDE_MCP_URL": "https://dpf.example/api/mcp/v1"}
             with patch.dict(os.environ, env), \
                     patch.object(updater, "resolve_claude_binary", return_value="/fake/claude"), \
                     patch.object(updater, "resolve_codex_binary", return_value=None), \
@@ -223,7 +252,8 @@ class ReportJsonTest(unittest.TestCase):
                     patch("subprocess.run", return_value=_Result()), patch("builtins.print"):
                 code = updater.main(["--skill-pack-path", str(PACK), "--report-json", str(report_path),
                                      "--mcp-url", "https://dpf.example/api/mcp/v1"])
-            self.assertEqual(code, 0)
+            # A successful fake CLI does not install any bytes: truthfully fail.
+            self.assertEqual(code, 1)
             report = json.loads(report_path.read_text())
             rows = {(row["client"], row["scope"]): row for row in report["clients"]}
             digest = delivered_digest(PACK)
@@ -236,7 +266,8 @@ class ReportJsonTest(unittest.TestCase):
             self.assertEqual((shared["before"]["digest"], shared["after"]["digest"]), (None, digest))
             self.assertEqual(shared["action"], "updated")
             self.assertTrue(shared["restartRequired"])
-            self.assertEqual(rows[("claude-code", f"project:{stale}")]["action"], "updated")
+            self.assertEqual(report["result"], "failed")
+            self.assertEqual(rows[("claude-code", f"project:{stale}")]["action"], "failed")
             self.assertEqual(rows[("claude-code", f"project:{gone}")]["action"], "prunable")
             self.assertEqual(rows[("claude-code", f"project-mcp-json:{stale}")]["action"], "retired")
             self.assertTrue(Path(rows[("claude-code", f"project-mcp-json:{stale}")]["backupPath"]).exists())

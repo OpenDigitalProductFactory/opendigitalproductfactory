@@ -4,6 +4,7 @@ import { projectBacklogItemReadiness } from "./backlog/initiative-readiness/entr
 import { loadInheritedInitiativeScope } from "./backlog/initiative-readiness/parent-scope-inheritance";
 import type { InitiativeReviewBinding } from "./mcp-task-review-contract";
 import { TASK_IN_FLIGHT_STATES } from "./tak/task-states";
+import { hasExecutionUncertainty } from "./shared/execution-uncertainty";
 
 function record(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)
@@ -15,6 +16,17 @@ type PersistedReviewOutcome = NonNullable<Awaited<ReturnType<typeof loadInitiati
 /** The completed-TaskRun write a verified receipt settles a review to; waits and stale approvals are dropped. */
 export function persistedReviewCompletionData(progressPayload: unknown, outcome: PersistedReviewOutcome) {
   const progress = { ...record(progressPayload) };
+  if (hasExecutionUncertainty(progress)) {
+    // The exact receipt resolves the review result, not every remote effect.
+    // Retain the original uncertainty and attempt evidence as history.
+    progress.executionUncertaintyResolution = { schemaVersion: 1, reviewReceiptId: outcome.receiptId,
+      artifactRef: outcome.artifactRef, prior: {
+        executionUncertainty: progress.executionUncertainty ?? null,
+        terminalWriterWait: progress.terminalWriterWait ?? null,
+        terminalWriterEscalation: progress.terminalWriterEscalation ?? null,
+      } };
+    delete progress.executionUncertainty;
+  }
   for (const key of ["terminalWriterWait", "terminalWriterDispatchFailure", "terminalWriterEscalation", "terminalWriterContextFailure", "resourceWait", "approvalEnvelopeId"])
     delete progress[key];
   return {

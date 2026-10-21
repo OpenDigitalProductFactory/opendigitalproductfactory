@@ -36,6 +36,7 @@ export type GovernedExecuteContext = {
   threadId?: string;
   routeContext?: string;
   taskRunId?: string;
+  taskExecutionFence?: import("./shared/task-execution-fence").TaskExecutionFence | null;
   apiTokenId?: string;
   /** Client product token from the caller's User-Agent (BI-0EEBA669);
    *  persisted by decision-ledger writers so a decision can be matched back
@@ -182,6 +183,8 @@ export type GovernedExecuteRejection =
 
 export type GovernedExecuteResult = ToolResult & {
   governance?: {
+    /** Actual persisted audit row, never a handler assertion; its outcome still needs validation. */
+    toolExecutionId?: string;
     rejected?: GovernedExecuteRejection;
     durationMs?: number;
     authorityReason?: CoworkerAuthorityDecision["reasonCode"];

@@ -26,6 +26,7 @@ The Admin area is the control centre for platform configuration. It is where adm
 - Maintain reference data tables used by portfolios, compliance, HR, and other areas
 - Configure storefront settings including domain routing and public storefront behaviour
 - See and change the organization's accountable owner under **Admin > Settings**. The page shows one line — **Accountable owner: <name> · Change** — and **Change** opens a picker of active people with sign-in accounts. Every Workroom without its own owner answers to this person. First-install setup records the owner account here; changing it requires platform-management rights and is recorded in the compliance audit trail with the previous and new owner. When nothing is recorded, the line reads **No accountable owner recorded · Set**.
+- Turn monitoring (Prometheus and Grafana) on or off at `/admin/settings/monitoring`. The page shows whether it is really running, its memory and CPU cost, and the last change; turning it on or off needs platform-management rights and reports the outcome. If the monitoring record disagrees with what is running, the button offers to match the record to the install instead; it stays locked only when the capability records are incomplete or unreadable, and says why. Details: [Turning monitoring on or off](../ai-workforce/index.md#turning-monitoring-on-or-off).
 - Choose your own language and time zone under **Admin > Settings > Language and region**. Both default to the organization's settings. English is the only language available today; administrators also see two test languages that show every screen in placeholder text, so untranslated wording and right-to-left layout problems are easy to spot.
 - End one person's access to a shared AI client under **Admin > Platform Development**. In **Keys for automated tools**, open **People** on a client such as Claude Code to see who is connected through it and when they last used it. **Revoke this person's access** asks for a reason, disconnects only that person, and records who revoked it and why. Everyone else stays connected, and the person can reconnect by signing in again. **Revoke** on the row itself still disconnects everyone using that client.
 - Name the GitHub repository this install manages, and log in to it, under **Admin > Platform Development** in **Managed repository**. The section appears only when the install's confirmed purpose is developing the platform. Type the repository as `owner/name` or its URL and select **Save**; the suggested repository is not saved until you do, and **Not now** leaves it unset. **Connect GitHub** shows a code to enter on GitHub. The platform asks only for public-repository access when the repository is public. Each repository shows one status: **Connected**, **Read only** (the login cannot label issues), **No access**, **Login expired**, **Not connected** or **Couldn't check** (with the time of the last answer). **Check again** re-checks it. Until it shows **Connected**, a "Connect your repository" item stays in your inbox.
@@ -132,3 +133,14 @@ immediately, a coworker task is queued for the next dispatcher tick. **Edit**
 opens on the cadence the job actually runs at, accepts either a frequency or a
 cron expression, and previews the next fire before you save. Coworker work cannot
 be scheduled more often than daily.
+
+The **Agent task dispatch** job starts coworker work every five minutes, up to 20
+due tasks per tick. Those tasks run side by side rather than one after another.
+How many run at once is the lower of two limits: the coworker's own concurrency
+limit (a coworker with a limit of 2 never runs more than two of its tasks at
+once) and the free slots in the shared AI CLI pool (four by default). When a
+provider in that pool reports it is rate-limited or out of its weekly allowance,
+the tick runs tasks one at a time. A task that fails
+does not stop the rest of the tick. If a platform upgrade starts draining
+work part-way through a tick, tasks that have not started yet wait for the next
+tick after the upgrade.

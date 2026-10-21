@@ -110,11 +110,12 @@ const BASE_ENV: Record<string, string> = {
  * Child wall-clock for a single promote.sh invocation under contract tests.
  * BI-72AEDE8B: must stay below the Vitest per-test timeout so a hung bash is
  * reported as a timed-out child (signal/error), not a silent suite stall.
- * Not a global vitest.config timeout change.
+ * Not a global vitest.config timeout change. One promote.sh run costs 11-25 s on a
+ * Windows host and more under a parallel gate run, so 25 s timed out (BI-1D5E2644).
  */
-const CONTRACT_CHILD_TIMEOUT_MS = 25_000;
+const CONTRACT_CHILD_TIMEOUT_MS = 100_000;
 /** Vitest per-test budget: child bound + fixture overhead on loaded Windows hosts. */
-const CONTRACT_TEST_TIMEOUT_MS = 40_000;
+const CONTRACT_TEST_TIMEOUT_MS = 120_000;
 /** @deprecated alias kept for readiness describe block readability */
 const READINESS_SCRIPT_TIMEOUT_MS = CONTRACT_TEST_TIMEOUT_MS;
 
@@ -409,6 +410,27 @@ describe.skipIf(!BASH_AVAILABLE)("promote.sh --self-upgrade contract", () => {
     // BI-D9BAB4FA: migrations must run on the new image before the swap.
     it("emits migrate step", () => {
       expect(dryRunResult.stdout).toContain("step=migrate");
+    });
+
+    it("guards the activity ingestion failure and verifies its original row before older recovery classifiers", () => {
+      const scriptSource = readFileSync(join(REPO_ROOT, "scripts", "promote.sh"), "utf8");
+      const recoveryCommand = "node packages/db/scripts/recover-workroom-activity-migration.mjs";
+      const resolveCommand = "prisma migrate resolve --rolled-back 20261014012000_workroom_activity_ingestion_hardening";
+      const verifyCommand = "recover-workroom-activity-migration.mjs --verify-rolled-back";
+      const humanCommand = "node packages/db/scripts/recover-human-principal-backfill-migration.mjs";
+      const inventoryCommand = "node packages/db/scripts/recover-inventory-snapshot-migration.mjs";
+      const deployCommand = "-c 'cd /app && pnpm --filter @dpf/db exec prisma migrate deploy'";
+
+      for (const command of [recoveryCommand, resolveCommand, verifyCommand, humanCommand, inventoryCommand, deployCommand]) {
+        expect(scriptSource).toContain(command);
+      }
+      expect(scriptSource.indexOf(recoveryCommand)).toBeLessThan(scriptSource.indexOf(resolveCommand));
+      expect(scriptSource.indexOf(resolveCommand)).toBeLessThan(scriptSource.indexOf(verifyCommand));
+      expect(scriptSource.indexOf(verifyCommand)).toBeLessThan(scriptSource.indexOf(humanCommand));
+      expect(scriptSource.indexOf(humanCommand)).toBeLessThan(scriptSource.indexOf(inventoryCommand));
+      expect(scriptSource.indexOf(inventoryCommand)).toBeLessThan(scriptSource.indexOf(deployCommand));
+      expect(scriptSource).not.toContain(`${resolveCommand}' >/dev/null 2>&1 || true`);
+      expect(scriptSource).not.toContain(`${verifyCommand}' || true`);
     });
 
     it("guards the known inventory snapshot failure before normal migration deploy", () => {

@@ -6,14 +6,18 @@
 // report + read door:
 //   • record_surface_readiness — a build surface heartbeats its own computed state
 //   • get_fleet_readiness       — read the rolled-up fleet view (for the digest / an operator)
+//   • issue_grok_credentials_client — Grok's own OAuth credentials client, for
+//     the toolchain updater (BI-84C1F526). Grant-gated, never wider than the caller.
 //
 // Ungated: reporting your OWN toolchain readiness (like propose_improvement /
 // report_quality_issue) cannot exceed the caller's authority or affect anyone
 // else; the read returns readiness telemetry only (no secrets). Inputs are
 // validated against the closed vocabularies.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
+import type { ToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
+import { SURFACE_READINESS_TOOL_GRANTS } from "@/lib/tak/surface-readiness-tool-grants";
+import { ownSourceCredentialConsequence } from "@/lib/agent-toolchain/source-credential-issue";
 import {
   SURFACE_READINESS_STATES,
   SURFACE_CLIENT_KINDS,
@@ -50,6 +54,15 @@ const definitions: ToolDefinition[] = [
         },
         mcpOk: { type: "boolean", description: "Whether the DPF MCP reachability probe passed." },
         mcpReason: { type: "string", description: "The probe failure reason when mcpOk is false (e.g. no_token, endpoint_unreachable)." },
+        cliVersion: {
+          type: "string",
+          description: "This client's own CLI --version line, as the toolchain updater reports it.",
+        },
+        clientVersions: {
+          type: "object",
+          description: "The updater report's clientVersions: each client kind's CLI --version line, or null when that CLI is absent. Lets the platform notice a client release its capability record has not verified.",
+          additionalProperties: { type: ["string", "null"] },
+        },
       },
       required: ["surfaceKey", "clientKind", "readinessState", "mcpOk"],
     },
@@ -59,7 +72,7 @@ const definitions: ToolDefinition[] = [
   {
     name: "get_fleet_readiness",
     description:
-      "Read the rolled-up readiness of every build surface known to this instance: which are ready, not-ready, or stale (heartbeat gone silent). Feeds the daily digest and answers 'is every AI surface wired to durable memory right now?'.",
+      "Read the rolled-up readiness of every build surface known to this instance: which are ready, not-ready, or stale (heartbeat gone silent). Feeds the daily digest and answers 'is every AI surface wired to durable memory right now?'. Also names clients whose capabilities are unverified for the version they report.",
     inputSchema: {
       type: "object",
       properties: {
@@ -77,17 +90,85 @@ const definitions: ToolDefinition[] = [
     requiredCapability: null,
     sideEffect: false,
   },
+  {
+    name: "issue_grok_credentials_client",
+    description:
+      "Return, or create once, YOUR OWN Grok connection credential: the client_credentials OAuth client Grok uses (dpf.read dpf.work dpf.build). Call it while converging the DPF toolchain on a host where Grok is installed, then pass data.credentialsClient to the toolchain updater on standard input (--grok-client-stdin). Refused when your connection is narrower than that credential. Never show the secret to the user.",
+    inputSchema: { type: "object", properties: {}, required: [] },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: true,
+    // creates the credential an external client acts with → consult-gated (TAK §8.4.1).
+    consequence: "authority",
+    secretResultKeys: ["credentialsClient"],
+  },
+  {
+    name: "issue_source_credentials_client",
+    description: "Return or create your own assistant-bound OAuth credentials client for source CLI work. Owner and assistant come from this authenticated connection; no recipient or scope override is accepted. The fixed read/work/build scope must already fit this token. Store data.credentialsClient only in the canonical untracked source credential file, never in transcripts. A portal session or unbound token cannot issue it.",
+    inputSchema: { type: "object", properties: {}, required: [], additionalProperties: false },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: true,
+    consequence: "authority",
+    consequenceForCall: ownSourceCredentialConsequence,
+    secretResultKeys: ["credentialsClient"],
+  },
 ];
+
+/**
+ * BI-54469E18: an MCP caller's row is keyed by ITS OWN credential, so one
+ * token can no longer overwrite another host's readiness. In-platform callers
+ * with no MCP token keep the supplied key.
+ */
+async function boundSurfaceKey(
+  supplied: string,
+  clientKind: string,
+  context: ToolExecutionContext | undefined,
+): Promise<string> {
+  if (!context?.apiTokenId || (context.authSource !== "oauth" && context.authSource !== "pat")) return supplied;
+  const [{ prisma }, { resolveCredentialRef }] = await Promise.all([
+    import("@dpf/db"),
+    import("@/lib/agent-toolchain/connection-observation"),
+  ]);
+  const credential = await resolveCredentialRef(prisma as never, { tokenId: context.apiTokenId, source: context.authSource });
+  return credential ? `${clientKind}@${credential.credentialRef}` : supplied;
+}
+
+const VERSION_LINE_LIMIT = 120;
+const versionLine = (value: unknown): string | null =>
+  typeof value === "string" && value.trim() ? value.trim().slice(0, VERSION_LINE_LIMIT) : null;
+
+/**
+ * BI-64795FD0: the CLI versions the updater reports, bounded. Only known client
+ * kinds are kept, each a `--version` line or null. Undefined when none were sent,
+ * so a plain heartbeat keeps the versions the last updater run stored.
+ */
+function versionDetail(params: Record<string, unknown>): { cliVersion?: string; clientVersions?: Record<string, string | null> } | undefined {
+  const detail: { cliVersion?: string; clientVersions?: Record<string, string | null> } = {};
+  const own = versionLine(params.cliVersion);
+  if (own) detail.cliVersion = own;
+  const map = params.clientVersions;
+  if (map && typeof map === "object" && !Array.isArray(map)) {
+    const versions: Record<string, string | null> = {};
+    for (const [kind, raw] of Object.entries(map as Record<string, unknown>)) {
+      if (!isSurfaceClientKind(kind) || (raw !== null && typeof raw !== "string")) continue;
+      versions[kind] = versionLine(raw);
+    }
+    if (Object.keys(versions).length) detail.clientVersions = versions;
+  }
+  return Object.keys(detail).length ? detail : undefined;
+}
 
 async function recordSurfaceReadinessHandler(
   params: Record<string, unknown>,
+  context?: ToolExecutionContext,
 ): Promise<ToolResult> {
-  const surfaceKey = typeof params.surfaceKey === "string" ? params.surfaceKey.trim() : "";
+  const suppliedKey = typeof params.surfaceKey === "string" ? params.surfaceKey.trim() : "";
   const clientKind = params.clientKind;
   const readinessState = params.readinessState;
   const mcpOk = params.mcpOk;
 
-  if (!surfaceKey) {
+  if (!suppliedKey) {
     return { success: false, error: "invalid_surface_key", message: "surfaceKey is required." };
   }
   if (!isSurfaceClientKind(clientKind)) {
@@ -100,6 +181,8 @@ async function recordSurfaceReadinessHandler(
     return { success: false, error: "invalid_mcp_ok", message: "mcpOk (boolean) is required." };
   }
 
+  const detail = versionDetail(params);
+  const surfaceKey = await boundSurfaceKey(suppliedKey, clientKind, context);
   const { prisma } = await import("@dpf/db");
   const { recordSurfaceReadiness } = await import("@/lib/agent-toolchain/fleet-readiness");
   await recordSurfaceReadiness(prisma as never, {
@@ -109,6 +192,7 @@ async function recordSurfaceReadinessHandler(
     dpfPlatformVersion: typeof params.dpfPlatformVersion === "string" ? params.dpfPlatformVersion : null,
     mcpOk,
     mcpReason: typeof params.mcpReason === "string" ? params.mcpReason : null,
+    ...(detail ? { detail } : {}),
   });
 
   return {
@@ -129,12 +213,37 @@ async function getFleetReadinessHandler(
   const expectedPlatformVersion = typeof params.expectedPlatformVersion === "string" ? params.expectedPlatformVersion : null;
 
   const { prisma } = await import("@dpf/db");
-  const { getFleetReadiness } = await import("@/lib/agent-toolchain/fleet-readiness");
+  const { getFleetReadiness, getToolchainCopies } = await import("@/lib/agent-toolchain/fleet-readiness");
+  const { getPublishedToolchain } = await import("@/lib/agent-toolchain/served-toolchain");
+  const now = new Date();
   const summary = await getFleetReadiness(prisma as never, {
-    now: new Date(),
+    now,
     staleAfterMs,
     expectedPlatformVersion,
   });
+  // BI-54469E18: what each connection actually loaded, against this release.
+  const published = getPublishedToolchain();
+  const origin = (process.env.NEXT_PUBLIC_BASE_URL || process.env.PUBLIC_URL || "https://localhost").replace(/\/+$/, "");
+  const toolchain = published
+    ? { release: { packVersion: published.packVersion, packDigest: published.packDigest }, ...(await getToolchainCopies(prisma as never, { published, mcpEndpoint: `${origin}/api/mcp/v1`, now, staleAfterMs })) }
+    : null;
+
+  // BI-64795FD0: clients whose capabilities are unverified, either because a
+  // connection reported a newer version or because the weekly re-verification
+  // could not read a declared source.
+  const { CLIENT_CAPABILITY_REVERIFY_TASK_ID, staleClientsFromTaskConfig } = await import("@/lib/agent-toolchain/client-capability-reverify");
+  const verificationTask = await prisma.scheduledAgentTask
+    .findUnique({ where: { taskId: CLIENT_CAPABILITY_REVERIFY_TASK_ID }, select: { taskConfig: true } })
+    .catch(() => null);
+  const capabilities = {
+    unverifiedVersions: [
+      ...(toolchain?.capabilityDrift ?? []),
+      ...summary.reportedCapabilityDrift.filter(
+        (drift) => !(toolchain?.capabilityDrift ?? []).some((seen) => seen.intakeKey === drift.intakeKey),
+      ),
+    ],
+    verificationStale: staleClientsFromTaskConfig(verificationTask?.taskConfig),
+  };
 
   const msg = summary.counts.total === 0
     ? "No build surfaces have reported readiness yet."
@@ -142,20 +251,63 @@ async function getFleetReadinessHandler(
       ? `All ${summary.counts.total} surface(s) are ready.`
       : `${summary.counts.notReady} not-ready, ${summary.counts.stale} stale of ${summary.counts.total} surface(s).`;
 
-  return { success: true, message: msg, data: summary as unknown as Record<string, unknown> };
+  return { success: true, message: msg, data: { ...summary, toolchain, capabilities } as unknown as Record<string, unknown> };
+}
+
+async function issueGrokCredentialsClientHandler(userId: string, context?: ToolExecutionContext): Promise<ToolResult> {
+  const [{ prisma }, { issueGrokCredentialsClientForCaller }, { GROK_CREDENTIALS_CLIENT_NAME }, { prepareClientSecret }, { decryptSecret }, { grokAgentRecordId, bindGrokClientAgent }] =
+    await Promise.all([
+      import("@dpf/db"),
+      import("@/lib/agent-toolchain/grok-credential-issue"),
+      import("@/lib/auth/grok-credentials-client"),
+      import("@/lib/auth/oauth-tokens"),
+      import("@/lib/govern/credential-crypto"),
+      import("@/lib/auth/grok-agent-binding"),
+    ]);
+  return issueGrokCredentialsClientForCaller(userId, context ?? {}, {
+    rows: (ownerUserId) =>
+      prisma.oAuthClient.findMany({
+        where: { ownerUserId, clientName: GROK_CREDENTIALS_CLIENT_NAME },
+        select: { oAuthClientId: true, clientName: true, registrationKind: true, ownerUserId: true, revokedAt: true, allowedScopes: true, clientSecretEnc: true, agentId: true },
+      }),
+    create: async (row) => {
+      await prisma.oAuthClient.create({ data: { ...row, allowedScopes: [...row.allowedScopes], redirectUris: [] } });
+    },
+    decrypt: decryptSecret,
+    prepareSecret: prepareClientSecret,
+    grokAgent: () => grokAgentRecordId(prisma),
+    bindAgent: (oAuthClientId, agentRecordId) => bindGrokClientAgent(prisma, oAuthClientId, agentRecordId),
+  });
+}
+
+async function issueSourceCredentialsClientHandler(userId: string, context?: ToolExecutionContext): Promise<ToolResult> {
+  const [{ prisma }, { issueSourceCredentialsClientForCaller, sourceCredentialsClientName }, { eligibleOAuthCoworkers }, { prepareClientSecret }, { decryptSecret }] = await Promise.all([
+    import("@dpf/db"), import("@/lib/agent-toolchain/source-credential-issue"), import("@/lib/auth/oauth-identity-binding"),
+    import("@/lib/auth/oauth-tokens"), import("@/lib/govern/credential-crypto"),
+  ]);
+  return issueSourceCredentialsClientForCaller(userId, context ?? {}, {
+    withOwnerLock: (owner, actor, run) => prisma.$transaction(async tx => {
+      const key = `source-credentials:${owner}:${actor}`;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))`;
+      return run({
+        eligible: async () => (await eligibleOAuthCoworkers(owner, null, null, tx, { agentId: actor })).find(candidate => candidate.agentId === actor) ?? null,
+        rows: () => tx.oAuthClient.findMany({ where: { ownerUserId: owner, clientName: sourceCredentialsClientName(actor) },
+          select: { oAuthClientId: true, clientName: true, registrationKind: true, ownerUserId: true, revokedAt: true, allowedScopes: true, clientSecretEnc: true, agentId: true } }),
+        create: async row => { await tx.oAuthClient.create({ data: { ...row, allowedScopes: [...row.allowedScopes], redirectUris: [] } }); },
+        decrypt: decryptSecret, prepareSecret: prepareClientSecret,
+      });
+    }),
+  });
 }
 
 export const surfaceReadinessPack: ToolPack = {
   packId: "surface-readiness",
   definitions,
   handlers: {
-    record_surface_readiness: (params) => recordSurfaceReadinessHandler(params),
+    record_surface_readiness: (params, _userId, context) => recordSurfaceReadinessHandler(params, context),
     get_fleet_readiness: (params) => getFleetReadinessHandler(params),
+    issue_grok_credentials_client: (_params, userId, context) => issueGrokCredentialsClientHandler(userId, context),
+    issue_source_credentials_client: (_params, userId, context) => issueSourceCredentialsClientHandler(userId, context),
   },
-  // Mirrors TOOL_TO_GRANTS (BI-6AC65187): the heartbeat upserts on a
-  // caller-supplied surfaceKey, so it rides the heartbeat tier.
-  grants: {
-    record_surface_readiness: ["work_capsule_write"],
-    get_fleet_readiness: ["work_capsule_read"],
-  },
+  grants: SURFACE_READINESS_TOOL_GRANTS,
 };

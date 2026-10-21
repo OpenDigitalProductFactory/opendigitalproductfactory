@@ -97,6 +97,9 @@ services:
     command: ["/docker-entrypoint.sh"]
     volumes:
       - dpf-source-code:/workspace
+      # Fresh runtime capability rows use the same canonical host snapshot as
+      # the portal. A directory bind observes atomic install-state replacements.
+      - ${DPF_STATE_DIR:-${HOME}/.dpf}:/dpf-state:ro
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://dpf:dpf_dev@postgres:5432/dpf}
       DPF_HOST_PROFILE: ${DPF_HOST_PROFILE:-}
@@ -332,7 +335,6 @@ services:
       DPF_SELF_UPGRADE_TARGET_BINDING_SECRET: ${DPF_SELF_UPGRADE_TARGET_BINDING_SECRET:-}
       DPF_DELIVERY_TASK_CURSOR_SECRET: ${DPF_DELIVERY_TASK_CURSOR_SECRET:-}
       HIVE_CONTRIBUTION_TOKEN: ${HIVE_CONTRIBUTION_TOKEN:-}
-      HIVE_OPS_TOKEN: ${HIVE_OPS_TOKEN:-}
       INNGEST_BASE_URL: http://inngest:8288
       # No default (BI-3267763F). A published fallback let anyone who could
       # reach /api/inngest forge signed invocations. The installers generate

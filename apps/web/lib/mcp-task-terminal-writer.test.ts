@@ -132,7 +132,7 @@ beforeEach(() => {
     sensitivity: "internal",
   });
   autonomous.resolveTools.mockResolvedValue({ tools: [], toolsForProvider: [], deferredTools: [] });
-  autonomous.execute.mockResolvedValue({ content: "Done.", executedTools: [] });
+  autonomous.execute.mockResolvedValue({ content: "Done.", providerId: "local", executedTools: [] });
   autonomous.executeTool.mockResolvedValue({
     success: true,
     message: "Read design.md lines 1-3 of 3.",
@@ -157,7 +157,7 @@ async function persistedMetadata(tokenId: string, request = params) {
 }
 
 describe("terminal writer resumption", () => {
-  it("recovers the same completed review once when persisted evidence proves the route-exit defect", async () => {
+  it("does not reserve inference for a legacy completed review without execution settlement proof", async () => {
     const metadata = await persistedMetadata("PAT-WRITER-ROUTE-EXIT");
     vi.clearAllMocks();
     const updatedAt = new Date("2026-08-28T09:27:00.000Z");
@@ -202,33 +202,9 @@ describe("terminal writer resumption", () => {
 
     const outcome = await submit("PAT-WRITER-ROUTE-EXIT");
 
-    expect(db.updateMany).toHaveBeenCalledWith({
-      where: { taskRunId: "TR-MCP-ROUTE-EXIT", status: "completed", updatedAt },
-      data: {
-        status: "working",
-        lastHeartbeatAt: expect.any(Date),
-        completedAt: null,
-        progressPayload: expect.objectContaining({
-          terminalWriterWait: expect.objectContaining({ attempt: 2 }),
-          recoveredFromCompletedRouteExit: true,
-          resumeReservedAt: expect.any(String),
-        }),
-      },
-    });
-    expect(autonomous.execute).toHaveBeenCalledWith(expect.objectContaining({
-      taskRunId: "TR-MCP-ROUTE-EXIT",
-      threadId: "thread-external",
-    }));
-    expect(autonomous.create).not.toHaveBeenCalled();
-    expect(outcome).toMatchObject({
-      kind: "result",
-      result: {
-        taskRunId: "TR-MCP-ROUTE-EXIT",
-        status: "completed",
-        idempotentReplay: true,
-        resumedFromTerminalWriterWait: true,
-      },
-    });
+    expect(db.updateMany).not.toHaveBeenCalled();
+    expect(autonomous.execute).not.toHaveBeenCalled();
+    expect(outcome).toMatchObject({ kind: "result", result: { taskRunId: "TR-MCP-ROUTE-EXIT", idempotentReplay: true } });
   });
 
   it("does not reopen a completed review without persisted successful reader evidence", async () => {
@@ -278,7 +254,7 @@ describe("terminal writer resumption", () => {
           schemaVersion: 1,
           kind: "missing-terminal-writer",
           writerToolName: "record_initiative_evidence",
-          resumeMode: "same-taskrun",
+          resumeMode: "same-taskrun", dispatchContract: "required-tool-call",
           attempt: 1,
           observedAt: "2026-08-28T07:19:00.000Z",
         },
@@ -434,7 +410,7 @@ describe("terminal writer resumption", () => {
           schemaVersion: 1,
           kind: "missing-terminal-writer",
           writerToolName: "record_initiative_evidence",
-          resumeMode: "same-taskrun",
+          resumeMode: "same-taskrun", dispatchContract: "required-tool-call",
           attempt: 1,
           observedAt: "2026-08-31T03:04:00.000Z",
         },
@@ -502,7 +478,7 @@ describe("terminal writer resumption", () => {
           schemaVersion: 1,
           kind: "missing-terminal-writer",
           writerToolName: "record_initiative_evidence",
-          resumeMode: "same-taskrun",
+          resumeMode: "same-taskrun", dispatchContract: "required-tool-call",
           attempt: 2,
           observedAt: "2026-08-28T07:24:00.000Z",
         },
@@ -649,7 +625,7 @@ describe("terminal writer resumption", () => {
       progressPayload: {
         terminalWriterWait: {
           schemaVersion: 1, kind: "missing-terminal-writer",
-          writerToolName: "record_initiative_evidence", resumeMode: "same-taskrun", attempt: 3,
+          writerToolName: "record_initiative_evidence", resumeMode: "same-taskrun", dispatchContract: "required-tool-call", attempt: 3,
           observedAt: "2026-09-01T02:22:19.237Z",
         },
         terminalWriterEscalation: {
@@ -697,7 +673,7 @@ describe("terminal writer resumption", () => {
       progressPayload: {
         terminalWriterWait: {
           schemaVersion: 1, kind: "missing-terminal-writer",
-          writerToolName: "record_initiative_evidence", resumeMode: "same-taskrun", attempt: 2,
+          writerToolName: "record_initiative_evidence", resumeMode: "same-taskrun", dispatchContract: "required-tool-call", attempt: 2,
           observedAt: "2026-09-01T01:18:33.353Z",
         },
         terminalWriterContextFailure: {
@@ -749,7 +725,7 @@ describe("terminal writer resumption", () => {
           schemaVersion: 1,
           kind: "missing-terminal-writer",
           writerToolName: "record_initiative_evidence",
-          resumeMode: "same-taskrun",
+          resumeMode: "same-taskrun", dispatchContract: "required-tool-call",
           attempt: 2,
           observedAt: "2026-08-28T07:24:00.000Z",
         },

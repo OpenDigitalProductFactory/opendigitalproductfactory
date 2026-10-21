@@ -1,4 +1,4 @@
-import { assertCliResultSucceeded, isProviderOverloadMessage, stripLeadingQuotaBanner } from "./cli-result-errors";
+import { assertCliResultSucceeded, isProviderOverloadMessage, stripLeadingQuotaBanner, parseCliTerminalResultMetadata } from "./cli-result-errors";
 export { isCliQuotaBanner, stripLeadingQuotaBanner } from "./cli-result-errors";
 
 // apps/web/lib/routing/cli-adapter.ts
@@ -34,6 +34,10 @@ import { withCliSlot } from "./cli-concurrency";
 import { isSideEffectingGrant } from "./grant-capability";
 import { toCliParsedUsage, type CliParsedUsage, type CliUsagePayload } from "./cli-usage";
 import { providerSetupLocation } from "@/lib/ai-provider-routes";
+import { randomUUID } from "node:crypto";
+import { renderOwnedCliRunner, NativeCliExecutionUncertainError } from "./cli-owned-runner";
+import { observeCliProcess } from "./cli-process-observation";
+import type { NativeCliDiagnostics } from "../shared/execution-uncertainty";
 
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
@@ -92,13 +96,13 @@ type CliAuth =
   | { mode: "oauth"; token: string }
   | { mode: "apikey"; apiKey: string };
 
-export async function resolveCliAuth(providerId: string): Promise<CliAuth> {
+export async function resolveCliAuth(providerId: string, connectionId?: string, expectedExecutionVersion?: string): Promise<CliAuth> {
   if (providerId === "anthropic-sub") {
     // Use getProviderBearerToken which handles token refresh automatically.
     // The raw getDecryptedCredential doesn't refresh expired tokens — it just
     // reads whatever is cached. getProviderBearerToken checks expiry, refreshes
     // if needed, and returns a valid token.
-    const tokenResult = await getProviderBearerToken(providerId);
+    const tokenResult = connectionId ? expectedExecutionVersion ? await getProviderBearerToken(providerId, connectionId, expectedExecutionVersion) : await getProviderBearerToken(providerId, connectionId) : await getProviderBearerToken(providerId);
     if ("error" in tokenResult) {
       throw new InferenceError(
         `OAuth token error for "${providerId}": ${tokenResult.error}. Configure via ${providerSetupLocation(providerId)}.`,
@@ -110,7 +114,7 @@ export async function resolveCliAuth(providerId: string): Promise<CliAuth> {
   }
 
   // Fallback: API key mode (shouldn't normally reach here — anthropic uses chat adapter)
-  const credential = await getDecryptedCredential(providerId);
+  const credential = connectionId ? expectedExecutionVersion ? await getDecryptedCredential(providerId, connectionId, expectedExecutionVersion) : await getDecryptedCredential(providerId, connectionId) : await getDecryptedCredential(providerId);
   const apiKey = credential?.secretRef ?? credential?.cachedToken;
   if (!apiKey) {
     throw new InferenceError(
@@ -310,10 +314,11 @@ export const cliAdapter: ExecutionAdapterHandler = {
 
   async execute(request: AdapterRequest): Promise<AdapterResult> {
     const { providerId, modelId, messages, systemPrompt, tools, mcpSession } = request;
+    const poolIdentity = request.plan.providerConnectionId ? { providerId, providerConnectionId: request.plan.providerConnectionId } : undefined;
     const startMs = Date.now();
 
     // 1. Resolve auth
-    const auth = await resolveCliAuth(providerId);
+    const auth = await resolveCliAuth(providerId, request.plan.providerConnectionId, request.plan.providerConnectionVersion);
 
     // 2. Build the prompt from messages
     // Claude CLI's `-p` flag takes a single prompt string. We concatenate
@@ -390,6 +395,7 @@ export const cliAdapter: ExecutionAdapterHandler = {
           threadId: mcpSession!.threadId ?? null,
           routeContext: mcpSession!.routeContext ?? null,
           taskRunId: mcpSession!.taskRunId ?? null,
+          taskExecutionFence: mcpSession!.taskExecutionFence,
           scopes: scopesForJwt,
           capability: capabilityForJwt,
         });
@@ -429,32 +435,28 @@ export const cliAdapter: ExecutionAdapterHandler = {
 
     // 4. Write prompt and system prompt to temp files in the sandbox
     const slug = `conv-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    const promptFile = `/tmp/cli-prompt-${slug}.txt`;
-    const systemFile = `/tmp/cli-system-${slug}.txt`;
-    const tokenFile = `/tmp/cli-token-${slug}.txt`;
-    const mcpConfigFile = `/tmp/cli-mcp-${slug}.json`;
-    const runnerScript = `/tmp/cli-run-${slug}.sh`;
-    // BI-35FAE2DB: empty, per-run cwd so the CLI discovers no project
-    // CLAUDE.md / settings / hooks above it.
-    const cliWorkingDir = `/tmp/cli-cwd-${slug}`;
-    // Records the in-container claude PID so a timeout can reap the actual
-    // process inside the sandbox (BI-F36E7510). proc.kill() below only reaches
-    // the local `docker exec` client, not the containerized process.
-    const pidFile = `/tmp/cli-pid-${slug}.txt`;
+    const authHome = `/tmp/dpf-claude-auth-${randomUUID()}`;
+    const promptFile = `${authHome}/cli-prompt-${slug}.txt`;
+    const systemFile = `${authHome}/cli-system-${slug}.txt`;
+    const tokenFile = `${authHome}/cli-token-${slug}.txt`;
+    const mcpConfigFile = `${authHome}/cli-mcp-${slug}.json`;
+    const runnerScript = `${authHome}/cli-run-${slug}.js`;
 
     const cp = lazyChildProcess();
     const execAsync = lazyUtil().promisify(cp.exec);
     const spawnCb = cp.spawn;
+    let containerDispatchStarted = false;
 
     try {
+      await execAsync(`docker exec ${SANDBOX_CONTAINER} sh -c 'mkdir -p ${authHome} && chmod 700 ${authHome} && chown node:node ${authHome}'`, { timeout: 5_000 });
       // Write prompt and system prompt to sandbox. Content is streamed via the
       // child's stdin (writeSandboxFile → dockerExecWriteStdin), NOT embedded in
       // the docker exec command — so secrets staged this way (the OAuth token /
       // mcp-config JWT below) never enter argv, a `ps` listing, or an exec log
       // (BI-AFEF038A).
       const writes: Promise<unknown>[] = [
-        writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: promptFile, content: prompt, mode: "644", timeoutMs: 5_000 }),
-        writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: systemFile, content: fullSystemPrompt, mode: "644", timeoutMs: 5_000 }),
+        writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: promptFile, content: prompt, mode: "600", chownNodeUser: true, timeoutMs: 5_000 }),
+        writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: systemFile, content: fullSystemPrompt, mode: "600", chownNodeUser: true, timeoutMs: 5_000 }),
       ];
 
       if (mcpJwt) {
@@ -478,7 +480,7 @@ export const cliAdapter: ExecutionAdapterHandler = {
             path: mcpConfigFile,
             content: JSON.stringify(mcpConfig),
             chownNodeUser: true,
-            mode: "644",
+            mode: "600",
             timeoutMs: 5_000,
           }),
         );
@@ -487,11 +489,9 @@ export const cliAdapter: ExecutionAdapterHandler = {
       await Promise.all(writes);
 
       // 5. Build auth env and runner script
-      let authExportLine: string;
-      let bareFlag = "";
       if (auth.mode === "oauth") {
         try {
-          await writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: tokenFile, content: auth.token, mode: "644", timeoutMs: 5_000 });
+          await writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: tokenFile, content: auth.token, chownNodeUser: true, mode: "600", timeoutMs: 5_000 });
         } catch {
           // BI-1291B677 / BI-AFEF038A: the token now streams via stdin so it no
           // longer enters the command surface, but keep this belt-and-suspenders
@@ -500,10 +500,8 @@ export const cliAdapter: ExecutionAdapterHandler = {
           // error and the BuildActivity / ideate_dispatch summary.
           throw new Error("Failed to stage the CLI OAuth token into the sandbox.");
         }
-        authExportLine = `export CLAUDE_CODE_OAUTH_TOKEN=$(cat ${tokenFile})`;
       } else {
-        authExportLine = `export ANTHROPIC_API_KEY=${auth.apiKey}`;
-        bareFlag = "--bare ";
+        await writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: tokenFile, content: auth.apiKey, chownNodeUser: true, mode: "600", timeoutMs: 5_000 });
       }
 
       // Build the CLI command.
@@ -518,9 +516,7 @@ export const cliAdapter: ExecutionAdapterHandler = {
       // --disallowedTools. The agentic loop's tool_use extractor parses the
       // model's structured-JSON output as before.
       const cliModel = modelId || "sonnet";
-      const mcpFlags = mcpJwt
-        ? `--mcp-config ${mcpConfigFile} --strict-mcp-config `
-        : "";
+      const mcpFlags = mcpJwt ? ["--mcp-config", mcpConfigFile, "--strict-mcp-config"] : [];
       // NOTE: claude is backgrounded (NOT `exec`ed) so the runner sh stays the
       // parent and records claude's PID to pidFile. This lets the timeout path
       // reap the real in-container process tree (BI-F36E7510); `exec` would
@@ -537,17 +533,10 @@ export const cliAdapter: ExecutionAdapterHandler = {
       // by leaving: every native filesystem tool is already disallowed here
       // (CLAUDE_CODE_NATIVE_TOOLS_FLAG_VALUE), so that context could never be
       // acted on, only paid for. Measurements are in the BI and commit message.
-      const script = [
-        "#!/bin/sh",
-        `mkdir -p ${cliWorkingDir}`,
-        `cd ${cliWorkingDir}`,
-        authExportLine,
-        `SYSPROMPT=$(cat ${systemFile})`,
-        `claude ${bareFlag}-p - --dangerously-skip-permissions ${mcpFlags}--disallowedTools "${CLAUDE_CODE_NATIVE_TOOLS_FLAG_VALUE}" --output-format json --model ${cliModel} --system-prompt "$SYSPROMPT" < ${promptFile} &`,
-        `CLIPID=$!`,
-        `echo "$CLIPID" > ${pidFile}`,
-        `wait "$CLIPID"`,
-      ].join("\n");
+      const script = renderOwnedCliRunner({ command: "claude", args: [...(auth.mode === "apikey" ? ["--bare"] : []), "-p", "-", "--dangerously-skip-permissions", ...mcpFlags,
+        "--disallowedTools", CLAUDE_CODE_NATIVE_TOOLS_FLAG_VALUE, "--output-format", "json", "--model", cliModel],
+        home: authHome, cwd: authHome, promptFile, systemPromptFile: systemFile, timeoutMs: CLI_TIMEOUT_MS,
+        env: { CLAUDE_CONFIG_DIR: authHome }, secretFile: { path: tokenFile, variable: auth.mode === "oauth" ? "CLAUDE_CODE_OAUTH_TOKEN" : "ANTHROPIC_API_KEY" } });
 
       await writeSandboxFile({ containerId: SANDBOX_CONTAINER, path: runnerScript, content: script, mode: "755", timeoutMs: 5_000 });
 
@@ -563,98 +552,82 @@ export const cliAdapter: ExecutionAdapterHandler = {
       // callers (Build Studio + coworkers), so a fan-out can't starve the
       // shared sandbox / portal. Prep (auth, file writes) stays outside the
       // slot so slots turn over on real inference, not setup.
-      const { stdout } = await withCliSlot(() => new Promise<{ stdout: string }>((resolve, reject) => {
+      const { stdout, diagnostics } = await withCliSlot(() => new Promise<{ stdout: string; diagnostics: NativeCliDiagnostics }>((resolve, reject) => {
         const proc = spawnCb("docker", [
-          "exec", "--user", "node", SANDBOX_CONTAINER, runnerScript,
+          "exec", "--user", "node", SANDBOX_CONTAINER, "node", runnerScript,
         ]);
+        containerDispatchStarted = true;
 
-        let stdout = "";
-        let stderr = "";
-        let timedOut = false;
-        const timer = setTimeout(() => {
-          timedOut = true;
-          proc.kill("SIGTERM");
-          // proc.kill() only signals the local `docker exec` client; the
-          // process INSIDE the container is not forwarded the signal and would
-          // orphan, pinning the shared sandbox to this build's branch and
-          // leaking pids/threads (BI-F36E7510 — the "portal bad state from too
-          // many CLIs" symptom). Reap the in-container tree explicitly: SIGTERM
-          // the recorded claude PID + the runner sh, then escalate to SIGKILL.
-          const reap = (sig: "TERM" | "KILL") =>
-            execAsync(
-              `docker exec ${SANDBOX_CONTAINER} sh -c "kill -${sig} $(cat ${pidFile} 2>/dev/null) 2>/dev/null; pkill -${sig} -f ${runnerScript} 2>/dev/null; true"`,
-              { timeout: 5_000 },
-            ).catch(() => {});
-          void reap("TERM");
-          setTimeout(() => void reap("KILL"), 3_000);
-        }, CLI_TIMEOUT_MS);
-
-        proc.stdout.on("data", (data: Buffer) => { stdout += data.toString(); });
-        proc.stderr.on("data", (data: Buffer) => { stderr += data.toString(); });
-
-        proc.on("close", (code: number | null) => {
-          clearTimeout(timer);
-          if (timedOut) {
+        observeCliProcess(proc, {
+          timeoutMs: CLI_TIMEOUT_MS + 15_000,
+          onClose: ({ code, stdout, stderr, diagnostics: localDiagnostics }) => {
+            const diagnostics = { ...localDiagnostics, terminalResult: parseCliTerminalResultMetadata(stdout) };
+            if (diagnostics.timedOut || code === null || code === 124 || stderr.includes("DPF_CLI_TIMEOUT")) {
+              reject(new NativeCliExecutionUncertainError(providerId, diagnostics));
+            } else if (code !== 0 && (mcpJwt || stdout.trim())) {
+              reject(new NativeCliExecutionUncertainError(providerId, diagnostics));
+            } else if (code === 0) {
+              resolve({ stdout, diagnostics });
+            } else {
+              // Check for auth errors in stderr
+              if (stderr.includes("unauthorized") || stderr.includes("401") || stderr.includes("authentication")) {
+                reject(new InferenceError(
+                  `Claude CLI auth failed: ${stderr.slice(0, 300)}`,
+                  "auth",
+                  providerId,
+                ));
+              } else if (isProviderOverloadMessage(stderr)) {
+                reject(new InferenceError(
+                  `Claude CLI overloaded: ${stderr.slice(0, 300)}`,
+                  "overloaded",
+                  providerId,
+                ));
+              } else if (stderr.includes("rate") || stderr.includes("429")) {
+                // EP-COST Phase 4: record pool exhaustion so orchestrator can back off
+                void recordCliRateLimit("claude-cli", providerId, stderr, poolIdentity);
+                reject(new InferenceError(
+                  `Claude CLI rate limited: ${stderr.slice(0, 300)}`,
+                  "rate_limit",
+                  providerId,
+                ));
+              } else {
+                reject(new InferenceError(
+                  `Claude CLI exit code ${code}: ${stderr.slice(0, 500)}`,
+                  "provider_error",
+                  providerId,
+                ));
+              }
+            }
+          },
+          onError: (err: Error, observation) => {
+            if (observation.started) {
+              reject(new NativeCliExecutionUncertainError(providerId, observation.diagnostics));
+              return;
+            }
+            containerDispatchStarted = false;
             reject(new InferenceError(
-              `Claude CLI timed out after ${CLI_TIMEOUT_MS / 1000}s`,
-              "provider_error",
+              `Claude CLI spawn error: ${err.message}`,
+              "network",
               providerId,
             ));
-          } else if (code === 0 || stdout.trim()) {
-            resolve({ stdout });
-          } else {
-            // Check for auth errors in stderr
-            if (stderr.includes("unauthorized") || stderr.includes("401") || stderr.includes("authentication")) {
-              reject(new InferenceError(
-                `Claude CLI auth failed: ${stderr.slice(0, 300)}`,
-                "auth",
-                providerId,
-              ));
-            } else if (isProviderOverloadMessage(stderr)) {
-              reject(new InferenceError(
-                `Claude CLI overloaded: ${stderr.slice(0, 300)}`,
-                "overloaded",
-                providerId,
-              ));
-            } else if (stderr.includes("rate") || stderr.includes("429")) {
-              // EP-COST Phase 4: record pool exhaustion so orchestrator can back off
-              void recordCliRateLimit("claude-cli", providerId, stderr);
-              reject(new InferenceError(
-                `Claude CLI rate limited: ${stderr.slice(0, 300)}`,
-                "rate_limit",
-                providerId,
-              ));
-            } else {
-              reject(new InferenceError(
-                `Claude CLI exit code ${code}: ${stderr.slice(0, 500)}`,
-                "provider_error",
-                providerId,
-              ));
-            }
-          }
-        });
-
-        proc.on("error", (err: Error) => {
-          clearTimeout(timer);
-          reject(new InferenceError(
-            `Claude CLI spawn error: ${err.message}`,
-            "network",
-            providerId,
-          ));
+          },
         });
       }));
 
       // 7. Parse the output
+      if (mcpJwt && diagnostics.terminalResult?.status !== "success") throw new NativeCliExecutionUncertainError(providerId, diagnostics);
       const parsed = parseCliJsonOutput(stdout);
       const inferenceMs = Date.now() - startMs;
 
       try {
         assertCliResultSucceeded(stdout, parsed, providerId);
       } catch (error) {
+        // Native MCP tools may have run before an error-shaped terminal result.
+        if (mcpJwt) throw new NativeCliExecutionUncertainError(providerId, diagnostics);
         if (error instanceof InferenceError && error.code === "rate_limit") {
           // Publish exhaustion before fallback can select another model on the
           // same account. The recorder contains persistence failures itself.
-          await recordCliRateLimit("claude-cli", providerId, parsed.text);
+          await recordCliRateLimit("claude-cli", providerId, parsed.text, poolIdentity);
         }
         throw error;
       }
@@ -701,7 +674,7 @@ export const cliAdapter: ExecutionAdapterHandler = {
       }
 
       // EP-COST Phase 4: successful call proves the pool is available — clear any stale exhaustion record.
-      void clearCliRateLimit("claude-cli");
+      void clearCliRateLimit("claude-cli", poolIdentity);
 
       return {
         text: parsed.text,
@@ -709,14 +682,24 @@ export const cliAdapter: ExecutionAdapterHandler = {
         usage: parsed.usage,
         inferenceMs,
       };
+    } catch (error) {
+      // Quota is an account observation, not proof that native tool effects settled.
+      // Use only the validated terminal envelope, never raw output or a reset guess.
+      const terminal = error instanceof NativeCliExecutionUncertainError ? error.diagnostics?.terminalResult : undefined;
+      if (terminal?.type === "result" && terminal.status === "error" && terminal.isError === true && terminal.hint === "quota") {
+        try {
+          await recordCliRateLimit("claude-cli", providerId,
+            "The native CLI reported a usage limit; its reset time is unknown.", poolIdentity);
+        } catch { /* Persistence must never replace the original execution hold. */ }
+      }
+      throw error;
     } finally {
       // Clean up temp files (fire-and-forget). The mcp-config file carries the
       // short-lived JWT; even though it's already 5-minute capped, we wipe it
       // so a leaked sandbox shell can't dump the bearer from disk after the
       // call returns.
-      execAsync(
-        `docker exec ${SANDBOX_CONTAINER} sh -c "rm -f ${promptFile} ${systemFile} ${tokenFile} ${mcpConfigFile} ${runnerScript} ${pidFile}; rmdir ${cliWorkingDir} 2>/dev/null || true"`,
-        { timeout: 5_000 },
+      if (!containerDispatchStarted) await execAsync(
+        `docker exec ${SANDBOX_CONTAINER} sh -c 'rm -rf ${authHome}'`, { timeout: 5_000 },
       ).catch(() => {});
     }
   },

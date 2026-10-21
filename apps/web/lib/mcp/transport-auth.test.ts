@@ -25,15 +25,18 @@ describe("authenticateMcpRequest — session JWT (BI-B949993E)", () => {
   beforeEach(() => verifySessionMock.mockReset());
 
   it("carries the governed TaskRun id from the JWT onto the resolved token", async () => {
+    const taskExecutionFence = { schemaVersion: 1 as const, reservation: "admitted", dispatchClaim: "dispatch", authorityDigest: null, requestDigest: "9".repeat(64) };
     verifySessionMock.mockResolvedValue({
       userId: "u1", agentId: "AGT-WS-REVIEW", threadId: "thread-xyz", routeContext: "/build",
       taskRunId: "TR-MCP-abc-123", scopes: ["backlog_read"], capability: "write",
+      taskExecutionFence,
     });
     const result = await authenticateMcpRequest(sessionRequest());
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.token.source).toBe("session-jwt");
     expect(result.token.taskRunId).toBe("TR-MCP-abc-123");
+    expect(result.token.taskExecutionFence).toEqual(taskExecutionFence);
     expect(result.token.threadId).toBe("thread-xyz");
   });
 
@@ -45,5 +48,38 @@ describe("authenticateMcpRequest — session JWT (BI-B949993E)", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.token.taskRunId).toBeNull();
+  });
+});
+
+// BI-84C1F526 (AC-GROK): an expired or missing client credential gets the same
+// repair link the TOOLCHAIN notice gives, so the agent can converge it.
+describe("authenticateMcpRequest — repair link on a refused credential", () => {
+  const REPAIR = "http://localhost:3000/api/agent-toolchain/manifest";
+
+  function bearerRequest(token?: string): Request {
+    return new Request("http://localhost:3000/api/mcp/v1", {
+      method: "POST",
+      headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) },
+      body: "{}",
+    });
+  }
+
+  async function errorOf(result: Awaited<ReturnType<typeof authenticateMcpRequest>>) {
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.response.status).toBe(401);
+    return (await result.response.json()).error as { message: string; data?: { repair?: string } };
+  }
+
+  it("names the toolchain repair when no credential is sent", async () => {
+    const error = await errorOf(await authenticateMcpRequest(bearerRequest()));
+    expect(error.data?.repair).toBe(REPAIR);
+    expect(error.message).toContain(REPAIR);
+  });
+
+  it("names the toolchain repair when the credential is expired or unknown", async () => {
+    const error = await errorOf(await authenticateMcpRequest(bearerRequest("expired-access-token")));
+    expect(error.message).toMatch(/invalid or expired token/);
+    expect(error.data?.repair).toBe(REPAIR);
   });
 });

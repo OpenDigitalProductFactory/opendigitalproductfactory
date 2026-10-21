@@ -21,3 +21,16 @@ Use the existing versioned work-shape registry, scopeClaims reader, initiative-e
 5. Verify the enterprise → initiative → room → step → actual evidence journey on the served target. Do not mark the seven runtime scenarios or parent initiative complete from this adapter change.
 
 The existing BI-9DC43E17 owner confirmed no overlapping code edits; its future journal sequencing work retains ownership of atomic sequence/high-water semantics.
+
+## October 15 bounded history regression
+
+The deployed recovery97 room has a current-source implement/pr-gate receipt behind
+99 newer activities. The recent 20-event feed omits it and incorrectly leaves the
+requirement without a correlated record. Keep that activity feed bounded, but read
+the latest matching receipt for each declared room/stage/evidence requirement from
+the same journal independently. Reuse the existing versioned binding validator and
+receipt adapter; deduplicate by immutable row ID. Missing/unavailable sources remain
+partial, stale/malformed bindings never satisfy a requirement, and all journal
+receipts remain observed rather than stage verdicts. No schema, new ledger, runner,
+authorization change, or replay is needed. Prove the >20-event regression first,
+then test deduplication, source drift, unavailable reads, and room isolation.

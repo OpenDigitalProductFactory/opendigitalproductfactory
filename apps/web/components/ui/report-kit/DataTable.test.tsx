@@ -1,4 +1,6 @@
-import { describe, expect, it } from "vitest";
+// @vitest-environment jsdom
+import { afterEach, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import {
@@ -28,6 +30,32 @@ const COLUMNS: Column<Row>[] = [
     sortAccessor: (r) => r.amount,
   },
 ];
+
+describe("responsive DataTable semantics", () => {
+  afterEach(cleanup);
+  it("sorts reflowed rows through a focusable native control", () => {
+    render(<DataTable columns={COLUMNS} rows={ROWS} getRowKey={row => row.id} responsive />);
+    const control = screen.getByRole("button", { name: "Name" });
+    control.focus();
+    expect(document.activeElement).toBe(control);
+    fireEvent.click(control);
+    expect(within(screen.getAllByRole("row")[1]).getByText("Alice")).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: "Name" }).getAttribute("aria-sort")).toBe("ascending");
+    fireEvent.click(control);
+    expect(within(screen.getAllByRole("row")[1]).getByText("Charlie")).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: "Name" }).getAttribute("aria-sort")).toBe("descending");
+  });
+  it("retains one table, every field and native sorting controls when rows reflow", () => {
+    const html = renderToStaticMarkup(<DataTable columns={COLUMNS} rows={ROWS}
+      getRowKey={row => row.id} ariaLabel="Accounts" responsive />);
+    expect(html.match(/<table\b/g)).toHaveLength(1);
+    expect(html).toContain('role="table"');
+    expect(html.match(/<td\b/g)).toHaveLength(9);
+    expect(html.match(/<button\b/g)).toHaveLength(2);
+    for (const row of ROWS) expect(html).toContain(row.name);
+    for (const column of COLUMNS) expect(html).toContain(String(column.header));
+  });
+});
 
 describe("DataTable pure helpers", () => {
   it("sorts numerically ascending and descending", () => {

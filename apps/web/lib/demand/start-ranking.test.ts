@@ -4,6 +4,7 @@
 // investment-bucket preference when targets are set.
 import { describe, expect, it } from "vitest";
 import { rankForStart, type StartRankingCandidate } from "./start-ranking";
+import { defaultBalancePolicy, evaluateInvestmentBalance } from "../portfolio/investment-balance";
 
 function item(overrides: Partial<StartRankingCandidate> & { itemId: string }): StartRankingCandidate {
   return {
@@ -21,6 +22,59 @@ function item(overrides: Partial<StartRankingCandidate> & { itemId: string }): S
 const ids = (ranked: Array<{ item: StartRankingCandidate }>) => ranked.map((r) => r.item.itemId);
 
 describe("rankForStart", () => {
+  it("moves observed spending toward the cumulative target across repeated starts", () => {
+    const now = new Date("2026-10-13T00:00:00Z");
+    const policy = { ...defaultBalancePolicy("founder", "shared-platform"), steeringEnabled: true };
+    const observation = { knownAttempts: 20, unknownAttempts: 0, refactorTokens: 2000, newTokens: 8000, unclassifiedTokens: 0, latestAt: now.toISOString() };
+    const candidates = [item({ itemId: "new", demandScore: 10, workType: "feature" }), item({ itemId: "repair", demandScore: 8, workType: "bug" })];
+    for (let i = 0; i < 100; i++) {
+      const preferred = evaluateInvestmentBalance(policy, observation, now).preferred;
+      const [next] = rankForStart(candidates, 1, { investmentByItem: { new: { scopeKey: "A", preferred }, repair: { scopeKey: "A", preferred } } });
+      if (next!.item.itemId === "repair") observation.refactorTokens += 1000;
+      else observation.newTokens += 1000;
+      observation.knownAttempts++;
+    }
+    const actual = evaluateInvestmentBalance(policy, observation, now).actualRefactorPercent!;
+    expect(actual).toBeGreaterThanOrEqual(74);
+    expect(actual).toBeLessThanOrEqual(85);
+  });
+  it("uses an evidenced repair classification without relabeling documentation work", () => {
+    const candidates = [item({ itemId: "new", demandScore: 10, workType: "feature" }), item({ itemId: "repair-doc", demandScore: 8, workType: "doc" })];
+    expect(ids(rankForStart(candidates, 2, { investmentByItem: {
+      new: { scopeKey: "A", preferred: "refactor" },
+      "repair-doc": { scopeKey: "A", preferred: "refactor", classification: "refactor" },
+    } }))).toEqual(["repair-doc", "new"]);
+  });
+  it("steers only within the leading funding scope and preserves other owners' positions", () => {
+    const candidates = [
+      item({ itemId: "A-new", demandScore: 10, workType: "feature" }),
+      item({ itemId: "B-new", demandScore: 9, workType: "feature" }),
+      item({ itemId: "A-fix", demandScore: 8, workType: "bug" }),
+    ];
+    const investmentByItem = {
+      "A-new": { scopeKey: "A", preferred: "refactor" as const },
+      "B-new": { scopeKey: "B", preferred: "new" as const },
+      "A-fix": { scopeKey: "A", preferred: "refactor" as const },
+    };
+    const ranked = rankForStart(candidates, 3, { investmentByItem });
+    expect(ids(ranked)).toEqual(["A-fix", "B-new", "A-new"]);
+    expect(ranked[0]!.reason).toContain("cumulative funding allocation");
+  });
+  it("never lets allocation cross scored or starved-bucket tiers", () => {
+    const candidates = [
+      item({ itemId: "new", demandScore: 10, workType: "feature", investmentBucket: "grow" }),
+      item({ itemId: "fix", demandScore: null, workType: "bug", investmentBucket: "run" }),
+    ];
+    const investmentByItem = Object.fromEntries(candidates.map((x) => [x.itemId, { scopeKey: "A", preferred: "refactor" as const }]));
+    expect(ids(rankForStart(candidates, 1, { investmentByItem }))).toEqual(["new"]);
+    candidates[1]!.demandScore = 8;
+    expect(ids(rankForStart(candidates, 1, { investmentByItem, bucketTargets: { grow: 80, run: 20 }, inFlight: [{ investmentBucket: "run", workType: "bug", weight: 10 }] }))).toEqual(["new"]);
+  });
+  it("keeps demand order within each category while leaving interleaved owners in their slots", () => {
+    const candidates = [item({ itemId: "A100", demandScore: 100, workType: "feature" }), item({ itemId: "B95", demandScore: 95, workType: "feature" }), item({ itemId: "A90", demandScore: 90, workType: "feature" }), item({ itemId: "A80", demandScore: 80, workType: "bug" })];
+    const investmentByItem = Object.fromEntries(candidates.map((x) => [x.itemId, { scopeKey: x.itemId[0]!, preferred: "refactor" as const }]));
+    expect(ids(rankForStart(candidates, 4, { investmentByItem }))).toEqual(["A80", "B95", "A100", "A90"]);
+  });
   it("orders scored items by demand score, highest first, regardless of age", () => {
     const ranked = rankForStart(
       [

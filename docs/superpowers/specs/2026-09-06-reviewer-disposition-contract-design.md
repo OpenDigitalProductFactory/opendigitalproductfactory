@@ -107,3 +107,94 @@ never alter receipts, approval records, or the preserved Workroom branch.
 Parent and sole delivery item: BI-31159978. Coverage receipt pending canonical
 recording against this immutable document and the approved scope baseline.
 Implementation readiness is not claimed by this document.
+
+## October 18 recurrence: research ordering and recorded finding correction
+
+Status: proposed continuation under BI-31159978 / WC-23EE73CF. The original
+delivery and receipts above remain historical evidence; this section does not
+approve new implementation or supersede an approved baseline.
+
+The OAuth contribution BI-B986A18B / WC-20A3E867 reproduces two remaining
+contract gaps on source 233d556713d4961e7ff4d088d67a90245321493b:
+
+- `shape-lane-escalations.ts:53` and the initiative readiness runbook request
+  failing-to-passing implementation proof for author research, while
+  `shape-requirements.ts` requires research before implementation admission.
+  A reproduction and design choice can precede the fix; passing regression
+  evidence cannot honestly be reported before that fix exists.
+- Receipt `initiative-98523598-6ee0-46cd-b336-2ab9d64815e9` introduced finding
+  `IF-B499C4D1D733A220` against research for a real product observability gap.
+  The research itself was complete. The receipt validator permits resolutions
+  of open findings but has no explicit correction of erroneous gate placement.
+  Marking the defect fixed to unlock research would be false.
+
+Current medium PLAN admission IRD-B6670530D1FB reproduces the same recovery
+ordering and an unreachable stale-baseline writer for this repair itself.
+Design admission IRD-6A6CDBB64E46 permits this preparation only. The exact
+spec-approval recovery returns no current request; no review was dispatched.
+
+### Proposed contract boundary
+
+Research records the current-state reproduction, named immutable source,
+problem, considered options and chosen approach. It reports failing tests and
+unrun implementation honestly. Delivery retains the requirement for actual
+passing regression and runtime acceptance evidence. Share the wording between
+claim recovery, terminal recovery and the runbook so these surfaces cannot
+reintroduce conflicting proof order.
+
+Correct erroneous gate placement through an explicit append-only disposition,
+separate from a defect resolution. Bind it to the original receipt, finding,
+gate, immutable evidence and authenticated accountable author. Require a reason
+and a retained destination for the still-open product defect. A wrong-gate
+correction must not claim that defect fixed, erase the original failure, change
+its evidence, grant implementation authority, settle an uncertain execution or
+silently clear an independent reviewer's finding. A reviewer-owned finding
+retains reviewer ownership. Repeated correction joins its prior recorded
+effect, rather than producing another disposition.
+
+Reject direct record edits, empty passing receipts that ignore an open finding,
+and use of `resolvedFindingRefs` to conceal a still-open defect. Reuse existing
+receipt/activity persistence and provenance; do not add a parallel findings
+ledger. Final field names and writer authorization require governed admission
+and review of this contract before implementation.
+
+### Verification owed
+
+Reproduce research-before-implementation without requiring a green fix first;
+retain delivery's regression requirement. Exercise wrong-gate correction,
+unchanged original receipt, retained open product defect, foreign-author and
+reviewer-owned refusal, cross-item or stale identity, duplicate correction and
+transaction failure. Confirm that unrelated findings still block passing
+receipts. After canonical deployment, apply the supported correction to the
+original OAuth receipt and read back both its history and current readiness.
+
+The separate approved OAuth baseline amendment remains required. This proposal
+does not replace that baseline with item-body criteria. No tests, implementation
+admission, coverage receipt or live correction are claimed for this section.
+
+### October 19: restore the existing approved-baseline amendment writer
+
+Current author research is accepted at source `8915bae1`; the continuation's
+PLAN claim `IRD-35B462BAB09D` still returns stale
+`OBJECTIVE_BASELINE_REQUIRED`, product-owner, and no writer route. Its retained
+approved repository baseline has no item-body origin. Body criteria are already
+readable, and body-baseline persistence correctly refuses to overwrite approved
+scope. This is a routing failure, not missing operator approval.
+
+The bounded gate repair preserves that baseline's independent amendment writer
+on a medium item. The shared readiness projection identifies a retained own
+repository baseline with an approval receipt; the medium gate keeps
+`design-checklist-reviewer` ownership, which the existing design-review issuer
+and request authorization already route. Guidance follows that same owner.
+The writer still validates immutable source, current baseline, reviewer
+independence, authorization and any changed-statement dispositions. Body-only,
+unapproved and inherited scopes gain no independent amendment route.
+
+This correction repairs the unavailable admission machinery under AGENTS.md's
+platform-failure recovery provision, in the existing governed Workroom. The
+first regression failed on the observed product-owner assignment before the
+source change. It is not a passing baseline amendment, a waived gate or a
+settled original execution. The research-guidance and wrong-gate disposition
+proposal above remains separate, unimplemented work. Normal independent review,
+full verification and publication apply to this routing repair; only after its
+deployment may the original baseline obtain a supported independent amendment.

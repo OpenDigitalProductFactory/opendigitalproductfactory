@@ -539,11 +539,11 @@ if node -e "require.resolve(\"tsx\")" >/dev/null 2>&1; then exec node --import t
 echo "issue-grok-credentials-client: no tsx runtime found in the portal image" >&2
 exit 127'
   if _grok_out="$(docker exec "$PORTAL_CONTAINER" sh -c "$_grok_issuer" issuer 2>"$_grok_err")"; then
-    if printf '%s\n' "$_grok_out" | node "$REPO_ROOT/scripts/refresh-grok-mcp-credential.mjs" write-client --config "$GROK_CONFIG_PATH"; then
+    if printf '%s\n' "$_grok_out" | node "$REPO_ROOT/packages/dpf-skill-pack/scripts/refresh-grok-mcp-credential.mjs" write-client --config "$GROK_CONFIG_PATH"; then
       # The updater receives only an operator-named endpoint. The refresher
       # still calls the resolved URL, including the install default.
       _grok_mcp_url="$MCP_ENDPOINT"
-      if node "$REPO_ROOT/scripts/refresh-grok-mcp-credential.mjs" refresh --mcp-url "$_grok_mcp_url" --config "$GROK_CONFIG_PATH"; then
+      if node "$REPO_ROOT/packages/dpf-skill-pack/scripts/refresh-grok-mcp-credential.mjs" refresh --mcp-url "$_grok_mcp_url" --config "$GROK_CONFIG_PATH"; then
         ok "Grok credential refreshed into bearer_token_file."
       else
         warn "Grok credential refresh did not complete."

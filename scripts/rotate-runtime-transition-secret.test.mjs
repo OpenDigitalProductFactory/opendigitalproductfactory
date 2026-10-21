@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -62,4 +62,21 @@ test("rotation archives the old key with its receipts and installs a new key", a
   assert.notEqual(next, old);
   assert.equal(await readFile(join(output.archiveDir, "runtime-transition.secret"), "utf8"), old);
   assert.equal(await readFile(join(output.archiveDir, "runtime-capability-transitions", "RCT-done.json"), "utf8"), "{}\n");
+});
+
+
+test("expired apply timestamp cannot permit key rotation", async t => {
+  const dir = await mkdtemp(join(tmpdir(), "dpf-rotate-lock-"));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  assert.equal(run(dir, "--initialize").status, 0);
+  const before = await readFile(join(dir, "runtime-transition.secret"));
+  const lock = join(dir, ".runtime-transition-apply.lock");
+  await mkdir(lock);
+  const expired = new Date(Date.now() - 60_000).toISOString();
+  await writeFile(join(lock, "expires-at"), expired);
+  const result = run(dir, "--rotate");
+  assert.equal(result.status, 75, result.stderr);
+  assert.match(result.stderr, /transition_in_progress/);
+  assert.equal(await readFile(join(lock, "expires-at"), "utf8"), expired);
+  assert.deepEqual(await readFile(join(dir, "runtime-transition.secret")), before);
 });

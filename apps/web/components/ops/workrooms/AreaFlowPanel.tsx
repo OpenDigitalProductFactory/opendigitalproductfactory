@@ -84,13 +84,9 @@ export function PortfolioFlowTiles({ flow, areaHref, t }: { flow: PortfolioFlowW
           size="sm"
           value={flow.flowLoad}
           label={t("flow.inFlow")}
-          hint={
-            <span className="flex flex-col gap-1">
-              {t("flow.inFlowHint")}
-              {delta(t, flow.flowLoad, flow.flowLoadPrior, (n) => String(n), true)}
-              <Trend values={flow.weeklyFlowLoad} label={t("flow.loadTrendLabel")} />
-            </span>
-          }
+          // No trend or change for load yet: rooms that end without a recorded stop
+          // never close their run, so its history overstates load (BI-B0E285FB).
+          hint={t("flow.inFlowHint")}
         />
         <KpiCard
           size="sm"

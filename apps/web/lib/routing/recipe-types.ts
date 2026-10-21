@@ -37,6 +37,10 @@ export interface RoutedHarnessPlan {
 
 export interface RoutedExecutionPlan {
   providerId: string;
+  providerConnectionId?: string;
+  providerConnectionVersion?: string;
+  accountAuthMethod?: string;
+  executionChannel?: string;
   modelId: string;
   recipeId: string | null;
   contractFamily: string;
