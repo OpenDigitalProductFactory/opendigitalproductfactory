@@ -47,6 +47,12 @@ Do not approve again just because the original card disappeared; your assistant
 can check the result and the affected work first. You can only read your own
 approval results.
 
+Your assistant can also check the stored action evidence for an approved
+provider-account test without running the test again. It reports the saved test
+outcome separately from the approval status. Missing, conflicting or unsupported
+evidence stays explicit. A saved test success alone does not prove a completed
+Responses verification or a quota update. Private test output is not returned.
+
 How long a coworker's request waits for you, and what happens if nobody
 answers, is explained in [the attention inbox guide](attention-inbox.md#how-long-a-coworkers-request-waits).
 
