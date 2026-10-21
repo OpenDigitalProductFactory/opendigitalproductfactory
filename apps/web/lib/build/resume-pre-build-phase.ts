@@ -350,6 +350,36 @@ export function countReviewIncompleteStreak(
   return { streak, lastAt };
 }
 
+/** reviewBuildPlan's own line for a review no reviewer could complete (review-history.ts). */
+const PLAN_REVIEW_INCOMPLETE_RE = /^Plan review: fail\. Review incomplete:/;
+
+/**
+ * Count the newest run of incomplete plan reviews in reviewBuildPlan's trail
+ * (newest first). Any other review outcome ends the streak. Pure; unit-tested.
+ */
+export function countPlanReviewIncompleteStreak(
+  rows: ReadonlyArray<{ summary: string | null; createdAt: Date }>,
+): ReviewIncompleteStreak {
+  let streak = 0;
+  let lastAt: Date | null = null;
+  for (const row of rows) {
+    if (!PLAN_REVIEW_INCOMPLETE_RE.test(row.summary ?? "")) break;
+    streak += 1;
+    lastAt ??= row.createdAt;
+  }
+  return { streak, lastAt };
+}
+
+async function readPlanReviewIncompleteStreak(buildId: string): Promise<ReviewIncompleteStreak> {
+  const rows = await prisma.buildActivity.findMany({
+    where: { buildId, tool: "reviewBuildPlan" },
+    orderBy: { createdAt: "desc" },
+    take: 60,
+    select: { summary: true, createdAt: true },
+  });
+  return countPlanReviewIncompleteStreak(rows);
+}
+
 async function readReviewIncompleteStreak(buildId: string): Promise<ReviewIncompleteStreak> {
   const rows = await prisma.buildActivity.findMany({
     where: { buildId, tool: "design_fix_loop" },
@@ -758,8 +788,25 @@ export async function resumePreBuildPhase(params: {
         const outcome = await dispatchPlanForApprovedBuild({ buildId, userId });
         return { kind: "resumed", phase, via: "dispatchPlanForApprovedBuild", detail: outcome.kind };
       }
-      if ((build.planReview as { reviewIncomplete?: boolean } | null)?.reviewIncomplete) {
-        return { kind: "skipped", phase, reason: "Plan review incomplete; preserve the plan and retry review after reviewer execution recovers." };
+      const planReviewIncomplete = (build.planReview as { reviewIncomplete?: boolean } | null)?.reviewIncomplete === true;
+      if (planReviewIncomplete) {
+        // BI-8925E227: no reviewer returned a usable verdict — an outage, not a
+        // verdict on the plan. Keep the plan (never regenerate it for this), back
+        // off on the consecutive incomplete reviews, then re-run the review. A
+        // permanent skip left these builds in plan forever.
+        const { streak, lastAt } = await readPlanReviewIncompleteStreak(buildId);
+        const backoff = reviewIncompleteBackoff({ streak, lastAt, now: new Date() });
+        if (!backoff.due) {
+          return {
+            kind: "skipped",
+            phase,
+            reason:
+              `plan review could not be completed ${streak}x in a row (no reviewer returned a usable verdict; the plan is ` +
+              `not at fault). Keeping the plan; next retry in ${formatWait(backoff.waitMs)} (${backoff.nextAt.toISOString()}).`,
+          };
+        }
+        // Due: fall through to the review re-run below — the failed-plan
+        // regeneration skips an incomplete review.
       }
       // Plan exists. If its last review FAILED, REGENERATE via the fix loop —
       // re-reviewing the same bad plan just re-fails forever (the live jam: a plan
@@ -768,6 +815,7 @@ export async function resumePreBuildPhase(params: {
       // fix loop (with a fresh verified-paths search + escalation) repairs it.
       const planReviewFailed =
         (build.buildPlan != null) &&
+        !planReviewIncomplete &&
         (build.planReview as { decision?: string } | null)?.decision === "fail";
       if (planReviewFailed) {
         const { dispatchPlanForApprovedBuild } = await import("@/lib/build/plan-on-approval");
