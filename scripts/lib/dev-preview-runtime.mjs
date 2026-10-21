@@ -64,9 +64,9 @@ export function assertPreviewConfig(config, { worktree, sha, leaseId }) {
   if (destination.hostname !== 'dev-postgres' || destination.pathname !== '/dpf') throw new Error('preview_destination_not_disposable');
 }
 
-export function assertPreviewContainer(container, { worktree, sha, leaseId }) {
+export function assertPreviewContainer(container, { worktree, sha, leaseId, dockerOperatingSystem }) {
   const mount = container.Mounts?.find(volume => volume.Destination === '/workspace');
-  if (mount?.Type !== 'bind' || !previewMountMatches(mount.Source, worktree)) throw new Error('preview_actual_mount_mismatch');
+  if (mount?.Type !== 'bind' || !previewMountMatches(mount.Source, worktree, dockerOperatingSystem)) throw new Error('preview_actual_mount_mismatch');
   if (!container.Config?.Env?.includes('DPF_ENVIRONMENT_CLASS=development')
       || !container.Config?.Env?.includes(`DPF_PREVIEW_SOURCE_SHA=${sha}`)
       || !container.Config?.Env?.includes(`DPF_PREVIEW_LEASE_ID=${leaseId}`)) throw new Error('preview_actual_environment_mismatch');
@@ -74,20 +74,33 @@ export function assertPreviewContainer(container, { worktree, sha, leaseId }) {
       || container.Config?.Labels?.['dpf.preview.lease'] !== leaseId) throw new Error('preview_actual_identity_mismatch');
 }
 
+export async function inspectPreviewBinding({ runner, id, identity }) {
+  const [container] = JSON.parse(await runner.run(['inspect', id]));
+  // Read on every inspection, including renewals. Failed metadata supplies no
+  // alias authority; direct POSIX and existing Windows bindings still compare.
+  const dockerOperatingSystem = await runner.run(['info', '--format', '{{.OperatingSystem}}'], { timeoutMs: 10000 }).catch(() => undefined);
+  assertPreviewContainer(container, { ...identity, dockerOperatingSystem });
+}
+
 // Output from config/inspect may contain secrets. Capture it privately and report
 // only the exit code on failure; never echo command arguments or child output.
 export function commandRunner({ docker = 'docker', env = process.env } = {}) {
   const children = new Set();
   return {
-    async run(args, { capture = true, bin = docker } = {}) {
+    async run(args, { capture = true, bin = docker, timeoutMs } = {}) {
       return new Promise((done, fail) => {
         const child = spawn(bin, args, { env, stdio: ['ignore', 'pipe', 'pipe'] });
         children.add(child);
         let output = '';
+        let timedOut = false;
+        const timer = Number.isFinite(timeoutMs) && timeoutMs > 0
+          ? setTimeout(() => { timedOut = true; child.kill('SIGKILL'); }, timeoutMs) : undefined;
+        const finished = () => { clearTimeout(timer); children.delete(child); };
         child.stdout.on('data', chunk => { if (capture) output += chunk; });
         child.stderr.resume();
-        child.once('error', () => { children.delete(child); fail(new Error('preview_process_unavailable')); });
-        child.once('close', code => { children.delete(child); code === 0 ? done(output.trim()) : fail(new Error(`preview_operation_failed:${Number.isInteger(code) ? `exit-${code}` : 'terminated'}`)); });
+        child.once('error', () => { finished(); fail(new Error('preview_process_unavailable')); });
+        child.once('close', code => { finished(); timedOut ? fail(new Error('preview_operation_timeout'))
+          : code === 0 ? done(output.trim()) : fail(new Error(`preview_operation_failed:${Number.isInteger(code) ? `exit-${code}` : 'terminated'}`)); });
       });
     },
     terminate() { for (const child of children) child.kill('SIGKILL'); },
@@ -250,8 +263,7 @@ async function runAdmittedPreview(env, cleanupState) {
       const id = await compose(['ps', '-q', 'dev-portal']);
       if (!id || /\s/.test(id)) throw new Error('preview_container_missing');
       ownedIds.add(id);
-      const [container] = JSON.parse(await runner.run(['inspect', id]));
-      assertPreviewContainer(container, identity);
+      await inspectPreviewBinding({ runner, id, identity });
       await verifySource();
     };
     const signal = () => void terminate().catch(error => { console.error(error.message); process.exitCode = 1; });
