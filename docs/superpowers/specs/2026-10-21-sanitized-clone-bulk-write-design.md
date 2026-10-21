@@ -121,13 +121,45 @@ coverage `cmvhuil3jkrsv01ldse9s057q` binds the initial immutable plan at
 `fcc04d128fa6cdbaa1950d7ddef9b9faa9e33d38`; implementation admission
 `IRD-90A56FE3E9C1` allowed this scoped source work.
 
-Source-local verification on Node 24.16.0 observed 87 passing tests across the
+Initial source-local verification on Node 24.16.0 observed 87 passing tests across the
 SQL, clone, cursor/memory and source-integrity suites. The 10 PostgreSQL cases
-were skipped because this worktree has no assigned database; their persisted
-value, real PrismaPg transaction and cleanup proof remains unrun pending normal
-shared local-CI admission. Both DB TypeScript 7 programs passed. The SQL helper
+were skipped because this worktree had no assigned database; their persisted
+value, real PrismaPg transaction and cleanup proof remained unrun at that
+checkpoint pending normal shared local-CI admission. Both DB TypeScript 7 programs passed. The SQL helper
 had an earlier first-red run with 21 failures and 15 passes, then 42 passes.
 The moved identifier/value conversion helpers retain their original bodies.
 Canonical gate, independent review and publication evidence belong to the
 Workroom and exact-commit PR record. No representative scale timing or served
 two-route acceptance is claimed by these source-local checks.
+
+**Owned PostgreSQL failure and bounded diagnosis.**
+
+On 2026-10-21, owned lease `NPEL-D7FBEFA692` executed all 10 PostgreSQL cases
+against source `a0c345d52e7e4855fdb8393e4a5706e0fb9850b9` on Node 24.16.0:
+9 passed, 1 failed and none skipped. The real-writer retained-heap case observed
+39,441,424 bytes against the unchanged 16,777,216-byte assertion. The preceding
+canonical commands passed, but the supplemental failure made the outer result
+inconclusive; evidence `cmvhxnjje0rot01o8vfrr5sp2` is not passing gate proof.
+The original durable resumer automatically began another canonical attempt
+before it was gracefully stopped. That attempt was interrupted before a second
+PostgreSQL execution. Its mutable log is distinct from the first observed
+PostgreSQL failure and must not be cited as the first run's report.
+
+Installed Prisma 7.10.1 initializes its compiler during `$connect()`, but its
+bounded diagnostic history also retains recent raw-query parameter strings and
+query plans even when output is disabled. This is a concrete potential payload
+retainer, not proof that it explains the entire observed increase. Diagnosis
+therefore records connected, cold, every-batch and post-copy retained heap;
+repeats the same 2,001-row real-writer path after it is warm; and deliberately
+retains independent containers for 1,001 payload rows as a positive control.
+The original cold baseline and raw 16 MiB assertion remain unchanged. A 20-second
+test timeout permits the three measured passes; production transaction timeouts,
+copy policy, client history, dependencies and memory limits are unchanged.
+
+One separately coordinated owned experiment will collect these controls before
+any product payload-budget adjustment is considered. Its private wrapper fences
+each explicit experiment before canonical work and retains immutable canonical
+and PostgreSQL reports on failure as well as success. An automatic repeat may
+perform no new canonical or PostgreSQL work. Current source is expected to
+remain red at the original cold assertion; no memory repair, throughput,
+representative setup-time or served-route acceptance is claimed in advance.

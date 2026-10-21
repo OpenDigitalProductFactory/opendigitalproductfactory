@@ -20,6 +20,7 @@ const describeDatabase = databaseUrl ? describe : describe.skip;
 const schema = `sanitized_clone_integrity_${randomUUID().replaceAll("-", "")}`;
 let client: Client;
 let destinationClient: PrismaClient;
+let connectedHeap = 0;
 
 // The writer discovers public-schema metadata. Every destination fixture owns
 // a unique public name, rather than touching any installed application table.
@@ -55,6 +56,7 @@ describeDatabase("sanitized clone publication with PostgreSQL", () => {
       adapter: new PrismaPg({ connectionString: databaseUrl!, max: 1, options: "-c search_path=public" }),
     });
     await destinationClient.$connect();
+    connectedHeap = retainedHeap();
     await client.query(`CREATE SCHEMA "${schema}"`);
     await client.query(`
       CREATE TABLE "${schema}"."Destination" (
@@ -107,6 +109,7 @@ describeDatabase("sanitized clone publication with PostgreSQL", () => {
       let largestBatch = 0;
       const heapBefore = retainedHeap();
       let peakHeapGrowth = 0;
+      const coldSamples: Array<{ rows: number; heapUsed: number; growth: number }> = [];
       await copySanitizedCursorBatches(client,
         `SELECT id, name, payload, NULL::text AS embedding FROM ${table} ORDER BY id`,
         async rows => {
@@ -116,12 +119,57 @@ describeDatabase("sanitized clone publication with PostgreSQL", () => {
           expect((rows[0]?.payload as { text: string }).text).toHaveLength(32768);
           for (let i = 0; i < rows.length; i++) rows[i] = sanitizeConfidentialRow(rows[i]!, Number(rows[i]!.id));
           await write(destinationName, rows);
-          peakHeapGrowth = Math.max(peakHeapGrowth, retainedHeap() - heapBefore);
+          const heapUsed = retainedHeap();
+          peakHeapGrowth = Math.max(peakHeapGrowth, heapUsed - heapBefore);
+          coldSamples.push({ rows: total, heapUsed, growth: heapUsed - heapBefore });
         }, 50);
       expect(total).toBe(2001);
       expect(largestBatch).toBe(50);
       const copied = await client.query(`SELECT count(*)::int AS count FROM ${destination} WHERE name LIKE 'Dev User %' AND embedding IS NULL`);
       expect(copied.rows[0].count).toBe(2001);
+      const coldAfterCopy = retainedHeap();
+      // Diagnostic controls use the same real writer, payload and source cursor.
+      // Preserve the original cold baseline and 16 MiB assertion below.
+      const controlPhase = async (phase: string, rowLimit: number, retain: boolean) => {
+        await client.query(`TRUNCATE TABLE ${destination}`);
+        const phaseWrite = createSanitizedCloneInsertWriter(destinationClient);
+        const baseline = retainedHeap();
+        const samples: Array<{ rows: number; heapUsed: number; growth: number }> = [];
+        const retainedBatches: Array<Array<Record<string, unknown>>> = [];
+        let rowsCopied = 0;
+        await copySanitizedCursorBatches(client,
+          `SELECT id, name, payload, NULL::text AS embedding FROM ${table} ORDER BY id LIMIT ${rowLimit}`,
+          async rows => {
+            rowsCopied += rows.length;
+            for (let i = 0; i < rows.length; i++) rows[i] = sanitizeConfidentialRow(rows[i]!, Number(rows[i]!.id));
+            // The copier empties its rows array; retain an independent container
+            // so this positive control actually keeps the payload objects alive.
+            if (retain) retainedBatches.push(rows.slice());
+            await phaseWrite(destinationName, rows);
+            const heapUsed = retainedHeap();
+            samples.push({ rows: rowsCopied, heapUsed, growth: heapUsed - baseline });
+          }, 50);
+        const afterCopy = retainedHeap();
+        // Read payload content after sampling so the control remains live.
+        const retainedPayloadBytes = retainedBatches.reduce((sum, batch) => sum + batch.reduce(
+          (bytes, row) => bytes + (row.payload as { text: string }).text.length, 0), 0);
+        retainedBatches.length = 0;
+        const afterRelease = retainedHeap();
+        return { phase, baseline, rowsCopied, samples,
+          peakGrowth: Math.max(...samples.map(sample => sample.growth)),
+          afterCopyGrowth: afterCopy - baseline, retainedPayloadBytes,
+          afterReleaseGrowth: afterRelease - baseline };
+      };
+      const warm = await controlPhase("warm-same-path", 2001, false);
+      const retained = await controlPhase("intentional-retained-batches", 1001, true);
+      console.info(`[sanitized-clone-memory] ${JSON.stringify({ connectedHeap,
+        cold: { baseline: heapBefore, samples: coldSamples, peakGrowth: peakHeapGrowth,
+          afterCopyGrowth: coldAfterCopy - heapBefore }, warm, retained })}`);
+      expect(warm.rowsCopied).toBe(2001);
+      expect(warm.peakGrowth).toBeLessThan(16 * 1024 * 1024);
+      expect(retained.rowsCopied).toBe(1001);
+      expect(retained.retainedPayloadBytes).toBe(1001 * 32768);
+      expect(retained.afterCopyGrowth).toBeGreaterThan(16 * 1024 * 1024);
       // More than 64 MiB JSON plus 3072-element vectors is processed without a
       // table-sized JS retention: live heap after each batch stays far below the
       // ~63 MiB the full table would retain (one 50-row batch is ~1.6 MiB), so
@@ -132,7 +180,7 @@ describeDatabase("sanitized clone publication with PostgreSQL", () => {
       await client.query(`DROP TABLE IF EXISTS ${table}`);
       await client.query(`DROP TABLE IF EXISTS ${destination}`);
     }
-  });
+  }, 20_000); // Three measured passes, not a production timeout or memory-limit change.
 
   it("persists incumbent value conversions, omitted defaults and first-conflict winners through PrismaPg", async () => {
     const tableName = fixtureName("values");
