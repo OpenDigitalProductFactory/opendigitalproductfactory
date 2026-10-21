@@ -6,6 +6,8 @@ import {
   generateBacklogItemId,
   improvementCategoryToWorkType,
   ingestBacklogItem,
+  parseGithubIssueUrl,
+  qualifiedIssueOriginId,
   validateIngestInput,
   type IngestBacklogStore,
 } from "./backlog-ingest";
@@ -372,5 +374,305 @@ describe("ingestBacklogItem", () => {
         ),
       ).toHaveLength(0);
     });
+  });
+});
+
+// ─── Repository-qualified origin reconciliation (BI-952F08BA, spec §6.1) ─────
+//
+// An in-memory store that answers the queries the front door issues, so these
+// cases exercise the real dedupe predicate rather than a canned findFirst.
+
+interface MemItem {
+  id: string;
+  itemId: string;
+  title: string;
+  body: string | null;
+  status: string;
+  occurrenceCount: number;
+}
+
+function memoryStore(seed: Array<Partial<MemItem> & { itemId: string }>, seedActivities: Array<Record<string, unknown>> = []) {
+  const items: MemItem[] = seed.map((s, i) => ({
+    id: s.id ?? `cuid-seed-${i + 1}`,
+    title: s.title ?? "Seeded",
+    body: s.body ?? null,
+    status: s.status ?? "triaging",
+    occurrenceCount: s.occurrenceCount ?? 1,
+    itemId: s.itemId,
+  }));
+  const activities: Array<Record<string, unknown>> = [...seedActivities];
+  const itemWrites: Array<Record<string, unknown>> = [];
+  const matches = (item: MemItem, where: Record<string, unknown> | undefined): boolean => {
+    if (!where) return true;
+    const body = where.body as { contains?: string } | undefined;
+    if (body?.contains && !(item.body ?? "").includes(body.contains)) return false;
+    const status = where.status as { notIn?: string[]; in?: readonly string[] } | undefined;
+    if (status?.notIn && status.notIn.includes(item.status)) return false;
+    if (status?.in && !status.in.includes(item.status)) return false;
+    return true;
+  };
+  const store: IngestBacklogStore = {
+    backlogItem: {
+      findFirst: async (args) => {
+        const where = (args as { where?: Record<string, unknown> }).where;
+        const hit = [...items].reverse().find((i) => matches(i, where));
+        return hit ? { id: hit.id, itemId: hit.itemId } : null;
+      },
+      findMany: async (args) => {
+        const where = (args as { where?: Record<string, unknown> }).where;
+        return items.filter((i) => matches(i, where)).map((i) => ({ ...i }));
+      },
+      update: async (args) => {
+        const { where, data } = args as { where: { id: string }; data: Record<string, unknown> };
+        itemWrites.push({ id: where.id, ...data });
+        const item = items.find((i) => i.id === where.id);
+        if (item && data.occurrenceCount) item.occurrenceCount += 1;
+        if (item && typeof data.status === "string") item.status = data.status;
+        return {};
+      },
+      create: async (args) => {
+        const data = (args as { data: Record<string, unknown> }).data;
+        const row: MemItem = {
+          id: `cuid-new-${items.length + 1}`,
+          itemId: data.itemId as string,
+          title: data.title as string,
+          body: (data.body as string | undefined) ?? null,
+          status: data.status as string,
+          occurrenceCount: 1,
+        };
+        items.push(row);
+        return { id: row.id, itemId: row.itemId };
+      },
+    },
+    backlogItemActivity: {
+      create: async (args) => {
+        activities.push({ recordedAt: new Date(Date.now() + activities.length), ...(args as { data: Record<string, unknown> }).data });
+        return {};
+      },
+      findMany: async (args) => {
+        const where = (args as { where?: { backlogItemId?: string; kind?: string } }).where ?? {};
+        return activities
+          .filter((a) => (!where.backlogItemId || a.backlogItemId === where.backlogItemId)
+            && (!where.kind || a.kind === where.kind))
+          .slice()
+          .reverse()
+          .map((a) => ({ payload: a.payload, summary: a.summary }));
+      },
+    },
+    epic: { findFirst: async () => null },
+  };
+  return { store, items, activities, itemWrites };
+}
+
+const REPO = "opendigitalproductfactory/opendigitalproductfactory";
+const issueUrl = (n: number, repo = "OpenDigitalProductFactory/opendigitalproductfactory") =>
+  `https://github.com/${repo}/issues/${n}`;
+
+function issueInput(n: number, overrides: {
+  repository?: string;
+  url?: string;
+  state?: string;
+  fingerprint?: string;
+  title?: string;
+} = {}): Parameters<typeof ingestBacklogItem>[0] {
+  const repository = overrides.repository ?? REPO;
+  const url = overrides.url ?? issueUrl(n);
+  return {
+    title: overrides.title ?? `Issue ${n}`,
+    body: `Summary of ${n}\n\n- ${url}`,
+    workType: "bug",
+    source: "user-request",
+    origin: { kind: "ecosystem-upstream-issue", id: `${repository}#${n}` },
+    reconcile: {
+      repository,
+      sourceUrl: url,
+      state: overrides.state ?? "open",
+      fingerprint: overrides.fingerprint ?? "fp-1",
+      legacyId: String(n),
+    },
+  };
+}
+
+const quiet = { indexKnowledge: () => {}, listRepoFiles: async () => [] as string[], searchSimilarItems: async () => ({ status: "ok", results: [] }) };
+
+describe("ingestBacklogItem — repository-qualified origin reconciliation (BI-952F08BA)", () => {
+  it("exports a qualified marker helper keyed on repository and number", () => {
+    expect(qualifiedIssueOriginId("OpenDigitalProductFactory/OpenDigitalProductFactory", 12)).toBe(`${REPO}#12`);
+    expect(parseGithubIssueUrl(issueUrl(4563))).toEqual({ repository: REPO, number: 4563 });
+    expect(parseGithubIssueUrl("https://example.test/i/4563")).toBeNull();
+  });
+
+  it("creates once, writing repository and source URL into the intake_origin payload", async () => {
+    const mem = memoryStore([]);
+    const result = await ingestBacklogItem(issueInput(7), { store: mem.store, ...quiet });
+    expect(result).toMatchObject({ created: true, outcome: "created" });
+    expect(mem.items[0].body).toContain(`[origin:ecosystem-upstream-issue:${REPO}#7]`);
+    expect(mem.activities[0]).toMatchObject({
+      kind: "intake_origin",
+      payload: {
+        origin: { kind: "ecosystem-upstream-issue", id: `${REPO}#7` },
+        created: true,
+        source: { repository: REPO, url: issueUrl(7), state: "open", fingerprint: "fp-1" },
+      },
+    });
+  });
+
+  it("a repeat poll of an open item changes no count and creates no item", async () => {
+    const mem = memoryStore([]);
+    await ingestBacklogItem(issueInput(7), { store: mem.store, ...quiet });
+    const second = await ingestBacklogItem(issueInput(7), { store: mem.store, ...quiet });
+    const third = await ingestBacklogItem(issueInput(7), { store: mem.store, ...quiet });
+    expect(second).toMatchObject({ created: false, outcome: "unchanged", itemId: mem.items[0].itemId });
+    expect(third.outcome).toBe("unchanged");
+    expect(mem.items).toHaveLength(1);
+    expect(mem.items[0].occurrenceCount).toBe(1);
+    expect(mem.itemWrites).toEqual([]);
+    expect(mem.activities).toHaveLength(1);
+  });
+
+  it.each(["deferred", "done", "retired"])("a repeat poll of a %s item creates nothing and leaves its status", async (status) => {
+    const mem = memoryStore([{
+      itemId: "BI-TERMINAL",
+      status,
+      body: `Summary\n\n- ${issueUrl(7)}\n\n[origin:ecosystem-upstream-issue:${REPO}#7]`,
+    }], [{ backlogItemId: "cuid-seed-1", kind: "intake_origin", payload: { source: { fingerprint: "fp-1", state: "open" } } }]);
+    const result = await ingestBacklogItem(issueInput(7), { store: mem.store, ...quiet });
+    expect(result).toMatchObject({ created: false, outcome: "unchanged", itemId: "BI-TERMINAL" });
+    expect(mem.items).toHaveLength(1);
+    expect(mem.items[0].status).toBe(status);
+    expect(mem.itemWrites).toEqual([]);
+  });
+
+  it("issue #4563: a retired legacy intake is matched, not re-created (BI-EADA73BA → BI-41C048D8 defect)", async () => {
+    const mem = memoryStore([{
+      itemId: "BI-EADA73BA",
+      status: "retired",
+      body: `Original report\n\n- Submitted by install \`dpf-agent-1\`\n- ${issueUrl(4563)}\n\n[origin:ecosystem-upstream-issue:4563]`,
+    }]);
+    const result = await ingestBacklogItem(issueInput(4563), { store: mem.store, ...quiet });
+    expect(result).toMatchObject({ created: false, itemId: "BI-EADA73BA" });
+    expect(mem.items).toHaveLength(1);
+    expect(mem.items[0].status).toBe("retired");
+    expect(mem.items[0].occurrenceCount).toBe(1);
+  });
+
+  it("the same issue number in two repositories files two distinct items", async () => {
+    const mem = memoryStore([]);
+    const a = await ingestBacklogItem(issueInput(12), { store: mem.store, ...quiet });
+    const b = await ingestBacklogItem(
+      issueInput(12, { repository: "someone/fork", url: issueUrl(12, "someone/fork") }),
+      { store: mem.store, ...quiet },
+    );
+    expect(a.created).toBe(true);
+    expect(b.created).toBe(true);
+    expect(a.itemId).not.toBe(b.itemId);
+    expect(mem.items).toHaveLength(2);
+  });
+
+  it("matches a legacy unqualified marker whose stored URL is the same repository and records one mapping", async () => {
+    const mem = memoryStore([{
+      itemId: "BI-LEGACY",
+      status: "open",
+      body: `Old body\n\n- ${issueUrl(30)}\n\n[origin:ecosystem-upstream-issue:30]`,
+    }]);
+    const first = await ingestBacklogItem(issueInput(30), { store: mem.store, ...quiet });
+    const second = await ingestBacklogItem(issueInput(30), { store: mem.store, ...quiet });
+    expect(first).toMatchObject({ created: false, outcome: "unchanged", itemId: "BI-LEGACY" });
+    expect(second).toMatchObject({ created: false, outcome: "unchanged", itemId: "BI-LEGACY" });
+    const mappings = mem.activities.filter((a) => (a.payload as { mapping?: unknown }).mapping);
+    expect(mappings).toHaveLength(1);
+    expect(mappings[0]).toMatchObject({
+      backlogItemId: "cuid-seed-1",
+      kind: "intake_origin",
+      payload: {
+        mapping: {
+          from: { kind: "ecosystem-upstream-issue", id: "30" },
+          to: { kind: "ecosystem-upstream-issue", id: `${REPO}#30` },
+        },
+      },
+    });
+    expect(mem.items).toHaveLength(1);
+    expect(mem.itemWrites).toEqual([]);
+  });
+
+  it("does not match a legacy marker whose stored URL is a different repository", async () => {
+    const mem = memoryStore([{
+      itemId: "BI-OTHER-REPO",
+      status: "open",
+      body: `Old body\n\n- ${issueUrl(30, "someone/fork")}\n\n[origin:ecosystem-upstream-issue:30]`,
+    }]);
+    const result = await ingestBacklogItem(issueInput(30), { store: mem.store, ...quiet });
+    expect(result).toMatchObject({ created: true, outcome: "created" });
+    expect(result.itemId).not.toBe("BI-OTHER-REPO");
+    expect(mem.items).toHaveLength(2);
+    expect(mem.activities.some((a) => (a.payload as { mapping?: unknown }).mapping)).toBe(false);
+  });
+
+  it("stops for review when a legacy marker's repository cannot be resolved", async () => {
+    const mem = memoryStore([{
+      itemId: "BI-NO-URL",
+      status: "open",
+      body: "Old body with no link\n\n[origin:ecosystem-upstream-issue:30]",
+    }]);
+    const result = await ingestBacklogItem(issueInput(30), { store: mem.store, ...quiet });
+    expect(result).toMatchObject({ created: false, outcome: "needs-review", reviewCandidates: ["BI-NO-URL"] });
+    expect(mem.items).toHaveLength(1);
+    expect(mem.activities).toHaveLength(0);
+    expect(mem.itemWrites).toEqual([]);
+  });
+
+  it("stops for review when more than one item claims the same origin (retired then re-created)", async () => {
+    const mem = memoryStore([
+      { itemId: "BI-EADA73BA", status: "retired", body: `- ${issueUrl(4563)}\n\n[origin:ecosystem-upstream-issue:4563]` },
+      { itemId: "BI-41C048D8", status: "triaging", body: `- ${issueUrl(4563)}\n\n[origin:ecosystem-upstream-issue:4563]` },
+    ]);
+    const result = await ingestBacklogItem(issueInput(4563), { store: mem.store, ...quiet });
+    expect(result.outcome).toBe("needs-review");
+    expect(result.reviewCandidates?.sort()).toEqual(["BI-41C048D8", "BI-EADA73BA"]);
+    expect(mem.items).toHaveLength(2);
+    expect(mem.items.map((i) => i.status)).toEqual(["retired", "triaging"]);
+    expect(mem.activities).toHaveLength(0);
+  });
+
+  it.each([
+    ["an edit", { fingerprint: "fp-2" }, "edited"],
+    ["a closure", { fingerprint: "fp-closed", state: "closed" }, "closed"],
+  ])("records %s as one change event on the same item", async (_label, change, kind) => {
+    const mem = memoryStore([]);
+    await ingestBacklogItem(issueInput(9), { store: mem.store, ...quiet });
+    const changed = await ingestBacklogItem(issueInput(9, change), { store: mem.store, ...quiet });
+    const again = await ingestBacklogItem(issueInput(9, change), { store: mem.store, ...quiet });
+    expect(changed).toMatchObject({ created: false, outcome: "changed", itemId: mem.items[0].itemId });
+    expect(again.outcome).toBe("unchanged");
+    const events = mem.activities.filter((a) => (a.payload as { change?: unknown }).change);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ backlogItemId: mem.items[0].id, payload: { change: { kind } } });
+    expect(mem.items).toHaveLength(1);
+    expect(mem.itemWrites).toEqual([]);
+  });
+
+  it("records a reopen on a done item as one change event without reopening the item", async () => {
+    const mem = memoryStore([{
+      itemId: "BI-DONE",
+      status: "done",
+      body: `- ${issueUrl(9)}\n\n[origin:ecosystem-upstream-issue:${REPO}#9]`,
+    }], [{ backlogItemId: "cuid-seed-1", kind: "intake_origin", payload: { source: { fingerprint: "fp-closed", state: "closed" } } }]);
+    const result = await ingestBacklogItem(issueInput(9, { fingerprint: "fp-open", state: "open" }), { store: mem.store, ...quiet });
+    expect(result).toMatchObject({ created: false, outcome: "changed", itemId: "BI-DONE" });
+    const events = mem.activities.filter((a) => (a.payload as { change?: unknown }).change);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ payload: { change: { kind: "reopened", fromState: "closed", toState: "open" } } });
+    expect(mem.items[0].status).toBe("done");
+    expect(mem.itemWrites).toEqual([]);
+  });
+
+  it("leaves other detectors' occurrence counting unchanged", async () => {
+    const mem = memoryStore([{ itemId: "BI-IMP-1", status: "open", body: "x\n\n[origin:improvement:IP-1]" }]);
+    const result = await ingestBacklogItem(
+      { title: "Same friction", workType: "feature", source: "automated-detection", origin: { kind: "improvement", id: "IP-1" } },
+      { store: mem.store, ...quiet },
+    );
+    expect(result).toMatchObject({ created: false, outcome: "recurred", itemId: "BI-IMP-1" });
+    expect(mem.items[0].occurrenceCount).toBe(2);
   });
 });

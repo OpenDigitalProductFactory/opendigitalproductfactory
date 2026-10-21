@@ -82,15 +82,45 @@ export interface BacklogIngestInput {
   archetypeIds?: string[];
   scopeRationale?: string | null;
   lifecycleTags?: string[];
+  /**
+   * Opt-in origin reconciliation for sources that re-deliver the same record
+   * on every poll (BI-952F08BA, spec §6.1). Absent → existing recurrence
+   * semantics (non-terminal dedupe + occurrence bump) are unchanged.
+   */
+  reconcile?: OriginReconciliation;
 }
+
+/** Source identity and state for a reconciled origin (spec §6.1). */
+export interface OriginReconciliation {
+  /** Lowercased `owner/repo` the qualified origin id belongs to. */
+  repository: string;
+  /** Canonical link to the source record. */
+  sourceUrl: string | null;
+  /** Source state as the origin reports it (e.g. "open" / "closed"). */
+  state: string;
+  /** Content/state fingerprint; a different value is a source change. */
+  fingerprint: string;
+  /** Legacy unqualified origin id to dual-read (the bare issue number). */
+  legacyId?: string;
+}
+
+/**
+ * What one ingest call did. `recurred` is the legacy recurrence path (count
+ * bumped); the other three non-create values belong to reconciled origins.
+ */
+export type BacklogIngestOutcome = "created" | "recurred" | "unchanged" | "changed" | "needs-review";
 
 export interface BacklogIngestResult {
   /** Semantic item id (BI-…). */
   itemId: string;
   /** Internal cuid (BacklogItem.id) — useful for FK writes by callers. */
   id: string;
-  /** false = matched an existing non-terminal item (deduped, occurrence bumped). */
+  /** false = matched an existing item (or, for needs-review, created nothing). */
   created: boolean;
+  /** Optional for the same reason as `implementationCandidates`. */
+  outcome?: BacklogIngestOutcome;
+  /** For `needs-review`: the item ids that claim this origin ambiguously. */
+  reviewCandidates?: string[];
   /**
    * Files that may ALREADY implement what this item proposes to build
    * (BI-1A1EC5EC). Advisory — the item is still created. Empty when the item is
@@ -145,10 +175,12 @@ export interface IngestBacklogStore {
     update(args: unknown): Promise<unknown>;
     create(args: unknown): Promise<{ id: string; itemId: string }>;
     /** Candidate pool for the duplicate advisory (BI-3722E9A1). */
-    findMany?(args: unknown): Promise<Array<{ itemId: string; title: string; body: string | null; status: string }>>;
+    findMany?(args: unknown): Promise<Array<{ id?: string; itemId: string; title: string; body: string | null; status: string }>>;
   };
   backlogItemActivity: {
     create(args: unknown): Promise<unknown>;
+    /** Origin history for reconciliation (BI-952F08BA). Required when `reconcile` is set. */
+    findMany?(args: unknown): Promise<Array<{ payload: unknown }>>;
   };
   epic: {
     findFirst(args: unknown): Promise<{ id: string } | null>;
@@ -182,6 +214,18 @@ export interface BacklogIngestDeps {
 /** Stable, queryable, human-readable provenance marker embedded in the body. */
 export function backlogOriginMarker(kind: string, id: string): string {
   return `[origin:${kind}:${id}]`;
+}
+
+/** Repository-qualified origin id for a GitHub issue: `owner/repo#<number>`. */
+export function qualifiedIssueOriginId(repository: string, number: number | string): string {
+  void repository; void number;
+  throw new Error("not implemented");
+}
+
+/** Parse a GitHub issue URL into its lowercased repository and number. */
+export function parseGithubIssueUrl(url: string | null | undefined): { repository: string; number: number } | null {
+  void url;
+  throw new Error("not implemented");
 }
 
 export function generateBacklogItemId(prefix?: string): string {

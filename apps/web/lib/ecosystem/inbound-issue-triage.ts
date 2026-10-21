@@ -34,6 +34,10 @@ export interface InboundEcosystemItem {
   /** How many distinct organizations reported it, when the envelope said. */
   affectedOrganizations?: number | null;
   url?: string | null;
+  /** Lowercased `owner/repo` an upstream issue belongs to (BI-952F08BA). */
+  repository?: string | null;
+  /** Source state as the origin reports it (e.g. "open" / "closed"). */
+  state?: string | null;
 }
 
 export interface InboundTriageResult {
@@ -42,6 +46,13 @@ export interface InboundTriageResult {
   failed: number;
   /** Item ids touched, newest first — what a caller reports to an operator. */
   itemIds: string[];
+  /** Reconciled origins that matched with no source change (BI-952F08BA). */
+  unchanged: number;
+  /** Reconciled origins whose source changed; recorded on the same item. */
+  changed: number;
+  /** Ambiguous origins left for reconciliation; no work was created. */
+  needsReview: number;
+  reviews: Array<{ origin: string; candidates: string[] }>;
 }
 
 export interface InboundTriageDeps {
@@ -94,7 +105,9 @@ export function toBacklogIngestInput(item: InboundEcosystemItem): BacklogIngestI
 }
 
 export async function runInboundIssueTriage(deps: InboundTriageDeps): Promise<InboundTriageResult> {
-  const result: InboundTriageResult = { ingested: 0, deduped: 0, failed: 0, itemIds: [] };
+  const result: InboundTriageResult = {
+    ingested: 0, deduped: 0, unchanged: 0, changed: 0, needsReview: 0, failed: 0, itemIds: [], reviews: [],
+  };
 
   for (const item of deps.items) {
     // Fault-isolate each item: one bad record must not strand every record
@@ -155,8 +168,10 @@ export interface DecodableDemandEnvelope {
 
 /** Map upstream GitHub issues onto the same inbound shape. */
 export function mapUpstreamIssues(
-  issues: Array<{ number: number; title: string; body: string | null; labels: string[]; htmlUrl: string }>,
+  issues: Array<{ number: number; title: string; body: string | null; labels: string[]; htmlUrl: string; state?: string }>,
+  fallbackRepo?: { owner: string; name: string } | null,
 ): InboundEcosystemItem[] {
+  void fallbackRepo;
   return issues.map((issue) => ({
     sourceKind: "upstream-issue" as const,
     sourceId: String(issue.number),
