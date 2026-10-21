@@ -4,7 +4,7 @@ status: draft
 
 # Cursor portability implementation and assessment plan
 
-**Backlog:** BI-0E56BA38 · **Epic:** EP-B932453F · **Workroom:** WC-ADDEE529
+**Backlog item:** BI-0E56BA38 · **Epic:** EP-B932453F · **Workroom:** WC-ADDEE529
 **Design:** [Cursor import projection and semantic-loss contract](../specs/2026-10-21-cursor-portability-design.md), commit `7171ea93ee4aedd859dd4046b3ba8a331fbd89c2`, blob `fa8bc60ed5bd02d48b203d557eb1dd16738509d3`, SHA-256 `10e9687c092087ceccf20f5b19e89eddaa5b6747f2a6021916bdde262fa8fac3`.
 **Planning admission:** `IRD-72313B8EB442`, feature/medium, allowed at `2026-10-21T07:16:03.525Z`, same branch and owner.
 
@@ -22,7 +22,7 @@ acceptance. Medium readiness currently treats a separate design baseline as
 not-applicable; do not invent a baseline ID or promote the proposed twelve design
 criteria into a frozen conformance denominator.
 
-## Original intake acceptance and backlog coverage
+## Original intake acceptance
 
 The four current BI acceptance criteria remain authoritative, verbatim:
 
@@ -30,6 +30,18 @@ The four current BI acceptance criteria remain authoritative, verbatim:
 2. Skill import is not represented as enforcement or job qualification.
 3. Unsupported mandatory requirements prevent the affected conformance claim or activity.
 4. Evidence and adapter mapping are portable and do not assume DPF-local grants or secrets.
+
+## Backlog coverage
+
+- Decision: atomic
+- Parent: BI-0E56BA38
+- Receipt: blocked-by: At authoring time the final immutable plan is unpublished and native provider-verified coverage for this BI and plan path is unrecorded; the coordinator must complete normal publication and record/check coverage.
+- Rationale: Content projection, semantic-loss reporting and real target assessment jointly satisfy one Cursor reproduction outcome; the phases cannot independently earn the four intake acceptance criteria.
+- Dependencies: BI-07A2B207 delivered package and trusted tools; BI-F9582C48 canonical contracts; actual authorized target environment and assessment scope remain required.
+
+The blocked-by entry is a truthful source checkpoint, **not a passing receipt**.
+After the condition changes, resolve the actual canonical receipt through this
+BI and exact plan path. Text-guard success proves the section's shape only.
 
 **Coverage decision to record: atomic.** Existing BI-0E56BA38 owns one
 `cursor-reference-reproduction` deliverable. Content projection, semantic-loss
@@ -169,6 +181,9 @@ schema, live scheduler or canonical runtime.
    closure in a new inert directory outside every Cursor discovery root. Preserve
    BI07's archive path grammar: `.agents`/`.cursor` destination names are report
    mapping data, never archive member names or direct extraction destinations.
+   Resolve the staging directory's parent before writing; reject symlink or path
+   redirection into any discovery root. CUR-V01 includes an UNRUN negative for a
+   seemingly external staging path whose resolved parent enters a discovery root.
 4. Do not materialize a native plugin wrapper, MCP configuration, hook, command,
    schedule or automatically discovered skill as a side effect of inspection.
    Standard/native plugin projections remain candidates only if every required
