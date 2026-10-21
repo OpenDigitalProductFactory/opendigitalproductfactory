@@ -162,23 +162,24 @@ Add a section "Taking over another executor's work" to
 Each deliverable ships on its own. D1 and D2 remove most of the observed
 friction.
 
-## 5. Acceptance criteria
+## 5. Objectives and acceptance criteria
 
-- **AC-1:** Given a PR number or branch, an OAuth assistant acting for the
-  room's person gets the room id, status and handover call from
-  `list_workrooms`, even when another assistant created the room. An assistant
-  acting for a different person gets nothing.
-- **AC-2:** An unfiltered `list_workrooms` returns exactly what it returns
-  today, for every caller kind.
-- **AC-3:** A heartbeat with a checkpoint stores the latest one. A not-admitted
-  `get_workroom` shows it, and an admitted one shows it in the room state.
-- **AC-4:** One approval hands over a set of N rooms. A room whose lease holder
-  changed after the dry run is skipped and reported. A changed set refuses the
-  call.
-- **AC-5:** A merged PR moves its room's `prDelivery` to `merged` and clears
-  stale escalations within one sync.
-- **AC-6:** The runbook section exists, and a takeover of three PRs follows it
-  with one approval and no `branch_occupied` probing.
+**OBJ-1:** A receiving assistant finds the Workroom for a PR or branch it was asked to take over, without probing errors and without seeing rooms of another person.
+
+**OBJ-2:** A receiving assistant learns what the previous executor had in flight before it is admitted.
+
+**OBJ-3:** One instruction from the person hands over a set of rooms through one approval, with a per-room audit trail.
+
+**OBJ-4:** A room whose PR merged stops presenting stale delivery state, and the procedure for taking over is written down.
+
+| Acceptance | Objective | Statement |
+| --- | --- | --- |
+| AC-1 | OBJ-1 | Given a PR number or branch, an OAuth assistant acting for the room's person gets the room id, status and handover call from list_workrooms, even when another assistant created the room; an assistant acting for a different person gets nothing. |
+| AC-2 | OBJ-1 | An unfiltered list_workrooms returns exactly what it returns today, for every caller kind. |
+| AC-3 | OBJ-2 | A heartbeat with a checkpoint stores the latest one; a not-admitted get_workroom shows it, and an admitted one shows it in the room state. |
+| AC-4 | OBJ-3 | One approval hands over a set of N rooms; a room whose lease holder changed after the dry run is skipped and reported, and a changed set refuses the call. |
+| AC-5 | OBJ-4 | A merged PR moves its room's prDelivery to merged and clears stale escalations within one sync. |
+| AC-6 | OBJ-4 | The runbook section exists, and a takeover of three PRs follows it with one approval and no branch_occupied probing. |
 
 ## 6. Risks
 
