@@ -547,6 +547,51 @@ application performance acceptance. Original design-spec D2E5E2765847 and
 spec-approval 4E1879A26F6B remain UNKNOWN, attempt 1, with replay disallowed.
 Their original digests, deadlines, budgets and checkpoints stay immutable.
 
+**Operator amendment, 2026-10-21.** The human authorized at most **two total**
+fresh restricted present assessments for BI-285EF102: one for the design-spec
+requirement associated with D2E5E2765847 and one for the spec-approval requirement
+associated with 4E1879A26F6B. The authorization uses current normal budgets and
+all recorded limits, while preserving unknown historical consumption separately.
+It was confirmed from the direct human reply in parent chat
+`01a12e23-936f-75b2-b382-d33c36045cd5` and recorded as BI-7906C73E activity
+`cmvi9mamr416101lfaz5ueejt` and BI-285EF102 activity
+`cmvi9man5416401lfsq7dbc71`. These records do not themselves replace independent
+amendment approval, plan coverage, current actor authority or execution capture.
+This bounded authorization removes missing historical aggregate accounting as a
+prerequisite for these two present assessments only. It grants no global budget
+waiver, original replay, third assessment or authority for another requirement.
+On approving this revision, supersede the prior AC-RA-3 statement with the
+operator-authorized two-requirement exception; its historical accounting rule
+continues to apply outside that exception. Other objectives and criteria retain
+their meaning.
+
+The following policy is retained inside this independently approved immutable
+artifact. The issuer reads its pinned bytes, verifies the current baseline and
+normal owner/actor authority, then emits a bound request. This extends the
+existing baseline and TaskRun admission; it is not a second grant store. An
+authorization-item locator selects evidence, never grants execution by itself.
+
+```review-reassessment-policy-v1
+{
+  "schemaVersion": 1,
+  "subjectItemId": "BI-285EF102",
+  "maxAssessments": 2,
+  "historicalConsumption": "retain-unknown",
+  "currentLimits": "normal-recorded",
+  "originalReplay": false,
+  "operatorEvidenceActivityIds": ["cmvi9mamr416101lfaz5ueejt", "cmvi9man5416401lfsq7dbc71"],
+  "requirements": [
+    { "gate": "design-spec", "originalRequestDigest": "8f7b7729a3b3c9aa37521e14ba20f81a9fe8bde8c716fe7b3217a5f3fe4488f9", "maxAssessments": 1 },
+    { "gate": "spec-approval", "originalRequestDigest": "78da95183d424f2434fe1f503c0bbd1981678590e2158b3d7ec440aecf940a00", "maxAssessments": 1 }
+  ]
+}
+```
+
+The original accepted request supplies its exact artifact identity. Admission
+must establish it, retain it in the current request, and refuse changed source.
+Malformed or multiple policy blocks, stale or unretained approval, ambiguous
+membership, unavailable evidence or unauthorized original-owner access refuse.
+
 ### Additional objectives and acceptance
 
 **OBJ-PRESENT:** Obtain one genuine independent verdict on the exact current review requirement without resuming an uncertain historical attempt.
@@ -557,7 +602,7 @@ Their original digests, deadlines, budgets and checkpoints stay immutable.
 | --- | --- | --- |
 | AC-RA-1 | OBJ-HISTORY, OBJ-PRESENT | Current original owner, independent reviewer, exact subject, gate, immutable artifact, independently approved amendment baseline and issued packet bind admission. Bind the target's expectedCurrentBaselineId, including null for initial approval, and validate it atomically. A genuine existing receipt is reconciled first; stale source, owner or expectation refuses without inference. |
 | AC-RA-2 | OBJ-FENCE, OBJ-CONTAIN | Held, uncertain, canceled, unversioned and displaced original callbacks cannot dispatch a platform tool or append a canonical result. Delayed approvals retain their captured original generation and pass current checks before execution and commit; they cannot revive the old task by marking it working. Unknown prior external effects stay unknown. |
-| AC-RA-3 | OBJ-PRESENT, OBJ-CONTAIN | One transaction admits at most one present reassessment across all authorization families for the same subject, gate and artifact. Applicable prior attempts and spend count against the same recorded aggregate limits. Missing accounting or exhausted allowance refuses; a new task supplies no budget reset. |
+| AC-RA-3 | OBJ-PRESENT, OBJ-CONTAIN | One transaction admits at most one present reassessment across all authorization families for the same subject, gate and artifact. The operator's 2026-10-21 authorization permits at most two total for the two named BI-285EF102 requirements under current normal budgets and all recorded limits, retaining unknown historical consumption separately. Known exhausted or conflicting limits refuse; missing historical aggregate accounting alone does not refuse these two. Other requirements retain the original accounting prerequisite. No original budget, attempt counter or deadline is reset. |
 | AC-RA-4 | OBJ-CONTAIN | A qualified existing in-process provider composition exposes exactly read_source_at_version and the bound canonical writer. The backend enforces the names, immutable reader arguments and writer binding on every actual dispatch path. Native CLI, shell, browser, filesystem tools, account/credential preparation, alternate task APIs, discovery escalation and undeclared provider tools are unavailable. Schema filtering alone fails qualification. |
 | AC-RA-5 | OBJ-HISTORY, OBJ-CONTAIN | Before execution, authenticated capture binds task, request, reservation, generation, authority, exact tools, provider configuration and immutable artifact. Missing or invalid pre-effect capture refuses with zero starts. Post-start capture failure preserves uncertain consumption and blocks further effects while reconciling any genuine committed receipt first. No historical closure is inferred. |
 | AC-RA-6 | OBJ-PRESENT, OBJ-FENCE | Only the current independent canonical writer issues the new receipt. Durable supersession binds it to the current requirement and quarantined originals. It changes no original outcome, clears no unknown effect and authorizes no replay. Cancellation and receipt races retain one durable winner. |
@@ -643,14 +688,35 @@ owned by accepted TaskRun requests and terminal-writer checkpoints. Provider
 usage and pending reservations come from task-linked AsyncInferenceOp,
 TaskArtifact and ToolExecution/effect owners; no absent row means zero usage.
 The current coworker daily-token gate is additional, not an original lineage
-allowance. Derive inherited limits and prior consumption from those authoritative
-records, counting outstanding reservations in full; an unknown historical
-amount may be conservatively charged at its authenticated enforced upper bound
-only when that bound itself is established. Unknown bounds or no remaining
-allowance return `reassessment-accounting-unproven` or the existing exhaustion
-refusal. Neither a new task nor a new credential resets an original
-deadline, attempt count or spend limit. Any distinct present execution window
-must be explicitly admitted under normal current authority and retained limits.
+allowance. Preserve every known inherited limit and reservation. A recorded
+exhausted ceiling or a conflict with an applicable limit refuses. For an ordinary
+reassessment outside the two named authorizations, derive inherited allowance
+and prior consumption from authoritative records, count outstanding reservations
+in full, and refuse unknown bounds as `reassessment-accounting-unproven`.
+An unknown historical amount may be charged at an upper bound only when that
+original enforced bound is authenticated; it never becomes zero or a current
+default.
+
+For the two operator-authorized BI-285EF102 requirements, retain historical
+attempts, reservations and unknown consumption as historical observations;
+do not invent an original allowance or subtract an invented historical charge.
+Admission records a distinct present allocation under normal current authority,
+the actual current budget configuration and the existing bounded effort warrant,
+request/output limits and execution window. Record those bounds before execution
+and count every actual provider start, internal transport retry and outstanding
+present reservation against them. Fail closed if a required current bound or
+its enforcement cannot be established. Normal daily budgets remain enforced,
+including their recorded configuration; this amendment creates no token-quota
+setting or substitute funding authority. Funding attribution uses the normal
+owner scope and never follows from installation or administrator identity.
+
+Count the two admitted present tasks across both gates, all credentials and
+families, including canceled, failed and uncertain tasks; cancellation or an
+unobserved result does not replenish either allocation. A matching caller joins
+the existing winner. No replacement provider task, new request key or completed
+task replay creates another assessment. Neither a new task nor a new credential
+changes an original deadline, attempt count or spend limit. The new present
+window belongs only to the new admitted task and cannot revive the old window.
 
 At most one reassessment may exist for the bound requirement/artifact,
 irrespective of token, reviewer selection or family. Concurrent callers join the
@@ -682,7 +748,8 @@ original delayed approvals, cancellation, stale authority and callbacks paused
 between authorization and commit. R2 claims exact loop/dispatch paths and proves
 both admitted tools execute while hidden tools, task/meta APIs, immutable-reader
 changes, native fallback, capability mismatch and overflow cannot execute. R3
-tests concurrent families, original aggregate exhaustion, stale owner/source/
+tests concurrent families, the two-task authorization ceiling, known exhausted
+limits, unknown historical accounting retained separately, stale owner/source/
 baseline, receipt precedence, cancellation and positive restricted reassessment.
 Resolve each claimed path's testImpact and guardObligations before edits;
 unresolved advice expands verification. At least one fifth of implementation
