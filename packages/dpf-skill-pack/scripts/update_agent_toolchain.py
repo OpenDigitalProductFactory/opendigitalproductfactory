@@ -1538,11 +1538,11 @@ def resolve_antigravity_binary() -> str | None:
 
 
 def antigravity_mcp_config_path(home: Path) -> Path:
-    # Antigravity is Windsurf/VS Code-derived; its MCP config is a JSON block
-    # keyed by `mcpServers`. The exact path is not yet pinned in public docs —
-    # this is the documented default; the live install confirms it during the
-    # EP-ANTIGRAVITY-001 evidence gate (BI-ECAE3494 / BI-47A81FEB).
-    return home / ".antigravity" / "mcp_config.json"
+    # The file the `agy` CLI and Antigravity.app both read (BI-4CB3C923).
+    # Pinned on 2026-10-20 against agy 1.4.3: `agy mcp add` writes here, and
+    # both binaries name only this path. The earlier ~/.antigravity/
+    # mcp_config.json guess is read by neither; a copy there is left in place.
+    return home / ".gemini" / "config" / "mcp_config.json"
 
 
 def ensure_antigravity_mcp_config(home: Path, mcp_url: str, dry_run: bool, declarations: Any = None) -> str:
@@ -1556,15 +1556,26 @@ def ensure_antigravity_mcp_config(home: Path, mcp_url: str, dry_run: bool, decla
     if resolve_antigravity_binary() is None:
         return "skipped: Antigravity CLI (agy) not found"
     path = antigravity_mcp_config_path(home)
-    data = read_json(path, {})
+    # agy leaves a 0-byte file behind when no server is configured; that is an
+    # empty config. Unparseable content is the operator's: leave it, and keep
+    # the rest of the update running instead of exiting.
+    try:
+        raw = path.read_text(encoding="utf-8-sig") if path.exists() else ""
+        data = json.loads(raw) if raw.strip() else {}
+    except (OSError, json.JSONDecodeError):
+        return f"skipped: cannot parse {path}; fix or empty it, then rerun"
     if not isinstance(data, dict):
         data = {}
     servers = data.get("mcpServers")
     if not isinstance(servers, dict):
         servers = {}
+    # agy's own schema: what `agy mcp add` writes for an http server. An
+    # operator who disabled the entry keeps it disabled.
+    previous = servers.get("dpf")
+    disabled = isinstance(previous, dict) and previous.get("disabled") is True
     servers["dpf"] = {
-        "type": "http",
-        "url": mcp_url,
+        "serverUrl": mcp_url,
+        "disabled": disabled,
         **({"headers": {"Authorization": f"Bearer ${{{TOKEN_ENV_VAR}}}"}} if mcp_client_bearer_header_required(mcp_url, "antigravity") else {}),
     }
     if declarations is not None:
