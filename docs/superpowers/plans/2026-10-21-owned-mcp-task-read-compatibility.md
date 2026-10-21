@@ -15,7 +15,11 @@ One independently shippable deliverable implements the bounded named compatibili
 | --- | --- | --- | --- | --- | --- | --- |
 | owned-task-read-compatibility | BI-CAP-21C511CA | OBJ-OWNED-READ, OBJ-READ-ISOLATION, OBJ-RESULT-TRUTH, OBJ-READ-ONLY, OBJ-LIVE-OBSERVATION | AC-OWNED-01 through AC-OWNED-10 | CT-OWNED-TASK-READ | FLOW-OWNED-TASK-OBSERVE | VERIFY-OWNED-TASK-READ |
 
-Live plan coverage is pending. Record provider-verified immutable plan identity and its actual coverage receipt after the design baseline permits it. A local commit or this table is not a coverage receipt. Claim/read readiness again after each material artifact change; retain refused decisions and follow the exact current recovery packet.
+## Backlog coverage
+
+Initial atomic coverage receipt `cmvi8njre3k2b01lfr886ms0q` binds this plan at commit `046774b6906b7b05ba74c665356361fc5364abff`, blob `fbdceeba23ce7bd949d6e227f0345e6f7b70d641`, to parent BI-CAP-21C511CA and its independently approved scope. Every phase is internal sequencing for that one BI; there are no independent child mappings or dependencies. In the receipt, `requirementRefs` are the five `OBJ-*` IDs above, `verificationRefs` are AC-OWNED-01 through AC-OWNED-10, and the contract/flow refs are CT-OWNED-TASK-READ and FLOW-OWNED-TASK-OBSERVE. The whole BI is the single shippable delivery; none of its phases is independently shippable.
+
+This pointer records the initial receipt, not validity for later bytes. Refresh provider-verified coverage for the current published plan and Workroom head after this edit; the latest live receipt is authoritative. Claim/read readiness again after each material artifact change; retain refused decisions and follow the exact current recovery packet. Independent plan approval remains pending.
 
 ## Phase 0 — design, evidence and readiness
 
