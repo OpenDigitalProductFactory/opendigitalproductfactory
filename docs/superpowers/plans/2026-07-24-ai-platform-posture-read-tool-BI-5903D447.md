@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # AI Platform Posture Read Tool — Implementation Plan (BI-5903D447)
 
 > **For agentic workers:** REQUIRED: Use the DPF-native delivery path (`dpf-tdd`, `dpf-local-merge-ci-before-push`, and `dpf-pr-with-dco`) to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -86,7 +90,7 @@ The original posture plan and `2026-06-25-platform-consolidation-spine-design.md
 
 Options rejected: broad result-cap increases; repeated full reads; altering the lower-authority owner list; thread/TaskRun joins; direct database diagnosis outside the tool. These either retain the truncation defect or expand authority and data scope. Exact selection adopts the existing Prisma unique-read pattern without a new parser, pagination framework or dependency.
 
-Live overlap review found BI-6786CE44 concerns assignments-page UX budgets, completed BI-0073DE6A concerns knowledge draft approval, and retired BI-5FE164B4 concerns provider authentication retirement. None supplies this bounded status projection. BI-1C44A93A remains owner of the separate owned schedule list; BI-0A82D3B4 remains owner of recurrence timing. Original unknown portal/native attempts are not settled by this repair.
+Live overlap review found BI-6786CE44 concerns assignments-page UX budgets, completed BI-0073DE6A concerns knowledge draft approval, and retired BI-5FE164B4 concerns provider authentication retirement. None supplies this bounded status projection. The separate owner-scoped schedule list remains outside this repair; BI-0A82D3B4 remains owner of recurrence timing. Original unknown portal/native attempts are not settled by this repair.
 
 The resolved Workroom impact contract names the two colocated test suites, Style Drift Guard, Design Grounding PR section, doc-index and capability-completeness freshness checks, preflight, exact-tree shared-runtime gate and PR health. `find_related_tests` returned each exact colocated suite with ready graph state and no warnings. Plans under `docs/superpowers` are unpublished in the doc resolver, so this extension requires no doc-index content edit. If a derived check actually requires a change, claim its path normally before writing; foreign scope conflicts do not authorize forced regeneration.
 

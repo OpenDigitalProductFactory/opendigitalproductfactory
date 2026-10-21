@@ -48,7 +48,7 @@ describe("BI-E725AA43 bounded scheduled-task posture", () => {
     agentId: "platform-engineer",
     title: "Synthetic posture monitor",
     isActive: true,
-    nextRunAt: new Date("2026-10-21T12:23:00.000Z"),
+    nextRunAt: new Date(Date.now() + 3_600_000),
     lastStatus: "error",
     lastError: "Synthetic required tool failure",
   };
