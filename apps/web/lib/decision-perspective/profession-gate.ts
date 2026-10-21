@@ -37,6 +37,7 @@ import type {
 } from "./types";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { resolveGateDecisionAgentId } from "@/lib/decision/decision-shadow-ledger-bridge";
+import type { DecisionSubjectKind } from "@dpf/db";
 
 type ProfessionGateClient = Parameters<typeof resolveProfileMaterialForProfession>[0]["db"] &
   Parameters<typeof persistDecisionInteraction>[0]["db"] &
@@ -225,6 +226,19 @@ export async function evaluateProfessionDecisionGate(input: {
    * person then chose. Omit when the coworker proposed nothing.
    */
   proposedOptionId?: string | null;
+  /**
+   * What the decision reviewed (BI-22601A38): the build and its backlog item.
+   * Without them nothing that later happens to the reviewed work can be
+   * attributed back to the decision. Omit when the caller reviewed nothing
+   * identifiable — a null subject is honest, an invented one is not.
+   */
+  build?: { buildId: string } | null;
+  subject?: { kind: DecisionSubjectKind; id: string } | null;
+  /**
+   * Caller-recorded facts merged into outcomePayload, e.g. the digest of the
+   * reviewed document. The gate's own fields always win over these.
+   */
+  outcomePayloadExtra?: Record<string, unknown>;
   domainClass: DecisionDomainClass;
   riskTier: DecisionRiskTier;
   declarations?: DecisionDeclarations;
@@ -337,7 +351,10 @@ export async function evaluateProfessionDecisionGate(input: {
       gateFallbackUsed: true,
       agentId,
       proposedOptionId: input.proposedOptionId ?? null,
+      build: input.build ?? null,
+      subject: input.subject ?? null,
       outcomePayloadExtra: {
+        ...(input.outcomePayloadExtra ?? {}),
         professionProfileSelected,
         professionKey,
         caller: input.caller ?? null,
@@ -490,7 +507,10 @@ export async function evaluateProfessionDecisionGate(input: {
     gateFallbackUsed: !professionProfileSelected,
     agentId,
     proposedOptionId: input.proposedOptionId ?? null,
+    build: input.build ?? null,
+    subject: input.subject ?? null,
     outcomePayloadExtra: {
+      ...(input.outcomePayloadExtra ?? {}),
       professionProfileSelected,
       professionKey,
       caller: input.caller ?? null,

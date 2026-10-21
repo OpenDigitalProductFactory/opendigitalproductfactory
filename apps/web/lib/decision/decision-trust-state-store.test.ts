@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { reviewedArtifactDigest } from "@/lib/build/architecture-advisory-outcome";
+
 import { decisionShadowLedgerId } from "./decision-shadow-ledger-mapping";
 import { DECISION_TRUST_MIN_SAMPLES, REPORT_ONLY_RECOMMENDATION } from "./decision-trust-state";
 import {
@@ -249,6 +251,90 @@ describe("backfill of a coworker's own proposal (BI-AE416D75)", () => {
     expect(ledger.get(decisionShadowLedgerId("DI-EA2"))).toMatchObject({
       proposedDecision: { recommendedOptionId: "aligned", recommendedBy: "coworker" },
     });
+  });
+});
+
+describe("an architecture advisory resolved from what happened downstream (BI-22601A38)", () => {
+  const design = { problemStatement: "one" };
+  function advisory(id: string, over: Row = {}): Row {
+    return decision(id, {
+      agentId: "AGT-WS-EA",
+      domainClass: "architecture-tradeoff",
+      riskTier: "medium",
+      outcomeType: "escalate",
+      recommendedOptionId: null,
+      options: ["aligned", "revise-before-building"],
+      gateKey: "profession",
+      scoredOptions: null,
+      routeContext: "reviewDesignDoc",
+      buildId: "FB-1",
+      outcomePayload: {
+        outcomeType: "escalate",
+        proposedOptionId: "aligned",
+        reviewedArtifact: { buildId: "FB-1", kind: "design", digest: reviewedArtifactDigest(design) },
+      },
+      ...over,
+    });
+  }
+  function withBuilds(db: DecisionTrustDb, ledger: Map<string, Row>, builds: Row[]) {
+    const extended = db as unknown as Record<string, unknown> & { decisionShadowLedger: Record<string, unknown> };
+    extended.featureBuild = { findMany: vi.fn(async () => builds) };
+    extended.decisionShadowLedger.findMany = vi.fn(async (args?: { where?: { ledgerId?: { in: string[] } } }) => {
+      const wanted = args?.where?.ledgerId?.in;
+      return [...ledger.values()].filter((r) =>
+        wanted ? wanted.includes(String(r.ledgerId)) && r.reconciledAt == null : r.sourceKind === "governed-decision");
+    });
+    extended.decisionShadowLedger.updateMany = vi.fn(async (args: { where: { ledgerId: string }; data: Row }) => {
+      const existing = ledger.get(args.where.ledgerId);
+      if (existing && existing.reconciledAt == null) ledger.set(args.where.ledgerId, { ...existing, ...args.data });
+      return { count: existing ? 1 : 0 };
+    });
+    return db;
+  }
+
+  it("is counted beside the human samples, never inside them", async () => {
+    const { db, ledger, trust } = fakeDb([advisory("DI-EA")]);
+    withBuilds(db, ledger, [{ buildId: "FB-1", phase: "build", designDoc: design, buildPlan: null }]);
+    const now = new Date("2026-10-21T12:00:00.000Z");
+    const result = await runDecisionTrustRecompute(db, now);
+    expect(result.advisoryOutcomes).toMatchObject({ examined: 1, resolved: 1, written: 1 });
+    expect(ledger.get(decisionShadowLedgerId("DI-EA"))).toMatchObject({
+      agreement: true,
+      metadata: { resolvedBy: "outcome" },
+    });
+    expect([...trust.values()][0]).toMatchObject({ agentId: "AGT-WS-EA", sampleCount: 0, agreementCount: 0 });
+    const report = await loadDecisionTrustReport(db);
+    expect(report.rows[0]).toMatchObject({ sampleCount: 0, outcomeResolvedCount: 1, outcomeAgreementCount: 1 });
+  });
+
+  it("gives way to a person's answer that arrives later", async () => {
+    const { db, ledger } = fakeDb([advisory("DI-EA")]);
+    withBuilds(db, ledger, [{ buildId: "FB-1", phase: "build", designDoc: design, buildPlan: null }]);
+    await runDecisionTrustRecompute(db, new Date("2026-10-21T12:00:00.000Z"));
+
+    const answered = advisory("DI-EA", {
+      chosenOptionId: "revise-before-building",
+      humanOutcome: {
+        type: "escalation",
+        resolverUserId: "user-1",
+        capturedAt: "2026-10-22T09:00:00.000Z",
+        chosenOptionId: "revise-before-building",
+      },
+    });
+    (db.decisionInteraction.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([answered]);
+    const result = await backfillDecisionShadowLedger(db);
+    expect(result.written).toBe(1);
+    expect(ledger.get(decisionShadowLedgerId("DI-EA"))).toMatchObject({
+      agreement: false,
+      metadata: { resolvedBy: "human" },
+    });
+  });
+
+  it("is skipped on a client that cannot read builds, rather than failing the recompute", async () => {
+    const { db } = fakeDb([advisory("DI-EA")]);
+    const result = await runDecisionTrustRecompute(db, new Date("2026-10-21T12:00:00.000Z"));
+    expect(result.advisoryOutcomes).toBeNull();
+    expect(result.recompute.failed).toBe(0);
   });
 });
 
