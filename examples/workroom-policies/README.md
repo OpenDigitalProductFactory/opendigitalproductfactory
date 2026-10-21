@@ -62,6 +62,13 @@ binding over those facts; it does not load or certify them. Real deployments kee
 their canonical portfolio/budget/commitment, grants, protected evidence, current
 authorization, cancellation, scheduling and transaction owners.
 
+DPF2 currently defers this slice: its small `Room.posture` overlap does not justify
+the full policy closure. Reconsider when a real composed-posture or persistent
+attention consumer owns the supplied facts and retires displaced behavior. Role
+or posture cannot supply missing work-case decision-mode facts. Keep DPF2's
+practice/context compiler, strict calendar source policy and protected evidence
+acceptance with their current owners.
+
 ## Incumbent limits and maintenance
 
 Missing room context still falls back to the inherited DPF plan. The dispatcher

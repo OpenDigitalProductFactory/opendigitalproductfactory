@@ -118,10 +118,17 @@ families. DPF2 has no Git commit yet, so no immutable consumer revision is claim
 
 | Slice | Concrete existing consumer home and retirement condition |
 | --- | --- |
-| WP | Adapt posture/HITL interpretation in `packages/core/src/index.ts` with existing `Room.posture` and trusted command facts. Retire only the two replaced advise/propose interpretation branches after unchanged posture tests. Keep the current worker, UTC recurrence/coalescing, human decisions, grants and budget/resource reservations. Producer trigger normalization does not replace calendar recurrence. |
+| WP | Defer absorption: current `Room.posture` comparisons provide little retirement for the policy closure. Reconsider when a real composed-posture or persistent attention consumer owns the required facts and retires displaced behavior. Do not invent work-case decision-mode facts from a role or posture. Keep the practice/context owner, worker, strict calendar source policy, human decisions, grants and budget/resource reservations. |
 | OP | Add exact composition refs through `QualifiedProfile`, `stage-eligibility.ts` and `packages/runtime/src/composition-plan.ts`. No AIDoc hash implementation exists there to retire. Replace fixture-only qualification interpretation only when a named adapter supplies exact scheme/source facts; retain the planner's account/channel/tool/context/cost eligibility. |
 | BS | Adapt the snapshot/freshness envelope within `packages/experience/src/operating-surface.ts` and the existing workspace response. `getBusinessOverview` is already retired; do not count it again. Retire only actually overlapping projection assembly and retain core dependency/CAS owners. DPF2 lacks canonical accounts/subscriptions/shelter records, so its commitments and fixture customers cannot masquerade as those facts. |
-| HX | Extend the existing `Contribution` and private submit/review/accept commands before implementing the existing `ContributionTransport` port. Preserve exact human revision review, separate steward acceptance and existing Store/outbox ownership. No remote normalization/transport exists there to claim retired; receiving content cannot authorize adoption. |
+| HX | Extend the existing `Contribution` and private submit/review/accept commands before implementing the existing `ContributionTransport` port. Require immutable full private-candidate custody, storage-resolved exact review and atomic review/reservation drift checks; `commons-candidate/0.1` does not provide those guarantees. Preserve separate steward acceptance and Store/outbox ownership. No remote normalization/transport exists there to claim retired; receiving content cannot authorize adoption. |
+
+DPF2's `docs/reviews/PRODUCER-EXTRACTION-CONSUMER-REVIEW.md` now specifies
+candidate sequential-interchange profile 0.1 and SI-01–08; these are specified
+and unrun, not an implemented importer or new absorption. Preserve its current
+`packages/core/src/artifact-custody.ts`, `work-package.ts`, admission and Store
+owners. Retire only structural/translation code actually replaced after paired
+compatibility checks.
 
 Update DPF2's existing provenance/dependency disposition per exact consumed
 closure, reuse shared leaves, and preserve its current fixture equality format.

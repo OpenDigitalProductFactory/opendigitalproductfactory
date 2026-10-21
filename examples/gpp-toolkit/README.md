@@ -102,6 +102,14 @@ and covering the accountable principal, binding versions, subject scope and
 validity. This demonstrates refusal of this known fixture, not a general
 aggregation engine or portable C-5 enforcement.
 
+DPF2's `docs/reviews/PRODUCER-EXTRACTION-CONSUMER-REVIEW.md` specifies candidate
+sequential-interchange profile 0.1 and paired SI-01–08 cases. They are specified
+and unrun; this fixture does not implement that importer or qualify its mappings.
+Any selected translation must retain separate accountable/executor identities,
+explicit unsupported-field refusals and DPF2's existing `artifact-custody.ts`,
+`work-package.ts`, current admission and Store owners. Retire only structural or
+translation code actually replaced after paired compatibility checks.
+
 ## Maintenance and rollback
 
 The portable production source remains in `packages/validators/src/gpp` and
