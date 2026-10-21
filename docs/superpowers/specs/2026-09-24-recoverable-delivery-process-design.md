@@ -196,7 +196,7 @@ that worker nor changes admission authority, queue priority or grants.
 
 Ordered implementation, owned atomically by BI-EB864226:
 
-1. **R-QH-1 / FLOW-BOUND-HANDOFF:** retain a bounded stdout tail from the
+1. **R-QH-1 / FLOW-BOUND-HANDOFF:** retain bounded stdout and stderr tails from the
    existing child gate. Only its queued exit and canonical durable-wait packet,
    bound to the original owner and source claim key, can supply a new lease pin.
 2. **R-QH-2 / FLOW-LATEST-PIN:** carry the returned reservation into the next
@@ -209,6 +209,14 @@ Ordered implementation, owned atomically by BI-EB864226:
    interpret task completion as passing verification.
 4. **R-QH-4 / FLOW-TERMINAL:** cancellation and source drift remain terminal;
    host-resource invocations retain their separate immutable-pin contract.
+5. **R-QH-4 / FLOW-TERMINAL / VC-QH-TERMINAL:** retire obsolete clients through
+   the existing gate-client compatibility floor. Raise the client revision and
+   server floor together for Windows and POSIX; revision 2 still contains the
+   stale-pin controller. A deployed floor returns the existing non-retryable
+   update-required response so an old branch cannot perpetuate duplicate waits.
+   Non-gate claims and unknown host platforms retain the existing exemptions.
+   Activate only the merged server through canonical upgrade; this is client
+   compatibility enforcement, not a grant or queue-priority change.
 
 Verification cases **VC-QH-CHAIN**, **VC-QH-IDENTITY**, **VC-QH-BOUNDS** and
 **VC-QH-TERMINAL** cover A → B → C pin progression, rejected foreign/missing/
