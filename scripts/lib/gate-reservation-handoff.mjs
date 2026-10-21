@@ -1,24 +1,23 @@
 // BI-EB864226: only the reservation pin advances. The source and actor do not.
 // This is a child-controller handoff, never authority to release a lease:
 // the server still validates ownership and performs queued supersession.
-
-function lastOption(argv, name) {
-  let result;
-  const end = argv.indexOf("--");
-  for (let i = 1; i < (end < 0 ? argv.length : end); i++) {
-    if (argv[i] === name) result = { index: i + 1, value: argv[i + 1], equals: false };
-    else if (argv[i].startsWith(`${name}=`)) result = { index: i, value: argv[i].slice(name.length + 1), equals: true };
-  }
-  return result;
-}
+import { parseArgs } from "node:util";
+import { scriptArgv } from "./script-argv.mjs";
 
 /** Inspect only canonical queued output from this pinned local-CI invocation. */
 export function advanceGateReservationPin(argv, outputTail) {
-  const pin = lastOption(argv, "--resume-lease-id");
-  if (!/(?:^|[/\\])gate-worktree\.mjs$/.test(argv[0] ?? "") || !pin) return { required: false };
-  const sha = lastOption(argv, "--sha")?.value;
-  const owner = lastOption(argv, "--owner-session-id")?.value;
+  if (!/(?:^|[/\\])gate-worktree\.mjs$/.test(argv[0] ?? "")) return { required: false };
   const refuse = (reason) => ({ required: true, valid: false, reason });
+  const args = scriptArgv(argv.slice(1));
+  let parsed;
+  try {
+    parsed = parseArgs({ args: scriptArgv(argv.slice(1)), strict: false, allowPositionals: true, tokens: true,
+      options: { sha: { type: "string" }, "owner-session-id": { type: "string" }, "resume-lease-id": { type: "string" } } });
+  } catch { return refuse("invalid-source-pin"); }
+  const pin = parsed.tokens.findLast((token) => token.kind === "option" && token.name === "resume-lease-id");
+  if (!pin) return { required: false };
+  const sha = parsed.values.sha;
+  const owner = parsed.values["owner-session-id"];
   if (!/^[a-f0-9]{40}$/.test(sha ?? "") || !owner || !pin.value) return refuse("invalid-source-pin");
   const expected = `local-ci:${owner}:${sha}`;
   const leases = new Set();
@@ -37,6 +36,6 @@ export function advanceGateReservationPin(argv, outputTail) {
   if (leases.size !== 1) return refuse(leases.size ? "ambiguous-handoff" : "missing-handoff");
   const [leaseId] = leases;
   const next = [...argv];
-  next[pin.index] = pin.equals ? `--resume-lease-id=${leaseId}` : leaseId;
+  next[pin.index + argv.length - args.length + (pin.inlineValue ? 0 : 1)] = pin.inlineValue ? `--resume-lease-id=${leaseId}` : leaseId;
   return { required: true, valid: true, argv: next, priorLeaseId: pin.value, leaseId };
 }

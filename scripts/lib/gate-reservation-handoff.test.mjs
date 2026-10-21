@@ -129,3 +129,18 @@ test("Windows paths and repeated options preserve the gate parser's last-value-w
   assert.equal(result.argv.at(-1), `--resume-lease-id=${B}`);
   assert.deepEqual(result.argv.slice(0, -1), argv.slice(0, -1));
 });
+
+test("a forwarded leading separator preserves the exact flag location", () => {
+  const argv = [ARGV[0], "--", ...ARGV.slice(1)];
+  const result = advanceGateReservationPin(argv, JSON.stringify(queued(B)));
+  assert.equal(result.valid, true);
+  assert.equal(last(result.argv, "--resume-lease-id"), B);
+  assert.deepEqual(result.argv.slice(0, -1), argv.slice(0, -1));
+});
+
+test("a missing reservation argument stops unrun without parsing an invented pin", () => {
+  const argv = ARGV.slice(0, -1);
+  const result = advanceGateReservationPin(argv, JSON.stringify(queued(B)));
+  assert.equal(result.valid, false);
+  assert.equal(result.reason, "invalid-source-pin");
+});
