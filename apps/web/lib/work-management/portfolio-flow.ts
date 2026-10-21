@@ -22,7 +22,7 @@ import { reconstructTimelines, type QueueTelemetryRow } from "@/lib/queue/queue-
 import { PORTFOLIO_ROLES, isPortfolioRole, type PortfolioRoleKey } from "@/lib/portfolio/portfolio-role";
 
 import { classifyDriveSegment } from "./workroom-flow-state";
-import { holdCauseTag, type DriveObservation } from "./workroom-stage-telemetry";
+import { holdCauseTag, WORKROOM_STAGE_QUEUE_PREFIX, type DriveObservation } from "./workroom-stage-telemetry";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 export const FLOW_WINDOW_DAYS = 28;
@@ -81,6 +81,8 @@ export type PortfolioFlow = {
   weeklyFlowEfficiency: (number | null)[];
   /** Successful runs finished in each week, oldest first. */
   weeklyThroughput: number[];
+  /** Shape versions that replaced an earlier version in this portfolio, by the week they first ran; oldest week first. */
+  weeklyVersionChanges: string[][];
   /** Runs in flow four weeks ago, for flow load's change; null when the telemetry does not reach back that far. */
   flowLoadPrior: number | null;
   /** Rooms in flow by item type. */
@@ -154,6 +156,7 @@ export function computePortfolioFlow(input: {
     weeklyFlowLoad: Array.from({ length: TREND_WEEKS }, () => 0),
     weeklyFlowEfficiency: Array.from({ length: TREND_WEEKS }, () => null),
     weeklyThroughput: Array.from({ length: TREND_WEEKS }, () => 0),
+    weeklyVersionChanges: Array.from({ length: TREND_WEEKS }, () => []),
     flowLoadPrior: null,
     distribution: { feature: 0, defect: 0, risk: 0, debt: 0 },
     shapes: [],
@@ -237,6 +240,22 @@ export function computePortfolioFlow(input: {
     efficiency.set(bucket, entry);
   }
 
+  // Version changes (spec §8 step 5): when each shape version first ran in a portfolio.
+  const firstRan = new Map<string, { bucket: PortfolioFlow["key"]; shapeRef: string; at: number }>();
+  for (const row of input.rows) {
+    if (!row.queueKey.startsWith(WORKROOM_STAGE_QUEUE_PREFIX)) continue;
+    const bucket = roomBucket.get(row.itemId.split(":")[0]!);
+    if (!bucket) continue;
+    const shapeRef = row.queueKey.slice(WORKROOM_STAGE_QUEUE_PREFIX.length).split(":")[0]!;
+    const key = `${bucket}\x00${shapeRef}`;
+    const seen = firstRan.get(key);
+    if (!seen || row.occurredAt.getTime() < seen.at) firstRan.set(key, { bucket, shapeRef, at: row.occurredAt.getTime() });
+  }
+  // A version is a change only when an earlier version of the same shape ran in the portfolio before it.
+  const replacements = [...firstRan.values()].filter((version) => [...firstRan.values()].some((other) =>
+    other.bucket === version.bucket && other.shapeRef !== version.shapeRef
+    && other.shapeRef.split("@")[0] === version.shapeRef.split("@")[0] && other.at < version.at));
+
   for (const [key, flow] of out) {
     const bucketRuns = runsByBucket.get(key) ?? [];
     const durationsIn = (from: Date, to: Date) => bucketRuns
@@ -256,6 +275,10 @@ export function computePortfolioFlow(input: {
     flow.weeklyFlowLoad = weekEnds.map((to) => bucketRuns.filter((run) =>
       run.startedAt.getTime() < to.getTime() && (!run.closedAt || run.closedAt.getTime() >= to.getTime())).length);
     flow.weeklyThroughput = weekEnds.map((to) => successIn(weekOf(to), to));
+    flow.weeklyVersionChanges = weekEnds.map((to) => replacements
+      .filter((version) => version.bucket === key && version.at >= weekOf(to).getTime() && version.at < to.getTime())
+      .map((version) => version.shapeRef)
+      .sort());
     const bucketSteps = finishedSteps.get(key) ?? [];
     flow.weeklyFlowEfficiency = weekEnds.map((to) => {
       const inWeek = bucketSteps.filter((step) => inRange(step.at, weekOf(to), to));
