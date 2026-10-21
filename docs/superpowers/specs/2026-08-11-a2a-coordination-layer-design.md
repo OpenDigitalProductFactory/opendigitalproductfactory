@@ -495,8 +495,8 @@ These are platform defaults. Each installation may narrow them. Widening needs a
 
 ### 19.4 Signed envelopes and identity
 
-- Every peer-task event is a CloudEvent, signed with the sending installation's Ed25519 key over the canonical envelope (JWS, RFC 7515, `EdDSA`). The receiver verifies that the key hashes to the link's attested peer DID. HTTP-level RFC 9421 signing (§7) remains the target for all federation routes and is tracked with `BI-51FA49EB`. The envelope signature is what makes a stored result attributable after the fact, and it is required in the first slice.
-- The requesting agent identity is carried as an attributed claim inside the signed envelope: requesting human Principal, coworker GAID, and PROD approval receipt id. The receiver records it as provenance. It is never authority, because the GAID namespace is not yet unique per installation (F9; `BI-F51DC0D3`).
+- Every peer-task event is a CloudEvent, signed with the sending installation's Ed25519 key over the canonical envelope (JWS, RFC 7515, `EdDSA`). The receiver verifies that the key hashes to the link's attested peer DID. HTTP-level RFC 9421 signing (§7) remains the target for all federation routes and is tracked with plan slice S2 (device pinning / signed events). The envelope signature is what makes a stored result attributable after the fact, and it is required in the first slice.
+- The requesting agent identity is carried as an attributed claim inside the signed envelope: requesting human Principal, coworker GAID, and PROD approval receipt id. The receiver records it as provenance. It is never authority, because the GAID namespace is not yet unique per installation (F9; plan slice S1 (GAID namespace)).
 - On the receiver, an inbound request runs as the link's `federated-peer` Principal (`packages/db/src/federation-link-types.ts:75`). Today that Principal has no grants, and `FederationLink.authorityBindingId` is never written. This revision gives it exactly one capability, `peer_validation_request`, through the link's `AuthorityBinding`. It grants nothing else.
 
 ### 19.5 Authority across the boundary
@@ -586,7 +586,7 @@ Evidence is attached on PROD to PROD-owned items. It is never written onto a mir
 ### 21.1 Unverified
 
 - DEV's own declared environment class, its served version, whether its native Edge node is running (`BI-0C326236` is open), and whether PowerShell 5.1 and `pwsh` are present. DEV was unreachable from PROD during this revision.
-- Six slices of the federated-A2A plan (`BI-F51DC0D3`, `BI-51FA49EB`, `BI-B280E853`, `BI-90E338D8`, `BI-0E61A6A7`, `BI-68AF8D86`) return `authority_evidence_unavailable` on PROD, and their epic `EP-MSP-FEDERATION` is not found on PROD. They may exist only on the peer. Plan coverage must reconcile with them when they can be read; this revision does not create duplicates of them.
+- Six slices of the federated-A2A plan (plan slice S1 (GAID namespace), plan slice S2 (device pinning / signed events), plan slice S3 (signed Agent Cards), plan slice S4 (task ingress), plan slice S5 (authority/privacy), plan slice S6 (operator UX)) are named in the 2026-08-08 plan, but are not in the live backlog (doc-anchor check, 2026-10-21) and their epic `EP-MSP-FEDERATION` does not exist. Plan coverage must reconcile with them when they can be read; this revision does not create duplicates of them.
 - Whether a proxy layer protects `/api/a2a/coworkers/*/offers/*` (F12).
 
 ### 21.2 Built, specified, missing
@@ -605,9 +605,9 @@ Evidence is attached on PROD to PROD-owned items. It is never written onto a mir
 | Peer environment class attested | Missing (F1–F3) | — |
 | Peer task event types, ingress route `/api/v1/federation/a2a`, sender tool | Specified (§7) | The route directory has no `a2a` entry |
 | `TaskRun` peer link and remote task id | Missing | `build-delivery.prisma:1050` |
-| Envelope signatures and HTTP message signatures | Specified (`BI-51FA49EB`) | F11 |
-| Signed Agent Cards | Specified (`BI-B280E853`, `BI-40648BBF`) | F10 |
-| Per-installation GAID namespace | Specified (`BI-F51DC0D3`) | F9 |
+| Envelope signatures and HTTP message signatures | Specified (plan slice S2 (device pinning / signed events)) | F11 |
+| Signed Agent Cards | Specified (plan slice S3 (signed Agent Cards), `BI-40648BBF`) | F10 |
+| Per-installation GAID namespace | Specified (plan slice S1 (GAID namespace)) | F9 |
 | Validation recipes | Specified here | — |
 | Overlay reachability | Decided (`BI-CAF86466`), not built | — |
 | Relay | Deferred (`BI-D43D3D76`) | — |

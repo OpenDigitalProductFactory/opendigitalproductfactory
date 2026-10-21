@@ -84,7 +84,7 @@ The contract adds:
 - the sender tool with dispatch confirmation;
 - a result handler that posts to the parent thread and records evidence on a PROD-owned item.
 
-Reconcile with `BI-90E338D8` and `BI-51FA49EB` once they are readable on PROD (design §21.1).
+Reconcile with plan slice S4 (task ingress) and plan slice S2 (device pinning / signed events) once they are readable on PROD (design §21.1).
 
 ### P4 — DEV execution
 
