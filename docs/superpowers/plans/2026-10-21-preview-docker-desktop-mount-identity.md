@@ -41,8 +41,7 @@ internal sequencing; the two consumers must agree on one canonical comparison.
 1. Publish the immutable design/plan with DCO and obtain native plan coverage;
    record the observed source defect and research through the ordinary evidence
    writer before the implementation claim. Do not substitute Markdown for a
-   refused receipt. This document's temporary coverage condition describes the
-   immutable-provider prerequisite, not completed planning.
+   refused receipt.
 2. V-RED: Add regressions to `scripts/lib/dev-portal-lease-claim-key.test.mjs`
    and `apps/web/lib/govern/preview-automation-sign-in.test.ts` before changing
    behavior. Observe the exact Desktop tuple fail in both adapters. Include
@@ -81,10 +80,38 @@ internal sequencing; the two consumers must agree on one canonical comparison.
 
 - Decision: atomic
 - Parent: BI-81AF5884
-- Receipt: blocked-by: immutable design and plan must first be committed, provider-readable and bound to the current Workroom head before native coverage can be recorded.
+- Receipt: cmvhtzqkqkhdb01ldb73my19n
 - Rationale: The helper, trusted daemon evidence and both consumers form one mount-identity repair; any individual consumer or helper shipped alone leaves the reported preview binding incomplete.
 - Deliverable: D-MOUNT -> BI-81AF5884; AC-1 through AC-6; C-MOUNT, C-ENGINE; F-KEEPER, F-ISSUER; V-RED, V-GREEN, V-PUBLISH.
 - Dependencies: none
+
+Native coverage was verified current before implementation. It binds the plan
+blob `40787d1b0074deee28b024c275d5d0c936ccf6b4` at DCO commit
+`ca0dbc2e4533ba12453eac6e98e2e2ba9649b365`. Research receipt
+`initiative-7d085790-6fd2-44cf-8f37-db44b53ac4a9` and implementation admission
+`IRD-8671101F9E53` precede behavior edits.
+
+## Source verification checkpoint
+
+Before behavior edits, the keeper suite reported 28 passed and 5 failed out of
+33, including `preview_actual_mount_mismatch` for the observed tuple. The issuer
+suite reported 13 passed and 5 failed out of 18, including its corresponding
+binding failure. These are source-local first-failing regressions, not served
+runtime results.
+
+After the repair, the keeper's 33 tests and issuer's 18 tests passed. The shared
+package's 118 tests passed. Shared typecheck and web source/test typechecks
+passed through the current repository runner. Independent source review found
+no findings and independently passed the six new keeper cases and full issuer
+suite. The mandatory style/token guards and generated doc-index check passed.
+
+The additional release lease suite passed 8 of 10 tests. Its two queue-exit
+expectation failures reproduced identically in an isolated extraction of
+unchanged main `28ab249373336c86b409a6cb129370867533c6fc`: queue claim returned
+75 instead of expected 3, and the refresh fixture returned 64 instead of expected
+3. This repair does not touch those queue contracts. Required final preflight,
+shared-CI and native semantic review remain pending at this checkpoint. No
+runtime acceptance, deployment or merge is claimed.
 
 ## Risks and stop condition
 

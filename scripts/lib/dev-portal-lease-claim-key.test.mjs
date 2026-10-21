@@ -133,6 +133,100 @@ test('actual Docker Desktop Windows mount identifies only its admitted host work
   }
 });
 
+const macIdentity = { ...identity, worktree: '/Users/markbodman/dpf-worktrees/reusable-continuation' };
+const actualForMount = (source, target = macIdentity) => ({
+  Mounts: [{ Type: 'bind', Source: source, Destination: '/workspace' }],
+  Config: { Labels: previewOverride(target).services['dev-portal'].labels,
+    Env: ['DPF_ENVIRONMENT_CLASS=development', `DPF_PREVIEW_SOURCE_SHA=${target.sha}`, `DPF_PREVIEW_LEASE_ID=${target.leaseId}`] },
+});
+
+test('actual Docker Desktop POSIX alias identifies the exact admitted Mac worktree', () => {
+  const actual = actualForMount(`/host_mnt${macIdentity.worktree}`);
+  assertPreviewContainer(actual, { ...macIdentity, dockerOperatingSystem: 'Docker Desktop' });
+  const literal = { ...macIdentity, worktree: `/host_mnt${macIdentity.worktree}` };
+  assertPreviewContainer(actualForMount(literal.worktree, literal), { ...literal, dockerOperatingSystem: 'Docker Desktop' });
+  assertPreviewContainer(actualForMount(`/host_mnt${literal.worktree}`, literal), { ...literal, dockerOperatingSystem: 'Docker Desktop' });
+});
+
+test('a Desktop-looking POSIX path cannot supply engine proof or weaken path and binding checks', () => {
+  const source = `/host_mnt${macIdentity.worktree}`;
+  for (const dockerOperatingSystem of [undefined, '', 'Linux', 'Ubuntu 24.04 LTS', 'docker desktop', 'Docker Desktop other']) {
+    assert.throws(() => assertPreviewContainer(actualForMount(source), { ...macIdentity, dockerOperatingSystem }), /actual_mount_mismatch/);
+  }
+  for (const wrong of ['/host_mnt/Users/markbodman/dpf', source.replace('/Users/', '/users/'),
+    `${source}\0`, `${source}\r`, `${source}\n`, `/host_mnt${macIdentity.worktree}/../reusable-continuation`,
+    `/host_mnt${macIdentity.worktree}/./`, source.slice(1), source.replace('/host_mnt/', '/host_mnt-other/'),
+    `/other${source}`, `${source}-other`, `/host_mnt/host_mnt${macIdentity.worktree}`]) {
+    assert.throws(() => assertPreviewContainer(actualForMount(wrong), { ...macIdentity, dockerOperatingSystem: 'Docker Desktop' }), /actual_mount_mismatch/);
+  }
+  for (const invalid of [`${macIdentity.worktree}\n`, '/Users/markbodman/dpf-worktrees/../reusable-continuation', 'Users/feature']) {
+    assert.throws(() => assertPreviewContainer(actualForMount(source), { ...macIdentity, worktree: invalid, dockerOperatingSystem: 'Docker Desktop' }), /actual_mount_mismatch/);
+  }
+});
+
+test('Desktop alias still enforces every actual container environment and identity field', () => {
+  for (const entry of ['DPF_ENVIRONMENT_CLASS=development', `DPF_PREVIEW_SOURCE_SHA=${macIdentity.sha}`, `DPF_PREVIEW_LEASE_ID=${macIdentity.leaseId}`]) {
+    const actual = actualForMount(`/host_mnt${macIdentity.worktree}`);
+    actual.Config.Env = actual.Config.Env.filter(value => value !== entry);
+    assert.throws(() => assertPreviewContainer(actual, { ...macIdentity, dockerOperatingSystem: 'Docker Desktop' }), /actual_environment_mismatch/);
+  }
+  for (const label of ['dpf.preview.sha', 'dpf.preview.lease']) {
+    const actual = actualForMount(`/host_mnt${macIdentity.worktree}`);
+    actual.Config.Labels[label] = 'foreign';
+    assert.throws(() => assertPreviewContainer(actual, { ...macIdentity, dockerOperatingSystem: 'Docker Desktop' }), /actual_identity_mismatch/);
+  }
+});
+
+test('each keeper inspection reads bounded daemon metadata anew and fences an alias after engine changes', async () => {
+  const { inspectPreviewBinding } = await import('./dev-preview-runtime.mjs');
+  let operatingSystem = 'Docker Desktop';
+  const calls = [];
+  const runner = { run: async (args, options) => {
+    calls.push({ args, options });
+    if (args[0] === 'info') return operatingSystem;
+    assert.deepEqual(args, ['inspect', 'fixture-container']);
+    return JSON.stringify([actualForMount(`/host_mnt${macIdentity.worktree}`)]);
+  } };
+  await inspectPreviewBinding({ runner, id: 'fixture-container', identity: macIdentity });
+  operatingSystem = 'Ubuntu 24.04 LTS';
+  await assert.rejects(inspectPreviewBinding({ runner, id: 'fixture-container', identity: macIdentity }), /actual_mount_mismatch/);
+  operatingSystem = '';
+  await assert.rejects(inspectPreviewBinding({ runner, id: 'fixture-container', identity: macIdentity }), /actual_mount_mismatch/);
+  const infoCalls = calls.filter(call => call.args[0] === 'info');
+  assert.equal(infoCalls.length, 3);
+  for (const call of infoCalls) {
+    assert.deepEqual(call.args, ['info', '--format', '{{.OperatingSystem}}']);
+    assert.equal(call.options.timeoutMs, 10000);
+  }
+});
+
+test('failed engine metadata holds the new alias and preserves direct POSIX and Windows keeper bindings', async () => {
+  const { inspectPreviewBinding } = await import('./dev-preview-runtime.mjs');
+  const windows = { ...identity, worktree: 'D:/DPF-worktrees/scoped-investment-balance' };
+  for (const [target, source, passes] of [[macIdentity, `/host_mnt${macIdentity.worktree}`, false],
+    [macIdentity, macIdentity.worktree, true], [windows, '/run/desktop/mnt/host/d/DPF-worktrees/scoped-investment-balance', true]]) {
+    const runner = { run: async args => {
+      if (args[0] === 'info') throw new Error('private daemon output');
+      return JSON.stringify([actualForMount(source, target)]);
+    } };
+    const check = inspectPreviewBinding({ runner, id: 'fixture-container', identity: target });
+    if (passes) await check;
+    else await assert.rejects(check, /actual_mount_mismatch/);
+  }
+});
+
+test('bounded preview command timeout terminates only its child without leaking output', async () => {
+  const runner = commandRunner();
+  const otherChild = runner.run(['-e', "setTimeout(() => console.log('unrelated-result'), 75)"], { bin: process.execPath });
+  await assert.rejects(runner.run(['-e', "console.log('private-child-output'); setTimeout(() => {}, 250)"],
+    { bin: process.execPath, timeoutMs: 25 }), error => {
+    assert.equal(error.message, 'preview_operation_timeout');
+    assert.ok(!error.message.includes('private-child-output'));
+    return true;
+  });
+  assert.equal(await otherChild, 'unrelated-result');
+});
+
 test('startup isolates dependencies, waits for clone success, verifies actual binding, then permits serving', async () => {
   const calls = [];
   await runPreviewLifecycle({ compose: async args => calls.push(args), inspect: async () => calls.push('inspect'),

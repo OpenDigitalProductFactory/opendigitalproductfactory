@@ -6,7 +6,7 @@ status: active
 
 Backlog: BI-81AF5884. Workroom: WC-DB6884ED. This is a bounded successor
 to completed BI-10AC904B, which owns the contributor-preview binding flow.
-Implementation is not yet claimed. The [ordered plan](../plans/2026-10-21-preview-docker-desktop-mount-identity.md)
+Implementation was admitted after native coverage and research receipts. The [ordered plan](../plans/2026-10-21-preview-docker-desktop-mount-identity.md)
 carries the delivery and verification sequence.
 
 ## Problem and source evidence
