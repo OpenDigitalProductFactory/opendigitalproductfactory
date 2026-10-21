@@ -84,6 +84,14 @@ describe("coworker pack — registration", () => {
     expect(approvalStatus.read).toHaveBeenCalledWith("e1", "u1", "a1");
     expect(result.success).toBe(true);
   });
+  it("keeps original action evidence separate from the envelope state", async () => {
+    const outcome = { state: "executed", label: "Authorized and completed", nextAction: "Continue",
+      actionEvidence: { state: "missing", reason: "execution-missing" } };
+    approvalStatus.read.mockResolvedValue(outcome);
+    const result = await coworkerPack.handlers.get_my_approval_status({ envelopeId: "e1" }, "u1", { agentId: "a1" });
+    expect(result.data).toEqual(outcome);
+    expect(approvalStatus.list).not.toHaveBeenCalled();
+  });
   it("discloses review requests to evidence authors without granting general summons or review receipts", () => {
     const grants = ["initiative_evidence_write"];
     expect(isToolAllowedByGrants("request_coworker", grants)).toBe(true);
