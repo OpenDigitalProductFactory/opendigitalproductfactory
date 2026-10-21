@@ -744,6 +744,13 @@ export async function resumePreBuildPhase(params: {
           console.warn("[resume-pre-build-phase] child design artifact heal failed:", { buildId }, err);
         }
       }
+      // BI-3E57890E: an independent reviewer failed the current design. Revise
+      // it from the findings (then re-plan) before plan→build retries a refusal.
+      if (build.originatingBacklogItemId) {
+        const { reviseDesignFromIndependentReview } = await import("@/lib/build/independent-design-review-revision");
+        const revised = await reviseDesignFromIndependentReview({ buildId, userId, originatingBacklogItemId: build.originatingBacklogItemId });
+        if (revised) return { ...revised, phase };
+      }
       if (!hasPlanTasks(build.buildPlan)) {
         // No plan yet — re-dispatch plan generation. The dispatcher auto-runs
         // reviewBuildPlan, which advances plan->build when the gate is satisfied.
