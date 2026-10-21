@@ -309,7 +309,7 @@ narrower, sharper, and more urgent than "design it".
 
 | Concern | Status | Where |
 |---|---|---|
-| Consult-before-consequential-act gate | **Built, enforce by default** | `apps/web/lib/tak/decision-routing-governance-hook.ts` — `principle_decide` must be consulted before a consequential tool; a consult clears the gate for `CONSULT_WINDOW_MS`. Modes: enforce \| shadow \| off |
+| Consult-before-consequential-act gate | **Built, enforce by default** | `apps/web/lib/tak/decision-routing-governance-hook.ts` — `principle_decide` must be consulted before a consequential tool; a consult clears the gate for `CONSULT_WINDOW_MS`. Modes: enforce \| shadow \| off. One rule for in-portal coworkers and external MCP agents (BI-638024F9); external agents default to shadow via `DPF_DECISION_GATE_EXTERNAL_MODE` |
 | Gate at tool dispatch | **Built** | Runtime kernel-commandment gate in `mcp-tools.ts` refuses or demands typed confirmation before the tool body runs |
 | Gate on workroom next-steps | **Built** | `BI-E0BFFF77` — work-shape action envelope + `principle_decide` autonomy gate; `CoworkerActionEnvelope` carries `manifestActionId`, `rationale`, `status`, `authorityDecisionId` |
 | Decision record | **Built, and sealed** | `DecisionInteraction` — question, options, evidence, sources, rationale, riskTier, confidenceBefore/After, `scoredOptions`, `recommendedOptionId`, `chosenOptionId`, `gateKey`. Append-only hash chain (`chainId`/`prevHash`/`chainEntryHash`/`sealedAt`) with a write guard |

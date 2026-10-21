@@ -40,6 +40,8 @@ export type ToolExecutionContext = AuthorizedSurfaceToolExecutionContext & {
   apiTokenId?: string;
   authSource?: string;
   tokenScope?: string; authorityDecisionId?: string; suppressDesignReviewAutoRepair?: boolean; suppressPlanReviewAutoRepair?: boolean;
+  /** BI-3E57890E: the design-fix loop's regeneration may save a designDoc while the build is in plan. */
+  allowPlanPhaseDesignRevision?: boolean;
   /**
    * Build the user is currently messaging from. Plumbed by agentic-loop.ts
    * from runAgenticLoop's `featureBuildId` param so phase-scoped tools can
