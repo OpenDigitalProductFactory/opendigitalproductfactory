@@ -2793,6 +2793,7 @@
         "an-undispatched-stage-is-a-pause-and-its-task-owner-is-the-accountable-person",
         "every-stage-is-a-queue",
         "a-named-governed-writer-must-be-attached-not-discovered",
+        "offered-or-not-dispatched-offered-then-corrected-once-bi-62db6c03",
         "a-stage-names-the-tools-it-needs",
         "a-new-shape-version-reaches-a-live-room-only-by-rebind-bi-cb5c0dce",
         "related-references",
