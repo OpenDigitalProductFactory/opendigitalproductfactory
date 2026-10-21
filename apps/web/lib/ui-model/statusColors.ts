@@ -594,6 +594,7 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     rate_limited: "warning",
     needs_credentials: "warning",
     no_models: "warning",
+    public_only: "warning",
     disabled: "neutral",
     unconfigured: "neutral",
     not_routable: "neutral",
