@@ -62,13 +62,13 @@ selected here.
 | AC-PKG-001 | OBJ-PKG-001 | Two assemblies from the same pinned sources, generator version, parameters and dependency lock produce the same content inventory and payload bytes; a source change changes the relevant digest. | Reproducibility and tamper fixtures. |
 | AC-PKG-002 | OBJ-PKG-001 | Every payload entry identifies its canonical source, immutable revision, source digest, derivation and exact output digest; generated outputs are rebuilt from their owners rather than edited directly. | Full source-to-output inventory reconciliation. |
 | AC-PKG-003 | OBJ-PKG-002 | A clean documented environment validates and inspects the delivered package without a DPF account, network access, publisher service or repository checkout; missing prerequisites produce a bounded diagnostic. | Network-denied clean-environment inspection. |
-| AC-PKG-004 | OBJ-PKG-002 | Malformed, oversized, ambiguous, path-escaping, link-bearing or integrity-invalid archives are rejected before extraction or loading executable content. | Hostile package fixtures and filesystem observation. |
+| AC-PKG-004 | OBJ-PKG-002 | Malformed, oversized, ambiguous, path-escaping, link-bearing or integrity-invalid archives are rejected during bounded read-only parsing; observed entry counts and decompressed bytes enforce limits independently of header claims, before materialization or executable loading. | Hostile package fixtures and filesystem observation. |
 | AC-PKG-005 | OBJ-PKG-002, OBJ-PKG-003 | Unsupported required versions, extensions, dependency semantics, flow semantics or mandatory controls hold import; optional unknown data round-trips within bounds and supplies no authority. | Negative import and round-trip fixtures. |
 | AC-PKG-006 | OBJ-PKG-002, OBJ-PKG-003 | Inspection and import create no actors, grants, credentials, tool connections, schedules, persistent agent memory or external effects; activation requires a separate target-owned admission. | Before/after local-state and external-effect observations. |
 | AC-PKG-007 | OBJ-PKG-003 | Selected content passes allow-list, secret/private-data and redistribution review; every included file has an attributable license disposition and required notice, while prohibited or unresolved content is excluded or holds assembly. | Content review, scanner results and complete license inventory. |
 | AC-PKG-008 | OBJ-PKG-003 | Original qualification status and evidence scope remain attributable to the original subject/profile; a new target is not assessed or qualified without target assessment or an attributable scheme-defined equivalence decision. | Transfer, changed-profile and stale-status fixtures. |
 | AC-PKG-009 | OBJ-PKG-003 | Updates produce a new immutable package and report changes to requirements, restrictions, dependencies and evidence; they neither overwrite local grants nor treat file restoration as external-effect settlement. | Update and rollback fixtures. |
-| AC-PKG-010 | OBJ-PKG-004 | Synthetic success, refusal, scope mismatch, uncertainty/reconciliation and extension-negotiation examples run through the existing reference functions and label every generated observation simulated with conformanceClaim none. | Standalone example output reconciled to canonical examples. |
+| AC-PKG-010 | OBJ-PKG-004 | Synthetic success, refusal, scope mismatch, uncertainty/reconciliation and extension-negotiation examples run validated fixture data through an independently trusted, pinned BI-F9582C48 runner and label every generated observation simulated with conformanceClaim none; package-supplied executable code remains inert unless separately admitted. | Standalone example output reconciled to canonical examples and executable trust-boundary checks. |
 | AC-PKG-011 | OBJ-PKG-004 | The package distinguishes included evidence from references requiring authenticated resolution, reports inaccessible evidence unknown, and maps each claim to an exact version, scope, assessor and observation or states it unassessed. | Missing-reference and conflicting-evidence fixtures. |
 | AC-PKG-012 | OBJ-PKG-001, OBJ-PKG-004 | The release maps its selected content to PC-01–08 and CT-01–08 without claiming those source tests or the nine candidate runtime cases establish the target's conformance. | Traceability review and complete declared test ledger. |
 
@@ -100,7 +100,7 @@ this design selects no executing host.
 | Comparator | Concrete model | Adopt or preserve | Reject or report as a loss |
 |---|---|---|---|
 | [Agent Skills](https://agentskills.io/specification) | Required `name`/`description`; optional `license`, `compatibility`, `metadata`; instructions and resource directories. | Reuse the instruction/resource layout and declared compatibility. | Do not treat experimental `allowed-tools` as grants or infer lock, provenance or control coverage from skill discovery. |
-| [Agent Plugins 1.0.0](https://github.com/agentplugins/agent-plugins-spec/blob/main/spec/1.0.0.md) | Root `plugin.json` with `$schema`/`name`, optional version/repository/license/extensions; fixed skills and MCP components. | Consider a generated host binding for supported content. Preserve the original package inventory outside the host's permissive loader. | Clients may support only skills or MCP and ignore unsupported component types/namespaces. Those behaviors cannot satisfy a mandatory TAK requirement. Summary-page differences about malformed extensions require checking the pinned normative spec before implementing a binding. |
+| [Agent Plugins 1.0.0](https://github.com/agentplugins/agent-plugins-spec/blob/main/spec/1.0.0.md) | Root `plugin.json` with `$schema`/`name`, optional version/repository/license/extensions; fixed skills and MCP components. | Consider a generated host binding for supported content. Preserve the original package inventory outside the host's permissive loader. | Clients may support only skills or MCP. Normative §§5.2/8.1 make unknown top-level fields and non-object extensions nonfatal; unknown namespaces are ignored without validation. Those loading rules cannot satisfy a mandatory TAK semantic requirement. |
 | [OCI manifest](https://specs.opencontainers.org/image-spec/manifest/) and [descriptor](https://specs.opencontainers.org/image-spec/descriptor/) | `schemaVersion`, media/artifact type, config, layers, subject and annotations; descriptors carry media type, digest and size. | Reuse the separation of content identity, type and length when deriving the inventory. | Do not add an OCI registry or container runtime for this content package, or equate a digest with signer trust or semantic equivalence. |
 | [Cursor plugins](https://cursor.com/docs/reference/plugins) | Native `.cursor-plugin/plugin.json` identity/version/repository/license, component paths, variables and schema; marketplace sources/version. | A future projection can map declared component paths and exact source identity. | Standard Agent Plugins support does not imply all substitutions: documented `PLUGIN_ROOT`/`PLUGIN_DATA` expansion is unsupported. Record that loss and hold any required mapping. Never copy dashboard secrets into source. |
 | [Claude plugins](https://code.claude.com/docs/en/plugins-reference), [dependencies](https://code.claude.com/docs/en/plugins/dependencies) and [marketplace](https://code.claude.com/docs/en/plugins/marketplace-reference) | Identity/version/license, components, dependencies and `userConfig`; sensitive configuration has distinct storage; immutable Git/archive source pins differ from dependency ranges. | Preserve exact source pins and the separation of distributable definition from local sensitive configuration. | Unknown top-level fields may be stripped; package-required semantics cannot rely on their survival. A range or catalog entry is not immutable dependency identity. |
@@ -108,9 +108,11 @@ this design selects no executing host.
 
 The [Agent Plugins manifest](https://agent-plugins.org/plugin-authors/manifest)
 and [loading contract](https://agent-plugins.org/client-implementers/loading-and-discovery)
-are useful implementation guides; pin the normative version for a binding rather
-than guessing through disagreements. Resolve and report all host-format losses
-before activation. No host-specific package is generated in this design phase.
+are useful implementation guides. The pinned normative 1.0.0 rule resolves their
+summary ambiguity about malformed extensions: report/ignore a non-object value
+and continue. This permissive host loading remains distinct from the package's
+closed inventory and mandatory-extension check. Resolve and report all host-format
+losses before activation. No host-specific package is generated in this phase.
 
 For generated provenance, [SLSA 1.2 build provenance](https://slsa.dev/spec/v1.2/build-provenance)
 provides subject, build definition, external parameters, resolved dependencies and
@@ -135,24 +137,110 @@ Its input records the composition/skill/work/archetype selectors, source documen
 versions, generator identity and dependency lock digest. No wildcard can silently
 include new files or follow symlinks. A source change requires a new assembly.
 
-The release contains a conventional directory/archive and a generated inventory:
+### First format and runtime
+
+The first release uses a single `.tar.gz` file named
+`<packageId>-<packageVersion>.tar.gz`, with a POSIX ustar payload and a root
+`dpf-reference-package.json` inventory whose `schemaVersion` is the literal
+`"1.0.0"`. `packageVersion` versions the selected content separately from that
+inventory format and from the existing trusted-artifact `"0.1.0"` version.
+This is a proposed distribution contract, not an adopted agent operating profile.
+
+Reuse the byte-stable archive implementation at
+`apps/web/lib/agent-toolchain/pack-archive.ts`: fixed 512-byte ustar headers,
+regular files only, no directory entries, zero uid/gid/mtime, fixed gzip mtime
+and OS byte, and compression level 9. Factor its reusable encoder within the
+existing packaging owner when implementation is admitted rather than copying a
+second encoder or importing `server-only` into the standalone tool. The inventory
+is the first member; remaining paths sort by UTF-16 code unit. The new package
+policy sets every member's mode to `0644`; unlike toolchain installation it has
+no automatically executable `.sh`/`.py` exception. Unsupported paths longer than
+ustar's name/prefix fields fail instead of silently choosing an extended format.
+
+The standalone verifier and trusted synthetic runner target **Node.js 24.x**
+(`>=24.0.0 <25.0.0`), matching the repository's `Dockerfile` Node 24 base and
+`.github/workflows/ci.yml` Node 24 verification jobs. This deliberately narrows
+the root `package.json`'s general `>=20` floor to the baseline actually verified
+by that delivery path. No DPF checkout, pnpm, database, credentials or model is
+required on the recipient. Include the trusted tools' resolved runtime dependency
+closure and notices; build tooling stays out of the recipient prerequisites.
+Pin the generator's exact Node and zlib versions in release provenance because
+compression byte identity must not depend on an unrecorded build tool version.
+This runtime choice does not qualify any agent harness. Clean-environment tests
+for it remain unrun.
+
+### Closed inventory vocabulary
+
+All inventory objects reject unknown keys. There are no optional core fields:
+nullable fields are present with `null`, and empty lists are present as `[]`.
+`Ref` means the existing strict `trustedReferenceSchema` (`id`, `version`, and
+optional `digest`); `Restrictions` means `trustedRestrictionsSchema` without
+alteration. `Extension` means the existing namespaced `id`, exact `version`,
+`mandatory` and bounded JSON `data` contract. Unknown required semantics fail
+through that existing extension rule, never an ignored top-level property.
+
+| Object | Exact required fields and meanings |
+|---|---|
+| Root | `schemaVersion: "1.0.0"`, `packageId`, `packageVersion`, `source: Source`, `generator: Generator`, `selection: Selection`, `runtime: Runtime`, `files: File[]`, `dependencies: Dependency[]`, `references: Reference[]`, `controls: Control[]`, `restrictions: Restrictions`, `licenseInventoryPath`, `extensions: Extension[]`. |
+| Source | `repositoryFullName`, `commitSha`, `treeSha`; full Git commit/tree IDs identify the source checkout. No authenticated URL or installation path. |
+| Generator | `reference: Ref`, `nodeVersion`, `zlibVersion`, `parametersSha256`; the last digest binds the canonical `Selection`. The generator reference identifies the exact implementation revision. |
+| Selection | `composition: Ref`, `skills: Ref[]`, `work: Ref`, `archetype: Ref`, `standards: Ref[]`; all refer to canonical reusable definitions, not live subject or room instances. Unresolved required selection holds assembly. |
+| Runtime | `name: "node"`, `versionRange: ">=24.0.0 <25.0.0"`, `verifier: Ref`, `syntheticRunner: Ref`; the latter references identify independently trusted tool releases, never authority supplied by this archive. |
+| File | `path`, `role`, `mediaType`, `byteLength`, `sha256`, `sources: SourceFile[]`, `derivation: Derivation`, `restrictions: Restrictions`, `licenseEntryId`. Each payload file appears exactly once; the root inventory does not list itself. |
+| SourceFile | `repositoryFullName`, `commitSha`, `path`, `blobSha`, `sha256`; both repository blob identity and exact source-byte SHA-256 remain available. |
+| Derivation | `kind` is `copy` or `generated`; `generator: Ref` and `parametersSha256` identify the transformation. A copy names the assembler and its selection parameters; generated text identifies the actual producer. |
+| Dependency | `name`, exact `version`, `artifactSha256`, `payloadPaths: string[]`, `dependencyRefs: Ref[]`, `licenseEntryId`; no ranges, `catalog:` values, implicit network fetch or install scripts. |
+| Reference | `reference: Ref`, `includedPath: string or null`, `required: boolean`, `access` is `public` or `authenticated`, `restrictions: Restrictions`; an inaccessible required reference holds the semantic check that needs it. |
+| Control | `reference: Ref`, `mandatory: boolean`, `declaredSupport` is `supported`, `unsupported` or `unknown`, `evidenceRefs: Ref[]`; these are package assertions that the verifier reports without promoting them to an assessed result. |
+
+`packageId` is 1–80 lower-case ASCII letters/digits/hyphens with alphanumeric
+ends. `packageVersion` is an exact SemVer without a leading `v` or mutable tag.
+Every SHA-256 is `sha256:` plus 64 lower-case hex digits; Git IDs use the source
+repository's full 40-character identity. `role` is one of `definition`, `schema`,
+`skill`, `resource`, `reference-source`, `fixture-data`, `reference-code`,
+`dependency`, `license`, `guide` or `provenance`. Role `reference-code` remains
+inert source material. `licenseEntryId` resolves to a component/file record in
+the declared SPDX inventory; declared and concluded licensing remain distinct.
+`licenseInventoryPath` must identify an included `license` entry.
+
+Inventory text is UTF-8 with no BOM and no trailing newline, serialized by the
+existing `canonicalJson` from `@dpf/integration-shared/canonical-json` (the
+sanctioned `scripts/lib/canonical-json.mjs` home for plain-Node scripts). Reuse
+that implementation; do not claim RFC 8785 compatibility or write another
+canonicalizer. It orders object keys by UTF-16 code unit and preserves array
+order. Before serialization reject duplicate JSON keys, non-finite numbers,
+unsafe/noninteger lengths, invalid strings and non-JSON values; do not rely on
+serialization to repair them. All set-like lists sort by stable identity, with
+`files` by path and references by `(id,version,digest)`, rejecting duplicates.
+
+The inventory uses the existing trusted-JSON depth/node/character ceilings.
+Package lists cannot exceed 256 files/dependencies/references/controls or 128
+source entries per file; extensions retain the existing limit of 32. Apply these
+limits to observed parsed content. The release contains these content classes:
 
 | Content | Included information |
 |---|---|
 | Inventory and provenance | Package identity/version; inventory-format version; source repository/commit/tree; generator version; canonical input selectors and parameters; each normalized relative path, role, media type, length and SHA-256 digest; source path/blob/digest and derivation; restrictions and license disposition. |
 | Contract artifacts | Structural schema generated by `trustedArtifactJsonSchema()`, selected portable definitions and exact existing semantic-import/reference-loop modules with their complete runtime dependency closure. |
 | Skills and governing references | Allow-listed skill/resources; exact normative/profile/work-shape references; permitted source snapshots needed for offline interpretation; explicit reference-only entries for material that cannot be redistributed. |
-| Synthetic scenarios | Existing simulated contract cases, a deterministic expected-output description and traceability to the owning tests. No live run history is packaged as a demonstration result. |
+| Synthetic scenarios | Fixture data for the existing simulated contract cases, a deterministic expected-output description and traceability to the owning tests. An independently trusted runner executes these data; no archive-supplied script is admitted by its inclusion. |
 | Dependency and licensing material | Exact versions and artifact digests from the existing lockfile, runtime requirements, file/component license and notice inventory, source/provenance references and redistribution disposition. |
 | Inspection guide | Required verifier/runtime versions, all limits, unsupported capabilities, example instructions, evidence scope, and the separation between inspection and activation. |
 
 The inventory is a derived release artifact, not a second definition registry or
-editable policy store. Keep envelope/inventory, output bytes and canonical source
-digests separate. Use a deterministic inventory serialization; hash exact file
-bytes without newline conversion. The root inventory digest is computed from its
-canonical content excluding its own digest/proof fields. Record the final archive
-digest separately. Archive ordering, timestamps, ownership metadata and compression
-parameters are fixed by the assembler version, never host defaults.
+editable policy store. A `File.sha256` hashes exact payload bytes without newline
+conversion. `SourceFile.sha256` hashes the original source bytes; it does not
+substitute for the generated output digest. `inventorySha256` hashes the exact
+canonical inventory bytes; the inventory has no self-digest, proof fields or
+self-entry, so there is no recursive hash. `archiveSha256` hashes every byte of
+the final gzip file and remains a separate transport identity.
+
+Publish a detached `<packageId>-<packageVersion>.release.json` containing exactly
+`schemaVersion: "1.0.0"`, `packageId`, `packageVersion`, `inventorySha256`,
+`archiveSha256`, `archiveByteLength` and `provenanceRef: Ref or null`, in the same
+canonical serialization. It is not an archive member. An existing authenticated
+release attestation may bind these identities; a detached document supplied by
+the same untrusted sender does not establish origin trust.
 
 Do not ship unresolved workspace `catalog:` dependency selectors: resolve the
 exact pinned dependency versions and artifact digests for the selected release.
@@ -164,11 +252,11 @@ or establish redistribution rights. This item adds no signing service or databas
 model. Where no acceptable origin proof exists, the inspection result states
 origin unverified and forbids an authenticated-origin claim.
 
-The clean inspection prerequisite is a supported standalone verifier and its
-documented runtime, distributed with pinned dependencies and notices. It must not
+The clean inspection prerequisite is the trusted standalone verifier and Node 24
+runtime described above, with pinned dependencies and notices. It must not
 require installing the DPF monorepo or execute its package-manager lifecycle
-scripts. The implementation plan must choose a supported runtime and demonstrate
-the dependency closure in AC-PKG-003. The current source package is not asserted
+scripts. The implementation must demonstrate that chosen baseline and dependency
+closure in AC-PKG-003. The current source package is not asserted
 to satisfy that requirement already. No new service, subscription or mandatory
 model dependency is proposed.
 
@@ -181,10 +269,19 @@ data, including skills, commands, MCP definitions, JSON schemas and examples.
 
 1. Check the archive's declared format/version and trusted-origin information.
    Inventory claims remain untrusted until their corresponding checks succeed.
-2. Enforce archive limits before extraction: at most 256 entries, 64 MiB compressed,
+2. Parse the archive read-only with limits: at most 256 entries, 64 MiB compressed,
    128 MiB total expanded and 16 MiB per entry for the first package version.
-   These are proposed defensive ceilings, not measured capacity claims. Reject
-   excess rather than truncate; nested archives are unsupported.
+   These are proposed defensive ceilings, not measured capacity claims. Count
+   actual compressed input bytes, every parsed header/member and actual
+   decompressed output bytes while streaming, including tar headers/padding in
+   the total. A forged size or member count cannot increase the budget. Check
+   before retaining each bounded chunk, stop decompression before exceeding
+   storage/memory limits, and reject a member whose observed bytes differ from
+   its header or inventory length. Reject concatenated/trailing gzip data,
+   extended tar metadata and nested archives; no entry is made executable.
+   "Before extraction" means this bounded read-only parse before materializing
+   the validated inventory to an inspection directory, not trusting headers or
+   allocating their declared size first.
 3. Reject absolute paths, parent traversal, NULs, duplicate/case-colliding or
    normalization-colliding paths, symlinks, hardlinks, device entries and undeclared
    files. Extraction stays within a new temporary directory and cannot replace
@@ -201,6 +298,17 @@ data, including skills, commands, MCP definitions, JSON schemas and examples.
    check results and limitations. Each capability is declared, supported by a
    named implementation, assessed by stated evidence, or unknown/unsupported.
    Package validation success is not a permission token or qualification badge.
+
+To run synthetic examples, the recipient separately chooses the independently
+trusted Node 24 runner pinned to BI-F9582C48's reference implementation. That
+runner accepts only bounded validated fixture data and uses its own trusted
+reference functions and expected assertions. It does not evaluate imported
+JavaScript, dynamic modules, scripts, expression strings or template commands.
+All archive-supplied code stays inert unless a distinct executable-code admission
+authenticates its producer and exact bytes. A self-consistent archive can replace
+both code and its listed hashes; neither inspection success nor origin-unverified
+content admits that code. The guide must show the trusted runner path separately
+from the package's fixture path and state this trust boundary explicitly.
 
 Inspection never creates a Principal, issues a GAID, imports authority grants,
 starts a model, connects MCP, enables a schedule or invokes tool hooks. A later
