@@ -18,6 +18,29 @@
 import type { PrismaClient } from "@dpf/db";
 import type { ArchitectureAdvisory, ReviewResult } from "@/lib/explore/feature-build-types";
 
+import {
+  REVIEWED_ARTIFACT_PAYLOAD_KEY,
+  reviewedArtifactDigest,
+  reviewedPhaseFor,
+  type ReviewedArtifactKind,
+} from "./architecture-advisory-outcome";
+
+/**
+ * What the advisory reviewed (BI-22601A38). Without it the advisory names no
+ * build and no document, so nothing that later happens to the design can be
+ * attributed back to it.
+ */
+export type ReviewedDocument = {
+  buildId: string;
+  kind: ReviewedArtifactKind;
+  /** The document exactly as stored when it was reviewed. */
+  document: unknown;
+  /** The build's originating backlog item, or null when it has none. */
+  backlogItemId: string | null;
+};
+
+const NEXT_PHASE: Record<ReviewedArtifactKind, string> = { design: "plan", plan: "build" };
+
 /** The menu the architect's advisory is recorded against. */
 export const ARCHITECTURE_ADVISORY_OPTIONS = ["aligned", "revise-before-building"] as const;
 export type ArchitectureAdvisoryOption = (typeof ARCHITECTURE_ADVISORY_OPTIONS)[number];
@@ -44,6 +67,7 @@ async function ledgerArchitectureAdvisory(
   userId: string,
   threadId: string | null | undefined,
   routeContext: string,
+  reviewed: ReviewedDocument | null,
 ): Promise<void> {
   try {
     const { evaluateProfessionDecisionGate } = await import(
@@ -71,6 +95,21 @@ async function ledgerArchitectureAdvisory(
       // clean pass, and the tier should say so rather than flattening both.
       riskTier: critical > 0 ? "high" : important > 0 ? "medium" : "low",
       routeContext,
+      build: reviewed ? { buildId: reviewed.buildId } : null,
+      subject: reviewed?.backlogItemId ? { kind: "backlog_item", id: reviewed.backlogItemId } : null,
+      ...(reviewed
+        ? {
+            phaseFrom: reviewedPhaseFor(reviewed.kind),
+            phaseTo: NEXT_PHASE[reviewed.kind],
+            outcomePayloadExtra: {
+              [REVIEWED_ARTIFACT_PAYLOAD_KEY]: {
+                buildId: reviewed.buildId,
+                kind: reviewed.kind,
+                digest: reviewedArtifactDigest(reviewed.document),
+              },
+            },
+          }
+        : {}),
       triggeredByUserId: userId,
       caller: {
         agentId: ENTERPRISE_ARCHITECT_AGENT_ID,
@@ -102,6 +141,7 @@ export async function finalizeArchitectureAdvisory(
   agentId: string | null | undefined,
   threadId: string | null | undefined,
   routeContext: string,
+  reviewed: ReviewedDocument | null = null,
 ): Promise<ArchitectureAdvisory | null> {
   const advisory = architectureAdvisoryFromReview(arch);
   if (arch?.issues?.length) {
@@ -123,7 +163,7 @@ export async function finalizeArchitectureAdvisory(
   // did not answer, or whose output failed to parse, must not leave a record
   // implying the architect weighed in (same rule as architectureAdvisoryFromReview).
   if (arch && advisory) {
-    await ledgerArchitectureAdvisory(prisma, arch, advisory, userId, threadId, routeContext);
+    await ledgerArchitectureAdvisory(prisma, arch, advisory, userId, threadId, routeContext, reviewed);
   }
   return advisory;
 }

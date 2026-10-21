@@ -9,6 +9,7 @@ vi.mock("@/lib/process-spine/canonical-improvement-digest", () => ({
 import type { ReviewResult } from "@/lib/explore/feature-build-types";
 
 import { architectProposedOption, finalizeArchitectureAdvisory } from "./architecture-advisory-ledger";
+import { reviewedArtifactDigest } from "./architecture-advisory-outcome";
 
 function review(decision: ReviewResult["decision"], issues: ReviewResult["issues"] = []): ReviewResult {
   return { decision, issues, summary: "The design reuses the existing ledger." } as ReviewResult;
@@ -37,5 +38,49 @@ describe("the architect's recommendation (BI-AE416D75)", () => {
     gate.mockClear();
     await finalizeArchitectureAdvisory({} as never, review("inconclusive"), "user-1", null, null, "reviewPlanDoc");
     expect(gate.mock.calls[0]![0].proposedOptionId).toBeNull();
+  });
+});
+
+describe("the advisory's subject (BI-22601A38)", () => {
+  it("records the reviewed build, its backlog item, the phase and a digest of the reviewed document", async () => {
+    gate.mockClear();
+    const designDoc = { problemStatement: "one", proposedApproach: "reuse the ledger" };
+    await finalizeArchitectureAdvisory({} as never, review("pass"), "user-1", "AGT-WS-EA", null, "reviewDesignDoc", {
+      buildId: "FB-1",
+      kind: "design",
+      document: designDoc,
+      backlogItemId: "BI-1",
+    });
+    expect(gate.mock.calls[0]![0]).toMatchObject({
+      build: { buildId: "FB-1" },
+      subject: { kind: "backlog_item", id: "BI-1" },
+      phaseFrom: "ideate",
+      phaseTo: "plan",
+      outcomePayloadExtra: {
+        reviewedArtifact: { buildId: "FB-1", kind: "design", digest: reviewedArtifactDigest(designDoc) },
+      },
+    });
+  });
+
+  it("names no backlog item when the build has none, rather than inventing one", async () => {
+    gate.mockClear();
+    await finalizeArchitectureAdvisory({} as never, review("fail"), "user-1", null, null, "reviewPlanDoc", {
+      buildId: "FB-2",
+      kind: "plan",
+      document: { tasks: [] },
+      backlogItemId: null,
+    });
+    const call = gate.mock.calls[0]![0];
+    expect(call.subject).toBeNull();
+    expect(call).toMatchObject({ build: { buildId: "FB-2" }, phaseFrom: "plan", phaseTo: "build" });
+  });
+
+  it("records no subject for a caller that does not say what was reviewed", async () => {
+    gate.mockClear();
+    await finalizeArchitectureAdvisory({} as never, review("pass"), "user-1", null, null, "reviewDesignDoc");
+    const call = gate.mock.calls[0]![0];
+    expect(call.build).toBeNull();
+    expect(call.subject).toBeNull();
+    expect(call.outcomePayloadExtra).toBeUndefined();
   });
 });
