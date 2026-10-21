@@ -54,7 +54,8 @@ Renderer/auth/route fixtures are not a supported smaller-data initializer.
 
 This is one atomic delivery under BI-B47BB1D7. `CLONE-ROWS` requires exact ordered
 row/type/null/default/conflict behavior. `CLONE-BOUNDS` requires finite statement
-rows, parameters and encoded-value bytes without dropping an oversized row.
+rows and parameters, with a prepared-parameter payload target and an oversized
+single-row exception rather than a hard wire-packet or total-memory ceiling.
 `CLONE-ATTEMPT` requires destination metadata reused only inside one clone attempt.
 `CLONE-PUBLISH` retains transactional replica posture and cleanup/failure fencing.
 
@@ -67,6 +68,9 @@ rows, parameters and encoded-value bytes without dropping an oversized row.
    Keep `ON CONFLICT DO NOTHING`. A single row larger than the payload target
    still uses its own statement; the bound must not silently omit or reject
    data previously accepted. Enforce the parameter ceiling before SQL execution.
+   Defaults are 50 rows, 65,535 parameters and a 1 MiB prepared-parameter target.
+   Statement-level trigger boundaries intentionally become batch boundaries;
+   ordinary trigger suppression remains pinned to each bounded transaction.
 3. `FLOW-COPY`: have the existing transaction writer consume those statements;
    retain the 50-row source window, current transaction row ceiling, timeout,
    `SET LOCAL session_replication_role = replica` and backpressure. A writer
@@ -79,7 +83,7 @@ rows, parameters and encoded-value bytes without dropping an oversized row.
    Graph advice names the existing clone unit/PostgreSQL tests; empty advice
    for new SQL/memory files expands to the complete scoped clone corpus.
 6. `VC-PG`: through an owned governed nonproduction PostgreSQL target, compare
-   real persisted values against the incumbent per-row reference for mixed
+   real persisted values against fixed expectations for incumbent conversions and mixed
    column sets/defaults, JSON/arrays/enums/numerics/dates/bytes/nulls, duplicate
    conflict winners and failures. Exercise the actual transaction writer;
    the old PostgreSQL fixture's handwritten row loop cannot qualify the repair.
@@ -112,5 +116,18 @@ CLONE-ATTEMPT, CLONE-PUBLISH. Contract refs are the same named contracts above.
 Flow refs: FLOW-REPRO, FLOW-COPY, FLOW-FAILURE. Verification refs: VC-UNIT,
 VC-PG, VC-SCALE. Native research receipt:
 `initiative-3e8b610f-4327-417c-8e48-a488d105b6bf`. The first regression observed
-50 INSERTs against expected one, with 34 existing tests passing. Coverage and
-implementation admission are pending; this document itself confers neither.
+50 INSERTs against expected one, with 34 existing tests passing. Native atomic
+coverage `cmvhuil3jkrsv01ldse9s057q` binds the initial immutable plan at
+`fcc04d128fa6cdbaa1950d7ddef9b9faa9e33d38`; implementation admission
+`IRD-90A56FE3E9C1` allowed this scoped source work.
+
+Source-local verification on Node 24.16.0 observed 87 passing tests across the
+SQL, clone, cursor/memory and source-integrity suites. The 10 PostgreSQL cases
+were skipped because this worktree has no assigned database; their persisted
+value, real PrismaPg transaction and cleanup proof remains unrun pending normal
+shared local-CI admission. Both DB TypeScript 7 programs passed. The SQL helper
+had an earlier first-red run with 21 failures and 15 passes, then 42 passes.
+The moved identifier/value conversion helpers retain their original bodies.
+Canonical gate, independent review and publication evidence belong to the
+Workroom and exact-commit PR record. No representative scale timing or served
+two-route acceptance is claimed by these source-local checks.
