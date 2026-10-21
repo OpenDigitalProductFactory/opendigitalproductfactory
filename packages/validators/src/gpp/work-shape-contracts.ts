@@ -223,4 +223,3 @@ export type WorkShapeDefinitionContract = Pick<
   // contract keeps exactly its eleven own keys.
   | "flow"
 >;
-

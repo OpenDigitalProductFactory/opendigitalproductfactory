@@ -56,5 +56,5 @@ doctrine or production mutations are included.
 
 Apache-2.0 provenance is retained in LICENSE and NOTICE. No third-party runtime
 component is redistributed. Rollback reverts the portable entry and its migrated
-callers/fact adapters together; no database migration is needed. Code stays
-unpublished until the operator authorizes publication.
+callers/fact adapters together; no database migration is needed. The operator has
+authorized source publication through the required checks and pull request.

@@ -10,6 +10,8 @@ export function isBoundedTrustedJson(value: unknown): boolean {
       if (typeof v === "number") { if (!Number.isFinite(v)) return false; continue; }
       if (typeof v === "string") { characters += v.length; if (characters > 1048576) return false; continue; }
       if (typeof v !== "object") return false;
+      // JSON arrays cannot carry inherited custom traversal or serialization behavior.
+      if (Array.isArray(v) && Object.getPrototypeOf(v) !== Array.prototype) return false;
       if (!Array.isArray(v) && Object.getPrototypeOf(v) !== Object.prototype && Object.getPrototypeOf(v) !== null) return false;
       // Aliased objects are allowed; a cycle is rejected by the depth ceiling.
       const entries = Object.entries(Object.getOwnPropertyDescriptors(v));

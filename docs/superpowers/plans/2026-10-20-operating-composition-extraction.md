@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # OP-01 local extraction checkpoint
 
 Backlog: BI-9874488F. Workroom: WC-147710C7. Owner: @markdbodman.

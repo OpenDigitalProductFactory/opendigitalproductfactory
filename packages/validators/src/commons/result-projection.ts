@@ -72,4 +72,3 @@ export function projectHiveResultBundle(payload: unknown): HiveResultProjection 
   }
   return { projected, violations };
 }
-

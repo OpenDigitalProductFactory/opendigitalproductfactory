@@ -33,6 +33,19 @@ describe("buildDemoTwinSnapshot — totality + determinism", () => {
 });
 
 describe("TwinView — one renderer, both lenses", () => {
+  it("labels a healthy account's upcoming renewal as attention without inventing risk", () => {
+    const profile = deriveTwinProfile(byCategory("software-platform"));
+    const snapshot = projectCustomerOperations({
+      accounts: [{ id: "healthy-account", name: "Healthy customer", status: "active" }],
+      commitments: [{ id: "upcoming-renewal", accountId: "healthy-account", status: "active", renewalAt: "2026-10-25T00:00:00Z", autoRenew: true }],
+      serviceWork: [],
+    }, new Date("2026-10-20T00:00:00Z"), DPF_CUSTOMER_RECORD_LINKS);
+    const html = renderToStaticMarkup(<TwinView profile={profile} snapshot={snapshot} />);
+    expect(snapshot.queues.find((queue) => queue.key === "renewals")?.items).toHaveLength(1);
+    expect(html).toMatch(/<h4[^>]*>Renewal attention<\/h4>/);
+    expect(html).toContain("Healthy customer");
+    expect(html).not.toContain("Renewals at risk");
+  });
   it("renders actual host-shaped customer work, record links and commitments with bounded density", async () => {
     const profile = deriveTwinProfile(byCategory("software-platform"));
     const facts = await loadCustomerOperatingFacts({
@@ -77,7 +90,7 @@ describe("TwinView — one renderer, both lenses", () => {
       <TwinView profile={profile} snapshot={buildDemoTwinSnapshot(profile)} />,
     );
     expect(html).toContain("Account health board");
-    expect(html).toContain("Renewals at risk");
+    expect(html).toContain("Renewal attention");
     // still shows the needs-you + activity surfaces
     expect(html).toContain("Needs you");
     expect(html).toContain("Activity");

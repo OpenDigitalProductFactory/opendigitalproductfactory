@@ -71,6 +71,16 @@ describe("versioned operating composition", () => {
     }
     expect(calls).toBe(0);
   });
+  it.each(["instructions", "skills", "models", "tools", "doctrine"] as const)("holds unsupported %s array prototypes before inherited serialization", (field) => {
+    let calls = 0;
+    const input = composition();
+    Object.setPrototypeOf(input[field], Object.create(Array.prototype, {
+      toJSON: { value: () => { calls++; throw new Error("Unsupported array serialization must not execute"); } },
+    }));
+    expect(buildOperatingComposition(input, () => { calls++; return "a".repeat(64); }))
+      .toEqual({ ok: false, diagnostics: [{ code: "input-limit", path: "" }] });
+    expect(calls).toBe(0);
+  });
   it("holds throwing and malformed digest ports", () => {
     for (const port of [() => { throw new Error("unavailable"); }, () => "not-a-digest"])
       expect(buildOperatingComposition(composition(), port).ok).toBe(false);

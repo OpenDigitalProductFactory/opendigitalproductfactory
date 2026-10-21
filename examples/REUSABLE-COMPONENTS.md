@@ -1,12 +1,29 @@
 # Local reusable component handoff
 
+## Publication preparation
+
+The operator authorized source publication and a pull request after the local
+checkpoint below. Production data, deployment and DPF2 edits remain excluded.
+The checkpoint verification is historical evidence for its exact revision;
+publication checks and their current verdict belong to the pull request.
+
+Publication review found and repaired two additional defects: the shared bounded
+JSON guard now rejects arrays with custom prototypes before consumer methods can
+run, and the real customer renewal lane says “Renewal attention” for upcoming as
+well as overdue renewals. Normal JSON and issued serialization remain unchanged.
+The Commons notice preserves the upstream copyright. Three trailing empty lines
+were removed, including two GPP files; their publication bytes therefore differ
+from the frozen priority snapshot only in whitespace. That frozen worktree and
+all of its recorded verification remain intact.
+
 ## October 20 joined continuation
 
 The four remaining local working subsets are implemented, independently reviewed
 and joined with the preserved priority checkpoint on `codex/reusable-continuation`
 at `3b7a668a7693081c3b9c6342b7961e2696e8e014`, in
-`/Users/markbodman/dpf-worktrees/reusable-continuation`. This source checkpoint is
-unpublished. The earlier checkpoint at `4faccd852a49bba58e40ad7146f3d9c585874cf0`
+`/Users/markbodman/dpf-worktrees/reusable-continuation`. This source checkpoint was
+unpublished when its October 20 verification was recorded. Publication status is
+tracked by the branch's pull request. The earlier checkpoint at `4faccd852a49bba58e40ad7146f3d9c585874cf0`
 in `/Users/markbodman/dpf-worktrees/gpp-toolkit` remains intact. Its WK/GP/SJ source
 and example closures are byte-identical in the continuation; no exported
 contract or admission limit from those closures changed.
@@ -25,8 +42,10 @@ expired, DPF granted this Workroom ordinary ownership; no forced override or
 human approval was used. The canonical index is fresh at 758 pages and the impact
 map at 747 code / 87 route edges. Documentation and source links passed. The
 ordinary commit hooks remain enabled. OP/HX documentation was already committed.
-Only the earlier two planning documents have been published; none of this
-implementation has been pushed.
+At that checkpoint, only the earlier two planning documents had been published;
+none of the implementation had been pushed. The operator subsequently authorized
+completing publication checks and opening a pull request. Deployment and changes
+to production data remain outside this task.
 
 WP moves the existing trigger normalization, delegated proactivity, temporal
 posture, HITL join, deadline attention and drive-hold rules. Actual scheduler,

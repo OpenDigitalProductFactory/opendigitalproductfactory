@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Business operations extraction — BS-01
 
 Parent design: [reusable architecture extraction](../specs/2026-10-18-reusable-architecture-extraction-design.md), family 6. Backlog BI-9A6163AD; Workroom WC-63F33236. Base `4fa796b64425b6129f172a01b89d8c8887c065fc`.

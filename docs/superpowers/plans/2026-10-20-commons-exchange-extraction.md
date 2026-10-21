@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Commons exchange extraction
 
 Owner: @markdbodman. Backlog: BI-0D316824. Workroom: WC-13E26FCD.

@@ -1,5 +1,7 @@
 // Pure utility library — no server imports. Safe in tests and client components.
 
+import type { BacklogWorkroomSummary } from "@/lib/work-capsules/backlog-workroom-ownership";
+
 export type BacklogItemInput = {
   title: string;
   type: "product" | "portfolio";
@@ -46,7 +48,7 @@ export type BacklogItemWithRelations = {
   scopeRationale?: string | null;
   lifecycleTags?: string[];
   activeBuild: { buildId: string; phase: string | null } | null;
-  activeWorkrooms?: import("@/lib/work-capsules/backlog-workroom-ownership").BacklogWorkroomSummary[];
+  activeWorkrooms?: BacklogWorkroomSummary[];
   digitalProduct: { id: string; productId: string; name: string } | null;
   organizationId?: string | null;
   productLineId?: string | null;

@@ -89,4 +89,3 @@ export const WORKROOM_SHAPE_KEYS = [
   "craft-stewardship",
 ] as const;
 export type WorkroomShapeKey = (typeof WORKROOM_SHAPE_KEYS)[number];
-

@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # WP-01: portable Workroom policies
 
 BI-D30CD423 · Workroom WC-67DEE1B6 · base 4fa796b64425b6129f172a01b89d8c8887c065fc.

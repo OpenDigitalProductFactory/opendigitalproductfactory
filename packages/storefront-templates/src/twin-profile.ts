@@ -288,7 +288,7 @@ const TEMPLATE_DEFAULTS: Record<
     capacityZoneKey: "board",
     resourceNoun: n("account", "accounts"),
     workItemNoun: n("engagement", "engagements"),
-    queues: [q("renewals", "Renewals at risk"), q("atrisk", "At-risk accounts"), q("ctas", "Open CTAs")],
+    queues: [q("renewals", "Renewal attention"), q("atrisk", "At-risk accounts"), q("ctas", "Open CTAs")],
     cog: { kind: "route-at-risk-account", signals: ["health-score", "workload", "deadline"] },
     capacityChips: ["at-risk", "renewals ≤90d", "book of business"],
   },

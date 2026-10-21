@@ -5,7 +5,7 @@ const NOW = new Date("2026-10-20T12:00:00Z");
 const facts: CustomerOperatingFacts = {
   accounts: [{ id: "customer-1", name: "Synthetic customer", status: "at_risk" }],
   commitments: [{ id: "commitment-1", accountId: "customer-1", status: "active", renewalAt: "2026-10-25T12:00:00Z", autoRenew: false }],
-  serviceWork: [{ id: "ticket-1", reference: "TKT-1", accountId: "customer-1", title: "Restore report delivery", status: "waiting-customer", priority: "high", dueAt: "2026-10-20T11:00:00Z", owner: { name: "Case owner", kind: "human" }, ownerRef: "principal-1" }],
+  serviceWork: [{ id: "ticket-1", reference: "TKT-1", accountId: "customer-1", title: "Restore report delivery", status: "waiting-customer", priority: "high", dueAt: new Date(NOW.getTime() - 3_600_000).toISOString(), owner: { name: "Case owner", kind: "human" }, ownerRef: "principal-1" }],
 };
 describe("customer operating projection", () => {
   it("uses the consumer's exact record-link adapter", () => {

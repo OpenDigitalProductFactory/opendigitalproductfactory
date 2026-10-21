@@ -1,6 +1,6 @@
 # Commons exchange working subset
 
-Maintenance owner: @markdbodman. BI-0D316824 / WC-13E26FCD. Apache-2.0; retain LICENSE and NOTICE when copying. All source in this slice is local and unpublished. The final joined checkpoint and exact component revision are recorded in `examples/REUSABLE-COMPONENTS.md`; `closure.json.sourceBaseline` identifies the starting tree, not the completed revision.
+Maintenance owner: @markdbodman. BI-0D316824 / WC-13E26FCD. Apache-2.0; retain LICENSE and NOTICE when copying. The joined source checkpoint and subsequent publication preparation are recorded in `examples/REUSABLE-COMPONENTS.md`; `closure.json.sourceBaseline` identifies the starting tree, not the completed revision.
 
 ## Contract and ownership
 
@@ -24,7 +24,7 @@ Run `node examples/commons-exchange/run.mjs` with exact Node 24.16.0 available (
 
 DPF2 can absorb that source closure as one internal module, keep one digest adapter and retire any displaced local candidate projection/intake serializer only after comparing its issued bytes and receipt semantics. Supply DPF2's existing Workroom, review, TAK, trusted clock, ledger and transport owners; do not copy DPF Prisma or build code. The candidate `sourceRefs` allow Workroom/finding/result references, but do not make DPF's existing FeatureBuild-only ship tool handle them. Copied source requires ownership of future upstream fixes, regression vectors, limits and license notices; importing the private workspace package is the alternative if both projects share a managed source boundary.
 
-Unavailable: durable production exact-content/destination approval, exactly-once egress, full curation and governed adoption, standards conformance, authenticated real review and DPF2 acceptance. This module exposes no adoption or execution command; those require the owning host adapters and gates. The standalone receipt sequence is synthetic and does not exercise adoption or claim live enforcement. Native plan/review gates, served runtime and shared build remain unrun under the operator's local exception. No code, release or production business data was published or changed.
+Unavailable: durable production exact-content/destination approval, exactly-once egress, full curation and governed adoption, standards conformance, authenticated real review and DPF2 acceptance. This module exposes no adoption or execution command; those require the owning host adapters and gates. The standalone receipt sequence is synthetic and does not exercise adoption or claim live enforcement. Native plan/review gates, served runtime and shared build were unrun at the recorded local checkpoint. Current publication verification belongs to the branch's pull request. No release or production business data change is authorized by this extraction.
 
 ## Migration and rollback
 

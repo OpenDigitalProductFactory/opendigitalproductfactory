@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { assessCommonsEgress, assessCommonsReceipt, type CommonsCandidate, type CommonsCurrentFacts, type CommonsReview } from "./exchange.js";
+import { normalizeHiveResultIntakeWithDigest } from "./result-intake.js";
+import { projectHiveResultBundle } from "./result-projection.js";
 const hash = `sha256:${"a".repeat(64)}`;
 const candidate: CommonsCandidate = { schemaVersion: "commons-candidate/0.1", id: "candidate-1", revision: "r1", scope: "wwmd", sourceRefs: [{ kind: "workroom", id: "private-workroom", version: "definition-4" }], accountablePrincipalId: "human-owner", requesterPrincipalId: "requester", authorPrincipalId: "author", payloadHash: hash, destination: { id: "approved-hive", version: "v2" } };
 const review: CommonsReview = { schemaVersion: "commons-review/0.1", id: "human-review", candidateId: candidate.id, candidateRevision: "r1", scope: "wwmd", payloadHash: hash, destination: candidate.destination, reviewerPrincipalId: "independent-human", decision: "approved", policyGeneration: "p1", expiresAt: 2000 };
@@ -25,6 +27,31 @@ describe("exact-content Commons egress intent", () => {
     let reads = 0; const bad = { ...candidate, get payloadHash() { reads++; return hash; } };
     for (const c of [bad, { ...candidate, scope: "unknown" }, { ...candidate, sourceRefs: [] }, { ...candidate, id: "x".repeat(513) }]) expect(assessCommonsEgress(c as CommonsCandidate, review, facts).kind).toBe("hold");
     expect(reads).toBe(0);
+  });
+  it("holds source references with an unsupported array prototype", () => {
+    class SourceReferences extends Array<CommonsCandidate["sourceRefs"][number]> {}
+    const sourceRefs = new SourceReferences(...candidate.sourceRefs);
+    expect(assessCommonsEgress({ ...candidate, sourceRefs }, review, facts)).toEqual({ kind: "hold", reasons: ["input:invalid"] });
+  });
+});
+describe("bounded Commons result arrays", () => {
+  it.each(["projection", "intake"] as const)("holds a custom array prototype before %s can invoke inherited methods", (boundary) => {
+    let calls = 0;
+    const result = Object.setPrototypeOf(["synthetic"], Object.create(Array.prototype, {
+      map: { value: () => { calls++; throw new Error("Unsupported array method must not execute"); } },
+    }));
+    const payload = { schemaVersion: "dpf.hive-result/1", result, sourceReceipt: "opaque_fixture_42" };
+    const observed = boundary === "projection" ? projectHiveResultBundle(payload)
+      : normalizeHiveResultIntakeWithDigest(payload, () => { calls++; return "a".repeat(64); });
+    expect(observed).toEqual(boundary === "projection"
+      ? { projected: {}, violations: ["payload:not-bounded-json"] }
+      : { ok: false, violations: ["payload:not-bounded-json"] });
+    expect(calls).toBe(0);
+  });
+  it("holds null-prototype arrays instead of throwing during intake", () => {
+    const result = Object.setPrototypeOf(["synthetic"], null);
+    expect(normalizeHiveResultIntakeWithDigest({ schemaVersion: "dpf.hive-result/1", result, sourceReceipt: "opaque_fixture_42" }, () => "a".repeat(64)))
+      .toEqual({ ok: false, violations: ["payload:not-bounded-json"] });
   });
 });
 describe("Commons receipt classification", () => {
