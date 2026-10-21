@@ -2290,6 +2290,29 @@ class CodexRegistrationConvergenceTest(unittest.TestCase):
 
 
 class CodexProjectConfigTest(unittest.TestCase):
+    def test_refusal_is_reported_not_raised(self):
+        # BI-CEDE5B55: on python3 3.9 without tomli the step refuses; the
+        # updater must report that and keep converging the other clients.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config = root / ".codex" / "config.toml"
+            config.parent.mkdir()
+            original = '[mcp_servers.dpf]\nurl="http://127.0.0.1:3000/api/mcp/v1"\n'
+            config.write_text(original)
+            refusal = ValueError("Project Codex TOML requires Python 3.11+ or tomli; configuration unchanged")
+            with patch.object(updater, "ensure_codex_project_config", side_effect=refusal):
+                status = updater.converge_codex_project_config(root, "https://localhost/api/mcp/v1", False)
+            self.assertTrue(status.startswith("unchanged ("), status)
+            self.assertIn("Python 3.11+", status)
+            self.assertEqual(config.read_text(), original)
+
+    def test_status_without_override_is_current(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.assertEqual(
+                updater.converge_codex_project_config(Path(directory), "https://localhost/api/mcp/v1", False),
+                "current",
+            )
+
     def test_missing_file_stays_missing(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
