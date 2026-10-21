@@ -18,6 +18,15 @@ describe("provider routing controls", () => {
     expect(result.restrictions.map(r => r.key)).toEqual(["operator", "local-only", "capacity"]);
     expect(result.restrictions[0].until).toBe("2026-10-12T14:00:00Z");
   });
+  it("shows a public-only provider as public work only, not routable (BI-1BF425BF)", () => {
+    const data = input();
+    (data.pw.provider as { sensitivityClearance?: string[] }).sensitivityClearance = ["public"];
+    const result = projectProviderRoutingControl(data);
+    expect(result.eligibility.eligible).toBe(false);
+    expect(result.eligibility.state).toBe("public_only");
+    expect(result.eligibility.label).toBe("Public work only");
+    expect(result.restrictions.map(r => r.key)).toEqual(["clearance"]);
+  });
   it("removing an operator pause leaves a current capacity restriction visible", () => {
     const result = projectProviderRoutingControl({ ...input(), capacity: { state: "rate_limited", retryAtMs: now + 60_000, safeSummary: "Wait for the usage reset." } });
     expect(result.eligibility.eligible).toBe(false);

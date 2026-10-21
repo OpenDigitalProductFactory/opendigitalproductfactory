@@ -190,3 +190,31 @@ describe("cliAdapterTypeForProvider", () => {
     expect(cliAdapterTypeForProvider("gemini")).toBeNull();
   });
 });
+
+describe("public-only clearance (BI-1BF425BF)", () => {
+  // deriveActivationClearance keeps a hosted provider public-only until its
+  // account is reviewed. Coworker turns ask for internal, so such a provider is
+  // connected and healthy yet takes none of that work: it must not read as routable.
+  const hosted = (sensitivityClearance?: string[]) =>
+    base({ authMethod: "oauth2_authorization_code", hasCredential: true, sensitivityClearance });
+
+  it("names a hosted provider cleared only for public work instead of calling it routable", () => {
+    const r = deriveRoutingEligibility(hosted(["public"]));
+    expect(r.state).toBe("public_only");
+    expect(r.eligible).toBe(false);
+    expect(r.label).toBe("Public work only");
+    expect(r.reason).toMatch(/not been reviewed for company data/);
+    expect(recommendedActionFor(r)).toMatch(/Review this provider's account/);
+  });
+
+  it("stays routable once the account is cleared for internal work, or when clearance is not supplied", () => {
+    expect(deriveRoutingEligibility(hosted(["public", "internal", "confidential"])).state).toBe("routable");
+    expect(deriveRoutingEligibility(hosted(undefined)).state).toBe("routable");
+  });
+
+  it("keeps the more actionable state first", () => {
+    expect(deriveRoutingEligibility({ ...hosted(["public"]), hasCredential: false }).state).toBe("needs_credentials");
+    expect(deriveRoutingEligibility({ ...hosted(["public"]), cliPoolExhausted: true }).state).toBe("rate_limited");
+  });
+});
+
