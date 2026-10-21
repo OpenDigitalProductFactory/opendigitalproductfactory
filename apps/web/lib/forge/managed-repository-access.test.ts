@@ -194,4 +194,13 @@ describe("isRepositoryManagingInstall (spec §3.1)", () => {
     expect(isRepositoryManagingInstall({ status: "missing" })).toBe(false);
     expect(isRepositoryManagingInstall({ status: "invalid", error: "bad" })).toBe(false);
   });
+
+  it("is true when evolve-dpf is a declared secondary purpose of a confirmed intent", () => {
+    const secondary = (status: string) => ({
+      status: "valid" as const,
+      intent: { primaryPurpose: "operate-organization", secondaryPurposes: ["evolve-dpf"], confirmation: { status } },
+    });
+    expect(isRepositoryManagingInstall(secondary("confirmed"))).toBe(true);
+    expect(isRepositoryManagingInstall(secondary("proposed"))).toBe(false);
+  });
 });

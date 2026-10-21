@@ -33,6 +33,8 @@ export type ContributionSetupState = {
   hasContributionCredential: boolean;
   /** The installation's declared primary purpose, when one is recorded. */
   installationPurpose?: string | null;
+  /** evolve-dpf is the primary or a declared secondary purpose. Defaults to the primary purpose alone. */
+  managesRepository?: boolean;
   /** Managed-repository status (BI-985F4EC9); omitted when it was not read. */
   managedRepositoryStatus?: ManagedRepositoryStatus | null;
 };
@@ -43,7 +45,7 @@ export type ContributionSetupGap = "decide" | "connect" | "repository";
 export function contributionSetupGap(state: ContributionSetupState): ContributionSetupGap | null {
   const contribution = contributionGap(state);
   if (contribution) return contribution;
-  const managesRepository = state.installationPurpose === "evolve-dpf";
+  const managesRepository = state.managesRepository ?? state.installationPurpose === "evolve-dpf";
   if (managesRepository && state.managedRepositoryStatus && state.managedRepositoryStatus !== "connected") {
     return "repository";
   }
@@ -127,11 +129,14 @@ export async function loadContributionSetupItems(db: Db, now: Date = new Date())
     where: { key: INSTALLATION_OPERATING_INTENT_KEY },
     select: { value: true },
   });
-  const purpose = (intent?.value as { primaryPurpose?: unknown } | null | undefined)?.primaryPurpose;
+  const declared = (intent?.value ?? null) as { primaryPurpose?: unknown; secondaryPurposes?: unknown } | null;
+  const purpose = declared?.primaryPurpose;
+  const { declaresRepositoryManagement } = await import("@/lib/forge/managed-repository-access");
+  const managesRepository = declared ? declaresRepositoryManagement(declared) : false;
   // Read only for an install that manages a repository; cached five minutes,
   // so the inbox never asks GitHub on every load.
   let managedRepositoryStatus: ManagedRepositoryStatus | null = null;
-  if (purpose === "evolve-dpf") {
+  if (managesRepository) {
     const { loadManagedRepositoryStatus } = await import("@/lib/forge/managed-repository-access");
     managedRepositoryStatus = (await loadManagedRepositoryStatus(db).catch(() => null))?.status ?? null;
   }
@@ -140,6 +145,7 @@ export async function loadContributionSetupItems(db: Db, now: Date = new Date())
     decidedByPerson: Boolean(config?.configuredById),
     hasContributionCredential: await hasContributionToken(),
     installationPurpose: typeof purpose === "string" ? purpose : null,
+    managesRepository,
     managedRepositoryStatus,
   });
   return gap ? [contributionSetupToAttentionItem(gap, now.toISOString())] : [];

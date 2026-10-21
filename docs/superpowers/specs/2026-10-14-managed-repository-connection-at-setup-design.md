@@ -76,8 +76,10 @@ repository is public.
 ### 3.1 When it applies
 
 A repository-managing install is one whose confirmed operating intent has
-`primaryPurpose = evolve-dpf` (the purpose the intake controller already
-requires). Other purposes see no new step. An archetype-level declaration is
+`evolve-dpf` as its primary purpose or as a declared secondary purpose. An
+install that operates an organisation can also own platform repository
+follow-through (kernel decision DI-A6148958CADB, 2026-10-21). Other installs see
+no new step. An archetype-level declaration is
 not added in this slice: the need follows the install's purpose, not its
 business archetype, and the capability registry is storefront-oriented. If a
 business archetype later manages customer repositories, it adds a
@@ -170,7 +172,7 @@ value. `PlatformDevConfig.upstreamRemoteUrl` is reused.
 
 ## 6. Acceptance
 
-- AC-1 A fresh install with confirmed `evolve-dpf` purpose sees the Managed
+- AC-1 A fresh install with confirmed `evolve-dpf` as primary or secondary purpose sees the Managed
   repository section in the platform-development setup step; saving records an
   explicit `upstreamRemoteUrl`; **Not now** leaves the controller uncommissioned
   and the nudge open.

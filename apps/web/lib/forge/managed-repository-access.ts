@@ -193,13 +193,29 @@ export async function checkRepositoryAccess(
  */
 export function isRepositoryManagingInstall(
   loaded:
-    | { status: "valid"; intent: { primaryPurpose: string; confirmation: { status: string } } }
+    | {
+      status: "valid";
+      intent: { primaryPurpose: string; secondaryPurposes?: readonly string[]; confirmation: { status: string } };
+    }
     | { status: "missing" }
     | { status: "invalid"; error: string },
 ): boolean {
   return loaded.status === "valid"
     && loaded.intent.confirmation.status === "confirmed"
-    && loaded.intent.primaryPurpose === "evolve-dpf";
+    && declaresRepositoryManagement(loaded.intent);
+}
+
+/**
+ * `evolve-dpf` as the primary or a declared secondary purpose. An install that
+ * operates an organisation can also own platform repository follow-through
+ * (kernel decision DI-A6148958CADB).
+ */
+export function declaresRepositoryManagement(intent: {
+  primaryPurpose?: unknown;
+  secondaryPurposes?: unknown;
+}): boolean {
+  if (intent.primaryPurpose === "evolve-dpf") return true;
+  return Array.isArray(intent.secondaryPurposes) && intent.secondaryPurposes.includes("evolve-dpf");
 }
 
 // ─── Status read model (cached) ─────────────────────────────────────────────

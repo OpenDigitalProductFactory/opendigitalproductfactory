@@ -53,6 +53,10 @@ describe("managed repository gap", () => {
     expect(contributionSetupGap({ ...settled, installationPurpose: "operate-organization", managedRepositoryStatus: "not-connected" })).toBeNull();
   });
 
+  it("raises it for an organisation install that also declares evolve-dpf as a secondary purpose", () => {
+    expect(contributionSetupGap({ ...settled, installationPurpose: "operate-organization", managesRepository: true, managedRepositoryStatus: "not-connected" })).toBe("repository");
+  });
+
   it("asks the contribution question first", () => {
     expect(contributionSetupGap({ ...settled, decidedByPerson: false, managedRepositoryStatus: "not-connected" })).toBe("decide");
   });
