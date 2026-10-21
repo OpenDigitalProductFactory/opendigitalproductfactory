@@ -36,6 +36,7 @@ import type {
   DecisionScoredOption,
 } from "./types";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { resolveGateDecisionAgentId } from "@/lib/decision/decision-shadow-ledger-bridge";
 
 type ProfessionGateClient = Parameters<typeof resolveProfileMaterialForProfession>[0]["db"] &
   Parameters<typeof persistDecisionInteraction>[0]["db"] &
@@ -217,6 +218,13 @@ export async function evaluateProfessionDecisionGate(input: {
    * only the coverage-based verdict is recorded (BI-6DCF772F).
    */
   scoredOptions?: DecisionScoredOption[];
+  /**
+   * The option the calling coworker itself proposes (BI-AE416D75) — e.g. the
+   * architect's review verdict. Recorded beside, never in place of, the
+   * kernel's pick, so the trust ledger can measure the coworker against what a
+   * person then chose. Omit when the coworker proposed nothing.
+   */
+  proposedOptionId?: string | null;
   domainClass: DecisionDomainClass;
   riskTier: DecisionRiskTier;
   declarations?: DecisionDeclarations;
@@ -259,6 +267,13 @@ export async function evaluateProfessionDecisionGate(input: {
     input.agentIdentity.agentId ?? input.agentIdentity.slugId ?? input.agentIdentity.roleSlug,
   );
   const borrow = input.declaredBorrow && !hasAgentIdentity ? input.declaredBorrow : null;
+  // BI-AE416D75: attribute the decision to the coworker that made it, as the
+  // BI-6082C235 backfill did for rows before it. Without this the row carries
+  // no agentId and never reaches the shadow ledger at all.
+  const agentId = await resolveGateDecisionAgentId(
+    input.db,
+    input.caller?.agentId ?? input.agentIdentity.agentId ?? null,
+  );
   /** Ledger stamp: present and true only on a real borrow. */
   const borrowLedgerFields = borrow
     ? {
@@ -320,6 +335,8 @@ export async function evaluateProfessionDecisionGate(input: {
       // still a WSID decision and must audit as one (BI-1BE30A9A).
       gateKey: PROFESSION_GATE_KEY,
       gateFallbackUsed: true,
+      agentId,
+      proposedOptionId: input.proposedOptionId ?? null,
       outcomePayloadExtra: {
         professionProfileSelected,
         professionKey,
@@ -471,6 +488,8 @@ export async function evaluateProfessionDecisionGate(input: {
     // would file this WSID decision under WWMD (BI-1BE30A9A).
     gateKey: PROFESSION_GATE_KEY,
     gateFallbackUsed: !professionProfileSelected,
+    agentId,
+    proposedOptionId: input.proposedOptionId ?? null,
     outcomePayloadExtra: {
       professionProfileSelected,
       professionKey,

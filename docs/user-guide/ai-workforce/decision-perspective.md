@@ -91,6 +91,10 @@ Read it with three things in mind:
 
 A coworker's decisions that nobody has resolved yet are shown as unresolved, so a coworker with no resolved decisions still appears in the report.
 
+**What counts as the coworker's recommendation.** When a coworker brings its own proposal to the gate, that proposal is what it is measured against: the architect's review verdict (*aligned* or *revise before building*), or a coworker's request to run a governed tool (*proceed*). When a coworker brings no proposal, its recommendation is the gate's own pick, if the gate made one. A decision with neither is counted under "no recommendation" and is never a sample. When you answer an escalated decision and choose one of its options, that answer is compared with the coworker's proposal and counts as a sample.
+
+Older decisions are counted only where the recommendation is still on record. Architecture reviews from before this change did not save the architect's verdict, so they stay under "no recommendation". Nothing is guessed.
+
 ### The Inheritance Chain
 
 When the active profile can't answer a question, the gate falls back through a fixed chain:

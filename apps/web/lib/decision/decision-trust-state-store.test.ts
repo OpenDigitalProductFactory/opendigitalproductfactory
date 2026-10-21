@@ -141,6 +141,117 @@ describe("backfillDecisionShadowLedger", () => {
   });
 });
 
+describe("backfill of a coworker's own proposal (BI-AE416D75)", () => {
+  const takMenu = [
+    { id: "proceed", features: { gtm_fit: 1, market_fit: 1, mission_fit: 1, product_fit: 1 }, description: "Proceed" },
+    { id: "decline", features: { blast_radius: 0, reversibility: 1 }, description: "Decline" },
+  ];
+  function takDecision(id: string, over: Row = {}): Row {
+    return decision(id, {
+      agentId: "AGT-WS-SCOUT",
+      domainClass: "plan-readiness",
+      riskTier: "medium",
+      outcomeType: "escalate",
+      recommendedOptionId: null,
+      options: ["Proceed", "Decline"],
+      gateKey: "org-business",
+      scoredOptions: takMenu,
+      outcomePayload: { outcomeType: "escalate" },
+      ...over,
+    });
+  }
+  const answered = {
+    chosenOptionId: "proceed",
+    humanOutcome: {
+      type: "escalation",
+      answer: "Proceed — always.",
+      resolverUserId: "user-1",
+      capturedAt: "2026-09-15T22:54:10.753Z",
+      clearsGate: true,
+      chosenOptionId: "proceed",
+    },
+  };
+  // The row the BI-6082C235 backfill wrote before the proposal was readable.
+  function legacyLedgerRow(id: string): Row {
+    return {
+      ledgerId: decisionShadowLedgerId(id),
+      decisionInteractionId: id,
+      agentId: "AGT-WS-SCOUT",
+      activityType: "governed_decision_plan_readiness",
+      riskClass: "internal-irreversible",
+      sourceKind: "governed-decision",
+      observedAt: new Date("2026-09-15T00:00:00.000Z"),
+      proposedDecision: { outcomeType: "escalate", recommendedOptionId: null, options: ["Proceed", "Decline"] },
+      metadata: { resolvedBy: null },
+      agreement: null,
+      reconciledAt: null,
+    };
+  }
+
+  it("rewrites a legacy TAK-gate row with the coworker's 'proceed' and counts a person's answer as a sample", async () => {
+    const { db, ledger, trust } = fakeDb(
+      [takDecision("DI-T1", answered), takDecision("DI-T2")],
+      [legacyLedgerRow("DI-T1"), legacyLedgerRow("DI-T2")],
+    );
+    const result = await backfillDecisionShadowLedger(db);
+    expect(result).toMatchObject({ written: 2, alreadyCurrent: 0 });
+    expect(ledger.get(decisionShadowLedgerId("DI-T1"))).toMatchObject({
+      proposedDecision: { recommendedOptionId: "proceed", recommendedBy: "coworker" },
+      agreement: true,
+      metadata: { resolvedBy: "human" },
+    });
+    expect(ledger.get(decisionShadowLedgerId("DI-T2"))).toMatchObject({
+      proposedDecision: { recommendedOptionId: "proceed", recommendedBy: "coworker" },
+      agreement: null,
+    });
+
+    await recomputeDecisionTrustStates(db, new Date("2026-10-21T00:00:00.000Z"));
+    expect([...trust.values()][0]).toMatchObject({ agentId: "AGT-WS-SCOUT", sampleCount: 1, agreementCount: 1 });
+
+    const again = await backfillDecisionShadowLedger(db);
+    expect(again).toMatchObject({ written: 0, alreadyCurrent: 2 });
+  });
+
+  it("leaves an architecture advisory whose verdict was never stored without a recommendation", async () => {
+    const ea = decision("DI-EA", {
+      agentId: "AGT-WS-EA",
+      domainClass: "architecture-tradeoff",
+      riskTier: "medium",
+      outcomeType: "escalate",
+      recommendedOptionId: null,
+      options: ["aligned", "revise-before-building"],
+      gateKey: "profession",
+      scoredOptions: null,
+      outcomePayload: { outcomeType: "escalate" },
+    });
+    const { db, ledger } = fakeDb([ea]);
+    await backfillDecisionShadowLedger(db);
+    expect(ledger.get(decisionShadowLedgerId("DI-EA"))).toMatchObject({
+      proposedDecision: { recommendedOptionId: null, recommendedBy: null },
+    });
+    const again = await backfillDecisionShadowLedger(db);
+    expect(again).toMatchObject({ written: 0, alreadyCurrent: 1 });
+  });
+
+  it("carries a proposal the gate recorded on a new architecture advisory", async () => {
+    const ea = decision("DI-EA2", {
+      agentId: "AGT-WS-EA",
+      domainClass: "architecture-tradeoff",
+      outcomeType: "escalate",
+      recommendedOptionId: null,
+      options: ["aligned", "revise-before-building"],
+      gateKey: "profession",
+      scoredOptions: null,
+      outcomePayload: { outcomeType: "escalate", proposedOptionId: "aligned" },
+    });
+    const { db, ledger } = fakeDb([ea]);
+    await backfillDecisionShadowLedger(db);
+    expect(ledger.get(decisionShadowLedgerId("DI-EA2"))).toMatchObject({
+      proposedDecision: { recommendedOptionId: "aligned", recommendedBy: "coworker" },
+    });
+  });
+});
+
 describe("recomputeDecisionTrustStates", () => {
   it("creates a TrustState at shadow for every coworker with a governed decision, resolved or not", async () => {
     const { db, trust } = fakeDb([

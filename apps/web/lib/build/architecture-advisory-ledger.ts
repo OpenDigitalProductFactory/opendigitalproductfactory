@@ -18,6 +18,21 @@
 import type { PrismaClient } from "@dpf/db";
 import type { ArchitectureAdvisory, ReviewResult } from "@/lib/explore/feature-build-types";
 
+/** The menu the architect's advisory is recorded against. */
+export const ARCHITECTURE_ADVISORY_OPTIONS = ["aligned", "revise-before-building"] as const;
+export type ArchitectureAdvisoryOption = (typeof ARCHITECTURE_ADVISORY_OPTIONS)[number];
+
+/**
+ * The option the architect itself recommends (BI-AE416D75): its review verdict.
+ * A pass says the design is aligned; a fail says revise before building. An
+ * inconclusive review recommended nothing, and is recorded as nothing.
+ */
+export function architectProposedOption(arch: Pick<ReviewResult, "decision">): ArchitectureAdvisoryOption | null {
+  if (arch.decision === "pass") return "aligned";
+  if (arch.decision === "fail") return "revise-before-building";
+  return null;
+}
+
 /**
  * Record an architecture advisory as a WSID decision. Never throws and never
  * blocks: a ledger failure is logged and the review proceeds.
@@ -46,7 +61,11 @@ async function ledgerArchitectureAdvisory(
         slugId: "ea-architect",
       },
       question: `Architectural alignment review: ${advisory.summary}`,
-      options: ["aligned", "revise-before-building"],
+      options: [...ARCHITECTURE_ADVISORY_OPTIONS],
+      // Without this the architect's verdict was never recorded, so all of its
+      // advisories counted as "no recommendation" and its agreement with what
+      // a person then chose could never be measured (BI-AE416D75).
+      proposedOptionId: architectProposedOption(arch),
       domainClass: "architecture-tradeoff",
       // An advisory that found entrenching debt is a higher-stakes call than a
       // clean pass, and the tier should say so rather than flattening both.
