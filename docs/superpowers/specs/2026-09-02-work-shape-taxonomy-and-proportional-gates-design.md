@@ -130,6 +130,13 @@ The current readiness profiles collapse onto (shape, sensitivity):
 
 ### 3.3 Selecting the shape at claim
 
+**Proposed correction (BI-EB4C25F4, 2026-10-21):** the owner pick-list and
+unclassified Large/High instructions below are historical contracts. The
+[evidence-based selection fix](2026-10-21-evidence-based-delivery-shape-selection-design.md)
+defines their scoped successor: engineering resolves technical facts, existing
+authority remains intact, and genuine business choices stay with their owner.
+That draft is not evidence that the new behavior is implemented or deployed.
+
 `claim_backlog_item_for_work` (and `adopt_worktree` for an existing branch) gains a `workShape` parameter restricted to the five delivery keys. Resolution order:
 
 1. **Caller supplied it** → recorded on the Workroom as the `workShape` scope claim with `source: declared`.
