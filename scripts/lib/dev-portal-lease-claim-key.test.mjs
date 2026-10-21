@@ -83,6 +83,9 @@ test('preview diagnostics distinguish lease failure categories without retaining
     { type: 'authority-deadline', category: 'authority-deadline' });
   assert.deepEqual(previewLeaseEventSummary({ type: 'heartbeat-lost', reason: 'preview_binding_changed' }),
     { type: 'heartbeat-lost', category: 'source-binding' });
+  for (const reason of ['preview_startup_exceeded_budget', 'preview_init_not_running']) {
+    assert.deepEqual(previewLeaseEventSummary({ type: 'heartbeat-lost', reason }), { type: 'heartbeat-lost', category: 'startup-liveness' });
+  }
   assert.deepEqual(previewLeaseEventSummary({ type: 'heartbeat-uncertain', reason: 'mcp timed out after 10000ms diagnostic-secret-must-not-escape' }),
     { type: 'heartbeat-uncertain', category: 'transport-timeout' });
   assert.deepEqual(previewLeaseEventSummary({ type: 'release-failed', reason: 'diagnostic-secret-must-not-escape' }),
@@ -458,4 +461,39 @@ test('admitted child outcomes are retained and untrusted launcher reasons never 
     spawnResumer: () => ({ spawned: false, reason: 'secret-must-not-escape' }) });
   assert.equal(result.reason, 'consumer-unavailable');
   assert.ok(!JSON.stringify(result).includes('secret-must-not-escape'));
+});
+
+// BI-E95458DE: a preview renewed its CI-slot lease for ~86 minutes before any
+// portal container existed. Renewal checked the container only once it was
+// owned, so the whole initialization stage renewed unchecked and unbounded.
+test('startup reports each phase so renewal can tell initializing from serving', async () => {
+  const { runPreviewLifecycle: run } = await import('./dev-preview-runtime.mjs');
+  const calls = [];
+  await run({ compose: async args => calls.push(args[0] === 'run' ? 'init-run' : args[0]), inspect: async () => {},
+    verifySource: async () => {}, stopOwned: async () => {}, ready: async () => calls.push('ready'), wait: async () => {},
+    onPhase: phase => calls.push(`phase:${phase}`), active: { initName: 'unique-init' } });
+  assert.deepEqual(calls, ['stop', 'up', 'phase:init', 'init-run', 'phase:start', 'up', 'ready', 'phase:serving']);
+});
+
+test('renewal refuses a startup that stalls or outlives its budget, and defers to the container once serving', async () => {
+  const { previewStartupLiveness, PREVIEW_STARTUP_BUDGET_MS, PREVIEW_INIT_GRACE_MS } = await import('./dev-preview-runtime.mjs');
+  const base = { startedAtMs: 0, phaseStartedAtMs: 0, initRunning: true };
+  assert.equal(previewStartupLiveness({ ...base, phase: 'init', nowMs: 60_000 }), null);
+  // The init container is gone but the lifecycle has not moved on: nothing is initializing.
+  assert.equal(previewStartupLiveness({ ...base, phase: 'init', initRunning: false, nowMs: PREVIEW_INIT_GRACE_MS + 1 }), 'preview_init_not_running');
+  // Docker may not have created the container yet at the first renewal.
+  assert.equal(previewStartupLiveness({ ...base, phase: 'init', initRunning: false, nowMs: PREVIEW_INIT_GRACE_MS - 1 }), null);
+  for (const phase of ['prepare', 'init', 'start']) {
+    assert.equal(previewStartupLiveness({ ...base, phase, nowMs: PREVIEW_STARTUP_BUDGET_MS + 1 }), 'preview_startup_exceeded_budget');
+  }
+  assert.equal(previewStartupLiveness({ ...base, phase: 'serving', initRunning: false, nowMs: PREVIEW_STARTUP_BUDGET_MS * 10 }), null);
+  assert.equal(PREVIEW_STARTUP_BUDGET_MS, 20 * 60_000);
+});
+
+test('the startup budget is operator-tunable and ignores unusable values', async () => {
+  const { previewStartupBudgetMs, PREVIEW_STARTUP_BUDGET_MS } = await import('./dev-preview-runtime.mjs');
+  assert.equal(previewStartupBudgetMs({ DPF_DEV_PORTAL_STARTUP_BUDGET_MINUTES: '45' }), 45 * 60_000);
+  for (const bad of [undefined, '', '0', '-3', 'soon']) {
+    assert.equal(previewStartupBudgetMs({ DPF_DEV_PORTAL_STARTUP_BUDGET_MINUTES: bad }), PREVIEW_STARTUP_BUDGET_MS);
+  }
 });
