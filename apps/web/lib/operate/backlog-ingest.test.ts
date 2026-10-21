@@ -202,6 +202,7 @@ describe("ingestBacklogItem", () => {
       itemId: "BI-IMP-EXISTING",
       id: "cuid-existing",
       created: false,
+      outcome: "recurred",
       implementationCandidates: [],
     });
     expect(created).toHaveLength(0);

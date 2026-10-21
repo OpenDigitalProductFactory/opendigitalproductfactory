@@ -11,12 +11,22 @@
  * provenance. It is pure and dependency-injected: no Prisma, no fetch.
  */
 
+import { createHash } from "crypto";
+
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
+
 import { parseArchetypeRefs } from "@/lib/federation/demand-projection";
-import type { BacklogIngestInput } from "@/lib/operate/backlog-ingest";
+import {
+  parseGithubIssueUrl,
+  qualifiedIssueOriginId,
+  type BacklogIngestInput,
+  type BacklogIngestOutcome,
+} from "@/lib/operate/backlog-ingest";
 import { BACKLOG_WORK_TYPE_VALUES, type BacklogWorkType } from "@/lib/explore/backlog";
 
 /** Where an inbound item came from. Part of the provenance marker, so a re-run
- *  matches the same origin instead of filing a second copy. */
+ *  matches the same origin instead of filing a second copy. Upstream issues
+ *  are additionally qualified by repository (BI-952F08BA). */
 export type InboundSourceKind = "upstream-issue" | "peer-demand";
 
 export interface InboundEcosystemItem {
@@ -55,9 +65,16 @@ export interface InboundTriageResult {
   reviews: Array<{ origin: string; candidates: string[] }>;
 }
 
+export interface InboundIngestOutcome {
+  itemId: string;
+  created: boolean;
+  outcome?: BacklogIngestOutcome;
+  reviewCandidates?: string[];
+}
+
 export interface InboundTriageDeps {
   items: InboundEcosystemItem[];
-  ingest: (input: BacklogIngestInput) => Promise<{ itemId: string; created: boolean }>;
+  ingest: (input: BacklogIngestInput) => Promise<InboundIngestOutcome>;
   /** Injected so a failure is observable in tests instead of only on a console. */
   onFailure?: (item: InboundEcosystemItem, error: unknown) => void;
 }
@@ -83,6 +100,43 @@ export function composeInboundBody(item: InboundEcosystemItem): string {
   return lines.join("\n");
 }
 
+/**
+ * Fingerprint of what an operator would call a change to the source: its
+ * title, text and open/closed state. Equal fingerprints across polls mean the
+ * issue did not change, so the front door records nothing (BI-952F08BA).
+ */
+export function inboundSourceFingerprint(item: InboundEcosystemItem): string {
+  const material = canonicalJson({ title: item.title, summary: item.summary, state: item.state ?? null });
+  return createHash("sha256").update(material).digest("hex");
+}
+
+/**
+ * Origin identity for one inbound item. An upstream issue is identified by its
+ * repository AND number (spec §6.1): the number alone collides across
+ * repositories. A peer demand mirror id is already globally unique.
+ */
+function originFor(item: InboundEcosystemItem): Pick<BacklogIngestInput, "origin" | "reconcile"> {
+  const kind = `ecosystem-${item.sourceKind}`;
+  if (item.sourceKind !== "upstream-issue") return { origin: { kind, id: item.sourceId } };
+  const repository = item.repository?.trim().toLowerCase();
+  if (!repository) {
+    // Refuse rather than fall back to the bare number: an unqualified origin is
+    // exactly the identity that re-created issue #4563's retired intake.
+    throw new Error(`upstream issue ${item.sourceId} has no resolvable repository; refusing an unqualified origin`);
+  }
+  return {
+    origin: { kind, id: qualifiedIssueOriginId(repository, item.sourceId) },
+    reconcile: {
+      repository,
+      sourceUrl: item.url ?? null,
+      state: item.state ?? "open",
+      fingerprint: inboundSourceFingerprint(item),
+      // Dual-read the pre-qualification marker until every legacy intake maps.
+      legacyId: item.sourceId,
+    },
+  };
+}
+
 /** Map one inbound item onto the backlog front door's input contract. */
 export function toBacklogIngestInput(item: InboundEcosystemItem): BacklogIngestInput {
   const scope = parseArchetypeRefs(item.archetypeRefs);
@@ -96,7 +150,7 @@ export function toBacklogIngestInput(item: InboundEcosystemItem): BacklogIngestI
     workType: isWorkType(item.workType) ? item.workType : "feature",
     // Provenance marker: a re-run of the sweep matches this same origin rather
     // than filing a duplicate.
-    origin: { kind: `ecosystem-${item.sourceKind}`, id: item.sourceId },
+    ...originFor(item),
     ...(scope.scopeKind ? { scopeKind: scope.scopeKind as BacklogIngestInput["scopeKind"] } : {}),
     ...(scope.archetypeCategories.length > 0 ? { archetypeCategories: scope.archetypeCategories } : {}),
     ...(scope.archetypeIds.length > 0 ? { archetypeIds: scope.archetypeIds } : {}),
@@ -113,9 +167,21 @@ export async function runInboundIssueTriage(deps: InboundTriageDeps): Promise<In
     // Fault-isolate each item: one bad record must not strand every record
     // after it — the same lesson the demand reconciliation loop already learned.
     try {
-      const filed = await deps.ingest(toBacklogIngestInput(item));
+      const input = toBacklogIngestInput(item);
+      const filed = await deps.ingest(input);
+      if (filed.outcome === "needs-review") {
+        // Ambiguous origin: nothing was created; the run summary names it.
+        result.needsReview++;
+        result.reviews.push({
+          origin: `${input.origin?.kind}:${input.origin?.id}`,
+          candidates: filed.reviewCandidates ?? [],
+        });
+        continue;
+      }
       if (filed.created) result.ingested++;
       else result.deduped++;
+      if (filed.outcome === "unchanged") result.unchanged++;
+      if (filed.outcome === "changed") result.changed++;
       result.itemIds.push(filed.itemId);
     } catch (err) {
       result.failed++;
@@ -171,10 +237,14 @@ export function mapUpstreamIssues(
   issues: Array<{ number: number; title: string; body: string | null; labels: string[]; htmlUrl: string; state?: string }>,
   fallbackRepo?: { owner: string; name: string } | null,
 ): InboundEcosystemItem[] {
-  void fallbackRepo;
+  // The issue's own URL names its repository; the commissioned repository is
+  // the fallback when the URL is missing or not a GitHub issue link.
+  const fallback = fallbackRepo ? `${fallbackRepo.owner}/${fallbackRepo.name}`.toLowerCase() : null;
   return issues.map((issue) => ({
     sourceKind: "upstream-issue" as const,
     sourceId: String(issue.number),
+    repository: parseGithubIssueUrl(issue.htmlUrl)?.repository ?? fallback,
+    state: issue.state ?? null,
     title: issue.title,
     summary: issue.body?.trim() || issue.title,
     // A relay-filed issue carries its work type as a label, when it carries one.

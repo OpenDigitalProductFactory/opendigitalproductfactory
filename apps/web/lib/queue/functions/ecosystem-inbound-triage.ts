@@ -5,6 +5,26 @@ import type { InboundTriageOutcome } from "@/lib/ecosystem/inbound-triage-runner
 import { ECOSYSTEM_JOB_CATALOG_ENTRIES } from "@/lib/operate/scheduled-jobs/catalog-ecosystem";
 import { projectNextRun } from "@/lib/operate/scheduled-jobs/cadence";
 
+type RanOutcome = Extract<InboundTriageOutcome, { ran: true }>;
+
+/** One line an operator reads on the schedule view (BI-952F08BA counts). */
+function summarizeScan(result: RanOutcome): string {
+  // `?? 0`: a durable step result memoized by an older build lacks these fields.
+  const unchanged = result.unchanged ?? 0;
+  const changed = result.changed ?? 0;
+  const needsReview = result.needsReview ?? 0;
+  // Non-reconciled origins (peer demand) still use recurrence semantics.
+  const recurred = Math.max(0, result.deduped - unchanged - changed);
+  const allReviews = result.reviews ?? [];
+  const reviews = allReviews
+    .slice(0, 10)
+    .map((review) => `${review.origin} (${review.candidates.join(", ") || "no candidates"})`)
+    .join("; ") + (allReviews.length > 10 ? `; +${allReviews.length - 10} more` : "");
+  return `${result.complete ? "Complete" : "Incomplete"} scan: ${result.ingested} created, ${unchanged} unchanged, `
+    + `${changed} changed, ${recurred} recurred, ${needsReview} needs review, ${result.failed} failed; `
+    + `${result.sourceErrors.length} unread source(s).${reviews ? ` Needs review: ${reviews}.` : ""}`;
+}
+
 async function recordScanOutcome(result: InboundTriageOutcome): Promise<void> {
   const { prisma } = await import("@dpf/db");
   const entry = ECOSYSTEM_JOB_CATALOG_ENTRIES.find((job) => job.jobId === "ecosystem-inbound-issue-triage")!;
@@ -18,9 +38,7 @@ async function recordScanOutcome(result: InboundTriageOutcome): Promise<void> {
     nextRunAt: projectNextRun(schedule, now),
     lastStatus: !result.ran ? "not-configured" : result.complete ? "completed" : "failed",
     lastError: errors.length ? errors.join("; ").slice(0, 2000) : null,
-    lastRunSummary: result.ran
-      ? `${result.complete ? "Complete" : "Incomplete"} scan: ${result.ingested} new, ${result.deduped} matched, ${result.failed} failed; ${result.sourceErrors.length} unread source(s).`
-      : result.reason,
+    lastRunSummary: result.ran ? summarizeScan(result) : result.reason,
   };
   await prisma.scheduledJob.upsert({
     where: { jobId: entry.jobId },
