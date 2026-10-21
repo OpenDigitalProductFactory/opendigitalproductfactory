@@ -10,7 +10,8 @@
  *   locally owned (not a federated mirror) → explicit upstream repository that
  *   matches the room and the commission → an active local owner, and the
  *   commissioning principal still one of them → a DECLARED production install →
- *   a valid, confirmed evolve-dpf operating intent.
+ *   a valid, confirmed operating intent whose primary purpose is evolve-dpf or
+ *   that declares evolve-dpf as a secondary purpose (DI-A6148958CADB).
  *
  * Any failed clause is `not commissioned: <reason>`. This is local controller
  * fencing, not a distributed lock across independent installations.
@@ -79,72 +80,125 @@ export type IntakeControllerVerdict =
   | { commissioned: true; repo: RepoIdentity; workroomCapsuleId: string }
   | { commissioned: false; reason: string };
 
-const refuse = (reason: string): IntakeControllerVerdict => ({ commissioned: false, reason: `not commissioned: ${reason}` });
 const sameRepo = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 const fullName = (repo: RepoIdentity) => `${repo.owner}/${repo.name}`;
 
-function isLocalOwner(participant: IntakeControllerParticipant): boolean {
+/** Exported so a presenter can say whether a given principal owns the room without re-deriving it. */
+export function isIntakeControllerOwner(participant: IntakeControllerParticipant): boolean {
   return participant.lifecycle === "active"
     && participant.roles.some((role) => OWNER_ROLES.has(role))
     && participant.principal?.status === "active"
     && participant.principal.kind !== FOREIGN_PRINCIPAL_KIND;
 }
 
-/** The single AC-1 predicate. Pure. */
-export function evaluateIntakeControllerAuthority(facts: IntakeControllerFacts): IntakeControllerVerdict {
-  const { commission, workroom } = facts;
-  if (!commission) {
-    return refuse(
-      `no controller workroom is referenced on ${INTAKE_CONTROLLER_JOB_ID}; `
-      + `commission an ${INTAKE_CONTROLLER_WORK_SHAPE} workroom owned on this installation`,
-    );
-  }
-  const id = commission.workroomCapsuleId;
-  if (!workroom) return refuse(`workroom ${id} was not found`);
-  if (workroom.archivedAt) return refuse(`workroom ${id} is archived`);
-  if (TERMINAL_WORKROOM_STATUSES.has(workroom.status)) return refuse(`workroom ${id} is ${workroom.status}`);
+/** The AC-1 predicate's clauses, in the order the predicate checks them. */
+export const INTAKE_CONTROLLER_CLAUSE_IDS = [
+  "commission",
+  "room-found",
+  "room-live",
+  "work-shape",
+  "locally-owned",
+  "upstream-configured",
+  "room-repository",
+  "commission-repository",
+  "room-owner",
+  "commissioner-owns",
+  "production-install",
+  "operating-intent",
+  "purpose",
+] as const;
+export type IntakeControllerClauseId = (typeof INTAKE_CONTROLLER_CLAUSE_IDS)[number];
 
-  const shape = readWorkShapeClaimRef(workroom.scopeClaims);
-  if (shape !== INTAKE_CONTROLLER_WORK_SHAPE) {
-    return refuse(`workroom ${id} declares ${shape ?? "no work shape"}, not ${INTAKE_CONTROLLER_WORK_SHAPE}`);
-  }
-  if (facts.mirroredFromPeer) return refuse(`workroom ${id} mirrors peer-owned work and is not locally owned`);
+/**
+ * One clause's outcome. `unchecked` means a clause it depends on failed (no room
+ * to read, no repository to compare), so this one has no answer yet. `reason`
+ * omits the `not commissioned: ` prefix the verdict adds.
+ */
+export type IntakeControllerClause =
+  | { id: IntakeControllerClauseId; status: "pass" }
+  | { id: IntakeControllerClauseId; status: "fail"; reason: string }
+  | { id: IntakeControllerClauseId; status: "unchecked" };
 
-  if (!facts.upstreamRemoteUrl) {
-    return refuse("no explicit upstream repository is configured (PlatformDevConfig.upstreamRemoteUrl)");
-  }
-  const repo = parseRepoFromUrl(facts.upstreamRemoteUrl);
-  if (!repo) return refuse("the configured upstream URL is not a GitHub repository");
-  if (!workroom.repositoryFullName || !sameRepo(workroom.repositoryFullName, fullName(repo))) {
-    return refuse(
-      `workroom ${id} is for ${workroom.repositoryFullName ?? "no repository"}, `
-      + `not the configured upstream ${fullName(repo)}`,
-    );
-  }
-  if (!sameRepo(commission.repositoryFullName, fullName(repo))) {
-    return refuse(`the commission names ${commission.repositoryFullName}, not the configured upstream ${fullName(repo)}`);
-  }
+/**
+ * Every clause of the AC-1 predicate, evaluated independently where its inputs
+ * exist. Pure. The verdict below is the first failing clause, so the runner, the
+ * commissioning action and the admin checklist read one rule.
+ */
+export function evaluateIntakeControllerClauses(facts: IntakeControllerFacts): IntakeControllerClause[] {
+  const { commission, workroom, intent } = facts;
+  const id = commission?.workroomCapsuleId ?? workroom?.capsuleId ?? "(none)";
+  const repo = facts.upstreamRemoteUrl ? parseRepoFromUrl(facts.upstreamRemoteUrl) : null;
+  const owners = workroom?.participants.filter(isIntakeControllerOwner) ?? [];
+  const clauses: IntakeControllerClause[] = [];
+  const check = (clauseId: IntakeControllerClauseId, ready: boolean, failure: () => string | null) => {
+    if (!ready) return clauses.push({ id: clauseId, status: "unchecked" });
+    const reason = failure();
+    clauses.push(reason ? { id: clauseId, status: "fail", reason } : { id: clauseId, status: "pass" });
+  };
 
-  const owners = workroom.participants.filter(isLocalOwner);
-  if (owners.length === 0) return refuse(`workroom ${id} has no active local accountable or coordinator owner`);
-  if (!owners.some((owner) => owner.principalId === commission.commissionedByPrincipalId)) {
-    return refuse(`the commissioning principal no longer owns workroom ${id}`);
-  }
-
+  check("commission", true, () => commission ? null
+    : `no controller workroom is referenced on ${INTAKE_CONTROLLER_JOB_ID}; `
+      + `commission an ${INTAKE_CONTROLLER_WORK_SHAPE} workroom owned on this installation`);
+  check("room-found", Boolean(commission), () => workroom ? null : `workroom ${id} was not found`);
+  check("room-live", Boolean(workroom), () => {
+    if (workroom!.archivedAt) return `workroom ${id} is archived`;
+    return TERMINAL_WORKROOM_STATUSES.has(workroom!.status) ? `workroom ${id} is ${workroom!.status}` : null;
+  });
+  check("work-shape", Boolean(workroom), () => {
+    const shape = readWorkShapeClaimRef(workroom!.scopeClaims);
+    return shape === INTAKE_CONTROLLER_WORK_SHAPE ? null
+      : `workroom ${id} declares ${shape ?? "no work shape"}, not ${INTAKE_CONTROLLER_WORK_SHAPE}`;
+  });
+  check("locally-owned", Boolean(workroom), () =>
+    facts.mirroredFromPeer ? `workroom ${id} mirrors peer-owned work and is not locally owned` : null);
+  check("upstream-configured", true, () => {
+    if (!facts.upstreamRemoteUrl) return "no explicit upstream repository is configured (PlatformDevConfig.upstreamRemoteUrl)";
+    return repo ? null : "the configured upstream URL is not a GitHub repository";
+  });
+  check("room-repository", Boolean(workroom && repo), () =>
+    workroom!.repositoryFullName && sameRepo(workroom!.repositoryFullName, fullName(repo!)) ? null
+      : `workroom ${id} is for ${workroom!.repositoryFullName ?? "no repository"}, `
+        + `not the configured upstream ${fullName(repo!)}`);
+  check("commission-repository", Boolean(commission && repo), () =>
+    sameRepo(commission!.repositoryFullName, fullName(repo!)) ? null
+      : `the commission names ${commission!.repositoryFullName}, not the configured upstream ${fullName(repo!)}`);
+  check("room-owner", Boolean(workroom), () =>
+    owners.length > 0 ? null : `workroom ${id} has no active local accountable or coordinator owner`);
+  check("commissioner-owns", Boolean(commission && owners.length > 0), () =>
+    owners.some((owner) => owner.principalId === commission!.commissionedByPrincipalId) ? null
+      : `the commissioning principal no longer owns workroom ${id}`);
   // Install identity (operator decision 2026-10-13): only a DECLARED production
   // install may hold the controller; a DEV peer cannot, even with a local room.
-  if (facts.environment.environmentClass !== "production") return refuse("installation is not a production install");
-  if (!facts.environment.declared) return refuse("installation is not a production install (environment class undeclared)");
+  check("production-install", true, () => {
+    if (facts.environment.environmentClass !== "production") return "installation is not a production install";
+    return facts.environment.declared ? null : "installation is not a production install (environment class undeclared)";
+  });
+  check("operating-intent", true, () => {
+    if (intent.status !== "valid") return `installation operating intent is ${intent.status}`;
+    return intent.intent.confirmation.status === "confirmed" ? null
+      : `installation operating intent is not confirmed (${intent.intent.confirmation.status})`;
+  });
+  // Operator decision DI-A6148958CADB: evolve-dpf may be the confirmed intent's
+  // primary purpose OR one of its declared secondary purposes.
+  check("purpose", intent.status === "valid", () => {
+    if (intent.status !== "valid") return null;
+    const { primaryPurpose, secondaryPurposes } = intent.intent;
+    return primaryPurpose === REQUIRED_PURPOSE || secondaryPurposes.includes(REQUIRED_PURPOSE) ? null
+      : `installation purpose is ${primaryPurpose} without ${REQUIRED_PURPOSE} as a secondary purpose`;
+  });
+  return clauses;
+}
 
-  const { intent } = facts;
-  if (intent.status !== "valid") return refuse(`installation operating intent is ${intent.status}`);
-  if (intent.intent.confirmation.status !== "confirmed") {
-    return refuse(`installation operating intent is not confirmed (${intent.intent.confirmation.status})`);
-  }
-  if (intent.intent.primaryPurpose !== REQUIRED_PURPOSE) {
-    return refuse(`installation purpose is ${intent.intent.primaryPurpose}, not ${REQUIRED_PURPOSE}`);
-  }
-  return { commissioned: true, repo, workroomCapsuleId: workroom.capsuleId };
+/** The single AC-1 predicate: the first failing clause, or commissioned. Pure. */
+export function evaluateIntakeControllerAuthority(facts: IntakeControllerFacts): IntakeControllerVerdict {
+  const failed = evaluateIntakeControllerClauses(facts).find((clause) => clause.status === "fail");
+  if (failed && failed.status === "fail") return { commissioned: false, reason: `not commissioned: ${failed.reason}` };
+  // Every clause passed, so the room, the commission and the upstream URL exist.
+  return {
+    commissioned: true,
+    repo: parseRepoFromUrl(facts.upstreamRemoteUrl!)!,
+    workroomCapsuleId: facts.workroom!.capsuleId,
+  };
 }
 
 // ── impure edge ───────────────────────────────────────────────────────────────
@@ -173,6 +227,11 @@ export interface IntakeControllerDeps {
 async function defaultDb(): Promise<IntakeControllerDb> {
   const { prisma } = await import("@dpf/db");
   return prisma as unknown as IntakeControllerDb;
+}
+
+/** The injected database, or the shared Prisma client. */
+export async function resolveIntakeControllerDb(deps: IntakeControllerDeps = {}): Promise<IntakeControllerDb> {
+  return deps.db ?? (await defaultDb());
 }
 
 /** Reuses the resolver behind loadInstanceStance (and so get_my_coworker_profile). */
@@ -221,10 +280,11 @@ async function isMirroredFromPeer(db: IntakeControllerDb, room: WorkroomRow): Pr
   return hasFederatedWorkOriginMarker(item?.body);
 }
 
-async function loadFacts(
+/** Load the facts the predicate reads for one (candidate or recorded) commission. */
+export async function loadIntakeControllerFacts(
   db: IntakeControllerDb,
   commission: IntakeControllerCommission,
-  loadEnvironment: () => Promise<IntakeControllerEnvironment>,
+  loadEnvironment: () => Promise<IntakeControllerEnvironment> = environmentLoader(db),
 ): Promise<IntakeControllerFacts> {
   const intentDb = { platformConfig: db.platformConfig } as unknown as InstallationIntentDb;
   const [workroom, config, intent, environment] = await Promise.all([
@@ -260,7 +320,7 @@ export async function loadIntakeControllerCommission(deps: IntakeControllerDeps 
     });
   }
   return evaluateIntakeControllerAuthority(
-    await loadFacts(db, commission, deps.loadEnvironment ?? environmentLoader(db)),
+    await loadIntakeControllerFacts(db, commission, deps.loadEnvironment ?? environmentLoader(db)),
   );
 }
 
@@ -292,7 +352,7 @@ export async function commissionIntakeController(input: IntakeControllerDeps & {
       commissionedAt: now.toISOString(),
     };
     const verdict = evaluateIntakeControllerAuthority(
-      await loadFacts(db, candidate, input.loadEnvironment ?? environmentLoader(db)),
+      await loadIntakeControllerFacts(db, candidate, input.loadEnvironment ?? environmentLoader(db)),
     );
     if (!verdict.commissioned) return err(verdict.reason);
 

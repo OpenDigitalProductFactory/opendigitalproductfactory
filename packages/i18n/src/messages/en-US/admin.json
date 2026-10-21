@@ -1,6 +1,48 @@
 {
   "scheduledWork": {
-    "lastResult": "Last result"
+    "lastResult": "Last result",
+    "intakeController": {
+      "title": "Issue intake controller",
+      "intro": "This installation reads and triages issues on the platform repository only after an owner commissions it. Every check below must pass first.",
+      "loading": "Checking…",
+      "loadFailed": "Could not check issue intake",
+      "retry": "Try again",
+      "commissioned": "Commissioned",
+      "notCommissioned": "Not commissioned",
+      "lapsed": "The commission no longer holds",
+      "commissionDetail": "{$room} for {$repository}, by {$by}:",
+      "room": "Controller room: {$room} for {$repository}",
+      "noRoom": "No issue-triage room exists yet, so there is nothing to commission.",
+      "checklist": "Commissioning checklist",
+      "status": {
+        "pass": "Pass",
+        "fail": "Fail",
+        "unchecked": "Not checked"
+      },
+      "clause": {
+        "commission": "A controller room is recorded",
+        "room-found": "The controller room exists",
+        "room-live": "The room is open",
+        "work-shape": "The room watches issues (issue-triage-watch)",
+        "locally-owned": "The room belongs to this installation",
+        "upstream-configured": "Upstream GitHub repository is set",
+        "room-repository": "The room is for that repository",
+        "commission-repository": "The commission names that repository",
+        "room-owner": "The room has an owner here",
+        "commissioner-owns": "You own the room",
+        "production-install": "This is a production installation",
+        "operating-intent": "The installation purpose is confirmed",
+        "purpose": "Developing the platform is its main or another job"
+      },
+      "readOnly": "Only someone who can manage the platform can commission issue intake.",
+      "becomeOwner": "Become the room's owner",
+      "ownerConfirmTitle": "Take ownership of the room?",
+      "ownerConfirm": "You become the owner of {$room}. This is recorded on the room.",
+      "ownerConfirmHandover": "You become the owner of {$room}. {$names} stays in the room but is no longer its owner. This is recorded on the room.",
+      "commission": "Commission",
+      "working": "Working…",
+      "blockedBy": "Blocked by: {$clause}"
+    }
   },
   "accountableOwner": {
     "label": "Accountable owner:",
