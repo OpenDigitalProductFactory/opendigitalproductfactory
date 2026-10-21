@@ -43,30 +43,43 @@ must be decomposed and must never enter implementation as xlarge.
 
 ## Backlog coverage
 
-**Coverage receipt: not recorded.** The rows below map proposed independently
-shippable slices to live intake items; they do not constitute governed coverage,
-triage approval or implementation readiness. Child items remain triaging.
-Existing portable trust work is reused, not recreated or claimed complete here.
-The server chooses the receipt contract; this client may not choose a weaker one.
+- Parent: `BI-E23432C1`
+- Decision: decomposed
+- Baseline: `baseline-ecbd4e72-81ad-4b32-8137-f0546363ed9f`, minted by independent spec approval of the unchanged design at `e61136fa94155801f28714269a35b6348aa815c0`.
+- Receipt: blocked-by: this corrected plan must first be published as an immutable provider-verified blob before live plan coverage can bind it.
+- Dependencies: the graph below; approved umbrella baseline and coverage are prerequisites for every slice, and operating-profiles also retains the existing portable trust contract.
+- Mappings: workroom-kernel -> `BI-DBA1FE11`; gpp-toolkit -> `BI-721C467A`; scoped-judgment -> `BI-4DD124E7`; workroom-policy-modules -> `BI-D30CD423`; operating-profiles -> `BI-9874488F`; business-surfaces -> `BI-9A6163AD`; commons-exchange -> `BI-0D316824`.
 
-| Key | Live BI | Independent | Dependencies | Requirements | Contracts | Flows | Verification |
-|---|---|---|---|---|---|---|---|
-| workroom-kernel | BI-DBA1FE11 | Yes | Approved umbrella baseline/coverage | AC-EX-01, AC-EX-02, AC-EX-03, AC-EX-05, AC-EX-06 | WK-01 | WF-01 | CT-WK |
-| gpp-toolkit | BI-721C467A | Yes | workroom-kernel | AC-EX-02, AC-EX-04, AC-EX-05, AC-EX-06 | GP-01 | GF-01 | CT-GP |
-| scoped-judgment | BI-4DD124E7 | Yes | Approved umbrella baseline/coverage | AC-EX-02, AC-EX-04, AC-EX-05, AC-EX-06 | SJ-01 | JF-01 | CT-SJ |
-| workroom-policy-modules | BI-D30CD423 | Yes | workroom-kernel | AC-EX-02, AC-EX-03, AC-EX-05 | WP-01 | PF-01 | CT-WP |
-| operating-profiles | BI-9874488F | Yes | workroom-kernel; existing portable trust contract | AC-EX-02, AC-EX-03, AC-EX-04, AC-EX-05 | OP-01 | OF-01 | CT-OP |
-| business-surfaces | BI-9A6163AD | Yes | workroom-kernel | AC-EX-02, AC-EX-05, AC-EX-07 | BS-01 | BF-01 | CT-BS |
-| commons-exchange | BI-0D316824 | Yes | workroom-kernel; scoped-judgment | AC-EX-02, AC-EX-04, AC-EX-05, AC-EX-08 | HX-01 | HF-01 | CT-HX |
+These seven existing mappings are not a coverage receipt, triage approval or
+implementation readiness. Existing portable trust work is reused, not recreated
+or claimed complete here. The server chooses the receipt contract and derives its
+current baseline and artifact digests; this client may not choose a weaker one.
 
-The design map supplies AC-EX-01 and the authority/qualification constraints
-shared by every slice. The following WK/GP/SJ/WP/OP/BS/HX and flow/test references
-name responsibilities within this plan, not new platform entities or standards.
-Record a `decision: decomposed` receipt only after the immutable plan and approved
-scope baseline exist. Bind the complete graph, BI mappings and four reference
-lists above; then retain the returned receipt and validate it with
-`check_plan_backlog_coverage`. If a baseline or receipt is refused, follow its
-specific remedy without switching lanes or self-approving.
+| Key | Live BI | Independent | Dependencies | Requirements (approved objectives) | Contracts | Flows | Verification (approved acceptance) | Functional test groups |
+|---|---|---|---|---|---|---|---|---|
+| workroom-kernel | BI-DBA1FE11 | Yes | Approved umbrella baseline/coverage | OBJ-REUSE, OBJ-AUTHORITY, OBJ-ABSORPTION, OBJ-TRUTH | WK-01 | WF-01 | AC-EX-01, AC-EX-02, AC-EX-03, AC-EX-05, AC-EX-06 | CT-WK |
+| gpp-toolkit | BI-721C467A | Yes | workroom-kernel | OBJ-REUSE, OBJ-AUTHORITY, OBJ-ABSORPTION | GP-01 | GF-01 | AC-EX-02, AC-EX-04, AC-EX-05, AC-EX-06 | CT-GP |
+| scoped-judgment | BI-4DD124E7 | Yes | Approved umbrella baseline/coverage | OBJ-REUSE, OBJ-AUTHORITY, OBJ-ABSORPTION | SJ-01 | JF-01 | AC-EX-02, AC-EX-04, AC-EX-05, AC-EX-06 | CT-SJ |
+| workroom-policy-modules | BI-D30CD423 | Yes | workroom-kernel | OBJ-REUSE, OBJ-AUTHORITY, OBJ-ABSORPTION | WP-01 | PF-01 | AC-EX-02, AC-EX-03, AC-EX-05 | CT-WP |
+| operating-profiles | BI-9874488F | Yes | workroom-kernel; existing portable trust contract | OBJ-REUSE, OBJ-AUTHORITY, OBJ-ABSORPTION | OP-01 | OF-01 | AC-EX-02, AC-EX-03, AC-EX-04, AC-EX-05 | CT-OP |
+| business-surfaces | BI-9A6163AD | Yes | workroom-kernel | OBJ-REUSE, OBJ-ABSORPTION, OBJ-TRUTH | BS-01 | BF-01 | AC-EX-02, AC-EX-05, AC-EX-07 | CT-BS |
+| commons-exchange | BI-0D316824 | Yes | workroom-kernel; scoped-judgment | OBJ-REUSE, OBJ-AUTHORITY, OBJ-ABSORPTION, OBJ-TRUTH | HX-01 | HF-01 | AC-EX-02, AC-EX-04, AC-EX-05, AC-EX-08 | CT-HX |
+
+The requirement references are objective IDs from the approved design baseline;
+verification references are its acceptance IDs. Together the seven deliverables
+retain AC-EX-01 through AC-EX-08. The separate CT groups preserve every functional
+test obligation below. The WK/GP/SJ/WP/OP/BS/HX and flow/test references name
+responsibilities within this plan, not new platform entities or standards.
+
+Record a `decision: decomposed` receipt only after this immutable corrected plan
+exists. Bind the complete graph, existing BI mappings and four native reference
+lists above. Retain the returned receipt canonically in the live backlog and
+Workroom, then validate it with `check_plan_backlog_coverage` while this covered
+head remains frozen. Do not copy its new ID back into this file: that would
+change the immutable blob the receipt binds. Live coverage and plan review,
+rather than this publication prerequisite note, determine current readiness.
+If a baseline or receipt is refused, follow its specific remedy without
+switching lanes or self-approving.
 
 ## Design grounding and impact contract
 
