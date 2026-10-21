@@ -71,6 +71,8 @@ vi.mock("@/lib/shared/lazy-node", () => ({
 // can assert on the (path, content, mode) it was handed WITHOUT the content ever
 // touching a command string.
 const mockWriteSandboxFile = vi.fn((..._args: unknown[]): Promise<void> => Promise.resolve());
+const mockLedgerCount = vi.fn();
+vi.mock("@dpf/db", () => ({ prisma: { toolExecution: { count: (...args: unknown[]) => mockLedgerCount(...args) } } }));
 vi.mock("./cli-pool-status", () => ({ recordCliRateLimit: vi.fn(), clearCliRateLimit: vi.fn() }));
 vi.mock("@/lib/build/sandbox/agent-cli-runtime", () => ({
   writeSandboxFile: (...args: unknown[]) => mockWriteSandboxFile(...args),
@@ -195,3 +197,35 @@ describe("native quota observations preserve execution uncertainty", () => {
       expect(clearCliRateLimit).not.toHaveBeenCalled();
     });
   });
+
+describe("BI-29BB23F5: a self-terminated native error with an empty governed ledger is settled", () => {
+  const quota = { type: "result", subtype: "success", is_error: true, result: "You've hit your weekly limit · resets 2am" };
+  const request = (taskRunId?: string) => makeRequest({
+    mcpSession: { userId: "user-1", agentId: "build-specialist", threadId: "thread-1", ...(taskRunId ? { taskRunId } : {}) },
+    tools: [{ type: "function", function: { name: "record_workroom_evidence", description: "Record", parameters: {} } }],
+  });
+  beforeEach(() => {
+    mockGetProviderBearerToken.mockResolvedValue({ token: "fake-oauth-token" });
+    mockCreateMcpSessionToken.mockResolvedValue("test-native-session");
+    mockLedgerCount.mockReset();
+  });
+  it("raises a rate limit so fallback can continue the same run", async () => {
+    mockLedgerCount.mockResolvedValue(0);
+    mockSpawn.mockReturnValue(createMockProcess(JSON.stringify(quota), 1));
+    const error = await cliAdapter.execute(request("TR-SCHED-B3D332F3")).catch(e => e);
+    expect(error).not.toBeInstanceOf(NativeCliExecutionUncertainError);
+    expect(error).toMatchObject({ name: "InferenceError", code: "rate_limit", providerId: "anthropic-sub" });
+    expect(recordCliRateLimit).toHaveBeenCalledOnce();
+    expect(mockLedgerCount).toHaveBeenCalledOnce();
+  });
+  it("keeps the hold when the governed ledger recorded a call", async () => {
+    mockLedgerCount.mockResolvedValue(2);
+    mockSpawn.mockReturnValue(createMockProcess(JSON.stringify(quota), 1));
+    await expect(cliAdapter.execute(request("TR-SCHED-B3D332F3"))).rejects.toBeInstanceOf(NativeCliExecutionUncertainError);
+  });
+  it("keeps the hold without a TaskRun", async () => {
+    mockSpawn.mockReturnValue(createMockProcess(JSON.stringify(quota), 1));
+    await expect(cliAdapter.execute(request())).rejects.toBeInstanceOf(NativeCliExecutionUncertainError);
+    expect(mockLedgerCount).not.toHaveBeenCalled();
+  });
+});
