@@ -20,6 +20,34 @@ the existing irreversible consequence and destructive-command blocks. Grants,
 token scope, clearance and room membership are still checked. DEV identity is
 context, never an extra grant; the paired installation remains read-only.
 
+## Reading one owned task through a named tool
+
+Connectors that expose named tools can use `get_mcp_task` with one exact `taskId`
+and `mode: "status"` (the default) or `mode: "result"`. It returns an immediate,
+bounded projection, not the protocol's exact underlying result. This read uses
+the existing `agent_control_read` grant and `view_platform` capability. The
+current interactive OAuth bearer, token scope, canonical assistant grants and
+human authority must all remain valid; no submission-only `thread_write` grant
+is required. A rotated bearer in the same authorized family can read the task.
+Another human, assistant or family cannot. Missing historical origin proof,
+PAT/session/credentials-client origins and revoked current authority return the
+same non-disclosing unavailable result.
+
+External tasks validate their saved request and deterministic task identity.
+Native semantic reviews validate their exact immutable request artifact and
+current paired human/assistant content access to the packet-bound Workroom.
+The reader preserves existing initiative-review and durable-inference admission
+checks. A final identity/artifact/current-authority fence discards a changed
+snapshot. There is no conversation lookup, task listing, cancellation, retry,
+dispatch or identity backfill in this tool.
+
+The `owned-mcp-task.v1` result keeps task status, errors, uncertainty, waits and
+genuine receipt identity. Text carries its original size, hash and truncation
+flag; unknown or oversized mandatory outcomes explicitly refuse. Saved requests,
+prompts and raw authority metadata are excluded. A readable status or receipt
+does not prove provider/child/effect settlement or authorize a retry. Existing
+`tasks/get` and `tasks/result` protocol behavior is unchanged.
+
 ## Reading an owned semantic review's recovery state
 
 For exhausted independent-review replacement, follow the

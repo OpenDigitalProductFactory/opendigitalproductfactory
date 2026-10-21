@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # MCP standard Tasks lifecycle — convergence design (Slice 4 / BI-4)
 
 | Field | Value |

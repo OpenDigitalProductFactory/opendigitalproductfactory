@@ -160,12 +160,12 @@ export const MCP_TASK_SELECT = {
   completedAt: true,
 } as const;
 
-const MCP_TASK_DURABLE_SELECT = {
+export const MCP_TASK_DURABLE_SELECT = {
   ...MCP_TASK_SELECT,
   a2aMetadata: true,
 } as const;
 
-type DurableTaskRow = McpTaskRunRow & { a2aMetadata: unknown };
+export type DurableTaskRow = McpTaskRunRow & { a2aMetadata: unknown };
 
 /** Share recovery semantics with submission replay without exposing its request metadata. */
 function taskWaitProjection(row: DurableTaskRow): Record<string, unknown> {
@@ -268,6 +268,12 @@ export async function handleTasksGet(
   const row = await prisma.taskRun.findUnique({ where: { taskRunId: taskId }, select: MCP_TASK_DURABLE_SELECT });
   if (!row) return { kind: "notfound", message: `task not found: ${taskId}` };
   if (row.userId !== userId) return { kind: "forbidden", message: "task belongs to a different auth context" };
+  return projectMcpTaskStatus(row, userId);
+}
+
+/** Canonical projection for an already loaded snapshot; callers supply admission. */
+export async function projectMcpTaskStatus(row: DurableTaskRow, userId: string): Promise<TaskLifecycleResult> {
+  if (row.userId !== userId) return { kind: "forbidden", message: "task belongs to a different auth context" };
   const durableIdentity = durableTaskIdentity(row);
   if (durableIdentity?.projectedOperationId) {
     const operation = await readDurableTaskOperation(row, userId, durableIdentity);
@@ -300,6 +306,15 @@ export async function handleTasksResult(
   const row = await prisma.taskRun.findUnique({ where: { taskRunId: taskId }, select: MCP_TASK_DURABLE_SELECT });
   if (!row) return { kind: "notfound", message: `task not found: ${taskId}` };
   if (row.userId !== userId) return { kind: "forbidden", message: "task belongs to a different auth context" };
+  return projectMcpTaskResult(row, userId, params, currentActor);
+}
+
+/** Shared result owner; named compatibility reads add stricter origin/final fences. */
+export async function projectMcpTaskResult(row: DurableTaskRow, userId: string,
+  params?: Record<string, unknown>, currentActor?: { actingAgentId: string | null; tokenGrantScopes: readonly string[] },
+): Promise<TaskLifecycleResult> {
+  if (row.userId !== userId) return { kind: "forbidden", message: "task belongs to a different auth context" };
+  const taskId = row.taskRunId;
 
   const meta = { "io.modelcontextprotocol/related-task": { taskId } };
   // This projection is read-only. It never enters the receipt healer or the

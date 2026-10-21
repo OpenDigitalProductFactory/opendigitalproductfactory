@@ -21,6 +21,7 @@ const EXPECTED_TOOLS = [
   "cancel_thread",
   "get_thread_result",
   "get_child_threads",
+  "get_mcp_task",
 ];
 
 beforeEach(() => {
@@ -28,7 +29,7 @@ beforeEach(() => {
 });
 
 describe("work-thread pack — registration", () => {
-  it("exposes exactly the four work-thread tools with a handler each", () => {
+  it("exposes the work-thread tools and owned-task reader with a handler each", () => {
     expect(workThreadPack.definitions.map((d) => d.name).sort()).toEqual([...EXPECTED_TOOLS].sort());
     expect(Object.keys(workThreadPack.handlers).sort()).toEqual([...EXPECTED_TOOLS].sort());
   });
@@ -44,11 +45,24 @@ describe("work-thread pack — registration", () => {
     expect(workThreadPack.grants.cancel_thread).toEqual(["thread_write"]);
     expect(workThreadPack.grants.get_thread_result).toEqual(["thread_read"]);
     expect(workThreadPack.grants.get_child_threads).toEqual(["thread_read"]);
+    expect(workThreadPack.grants.get_mcp_task).toEqual(["agent_control_read"]);
 
     expect(isToolAllowedByGrants("spawn_work_thread", ["thread_write"])).toBe(true);
     expect(isToolAllowedByGrants("cancel_thread", ["thread_write"])).toBe(true);
     expect(isToolAllowedByGrants("get_thread_result", ["thread_read"])).toBe(true);
     expect(isToolAllowedByGrants("get_child_threads", ["thread_read"])).toBe(true);
+    expect(isToolAllowedByGrants("get_mcp_task", ["agent_control_read"])).toBe(true);
+    expect(isToolAllowedByGrants("get_mcp_task", ["thread_read", "thread_write"])).toBe(false);
+  });
+
+  it("declares an immediate read-only exact-task status/result schema", () => {
+    const tool = workThreadPack.definitions.find(d => d.name === "get_mcp_task");
+    expect(tool).toMatchObject({ sideEffect: false, annotations: {
+      readOnlyHint: true, destructiveHint: false, idempotentHint: true,
+    }, inputSchema: { additionalProperties: false, required: ["taskId"], properties: {
+      taskId: { type: "string", minLength: 1, maxLength: 256 },
+      mode: { enum: ["status", "result"] },
+    } } });
   });
 });
 

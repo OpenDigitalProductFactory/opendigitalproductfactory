@@ -15,6 +15,18 @@ import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
 const definitions: ToolDefinition[] = [
   {
+    name: "get_mcp_task",
+    description: "Read one task submitted by this connection and assistant. Returns an immediate bounded status or result snapshot; missing authority or origin proof returns unavailable. Reading never retries or cancels work.",
+    inputSchema: { type: "object", additionalProperties: false, properties: {
+      taskId: { type: "string", minLength: 1, maxLength: 256, description: "Exact TaskRun id returned by the original submission." },
+      mode: { type: "string", enum: ["status", "result"], default: "status" },
+    }, required: ["taskId"] },
+    requiredCapability: "view_platform",
+    sideEffect: false,
+    executionMode: "immediate",
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  },
+  {
     name: "spawn_work_thread",
     description: "Start a child coworker thread from the current thread. Use for delegated work that should report back separately.",
     inputSchema: {
@@ -170,6 +182,7 @@ async function getChildThreadsHandler(
 }
 
 const handlers: Record<string, ToolPackHandler> = {
+  get_mcp_task: (params, userId, context) => import("../owned-task-read").then(m => m.getOwnedMcpTask(params, userId, context)),
   spawn_work_thread: (params, userId, context) => spawnWorkThreadHandler(params, userId, context),
   cancel_thread: (params, userId, context) => cancelThreadHandler(params, userId, context),
   get_thread_result: (params, userId) => getThreadResultHandler(params, userId),
@@ -181,6 +194,7 @@ export const workThreadPack: ToolPack = {
   definitions,
   handlers,
   grants: {
+    get_mcp_task: ["agent_control_read"],
     spawn_work_thread: ["thread_write"],
     cancel_thread: ["thread_write"],
     get_thread_result: ["thread_read"],

@@ -589,7 +589,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
 
   // Provider management
   ...PROVIDER_MANAGEMENT_TOOL_GRANTS,
-  // Read-only AI posture uses the same grant as provider management.
+  get_mcp_task: ["agent_control_read"],
   get_ai_platform_posture: ["agent_control_read"],
   run_endpoint_tests: ["agent_control_read"],
   activity_harness_confidence_override: ["agent_control_read"],

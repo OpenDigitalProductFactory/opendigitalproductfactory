@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Bounded owned MCP task reader — implementation plan
 
 **Backlog:** BI-CAP-21C511CA. **Workroom:** WC-0750EFD3. **Profile:** feature, unchanged.
