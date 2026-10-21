@@ -509,7 +509,10 @@ commissioning action evaluate one predicate, and refuse with
    install whose class is only the undeclared cautious default, cannot become the
    controller even with a local Workroom.
 8. The installation operating intent is valid, confirmed and has `evolve-dpf` as its
-   primary purpose.
+   primary purpose or as a declared secondary purpose. An install that operates an
+   organisation can also own platform repository follow-through (kernel decision
+   DI-A6148958CADB, 2026-10-21); the operator declares secondary purposes on the
+   installation identity panel.
 
 Only a user with `manage_platform` whose active human principal owns the Workroom may
 commission it. The queue function runs with a concurrency limit of one. A failing or
