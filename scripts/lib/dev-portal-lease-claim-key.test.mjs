@@ -268,6 +268,22 @@ test('queued preview registers the existing durable consumer with frozen source 
   assert.ok(registration.gateArgv.includes(pin.claimKey));
 });
 
+test('a queued preview accepts the canonical ?tier=full endpoint and still refuses other URL extras', async () => {
+  const { resumePreviewQueue } = await import('../dev-preview-queue-resume.mjs');
+  const register = () => ({ spawned: true, survivesSession: true, pid: 123 });
+  // The bootstrap persists DPF_MCP_URL as <PUBLIC_URL>/api/mcp/v1?tier=full (BI-F91D4DB7).
+  const canonical = await resumePreviewQueue({ ...pin, mcpUrl: 'https://localhost/api/mcp/v1?tier=full' },
+    { now, readSource: source, observerDirectory: '/observers', spawnResumer: register });
+  assert.equal(canonical.code, 75);
+  assert.equal(canonical.spawned, true);
+  for (const mcpUrl of ['https://localhost/api/mcp/v1?tier=full&token=x', 'https://localhost/api/mcp/v1?tier=core',
+    'https://localhost/api/mcp/v1?token=x', 'https://localhost/api/mcp/v1#frag', 'https://user:pw@localhost/api/mcp/v1?tier=full']) {
+    const refused = await resumePreviewQueue({ ...pin, mcpUrl }, { now, readSource: source,
+      spawnResumer: () => assert.fail(`${mcpUrl} must not register`) });
+    assert.equal(refused.reason, 'invalid-pin', mcpUrl);
+  }
+});
+
 test('the registered preview consumer reclaims the same lease without forking another consumer', async () => {
   const { resumePreviewQueue } = await import('../dev-preview-queue-resume.mjs');
   let command;
