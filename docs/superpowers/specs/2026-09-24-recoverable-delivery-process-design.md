@@ -218,6 +218,13 @@ publication checks. Current live queue observations are reproduction evidence,
 not a passing gate or acceptance receipt. Do not activate unmerged toolchain
 source or bypass a pending employee approval to clean up earlier reservations.
 
+Acceptance criteria, quoted from the implementation item's scope:
+
+- AC-QH-1 (R-QH-1 / VC-QH-IDENTITY): accept a handoff only from the queued child exit and one canonical durable-wait packet matching the original source and owner claim key. Missing, foreign and ambiguous packets stop unrun, with no replay of the old pin.
+- AC-QH-2 (R-QH-2 / VC-QH-CHAIN): across at least two integration-identity replacements A→B→C, the child invocations name A then B then C as resumeLeaseId; source, branch, worktree, provider and owner stay unchanged. Server ownership and atomic queued supersession remain authoritative.
+- AC-QH-3 (R-QH-3 / VC-QH-BOUNDS): bounded noisy child output retains the final handoff without unbounded memory/logs; missing proof uses the existing prerequisite-unavailable classification, never a product failure or fabricated pass.
+- AC-QH-4 (R-QH-4 / VC-QH-TERMINAL): cancellation and source drift stop without replacement; host-resource invocations preserve their separate immutable-pin behavior. Existing resumer and gate-resume suites remain green. Protected publication and one real canonical gate still required; no unmerged activation or bypass of an earlier pending approval.
+
 ### 3.8 Pull request and merge
 
 - **State:** the pull request and the merge queue.
