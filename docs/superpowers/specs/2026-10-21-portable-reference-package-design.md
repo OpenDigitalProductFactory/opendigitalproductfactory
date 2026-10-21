@@ -156,6 +156,8 @@ is the first member; remaining paths sort by UTF-16 code unit. The new package
 policy sets every member's mode to `0644`; unlike toolchain installation it has
 no automatically executable `.sh`/`.py` exception. Unsupported paths longer than
 ustar's name/prefix fields fail instead of silently choosing an extended format.
+The maximum is **255 payload files plus the one root inventory member**, for
+256 archive members in total. The inventory is not counted in `files[]`.
 
 The standalone verifier and trusted synthetic runner target **Node.js 24.x**
 (`>=24.0.0 <25.0.0`), matching the repository's `Dockerfile` Node 24 base and
@@ -214,7 +216,7 @@ serialization to repair them. All set-like lists sort by stable identity, with
 `files` by path and references by `(id,version,digest)`, rejecting duplicates.
 
 The inventory uses the existing trusted-JSON depth/node/character ceilings.
-Package lists cannot exceed 256 files/dependencies/references/controls or 128
+Package lists cannot exceed 255 files, 256 dependencies/references/controls or 128
 source entries per file; extensions retain the existing limit of 32. Apply these
 limits to observed parsed content. The release contains these content classes:
 
@@ -266,6 +268,29 @@ The recipient uses a trusted verifier obtained independently of the untrusted
 archive. Do not execute an archive's own verifier, install script, imported plugin
 or hook to decide whether that archive is safe. Every content item is initially
 data, including skills, commands, MCP definitions, JSON schemas and examples.
+
+Every materialized output path uses the following first-version portable grammar:
+1–32 nonempty ASCII segments separated only by `/`, with a total length of at
+most 255 bytes. Each segment is 1–100 characters, starts with an ASCII letter
+or digit, ends with a letter, digit, `_` or `-`, and otherwise contains only
+letters, digits, `.`, `_` or `-`. The one-character case is an ASCII letter or
+digit. Reject `.`/`..`, empty segments, leading/trailing slash, every backslash,
+colon, NUL, control character, non-ASCII character and whitespace. Thus Windows
+drive-relative/absolute paths, UNC paths, alternate-data-stream names and
+trailing-dot/space names are invalid without platform-specific reinterpretation.
+Also reject a segment whose part before its first dot is, case-insensitively,
+`CON`, `PRN`, `AUX`, `NUL`, `COM1`–`COM9` or `LPT1`–`LPT9`. Compare whole paths
+case-insensitively as well as byte-for-byte and reject collisions. Check the
+ustar prefix/name split independently of the total-length rule.
+
+This grammar applies equally to archive member names, `File.path`,
+`licenseInventoryPath`, dependency payload paths and non-null included reference
+paths. It fits the canonical source modules and standard skill/resource names
+identified in this design. No content selection has been frozen: a later selected
+source whose natural path cannot be represented is assigned an explicit safe
+output path in the generated inventory or held, never silently normalized.
+Provenance `SourceFile.path` remains bounded source-identification data and is
+never interpreted as an extraction or executable path.
 
 1. Check the archive's declared format/version and trusted-origin information.
    Inventory claims remain untrusted until their corresponding checks succeed.
