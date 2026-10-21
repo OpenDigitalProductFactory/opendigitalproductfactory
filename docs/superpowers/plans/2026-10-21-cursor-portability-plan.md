@@ -48,6 +48,12 @@ canonical receipt stays on the BI, referenced by this stable section rather than
 editing a committed plan to insert its own future commit identity. No Markdown
 table substitutes for live coverage or authority.
 
+All four native coverage reference arrays must contain nonempty strings present
+verbatim in this immutable plan. For schema v3 they need not be baseline OBJ/AC
+identifiers: use the four original criterion sentences as requirement references,
+and the explicit contract, flow and verification references below. Do not invent
+a baseline or shorten the criterion text into an unbound replacement.
+
 | Deliverable | Existing BI | Required dependency | Requirement references | Contract references | Flow references | Verification references |
 |---|---|---|---|---|---|---|
 | cursor-reference-reproduction | BI-0E56BA38 | BI-07A2B207 delivered package; BI-F9582C48 canonical semantics; actual target authority/environment and assessment scope | The four original intake criteria above; AC-CUR-001, AC-CUR-002, AC-CUR-003, AC-CUR-004, AC-CUR-005, AC-CUR-006, AC-CUR-007, AC-CUR-008, AC-CUR-009, AC-CUR-010, AC-CUR-011, AC-CUR-012 | PC-01, PC-02, PC-03, PC-04, PC-05, PC-06, PC-07, PC-08; trusted-artifact 0.1.0; proposed BI07 inventory 1.0.0; GAID-PD-001; JSI-PD-002 | cursor-inspect-project; cursor-bind-target; cursor-observe-hold; cursor-compare-revalidate | CT-01, CT-02, CT-03, CT-04, CT-05, CT-06, CT-07, CT-08; CUR-V01, CUR-V02, CUR-V03, CUR-V04, CUR-V05, CUR-V06, CUR-V07, CUR-V08, CUR-V09, CUR-V10, CUR-V11, CUR-V12 |
@@ -133,6 +139,12 @@ scope. No runtime action or code edit is performed by writing this plan.
 4. Claim exact future code/test/docs paths; consume the actual change-impact
    contract and add every testImpact and guardObligation to the work brief before
    Red. Unresolved advice requires exhaustive verification, not an exemption.
+5. Recheck canonical coverage **after those code-path claims and before any source
+   implementation**. The schema v3 scope digest includes current BI body, delivery
+   shape, sensitivity and declared edit paths; an unchanged plan does not keep a
+   receipt current when any of those changes. The coordinator must record refreshed
+   coverage for the actual scope and verify it, then reconcile normal implementation
+   admission. Repeat only for a real changed prerequisite, never as a blind retry.
 
 The current **document** scope contract is resolved, with no testImpact or
 guardObligations and a required doc-index check. It says nothing about the
