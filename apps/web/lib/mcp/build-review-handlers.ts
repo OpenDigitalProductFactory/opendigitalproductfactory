@@ -67,7 +67,13 @@ export async function saveBuildEvidence(params: Record<string, unknown>, userId:
 
       // Guide the agent when it saves the wrong field for the current phase
       const currentBuildForPhaseCheck = await prisma.featureBuild.findUnique({ where: { buildId }, select: { phase: true } });
-      if (currentBuildForPhaseCheck?.phase === "plan" && field === "designDoc") {
+      // BI-3E57890E: the design-fix loop revising a plan-phase design is exempt.
+      const { redirectsPlanPhaseDesignSave } = await import("@/lib/build/plan-phase-design-save");
+      if (redirectsPlanPhaseDesignSave({
+        phase: currentBuildForPhaseCheck?.phase,
+        field,
+        allowPlanPhaseDesignRevision: context?.allowPlanPhaseDesignRevision,
+      })) {
         return { success: true, message: 'Design doc updated. IMPORTANT: You are in the PLAN phase. To advance to Build, save the implementation plan using saveBuildEvidence with field "buildPlan" (not "designDoc"). The buildPlan must contain { fileStructure, tasks } arrays.', entityId: buildId };
       }
 
