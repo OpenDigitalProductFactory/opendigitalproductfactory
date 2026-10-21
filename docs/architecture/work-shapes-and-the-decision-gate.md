@@ -397,12 +397,19 @@ assuming coverage, because the honest scope is narrow by design:
 
 - **Tool coverage:** `CONSEQUENTIAL_DECISION_TOOLS` currently holds **two** tools —
   `triage_backlog_item` and `retire_backlog_item`.
-- **Surface:** only `source: "agentic-loop"` (in-portal coworker and Build Studio).
-  External CLI sessions are governed by the plane-1 `PreToolUse` hook instead; direct
-  REST/JSON-RPC is operator traffic and out of scope.
+- **Surface:** the agent surfaces, with one decision table for both:
+  `source: "agentic-loop"` (in-portal coworker and Build Studio) and, since
+  BI-638024F9, `source: "external-jsonrpc"` (external coding agents over
+  `/api/mcp/v1`). The plane-1 `PreToolUse` hook still runs on external clients, but
+  only as an accelerator. Direct REST/JSON-RPC and the portal's own MCP session are
+  operator traffic and out of scope.
 - **Consultation window:** a `principle_decide` call clears the gate for
   `CONSULT_WINDOW_MS` — 30 minutes. The intended bypass is "consult first".
-- **Mode:** `DPF_DECISION_GATE_MODE` = `enforce` (default) | `shadow` | `off`.
+- **Mode:** `DPF_DECISION_GATE_MODE` = `enforce` (default) | `shadow` | `off` for
+  internal agents. External agents follow `DPF_DECISION_GATE_EXTERNAL_MODE`, default
+  `shadow` while the rollout gathers audit data, and set to `enforce` to deny. A
+  global `off` turns the gate off for every source. Every audit line names its
+  `source`, so the shadow data can be read per surface.
 - **Fail-open:** any error allows. A governance guard must never wedge the loop.
 - **Ledger:** the consultation map is per-process and in-memory, so it holds for a
   single-portal deployment and would need a durable store for multi-instance portals.
