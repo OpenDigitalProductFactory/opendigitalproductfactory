@@ -172,9 +172,12 @@ describe.skipIf(!url)("canonical review writer transactions on PostgreSQL", () =
       .rejects.toMatchObject({ code: "23514", constraint: "initiative_artifact_retention_pin_shape" });
   });
   async function displace(client: PoolClient, change: string) {
-    const progress = change === "unknown" ? { executionUncertainty: { schemaVersion: 1, settlement: "unknown" } }
-      : change === "generation" ? { resumeReservedAt: "new-admission" } : {};
-    const status = change === "cancellation" ? "canceled" : change === "generation" ? "working" : "input-required";
+    const progress = ["unknown", "working-unknown"].includes(change) ? { executionUncertainty: { schemaVersion: 1, settlement: "unknown" } }
+      : change === "generation" ? { resumeReservedAt: "new-admission" }
+        : change === "dispatch" ? { dispatch: { claimedAt: "new-dispatch" } }
+          : change === "authority" ? { reviewExecutionAuthority: { schemaVersion: 1, tokenId: "new-authority" } } : {};
+    const status = change === "cancellation" ? "canceled"
+      : ["hold", "unknown"].includes(change) ? "input-required" : "working";
     await client.query('UPDATE "TaskRun" SET status=$1,"progressPayload"=$2::jsonb,"updatedAt"=clock_timestamp() WHERE "taskRunId"=$3', [status, JSON.stringify(progress), taskRunId]);
   }
 
@@ -195,7 +198,7 @@ describe.skipIf(!url)("canonical review writer transactions on PostgreSQL", () =
         actionKey: "record_initiative_design_review", decision: "allow", policyVersion: "fixture-v1", rationale: { taskRunId } } });
     });
 
-    it.each(["hold", "unknown", "generation", "cancellation"])("appends nothing when %s wins the real row lock", async (change) => {
+    it.each(["hold", "unknown", "working-unknown", "generation", "dispatch", "authority", "cancellation"])("appends nothing when %s wins the real row lock", async (change) => {
       const blocker = await pool.connect();
       await blocker.query("BEGIN");
       let pending: ReturnType<typeof writer.run> | undefined;

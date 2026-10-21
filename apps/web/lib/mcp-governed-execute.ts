@@ -214,10 +214,8 @@ async function callExecuteTool(
   // an approved run is first checked here (BI-F4EB23C1).
   const refusal = await oauthRoomRefusal(toolName, params, userId, ctx);
   if (refusal) return refusal;
-  if (ctx?.callerClient === APPROVAL_COMPLETION) {
-    const recoveryRefusal = await checkRecoveredReviewAuthority(userId, ctx);
-    if (recoveryRefusal) return recoveryRefusal;
-  }
+  const recoveryRefusal = await checkRecoveredReviewAuthority(userId, ctx);
+  if (recoveryRefusal) return recoveryRefusal;
   if (_executeToolOverride) return _executeToolOverride(toolName, params, userId, ctx);
   return executeTool(toolName, params, userId, ctx);
 }

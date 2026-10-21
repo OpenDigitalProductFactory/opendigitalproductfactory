@@ -111,7 +111,9 @@ export async function executeRemoteTaskAttempt(input: {
   const taskExecutionFence = parsed.initiativeReviewBinding ? captureTaskExecutionFence(admittedRun.progressPayload,
     (admittedRun.a2aMetadata as Record<string, unknown> | null)?.requestDigest) : undefined;
   const settle = (args: Prisma.TaskRunUpdateManyArgs & { where: { taskRunId: string } }) =>
-    settleRemoteTask(args, reservation, dispatchClaim);
+    settleRemoteTask(args, reservation, dispatchClaim, parsed.initiativeReviewBinding ? {
+      executionFence: taskExecutionFence ?? null, userId: token.userId, agentId: parsed.agentId,
+    } : undefined);
   // A lost acknowledgement is recovery work, not another independent assessment.
   // Keep the same bound receipt and let the fenced settlement preserve cancellation.
   const priorReview = parsed.initiativeReviewBinding

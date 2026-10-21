@@ -5,8 +5,7 @@ import type { InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
 import type { InitiativeArtifactRef, InitiativeGateKey, InitiativeGateReceipt } from "./receipt-schema";
 import { validInitiativeGateReceipt } from "./receipt-validation";
 import { ok, type ActionSuccess } from "@/lib/shared/action-result";
-import { hasExecutionUncertainty } from "@/lib/shared/execution-uncertainty";
-import { captureTaskExecutionFence, sameTaskExecutionFence, type TaskExecutionFence } from "@/lib/shared/task-execution-fence";
+import { taskExecutionEligible, type TaskExecutionFence } from "@/lib/shared/task-execution-fence";
 import { isRolledBackPostgresConflict } from "@/lib/shared/postgres-transaction-conflict";
 
 /** Internal context only: never accepted from tool arguments. This identifies an
@@ -103,8 +102,8 @@ export async function lockBoundReviewEffect(tx: Prisma.TransactionClient, scope:
 /** Call after genuine winner readback, while the original TaskRun lock is held. */
 export function checkBoundReviewWriteExecution(scope: BoundReviewScope, locked: LockedReviewExecution | null): Refusal | null {
   if (!scope.boundReviewTask) return null;
-  if (!locked || locked.status !== "working" || hasExecutionUncertainty(locked.progressPayload)
-    || !sameTaskExecutionFence(scope.boundReviewTask.executionFence, captureTaskExecutionFence(locked.progressPayload, scope.boundReviewTask.requestDigest))) {
+  if (!locked || !taskExecutionEligible({ ...locked, requestDigest: scope.boundReviewTask.requestDigest,
+    executionFence: scope.boundReviewTask.executionFence })) {
     return { ok: false, code: "AUTHORIZATION_DENIED",
       error: "The bound review execution is held, uncertain, unversioned or displaced. No new review effect was published." };
   }

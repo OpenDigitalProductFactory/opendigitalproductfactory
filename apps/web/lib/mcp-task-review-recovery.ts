@@ -11,6 +11,9 @@ import { recoverTerminalWriterEscalation, TERMINAL_WRITER_MAX_ATTEMPTS } from ".
 import { hasExecutionUncertainty } from "./shared/execution-uncertainty";
 import { expandGrants } from "./tak/agent-grants";
 import { isRecord } from "./shared/coerce";
+import { isBoundReviewTask, taskExecutionEligible } from "./shared/task-execution-fence";
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
+import { parseInitiativeReviewBinding } from "./mcp-task-review-contract";
 import type { UserContext } from "./permissions";
 import type { RemoteTaskSubmitParams } from "./mcp-task-submit-params";
 import type { ExistingRemoteTask, RemoteTaskSubmitAuth } from "./mcp-task-submit-types";
@@ -189,9 +192,20 @@ function recoveryWindowOpen(metadata: unknown, progress: unknown): boolean {
   return true;
 }
 
-/** Every governed reader/writer rechecks transferred authority, including approval completion. */
+/** Only the admitted normalized immutable binding can retain execution authority. */
+export function validBoundReviewTaskMetadata(metadata: unknown): boolean {
+  if (!isRecord(metadata)) return false;
+  const binding = parseInitiativeReviewBinding(metadata.initiativeReviewBinding);
+  // Persisted admission is already normalized. Dropping unknown fields would
+  // reinterpret future authority or artifact formats as the current contract.
+  return Boolean(binding && canonicalJson(binding) === canonicalJson(metadata.initiativeReviewBinding));
+}
+
+/** Read-only callback admission for every bound review, including legacy sessions.
+ * Status/result observation uses its own read authority, never this execution gate. */
 export async function reviewRecoveryToolRefusal(input: {
-  taskRunId: string; apiTokenId?: string; userId: string;
+  taskRunId: string; apiTokenId?: string; userId: string; actingAgentId?: string;
+  executionFence?: unknown; phase?: "working" | "approval-resume";
 }): Promise<import("./mcp-tool-types").ToolResult | null> {
   const denied = (): import("./mcp-tool-types").ToolResult => ({ success: false,
     error: "review_execution_authority_refused",
@@ -199,15 +213,24 @@ export async function reviewRecoveryToolRefusal(input: {
   });
   try {
     const task = await prisma.taskRun.findUnique({ where: { taskRunId: input.taskRunId },
-      select: { userId: true, status: true, updatedAt: true, a2aMetadata: true, progressPayload: true } });
-    if (!task || !isRecord(task.progressPayload) || task.progressPayload.reviewExecutionAuthority === undefined) return null;
+      select: { userId: true, currentAgentId: true, status: true, updatedAt: true, a2aMetadata: true, progressPayload: true } });
+    if (!task) return denied();
+    if (isBoundReviewTask(task.a2aMetadata)) {
+      if (!validBoundReviewTaskMetadata(task.a2aMetadata)
+        || task.userId !== input.userId || !task.currentAgentId || !input.actingAgentId
+        || resolveCanonicalAgentId(task.currentAgentId) !== resolveCanonicalAgentId(input.actingAgentId)
+        || !taskExecutionEligible({ status: task.status, progressPayload: task.progressPayload,
+          requestDigest: isRecord(task.a2aMetadata) ? task.a2aMetadata.requestDigest : null,
+          executionFence: input.executionFence, phase: input.phase })) return denied();
+    }
+    if (!isRecord(task.progressPayload) || task.progressPayload.reviewExecutionAuthority === undefined) return null;
     const authority = parseReviewExecutionAuthority(task.progressPayload, task.a2aMetadata, input.userId);
-    if (!authority || task.userId !== input.userId || task.status !== "working"
+    if (!authority || task.userId !== input.userId || !["working", ...(input.phase === "approval-resume" ? ["input-required"] : [])].includes(task.status)
       || authority.tokenId !== input.apiTokenId || hasExecutionUncertainty(task.progressPayload)) return denied();
     const { loadPersistedRemoteTask, reconstructPersistedRemoteTask } = await import("./mcp-task-persisted-request");
     const stored = await loadPersistedRemoteTask(input.taskRunId);
     const reconstructed = stored ? reconstructPersistedRemoteTask(stored) : null;
-    if (!stored || stored.updatedAt.getTime() !== task.updatedAt.getTime() || stored.status !== "working"
+    if (!stored || stored.updatedAt.getTime() !== task.updatedAt.getTime() || stored.status !== task.status
       || !reconstructed?.ok || reconstructed.data.token.tokenId !== authority.tokenId
       || !await revalidateReviewExecutionAuthority({ ...reconstructed.data,
         metadata: stored.a2aMetadata, progress: stored.progressPayload })) return denied();

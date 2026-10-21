@@ -1,6 +1,6 @@
 import "server-only";
 
-import { prisma } from "@dpf/db";
+import { prisma, type Prisma } from "@dpf/db";
 import { randomUUID } from "crypto";
 
 import type {
@@ -17,6 +17,8 @@ import {
 } from "./coworker-authority-decision";
 import { escalationReasonSentence } from "./escalation-gate";
 import type { ApprovalClassification } from "@/lib/coworker/approval-lifetime";
+import { isBoundReviewTask } from "@/lib/shared/task-execution-fence";
+import { reserveTaskRunGenerationWorking } from "@/lib/observability/heartbeat";
 
 export type CoworkerAuthorityInputResolver = (args: {
   execution: GovernedExecuteArgs;
@@ -327,9 +329,28 @@ async function ensureApproval(
   return ensureAuthorityApprovalEnvelope(input);
 }
 
-async function resumeApprovedTask(taskRunId: string): Promise<void> {
+class ReviewResumeRefusal extends Error {
+  constructor(message: string, readonly settled: boolean) { super(message); }
+}
+
+async function resumeApprovedTask(taskRunId: string, execution: GovernedExecuteArgs): Promise<void> {
   if (overrides.authorityApprovalTaskResume) {
     await overrides.authorityApprovalTaskResume(taskRunId);
+    return;
+  }
+  const task = await prisma.taskRun.findUnique({ where: { taskRunId }, select: {
+    status: true, updatedAt: true, progressPayload: true, a2aMetadata: true,
+  } });
+  if (task && isBoundReviewTask(task.a2aMetadata)) {
+    const { reviewRecoveryToolRefusal } = await import("@/lib/mcp-task-review-recovery");
+    const refusal = await reviewRecoveryToolRefusal({ taskRunId, userId: execution.userId,
+      apiTokenId: execution.context?.apiTokenId, actingAgentId: execution.context?.agentId,
+      executionFence: execution.context?.taskExecutionFence, phase: "approval-resume" });
+    if (refusal) throw new ReviewResumeRefusal(refusal.message, refusal.error !== "review_execution_authority_unavailable");
+    if (!await reserveTaskRunGenerationWorking({ taskRunId, expectedStatus: task.status,
+      updatedAt: task.updatedAt, progressPayload: (task.progressPayload ?? {}) as Prisma.InputJsonValue })) {
+      throw new ReviewResumeRefusal("The approved review generation changed before resuming.", true);
+    }
     return;
   }
   const { resumeAuthorityApprovalTask } = await import(
@@ -522,8 +543,12 @@ export async function enforceCoworkerToolAuthority(
   // to resume, and resuming would flip a finished run back to working.
   if (approvedEnvelopeId && reservedAt && input.task?.taskRunId && input.approval?.proposeBoundary !== true) {
     try {
-      await resumeApprovedTask(input.task.taskRunId);
+      await resumeApprovedTask(input.task.taskRunId, execution);
     } catch (error) {
+      if (error instanceof ReviewResumeRefusal && error.settled) {
+        await finalizeCoworkerAuthorityApproval(approvedEnvelopeId, false);
+        return { outcome: "reject", rejection: "authority_denied", message: error.message };
+      }
       // Nothing ran and nothing was decided: give the approval back (BI-5B34D277).
       await releaseCoworkerAuthorityReservation(approvedEnvelopeId, reservedAt).catch((releaseError) => {
         console.error(

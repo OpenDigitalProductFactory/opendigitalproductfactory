@@ -1,7 +1,31 @@
 import { describe, expect, it } from "vitest";
-import { captureTaskExecutionFence, parseTaskExecutionFence, sameTaskExecutionFence } from "./task-execution-fence";
+import { captureTaskExecutionFence, isBoundReviewTask, parseTaskExecutionFence, sameTaskExecutionFence, taskExecutionEligible } from "./task-execution-fence";
 
 describe("admitted task execution identity", () => {
+  it("distinguishes absent review metadata from an explicit invalid binding", () => {
+    expect(isBoundReviewTask({})).toBe(false);
+    expect(isBoundReviewTask({ initiativeReviewBinding: null })).toBe(false);
+    for (const initiativeReviewBinding of [undefined, {}, 42]) {
+      expect(isBoundReviewTask({ initiativeReviewBinding })).toBe(true);
+    }
+  });
+  const requestDigest = "9".repeat(64);
+  const executionFence = captureTaskExecutionFence({}, requestDigest);
+  it("allows a current executor and only an exact parked approval to resume", () => {
+    expect(taskExecutionEligible({ status: "working", progressPayload: {}, requestDigest, executionFence })).toBe(true);
+    expect(taskExecutionEligible({ status: "input-required", progressPayload: {}, requestDigest, executionFence })).toBe(false);
+    expect(taskExecutionEligible({ status: "input-required", progressPayload: {}, requestDigest, executionFence, phase: "approval-resume" })).toBe(true);
+  });
+  it.each([
+    { status: "canceled" }, { executionFence: null }, { requestDigest: "8".repeat(64) },
+    { progressPayload: { executionUncertainty: {} } }, { progressPayload: { resumeReservedAt: "later" } },
+    { progressPayload: { dispatch: { claimedAt: "later" } } },
+    { progressPayload: { reviewExecutionAuthority: { schemaVersion: 1, tokenId: "later" } } },
+  ])("refuses held, unversioned and displaced executors at both execution and approval boundaries: %j", over => {
+    for (const phase of ["working", "approval-resume", "approval-renewal"] as const) {
+      expect(taskExecutionEligible({ status: "working", progressPayload: {}, requestDigest, executionFence, phase, ...over })).toBe(false);
+    }
+  });
   it("distinguishes an admitted initial generation from a missing callback fence", () => {
     const initial = captureTaskExecutionFence(null);
     expect(initial).toEqual({ schemaVersion: 1, reservation: null, dispatchClaim: null, authorityDigest: null, requestDigest: null });

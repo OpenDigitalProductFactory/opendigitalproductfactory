@@ -7,6 +7,7 @@ vi.mock("./mcp-task-original-result", () => ({ readOriginalReviewResult: mocks.c
 import { loadExplicitReviewRecovery } from "./mcp-task-review-recovery";
 import { deterministicExternalTaskRunId, remoteTaskRequestDigest } from "./mcp-task-capacity-contract";
 import { parseRemoteTaskSubmitParams } from "./mcp-task-submit-params";
+import { captureTaskExecutionFence } from "./shared/task-execution-fence";
 
 const scope = ["file_read", "backlog-item:BI-TEST", "tool:read_source_at_version", "tool:record_initiative_architecture_review"];
 const raw = { agentId: "AGT-WS-EA", routeContext: "/build", title: "Review", objective: "Review", prompt: "Review",
@@ -35,6 +36,50 @@ beforeEach(() => {
   mocks.current.mockResolvedValue(true); mocks.authorize.mockResolvedValue({ bounded: true });
   mocks.collect.mockResolvedValue(null);
 });
+
+it("refuses held legacy bound callbacks without a transferred-authority marker", async () => {
+  const { reviewRecoveryToolRefusal } = await import("./mcp-task-review-recovery");
+  mocks.liveTask.mockResolvedValue({ ...row, currentAgentId: raw.agentId,
+    a2aMetadata: { ...row.a2aMetadata, trigger: "external-mcp", initiativeReviewBinding: raw.initiativeReviewBinding },
+    progressPayload: { executionUncertainty: { schemaVersion: 1, kind: "execution-uncertain", settlement: "unknown" } },
+  });
+  expect(await reviewRecoveryToolRefusal({ taskRunId, userId: "human", apiTokenId: "old-token" }))
+    .toMatchObject({ success: false, error: "review_execution_authority_refused" });
+});
+
+it.each(["current", "held", "canceled", "unversioned", "generation", "actor", "owner", "request"])("checks every legacy bound callback: %s", async mode => {
+  const { reviewRecoveryToolRefusal } = await import("./mcp-task-review-recovery");
+  const task = { ...row, status: "working", currentAgentId: raw.agentId, progressPayload: {} as Record<string, unknown>,
+    a2aMetadata: { ...row.a2aMetadata, initiativeReviewBinding: raw.initiativeReviewBinding } };
+  if (mode === "held") task.status = "input-required";
+  if (mode === "canceled") task.status = "canceled";
+  if (mode === "generation") task.progressPayload.resumeReservedAt = "later";
+  if (mode === "actor") task.currentAgentId = "other";
+  if (mode === "owner") task.userId = "other";
+  if (mode === "request") task.a2aMetadata.requestDigest = "f".repeat(64);
+  mocks.liveTask.mockResolvedValue(task);
+  const result = await reviewRecoveryToolRefusal({ taskRunId, userId: "human", actingAgentId: raw.agentId,
+    executionFence: mode === "unversioned" ? null : captureTaskExecutionFence({}, digest) });
+  if (mode === "current") expect(result).toBeNull();
+  else expect(result).toMatchObject({ success: false, error: "review_execution_authority_refused" });
+});
+
+it.each([{}, { initiativeReviewBinding: null }])("preserves unrelated nonreview callbacks with absent binding %j", async metadata => {
+  const { reviewRecoveryToolRefusal } = await import("./mcp-task-review-recovery");
+  mocks.liveTask.mockResolvedValue({ ...row, progressPayload: {}, a2aMetadata: metadata });
+  expect(await reviewRecoveryToolRefusal({ taskRunId, userId: "human" })).toBeNull();
+});
+
+it.each([undefined, {}, { ...raw.initiativeReviewBinding, schemaVersion: 2 },
+  { ...raw.initiativeReviewBinding, artifactRef: { kind: "unknown-version" } }])(
+  "refuses malformed or unknown immutable bindings even with a current full fence: %j", async binding => {
+    const { reviewRecoveryToolRefusal } = await import("./mcp-task-review-recovery");
+    mocks.liveTask.mockResolvedValue({ ...row, status: "working", currentAgentId: raw.agentId,
+      progressPayload: {}, a2aMetadata: { ...row.a2aMetadata, initiativeReviewBinding: binding } });
+    expect(await reviewRecoveryToolRefusal({ taskRunId, userId: "human", actingAgentId: raw.agentId,
+      executionFence: captureTaskExecutionFence({}, digest) }))
+      .toMatchObject({ success: false, error: "review_execution_authority_refused" });
+  });
 
 it("selects the original paused task under current authority without rewriting its immutable origin", async () => {
   const result = await loadExplicitReviewRecovery({ token, parsed: params, userContext: { platformRole: "developer", isSuperuser: false } });
@@ -180,7 +225,8 @@ it("rechecks a recovered task's live permission at each governed effect and hold
       requestedThreadId: null, collaborationKind: "handoff" },
     messages: [{ parts: [{ text: raw.prompt }] }], user: { id: "human", isActive: true, isSuperuser: true, groups: [] } };
   mocks.liveTask.mockResolvedValue(full);
-  const effect = { taskRunId, apiTokenId: "new-token", userId: "human" };
+  const effect = { taskRunId, apiTokenId: "new-token", userId: "human", actingAgentId: raw.agentId,
+    executionFence: captureTaskExecutionFence(full.progressPayload, digest) };
   expect(await reviewRecoveryToolRefusal(effect)).toBeNull();
   mocks.current.mockResolvedValue(false);
   expect(await reviewRecoveryToolRefusal(effect)).toMatchObject({ success: false, error: "review_execution_authority_refused" });

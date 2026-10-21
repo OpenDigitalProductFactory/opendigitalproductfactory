@@ -20,7 +20,7 @@ vi.mock("@/lib/tak/task-records", () => ({ createTaskMessage: vi.fn() }));
 vi.mock("@dpf/db", () => ({
   prisma: {
     user: { findUnique: vi.fn() },
-    taskRun: { findFirst: vi.fn(), update: vi.fn() },
+    taskRun: { findFirst: vi.fn(), findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     agentThread: { upsert: vi.fn() },
     taskMessage: { create: vi.fn() },
   },
@@ -31,6 +31,8 @@ import { resolveMcpApiToken } from "@/lib/auth/mcp-api-token";
 import { verifyMcpSessionToken } from "@/lib/mcp/session-token";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { POST } from "./route";
+import { createAutonomousWorkRun } from "@/lib/tak/autonomous-work-run";
+import { captureTaskExecutionFence } from "@/lib/shared/task-execution-fence";
 
 const resolveMock = vi.mocked(resolveMcpApiToken);
 const govMock = vi.mocked(governedExecuteTool);
@@ -82,6 +84,10 @@ describe("POST tools/call — server-only approval context", () => {
     const taskExecutionFence = { schemaVersion: 1 as const, reservation: "admitted", dispatchClaim: "dispatch", authorityDigest: null, requestDigest: "9".repeat(64) };
     vi.mocked(verifyMcpSessionToken).mockResolvedValue({ userId: "u1", agentId: "AGT-CAPSULE", taskRunId: "TR-BOUND",
       scopes: ["work_capsule_write"], capability: "write", ...(signed ? { taskExecutionFence } : {}) });
+    // This fixture verifies server-only carriage for a nonreview task. Held
+    // bound-review execution is covered separately below.
+    vi.mocked(prisma.taskRun.findUnique).mockResolvedValue({ userId: "u1", currentAgentId: "AGT-CAPSULE",
+      status: "working", a2aMetadata: { initiativeReviewBinding: null }, progressPayload: {} } as never);
     const request = toolRequest({ name: "create_workroom", arguments: { ...ARGS, taskExecutionFence: { forged: true } },
       _meta: { taskExecutionFence: { forged: true } }, taskExecutionFence: { forged: true } });
     request.headers.set("x-mcp-session", "synthetic-test-session");
@@ -99,5 +105,52 @@ describe("POST tools/call — server-only approval context", () => {
     expect(govMock).toHaveBeenCalledOnce();
     const context = govMock.mock.calls[0]![0].context ?? {};
     for (const key of Object.keys(SERVER_ONLY)) expect(context).not.toHaveProperty(key);
+  });
+});
+
+const reviewBinding = {
+  itemId: "BI-REVIEW", gate: "spec-approval", writerToolName: "record_initiative_spec_approval",
+  artifactRef: { kind: "repo-blob-at-commit", repositoryFullName: "org/repo", commitSha: "a".repeat(40),
+    path: "docs/review.md", providerBlobId: "b".repeat(40) },
+  workroomRef: { kind: "workroom-head", workroomId: "WC-REVIEW", repositoryFullName: "org/repo",
+    branchName: "codex/review", headSha: "a".repeat(40) },
+};
+
+describe("POST — bound review callback containment", () => {
+  it.each([
+    ["tools/list", {}],
+    ["tools/call", { name: "load_tools", arguments: { names: ["get_backlog_item"] } }],
+    ["tasks/submit", { agentId: "AGT-CAPSULE", routeContext: "/build", objective: "child",
+      prompt: "child", idempotencyKey: "held-child", riskClass: "read" }],
+    ["tasks/cancel", { taskId: "TR-OTHER" }],
+  ])("refuses %s before its transport handler for an uncertain legacy review", async (method, params) => {
+    vi.mocked(verifyMcpSessionToken).mockResolvedValue({ userId: "u1", agentId: "AGT-CAPSULE",
+      scopes: ["backlog_read", "initiative_evidence_write"], capability: "write",
+      taskRunId: "TR-HELD-REVIEW", threadId: "thread-held", routeContext: "/build" });
+    vi.mocked(prisma.taskRun.findUnique).mockResolvedValue({ userId: "u1", currentAgentId: "AGT-CAPSULE",
+      status: "input-required", a2aMetadata: { initiativeReviewBinding: reviewBinding, requestDigest: "a".repeat(64) },
+      progressPayload: { executionUncertainty: { settlement: "unknown" } } } as never);
+    const request = toolRequest({});
+    request.headers.set("x-mcp-session", "held-session");
+    const response = await POST(new Request(request, { body: JSON.stringify({ jsonrpc: "2.0", id: 700, method, params }) }));
+    expect(response.status).toBe(403);
+    expect((await response.json()).error.data.error).toBe("review_execution_authority_refused");
+    expect(govMock).not.toHaveBeenCalled();
+    expect(createAutonomousWorkRun).not.toHaveBeenCalled();
+    expect(prisma.taskRun.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("dispatches a current bound callback with its exact signed fence", async () => {
+    const requestDigest = "a".repeat(64);
+    const taskExecutionFence = captureTaskExecutionFence({}, requestDigest)!;
+    vi.mocked(verifyMcpSessionToken).mockResolvedValue({ userId: "u1", agentId: "AGT-CAPSULE", taskRunId: "TR-CURRENT-REVIEW",
+      scopes: ["work_capsule_write"], capability: "write", taskExecutionFence });
+    vi.mocked(prisma.taskRun.findUnique).mockResolvedValue({ userId: "u1", currentAgentId: "AGT-CAPSULE",
+      status: "working", a2aMetadata: { initiativeReviewBinding: reviewBinding, requestDigest }, progressPayload: {} } as never);
+    const request = toolRequest({ name: "create_workroom", arguments: ARGS });
+    request.headers.set("x-mcp-session", "current-session");
+    await POST(request);
+    expect(govMock).toHaveBeenCalledOnce();
+    expect(govMock.mock.calls[0]?.[0].context?.taskExecutionFence).toEqual(taskExecutionFence);
   });
 });
