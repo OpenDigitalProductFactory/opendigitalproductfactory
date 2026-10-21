@@ -20,6 +20,7 @@
 import { hasFederatedWorkOriginMarker } from "@dpf/db/federated-work-contract";
 
 import { parseRepoFromUrl, type RepoIdentity } from "@/lib/contributor-change-lanes/github-rest-reader";
+import { declaresRepositoryManagement } from "@/lib/forge/managed-repository-access";
 import {
   loadInstallationOperatingIntent,
   type InstallationIntentDb,
@@ -183,7 +184,7 @@ export function evaluateIntakeControllerClauses(facts: IntakeControllerFacts): I
   check("purpose", intent.status === "valid", () => {
     if (intent.status !== "valid") return null;
     const { primaryPurpose, secondaryPurposes } = intent.intent;
-    return primaryPurpose === REQUIRED_PURPOSE || secondaryPurposes.includes(REQUIRED_PURPOSE) ? null
+    return declaresRepositoryManagement({ primaryPurpose, secondaryPurposes }) ? null
       : `installation purpose is ${primaryPurpose} without ${REQUIRED_PURPOSE} as a secondary purpose`;
   });
   return clauses;
