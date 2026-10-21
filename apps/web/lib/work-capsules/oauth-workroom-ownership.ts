@@ -31,6 +31,18 @@ type OAuthCapsuleTarget = {
   params: Record<string, unknown>; userId: string; agentId?: string; authSource?: string; action: boolean; toolName?: string;
 };
 
+/** The exact call that hands the person's room to this assistant. */
+export function workroomHandoverCall(capsuleId: string, toExecutorKind: WorkCapsuleExecutorKind) {
+  return {
+    tool: WORKROOM_HANDOVER_TOOL,
+    arguments: {
+      capsuleId,
+      toExecutorKind,
+      reason: "A new assistant is taking over this work for the room's owner.",
+    },
+  };
+}
+
 /**
  * The person owns the room but this assistant has never worked in it, which is
  * what a replacement session looks like. Name the handover instead of sending
@@ -44,16 +56,7 @@ function assistantNotAdmitted(capsuleId: string, toExecutorKind: WorkCapsuleExec
       "The person you act for owns this workroom, but you have not been admitted to it. " +
       `Take it over with ${WORKROOM_HANDOVER_TOOL} (the exact call is in data.handover). They may be asked to approve it, unless an operator has already graduated you for this kind of action. ` +
       "After that, get_workroom shows where the work stands and what to do next.",
-    data: {
-      handover: {
-        tool: WORKROOM_HANDOVER_TOOL,
-        arguments: {
-          capsuleId,
-          toExecutorKind,
-          reason: "A new assistant is taking over this work for the room's owner.",
-        },
-      },
-    },
+    data: { handover: workroomHandoverCall(capsuleId, toExecutorKind) },
   };
 }
 type HandoverAccess = { decision: { level: string; reason?: string }; handoverRefusal?: HandoverRefusal };
