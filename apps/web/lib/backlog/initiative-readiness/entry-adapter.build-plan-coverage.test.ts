@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { buildPlanCoveragePayload, traceBuildPlanToAcceptance } from "./build-plan-coverage";
 import { projectBacklogItemReadiness } from "./entry-adapter";
-import { baseline, item, readyActivities, receipt, transitionObject } from "./entry-adapter.test-fixtures";
+import { baseline, item, readyActivities, receipt } from "./entry-adapter.test-fixtures";
 
 const PLAN_DIGEST = `sha256:${"c".repeat(64)}`;
 
