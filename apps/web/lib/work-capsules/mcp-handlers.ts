@@ -517,6 +517,13 @@ export async function heartbeatCapsuleTool(
   if (!capsuleId) {
     return { success: false, error: "missing_capsuleId", message: "capsuleId is required." };
   }
+  let checkpoint;
+  if (params.checkpoint !== undefined) {
+    const { parseExecutorCheckpoint } = await import("./executor-checkpoint");
+    const parsed = parseExecutorCheckpoint(params.checkpoint);
+    if (!parsed.ok) return { success: false, error: "invalid_checkpoint", message: `${parsed.message} The lease was not renewed.` };
+    checkpoint = parsed.checkpoint;
+  }
 
   let capsule;
   try {
@@ -524,6 +531,7 @@ export async function heartbeatCapsuleTool(
       db: workCapsuleDb(),
       capsuleId,
       actor: await actor(userId, context),
+      checkpoint,
     });
   } catch (error) {
     if (!(error instanceof WorkroomLeaseHeldError)) throw error;
