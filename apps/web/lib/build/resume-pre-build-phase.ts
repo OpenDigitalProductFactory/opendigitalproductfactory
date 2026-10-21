@@ -845,6 +845,28 @@ export async function resumePreBuildPhase(params: {
                 reason: `plan → build ${retried.kind} after re-attesting research: ${(retried as { reason?: string }).reason ?? retried.kind}`,
               };
             }
+            // BI-6F2872FC: a plan generated before tasks named the acceptance
+            // criteria they satisfy can never be covered. When only the plan
+            // lanes refuse the build, regenerate it once through the normal
+            // plan dispatch and review; the reviewed plan is then covered.
+            const { decidePlanTraceabilityRegeneration, PLAN_TRACEABILITY_REGENERATION_TOOL } = await import(
+              "@/lib/build/plan-traceability-regeneration"
+            );
+            const regeneration = await decidePlanTraceabilityRegeneration({
+              buildId,
+              originatorRowId: build.originatingBacklogItemId ?? null,
+              buildPlan: build.buildPlan,
+            });
+            if (regeneration.due) {
+              await prisma.buildActivity.create({ data: {
+                buildId,
+                tool: PLAN_TRACEABILITY_REGENERATION_TOOL,
+                summary: "Regenerating the plan so each task names the acceptance criteria it satisfies; the plan gates for this build's shape require that trace.",
+              } });
+              const { dispatchPlanForApprovedBuild } = await import("@/lib/build/plan-on-approval");
+              const regenerated = await dispatchPlanForApprovedBuild({ buildId, userId, forceRegenerate: true });
+              return { kind: "resumed", phase, via: "dispatchPlanForApprovedBuild:traceability", detail: regenerated.kind };
+            }
             return { kind: "skipped", phase, reason: `plan → build ${outcome.kind}: ${outcome.reason}` };
           }
           case "wwmd-withheld":
