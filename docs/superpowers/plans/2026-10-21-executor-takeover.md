@@ -13,13 +13,13 @@ friction. D3 comes before D4. D5 comes last.
 
 ## Coverage
 
-| Deliverable | Backlog item | Design | Acceptance |
-| --- | --- | --- | --- |
-| D1 PR/branch lookup | BI-679D2BF6 | §3.1 | AC-1, AC-2 |
-| D2 merged PR clears delivery state | BI-3A8F935B (absorbs BI-150D4696) | §3.4 | AC-5 |
-| D3 heartbeat checkpoint | BI-11EF5A8C | §3.2 | AC-3 |
-| D4 checkpoint before admission + batched handover | BI-D4144471 | §3.3 | AC-3, AC-4 |
-| D5 takeover runbook | BI-70341CE8 | §3.5 | AC-6 |
+| Deliverable | Backlog item | Design | Objective | Acceptance |
+| --- | --- | --- | --- | --- |
+| D1 PR/branch lookup | BI-679D2BF6 | §3.1 | OBJ-1 | AC-1, AC-2 |
+| D2 merged PR clears delivery state | BI-3A8F935B (absorbs BI-150D4696) | §3.4 | OBJ-4 | AC-5 |
+| D3 heartbeat checkpoint | BI-11EF5A8C | §3.2 | OBJ-2 | AC-3 |
+| D4 checkpoint before admission + batched handover | BI-D4144471 | §3.3 | OBJ-2, OBJ-3 | AC-3, AC-4 |
+| D5 takeover runbook | BI-70341CE8 | §3.5 | OBJ-4 | AC-6 |
 
 Stopping stage tasks on terminal rooms is BI-1DDCE164 (AC-2 there), already
 in delivery in another Workroom. Nothing here depends on its internals.
