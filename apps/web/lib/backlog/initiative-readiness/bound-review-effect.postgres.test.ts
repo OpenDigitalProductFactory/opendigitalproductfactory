@@ -35,7 +35,9 @@ vi.mock("@/lib/documents/blob-storage", () => ({ writeDocumentBlob: async () => 
 import { recordInitiativeGateReceipt } from "./receipt-repository";
 import { recordInitiativeSpecApproval } from "./baseline-repository";
 
-const url = process.env.DPF_SQL_TEST_DATABASE_URL;
+// The shared runner supplies its isolated slot only after governed admission.
+// Never fall back to the install's general DATABASE_URL.
+const url = process.env.DPF_SQL_TEST_DATABASE_URL ?? process.env.DPF_LOCAL_CI_TEST_DATABASE_URL;
 const schema = `review_write_fence_${randomUUID().replaceAll("-", "")}`;
 const tables = ["TaskRun", "BacklogItem", "BacklogItemActivity", "WorkCapsule", "AuthorizationDecisionLog",
   "CoworkerActionEnvelope", "Organization", "DocumentBlob", "Document", "DocumentVersion", "InitiativeArtifactRetentionPin", "FeatureBuild"];
