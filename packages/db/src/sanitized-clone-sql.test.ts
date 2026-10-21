@@ -83,9 +83,9 @@ describe("bounded sanitized insert SQL", () => {
     expect(result.map(statement => statement.values)).toEqual([["x"], ["oversized"], ["y"]]);
   });
 
-  it("uses the literal 256 KiB default and keeps an oversized row alone", () => {
-    const half = "x".repeat(131_072);
-    const oversized = "z".repeat(262_145);
+  it("uses the literal 128 KiB default and keeps an oversized row alone", () => {
+    const half = "x".repeat(65_536);
+    const oversized = "z".repeat(131_073);
     const result = build([{ text: half }, { text: half }, { text: "y" }, { text: oversized }, { text: "after" }]);
     expect(result.map(statement => statement.values.length)).toEqual([2, 1, 1, 1]);
     expect(result.flatMap(statement => statement.values)).toEqual([half, half, "y", oversized, "after"]);

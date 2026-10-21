@@ -68,7 +68,7 @@ single-row exception rather than a hard wire-packet or total-memory ceiling.
    Keep `ON CONFLICT DO NOTHING`. A single row larger than the payload target
    still uses its own statement; the bound must not silently omit or reject
    data previously accepted. Enforce the parameter ceiling before SQL execution.
-   Defaults are 50 rows, 65,535 parameters and a 256 KiB prepared-parameter target.
+   Defaults are 50 rows, 65,535 parameters and a 128 KiB prepared-parameter target.
    Statement-level trigger boundaries intentionally become batch boundaries;
    ordinary trigger suppression remains pinned to each bounded transaction.
 3. `FLOW-COPY`: have the existing transaction writer consume those statements;
@@ -177,16 +177,28 @@ fell to 53,168 after release. These measurements support a bounded payload-histo
 hypothesis rather than table-wide accumulation; they do not attribute every byte
 to one internal client structure or make the cold 16 MiB failure pass.
 
-Reduce only the default prepared-payload target from 1 MiB to 256 KiB. Keep the
+At `b7a898600480e147991e1ad8c41e94450effbea2`, reducing the target from 1 MiB
+to 256 KiB lowered the cold peak to 20,673,384 bytes, but the same 16 MiB
+assertion still failed. The same-path warm peak was 3,647,488 bytes; the positive
+control retained 33,092,968 and fell to 52,496 after release. All 10 PostgreSQL
+cases executed: 9 passed, 1 failed and none skipped. Canonical checks passed,
+but evidence `cmvhzvpv90fzd01lfs807455u` is inconclusive and is not final gate
+qualification. Preserve this failed experiment separately from any later result.
+
+Reduce only the current default prepared-payload target from 256 KiB to 128 KiB. Keep the
 50-row and 65,535-parameter limits, ordered casts/defaults/conflicts, transaction
 owner and oversized-single-row exception. Smaller values still permit 50-row
-statements; 32 KiB JSON rows need approximately eight statements per 50-row
-callback instead of two. This trades more large-payload round trips for a smaller
+statements. In the measured fixture, JSON serialization and other columns make
+each 32 KiB payload row approximately 32,810–32,820 prepared bytes. The target
+change permits three rows per statement instead of seven: 17 statements per
+50-row callback instead of eight (681 instead of 321 across 2,001 rows).
+This trades more large-payload round trips for a smaller
 per-statement prepared payload. Whether this keeps the unchanged cold retained-heap
 bound must be established by the final owned run. It is not a wire or total-heap
-ceiling and does not guarantee any representative clone time. A literal boundary
-regression first observed one five-row statement instead of `[2, 1, 1, 1]`, with
-41 incumbent SQL tests passing. Preserve the cold 16 MiB assertion, all measured
+ceiling and does not guarantee any representative clone time. The measured
+256 KiB result establishes no safe memory margin for 128 KiB. The literal
+128 KiB boundary regression first observed `[3, 2]` instead of `[2, 1, 1, 1]`,
+with 41 incumbent SQL tests passing. Preserve the cold 16 MiB assertion, all measured
 controls and the real PrismaPg writer. Final owned qualification requires the
 complete exact-source experiment to pass this changed default; its actual outcome
 belongs in the Workroom and PR record, separately from source-local checks.
