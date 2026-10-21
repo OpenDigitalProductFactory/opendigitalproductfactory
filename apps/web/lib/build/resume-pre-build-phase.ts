@@ -781,7 +781,8 @@ export async function resumePreBuildPhase(params: {
         const outcome = await dispatchPlanForApprovedBuild({ buildId, userId });
         return { kind: "resumed", phase, via: "dispatchPlanForApprovedBuild", detail: outcome.kind };
       }
-      if ((build.planReview as { reviewIncomplete?: boolean } | null)?.reviewIncomplete) {
+      const planReviewIncomplete = (build.planReview as { reviewIncomplete?: boolean } | null)?.reviewIncomplete === true;
+      if (planReviewIncomplete) {
         // BI-8925E227: no reviewer returned a usable verdict — an outage, not a
         // verdict on the plan. Keep the plan (never regenerate it for this), back
         // off on the consecutive incomplete reviews, then re-run the review. A
@@ -797,14 +798,8 @@ export async function resumePreBuildPhase(params: {
               `not at fault). Keeping the plan; next retry in ${formatWait(backoff.waitMs)} (${backoff.nextAt.toISOString()}).`,
           };
         }
-        const { executeTool } = await import("@/lib/mcp-tools");
-        const result = await executeTool("reviewBuildPlan", { buildId }, userId, { featureBuildId: buildId });
-        return {
-          kind: "resumed",
-          phase,
-          via: "executeTool:reviewBuildPlan",
-          detail: typeof result.message === "string" ? result.message.slice(0, 160) : "review re-run",
-        };
+        // Due: fall through to the review re-run below — the failed-plan
+        // regeneration skips an incomplete review.
       }
       // Plan exists. If its last review FAILED, REGENERATE via the fix loop —
       // re-reviewing the same bad plan just re-fails forever (the live jam: a plan
@@ -813,6 +808,7 @@ export async function resumePreBuildPhase(params: {
       // fix loop (with a fresh verified-paths search + escalation) repairs it.
       const planReviewFailed =
         (build.buildPlan != null) &&
+        !planReviewIncomplete &&
         (build.planReview as { decision?: string } | null)?.decision === "fail";
       if (planReviewFailed) {
         const { dispatchPlanForApprovedBuild } = await import("@/lib/build/plan-on-approval");
