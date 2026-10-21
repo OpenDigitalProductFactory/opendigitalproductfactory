@@ -47,6 +47,16 @@ migration, install default or running service changes here.
 These proposed identifiers describe BI0E's eventual implementation acceptance;
 they are not a frozen conformance denominator or an already minted baseline.
 
+The existing intake acceptance remains authoritative. The proposed detailed
+criteria below refine how to observe it; they do not replace or broaden it:
+
+| Existing BI-0E56BA38 acceptance, verbatim | Proposed detail |
+|---|---|
+| A named Cursor version/surface can reproduce the documented supported profile. | AC-CUR-010, AC-CUR-011, AC-CUR-012 |
+| Skill import is not represented as enforcement or job qualification. | AC-CUR-003, AC-CUR-008 |
+| Unsupported mandatory requirements prevent the affected conformance claim or activity. | AC-CUR-004, AC-CUR-005, AC-CUR-012 |
+| Evidence and adapter mapping are portable and do not assume DPF-local grants or secrets. | AC-CUR-001, AC-CUR-009, AC-CUR-010 |
+
 **OBJ-CUR-001:** Derive an inspectable Cursor content projection from the same immutable portable package without creating another editable definition or policy store.
 
 **OBJ-CUR-002:** Make every required semantic loss and unproven enforcement boundary explicit, holding affected import, activity and claims rather than degrading silently.
