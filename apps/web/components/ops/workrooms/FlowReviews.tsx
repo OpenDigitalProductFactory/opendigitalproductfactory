@@ -48,6 +48,7 @@ export function FlowReviews({ history, everyDays, t }: { history: FlowReviewHist
   return (
     <section aria-labelledby="shape-reviews-heading" className="space-y-2">
       <h3 id="shape-reviews-heading" className="text-sm font-medium text-[var(--dpf-text)]">{t("flow.reviews.heading", { days: everyDays })}</h3>
+      <p className="text-xs text-[var(--dpf-muted)]">{t("flow.reviews.scope")}</p>
       {!history ? (
         <p className="text-xs text-[var(--dpf-muted)]">{t("flow.reviews.noData")}</p>
       ) : (

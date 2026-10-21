@@ -22,7 +22,7 @@ import { loadRoomAiUse } from "./room-ai-spend.server";
 import { TERMINAL_WORKROOM_STATUSES } from "./standing-room-nesting";
 import { getWorkShape, getWorkShapeVersion } from "./work-shapes";
 import { readWorkShapeClaimRef } from "./workroom-shape-claim";
-import { computeFlowReviewHistory, type FlowReviewHistory } from "./flow-review-receipt";
+import { computeFlowReviewHistory, liveStageHolds, type FlowReviewHistory } from "./flow-review-receipt";
 import { computeShapeStepMeasures, typicalStepWaitMs, type ShapeStepMeasures, type StepSnapshot } from "./shape-step-measures";
 import { buildShapeFlowMap, type WorkroomFlowMapModel } from "./workroom-flow-map";
 import { classifyDriveSegment, type WorkroomFlowState } from "./workroom-flow-state";
@@ -200,27 +200,13 @@ export async function loadShapeFlowView(input: {
     now,
   });
 
-  const liveHolds = new Map<string, Map<string, number>>();
-  for (const room of inScope) {
-    const obs = room.current;
-    if (!obs?.action || !obs.reason || !obs.stageKey) continue;
-    const classified = classifyDriveSegment({ action: obs.action, reason: obs.reason });
-    if (classified?.state !== "awaiting-person" && classified?.state !== "blocked") continue;
-    const cause = classified.state === "awaiting-person" ? "awaiting-person" : (holdCauseTag(classified.cause, obs.detail) ?? "blocked");
-    const causes = liveHolds.get(obs.stageKey) ?? new Map<string, number>();
-    causes.set(cause, (causes.get(cause) ?? 0) + 1);
-    liveHolds.set(obs.stageKey, causes);
-  }
   const reviews = computeFlowReviewHistory({
     shapeRef,
     stages: model.stages.map((stage) => ({ key: stage.key, title: stage.title })),
     snapshots: history,
     everyDays: definition.reviewPoint.everyDays,
-    liveHolds: [...liveHolds].map(([stageKey, causes]) => ({
-      stageKey,
-      roomsHeld: [...causes.values()].reduce((sum, n) => sum + n, 0),
-      cause: [...causes.entries()].sort((a, b) => b[1] - a[1])[0]![0],
-    })),
+    // Snapshots are per shape version, so the cause reads every room on it, not this area's.
+    liveHolds: liveStageHolds(rooms.filter((room) => room.shapeRef === shapeRef)),
     now,
   });
 

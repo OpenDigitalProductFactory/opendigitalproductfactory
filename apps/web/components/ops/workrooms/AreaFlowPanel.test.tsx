@@ -174,6 +174,8 @@ describe("FlowReviews in the drill-in", () => {
     };
     render(<ShapeFlowDrillIn view={view} backHref="/a" baseHref="/a" stageKey={null} t={t} />);
     const reviews = screen.getByRole("region", { name: "Flow reviews, every 28 days" });
+    // Snapshots are per shape version, so the panel says its reviews span every area.
+    expect(within(reviews).getByText(/Reviews cover every room on this shape version, in every area/)).toBeInTheDocument();
     expect(within(reviews).getByText(/Baseline, 2026-07-01 to 2026-07-29: a step typically takes 10h, flow efficiency 10%, 20 steps finished\./)).toBeInTheDocument();
     expect(within(reviews).getByText(/A step typically takes 4h \(baseline 10h\); flow efficiency 25% \(baseline 10%\)\./)).toBeInTheDocument();
     expect(within(reviews).getByText(/Most waiting: Merge, 3 held, typically waiting 2d\. Held because: waiting on a person\./)).toBeInTheDocument();

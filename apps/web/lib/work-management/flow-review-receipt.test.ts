@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { computeFlowReviewHistory, type ReceiptSnapshot } from "./flow-review-receipt";
+import { computeFlowReviewHistory, liveStageHolds, type ReceiptSnapshot } from "./flow-review-receipt";
 
 const H = 3_600_000;
 const SHAPE = "delivery-small@1.0.0";
@@ -78,5 +78,23 @@ describe("computeFlowReviewHistory", () => {
   it("ignores other versions' queues", () => {
     const other = { ...snap("implement", 1, 50, 99, 1), queueKey: "wr:delivery-small@2.0.0:implement" };
     expect(computeFlowReviewHistory({ shapeRef: SHAPE, stages, snapshots: [other], everyDays: 7, now: new Date() })).toBeNull();
+  });
+});
+
+describe("liveStageHolds", () => {
+  const obs = (action: string, reason: string, stageKey: string | null) => ({ current: { action, reason, stageKey, cycleKey: null } });
+  it("counts held rooms per step and names the cause most of them share; working and stepless rooms are not held", () => {
+    expect(liveStageHolds([
+      obs("pause", "conformance_pause", "merge"),
+      obs("pause", "conformance_pause", "merge"),
+      obs("attention", "role_stage", "merge"),
+      obs("attention", "role_stage", "review"),
+      obs("dispatch_agent", "agent_stage", "merge"),
+      obs("pause", "conformance_pause", null),
+      { current: null },
+    ])).toEqual([
+      { stageKey: "merge", roomsHeld: 3, cause: "conformance_pause" },
+      { stageKey: "review", roomsHeld: 1, cause: "awaiting-person" },
+    ]);
   });
 });
