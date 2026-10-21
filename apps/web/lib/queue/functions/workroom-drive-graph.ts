@@ -172,7 +172,7 @@ export async function applyGraphDrivePlan(input: {
   for (const token of dispatch) {
     // GPP element 2 "Attachment" + element 5 "Capability set": each branch's
     // task carries only its own stage's declared tools (design §11, correction 7).
-    const brief = stageBriefInputFromDefinition({ capsuleId: room.capsuleId, roomObjective: room.objective ?? null,
+    const brief = stageBriefInputFromDefinition({ capsuleId: room.capsuleId, roomObjective: room.objective ?? null, backlogItemKey: room.workItemKey ?? null,
       shapeKey: plan.shapeKey ?? "", shapeVersion: plan.shapeVersion ?? "", definition: plan.definition ?? null, stageKey: token.stageKey });
     const scheduled = await effects.upsertAgentTask({
       taskId: token.taskId as string,

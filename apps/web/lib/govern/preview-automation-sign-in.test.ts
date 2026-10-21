@@ -37,6 +37,43 @@ describe("admitted preview automation identity", () => {
 });
 
 describe("Docker Desktop host mount identity", () => {
+  const macLease = { ...lease, worktreePath: "/Users/markbodman/dpf-worktrees/reusable-continuation" };
+  const macContainer = (source = `/host_mnt${macLease.worktreePath}`) => ({ State: { Running: true }, NetworkSettings: { Ports: { "3000/tcp": [{ HostIp: "127.0.0.1", HostPort: "3001" }] } }, Mounts: [{ Type: "bind", Source: source, Destination: "/workspace" }], Config: { Env: ["DPF_ENVIRONMENT_CLASS=development"], Labels: { "com.docker.compose.service": "dev-portal", "dpf.preview.lease": "NPEL-1", "dpf.preview.sha": "sha" } } });
+  it("accepts the exact observed Mac namespace only with Desktop daemon evidence and retains literal POSIX equality", () => {
+    assertPreviewIssuerContainer(macContainer(), macLease, "sha", "Docker Desktop");
+    const literal = { ...macLease, worktreePath: `/host_mnt${macLease.worktreePath}` };
+    assertPreviewIssuerContainer(macContainer(literal.worktreePath), literal, "sha", "Docker Desktop");
+    assertPreviewIssuerContainer(macContainer(`/host_mnt${literal.worktreePath}`), literal, "sha", "Docker Desktop");
+  });
+  it("rejects unproved aliases, different sources, controls, traversal and prefix lookalikes", () => {
+    for (const operatingSystem of [undefined, "", "Linux", "Ubuntu 24.04 LTS", "docker desktop", "Docker Desktop other"]) {
+      expect(() => assertPreviewIssuerContainer(macContainer(), macLease, "sha", operatingSystem)).toThrow("preview_issuer_binding_mismatch");
+    }
+    const source = `/host_mnt${macLease.worktreePath}`;
+    for (const wrong of ["/host_mnt/Users/markbodman/dpf", source.replace("/Users/", "/users/"),
+      `${source}\0`, `${source}\r`, `${source}\n`, `${source}/../reusable-continuation`, `${source}/./`,
+      source.slice(1), source.replace("/host_mnt/", "/host_mnt-other/"), `/other${source}`, `${source}-other`, `/host_mnt/host_mnt${macLease.worktreePath}`]) {
+      expect(() => assertPreviewIssuerContainer(macContainer(wrong), macLease, "sha", "Docker Desktop")).toThrow("preview_issuer_binding_mismatch");
+    }
+    for (const worktreePath of [`${macLease.worktreePath}\n`, "/Users/markbodman/dpf-worktrees/../reusable-continuation", "Users/feature"]) {
+      expect(() => assertPreviewIssuerContainer(macContainer(), { ...macLease, worktreePath }, "sha", "Docker Desktop")).toThrow("preview_issuer_binding_mismatch");
+    }
+  });
+  it("retains running, port, service, lease, SHA, mount and environment guards after accepting the alias", () => {
+    const mutations = [
+      (c: ReturnType<typeof macContainer>) => { c.State.Running = false; },
+      (c: ReturnType<typeof macContainer>) => { c.NetworkSettings.Ports["3000/tcp"][0]!.HostPort = "3000"; },
+      (c: ReturnType<typeof macContainer>) => { c.NetworkSettings.Ports["3000/tcp"][0]!.HostIp = "0.0.0.0"; },
+      ...["com.docker.compose.service", "dpf.preview.lease", "dpf.preview.sha"].map(label => (c: ReturnType<typeof macContainer>) => { c.Config.Labels[label as keyof typeof c.Config.Labels] = "foreign"; }),
+      (c: ReturnType<typeof macContainer>) => { c.Mounts[0]!.Type = "volume"; },
+      (c: ReturnType<typeof macContainer>) => { c.Mounts[0]!.Destination = "/other"; },
+      (c: ReturnType<typeof macContainer>) => { c.Config.Env = ["DPF_ENVIRONMENT_CLASS=production"]; },
+    ];
+    for (const mutate of mutations) {
+      const actual = macContainer(); mutate(actual);
+      expect(() => assertPreviewIssuerContainer(actual, macLease, "sha", "Docker Desktop")).toThrow("preview_issuer_binding_mismatch");
+    }
+  });
   it("accepts the Windows host path from Linux but rejects foreign drive, worktree and relative paths", () => {
     const windowsLease = { ...lease, worktreePath: "D:/DPF-worktrees/scoped-investment-balance" };
     const container = { State: { Running: true }, NetworkSettings: { Ports: { "3000/tcp": [{ HostIp: "127.0.0.1", HostPort: "3001" }] } }, Mounts: [{ Type: "bind", Source: "/run/desktop/mnt/host/d/DPF-worktrees/scoped-investment-balance", Destination: "/workspace" }], Config: { Env: ["DPF_ENVIRONMENT_CLASS=development"], Labels: { "com.docker.compose.service": "dev-portal", "dpf.preview.lease": "NPEL-1", "dpf.preview.sha": "sha" } } };
@@ -76,6 +113,38 @@ describe("canonical preview session issuance", () => {
     expect(mocks.mint).toHaveBeenCalledWith(expect.objectContaining({ baseUrl: admitted.url }), expect.objectContaining({ db, env: expect.objectContaining({ DPF_ENVIRONMENT_CLASS: "development", AUTH_SECRET: "preview-only-secret".repeat(4) }) }));
     expect(mocks.disconnect).toHaveBeenCalledOnce();
     expect(mocks.execute.mock.calls.some(([, args]) => args[0] === "exec")).toBe(false);
+    expect(mocks.execute).toHaveBeenCalledWith("docker", ["info", "--format", "{{.OperatingSystem}}"], expect.objectContaining({ timeout: 10000 }));
+  });
+  it.each(["Docker Desktop", "Ubuntu 24.04 LTS", "", "failed"])("binds the observed Mac preview through actual inspected daemon metadata: %s", async operatingSystem => {
+    const worktreePath = "/Users/markbodman/dpf-worktrees/reusable-continuation";
+    mocks.lease.mockResolvedValue({ ...admitted, worktreePath });
+    mocks.execute.mockImplementation(async (_bin, args) => {
+      if (args[0] === "info") {
+        if (operatingSystem === "failed") throw new Error("private daemon metadata");
+        return { stdout: `${operatingSystem}\n`, stderr: "" };
+      }
+      const actual = container(); actual.Mounts[0]!.Source = `/host_mnt${worktreePath}`;
+      return { stdout: args[0] === "ps" ? "abc123def456" : JSON.stringify([actual]), stderr: "" };
+    });
+    const result = issuePreviewAutomationSignIn({ leaseId: "NPEL-1", ownerSessionId: "session", userId: "actor" });
+    if (operatingSystem === "Docker Desktop") {
+      await expect(result).resolves.toMatchObject({ issued: true });
+      expect(mocks.execute).toHaveBeenCalledWith("docker", ["info", "--format", "{{.OperatingSystem}}"], expect.objectContaining({ timeout: 10000 }));
+    } else {
+      await expect(result).rejects.toThrow("preview_issuer_binding_mismatch");
+      expect(mocks.createDb).not.toHaveBeenCalled();
+      expect(mocks.mint).not.toHaveBeenCalled();
+    }
+  });
+  it.each(["/feature", "D:/DPF-worktrees/scoped-investment-balance"])("preserves an existing mount when engine metadata fails: %s", async worktreePath => {
+    mocks.lease.mockResolvedValue({ ...admitted, worktreePath });
+    mocks.execute.mockImplementation(async (_bin, args) => {
+      if (args[0] === "info") throw new Error("private daemon metadata");
+      const actual = container(); actual.Mounts[0]!.Source = worktreePath === "/feature" ? worktreePath : "/run/desktop/mnt/host/d/DPF-worktrees/scoped-investment-balance";
+      return { stdout: args[0] === "ps" ? "abc123def456" : JSON.stringify([actual]), stderr: "" };
+    });
+    await expect(issuePreviewAutomationSignIn({ leaseId: "NPEL-1", ownerSessionId: "session", userId: "actor" })).resolves.toMatchObject({ issued: true });
+    expect(mocks.execute).toHaveBeenCalledWith("docker", ["info", "--format", "{{.OperatingSystem}}"], expect.objectContaining({ timeout: 10000 }));
   });
   it("refuses an unowned source room before Docker or preview DB access", async () => {
     mocks.room.mockImplementation(async ({ where }) => where.executorRef ? { repositoryFullName: "owner/repo", status: "working" } : null);

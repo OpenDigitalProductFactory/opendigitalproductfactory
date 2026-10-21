@@ -3,6 +3,7 @@
 import { createHash } from "node:crypto";
 import { copySanitizedCursorBatches } from "./sanitized-clone-batches";
 import { sanitizeConfidentialRow } from "./sanitized-clone";
+import { buildSanitizedInsertStatements } from "./sanitized-clone-sql";
 
 void (async () => {
   const rowBytes = 512 * 1024;
@@ -21,13 +22,21 @@ void (async () => {
   const hash = createHash("sha256");
   await copySanitizedCursorBatches(source, "SELECT id, name, payload, NULL AS embedding FROM large_fixture", async rows => {
     for (let i = 0; i < rows.length; i++) rows[i] = sanitizeConfidentialRow(rows[i]!, Number(rows[i]!.id));
-    // Equivalent destination serialization/backpressure; no retained writes.
-    for (const row of rows) {
-      if (!String(row.name).startsWith("Dev User") || row.embedding !== null) throw new Error("unsanitized payload");
-      const payload = JSON.stringify(row.payload);
-      hash.update(payload);
-      totalBytes += payload.length;
-      totalRows++;
+    if (rows.some(row => !String(row.name).startsWith("Dev User") || row.embedding !== null)) throw new Error("unsanitized payload");
+    const types = new Map([
+      ["id", { dataType: "text", udtName: "text" }],
+      ["name", { dataType: "text", udtName: "text" }],
+      ["payload", { dataType: "jsonb", udtName: "jsonb" }],
+      ["embedding", { dataType: "text", udtName: "text" }],
+    ]);
+    // Exercise actual bounded statement serialization/backpressure, retaining no writes.
+    for (const statement of buildSanitizedInsertStatements("Fixture", rows, types)) {
+      for (let index = 2; index < statement.values.length; index += 4) {
+        const payload = statement.values[index] as string;
+        hash.update(payload);
+        totalBytes += payload.length;
+        totalRows++;
+      }
     }
     peakHeap = Math.max(peakHeap, process.memoryUsage().heapUsed);
   });
