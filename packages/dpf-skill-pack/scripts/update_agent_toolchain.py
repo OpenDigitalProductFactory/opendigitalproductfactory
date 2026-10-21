@@ -833,6 +833,22 @@ def ensure_codex_config(
     return write_text_if_changed(path, text)
 
 
+def converge_codex_project_config(project_root: Path, mcp_url: str, dry_run: bool) -> str:
+    """Run the optional project-override repair; a refusal is a status, not an abort.
+
+    BI-CEDE5B55: ensure_codex_project_config refuses (ValueError) whenever it
+    cannot validate the TOML, including on stock macOS python3 3.9 with no
+    tomli. Uncaught, that refusal ended main() before Grok, Claude and the
+    shared copy converged, leaving every client stale. The file is already
+    left unchanged on refusal, so report it and carry on.
+    """
+    try:
+        changed = ensure_codex_project_config(project_root, mcp_url, dry_run)
+    except ValueError as error:
+        return f"unchanged ({error})"
+    return "converged" if changed else "current"
+
+
 def ensure_codex_project_config(project_root: Path, mcp_url: str, dry_run: bool) -> bool:
     """Repair an explicitly scoped override, validating all preserved TOML data."""
     path = project_root / ".codex" / "config.toml"
@@ -2489,7 +2505,8 @@ def main(argv: list[str]) -> int:
             global_config = codex_config_path(home)
             saved = global_config.read_text(encoding="utf-8-sig") if global_config.exists() else ""
             endpoint = args.mcp_url or existing_codex_mcp_endpoint(saved) or DEFAULT_MCP_URL
-            ensure_codex_project_config(args.project_root, endpoint, args.dry_run)
+            project_status = converge_codex_project_config(args.project_root, endpoint, args.dry_run)
+            print(f"  Codex project override : {project_status}")
         codex_hooks_status = install_codex_hooks(codex_managed, home, args.dry_run)
         print(
             f"  Codex      : marketplace + config converged; plugin {codex_status}; "
