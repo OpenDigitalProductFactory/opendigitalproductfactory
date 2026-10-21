@@ -19,6 +19,7 @@ import {
   runSourceCheckedClone,
   runWithDestinationCleanup,
   insertRowsWithReplicationDisabled,
+  createSanitizedCloneInsertWriter,
   resolveCompatibleCopyColumns,
   sanitizeConfidentialRow,
 } from "./sanitized-clone";
@@ -232,6 +233,60 @@ describe("destination cleanup", () => {
 });
 
 describe("bounded confidential inserts", () => {
+  it("reuses metadata only within one clone attempt and refreshes each new attempt", async () => {
+    const queried: string[] = [];
+    const transaction = {
+      $queryRawUnsafe: async (_sql: string, table: string) => {
+        queried.push(table);
+        return [{ columnName: "id", dataType: "text", udtName: "text" }];
+      },
+      $executeRawUnsafe: async () => 1,
+    };
+    const client = { $transaction: async (write: (tx: typeof transaction) => Promise<void>) => write(transaction) };
+    const attempt = createSanitizedCloneInsertWriter(client as never);
+    await attempt("First", [{ id: "1" }]);
+    await attempt("First", [{ id: "2" }]);
+    await attempt("Second", [{ id: "3" }]);
+    expect(queried).toEqual(["First", "Second"]);
+    await createSanitizedCloneInsertWriter(client as never)("First", [{ id: "4" }]);
+    expect(queried).toEqual(["First", "Second", "First"]);
+  });
+
+  it("does not cache a failed metadata query", async () => {
+    let reads = 0;
+    const transaction = {
+      $queryRawUnsafe: async () => {
+        if (++reads === 1) throw new Error("catalog unavailable");
+        return [{ columnName: "id", dataType: "text", udtName: "text" }];
+      },
+      $executeRawUnsafe: async () => 1,
+    };
+    const client = { $transaction: async (write: (tx: typeof transaction) => Promise<void>) => write(transaction) };
+    const attempt = createSanitizedCloneInsertWriter(client as never);
+    await expect(attempt("First", [{ id: "1" }])).rejects.toThrow("catalog unavailable");
+    await attempt("First", [{ id: "1" }]);
+    expect(reads).toBe(2);
+  });
+
+  it("writes a fetched 50-row window as one ordered parameterized statement", async () => {
+    const statements: Array<{ sql: string; values: unknown[] }> = [];
+    const transaction = {
+      $queryRawUnsafe: async () => [{ columnName: "id", dataType: "text", udtName: "text" }],
+      $executeRawUnsafe: async (sql: string, ...values: unknown[]) => {
+        statements.push({ sql, values });
+        return 1;
+      },
+    };
+    const client = { $transaction: async (write: (tx: typeof transaction) => Promise<void>) => write(transaction) };
+    const rows = Array.from({ length: 50 }, (_, index) => ({ id: `row-${index}` }));
+    await insertRowsWithReplicationDisabled(client as never, "Window", rows);
+    const inserts = statements.filter(({ sql }) => sql.startsWith("INSERT INTO"));
+    expect(inserts).toHaveLength(1);
+    expect(inserts[0]!.values).toEqual(rows.map(row => row.id));
+    expect(inserts[0]!.sql).toContain("($1), ($2)");
+    expect(inserts[0]!.sql).toContain("ON CONFLICT DO NOTHING");
+  });
+
   it("uses explicit bounded transactions and disables triggers in every chunk", async () => {
     const events: string[] = [];
     const transactionOptions: Array<{ maxWait?: number; timeout?: number }> = [];
@@ -266,7 +321,7 @@ describe("bounded confidential inserts", () => {
       { maxWait: 10_000, timeout: 30_000 },
     ]);
     expect(events.filter((sql) => sql === "SET LOCAL session_replication_role = replica")).toHaveLength(2);
-    expect(events.filter((sql) => sql.startsWith("INSERT INTO"))).toHaveLength(3);
+    expect(events.filter((sql) => sql.startsWith("INSERT INTO"))).toHaveLength(2);
   });
 });
 
