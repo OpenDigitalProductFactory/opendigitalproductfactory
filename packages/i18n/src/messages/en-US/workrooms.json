@@ -192,6 +192,7 @@
     "back": "← All shapes in this area",
     "versionNav": "Shape version",
     "version": "v{$version}",
+    "versionMarker": "New shape version: {$versions}",
     "roomsInFlowOn": "{$count} rooms in flow on v{$version}. Choose a step to see its rooms.",
     "roomsAt": "Rooms at {$stage}",
     "noRoomsAtStep": "No rooms are at this step now.",
@@ -209,6 +210,19 @@
       "ladderLabel": "Timeline: process time above, wait time below, for each step",
       "ladderTotal": "Process {$process} · wait {$wait} · flow efficiency {$efficiency}.",
       "ladderUnmeasured": "{$count} step(s) left out: too few exits to measure."
+    },
+    "reviews": {
+      "heading": "Flow reviews, every {$days} days",
+      "baseline": "Baseline, {$from} to {$to}: a step typically takes {$dwell}, flow efficiency {$efficiency}, {$exits} steps finished.",
+      "baselineTooFew": "Baseline, {$from} to {$to}: too few steps finished to measure ({$exits} of {$min}).",
+      "firstDue": "The first review is on {$date}, once the four-week baseline is complete.",
+      "noData": "No review yet: this version has no step data.",
+      "measures": "A step typically takes {$dwell} (baseline {$baselineDwell}); flow efficiency {$efficiency} (baseline {$baselineEfficiency}).",
+      "tooFew": "Too few steps finished in the last {$days} days to compare ({$exits} of {$min}).",
+      "bottleneck": "Most waiting: {$stage}, {$count} held, typically waiting {$wait}.",
+      "bottleneckUnmeasured": "Most waiting: {$stage}, {$count} held.",
+      "cause": "Held because: {$cause}.",
+      "nothingHeld": "Nothing was held at this review."
     },
     "working": "Being worked",
     "waitingPerson": "Waiting on a person",

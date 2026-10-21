@@ -6,9 +6,10 @@ import { MessagesProvider } from "@/components/i18n/MessagesProvider";
 import { Surface } from "@/components/ui/Surface";
 import { WorkroomFlowMap } from "@/components/workspace/workroom/WorkroomFlowMap";
 import { AREA_SECTIONS } from "@/lib/navigation/portal-shell-sections";
-import { loadPortfolioFlowView, loadShapeFlowView } from "@/lib/work-management/area-flow.server";
+import { loadPortfolioFlowView, loadShapeFlowView, loadStageWaits } from "@/lib/work-management/area-flow.server";
 import { bottleneckSentence, heroShape, resolveHeroPortfolio, type PortfolioDecompositionLike } from "@/lib/work-management/main-stream-hero";
 import { getWorkShape } from "@/lib/work-management/work-shapes";
+import { workroomStageQueueKey } from "@/lib/work-management/workroom-stage-telemetry";
 import { formatDuration } from "@/lib/datetime";
 import { getT } from "@/lib/i18n/t.server";
 import { getLocaleContext } from "@/lib/i18n/locale-context.server";
@@ -30,7 +31,8 @@ export async function MainStreamHero({ archetypeId }: { archetypeId: string | nu
   const workHref = `/area/${section.key}?view=work`;
   const shape = heroShape(flow);
   const view = shape ? await loadShapeFlowView({ shapeKey: shape.shapeKey, portfolioRole: role }).catch(() => null) : null;
-  const sentence = bottleneckSentence(flow, (key) => getWorkShape(key)?.title ?? key);
+  const waits = await loadStageWaits(flow.shapes.filter((row) => row.held.length > 0).map((row) => row.shapeRef)).catch(() => new Map<string, number | null>());
+  const sentence = bottleneckSentence(flow, (key) => getWorkShape(key)?.title ?? key, (shapeRef, stageKey) => waits.get(workroomStageQueueKey(shapeRef, stageKey)) ?? null);
   const t = await getT("workrooms");
   const locale = await getLocaleContext();
 

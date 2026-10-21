@@ -22,7 +22,8 @@ import { loadRoomAiUse } from "./room-ai-spend.server";
 import { TERMINAL_WORKROOM_STATUSES } from "./standing-room-nesting";
 import { getWorkShape, getWorkShapeVersion } from "./work-shapes";
 import { readWorkShapeClaimRef } from "./workroom-shape-claim";
-import { computeShapeStepMeasures, type ShapeStepMeasures } from "./shape-step-measures";
+import { computeFlowReviewHistory, type FlowReviewHistory } from "./flow-review-receipt";
+import { computeShapeStepMeasures, typicalStepWaitMs, type ShapeStepMeasures, type StepSnapshot } from "./shape-step-measures";
 import { buildShapeFlowMap, type WorkroomFlowMapModel } from "./workroom-flow-map";
 import { classifyDriveSegment, type WorkroomFlowState } from "./workroom-flow-state";
 import {
@@ -105,7 +106,28 @@ export type ShapeFlowView = {
   roomsAtStep: ShapeRoomAtStep[] | null;
   /** Per-step data boxes, timeline ladder and heat (F4, spec §4 VSM). */
   stepMeasures: ShapeStepMeasures;
+  /** Baseline and the reviews at each review point (F8b, spec §8). */
+  reviews: FlowReviewHistory;
+  reviewEveryDays: number;
 };
+
+/**
+ * Typical wait per held step for the given shape versions, keyed by stage
+ * queue key: what the home's bottleneck sentence ranks on (BI-9148060C).
+ */
+export async function loadStageWaits(shapeRefs: readonly string[], now: Date = new Date()): Promise<Map<string, number | null>> {
+  if (shapeRefs.length === 0) return new Map();
+  const rows = await prisma.queueMetricSnapshot.findMany({
+    where: {
+      OR: shapeRefs.map((shapeRef) => ({ queueKey: { startsWith: `${WORKROOM_STAGE_QUEUE_PREFIX}${shapeRef}:` } })),
+      period: { gte: new Date(now.getTime() - FLOW_WINDOW_DAYS * DAY_MS).toISOString().slice(0, 10) },
+    },
+    select: { queueKey: true, period: true, cycleP50Ms: true, processP50Ms: true, firstPassYield: true, throughput: true },
+  });
+  const byKey = new Map<string, StepSnapshot[]>();
+  for (const row of rows) byKey.set(row.queueKey, [...(byKey.get(row.queueKey) ?? []), row]);
+  return new Map([...byKey].map(([queueKey, snapshots]) => [queueKey, typicalStepWaitMs(snapshots)]));
+}
 
 export async function loadShapeFlowView(input: {
   shapeKey: string;
@@ -120,7 +142,7 @@ export async function loadShapeFlowView(input: {
   if (!definition) return null;
   const shapeRef = `${definition.key}@${definition.version}`;
 
-  const [rooms, snapshots, keyed] = await Promise.all([
+  const [rooms, snapshots, keyed, history] = await Promise.all([
     loadRooms(),
     prisma.queueMetricSnapshot.findMany({
       where: {
@@ -133,6 +155,11 @@ export async function loadShapeFlowView(input: {
       where: { queueKey: { startsWith: `${WORKROOM_STAGE_QUEUE_PREFIX}${definition.key}@` } },
       select: { queueKey: true },
       distinct: ["queueKey"],
+    }),
+    // The version's whole history: its baseline is its first four weeks.
+    prisma.queueMetricSnapshot.findMany({
+      where: { queueKey: { startsWith: `${WORKROOM_STAGE_QUEUE_PREFIX}${shapeRef}:` } },
+      select: { queueKey: true, period: true, depth: true, cycleP50Ms: true, processP50Ms: true, firstPassYield: true, throughput: true },
     }),
   ]);
 
@@ -173,5 +200,29 @@ export async function loadShapeFlowView(input: {
     now,
   });
 
-  return { model, versions, roomsAtStep, stepMeasures };
+  const liveHolds = new Map<string, Map<string, number>>();
+  for (const room of inScope) {
+    const obs = room.current;
+    if (!obs?.action || !obs.reason || !obs.stageKey) continue;
+    const classified = classifyDriveSegment({ action: obs.action, reason: obs.reason });
+    if (classified?.state !== "awaiting-person" && classified?.state !== "blocked") continue;
+    const cause = classified.state === "awaiting-person" ? "awaiting-person" : (holdCauseTag(classified.cause, obs.detail) ?? "blocked");
+    const causes = liveHolds.get(obs.stageKey) ?? new Map<string, number>();
+    causes.set(cause, (causes.get(cause) ?? 0) + 1);
+    liveHolds.set(obs.stageKey, causes);
+  }
+  const reviews = computeFlowReviewHistory({
+    shapeRef,
+    stages: model.stages.map((stage) => ({ key: stage.key, title: stage.title })),
+    snapshots: history,
+    everyDays: definition.reviewPoint.everyDays,
+    liveHolds: [...liveHolds].map(([stageKey, causes]) => ({
+      stageKey,
+      roomsHeld: [...causes.values()].reduce((sum, n) => sum + n, 0),
+      cause: [...causes.entries()].sort((a, b) => b[1] - a[1])[0]![0],
+    })),
+    now,
+  });
+
+  return { model, versions, roomsAtStep, stepMeasures, reviews, reviewEveryDays: definition.reviewPoint.everyDays };
 }
