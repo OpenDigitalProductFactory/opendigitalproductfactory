@@ -624,7 +624,7 @@ export async function claimGovernedBacklogWorkspace(args: {
       const row = await tx.workroom.findUnique({ where: { capsuleId: claim.capsuleId } }) as Record<string, unknown> | null;
       // BI-36FC2981: the room is born owned, in the claim's own transaction.
       const coordinatorCount = row && ownership && tx.workroomParticipant
-        ? await bornOwned(tx as CapsuleDb & { workroomParticipant: RoomOwnershipDb["workroomParticipant"] }, {
+        ? await bornOwned(tx as CapsuleDb & RoomOwnershipDb, {
           workroomRowId: String(row.id), ownership, actor: args.actor,
         })
         : undefined;
@@ -699,7 +699,7 @@ export async function claimGovernedBacklogWorkspace(args: {
 
 /** Establish ownership and record it; returns the room's active coordinator count. */
 async function bornOwned(
-  tx: CapsuleDb & { workroomParticipant: RoomOwnershipDb["workroomParticipant"] },
+  tx: CapsuleDb & RoomOwnershipDb,
   args: { workroomRowId: string; ownership: Awaited<ReturnType<typeof resolveRoomOwnershipPrincipals>>; actor: WorkCapsuleActor },
 ): Promise<number> {
   const outcome = await establishRoomOwnership(tx, { workroomId: args.workroomRowId, ...args.ownership });
