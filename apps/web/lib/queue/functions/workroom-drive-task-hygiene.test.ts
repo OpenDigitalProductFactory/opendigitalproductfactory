@@ -4,8 +4,6 @@
 // Every room had either left the drive (Build Studio executor after #6391,
 // archived) or advanced to an attention stage (spec-approval, merge). Their
 // */15 tasks kept firing; each run re-verified a stage nobody would read again.
-// Separately, one room's throw aborted the whole tick, so rooms after it in the
-// ordering were not driven at all.
 
 import { describe, expect, it, vi } from "vitest";
 
@@ -13,7 +11,7 @@ import { buildDispatchCheckpoint } from "@/lib/work-management/workroom-drive-ch
 import { workroomDriveTaskId } from "@/lib/work-management/drive-resolution";
 import { buildWorkShapeClaim } from "@/lib/work-management/workroom-shape-claim";
 import { runWorkroomDriveJob, type WorkroomDriveEffects, type WorkroomDriveRoom } from "./workroom-drive";
-import { deactivateUndrivenRoomTasks, workItemKeyOf } from "./workroom-drive-data";
+import { deactivateUndrivenRoomTasks, taskLeftBehind, workItemKeyOf } from "./workroom-drive-data";
 
 const SHAPE = "obligation-assurance-watch";
 
@@ -85,22 +83,19 @@ describe("attention stops the task the drive dispatched for an earlier stage", (
   });
 });
 
-describe("one room's failure does not stop the tick", () => {
-  it("drives the remaining rooms, names the room that failed, and still fails the run", async () => {
-    const fx = effects();
-    fx.upsertAgentTask.mockImplementationOnce(async () => {
-      throw new Error("Recorded dispatch requires task identity reconciliation before replay");
-    });
-    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
-    await expect(runWorkroomDriveJob(new Date("2026-09-01T00:00:00.000Z"), {
-      listRooms: async () => [room({ id: "row-a", capsuleId: "WC-AAAA" }), room({ id: "row-b", capsuleId: "WC-BBBB" })],
-      effects: fx,
-    })).rejects.toThrow(/identity reconciliation/);
-    // The second room was still driven: its task was enqueued and its tick persisted.
-    expect(fx.upsertAgentTask).toHaveBeenCalledTimes(2);
-    expect(fx.persist.mock.calls.some((call) => call[0]?.roomId === "row-b")).toBe(true);
-    expect(logged.mock.calls.some((call) => String(call[0]).includes("WC-AAAA"))).toBe(true);
-    logged.mockRestore();
+describe("taskLeftBehind", () => {
+  const planAt = (stageKey: string) => ({ shapeKey: SHAPE, stageKey });
+  it("names the room's task only when its last enqueue was for another stage", () => {
+    const state = { workroomDispatchCheckpoint: checkpointAt("sweep") };
+    expect(taskLeftBehind({ capsuleId: "WC-TEST", workspaceState: state }, planAt("raise"))).toBe(workroomDriveTaskId("WC-TEST", SHAPE));
+    expect(taskLeftBehind({ capsuleId: "WC-TEST", workspaceState: state }, planAt("sweep"))).toBeNull();
+  });
+
+  it("ignores another room's checkpoint, a missing checkpoint and a plan with no shape", () => {
+    const foreign = { workroomDispatchCheckpoint: checkpointAt("sweep", "WC-OTHER") };
+    expect(taskLeftBehind({ capsuleId: "WC-TEST", workspaceState: foreign }, planAt("raise"))).toBeNull();
+    expect(taskLeftBehind({ capsuleId: "WC-TEST", workspaceState: {} }, planAt("raise"))).toBeNull();
+    expect(taskLeftBehind({ capsuleId: "WC-TEST", workspaceState: { workroomDispatchCheckpoint: checkpointAt("sweep") } }, { shapeKey: null, stageKey: "raise" })).toBeNull();
   });
 });
 

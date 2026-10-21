@@ -12,6 +12,8 @@ import {
   COORDINATION_SCOPE_TYPE,
 } from "@/lib/work-management/coordinator-eligibility";
 import type { RecordedEvidence } from "@/lib/work-management/stage-evidence-receipts";
+import { workroomDriveTaskId } from "@/lib/work-management/drive-plan-stage";
+import { readDispatchCheckpoint } from "@/lib/work-management/workroom-drive-checkpoint";
 import { planContainmentRelations, TERMINAL_WORKROOM_STATUSES, terminalStandingRoomIds } from "@/lib/work-management/standing-room-nesting";
 
 /**
@@ -473,4 +475,25 @@ export async function deactivateUndrivenRoomTasks(db?: {
     console.warn("[workroom-drive] undriven room task stop skipped:", error);
     return 0;
   }
+}
+
+/**
+ * The room's sequential stage task, when an attention tick has moved the room
+ * off the stage that task was last enqueued for (BI-1DDCE164). That task is
+ * then working a stage nobody will read again, so the drive stops it.
+ *
+ * Attention on the SAME stage returns null and leaves the task alone: a later
+ * same-stage dispatch replays the recorded enqueue without reactivating its
+ * task (workroom-drive-scheduling.ts), so stopping it here could strand a stage
+ * the drive still wants run.
+ */
+export function taskLeftBehind(
+  room: { capsuleId: string; workspaceState: unknown },
+  plan: { shapeKey?: string | null; stageKey?: string | null },
+): string | null {
+  if (!plan.shapeKey) return null;
+  const workspace = room.workspaceState && typeof room.workspaceState === "object" ? room.workspaceState as Record<string, unknown> : {};
+  const enqueued = readDispatchCheckpoint(workspace.workroomDispatchCheckpoint ?? null);
+  const taskId = workroomDriveTaskId(room.capsuleId, plan.shapeKey);
+  return enqueued && enqueued.confirmedEffect.taskId === taskId && enqueued.stage.stageKey !== plan.stageKey ? taskId : null;
 }
