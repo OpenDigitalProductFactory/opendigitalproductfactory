@@ -13,6 +13,14 @@ const TOTAL_BYTES = 32 * 1024 * 1024;
 const identityHash = (identity: Identity) => createHash("sha256").update(canonicalJson(identity)).digest("hex");
 
 function compact(row: Row): Row {
+  // A room the person owns but this assistant has not joined discloses only
+  // what workroom_assistant_not_admitted already does, plus the caller's key.
+  if (row.admission === "handover-required") {
+    return { capsuleId: row.capsuleId, status: row.status, backlogItemId: row.backlogItemId ?? null,
+      headBranch: row.headBranch ?? null, pullRequestNumber: row.pullRequestNumber ?? null,
+      liveness: row.liveness, isLive: row.isLive, isReapable: row.isReapable,
+      admission: row.admission, handover: row.handover };
+  }
   const shortenedFields: string[] = [];
   const bounded = (key: string, value: unknown, max = 120) => {
     const text = typeof value === "string" ? value : "";

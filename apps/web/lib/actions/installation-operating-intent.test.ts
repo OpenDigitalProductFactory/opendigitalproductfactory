@@ -350,4 +350,57 @@ describe("declareInstallationIdentity", () => {
       "pairedProductionInstallationRef",
     );
   });
+
+  describe("secondary purposes (DI-A6148958CADB)", () => {
+    const confirmedRows = () => ({
+      rows: {
+        [OPERATING_INTENT_CONFIG_KEY]: CONFIRMED_DEV_INTENT,
+        [ENVIRONMENT_CLASS_CONFIG_KEY]: {
+          schemaVersion: 1,
+          environmentClass: "development",
+          declaredAt: "2026-08-02T00:00:00.000Z",
+          declaredByPrincipalId: "PRN-1",
+        },
+      },
+      installerEnvironmentClass: "development",
+    });
+
+    it("saves the declared secondary purposes, dropping duplicates and the primary", async () => {
+      seed(confirmedRows());
+      const result = await declareInstallationIdentity({
+        ...DEV_DECLARATION,
+        primaryPurpose: "evolve-dpf",
+        secondaryPurposes: ["grow-channel", "evolve-dpf", "grow-channel"],
+      });
+      expect(result).toMatchObject({ ok: true, data: { kind: "saved", changed: true, confirmationStatus: "confirmed" } });
+      expect(written()[OPERATING_INTENT_CONFIG_KEY]).toMatchObject({ secondaryPurposes: ["grow-channel"] });
+    });
+
+    it("refuses a secondary purpose outside the closed vocabulary without writing", async () => {
+      seed(confirmedRows());
+      const result = await declareInstallationIdentity({ ...DEV_DECLARATION, secondaryPurposes: ["take-over-the-world"] });
+      expect(result).toMatchObject({ ok: false, error: expect.stringMatching(/Choose other jobs from/) });
+      expect(mocks.transaction).not.toHaveBeenCalled();
+      expect(mocks.requireCapability).not.toHaveBeenCalled();
+    });
+
+    it("keeps the stored secondary purposes when the form does not send any", async () => {
+      seed({
+        ...confirmedRows(),
+        rows: { ...confirmedRows().rows, [OPERATING_INTENT_CONFIG_KEY]: { ...CONFIRMED_DEV_INTENT, confirmation: { status: "suggested" }, secondaryPurposes: ["grow-channel"] } },
+      });
+      await declareInstallationIdentity(DEV_DECLARATION);
+      expect(written()[OPERATING_INTENT_CONFIG_KEY]).toMatchObject({ secondaryPurposes: ["grow-channel"] });
+    });
+
+    it("does not rewrite when the secondary purposes already match", async () => {
+      seed({
+        ...confirmedRows(),
+        rows: { ...confirmedRows().rows, [OPERATING_INTENT_CONFIG_KEY]: { ...CONFIRMED_DEV_INTENT, secondaryPurposes: ["grow-channel"] } },
+      });
+      const result = await declareInstallationIdentity({ ...DEV_DECLARATION, secondaryPurposes: ["grow-channel"] });
+      expect(result).toMatchObject({ ok: true, data: { changed: false } });
+      expect(mocks.transaction).not.toHaveBeenCalled();
+    });
+  });
 });

@@ -14,6 +14,7 @@ import {
   mapUpstreamIssues,
   runInboundIssueTriage,
   type InboundEcosystemItem,
+  type InboundIngestOutcome,
   type InboundTriageResult,
 } from "./inbound-issue-triage";
 
@@ -33,7 +34,7 @@ export interface InboundTriageRunnerDeps {
   /** Reads issues from the commissioned repository — never a fallback one. */
   readIssues?: (repo: RepoIdentity) => Promise<{ ok: boolean; issues?: unknown[]; error?: string }>;
   readPeerDemand?: () => Promise<Array<{ mirrorId: string; payload: unknown }>>;
-  ingest?: (input: unknown) => Promise<{ itemId: string; created: boolean }>;
+  ingest?: (input: unknown) => Promise<InboundIngestOutcome>;
   onFailure?: (item: InboundEcosystemItem, error: unknown) => void;
 }
 
@@ -72,7 +73,7 @@ export async function runEcosystemInboundTriage(
     if (!issueResult.ok || !Array.isArray(issueResult.issues)) {
       sourceErrors.push({ source: "upstream-issue", error: ("error" in issueResult ? issueResult.error : null) ?? "Issue read returned no valid issue list" });
     } else {
-      items.push(...mapUpstreamIssues(issueResult.issues as Parameters<typeof mapUpstreamIssues>[0]));
+      items.push(...mapUpstreamIssues(issueResult.issues as Parameters<typeof mapUpstreamIssues>[0], repo));
     }
   } catch (error) {
     sourceErrors.push({ source: "upstream-issue", error: getErrorMessage(error) });
@@ -100,7 +101,12 @@ export async function runEcosystemInboundTriage(
   const ingest = deps.ingest ?? (async (input: unknown) => {
     const { ingestBacklogItem } = await import("@/lib/operate/backlog-ingest");
     const filed = await ingestBacklogItem(input as Parameters<typeof ingestBacklogItem>[0]);
-    return { itemId: filed.itemId, created: filed.created };
+    return {
+      itemId: filed.itemId,
+      created: filed.created,
+      outcome: filed.outcome,
+      reviewCandidates: filed.reviewCandidates,
+    };
   });
 
   const result = await runInboundIssueTriage({

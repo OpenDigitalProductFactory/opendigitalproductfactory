@@ -679,4 +679,47 @@ describe("dispatchDesignReviewFixLoop (design-review fix loop)", () => {
     expect(mockEscalate).not.toHaveBeenCalled();
   });
 
+  // BI-3E57890E: the independent reviewer failed a plan-phase design that Build
+  // Studio's own review passed. The loop takes the reviewer's findings as its
+  // input and saves the revision even though the build is in plan.
+  it("revises a design from an independent review's findings although its own review passed", async () => {
+    const designFields = { id: "ck4", title: "Forge outbox", kind: "fix", originatingBacklogItemId: "cmpcuid1",
+      designReview: { decision: "pass", issues: [] }, designDoc: { problemStatement: "Old" } };
+    mockPrisma.featureBuild.findUnique.mockImplementation(async (args: { select?: Record<string, boolean> }) => {
+      const select = args?.select ?? {};
+      if (select.kind) return designFields;
+      if (select.originatingBacklogItemId) return { originatingBacklogItemId: "cmpcuid1", designDoc: designFields.designDoc, title: "T", description: "D" };
+      if (select.designReview) return { designReview: { decision: "pass", issues: [] } };
+      return { designDoc: { problemStatement: "Revised" } };
+    });
+    mockPrisma.backlogItem.findUnique.mockResolvedValue({ title: "BI Title", body: "Body.", effortSize: "medium", workType: "bug" });
+    mockGetBuildStudioConfig.mockResolvedValue({
+      provider: "claude", claudeProviderId: "anthropic-sub", codexProviderId: "", grokProviderId: "", opencodeProviderId: "",
+      claudeModel: "sonnet", codexModel: "", grokModel: "", opencodeModel: "",
+      selection: engineSelection("claude", "anthropic-sub"),
+    });
+    mockDispatchIdeateResearch.mockResolvedValue({ success: true, designDoc: { problemStatement: "Revised" }, rawOutput: "{}", durationMs: 5 });
+    mockExecuteTool.mockResolvedValue({ success: true });
+
+    const res = await dispatchDesignReviewFixLoop({
+      buildId: "FB-IR", userId: "u-1",
+      failedReview: { decision: "fail", issues: [{ severity: "important", description: "[spec-approval] No per-class retry budget." }] },
+    });
+
+    expect(res).toMatchObject({ kind: "repaired", rounds: 1 });
+    expect(mockDispatchIdeateResearch).toHaveBeenCalledWith(expect.objectContaining({
+      userContext: expect.stringContaining("No per-class retry budget."),
+    }));
+    expect(mockExecuteTool).toHaveBeenCalledWith(
+      "saveBuildEvidence",
+      expect.objectContaining({ buildId: "FB-IR", field: "designDoc" }),
+      "u-1",
+      expect.objectContaining({ allowPlanPhaseDesignRevision: true }),
+    );
+    // The build stays in plan: the finished ideate phase run is not reopened.
+    const { startBuildPhaseRun } = await import("./build-phase-run");
+    expect(startBuildPhaseRun).not.toHaveBeenCalled();
+    expect(mockEscalate).not.toHaveBeenCalled();
+  });
+
 });

@@ -201,10 +201,33 @@ async function readCredential(prisma: PrismaLike, providerId: string): Promise<s
   }
 }
 
+/**
+ * The managed-repository login (BI-985F4EC9), written by the device flow with
+ * the "repository-controller" purpose and checked against the managed
+ * repository itself. Duplicated as a literal (not imported from
+ * lib/forge/managed-repository-access) to keep this reader's import graph flat.
+ */
+const REPOSITORY_CONTROLLER_PROVIDER_ID = "github-repository-controller";
+
+export type ResolveGithubTokenOptions = {
+  /**
+   * Try the managed-repository login first, then the existing chain. Issue
+   * intake sets it: the controller credential is the one the operator logged
+   * in for that repository. Installs that predate it keep the old chain.
+   */
+  preferRepositoryController?: boolean;
+};
+
 // Exported for reuse by release-health (BI-3630773C); callers that can read
 // public repos treat a null return as "proceed unauthenticated", not an error.
-export async function resolveGithubToken(prisma: PrismaLike): Promise<string | null> {
-  for (const providerId of GITHUB_READ_CREDENTIAL_PROVIDER_IDS) {
+export async function resolveGithubToken(
+  prisma: PrismaLike,
+  options: ResolveGithubTokenOptions = {},
+): Promise<string | null> {
+  const chain = options.preferRepositoryController
+    ? [REPOSITORY_CONTROLLER_PROVIDER_ID, ...GITHUB_READ_CREDENTIAL_PROVIDER_IDS]
+    : GITHUB_READ_CREDENTIAL_PROVIDER_IDS;
+  for (const providerId of chain) {
     const token = await readCredential(prisma, providerId);
     if (token) return token;
   }

@@ -883,6 +883,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/worktree-liveness.test.mjs",
         "scripts/lib/worktree-janitor-core.test.mjs",
         "scripts/worktree-janitor.test.mjs",
+        "scripts/worktree-janitor-sh.test.mjs",
         "scripts/lib/worktree-session-heartbeat.test.mjs",
         // BI-DBAD1A1B: SessionEnd process matching accepts only the canonical
         // worktree itself or descendants, never sibling worktrees/CI runners.

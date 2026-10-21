@@ -22,6 +22,7 @@ import {
   type DecisionShadowLedgerDb,
   type ShadowLedgerSyncOutcome,
 } from "@/lib/decision/decision-shadow-ledger-bridge";
+import { PROPOSED_OPTION_PAYLOAD_KEY, normalizeProposedOptionId } from "@/lib/decision/coworker-proposal";
 
 type DecisionInteractionClient = {
   decisionInteraction: {
@@ -310,6 +311,14 @@ export async function persistDecisionInteraction(input: {
    */
   agentId?: string | null;
   /**
+   * The option the coworker itself proposed (BI-AE416D75), as opposed to the
+   * kernel's pick in `evaluation.recommendedOptionId`. Validated against the
+   * offered menu and recorded as `outcomePayload.proposedOptionId`; one outside
+   * the menu is dropped, never recorded. The trust ledger measures the
+   * coworker against it.
+   */
+  proposedOptionId?: string | null;
+  /**
    * Trust-envelope immutability seal (BI-81CC5D8E). When present, the row is
    * written as the next append-only entry in a hash chain. Omitted for callers
    * that do not seal (behavior unchanged — all chain columns stay NULL).
@@ -328,6 +337,10 @@ export async function persistDecisionInteraction(input: {
 }> {
   const interactionId = input.interactionId ?? createDecisionInteractionId();
   const agentId = input.agentId?.trim() || null;
+  const proposedOptionId = normalizeProposedOptionId(input.proposedOptionId, {
+    options: input.evaluation.options,
+    scoredOptions: input.evaluation.scoredOptions,
+  });
   const row = await input.db.decisionInteraction.create({
     data: {
       interactionId,
@@ -386,6 +399,7 @@ export async function persistDecisionInteraction(input: {
         stanceAlignment: input.evaluation.stanceAlignment ?? null,
         relevanceMethod: input.evaluation.relevanceMethod ?? null,
         gapReason: input.evaluation.gapReason ?? null,
+        ...(proposedOptionId ? { [PROPOSED_OPTION_PAYLOAD_KEY]: proposedOptionId } : {}),
       },
     },
   }) as Record<string, unknown>;
@@ -398,6 +412,7 @@ export async function persistDecisionInteraction(input: {
         riskTier: input.evaluation.riskTier,
         outcomeType: input.evaluation.outcomeType,
         recommendedOptionId: input.evaluation.recommendedOptionId ?? null,
+        proposedOptionId,
         options: input.evaluation.options,
         rationale: input.evaluation.rationale || null,
         // A decision is born unresolved; slice 1 fills the outcome half later.
