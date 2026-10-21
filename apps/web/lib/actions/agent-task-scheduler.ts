@@ -22,7 +22,7 @@ import { formatScheduledTurnPrompt } from "./scheduled-turn-prompt";
 import {
   classifyScheduledRequiredTools, scheduledToolsNeedingPin, scheduledRunLastStatus,
   createTaskRunForScheduledTask,
-  detectScheduledRunFailure, withPersistedExecutions,
+  detectScheduledRunFailure, withPersistedExecutions, scheduledMandatoryToolGap, scheduledRequiredToolCorrection,
   type ScheduledTaskRunRef,
 } from "@/lib/tak/scheduled-task-runs";
 import { createTaskMessage } from "@/lib/tak/task-records";
@@ -516,6 +516,9 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       taskKind: task.taskKind, prompt: task.prompt, agentId: task.agentId,
       tools: [...tools, ...deferredTools], externalAccess,
     });
+    // BI-62DB6C03: a Workroom stage is never dispatched without its evidence writer.
+    const writerGap = scheduledMandatoryToolGap({ prompt: task.prompt, taskConfig: task.taskConfig, mode: toolArgs.mode, attached: tools, deferred: deferredTools });
+    if (writerGap) throw new Error(`Scheduled run not dispatched (${writerGap}).`);
 
     // Mirror the interactive coworker path (agent-coworker.sendMessage): carry the
     // coworker's configured model requirements into the scheduled run. Without
@@ -536,7 +539,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       task.routeContext,
     );
 
-    const result = await executeAutonomousAgenticLoop({
+    const loopInput = {
       systemPrompt: agentInfo.systemPrompt,
       systemPromptInstructionSpans: coworkerBriefSpans(agentInfo.systemPrompt),
       chatHistory,
@@ -551,7 +554,15 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       taskRunId: taskRunRef.taskRunId,
       proposeSideEffects: boundary === "propose",
       ...(Object.keys(modelRequirements).length > 0 ? { modelRequirements } : {}),
-    });
+    };
+    let result = await executeAutonomousAgenticLoop(loopInput);
+    // BI-62DB6C03: one correction turn when the writer was handed over and not called.
+    const attachedToolNames = tools.map((tool) => tool.name);
+    const correction = scheduledRequiredToolCorrection({ prompt: task.prompt, authorizedTools: [...tools, ...deferredTools], attachedToolNames, executedTools: result.executedTools ?? [] });
+    if (correction && !(await prisma.toolExecution.findFirst({ where: { taskRunId: taskRunRef.taskRunId, toolName: correction.toolName, success: true }, select: { id: true } }))) {
+      const retry = await executeAutonomousAgenticLoop({ ...loopInput, chatHistory: [...chatHistory, { role: "assistant" as const, content: result.content ?? "" }, { role: "user" as const, content: correction.message }] });
+      result = { ...retry, executedTools: [...(result.executedTools ?? []), ...(retry.executedTools ?? [])] };
+    }
     const executedTools = [...(result.executedTools ?? [])];
 
     const requiredTool = getRequiredProceduralToolForScheduledTask(task.taskId, task.agentId);
@@ -605,7 +616,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
     // records status=failed and the BI-754C9E82 retry cadence takes over,
     // instead of completing quietly with a healthy lastStatus. BI-D48B3B0F: judge what the run PERSISTED too.
     const verdictTools = withPersistedExecutions(executedTools, await prisma.toolExecution.findMany({ where: { taskRunId: taskRunRef.taskRunId, success: true }, select: { toolName: true, result: true } }));
-    const runFailure = detectScheduledRunFailure({ prompt: task.prompt, authorizedTools: [...tools, ...deferredTools], executedTools: verdictTools, content: result.content });
+    const runFailure = detectScheduledRunFailure({ prompt: task.prompt, authorizedTools: [...tools, ...deferredTools], executedTools: verdictTools, content: result.content, attachedToolNames });
     if (runFailure) throw new Error(`Scheduled run produced no governed work (${runFailure}). ${result.content ?? ""}`.trim());
 
     const requiredTools = classifyScheduledRequiredTools({ prompt: task.prompt, authorizedTools: [...tools, ...deferredTools], executedTools: verdictTools });
