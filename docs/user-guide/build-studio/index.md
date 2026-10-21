@@ -98,6 +98,8 @@ Independent reviewers also check the design before building starts. If one of th
 
 The AI Coworker creates or refines the implementation plan, including affected files, tests, documentation impact, dependencies, and risk controls. Routine plan progression can remain under coworker custody; unresolved product judgment or elevated consequence returns to you as a clear decision.
 
+Each plan task names the acceptance criteria it delivers. When the work is large, or the files the plan touches make it so, the platform checks that every approved acceptance criterion is covered by some task, records that coverage against the reviewed plan, and asks an independent reviewer to approve the plan before building starts. If a plan cannot be traced to the criteria, the activity log says which criteria no task covers. A plan written before tasks named their criteria is regenerated once so it can be traced. None of this waits on you.
+
 ### Build
 
 The AI Coworker generates code inside the isolated Build runtime. It runs tests and typecheck, gathers concrete evidence, and can use bounded disposable spikes to answer uncertain UX or implementation questions. A spike is evidence, not production code: the normal design, review, and release gates still decide what may ship.
