@@ -196,6 +196,29 @@ estimate the operator's job. The older taxonomy's owner pick-list instruction
 and its contradictory unclassified Large/High rule are explicitly superseded
 for routine technical classification by this correction.
 
+### Exact doctrine correction
+
+Replace the current `gates-proportional-to-shape` bullet that instructs an
+agent to put the pick list to a person with this scoped rule in the same
+implementation change:
+
+> **Engineering resolves technical shape.** Use the current recorded size,
+> existing binding, source evidence and authoritative scope within the acting
+> engineer's delegation, and record the derivation or explicit assessment.
+> Missing or invalid technical facts hold implementation and route to qualified
+> engineering assessment; they do not ask a nontechnical owner to choose a
+> taxonomy entry. Ask the relevant owner only for a material business appetite,
+> damaging action or unresolved authority decision, with plain consequences.
+> Existing independent scope, sensitivity controls and higher obligations remain
+> authoritative; no inference silently lowers them.
+
+This corrects that one rule rather than creating a second home for the taxonomy.
+Retain its surrounding baseline ownership, sensitivity ceilings, delivery
+evidence and no-artifact-for-ceremony rules. The kernel page's "Where it lives"
+section points to this scoped successor alongside the original taxonomy, so
+discovery reaches current direction. The old specification remains historical
+design evidence rather than a competing current instruction.
+
 No schema, grant, endpoint, permission projection or frontend component changes
 are planned. Existing per-item/per-room reads are sufficient; no global backlog
 scan is added to claims. Missing or capped source evidence must be disclosed,
