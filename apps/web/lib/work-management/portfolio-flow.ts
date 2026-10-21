@@ -59,8 +59,12 @@ export type ShapeFlowRow = {
   flowTimeP50Ms: number | null;
   runs: number;
   /** The step holding the most rooms right now, and why most of them are held. */
-  bottleneck: { stageKey: string; roomsHeld: number; cause: string } | null;
+  bottleneck: StageHold | null;
+  /** Every step holding rooms right now, most rooms first. */
+  held: StageHold[];
 };
+
+export type StageHold = { stageKey: string; roomsHeld: number; cause: string };
 
 export type PortfolioFlow = {
   key: PortfolioRoleKey | "unplaced";
@@ -270,13 +274,11 @@ export function computePortfolioFlow(input: {
   }
 
   for (const [accKey, acc] of shapeAcc) {
-    let bottleneck: ShapeFlowRow["bottleneck"] = null;
-    for (const [stageKey, stage] of acc.held) {
-      if (!bottleneck || stage.n > bottleneck.roomsHeld) {
-        const cause = [...stage.causes.entries()].sort((a, b) => b[1] - a[1])[0]![0];
-        bottleneck = { stageKey, roomsHeld: stage.n, cause };
-      }
-    }
+    const held = [...acc.held].map(([stageKey, stage]): StageHold => ({
+      stageKey,
+      roomsHeld: stage.n,
+      cause: [...stage.causes.entries()].sort((a, b) => b[1] - a[1])[0]![0],
+    })).sort((a, b) => b.roomsHeld - a.roomsHeld);
     const times = shapeRunTimes.get(accKey) ?? [];
     out.get(acc.bucket)!.shapes.push({
       shapeKey: acc.shapeRef.split("@")[0]!,
@@ -284,7 +286,8 @@ export function computePortfolioFlow(input: {
       roomsInFlow: acc.inFlow,
       flowTimeP50Ms: percentile(times, 0.5),
       runs: times.length,
-      bottleneck,
+      bottleneck: held[0] ?? null,
+      held,
     });
   }
   for (const flow of out.values()) flow.shapes.sort((a, b) => b.roomsInFlow - a.roomsInFlow || a.shapeKey.localeCompare(b.shapeKey));

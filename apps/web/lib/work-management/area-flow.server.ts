@@ -22,7 +22,7 @@ import { loadRoomAiUse } from "./room-ai-spend.server";
 import { TERMINAL_WORKROOM_STATUSES } from "./standing-room-nesting";
 import { getWorkShape, getWorkShapeVersion } from "./work-shapes";
 import { readWorkShapeClaimRef } from "./workroom-shape-claim";
-import { computeShapeStepMeasures, type ShapeStepMeasures } from "./shape-step-measures";
+import { computeShapeStepMeasures, typicalStepWaitMs, type ShapeStepMeasures, type StepSnapshot } from "./shape-step-measures";
 import { buildShapeFlowMap, type WorkroomFlowMapModel } from "./workroom-flow-map";
 import { classifyDriveSegment, type WorkroomFlowState } from "./workroom-flow-state";
 import {
@@ -106,6 +106,24 @@ export type ShapeFlowView = {
   /** Per-step data boxes, timeline ladder and heat (F4, spec §4 VSM). */
   stepMeasures: ShapeStepMeasures;
 };
+
+/**
+ * Typical wait per held step for the given shape versions, keyed by stage
+ * queue key: what the home's bottleneck sentence ranks on (BI-9148060C).
+ */
+export async function loadStageWaits(shapeRefs: readonly string[], now: Date = new Date()): Promise<Map<string, number | null>> {
+  if (shapeRefs.length === 0) return new Map();
+  const rows = await prisma.queueMetricSnapshot.findMany({
+    where: {
+      OR: shapeRefs.map((shapeRef) => ({ queueKey: { startsWith: `${WORKROOM_STAGE_QUEUE_PREFIX}${shapeRef}:` } })),
+      period: { gte: new Date(now.getTime() - FLOW_WINDOW_DAYS * DAY_MS).toISOString().slice(0, 10) },
+    },
+    select: { queueKey: true, period: true, cycleP50Ms: true, processP50Ms: true, firstPassYield: true, throughput: true },
+  });
+  const byKey = new Map<string, StepSnapshot[]>();
+  for (const row of rows) byKey.set(row.queueKey, [...(byKey.get(row.queueKey) ?? []), row]);
+  return new Map([...byKey].map(([queueKey, snapshots]) => [queueKey, typicalStepWaitMs(snapshots)]));
+}
 
 export async function loadShapeFlowView(input: {
   shapeKey: string;

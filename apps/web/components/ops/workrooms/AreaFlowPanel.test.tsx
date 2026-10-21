@@ -40,7 +40,7 @@ const flow = (key: PortfolioFlowWithCost["key"], overrides: Partial<PortfolioFlo
   weeklyThroughput: [1, 1, 2, 2, 2, 3, 2, 3],
   flowLoadPrior: 8,
   distribution: { feature: 4, defect: 2, risk: 1, debt: 0 },
-  shapes: [{ shapeKey: "delivery-small", shapeRef: "delivery-small@1.0.0", roomsInFlow: 5, flowTimeP50Ms: 20 * H, runs: 6, bottleneck: { stageKey: "merge", roomsHeld: 3, cause: "awaiting-person" } }],
+  shapes: [{ shapeKey: "delivery-small", shapeRef: "delivery-small@1.0.0", roomsInFlow: 5, flowTimeP50Ms: 20 * H, runs: 6, bottleneck: { stageKey: "merge", roomsHeld: 3, cause: "awaiting-person" }, held: [{ stageKey: "merge", roomsHeld: 3, cause: "awaiting-person" }] }],
   points: { inFlight: 34, delivered: 21 },
   ai: { runs: 4, tokens: 12_000, recordedUsd: 1.5, subscriptionTokens: 0, durationMs: 0 },
   ...overrides,
