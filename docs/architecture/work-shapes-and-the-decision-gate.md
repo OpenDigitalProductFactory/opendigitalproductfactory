@@ -892,6 +892,32 @@ One case still holds unconditionally:
 - **An unknown cycle key on either side.** Reading "unknown" as "a new cycle"
   would silently re-open the every-tick loop.
 
+**The cycle bound still held for things that were not running** (BI-7C0B2BD6).
+On 2026-10-14, 279 rooms were paused on `executor_writeback_unavailable`. Some
+had no task at all, because an old `dispatch_agent` record never created one.
+Some had a task whose run had already failed. Some had a task that the pause
+itself had switched off before the scheduler ran it. The sequential drive now
+reads the room's task, and the latch holds only while the queued run is
+outstanding:
+
+- If no task exists, or no enqueue was recorded, the latch releases.
+- An unfinished run keeps the room paused for up to 2 hours, with the task left
+  active so it can still run.
+- A run that finished without a completing receipt is a failure. The room is
+  retried after a backoff of 15 minutes, then 30.
+- After three failures in one cycle the room stays paused, and its ledger and
+  trail row name the last error. A new cycle resets the count.
+
+Rooms released this way are dispatched at most at the agent-task dispatcher's
+own provider-slot count per tick. The rest read **waiting for agent capacity**
+(`do_not_wake`/`awaiting_agent_capacity`) and go out on later ticks, starting
+with the room that has waited longest.
+
+The same incident exposed a second fault. One room failing task-identity
+reconciliation threw, and the throw ended the tick for every room after it: 68
+rooms were not re-evaluated after midnight. A failure while driving one room is
+now recorded in the tick result as an `error` entry, and the tick carries on.
+
 The general lesson is worth stating plainly, because it applies to any
 fail-closed guard: a guard whose own output re-triggers its input has no
 recovery path, and the estate it protects can only degrade. Bound the latch to
