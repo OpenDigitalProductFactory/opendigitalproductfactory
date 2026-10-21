@@ -91,6 +91,19 @@ The register is split into three lanes, because they are different kinds of thin
   claims that were never scheduled work at all. Nothing here runs again;
   **Retire** clears it from the register.
 
+**Issue intake controller** sits under the attention line, closed by default. It
+says whether this installation is commissioned to read and triage issues on the
+platform repository. Open it to see each requirement marked **Pass**, **Fail** or
+**Not checked**, with the reason for any failure. The installation must be a
+production install whose confirmed main or other job is developing the platform
+(set under **About this installation** in your workspace). The upstream
+repository must be set, and you must own the issue-triage room.
+**Become the room's owner** makes you its owner; any current owner stays in the
+room, and the change is recorded there. **Commission** stays unavailable, naming
+the failing requirement, until every requirement passes. Once commissioned, the
+panel shows the room, the repository, who commissioned it and when. Only someone
+who can manage the platform can take ownership or commission.
+
 The hourly **Backlog triage drain** assesses new or changed items. Once an item
 needs review, unchanged work is skipped on subsequent sweeps; it stays visible
 in triaging for you or a coworker to decide. Editing its decision inputs or
