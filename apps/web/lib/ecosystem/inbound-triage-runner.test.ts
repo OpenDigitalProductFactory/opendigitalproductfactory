@@ -120,9 +120,22 @@ describe("runEcosystemInboundTriage", () => {
     expect(filed).toMatchObject({
       source: "user-request",
       workType: "bug",
-      origin: { kind: "ecosystem-upstream-issue", id: "412" },
+      origin: { kind: "ecosystem-upstream-issue", id: "opendigitalproductfactory/opendigitalproductfactory#412" },
+      reconcile: expect.objectContaining({ repository: "opendigitalproductfactory/opendigitalproductfactory", legacyId: "412" }),
     });
     expect(filed.body).toContain("dpf-agent-9f2c");
+  });
+
+  it("surfaces a needs-review origin in the run summary without filing work", async () => {
+    const ingest = vi.fn().mockResolvedValue({ itemId: "", created: false, outcome: "needs-review", reviewCandidates: ["BI-A", "BI-B"] });
+    const result = await runEcosystemInboundTriage({
+      loadCommission: commissioned,
+      readIssues: async () => ({ ok: true, issues: [issue] }),
+      readPeerDemand: async () => [],
+      ingest,
+    });
+    expect(result).toMatchObject({ ran: true, ingested: 0, needsReview: 1,
+      reviews: [{ origin: "ecosystem-upstream-issue:opendigitalproductfactory/opendigitalproductfactory#412", candidates: ["BI-A", "BI-B"] }] });
   });
 
   it("still files peer demand when the upstream issue read fails", async () => {

@@ -76,7 +76,7 @@ const initiativeReviewProperties = {
 const definitions: ToolDefinition[] = [
   {
     name: "get_my_approval_status",
-    description: "Read an exact approval outcome by envelopeId, or use mode pending to discover up to 20 unexpired requests for the authenticated user and current assistant. Pending entries name owner, expiry, exact Inbox link and immutable review locator; hasMore names a bounded page. Does not approve, retry, transfer ownership or grant access.",
+    description: "Read an exact approval outcome by envelopeId and separately report safe stored action evidence for provider-account tests, or explicit missing, conflicting or unsupported evidence. Generic test success does not prove Responses verification or quota reconciliation. Use mode pending to discover up to 20 unexpired requests for the authenticated user and current assistant, with owner, expiry, Inbox link and immutable review locator; hasMore names a bounded page. Does not execute, approve, retry, transfer ownership or grant access.",
     inputSchema: { type: "object", properties: {
       mode: { type: "string", enum: ["exact", "pending"], description: "Defaults to exact; pending omits envelopeId." },
       envelopeId: { type: "string", minLength: 1, maxLength: 128 },

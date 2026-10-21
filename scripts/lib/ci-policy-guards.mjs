@@ -144,6 +144,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/lib/durable-wait-resumer.test.mjs"),
       // A resumed gate stays on its source and a cancelled wait stays cancelled.
       node("--test", "scripts/lib/gate-resume-pin.test.mjs"),
+      // BI-EB864226: every queued replacement advances the parent's current pin.
+      node("--test", "scripts/lib/gate-reservation-handoff.test.mjs"),
       node("--test", "scripts/gate-worktree-resume.test.mjs"),
     ]),
     guard("host-port-range-guard", "Host Port Range Guard", [
@@ -883,6 +885,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/worktree-liveness.test.mjs",
         "scripts/lib/worktree-janitor-core.test.mjs",
         "scripts/worktree-janitor.test.mjs",
+        "scripts/worktree-janitor-sh.test.mjs",
         "scripts/lib/worktree-session-heartbeat.test.mjs",
         // BI-DBAD1A1B: SessionEnd process matching accepts only the canonical
         // worktree itself or descendants, never sibling worktrees/CI runners.

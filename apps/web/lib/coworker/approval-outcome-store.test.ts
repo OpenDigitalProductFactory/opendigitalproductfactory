@@ -2,8 +2,28 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 vi.mock("@dpf/db", () => ({ prisma: {} }));
 import { listPendingApprovalOutcomes, loadApprovalOutcomes, readApprovalOutcome, recordApprovalOutcome } from "./approval-outcome-store";
+import { fingerprintCoworkerInput } from "@/lib/govern/authority/coworker-authority-decision";
 
 const now = new Date("2026-09-27T12:00:00Z");
+it("reads the original provider test evidence after the approval replay window without running the action", async () => {
+  const parameters = { operation: "test", providerId: "chatgpt", connectionId: "provider-default-chatgpt" };
+  const inputFingerprint = fingerprintCoworkerInput(parameters);
+  const envelope = { id: "approved-provider-test", status: "executed", createdAt: now, expiresAt: now,
+    delegatingUserId: "u1", coworkerAgentId: "a1", threadId: "thread1", manifestActionId: "manage_provider_account",
+    inputFingerprint, argsJson: { approvalBinding: { actingHumanUserId: "u1", actingAgentId: "a1",
+      toolName: "manage_provider_account", inputFingerprint, taskRunId: null, chainId: null, routeContext: null } },
+    toolExecutions: [],
+  };
+  const db = { coworkerActionEnvelope: { findFirst: vi.fn(async () => envelope) },
+    toolExecution: { findMany: vi.fn(async () => [{ id: "actual-run", envelopeId: envelope.id, userId: "u1", agentId: "a1",
+      threadId: "thread1", taskRunId: null, toolName: "manage_provider_account", executionMode: "external-mcp",
+      createdAt: now, durationMs: 10, parameters, success: true, result: { success: true, message: "secret raw message" } }]) },
+  };
+  const result = await readApprovalOutcome(envelope.id, "u1", "a1", db as never, new Date("2026-10-21T00:00:00Z"));
+  expect(result).toMatchObject({ state: "executed", actionEvidence: { state: "available", executionId: "actual-run",
+    outcome: "succeeded", quotaReconciliation: "unproven", responsesVerification: "unproven" } });
+  expect(JSON.stringify(result)).not.toContain("secret raw message");
+});
 const row = { id: "e1", delegatingUserId: "u1", coworkerAgentId: "a1", threadId: "thread1", taskRunId: null, status: "approved", createdAt: now, expiresAt: now, toolExecutions: [] as unknown[] };
 function fixture() {
   const findFirst = vi.fn(async ({ where }: { where: Record<string, unknown> }) => where.delegatingUserId === "u1" && (!where.coworkerAgentId || where.coworkerAgentId === "a1") ? row : null);

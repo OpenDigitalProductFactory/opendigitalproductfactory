@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "collapsed-panel-checklist",
+  "decisionInteractionId": "DI-A16F6A02CF20",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/admin/scheduled-jobs/IntakeControllerPanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "collapsed-panel-checklist",
+      "inline-row-controls",
+      "dedicated-wizard-page"
+    ]
+  }
+}

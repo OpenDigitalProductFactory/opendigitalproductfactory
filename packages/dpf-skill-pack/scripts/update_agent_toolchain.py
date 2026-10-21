@@ -833,6 +833,22 @@ def ensure_codex_config(
     return write_text_if_changed(path, text)
 
 
+def converge_codex_project_config(project_root: Path, mcp_url: str, dry_run: bool) -> str:
+    """Run the optional project-override repair; a refusal is a status, not an abort.
+
+    BI-CEDE5B55: ensure_codex_project_config refuses (ValueError) whenever it
+    cannot validate the TOML, including on stock macOS python3 3.9 with no
+    tomli. Uncaught, that refusal ended main() before Grok, Claude and the
+    shared copy converged, leaving every client stale. The file is already
+    left unchanged on refusal, so report it and carry on.
+    """
+    try:
+        changed = ensure_codex_project_config(project_root, mcp_url, dry_run)
+    except ValueError as error:
+        return f"unchanged ({error})"
+    return "converged" if changed else "current"
+
+
 def ensure_codex_project_config(project_root: Path, mcp_url: str, dry_run: bool) -> bool:
     """Repair an explicitly scoped override, validating all preserved TOML data."""
     path = project_root / ".codex" / "config.toml"
@@ -1522,11 +1538,11 @@ def resolve_antigravity_binary() -> str | None:
 
 
 def antigravity_mcp_config_path(home: Path) -> Path:
-    # Antigravity is Windsurf/VS Code-derived; its MCP config is a JSON block
-    # keyed by `mcpServers`. The exact path is not yet pinned in public docs —
-    # this is the documented default; the live install confirms it during the
-    # EP-ANTIGRAVITY-001 evidence gate (BI-ECAE3494 / BI-47A81FEB).
-    return home / ".antigravity" / "mcp_config.json"
+    # The file the `agy` CLI and Antigravity.app both read (BI-4CB3C923).
+    # Pinned on 2026-10-20 against agy 1.4.3: `agy mcp add` writes here, and
+    # both binaries name only this path. The earlier ~/.antigravity/
+    # mcp_config.json guess is read by neither; a copy there is left in place.
+    return home / ".gemini" / "config" / "mcp_config.json"
 
 
 def ensure_antigravity_mcp_config(home: Path, mcp_url: str, dry_run: bool, declarations: Any = None) -> str:
@@ -1540,15 +1556,26 @@ def ensure_antigravity_mcp_config(home: Path, mcp_url: str, dry_run: bool, decla
     if resolve_antigravity_binary() is None:
         return "skipped: Antigravity CLI (agy) not found"
     path = antigravity_mcp_config_path(home)
-    data = read_json(path, {})
+    # agy leaves a 0-byte file behind when no server is configured; that is an
+    # empty config. Unparseable content is the operator's: leave it, and keep
+    # the rest of the update running instead of exiting.
+    try:
+        raw = path.read_text(encoding="utf-8-sig") if path.exists() else ""
+        data = json.loads(raw) if raw.strip() else {}
+    except (OSError, json.JSONDecodeError):
+        return f"skipped: cannot parse {path}; fix or empty it, then rerun"
     if not isinstance(data, dict):
         data = {}
     servers = data.get("mcpServers")
     if not isinstance(servers, dict):
         servers = {}
+    # agy's own schema: what `agy mcp add` writes for an http server. An
+    # operator who disabled the entry keeps it disabled.
+    previous = servers.get("dpf")
+    disabled = isinstance(previous, dict) and previous.get("disabled") is True
     servers["dpf"] = {
-        "type": "http",
-        "url": mcp_url,
+        "serverUrl": mcp_url,
+        "disabled": disabled,
         **({"headers": {"Authorization": f"Bearer ${{{TOKEN_ENV_VAR}}}"}} if mcp_client_bearer_header_required(mcp_url, "antigravity") else {}),
     }
     if declarations is not None:
@@ -2489,7 +2516,8 @@ def main(argv: list[str]) -> int:
             global_config = codex_config_path(home)
             saved = global_config.read_text(encoding="utf-8-sig") if global_config.exists() else ""
             endpoint = args.mcp_url or existing_codex_mcp_endpoint(saved) or DEFAULT_MCP_URL
-            ensure_codex_project_config(args.project_root, endpoint, args.dry_run)
+            project_status = converge_codex_project_config(args.project_root, endpoint, args.dry_run)
+            print(f"  Codex project override : {project_status}")
         codex_hooks_status = install_codex_hooks(codex_managed, home, args.dry_run)
         print(
             f"  Codex      : marketplace + config converged; plugin {codex_status}; "

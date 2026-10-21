@@ -29,7 +29,10 @@ import type {
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { useT } from "@/lib/i18n/use-t";
 
+import { INTAKE_CONTROLLER_JOB_ID } from "@/lib/operate/scheduled-jobs/intake-controller-commission";
+
 import { EditScheduleDialog } from "./EditScheduleDialog";
+import { IntakeControllerPanel } from "./IntakeControllerPanel";
 import { ScheduleWindowChart } from "./ScheduleWindowChart";
 
 type Banner = { kind: "ok" | "error"; text: string } | null;
@@ -175,6 +178,7 @@ export function ScheduledJobsClient({ initialJobs }: { initialJobs: ScheduledWor
     [jobs],
   );
   const spent = useMemo(() => jobs.filter((j) => j.retirable), [jobs]);
+  const hasIntakeController = jobs.some((j) => j.jobId === INTAKE_CONTROLLER_JOB_ID);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -288,6 +292,8 @@ export function ScheduledJobsClient({ initialJobs }: { initialJobs: ScheduledWor
           </span>
         )}
       </div>
+
+      {hasIntakeController && <IntakeControllerPanel onChanged={refresh} />}
 
       <ScheduleWindowChart
         jobs={jobs}

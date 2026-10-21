@@ -138,7 +138,10 @@ def _toml_dpf_url(path: Path) -> Optional[str]:
 def _dpf_server_url(data: Any) -> Optional[object]:
     servers = data.get("mcpServers") if isinstance(data, dict) else None
     server = servers.get("dpf") if isinstance(servers, dict) else None
-    return server.get("url") if isinstance(server, dict) else None
+    if not isinstance(server, dict):
+        return None
+    # agy's own config names the endpoint serverUrl (BI-4CB3C923).
+    return server.get("url") or server.get("serverUrl")
 
 
 def configured_origins(home: Path, env: Mapping[str, str]) -> list[str]:

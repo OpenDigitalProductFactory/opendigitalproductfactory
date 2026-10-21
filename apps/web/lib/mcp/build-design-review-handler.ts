@@ -47,7 +47,7 @@ async function reviewDesignDocInner(params: Record<string, unknown>, userId: str
       // trajectory in the operator-facing gate reason (mirror of BI-4396EFEC
       // for the plan path). Live repro: FB-5E20E793 oscillated on the same
       // "missing accessibility" complaint round after round.
-      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { designDoc: true, designReview: true, kind: true, brief: true, plan: true, title: true, description: true } });
+      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { designDoc: true, designReview: true, kind: true, brief: true, plan: true, title: true, description: true, originatingBacklogItemId: true } });
 
       // Fix flow: a fix build has no feature design doc — it carries a structured
       // diagnosis (fixContext) on its brief. Review the diagnosis for completeness
@@ -197,7 +197,14 @@ async function reviewDesignDocInner(params: Record<string, unknown>, userId: str
       const r1 = r1settled.status === "fulfilled" ? parseReviewResponse(r1settled.value.content) : null;
       const r2 = r2settled.status === "fulfilled" ? parseReviewResponse(r2settled.value.content) : null;
       const archReview = archSettled.status === "fulfilled" ? parseReviewResponse(archSettled.value.content) : null;
-      const architectureAdvisory = await finalizeArchitectureAdvisory(prisma, archReview, userId, context?.agentId, context?.threadId, "reviewDesignDoc");
+      const architectureAdvisory = await finalizeArchitectureAdvisory(prisma, archReview, userId, context?.agentId, context?.threadId, "reviewDesignDoc", {
+        // BI-22601A38: name what was reviewed, so what later happens to this
+        // design can resolve the advisory.
+        buildId,
+        kind: "design",
+        document: build.designDoc,
+        backlogItemId: build.originatingBacklogItemId ?? null,
+      });
       const reviewBase = assembleReviewPanel(r1, r2);
       // BI-CE49D82E — Compute the iteration delta against the prior round and
       // attach to the ReviewResult. computeReviewDelta + isOscillating live in

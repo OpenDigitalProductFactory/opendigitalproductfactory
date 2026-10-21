@@ -13,6 +13,13 @@ import {
 import { parseFrontmatter } from "./seed-skills";
 import { ensureHiveScoutScheduledTask } from "./seed-hive-scout";
 
+// No accountable owner recorded: the seed falls back to the superuser guess (BI-F0E946D2).
+const noAccountableOwner = {
+  portfolio: { findUnique: async () => null },
+  organization: { findFirst: async () => null },
+  principalAlias: { findFirst: async () => null },
+};
+
 describe("Hive Scout seed helper", () => {
   const user = {
     findFirst: vi.fn(),
@@ -173,7 +180,7 @@ describe("Hive Scout seed helper", () => {
     scheduledAgentTask.findUnique.mockResolvedValue(null);
 
     const result = await ensureHiveScoutScheduledTask(
-      { user, scheduledAgentTask, scheduledJob } as never,
+      { ...noAccountableOwner, user, scheduledAgentTask, scheduledJob } as never,
       new Date("2026-05-11T12:00:00Z"),
     );
 
@@ -207,7 +214,7 @@ describe("Hive Scout seed helper", () => {
     });
 
     const result = await ensureHiveScoutScheduledTask(
-      { user, scheduledAgentTask, scheduledJob } as never,
+      { ...noAccountableOwner, user, scheduledAgentTask, scheduledJob } as never,
       new Date("2026-05-11T12:00:00Z"),
     );
 
@@ -234,7 +241,7 @@ describe("Hive Scout seed helper", () => {
 
     const now = new Date("2026-05-11T12:00:00Z");
     await ensureHiveScoutScheduledTask(
-      { user, scheduledAgentTask, scheduledJob } as never,
+      { ...noAccountableOwner, user, scheduledAgentTask, scheduledJob } as never,
       now,
     );
 
@@ -260,7 +267,7 @@ describe("Hive Scout seed helper", () => {
 
     await expect(
       ensureHiveScoutScheduledTask(
-        { user, scheduledAgentTask, scheduledJob } as never,
+        { ...noAccountableOwner, user, scheduledAgentTask, scheduledJob } as never,
         new Date("2026-05-11T12:00:00Z"),
       ),
     ).rejects.toThrow("seed: no superuser found");

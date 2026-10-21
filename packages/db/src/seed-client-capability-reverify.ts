@@ -10,7 +10,7 @@
 // writes it: a re-seed must not erase what the task has learned.
 
 import type { PrismaClient } from "../generated/client/client";
-import { findInstallWorkOwnerUserId } from "./install-work-owner";
+import { findTaskOwnerUserId } from "./install-work-owner";
 
 import {
   CLIENT_CAPABILITY_REVERIFY_AGENT_ID,
@@ -24,7 +24,7 @@ import {
   CLIENT_CAPABILITY_REVERIFY_TASK_TITLE,
 } from "./client-capability-reverify-config";
 
-type ScheduledTaskSeedClient = Pick<PrismaClient, "user" | "scheduledAgentTask" | "scheduledJob">;
+type ScheduledTaskSeedClient = Pick<PrismaClient, "user" | "portfolio" | "organization" | "principalAlias" | "scheduledAgentTask" | "scheduledJob">;
 
 function computeNextCronRun(cronExpr: string, from: Date): Date {
   const parts = cronExpr.trim().split(/\s+/);
@@ -48,7 +48,7 @@ export async function ensureClientCapabilityReverifyScheduledTask(
   prisma: ScheduledTaskSeedClient,
   now: Date = new Date(),
 ): Promise<{ created: boolean }> {
-  const ownerId = await findInstallWorkOwnerUserId(prisma);
+  const ownerId = await findTaskOwnerUserId(prisma);
   if (!ownerId) {
     throw new Error("seed: no superuser found - cannot seed client-capability re-verification scheduled task");
   }
