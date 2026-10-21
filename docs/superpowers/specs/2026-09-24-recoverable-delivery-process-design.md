@@ -180,6 +180,44 @@ timeout, cancellation, duplicate delivery and reassignment.
 - **Timeout:** the resumer's deadline is bounded; exit codes 81 and 82 are
   classified `retry: false`, so no caller loops on them.
 
+#### Repeated reservation replacement — BI-EB864226
+
+The October 21 reproduction keeps source head `5c1c929d2791` fixed while the
+integration tree and evidence-plan digest change. The original detached
+resumer keeps `--resume-lease-id NPEL-6AA04D9236` in every child invocation.
+The first replacement retires that lease; later replacements no longer name
+the current reservation and leave obsolete queued rows behind. A single
+verified resumer and unchanged source exclude a second manual gate as the
+cause. The regression test reproduces the unchanged pin across two replacements.
+
+This bounded repair restores the existing resume contract. The larger
+host-worker replacement remains BI-A6DC9847; this repair neither activates
+that worker nor changes admission authority, queue priority or grants.
+
+Ordered implementation, owned atomically by BI-EB864226:
+
+1. **R-QH-1 / FLOW-BOUND-HANDOFF:** retain a bounded stdout tail from the
+   existing child gate. Only its queued exit and canonical durable-wait packet,
+   bound to the original owner and source claim key, can supply a new lease pin.
+2. **R-QH-2 / FLOW-LATEST-PIN:** carry the returned reservation into the next
+   invocation. Preserve the source, branch, worktree, provider and owner flags.
+   The server's existing ownership checks and atomic supersession remain the
+   authority; reading output grants no permission to release a foreign lease.
+3. **R-QH-3 / FLOW-REFUSE-UNKNOWN:** missing, foreign or contradictory handoff
+   data stops the resumer unrun with the existing prerequisite-unavailable
+   classification. Do not retry the obsolete pin, synthesize a verdict or
+   interpret task completion as passing verification.
+4. **R-QH-4 / FLOW-TERMINAL:** cancellation and source drift remain terminal;
+   host-resource invocations retain their separate immutable-pin contract.
+
+Verification cases **VC-QH-CHAIN**, **VC-QH-IDENTITY**, **VC-QH-BOUNDS** and
+**VC-QH-TERMINAL** cover A → B → C pin progression, rejected foreign/missing/
+ambiguous packets, bounded noisy output, and cancellation/source drift. Run the
+existing resumer and gate-resume suites unchanged, then the mandatory governed
+publication checks. Current live queue observations are reproduction evidence,
+not a passing gate or acceptance receipt. Do not activate unmerged toolchain
+source or bypass a pending employee approval to clean up earlier reservations.
+
 ### 3.8 Pull request and merge
 
 - **State:** the pull request and the merge queue.
