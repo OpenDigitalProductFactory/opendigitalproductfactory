@@ -83,11 +83,12 @@ describe("bounded sanitized insert SQL", () => {
     expect(result.map(statement => statement.values)).toEqual([["x"], ["oversized"], ["y"]]);
   });
 
-  it("uses the default 1 MiB prepared payload target", () => {
-    const text = "x".repeat(524_288);
-    const result = build([{ text }, { text }, { text: "tail" }]);
-    expect(result.map(statement => statement.values.length)).toEqual([2, 1]);
-    expect(result[1]!.values).toEqual(["tail"]);
+  it("uses the literal 256 KiB default and keeps an oversized row alone", () => {
+    const half = "x".repeat(131_072);
+    const oversized = "z".repeat(262_145);
+    const result = build([{ text: half }, { text: half }, { text: "y" }, { text: oversized }, { text: "after" }]);
+    expect(result.map(statement => statement.values.length)).toEqual([2, 1, 1, 1]);
+    expect(result.flatMap(statement => statement.values)).toEqual([half, half, "y", oversized, "after"]);
   });
 
   it("measures prepared JSON and array literals, not unescaped source strings", () => {

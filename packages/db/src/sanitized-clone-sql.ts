@@ -93,7 +93,7 @@ export type SanitizedInsertStatement = { sql: string; values: unknown[] };
 const DEFAULT_INSERT_POLICY: Readonly<SanitizedInsertPolicy> = Object.freeze({
   maxRows: 50,
   maxParameters: 65_535,
-  maxPayloadBytes: 1_048_576,
+  maxPayloadBytes: 262_144,
 });
 
 function insertPolicy(policy: Partial<SanitizedInsertPolicy>): SanitizedInsertPolicy {

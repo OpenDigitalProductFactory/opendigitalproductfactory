@@ -68,7 +68,7 @@ single-row exception rather than a hard wire-packet or total-memory ceiling.
    Keep `ON CONFLICT DO NOTHING`. A single row larger than the payload target
    still uses its own statement; the bound must not silently omit or reject
    data previously accepted. Enforce the parameter ceiling before SQL execution.
-   Defaults are 50 rows, 65,535 parameters and a 1 MiB prepared-parameter target.
+   Defaults are 50 rows, 65,535 parameters and a 256 KiB prepared-parameter target.
    Statement-level trigger boundaries intentionally become batch boundaries;
    ordinary trigger suppression remains pinned to each bounded transaction.
 3. `FLOW-COPY`: have the existing transaction writer consume those statements;
@@ -153,13 +153,40 @@ therefore records connected, cold, every-batch and post-copy retained heap;
 repeats the same 2,001-row real-writer path after it is warm; and deliberately
 retains independent containers for 1,001 payload rows as a positive control.
 The original cold baseline and raw 16 MiB assertion remain unchanged. A 20-second
-test timeout permits the three measured passes; production transaction timeouts,
-copy policy, client history, dependencies and memory limits are unchanged.
+test timeout permits the three measured passes. At the diagnostic checkpoint,
+production transaction timeouts, copy policy, client history, dependencies and
+memory limits were unchanged.
 
-One separately coordinated owned experiment will collect these controls before
-any product payload-budget adjustment is considered. Its private wrapper fences
+Separately coordinated owned experiments collect these controls before a product
+payload-budget adjustment is considered. The private wrapper fences
 each explicit experiment before canonical work and retains immutable canonical
 and PostgreSQL reports on failure as well as success. An automatic repeat may
-perform no new canonical or PostgreSQL work. Current source is expected to
-remain red at the original cold assertion; no memory repair, throughput,
-representative setup-time or served-route acceptance is claimed in advance.
+perform no new canonical or PostgreSQL work. The diagnostic checkpoint remains
+distinct from a repair: its original cold assertion stays red until a product
+change passes the same owned test. No throughput, representative setup-time or
+served-route acceptance is claimed from the diagnostic controls.
+
+**Measured retention and payload-budget repair.** The controlled experiment at
+`24bce3d53a678f40ace68fcdf636f52397a061ac` executed 10 PostgreSQL cases: 9 passed,
+1 failed and none skipped. Evidence `cmvhziopf09sk01lfyyeq80zv` is inconclusive,
+not passing gate proof. Its retained-heap growth rose from 5,474,472 bytes after
+50 rows to 39,380,232 after 700, then increased only 85,240 across the next 1,300
+rows. The original cold peak was 39,465,472 bytes. The warmed 2,001-row pass grew
+by at most 4,408,096 bytes, while deliberate retention grew by 33,092,760 and
+fell to 53,168 after release. These measurements support a bounded payload-history
+hypothesis rather than table-wide accumulation; they do not attribute every byte
+to one internal client structure or make the cold 16 MiB failure pass.
+
+Reduce only the default prepared-payload target from 1 MiB to 256 KiB. Keep the
+50-row and 65,535-parameter limits, ordered casts/defaults/conflicts, transaction
+owner and oversized-single-row exception. Smaller values still permit 50-row
+statements; 32 KiB JSON rows need approximately eight statements per 50-row
+callback instead of two. This trades more large-payload round trips for a smaller
+per-statement prepared payload. Whether this keeps the unchanged cold retained-heap
+bound must be established by the final owned run. It is not a wire or total-heap
+ceiling and does not guarantee any representative clone time. A literal boundary
+regression first observed one five-row statement instead of `[2, 1, 1, 1]`, with
+41 incumbent SQL tests passing. Preserve the cold 16 MiB assertion, all measured
+controls and the real PrismaPg writer. Final owned qualification requires the
+complete exact-source experiment to pass this changed default; its actual outcome
+belongs in the Workroom and PR record, separately from source-local checks.
