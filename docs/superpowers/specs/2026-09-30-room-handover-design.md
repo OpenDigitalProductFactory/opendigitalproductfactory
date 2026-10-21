@@ -220,3 +220,13 @@ oldest one, so a seed never stops an upgrade. Historical requester and creator
 fields are unchanged. A migration backfills the marker from the BuildActivity
 rows past applies left.
 
+
+### Addendum (2026-10-21, BI-F0E946D2): seeds name the accountable person
+
+Skipping the handed-over account was not enough. The seeds still guessed the
+oldest remaining superuser, and on 2026-10-16 a new seeded task went to a
+superuser who is not the accountable person. The portfolio owner walk
+(`resolveWorkOwner`: portfolio, Foundational, organization, then the guess) now
+lives in `packages/db/src/install-work-owner.ts`. apps/web re-exports it, and
+every task seed names a new task's owner through `findTaskOwnerUserId`. A guard
+test fails a seed that calls the guess directly.
