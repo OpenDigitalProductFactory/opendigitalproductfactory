@@ -177,6 +177,16 @@ and replaces its pause, so an existing stall card clears on the next tick with n
 Reopening the item lets the next tick plan the room again. A room with no item, or an item whose
 status could not be read, is driven as before.
 
+**A stage task runs only while the drive wants it** ⟦runtime: 2026-10-21, `BI-1DDCE164`⟧. On
+2026-10-20/21, build-specialist ran 553 times in 14 hours across 14 room-stages. Each of those
+rooms had already moved to an attention stage, or had left the drive (a Build Studio executor
+since BI-B5751303, or archived), so no run's evidence was ever read. The drive now stops the
+task when a sequential room concludes attention on a stage other than the one it last enqueued.
+Each tick also stops the tasks of archived, terminal and Build Studio rooms. The stage brief
+names the room objective and the bound backlog item, with a pointer to read it through
+`get_backlog_item`. Before this, 737 of 1030 build-specialist stage records were `blocked`,
+mostly because the agent could not tell which work the room delivers.
+
 A room that never declared one gets a **derived** shape from what it already is
 (`derive-workroom-shape.ts`): a standing WSID room is craft stewardship by definition,
 `launch-readiness` is an approval sign-off, `governance` and `remediation` are consequential
