@@ -8,8 +8,8 @@ status: draft
 execution loop for harness implementers. It runs without a DPF connection, model,
 credential, filesystem or network. This is the portable reference deliverable for
 BI-F9582C48 under EP-B932453F, implemented against the
-[approved design](../superpowers/specs/2026-09-27-portable-tak-contracts-design.md)
-and [implementation plan](../superpowers/plans/2026-10-01-portable-tak-contracts.md).
+[approved design](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/250447587496308226abc10aca79ee006ecd10f6/docs/superpowers/specs/2026-09-27-portable-tak-contracts-design.md)
+and [implementation plan](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/250447587496308226abc10aca79ee006ecd10f6/docs/superpowers/plans/2026-10-01-portable-tak-contracts.md).
 Those documents trace PC-01..08 to the TAK, JSI, GAID and GPP normative drafts.
 
 ## Run the examples

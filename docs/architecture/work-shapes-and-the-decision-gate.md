@@ -434,7 +434,7 @@ unconsulted consequential decision.
 are gated. The general pre-execution interceptor over all consequential tool calls — with
 its four check families (alignment, authority and policy, consequence/HITL, and
 precondition/ordering) — is the target architecture in the
-[governance-gate spec](../superpowers/specs/2026-08-13-wwwd-constitutional-alignment-gate.md),
+[governance-gate spec](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/250447587496308226abc10aca79ee006ecd10f6/docs/superpowers/specs/2026-08-13-wwwd-constitutional-alignment-gate.md),
 not the current state.
 
 ## The shape's next steps, after the gate
@@ -527,7 +527,7 @@ cost against quality against time — through `resolveWorkroomPosture`
 Golden Triangle engines. `WorkroomView.posture` carries the result and the reason for every
 clamp. The load-bearing rule mirrors the two-level rule above: a derivation may TIGHTEN the
 action boundary and may never widen it, so shape can restrict autonomy but never grant it.
-Design: [Work Posture](../superpowers/specs/2026-08-22-workroom-work-posture-design.md).
+Design: [Work Posture](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/250447587496308226abc10aca79ee006ecd10f6/docs/superpowers/specs/2026-08-22-workroom-work-posture-design.md).
 
 ## Encoding and visualization
 
@@ -542,12 +542,12 @@ Workroom/cycle/task records. These are DPF contracts, not BPMN XML or SysML text
 | BPMN | Process tasks, gateways, waits, recovery paths and ownership lanes | `process-extract.ts` and `reconcile-process.ts` project selected state machines; WorkShape recovery extraction needs explicit coverage |
 | SysML v2 | Requirements, interfaces, allocation to components and verification evidence | Existing EA notation and Parity Engine; use stable source keys rather than a separately maintained model |
 
-The [SysML reference](../Reference/sysml-v2.md) owns notation selection; ArchiMate
+The [SysML reference](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/250447587496308226abc10aca79ee006ecd10f6/docs/Reference/sysml-v2.md) owns notation selection; ArchiMate
 remains the enterprise view and C4 the lightweight software explanation. Current
 views derive from registered definitions, transition rules and canonical receipts.
 Target-state sketches must be labeled as such until implemented and verified.
 
-The [reviewer recovery amendment](../superpowers/specs/2026-09-03-local-first-agentic-delivery-throughput-design.md#81-reviewer-recovery-and-receipt-settlement)
+The [reviewer recovery amendment](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/250447587496308226abc10aca79ee006ecd10f6/docs/superpowers/specs/2026-09-03-local-first-agentic-delivery-throughput-design.md#81-reviewer-recovery-and-receipt-settlement)
 defines the planned extension of `pull-request-flow-watch@1.0.0`, its version
 compatibility requirements and the operator display. A declared shape never proves
 that automatic replacement or gate advancement is running.
@@ -1148,7 +1148,7 @@ place, but widening one (a new tool, stage, evidence kind or grant, a changed
 accountable principal, or a governed decision relaxed to a status change)
 needs a new version and a fresh gate decision. Kernel decision DI-E4DAF14D9343
 chose bump-and-rebind. Design:
-[spec](../superpowers/specs/2026-10-01-workroom-shape-rebind-design.md).
+[spec](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/250447587496308226abc10aca79ee006ecd10f6/docs/superpowers/specs/2026-10-01-workroom-shape-rebind-design.md).
 
 - **A bump never stops a room.** The superseded definition moves to
   `WORK_SHAPE_PRIOR_VERSIONS` (`work-shape-prior-versions.ts`) in the same
@@ -1191,7 +1191,7 @@ fallback or grants execution authority.
 - [Workroom vocabulary boundary](workroom-vocabulary-boundary.md) — what the word means at each layer
 - [Trustworthy AI Agent Standards Family](agent-standards-family.md) — TAK, GAID, JSI, GPP and the composition rule
 - [Gated Permissions Process (GPP)](gated-permissions-process.md) — the standard that models each shape stage's gate and the tools it admits; see its [pairing diagram](gated-permissions-process.md#73-the-pairing-at-a-glance) and the [binding as a model](gated-permissions-process.md#123-the-binding-as-a-model)
-- [A Governance Gate on Consequential Tool Use](../superpowers/specs/2026-08-13-wwwd-constitutional-alignment-gate.md) — the target architecture
+- [A Governance Gate on Consequential Tool Use](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/250447587496308226abc10aca79ee006ecd10f6/docs/superpowers/specs/2026-08-13-wwwd-constitutional-alignment-gate.md) — the target architecture
 - [Work Rooms](../user-guide/workspace/work-rooms.md) — the end-user view
 
 ## A shape must outlive the room that decided it (BI-82DCD601)
