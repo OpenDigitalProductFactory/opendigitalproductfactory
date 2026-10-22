@@ -34,7 +34,7 @@ export function formatInitiativeReviewObjective(args: InitiativeReviewObjectiveI
     args.artifact?.kind === "document-version"
       ? ` Read the retained criteria and source identity with ${IMMUTABLE_REVIEW_READER_TOOL} (repositoryFullName ${args.repositoryFullName}, path initiative-body-version/${args.artifact.versionId}, version ${args.artifact.versionId}, expectedBlobId ${args.artifact.valueDigest}),`
       : args.artifact?.kind === "feature-build-revision"
-      ? ` Read the accepted Build Studio design revision ${args.artifact.revisionId} with ${BUILD_ARTIFACT_REVISION_READER_TOOL} (repositoryFullName ${args.repositoryFullName}, path build-artifact-revision/${args.artifact.revisionId}, version ${args.artifact.revisionId}, expectedBlobId ${args.artifact.valueDigest}),`
+      ? ` Read the accepted Build Studio ${args.gate === "plan-review" ? "implementation plan" : "design"} revision ${args.artifact.revisionId} with ${BUILD_ARTIFACT_REVISION_READER_TOOL} (repositoryFullName ${args.repositoryFullName}, path build-artifact-revision/${args.artifact.revisionId}, version ${args.artifact.revisionId}, expectedBlobId ${args.artifact.valueDigest}),`
       : args.artifact
         ? ` Read ${args.artifact.path} at ${reviewSha} with ${IMMUTABLE_REVIEW_READER_TOOL} (repositoryFullName ${args.repositoryFullName}, version ${reviewSha}, expectedBlobId ${args.artifact.providerBlobId}),`
         : ""

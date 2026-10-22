@@ -1,6 +1,7 @@
 import { isRecord } from "@/lib/shared/coerce";
 import { parseVerifiedPullRequestObservation } from "@/lib/contributor-change-lanes/pull-request-observation";
 import { WORK_CAPSULE_OPEN_PR_FRESHNESS_MS } from "./liveness";
+import { authoredHeadSha } from "./authored-head";
 import { resolvePullRequestBindings } from "./pull-request-binding";
 
 const BATCH_LIMIT = 100;
@@ -37,7 +38,11 @@ export async function reconcileInventoryPullRequestBindings(syncRunId: string, n
       OR: observations.map((observation) => ({
           repositoryFullName: observation.repositoryFullName, headBranch: observation.headBranch,
           AND: [
-            { OR: [{ headSha: observation.headSha }, { headSha: null, AND: [
+            // A room with no authored head yet (null, or still its claim-time
+            // base: BI-A7797C2C) can only be matched in memory, because the
+            // base comparison is column-to-column. The pure resolver applies
+            // authoredHeadSha; this pre-filter admits every candidate for it.
+            { OR: [{ headSha: observation.headSha }, { AND: [
               { OR: [{ pullRequestNumber: null }, { pullRequestNumber: observation.number }] },
               { OR: [{ pullRequestUrl: null }, { pullRequestUrl: observation.url }] },
             ] }] },
@@ -47,7 +52,7 @@ export async function reconcileInventoryPullRequestBindings(syncRunId: string, n
         })),
     },
     select: { id: true, capsuleId: true, repositoryFullName: true, headBranch: true,
-      headSha: true, pullRequestNumber: true, pullRequestUrl: true, updatedAt: true },
+      headSha: true, baseSha: true, pullRequestNumber: true, pullRequestUrl: true, updatedAt: true },
     orderBy: [{ updatedAt: "asc" }, { id: "asc" }], take: BATCH_LIMIT + 1,
   });
   result.hasMore = rooms.length > BATCH_LIMIT;
@@ -58,7 +63,7 @@ export async function reconcileInventoryPullRequestBindings(syncRunId: string, n
     const room = batch.find((candidate) => candidate.capsuleId === binding.capsuleId)!;
     const observation = observations.find((candidate) => candidate.repositoryFullName === room.repositoryFullName
       && candidate.headBranch === room.headBranch && candidate.number === binding.pullRequestNumber
-      && (!room.headSha || candidate.headSha.toLowerCase() === room.headSha.toLowerCase()))!;
+      && (!authoredHeadSha(room) || candidate.headSha.toLowerCase() === authoredHeadSha(room)!.toLowerCase()))!;
     const saved = await prisma.$transaction(async (tx) => {
       const update = await tx.workroom.updateMany({
         where: { id: room.id, updatedAt: room.updatedAt, archivedAt: null,

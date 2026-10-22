@@ -28,6 +28,7 @@ import { runAsBuildPhase } from "@/lib/build/build-phase-inference-origin";
 import { prisma } from "@dpf/db";
 import { denialForNextAttempt, denyAfterUnparseable } from "@/lib/build/plan-generation-retry";
 import { nearestExistingDirectory, normalizeBuildPlanPaths, type UnresolvedModifyPathHint } from "./build-plan-paths";
+import { buildDesignAcceptanceCriteria } from "@/lib/backlog/initiative-readiness/render-build-design-text";
 import { escalateBuildToHuman, SELF_FIX_CLASS } from "@/lib/build/escalate-build-to-human";
 
 function logBuildActivity(buildId: string, tool: string, summary: string): Promise<void> {
@@ -109,9 +110,13 @@ function buildPlanGenerationPrompt(params: {
     accessibility?: string;
   };
 
-  const acceptance = Array.isArray(dd.acceptanceCriteria)
-    ? dd.acceptanceCriteria.join("; ")
-    : (dd.acceptanceCriteria ?? "Not specified");
+  // BI-6F2872FC: number the criteria exactly as the design's scope baseline
+  // does, so each task can name the ids it satisfies and the platform can
+  // trace the plan to the approved acceptance criteria.
+  const acceptanceIds = buildDesignAcceptanceCriteria(designDoc);
+  const acceptance = acceptanceIds.length > 0
+    ? `\n${acceptanceIds.map(({ id, statement }) => `- ${id}: ${statement}`).join("\n")}`
+    : typeof dd.acceptanceCriteria === "string" ? dd.acceptanceCriteria : "Not specified";
 
   return `You are generating an implementation plan for a Build Studio feature build.
 
@@ -138,7 +143,8 @@ Generate a concrete implementation plan. Respond with ONLY valid JSON matching t
       "title": "<task title>",
       "testFirst": "<how to verify before implementing>",
       "implement": "<exact change with specific file paths and patterns to follow>",
-      "verify": "<how to confirm the task worked>"
+      "verify": "<how to confirm the task worked>",
+      "satisfies": ["<AC id>", "..."]
     }
   ]
 }
@@ -147,7 +153,8 @@ CRITICAL RULES:
 - ALL paths MUST be monorepo-relative: "apps/web/...", "packages/db/...", NOT "lib/..." or "src/..."
 - ONLY use paths from the VERIFIED FILES section below for "modify" actions. Do NOT invent paths.
 - For "create" actions, use the same directory as the nearest related existing file.
-- Each task MUST have: title, testFirst, implement, verify
+- Each task MUST have: title, testFirst, implement, verify, satisfies
+- satisfies lists the acceptance ids (AC-1, AC-2, ...) from the Acceptance Criteria above that the task delivers; use only those ids, and make sure every acceptance id is named by at least one task
 - implement MUST reference specific existing files/patterns (e.g. "follow pattern in apps/web/lib/actions/build.ts")
 - Tasks should be 2-5 minutes of work each — atomic, bite-sized. ONE specific file operation per task.
 - NEVER combine multiple file edits or a test + implementation in one task

@@ -34,6 +34,16 @@ beforeEach(() => {
 });
 
 describe("inventory Workroom binding", () => {
+  it("binds a room whose head is still its claim-time base (BI-A7797C2C)", async () => {
+    const base = "1".repeat(40);
+    mocks.rooms.mockResolvedValue([{ ...room, headSha: base, baseSha: base }]);
+    expect((await reconcileInventoryPullRequestBindings("current-run", now)).bound).toBe(1);
+    expect(mocks.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ id: room.id, headSha: base, pullRequestNumber: null }),
+      data: { pullRequestNumber: observation.number, pullRequestUrl: observation.url },
+    }));
+  });
+
   it("retains previous PR history when the current full head selects a replacement", async () => {
     const previousUrl = `https://github.com/${repository}/pull/41`;
     mocks.rooms.mockResolvedValue([{ ...room, pullRequestNumber: 41, pullRequestUrl: previousUrl }]);

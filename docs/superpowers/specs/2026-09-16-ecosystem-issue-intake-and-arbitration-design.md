@@ -530,10 +530,14 @@ and repeated-poll checks pass. Retain old evidence for audit and rollback of the
 reader; no destructive migration or new model is required by this amendment.
 
 **Operating contract.** Separate intake detection from the weekly voting digest.
-The proposed internal target is hourly detection, acknowledgement and assignment
-within one business day, a disposition within two business days, and a weekly
-update while unresolved. These targets require owner ratification before being
-published as customer commitments. Urgent service, safety or security impact
+The owner ratified these internal targets on 2026-10-21 (the originally proposed
+hourly / one-day / two-day / weekly set was declined as too aggressive): detection
+every four hours, acknowledgement and assignment of external submissions within
+two business days, a triage disposition within five business days, and a
+meaningful progress update every two weeks while unresolved. The scheduled job's
+default cadence is every four hours; an install may tune it on the scheduled-work
+register. These are internal targets, not published customer commitments, until
+the owner says otherwise. Urgent service, safety or security impact
 uses the existing incident/escalation path. Routine external acknowledgement
 precedes internal suggestions; delivery order still considers severity, evidenced
 impact, age, dependencies and available capacity. Unknown origin remains visible

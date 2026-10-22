@@ -1515,6 +1515,9 @@
     "apps/web/lib/work-capsules.ts": [
       "docs/architecture/work-shapes-and-the-decision-gate.md"
     ],
+    "apps/web/lib/work-capsules/authored-head.ts": [
+      "docs/architecture/failure-analysis-and-recovery.md"
+    ],
     "apps/web/lib/work-capsules/delivery-task-hub.ts": [
       "docs/user-guide/build-studio/index.md"
     ],
@@ -3287,6 +3290,7 @@
     ],
     "docs/architecture/failure-analysis-and-recovery.md": [
       "apps/web/lib/change-review/failure-analysis.ts",
+      "apps/web/lib/work-capsules/authored-head.ts",
       "scripts/pregate-preflight.mjs"
     ],
     "docs/architecture/field-service-work-item.md": [

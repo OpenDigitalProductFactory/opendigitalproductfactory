@@ -1037,6 +1037,38 @@ for an answer without the means to obtain one converts an honest failure into a
 confident falsehood — which is why the governed-evidence requirement is the load
 -bearing guard here, not the prompt.
 
+### Offered, or not dispatched; offered, then corrected once (BI-62DB6C03)
+
+The pin did its job. On 2026-10-21 the adopter health watch (`WC-0A92C30D`,
+customer-advisor on codex/gpt-5.6-luna) ended with "the required
+evidence-recording action is unavailable". The writer was in its tool list.
+The archived prompt of the same coworker's next failure lists
+`record_workroom_evidence` second under "Tools:", and every `/ops/workrooms`
+turn in the previous seven days attached 15 tools with the writer pinned. In
+those seven days 40 failed stage runs were this false claim (25 on
+chatgpt/gpt-5.6-sol, 10 on codex/gpt-5.6-luna). Nothing told the model it was
+wrong.
+
+The opposite case went unreported. The verdict counts a prompt-named writer as
+required only when it is authorized. A run offered no writer was recorded `ok`,
+and the drive dispatched the stage again. That happens at an advise boundary,
+which strips every side-effecting tool, or when the grant or owner capability is
+missing. Three rules now hold, in `scheduled-task-runs.ts` and the scheduler:
+
+- **A Workroom stage run is never dispatched without its writer.**
+  `scheduledMandatoryToolNames` requires `record_workroom_evidence` for any run
+  carrying `taskConfig.workroomStage` or a brief that names it, whatever the
+  grants say. `scheduledMandatoryToolGap` refuses the run before inference and
+  gives the reason. Advise mode withholds writers by design, so a Workroom
+  stage is not dispatched in advise mode.
+- **A writer that was handed over and not called gets one correction turn**
+  (`scheduledRequiredToolCorrection`). The turn says the tool is attached and
+  that a "blocked" outcome is the honest way to report not having done the
+  work. There is no correction if the writer already persisted under the run.
+- **The verdict says when the writer was offered.** The failure reads
+  "executed zero times; it was attached to the run and not called". That is
+  not an availability fault, and the record should not be read as one.
+
 ## A stage names the tools it needs
 
 Pinning the writer the prompt names was not enough. Live standing rooms kept
