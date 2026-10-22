@@ -205,3 +205,210 @@ until implementation, protected delivery and canonical failure exercises pass.
 Atomic under BI-7A4E70E9 for the safety dependency explained above. No initiative
 scope baseline exists for BI-7A4E70E9. Coverage and independent design approval
 are pending; this document is not implementation admission.
+
+## Addendum: surviving Linux kernel witness (2026-10-20)
+
+### Scope and approval status
+
+The operator explicitly authorized preparation of this bounded design addendum
+in this chat. That authorization does not admit implementation, grant Linux
+privileges, approve a changed artifact, or authorize activation. This section
+extends CON-OR-3 and VER-OR-2; it does not replace the original two signatures,
+current enrollment, original owner, capture, deadlines or journal contracts.
+
+Reuse the recorded design `9ea14626c7edc4fb85d7198d00339f8c734504ea`,
+baseline `20afd87e-432d-45d3-b800-e081146c1742` and admission
+`IRD-217D54E67AD1` for their approved scope. The historical draft and coverage
+statements above describe that document's original state. They do not revoke
+those later receipts or approve this new boundary. This delta needs its own
+scoped architecture/design disposition before implementation. All three original
+recovery outcomes remain incomplete.
+
+### Observed gap and retained decisions
+
+The measured operator host is macOS. Its selected Docker Desktop daemon runs
+Linux 7.0.14-linuxkit. A macOS process cannot directly retain that VM's Linux
+pidfds. A witness inside the original broker's PID namespace cannot survive
+that namespace's completed teardown. Existing installer HOST observations remain
+the authority for HOST file/configuration identity (DI-A836A4CFB6B3); they do
+not establish this distinct kernel lifetime condition.
+
+The isolated Ubuntu diagnostic proved that a retained non-init leader pidfd
+can report termination while a detached descendant remains alive. It also
+measured original namespace-init and descendant pidfd termination separately.
+That fixture is not a Linuxkit artifact test, an original-owner join, or proof
+that a previously issued Docker request has finished. The cgroup diagnostic's
+ENODEV result remains unavailable evidence, never an empty-group proof.
+
+Retain DI-BD1FBABB7327 (fixed promoter execution), DI-2CA217FFDEA2 (native
+inventory join), DI-B22B1AB3377D (existing signed SelfUpgradeRun evidence),
+DI-37FF621B11DC (daemon references) and DI-A1E0AF9832AD (creation receipts).
+No settled decision is rescored by this addendum.
+
+### Proposed topology for governed review
+
+Extend the existing pinned promoter artifact with a fixed Linux supervisor
+mode. Within that same container, the supervisor remains outside a newly
+created child PID namespace. Its only executable child is the approved fixed
+broker, which becomes PID 1 in that child namespace. The supervisor obtains
+an original process pidfd at creation with `clone3(CLONE_NEWPID | CLONE_PIDFD)`;
+PID lookup after an interruption is not an alternative. It retains that handle
+and the independently joined child namespace identity before permitting effects.
+
+This is a proposed rearrangement of the existing promoter execution boundary,
+not an implemented feature. It requires a small Linux-native executable mode
+packaged and pinned by the existing promoter contract/build context. The
+current Node-only artifact closure does not supply that mode. A native helper
+binary is therefore an explicit new implementation component, even though it
+adds no persistent service, public API, database, key, grant or agent role.
+The existing macOS native Edge process is not claimed to execute Linux syscalls.
+
+The parent starts exactly one broker for exactly one admitted original run.
+It neither accepts arbitrary argv nor attaches to existing containers or PIDs.
+No host PID namespace, host procfs bind, host process scan, Docker exec, ptrace,
+namespace entry into unrelated processes, or privileged container is proposed.
+The child remains confined to its namespace and descendants; joining an
+ancestor namespace is forbidden. Daemon-created service containers are outside
+this process boundary and require the separate daemon proof below.
+
+The supervisor's post-launch job is observation only. It receives neither a
+Docker socket nor an apply/cleanup API. It cannot signal the broker, delete
+files or containers, release a lease, start a successor, or execute a supplied
+command. Existing fixed execution and request writers retain their existing
+roles. Timeout or parent loss must retain custody rather than trigger cleanup.
+
+### Additional privilege and lifetime boundary
+
+Creating a PID namespace requires CAP_SYS_ADMIN in the user namespace that
+owns the new PID namespace. This broad Linux capability is a material change
+from an ordinary restricted broker launch. It is required only by the proposed
+fixed bootstrap; it is not authorized by the operator's permission to write
+this design. Do not substitute `--privileged`, unconfined seccomp, host PID
+access, or an assumed unprivileged-user-namespace configuration.
+
+Before implementation admission, the reviewed launch contract must specify the
+user namespace, UID/GID, complete capabilities, syscall filter, mounts and file
+descriptors, with a supported Docker Desktop policy. Bootstrap must drop all
+capabilities and their bounding/ambient paths, set no_new_privs and install
+irreversible restrictions before the effects barrier opens. The child must not
+inherit bootstrap privilege. The parent must then be unable to create another
+child or regain privileges. An exact executable/syscall policy needs review
+and measurement; this draft does not assert the current image can enforce it.
+
+The supervisor survives child namespace teardown while its original container
+and process remain alive. It does not survive its own death, container removal,
+VM restart or daemon replacement. Lost original kernel handles are never
+reconstructed from a durable record. Those cases retain the original owner and
+intervention state. Native VM restart still requires separately measured
+settlement and a sibling's own lease; this addendum supplies no restart handoff.
+
+### Admission, authentication and handle custody
+
+The existing authenticated installer/promoter admission binds the original
+owner token, host/daemon identity, lock and state-file generations, capture,
+source/image pins, exact broker executable and original time windows. The
+supervisor joins its child handles to that same admission before any state or
+Docker effect. The child cannot supply its own namespace identity or witness.
+The physical HOST/private mapping remains independently verified, never inferred
+from DPF_STATE_DIR, a report path, a container label or an echoed hash.
+
+A fixed inherited anonymous descriptor barrier is proposed for the parent/child
+startup and observation exchange. This is new internal IPC that requires
+explicit review in this delta; it is not permission to add a listening socket,
+HTTP route or general command transport. Bound its grammar and byte count;
+close unused ends and prevent descriptor inheritance into broker descendants.
+Only the original authenticated supervisor instance may complete the barrier.
+A copied JSON receipt, integer fd or PID cannot substitute for its live handles.
+
+The parent emits at most one bounded observation bound to the original nonce,
+owner generation, daemon identity, artifact, kernel identity and journal digest,
+using the existing authenticated evidence path. Its key material and output
+must be inaccessible to the mutating child. Reuse of the existing receipt
+mechanism requires a reviewed isolation and attribution proof; a shared child-
+readable HMAC secret would not establish an independent observer. No new signing
+key or trust root is approved here. If the existing mechanism cannot provide
+that isolation, record the precise gap before implementation admission.
+
+Observation records are audit data. The protected owner-transition code alone
+may consume a live original observation capability together with all other
+conditions. Persisted evidence never becomes a release or replay capability.
+
+### Two independent settlement conditions
+
+Kernel condition: retain the original non-thread init pidfd and namespace join,
+prove that every admitted executor descendant was confined beneath that init,
+and observe the required termination/reaping semantics on the exact supported
+kernel. Poll readability alone is insufficient. Closed handles, POLLNVAL,
+namespace mismatch, unavailable observations and incomplete confinement refuse.
+The exact Linuxkit kernel and packaged binary must be measured before accepting
+the condition; the private Ubuntu fixture cannot establish it.
+
+Daemon condition: every original effect intent must have a matching complete
+request settlement and independent expected observation under the existing
+fixed request journal and finite creation/CID receipts. Kernel teardown never
+cancels or settles daemon work. A lost response, incomplete create receipt,
+unsettled rename/remove, or late promoter operation retains the original owner.
+Container absence, Docker API version, command exit and a healthy portal cannot
+close an uncertain request. This addendum adds no daemon cancellation or replay
+protocol and makes no claim that every uncertain operation is recoverable.
+
+Only when both conditions and the original authority/generation/deadline checks
+hold may the existing boundary perform a protected serial ownership transition.
+Guarded resume and combined rollback must revalidate actual state afterward;
+no saved terminal report skips those checks. Expiry does not renew the original
+forward or rollback window. The supervisor does not perform this transition.
+
+### Changes, scale and verification owed
+
+Extend existing owners: `substrate-start.mjs` for admitted fixed launch and
+HOST/private evidence joining; `runtime-apply-lock.mjs` for opaque custody and
+serial transition; `offline-recovery-execution.mjs` and its journal for original
+request settlement; promoter artifact/contract/build-context owners for the
+pinned Linux executable. Existing native runtime-apply code remains a distinct
+consumer of the shared boundary and has no release-after-effect API today.
+Reports and the existing SelfUpgradeRun importer remain data projections.
+
+Scope is one supervisor, one child namespace and one original lease per local
+runtime boundary. Work is bounded by the original finite request/CID journal
+and fixed descriptor budget, with explicit refusal at the configured limits.
+No fleet scan or per-process inventory poll is proposed. BI-7A4E70E9 owns this
+local reliability delta; any fleet-wide coordinator is outside this design.
+No schema or enum migration is proposed, and the existing journal remains the
+single authoritative request history.
+
+Before implementation, the governed review must resolve the bootstrap privilege
+policy, native artifact packaging, parent/child authentication isolation and
+physical HOST/private mapping. Review the bounded anonymous IPC explicitly.
+No new privilege or component may be activated merely because it is named here.
+
+Required later tests include an escaped non-init descendant, namespace/PID reuse,
+handle substitution, parent death before and after every barrier, privilege
+retention attempts, child forgery, descriptor leakage and VM/daemon replacement.
+Inject late or uncertain Docker effects after kernel termination and assert no
+handoff. Positive tests must measure the original namespace-init teardown and
+all request settlements before exactly one serial transition. Repeat through
+the canonical isolated full application artifact, N-1 caller and actual outage/
+rollback exercises. Retain all prior failures. Source mocks and helper-only
+fixtures cannot satisfy AC-OR-5 or authorize partial publication.
+
+### Standards and evidence limits
+
+- [Linux clone(2)](https://man7.org/linux/man-pages/man2/clone.2.html): original
+  child creation with a pidfd and a new PID namespace; namespace creation has a
+  capability requirement. This is the proposed creation primitive, not a probe.
+- [Linux pid_namespaces(7)](https://man7.org/linux/man-pages/man7/pid_namespaces.7.html):
+  namespace-init death terminates namespace members and prevents later creation
+  there. Exact teardown ordering still needs measured kernel evidence.
+- [Linux pidfd_open(2)](https://man7.org/linux/man-pages/man2/pidfd_open.2.html):
+  process handles identify individual processes; a process handle alone does not
+  certify its descendants or a daemon request.
+- [Linux seccomp(2)](https://man7.org/linux/man-pages/man2/seccomp.2.html): inherited
+  syscall restrictions and no_new_privs support the proposed confinement; the
+  actual filter and packaged runtime remain unimplemented and unverified.
+
+Preserved source archive SHA-256:
+`39b7937b3ad541e2914e2f388404df1fa2737ea2fd0513a6e2617b3293701f93`.
+Preserved isolated pidfd diagnostic archive SHA-256:
+`8adabfe476578b4e1281770913d622c2614274f09495a30d29217786fd73b1db`.
+These identify retained evidence, not the future implementation or a passing
+acceptance run. This addendum is a reviewable proposal only.
