@@ -237,3 +237,13 @@ the same account, and revoking would not have stopped a fresh sign-in
 - `plan_account_handover` reports `liveAgentCredentials` (live access tokens
   and refresh grants), outside the digest. The approver ends them through the
   per-person revoke under Admin > Platform Development > MCP.
+
+## Addendum (2026-10-21, BI-F0E946D2): seeds name the accountable person
+
+Skipping the handed-over account was not enough. The seeds still guessed the
+oldest remaining superuser, and on 2026-10-16 a new seeded task went to a
+superuser who is not the accountable person. The portfolio owner walk
+(`resolveWorkOwner`: portfolio, Foundational, organization, then the guess) now
+lives in `packages/db/src/install-work-owner.ts`. apps/web re-exports it, and
+every task seed names a new task's owner through `findTaskOwnerUserId`. A guard
+test fails a seed that calls the guess directly.

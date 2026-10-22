@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { parseArgs as utilParseArgs } from "node:util";
-import { spawn } from "node:child_process";
+import { ChildProcess, spawn } from "node:child_process";
 import { appendFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 
@@ -10,6 +10,7 @@ import {
   RESUME_MARKER_ENV,
 } from "./lib/durable-wait-resumer.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
+import { advanceGateReservationPin } from "./lib/gate-reservation-handoff.mjs";
 import {
   EXIT_RUNNER_PREREQUISITE_UNAVAILABLE,
   EXIT_CHILD_SIGNAL_DEATH,
@@ -173,14 +174,20 @@ function runGateOnce({ gateArgv, env, spawnFn, cwd, log }) {
     });
     log("gate-start", { pid: child.pid ?? null });
     let remaining = 65536;
+    const outputTails = { stdout: "", stderr: "" };
     for (const stream of ["stdout", "stderr"]) child[stream]?.on("data", chunk => {
+      // Keep the final controller packet even when earlier output exhausted the log budget.
+      outputTails[stream] = (outputTails[stream] + String(chunk)).slice(-65536);
       if (remaining <= 0) return;
       const text = String(chunk).slice(0, remaining);
       remaining -= text.length;
       log("gate-output", { pid: child.pid ?? null, stream, text, truncated: remaining === 0 });
     });
-    child.once("error", () => resolve(null));
-    child.once("exit", (code) => resolve(code));
+    const finish = (code) => resolve({ code, outputTail: `${outputTails.stdout}\n${outputTails.stderr}` });
+    child.once("error", () => finish(null));
+    // Node's close follows stdio drain; exit alone can precede the last packet.
+    // Minimal injected process adapters retain their existing exit-only contract.
+    child.once(child instanceof ChildProcess ? "close" : "exit", finish);
   });
 }
 
@@ -208,16 +215,29 @@ export async function resumeUntilAdmitted({
   let attempts = 0;
   let blockedAttempts = 0;
   let blockedStreak = 0;
+  let currentArgv = [...gateArgv];
   for (;;) {
     if (attempts > 0 && now() >= giveUpAt) {
       return { code: EXIT_QUEUED, attempts, blockedAttempts, outcome: classifyResumeOutcome(EXIT_QUEUED) };
     }
     attempts += 1;
-    const code = await runGateOnce({ gateArgv, env, spawnFn, cwd, log });
+    const { code, outputTail } = await runGateOnce({ gateArgv: currentArgv, env, spawnFn, cwd, log });
     const blocked = code !== null && code !== EXIT_QUEUED && isRetryableExit(code);
     if (blocked) blockedAttempts += 1;
     blockedStreak = blocked ? blockedStreak + 1 : 0;
     log("gate-attempt", { attempts, code, ...(blocked ? { blocked: true } : {}) });
+    if (code === EXIT_QUEUED) {
+      const handoff = advanceGateReservationPin(currentArgv, outputTail);
+      if (handoff.required && !handoff.valid) {
+        log("queue-handoff-unverified", { reason: handoff.reason });
+        return { code: EXIT_RUNNER_PREREQUISITE_UNAVAILABLE, attempts, blockedAttempts,
+          outcome: { evidence: "unrun", reason: "queue-handoff-unverified" } };
+      }
+      if (handoff.valid) {
+        currentArgv = handoff.argv;
+        log("queue-reservation-handoff", { priorLeaseId: handoff.priorLeaseId, leaseId: handoff.leaseId });
+      }
+    }
     // A real verdict - the gate passed or the product failed - ends the wait.
     // Anything the classifier calls blocked-and-transient does not.
     // A cancellation or a moved source is final too: both stop the wait unrun.

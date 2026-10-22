@@ -114,6 +114,7 @@ export function previewLeaseEventSummary(event) {
   let category = 'unclassified';
   if (reason === 'lease-authority-deadline') category = 'authority-deadline';
   else if (reason === 'preview_binding_changed') category = 'source-binding';
+  else if (reason === 'preview_startup_exceeded_budget' || reason === 'preview_init_not_running') category = 'startup-liveness';
   else if (/timed out|ETIMEDOUT/i.test(reason)) category = 'transport-timeout';
   else if (/ECONNRESET|ECONNREFUSED/i.test(reason)) category = 'transport-connection';
   else if (/invalid JSON/i.test(reason)) category = 'transport-response';
@@ -159,18 +160,46 @@ export async function stopOwnedPreviewContainers({ runner, leaseId, projectName,
   if (failures.length) throw new AggregateError(failures, 'preview_owned_cleanup_failed');
 }
 
-export async function runPreviewLifecycle({ compose, inspect, verifySource, stopOwned, ready, wait, active }) {
+// BI-E95458DE: a lease renewed while nothing serves holds the shared CI slot
+// for nobody. On 2026-10-21 a preview renewed for ~86 minutes before its first
+// portal container existed, because renewal could inspect a container only once
+// one was owned. Startup is therefore bounded and, while dev-init runs, renewal
+// requires the init container to be alive. The default matches the server-side
+// preview hold (DI-34AA7F9F14DE); a slower host raises it explicitly.
+export const PREVIEW_STARTUP_BUDGET_MS = 20 * 60_000;
+// `compose run` may not have created the init container by the first renewal.
+export const PREVIEW_INIT_GRACE_MS = 30_000;
+
+export function previewStartupBudgetMs(env = process.env) {
+  const minutes = Number(env.DPF_DEV_PORTAL_STARTUP_BUDGET_MINUTES);
+  return Number.isFinite(minutes) && minutes > 0 ? minutes * 60_000 : PREVIEW_STARTUP_BUDGET_MS;
+}
+
+/** Why renewal must stop during startup, or null while startup is still live. */
+export function previewStartupLiveness({ phase, startedAtMs, phaseStartedAtMs, nowMs, initRunning,
+  budgetMs = PREVIEW_STARTUP_BUDGET_MS, graceMs = PREVIEW_INIT_GRACE_MS }) {
+  // A serving preview is checked against its owned container instead.
+  if (phase === 'serving') return null;
+  if (nowMs - startedAtMs > budgetMs) return 'preview_startup_exceeded_budget';
+  if (phase === 'init' && !initRunning && nowMs - phaseStartedAtMs > graceMs) return 'preview_init_not_running';
+  return null;
+}
+
+export async function runPreviewLifecycle({ compose, inspect, verifySource, stopOwned, ready, wait, active, onPhase = () => {} }) {
   // Preparation/configuration/image admission is completed by the caller first.
   // A failed initialization can never reach the start operation.
   await verifySource();
   await compose(['stop', 'dev-portal']);
   await compose(['up', '-d', '--no-deps', '--no-recreate', '--no-build', '--wait', 'dev-postgres']);
   try {
+    onPhase('init');
     await compose(['run', '--rm', '--no-deps', '--name', active.initName, 'dev-init']);
+    onPhase('start');
     await verifySource();
     await compose(['up', '-d', '--no-deps', '--no-build', 'dev-portal']);
     await inspect();
     await ready();
+    onPhase('serving');
     await wait();
   } finally { await stopOwned(); }
 }
@@ -272,6 +301,11 @@ async function runAdmittedPreview(env, cleanupState) {
       const expiresAt = env.DPF_DEV_PORTAL_LEASE_EXPIRES_AT;
       if (!expiresAt || !(Date.parse(expiresAt) > Date.now())) throw new Error('preview_admission_expired');
       cleanupState.supervised = true;
+      const startup = { phase: 'prepare', startedAtMs: Date.now(), phaseStartedAtMs: Date.now() };
+      const budgetMs = previewStartupBudgetMs(env);
+      const initRunning = async () => {
+        try { return (await runner.run(['inspect', '--format', '{{.State.Running}}', initName])) === 'true'; } catch { return false; }
+      };
       const outcome = await superviseLeaseRun({
         ttlMs: admittedLeaseTtlMs(expiresAt, 120000), expiresAt,
         run: () => runPreviewLifecycle({ compose, inspect, verifySource, stopOwned,
@@ -293,9 +327,13 @@ async function runAdmittedPreview(env, cleanupState) {
             }
             console.log(`Contributor preview bound to ${branch} @ ${sha}; initialization complete.`);
           },
-          wait: () => wait, active: { initName } }),
+          wait: () => wait, active: { initName },
+          onPhase: phase => Object.assign(startup, { phase, phaseStartedAtMs: Date.now() }) }),
         renew: async () => {
           try { await verifySource(); if (ownedIds.size) await inspect(); } catch { return { success: false, error: 'preview_binding_changed' }; }
+          const stalled = previewStartupLiveness({ ...startup, nowMs: Date.now(), budgetMs,
+            initRunning: startup.phase === 'init' ? await initRunning() : false });
+          if (stalled) return { success: false, error: stalled };
           return call('renew_nonprod_environment_lease', { leaseId, ownerSessionId, ttlMinutes: 2,
             hostPressure: await sampleLocalCiHostPressure({ rootPath: worktree, evidenceIsolationHealthy: true }) });
         }, terminate,
