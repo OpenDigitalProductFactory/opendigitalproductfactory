@@ -951,17 +951,21 @@ of consumed candidate allocations and required histories; capability retirement
 never permits their deletion or rewinds the one-per-requirement/two-total ceiling.
 Also prove retention of current compatible fences, or complete authenticated
 retirement and reconciliation of every issued capability and possibly started
-effect. Exclude reassessment admission from proof validation through restoration
-and post-restore verification, before admission can resume. A process-local mutex
-or a database row lock assumed to survive restoration is not that exclusion.
+effect. Exclude reassessment admission and protected allocation, capture,
+settlement and canonical-writer commits from proof validation through restoration
+and post-restore verification. Resume only after restore execution is positively
+settled and the surviving proof is verified. Loss of a lock or connection does
+not prove an external restore process stopped. A process-local mutex or a
+database row lock assumed to survive restoration is not that exclusion.
 Use the existing canonical restore/admission boundary only when its exclusion
 and evidence survive the restore; otherwise refuse before any restore effect.
 Missing, uncertain or stale proof also refuses. Reuse canonical state and the
 rollback contract; do not invent a second history store or infer retirement
 from quiescence or an empty active-task list. Test a recovery point predating
-admission, cross-worker admission races through the entire restore, missing
-proof, post-restore retention of spent allowances/histories and genuine capability
-retirement without a third allocation. Existing destructive permissions and
+admission, cross-worker admission and protected-commit races through the entire
+restore, lock loss with a continuing restore process, missing proof, post-restore
+retention of spent allowances/histories and genuine capability retirement without
+a third allocation. Existing destructive permissions and
 typed confirmation remain mandatory. This scope covers only canonical
 self-upgrade database rollback; arbitrary privileged database/file/host
 administration remains the declared trusted-admin boundary. WWMD decision
