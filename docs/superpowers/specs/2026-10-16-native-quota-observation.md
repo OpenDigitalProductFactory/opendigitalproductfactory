@@ -28,15 +28,26 @@ No UI, schema, migration, dependency, credential, grant, lifecycle or routing-po
 
 The refactoring consolidates observation at one error boundary rather than duplicating process-close and result-parsing branches. Record failed, skipped and unrun gates honestly; no passing review or deployed behavior is claimed by this design.
 
-## Settlement by the governed ledger (BI-29BB23F5, 2026-10-21)
+## Contain the empty-audit settlement exception (BI-29BB23F5, October 21)
 
-This section narrows the rule above that a native failure never falls back within the execution. In the seven days to October 21, 211 failed scheduled Workroom runs (237 runs in total) ended "The existing execution has no verified settled result". 214 of them finished in under ten seconds with no ToolExecution row. Held diagnostics showed a self-terminated exit 1 with a structured error envelope: a weekly sub-account limit, or an API usage limit that the quota hint does not match. The hold sent no work to an alternative provider and bypassed the capacity hold, so every retry repeated the same failure.
+PR #6537, merge `2f07ed17208cd076183e316d6bc198353099fdaf`, added automatic settlement for a structured native error, a closed outer process and zero ToolExecution rows. Its WWMD decision DI-88DE0C444B56 relied on the premise that the audit was the execution's complete effect channel. Source assessment found that premise unproven: ordinary writers can mutate before best-effort audit insertion, approval creation can precede audit reservation, and in-flight requests can outlive a count. The runner also leaves child closure unverified and its native-tool denylist does not attest the actual closed capability inventory. These are source counterexamples, not evidence that any particular historical execution caused an effect.
 
-The Claude CLI runs with every native tool disallowed and only the platform MCP server mounted. Its only effect channel is therefore `governedExecuteTool`, which writes a ToolExecution row (a reservation before any consequential side effect) under the session's taskRunId before it returns the result. `settleNativeCliWithoutEffects` (`apps/web/lib/routing/cli-native-settlement.ts`) settles the execution only when all of these hold:
+**OBJ-HOLD:** Preserve native execution uncertainty until authentic execution and effect evidence establishes settlement.
 
-- the CLI exited by itself: an exit code other than 124, no signal and no timeout;
-- its output parsed as a `type:result` envelope with error status;
-- the session carries a taskRunId;
-- the ledger has zero rows for that taskRunId or thread since dispatch, minus a five-second skew margin.
+**OBJ-QUOTA:** Retain validated quota observation and existing admission checks for future independently authorized requests.
 
-The settlement is logged (`settled-without-effects`). It then raises the ordinary InferenceError for the hint (rate_limit for quota), so fallback and the room's capacity hold apply. A timeout, a signal, an unparsed envelope, a missing taskRunId, any ledger row or an unreadable ledger keeps the hold. Codex is unchanged because its native workspace tools write outside the ledger. WWMD decision DI-88DE0C444B56.
+| Acceptance | Objectives | Statement |
+| --- | --- | --- |
+| AC-HOLD-1 | OBJ-HOLD | A native error with a task identity and an empty audit still propagates the original uncertainty; outer closure, quota text and audit absence do not authorize another provider start. |
+| AC-HOLD-2 | OBJ-HOLD, OBJ-QUOTA | Safe quota observation is awaited once, and observation persistence failure preserves the same uncertainty and diagnostics. |
+| AC-HOLD-3 | OBJ-HOLD | Remove the automatic settlement helper and its unsound positive fixtures; retain genuine no-fallback coverage, malformed-envelope refusal and successful-path compatibility. |
+| AC-HOLD-4 | OBJ-QUOTA | Reuse the existing pool/capacity recorder and predispatch check without changing quota ownership, cooldown policy, providers or routing configuration. |
+
+Ordered implementation stays in this fix document:
+
+1. Preserve the original author head and evidence, refresh the existing governed room and worktree, and demonstrate the empty-audit hold regression before changing production code.
+2. Remove only the automatic settlement conversion and helper. Keep quota recording at the shared error boundary and rethrow the original exception.
+3. Run the affected adapter, quota, uncertainty and existing fallback tests, both web TypeScript programs and applicable guards. Complete the governed integration gate and independent source assessment before protected publication.
+4. Verify the containing canonical release through the existing release owner. Source tests do not prove historical closure, and live acceptance must not relaunch an uncertain execution.
+
+This containment restores the native hold rather than manufacturing complete capture. BI-7906C73E separately owns qualified present reassessment; its restricted execution composition does not qualify ordinary native routing or transfer review budget here. Historical identities, unknown outcomes and retry blocks remain intact. No new capture mechanism, approval table, grant, provider, monitor trigger or production runtime is introduced. The monitor's useful execution remains a separate delivery obligation.

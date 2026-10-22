@@ -37,7 +37,6 @@ import { providerSetupLocation } from "@/lib/ai-provider-routes";
 import { randomUUID } from "node:crypto";
 import { renderOwnedCliRunner, NativeCliExecutionUncertainError } from "./cli-owned-runner";
 import { observeCliProcess } from "./cli-process-observation";
-import { settleNativeCliWithoutEffects } from "./cli-native-settlement";
 import type { NativeCliDiagnostics } from "../shared/execution-uncertainty";
 
 
@@ -447,7 +446,6 @@ export const cliAdapter: ExecutionAdapterHandler = {
     const execAsync = lazyUtil().promisify(cp.exec);
     const spawnCb = cp.spawn;
     let containerDispatchStarted = false;
-    let dispatchedAt: Date | null = null;
 
     try {
       await execAsync(`docker exec ${SANDBOX_CONTAINER} sh -c 'mkdir -p ${authHome} && chmod 700 ${authHome} && chown node:node ${authHome}'`, { timeout: 5_000 });
@@ -555,7 +553,6 @@ export const cliAdapter: ExecutionAdapterHandler = {
       // shared sandbox / portal. Prep (auth, file writes) stays outside the
       // slot so slots turn over on real inference, not setup.
       const { stdout, diagnostics } = await withCliSlot(() => new Promise<{ stdout: string; diagnostics: NativeCliDiagnostics }>((resolve, reject) => {
-        dispatchedAt = new Date();
         const proc = spawnCb("docker", [
           "exec", "--user", "node", SANDBOX_CONTAINER, "node", runnerScript,
         ]);
@@ -695,10 +692,7 @@ export const cliAdapter: ExecutionAdapterHandler = {
             "The native CLI reported a usage limit; its reset time is unknown.", poolIdentity);
         } catch { /* Persistence must never replace the original execution hold. */ }
       }
-      // BI-29BB23F5: a self-terminated error whose governed ledger is empty changed nothing.
-      const settled = mcpJwt && dispatchedAt
-        ? await settleNativeCliWithoutEffects({ error, session: mcpSession, dispatchedAt }) : null;
-      throw settled ?? error;
+      throw error;
     } finally {
       // Clean up temp files (fire-and-forget). The mcp-config file carries the
       // short-lived JWT; even though it's already 5-minute capped, we wipe it

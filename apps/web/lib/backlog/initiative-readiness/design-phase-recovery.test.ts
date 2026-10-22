@@ -84,6 +84,39 @@ describe("designPhaseReviewDecision", () => {
       completion: completion([]),
     })).toBeNull();
   });
+  it("keeps an owed stale approval requestable when old-baseline plan coverage already passes", () => {
+    const baseline = readinessRequirement({ code: "OBJECTIVE_BASELINE_REQUIRED", state: "stale", accountableRole: "design-checklist-reviewer" });
+    const implementation = { ...completion([]), target: "implementation" as const, verdict: "allowed" as const,
+      satisfied: [readinessRequirement({ code: "PLAN_REQUIRED", state: "pass", accountableRole: "implementation-planner" })] };
+    const terminal = completion([baseline,
+      readinessRequirement({ code: "ACCEPTANCE_EVIDENCE_REQUIRED", state: "missing", accountableRole: "acceptance-reviewer" }),
+      readinessRequirement({ code: "OBJECTIVE_RECONCILIATION_REQUIRED", state: "missing", accountableRole: "acceptance-reviewer" }),
+    ]);
+    const decisions = { implementation, completion: terminal };
+    expect(decisionForIndependentReview("record_initiative_design_review", decisions)).toMatchObject({
+      target: "completion", verdict: "input-required", unmet: [baseline], blockers: [],
+    });
+    expect(implementation.verdict).toBe("allowed");
+    expect(implementation.satisfied[0]?.state).toBe("pass");
+    expect(decisionForIndependentReview("record_initiative_design_review", { ...decisions,
+      completion: { ...terminal, verdict: "denied", blockers: [baseline], unmet: terminal.unmet.slice(1) },
+    })).toMatchObject({ target: "completion", verdict: "denied", blockers: [baseline], unmet: [] });
+    expect(decisionForIndependentReview("record_initiative_architecture_review", decisions)).toBeNull();
+    expect(decisionForIndependentReview("record_initiative_design_review", { ...decisions,
+      completion: { ...terminal, verdict: "allowed" },
+    })).toBeNull();
+    for (const change of [{ accountableRole: "product-owner" }, { state: "missing" as const },
+      { state: "pass" as const }, { state: "fail" as const }]) {
+      expect(decisionForIndependentReview("record_initiative_design_review", { ...decisions,
+        completion: completion([{ ...baseline, ...change }]),
+      })).toBeNull();
+      expect(decisionForIndependentReview("record_initiative_design_review", { ...decisions,
+        completion: { ...completion([]), blockers: [{ ...baseline, ...change }] },
+      })).toBeNull();
+    }
+    expect(decisionForIndependentReview("record_initiative_design_review", { implementation, completion: completion([]) })).toBeNull();
+    expect(decisionForIndependentReview("record_initiative_design_review", { completion: terminal })).toBeNull();
+  });
   it("treats a fix item's spec-approval baseline as a design review owed before delivery", () => {
     const decision = completion([
       readinessRequirement({ code: "PLAN_REQUIRED", state: "missing", accountableRole: "implementation-planner" }),
