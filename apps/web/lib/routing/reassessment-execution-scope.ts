@@ -1,11 +1,20 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { initiativeReviewWriterArgumentContract, parseInitiativeReviewBinding, type InitiativeReviewBinding } from "../mcp-task-review-contract";
 import { parseTaskExecutionFence, sameTaskExecutionFence, type TaskExecutionFence } from "../shared/task-execution-fence";
-import { createInitiativeReviewTerminalToolPolicy, normalizeTerminalToolArguments } from "../tak/terminal-tool-policy";
+import { immutableReaderArgumentsFor, normalizeTerminalToolArguments } from "../shared/immutable-review-reader";
 import type { RoutedExecutionPlan } from "./recipe-types";
-import type { ReassessmentBudgetConfiguration } from "../inference/budget-gate";
+import type { ReassessmentBudgetConfiguration } from "../shared/reassessment-budget-contract";
+
+export type ReassessmentFiniteTokenProof = {
+  schemaVersion: 1; kind: "dmr-native-messages-v1"; apiRoot: string; runtimeVersion: "v1.2.8";
+  modelDigest: string; engineIdentity: string; engineArtifactDigest: string; engineSourceCommit: "72874f5";
+  templateDigest: string; configDigest: string;
+};
+export type ReassessmentTokenReservation = {
+  schemaVersion: 1; reservationId: string; bodySha256: string; inputTokens: number; maxOutputTokens: number; reservedTokens: number;
+};
 
 export type QualifiedReassessmentExecution = {
   schemaVersion: 1;
@@ -20,6 +29,7 @@ export type QualifiedReassessmentExecution = {
   budgetConfiguration: ReassessmentBudgetConfiguration;
   bounds: { maxProviderStarts: number; maxDurationMs: number; maxOutputTokens: number };
   qualificationDigest: string;
+  finiteTokenProof?: ReassessmentFiniteTokenProof;
 };
 
 export type ReassessmentExecutionManifest = {
@@ -43,7 +53,7 @@ export type ReassessmentCaptureEvent = ReassessmentEffect & {
 };
 export type ReassessmentCaptureReservation = { reservationId: string };
 export type ReassessmentExecutionState = {
-  providerReservations: number; providerStarts: number; unknownEffects: number; held: boolean; closed: boolean;
+  providerReservations: number; providerStarts: number; reservedTokens: number; unknownEffects: number; held: boolean; closed: boolean;
 };
 export type ReassessmentCaptureHooks = {
   open(context: ReassessmentExecutionContext): Promise<void>;
@@ -60,10 +70,13 @@ export const isReassessmentExecutionError = (error: unknown): error is Reassessm
 
 type Scope = { context: ReassessmentExecutionContext; hooks: ReassessmentCaptureHooks; state: ReassessmentExecutionState; sequence: number };
 const execution = new AsyncLocalStorage<Scope>();
+type TokenHandoff = { scope: Scope; reservation: Readonly<ReassessmentTokenReservation>; issued: boolean; consumed: boolean; closed: boolean };
+const tokenHandoff = new AsyncLocalStorage<TokenHandoff>();
 const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
 const digest = (value: unknown): value is string => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
 const nonempty = (value: unknown): value is string => typeof value === "string" && value.trim() === value && value.length > 0;
 const positiveInteger = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) > 0;
+const nonnegativeInteger = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0;
 const equal = (left: unknown, right: unknown) => canonicalJson(left ?? null) === canonicalJson(right ?? null);
 function fail(code: string, message = code): never {
   const scope = execution.getStore();
@@ -73,6 +86,63 @@ function fail(code: string, message = code): never {
 
 /** Provider/transport guards use the same permanent hold as tool guards. */
 export function refuseReassessmentExecution(code: string, message = code): never { return fail(code, message); }
+
+export function validReassessmentFiniteTokenProof(value: unknown): value is ReassessmentFiniteTokenProof {
+  if (!object(value) || Object.keys(value).length !== 10 || value.schemaVersion !== 1 || value.kind !== "dmr-native-messages-v1"
+    || value.runtimeVersion !== "v1.2.8" || value.engineSourceCommit !== "72874f5" || !nonempty(value.apiRoot)
+    || !nonempty(value.modelDigest) || !nonempty(value.engineIdentity) || typeof value.engineArtifactDigest !== "string"
+    || !/^(sha256:)?[a-f0-9]{64}$/.test(value.engineArtifactDigest) || !digest(value.templateDigest) || !digest(value.configDigest)) return false;
+  try { const url = new URL(value.apiRoot); return ["http:", "https:"].includes(url.protocol) && !url.username && !url.password && !url.search && !url.hash; }
+  catch { return false; }
+}
+
+export function parseReassessmentTokenReservation(value: unknown): ReassessmentTokenReservation | null {
+  if (!object(value) || Object.keys(value).length !== 6 || value.schemaVersion !== 1 || typeof value.reservationId !== "string"
+    || !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(value.reservationId)
+    || !digest(value.bodySha256) || !nonnegativeInteger(value.inputTokens) || !positiveInteger(value.maxOutputTokens)
+    || !positiveInteger(value.reservedTokens) || value.reservedTokens !== value.inputTokens + value.maxOutputTokens) return null;
+  return value as ReassessmentTokenReservation;
+}
+
+/** Native count evidence reserves the whole generation before any asynchronous callback. No allowance is refunded. */
+export async function withReassessmentTokenReservation<T>(input: { bodyUtf8: string; inputTokens: number; maxOutputTokens: number }, fn: () => Promise<T>): Promise<T> {
+  const scope = execution.getStore(); assertReassessmentActive();
+  if (!scope || !scope.context.qualification.finiteTokenProof || scope.context.qualification.budgetConfiguration.configuredPerTaskLimit <= 0)
+    fail("reassessment-finite-token-proof-required");
+  if (tokenHandoff.getStore() || typeof input.bodyUtf8 !== "string" || !nonnegativeInteger(input.inputTokens)
+    || input.maxOutputTokens !== scope.context.qualification.bounds.maxOutputTokens) fail("reassessment-token-reservation-invalid");
+  const reservedTokens = input.inputTokens + input.maxOutputTokens;
+  if (!positiveInteger(reservedTokens) || scope.state.reservedTokens + reservedTokens > scope.context.qualification.budgetConfiguration.configuredPerTaskLimit)
+    fail("reassessment-token-limit", "The immutable whole-generation token allowance is exhausted.");
+  scope.state.reservedTokens += reservedTokens;
+  const reservation = Object.freeze({ schemaVersion: 1 as const, reservationId: randomUUID(),
+    bodySha256: createHash("sha256").update(input.bodyUtf8, "utf8").digest("hex"), inputTokens: input.inputTokens, maxOutputTokens: input.maxOutputTokens, reservedTokens });
+  const handoff: TokenHandoff = { scope, reservation, issued: false, consumed: false, closed: false };
+  try { return await tokenHandoff.run(handoff, fn); } finally { handoff.closed = true; }
+}
+
+/** Only the exact single HTTP body can claim a server-owned count reservation. */
+export function reassessmentTokenReservationFor(bodyUtf8: string): Readonly<ReassessmentTokenReservation> {
+  const scope = execution.getStore(); const handoff = tokenHandoff.getStore(); assertReassessmentActive();
+  if (!scope || !handoff || handoff.scope !== scope || handoff.closed || handoff.issued || typeof bodyUtf8 !== "string"
+    || createHash("sha256").update(bodyUtf8, "utf8").digest("hex") !== handoff.reservation.bodySha256) fail("reassessment-token-handoff-invalid");
+  handoff.issued = true;
+  return handoff.reservation;
+}
+
+function consumeFiniteProviderReservation(scope: Scope, input: unknown): void {
+  if (scope.context.qualification.budgetConfiguration.configuredPerTaskLimit === 0) return;
+  if (!object(input) || !["configuration", "count", "generation"].includes(String(input.operation))) fail("reassessment-provider-operation-invalid");
+  if (input.operation !== "generation") {
+    if (Object.hasOwn(input, "tokenReservation")) fail("reassessment-token-reservation-invalid");
+    return;
+  }
+  const handoff = tokenHandoff.getStore(); const reservation = parseReassessmentTokenReservation(input.tokenReservation);
+  if (!reservation || !handoff || handoff.scope !== scope || handoff.closed || !handoff.issued || handoff.consumed
+    || !equal(reservation, handoff.reservation) || typeof input.bodyUtf8 !== "string"
+    || createHash("sha256").update(input.bodyUtf8, "utf8").digest("hex") !== reservation.bodySha256) fail("reassessment-token-reservation-invalid");
+  handoff.consumed = true;
+}
 
 export function hasPersistedReassessmentExecution(metadata: unknown): boolean {
   return object(metadata) && Object.prototype.hasOwnProperty.call(metadata, "reassessmentExecution");
@@ -160,7 +230,9 @@ function validateSeed(seed: ReassessmentExecutionSeed): void {
     || !digest(q.providerConfigurationDigest) || !digest(q.toolSurfaceDigest) || !digest(q.qualificationDigest)
     || q.budgetConfiguration?.source !== "registry-and-execution-config" || !nonempty(q.budgetConfiguration.agentId)
     || !Number.isFinite(q.budgetConfiguration.configuredDailyLimit) || q.budgetConfiguration.configuredDailyLimit < 0
-    || q.budgetConfiguration.configuredPerTaskLimit !== 0
+    || !nonnegativeInteger(q.budgetConfiguration.configuredPerTaskLimit)
+    || (q.finiteTokenProof !== undefined && !validReassessmentFiniteTokenProof(q.finiteTokenProof))
+    || (q.budgetConfiguration.configuredPerTaskLimit > 0 && !validReassessmentFiniteTokenProof(q.finiteTokenProof))
     || !digest(q.budgetConfiguration.configurationDigest)
     || !positiveInteger(q.bounds?.maxProviderStarts) || !positiveInteger(q.bounds?.maxDurationMs) || !positiveInteger(q.bounds?.maxOutputTokens)
     || q.executionPlan?.providerId !== q.providerId || q.executionPlan.modelId !== q.modelId
@@ -193,7 +265,7 @@ export async function runReassessmentExecution<T>(seed: ReassessmentExecutionSee
   if (execution.getStore()) fail("reassessment-nested-execution", "A reassessment cannot open another execution scope.");
   const context = freeze(reassessmentCaptureValue(seed) as ReassessmentExecutionSeed);
   validateSeed(context);
-  const scope: Scope = { context, hooks, sequence: 0, state: { providerReservations: 0, providerStarts: 0, unknownEffects: 0, held: false, closed: false } };
+  const scope: Scope = { context, hooks, sequence: 0, state: { providerReservations: 0, providerStarts: 0, reservedTokens: 0, unknownEffects: 0, held: false, closed: false } };
   try { await hooks.open(context); }
   catch { fail("reassessment-capture-unavailable", "The authenticated sealed manifest could not be captured before execution."); }
   return execution.run(scope, async () => {
@@ -227,6 +299,7 @@ export async function runReassessmentEffect<T>(effect: ReassessmentEffect, execu
   if (!nonempty(effect.name) || !["provider", "tool"].includes(effect.kind)) fail("reassessment-effect-invalid");
   if (effect.kind === "tool") assertReassessmentProposedToolCall({ toolName: effect.name, params: object(effect.input) ? effect.input : {} });
   const input = reassessmentCaptureValue(effect.input);
+  if (effect.kind === "provider") consumeFiniteProviderReservation(scope, input);
   if (effect.kind === "provider" && scope.state.providerReservations >= scope.context.qualification.bounds.maxProviderStarts) {
     fail("reassessment-provider-start-limit", "The immutable provider start allowance is exhausted.");
   }
@@ -276,7 +349,7 @@ export function assertReassessmentProposedToolCall(input: { toolName: string; pa
   reassessmentCaptureValue(input.params);
   if (input.toolName === "read_source_at_version") {
     if (Object.keys(input.params).some(key => !READER_KEYS.has(key))) fail("reassessment-reader-arguments-invalid", "The immutable reader received undeclared arguments.");
-    const policy = createInitiativeReviewTerminalToolPolicy(binding.writerToolName, ["read_source_at_version", binding.writerToolName], binding.artifactRef)!;
+    const policy = { readerToolNames: ["read_source_at_version"], immutableReaderArguments: immutableReaderArgumentsFor(binding.artifactRef) };
     const disposition = normalizeTerminalToolArguments(policy, input.toolName, input.params);
     if (disposition.kind === "refuse") fail(disposition.result.error, disposition.result.message);
     return disposition.arguments;

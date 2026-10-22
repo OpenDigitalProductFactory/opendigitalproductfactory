@@ -687,6 +687,46 @@ not establish that this composition is installed or qualified. The authenticated
 producer, reservation enforcement, response normalization and positive/refusal
 tests remain required before R2 completion or R3 activation.
 
+**Chosen ownership extension, pending independent approval.** Kernel consult
+DI-5E1966E5D0FF selected extension of the existing durable host-resource owner
+over a separate raw-completion function protocol: high confidence, margin 0.743,
+autonomy eligible, no commandment conflict. This selects the design direction;
+it neither approves this amendment nor authorizes a production allocation.
+The initial preference for the smaller raw adapter was changed by that consult.
+
+Current DMR source releases its runner reference between count and generation.
+Native Messages does not bind the global template per request. Re-reading
+identities cannot prevent a configuration change and reversal between reads.
+The process-local inference lane therefore cannot supply the required
+cross-worker composition guarantee. The existing nonproduction/developer lease
+contract must not be presented as an already implemented production fence.
+
+Extend the existing durable physical-host resource owner explicitly to this
+normal production composition, without a second lock store or grant engine.
+An authenticated Workroom/TaskRun owner must acquire the same resource identity
+used by every supported DMR mutator before current identity reads, counting,
+reservation and generation. Configuration, automatic context reconciliation,
+model install/removal/unload and startup model creation must honor that owner.
+An unguarded supported path makes qualification fail closed. Bind its ownership
+and generation into the execution manifest; verify it at each real dispatch.
+The in-process priority lane remains an adapter with one documented lock order.
+
+Reuse the existing renewal, cancellation and expiry supervisor. Its interval
+cannot extend the task's immutable deadline or replenish starts/tokens. Lost
+ownership cancels further dispatch and preserves outstanding reservations;
+unproved backend termination is uncertainty, never permission to release early
+or run a replacement. Admission requires positive compatibility evidence for
+the owner and every supported producer. Runtime changes outside that supported
+trusted-owner contract invalidate qualification; status metadata alone is not
+a fresh hash of running engine bytes.
+
+This broader owner extension requires the new independently approved immutable
+baseline and refreshed atomic R1–R4 coverage before implementation. The existing
+unchanged R2 approval supports the closed-loop/capture scaffolding; draft finite
+reservation and Messages tests do not establish this production ownership
+contract. No finite positive task is admitted until its real enforcement and
+served positive/refusal evidence exist.
+
 ### Atomic admission, original limits and concurrency
 
 Resolve authorized original readback and genuine exact receipts first. The

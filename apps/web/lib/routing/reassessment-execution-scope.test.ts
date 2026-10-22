@@ -4,6 +4,7 @@ import {
   assertReassessmentActive, assertReassessmentPlan, assertReassessmentProposedToolCall,
   assertReassessmentToolCall, currentReassessmentExecution, runReassessmentEffect,
   runReassessmentExecution, validateReassessmentToolCalls, matchesPersistedReassessmentScope, reassessmentToolSurfaceDigest,
+  withReassessmentTokenReservation, reassessmentTokenReservationFor,
   type ReassessmentCaptureHooks, type ReassessmentExecutionSeed,
 } from "./reassessment-execution-scope";
 
@@ -38,6 +39,113 @@ function fixture() {
   return { seed, hooks };
 }
 const writer = { decision: "pass", reason: "Evidence checked.", findings: [], resolvedFindingRefs: [] };
+
+function finiteFixture() {
+  const f = fixture();
+  f.seed.qualification.budgetConfiguration = reassessmentBudgetFixture({ configuredPerTaskLimit: 50_000 });
+  f.seed.qualification.bounds.maxProviderStarts = 20;
+  Object.assign(f.seed.qualification, { finiteTokenProof: { schemaVersion: 1, kind: "dmr-native-messages-v1", apiRoot: "http://dmr.invalid",
+    runtimeVersion: "v1.2.8", modelDigest: "sha256:" + "5".repeat(64), engineIdentity: "llama.cpp",
+    engineArtifactDigest: "sha256:" + "6".repeat(64), engineSourceCommit: "72874f5", templateDigest: "7".repeat(64), configDigest: "8".repeat(64) } });
+  return f;
+}
+function finiteGeneration(bodyUtf8: string, inputTokens: number, io: () => Promise<unknown>, maxOutputTokens = 100) {
+  return withReassessmentTokenReservation({ bodyUtf8, inputTokens, maxOutputTokens }, () => runReassessmentEffect({ kind: "provider", name: "native-messages",
+    input: { operation: "generation", bodyUtf8, tokenReservation: reassessmentTokenReservationFor(bodyUtf8) } }, io));
+}
+
+describe("finite whole-generation token reservations", () => {
+  it.each(["missing-proof", "runtime-version", "engine-artifact", "engine-commit", "credential-url", "extra-proof-key"])("refuses %s before any capture or provider start", async condition => {
+    const { seed, hooks } = finiteFixture(); const proof = seed.qualification.finiteTokenProof!;
+    if (condition === "missing-proof") delete seed.qualification.finiteTokenProof;
+    if (condition === "runtime-version") Object.assign(proof, { runtimeVersion: "v1.2.9" });
+    if (condition === "engine-artifact") proof.engineArtifactDigest = "unproven";
+    if (condition === "engine-commit") Object.assign(proof, { engineSourceCommit: "other" });
+    if (condition === "credential-url") proof.apiRoot = "http://credential@dmr.invalid";
+    if (condition === "extra-proof-key") Object.assign(proof, { bypass: true });
+    const io = vi.fn(async () => "never");
+    await expect(runReassessmentExecution(seed, hooks, () => finiteGeneration("body", 1, io))).rejects.toMatchObject({ code: "reassessment-manifest-invalid" });
+    expect(hooks.open).not.toHaveBeenCalled(); expect(io).not.toHaveBeenCalled();
+  });
+  it("admits two exact generations within 50K and retains every input plus maximum output charge", async () => {
+    const { seed, hooks } = finiteFixture(); const io = vi.fn(async () => ({ usage: { outputTokens: 1 } }));
+    await runReassessmentExecution(seed, hooks, async () => {
+      await finiteGeneration('{"generation":1}', 24_900, io);
+      await finiteGeneration('{"generation":2}', 24_900, io);
+    });
+    expect(io).toHaveBeenCalledTimes(2);
+    expect(hooks.reserve).toHaveBeenCalledTimes(2);
+    expect(hooks.close).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ reservedTokens: 50_000, providerStarts: 2 }));
+  });
+  it("refuses cumulative overrun before capture or I/O even when prior actual output was smaller", async () => {
+    const { seed, hooks } = finiteFixture(); const io = vi.fn(async () => ({ outputTokens: 0 }));
+    await runReassessmentExecution(seed, hooks, async () => {
+      await finiteGeneration("first", 24_900, io);
+      await expect(finiteGeneration("second", 25_000, io)).rejects.toThrow(/token.*limit|allowance/i);
+    });
+    expect(io).toHaveBeenCalledOnce(); expect(hooks.reserve).toHaveBeenCalledOnce();
+  });
+  it("refuses an initially oversized whole generation before the callback, capture or provider I/O", async () => {
+    const { seed, hooks } = finiteFixture(); const io = vi.fn(async () => "never");
+    await runReassessmentExecution(seed, hooks, async () => {
+      await expect(finiteGeneration("oversized", 49_901, io)).rejects.toMatchObject({ code: "reassessment-token-limit" });
+    });
+    expect(io).not.toHaveBeenCalled(); expect(hooks.reserve).not.toHaveBeenCalled();
+  });
+  it("charges before the callback and never replenishes an unused reservation", async () => {
+    const { seed, hooks } = finiteFixture(); const callback = vi.fn(async () => "never");
+    await runReassessmentExecution(seed, hooks, async () => {
+      await withReassessmentTokenReservation({ bodyUtf8: "unused", inputTokens: 49_900, maxOutputTokens: 100 }, async () => "unused");
+      await expect(withReassessmentTokenReservation({ bodyUtf8: "next", inputTokens: 0, maxOutputTokens: 100 }, callback)).rejects.toThrow(/token.*limit|allowance/i);
+    });
+    expect(callback).not.toHaveBeenCalled(); expect(hooks.reserve).not.toHaveBeenCalled();
+  });
+  it("accepts an authenticated zero-input count while reserving its complete output cap", async () => {
+    const { seed, hooks } = finiteFixture(); const io = vi.fn(async () => "response");
+    await runReassessmentExecution(seed, hooks, () => finiteGeneration("zero-input", 0, io));
+    expect(io).toHaveBeenCalledOnce();
+    expect(hooks.close).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ reservedTokens: 100 }));
+  });
+  it("retains the full generation charge after post-start capture loss", async () => {
+    const { seed, hooks } = finiteFixture(); const io = vi.fn(async () => "observed"); hooks.complete = vi.fn(async () => { throw Error("capture lost"); });
+    await runReassessmentExecution(seed, hooks, async () => {
+      await expect(finiteGeneration("first", 49_900, io)).rejects.toThrow(/capture/i);
+      await expect(finiteGeneration("second", 0, io)).rejects.toThrow(/held/i);
+    });
+    expect(io).toHaveBeenCalledOnce();
+    expect(hooks.close).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ reservedTokens: 50_000, unknownEffects: 1, held: true }));
+  });
+  it.each(["changed-body", "duplicate-handoff", "forged-effect", "output-cap"])("refuses %s before capture or I/O", async condition => {
+    const { seed, hooks } = finiteFixture(); const io = vi.fn(async () => "never");
+    await runReassessmentExecution(seed, hooks, async () => {
+      await expect(withReassessmentTokenReservation({ bodyUtf8: "bound", inputTokens: 10, maxOutputTokens: condition === "output-cap" ? 99 : 100 }, async () => {
+        const tokenReservation = reassessmentTokenReservationFor(condition === "changed-body" ? "changed" : "bound");
+        if (condition === "duplicate-handoff") reassessmentTokenReservationFor("bound");
+        await runReassessmentEffect({ kind: "provider", name: "post", input: { operation: "generation", tokenReservation:
+          condition === "forged-effect" ? { ...tokenReservation, inputTokens: 0, reservedTokens: 100 } : tokenReservation } }, io);
+      })).rejects.toThrow(/reservation|token|bound|cap|handoff/i);
+    });
+    expect(io).not.toHaveBeenCalled(); expect(hooks.reserve).not.toHaveBeenCalled();
+  });
+  it("serializes in-memory whole-generation charges across parallel callbacks", async () => {
+    const { seed, hooks } = finiteFixture(); const io = vi.fn(async () => "response");
+    await runReassessmentExecution(seed, hooks, async () => {
+      const results = await Promise.allSettled([finiteGeneration("first", 29_900, io), finiteGeneration("second", 29_900, io)]);
+      expect(results.filter(result => result.status === "fulfilled")).toHaveLength(0);
+    });
+    // The refused second reservation holds the shared execution before either effect starts.
+    expect(io).not.toHaveBeenCalled();
+  });
+  it("labels count/configuration operations without charging fictional generation tokens, while consuming provider starts", async () => {
+    const { seed, hooks } = finiteFixture(); const io = vi.fn(async () => "evidence");
+    await runReassessmentExecution(seed, hooks, async () => {
+      for (const operation of ["configuration", "count"]) await runReassessmentEffect({ kind: "provider", name: operation, input: { operation } }, io);
+      await expect(runReassessmentEffect({ kind: "provider", name: "unlabeled", input: {} }, io)).rejects.toThrow(/operation|reservation/i);
+    });
+    expect(io).toHaveBeenCalledTimes(2);
+    expect(hooks.close).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ providerStarts: 2, reservedTokens: 0 }));
+  });
+});
 
 describe("reassessment tool surface digest", () => {
   it("uses deterministic object keys without changing the complete ordered input", () => {

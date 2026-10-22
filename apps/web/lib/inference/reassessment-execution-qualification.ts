@@ -7,7 +7,6 @@ import type { RoutedExecutionPlan } from "../routing/recipe-types";
 import { parseExecutionAdapterSelector } from "../routing/execution-adapter-types";
 import { accountAuthMethod, providerAccountExecutionBlock } from "../routing/provider-account-candidates";
 import { refuseReassessmentExecution, type QualifiedReassessmentExecution } from "../routing/reassessment-execution-scope";
-import type { EffortWarrant } from "../tak/effort-warrant";
 import type { RouteAndCallOptions } from "./routed-inference-options";
 import { readReassessmentBudgetConfiguration, checkReassessmentBudget } from "./budget-gate";
 import { readReassessmentProviderAuthHeaders } from "./provider-account-credentials";
@@ -99,7 +98,7 @@ export type ReassessmentQualificationInput = {
   systemPrompt: string;
   sensitivity: RouteSensitivity;
   options: RouteAndCallOptions & { agentId: string };
-  effortWarrant: EffortWarrant;
+  effortWarrant: { maxIterations: number; maxDurationMs: number };
   toolSurfaceDigest: string;
 };
 

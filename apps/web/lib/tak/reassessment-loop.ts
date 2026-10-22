@@ -1,9 +1,11 @@
-import type { RunAgenticLoopParams } from "./agentic-loop";
+import type { TaskExecutionFence } from "../shared/task-execution-fence";
 import type { ToolCallEntry } from "../routing/chat-message-types";
 import { assertReassessmentActive, assertReassessmentPlan, assertReassessmentToolCall,
   isReassessmentExecutionError, refuseReassessmentExecution } from "../routing/reassessment-execution-scope";
 
-type Identity = Pick<RunAgenticLoopParams, "userId" | "agentId" | "taskRunId" | "taskExecutionFence">;
+type Identity = { userId: string; agentId: string; taskRunId?: string | null; taskExecutionFence?: TaskExecutionFence | null };
+type ReassessmentLoopInput = Identity & { tools: readonly { name: string }[]; toolsForProvider?: readonly Record<string, unknown>[];
+  deferredTools?: readonly unknown[]; enableExecutionPlan?: boolean; proposeSideEffects?: boolean };
 
 /** A captured loop never becomes ordinary merely because a callback lost ALS. */
 export function assertRestrictedReassessmentTurn(restricted: boolean, tools: readonly Record<string, unknown>[] | undefined): void {
@@ -14,7 +16,7 @@ export function assertRestrictedReassessmentTurn(restricted: boolean, tools: rea
     plan: context.qualification.executionPlan, tools });
 }
 
-export function restrictedReassessmentLoop(input: RunAgenticLoopParams): boolean {
+export function restrictedReassessmentLoop(input: ReassessmentLoopInput): boolean {
   const context = assertReassessmentActive();
   if (!context) return false;
   if (input.enableExecutionPlan || input.proposeSideEffects || input.deferredTools?.length

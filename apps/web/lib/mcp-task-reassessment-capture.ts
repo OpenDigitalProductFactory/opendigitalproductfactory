@@ -6,8 +6,9 @@ import { sameTaskExecutionFence, taskExecutionEligible, type TaskExecutionFence 
 import {
   ReassessmentExecutionError, reassessmentCaptureValue, runReassessmentExecution,
   hasPersistedReassessmentExecution, parseReassessmentExecutionLocator,
+  parseReassessmentTokenReservation, validReassessmentFiniteTokenProof,
   type ReassessmentCaptureHooks, type ReassessmentExecutionContext,
-  type ReassessmentExecutionManifest, type ReassessmentExecutionSeed, type ReassessmentExecutionLocator,
+  type ReassessmentExecutionManifest, type ReassessmentExecutionSeed, type ReassessmentExecutionLocator, type ReassessmentCaptureEvent,
 } from "./routing/reassessment-execution-scope";
 export { hasPersistedReassessmentExecution, parseReassessmentExecutionLocator } from "./routing/reassessment-execution-scope";
 
@@ -27,7 +28,7 @@ export const reassessmentExecutionManifestDigest = (manifest: ReassessmentExecut
 
 async function readManifest(tx: Prisma.TransactionClient, input: PersistedReassessmentExecutionInput,
   locator: ReassessmentExecutionLocator, lock = false): Promise<{ seed: ReassessmentExecutionSeed; threadId: string }> {
-  if (lock) await tx.$queryRaw`SELECT "id" FROM "TaskRun" WHERE "taskRunId" = ${input.taskRunId} FOR SHARE`;
+  if (lock) await tx.$queryRaw`SELECT "id" FROM "TaskRun" WHERE "taskRunId" = ${input.taskRunId} FOR UPDATE`;
   const row = await tx.taskRun.findUnique({ where: { taskRunId: input.taskRunId }, select: {
     id: true, taskRunId: true, userId: true, currentAgentId: true, status: true, threadId: true, a2aMetadata: true, progressPayload: true,
   } });
@@ -68,6 +69,80 @@ async function artifact(tx: Prisma.TransactionClient, context: ReassessmentExecu
   } });
 }
 
+/** Every finite reservation is present in both existing owners in the same transaction. */
+async function assertFiniteReservationLedger(tx: Prisma.TransactionClient, input: PersistedReassessmentExecutionInput,
+  context: ReassessmentExecutionContext, event: ReassessmentCaptureEvent): Promise<void> {
+  const limit = context.qualification.budgetConfiguration.configuredPerTaskLimit;
+  if (limit === 0) return;
+  function invalid(): never { return refuse("reassessment-token-accounting-unproven", "The current generation reservation accounting is missing, malformed or inconsistent."); }
+  if (!Number.isSafeInteger(limit) || limit <= 0 || !validReassessmentFiniteTokenProof(context.qualification.finiteTokenProof)) invalid();
+  const checkedEvent = (value: unknown): ReassessmentCaptureEvent => {
+    if (!object(value) || !["provider", "tool"].includes(String(value.kind)) || typeof value.name !== "string" || !value.name
+      || !Number.isSafeInteger(value.sequence) || Number(value.sequence) <= 0 || typeof value.observedAt !== "string"
+      || !Number.isFinite(Date.parse(value.observedAt)) || !object(value.input)) invalid();
+    if (value.kind === "tool") {
+      if (value.providerReservationOrdinal !== null || !["read_source_at_version", context.binding.writerToolName].includes(value.name as string)) invalid();
+    } else {
+      if (!Number.isSafeInteger(value.providerReservationOrdinal) || Number(value.providerReservationOrdinal) <= 0
+        || !["configuration", "count", "generation"].includes(String(value.input.operation))) invalid();
+      if (value.input.operation === "generation") {
+        const reservation = parseReassessmentTokenReservation(value.input.tokenReservation);
+        if (!reservation || reservation.maxOutputTokens !== context.qualification.bounds.maxOutputTokens || typeof value.input.bodyUtf8 !== "string"
+          || createHash("sha256").update(value.input.bodyUtf8, "utf8").digest("hex") !== reservation.bodySha256) invalid();
+      } else if (Object.hasOwn(value.input, "tokenReservation")) invalid();
+    }
+    return value as ReassessmentCaptureEvent;
+  };
+  const [executions, artifacts] = await Promise.all([
+    tx.toolExecution.findMany({ where: { taskRunId: context.taskRunId, toolName: "reassessment_capture", executionMode: "restricted-reassessment-capture" }, select: { parameters: true, userId: true, agentId: true } }),
+    tx.taskArtifact.findMany({ where: { taskRunId: input.taskRunRecordId, name: "reassessment-effect-reservation-v1" }, select: { parts: true, metadata: true, producerAgentId: true } }),
+  ]);
+  if (!Array.isArray(executions) || !Array.isArray(artifacts)) invalid();
+  const executionEvents = new Map<number, ReassessmentCaptureEvent>(), artifactEvents = new Map<number, ReassessmentCaptureEvent>();
+  const add = (events: Map<number, ReassessmentCaptureEvent>, raw: unknown): void => {
+    const captured = checkedEvent(raw); if (events.has(captured.sequence)) invalid(); events.set(captured.sequence, captured);
+  };
+  for (const row of executions) {
+    const parameters = object(row.parameters) ? row.parameters : null;
+    if (row.userId !== context.userId || row.agentId !== context.agentId || !parameters || parameters.schemaVersion !== 1 || parameters.manifestArtifactId !== context.manifest.artifactId
+      || parameters.manifestDigest !== context.manifest.digest || parameters.requestDigest !== context.requestDigest
+      || !sameTaskExecutionFence(parameters.executionFence, context.executionFence)) invalid();
+    add(executionEvents, parameters.event);
+  }
+  for (const row of artifacts) {
+    const metadata = object(row.metadata) ? row.metadata : null;
+    const part = Array.isArray(row.parts) && row.parts.length === 1 && object(row.parts[0]) ? row.parts[0] : null;
+    const data = object(part?.data) ? part.data : null;
+    if (row.producerAgentId !== context.agentId || !metadata || metadata.schemaVersion !== 1 || metadata.manifestArtifactId !== context.manifest.artifactId
+      || metadata.manifestDigest !== context.manifest.digest || metadata.requestDigest !== context.requestDigest
+      || metadata.compositionVersion !== context.qualification.compositionVersion || part?.type !== "reassessment-effect-reservation-v1"
+      || !data || data.executionStatus !== "reserved" || data.requestDigest !== context.requestDigest
+      || !sameTaskExecutionFence(data.executionFence, context.executionFence)) invalid();
+    add(artifactEvents, data.event);
+  }
+  if (executionEvents.size !== artifactEvents.size || [...executionEvents].some(([sequence, value]) => !equal(value, artifactEvents.get(sequence)))) invalid();
+  const summarize = (events: Map<number, ReassessmentCaptureEvent>) => {
+    let tokens = 0, providers = 0; const reservations = new Set<string>();
+    for (let sequence = 1; sequence <= events.size; sequence++) {
+      const captured = events.get(sequence); if (!captured) invalid();
+      if (captured.kind !== "provider") continue;
+      if (captured.providerReservationOrdinal !== ++providers) invalid();
+      if ((captured.input as Record<string, unknown>).operation !== "generation") continue;
+      const reservation = parseReassessmentTokenReservation((captured.input as Record<string, unknown>).tokenReservation)!;
+      if (reservations.has(reservation.reservationId)) invalid(); reservations.add(reservation.reservationId);
+      tokens += reservation.reservedTokens; if (!Number.isSafeInteger(tokens) || tokens > limit) invalid();
+    }
+    return { tokens, providers, reservations };
+  };
+  const prior = summarize(executionEvents), mirror = summarize(artifactEvents), next = checkedEvent(event);
+  if (prior.tokens !== mirror.tokens || next.sequence !== executionEvents.size + 1) invalid();
+  if (next.kind === "provider" && (next.providerReservationOrdinal !== prior.providers + 1 || prior.providers >= context.qualification.bounds.maxProviderStarts)) invalid();
+  if (next.kind !== "provider" || (next.input as Record<string, unknown>).operation !== "generation") return;
+  const reservation = parseReassessmentTokenReservation((next.input as Record<string, unknown>).tokenReservation)!;
+  if (prior.reservations.has(reservation.reservationId)) invalid();
+  if (prior.tokens + reservation.reservedTokens > limit) refuse("reassessment-token-limit", "The immutable whole-generation token allowance is exhausted.");
+}
+
 /** Uses the existing TaskArtifact and ToolExecution owners. Capture rows have
  * their own audit-only name, so a captured writer output is never mistaken for
  * a canonical writer invocation or an independently issued domain receipt. */
@@ -84,6 +159,7 @@ export function createReassessmentCaptureHooks(input: PersistedReassessmentExecu
     reserve: async (context, event) => database.$transaction(async tx => {
       const current = await readManifest(tx, input, locator, true);
       if (!equal(current.seed, context)) refuse("reassessment-manifest-changed", "The execution manifest changed before reservation.");
+      await assertFiniteReservationLedger(tx, input, context, event);
       await artifact(tx, context, input.taskRunRecordId, "reassessment-effect-reservation-v1", {
         executionStatus: "reserved", event, requestDigest: context.requestDigest, executionFence: context.executionFence,
       }, event.sequence);
