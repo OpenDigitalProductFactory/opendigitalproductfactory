@@ -1,6 +1,9 @@
 import { EXECUTION_UNCERTAIN_MESSAGE, executionUncertaintyFromError, hasExecutionUncertainty } from "./shared/execution-uncertainty";
 import { reservationIdentity, dispatchIdentity, settleRemoteTask } from "./mcp-task-attempt-state";
-import { captureTaskExecutionFence } from "./shared/task-execution-fence";
+import { captureTaskExecutionFence, sameTaskExecutionFence } from "./shared/task-execution-fence";
+import { withPersistedReassessmentExecution } from "./mcp-task-reassessment-capture";
+import { currentReassessmentExecution, hasPersistedReassessmentExecution, isReassessmentExecutionError,
+  matchesPersistedReassessmentScope, refuseReassessmentExecution } from "./routing/reassessment-execution-scope";
 import { projectRemoteTaskReplay } from "./mcp-task-replay-projection";
 import { TASK_IN_FLIGHT_STATES } from "@/lib/tak/task-states";
 import { remoteTaskConversation } from "./mcp-task-conversation";
@@ -108,14 +111,14 @@ export async function executeRemoteTaskAttempt(input: {
     || dispatchIdentity(admittedRun.progressPayload) !== dispatchClaim)) {
     return projectRemoteTaskReplay({ existing: { ...admittedRun, taskRunId: run.taskRunId }, requestMatches: true });
   }
-  const taskExecutionFence = parsed.initiativeReviewBinding ? captureTaskExecutionFence(admittedRun.progressPayload,
+  const reassessmentExecution = hasPersistedReassessmentExecution(admittedRun.a2aMetadata);
+  const taskExecutionFence = parsed.initiativeReviewBinding || reassessmentExecution ? captureTaskExecutionFence(admittedRun.progressPayload,
     (admittedRun.a2aMetadata as Record<string, unknown> | null)?.requestDigest) : undefined;
   const settle = (args: Prisma.TaskRunUpdateManyArgs & { where: { taskRunId: string } }) =>
-    settleRemoteTask(args, reservation, dispatchClaim, parsed.initiativeReviewBinding ? {
+    settleRemoteTask(args, reservation, dispatchClaim, parsed.initiativeReviewBinding || reassessmentExecution ? {
       executionFence: taskExecutionFence ?? null, userId: token.userId, agentId: parsed.agentId,
     } : undefined);
-  // A lost acknowledgement is recovery work, not another independent assessment.
-  // Keep the same bound receipt and let the fenced settlement preserve cancellation.
+  // Recover lost acknowledgements from the bound receipt under the same fence.
   const priorReview = parsed.initiativeReviewBinding
     ? await loadTaskInitiativeReviewOutcome(run.taskRunId, parsed.initiativeReviewBinding)
     : null;
@@ -143,139 +146,144 @@ export async function executeRemoteTaskAttempt(input: {
   }
   const progress = admittedRun.progressPayload && typeof admittedRun.progressPayload === "object"
     && !Array.isArray(admittedRun.progressPayload) ? admittedRun.progressPayload as Record<string, unknown> : {};
-  // Stable authority and immutable windows survive every parked/terminal result;
-  // transient writer/capacity markers are still rebuilt by their owning branch.
+  // Retain stable authority/windows; each branch rebuilds transient waits.
   const recoveryCheckpoint = Object.fromEntries(["reviewExecutionAuthority", "deadlineAt", "expiresAt"]
     .filter(key => progress[key] !== undefined).map(key => [key, progress[key]])) as Prisma.InputJsonObject;
-  if (progress.reviewExecutionAuthority !== undefined) {
-    const { revalidateReviewExecutionAuthority } = await import("./mcp-task-review-recovery");
-    if (!await revalidateReviewExecutionAuthority({ token, parsed, userContext,
-      metadata: admittedRun.a2aMetadata, progress })) {
-      const displaced = await settle({ where: { taskRunId: run.taskRunId }, data: {
-        status: "input-required", completedAt: null, progressPayload: {
-          ...progress,
-          errorCode: "review_execution_authority_refused", requiresApproval: false,
-        } as Prisma.InputJsonValue,
-      } });
-      return displaced ?? { kind: "result", result: { taskRunId: run.taskRunId, status: "input-required", isError: true,
-        content: remoteTaskContent("Current review execution authority was refused; no inference was dispatched."),
-        structuredContent: { error: "review_execution_authority_refused" } } };
-    }
-  }
-  const agent = await resolveAutonomousWorkAgent({
-    agentId: parsed.agentId,
-    routeContext: parsed.routeContext,
-    userContext,
-  });
-  const modelRoutingAgentId = agent.agentId ?? parsed.agentId;
-  const resolvedAgentId = resolveCanonicalAgentId(modelRoutingAgentId);
-  const requestedAgentId = parsed.agentId;
-  const requestedCanonicalAgentId = resolveCanonicalAgentId(requestedAgentId);
-  let routingConfig: {
-    minimumTier: string;
-    budgetClass: string;
-    pinnedProviderId: string | null;
-    pinnedModelId: string | null;
-    residencyPolicy: string | null;
-  } | null = null;
-  // An explicit alias is itself an operator-selectable coworker identity, so
-  // its assignment wins. A canonical request keeps the established resolved
-  // slug first because the coworker management surface stores assignments by
-  // slug. Grants and audit remain canonical in both cases.
-  const configAgentIds = requestedAgentId === requestedCanonicalAgentId
-    ? [modelRoutingAgentId, requestedAgentId]
-    : [requestedAgentId, modelRoutingAgentId];
-  for (const configAgentId of new Set(configAgentIds)) {
-    routingConfig = await prisma.agentModelConfig?.findUnique({
-      where: { agentId: configAgentId },
-      select: {
-        minimumTier: true,
-        budgetClass: true,
-        pinnedProviderId: true,
-        pinnedModelId: true,
-        residencyPolicy: true,
-      },
-    }).catch(() => null) ?? null;
-    if (routingConfig) break;
-  }
-  const modelRequirements = routingConfig
-    ? {
-        defaultMinimumTier: routingConfig.minimumTier,
-        defaultBudgetClass: routingConfig.budgetClass,
-        ...(routingConfig.pinnedProviderId
-          ? { preferredProviderId: routingConfig.pinnedProviderId }
-          : {}),
-        ...(routingConfig.pinnedModelId
-          ? { preferredModelId: routingConfig.pinnedModelId }
-          : {}),
-        // BI-8CFA1CA8: residency is read as the stated policy it is. This used
-        // to be inferred from `pinnedProviderId === "local"`, which let a
-        // routing preference silently set — or silently clear — a data
-        // guarantee. The migration wrote the policy explicitly for every
-        // config that was local-pinned, so behaviour is unchanged.
-        ...(routingConfig.residencyPolicy
-          ? {
-              residencyPolicy:
-                routingConfig.residencyPolicy as RequestContract["residencyPolicy"],
-            }
-          : {}),
-      }
-    : null;
-  const toolMode = parsed.riskClass === "read" ? "advise" : "act";
-  const exactRequiredToolNames = requiredToolNames(parsed.authorityScope);
-  const resolvedTools = await resolveAutonomousWorkTools({
-    userContext,
-    agentId: resolvedAgentId,
-    mode: toolMode,
-    externalAccessEnabled: true,
-    routeContext: parsed.routeContext,
-    intentQuery: parsed.prompt,
-    requiredToolNames: exactRequiredToolNames,
-  });
-  const reviewProfile = parsed.initiativeReviewBinding?.gate === "spec-approval"
-    ? await loadReviewerProfile(prisma, parsed.initiativeReviewBinding.itemId) : null;
-  const tools = narrowInitiativeReviewTools(
-    resolvedTools,
-    exactRequiredToolNames,
-    parsed.initiativeReviewBinding,
-    parsed.prompt,
-    reviewProfile,
-  );
-  const effortWarrant = requiresInitiativeReviewEffort(exactRequiredToolNames)
-    ? deriveEffortWarrant({
-        reasoningDepth: "high",
-        availableToolNames: [
-          ...tools.tools.map((tool) => tool.name),
-          ...tools.deferredTools.map((tool) => tool.name),
-        ],
-        messageChars: parsed.prompt.length,
-      })
-    : undefined;
-  const baseTerminalToolPolicy = parsed.initiativeReviewBinding
-    ? createInitiativeReviewTerminalToolPolicy(
-        parsed.initiativeReviewBinding.writerToolName,
-        exactRequiredToolNames,
-        parsed.initiativeReviewBinding.artifactRef,
-      )
-    : null;
-  const terminalToolPolicy = baseTerminalToolPolicy && input.resumeKind === "terminal-writer"
-    ? enterTerminalWriterPhase(baseTerminalToolPolicy)
-    : baseTerminalToolPolicy;
-  const resumedFlag = !input.idempotentReplay
-    ? {}
-    : input.resumeKind === "terminal-writer"
-      ? { resumedFromTerminalWriterWait: true }
-      : { resumedFromCapacity: true };
-  const conversation = remoteTaskConversation({
-    systemPrompt: `${agent.systemPrompt}\n${await loadPirEvidenceContext(prisma, parsed.initiativeReviewBinding)}`,
-    prompt: parsed.prompt,
-    resumeKind: input.resumeKind,
-    terminalWriterContext: input.terminalWriterContext,
-  });
-
-  // BI-2E479619: rows a CLI wrote natively during THIS attempt start here.
-  const attemptStartedMs = Date.now();
+  const resumedFlag = !input.idempotentReplay ? {} : input.resumeKind === "terminal-writer"
+    ? { resumedFromTerminalWriterWait: true } : { resumedFromCapacity: true };
+  let loopEntered = false;
   try {
+    if (reassessmentExecution && !matchesPersistedReassessmentScope(admittedRun.a2aMetadata, run.taskRunId)) {
+      if (!parsed.initiativeReviewBinding) refuseReassessmentExecution("reassessment-manifest-invalid", "The accepted reassessment has no review binding.");
+      return await withPersistedReassessmentExecution({ taskRunRecordId: run.id, taskRunId: run.taskRunId,
+        userId: token.userId, agentId: resolveCanonicalAgentId(parsed.agentId), binding: parsed.initiativeReviewBinding,
+        requestDigest: (admittedRun.a2aMetadata as Record<string, unknown>).requestDigest as string,
+        executionFence: taskExecutionFence ?? null, a2aMetadata: admittedRun.a2aMetadata, progressPayload: admittedRun.progressPayload,
+      }, () => executeRemoteTaskAttempt({ ...input, expectedReservation: reservation, expectedDispatchClaim: dispatchClaim }));
+    }
+    if (progress.reviewExecutionAuthority !== undefined) {
+      const { revalidateReviewExecutionAuthority } = await import("./mcp-task-review-recovery");
+      if (!await revalidateReviewExecutionAuthority({ token, parsed, userContext,
+        metadata: admittedRun.a2aMetadata, progress })) {
+        const displaced = await settle({ where: { taskRunId: run.taskRunId }, data: {
+          status: "input-required", completedAt: null, progressPayload: {
+            ...progress,
+            errorCode: "review_execution_authority_refused", requiresApproval: false,
+          } as Prisma.InputJsonValue,
+        } });
+        return displaced ?? { kind: "result", result: { taskRunId: run.taskRunId, status: "input-required", isError: true,
+          content: remoteTaskContent("Current review execution authority was refused; no inference was dispatched."),
+          structuredContent: { error: "review_execution_authority_refused" } } };
+      }
+    }
+    const agent = await resolveAutonomousWorkAgent({
+      agentId: parsed.agentId,
+      routeContext: parsed.routeContext,
+      userContext,
+    });
+    const modelRoutingAgentId = agent.agentId ?? parsed.agentId;
+    const resolvedAgentId = resolveCanonicalAgentId(modelRoutingAgentId);
+    const reassessmentScope = currentReassessmentExecution();
+    if (reassessmentExecution && (!reassessmentScope || reassessmentScope.agentId !== resolvedAgentId
+      || !sameTaskExecutionFence(reassessmentScope.executionFence, taskExecutionFence))) {
+      refuseReassessmentExecution("reassessment-execution-conflict", "The resolved reviewer or full execution fence differs from the sealed reassessment admission.");
+    }
+    const requestedAgentId = parsed.agentId;
+    const requestedCanonicalAgentId = resolveCanonicalAgentId(requestedAgentId);
+    let routingConfig: {
+      minimumTier: string;
+      budgetClass: string;
+      pinnedProviderId: string | null;
+      pinnedModelId: string | null;
+      residencyPolicy: string | null;
+    } | null = null;
+    // Aliases select assignments; canonical requests prefer stored slugs for routing.
+    const configAgentIds = requestedAgentId === requestedCanonicalAgentId
+      ? [modelRoutingAgentId, requestedAgentId]
+      : [requestedAgentId, modelRoutingAgentId];
+    for (const configAgentId of new Set(configAgentIds)) {
+      routingConfig = await prisma.agentModelConfig?.findUnique({
+        where: { agentId: configAgentId },
+        select: {
+          minimumTier: true,
+          budgetClass: true,
+          pinnedProviderId: true,
+          pinnedModelId: true,
+          residencyPolicy: true,
+        },
+      }).catch(() => null) ?? null;
+      if (routingConfig) break;
+    }
+    const modelRequirements = routingConfig
+      ? {
+          defaultMinimumTier: routingConfig.minimumTier,
+          defaultBudgetClass: routingConfig.budgetClass,
+          ...(routingConfig.pinnedProviderId
+            ? { preferredProviderId: routingConfig.pinnedProviderId }
+            : {}),
+          ...(routingConfig.pinnedModelId
+            ? { preferredModelId: routingConfig.pinnedModelId }
+            : {}),
+          // BI-8CFA1CA8: residency is explicit policy, never inferred from routing.
+          ...(routingConfig.residencyPolicy
+            ? {
+                residencyPolicy:
+                  routingConfig.residencyPolicy as RequestContract["residencyPolicy"],
+              }
+            : {}),
+        }
+      : null;
+    const toolMode = parsed.riskClass === "read" ? "advise" : "act";
+    const exactRequiredToolNames = requiredToolNames(parsed.authorityScope);
+    const resolvedTools = await resolveAutonomousWorkTools({
+      userContext,
+      agentId: resolvedAgentId,
+      mode: toolMode,
+      externalAccessEnabled: true,
+      routeContext: parsed.routeContext,
+      intentQuery: parsed.prompt,
+      requiredToolNames: exactRequiredToolNames,
+      ...(reassessmentExecution ? { restrictedReviewBinding: parsed.initiativeReviewBinding } : {}),
+    });
+    const reviewProfile = parsed.initiativeReviewBinding?.gate === "spec-approval"
+      ? await loadReviewerProfile(prisma, parsed.initiativeReviewBinding.itemId) : null;
+    const tools = narrowInitiativeReviewTools(
+      resolvedTools,
+      exactRequiredToolNames,
+      parsed.initiativeReviewBinding,
+      parsed.prompt,
+      reviewProfile,
+    );
+    const effortWarrant = requiresInitiativeReviewEffort(exactRequiredToolNames)
+      ? deriveEffortWarrant({
+          reasoningDepth: "high",
+          availableToolNames: [
+            ...tools.tools.map((tool) => tool.name),
+            ...tools.deferredTools.map((tool) => tool.name),
+          ],
+          messageChars: parsed.prompt.length,
+        })
+      : undefined;
+    const baseTerminalToolPolicy = parsed.initiativeReviewBinding
+      ? createInitiativeReviewTerminalToolPolicy(
+          parsed.initiativeReviewBinding.writerToolName,
+          exactRequiredToolNames,
+          parsed.initiativeReviewBinding.artifactRef,
+        )
+      : null;
+    const terminalToolPolicy = baseTerminalToolPolicy && input.resumeKind === "terminal-writer"
+      ? enterTerminalWriterPhase(baseTerminalToolPolicy)
+      : baseTerminalToolPolicy;
+    const conversation = remoteTaskConversation({
+      systemPrompt: `${agent.systemPrompt}\n${await loadPirEvidenceContext(prisma, parsed.initiativeReviewBinding)}`,
+      prompt: parsed.prompt,
+      resumeKind: input.resumeKind,
+      terminalWriterContext: input.terminalWriterContext,
+    });
+
+    // BI-2E479619: rows a CLI wrote natively during THIS attempt start here.
+    const attemptStartedMs = Date.now();
+    loopEntered = true;
     const result = await executeAutonomousAgenticLoop({
       systemPrompt: conversation.systemPrompt,
       systemPromptInstructionSpans: coworkerBriefSpans(agent.systemPrompt),
@@ -302,10 +310,7 @@ export async function executeRemoteTaskAttempt(input: {
       ...(modelRequirements ? { modelRequirements } : {}),
     });
 
-    // BI-2E479619: a CLI adapter runs the governed tools natively, so the
-    // loop's records can miss them. Fold this attempt's native rows (deduped
-    // against any the loop already folded) so the writer check, a writer
-    // refusal and executedToolCount all read the same calls.
+    // BI-2E479619: fold deduped native CLI calls into the writer/count evidence.
     if (terminalToolPolicy) {
       await foldNativeMcpExecutions({
         taskRunId: run.taskRunId,
@@ -318,9 +323,7 @@ export async function executeRemoteTaskAttempt(input: {
       ? result.executedTools?.filter((tool) => tool.name === parsed.initiativeReviewBinding!.writerToolName && tool.result.success).at(-1)?.result
       : undefined;
     const receiptId = optionalString(writerResult?.data?.["receiptId"]);
-    // The persisted receipt is the authority, not this turn's records: before
-    // anything is classified as a missing writer, consult the receipt this
-    // TaskRun's writer recorded (also one minted by an earlier attempt).
+    // The TaskRun's persisted receipt wins over incomplete turn records.
     const persistedOutcome = parsed.initiativeReviewBinding
       ? (receiptId ? await loadInitiativeReviewOutcome(parsed.initiativeReviewBinding, receiptId) : null)
         ?? await loadTaskInitiativeReviewOutcome(run.taskRunId, parsed.initiativeReviewBinding)
@@ -394,9 +397,7 @@ export async function executeRemoteTaskAttempt(input: {
     const terminalWriterMissing = terminalToolPolicy !== null
       && !terminalWriterSucceeded
       && terminalWriterApprovalEnvelopeId === null;
-    // BI-C35576A9: record the contract the provider that RAN was held to, never a
-    // hard-coded claim. A CLI adapter is receipt-verified; an HTTP adapter forced
-    // the call. Undefined when nothing ran, so a throw never invents a contract.
+    // BI-C35576A9: record the actual provider's contract, undefined if none ran.
     const terminalWriterContract = terminalWriterDispatchContractForProvider(
       (result as { providerId?: string }).providerId,
     );
@@ -741,6 +742,32 @@ export async function executeRemoteTaskAttempt(input: {
       },
     };
   } catch (err) {
+    if (!reassessmentExecution && !loopEntered) throw err;
+    let receiptReadUnavailable = false;
+    const committedOutcome = parsed.initiativeReviewBinding
+      ? await loadTaskInitiativeReviewOutcome(run.taskRunId, parsed.initiativeReviewBinding)
+        .catch(() => { receiptReadUnavailable = true; return null; }) : null;
+    if (committedOutcome) {
+      const displaced = await settle({ where: { taskRunId: run.taskRunId },
+        data: persistedReviewCompletionData(admittedRun.progressPayload, committedOutcome) });
+      return displaced ?? { kind: "result", result: { taskRunId: run.taskRunId, status: "completed",
+        idempotentReplay: input.idempotentReplay, ...resumedFlag, requiresApproval: false, resumable: false,
+        content: remoteTaskContent(committedOutcome.summary), structuredContent: committedOutcome, isError: false } };
+    }
+    if (receiptReadUnavailable || (reassessmentExecution && isReassessmentExecutionError(err)
+      && ["reassessment-capture-incomplete", "reassessment-effect-outcome-uncertain"].includes(err.code))) {
+      const uncertainty = { ...executionUncertaintyFromError(err), observedAt: new Date().toISOString() };
+      const summary = receiptReadUnavailable ? `Canonical review receipt readback is unavailable. ${EXECUTION_UNCERTAIN_MESSAGE}` : EXECUTION_UNCERTAIN_MESSAGE;
+      const displaced = await settle({ where: { taskRunId: run.taskRunId }, data: {
+        status: "input-required", completedAt: null, progressPayload: {
+          ...progress, summary, requiresApproval: false, executionUncertainty: uncertainty, ...resumedFlag,
+        } as Prisma.InputJsonValue,
+      } });
+      return displaced ?? { kind: "result", result: { taskRunId: run.taskRunId, status: "input-required",
+        idempotentReplay: input.idempotentReplay, ...resumedFlag, requiresApproval: false, resumable: false,
+        waitReason: "execution-uncertain", structuredContent: { error: "execution_uncertain", executionUncertainty: uncertainty,
+          ...(receiptReadUnavailable ? { receiptReadback: "unavailable" } : {}) }, content: remoteTaskContent(summary), isError: false } };
+    }
     const message = err instanceof Error ? err.message : "Unknown remote coworker execution error";
     const displaced = await settle({
       where: { taskRunId: run.taskRunId },

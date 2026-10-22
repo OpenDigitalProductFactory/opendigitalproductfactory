@@ -1,12 +1,6 @@
 import { APPROVAL_COMPLETION, checkRecoveredReviewAuthority, defaultGovernedToolPreflight } from "./mcp-governed-execute-preflight";
-// Single governed entry point for tool execution.
-//
-// All MCP-style callers (REST /api/mcp/call, the future JSON-RPC route, and
-// the in-platform agentic loop) should funnel through here so that the three
-// governance layers — user capability, agent grants, audit — are enforced in
-// one place. Today only agentic-loop writes ToolExecution rows; this wrapper
-// closes the audit gap on the REST and JSON-RPC paths and gives the future
-// external-MCP transport a stable hook.
+import { assertReassessmentToolCall, runReassessmentEffect } from "./routing/reassessment-execution-scope";
+// Shared governed entry for user capability, agent grants and durable audit.
 
 import { can, type CapabilityKey } from "./permissions";
 import { GOVERNED_REJECTION_DISPOSITION, rejectionMessage } from "./govern/authority/governed-rejection-disposition";
@@ -288,9 +282,13 @@ async function runPostToolHooks(event: ToolLifecyclePostEvent): Promise<void> {
 
 /** BI-5B34D277: an exception before the tool ran gives back the approval it reserved. */
 export async function governedExecuteTool(args: GovernedExecuteArgs): Promise<GovernedExecuteResult> {
+  args = { ...args, rawParams: assertReassessmentToolCall({ toolName: args.toolName, params: args.rawParams,
+    userId: args.userId, agentId: args.context?.agentId ?? "", taskRunId: args.context?.taskRunId,
+    executionFence: args.context?.taskExecutionFence }) };
   const run = newApprovalRun();
   try {
-    return await governedExecuteToolRun(args, run);
+    return await runReassessmentEffect({ kind: "tool", name: args.toolName, input: args.rawParams },
+      () => governedExecuteToolRun(args, run));
   } catch (err) {
     await releaseUnsettledApproval(run, args.toolName);
     throw err;

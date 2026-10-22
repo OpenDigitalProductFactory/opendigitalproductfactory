@@ -41,7 +41,7 @@ import { bindProviderAccountSuitability } from "@/lib/routing/provider-account-c
 import { accountAffinityKey } from "@/lib/routing/provider-account-allocation";
 import { conservativeQuotaScope } from "@/lib/routing/provider-capacity/scopes";
 import { prisma } from "@dpf/db";
-import { getLocalOnlyInference } from "@/lib/inference/local-only";
+import { getLocalOnlyInference, getLocalOnlyInferenceFresh } from "@/lib/inference/local-only";
 import { resolveDispatchPosture, type DispatchPosture } from "@/lib/golden-triangle/dispatch";
 import {
   buildEffectiveRequestContract,
@@ -51,6 +51,8 @@ import { assertDurableExecutionConstraint } from "./durable-execution-constraint
 import { persistAcceptedRoutedTokenUsage, persistRoutedTokenUsage, routedContextKey } from "./routed-token-usage";
 import type { RouteAndCallOptions } from "./routed-inference-options";
 import { applyCallerExecutionPlanOverrides } from "./routed-inference-plan-overrides";
+import type { RoutedExecutionPlan } from "@/lib/routing/recipe-types";
+import { currentReassessmentExecution, assertReassessmentPlan, ReassessmentExecutionError } from "@/lib/routing/reassessment-execution-scope";
 import {
   applyObservedRouterEvidence,
   attachProviderSuitabilityReceipt,
@@ -157,22 +159,12 @@ function endpointPreferencesFromOptions(
   };
 }
 
-/**
- * The routing half of routeAndCall: contract inference → routing-data load →
- * V2 endpoint selection. Produces the RouteDecision WITHOUT dispatching. Both
- * the live path (routeAndCall) and the side-effect-free preview (previewRoute)
- * go through here, so a prediction can never drift from what actually runs.
- *
- * `skipRecipe` (preview) makes routeEndpointV2 deterministic and skips the
- * challenger Math.random() roll; the live path leaves it false so the
- * executionPlan is built for dispatch.
- */
 async function prepareRoute(
   messages: ChatMessage[],
   systemPrompt: string,
   sensitivity: RouteSensitivity,
   options: RouteAndCallOptions | undefined,
-  prep?: { skipRecipe?: boolean },
+  prep?: { skipRecipe?: boolean; reassessment?: boolean },
 ): Promise<PreparedRoute> {
   const taskType = options?.taskType ?? "conversation";
 
@@ -182,20 +174,9 @@ async function prepareRoute(
   // authoritative over a task requirement's residency, and the guarantee the
   // "disable cloud" admin toggle promises (no silent per-phase cloud fallback).
   // Computed in prepareRoute so the per-phase preview (previewRoute) reflects it too.
-  const localOnlyInference = await getLocalOnlyInference();
+  const localOnlyInference = await (prep?.reassessment ? getLocalOnlyInferenceFresh() : getLocalOnlyInference());
 
-  // EP-GOLDEN-TRIANGLE Slice 3: resolve the saved Cost/Quality/Time posture and
-  // feed it into routing as DEFAULTS (caller options + the local-only sovereignty
-  // switch below still win). Fail-open + Balanced-inert: null when no non-Balanced
-  // default is set, so this is byte-identical to flag-off until a posture is chosen.
-  // The calling coworker's own posture (if any) layers above org/platform, so a
-  // per-coworker priority actually tunes that coworker's runs. Single-org install
-  // → null org id; non-coworker runs pass null agentId (platform default).
-  // A durable caller that supplies an exact execution constraint has already
-  // closed every route-affecting policy. Saved Golden Triangle posture is an
-  // ambient preference, not authority to change that immutable plan. Keep the
-  // agent on the durable authority/audit binding, but do not let its saved (or
-  // inherited organization/platform) posture alter routing context or effort.
+  // Durable exact plans outrank ambient saved posture.
   const posture = options?.durableAsyncOperation?.expectedExecution
     ? null
     : await resolveDispatchPosture(options?.agentId ?? null, taskType, null, undefined, {
@@ -249,7 +230,7 @@ async function prepareRoute(
   });
 
   const [loadedManifests, policies, overrides] = await Promise.all([
-    loadEndpointManifests(Date.now(), resolveLocalRoutingRuntime),
+    prep?.reassessment ? loadEndpointManifests(Date.now()) : loadEndpointManifests(Date.now(), resolveLocalRoutingRuntime),
     loadPolicyRules(),
     loadOverrides(taskType),
   ]);
@@ -272,6 +253,16 @@ async function prepareRoute(
     });
     contract = preparedSuitability.contract;
     suitability = preparedSuitability.suitability;
+    if (prep?.reassessment && !suitability) throw new ReassessmentExecutionError("reassessment-suitability-unproven");
+  }
+  if (prep?.reassessment) {
+    const allowed = [...new Set(loadedManifests.filter(endpoint => endpoint.providerConnectionId
+      && endpoint.providerConnectionVersion && endpoint.executionChannel === "direct-api"
+      && ["api_key", "none"].includes(endpoint.accountAuthMethod ?? ""))
+      .map(endpoint => endpoint.providerConnectionId!))];
+    if (allowed.length === 0) throw new ReassessmentExecutionError("reassessment-composition-unavailable");
+    contract.allowedProviderConnectionIds = allowed.filter(id => contract.allowedProviderConnectionIds === undefined
+      || contract.allowedProviderConnectionIds.includes(id));
   }
   const manifests = suitability?.mode === "enforced"
     ? bindProviderAccountSuitability(loadedManifests, contract.sensitivity, suitability.policy.allowedProviderConnectionIds)
@@ -309,6 +300,25 @@ async function prepareRoute(
   };
 }
 
+/** Normal V2 ranking constrained before selection to existing restricted HTTP accounts. */
+export async function prepareReassessmentRoute(messages: ChatMessage[], systemPrompt: string,
+  sensitivity: RouteSensitivity, options?: RouteAndCallOptions): Promise<RoutePreview & { executionPlan: RoutedExecutionPlan }> {
+  if (options?.interactionMode && options.interactionMode !== "sync" || options?.durableAsyncOperation
+    || options?.requiresCodeExecution || options?.requiresWebSearch || options?.requiresComputerUse) {
+    throw new ReassessmentExecutionError("reassessment-composition-unsupported");
+  }
+  const prepared = await prepareRoute(messages, systemPrompt, sensitivity, options, { reassessment: true });
+  const { contract, decision, manifests } = prepared;
+  const selectedManifest = manifests.find(endpoint => endpoint.id === decision.selectedEndpoint) ?? null;
+  if (!selectedManifest || !decision.executionPlan) throw new ReassessmentExecutionError("reassessment-composition-unavailable");
+  const executionPlan = applyCallerExecutionPlanOverrides(decision.executionPlan, {
+    maxOutputTokens: options?.activityContract?.tokenEnvelope.maxOutputTokens,
+    effort: options?.effort ?? prepared.posture?.effort, toolChoice: options?.toolChoice,
+    terminalWriterToolName: options?.terminalWriterToolName,
+  });
+  return { contract, decision, selectedManifest, executionPlan };
+}
+
 /** Result of a side-effect-free routing dry-run. */
 export interface RoutePreview {
   /** The endpoint the live router would select first (selectedEndpoint=null → none eligible). */
@@ -319,21 +329,6 @@ export interface RoutePreview {
   contract: RequestContract;
 }
 
-/**
- * Side-effect-free dry-run of V2 routing: resolves the endpoint that WOULD be
- * selected for a given task contract, without dispatching, persisting a route
- * decision, rolling the challenger arm, or building an executionPlan.
- *
- * This is the primitive the Model Selection & Runtime Health resolver uses to
- * predict, per build phase, which provider/model the live routeAndCall path
- * will pick — answering "local or cloud, per phase?" BEFORE a run rather than
- * discovering it after the GPU has sat idle. It mirrors routeAndCall's routing
- * inputs (taskType, sensitivity, budgetClass, tools→requiresTools) so the
- * predicted winner matches the live one.
- *
- * Throws NoEligibleEndpointsError when no providers are configured at all —
- * callers should catch and surface that as a configuration gap.
- */
 export async function previewRoute(
   messages: ChatMessage[],
   sensitivity: RouteSensitivity = "internal",
@@ -354,21 +349,13 @@ export async function previewRoute(
 
 // ─── Main function ──────────────────────────────────────────────────────────
 
-/**
- * Route and execute an LLM inference call through the V2 pipeline.
- *
- * This is the sole inference entry point after EP-INF-009b: contract,
- * manifests, V2 routing, then fallback dispatch.
- *
- * Throws `NoEligibleEndpointsError` if no endpoints qualify — no silent
- * degradation to a different routing mechanism.
- */
 export async function routeAndCall(
   messages: ChatMessage[],
   systemPrompt: string,
   sensitivity: RouteSensitivity = "internal",
   options?: RouteAndCallOptions,
 ): Promise<RoutedInferenceResult> {
+  if (currentReassessmentExecution()) return routeAndCallAttempt(messages, systemPrompt, sensitivity, options, () => {});
   let reconciled = false;
   let dispatchStarted = false;
   try {
@@ -397,7 +384,8 @@ async function routeAndCallAttempt(
   // executionPlan is built for dispatch below.
   const cancellation = currentInferenceSignal();
   cancellation?.throwIfAborted();
-  const prepared = await prepareRoute(messages, systemPrompt, sensitivity, options);
+  const restricted = currentReassessmentExecution();
+  const prepared = await prepareRoute(messages, systemPrompt, sensitivity, options, restricted ? { reassessment: true } : undefined);
   const { contract, manifests, policies, overrides, taskType } = prepared;
   messages = prepared.screenInput.messages;
   systemPrompt = prepared.screenInput.systemPrompt;
@@ -419,6 +407,19 @@ async function routeAndCallAttempt(
       toolChoice: options?.toolChoice,
       terminalWriterToolName: options?.terminalWriterToolName,
     });
+  }
+  if (restricted) {
+    const frozen = restricted.qualification;
+    const endpoint = manifests.find(manifest => manifest.id === decision.selectedEndpoint);
+    if (options?.interactionMode === "background" || options?.durableAsyncOperation || !endpoint
+      || endpoint.providerId !== frozen.providerId || endpoint.modelId !== frozen.modelId
+      || endpoint.providerConnectionId !== frozen.providerConnectionId
+      || endpoint.providerConnectionVersion !== frozen.providerConnectionVersion) {
+      throw new ReassessmentExecutionError("reassessment-route-changed");
+    }
+    decision = { ...decision, executionPlan: frozen.executionPlan, fallbackChain: [endpoint.id] };
+    assertReassessmentPlan({ providerId: endpoint.providerId, modelId: endpoint.modelId,
+      plan: frozen.executionPlan, tools: options?.tools });
   }
 
   // BI-F4D3B9E9(c): persist the failed route decision BEFORE throwing so the
@@ -447,13 +448,7 @@ async function routeAndCallAttempt(
     }
   }
 
-  // Graceful degradation: if all endpoints were excluded because they lack tool
-  // support, retry without the tools requirement. The model can still converse —
-  // it just won't have tool calling. This is critical for Ollama-only setups
-  // where the coworker injects tools but the local model can't use them.
-  //
-  // EXCEPTION: When requireTools is set (Build Studio, coding agents), tool
-  // stripping destroys task semantics. Fail fast instead of silently degrading.
+  // Ordinary calls may relax tool capability; governed callers require their tools.
   if (!decision.selectedEndpoint && contract.requiresTools) {
     if (options?.requireTools || contract.toolChoice === "required") {
       const fix = contract.residencyPolicy === "local_only"

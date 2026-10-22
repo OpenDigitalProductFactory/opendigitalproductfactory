@@ -565,8 +565,8 @@ operator-authorized two-requirement exception; its historical accounting rule
 continues to apply outside that exception. Other objectives and criteria retain
 their meaning.
 
-The following policy is retained inside this independently approved immutable
-artifact. The issuer reads its pinned bytes, verifies the current baseline and
+The issuer must obtain the following policy from an independently approved
+immutable artifact. It reads the pinned bytes, verifies the current baseline and
 normal owner/actor authority, then emits a bound request. This extends the
 existing baseline and TaskRun admission; it is not a second grant store. An
 authorization-item locator selects evidence, never grants execution by itself.
@@ -658,6 +658,34 @@ committed receipt first; observation failure cannot erase that verdict.
 Prospective capture and old callback fencing do not
 prove membership or closure for historical native process trees. An unsupported
 composition refuses without silently selecting another provider or route.
+
+**Finite current-token enforcement.** The positive path must preserve the
+reviewer's current registry and execution-configuration limits, including its
+50,000-token aggregate task ceiling. A finite ceiling cannot qualify through an
+estimate, a configured context number or an unlimited-only implementation.
+Before admission, qualify the existing local DMR Messages/count composition and
+its unchanged local-runtime account under normal routing eligibility. Bind the
+actual engine artifact/source, model, deterministic template and served
+configuration; an available route or version prefix alone is insufficient.
+
+Inside the admitted window, serialize each complete native Messages body once,
+capture its count request, then durably reserve the exact prompt count plus the
+enforced completion ceiling before sending that unchanged body for generation.
+Both HTTP requests consume the existing start allowance and deadline. Retain
+outstanding or uncertain reservations in full. Validate complete response usage,
+including cached input, against the reservation before further effects. Missing
+identity, changing configuration, invalid counts or incomplete capture refuses
+or holds execution. No account edit, model reload, fallback or native process
+establishes this qualification.
+
+The candidate proof is pinned to [DMR v1.2.8 route forwarding](https://github.com/docker/model-runner/blob/5a3112fdc10bcfe236a7450fcfa7e83ed3c0209e/pkg/inference/scheduling/http_handler.go#L98-L108)
+and its [engine identity owner](https://github.com/docker/model-runner/blob/5a3112fdc10bcfe236a7450fcfa7e83ed3c0209e/pkg/inference/backends/llamacpp/download.go#L231-L249).
+The corresponding [llama.cpp count and generation source](https://github.com/ggml-org/llama.cpp/blob/72874f559c598b8f89fbb24864868337cf5afb4c/tools/server/server-context.cpp#L5330-L5378)
+must supply matching tokenization and an enforced completion counter. Template
+clock inputs require an audited deterministic template. Source research does
+not establish that this composition is installed or qualified. The authenticated
+producer, reservation enforcement, response normalization and positive/refusal
+tests remain required before R2 completion or R3 activation.
 
 ### Atomic admission, original limits and concurrency
 

@@ -913,6 +913,7 @@
       "anchors": [
         "ai-routing-document-map",
         "current-authority",
+        "restricted-present-reassessment",
         "streaming-versus-result-delivery",
         "approved-adjacent-delivery-contract",
         "proposed-architecture",
@@ -1333,6 +1334,7 @@
         "the-three-laws",
         "the-standards-p1p13",
         "enforcement-how-subsequent-changes-stay-conformant",
+        "restricted-review-surface",
         "how-to-apply-quick-checklist-when-changing-a-model-facing-surface",
         "related"
       ]

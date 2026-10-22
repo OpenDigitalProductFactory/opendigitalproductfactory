@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { ToolDefinition } from "@/lib/mcp-tool-types";
-import { narrowInitiativeReviewTools, parseInitiativeReviewBinding } from "./mcp-task-review-contract";
+import { initiativeReviewWriterArgumentContract, narrowInitiativeReviewTools, parseInitiativeReviewBinding } from "./mcp-task-review-contract";
 
 const binding = {
   writerToolName: "record_initiative_evidence",
@@ -51,6 +51,19 @@ const evidenceWriterSchema = {
   },
   required: ["itemId", "reason"],
 };
+
+it("shares the exact variable writer argument contract used by provider schemas and restricted dispatch", () => {
+  expect(initiativeReviewWriterArgumentContract(binding)).toMatchObject({
+    objectiveMappingProposal: true,
+    writerPropertyNames: ["operation", "baselineId", "objectiveMappings", "reason"],
+    requiredWriterNames: ["operation", "baselineId", "objectiveMappings", "reason"],
+  });
+  expect(initiativeReviewWriterArgumentContract({ ...binding, gate: "spec-approval" })).toMatchObject({
+    objectiveMappingProposal: false,
+    writerPropertyNames: ["decision", "reason", "findings", "resolvedFindingRefs", "profile", "artifactRole", "supersessionDispositions"],
+    requiredWriterNames: ["decision", "reason", "findings", "resolvedFindingRefs", "profile", "artifactRole"],
+  });
+});
 
 describe("narrowInitiativeReviewTools", () => {
   it("binds spec approval to current server classification without changing task identity", () => {

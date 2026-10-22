@@ -761,6 +761,16 @@ are unaffected.
 
 ## Canonical review writer execution identity
 
+The captured identity also fences every task-bound review callback, whether or
+not it used connection recovery. Governed preflight, immediate tool dispatch and
+task settlement recheck the same request, reservation, dispatch claim and
+authority digest. An approval return keeps its original audited identity and
+cannot adopt a newer generation or revive a held execution. Malformed non-null
+review bindings fail closed; ordinary tasks with the historical null sentinel
+keep their normal behavior. The original owner can still read exact
+`tasks/get` and `tasks/result` evidence under current read permissions. These
+reads neither resume execution nor clear uncertainty.
+
 For a task-bound initiative review, the admitted executor captures its request
 digest, reservation, dispatch claim and recorded execution-authority digest before
 starting provider work. Internal tool execution carries that captured identity;

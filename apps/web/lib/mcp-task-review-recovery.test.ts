@@ -70,6 +70,16 @@ it.each([{}, { initiativeReviewBinding: null }])("preserves unrelated nonreview 
   expect(await reviewRecoveryToolRefusal({ taskRunId, userId: "human" })).toBeNull();
 });
 
+it.each([null, {}, { schemaVersion: 1, manifestArtifactId: "sealed", manifestDigest: "f".repeat(64) }])(
+  "refuses a prospective restricted callback outside its captured execution scope: %j", async marker => {
+    const { reviewRecoveryToolRefusal } = await import("./mcp-task-review-recovery");
+    mocks.liveTask.mockResolvedValue({ ...row, status: "working", currentAgentId: raw.agentId, progressPayload: {},
+      a2aMetadata: { ...row.a2aMetadata, initiativeReviewBinding: raw.initiativeReviewBinding, reassessmentExecution: marker } });
+    expect(await reviewRecoveryToolRefusal({ taskRunId, userId: "human", actingAgentId: raw.agentId,
+      executionFence: captureTaskExecutionFence({}, digest) }))
+      .toMatchObject({ success: false, error: "review_execution_authority_refused" });
+  });
+
 it.each([undefined, {}, { ...raw.initiativeReviewBinding, schemaVersion: 2 },
   { ...raw.initiativeReviewBinding, artifactRef: { kind: "unknown-version" } }])(
   "refuses malformed or unknown immutable bindings even with a current full fence: %j", async binding => {

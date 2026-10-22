@@ -78,6 +78,7 @@ import {
 } from "./terminal-tool-policy";
 import { rotateTerminalWriterRoute } from "./terminal-writer-route";
 import { shouldExitWithLocalToolCallDiagnostic } from "./local-tool-call-diagnostic";
+import { assertRestrictedReassessmentTurn, restrictedReassessmentLoop, restrictedReassessmentToolCall, rethrowRestrictedReassessmentError } from "./reassessment-loop";
 export { detectToolRefusedDespiteAvailability } from "./tool-refused-recovery";
 
 // Safety ceiling — the loop exits naturally when the model responds with text-only
@@ -1061,14 +1062,15 @@ export type RunAgenticLoopParams = Pick<LoopToolContextInput, "taskExecutionFenc
 };
 
 export async function runAgenticLoop(params: RunAgenticLoopParams): Promise<AgenticResult> {
+  const restricted = restrictedReassessmentLoop(params);
   const tracker = { activeSkillId: params.activeSkillId ?? null };
   let isSuccess = false;
   try {
-    const result = await withLocalNativeContinuation(() => _runAgenticLoop(params, tracker));
+    const result = await withLocalNativeContinuation(() => _runAgenticLoop(params, tracker, restricted));
     isSuccess = true;
     return result;
   } finally {
-    if (tracker.activeSkillId) {
+    if (!restricted && tracker.activeSkillId) {
       const { recordSkillUsageEvents } = await import("@/lib/skills/usage-events");
       void recordSkillUsageEvents({
         phase: isSuccess ? "completed" : "failed",
@@ -1083,7 +1085,7 @@ export async function runAgenticLoop(params: RunAgenticLoopParams): Promise<Agen
   }
 }
 
-async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSkillId: string | null }): Promise<AgenticResult> {
+async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSkillId: string | null }, restricted: boolean): Promise<AgenticResult> {
   const {
     chatHistory,
     systemPrompt,
@@ -1151,12 +1153,9 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
   // the family successor rather than to whatever ranked first.
   effectiveConfig.preferredModelFamily ??= await lookupPinnedModelFamily(prisma, effectiveConfig.preferredProviderId, effectiveConfig.preferredModelId);
 
-  // BI-E8BCA547 — spend-aware routing. Check the agent's live daily spend once
-  // per turn and, when it is near the budget, bias the routing budget class
-  // toward cost so the router picks a cheaper (still capability-floor-respecting)
-  // model — instead of only logging the warning until the 100% hard-reject.
-  // Advisory: any failure leaves the class untouched and never blocks the turn.
-  try {
+  // BI-E8BCA547: ordinary turns may bias routing toward cost near budget.
+  // Restricted turns retain their qualified composition and budget owner.
+  if (!restricted) try {
     const { checkAgentBudgetFromRegistry, writeBudgetEvent } = await import("@/lib/inference/budget-gate");
     const { spendAwareBudgetClass } = await import("@/lib/inference/spend-aware-routing");
     const budget = await checkAgentBudgetFromRegistry(agentId);
@@ -1369,8 +1368,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     });
   };
 
-  // EP-27FD96BC · P1 — the unified warrant bounds iterations for this turn.
-  // Clamped to the hard MAX_ITERATIONS safety ceiling; absent warrant = 200.
+  // EP-27FD96BC: clamp the warrant to the hard iteration ceiling.
   const iterationCeiling = Math.min(
     MAX_ITERATIONS,
     effortWarrant?.maxIterations ?? MAX_ITERATIONS,
@@ -1383,11 +1381,12 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     );
   }
   for (let iteration = 0; iteration < iterationCeiling; iteration++) {
+    assertRestrictedReassessmentTurn(restricted, terminalProviderTools);
     if (params.terminalToolPolicy) {
-      routeOptions.tools = terminalToolSurfaceOverride
+      routeOptions.tools = restricted ? [...terminalProviderTools] : terminalToolSurfaceOverride
         ? selectTerminalToolSurface(terminalProviderTools, terminalToolSurfaceOverride)
         : applyTerminalToolSurface(params.terminalToolPolicy, executedTools, terminalProviderTools);
-      const writerOnlySurface = routeOptions.tools.length === 1
+      const writerOnlySurface = !restricted && routeOptions.tools.length === 1
         && selectTerminalToolSurface(routeOptions.tools, [params.terminalToolPolicy.writerToolName]).length === 1;
       routeOptions.toolChoice = writerOnlySurface ? "required" : undefined;
       routeOptions.terminalWriterToolName = writerOnlySurface ? params.terminalToolPolicy.writerToolName : undefined;
@@ -1399,9 +1398,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       break;
     }
 
-    // BI-4ab6be39 — cooperative heartbeat. If the row was canceled elsewhere
-    // (status != "working"), heartbeat returns false; we treat that as a
-    // cooperative-cancel signal and break out of the loop.
+    // BI-4ab6be39: stop cooperatively when the task's heartbeat is refused.
     if (taskRunId) {
       const { heartbeat } = await import("@/lib/observability/heartbeat");
       const alive = await heartbeat(taskRunId);
@@ -1499,7 +1496,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       const content = buildRepeatedToolStopMessage({
         toolName: repeated.toolName, count: repeated.count, routeContext, reasonHint: repeated.reasonHint,
       });
-      await recordRepeatedToolIssue({
+      if (!restricted) await recordRepeatedToolIssue({
         repeated, routeContext: routeContext ?? null, userId,
         agentId: agentId ?? null, threadId: threadId ?? null, taskRunId: taskRunId ?? null,
       });
@@ -1578,6 +1575,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         );
       }
     } catch (routeErr) {
+      rethrowRestrictedReassessmentError(restricted, routeErr);
       const msg = routeErr instanceof Error ? routeErr.message : String(routeErr);
       const failure = describeToolRouteFailureOutcome(msg, routeOptions.tools?.length ?? 0, routeErr);
       console.warn(`[agentic-loop] routeAndCall threw: ${msg}`);
@@ -1649,7 +1647,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     }
     totalInputTokens += result.inputTokens;
     totalOutputTokens += result.outputTokens;
-    if (params.terminalToolPolicy) await (await import("./native-mcp-executions")).foldNativeMcpExecutions({ taskRunId, providerId: result.providerId, sinceMs: startTime, records: executedTools }); // BI-2E479619: CLI-native MCP calls are this turn's tool records too.
+    if (!restricted && params.terminalToolPolicy) await (await import("./native-mcp-executions")).foldNativeMcpExecutions({ taskRunId, providerId: result.providerId, sinceMs: startTime, records: executedTools }); // BI-2E479619
     // No tool calls — check if agent stalled with intent to continue
     if (!result.toolCalls || result.toolCalls.length === 0) {
       const trimmed = result.content.trim();
@@ -1678,7 +1676,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           terminalToolNudges++;
           terminalToolSurfaceOverride = exit.allowedToolNames;
           messages = [...messages, transferLocalNativeContinuation(result, { role: "assistant" as const, content: result.content }), { role: "user", content: exit.message }];
-          await rotateTerminalWriterRoute({ policy: params.terminalToolPolicy, records: executedTools, options: routeOptions, providerId: result.providerId, messages, systemPrompt: params.systemPrompt, sensitivity: params.sensitivity });
+          if (!restricted) await rotateTerminalWriterRoute({ policy: params.terminalToolPolicy, records: executedTools, options: routeOptions, providerId: result.providerId, messages, systemPrompt: params.systemPrompt, sensitivity: params.sensitivity });
           continue;
         }
         if (exit.kind === "input-required") {
@@ -2202,7 +2200,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     const chatApprovalIds: string[] = []; // BI-7BCC87BB: declared-proposal requests raised in chat this step
 
     for (const providerToolCall of result.toolCalls) {
-      let tc = providerToolCall;
+      let tc = restrictedReassessmentToolCall(restricted, params, providerToolCall);
       if (params.terminalToolPolicy) {
         // BI-E8237EAE: size governed reader pages to what this model can see whole.
         const normalized = normalizeTerminalToolArguments(params.terminalToolPolicy, tc.name, tc.arguments, resolveToolResultCharCap(resolvedMaxContextTokens));
@@ -2401,7 +2399,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       const toolStartMs = Date.now();
       let toolResult: ToolResult;
       try {
-        if (!tracker.activeSkillId && !hasResolvedSkillInvocation && tc.name !== LOAD_TOOLS_TOOL_NAME && !EXECUTION_PLAN_TOOL_NAMES.has(tc.name)) {
+        if (!restricted && !tracker.activeSkillId && !hasResolvedSkillInvocation && tc.name !== LOAD_TOOLS_TOOL_NAME && !EXECUTION_PLAN_TOOL_NAMES.has(tc.name)) {
           hasResolvedSkillInvocation = true;
           try {
             const { getSkillsForAgent } = await import("@/lib/skills/runtime");
@@ -2437,6 +2435,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           source: "agentic-loop",
         });
       } catch (err) {
+        rethrowRestrictedReassessmentError(restricted, err);
         const errorMsg = err instanceof Error ? err.message : "Unknown error";
         console.error(`[agentic-tool] UNCAUGHT iter=${iteration} tool=${tc.name}:`, errorMsg);
         toolResult = { success: false, error: errorMsg, message: `Tool ${tc.name} failed: ${errorMsg}` };

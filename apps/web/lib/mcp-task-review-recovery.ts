@@ -2,6 +2,7 @@ import { parseReviewExecutionAuthority } from "./mcp-task-persisted-request";
 export { parseReviewExecutionAuthority } from "./mcp-task-persisted-request";
 import { ok, err, type ActionSuccess, type ActionFailure } from "./shared/action-result";
 import { prisma } from "@dpf/db";
+import { matchesPersistedReassessmentScope } from "./routing/reassessment-execution-scope";
 import { resolveCanonicalAgentId } from "@dpf/db/agent-identity";
 import { OAUTH_EXECUTION_AUTHORITY_SELECT, isCurrentOAuthExecutionAuthority } from "./auth/oauth-tokens";
 import { deterministicExternalTaskRunId, matchingRemoteTaskRequestDigest, reconcileReviewReplayScope } from "./mcp-task-capacity-contract";
@@ -215,6 +216,7 @@ export async function reviewRecoveryToolRefusal(input: {
     const task = await prisma.taskRun.findUnique({ where: { taskRunId: input.taskRunId },
       select: { userId: true, currentAgentId: true, status: true, updatedAt: true, a2aMetadata: true, progressPayload: true } });
     if (!task) return denied();
+    if (!matchesPersistedReassessmentScope(task.a2aMetadata, input.taskRunId)) return denied();
     if (isBoundReviewTask(task.a2aMetadata)) {
       if (!validBoundReviewTaskMetadata(task.a2aMetadata)
         || task.userId !== input.userId || !task.currentAgentId || !input.actingAgentId

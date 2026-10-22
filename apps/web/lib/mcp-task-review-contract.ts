@@ -216,19 +216,10 @@ export function validateInitiativeReviewAuthorityScope(
   return null;
 }
 
-export function narrowInitiativeReviewTools<T extends {
-  tools: ToolDefinition[];
-  toolsForProvider: Array<Record<string, unknown>>;
-  deferredTools: ToolDefinition[];
-}>(
-  input: T,
-  requiredNames: readonly string[],
-  binding: InitiativeReviewBinding | undefined,
-  prompt?: string,
-  authoritativeProfile?: string | null,
-): T {
-  if (!binding) return input;
-  const exactNames = new Set(requiredNames);
+/** One variable-argument contract for the provider schema and the actual
+ * restricted dispatcher. Binding identity is injected by the canonical writer
+ * from the accepted task; these are the fields the assessment may supply. */
+export function initiativeReviewWriterArgumentContract(binding: InitiativeReviewBinding, prompt?: string) {
   const currentBaselineId = optionalString(binding.expectedCurrentBaselineId);
   const eligibleEvidenceActivityIds = binding.eligibleEvidenceActivityIds ?? [];
   const objectiveMappingProposal = binding.writerToolName === "record_initiative_evidence"
@@ -254,6 +245,24 @@ export function narrowInitiativeReviewTools<T extends {
     ...(binding.gate === "spec-approval" ? ["profile", "artifactRole"] : []),
     ...(binding.gate === "classification" ? ["profile"] : []),
   ];
+  return { writerPropertyNames, requiredWriterNames, objectiveMappingProposal, currentBaselineId, eligibleEvidenceActivityIds };
+}
+
+export function narrowInitiativeReviewTools<T extends {
+  tools: ToolDefinition[];
+  toolsForProvider: Array<Record<string, unknown>>;
+  deferredTools: ToolDefinition[];
+}>(
+  input: T,
+  requiredNames: readonly string[],
+  binding: InitiativeReviewBinding | undefined,
+  prompt?: string,
+  authoritativeProfile?: string | null,
+): T {
+  if (!binding) return input;
+  const exactNames = new Set(requiredNames);
+  const { writerPropertyNames, requiredWriterNames, objectiveMappingProposal, currentBaselineId, eligibleEvidenceActivityIds }
+    = initiativeReviewWriterArgumentContract(binding, prompt);
   const narrowSchema = (schema: Record<string, unknown>) => {
     const properties = schema.properties && typeof schema.properties === "object" && !Array.isArray(schema.properties)
       ? schema.properties as Record<string, unknown>

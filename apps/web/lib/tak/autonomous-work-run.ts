@@ -13,6 +13,9 @@ import type { ProactivityPlan } from "@/lib/proactivity/proactivity-types";
 import { admitRuntimeGuardedWork } from "@/lib/platform-runtime/work-admission";
 import type { RouteSensitivity } from "@/lib/agent-sensitivity";
 import type { SurfaceMode, SurfacePrincipalContext } from "@dpf/types";
+import { narrowInitiativeReviewTools, type InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
+import { immutablePageReaderForArtifact } from "./terminal-tool-policy";
+import { ReassessmentExecutionError, currentReassessmentExecution, assertReassessmentToolCall } from "@/lib/routing/reassessment-execution-scope";
 
 /** Best-effort latest user-turn text, for the reviewer's context. */
 function lastUserRequest(history: ChatMessage[]): string {
@@ -248,6 +251,8 @@ export async function resolveAutonomousWorkTools(input: {
    *  schemas inside the attachment budget so the model never has to discover a
    *  known governed writer through the public marketplace. */
   requiredToolNames?: readonly string[];
+  /** Server-owned admitted binding. Narrows already-authorized tools before runtime probes. */
+  restrictedReviewBinding?: InitiativeReviewBinding;
 }): Promise<{
   tools: ToolDefinition[];
   toolsForProvider: Array<Record<string, unknown>>;
@@ -266,6 +271,17 @@ export async function resolveAutonomousWorkTools(input: {
     agentId: input.agentId,
     additionalGrants: COWORKER_AUTHORIZED_SURFACE_BASELINE_GRANTS,
   });
+
+  if (input.restrictedReviewBinding) {
+    const binding = input.restrictedReviewBinding;
+    const names = [immutablePageReaderForArtifact(binding.artifactRef), binding.writerToolName];
+    const requested = new Set(input.requiredToolNames ?? []);
+    if (requested.size !== 2 || names.some(name => !requested.has(name) || !authorized.some(tool => tool.name === name))) {
+      throw new ReassessmentExecutionError("reassessment-tool-surface-unavailable", "The exact reader and writer must both be normally authorized; auxiliary tools cannot join this surface.");
+    }
+    return narrowInitiativeReviewTools({ tools: authorized, toolsForProvider: toolsToOpenAIFormat(authorized), deferredTools: [] },
+      names, binding, input.intentQuery);
+  }
 
   // BI-CAP-F2D39F8F: right-size the ATTACHMENT for autonomous runs with the
   // SAME budget the interactive path uses (coworker-tool-budget). A scheduled
@@ -438,6 +454,19 @@ export async function executeAutonomousAgenticLoop(input: {
 }) {
   const { runAgenticLoop } = await import("@/lib/tak/agentic-loop");
   const { withInferenceOrigin } = await import("@/lib/inference/inference-admission");
+
+  const restricted = currentReassessmentExecution();
+  if (restricted) {
+    assertReassessmentToolCall({ toolName: immutablePageReaderForArtifact(restricted.binding.artifactRef), params: {},
+      userId: input.userId, agentId: input.agentId, taskRunId: input.taskRunId ?? undefined, executionFence: input.taskExecutionFence });
+    // The sealed review runs its exact loop. Auxiliary grounding, draft reviews
+    // and asynchronous learning writers are outside this captured composition.
+    const result = await withInferenceOrigin("autonomous", () => runAgenticLoop({ ...input, toolsForProvider: input.toolsForProvider,
+      deferredTools: [], allowToolFreeInference: false,
+      ...(input.roomTurn ? { workroomId: input.roomTurn.workroomId, roomAuthority: toRoomAuthorityContext(input.roomTurn),
+        externalAccessEnabled: input.roomTurn.externalAccess.enabled, workroomPriority: input.roomTurn.priority } : {}) }));
+    return { ...result, authoritativeSurfaceEvidence: false };
+  }
 
   // Capture before-run timestamp so the post-run reflection trigger only
   // considers PlatformIssueReport rows this run produced.
