@@ -428,9 +428,12 @@ describe("restricted reassessment execution capture", () => {
       seed.qualification.bounds.maxProviderStarts = 100;
       expect(context.qualification.bounds.maxProviderStarts).toBe(2);
     });
-    const expired = fixture(); expired.seed.startedAt = new Date(Date.now() - 40_000).toISOString();
-    expired.seed.deadlineAt = new Date(Date.now() - 10_000).toISOString();
-    await expect(runReassessmentExecution(expired.seed, expired.hooks, async () => "never")).rejects.toThrow(/deadline/i);
+    const expired = fixture(), now = Date.now(), execute = vi.fn(async () => "never");
+    expired.seed.startedAt = new Date(now - 40_000).toISOString();
+    expired.seed.deadlineAt = new Date(now - 10_000).toISOString();
+    await expect(runReassessmentExecution(expired.seed, expired.hooks, execute)).rejects.toMatchObject({ code: "reassessment-deadline-exhausted" });
+    expect(execute).not.toHaveBeenCalled(); expect(expired.hooks.open).not.toHaveBeenCalled();
+    expect(expired.hooks.reserve).not.toHaveBeenCalled();
   });
 
   it("closes inherited async descendants once the owning execution returns", async () => {
