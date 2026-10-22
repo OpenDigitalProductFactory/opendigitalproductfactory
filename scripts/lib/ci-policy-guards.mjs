@@ -343,6 +343,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // BI-30E3E229: reads repo files by repo-relative literal path, so it
       // asserts live repository state rather than this guard's logic.
       conformanceTest("scripts/publish-image-release-identity.test.mjs"),
+      conformanceTest("scripts/promote-source-identity.test.mjs"),
     ]),
     guard("docs-link-integrity", "Docs Link Integrity", [
       node("scripts/gen-doc-index.mjs", "--check"),
