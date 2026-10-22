@@ -5539,6 +5539,23 @@
         "recommended-prompt-for-future-prs-copy-paste-ready"
       ]
     },
+    "docs/history/2026-10-16-review-settlement-investigation.md": {
+      "publicHref": "/history/2026-10-16-review-settlement-investigation/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "review-settlement-historical-investigation-and-sequencing",
+        "ordered-implementation-plan",
+        "p1-establish-executable-evidence-adapters",
+        "p2-consolidate-qualification-and-integrate-the-writer-fence",
+        "p3-admit-one-same-task-continuation",
+        "p4-qualify-delivery-and-served-behavior",
+        "backlog-coverage",
+        "finite-unsupported-boundary-and-resumption",
+        "october-19-bounded-source-recovery-original-proof-inventory"
+      ]
+    },
     "docs/install/cloud-single-vm.md": {
       "publicHref": "/install/cloud-single-vm/",
       "portalHref": null,
