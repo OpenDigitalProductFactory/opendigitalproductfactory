@@ -832,8 +832,10 @@ An unsupported normal winner refuses before allocation.
 
 Compatible transport, approval, worker and writer owners are required on the
 actual served image. Upgrade preflight and the final swap check their packaged
-capability proof, including fallback targets. Canonical PostgreSQL restore is
-currently refused before any backup or restore effect because whole-restore
-retention and effect exclusion have not been proven. This deliberately reduces
-restore availability; the refusal is not positive retention evidence. Source
+capability proof, including fallback targets. Canonical self-upgrade PostgreSQL
+rollback is currently refused before any backup or restore effect because
+whole-restore retention and effect exclusion have not been proven. This
+deliberately reduces rollback availability; the refusal is not positive
+retention evidence. Other privileged database, file and host administration
+remains the approved trusted-admin boundary. Source
 tests alone do not establish deployment, a live assessment or parent admission.

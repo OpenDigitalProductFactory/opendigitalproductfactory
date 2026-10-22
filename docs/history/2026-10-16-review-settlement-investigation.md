@@ -234,4 +234,3 @@ omit it and return `proofInventoryUnavailable: "budget"` if that marker fits;
 otherwise return the complete base without the marker. A valid locator three
 characters longer exercises the marker-omission boundary. Base overflow still
 returns the original over-budget refusal. Neither path authorizes replay.
-

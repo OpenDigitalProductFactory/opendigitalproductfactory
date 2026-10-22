@@ -72,7 +72,13 @@ export function parsePresentReassessmentRelation(v: unknown): PresentReassessmen
     || typeof a.commitSha !== "string" || !/^[a-f0-9]{40}$/.test(a.commitSha)
     || typeof a.providerBlobId !== "string" || !/^[a-f0-9]{40}$/.test(a.providerBlobId)
     || !text(a.path) || a.path.includes("\\") || a.path.split("/").some(p => !p || p === "." || p === "..")) return null;
-  return v as PresentReassessmentRelation;
+  // The accepted request digest uses the decoder's field order. JSONB may
+  // reorder stored object keys, so reconstruct both objects rather than
+  // returning the database representation with a different digest.
+  return { schemaVersion: 1, authorizationItemId: v.authorizationItemId, baselineId: v.baselineId,
+    policyDigest: v.policyDigest, originalTaskRunId: v.originalTaskRunId, originalRequestDigest: v.originalRequestDigest,
+    predecessorTaskRunIds: [...v.predecessorTaskRunIds], authorityArtifact: { kind: "repo-blob-at-commit",
+      repositoryFullName: a.repositoryFullName, commitSha: a.commitSha, path: a.path, providerBlobId: a.providerBlobId } };
 }
 
 export function reassessmentPolicyDigest(value: ReassessmentPolicy): string {

@@ -186,4 +186,3 @@ export function normalizeTerminalToolArguments(
 
   return { kind: "allow", arguments: normalized };
 }
-
