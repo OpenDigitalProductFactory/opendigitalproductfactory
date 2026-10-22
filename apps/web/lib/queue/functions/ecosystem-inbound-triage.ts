@@ -60,7 +60,7 @@ export const ecosystemInboundTriage = jobs.createFunction(
     id: "ecosystem/inbound-issue-triage",
     retries: 2,
     concurrency: { limit: 1, scope: "fn" },
-    triggers: [cron("17 6 * * 1")],
+    triggers: [cron("17 */4 * * *")],
   },
   async ({ step }) => {
     const gate = await gateAtEntry(step, "ecosystem/inbound-issue-triage");
