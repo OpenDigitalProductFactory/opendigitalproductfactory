@@ -34,7 +34,7 @@ import { prisma } from "@dpf/db";
 import { interceptToolCallAsProposal } from "@/lib/proactivity/propose-interception";
 import { agentEventBus } from "./agent-event-bus";
 import { terminalTruncationMessage } from "./terminal-response-truncation";
-import { TIER_MINIMUM_DIMENSIONS, type QualityTier } from "../routing/quality-tiers";
+import { resolveEffectiveAgentRouteConfig } from "./agent-route-config";
 import {
   DEFAULT_MINIMUM_CONTEXT_TOKENS,
   resolveTurnGroundedGuidanceRoute,
@@ -78,7 +78,8 @@ import {
 } from "./terminal-tool-policy";
 import { rotateTerminalWriterRoute } from "./terminal-writer-route";
 import { shouldExitWithLocalToolCallDiagnostic } from "./local-tool-call-diagnostic";
-import { assertRestrictedReassessmentTurn, restrictedReassessmentLoop, restrictedReassessmentToolCall, rethrowRestrictedReassessmentError } from "./reassessment-loop";
+import { assertRestrictedReassessmentTurn, restrictedReassessmentLoop, restrictedReassessmentToolCall, restrictedReassessmentReceipt, rethrowRestrictedReassessmentError, type CanonicalReviewReceiptCheck } from "./reassessment-loop";
+import { preloadFiniteReassessment, fullReassessmentToolResult } from "./reassessment-preload";
 export { detectToolRefusedDespiteAvailability } from "./tool-refused-recovery";
 
 // Safety ceiling — the loop exits naturally when the model responds with text-only
@@ -231,109 +232,6 @@ function hasAuthoritativeToolProgress(
   ) ?? false;
 }
 
-type AgentRouteConfig = {
-  minimumDimensions?: Record<string, number>;
-  budgetClass?: "minimize_cost" | "balanced" | "quality_first";
-  preferredProviderId?: string;
-  preferredModelId?: string;
-  /** BI-7F2FBDA3: lineage of the pinned model, looked up even when it has retired. */
-  preferredModelFamily?: string | null;
-  allowedProviders?: string[];
-  deniedProviders?: string[];
-  residencyPolicy?: "local_only" | "approved_cloud" | "any_enabled";
-  effort?: "low" | "medium" | "high" | "max";
-};
-
-function resolveEffectiveAgentRouteConfig(params: {
-  agentModelConfig: {
-    minimumTier: string;
-    budgetClass: string;
-    pinnedProviderId: string | null;
-    pinnedModelId: string | null;
-  } | null;
-  modelRequirements: unknown;
-}): AgentRouteConfig {
-  const codeConfig: AgentRouteConfig =
-    params.modelRequirements && typeof params.modelRequirements === "object"
-      ? {
-          ...("defaultMinimumTier" in params.modelRequirements
-            ? {
-                minimumDimensions:
-                  TIER_MINIMUM_DIMENSIONS[
-                    params.modelRequirements.defaultMinimumTier as QualityTier
-                  ] ?? {},
-              }
-            : "minimumDimensions" in params.modelRequirements
-              ? {
-                  minimumDimensions:
-                    params.modelRequirements.minimumDimensions as Record<string, number>,
-                }
-              : {}),
-          ...("defaultBudgetClass" in params.modelRequirements
-            ? {
-                budgetClass: params.modelRequirements.defaultBudgetClass as
-                  | "minimize_cost"
-                  | "balanced"
-                  | "quality_first",
-              }
-            : "budgetClass" in params.modelRequirements
-              ? {
-                  budgetClass: params.modelRequirements.budgetClass as
-                    | "minimize_cost"
-                    | "balanced"
-                    | "quality_first",
-                }
-              : {}),
-          ...("preferredProviderId" in params.modelRequirements
-            ? { preferredProviderId: params.modelRequirements.preferredProviderId as string }
-            : {}),
-          ...("preferredModelId" in params.modelRequirements
-            ? { preferredModelId: params.modelRequirements.preferredModelId as string }
-            : {}),
-          ...("allowedProviders" in params.modelRequirements
-            ? { allowedProviders: params.modelRequirements.allowedProviders as string[] }
-            : {}),
-          ...("deniedProviders" in params.modelRequirements
-            ? { deniedProviders: params.modelRequirements.deniedProviders as string[] }
-            : {}),
-          ...("residencyPolicy" in params.modelRequirements
-            ? {
-                residencyPolicy: params.modelRequirements.residencyPolicy as
-                  | "local_only"
-                  | "approved_cloud"
-                  | "any_enabled",
-              }
-            : {}),
-          ...("defaultEffort" in params.modelRequirements
-            ? {
-                effort: params.modelRequirements.defaultEffort as
-                  | "low"
-                  | "medium"
-                  | "high"
-                  | "max",
-              }
-            : {}),
-        }
-      : {};
-
-  if (!params.agentModelConfig) return codeConfig;
-
-  return {
-    ...codeConfig,
-    minimumDimensions:
-      TIER_MINIMUM_DIMENSIONS[params.agentModelConfig.minimumTier as QualityTier] ??
-      codeConfig.minimumDimensions ??
-      {},
-    budgetClass: params.agentModelConfig.budgetClass as
-      | "minimize_cost"
-      | "balanced"
-      | "quality_first",
-    preferredProviderId:
-      params.agentModelConfig.pinnedProviderId ?? codeConfig.preferredProviderId,
-    preferredModelId:
-      params.agentModelConfig.pinnedModelId ?? codeConfig.preferredModelId,
-  };
-}
 
 /** Detect when the agent claims completion or narrates code without having called authoritative tools. */
 export function detectFabrication(
@@ -913,7 +811,7 @@ export function buildToolSessionHintMessage(
 }
 
 export type RunAgenticLoopParams = Pick<LoopToolContextInput, "taskExecutionFence"> & {
-
+  canonicalReviewReceipt?: CanonicalReviewReceiptCheck;
   chatHistory: ChatMessage[];
   systemPrompt: string;
   /** Instruction spans in `systemPrompt`; see RouteAndCallOptions (BI-463BE12A). */
@@ -1254,6 +1152,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
   const executedTools: AgenticResult["executedTools"] = [];
+  const finitePreload = await preloadFiniteReassessment({ ...params, interactionMode }, executedTools, governedExecuteTool); if (finitePreload) messages.push(finitePreload);
   let lastResult: RoutedInferenceResult | null = null;
   let continuationNudges = 0;
   // BI-PIR-2fc2106c: one soft no-progress nudge per args signature.
@@ -1511,11 +1410,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
 
     // EP-INF-009b: All inference goes through V2 routing pipeline
     inferenceCallCount++;
-    // Assemble the compacted, plan-reminded context once (it was built twice,
-    // once per heartbeat branch below) and gauge its pressure. Observability
-    // only — the array is sent unchanged; this just makes context fill visible
-    // per dispatch (the autonomous loop is the run most likely to drift into
-    // the dumb zone). See ./context-pressure.
+    // Keep complete finite evidence; ordinary turns retain context compaction.
     // BI-3C8220ED — overload→trim. Measure the pressure BEFORE compaction and
     // feed the zone into the trim, so a turn already in the warning/dumb zone
     // compacts harder instead of only being logged after the fact.
@@ -1524,7 +1419,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       resolvedMaxContextTokens,
     ).zone;
     const assembledMessages = withPlanReminder(
-      compactAgenticMessages(messages, resolvedMaxContextTokens, preCompactionZone, params.terminalToolPolicy?.readerToolNames),
+      finitePreload ? messages : compactAgenticMessages(messages, resolvedMaxContextTokens, preCompactionZone, params.terminalToolPolicy?.readerToolNames),
     );
     const ctxPressure = classifyContextPressure(estimateContextTokens(assembledMessages, systemPrompt), resolvedMaxContextTokens);
     if (ctxPressure.estimatedTokens > ctxPeakTokens) ctxPeakTokens = ctxPressure.estimatedTokens;
@@ -2461,7 +2356,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         refusalReasons.clear();
       }
 
-      const modelEvidenceTruncated = params.terminalToolPolicy?.readerToolNames.includes(tc.name)
+      const modelEvidenceTruncated = !finitePreload && params.terminalToolPolicy?.readerToolNames.includes(tc.name)
         ? clampToolResultForModel(toolResult, { maxChars: resolveToolResultCharCap(resolvedMaxContextTokens) }).truncated
         : undefined;
       executedTools.push({ name: tc.name, args: tc.arguments, result: toolResult, modelEvidenceTruncated });
@@ -2470,6 +2365,8 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       }
       iterationResults.push({ tc, toolResult });
       onProgress?.({ type: "tool:complete", tool: tc.name, success: toolResult.success });
+      const receipt = await restrictedReassessmentReceipt(restricted, params, tc.name, toolResult);
+      if (receipt) { logTurnSummary(result.providerId, result.modelId); return completeResult(receipt.summary, result); }
       const raisedId = declaredProposalInChat ? pendingApprovalEnvelopeId(toolResult) : null;
       // The turn ends on the raised request; later calls in this batch are not run.
       if (raisedId) { chatApprovalIds.push(raisedId); break; }
@@ -2506,7 +2403,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         // truncation notice. Replaces the prior silent `slice(0, 3000)`, which
         // left `message` unbounded and gave the model no signal that data was
         // cut. The stored toolResult (audit/receipts) is unaffected.
-        content: clampToolResultForModel(toolResult, {
+        content: finitePreload ? fullReassessmentToolResult(toolResult, tc.name) : clampToolResultForModel(toolResult, {
           maxChars: resolveToolResultCharCap(resolvedMaxContextTokens), toolName: tc.name, provenance: resolveToolResultProvenance(tc.name, (name) => dynamicToolSurface.definition(name)),
         }).text,
         toolCallId: tc.id,

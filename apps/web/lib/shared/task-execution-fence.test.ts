@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { captureTaskExecutionFence, isBoundReviewTask, parseTaskExecutionFence, sameTaskExecutionFence, taskExecutionEligible } from "./task-execution-fence";
 
+it.each(["working", "approval-resume", "approval-renewal"] as const)("never revives a quarantined historical review during %s", phase => {
+  const requestDigest = "a".repeat(64), progressPayload = { reassessmentQuarantine: { schemaVersion: 1, supersededByTaskRunId: "TR-present" } };
+  expect(taskExecutionEligible({ status: phase === "working" ? "working" : "input-required", progressPayload, requestDigest,
+    executionFence: captureTaskExecutionFence(progressPayload, requestDigest), phase })).toBe(false);
+});
+
 describe("admitted task execution identity", () => {
   it("distinguishes absent review metadata from an explicit invalid binding", () => {
     expect(isBoundReviewTask({})).toBe(false);

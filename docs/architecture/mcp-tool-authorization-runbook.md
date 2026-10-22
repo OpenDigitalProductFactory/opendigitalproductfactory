@@ -791,3 +791,49 @@ reset attempts or qualify historical recovery. Deploy compatible writers before
 admitting these sessions. Roll back by disabling admission while retaining the
 compatible fence and readers; a pre-fence binary requires separately proven
 capability retirement and reconciled effects.
+
+## Explicitly authorized present reassessments
+
+An approved retained policy can authorize a bounded present assessment of an
+unchanged review requirement. This is separate from original-task recovery.
+`get_backlog_item` accepts `reassessmentAuthorizationItemId` with the exact
+`itemId` and `recoveryGate`; its server-issued packet retains the original
+source and the approved policy, baseline and predecessor relation. The locator
+confers no permission. Submit the complete packet unchanged through the normal
+governed `request_coworker` path.
+
+Admission rechecks current human, connection, coworker grants, Workroom access,
+independent approval, normal routing and recorded budgets. It locks the complete
+accepted lineage before the subject and authorization items. Every accepted
+assessment counts, including pending, failed, canceled and uncertain work.
+Repeated requests read the existing allocation; they cannot open another window
+or reset a counter. Historical unknown consumption remains unknown.
+The shared task creator also refuses a new ordinary bound task for the same
+held, uncertain, quarantined or already reassessed requirement. Explicit review
+writer scopes require a binding, and external independent writers require the
+validated persisted binding at publication. Direct `tasks/submit` cannot publish
+a replacement verdict by omitting that binding or changing its key.
+
+The initial TaskRun, immutable qualification root and first input commit together.
+Only declared captured configuration reads run during qualification. Promotion
+adds an immutable execution seal on that same task and original window; reader,
+writer, count and generation effects require the actual promoted scope. Current
+authority and the retained seal are checked again at each effect and inside the
+canonical writer transaction. A genuine existing receipt takes precedence over
+new execution. Predecessor quarantine retains its original status, uncertainty,
+attempts and limits alongside a separate execution hold.
+
+The finite native path captures complete count and generation bodies, reserves
+the exact prompt count plus the full output ceiling, and retains outstanding
+reservations. Normal model selection, quality floors, daily observed-usage checks
+and resource admission still apply. Missing host GPU telemetry is recorded as
+unknown under the ordinary capacity policy; it is never an idle measurement.
+An unsupported normal winner refuses before allocation.
+
+Compatible transport, approval, worker and writer owners are required on the
+actual served image. Upgrade preflight and the final swap check their packaged
+capability proof, including fallback targets. Canonical PostgreSQL restore is
+currently refused before any backup or restore effect because whole-restore
+retention and effect exclusion have not been proven. This deliberately reduces
+restore availability; the refusal is not positive retention evidence. Source
+tests alone do not establish deployment, a live assessment or parent admission.

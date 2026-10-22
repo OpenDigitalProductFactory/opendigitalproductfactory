@@ -145,6 +145,55 @@ describe.skipIf(!url)("canonical review writer transactions on PostgreSQL", () =
         actionKey: "record_initiative_design_review", decision: "allow", policyVersion: "fixture-v1", rationale: { taskRunId } } });
     });
 
+    async function markPresent() {
+      const owner = await db.backlogItem.create({ data: { itemId: "BI-7906C73E", title: "Synthetic policy owner", status: "open", type: "product" } });
+      const task = await db.taskRun.findUniqueOrThrow({ where: { taskRunId } });
+      const metadata = task.a2aMetadata as Record<string, unknown>;
+      await db.taskRun.update({ where: { taskRunId }, data: { a2aMetadata: {
+        ...metadata, reassessmentExecution: { schemaVersion: 2, manifestArtifactId: "ta-synthetic-root", manifestDigest: "1".repeat(64) },
+        initiativeReviewBinding: { ...metadata.initiativeReviewBinding as Record<string, unknown>, presentReassessment: {
+          schemaVersion: 1, authorizationItemId: owner.itemId, baselineId: "baseline-synthetic", policyDigest: "2".repeat(64),
+          originalTaskRunId: "TR-SYNTHETIC-OLD", originalRequestDigest: "3".repeat(64), predecessorTaskRunIds: ["TR-SYNTHETIC-OLD"], authorityArtifact: artifactRef,
+        } },
+      } as fixturePrisma.InputJsonValue } });
+      return owner;
+    }
+
+    it("refuses a new marked V2 effect without actual promoted E authority", async () => {
+      await markPresent();
+      expect(await writer.run()).toMatchObject({ ok: false, code: "AUTHORIZATION_DENIED" });
+      expect(await verdictCount()).toBe(0);
+      expect(await db.initiativeArtifactRetentionPin.count()).toBe(0);
+    });
+
+    it("locks the policy owner before its new-write authority check", async () => {
+      const owner = await markPresent(), blocker = await pool.connect();
+      let publication: ReturnType<typeof writer.run> | undefined;
+      await blocker.query("BEGIN");
+      try {
+        await blocker.query('SELECT "id" FROM "BacklogItem" WHERE "id"=$1 FOR UPDATE', [owner.id]);
+        publication = writer.run(); void publication.catch(() => undefined);
+        await Promise.race([waitForBlockedWriter("BacklogItem"), publication.then(result => { throw earlyWriterResult(result); })]);
+        await blocker.query("COMMIT");
+        expect(await publication).toMatchObject({ ok: false, code: "AUTHORIZATION_DENIED" });
+        expect(await verdictCount()).toBe(0);
+      } finally {
+        await blocker.query("ROLLBACK"); await publication?.catch(() => undefined); blocker.release();
+      }
+    }, 15000);
+
+    it("reads its genuine committed receipt after quarantine and loss of the current policy owner", async () => {
+      expect(await writer.run()).toMatchObject({ ok: true });
+      const owner = await markPresent();
+      await db.taskRun.update({ where: { taskRunId }, data: { status: "input-required", progressPayload: {
+        reassessmentQuarantine: { schemaVersion: 1, replayAllowed: false },
+      } } });
+      await db.backlogItem.delete({ where: { id: owner.id } });
+      expect(await writer.run()).toMatchObject({ ok: true, deduplicated: true });
+      expect(await verdictCount()).toBe(1);
+      expect(await db.initiativeArtifactRetentionPin.count()).toBe(writer.gate === "spec-approval" ? 1 : 0);
+    });
+
     it.each(["hold", "unknown", "working-unknown", "generation", "dispatch", "authority", "cancellation"])("appends nothing when %s wins the real row lock", async (change) => {
       const blocker = await pool.connect();
       await blocker.query("BEGIN");

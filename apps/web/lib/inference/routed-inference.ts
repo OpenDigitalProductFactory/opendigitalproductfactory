@@ -52,7 +52,9 @@ import { persistAcceptedRoutedTokenUsage, persistRoutedTokenUsage, routedContext
 import type { RouteAndCallOptions } from "./routed-inference-options";
 import { applyCallerExecutionPlanOverrides } from "./routed-inference-plan-overrides";
 import type { RoutedExecutionPlan } from "@/lib/routing/recipe-types";
-import { currentReassessmentExecution, assertReassessmentPlan, ReassessmentExecutionError } from "@/lib/routing/reassessment-execution-scope";
+import { currentReassessmentExecution, currentFiniteReassessmentExecution, assertReassessmentPlan, ReassessmentExecutionError } from "@/lib/routing/reassessment-execution-scope";
+import { spendAwareBudgetClass, type BudgetClass } from "./spend-aware-routing";
+import { assertReassessmentNativeScreenUnchanged, reassessmentNativePlansEqual, type ReassessmentNativeRoutingFacts } from "./reassessment-native-runtime";
 import {
   applyObservedRouterEvidence,
   attachProviderSuitabilityReceipt,
@@ -130,6 +132,7 @@ export interface RoutedInferenceResult {
 
 interface PreparedRoute {
   contract: RequestContract;
+  requestedBudgetClass?: BudgetClass;
   decision: RouteDecision;
   manifests: EndpointManifest[];
   policies: PolicyRuleEval[];
@@ -164,7 +167,7 @@ async function prepareRoute(
   systemPrompt: string,
   sensitivity: RouteSensitivity,
   options: RouteAndCallOptions | undefined,
-  prep?: { skipRecipe?: boolean; reassessment?: boolean },
+  prep?: { skipRecipe?: boolean; reassessment?: boolean; nativeRuntime?: ReassessmentNativeRoutingFacts },
 ): Promise<PreparedRoute> {
   const taskType = options?.taskType ?? "conversation";
 
@@ -229,8 +232,10 @@ async function prepareRoute(
     },
   });
 
+  const requestedBudgetClass = contract.budgetClass;
+  if (prep?.nativeRuntime) contract = { ...contract, budgetClass: spendAwareBudgetClass(contract.budgetClass, prep.nativeRuntime.budgetStatus) };
   const [loadedManifests, policies, overrides] = await Promise.all([
-    prep?.reassessment ? loadEndpointManifests(Date.now()) : loadEndpointManifests(Date.now(), resolveLocalRoutingRuntime),
+    prep?.nativeRuntime ? loadEndpointManifests(Date.now(), prep.nativeRuntime.reader) : prep?.reassessment ? loadEndpointManifests(Date.now()) : loadEndpointManifests(Date.now(), resolveLocalRoutingRuntime),
     loadPolicyRules(),
     loadOverrides(taskType),
   ]);
@@ -257,8 +262,8 @@ async function prepareRoute(
   }
   if (prep?.reassessment) {
     const allowed = [...new Set(loadedManifests.filter(endpoint => endpoint.providerConnectionId
-      && endpoint.providerConnectionVersion && endpoint.executionChannel === "direct-api"
-      && ["api_key", "none"].includes(endpoint.accountAuthMethod ?? ""))
+      && endpoint.providerConnectionVersion && (endpoint.executionChannel === "direct-api" && ["api_key", "none"].includes(endpoint.accountAuthMethod ?? "")
+        || prep.nativeRuntime && endpoint.providerId === "local" && endpoint.executionChannel === "local-runtime" && endpoint.accountAuthMethod === "none"))
       .map(endpoint => endpoint.providerConnectionId!))];
     if (allowed.length === 0) throw new ReassessmentExecutionError("reassessment-composition-unavailable");
     contract.allowedProviderConnectionIds = allowed.filter(id => contract.allowedProviderConnectionIds === undefined
@@ -288,6 +293,7 @@ async function prepareRoute(
 
   return {
     contract,
+    requestedBudgetClass,
     decision,
     manifests,
     policies,
@@ -302,12 +308,12 @@ async function prepareRoute(
 
 /** Normal V2 ranking constrained before selection to existing restricted HTTP accounts. */
 export async function prepareReassessmentRoute(messages: ChatMessage[], systemPrompt: string,
-  sensitivity: RouteSensitivity, options?: RouteAndCallOptions): Promise<RoutePreview & { executionPlan: RoutedExecutionPlan }> {
+  sensitivity: RouteSensitivity, options?: RouteAndCallOptions, nativeRuntime?: ReassessmentNativeRoutingFacts): Promise<RoutePreview & { executionPlan: RoutedExecutionPlan; requestedBudgetClass?: BudgetClass }> {
   if (options?.interactionMode && options.interactionMode !== "sync" || options?.durableAsyncOperation
     || options?.requiresCodeExecution || options?.requiresWebSearch || options?.requiresComputerUse) {
     throw new ReassessmentExecutionError("reassessment-composition-unsupported");
   }
-  const prepared = await prepareRoute(messages, systemPrompt, sensitivity, options, { reassessment: true });
+  const prepared = await prepareRoute(messages, systemPrompt, sensitivity, options, { reassessment: true, nativeRuntime });
   const { contract, decision, manifests } = prepared;
   const selectedManifest = manifests.find(endpoint => endpoint.id === decision.selectedEndpoint) ?? null;
   if (!selectedManifest || !decision.executionPlan) throw new ReassessmentExecutionError("reassessment-composition-unavailable");
@@ -316,8 +322,13 @@ export async function prepareReassessmentRoute(messages: ChatMessage[], systemPr
     effort: options?.effort ?? prepared.posture?.effort, toolChoice: options?.toolChoice,
     terminalWriterToolName: options?.terminalWriterToolName,
   });
-  return { contract, decision, selectedManifest, executionPlan };
+  return { contract, decision, selectedManifest, executionPlan, requestedBudgetClass: prepared.requestedBudgetClass };
 }
+
+/** Source-only candidate facts; the reader explicitly preserves UNKNOWN. */
+export const prepareReassessmentNativeStaticRoute = (messages: ChatMessage[], systemPrompt: string, sensitivity: RouteSensitivity,
+  options: RouteAndCallOptions, nativeRuntime: ReassessmentNativeRoutingFacts) =>
+  prepareRoute(messages, systemPrompt, sensitivity, options, { reassessment: true, nativeRuntime });
 
 /** Result of a side-effect-free routing dry-run. */
 export interface RoutePreview {
@@ -377,15 +388,14 @@ async function routeAndCallAttempt(
   options: RouteAndCallOptions | undefined,
   onDispatch: () => void,
 ): Promise<RoutedInferenceResult> {
-  // 1-3. Contract inference, routing-data load, and V2 endpoint selection —
-  // shared with previewRoute() via prepareRoute() so a model-selection
-  // prediction can never drift from what this live path actually picks. The
-  // live path keeps recipe selection (skipRecipe defaults false) so the
-  // executionPlan is built for dispatch below.
+  // Shared preparation retains normal eligibility, ranking and preferences.
   const cancellation = currentInferenceSignal();
   cancellation?.throwIfAborted();
   const restricted = currentReassessmentExecution();
-  const prepared = await prepareRoute(messages, systemPrompt, sensitivity, options, restricted ? { reassessment: true } : undefined);
+  const finite = currentFiniteReassessmentExecution(), original = finite ? structuredClone({ messages, systemPrompt, tools: options?.tools }) : null;
+  const nativeRuntime = finite ? await (await import("./reassessment-execution-qualification")).prepareCurrentReassessmentNativeRouting() : undefined;
+  const prepared = await prepareRoute(messages, systemPrompt, sensitivity, options, restricted ? { reassessment: true, nativeRuntime } : undefined);
+  if (original) assertReassessmentNativeScreenUnchanged(original, prepared.screenInput);
   const { contract, manifests, policies, overrides, taskType } = prepared;
   messages = prepared.screenInput.messages;
   systemPrompt = prepared.screenInput.systemPrompt;
@@ -410,6 +420,8 @@ async function routeAndCallAttempt(
   }
   if (restricted) {
     const frozen = restricted.qualification;
+    if (finite && (decision.routingConfidence?.qualityFloorRelaxed || prepared.requestedBudgetClass !== frozen.nativeRuntime!.requestedBudgetClass || contract.budgetClass !== frozen.nativeRuntime!.spendAwareBudgetClass
+      || !decision.executionPlan || !reassessmentNativePlansEqual(decision.executionPlan, frozen.executionPlan))) throw new ReassessmentExecutionError("reassessment-native-normal-plan-changed");
     const endpoint = manifests.find(manifest => manifest.id === decision.selectedEndpoint);
     if (options?.interactionMode === "background" || options?.durableAsyncOperation || !endpoint
       || endpoint.providerId !== frozen.providerId || endpoint.modelId !== frozen.modelId

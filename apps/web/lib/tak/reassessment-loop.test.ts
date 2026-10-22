@@ -1,27 +1,44 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-const scope = vi.hoisted(() => ({ active: true, plan: vi.fn(), tool: vi.fn() }));
+const scope = vi.hoisted(() => ({ active: true, binding: { writerToolName: "writer", gate: "research", eligibleEvidenceActivityIds: [] as string[] }, plan: vi.fn(), tool: vi.fn() }));
 vi.mock("../routing/reassessment-execution-scope", async load => ({
   ...await load<typeof import("../routing/reassessment-execution-scope")>(),
-  assertReassessmentActive: () => scope.active ? { binding: { writerToolName: "writer" }, qualification: {
+  assertReassessmentActive: () => scope.active ? { binding: scope.binding, qualification: {
     providerId: "provider", modelId: "model", executionPlan: { providerId: "provider", modelId: "model" },
   } } : null,
   assertReassessmentPlan: scope.plan, assertReassessmentToolCall: scope.tool,
 }));
-import { assertRestrictedReassessmentTurn, restrictedReassessmentLoop, restrictedReassessmentToolCall, rethrowRestrictedReassessmentError } from "./reassessment-loop";
+import { assertRestrictedReassessmentTurn, restrictedReassessmentLoop, restrictedReassessmentToolCall, restrictedReassessmentReceipt, rethrowRestrictedReassessmentError } from "./reassessment-loop";
 import { ReassessmentExecutionError } from "../routing/reassessment-execution-scope";
 import type { RunAgenticLoopParams } from "./agentic-loop";
 const input: RunAgenticLoopParams = { userId: "human", agentId: "reviewer", taskRunId: "TR-FIXTURE", threadId: "thread", routeContext: "/review",
-  systemPrompt: "Review", chatHistory: [], sensitivity: "internal",
+  systemPrompt: "Review", chatHistory: [], sensitivity: "internal", canonicalReviewReceipt: async () => null,
   taskExecutionFence: { schemaVersion: 1, reservation: null, dispatchClaim: null, authorityDigest: null, requestDigest: "a".repeat(64) },
   tools: ["read_source_at_version", "writer"].map(name => ({ name, description: name, inputSchema: {}, requiredCapability: null,
     executionMode: "immediate", sideEffect: false })), toolsForProvider: [{ type: "function" }, { type: "function" }] };
-beforeEach(() => { vi.clearAllMocks(); scope.active = true; scope.tool.mockImplementation(value => value.params); });
+beforeEach(() => { vi.clearAllMocks(); scope.active = true; scope.binding = { writerToolName: "writer", gate: "research", eligibleEvidenceActivityIds: [] }; scope.tool.mockImplementation(value => value.params); });
 describe("restricted core-loop guard", () => {
   it("requires the actual captured actor/fence and complete provider surface on entry", () => {
     expect(restrictedReassessmentLoop(input)).toBe(true);
     expect(scope.tool).toHaveBeenCalledWith(expect.objectContaining({ userId: "human", agentId: "reviewer",
       taskRunId: "TR-FIXTURE", executionFence: input.taskExecutionFence, toolName: "read_source_at_version" }));
     expect(scope.plan).toHaveBeenCalledWith(expect.objectContaining({ tools: input.toolsForProvider }));
+  });
+  it("requires canonical readback from the sealed binding even without terminal policy", () => {
+    expect(() => restrictedReassessmentLoop({ ...input, canonicalReviewReceipt: undefined })).toThrow(/receipt-check-required/);
+    expect(scope.plan).not.toHaveBeenCalled(); expect(scope.tool).not.toHaveBeenCalled();
+  });
+  it.each(["objective-mapping", "eligible-evidence"])("retains the sealed %s proposal exemption", kind => {
+    if (kind === "objective-mapping") scope.binding.gate = kind;
+    else scope.binding.eligibleEvidenceActivityIds = ["evidence"];
+    expect(restrictedReassessmentLoop({ ...input, canonicalReviewReceipt: undefined })).toBe(true);
+  });
+  it("checks only the sealed writer's actual result and leaves ordinary calls untouched", async () => {
+    const result = { success: true, message: "Recorded" }, check = vi.fn(async () => ({ receiptId: "receipt", summary: "Verified" }));
+    expect(await restrictedReassessmentReceipt(true, { canonicalReviewReceipt: check }, "foreign-writer", result)).toBeNull();
+    expect(check).not.toHaveBeenCalled();
+    expect(await restrictedReassessmentReceipt(true, { canonicalReviewReceipt: check }, "writer", result)).toEqual({ receiptId: "receipt", summary: "Verified" });
+    expect(check).toHaveBeenCalledExactlyOnceWith(result);
+    expect(await restrictedReassessmentReceipt(false, {}, "writer", result)).toBeNull();
   });
   it.each([
     { enableExecutionPlan: true }, { proposeSideEffects: true }, { deferredTools: [{ name: "load_tools" }] },

@@ -1,4 +1,5 @@
 import "server-only";
+import { assertReassessmentOwnerSupport } from "@/lib/shared/reassessment-owner-versions";
 
 import { prisma, type Prisma } from "@dpf/db";
 import { randomUUID } from "crypto";
@@ -334,6 +335,7 @@ class ReviewResumeRefusal extends Error {
 }
 
 async function resumeApprovedTask(taskRunId: string, execution: GovernedExecuteArgs): Promise<void> {
+  assertReassessmentOwnerSupport("approval", 2);
   if (overrides.authorityApprovalTaskResume) {
     await overrides.authorityApprovalTaskResume(taskRunId);
     return;

@@ -257,7 +257,7 @@ export async function recordInitiativeGateReceipt(args: {
       receipt: winner.receipt as unknown as Record<string, unknown>, deduplicated: true };
     if (winnerOnly) return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS",
       error: "Concurrent publication did not leave a qualified canonical winner. No write was retried." };
-    const executionRefusal = checkBoundReviewWriteExecution(args, taskLock.execution);
+    const executionRefusal = await checkBoundReviewWriteExecution(args, taskLock.execution, tx);
     if (executionRefusal) return executionRefusal;
     const history = await tx.backlogItemActivity.findMany({
       where: { backlogItemId: item.id, kind: "initiative_gate_receipt", gateKey },

@@ -11,6 +11,7 @@ vi.mock("@dpf/db", () => {
 });
 
 vi.mock("@/lib/platform-runtime/work-admission", () => ({ admitRuntimeGuardedWork: vi.fn() }));
+vi.mock("../mcp-task-review-reassessment", () => ({ lockInitiativeReviewCreationSubject: vi.fn() }));
 
 vi.mock("@/lib/tak/agentic-loop", () => ({ runAgenticLoop: vi.fn() }));
 vi.mock("@/lib/tak/pattern-observer-service", () => ({

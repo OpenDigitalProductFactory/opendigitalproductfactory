@@ -65,6 +65,12 @@ beforeEach(() => {
   mock.fetch.mockImplementation(async () => new Response(JSON.stringify(payload()), { status: 200 }));
 });
 describe("restricted reassessment provider boundary", () => {
+  it("does not activate finite production from a legacy ten-field proof or caller DTO", async () => {
+    Object.assign(mock.context.qualification as object, { budgetConfiguration: { configuredPerTaskLimit: 50000 },
+      finiteTokenProof: { kind: "dmr-native-messages-v1" }, nativeRuntime: { schemaVersion: 2 } });
+    await expect(callProvider("openai", "model", [], "review", tools, plan())).rejects.toThrow(/finite.*unproven/);
+    expect(mock.readProvider).not.toHaveBeenCalled(); expect(mock.fetch).not.toHaveBeenCalled();
+  });
   it("refuses a native adapter before account lookup, credential preparation or capability probing", async () => {
     await expect(callProvider("openai", "model", [], "review", tools, { ...plan("claude-cli"), toolPolicy: { toolChoice: "auto" } })).rejects.toThrow(/reassessment|restricted|HTTP/i);
     expect(mock.readProvider).not.toHaveBeenCalled(); expect(mock.readAccount).not.toHaveBeenCalled();

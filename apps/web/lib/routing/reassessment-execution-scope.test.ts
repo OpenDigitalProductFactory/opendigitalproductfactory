@@ -1,6 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
+import { createHash } from "node:crypto";
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
+import type { ReassessmentQualificationPrefix } from "./reassessment-phase-contract";
+import { REASSESSMENT_NATIVE_COMPOSITION, reassessmentNativeCatalogDigest } from "../shared/reassessment-native-composition";
 import { reassessmentBudgetFixture } from "../../test-support/reassessment-budget-fixture";
 import {
+  runReassessmentQualification, currentReassessmentQualification, runReassessmentQualificationRequest,
+  getReassessmentQualificationPrefix, promoteReassessmentExecution,
+  currentFiniteReassessmentExecution,
   assertReassessmentActive, assertReassessmentPlan, assertReassessmentProposedToolCall,
   assertReassessmentToolCall, currentReassessmentExecution, runReassessmentEffect,
   runReassessmentExecution, validateReassessmentToolCalls, matchesPersistedReassessmentScope, reassessmentToolSurfaceDigest,
@@ -39,6 +46,122 @@ function fixture() {
   return { seed, hooks };
 }
 const writer = { decision: "pass", reason: "Evidence checked.", findings: [], resolvedFindingRefs: [] };
+
+function qualificationFixture() {
+  const f = fixture(); const { qualification, ...identity } = f.seed;
+  qualification.providerConnectionVersion = "9".repeat(64);
+  Object.assign(qualification.executionPlan, { providerConnectionId: qualification.providerConnectionId,
+    providerConnectionVersion: qualification.providerConnectionVersion, accountAuthMethod: "none", executionChannel: "direct-api" });
+  const root = { ...identity, schemaVersion: 2 as const, phase: "qualification" as const,
+    compatibility: { schemaVersion: 1 as const, configDigest: "sha256:" + "1".repeat(64), sourceSha: "2".repeat(40), sourceContentHash: "3".repeat(64), contractSha256: "4".repeat(64),
+      owners: { transport: { version: 2, sourceSha256: "5".repeat(64) }, approval: { version: 2, sourceSha256: "6".repeat(64) },
+        worker: { version: 2, sourceSha256: "7".repeat(64) }, writer: { version: 2, sourceSha256: "8".repeat(64) } } },
+    budgetConfiguration: qualification.budgetConfiguration, bounds: { ...qualification.bounds, maxProviderStarts: 4 },
+    nativeObservationUrls: ["http://dmr.invalid/version", "http://dmr.invalid/engines/status"] };
+  const hooks = { open: vi.fn(async () => {}), close: vi.fn(async () => {}), uncertain: vi.fn(async () => {}),
+    readExecutionSeal: vi.fn(async (_context: unknown, prefix: ReassessmentQualificationPrefix) => {
+    const q = { ...qualification, bounds: root.bounds, nativeRuntime: { schemaVersion: 2 as const, catalogDigest: "4".repeat(64),
+      observationDigest: prefix.digest, spendAwareBudgetClass: "balanced" as const } };
+    q.qualificationDigest = createHash("sha256").update(canonicalJson(Object.fromEntries(Object.entries(q).filter(([key]) => key !== "qualificationDigest")))).digest("hex");
+    return { schemaVersion: 2 as const, root: { schemaVersion: 2 as const, manifestArtifactId: root.manifest.artifactId, manifestDigest: root.manifest.digest },
+      taskRunId: root.taskRunId, userId: root.userId, agentId: root.agentId, requestDigest: root.requestDigest, executionFence: root.executionFence,
+      binding: root.binding, qualificationPrefix: prefix, qualification: q, authorityDecisionId: "server-authority", sealedAt: new Date().toISOString() };
+  }), reserve: vi.fn(async (_context: unknown, event: import("./reassessment-execution-scope").ReassessmentCaptureEvent) => ({ reservationId: `capture-${event.sequence}` })),
+  complete: vi.fn(async () => {}) };
+  return { root, hooks };
+}
+
+describe("two-phase reassessment authority", () => {
+  it.each(["missing-bound", "extra-bound", "changed-budget", "normalized-url", "old-owner", "extra-owner"])("refuses malformed Q %s before opening capture", async condition => {
+    const { root, hooks } = qualificationFixture();
+    if (condition === "missing-bound") delete (root.bounds as Partial<typeof root.bounds>).maxOutputTokens;
+    if (condition === "extra-bound") Object.assign(root.bounds, { extra: 20 });
+    if (condition === "changed-budget") root.budgetConfiguration.configuredPerTaskLimit = 999;
+    if (condition === "normalized-url") root.nativeObservationUrls[0] = "http://dmr.invalid/../version";
+    if (condition === "old-owner") root.compatibility.owners.writer.version = 1;
+    if (condition === "extra-owner") Object.assign(root.compatibility.owners, { extra: { version: 2, sourceSha256: "9".repeat(64) } });
+    await expect(runReassessmentQualification(root, hooks, async () => "never")).rejects.toThrow(/root-invalid|compatibility-unproven/i);
+    expect(hooks.open).not.toHaveBeenCalled();
+  });
+  it("requires actual promotion and the audited catalog for finite activation", async () => {
+    expect(currentFiniteReassessmentExecution()).toBeNull();
+    const legacy = fixture();
+    await runReassessmentExecution(legacy.seed, legacy.hooks, async () => { expect(currentFiniteReassessmentExecution()).toBeNull(); });
+    const { root, hooks } = qualificationFixture(); const original = hooks.readExecutionSeal.getMockImplementation()!;
+    hooks.readExecutionSeal.mockImplementation(async (context, prefix) => {
+      const seal = await original(context, prefix); const q = seal.qualification; const c = REASSESSMENT_NATIVE_COMPOSITION;
+      q.executionPlan.executionChannel = "local-runtime";
+      q.nativeRuntime.catalogDigest = reassessmentNativeCatalogDigest();
+      Object.assign(q, { finiteTokenProof: { schemaVersion: 1, kind: c.kind, apiRoot: "http://dmr.invalid", runtimeVersion: c.runtimeVersion,
+        modelDigest: c.modelDigest, engineIdentity: `Running: llama.cpp ${c.engineBuild} (sha256:${c.engineArchiveDigest}) ${c.engineSourceCommit.slice(0, 7)}`,
+        engineArtifactDigest: `sha256:${c.engineArchiveDigest}`, engineSourceCommit: "72874f5", templateDigest: c.templateDigest, configDigest: "a".repeat(64) } });
+      const { qualificationDigest: _digest, ...unsigned } = q;
+      q.qualificationDigest = createHash("sha256").update(canonicalJson(unsigned)).digest("hex"); return seal;
+    });
+    await runReassessmentQualification(root, hooks, async () => {
+      expect(() => currentFiniteReassessmentExecution()).toThrow(/qualification/i);
+      for (const url of root.nativeObservationUrls) await runReassessmentQualificationRequest({ method: "GET", url }, async () => ({}));
+      await promoteReassessmentExecution(async () => {
+        expect(currentReassessmentQualification()).toBeNull();
+        expect(currentFiniteReassessmentExecution()?.taskRunId).toBe(root.taskRunId);
+      });
+    });
+  });
+  it("opens once and promotes without resetting starts, sequence or root", async () => {
+    const { root, hooks } = qualificationFixture(); const io = vi.fn(async () => ({ complete: "bytes" }));
+    await runReassessmentQualification(root, hooks, async () => {
+      expect(currentReassessmentQualification()?.deadlineAt).toBe(root.deadlineAt);
+      expect(() => currentReassessmentExecution()).toThrow(/qualification/i);
+      for (const url of root.nativeObservationUrls) await runReassessmentQualificationRequest({ method: "GET", url }, io);
+      expect(getReassessmentQualificationPrefix()).toMatchObject({ eventCount: 2, providerStarts: 2, providerReservations: 2 });
+      await promoteReassessmentExecution(async () => {
+        expect(currentReassessmentExecution()?.manifest).toEqual(root.manifest);
+        expect(matchesPersistedReassessmentScope({ requestDigest: root.requestDigest, reassessmentExecution: { schemaVersion: 2,
+          manifestArtifactId: root.manifest.artifactId, manifestDigest: root.manifest.digest } }, root.taskRunId)).toBe(true);
+        await runReassessmentEffect({ kind: "provider", name: "generation", input: {} }, io);
+      });
+    });
+    expect(io).toHaveBeenCalledTimes(3); expect(hooks.open).toHaveBeenCalledOnce(); expect(hooks.close).toHaveBeenCalledOnce();
+    expect(hooks.reserve.mock.calls.map(call => call[1].sequence)).toEqual([1, 2, 3]);
+    expect(hooks.close).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ providerStarts: 3, providerReservations: 3, closed: true }));
+  });
+  it.each(["tool", "provider", "wrong-url", "wrong-method", "out-of-order"])("refuses Q %s without I/O", async kind => {
+    const { root, hooks } = qualificationFixture(); const io = vi.fn(async () => ({}));
+    await runReassessmentQualification(root, hooks, async () => {
+      const effect = kind === "tool" ? () => runReassessmentEffect({ kind: "tool", name: "read_source_at_version", input: {} }, io)
+        : kind === "provider" ? () => runReassessmentEffect({ kind: "provider", name: "generation", input: {} }, io)
+        : () => runReassessmentQualificationRequest({ method: kind === "wrong-method" ? "POST" as "GET" : "GET",
+          url: kind === "out-of-order" ? root.nativeObservationUrls[1]! : "http://dmr.invalid/count_tokens" }, io);
+      await expect(effect()).rejects.toThrow();
+    });
+    expect(io).not.toHaveBeenCalled(); expect(hooks.reserve).not.toHaveBeenCalled();
+  });
+  it("cannot promote an incomplete prefix", async () => {
+    const { root, hooks } = qualificationFixture();
+    await runReassessmentQualification(root, hooks, async () => {
+      await expect(promoteReassessmentExecution(async () => "never")).rejects.toThrow(/prefix|observation/i);
+    });
+    expect(hooks.readExecutionSeal).not.toHaveBeenCalled();
+  });
+  it("refuses an old Q callback after seal", async () => {
+    const { root, hooks } = qualificationFixture(); const io = vi.fn(async () => ({}));
+    await runReassessmentQualification(root, hooks, async () => {
+      let release!: () => void; const barrier = new Promise<void>(resolve => { release = resolve; });
+      const delayed = barrier.then(() => expect(runReassessmentQualificationRequest({ method: "GET", url: root.nativeObservationUrls[0]! }, io)).rejects.toThrow(/phase|sealed|qualification/i));
+      for (const url of root.nativeObservationUrls) await runReassessmentQualificationRequest({ method: "GET", url }, io);
+      await promoteReassessmentExecution(async () => { release(); await delayed; });
+    });
+    expect(io).toHaveBeenCalledTimes(2);
+  });
+  it("requires a server-read seal without reopening the root", async () => {
+    const { root, hooks } = qualificationFixture(); const io = vi.fn(async () => ({})); hooks.readExecutionSeal.mockResolvedValue(null as never);
+    await runReassessmentQualification(root, hooks, async () => {
+      for (const url of root.nativeObservationUrls) await runReassessmentQualificationRequest({ method: "GET", url }, io);
+      await expect(promoteReassessmentExecution(io)).rejects.toThrow(/seal/i);
+    });
+    expect(io).toHaveBeenCalledTimes(2); expect(hooks.open).toHaveBeenCalledOnce();
+  });
+});
 
 function finiteFixture() {
   const f = fixture();

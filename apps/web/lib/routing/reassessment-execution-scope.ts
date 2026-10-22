@@ -5,71 +5,49 @@ import { initiativeReviewWriterArgumentContract, parseInitiativeReviewBinding, t
 import { parseTaskExecutionFence, sameTaskExecutionFence, type TaskExecutionFence } from "../shared/task-execution-fence";
 import { immutableReaderArgumentsFor, normalizeTerminalToolArguments } from "../shared/immutable-review-reader";
 import type { RoutedExecutionPlan } from "./recipe-types";
-import type { ReassessmentBudgetConfiguration } from "../shared/reassessment-budget-contract";
+import { parseReassessmentExecutionSealV2, parseReassessmentRootLocatorV2, reassessmentQualificationPrefix, validReassessmentBudgetConfiguration,
+  type ReassessmentQualificationSeedV2, type ReassessmentQualificationPrefix, type ReassessmentExecutionSealV2 } from "./reassessment-phase-contract";
+import { validAuditedReassessmentNativeQualification } from "../shared/reassessment-native-composition";
+import { validateReassessmentRuntimeCompatibility } from "../shared/reassessment-owner-versions";
 
-export type ReassessmentFiniteTokenProof = {
-  schemaVersion: 1; kind: "dmr-native-messages-v1"; apiRoot: string; runtimeVersion: "v1.2.8";
-  modelDigest: string; engineIdentity: string; engineArtifactDigest: string; engineSourceCommit: "72874f5";
-  templateDigest: string; configDigest: string;
-};
-export type ReassessmentTokenReservation = {
-  schemaVersion: 1; reservationId: string; bodySha256: string; inputTokens: number; maxOutputTokens: number; reservedTokens: number;
-};
-
-export type QualifiedReassessmentExecution = {
-  schemaVersion: 1;
-  compositionVersion: "restricted-review-http-v1";
-  providerId: string;
-  providerConnectionId: string;
-  providerConnectionVersion: string;
-  modelId: string;
-  executionPlan: RoutedExecutionPlan;
-  providerConfigurationDigest: string;
-  toolSurfaceDigest: string;
-  budgetConfiguration: ReassessmentBudgetConfiguration;
-  bounds: { maxProviderStarts: number; maxDurationMs: number; maxOutputTokens: number };
-  qualificationDigest: string;
-  finiteTokenProof?: ReassessmentFiniteTokenProof;
-};
-
-export type ReassessmentExecutionManifest = {
-  schemaVersion: 1;
-  taskRunId: string;
-  userId: string;
-  agentId: string;
-  requestDigest: string;
-  executionFence: TaskExecutionFence;
-  binding: InitiativeReviewBinding;
-  qualification: QualifiedReassessmentExecution;
-  startedAt: string;
-  deadlineAt: string;
-};
-export type ReassessmentExecutionSeed = ReassessmentExecutionManifest & { manifest: { artifactId: string; digest: string } };
-export type ReassessmentExecutionLocator = { schemaVersion: 1; manifestArtifactId: string; manifestDigest: string };
-export type ReassessmentExecutionContext = Readonly<ReassessmentExecutionSeed>;
-export type ReassessmentEffect = { kind: "provider" | "tool"; name: string; input: unknown };
-export type ReassessmentCaptureEvent = ReassessmentEffect & {
-  sequence: number; providerReservationOrdinal: number | null; observedAt: string;
-};
-export type ReassessmentCaptureReservation = { reservationId: string };
-export type ReassessmentExecutionState = {
-  providerReservations: number; providerStarts: number; reservedTokens: number; unknownEffects: number; held: boolean; closed: boolean;
-};
-export type ReassessmentCaptureHooks = {
-  open(context: ReassessmentExecutionContext): Promise<void>;
-  reserve(context: ReassessmentExecutionContext, event: ReassessmentCaptureEvent): Promise<ReassessmentCaptureReservation>;
-  complete(context: ReassessmentExecutionContext, event: ReassessmentCaptureEvent, reservation: ReassessmentCaptureReservation, output: unknown): Promise<void>;
-  uncertain?(context: ReassessmentExecutionContext, event: ReassessmentCaptureEvent, reservation: ReassessmentCaptureReservation, error: { code: string; message: string }): Promise<void>;
-  close?(context: ReassessmentExecutionContext, state: Readonly<ReassessmentExecutionState>): Promise<void>;
-};
+import type { ReassessmentFiniteTokenProof, ReassessmentTokenReservation, ReassessmentExecutionSeed, ReassessmentExecutionLocator,
+  ReassessmentExecutionContext, ReassessmentEffect, ReassessmentCaptureEvent, ReassessmentCaptureReservation,
+  ReassessmentExecutionState, ReassessmentCaptureHooks } from "./reassessment-phase-contract";
+export type { ReassessmentFiniteTokenProof, ReassessmentTokenReservation, QualifiedReassessmentExecution, ReassessmentExecutionManifest,
+  ReassessmentExecutionSeed, ReassessmentExecutionLocator, ReassessmentExecutionContext, ReassessmentEffect, ReassessmentCaptureEvent,
+  ReassessmentCaptureReservation, ReassessmentExecutionState, ReassessmentCaptureHooks } from "./reassessment-phase-contract";
 
 export class ReassessmentExecutionError extends Error {
   constructor(public readonly code: string, message = code) { super(message); this.name = "ReassessmentExecutionError"; }
 }
 export const isReassessmentExecutionError = (error: unknown): error is ReassessmentExecutionError => error instanceof ReassessmentExecutionError;
 
-type Scope = { context: ReassessmentExecutionContext; hooks: ReassessmentCaptureHooks; state: ReassessmentExecutionState; sequence: number };
+type Scope = { context: ReassessmentExecutionContext; hooks: ReassessmentCaptureHooks; state: ReassessmentExecutionState; sequence: { value: number }; root?: QualificationRoot };
 const execution = new AsyncLocalStorage<Scope>();
+/** Qualification deliberately has no execution plan or tool authority. */
+export type ReassessmentQualificationContext = Readonly<ReassessmentQualificationSeedV2>;
+export type ReassessmentPhaseCaptureContext = ReassessmentQualificationContext | ReassessmentExecutionContext;
+export type ReassessmentQualificationHooks = {
+  open(context: ReassessmentQualificationContext): Promise<void>;
+  reserve(context: ReassessmentPhaseCaptureContext, event: ReassessmentCaptureEvent): Promise<ReassessmentCaptureReservation>;
+  complete(context: ReassessmentPhaseCaptureContext, event: ReassessmentCaptureEvent, reservation: ReassessmentCaptureReservation, output: unknown): Promise<void>;
+  uncertain?(context: ReassessmentPhaseCaptureContext, event: ReassessmentCaptureEvent, reservation: ReassessmentCaptureReservation, error: { code: string; message: string }): Promise<void>;
+  close?(context: ReassessmentQualificationContext, state: Readonly<ReassessmentExecutionState>): Promise<void>;
+  readExecutionSeal(context: ReassessmentQualificationContext, prefix: ReassessmentQualificationPrefix): Promise<ReassessmentExecutionSealV2 | null>;
+  validateCommit?(transaction: unknown, context: ReassessmentQualificationContext, seal: ReassessmentExecutionSealV2): Promise<void>;
+};
+type QualificationRoot = { context: ReassessmentQualificationContext; hooks: ReassessmentQualificationHooks; state: ReassessmentExecutionState;
+  sequence: { value: number }; activePhase: "qualification" | "execution"; pending: number; promoting: boolean;
+  seal?: Readonly<ReassessmentExecutionSealV2>;
+  observations: Array<{ event: ReassessmentCaptureEvent; reservationId: string; output: unknown }> };
+const phase = new AsyncLocalStorage<{ root: QualificationRoot; phase: "qualification" | "execution" }>();
+export function currentReassessmentQualification(): ReassessmentQualificationContext | null {
+  const frame = phase.getStore();
+  if (!frame) return null;
+  if (frame.phase === "execution" && frame.root.activePhase === "execution") { assertReassessmentActive(); return null; }
+  assertQualificationFrame(frame);
+  return frame.root.context;
+}
 type TokenHandoff = { scope: Scope; reservation: Readonly<ReassessmentTokenReservation>; issued: boolean; consumed: boolean; closed: boolean };
 const tokenHandoff = new AsyncLocalStorage<TokenHandoff>();
 const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
@@ -81,6 +59,9 @@ const equal = (left: unknown, right: unknown) => canonicalJson(left ?? null) ===
 function fail(code: string, message = code): never {
   const scope = execution.getStore();
   if (scope) scope.state.held = true;
+  const frame = phase.getStore();
+  // A stale Q callback must refuse without poisoning an already promoted E.
+  if (frame && frame.phase === frame.root.activePhase) frame.root.state.held = true;
   throw new ReassessmentExecutionError(code, message);
 }
 
@@ -161,8 +142,10 @@ export function parseReassessmentExecutionLocator(value: unknown): ReassessmentE
 export function matchesPersistedReassessmentScope(metadata: unknown, taskRunId: string): boolean {
   if (!hasPersistedReassessmentExecution(metadata)) return true;
   const scope = execution.getStore();
-  const locator = parseReassessmentExecutionLocator(object(metadata) ? metadata.reassessmentExecution : null);
+  const raw = object(metadata) ? metadata.reassessmentExecution : null;
+  const locator = parseReassessmentExecutionLocator(raw) ?? parseReassessmentRootLocatorV2(raw);
   return Boolean(scope && !scope.state.closed && !scope.state.held && locator
+    && (locator.schemaVersion === 1 ? !scope.root : scope.root?.activePhase === "execution" && phase.getStore()?.phase === "execution")
     && Date.now() < Date.parse(scope.context.deadlineAt) && scope.context.taskRunId === taskRunId
     && object(metadata) && metadata.requestDigest === scope.context.requestDigest
     && locator.manifestArtifactId === scope.context.manifest.artifactId && locator.manifestDigest === scope.context.manifest.digest);
@@ -216,6 +199,137 @@ function freeze<T>(value: T): T {
   return value;
 }
 
+function assertExecutionPhase(): void {
+  const frame = phase.getStore();
+  if (frame && (frame.phase !== "execution" || frame.root.activePhase !== "execution")) {
+    throw new ReassessmentExecutionError("reassessment-qualification-only", "Qualification cannot execute tools, count, generation or ordinary fallback.");
+  }
+}
+
+function assertQualificationFrame(frame = phase.getStore()): QualificationRoot {
+  if (!frame || frame.phase !== "qualification" || frame.root.activePhase !== "qualification") {
+    throw new ReassessmentExecutionError("reassessment-qualification-phase-closed", "The qualification phase is absent or already sealed.");
+  }
+  const root = frame.root;
+  if (root.state.closed || root.state.held) throw new ReassessmentExecutionError("reassessment-qualification-held", "Qualification is closed or held.");
+  if (Date.now() >= Date.parse(root.context.deadlineAt)) {
+    root.state.held = true; throw new ReassessmentExecutionError("reassessment-deadline-exhausted");
+  }
+  return root;
+}
+
+function validateQualificationRoot(context: ReassessmentQualificationContext): void {
+  const { manifest, ...data } = context;
+  const keys = ["schemaVersion", "phase", "taskRunId", "userId", "agentId", "requestDigest", "executionFence", "binding",
+    "budgetConfiguration", "bounds", "nativeObservationUrls", "startedAt", "deadlineAt", "compatibility"];
+  try { validateReassessmentRuntimeCompatibility(context.compatibility); }
+  catch { throw new ReassessmentExecutionError("reassessment-compatibility-unproven"); }
+  const binding = parseInitiativeReviewBinding(context.binding), fence = parseTaskExecutionFence(context.executionFence);
+  const start = Date.parse(context.startedAt), end = Date.parse(context.deadlineAt);
+  if (Object.keys(data).length !== keys.length || Object.keys(data).some(key => !keys.includes(key))
+    || context.schemaVersion !== 2 || context.phase !== "qualification" || ![context.taskRunId, context.userId, context.agentId].every(nonempty)
+    || !digest(context.requestDigest) || !fence || fence.requestDigest !== context.requestDigest
+    || !binding || !equal(binding, context.binding) || binding.artifactRef.kind !== "repo-blob-at-commit"
+    || !manifest || Object.keys(manifest).length !== 2 || !nonempty(manifest.artifactId) || !digest(manifest.digest)
+    || !validReassessmentBudgetConfiguration(context.budgetConfiguration, context.agentId)
+    || ![context.bounds?.maxProviderStarts, context.bounds?.maxDurationMs, context.bounds?.maxOutputTokens].every(positiveInteger)
+    || Object.keys(context.bounds ?? {}).length !== 3 || context.bounds.maxProviderStarts > 200
+    || context.bounds.maxOutputTokens > context.budgetConfiguration.configuredMaxOutputTokens
+    || !Array.isArray(context.nativeObservationUrls) || !context.nativeObservationUrls.length
+    || context.nativeObservationUrls.length > context.bounds.maxProviderStarts
+    || new Set(context.nativeObservationUrls).size !== context.nativeObservationUrls.length
+    || !context.nativeObservationUrls.every(url => {
+      try { const parsed = new URL(url); return parsed.href === url && ["http:", "https:"].includes(parsed.protocol) && !parsed.username && !parsed.password && !parsed.hash; }
+      catch { return false; }
+    }) || !Number.isFinite(start) || !Number.isFinite(end) || start > Date.now() || end <= start
+    || end - start > context.bounds.maxDurationMs || context.bounds.maxDurationMs > context.budgetConfiguration.configuredTimeoutMs) {
+    throw new ReassessmentExecutionError("reassessment-qualification-root-invalid");
+  }
+}
+
+/** Opens the immutable root once. Promotion neither reopens capture nor changes its allowance. */
+export async function runReassessmentQualification<T>(seed: ReassessmentQualificationSeedV2, hooks: ReassessmentQualificationHooks, fn: () => Promise<T>): Promise<T> {
+  if (phase.getStore() || execution.getStore()) fail("reassessment-nested-execution");
+  const context = freeze(reassessmentCaptureValue(seed) as ReassessmentQualificationSeedV2);
+  validateQualificationRoot(context);
+  const root: QualificationRoot = { context, hooks, sequence: { value: 0 }, activePhase: "qualification", pending: 0, promoting: false, observations: [],
+    state: { providerReservations: 0, providerStarts: 0, reservedTokens: 0, unknownEffects: 0, held: false, closed: false } };
+  try { await hooks.open(context); } catch { throw new ReassessmentExecutionError("reassessment-capture-unavailable"); }
+  return phase.run({ root, phase: "qualification" }, async () => {
+    try { assertQualificationFrame(); return await fn(); }
+    finally { root.state.closed = true;
+      try { await hooks.close?.(context, Object.freeze({ ...root.state })); } catch { root.state.held = true; }
+    }
+  });
+}
+
+/** The only Q effect port is the exact ordered server-selected GET inventory. */
+export async function runReassessmentQualificationRequest<T>(request: { method: "GET"; url: string }, execute: () => Promise<T>,
+  captureOutput?: (value: T) => unknown | Promise<unknown>): Promise<T> {
+  const root = assertQualificationFrame();
+  if (Object.keys(request).length !== 2 || request.method !== "GET" || root.pending || root.promoting
+    || request.url !== root.context.nativeObservationUrls[root.observations.length]
+    || root.state.providerReservations >= root.context.bounds.maxProviderStarts) {
+    fail("reassessment-qualification-request-unavailable");
+  }
+  root.pending++;
+  const event = freeze({ kind: "provider" as const, name: "native-runtime-observation", input: { operation: "configuration", method: "GET", url: request.url },
+    sequence: ++root.sequence.value, providerReservationOrdinal: ++root.state.providerReservations, observedAt: new Date().toISOString() });
+  let reservation: ReassessmentCaptureReservation | undefined;
+  let started = false;
+  try {
+    reservation = await root.hooks.reserve(root.context, event);
+    if (!nonempty(reservation?.reservationId)) throw new Error("missing reservation");
+    assertQualificationFrame(); root.state.providerStarts++; started = true;
+    const result = await execute();
+    const output = reassessmentCaptureValue(captureOutput ? await captureOutput(result) : result);
+    await root.hooks.complete(root.context, event, reservation, output);
+    root.observations.push({ event, reservationId: reservation.reservationId, output });
+    return result;
+  } catch (error) {
+    root.state.held = true;
+    if (started && reservation) {
+      root.state.unknownEffects++;
+      try { await root.hooks.uncertain?.(root.context, event, reservation, { code: "qualification-outcome-uncertain", message: "An observation started without complete capture." }); } catch { /* Reserved is still unknown. */ }
+    }
+    throw new ReassessmentExecutionError(started ? "reassessment-capture-incomplete" : "reassessment-capture-unavailable",
+      isReassessmentExecutionError(error) ? error.message : undefined);
+  } finally { root.pending--; }
+}
+
+export function getReassessmentQualificationPrefix(): ReassessmentQualificationPrefix {
+  const root = assertQualificationFrame();
+  if (root.pending || root.promoting || root.state.unknownEffects || root.observations.length !== root.context.nativeObservationUrls.length
+    || root.state.providerReservations !== root.observations.length || root.state.providerStarts !== root.observations.length) {
+    throw new ReassessmentExecutionError("reassessment-qualification-prefix-incomplete");
+  }
+  return freeze(reassessmentQualificationPrefix(root.observations));
+}
+
+/** A caller supplies work, never a seal DTO. The authenticated storage hook rereads authority. */
+export async function promoteReassessmentExecution<T>(fn: () => Promise<T>): Promise<T> {
+  const root = assertQualificationFrame(); const prefix = getReassessmentQualificationPrefix(); root.promoting = true;
+  try {
+    const seal = parseReassessmentExecutionSealV2(await root.hooks.readExecutionSeal(root.context, prefix));
+    assertQualificationFrame();
+    const locator = { schemaVersion: 2, manifestArtifactId: root.context.manifest.artifactId, manifestDigest: root.context.manifest.digest };
+    if (!seal || !equal(seal.root, locator) || !equal(seal.qualificationPrefix, prefix)
+      || ["taskRunId", "userId", "agentId", "requestDigest", "executionFence", "binding"].some(key => !equal(seal[key as keyof typeof seal], root.context[key as keyof typeof root.context]))
+      || !equal(seal.qualification.budgetConfiguration, root.context.budgetConfiguration) || !equal(seal.qualification.bounds, root.context.bounds)
+      || Date.parse(seal.sealedAt) < Date.parse(root.context.startedAt) || Date.parse(seal.sealedAt) > Date.now()) {
+      throw new ReassessmentExecutionError("reassessment-execution-seal-unproven");
+    }
+    const { phase: _phase, budgetConfiguration: _budget, bounds: _bounds, nativeObservationUrls: _urls, ...identity } = root.context;
+    const context = freeze({ ...identity, schemaVersion: 1 as const, qualification: seal.qualification }); validateSeed(context);
+    const hooks: ReassessmentCaptureHooks = { open: async () => {}, reserve: root.hooks.reserve, complete: root.hooks.complete,
+      uncertain: root.hooks.uncertain };
+    const scope: Scope = { context, hooks, state: root.state, sequence: root.sequence, root };
+    root.seal = freeze(reassessmentCaptureValue(seal) as ReassessmentExecutionSealV2);
+    root.activePhase = "execution";
+    return await phase.run({ root, phase: "execution" }, () => execution.run(scope, fn));
+  } finally { root.promoting = false; }
+}
+
 function validateSeed(seed: ReassessmentExecutionSeed): void {
   const q = seed.qualification;
   const binding = parseInitiativeReviewBinding(seed.binding);
@@ -244,10 +358,41 @@ function validateSeed(seed: ReassessmentExecutionSeed): void {
 }
 
 export function currentReassessmentExecution(): ReassessmentExecutionContext | null {
+  assertExecutionPhase();
   return execution.getStore()?.context ?? null;
 }
 
+/** Finite production activation requires this server-promoted E frame, never an additive DTO on v1. */
+export function currentFiniteReassessmentExecution(): ReassessmentExecutionContext | null {
+  assertExecutionPhase();
+  const scope = execution.getStore();
+  if (!scope?.root) return null;
+  const context = assertReassessmentActive()!;
+  if (context.qualification.nativeRuntime?.schemaVersion !== 2 || !validReassessmentFiniteTokenProof(context.qualification.finiteTokenProof)
+    || !validAuditedReassessmentNativeQualification(context.qualification)) {
+    fail("reassessment-finite-execution-unproven");
+  }
+  return context;
+}
+
+/** The actual writer supplies its already locked transaction. No DTO can grant
+ * this port: only the promoted E root retains the trusted storage callback. */
+export async function validateReassessmentCommitBoundary(transaction: unknown, expected: {
+  taskRunId: string; requestDigest: string; executionFence?: TaskExecutionFence | null;
+}): Promise<void> {
+  const context = currentFiniteReassessmentExecution();
+  const root = execution.getStore()?.root;
+  if (!context || !root?.seal || !root.hooks.validateCommit || context.taskRunId !== expected.taskRunId
+    || context.requestDigest !== expected.requestDigest || !sameTaskExecutionFence(context.executionFence, expected.executionFence)) {
+    fail("reassessment-commit-authority-unproven");
+  }
+  try { await root.hooks.validateCommit(transaction, root.context, root.seal); }
+  catch { fail("reassessment-commit-authority-unproven"); }
+  assertReassessmentActive();
+}
+
 export function assertReassessmentActive(): ReassessmentExecutionContext | null {
+  assertExecutionPhase();
   const scope = execution.getStore();
   if (!scope) return null;
   if (scope.state.closed) fail("reassessment-execution-closed", "The reassessment execution is closed.");
@@ -262,10 +407,10 @@ export function assertReassessmentActive(): ReassessmentExecutionContext | null 
 /** Only the authenticated server wrapper supplies these hooks after reading a
  * persisted admission manifest. A model/tool argument never enables a scope. */
 export async function runReassessmentExecution<T>(seed: ReassessmentExecutionSeed, hooks: ReassessmentCaptureHooks, fn: () => Promise<T>): Promise<T> {
-  if (execution.getStore()) fail("reassessment-nested-execution", "A reassessment cannot open another execution scope.");
+  if (execution.getStore() || phase.getStore()) fail("reassessment-nested-execution", "A reassessment cannot open another execution scope.");
   const context = freeze(reassessmentCaptureValue(seed) as ReassessmentExecutionSeed);
   validateSeed(context);
-  const scope: Scope = { context, hooks, sequence: 0, state: { providerReservations: 0, providerStarts: 0, reservedTokens: 0, unknownEffects: 0, held: false, closed: false } };
+  const scope: Scope = { context, hooks, sequence: { value: 0 }, state: { providerReservations: 0, providerStarts: 0, reservedTokens: 0, unknownEffects: 0, held: false, closed: false } };
   try { await hooks.open(context); }
   catch { fail("reassessment-capture-unavailable", "The authenticated sealed manifest could not be captured before execution."); }
   return execution.run(scope, async () => {
@@ -293,6 +438,9 @@ async function captureUncertain(scope: Scope, event: ReassessmentCaptureEvent, r
  * An outstanding reservation consumes its full slot; a failure cannot replenish
  * the immutable allowance or silently choose a replacement route. */
 export async function runReassessmentEffect<T>(effect: ReassessmentEffect, execute: () => Promise<T>, captureOutput?: (value: T) => unknown | Promise<unknown>): Promise<T> {
+  const frame = phase.getStore();
+  if (frame?.phase === "qualification" && frame.root.activePhase === "qualification") fail("reassessment-qualification-only");
+  assertExecutionPhase();
   const scope = execution.getStore();
   if (!scope) return execute();
   assertReassessmentActive();
@@ -304,7 +452,7 @@ export async function runReassessmentEffect<T>(effect: ReassessmentEffect, execu
     fail("reassessment-provider-start-limit", "The immutable provider start allowance is exhausted.");
   }
   const ordinal = effect.kind === "provider" ? ++scope.state.providerReservations : null;
-  const event = freeze({ ...effect, input, sequence: ++scope.sequence, providerReservationOrdinal: ordinal, observedAt: new Date().toISOString() });
+  const event = freeze({ ...effect, input, sequence: ++scope.sequence.value, providerReservationOrdinal: ordinal, observedAt: new Date().toISOString() });
   let reservation: ReassessmentCaptureReservation;
   try {
     reservation = await scope.hooks.reserve(scope.context, event);
@@ -388,7 +536,7 @@ export function assertReassessmentPlan(input: { providerId: string; modelId: str
   const context = assertReassessmentActive();
   if (!context) return null;
   if (input.providerId !== context.qualification.providerId || input.modelId !== context.qualification.modelId
-    || !equal(input.plan, context.qualification.executionPlan)) fail("reassessment-composition-changed", "The actual provider execution plan differs from the qualified immutable composition.");
+    || !sameReassessmentPlan(input.plan, context)) fail("reassessment-composition-changed", "The actual provider execution plan differs from the qualified immutable composition.");
   if (!input.tools || input.tools.length !== 2) fail("reassessment-tool-surface-changed", "A restricted provider requires exactly two function tools.");
   const names = input.tools.map(entry => {
     if (!object(entry) || entry.type !== "function") fail("reassessment-provider-tool-unavailable");
@@ -403,6 +551,14 @@ export function assertReassessmentPlan(input: { providerId: string; modelId: str
     fail("reassessment-tool-surface-changed", "The full ordered provider tool surface differs from the qualified immutable composition.");
   }
   return context;
+}
+
+function sameReassessmentPlan(actual: RoutedExecutionPlan, context: ReassessmentExecutionContext): boolean {
+  const expected = context.qualification.executionPlan;
+  if (!validAuditedReassessmentNativeQualification(context.qualification) || !actual.localThinkingBudgetEvidence || !expected.localThinkingBudgetEvidence) return equal(actual, expected);
+  if (!nonnegativeInteger(actual.localThinkingBudgetEvidence.observedAt)) return false;
+  return equal({ ...actual, localThinkingBudgetEvidence: { ...actual.localThinkingBudgetEvidence, observedAt: 0 } },
+    { ...expected, localThinkingBudgetEvidence: { ...expected.localThinkingBudgetEvidence, observedAt: 0 } });
 }
 
 export function validateReassessmentToolCalls(calls: readonly unknown[] | undefined): void {

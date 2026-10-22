@@ -3,7 +3,7 @@ import type { ChatMessage } from "./chat-message-types";
 import { extractAnthropicToolCalls, formatMessageForAnthropic } from "./provider-message-format";
 import { toWireSampling } from "./sampling-profile";
 import {
-  assertReassessmentActive, assertReassessmentPlan, reassessmentCaptureValue,
+  assertReassessmentActive, assertReassessmentPlan, currentFiniteReassessmentExecution, reassessmentCaptureValue,
   refuseReassessmentExecution, validateReassessmentToolCalls, withReassessmentTokenReservation,
 } from "./reassessment-execution-scope";
 
@@ -13,6 +13,9 @@ const nonempty = (value: unknown): value is string => typeof value === "string" 
 const tokenCount = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0;
 const refuse = (code: string): never => refuseReassessmentExecution(`reassessment-native-messages-${code}`);
 const onlyKeys = (value: object, keys: readonly string[]) => Object.keys(value).every(key => keys.includes(key));
+// A turn owns its complete count/body/reservation handoff. A later semantic
+// continuation may acquire this again, but overlapping dispatch cannot race it.
+const dispatching = new WeakSet<object>();
 
 function messageForWire(message: ChatMessage): Record<string, unknown> {
   if (!onlyKeys(message, ["role", "content", "toolCalls", "toolCallId"]) || !["user", "assistant", "tool"].includes(message.role)) {
@@ -81,7 +84,8 @@ function samplingForWire(plan: AdapterRequest["plan"]): Record<string, number> {
 async function responseJson(response: Response, operation: "count" | "generation"): Promise<Record<string, unknown>> {
   if (!response.ok) return refuse(`${operation}-failed`);
   let value: unknown;
-  try { value = await response.json(); } catch { return refuse(`${operation}-invalid-json`); }
+  try { value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(await response.arrayBuffer())); }
+  catch { return refuse(`${operation}-invalid-json`); }
   if (!object(value)) return refuse(`${operation}-invalid-response`);
   return value;
 }
@@ -109,16 +113,22 @@ function normalizeGeneration(raw: Record<string, unknown>, inputTokens: number, 
     inferenceMs, raw, finishReason: raw.stop_reason, truncated: raw.stop_reason === "max_tokens" };
 }
 
-/** Draft finite composition: qualification must independently prove the native
- * model/template/config fence before this concrete handler can be selected. */
+/** Concrete finite wire. Only a server-promoted execution with the audited
+ * model/template/config proof may select this private handler. */
 export const reassessmentMessagesAdapter: ExecutionAdapterHandler = {
   type: "restricted-native-messages",
   async execute(request) {
     const scope = assertReassessmentPlan(request);
     const proof = scope?.qualification.finiteTokenProof;
-    if (!scope || proof?.kind !== "dmr-native-messages-v1") return refuse("qualified-scope-required");
+    if (!scope || scope !== currentFiniteReassessmentExecution() || proof?.kind !== "dmr-native-messages-v1") return refuse("promoted-qualified-scope-required");
+    if (dispatching.has(scope)) return refuse("concurrent-dispatch");
+    dispatching.add(scope);
+    try {
     const { plan } = request;
-    if (Object.keys(plan.providerSettings).length || plan.localThinkingBudgetEvidence !== undefined
+    const evidence = plan.localThinkingBudgetEvidence;
+    if (evidence && (evidence.dialect !== "llama.cpp-b9879" || evidence.modelDigest !== proof.modelDigest
+      || evidence.engineIdentity !== proof.engineIdentity || evidence.templateDigest !== proof.templateDigest || evidence.configDigest !== proof.configDigest)) return refuse("runtime-evidence-changed");
+    if (Object.keys(plan.providerSettings).length
       || plan.localThinkingBudgetRequest !== undefined || request.previousResponseId !== undefined
       || plan.openRouterPolicy !== undefined || plan.openRouterObligations !== undefined
       || !onlyKeys(plan.toolPolicy, ["toolChoice", "allowParallelToolCalls"])
@@ -148,5 +158,6 @@ export const reassessmentMessagesAdapter: ExecutionAdapterHandler = {
     assertReassessmentActive();
     return normalizeGeneration(await responseJson(response, "generation"), inputTokens,
       scope.qualification.bounds.maxOutputTokens, Date.now() - startedAt);
+    } finally { dispatching.delete(scope); }
   },
 };

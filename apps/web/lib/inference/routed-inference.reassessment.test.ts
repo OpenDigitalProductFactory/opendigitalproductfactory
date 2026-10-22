@@ -50,6 +50,21 @@ describe("restricted review routing qualification", () => {
     expect(mocks.resolveLocalRoutingRuntime).not.toHaveBeenCalled();
     expect(result.executionPlan).toEqual(plan);
   });
+  it("uses captured local facts and normal spend policy without forcing the native candidate to win", async () => {
+    const local = { ...http, id: "local:model", providerId: "local", providerConnectionId: "provider-default-local",
+      executionChannel: "local-runtime", accountAuthMethod: "none" };
+    const reader = vi.fn(async () => ({ contextTokens: 131072 }));
+    mocks.loadEndpointManifests.mockResolvedValue([cli, http, local]);
+    mocks.inferContract.mockResolvedValue({ sensitivity: "development", minContextTokens: 30000, budgetClass: "quality_first" });
+    const result = await prepareReassessmentRoute([], "review", "development", { preferredProviderId: http.providerId },
+      { reader, budgetStatus: "warning_80" });
+    expect(result.contract).toMatchObject({ minContextTokens: 30000, budgetClass: "balanced",
+      allowedProviderConnectionIds: [http.providerConnectionId, local.providerConnectionId] });
+    expect(result.requestedBudgetClass).toBe("quality_first"); expect(result.executionPlan.providerId).toBe(http.providerId);
+    expect(mocks.loadEndpointManifests.mock.calls[0]?.[1]).toBe(reader);
+    expect(mocks.routeEndpointV2.mock.calls[0]?.[4].preferences.preferredProviderId).toBe(http.providerId);
+    expect(mocks.resolveLocalRoutingRuntime).not.toHaveBeenCalled();
+  });
   it("intersects normal account policy so a preferred connected account cannot widen it", async () => {
     mocks.inferContract.mockResolvedValue({ sensitivity: "confidential", allowedProviderConnectionIds: ["other-account"] });
     await prepareReassessmentRoute([], "review", "confidential");

@@ -72,6 +72,7 @@ export function taskExecutionEligible(input: {
   const states = input.phase === "approval-renewal" ? ["working", "input-required", "stalled", "failed"]
     : input.phase === "approval-resume" ? ["working", "input-required"] : ["working"];
   return states.includes(input.status) && typeof input.requestDigest === "string"
+    && !(isRecord(input.progressPayload) && Object.hasOwn(input.progressPayload, "reassessmentQuarantine"))
     && /^[a-f0-9]{64}$/.test(input.requestDigest) && !hasExecutionUncertainty(input.progressPayload)
     && sameTaskExecutionFence(input.executionFence, captureTaskExecutionFence(input.progressPayload, input.requestDigest));
 }

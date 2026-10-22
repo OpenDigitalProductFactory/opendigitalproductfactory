@@ -2031,7 +2031,8 @@
         "7-closing-a-small-or-medium-item-the-baseline-is-the-body-bi-0f8e39d5",
         "approval-outcome-readback",
         "anti-patterns-observed",
-        "original-review-recovery-across-connection-changes"
+        "original-review-recovery-across-connection-changes",
+        "a-present-assessment-authorized-by-an-approved-policy"
       ]
     },
     "docs/architecture/job-specific-intelligence.md": {
@@ -2171,7 +2172,8 @@
         "recovering-an-interrupted-independent-review",
         "parent-bounded-local-review-execution-bi-03ac2fd9",
         "recovering-an-original-initiative-review-after-a-connection-change",
-        "canonical-review-writer-execution-identity"
+        "canonical-review-writer-execution-identity",
+        "explicitly-authorized-present-reassessments"
       ]
     },
     "docs/architecture/mcp-tool-packs.md": {

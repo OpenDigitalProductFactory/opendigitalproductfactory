@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { ToolDefinition } from "@/lib/mcp-tool-types";
 import { initiativeReviewWriterArgumentContract, narrowInitiativeReviewTools, parseInitiativeReviewBinding } from "./mcp-task-review-contract";
+import { remoteTaskRequestDigest } from "./mcp-task-capacity-contract";
 
 const binding = {
   writerToolName: "record_initiative_evidence",
@@ -24,6 +25,23 @@ const binding = {
     providerBlobId: "3652f3d223fa8eb9a2a4873de7d65a8222f114c6",
   },
 };
+
+it("retains every server-issued present relation byte in the immutable request", () => {
+  const presentReassessment = {
+    schemaVersion: 1 as const, authorizationItemId: "BI-7906C73E", baselineId: "baseline-approved",
+    policyDigest: "a".repeat(64), originalTaskRunId: "TR-MCP-original", originalRequestDigest: "b".repeat(64),
+    predecessorTaskRunIds: ["TR-MCP-original"],
+    authorityArtifact: { kind: "repo-blob-at-commit" as const, repositoryFullName: "owner/repo", commitSha: "c".repeat(40),
+      path: "docs/spec.md", providerBlobId: "d".repeat(40) },
+  };
+  const current = { ...binding, writerToolName: "record_initiative_design_review", gate: "design-spec", presentReassessment };
+  expect(parseInitiativeReviewBinding(current)).toEqual(current);
+  expect(parseInitiativeReviewBinding({ ...current, presentReassessment: { ...presentReassessment, originalReplay: true } })).toBeNull();
+  const packet = { agentId: "reviewer", routeContext: "/build", title: "Review", objective: "Review", prompt: "Review",
+    riskClass: "bounded-write" as const, idempotencyKey: "server-issued", initiativeReviewBinding: current };
+  const originalDigest = remoteTaskRequestDigest(packet);
+  expect(remoteTaskRequestDigest({ ...packet, initiativeReviewBinding: binding })).not.toBe(originalDigest);
+});
 
 const evidenceWriterSchema = {
   type: "object",

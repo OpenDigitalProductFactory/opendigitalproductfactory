@@ -148,94 +148,49 @@ describe("self-upgrade rollback", () => {
     expect(postgres).not.toHaveBeenCalled();
   });
 
-  it("restores postgres from the recovery point", async () => {
-    const calls: string[] = [];
-    const now = vi
-      .fn()
-      .mockReturnValueOnce(new Date("2026-06-01T00:10:00.000Z"))
-      .mockReturnValueOnce(new Date("2026-06-01T00:15:00.000Z"));
-    const postgres = vi.fn(async (args) => {
-      calls.push("postgres");
-      expect(args).toMatchObject({
-        sourceBackupRunId: "BR-PG",
-        initiatedByUserId: "user-ops",
-        trigger: "self-upgrade-rollback",
-        acquireLock: false,
-      });
-      expect(args.prismaClient).toBe(mockPrisma);
-      return { restoreId: "RR-PG", status: "ok" as const };
-    });
+  it.each(["missing", "empty-active-tasks", "retired", "forged-retention"])(
+    "refuses canonical restoration with %s proof before any restore effect", async proof => {
+      const evidence = { recoveryPoint, reassessmentRetention: {
+        proof, activeTaskIds: [], capabilitiesRetired: true, allocationsRetained: true,
+      } };
+      mockPrisma.selfUpgradeRun.findUnique.mockResolvedValue(makeRun({ completionEvidence: evidence }));
+      const postgres = vi.fn(async () => ({ restoreId: "RR-PG", status: "ok" as const }));
+      await expect(runSelfUpgradeRollback({ runId: "SUR-ROLLBACK", prismaClient: mockPrisma as never,
+        runners: { postgres } })).rejects.toThrow(/reassessment.*retention.*unproven/i);
+      expect(postgres).not.toHaveBeenCalled();
+      expect(mockPrisma.backupRun.findMany).not.toHaveBeenCalled();
+      expect(mockPrisma.backupRun.upsert).not.toHaveBeenCalled();
+      expect(mockPrisma.selfUpgradeRun.upsert).not.toHaveBeenCalled();
+      expect(evidence).toEqual({ recoveryPoint, reassessmentRetention: {
+        proof, activeTaskIds: [], capabilitiesRetired: true, allocationsRetained: true,
+      } });
+    },
+  );
 
-    const result = await runSelfUpgradeRollback({
-      runId: "SUR-ROLLBACK",
-      initiatedByUserId: "user-ops",
-      prismaClient: mockPrisma as never,
-      now,
-      runners: { postgres },
-    });
-
-    expect(result).toMatchObject({
-      ok: true,
-      status: "ok",
-      runId: "SUR-ROLLBACK",
-      restores: [
-        { target: "postgres", sourceBackupRunId: "BR-PG", restoreId: "RR-PG", status: "ok" },
-      ],
-    });
-    expect(calls).toEqual(["postgres"]);
-    expect(mockPrisma.backupRun.findMany).toHaveBeenCalledWith({
-      where: { id: { in: ["BR-PG"] } },
-    });
-    expect(mockPrisma.backupRun.upsert).toHaveBeenCalledTimes(1);
-    expect(mockPrisma.backupRun.upsert).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({ where: { id: "BR-PG" } }),
-    );
-    expect(mockPrisma.selfUpgradeRun.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { runId: "SUR-ROLLBACK" },
-        update: expect.objectContaining({
-          status: "rolled-back",
-          failureLog: null,
-        }),
-      }),
-    );
-    const upsertCall = mockPrisma.selfUpgradeRun.upsert.mock.calls[0][0];
-    expect(upsertCall.update.completionEvidence.rollback).toMatchObject({
-      schemaVersion: 1,
-      trigger: "self-upgrade-rollback",
-      status: "ok",
-      selfUpgradeRunId: "SUR-ROLLBACK",
-      restoreOrder: ["postgres"],
-    });
-  });
-
-  it("records rollback-failed evidence when the postgres restore fails", async () => {
+  it("does not launch even a refusing restore runner or relabel the upgrade as rolled back", async () => {
     const postgres = vi.fn().mockRejectedValue(new Error("pg_restore failed"));
-
-    const result = await runSelfUpgradeRollback({
+    await expect(runSelfUpgradeRollback({
       runId: "SUR-ROLLBACK",
       prismaClient: mockPrisma as never,
       runners: { postgres },
-    });
-
-    expect(result).toMatchObject({
-      ok: false,
-      status: "failed",
-      error: "self-upgrade rollback failed at postgres: pg_restore failed",
-    });
-    expect(postgres).toHaveBeenCalledTimes(1);
-    expect(mockPrisma.selfUpgradeRun.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        update: expect.objectContaining({
-          status: "rollback-failed",
-          failureLog: "self-upgrade rollback failed at postgres: pg_restore failed",
-        }),
-      }),
-    );
+    })).rejects.toThrow(/reassessment-rollback-retention-unproven/);
+    expect(postgres).not.toHaveBeenCalled();
+    expect(mockPrisma.selfUpgradeRun.upsert).not.toHaveBeenCalled();
   });
 
-  it("reports whether completion evidence contains a restorable recovery point", () => {
+  it("refuses concurrent callers without a restore process or history writes", async () => {
+    const postgres = vi.fn(async () => ({ restoreId: "RR-PG", status: "ok" as const }));
+    const results = await Promise.allSettled(Array.from({ length: 3 }, () => runSelfUpgradeRollback({
+      runId: "SUR-ROLLBACK", prismaClient: mockPrisma as never, runners: { postgres },
+    })));
+    expect(results.every(result => result.status === "rejected"
+      && result.reason instanceof SelfUpgradeRollbackError)).toBe(true);
+    expect(postgres).not.toHaveBeenCalled();
+    expect(mockPrisma.backupRun.upsert).not.toHaveBeenCalled();
+    expect(mockPrisma.selfUpgradeRun.upsert).not.toHaveBeenCalled();
+  });
+
+  it("recognizes recovery-point structure without admitting restoration", () => {
     expect(hasGovernedRecoveryPoint({ recoveryPoint })).toBe(true);
     expect(hasGovernedRecoveryPoint({ recoveryPoint: { ...recoveryPoint, status: "failed" } })).toBe(false);
     expect(hasGovernedRecoveryPoint({})).toBe(false);

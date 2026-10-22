@@ -147,6 +147,14 @@ function memberMap(point: SelfUpgradeRecoveryPointLike): Record<BackupTarget, st
   return result as Record<BackupTarget, string>;
 }
 
+function requireReassessmentRetentionBeforeRestore(): void {
+  // The restore mutex cannot exclude other workers or survive pg_restore.
+  // No canonical producer yet proves allocation/history retention, protected
+  // commits excluded through restoration, or positively settled restoration.
+  // Refusal loses rollback availability; it is not positive retention evidence.
+  throw new SelfUpgradeRollbackError("reassessment-rollback-retention-unproven: canonical database restoration cannot prove retained allocations, histories and fences.");
+}
+
 async function resolveRunners(
   overrides?: Partial<Record<BackupTarget, RestoreRunner>>,
 ): Promise<Record<BackupTarget, RestoreRunner>> {
@@ -353,6 +361,7 @@ export async function runSelfUpgradeRollback(
     throw new SelfUpgradeRollbackError("Self-upgrade run has no governed recovery point.");
   }
   const memberRunIds = memberMap(recoveryPoint);
+  requireReassessmentRetentionBeforeRestore();
   const sourceSnapshots = await loadRecoverySourceSnapshots(prisma, memberRunIds);
   const runners = await resolveRunners(args.runners);
 

@@ -16,6 +16,7 @@ import type { SurfaceMode, SurfacePrincipalContext } from "@dpf/types";
 import { narrowInitiativeReviewTools, type InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
 import { immutablePageReaderForArtifact } from "./terminal-tool-policy";
 import { ReassessmentExecutionError, currentReassessmentExecution, assertReassessmentToolCall } from "@/lib/routing/reassessment-execution-scope";
+import type { CanonicalReviewReceiptCheck } from "./reassessment-loop";
 
 /** Best-effort latest user-turn text, for the reviewer's context. */
 function lastUserRequest(history: ChatMessage[]): string {
@@ -81,6 +82,9 @@ export type AutonomousWorkRunInput = {
    * payload; it exists for authority lanes that must serialize alternate keys.
    */
   admissionGuard?: (tx: Prisma.TransactionClient) => Promise<void>;
+  /** Server-only atomic persistence, after creation and before the deferred
+   * input commits. Never accepted from serialized client or tool arguments. */
+  afterTaskCreated?: (tx: Prisma.TransactionClient, run: AutonomousWorkRunRef) => Promise<void>;
   transactionIsolationLevel?: Prisma.TransactionIsolationLevel;
   /**
    * Closed deferred callers may commit their first user message in the same
@@ -139,6 +143,10 @@ export async function createAutonomousWorkRun(
     const source = taskRunSourceForTrigger(input.trigger);
     await admitRuntimeGuardedWork(tx as never, `task-run:${source}`);
     await input.admissionGuard?.(tx);
+    if (input.metadata?.initiativeReviewBinding) {
+      const { lockInitiativeReviewCreationSubject } = await import("../mcp-task-review-reassessment");
+      await lockInitiativeReviewCreationSubject(tx, input.metadata.initiativeReviewBinding);
+    }
     const taskRun = await tx.taskRun.create({
       data: {
         taskRunId: input.taskRunId ?? createPublicTaskRunId(input.trigger),
@@ -161,6 +169,7 @@ export async function createAutonomousWorkRun(
       },
       select: { id: true, taskRunId: true, contextId: true },
     });
+    await input.afterTaskCreated?.(tx, taskRun);
     if (input.deferredSubmission) {
       await tx.taskMessage.create({
         data: {
@@ -178,7 +187,7 @@ export async function createAutonomousWorkRun(
       });
     }
     return taskRun;
-  }, { isolationLevel: input.transactionIsolationLevel ?? "Serializable" });
+  }, { isolationLevel: input.transactionIsolationLevel ?? (input.metadata?.initiativeReviewBinding ? "ReadCommitted" : "Serializable") });
 }
 
 export async function findCurrentAutonomousWorkRun(input: {
@@ -379,6 +388,7 @@ export async function resolveAutonomousWorkTools(input: {
 }
 
 export async function executeAutonomousAgenticLoop(input: {
+  canonicalReviewReceipt?: CanonicalReviewReceiptCheck;
   systemPrompt: string;
   /** Instruction spans within `systemPrompt`, forwarded to routing (BI-463BE12A). */
   systemPromptInstructionSpans?: string[];

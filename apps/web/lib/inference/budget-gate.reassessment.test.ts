@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { Prisma } from "@dpf/db";
 
 const db = vi.hoisted(() => ({ agent: { findUnique: vi.fn() }, tokenUsage: { aggregate: vi.fn() } }));
 vi.mock("@dpf/db", () => ({ prisma: db }));
@@ -34,6 +35,24 @@ describe("restricted review current normal budget", () => {
     expect(config.configurationDigest).toBe((await read()).configurationDigest);
     // A wider recorded policy is still an identity change even if the other ceiling wins.
     expect(config.configurationDigest).not.toBe((await read(registry(200001))).configurationDigest);
+  });
+  it("uses the supplied transaction for current configuration and observed daily totals", async () => {
+    const owner = { agent: { findUnique: vi.fn(async () => currentRow({ perTaskTokenLimit: 40000 })) },
+      tokenUsage: { aggregate: vi.fn(async () => ({ _sum: { inputTokens: 150000, outputTokens: 10000 } })) } };
+    const tx = owner as unknown as Pick<Prisma.TransactionClient, "agent" | "tokenUsage">;
+    const loadRegistry = vi.fn(() => registry());
+    const config = await readReassessmentBudgetConfiguration("reviewer", loadRegistry, tx);
+    expect(config.configuredPerTaskLimit).toBe(40000);
+    expect(await checkReassessmentBudget(config, tx)).toMatchObject({ status: "warning_80", actualTokens: 160000 });
+    expect(owner.agent.findUnique).toHaveBeenCalledOnce(); expect(owner.tokenUsage.aggregate).toHaveBeenCalledOnce();
+    expect(loadRegistry).toHaveBeenCalledOnce(); expect(db.agent.findUnique).not.toHaveBeenCalled(); expect(db.tokenUsage.aggregate).not.toHaveBeenCalled();
+  });
+  it("refuses transaction-local exhaustion even when ambient usage is below the ceiling", async () => {
+    const config = await read(registry(100));
+    db.tokenUsage.aggregate.mockResolvedValue({ _sum: { inputTokens: 0, outputTokens: 0 } });
+    const owner = { tokenUsage: { aggregate: vi.fn(async () => ({ _sum: { inputTokens: 100, outputTokens: 0 } })) } };
+    await expect(checkReassessmentBudget(config, owner as unknown as Pick<Prisma.TransactionClient, "tokenUsage">)).rejects.toThrow(/exhausted/);
+    expect(db.tokenUsage.aggregate).not.toHaveBeenCalled();
   });
   it("intersects narrowed live limits without widening any registry ceiling", async () => {
     db.agent.findUnique.mockResolvedValue(currentRow({ dailyTokenLimit: 120000, perTaskTokenLimit: 40000,

@@ -158,6 +158,9 @@ export async function dispatchExternalCoworkerTask(input: ExternalCoworkerTaskIn
         source: verified.source,
       },
       userContext: verified.userContext,
+      ...(reviewPacket?.binding.presentReassessment && input.context?.authorityDecisionId && input.context.agentId
+        ? { presentReviewAuthority: { authorityDecisionId: input.context.authorityDecisionId,
+            actingAgentId: input.context.agentId, tokenGrantScopes: input.context.tokenGrantScopes ?? [] } } : {}),
       params: {
         agentId: input.targetAgent,
         routeContext: input.context?.routeContext ?? "/build",

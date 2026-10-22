@@ -7,7 +7,7 @@
 //
 // EP-COST-001 Phase 2 — spec §3 Budget Gate
 
-import { prisma } from "@dpf/db";
+import { prisma, type Prisma } from "@dpf/db";
 import { createHash } from "node:crypto";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 
@@ -43,6 +43,7 @@ const intersectTokenLimit = (left: number, right: number) => left === 0 ? right 
 export async function readReassessmentBudgetConfiguration(
   agentId: string,
   loadRegistry: () => unknown = currentRegistry,
+  database: Pick<Prisma.TransactionClient, "agent"> = prisma,
 ): Promise<ReassessmentBudgetConfiguration> {
   type Agent = { agent_id?: string; agent_name?: string; config_profile?: {
     token_budget?: { daily_limit?: number; per_task_limit?: number };
@@ -60,7 +61,7 @@ export async function readReassessmentBudgetConfiguration(
     perTaskTokenLimit: agent.config_profile?.token_budget?.per_task_limit,
     timeoutSeconds: agent.config_profile?.execution_runtime?.timeout_seconds,
     maxTokens: agent.config_profile?.model_binding?.max_tokens, executionType: agent.config_profile?.execution_runtime?.type });
-  const current = await prisma.agent.findUnique({ where: { agentId: agent.agent_id! },
+  const current = await database.agent.findUnique({ where: { agentId: agent.agent_id! },
     select: { id: true, agentId: true, executionConfig: { select: { id: true, agentId: true,
       dailyTokenLimit: true, perTaskTokenLimit: true, timeoutSeconds: true, maxTokens: true, executionType: true } } } });
   const config = current?.executionConfig;
@@ -83,10 +84,11 @@ export async function readReassessmentBudgetConfiguration(
 }
 
 /** Read authenticated current totals; transport/owner errors must refuse execution. */
-export async function checkReassessmentBudget(config: ReassessmentBudgetConfiguration): Promise<BudgetCheckResult> {
+export async function checkReassessmentBudget(config: ReassessmentBudgetConfiguration,
+  database: Pick<Prisma.TransactionClient, "tokenUsage"> = prisma): Promise<BudgetCheckResult> {
   const todayStart = new Date(); todayStart.setUTCHours(0, 0, 0, 0);
   const usageAgentIds = [...new Set([config.agentId, config.registryAgentId, config.registryAgentName])];
-  const result = await prisma.tokenUsage.aggregate({ where: { agentId: { in: usageAgentIds }, createdAt: { gte: todayStart } },
+  const result = await database.tokenUsage.aggregate({ where: { agentId: { in: usageAgentIds }, createdAt: { gte: todayStart } },
     _sum: { inputTokens: true, outputTokens: true } });
   const amounts = [result._sum.inputTokens, result._sum.outputTokens];
   if (!amounts.every(value => value === null || Number.isSafeInteger(value) && value! >= 0)) {

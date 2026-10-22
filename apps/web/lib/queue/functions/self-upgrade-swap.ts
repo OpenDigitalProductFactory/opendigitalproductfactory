@@ -16,11 +16,12 @@ import {
   refreshMigrationHandoffAfterDrain,
   resolveReadinessBackupHostPath,
   runCandidatePreflight,
+  runReassessmentCandidatePreflight,
   type InstallStateMigrationHandoff,
 } from "@/lib/self-upgrade/preflight";
 import { isFeatureBuildDeployed } from "@/lib/self-upgrade/completion";
 import { classifyBuildFailure, formatClassifiedExcerpt } from "@/lib/self-upgrade/build-failure-classifier";
-import { completeRun, failRun, recordPromoterReadiness, recordRunRecoveryPoint } from "@/lib/self-upgrade/run-store";
+import { completeRun, failRun, recordPromoterReadiness, recordRunRecoveryPoint, recordReassessmentCompatibility } from "@/lib/self-upgrade/run-store";
 import { clearCooldown, recordCooldown } from "@/lib/self-upgrade/cooldown";
 import { emitUpgradeEvent } from "@/lib/self-upgrade/notifications";
 import {
@@ -140,6 +141,17 @@ export async function finishSelfUpgrade(ctx: SelfUpgradeSwapContext): Promise<Re
       await recordCooldown(now, cooldownMinutes);
       await emitUpgradeEvent({ type: "upgrade.failed", runId });
       return { ok: false, status: "failed", runId, quiescenceRunId, reason: "admission-reopened-before-swap", excerpt: guard.error };
+    }
+  }
+
+  if (!dryRun) {
+    const compatibility = await runReassessmentCandidatePreflight({ runId, targetSha: ctx.builtStamp,
+      composeProject: ctx.promoter.composeProject, release: ctx.promoter.release, stage: "swap",
+      failRun, emitFailure, recordCompatibility: recordReassessmentCompatibility });
+    if (!compatibility.ok) {
+      if (quiescenceRunId) await failQuiescenceSwap(quiescenceRunId, compatibility.reason);
+      await recordCooldown(now, cooldownMinutes);
+      return { ok: false, status: "failed", runId, quiescenceRunId, reason: compatibility.reason };
     }
   }
 

@@ -180,10 +180,13 @@ function installStorage() {
   m["toolExecution.findFirst"] = (args: Row) => rows("executions", args).at(-1) ?? null;
   m["toolExecution.updateMany"] = ({ where, data }: Row) => { const found = rows("executions", { where }); found.forEach((r: Row) => Object.assign(r, data)); return { count: found.length }; };
   m["toolExecution.update"] = ({ where, data }: Row) => { const row = s.executions.find((r: Row) => r.id === where.id); Object.assign(row, data); return row; };
-  m["backlogItem.findUnique"] = ({ where }: Row) => matches(item, where) ? { ...item, activities: s.activities } : null;
+  m["backlogItem.findUnique"] = ({ where }: Row) => {
+    if (s.receiptReadUnavailable && s.activities.length) throw new Error("Synthetic canonical readback unavailable");
+    return matches(item, where) ? { ...item, activities: s.activities } : null;
+  };
   m["backlogItemActivity.findMany"] = (args: Row) => rows("activities", args);
   m["backlogItemActivity.findUnique"] = ({ where }: Row) => s.activities.find((a: Row) => matches(a, where)) ?? null;
-  m["backlogItemActivity.create"] = ({ data }: Row) => put("activities", data);
+  m["backlogItemActivity.create"] = ({ data }: Row) => { s.log.push("canonical-receipt"); return put("activities", data); };
   m["coworkerActionEnvelope.findMany"] = () => [];
   m["authorizationDecisionLog.create"] = ({ data }: Row) => put("authorities", data);
   m["authorizationDecisionLog.findUnique"] = ({ where }: Row) => s.authorities.find((a: Row) => matches(a, where)) ?? null;
@@ -242,7 +245,8 @@ function run() {
 const reservations = () => s.executions.filter((e: Row) => e.toolName === "reassessment_capture");
 beforeEach(() => {
   Object.assign(s, { methods: {}, requests: [], providerEntries: 0, repoRequests: [], artifacts: [], executions: [], activities: [], authorities: [], log: [], locks: [],
-    unconfigured: [], unsupported: [], unexpectedNetwork: [], failure: null, hidden: false, samePrincipal: false });
+    unconfigured: [], unsupported: [], unexpectedNetwork: [], failure: null, hidden: false, samePrincipal: false,
+    decision: "pass", trailingTool: false, receiptReadUnavailable: false });
   installStorage(); invalidateRoutingLoaderCache();
   vi.stubGlobal("fetch", () => { s.unexpectedNetwork.push("global fetch"); throw new Error("Unexpected real network access"); });
   s.repoFetch = async (input: RequestInfo | URL) => {
@@ -264,9 +268,13 @@ beforeEach(() => {
     expect(reservations().at(-1)?.parameters.event.kind).toBe("provider");
     s.requests.push(body); s.log.push("provider-io");
     const n = s.requests.length, name = s.hidden ? "load_tools" : n === 1 ? reader : n === 2 ? writer : null;
-    const args = name === writer ? { decision: "pass", reason: "The synthetic research documents the evidence boundary.", findings: [], resolvedFindingRefs: [] } : {};
+    const args = name === writer ? { decision: s.decision, reason: "The synthetic model supplies this fixture assessment.",
+      findings: s.decision === "fail" ? [{ issue: "Synthetic blocking finding about the stated boundary.", severity: "important",
+        evidence: { blobId, startLine: 2, endLine: 2, quote: "The ownership and capture boundaries are explicit." } }] : [], resolvedFindingRefs: [] } : {};
+    const toolCalls = name ? [{ id: `call-${n}`, type: "function", function: { name, arguments: JSON.stringify(args) } }] : [];
+    if (name === writer && s.trailingTool) toolCalls.push({ id: "trailing-reader", type: "function", function: { name: reader, arguments: "{}" } });
     return new Response(JSON.stringify({ choices: [{ finish_reason: name ? "tool_calls" : "stop", message: { content: name ? "" : "Research recorded.",
-      ...(name ? { tool_calls: [{ id: `call-${n}`, type: "function", function: { name, arguments: JSON.stringify(args) } }] } : {}) } }],
+      ...(name ? { tool_calls: toolCalls } : {}) } }],
       usage: { prompt_tokens: 10, completion_tokens: 5 } }), { status: 200 });
   };
   _setGovernanceForTests({ resolveCoworkerAuthorityInput: authorityInput as never });
@@ -286,10 +294,9 @@ describe("connected persisted R2 execution with synthetic exterior ports", () =>
     expect(s.run.progressPayload.reviewOutcome.receiptId).toBe(receipt.id);
     expect(s.artifacts.filter((a: Row) => a.name === "reassessment-execution-open-v1")).toHaveLength(1);
     expect(s.artifacts.filter((a: Row) => a.name === "reassessment-execution-close-v1")).toHaveLength(1);
-    expect(s.requests).toHaveLength(3);
-    expect(s.providerEntries).toBe(3);
+    expect(s.requests).toHaveLength(2);
+    expect(s.providerEntries).toBe(2);
     expect(s.requests[1].messages.some((m: Row) => m.role === "tool" && m.content.includes("The ownership and capture boundaries are explicit."))).toBe(true);
-    expect(s.requests[2].messages.some((m: Row) => m.role === "tool" && m.content.includes(receipt.id))).toBe(true);
     expect(s.repoRequests.length).toBeGreaterThanOrEqual(3);
     for (const execution of reservations()) {
       expect(execution).toMatchObject({ taskRunId, userId, agentId, success: true });
@@ -317,8 +324,25 @@ describe("connected persisted R2 execution with synthetic exterior ports", () =>
     expect(s.run.progressPayload.reviewOutcome.receiptId).toBe(receipt.id);
     expect(s.locks).toContain('SELECT "id" FROM "TaskRun" WHERE "taskRunId" = ? FOR SHARE');
     expect(s.authorities.find((a: Row) => a.decisionId === receipt.payload.authorityDecisionId)?.rationale.taskRunId).toBe(taskRunId);
-    expect(s.requests).toHaveLength(3);
-    expect(s.providerEntries).toBe(3);
+    expect(s.requests).toHaveLength(2);
+    expect(s.providerEntries).toBe(2);
+  });
+  it.each(["research", "design-spec"] as const)("stops on an actual canonical %s fail before a trailing governed reader or generation", async gate => {
+    await prepare(gate); s.decision = "fail"; s.trailingTool = true;
+    expect(await run()).toMatchObject({ result: { status: "completed", isError: false } });
+    expect(s.activities).toHaveLength(1);
+    expect(s.activities[0].payload).toMatchObject({ gate, decision: "fail", artifactRef });
+    expect(s.run.progressPayload.reviewOutcome).toMatchObject({ receiptId: s.activities[0].id, decision: "fail" });
+    // The actual pack re-reads the citation through its governed dispatcher.
+    expect(s.executions.filter((e: Row) => e.toolName === reader)).toHaveLength(2);
+    expect(s.log.lastIndexOf(`audit:${reader}`)).toBeLessThan(s.log.indexOf("canonical-receipt"));
+    expect(s.requests).toHaveLength(2); expect(s.providerEntries).toBe(2);
+  });
+  it("holds unavailable canonical readback after an actual writer commit without another provider start", async () => {
+    await prepare("design-spec"); s.receiptReadUnavailable = true;
+    expect(await run()).toMatchObject({ result: { status: "input-required", waitReason: "execution-uncertain", resumable: false } });
+    expect(s.activities).toHaveLength(1); expect(s.run.progressPayload).not.toHaveProperty("reviewOutcome");
+    expect(s.requests).toHaveLength(2); expect(s.providerEntries).toBe(2);
   });
   it("refuses self-review in the real independent design writer without a canonical append", async () => {
     await prepare("design-spec"); s.samePrincipal = true;

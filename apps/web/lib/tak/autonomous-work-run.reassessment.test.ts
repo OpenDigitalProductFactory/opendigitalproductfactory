@@ -2,7 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { reassessmentBudgetFixture } from "../../test-support/reassessment-budget-fixture";
 const mocks = vi.hoisted(() => ({ available: vi.fn(), local: vi.fn(), fidelity: vi.fn(), profession: vi.fn(), surface: vi.fn(),
   review: vi.fn(), reflection: vi.fn(), patterns: vi.fn() }));
-vi.mock("@dpf/db", () => ({ prisma: {} }));
+vi.mock("@dpf/db", () => {
+  const tx = { taskRun: { create: vi.fn() }, taskMessage: { create: vi.fn() } };
+  return { prisma: { ...tx, $transaction: vi.fn(async callback => callback(tx)) } };
+});
+vi.mock("@/lib/platform-runtime/work-admission", () => ({ admitRuntimeGuardedWork: vi.fn() }));
 vi.mock("@/lib/tak/agentic-loop", () => ({ runAgenticLoop: vi.fn() }));
 vi.mock("@/lib/mcp-tools", () => ({ getAvailableTools: mocks.available,
   toolsToOpenAIFormat: (tools: Array<{ name: string; inputSchema: unknown }>) => tools.map(tool => ({ type: "function", function: { name: tool.name, parameters: tool.inputSchema } })) }));
@@ -15,7 +19,7 @@ vi.mock("@/lib/coworker/authorized-surface-prompt-grounding", () => ({ groundPro
 vi.mock("@/lib/golden-triangle/coworker-review", () => ({ resolveCoworkerReviewPattern: mocks.review }));
 vi.mock("@/lib/tak/reflection-triggers", () => ({ processRuntimeIssueReflection: mocks.reflection }));
 vi.mock("@/lib/tak/pattern-observer-service", () => ({ observeWorkPatternsAfterRun: mocks.patterns }));
-import { executeAutonomousAgenticLoop, resolveAutonomousWorkTools } from "./autonomous-work-run";
+import { createAutonomousWorkRun, executeAutonomousAgenticLoop, resolveAutonomousWorkTools } from "./autonomous-work-run";
 import { runReassessmentExecution, type ReassessmentExecutionSeed } from "@/lib/routing/reassessment-execution-scope";
 
 const binding = { itemId: "BI-FIXTURE", gate: "design-spec", writerToolName: "record_initiative_design_review",
@@ -35,6 +39,21 @@ beforeEach(() => {
 const input = { userContext: { userId: "human", platformRole: "ceo", isSuperuser: true }, agentId: "reviewer",
   requiredToolNames: names, restrictedReviewBinding: binding };
 describe("restricted review tool resolution", () => {
+  it("commits a server-owned allocation hook inside the TaskRun creation transaction", async () => {
+    const { prisma } = await import("@dpf/db");
+    const row = { id: "record", taskRunId: "TR-MCP-current", contextId: "thread" };
+    vi.mocked(prisma.taskRun.create).mockResolvedValue(row as never);
+    const created = vi.fn(async (tx, run) => {
+      expect(tx.taskRun.create).toBe(prisma.taskRun.create);
+      expect(run).toEqual(row);
+      expect(prisma.taskRun.create).toHaveBeenCalled();
+      throw new Error("allocation persistence failed");
+    });
+    await expect(createAutonomousWorkRun({ trigger: "external-mcp", userId: "human", agentId: "reviewer", routeContext: "/build",
+      title: "Independent review", objective: "Review exact source", prompt: "Review exact source", afterTaskCreated: created,
+    })).rejects.toThrow("allocation persistence failed");
+    expect(created).toHaveBeenCalledOnce();
+  });
   it("retains normal authorization and resolves exactly the bound pair without runtime probes", async () => {
     const result = await resolveAutonomousWorkTools(input);
     expect(mocks.available).toHaveBeenCalledOnce();
@@ -65,13 +84,14 @@ describe("restricted review tool resolution", () => {
         budgetConfiguration: reassessmentBudgetFixture(),
         bounds: { maxProviderStarts: 2, maxDurationMs: 30_000, maxOutputTokens: 100 } } };
     const { runAgenticLoop } = await import("./agentic-loop");
+    const canonicalReviewReceipt = vi.fn(async () => null);
     vi.mocked(runAgenticLoop).mockResolvedValue({ content: "Fixture result.", executedTools: [] } as never);
     await runReassessmentExecution(seed, { open: async () => {}, reserve: async () => ({ reservationId: "fixture" }), complete: async () => {} },
       () => executeAutonomousAgenticLoop({ userId: seed.userId, agentId: seed.agentId, taskRunId: seed.taskRunId,
         taskExecutionFence: seed.executionFence, threadId: "fixture", routeContext: "/build", taskType: "external-mcp",
         systemPrompt: "Captured review instructions.", chatHistory: [], sensitivity: "internal", tools: names.map(tool) as never,
-        toolsForProvider: [], deferredTools: [] }));
-    expect(runAgenticLoop).toHaveBeenCalledWith(expect.objectContaining({ systemPrompt: "Captured review instructions.", taskRunId: seed.taskRunId }));
+        toolsForProvider: [], deferredTools: [], canonicalReviewReceipt }));
+    expect(runAgenticLoop).toHaveBeenCalledWith(expect.objectContaining({ systemPrompt: "Captured review instructions.", taskRunId: seed.taskRunId, canonicalReviewReceipt }));
     expect(mocks.profession).not.toHaveBeenCalled(); expect(mocks.surface).not.toHaveBeenCalled(); expect(mocks.review).not.toHaveBeenCalled();
     expect(mocks.reflection).not.toHaveBeenCalled(); expect(mocks.patterns).not.toHaveBeenCalled();
   });

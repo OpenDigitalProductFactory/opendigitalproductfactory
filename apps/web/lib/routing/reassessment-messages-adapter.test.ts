@@ -1,9 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
+import { createHash } from "node:crypto";
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { reassessmentBudgetFixture } from "../../test-support/reassessment-budget-fixture";
+import { REASSESSMENT_NATIVE_COMPOSITION, reassessmentNativeCatalogDigest } from "../shared/reassessment-native-composition";
 import type { AdapterRequest } from "./adapter-types";
 import {
   reassessmentTokenReservationFor, reassessmentToolSurfaceDigest, runReassessmentEffect,
-  runReassessmentExecution, type ReassessmentCaptureHooks, type ReassessmentExecutionSeed,
+  runReassessmentQualification, runReassessmentQualificationRequest, promoteReassessmentExecution,
+  type ReassessmentCaptureHooks, type ReassessmentExecutionSeed, type ReassessmentQualificationHooks,
 } from "./reassessment-execution-scope";
 import { reassessmentMessagesAdapter } from "./reassessment-messages-adapter";
 
@@ -17,9 +21,31 @@ function payload(usage: unknown = { input_tokens: 70, cache_read_input_tokens: 3
     { type: "tool_use", id: "call-reader", name: "read_source_at_version", input: { maxLines: 20 } }],
   stop_reason: "tool_use", usage };
 }
+async function runWireFixture<T>(seed: ReassessmentExecutionSeed, hooks: ReassessmentCaptureHooks, fn: () => Promise<T>) {
+  const { qualification, ...identity } = seed;
+  const root = { ...identity, schemaVersion: 2 as const, phase: "qualification" as const,
+    budgetConfiguration: qualification.budgetConfiguration, bounds: qualification.bounds,
+    nativeObservationUrls: ["http://dmr.invalid/version"],
+    compatibility: { schemaVersion: 1 as const, configDigest: "sha256:" + "1".repeat(64), sourceSha: "2".repeat(40), sourceContentHash: "3".repeat(64), contractSha256: "4".repeat(64),
+      owners: { transport: { version: 2, sourceSha256: "5".repeat(64) }, approval: { version: 2, sourceSha256: "6".repeat(64) },
+        worker: { version: 2, sourceSha256: "7".repeat(64) }, writer: { version: 2, sourceSha256: "8".repeat(64) } } } };
+  const phaseHooks = { ...hooks, readExecutionSeal: async (_context: unknown, prefix: { digest: string }) => {
+    const q = { ...qualification, nativeRuntime: { schemaVersion: 2 as const, catalogDigest: reassessmentNativeCatalogDigest(), observationDigest: prefix.digest,
+      requestedBudgetClass: "balanced" as const, spendAwareBudgetClass: "balanced" as const } };
+    const { qualificationDigest: _, ...unsigned } = q; q.qualificationDigest = createHash("sha256").update(canonicalJson(unsigned)).digest("hex");
+    return { schemaVersion: 2, root: { schemaVersion: 2, manifestArtifactId: root.manifest.artifactId, manifestDigest: root.manifest.digest },
+      taskRunId: root.taskRunId, userId: root.userId, agentId: root.agentId, requestDigest: root.requestDigest, executionFence: root.executionFence,
+      binding: root.binding, qualificationPrefix: prefix, qualification: q, authorityDecisionId: "fixture-readback", sealedAt: new Date().toISOString() };
+  } } as unknown as ReassessmentQualificationHooks;
+  return runReassessmentQualification(root, phaseHooks, async () => {
+    await runReassessmentQualificationRequest({ method: "GET", url: root.nativeObservationUrls[0]! }, async () => "fixture-version", value => ({ value }));
+    return promoteReassessmentExecution(fn);
+  });
+}
 function fixture(count: unknown = { input_tokens: 100 }, response: unknown = payload()) {
   const startedAt = new Date().toISOString();
   const plan: AdapterRequest["plan"] = { providerId: "local", modelId: "model", recipeId: null,
+    providerConnectionId: "connection", providerConnectionVersion: "a".repeat(64), accountAuthMethod: "none", executionChannel: "local-runtime",
     contractFamily: "review", executionAdapter: "chat", maxTokens: 100, providerSettings: {},
     toolPolicy: { toolChoice: "required" }, responsePolicy: {} };
   const seed: ReassessmentExecutionSeed = {
@@ -30,14 +56,17 @@ function fixture(count: unknown = { input_tokens: 100 }, response: unknown = pay
       expectedCurrentBaselineId: null, artifactRef: { kind: "repo-blob-at-commit", repositoryFullName: "owner/repo",
         commitSha: "c".repeat(40), path: "design.md", providerBlobId: "d".repeat(40) } },
     qualification: { schemaVersion: 1, compositionVersion: "restricted-review-http-v1", providerId: "local", modelId: "model",
-      providerConnectionId: "connection", providerConnectionVersion: "v1", providerConfigurationDigest: "e".repeat(64),
+      providerConnectionId: "connection", providerConnectionVersion: "a".repeat(64), providerConfigurationDigest: "e".repeat(64),
       toolSurfaceDigest: reassessmentToolSurfaceDigest(tools), qualificationDigest: "f".repeat(64), executionPlan: plan,
-      budgetConfiguration: reassessmentBudgetFixture({ configuredPerTaskLimit: 50_000 }),
+      budgetConfiguration: reassessmentBudgetFixture({ configuredPerTaskLimit: 50_000,
+        registryLimits: { ...reassessmentBudgetFixture().registryLimits, perTaskTokenLimit: 50_000 },
+        executionConfigLimits: { ...reassessmentBudgetFixture().executionConfigLimits, perTaskTokenLimit: 50_000 } }),
       bounds: { maxProviderStarts: 20, maxDurationMs: 30_000, maxOutputTokens: 100 },
       finiteTokenProof: { schemaVersion: 1, kind: "dmr-native-messages-v1", apiRoot: "http://dmr.invalid",
-        runtimeVersion: "v1.2.8", modelDigest: "sha256:" + "1".repeat(64), engineIdentity: "llama.cpp",
-        engineArtifactDigest: "sha256:" + "2".repeat(64), engineSourceCommit: "72874f5",
-        templateDigest: "3".repeat(64), configDigest: "4".repeat(64) } },
+        runtimeVersion: "v1.2.8", modelDigest: REASSESSMENT_NATIVE_COMPOSITION.modelDigest,
+        engineIdentity: `Running: llama.cpp b9879-metal (sha256:${REASSESSMENT_NATIVE_COMPOSITION.engineArchiveDigest}) 72874f5`,
+        engineArtifactDigest: `sha256:${REASSESSMENT_NATIVE_COMPOSITION.engineArchiveDigest}`, engineSourceCommit: "72874f5",
+        templateDigest: REASSESSMENT_NATIVE_COMPOSITION.templateDigest, configDigest: "4".repeat(64) } },
     startedAt, deadlineAt: new Date(Date.parse(startedAt) + 30_000).toISOString(),
     manifest: { artifactId: "ta-native-manifest", digest: "5".repeat(64) },
   };
@@ -59,10 +88,50 @@ function fixture(count: unknown = { input_tokens: 100 }, response: unknown = pay
     provider: { baseUrl: "http://dmr.invalid/engines/llama.cpp/v1", headers: {} }, tools: structuredClone(tools),
     messages: [{ role: "user", content: "Review the exact source." }], systemPrompt: "Use only the bound reader and writer.", fetchImpl };
   return { seed, hooks, request, network,
-    execute: () => runReassessmentExecution(seed, hooks, () => reassessmentMessagesAdapter.execute(request)) };
+    execute: () => runWireFixture(seed, hooks, () => reassessmentMessagesAdapter.execute(request)) };
 }
 
 describe("restricted native Messages finite-token wire", () => {
+  it("refuses a lossy UTF-8 count response before reserving or starting generation", async () => {
+    const f = fixture();
+    f.network.mockImplementationOnce(async () => new Response(Buffer.concat([
+      Buffer.from('{"input_tokens":100,"extra":"'), Buffer.from([0xff]), Buffer.from('"}'),
+    ])));
+    await expect(f.execute()).rejects.toThrow(/count-invalid-json/);
+    expect(f.network).toHaveBeenCalledOnce();
+    expect(f.hooks.close).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ reservedTokens: 0, held: true }));
+  });
+  it("refuses overlapping turn dispatch before the second count and preserves the first observed capture", async () => {
+    const f = fixture();
+    let release!: () => void;
+    f.network.mockImplementationOnce(async () => {
+      await new Promise<void>(resolve => { release = resolve; });
+      return new Response(JSON.stringify({ input_tokens: 100 }), { status: 200 });
+    });
+    await runWireFixture(f.seed, f.hooks, async () => {
+      const first = reassessmentMessagesAdapter.execute(f.request);
+      const observedFirst = first.then(value => ({ value }), error => ({ error }));
+      while (!release) await Promise.resolve();
+      try {
+        await expect(reassessmentMessagesAdapter.execute(f.request)).rejects.toThrow(/dispatch|held|concurrent/i);
+      } finally { release(); await observedFirst; }
+      expect(await observedFirst).toMatchObject({ error: expect.objectContaining({ code: "reassessment-execution-held" }) });
+    });
+    expect(f.network).toHaveBeenCalledOnce();
+    expect(f.hooks.complete).toHaveBeenCalledTimes(2);
+  });
+  it("allows a new full-body count and reservation for a later semantic turn under the same task", async () => {
+    const f = fixture();
+    await runWireFixture(f.seed, f.hooks, async () => {
+      await reassessmentMessagesAdapter.execute(f.request);
+      f.request.messages.push({ role: "user", content: "The fully observed writer refused; correct the rationale." });
+      await reassessmentMessagesAdapter.execute(f.request);
+    });
+    expect(f.network).toHaveBeenCalledTimes(4);
+    const bodies = f.network.mock.calls.map(call => call[1]?.body);
+    expect(bodies[0]).toBe(bodies[1]); expect(bodies[2]).toBe(bodies[3]); expect(bodies[2]).not.toBe(bodies[0]);
+    expect(f.hooks.close).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ reservedTokens: 400, providerStarts: 5 }));
+  });
   it("counts the exact text/tool body, reserves finite 50K allowance, and generates with identical bytes", async () => {
     const f = fixture();
     await expect(f.execute()).resolves.toMatchObject({ text: "Reading the bound design.",
@@ -77,7 +146,7 @@ describe("restricted native Messages finite-token wire", () => {
     expect(JSON.parse(String(countBody))).toMatchObject({ model: f.seed.qualification.finiteTokenProof!.modelDigest,
       max_tokens: 100, stream: false, tool_choice: { type: "any" },
       tools: [{ name: "read_source_at_version" }, { name: "record_initiative_design_review" }] });
-    expect(f.hooks.close).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ reservedTokens: 200, providerStarts: 2 }));
+    expect(f.hooks.close).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ reservedTokens: 200, providerStarts: 3 }));
   });
 
   it("accepts source-proven zero prospective input without treating count output as generation usage", async () => {

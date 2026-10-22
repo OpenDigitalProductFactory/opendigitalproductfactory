@@ -5,10 +5,18 @@ vi.mock("@dpf/db", () => ({ prisma: {} }));
 import {
   createReassessmentCaptureHooks, hasPersistedReassessmentExecution, reassessmentExecutionManifestDigest,
   withPersistedReassessmentExecution, type ReassessmentCaptureDatabase,
+  withPersistedReassessmentQualification, readPersistedReassessmentQualificationPrefix,
+  loadPersistedReassessmentQualificationRoot,
   type PersistedReassessmentExecutionInput,
 } from "./mcp-task-reassessment-capture";
 import { assertReassessmentToolCall, runReassessmentEffect, withReassessmentTokenReservation, reassessmentTokenReservationFor,
+  runReassessmentQualificationRequest, promoteReassessmentExecution,
+  validateReassessmentCommitBoundary,
   type ReassessmentExecutionManifest, type ReassessmentExecutionContext, type ReassessmentCaptureEvent } from "./routing/reassessment-execution-scope";
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
+import { deriveReassessmentExecutionSealArtifactId, type ReassessmentQualificationManifestV2, type ReassessmentRootLocatorV2,
+  type ReassessmentExecutionSealV2 } from "./routing/reassessment-phase-contract";
+import { REASSESSMENT_NATIVE_COMPOSITION, reassessmentNativeCatalogDigest } from "./shared/reassessment-native-composition";
 
 function fixture() {
   const now = new Date();
@@ -34,7 +42,8 @@ function fixture() {
   const tx = {
     $queryRaw: vi.fn(async (..._args: unknown[]) => []), taskRun: { findUnique: vi.fn(async () => row) },
     taskArtifact: {
-      findMany: vi.fn(async () => artifacts.filter(a => a.name === "reassessment-effect-reservation-v1")),
+      findMany: vi.fn(async ({ where }: { where: { name: string | { in: string[] } } }) => artifacts.filter(a =>
+        typeof where.name === "string" ? a.name === where.name : where.name.in.includes(String(a.name)))),
       findUnique: vi.fn(async ({ where }: { where: { artifactId: string } }) => artifacts.find(a => a.artifactId === where.artifactId) ?? null),
       create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
         if (artifacts.some(a => a.artifactId === data.artifactId)) throw new Error("duplicate sealed capture");
@@ -43,7 +52,7 @@ function fixture() {
     },
     toolExecution: {
       findMany: vi.fn(async () => executions),
-      create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => { executions.push(data); return { id: `execution-${executions.length}` }; }),
+      create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => { const id = `execution-${executions.length + 1}`; executions.push({ ...data, id }); return { id }; }),
       updateMany: vi.fn(async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
         const found = executions.find((_e, i) => `execution-${i + 1}` === where.id); if (!found) return { count: 0 };
         Object.assign(found, data); return { count: 1 };
@@ -77,6 +86,137 @@ function generationEvent(sequence: number, inputTokens: number): ReassessmentCap
     input: { operation: "generation", bodyUtf8, tokenReservation: { schemaVersion: 1, reservationId: randomUUID(),
       bodySha256: createHash("sha256").update(bodyUtf8).digest("hex"), inputTokens, maxOutputTokens: 20, reservedTokens: inputTokens + 20 } } };
 }
+
+function phaseFixture() {
+  const f = fixture(); const { qualification, ...identity } = f.manifest;
+  const root: ReassessmentQualificationManifestV2 = { ...identity, schemaVersion: 2, phase: "qualification",
+    compatibility: { schemaVersion: 1, configDigest: "sha256:" + "1".repeat(64), sourceSha: "2".repeat(40), sourceContentHash: "3".repeat(64), contractSha256: "4".repeat(64),
+      owners: { transport: { version: 2, sourceSha256: "5".repeat(64) }, approval: { version: 2, sourceSha256: "6".repeat(64) },
+        worker: { version: 2, sourceSha256: "7".repeat(64) }, writer: { version: 2, sourceSha256: "8".repeat(64) } } },
+    budgetConfiguration: qualification.budgetConfiguration, bounds: { maxProviderStarts: 4, maxDurationMs: 30_000, maxOutputTokens: 20 },
+    nativeObservationUrls: ["http://dmr.invalid/version", "http://dmr.invalid/engines/status"] };
+  const locator: ReassessmentRootLocatorV2 = { schemaVersion: 2, manifestArtifactId: "ta-root", manifestDigest: reassessmentExecutionManifestDigest(root) };
+  Object.assign(f.row.a2aMetadata, { reassessmentExecution: locator });
+  f.artifacts.splice(0, 1, { id: "root-row", artifactId: locator.manifestArtifactId, taskRunId: f.row.id, producerAgentId: root.agentId,
+    name: "reassessment-qualification-root-v2", parts: [{ type: "reassessment-qualification-root-v2", mimeType: "application/json", data: root }] });
+  const authority = vi.fn(async () => {}), io = vi.fn(async () => ({ status: 200, bodyUtf8: "complete native bytes" }));
+  const hash = (data: unknown) => createHash("sha256").update(canonicalJson(data)).digest("hex");
+  const produceSeal = async () => {
+    const prefix = await f.database.$transaction(tx => readPersistedReassessmentQualificationPrefix(tx, f.input, locator, { requireSealAbsent: true }));
+    const unsigned = { ...qualification, bounds: root.bounds, providerConnectionVersion: "9".repeat(64),
+      executionPlan: { ...qualification.executionPlan, providerConnectionId: qualification.providerConnectionId, providerConnectionVersion: "9".repeat(64),
+        accountAuthMethod: "none" as const, executionChannel: "direct-api" as const },
+      nativeRuntime: { schemaVersion: 2 as const, catalogDigest: "8".repeat(64), observationDigest: prefix.digest, spendAwareBudgetClass: "balanced" as const } };
+    const { qualificationDigest: _old, ...data } = unsigned;
+    const seal: ReassessmentExecutionSealV2 = { schemaVersion: 2, root: locator, taskRunId: root.taskRunId, userId: root.userId, agentId: root.agentId,
+      requestDigest: root.requestDigest, executionFence: root.executionFence, binding: root.binding, qualificationPrefix: prefix,
+      qualification: { ...data, qualificationDigest: hash(data) }, authorityDecisionId: "normal-current-authority", sealedAt: new Date().toISOString() };
+    f.artifacts.push({ id: "seal-row", artifactId: deriveReassessmentExecutionSealArtifactId({ taskRunId: root.taskRunId, rootArtifactId: locator.manifestArtifactId,
+      rootDigest: locator.manifestDigest }), taskRunId: f.row.id, producerAgentId: root.agentId, name: "reassessment-execution-seal-v2",
+      parts: [{ type: "reassessment-execution-seal-v2", mimeType: "application/json", data: seal }] });
+    return seal;
+  };
+  const observe = async () => { for (const url of root.nativeObservationUrls) await runReassessmentQualificationRequest({ method: "GET", url }, io); };
+  return { ...f, root, locator, authority, io, produceSeal, observe };
+}
+
+describe("persisted qualification and additive execution seal", () => {
+  it.each(["current", "changed-task", "changed-root-authority", "extra-key", "malformed-scopes"])("reads only %s admitted pre-Q request authority", async condition => {
+    const f = phaseFixture(); const requestAuthority = { authorityDecisionId: "normal-allow", actingAgentId: "requester", tokenGrantScopes: ["initiative_evidence_write"] };
+    const metadata = { ...f.row.a2aMetadata, presentReviewAuthority: requestAuthority };
+    f.row.a2aMetadata = metadata;
+    f.input.a2aMetadata = structuredClone(metadata);
+    f.artifacts[0]!.metadata = { authorityDecisionId: requestAuthority.authorityDecisionId, actingAgentId: requestAuthority.actingAgentId };
+    if (condition === "changed-task") requestAuthority.authorityDecisionId = "different-allow";
+    if (condition === "changed-root-authority") f.artifacts[0]!.metadata = { ...requestAuthority, authorityDecisionId: "different-allow" };
+    if (condition === "extra-key") Object.assign(requestAuthority, { grant: true });
+    if (condition === "malformed-scopes") Object.assign(requestAuthority, { tokenGrantScopes: [null] });
+    const read = loadPersistedReassessmentQualificationRoot(f.input, { database: f.database });
+    if (condition === "current") {
+      await expect(read).resolves.toMatchObject({ seed: { taskRunId: f.root.taskRunId, compatibility: f.root.compatibility }, requestAuthority });
+    } else await expect(read).rejects.toThrow(/request authority/i);
+    expect(f.executions).toHaveLength(0);
+    expect(f.artifacts).toHaveLength(1);
+  });
+  it.each(["current", "revoked", "changed-seal", "changed-root", "displaced"])("rechecks %s authority in the writer transaction with its E reservation still outstanding", async condition => {
+    const f = phaseFixture(); let commit = false;
+    f.authority.mockImplementation(async () => { if (commit && condition === "revoked") throw new Error("authority revoked"); });
+    await withPersistedReassessmentQualification(f.input, async () => {
+      await f.observe(); const seal = await f.produceSeal();
+      const q = seal.qualification, c = REASSESSMENT_NATIVE_COMPOSITION;
+      q.executionPlan.executionChannel = "local-runtime"; q.nativeRuntime!.catalogDigest = reassessmentNativeCatalogDigest();
+      q.finiteTokenProof = { schemaVersion: 1, kind: c.kind, apiRoot: "http://dmr.invalid", runtimeVersion: c.runtimeVersion,
+        modelDigest: c.modelDigest, engineIdentity: `Running: llama.cpp ${c.engineBuild} (sha256:${c.engineArchiveDigest}) ${c.engineSourceCommit.slice(0, 7)}`,
+        engineArtifactDigest: `sha256:${c.engineArchiveDigest}`, engineSourceCommit: "72874f5", templateDigest: c.templateDigest, configDigest: "a".repeat(64) };
+      const { qualificationDigest: _old, ...unsigned } = q;
+      q.qualificationDigest = createHash("sha256").update(canonicalJson(unsigned)).digest("hex");
+      await promoteReassessmentExecution(async () => {
+        await runReassessmentEffect({ kind: "tool", name: f.root.binding.writerToolName, input: {} }, async () => {
+          commit = true;
+          if (condition === "changed-seal") seal.authorityDecisionId = "different-authority";
+          if (condition === "changed-root") f.root.bounds = { ...f.root.bounds, maxProviderStarts: f.root.bounds.maxProviderStarts + 1 };
+          if (condition === "displaced") f.row.status = "input-required";
+          const transactions = vi.mocked(f.database.$transaction).mock.calls.length;
+          const reads = f.tx.toolExecution.findMany.mock.calls.length;
+          const verify = validateReassessmentCommitBoundary(f.tx, f.input);
+          if (condition === "current") await expect(verify).resolves.toBeUndefined();
+          else await expect(verify).rejects.toThrow(/commit-authority/i);
+          expect(f.tx.toolExecution.findMany.mock.calls).toHaveLength(reads);
+          expect(vi.mocked(f.database.$transaction).mock.calls).toHaveLength(transactions);
+          return "synthetic canonical outcome";
+        });
+      });
+    }, { database: f.database, validateExecutionAuthority: f.authority });
+    expect(f.authority).toHaveBeenCalledTimes(condition === "current" || condition === "revoked" ? 3 : 2);
+  });
+  it("uses the same opened root and mirrored prefix for a genuine stored seal before E", async () => {
+    const f = phaseFixture();
+    await withPersistedReassessmentQualification(f.input, async () => {
+      await f.observe(); await f.produceSeal();
+      await promoteReassessmentExecution(() => runReassessmentEffect({ kind: "provider", name: "messages", input: { operation: "generation" } }, f.io));
+    }, { database: f.database, validateExecutionAuthority: f.authority });
+    expect(f.io).toHaveBeenCalledTimes(3); expect(f.authority).toHaveBeenCalledTimes(2);
+    expect(f.executions.map(row => (row.parameters as { event: { sequence: number } }).event.sequence)).toEqual([1, 2, 3]);
+    expect(f.artifacts.filter(row => row.name === "reassessment-execution-open-v1")).toHaveLength(1);
+    expect(f.artifacts.filter(row => row.name === "reassessment-execution-close-v1")).toHaveLength(1);
+  });
+  it.each(["missing-execution", "missing-observation", "unknown-result", "changed-producer", "changed-output", "missing-output", "missing-authority"])("refuses %s before E I/O", async condition => {
+    const f = phaseFixture(); const execute = vi.fn(async () => ({}));
+    await withPersistedReassessmentQualification(f.input, async () => {
+      await f.observe(); await f.produceSeal();
+      if (condition === "missing-execution") f.executions.pop();
+      if (condition === "missing-observation") f.artifacts.splice(f.artifacts.findIndex(row => row.name === "reassessment-effect-observed-v1"), 1);
+      if (condition === "unknown-result") f.executions[0]!.success = false;
+      if (condition === "changed-producer") f.artifacts.find(row => row.name === "reassessment-effect-observed-v1")!.producerAgentId = "other";
+      if (condition === "changed-output") f.executions[0]!.result = { executionStatus: "observed", output: "changed bytes" };
+      if (condition === "missing-output") {
+        f.executions[0]!.result = { executionStatus: "observed", output: null };
+        delete ((f.artifacts.find(row => row.name === "reassessment-effect-observed-v1")!.parts as Array<{ data: Record<string, unknown> }>)[0]!.data).output;
+      }
+      await expect(promoteReassessmentExecution(execute)).rejects.toThrow(/prefix|seal/i);
+    }, { database: f.database, ...(condition === "missing-authority" ? {} : { validateExecutionAuthority: f.authority }) });
+    expect(execute).not.toHaveBeenCalled(); expect(f.io).toHaveBeenCalledTimes(2);
+  });
+  it("refuses promotion while the reserved GET has not completed", async () => {
+    const f = phaseFixture(); let finish!: () => void; let started!: () => void;
+    const entered = new Promise<void>(resolve => { started = resolve; }); const barrier = new Promise<void>(resolve => { finish = resolve; });
+    await withPersistedReassessmentQualification(f.input, async () => {
+      const pending = runReassessmentQualificationRequest({ method: "GET", url: f.root.nativeObservationUrls[0]! }, async () => { started(); await barrier; return {}; });
+      await entered;
+      await expect(f.database.$transaction(tx => readPersistedReassessmentQualificationPrefix(tx, f.input, f.locator, { requireSealAbsent: true }))).rejects.toThrow(/prefix/i);
+      finish(); await pending;
+    }, { database: f.database });
+  });
+  it("refuses a second Q reservation after the seal was inserted", async () => {
+    const f = phaseFixture();
+    await withPersistedReassessmentQualification(f.input, async () => {
+      await f.observe(); await f.produceSeal();
+      await expect(f.database.$transaction(tx => readPersistedReassessmentQualificationPrefix(tx, f.input, f.locator, { requireSealAbsent: true }))).rejects.toThrow(/seal/i);
+    }, { database: f.database });
+    await expect(withPersistedReassessmentQualification(f.input, f.io, { database: f.database })).rejects.toThrow();
+    expect(f.io).toHaveBeenCalledTimes(2);
+  });
+});
 
 describe("finite durable generation reservation ledger", () => {
   it("captures two generations up to 50K under an exclusive task lock before I/O", async () => {

@@ -285,3 +285,22 @@ The [MCP authorization procedure](mcp-tool-authorization-runbook.md#recovering-a
 describes the current-authority checks, generation reservation and approval
 continuation. Completion still requires the original task's genuine governed
 writer receipt and the readiness finding it actually records.
+
+### A present assessment authorized by an approved policy
+
+Original recovery cannot restart uncertain or exhausted work. A separately
+approved retained policy may explicitly authorize a present assessment of its
+exact unchanged requirements. Supply its `reassessmentAuthorizationItemId` on
+the bounded `get_backlog_item` read alongside `itemId` and `recoveryGate`, then
+use the returned complete `request_coworker` packet. The current human,
+connection, author, independent reviewer and both Workrooms must still authorize
+it. A policy identifier never supplies those permissions.
+
+Every accepted assessment consumes that policy's allowance in every state.
+Retrying a request returns the existing assessment without another execution
+window. An initial qualification failure also consumes its accepted allocation;
+do not issue another key or connection family to replace it. The original
+unknown result remains unchanged. Only genuine governed receipts satisfy the
+requirements, and the parent's next normal admission check must still pass.
+See the [present reassessment authorization procedure](mcp-tool-authorization-runbook.md#explicitly-authorized-present-reassessments)
+for capture, budget, compatibility and restore restrictions.

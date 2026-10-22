@@ -42,6 +42,7 @@ import {
 } from "../routing/provider-capacity/store";
 import { chatAdapter } from "../routing/chat-adapter";
 import { responsesAdapter } from "../routing/responses-adapter";
+import { reassessmentMessagesAdapter } from "../routing/reassessment-messages-adapter";
 import "../routing/image-gen-adapter"; // EP-INF-009c: registers "image_gen" adapter
 import "../routing/embedding-adapter"; // EP-INF-009c: registers "embedding" adapter
 import "../routing/transcription-adapter"; // EP-INF-009c: registers "transcription" adapter
@@ -61,11 +62,12 @@ import { providerInferenceFetch, withInferenceCancellationFetch } from "./provid
 import { assertGovernedInferenceAuthority, currentGovernedInferenceDeadline } from "@/lib/routing/governed-inference-deadline";
 import { InferenceError } from "../routing/inference-error";
 import { accountAuthMethod, providerAccountExecutionBlock, ProviderAccountSelectionChangedError } from "../routing/provider-account-candidates";
-import { assertReassessmentActive, assertReassessmentPlan, refuseReassessmentExecution,
+import { assertReassessmentActive, assertReassessmentPlan, currentFiniteReassessmentExecution, refuseReassessmentExecution,
   runReassessmentEffect, validateReassessmentToolCalls } from "../routing/reassessment-execution-scope";
-import { assertReassessmentQualificationCurrent } from "./reassessment-execution-qualification";
+import { assertReassessmentQualificationCurrent, refreshReassessmentNativeRuntime } from "./reassessment-execution-qualification";
 import { readReassessmentProviderAuthHeaders } from "./provider-account-credentials";
-import { captureReassessmentHttpResponse } from "./reassessment-http-capture";
+import { captureReassessmentHttpResponse, withReassessmentHttpTransport } from "./reassessment-http-capture";
+import { reassessmentNativeMessagesFetch } from "./reassessment-native-runtime";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -306,6 +308,8 @@ export async function callProvider(
     responsePolicy: {},
   };
   const reassessment = assertReassessmentPlan({ providerId, modelId, plan: effectivePlan, tools });
+  const finite = currentFiniteReassessmentExecution();
+  if ((reassessment?.qualification.budgetConfiguration?.configuredPerTaskLimit ?? 0) > 0 && !finite) return refuseReassessmentExecution("reassessment-finite-execution-unproven");
   const executionAdapterRaw = effectivePlan.executionAdapter;
   let selector: ExecutionAdapterSelector | null;
   try {
@@ -320,7 +324,7 @@ export async function callProvider(
     return refuseReassessmentExecution("reassessment-requires-in-process-HTTP");
   }
   if (reassessment && (effectivePlan.providerSettings.providerTools !== undefined
-    || effectivePlan.providerSettings.thinking_budget_tokens !== undefined || effectivePlan.localThinkingBudgetEvidence !== undefined)) {
+    || effectivePlan.providerSettings.thinking_budget_tokens !== undefined || !finite && effectivePlan.localThinkingBudgetEvidence !== undefined)) {
     return refuseReassessmentExecution("reassessment-hidden-tools-or-runtime-probe");
   }
   // Required tool choice on an adapter that cannot force it: refuse, or — for a
@@ -435,7 +439,7 @@ export async function callProvider(
 
   // 3. Dispatch to adapter (instrumented for Prometheus metrics)
   const adapter =
-    reassessment ? executionAdapterRaw === "responses" ? responsesAdapter : chatAdapter
+    finite ? reassessmentMessagesAdapter : reassessment ? executionAdapterRaw === "responses" ? responsesAdapter : chatAdapter
     : selector !== null
       ? await resolveExecutionAdapter(selector, effectivePlan.capabilityRequirements)
       : getExecutionAdapter(executionAdapterRaw as string);
@@ -457,6 +461,8 @@ export async function callProvider(
   let result;
   let investment: import("../routing/adapter-telemetry-writer").InvestmentAttemptSnapshot | null = null;
   let investmentGuidance = "";
+  const parentFetch = providerId === "local" ? currentGovernedInferenceDeadline()?.localFetch : undefined;
+  const actualFetch = parentFetch ? withInferenceCancellationFetch(parentFetch) : providerInferenceFetch;
   try {
     const execute = async () => {
       await assertProviderDispatchCapacity(providerId);
@@ -479,14 +485,14 @@ export async function callProvider(
       await assertGovernedInferenceAuthority(currentInferenceSignal());
       currentInferenceSignal()?.throwIfAborted();
       if (reassessment) await assertReassessmentQualificationCurrent(reassessment.qualification);
-      const parentFetch = providerId === "local" ? currentGovernedInferenceDeadline()?.localFetch : undefined;
+      if (finite) await refreshReassessmentNativeRuntime(finite.qualification, actualFetch);
       return adapter.execute({
         providerId,
         modelId,
         plan: effectivePlan,
         provider: { baseUrl, headers },
         readLocalThinkingBudgetEvidence: getLocalThinkingBudgetEvidence,
-        fetchImpl: reassessmentFetch(parentFetch ? withInferenceCancellationFetch(parentFetch) : providerInferenceFetch, effectivePlan, tools),
+        fetchImpl: finite ? reassessmentNativeMessagesFetch(effectivePlan, tools) : reassessmentFetch(actualFetch, effectivePlan, tools),
         messages,
         systemPrompt: investmentGuidance ? `${systemPrompt}\n\n${investmentGuidance}` : systemPrompt,
         tools,
@@ -495,8 +501,10 @@ export async function callProvider(
       });
     };
     if (isLocalProviderId(providerId)) {
-      result = await withLocalInferenceLock(execute, { modelId, origin,
+      const admitted = () => withLocalInferenceLock(execute, { modelId, origin,
         signal: currentInferenceSignal(currentGovernedInferenceDeadline()?.signal) });
+      result = finite ? await withReassessmentHttpTransport({ fetchImpl: actualFetch,
+        assertCurrent: () => assertReassessmentQualificationCurrent(finite.qualification) }, admitted) : await admitted();
     } else {
       releaseInferenceSlot = await acquireInferenceSlot(engineKeyForProvider(providerId), origin, {
         providerId,

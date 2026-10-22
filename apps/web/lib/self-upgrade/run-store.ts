@@ -4,6 +4,7 @@ import { prisma, Prisma } from "@dpf/db";
 import { safeSyncSelfUpgradeChangeRecord } from "@/lib/self-upgrade/change-record";
 import { agentEventBus } from "@/lib/agent-event-bus";
 import { recordCorrectiveRecoveryEvidence } from "@/lib/backlog/capture-corrective-bi";
+import { validateReassessmentRuntimeCompatibility, type ReassessmentRuntimeCompatibility } from "@/lib/shared/reassessment-owner-versions";
 import {
   deriveFailureReason,
   FAILURE_REASON_MAX,
@@ -495,6 +496,21 @@ export async function recordRunRecoveryPoint(
       }),
     },
   });
+}
+
+export type ReassessmentCompatibilityReport = {
+  stage: "preflight" | "swap"; observedAt: string; proof: ReassessmentRuntimeCompatibility;
+};
+
+/** Portal compatibility observations never replace the installer's signed readiness. */
+export async function recordReassessmentCompatibility(runId: string, report: ReassessmentCompatibilityReport): Promise<SelfUpgradeRunRow> {
+  validateReassessmentRuntimeCompatibility(report.proof);
+  if (!["preflight", "swap"].includes(report.stage) || !Number.isFinite(Date.parse(report.observedAt))) throw new Error("reassessment-compatibility-unproven");
+  const current = await prisma.selfUpgradeRun.findUnique({ where: { runId }, select: { completionEvidence: true } });
+  const evidence = asEvidenceRecord(current?.completionEvidence);
+  return prisma.selfUpgradeRun.update({ where: { runId }, data: { completionEvidence: toJson({ ...evidence,
+    reassessmentCompatibility: { ...asEvidenceRecord(evidence.reassessmentCompatibility), [report.stage]: report },
+  }) } });
 }
 
 /**

@@ -94,10 +94,13 @@ export async function authorizeCoworkerRequest(
     return deny("The connection's authorization is no longer current.");
   }
   const binding = parseInitiativeReviewBinding(params.initiativeReviewBinding);
+  if (binding?.presentReassessment && recoveryTarget !== undefined) {
+    return deny("A present assessment cannot resume an original review. Use its exact issued request for readback.");
+  }
   const lane = binding?.gate === "objective-mapping" && binding.writerToolName === "record_initiative_evidence"
     ? readinessLaneForRole("acceptance-reviewer")?.lane
     : binding && INITIATIVE_READINESS_LANES[binding.writerToolName];
-  if (options?.sourceOnly && (!binding || binding.eligibleEvidenceActivityIds?.length
+  if (options?.sourceOnly && (!binding || binding.presentReassessment || binding.eligibleEvidenceActivityIds?.length
     || !["record_initiative_design_review", "record_initiative_architecture_review"].includes(binding.writerToolName))) {
     return deny("This review does not have a source-only activity contract.");
   }
@@ -189,13 +192,24 @@ export async function authorizeCoworkerRequest(
         })() : null });
       return recovery.reviewerRoutes.filter((route) => route.independent).map((route) => route.requestCoworker);
     })();
-  if (!issued.some((issuedPacket) => canonicalJson(issuedPacket) === canonicalJson(params))) {
+  const comparable = binding.presentReassessment ? await (async () => {
+    if (recoveryTarget !== undefined) return [];
+    const { issuePresentReassessmentRequest } = await import("@/lib/mcp-task-review-reassessment");
+    const packets: Record<string, unknown>[] = [];
+    for (const packet of issued) {
+      try { packets.push(await issuePresentReassessmentRequest({ packet, authorizationItemId: binding.presentReassessment!.authorizationItemId,
+        userId, actingAgentId: context.agentId!, tokenGrantScopes: context.tokenGrantScopes ?? [] })); }
+      catch { /* An unproven source does not issue an alternative packet. */ }
+    }
+    return packets;
+  })() : issued;
+  if (!comparable.some((issuedPacket) => canonicalJson(issuedPacket) === canonicalJson(params))) {
     if (!options?.sourceOnly && await hasCompletedReview(params, userId, context)) return { bounded: true };
     return deny("The review request has changed or is no longer eligible. This refusal does not deliver a replacement packet. Read get_backlog_item with itemId and recoveryGate for the current exact request or explicit recovery; never reconstruct it.");
   }
   // The native door must retain an issued original-task locator. Dropping it
   // cannot turn a recovery request into a new connection's duplicate task.
-  if (!options?.sourceOnly && !options?.forceBounded) {
+  if (!binding.presentReassessment && !options?.sourceOnly && !options?.forceBounded) {
     const { issueOriginalReviewRecoveryTarget } = await import("@/lib/mcp-task-review-recovery");
     const key = await resolveMcpTaskAuthorityKey({ tokenId: context.apiTokenId, userId, source: "oauth" });
     if (!key) return deny("The current connection's review task authority is unavailable.");

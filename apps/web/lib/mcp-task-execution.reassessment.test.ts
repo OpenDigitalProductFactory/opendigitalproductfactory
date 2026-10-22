@@ -4,6 +4,7 @@ const state = vi.hoisted(() => ({ active: false, events: [] as string[], receipt
 const db = vi.hoisted(() => ({ findTaskRun: vi.fn(), updateTaskRun: vi.fn(), findModelConfig: vi.fn() }));
 const autonomous = vi.hoisted(() => ({ resolveAgent: vi.fn(), resolveTools: vi.fn(), execute: vi.fn() }));
 const capture = vi.hoisted(() => vi.fn());
+const presentWorker = vi.hoisted(() => vi.fn());
 const receiptLookup = vi.hoisted(() => vi.fn());
 
 vi.mock("@dpf/db", () => ({ prisma: {
@@ -16,6 +17,7 @@ vi.mock("@/lib/tak/autonomous-work-run", () => ({
   executeAutonomousAgenticLoop: (...args: unknown[]) => autonomous.execute(...args),
 }));
 vi.mock("./mcp-task-reassessment-capture", () => ({ withPersistedReassessmentExecution: (...args: unknown[]) => capture(...args) }));
+vi.mock("./mcp-task-reassessment-worker", () => ({ withPresentReassessmentWorker: (...args: unknown[]) => presentWorker(...args) }));
 vi.mock("./routing/reassessment-execution-scope", async importOriginal => ({
   ...await importOriginal<typeof import("./routing/reassessment-execution-scope")>(),
   matchesPersistedReassessmentScope: () => state.active,
@@ -56,7 +58,7 @@ function admitted(restricted = true) {
   return { id: "run-record", taskRunId: "TR-REASSESSMENT", userId: "human", currentAgentId: parsed.agentId,
     status: "working", updatedAt: new Date(), progressPayload: structuredClone(progressPayload),
     a2aMetadata: { trigger: "external-mcp", requestDigest: fence.requestDigest, initiativeReviewBinding: binding,
-      ...(restricted ? { reassessmentExecution: marker } : {}) } };
+      ...(restricted ? { reassessmentExecution: structuredClone(marker) } : {}) } };
 }
 function run(params = parsed) {
   return executeRemoteTaskAttempt({ run: { id: "run-record", taskRunId: "TR-REASSESSMENT", contextId: "thread" },
@@ -68,7 +70,7 @@ const receipt = { receiptId: "canonical-receipt", gate: "research", decision: "p
 const writes = () => db.updateTaskRun.mock.calls.map(([args]) => args.data as Record<string, unknown>);
 
 beforeEach(() => {
-  vi.clearAllMocks(); state.active = false; state.events = []; state.receipt = null;
+  vi.resetAllMocks(); state.active = false; state.events = []; state.receipt = null;
   db.findTaskRun.mockResolvedValue(admitted()); db.updateTaskRun.mockResolvedValue({ count: 1 }); db.findModelConfig.mockResolvedValue(null);
   receiptLookup.mockImplementation(async () => state.receipt);
   capture.mockImplementation(async (input, callback) => {
@@ -83,6 +85,10 @@ beforeEach(() => {
   autonomous.resolveTools.mockImplementation(async () => { state.events.push("tools");
     return { tools: [], toolsForProvider: [], deferredTools: [] }; });
   autonomous.execute.mockImplementation(async () => { state.events.push("loop"); return { content: "Review held.", executedTools: [] }; });
+  presentWorker.mockImplementation(async (_input, _ports, callback) => {
+    state.events.push("qualification-worker"); state.active = true;
+    try { return await callback(); } finally { state.active = false; }
+  });
 });
 
 describe("persisted reassessment worker boundary", () => {
@@ -95,6 +101,7 @@ describe("persisted reassessment worker boundary", () => {
       a2aMetadata: admitted().a2aMetadata, progressPayload }), expect.any(Function));
     expect(autonomous.resolveTools).toHaveBeenCalledWith(expect.objectContaining({ restrictedReviewBinding: binding }));
     expect(autonomous.execute).toHaveBeenCalledWith(expect.objectContaining({ taskExecutionFence: fence, tokenGrantScopes: parsed.authorityScope }));
+    expect(autonomous.execute.mock.calls[0][0].canonicalReviewReceipt).toBeTypeOf("function");
     expect(writes()[0]).toMatchObject({ progressPayload: { resumeReservedAt: fence.reservation, dispatch: progressPayload.dispatch,
       deadlineAt: progressPayload.deadlineAt } });
   });
@@ -103,6 +110,18 @@ describe("persisted reassessment worker boundary", () => {
     db.findTaskRun.mockResolvedValue(admitted(false)); await run();
     expect(capture).not.toHaveBeenCalled(); expect(state.events).toEqual(["agent", "tools", "loop"]);
     expect(autonomous.resolveTools.mock.calls[0][0]).not.toHaveProperty("restrictedReviewBinding");
+    expect(autonomous.execute.mock.calls[0][0]).not.toHaveProperty("canonicalReviewReceipt");
+  });
+
+  it("routes a V2 root through the qualification owner before preparation, then recurses once under its same fence", async () => {
+    const row = admitted(); row.a2aMetadata.reassessmentExecution = { ...marker, schemaVersion: 2 };
+    db.findTaskRun.mockResolvedValue(row);
+    await run();
+    expect(capture).not.toHaveBeenCalled(); expect(presentWorker).toHaveBeenCalledOnce();
+    expect(state.events).toEqual(["qualification-worker", "agent", "tools", "loop"]);
+    expect(presentWorker.mock.calls[0][0]).toMatchObject({ persistedInput: { executionFence: fence,
+      progressPayload, a2aMetadata: row.a2aMetadata }, parsed, threadId: "thread" });
+    expect(autonomous.execute.mock.calls[0][0].taskExecutionFence).toEqual(fence);
   });
 
   it("preserves ordinary preparation errors without changing their settlement behavior", async () => {
@@ -133,6 +152,30 @@ describe("persisted reassessment worker boundary", () => {
     expect(writes()[0]).toMatchObject({ status: "completed", progressPayload: { reviewOutcome: receipt, requiresApproval: false } });
   });
 
+  it.each([null, { kind: "present-reassessment-quarantine", replayAllowed: false }])(
+    "holds a quarantined predecessor before all preparation, including a malformed marker", async quarantine => {
+      const row = admitted(false); Object.assign(row.progressPayload, { reassessmentQuarantine: quarantine });
+      db.findTaskRun.mockResolvedValue(row);
+      expect(await run()).toMatchObject({ result: { status: "input-required", resumable: false } });
+      expect(state.events).toEqual([]); expect(capture).not.toHaveBeenCalled();
+      expect(writes()).toEqual([]);
+    },
+  );
+  it("returns a genuine canonical receipt before a predecessor quarantine hold", async () => {
+    const row = admitted(false); Object.assign(row.progressPayload, { reassessmentQuarantine: { replayAllowed: false } });
+    db.findTaskRun.mockResolvedValue(row); state.receipt = receipt;
+    expect(await run()).toMatchObject({ result: { status: "completed", structuredContent: receipt } });
+    expect(state.events).toEqual([]); expect(capture).not.toHaveBeenCalled();
+  });
+
+  it("does not let receipt reconciliation overwrite a canceled or newer task after a lost CAS", async () => {
+    const row = admitted(false); state.receipt = receipt;
+    db.findTaskRun.mockResolvedValueOnce(row).mockResolvedValue({ ...row, status: "canceled" });
+    db.updateTaskRun.mockResolvedValue({ count: 0 });
+    expect(await run()).toMatchObject({ result: { status: "canceled", resumable: false } });
+    expect(state.events).toEqual([]); expect(capture).not.toHaveBeenCalled();
+  });
+
   it("does not adopt a later reservation when the sealed wrapper invokes its callback", async () => {
     capture.mockImplementation(async (_input, callback) => {
       const displaced = admitted(); displaced.progressPayload.resumeReservedAt = "later-reservation";
@@ -151,7 +194,7 @@ describe("persisted reassessment worker boundary", () => {
 
   it("reconciles a canonical receipt committed just before the capture wrapper throws", async () => {
     capture.mockImplementation(async () => { state.receipt = receipt; throw new ReassessmentExecutionError("reassessment-capture-incomplete"); });
-    expect(await run()).toMatchObject({ result: { status: "completed", structuredContent: receipt, isError: false } });
+    expect(await run()).toMatchObject({ result: { status: "completed", structuredContent: receipt, idempotentReplay: false, isError: false } });
     expect(autonomous.resolveAgent).not.toHaveBeenCalled(); expect(writes()).toHaveLength(1);
     expect(writes()[0]).toMatchObject({ status: "completed", progressPayload: { reviewOutcome: receipt } });
   });
@@ -162,6 +205,56 @@ describe("persisted reassessment worker boundary", () => {
     expect(await run()).toMatchObject({ result: { status: "completed", structuredContent: receipt, isError: false } });
     expect(writes()).toHaveLength(1); expect(writes()[0]).toMatchObject({ status: "completed", progressPayload: { reviewOutcome: receipt } });
     expect(JSON.stringify(writes())).not.toContain('"status":"failed"');
+  });
+
+  it.each(["heartbeat", "quarantine", "unknown"])("settles a genuine post-error receipt after a same-fence %s update", async change => {
+    const initial = admitted(false), fresh = { ...initial, updatedAt: new Date(initial.updatedAt.getTime() + 1000),
+      progressPayload: { ...initial.progressPayload, heartbeatAt: "fresh-heartbeat" } };
+    if (change === "quarantine") Object.assign(fresh.progressPayload, { reassessmentQuarantine: { replayAllowed: false } });
+    if (change === "unknown") Object.assign(fresh.progressPayload, { executionUncertainty: {
+      schemaVersion: 1, kind: "execution-uncertain", settlement: "unknown",
+    } });
+    db.findTaskRun.mockResolvedValue(initial);
+    db.updateTaskRun.mockResolvedValueOnce({ count: 0 }).mockResolvedValueOnce({ count: 1 });
+    autonomous.execute.mockImplementation(async () => { state.receipt = receipt; db.findTaskRun.mockResolvedValue(fresh); throw Error("post-write acknowledgement lost"); });
+    expect(await run()).toMatchObject({ result: { status: "completed", structuredContent: receipt, idempotentReplay: false } });
+    expect(db.updateTaskRun).toHaveBeenCalledTimes(2);
+    expect(db.updateTaskRun.mock.calls[1][0]).toMatchObject({ where: { status: "working", updatedAt: fresh.updatedAt },
+      data: { progressPayload: { heartbeatAt: "fresh-heartbeat", deadlineAt: progressPayload.deadlineAt, reviewOutcome: receipt } } });
+    if (change === "unknown") expect(writes()[1].progressPayload).toMatchObject({
+      executionUncertaintyResolution: { reviewReceiptId: receipt.receiptId, prior: { executionUncertainty: { settlement: "unknown" } } },
+    });
+    expect(autonomous.execute).toHaveBeenCalledOnce(); expect(capture).not.toHaveBeenCalled();
+  });
+
+  it.each(["reservation", "dispatch", "authority", "request", "actor", "user", "canceled"])(
+    "does not refresh receipt settlement across a changed %s", async change => {
+      const initial = admitted(false), fresh = admitted(false); fresh.updatedAt = new Date(initial.updatedAt.getTime() + 1000);
+      if (change === "reservation") fresh.progressPayload.resumeReservedAt = "new-reservation";
+      if (change === "dispatch") fresh.progressPayload.dispatch.claimedAt = "new-dispatch";
+      if (change === "authority") Object.assign(fresh.progressPayload, { reviewExecutionAuthority: { schemaVersion: 1, decisionId: "new-authority" } });
+      if (change === "request") fresh.a2aMetadata.requestDigest = "2".repeat(64);
+      if (change === "actor") fresh.currentAgentId = "AGT-WS-OTHER";
+      if (change === "user") fresh.userId = "other-human";
+      if (change === "canceled") fresh.status = "canceled";
+      db.findTaskRun.mockResolvedValue(initial); db.updateTaskRun.mockResolvedValueOnce({ count: 0 });
+      autonomous.execute.mockImplementation(async () => { state.receipt = receipt; db.findTaskRun.mockResolvedValue(fresh); throw Error("post-write acknowledgement lost"); });
+      expect(await run()).toMatchObject({ result: { status: fresh.status } });
+      expect(db.updateTaskRun).toHaveBeenCalledOnce(); expect(autonomous.execute).toHaveBeenCalledOnce();
+    },
+  );
+
+  it("stops after the single fresh receipt CAS loses to cancellation", async () => {
+    const initial = admitted(false), fresh = { ...initial, updatedAt: new Date(initial.updatedAt.getTime() + 1000) };
+    db.findTaskRun.mockResolvedValue(initial);
+    db.updateTaskRun.mockImplementation(async () => {
+      if (db.updateTaskRun.mock.calls.length === 2) db.findTaskRun.mockResolvedValue({ ...fresh, status: "canceled" });
+      return { count: 0 };
+    });
+    autonomous.execute.mockImplementation(async () => { state.receipt = receipt; db.findTaskRun.mockResolvedValue(fresh); throw Error("post-write acknowledgement lost"); });
+    expect(await run()).toMatchObject({ result: { status: "canceled", resumable: false } });
+    expect(db.updateTaskRun).toHaveBeenCalledTimes(2); expect(db.findTaskRun).toHaveBeenCalledTimes(3);
+    expect(autonomous.execute).toHaveBeenCalledOnce();
   });
 
   it.each(["reassessment-capture-incomplete", "reassessment-effect-outcome-uncertain"])("holds %s as sanitized unknown execution when no canonical receipt exists", async code => {
