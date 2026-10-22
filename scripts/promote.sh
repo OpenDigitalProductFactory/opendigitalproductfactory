@@ -914,7 +914,22 @@ if [[ $_dry_run -eq 0 ]]; then
     printf 'error: cannot resolve HEAD of build source %s\n' "$PROMOTE_SOURCE" >&2
     exit 1
   }
-  if [[ -n "$(git -C "$PROMOTE_SOURCE" status --porcelain 2>/dev/null || true)" ]]; then
+  # LFS clean filters spool even unchanged materialized files. The source is
+  # mounted read-only, so give this check private scratch storage outside it.
+  _source_lfs_storage=$(mktemp -d) || {
+    printf 'error: cannot allocate scratch storage for build source verification\n' >&2
+    exit 1
+  }
+  # A missing/broken clean filter is unverifiable source, never a clean tree.
+  # Keep Git's diagnostic so the failure names the tool/filter that failed.
+  if ! _source_status=$(git -c core.hooksPath=/dev/null -c "lfs.storage=$_source_lfs_storage" \
+    -C "$PROMOTE_SOURCE" status --porcelain); then
+    rm -rf -- "$_source_lfs_storage"
+    printf 'error: cannot verify build source status (including Git LFS filters); refusing to build an image with unverified source identity\n' >&2
+    exit 1
+  fi
+  rm -rf -- "$_source_lfs_storage"
+  if [[ -n "$_source_status" ]]; then
     _built_sha="${_built_sha}-dirty"
   fi
   if [[ "$PROMOTE_TARGET_SHA" != "$_built_sha" ]]; then
