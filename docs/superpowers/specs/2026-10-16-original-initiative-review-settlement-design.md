@@ -606,7 +606,7 @@ membership, unavailable evidence or unauthorized original-owner access refuse.
 | AC-RA-4 | OBJ-CONTAIN | A qualified existing in-process provider composition exposes exactly read_source_at_version and the bound canonical writer. The backend enforces the names, immutable reader arguments and writer binding on every actual dispatch path. Native CLI, shell, browser, filesystem tools, account/credential preparation, alternate task APIs, discovery escalation and undeclared provider tools are unavailable. Schema filtering alone fails qualification. |
 | AC-RA-5 | OBJ-HISTORY, OBJ-CONTAIN | Before execution, authenticated capture binds task, request, reservation, generation, authority, exact tools, provider configuration and immutable artifact. Missing or invalid pre-effect capture refuses with zero starts. Post-start capture failure preserves uncertain consumption and blocks further effects while reconciling any genuine committed receipt first. No historical closure is inferred. |
 | AC-RA-6 | OBJ-PRESENT, OBJ-FENCE | Only the current independent canonical writer issues the new receipt. Durable supersession binds it to the current requirement and quarantined originals. It changes no original outcome, clears no unknown effect and authorizes no replay. Cancellation and receipt races retain one durable winner. |
-| AC-RA-7 | OBJ-FENCE, OBJ-CONTAIN | Canonical admission verifies compatible transport, approval, worker and writer versions. Mixed-version admission and unsafe downgrade refuse. Disabling admission retains compatible fences/readers and all unresolved histories. |
+| AC-RA-7 | OBJ-FENCE, OBJ-CONTAIN | Canonical admission verifies compatible transport, approval, worker and writer versions. Mixed-version admission and unsafe downgrade refuse. Disabling admission retains compatible fences/readers and all unresolved histories. Canonical self-upgrade database rollback also refuses before restoration when it cannot prove retention of those obligations or genuine complete retirement. |
 | AC-RA-8 | OBJ-PRESENT, OBJ-CONTAIN | Source tests, real PostgreSQL races and canonical served acceptance prove both a restricted positive reassessment and refusal. D2/4E are never relaunched. Genuine current receipts and normal BI-285EF102 plan admission precede review-recovery completion; application under-load acceptance remains with the parent. |
 
 ### Existing substrate and actual execution boundary
@@ -942,6 +942,24 @@ rollback cannot restore incompatible writer/reader bytes while retained
 obligations require the fences; quiescence alone is not retirement proof. These
 deployment and compatibility producers remain unimplemented and require real
 positive, missing-proof, mixed-version and unsafe-downgrade verification.
+
+The existing canonical PostgreSQL rollback owner,
+`apps/web/lib/self-upgrade/rollback.ts`, restores an earlier database snapshot;
+image compatibility alone cannot preserve newer task fences or capture history.
+R4 therefore includes a pre-restore obligation check at this owner, serialized
+with reassessment admission. Before restoration, positively establish retention
+of every required TaskRun, fence and capture obligation, or complete authenticated
+retirement and reconciliation of the capabilities and possibly started effects.
+Missing, uncertain or stale proof refuses before any restore effect. Reuse the
+existing canonical state and rollback contract; do not invent a second history
+store or infer retirement from quiescence or an empty active-task list.
+Test a recovery point predating admission, concurrent admission, missing proof,
+retained obligations and genuine retirement. Existing destructive permissions
+and typed confirmation remain mandatory. This scope covers only canonical
+self-upgrade database rollback; arbitrary privileged database/file/host
+administration remains the declared trusted-admin boundary. WWMD decision
+`DI-31985D298EC9` selected this pending design clarification; it grants neither
+amendment approval nor implementation admission.
 
 Only canonical `request_self_upgrade` advances the install. Served acceptance
 verifies compatible writer/approval/transport coverage, a restricted positive
