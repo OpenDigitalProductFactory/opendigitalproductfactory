@@ -141,15 +141,27 @@ describe.skipIf(!url)("atomic production reassessment hooks on PostgreSQL", () =
     expect(await fixture.db.taskRun.count()).toBe(2); expect(await fixture.db.taskMessage.count()).toBe(2); expect(await fixture.db.taskArtifact.count()).toBe(0);
   });
   it("seals the complete mirrored Q prefix and preserves every original unknown limit and attempt", async () => {
-    const f = await admit(inputFor(await setup(), "TR-fixture-finite")), effect = vi.fn(async () => {}), prior = json(f.row.a2aMetadata);
-    await seal(f, () => withReassessmentTokenReservation({ bodyUtf8: "synthetic-body", inputTokens: 100, maxOutputTokens: 100 },
-      () => runReassessmentEffect({ kind: "provider", name: "synthetic-generation", input: { operation: "generation", bodyUtf8: "synthetic-body", tokenReservation: reassessmentTokenReservationFor("synthetic-body") } }, effect)));
+    const output = { status: 200, headers: [["content-type", "application/json"]], bodyUtf8: JSON.stringify({ content: "Complete synthetic generation response." }) };
+    const f = await admit(inputFor(await setup(), "TR-fixture-finite")), effect = vi.fn(async () => output), prior = json(f.row.a2aMetadata);
+    await seal(f, async () => {
+      expect(await withReassessmentTokenReservation({ bodyUtf8: "synthetic-body", inputTokens: 100, maxOutputTokens: 100 },
+        () => runReassessmentEffect({ kind: "provider", name: "synthetic-generation", input: { operation: "generation", bodyUtf8: "synthetic-body", tokenReservation: reassessmentTokenReservationFor("synthetic-body") } }, effect))).toEqual(output);
+    });
     expect(effect).toHaveBeenCalledOnce(); expect(await fixture.db.taskRun.count()).toBe(3);
     expect((await fixture.db.taskRun.findUniqueOrThrow({ where: { id: f.row.id } })).a2aMetadata).toEqual(prior);
     const original = await fixture.db.taskRun.findUniqueOrThrow({ where: { taskRunId: f.input.originals[0]!.taskRunId } });
     expect(original.progressPayload).toMatchObject({ ...progress, reassessmentQuarantine: { replayAllowed: false } });
     expect(await fixture.db.taskArtifact.count({ where: { name: "reassessment-execution-seal-v2" } })).toBe(1);
     expect(await fixture.db.toolExecution.count()).toBe(2);
+    const executions = await fixture.db.toolExecution.findMany({ where: { taskRunId: f.row.taskRunId, toolName: "reassessment_capture",
+      parameters: { path: ["event", "sequence"], equals: 2 } } });
+    expect(executions).toHaveLength(1);
+    expect(executions[0]!.success).toBe(true);
+    expect(executions[0]!.result).toEqual({ executionStatus: "observed", output });
+    const observations = await fixture.db.taskArtifact.findMany({ where: { taskRunId: f.row.id, name: "reassessment-effect-observed-v1" } });
+    expect(observations).toHaveLength(2);
+    expect(observations.map(row => row.parts)).toContainEqual([{ type: "reassessment-effect-observed-v1", mimeType: "application/json", data: {
+      event: (executions[0]!.parameters as { event: unknown }).event, reservation: { reservationId: executions[0]!.id }, output } }]);
   });
   it("seals the other requirement without holding an already allocated current assessment", async () => {
     const original = await setup(), first = await admit(inputFor(original, "TR-fixture-design-current")), second = await admit(inputFor(original, "TR-fixture-approval-current", "spec-approval"));

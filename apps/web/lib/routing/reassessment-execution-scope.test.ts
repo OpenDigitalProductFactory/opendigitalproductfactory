@@ -398,6 +398,18 @@ describe("restricted reassessment execution capture", () => {
     expect(hooks.close).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ unknownEffects: 1, held: true }));
   });
 
+  it("holds a started effect with undefined output instead of recording an observed success", async () => {
+    const { seed, hooks } = fixture(), io = vi.fn(async () => undefined), later = vi.fn(async () => "forbidden");
+    await runReassessmentExecution(seed, hooks, async () => {
+      await expect(runReassessmentEffect({ kind: "provider", name: "post", input: {} }, io))
+        .rejects.toMatchObject({ code: "reassessment-capture-incomplete" });
+      await expect(runReassessmentEffect({ kind: "provider", name: "later", input: {} }, later)).rejects.toThrow(/held/i);
+    });
+    expect(io).toHaveBeenCalledOnce(); expect(later).not.toHaveBeenCalled(); expect(hooks.complete).not.toHaveBeenCalled();
+    expect(hooks.uncertain).toHaveBeenCalledOnce();
+    expect(hooks.close).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ providerStarts: 1, unknownEffects: 1, held: true }));
+  });
+
   it("counts actual transport retries against the same immutable start ceiling", async () => {
     const { seed, hooks } = fixture(); const io = vi.fn(async () => "response");
     await runReassessmentExecution(seed, hooks, async () => {
