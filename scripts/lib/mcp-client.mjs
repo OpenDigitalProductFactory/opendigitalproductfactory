@@ -19,6 +19,7 @@ import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { spawn } from "node:child_process";
 import { materializeBearer } from "./mcp-credential.mjs";
+import { resolveHostMcpTrust, describeMcpTransportError } from "./mcp-host-trust.mjs";
 
 let callId = 0;
 
@@ -200,6 +201,7 @@ export async function mcpPost(method, params, {
   }
 
   const url = new URL(mcpUrl);
+  const trust = url.protocol === "https:" ? resolveHostMcpTrust({ mcpUrl }) : null;
   const requestFn = url.protocol === "https:" ? httpsRequest : httpRequest;
   return new Promise((resolve, reject) => {
     const timeoutError = () => Object.assign(
@@ -207,6 +209,7 @@ export async function mcpPost(method, params, {
     const req = requestFn(url, {
       method: "POST",
       agent: false,
+      ...trust?.tlsOptions,
       headers: {
         ...headers,
         "Content-Length": Buffer.byteLength(body),
@@ -223,7 +226,7 @@ export async function mcpPost(method, params, {
     const deadline = setTimeout(() => req.destroy(timeoutError()), timeoutMs);
     req.once("close", () => clearTimeout(deadline));
     req.setTimeout(timeoutMs, () => req.destroy(timeoutError()));
-    req.on("error", reject);
+    req.on("error", error => reject(url.protocol === "https:" ? describeMcpTransportError(error, { phase: "request" }) : error));
     req.write(body);
     req.end();
   });
@@ -242,6 +245,12 @@ export async function mcpPost(method, params, {
  */
 export async function mcpCall(toolName, args, options = {}) {
   const reply = await mcpPost("tools/call", { name: toolName, arguments: args }, options);
+  if (reply.status === 401 || reply.status === 403) {
+    const code = reply.status === 401 ? "mcp_authentication_failed" : "mcp_authorization_failed";
+    throw Object.assign(new Error(`${code}: HTTP ${reply.status}; verified transport succeeded. ${reply.status === 401
+      ? "Check the existing credential's validity; no identity was changed."
+      : "The current identity lacks authority for this operation; use its governed grant remedy."}`), { code });
+  }
   try {
     return extractToolResult(JSON.parse(reply.text));
   } catch (error) {

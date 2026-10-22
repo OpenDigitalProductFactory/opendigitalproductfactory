@@ -645,6 +645,7 @@ async function governedExecuteToolRun(args: GovernedExecuteArgs, run: ApprovalRu
       threadId: args.context?.threadId,
       routeContext: args.context?.routeContext,
       taskRunId: args.context?.taskRunId,
+      taskExecutionFence: args.context?.taskExecutionFence,
       featureBuildId: args.context?.featureBuildId,
       coworkerMode: args.context?.coworkerMode,
       // Caller attribution for the decision ledger (BI-0EEBA669): without these three,

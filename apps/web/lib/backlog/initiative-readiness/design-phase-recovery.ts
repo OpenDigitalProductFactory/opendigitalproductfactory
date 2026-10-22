@@ -106,6 +106,18 @@ export function decisionForIndependentReview(
       const blockers = terminal.blockers.filter(isOwedPlanReview);
       const unmet = terminal.unmet.filter(isOwedPlanReview);
       if (blockers.length || unmet.length) return { ...terminal, blockers, unmet };
+      // BI-7531B73C: retained plan coverage can still pass while the current
+      // design owes amendment approval. Match the completion issuer's stale
+      // scope obligation without requiring missing coverage or reviving a
+      // missing/product-owned baseline as an amendment.
+      const isOwedAmendment = (entry: InitiativeReadinessDecision["unmet"][number]) =>
+        entry.code === "OBJECTIVE_BASELINE_REQUIRED" && entry.state === "stale"
+        && entry.accountableRole === "design-checklist-reviewer";
+      const amendmentBlockers = terminal.blockers.filter(isOwedAmendment);
+      const amendmentUnmet = terminal.unmet.filter(isOwedAmendment);
+      if (amendmentBlockers.length || amendmentUnmet.length) {
+        return { ...terminal, blockers: amendmentBlockers, unmet: amendmentUnmet };
+      }
     }
     // BI-EE99767C: the claim issuer sequences spec approval before plan coverage
     // when coverage needs a baseline. A fix carries only PLAN_REQUIRED here;

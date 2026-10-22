@@ -33,12 +33,25 @@ The request's link opens that result directly, including after a refresh. Open
 **Recent approval results** to review recent decisions separately from work that
 still needs you. Completed decisions do not increase the attention count.
 
+The Inbox displays a bounded list. Its approval summary shows how many requests
+are waiting in total and how many are shown. Use **Older requests** to continue
+through the queue and **Latest requests** to return to the newest requests.
+After a decision, another request may fill the cleared place; the pending total
+shows your progress. The displayed-item count also includes other notices and
+is not the full approval total. If the queue cannot be read, it says unavailable.
+
 An approval and a completed action are separate facts. The result says whether
 the action completed, failed, could not run, or expired, and explains the next
 step. Older decisions without a recorded result say the outcome is unknown.
 Do not approve again just because the original card disappeared; your assistant
 can check the result and the affected work first. You can only read your own
 approval results.
+
+Your assistant can also check the stored action evidence for an approved
+provider-account test without running the test again. It reports the saved test
+outcome separately from the approval status. Missing, conflicting or unsupported
+evidence stays explicit. A saved test success alone does not prove a completed
+Responses verification or a quota update. Private test output is not returned.
 
 How long a coworker's request waits for you, and what happens if nobody
 answers, is explained in [the attention inbox guide](attention-inbox.md#how-long-a-coworkers-request-waits).

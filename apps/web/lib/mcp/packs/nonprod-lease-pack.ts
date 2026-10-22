@@ -325,6 +325,7 @@ async function claimNonprodEnvironmentLeaseHandler(
   }
 
   const result = await claimNonprodEnvironmentLease({
+    authenticatedUserId: userId,
     resumeLeaseId: stringValue("resumeLeaseId") || undefined,
     environmentKey: environmentKey as "active-candidate" | "local-integration-ci" | "host-heavy-resource",
     ownerProvider: ownerProvider as (typeof NONPROD_OWNER_PROVIDERS)[number],
@@ -564,7 +565,9 @@ async function renewNonprodEnvironmentLeaseHandler(params: Record<string, unknow
     return {
       success: false,
       error: "lease_lost",
-      message: `Lease cannot be renewed (${result.reason}); re-claim if you still need the environment.`,
+      message: result.reason === "yielded"
+        ? "Contributor preview yielded the shared local-CI slot: it passed its bounded hold while pre-PR gates were waiting. Re-claim to queue behind them."
+        : `Lease cannot be renewed (${result.reason}); re-claim if you still need the environment.`,
       data: { reason: result.reason },
     };
   }

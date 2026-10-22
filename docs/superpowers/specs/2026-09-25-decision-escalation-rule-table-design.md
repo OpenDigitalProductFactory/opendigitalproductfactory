@@ -344,3 +344,15 @@ The input exists from day one; callers wire it as their facts exist:
 - Follow-on dispatch for `vector-gap` and `capability-gap` (the corpus-gap one
   exists: BI-F6FD946F). They are recorded on the row so they can be counted
   before anything is built for them.
+
+## 8. Addendum (2026-10-21): the write side (BI-5CA6AB34)
+
+This table decides which kernel outcomes reach a person, and the read side (`human-escalation.ts`) shows only those. BI-271B8EEC asked for the matching write side: a decision reaches a person only with a qualifying record. WWMD DI-8037FE582F71 (high confidence) scoped that to the residual, because action approvals already route through `resolveEscalation` on the envelope path (BI-C8EC05C9, BI-6B3DA9DD) and escalation captures already refuse non-human-routed records.
+
+**The one unrecorded decision path was leave.** When a hard leave rail fired, `decideLeaveRequest` skipped the gate and `proposeLeaveDecision` wrote the manager's recommendation with no DecisionInteraction. Now:
+- A fired rail calls the org-decision gate once with `declarations: { thresholdExceeded: true }`. This table routes that to a person (`damaging-threshold`), and the gate persists the record under the org's own profile. The rail's verdict stands: the action is always escalate. If the record cannot be made, it still escalates.
+- `proposeLeaveDecision` refuses to write a recommendation without a record (`status: "refused"`; the tool reports `decision_record_missing`). The request stays pending in the approver's leave queue, so no human authority is lost.
+
+**Every other person-facing write is classified.** `lib/decision-perspective/person-facing-write-sites.ts` lists each write primitive that puts something in front of a person, and every caller of it, as `decision-governed` (with the check that enforces it), `notice` or `operator-override`. Its test scans the source, so a new caller fails until it is classified. Today's notices are issue reports (`createPlatformIssueReport`), the terminal-writer retry signal, and consented upstream feedback. The operator override is the quiescence Force now.
+
+**Who it covers.** Leave proposals come from the `propose_leave_decision` tool, which internal coworkers and external MCP agents call alike, so the rule holds for both (see BI-638024F9 for the consult gate's parity).

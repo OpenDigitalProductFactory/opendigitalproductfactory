@@ -1,8 +1,9 @@
 import { beforeEach, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ liveTask: vi.fn(), cas: vi.fn(), reads: vi.fn(), writer: vi.fn(), tasks: vi.fn(), task: vi.fn(), token: vi.fn(), current: vi.fn(), authorize: vi.fn() }));
+const mocks = vi.hoisted(() => ({ collect: vi.fn(), liveTask: vi.fn(), cas: vi.fn(), reads: vi.fn(), writer: vi.fn(), tasks: vi.fn(), task: vi.fn(), token: vi.fn(), current: vi.fn(), authorize: vi.fn() }));
 vi.mock("@dpf/db", () => ({ prisma: { taskRun: { findFirst: mocks.task, findUnique: mocks.liveTask, findMany: mocks.tasks, updateMany: mocks.cas }, toolExecution: { findMany: mocks.reads, findFirst: mocks.writer }, mcpApiToken: { findUnique: mocks.token } } }));
 vi.mock("./auth/oauth-tokens", () => ({ OAUTH_EXECUTION_AUTHORITY_SELECT: {}, isCurrentOAuthExecutionAuthority: mocks.current }));
 vi.mock("./mcp/independent-review-request", () => ({ authorizeCoworkerRequest: mocks.authorize }));
+vi.mock("./mcp-task-original-result", () => ({ readOriginalReviewResult: mocks.collect }));
 import { loadExplicitReviewRecovery } from "./mcp-task-review-recovery";
 import { deterministicExternalTaskRunId, remoteTaskRequestDigest } from "./mcp-task-capacity-contract";
 import { parseRemoteTaskSubmitParams } from "./mcp-task-submit-params";
@@ -32,6 +33,7 @@ beforeEach(() => {
   vi.resetAllMocks(); mocks.task.mockResolvedValue(structuredClone(row));
   mocks.token.mockImplementation(async ({ where }: { where: { id: string } }) => where.id === "new-token" ? current : { userId: "human", agentId: "AGT-EXT-CODEX" });
   mocks.current.mockResolvedValue(true); mocks.authorize.mockResolvedValue({ bounded: true });
+  mocks.collect.mockResolvedValue(null);
 });
 
 it("selects the original paused task under current authority without rewriting its immutable origin", async () => {
@@ -81,6 +83,37 @@ it("issues a locator for the exact saved request and refuses ambiguous or uncert
   expect(await issueOriginalReviewRecoveryTarget({ packet, userId: "human", actingAgentId: "AGT-EXT-CODEX", taskAuthorityKey: "oauth-family:new" })).toMatchObject({ kind: "refused" });
   mocks.tasks.mockResolvedValue([{ ...row, progressPayload: { executionUncertainty: {} } }]);
   expect(await issueOriginalReviewRecoveryTarget({ packet, userId: "human", actingAgentId: "AGT-EXT-CODEX", taskAuthorityKey: "oauth-family:new" })).toMatchObject({ kind: "refused" });
+});
+
+it("delivers read-only evidence and exact Tasks/result locator for an uncertain same-family original", async () => {
+  const { issueOriginalReviewRecoveryTarget } = await import("./mcp-task-review-recovery");
+  const packet = { targetAgent: raw.agentId, objective: raw.objective, questionPacketSummary: raw.title,
+    requestKey: raw.idempotencyKey, initiativeReviewBinding: raw.initiativeReviewBinding };
+  mocks.tasks.mockResolvedValue([{ ...row, progressPayload: { executionUncertainty: {} } }]);
+  const collected = { schemaVersion: 1, taskRunId, classification: "unknown", readOnly: true,
+    replayAllowed: false, reason: "No verified child closure.", observations: [], missingProof: ["child-closure"], bounded: true };
+  mocks.collect.mockResolvedValue(collected);
+  expect(await issueOriginalReviewRecoveryTarget({ packet, userId: "human", actingAgentId: "AGT-EXT-CODEX",
+    taskAuthorityKey: "oauth-family:original", tokenGrantScopes: ["backlog_read"] })).toMatchObject({
+    kind: "refused", reason: "original-review-not-safely-resumable", originalResult: collected,
+    resultRead: { method: "tasks/result", params: { taskId: taskRunId, requestDigest: digest } },
+  });
+  expect(mocks.collect).toHaveBeenCalledWith({ taskRunId, userId: "human", actingAgentId: "AGT-EXT-CODEX",
+    tokenGrantScopes: ["backlog_read"], expected: { requestDigest: digest, updatedAt: updatedAt.toISOString() } });
+  expect(mocks.cas).not.toHaveBeenCalled();
+  expect(mocks.authorize).not.toHaveBeenCalled();
+});
+
+it("does not collect another original owner's evidence or return its result locator", async () => {
+  const { issueOriginalReviewRecoveryTarget } = await import("./mcp-task-review-recovery");
+  mocks.tasks.mockResolvedValue([{ ...row, progressPayload: { executionUncertainty: {} } }]);
+  mocks.token.mockResolvedValue({ userId: "different-human", agentId: "AGT-EXT-CODEX" });
+  const result = await issueOriginalReviewRecoveryTarget({ packet: { targetAgent: raw.agentId,
+    objective: raw.objective, questionPacketSummary: raw.title, requestKey: raw.idempotencyKey,
+    initiativeReviewBinding: raw.initiativeReviewBinding }, userId: "human", actingAgentId: "AGT-EXT-CODEX",
+    taskAuthorityKey: "oauth-family:original" });
+  expect(result).toEqual({ kind: "refused", reason: "original-human-or-coworker-mismatch" });
+  expect(mocks.collect).not.toHaveBeenCalled();
 });
 
 it.each(["scope", "deadline", "retry-budget", "room-or-lane", "unknown-settlement", "widened-tool", "changed-source"])("refuses %s without rewriting the original checkpoint", async condition => {

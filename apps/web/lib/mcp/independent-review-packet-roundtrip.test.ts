@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   item: vi.fn(), readiness: vi.fn(), recovery: vi.fn(), history: vi.fn(), historyMany: vi.fn(), authority: vi.fn(),
   access: vi.fn(), design: vi.fn(), itemFirst: vi.fn(), activities: vi.fn(), rooms: vi.fn(), room: vi.fn(),
+  collect: vi.fn(),
 }));
 vi.mock("@dpf/db", () => ({ prisma: {
   backlogItem: { findUnique: mocks.item, findFirst: mocks.itemFirst },
@@ -40,6 +41,7 @@ vi.mock("@/lib/govern/current-user-context", () => ({ currentUserContext: async 
 vi.mock("@/lib/auth/oauth-tokens", () => ({ OAUTH_EXECUTION_AUTHORITY_SELECT: {}, isCurrentOAuthExecutionAuthority: async () => true }));
 vi.mock("@/lib/mcp-task-review-outcome", () => ({ loadTaskInitiativeReviewOutcome: async () => null }));
 vi.mock("@/lib/mcp-task-review-document", () => ({ reviewDocumentPreflight: async () => ({ refusal: null, notice: null }) }));
+vi.mock("@/lib/mcp-task-original-result", () => ({ readOriginalReviewResult: mocks.collect }));
 
 import { getBacklogItem } from "./packs/backlog-pack-read-tools";
 import { authorizeCoworkerRequest } from "./independent-review-request";
@@ -71,6 +73,8 @@ beforeEach(() => {
   mocks.design.mockReset().mockResolvedValue({ evidence: { state: "not-applicable" } });
   mocks.history.mockResolvedValue(null);
   mocks.historyMany.mockResolvedValue([]);
+  mocks.collect.mockResolvedValue({ schemaVersion: 1, classification: "unknown", readOnly: true,
+    replayAllowed: false, reason: "Child closure remains unverified.", observations: [], missingProof: ["child-closure"], bounded: true });
   mocks.authority.mockResolvedValue(authority.taskAuthorityKey);
   mocks.access.mockImplementation(async ({ requested }) => ({ decision: { level: requested } }));
   mocks.item.mockResolvedValue({ id: "item-row", itemId: "BI-ROUNDTRIP", title: "Current review", status: "open",
@@ -191,6 +195,7 @@ describe("bounded recovery packet round trip", () => {
     const authorityScope = ["initiative_evidence_write", "backlog-item:BI-ROUNDTRIP", ...old.requiredToolNames!.map(name => `tool:${name}`)];
     const row = {
       taskRunId, userId: "human", currentAgentId: old.targetAgent, status: "input-required", authorityScope,
+      updatedAt: new Date("2026-10-16T00:00:00Z"),
       a2aMetadata: { taskAuthorityKey: authority.taskAuthorityKey, idempotencyKey: old.requestKey, requestedAgentId: old.targetAgent,
         ...(hasOAuthMetadata ? { tokenSource: "oauth", apiTokenId: "access" } : {}),
         requestDigestVersion: 2, requestDigest: remoteTaskRequestDigest({ agentId: old.targetAgent, routeContext: "/build",
@@ -214,11 +219,23 @@ describe("bounded recovery packet round trip", () => {
         && key === row.a2aMetadata.idempotencyKey && source === row.a2aMetadata.tokenSource ? [row] : [];
     });
     const read = await getBacklogItem({ itemId: "BI-ROUNDTRIP", recoveryGate: "design-spec" }, "AGT-AUTHOR", "human", context);
-    expect(read.success).toBe(true);
-    expect(packetFrom(read)).toEqual(old);
+    if (hasOAuthMetadata) {
+      expect(read).toMatchObject({ success: false, error: "original_review_recovery_required",
+        data: { originalResult: { classification: "unknown", replayAllowed: false },
+          resultRead: { method: "tasks/result", params: { taskId: taskRunId } } } });
+      expect(read.data).not.toHaveProperty("recovery");
+      expect(mocks.collect).toHaveBeenCalled();
+    } else {
+      expect(read.success).toBe(true);
+      expect(packetFrom(read)).toEqual(old);
+      expect(packetFrom(read)).not.toHaveProperty("reviewRecovery");
+      expect(mocks.collect).not.toHaveBeenCalled();
+    }
     await expect(mocks.historyMany.mock.results[0]!.value).resolves.toEqual(hasOAuthMetadata ? [row] : []);
-    expect(packetFrom(read)).not.toHaveProperty("reviewRecovery");
-    expect(await authorizeCoworkerRequest(old, "human", context)).toEqual({ bounded: true });
+    const admission = await authorizeCoworkerRequest(old, "human", context);
+    if (hasOAuthMetadata) expect(admission).toMatchObject({ bounded: true,
+      refusal: { error: "independent_review_request_denied" } });
+    else expect(admission).toEqual({ bounded: true });
   });
 });
 

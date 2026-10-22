@@ -61,6 +61,7 @@ describe("initiative readiness reviewer tools", () => {
     expect(mocks.recordGateReceipt).toHaveBeenCalledWith(expect.objectContaining({ workroomRef: undefined }));
   });
   it("carries only the trusted TaskRun workroom identity to the writer alongside the historical plan", async () => {
+    const taskExecutionFence = { schemaVersion: 1 as const, reservation: "admitted", dispatchClaim: "dispatch", authorityDigest: null, requestDigest: "9".repeat(64) };
     const artifactRef = { kind: "repo-blob-at-commit", repositoryFullName: "owner/repo",
       commitSha: "99986af2a1fb1ff8d041ca7d9080ea6d02a4f963", providerBlobId: "b".repeat(40), path: "plan.md" };
     const workroomRef = { kind: "workroom-head", workroomId: "WC-DF238BD5", repositoryFullName: "owner/repo",
@@ -71,10 +72,11 @@ describe("initiative readiness reviewer tools", () => {
     } } });
     mocks.recordGateReceipt.mockResolvedValue({ ok: true, receiptId: "plan-receipt" });
     expect(await initiativeReadinessPack.handlers.record_initiative_design_review!({ decision: "pass", reason: "Reviewed.",
-      findings: [], resolvedFindingRefs: [], workroomRef: { ...workroomRef, headSha: artifactRef.commitSha } },
-      "user", { taskRunId: "TR-E084", agentId: "AGT-WS-REVIEW" } as never)).toMatchObject({ success: true });
+      findings: [], resolvedFindingRefs: [], workroomRef: { ...workroomRef, headSha: artifactRef.commitSha },
+      taskExecutionFence: { ...taskExecutionFence, reservation: "forged" } },
+      "user", { taskRunId: "TR-E084", agentId: "AGT-WS-REVIEW", taskExecutionFence } as never)).toMatchObject({ success: true });
     expect(mocks.recordGateReceipt).toHaveBeenCalledWith(expect.objectContaining({ artifactRef, workroomRef,
-      expectedCurrentBaselineId: "baseline-434" }));
+      expectedCurrentBaselineId: "baseline-434", boundReviewTask: expect.objectContaining({ executionFence: taskExecutionFence }) }));
   });
   it("validates a real failure citation after metrics-only source auditing without retaining source in the audit", async () => {
     const artifactRef = { kind: "repo-blob-at-commit", repositoryFullName: "owner/repo", commitSha: "a".repeat(40), providerBlobId: "b".repeat(40), path: "design.md" };

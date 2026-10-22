@@ -116,6 +116,20 @@ describe("nonprod-lease pack — registration", () => {
 });
 
 describe("nonprod-lease pack — handler behavior (delegation preserved)", () => {
+  it("takes immediate admission's user only from the authenticated handler", async () => {
+    lease.claimNonprodEnvironmentLease.mockResolvedValueOnce({
+      status: "admitted", lease: { leaseId: "NPEL-NEW", taskRunId: null }, slotKey: "slot-0", waitAgeMs: 0,
+    });
+    await nonprodLeasePack.handlers.claim_nonprod_environment_lease({
+      environmentKey: "local-integration-ci", ownerProvider: "codex", ownerSessionId: "session-1",
+      purpose: "test", url: "http://localhost:3010", ports: [3010], slotManifestVersion: 1,
+      expiresAt: new Date(Date.now() + 60_000).toISOString(), authenticatedUserId: "foreign-user",
+    }, "authenticated-user");
+    expect(lease.claimNonprodEnvironmentLease).toHaveBeenCalledWith(expect.objectContaining({
+      authenticatedUserId: "authenticated-user",
+    }));
+  });
+
   it("reports an expired approved request as refused without starting a wait", async () => {
     lease.claimNonprodEnvironmentLease.mockRejectedValueOnce(new Error("nonprod_lease_request_expired"));
     const result = await nonprodLeasePack.handlers.claim_nonprod_environment_lease({
@@ -198,7 +212,7 @@ describe("nonprod-lease pack — handler behavior (delegation preserved)", () =>
         url: "http://localhost:3010",
         ports: [3010],
         expiresAt: new Date(Date.now() + 60_000).toISOString(),
-        gateClientRevision: 2,
+        gateClientRevision: 3,
         worktreePath: "D:\\DPF-source-root-worktrees\\lease-terminal-retry-stop",
       },
       "u1",
@@ -271,26 +285,30 @@ describe("nonprod-lease pack — handler behavior (delegation preserved)", () =>
 
   // BI-69178E02: a gate client runs from the branch, so the server is the only
   // place a client defect fixed on main can be retired from un-rebased branches.
-  it.each(["D:/DPF-worktrees/stale", "/home/dev/dpf-worktrees/stale"])("refuses a stale gate client at %s before touching any lease", async (worktreePath) => {
+  it.each([
+    ["D:/DPF-worktrees/stale", undefined], ["/home/dev/dpf-worktrees/stale", undefined],
+    ["D:/DPF-worktrees/stale", 2], ["/home/dev/dpf-worktrees/stale", 2],
+  ])("refuses a stale gate client at %s (revision %s) before touching any lease", async (worktreePath, gateClientRevision) => {
     const res = await nonprodLeasePack.handlers.claim_nonprod_environment_lease({
       environmentKey: "local-integration-ci", ownerProvider: "claude", ownerSessionId: "s1",
       claimKey: "local-ci:s1:abc", purpose: "Pre-PR local-CI gate for fix/x @ abc",
       url: "http://localhost:3010", ports: [3010],
       expiresAt: new Date(Date.now() + 60_000).toISOString(),
       worktreePath,
+      gateClientRevision,
     }, "u1");
 
     expect(res).toMatchObject({
       success: false,
       error: "gate_client_upgrade_required",
-      data: { admission: { status: "refused" }, minimumRevision: 2, clientRevision: 0 },
+      data: { admission: { status: "refused" }, minimumRevision: 3, clientRevision: gateClientRevision ?? 0 },
     });
     expect(res.message).toMatch(/Rebase the branch onto main/);
     expect(res.message).toMatch(/not a verdict on the diff/);
     expect(lease.claimNonprodEnvironmentLease).not.toHaveBeenCalled();
   });
 
-  it("admits revision 2 Windows and POSIX gate clients", async () => {
+  it("admits revision 3 Windows and POSIX gate clients", async () => {
     lease.claimNonprodEnvironmentLease.mockResolvedValue({
       status: "admitted", lease: { leaseId: "NPEL-A1" }, slotKey: "slot-0", waitAgeMs: 0, poolPolicy: {},
     });
@@ -301,10 +319,10 @@ describe("nonprod-lease pack — handler behavior (delegation preserved)", () =>
       expiresAt: new Date(Date.now() + 60_000).toISOString(),
     };
     const current = await nonprodLeasePack.handlers.claim_nonprod_environment_lease({
-      ...base, worktreePath: "D:\\DPF-source-root-worktrees\\fresh", gateClientRevision: 2,
+      ...base, worktreePath: "D:\\DPF-source-root-worktrees\\fresh", gateClientRevision: 3,
     }, "u1");
     const posix = await nonprodLeasePack.handlers.claim_nonprod_environment_lease({
-      ...base, worktreePath: "/home/dev/dpf-worktrees/any", gateClientRevision: 2,
+      ...base, worktreePath: "/home/dev/dpf-worktrees/any", gateClientRevision: 3,
     }, "u1");
     expect(current.error).not.toBe("gate_client_upgrade_required");
     expect(posix.error).not.toBe("gate_client_upgrade_required");

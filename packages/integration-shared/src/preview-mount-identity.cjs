@@ -1,10 +1,10 @@
 "use strict";
 const { posix, win32 } = require("node:path");
 
-// Docker Desktop's Linux daemon reports a Windows bind source in its VM
-// namespace. Translate only this known form, and only for a Windows admission.
-// Relative paths and traversal never establish a preview's source identity.
-function previewMountMatches(source, worktree) {
+// Desktop aliases require exact namespace and path identity. The POSIX alias
+// additionally requires a fresh fact from the same daemon used for inspect;
+// native Linux can have distinct /host_mnt and host-root directories.
+function previewMountMatches(source, worktree, dockerOperatingSystem) {
   const valid = value => typeof value === "string" && value.length > 0
     && !/[\0\r\n]/.test(value) && !value.split(/[\\/]/).some(part => part === "." || part === "..");
   if (!valid(source) || !valid(worktree)) return false;
@@ -18,8 +18,11 @@ function previewMountMatches(source, worktree) {
     };
     return canonical(source) === canonical(worktree);
   }
-  return posix.isAbsolute(source) && posix.isAbsolute(worktree)
-    && posix.normalize(source).replace(/\/$/, "") === posix.normalize(worktree).replace(/\/$/, "");
+  if (!posix.isAbsolute(source) || !posix.isAbsolute(worktree)) return false;
+  const canonical = value => posix.normalize(value).replace(/\/$/, "");
+  if (canonical(source) === canonical(worktree)) return true;
+  return dockerOperatingSystem === "Docker Desktop" && source.startsWith("/host_mnt/")
+    && canonical(source.slice("/host_mnt".length)) === canonical(worktree);
 }
 
 module.exports = { previewMountMatches };

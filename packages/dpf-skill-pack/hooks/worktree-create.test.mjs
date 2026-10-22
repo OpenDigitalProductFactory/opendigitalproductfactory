@@ -84,7 +84,8 @@ async function packagedFixture(t, { reply, source = true, helper = true, legacyH
   }
   if (helper) {
     for (const relative of ["scripts/lib/workroom-bind.mjs", "scripts/lib/mcp-client.mjs", "scripts/lib/git.mjs",
-      "scripts/lib/mcp-credential.mjs", "packages/dpf-skill-pack/scripts/lib/client-credentials-exchange.mjs"]) {
+      "scripts/lib/mcp-credential.mjs", "scripts/lib/mcp-host-trust.mjs", "scripts/lib/resolve-compose-install-context.mjs",
+      "scripts/lib/script-argv.mjs", "packages/dpf-skill-pack/scripts/lib/client-credentials-exchange.mjs"]) {
       copy(relative, join(root, relative));
     }
     if (legacyHelper) writeFileSync(join(root, "scripts/lib/workroom-bind.mjs"),

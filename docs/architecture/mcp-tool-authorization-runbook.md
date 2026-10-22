@@ -1,5 +1,12 @@
 # MCP tool authorization runbook
 
+Source host tooling applies existing authorized CA trust to native MCP and OAuth
+requests without changing the selected credential or grants. Supported gate
+launchers also prepare child Node startup. TLS verification failures precede
+HTTP; HTTP401 and HTTP403 remain authentication and authorization failures.
+See [saved host trust](../install/platform-support-watchlist.md#saved-host-ca-trust-and-stale-clients)
+for resolution precedence and safe recovery.
+
 **Routine delegated maintenance (BI-B22C8E02).** Current OAuth consent steers
 authorized ordinary reads and reversible work without a new approval for each
 call. Account model discovery with an explicit account identity synchronizes
@@ -674,6 +681,29 @@ need separate measured acceptance.
 
 ## Recovering an original initiative review after a connection change
 
+Original owners can collect existing review evidence through `tasks/result`
+without resubmitting the review. Initiative-review results return a bounded
+`originalResult` projection under the current connection's read scopes, original
+human/coworker identity and exact Workroom content access. An optional
+`requestDigest` pins readback to the saved request. The issuer's reconciliation
+refusal also returns the same projection and an exact `tasks/result` locator
+when the immutable original request matches. Neither route supplies dispatch
+authority or performs receipt-backed status healing.
+
+`receipt-complete` means an existing genuine governed writer receipt matches the
+original task, digest, attempt, checkpoint and immutable artifact; its recorded
+decision can be pass, fail or not-applicable. `proven-not-dispatched` and
+`proven-settled-without-receipt` require authoritative original-attempt proof.
+Missing or contradictory proof returns `unknown` with explicit missing facts.
+Current native observations record child closure as unverified, so outer close,
+timeout or a budget refusal alone cannot establish no late effects. Historical
+unknowns remain closed. Returned provenance contains bounded source identities,
+times, digests and observed facts; raw provider output and prompts are excluded.
+Concurrent checkpoint changes invalidate the collected snapshot. Collection
+never resets a deadline, attempt or approval, changes identity or grants, creates
+a verdict, or authorizes a retry. Existing receipt CAS/history healing remains a
+separate operation and accepts only its matching genuine receipt.
+
 Read `get_backlog_item` with the exact `itemId` and `recoveryGate`. For an owned,
 safely stopped review, its native `request_coworker` packet includes
 `reviewRecovery`: the original TaskRun, saved request digest and observed
@@ -728,3 +758,26 @@ current human, token, coworker and scope checks still run in the handler.
 Production, unreadable stance, unbound calls and supplied overrides retain
 authority approval. Other authority operations, including room invitations,
 are unaffected.
+
+## Canonical review writer execution identity
+
+For a task-bound initiative review, the admitted executor captures its request
+digest, reservation, dispatch claim and recorded execution-authority digest before
+starting provider work. Internal tool execution carries that captured identity;
+native MCP carries it in the signed session. Tool arguments and JSON-RPC metadata
+cannot supply it. Approval replay uses the original server-owned audit identity,
+never the task's latest generation.
+
+Both canonical review writers lock the original task before the subject. A new
+receipt, baseline or retention pin requires a working task, no execution
+uncertainty and the same captured identity under that transaction lock. A held,
+displaced or unversioned callback cannot append an effect. A genuine exact
+existing winner remains readable under the existing actor, artifact and authority
+checks; its receipt identifier does not include the execution generation.
+
+Legacy sessions without the captured identity cannot publish new task-bound
+reviews. This refusal does not settle an unknown execution, authorize inference,
+reset attempts or qualify historical recovery. Deploy compatible writers before
+admitting these sessions. Roll back by disabling admission while retaining the
+compatible fence and readers; a pre-fence binary requires separately proven
+capability retirement and reconciled effects.

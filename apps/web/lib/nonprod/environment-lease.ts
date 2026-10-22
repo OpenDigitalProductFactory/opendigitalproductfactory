@@ -24,7 +24,9 @@ import { isImmutableGateClaimKey } from "@/lib/gates/gate-run-identity";
 import { settleTerminalGateLease } from "./environment-lease-terminal-evidence";
 import { resolveResumeClaim, validateHostResourceClaim } from "./environment-lease-resume";
 import { admittedLeaseTtlMs, DEFAULT_LEASE_TTL_MS, resolveLeaseRequestTiming } from "./environment-lease-timing";
+import { previewMustYieldSlot } from "./environment-lease-preview-yield";
 import { afterNonprodLeaseRelease, publishNonprodCapacityForHead, settleExpiredNonprodLeaseWaits } from "./durable-wait";
+import { bindFreshImmediateLeaseProvenance } from "./environment-lease-provenance";
 export { NONPROD_OWNER_PROVIDERS, type NonprodOwnerProvider } from "./nonprod-owner-provider";
 export {
   admittedLeaseTtlMs,
@@ -251,6 +253,8 @@ export async function claimNonprodEnvironmentLease(input: {
   branchName?: string;
   buildId?: string;
   taskRunId?: string;
+  /** Authenticated MCP actor; never read from claim parameters. */
+  authenticatedUserId?: string;
   cleanupCommand?: string;
   slotManifestVersion?: 1;
   productionBuild?: "local" | "delegated"; // BI-3A14308C: "delegated" waives only the builder reserve
@@ -473,7 +477,8 @@ export async function claimNonprodEnvironmentLease(input: {
     if (current.status === "active" && current.slotKey) {
       return {
         status: "admitted",
-        lease: current,
+        lease: await bindFreshImmediateLeaseProvenance({ db: tx, lease: current, created,
+          authenticatedUserId: input.authenticatedUserId, waitDeadlineAt: queueExpiresAt, now }),
         slotKey: current.slotKey,
         waitAgeMs,
         poolPolicy,
@@ -652,7 +657,7 @@ export async function renewNonprodEnvironmentLease(input: {
     lease: LeaseRow;
     poolPolicy: ResolvedNonprodPoolPolicy;
   }
-  | { status: "lost"; reason: "not-found" | "not-active" | "not-owner" | "expired" }
+  | { status: "lost"; reason: "not-found" | "not-active" | "not-owner" | "expired" | "yielded" }
 > {
   const db = input.db ?? prisma;
   const now = input.now ?? new Date();
@@ -663,6 +668,9 @@ export async function renewNonprodEnvironmentLease(input: {
   if (lease.status !== "active") return { status: "lost", reason: "not-active" };
   if (lease.ownerSessionId !== input.ownerSessionId) return { status: "lost", reason: "not-owner" };
   if (lease.expiresAt.getTime() <= now.getTime()) return { status: "lost", reason: "expired" };
+  // BI-995E9530: a long-held preview yields the shared CI slot to a waiting
+  // gate; its keeper treats lease_lost as authoritative and stops the preview.
+  if (await previewMustYieldSlot(db, lease, now)) return { status: "lost", reason: "yielded" };
   if (input.slotBinding) {
     assertRenewalSlotBinding(lease, input.slotBinding);
   } else if (

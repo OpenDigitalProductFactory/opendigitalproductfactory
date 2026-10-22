@@ -53,7 +53,7 @@ describe("buildSetupSnippets", () => {
     const { grok, antigravity, vscode } = buildSetupSnippets(TOKEN, BASE);
     expect(grok).toContain(`url = "${LOCAL_MCP_URL}"`);
     expect(grok).not.toContain("tier=full");
-    expect(antigravity).toContain(`"url": "${LOCAL_MCP_URL}"`);
+    expect(antigravity).toContain(`"serverUrl": "${LOCAL_MCP_URL}"`);
     expect(antigravity).not.toContain("tier=full");
     expect(vscode).toContain(`"url": "${LOCAL_MCP_URL}"`);
     expect(vscode).not.toContain("tier=full");
@@ -62,10 +62,12 @@ describe("buildSetupSnippets", () => {
   it("antigravity produces a JSON mcpServers.dpf block (http, env-backed auth) and never embeds the secret", () => {
     const { antigravity } = buildSetupSnippets(TOKEN, BASE);
     const parsed = JSON.parse(antigravity) as {
-      mcpServers?: { dpf?: { type?: string; url?: string; headers?: { Authorization?: string } } };
+      mcpServers?: { dpf?: { serverUrl?: string; disabled?: boolean; url?: string; headers?: { Authorization?: string } } };
     };
-    expect(parsed.mcpServers?.dpf?.type).toBe("http");
-    expect(parsed.mcpServers?.dpf?.url).toBe(LOCAL_MCP_URL);
+    // agy's own schema, as `agy mcp add` writes it (BI-4CB3C923).
+    expect(parsed.mcpServers?.dpf?.serverUrl).toBe(LOCAL_MCP_URL);
+    expect(parsed.mcpServers?.dpf?.disabled).toBe(false);
+    expect(parsed.mcpServers?.dpf?.url).toBeUndefined();
     expect(parsed.mcpServers?.dpf?.headers?.Authorization).toBe("Bearer ${DPF_MCP_BEARER_TOKEN}");
     expect(antigravity).not.toContain(TOKEN);
   });

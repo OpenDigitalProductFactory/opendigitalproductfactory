@@ -41,6 +41,19 @@ export const HYGIENE_JOB_CATALOG_ENTRIES: readonly ScheduledJobCatalogEntry[] = 
     runNowEvent: null,
   },
   {
+    jobId: "legacy-proposal-expiry-sweep",
+    inngestId: "ops/legacy-proposal-expiry-sweep",
+    honorsEnabledGate: true,
+    name: "Legacy proposal expiry",
+    purpose:
+      "Expires legacy coworker action proposals left undecided past the approval lifetime (BI-753D69A9). Status change only; nothing runs and no row is deleted.",
+    cron: "17 4 * * *",
+    cadence: "Daily at 04:17",
+    category: "core",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
+  {
     jobId: "runtime-target-janitor",
     inngestId: "ops/runtime-target-janitor",
     ungatedReason:

@@ -122,3 +122,74 @@ Decision: atomic, LV-FIX -> BI-B8437D03. Requirement refs AC-1 through AC-6;
 contract refs LV-ABS, LV-REL, LV-FENCE, LV-OUTCOME; flow refs LV-RED, LV-TIMING,
 LV-CALLERS, LV-VERIFY; verification refs LV-RED and LV-VERIFY.
 Native immutable plan coverage and implementation admission are pending.
+
+## Follow-up: authenticated immediate-admission cleanup (2026-10-18)
+
+The original LV-FIX shipped in PR6477 and its bounded live timing acceptance is
+retained. This follow-up reuses BI-B8437D03 / WC-ECDBB7AC; it does not reopen or
+reinterpret the original stale approval. A real versioned local-CI admission
+NPEL-3E7C0681E6 had no taskRunId. Therefore the existing narrow authenticated
+DEV owner cleanup predicate could not establish ownership and requested an
+employee approval even though the same caller had just acquired the lease.
+
+**LC-OWN:** Newly immediate-admitted versioned local-CI claims receive the same
+server-owned deterministic user/lease Task provenance as queued admissions.
+The authenticated MCP user, never a caller-supplied user or Task id, owns that
+record. Preserve the admitted expiry; checkpointing must not substitute the
+wait deadline for its bounded active lifetime. Existing queued Task event,
+consumption and continuation history must survive admission and replay.
+
+**LC-FENCE:** Keep lease-cleanup-consequence.ts unchanged: exact user, session,
+claim, environment, worktree, branch, manifest, slot and active-key checks;
+declared DEV purpose; and no process-owned resource. Legacy preview, foreign,
+production, malformed or unsupported provenance remains gated. No grant,
+approval-policy, schema, table or cleanup tool expansion is proposed.
+
+One atomic deliverable **LC-FIX** maps to BI-B8437D03. Requirement refs
+LC-OWN and LC-FENCE; contract ref LC-PROVENANCE; flow refs LC-RED,
+LC-CHECKPOINT and LC-VERIFY; verification refs LC-RED and LC-VERIFY.
+
+1. **LC-RED:** Add a real lease-pack regression for a fresh immediate versioned
+   admission without taskRunId. Expect durable authenticated provenance, an
+   admitted projection and unchanged lease expiry. Cover supplied unrelated
+   Task ids, repeat admission and failure to persist; keep existing queued and
+   foreign-owner cleanup negatives. Run the new test before implementation.
+2. **LC-CHECKPOINT / LC-PROVENANCE:** Refactor the existing durable Task payload
+   construction so immediate and queued admissions share binding semantics.
+   Inside the fresh lease transaction only, create the completed immediate Task
+   and compare-and-set its null lease linkage. Persistence failure rolls back
+   admission. Do not backfill an old active row, reset an existing queued wait or
+   overwrite another Task. Return the persisted linkage in the tool response.
+   Reuse existing admission settlement for queued continuations. Do not change
+   any actual resource capacity, FIFO, timing or renewal policy.
+3. **LC-VERIFY:** Run all graph-linked durable-wait, lease-pack, release,
+   expiry-wait and cleanup-consequence suites, both web TypeScript programs,
+   current gate obligations and independent exact-source review. Complete the
+   governed full gate, protected PR and qualified canonical release. On the
+   served target prove a fresh owned versioned immediate claim can release
+   through the existing no-extra-consequence rule, with no employee envelope;
+   preserve rejected foreign/process/production cases as source tests.
+
+Risks: granting ownership to a subscriber, overwriting a foreign Task, resetting
+a queued capacity event, or extending active TTL. The immediate helper must
+bind only the fresh lease's authenticated provenance and preserve existing
+Task identity on continuations. Failure to persist provenance is not a cleanup
+pass and must be explicit/recoverable. Rollback removes the new immediate
+checkpoint path; existing policy then safely requires approval again. Retain
+Task and verification history; no migration or historical backfill.
+
+Roughly 20% of this implementation is shared payload/checkpoint refactoring.
+Funding remains unresolved; no new allocation or paid inference is authorized
+by this plan. Initial proportional follow-up coverage
+`cmvd9q9b80hdn01qrfawr4ag8` binds published plan commit
+`8c101c08bb7d7eac2f96cf46f1b7fc05b0ddc676`, blob
+`62ba97f2a468a624488f4bbd30a5b805508add4e`; implementation admission
+`IRD-69D501CBC024` allowed. Refresh immutable coverage for the final source.
+The first-failing source-local regression observed zero Task upserts; the
+implemented test now also exercises the unchanged cleanup predicate, including
+foreign-user refusal. This is source evidence, not live acceptance or proof of
+real PostgreSQL rollback. Full governed integration and live cleanup are owed.
+
+Documentation impact: this changes internal admission provenance only. Existing
+lease arguments, caller workflow and cleanup authority remain the same; no
+operator or client setup documentation changes are needed.

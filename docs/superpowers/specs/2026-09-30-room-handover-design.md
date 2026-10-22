@@ -220,3 +220,30 @@ oldest one, so a seed never stops an upgrade. Historical requester and creator
 fields are unchanged. A migration backfills the marker from the BuildActivity
 rows past applies left.
 
+
+## Addendum (2026-10-14, BI-9D2199D4): a handover moves work, not access
+
+A handed-over account can still sign in, and its agent credentials stay live.
+On 2026-10-02 the operator connected Codex under admin@dpf.local, a day after
+its handover, and the new room went back to admin. `User.isActive` stays the
+access switch. The handover does not revoke credentials: the approver is often
+the same account, and revoking would not have stopped a fresh sign-in
+(principle_decide DI-F60AEA3E7D84 chose this over refusing or revoking).
+
+- OAuth consent under a handed-over account says when its work was handed over.
+  Connect needs a ticked `acknowledge_handover` naming the session's account;
+  the POST refuses any other and shows the screen again. The audit row records
+  `accountWorkHandedOverAt`.
+- `plan_account_handover` reports `liveAgentCredentials` (live access tokens
+  and refresh grants), outside the digest. The approver ends them through the
+  per-person revoke under Admin > Platform Development > MCP.
+
+## Addendum (2026-10-21, BI-F0E946D2): seeds name the accountable person
+
+Skipping the handed-over account was not enough. The seeds still guessed the
+oldest remaining superuser, and on 2026-10-16 a new seeded task went to a
+superuser who is not the accountable person. The portfolio owner walk
+(`resolveWorkOwner`: portfolio, Foundational, organization, then the guess) now
+lives in `packages/db/src/install-work-owner.ts`. apps/web re-exports it, and
+every task seed names a new task's owner through `findTaskOwnerUserId`. A guard
+test fails a seed that calls the guess directly.

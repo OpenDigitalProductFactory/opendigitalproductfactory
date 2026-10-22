@@ -32,6 +32,7 @@ export interface AdapterMcpSession {
    * binding data.
    */
   taskRunId?: string | null;
+  taskExecutionFence?: import("@/lib/shared/task-execution-fence").TaskExecutionFence | null;
 }
 
 /** Input to an execution adapter */

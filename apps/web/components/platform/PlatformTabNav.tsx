@@ -30,14 +30,14 @@ export function PlatformTabNav({ workspace }: { workspace?: { label: string; ite
 
   return (
     <>
-      <div className="grid gap-2 lg:hidden" data-component="platform-mobile-nav">
+      <div className={`grid gap-2 lg:hidden${context ? " grid-cols-2" : ""}`} data-component="platform-mobile-nav">
         <select
           aria-label="Platform area"
           value={activeFamily.href}
           onChange={(event) => router.push(event.target.value)}
           className={[
             SHELL_TAP_TARGET_CLASS,
-            "w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 text-sm font-medium text-[var(--dpf-text)]",
+            "min-w-0 w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 text-sm font-medium text-[var(--dpf-text)]",
           ].join(" ")}
         >
           {PLATFORM_FAMILIES.map((family) => (
@@ -54,7 +54,7 @@ export function PlatformTabNav({ workspace }: { workspace?: { label: string; ite
             onChange={(event) => router.push(event.target.value)}
             className={[
               SHELL_TAP_TARGET_CLASS,
-              "w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 text-sm font-medium text-[var(--dpf-text)]",
+              "min-w-0 w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 text-sm font-medium text-[var(--dpf-text)]",
             ].join(" ")}
           >
             {subItems.map((item) => (

@@ -91,6 +91,22 @@ function asStatement(value: unknown): string | null {
 }
 
 /**
+ * The acceptance ids a Build Studio design states, exactly as its scope
+ * manifest numbers them. The plan generator names these ids in each task's
+ * `satisfies`, and the plan coverage traces them against the baseline the
+ * spec approval minted from this same numbering (BI-6F2872FC).
+ */
+export function buildDesignAcceptanceCriteria(doc: Record<string, unknown>): Array<{ id: string; statement: string }> {
+  const criteria = Array.isArray(doc.acceptanceCriteria) ? doc.acceptanceCriteria : [];
+  return criteria
+    .map(asStatement)
+    // Index the SURVIVING criteria: a criterion that renders to nothing must not
+    // leave a gap that shifts every later id and moves the baseline digest.
+    .filter((statement): statement is string => statement !== null)
+    .map((statement, index) => ({ id: `AC-${index + 1}`, statement }));
+}
+
+/**
  * Render the marked objective and its acceptance table.
  *
  * Returns null unless BOTH an objective statement and at least one acceptance
@@ -102,16 +118,10 @@ function renderScopeManifest(doc: Record<string, unknown>): string | null {
   const objective = asStatement(doc.problemStatement);
   if (!objective) return null;
 
-  const criteria = Array.isArray(doc.acceptanceCriteria) ? doc.acceptanceCriteria : [];
-  const rows = criteria
-    .map(asStatement)
-    // Index the SURVIVING criteria: a criterion that renders to nothing must not
-    // leave a gap that shifts every later id and moves the baseline digest.
-    .filter((statement): statement is string => statement !== null)
-    .map((statement, index) => {
-      const cell = statement.replace(/\\/g, "\\\\").replace(/\|/g, "\\|");
-      return `| AC-${index + 1} | ${OBJECTIVE_ID} | ${cell} |`;
-    });
+  const rows = buildDesignAcceptanceCriteria(doc).map(({ id, statement }) => {
+    const cell = statement.replace(/\\/g, "\\\\").replace(/\|/g, "\\|");
+    return `| ${id} | ${OBJECTIVE_ID} | ${cell} |`;
+  });
   if (rows.length === 0) return null;
 
   return [
