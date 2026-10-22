@@ -140,8 +140,7 @@ services, gateways, models, directives, data, and runtime state are independent 
 `AUTH`, not a linear transformation chain. The consequential-action path crosses `AUTH` and produces attributable evidence. TAK owns the
 authority decision, runtime gate, delegation, and execution-receipt semantics. GAID owns the
 AgentSubject and operating-profile identity; TAK-JSI owns job/activity qualification; the
-[Portfolio Aligned Agent and Workforce Operating
-Standard](four-portfolio-archetype-ai-workforce-operating-standard.md) owns the Product, service,
+[Portfolio Aligned Agent and Workforce Operating Standard](four-portfolio-archetype-ai-workforce-operating-standard.md) owns the Product, service,
 work, and lifecycle bridge. Offering, accepted agreement, entitlement, usage, asset, package,
 deployment, product instance, and service instance remain separate identities. Context nodes in this
 view do not transfer that ownership to TAK.
@@ -735,7 +734,7 @@ the declared boundary remain explicit assurance limits.
 
 The [assertion rubric](tak-conformance-tests.md#principle-directed-amendment-assertions)
 maps these clauses to observable challenges. The informative
-[composition design](../superpowers/specs/2026-09-27-principle-directed-agent-composition-design.md)
+[composition design](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/250447587496308226abc10aca79ee006ecd10f6/docs/superpowers/specs/2026-09-27-principle-directed-agent-composition-design.md)
 describes MBSE views and the DPF scope binding without adding normative owners.
 
 ## 8. Tool Execution and Action Gating
