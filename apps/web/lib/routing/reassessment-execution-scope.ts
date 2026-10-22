@@ -158,7 +158,7 @@ export function reassessmentCaptureValue(value: unknown): unknown {
   const visit = (entry: unknown): void => {
     if (entry === null || typeof entry === "string" || typeof entry === "boolean") return;
     if (typeof entry === "number" && Number.isFinite(entry)) return;
-    if (typeof entry !== "object" || entry === null || active.has(entry)
+    if (typeof entry !== "object" || active.has(entry)
       || (!Array.isArray(entry) && Object.getPrototypeOf(entry) !== Object.prototype && Object.getPrototypeOf(entry) !== null)) {
       fail("reassessment-capture-invalid", "The complete capture is not losslessly serializable JSON.");
     }
