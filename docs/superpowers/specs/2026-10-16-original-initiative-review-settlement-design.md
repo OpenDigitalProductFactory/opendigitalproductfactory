@@ -661,71 +661,170 @@ composition refuses without silently selecting another provider or route.
 
 **Finite current-token enforcement.** The positive path must preserve the
 reviewer's current registry and execution-configuration limits, including its
-50,000-token aggregate task ceiling. A finite ceiling cannot qualify through an
-estimate, a configured context number or an unlimited-only implementation.
-Before admission, qualify the existing local DMR Messages/count composition and
-its unchanged local-runtime account under normal routing eligibility. Bind the
-actual engine artifact/source, model, deterministic template and served
-configuration; an available route or version prefix alone is insufficient.
+50,000-token aggregate task ceiling. An estimate, configured context number or
+unlimited-only implementation cannot establish that ceiling. Qualify the
+existing local DMR Messages/count composition and its unchanged local-runtime
+account under normal routing eligibility. Bind the actual engine artifact and
+source, full model digest, deterministic template and served configuration; an
+available route or version prefix alone is insufficient.
 
-Inside the admitted window, serialize each complete native Messages body once,
-capture its count request, then durably reserve the exact prompt count plus the
-enforced completion ceiling before sending that unchanged body for generation.
-Both HTTP requests consume the existing start allowance and deadline. Retain
-outstanding or uncertain reservations in full. Validate complete response usage,
-including cached input, against the reservation before further effects. Missing
-identity, changing configuration, invalid counts or incomplete capture refuses
-or holds execution. No account edit, model reload, fallback or native process
-establishes this qualification.
+**Chosen audited composition, pending independent approval.** Kernel decision
+DI-ECA01D51F723 selected `audited-native-messages-invariant`, with composite
+13.0819, margin 0.8069, high confidence, autonomy eligible and no commandment
+conflict. Its recorded outcome supersedes DI-5E1966E5D0FF's proposed broad
+host-owner extension; retain that earlier decision as history. This decision
+selects an implementation direction. It does not approve this amendment,
+establish empirical proof or authorize a production allocation.
 
-The candidate proof is pinned to [DMR v1.2.8 route forwarding](https://github.com/docker/model-runner/blob/5a3112fdc10bcfe236a7450fcfa7e83ed3c0209e/pkg/inference/scheduling/http_handler.go#L98-L108)
-and its [engine identity owner](https://github.com/docker/model-runner/blob/5a3112fdc10bcfe236a7450fcfa7e83ed3c0209e/pkg/inference/backends/llamacpp/download.go#L231-L249).
-The corresponding [llama.cpp count and generation source](https://github.com/ggml-org/llama.cpp/blob/72874f559c598b8f89fbb24864868337cf5afb4c/tools/server/server-context.cpp#L5330-L5378)
-must supply matching tokenization and an enforced completion counter. Template
-clock inputs require an audited deterministic template. Source research does
-not establish that this composition is installed or qualified. The authenticated
-producer, reservation enforcement, response normalization and positive/refusal
-tests remain required before R2 completion or R3 activation.
+The initial native inspection retained in WC-A5703D01 established this candidate
+composition. These are initial physical observations and retained artifact
+identities, not facts freshly measured by each later HTTP read:
 
-**Chosen ownership extension, pending independent approval.** Kernel consult
-DI-5E1966E5D0FF selected extension of the existing durable host-resource owner
-over a separate raw-completion function protocol: high confidence, margin 0.743,
-autonomy eligible, no commandment conflict. This selects the design direction;
-it neither approves this amendment nor authorizes a production allocation.
-The initial preference for the smaller raw adapter was changed by that consult.
+| Evidence | Exact observed value |
+| --- | --- |
+| OCI model manifest | 1,192 bytes; `sha256:66c4f325bc71350f07fb2da4f92455553c7bbc8af5d7ee2095fbeac79b9e66c9` |
+| OCI model configuration | 11,424 bytes; `sha256:0c8ee016ba9be61836af6cac90d09ed414298ba20e65d2a20bf01d642967e7ae` |
+| Logical model configuration using canonical JSON | `sha256:f2cad47727f7d07e4a51f11c4499d90252ee96b530d7a508a06359ecec91dd40` |
+| GGUF layer | `sha256:31629f53165ab6a7dad8c9847dcfd1fdf55829dac1e6e748f4a68581b0033d34` |
+| mmproj layer | `sha256:de2a49866988ea272c43dc2a43ee2662c25725a717ca5b9059ea420a97f53fe8` |
+| Engine executable bytes | `sha256:0e9095b1a9068961682fa60fa101bdcf40e0b1f1e6b0c44c1616c0611c1d4b26` |
+| Reported engine archive identity | `sha256:b70706f473b4043ca3e0c32704a7fda3412b83bceef0564684187b8011230de8` |
+| Engine source | `72874f559c598b8f89fbb24864868337cf5afb4c` |
+| Effective template | 8,952 characters; `sha256:c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041` |
 
-Current DMR source releases its runner reference between count and generation.
-Native Messages does not bind the global template per request. Re-reading
-identities cannot prevent a configuration change and reversal between reads.
-The process-local inference lane therefore cannot supply the required
-cross-worker composition guarantee. The existing nonproduction/developer lease
-contract must not be presented as an already implemented production fence.
+The complete manifest contains GGUF and mmproj layers, with no template sidecar.
+The effective template is clock independent; no separate native named-tool
+template is present. The inspected renderer environment and process arguments contain no
+template overrides. The restricted request remains text and function tools
+only; the mmproj layer grants no multimodal capability. The Workroom evidence
+is neither a review verdict nor a served acceptance receipt.
 
-Extend the existing durable physical-host resource owner explicitly to this
-normal production composition, without a second lock store or grant engine.
-An authenticated Workroom/TaskRun owner must acquire the same resource identity
-used by every supported DMR mutator before current identity reads, counting,
-reservation and generation. Configuration, automatic context reconciliation,
-model install/removal/unload and startup model creation must honor that owner.
-An unguarded supported path makes qualification fail closed. Bind its ownership
-and generation into the execution manifest; verify it at each real dispatch.
-The in-process priority lane remains an adapter with one documented lock order.
+Define one source-audited supported-composition catalog entry from that retained
+evidence and the pinned [DMR v1.2.8 forwarding source](https://github.com/docker/model-runner/blob/5a3112fdc10bcfe236a7450fcfa7e83ed3c0209e/pkg/inference/scheduling/http_handler.go#L98-L108),
+[engine identity owner](https://github.com/docker/model-runner/blob/5a3112fdc10bcfe236a7450fcfa7e83ed3c0209e/pkg/inference/backends/llamacpp/download.go#L231-L249)
+and [llama.cpp count/generation implementation](https://github.com/ggml-org/llama.cpp/blob/72874f559c598b8f89fbb24864868337cf5afb4c/tools/server/server-context.cpp#L5330-L5378).
+Qualification has two explicit phases. Before reserving a candidate, verify the
+source-supported method/catalog, current account and grant intersection,
+registry/execution-configuration budgets, compatible implementation and expected
+composition. That establishes a supported qualification procedure, not a fresh
+observation of the actual runtime or permission to execute a review.
 
-Reuse the existing renewal, cancellation and expiry supervisor. Its interval
-cannot extend the task's immutable deadline or replenish starts/tokens. Lost
-ownership cancels further dispatch and preserves outstanding reservations;
-unproved backend termination is uncertainty, never permission to release early
-or run a replacement. Admission requires positive compatibility evidence for
-the owner and every supported producer. Runtime changes outside that supported
-trusted-owner contract invalidate qualification; status metadata alone is not
-a fresh hash of running engine bytes.
+One atomic admission-counter transaction reserves at most one candidate for the
+exact requirement/artifact and at most two across the named authorization.
+Every reservation counts, including pending, refused, failed, canceled and
+uncertain candidates. A matching caller joins that same candidate; no different
+key, credential family or qualification failure creates a replacement. The
+originals stay UNKNOWN and retain their immutable identities and accounting.
+AC-RA-3 counts that initial candidate allocation. The later execution seal grants
+permission to execute the same allocation; it never allocates a second task.
 
-This broader owner extension requires the new independently approved immutable
-baseline and refreshed atomic R1–R4 coverage before implementation. The existing
-unchanged R2 approval supports the closed-loop/capture scaffolding; draft finite
-reservation and Messages tests do not establish this production ownership
-contract. No finite positive task is admitted until its real enforcement and
-served positive/refusal evidence exist.
+The reserved TaskRun owns one immutable qualification manifest and one captured
+event lineage using existing TaskArtifact/ToolExecution owners. Its initial
+phase permits only the exact bounded runtime-identity GETs. Reader/writer tools,
+counting, generation, fallback and ordinary worker execution remain unavailable.
+Persist each configuration effect's capture before its HTTP request. Fresh reads
+of `/version`, `/engines/status`, the full-SHA `/models` identity/configuration
+and `/engines/_configure` must match the audited catalog and current account.
+Feed those observed facts through normal V2 eligibility and ranking, preserving
+hard task floors, preferences and account restrictions. Only the supported
+expected composition may proceed; a changed selection does not trigger fallback.
+
+Atomically accept the final immutable execution seal under the same TaskRun
+fence and review-subject locking protocol, rechecking authority, baseline,
+membership, compatibility and remaining bounds. The seal binds the actual plan,
+tools, configuration and complete qualification capture. Only then admit reader,
+writer, count and generation effects. Keep the same capture open, event ordinals,
+reservation identity and original window; promotion cannot restart the deadline
+or replenish starts/tokens. A failed qualification consumes its reservation and
+cannot enter ordinary recovery or allocate another assessment.
+
+Revalidate the required logical identities after capacity admission and before
+count/generation dispatch, using captured configuration reads that themselves
+consume the existing allowance. Keep configuration observation separate from the
+check that would otherwise recursively request another observation. Fresh logical
+self-reports are not fresh physical hashes of the executable, inherited
+environment or model files. Unknown, ambiguous, incomplete or changed tuples
+refuse; a matching version prefix does not qualify them. No uncaptured
+pre-reservation HTTP lookup stands in for this protocol.
+
+The composition proof must establish semantic invariance across every supported
+typed DPF mutator. Context reconciliation changes capacity without changing the
+fixed model's tokenizer or renderer. Install, removal, unload and reload paths
+must either preserve those semantics for the exact full model SHA or refuse
+the request. An alias change cannot select a different model for the sealed
+full-SHA body. Audit the effective template selection, absence of sidecars and
+renderer overrides, default template arguments, tokenization and completion
+counter. A supported transition that can change those semantics invalidates the
+catalog entry until a real compatible guard or another proof closes it. Repeated
+identity reads alone cannot exclude a change and reversal between reads.
+
+The trust boundary includes the native runtime, its host administrator and the
+integrity of its self-reports, installed artifacts, environment and startup
+arguments. Arbitrary host/native administrative changes to those facts are
+outside the supported typed DPF contract and invalidate qualification. This
+includes privileged approved `admin_run_command` or sandbox execution; those
+surfaces retain their existing authority and are not claimed absent or retired.
+The trust boundary must be explicit; it does not turn an unsupported renderer mutation
+into a safe one. No new native observer or durable host lease is required solely
+to protect an invariant that every supported transition already preserves.
+Existing admission, execution-generation, resource-capacity and cancellation
+controls still apply. Source audits and kernel decisions cannot substitute for
+the initial physical evidence or actual runtime verification.
+
+Preserve existing local resource-capacity admission. Its `/engines/ps` reads must
+use the same bounded captured transport. The restricted composition cannot
+perform automatic unload or other model-management effects; wait or refuse
+within its unchanged window when capacity is unavailable. Typed capture and
+scope refusals must escape ordinary best-effort error handling.
+
+Inside the admitted window, serialize each complete native Messages body once.
+Capture the count request, validate its nonnegative safe-integer prompt count,
+then durably reserve that exact count plus the full enforced output ceiling
+before sending the unchanged serialized body for generation. Count and
+generation use the exact full model SHA and the catalog's deterministic renderer
+and tokenizer. Every actual HTTP request, including configuration and count
+reads, consumes the recorded start allowance and deadline and receives valid
+pre-effect capture. Configuration reads and prospective counts are not generated
+token usage. Retain every generation reservation in full, including outstanding
+or uncertain consumption; no refund replenishes the task allowance.
+
+Preserve the normal current daily-budget gate at every start, using the current
+registry/configuration intersection and observed UTC-day usage. That gate is an
+observed-usage pre-call check, not a cross-worker reservation of the remaining
+daily allowance. Do not claim a new hard daily aggregate guarantee from it. The
+present task's finite aggregate ceiling uses its strict durable reservations;
+this amendment changes no daily setting, funding authority or normal gate rule.
+
+Before normal V2 selection, apply the existing spend-aware budget-class policy
+for the current daily warning state while preserving hard task floors. Bind that
+class into the execution seal. If its applicable policy changes before dispatch,
+refuse further execution under the spent allocation; do not silently reroute or
+reset qualification, reservations or the window.
+
+Validate complete generation usage: uncached plus cached input must equal the
+reserved prompt count, and output must not exceed the reserved ceiling. Missing
+or conflicting usage, unsupported response blocks, changed configuration or
+incomplete capture holds further effects and reconciles any genuine committed
+receipt first. Refuse media, hidden native tools, fallback, account preparation,
+native process launch and silent setting removal. Pre-start capture failure
+allows zero starts; post-start uncertainty preserves the reservation and history.
+
+To reduce provider starts, the implementation may preload the complete bound
+artifact through the same governed immutable reader, with attributable capture
+and traversal evidence, and stop when the canonical receipt is verified. It must
+not truncate source, tool history or output allowances to fit the budget, invent
+reader evidence, or replace the independent writer's judgment. Failure to fit
+the full reservation refuses execution.
+
+The new authenticated finite qualifier and production integration remain
+unimplemented. Draft reservation and Messages tests do not establish their
+installation, qualification or served acceptance. The independently approved
+amendment baseline, refreshed atomic R1–R4 coverage, compatible producer and
+transport evidence, and real positive/refusal verification remain required
+before their respective implementation and delivery gates. No finite positive
+task is admitted until its actual enforcement is established. This choice
+changes no AC-RA-4/5/7 semantics, human budget authorization, historical unknown
+consumption or original-task replay prohibition.
 
 ### Atomic admission, original limits and concurrency
 
@@ -750,7 +849,10 @@ while holding the subject lock. Demonstrate the protocol in real PostgreSQL race
 
 In that transaction, recheck current actor and normal grant intersection,
 exact artifact/baseline and packet, original immutable identities, cancellation,
-composition qualification, compatibility and remaining aggregate allowance.
+the source-supported qualification procedure, compatibility and remaining
+aggregate allowance. For a reserved candidate, the final execution seal
+rechecks those conditions and the actual qualified composition before granting
+execution; it does not create another allocation.
 Current per-task writer attempts and saved inference/deadline ceilings are
 owned by accepted TaskRun requests and terminal-writer checkpoints. Provider
 usage and pending reservations come from task-linked AsyncInferenceOp,
@@ -825,6 +927,22 @@ consolidates existing generation, authority and effect predicates.
 
 R4 requires affected unit tests, real PostgreSQL races, package typechecks,
 exact committed-tree gates, independent assessment, DCO PR and protected merge.
+The planned server-owned `mcp-task-reassessment-contract.ts` must obtain explicit
+support from the actual transport, approval, worker and canonical-writer owners
+and bind it to the executing container config digest and baked source identity.
+Reuse the existing immutable runtime-image observer and packaged protocol-probe
+pattern; neither environment SHA alone nor a liveness heartbeat proves support.
+Seal and recheck that evidence through existing TaskRun/TaskArtifact owners.
+Prove that an actual old binding parser refuses the nested new relation through
+persisted-request digest reconstruction before preparation or inference.
+
+Enforce candidate compatibility through existing self-upgrade preflight, final
+swap and promoter rollback owners. Forced draining cannot waive it. Automatic
+rollback cannot restore incompatible writer/reader bytes while retained
+obligations require the fences; quiescence alone is not retirement proof. These
+deployment and compatibility producers remain unimplemented and require real
+positive, missing-proof, mixed-version and unsafe-downgrade verification.
+
 Only canonical `request_self_upgrade` advances the install. Served acceptance
 verifies compatible writer/approval/transport coverage, a restricted positive
 case and refusal cases. The parent obtains genuine current D2/4E requirement
