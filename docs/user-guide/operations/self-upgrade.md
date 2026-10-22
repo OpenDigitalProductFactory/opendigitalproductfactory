@@ -122,9 +122,13 @@ upgrade. Nothing is lost by waiting.
 
 ## What Is Reversible
 
-- A failed upgrade is **automatically rolled back** and its promoter container is
-  force-removed, so a broken build cannot leave the install in a half-swapped
-  state.
+- Saving a recovery point does not make restoration available. The page keeps
+  the backup and run history visible and explains why restoration is unavailable.
+  Canonical database restoration is currently blocked until the platform can
+  prove that review history remains intact.
+- A failed upgrade can use the previous version only when that version is
+  compatible with the retained history. Read the deployment details after a
+  failure; automatic restoration is not guaranteed.
 - Candidate promoter preparation and the application build use Docker BuildKit
   and the same bounded wall-clock budget (default **25 minutes**). If either
   build stalls, it is killed and the deployment is marked failed with a

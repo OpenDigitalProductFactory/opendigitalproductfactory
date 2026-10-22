@@ -8,6 +8,7 @@ import {
   runPostgresRestore,
 } from "@/lib/operate/backups/postgres-restore-runner";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { getSelfUpgradeRecoveryState, type SelfUpgradeRecoveryPointSnapshot } from "./recovery-eligibility";
 
 export const SELF_UPGRADE_ROLLBACK_CONFIRMATION_TEXT = "ROLLBACK";
 const ROLLBACK_TRIGGER = "self-upgrade-rollback";
@@ -79,21 +80,7 @@ export class SelfUpgradeRollbackError extends Error {
   }
 }
 
-interface SelfUpgradeRecoveryPointMemberLike {
-  target: BackupTarget;
-  runId: string | null;
-  status: "ok" | "failed";
-  error?: string;
-}
-
-interface SelfUpgradeRecoveryPointLike {
-  schemaVersion: 1;
-  status: "ok" | "failed" | "skipped";
-  trigger: "pre-upgrade-recovery";
-  selfUpgradeRunId: string;
-  createdAt: string;
-  members: SelfUpgradeRecoveryPointMemberLike[];
-}
+type SelfUpgradeRecoveryPointLike = SelfUpgradeRecoveryPointSnapshot;
 
 interface RollbackArgs {
   runId: string;
@@ -106,53 +93,6 @@ interface RollbackArgs {
 function toRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
-}
-
-function parseRecoveryPoint(value: unknown): SelfUpgradeRecoveryPointLike | null {
-  const evidence = toRecord(value);
-  const point = toRecord(evidence?.recoveryPoint);
-  if (!point) return null;
-  if (point.schemaVersion !== 1) return null;
-  if (point.trigger !== "pre-upgrade-recovery") return null;
-  if (!Array.isArray(point.members)) return null;
-
-  return point as unknown as SelfUpgradeRecoveryPointLike;
-}
-
-function memberMap(point: SelfUpgradeRecoveryPointLike): Record<BackupTarget, string> {
-  if (point.status !== "ok") {
-    throw new SelfUpgradeRollbackError(
-      `Recovery point status is ${point.status}; only complete recovery points can be restored.`,
-    );
-  }
-
-  const byTarget = new Map<BackupTarget, string>();
-  for (const member of point.members) {
-    if (member.status === "ok" && member.runId) {
-      byTarget.set(member.target, member.runId);
-    }
-  }
-
-  const missing = RESTORE_ORDER.filter((target) => !byTarget.has(target));
-  if (missing.length > 0) {
-    throw new SelfUpgradeRollbackError(
-      `Recovery point is missing successful backup members: ${missing.join(", ")}.`,
-    );
-  }
-
-  const result: Partial<Record<BackupTarget, string>> = {};
-  for (const target of RESTORE_ORDER) {
-    result[target] = byTarget.get(target)!;
-  }
-  return result as Record<BackupTarget, string>;
-}
-
-function requireReassessmentRetentionBeforeRestore(): void {
-  // The restore mutex cannot exclude other workers or survive pg_restore.
-  // No canonical producer yet proves allocation/history retention, protected
-  // commits excluded through restoration, or positively settled restoration.
-  // Refusal loses rollback availability; it is not positive retention evidence.
-  throw new SelfUpgradeRollbackError("reassessment-rollback-retention-unproven: canonical database restoration cannot prove retained allocations, histories and fences.");
 }
 
 async function resolveRunners(
@@ -352,16 +292,12 @@ export async function runSelfUpgradeRollback(
   if (!run) {
     throw new SelfUpgradeRollbackError(`SelfUpgradeRun ${args.runId} not found.`);
   }
-  if (run.status === "running") {
-    throw new SelfUpgradeRollbackError("Cannot rollback while the self-upgrade run is still running.");
+  const recovery = getSelfUpgradeRecoveryState(run);
+  if (!recovery.available || !recovery.point || !recovery.backupRunIds) {
+    throw new SelfUpgradeRollbackError(`${recovery.reason}: ${recovery.detail}`);
   }
-
-  const recoveryPoint = parseRecoveryPoint(run.completionEvidence);
-  if (!recoveryPoint) {
-    throw new SelfUpgradeRollbackError("Self-upgrade run has no governed recovery point.");
-  }
-  const memberRunIds = memberMap(recoveryPoint);
-  requireReassessmentRetentionBeforeRestore();
+  const recoveryPoint = recovery.point;
+  const memberRunIds = recovery.backupRunIds;
   const sourceSnapshots = await loadRecoverySourceSnapshots(prisma, memberRunIds);
   const runners = await resolveRunners(args.runners);
 
@@ -424,14 +360,7 @@ export async function runSelfUpgradeRollback(
 }
 
 export function hasGovernedRecoveryPoint(completionEvidence: unknown): boolean {
-  const recoveryPoint = parseRecoveryPoint(completionEvidence);
-  if (!recoveryPoint) return false;
-  try {
-    memberMap(recoveryPoint);
-    return true;
-  } catch {
-    return false;
-  }
+  return getSelfUpgradeRecoveryState({ status: "succeeded", completionEvidence }).backupRunIds !== null;
 }
 
 export { RestoreIntegrityError, RestoreLockedError };

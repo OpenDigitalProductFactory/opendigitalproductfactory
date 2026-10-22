@@ -2881,6 +2881,22 @@
         "a-room-with-no-workitem-is-its-own-case"
       ]
     },
+    "docs/audits/2026-10-22-review-reassessment-restore-availability.md": {
+      "publicHref": "/audits/2026-10-22-review-reassessment-restore-availability/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "recovery-availability-on-the-self-upgrade-page",
+        "finding-and-approved-scope",
+        "prototype-and-fit-decision",
+        "implementation-plan",
+        "verification-and-publication",
+        "task-and-scorecard-contract",
+        "source-and-delivery-checks",
+        "sources"
+      ]
+    },
     "docs/business-types/_readability-report.md": {
       "publicHref": "/business-types/_readability-report/",
       "portalHref": null,

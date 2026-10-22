@@ -20,6 +20,8 @@ vi.mock("@/lib/operate/metrics", () => ({
 
 import { prisma } from "@dpf/db";
 import { __test__ as restoreLockTest } from "@/lib/operate/backups/postgres-restore-runner";
+import * as restoreRunner from "@/lib/operate/backups/postgres-restore-runner";
+import { getSelfUpgradeRecoveryState } from "./recovery-eligibility";
 import {
   hasGovernedRecoveryPoint,
   runSelfUpgradeRollback,
@@ -36,6 +38,7 @@ const mockPrisma = prisma as unknown as {
     upsert: ReturnType<typeof vi.fn>;
   };
 };
+const acquireRestoreLock = vi.spyOn(restoreRunner, "acquireRestoreLock");
 
 const recoveryPoint = {
   schemaVersion: 1,
@@ -194,5 +197,26 @@ describe("self-upgrade rollback", () => {
     expect(hasGovernedRecoveryPoint({ recoveryPoint })).toBe(true);
     expect(hasGovernedRecoveryPoint({ recoveryPoint: { ...recoveryPoint, status: "failed" } })).toBe(false);
     expect(hasGovernedRecoveryPoint({})).toBe(false);
+  });
+
+  it.each([
+    makeRun({ status: "running" }),
+    makeRun({ completionEvidence: null }),
+    makeRun({ completionEvidence: { recoveryPoint: { ...recoveryPoint, members: [null] } } }),
+    makeRun({ completionEvidence: { recoveryPoint: { ...recoveryPoint, status: "failed" } } }),
+    makeRun({ completionEvidence: { recoveryPoint, rollback: { status: "ok" } } }),
+    makeRun(),
+  ])("uses the same fresh-run policy before any restore effect: %j", async run => {
+    mockPrisma.selfUpgradeRun.findUnique.mockResolvedValue(run);
+    const expected = getSelfUpgradeRecoveryState(run);
+    const postgres = vi.fn();
+    await expect(runSelfUpgradeRollback({ runId: "SUR-ROLLBACK", prismaClient: mockPrisma as never,
+      runners: { postgres } })).rejects.toThrow(`${expected.reason}: ${expected.detail}`);
+    expect(mockPrisma.selfUpgradeRun.findUnique).toHaveBeenCalledTimes(1);
+    expect(mockPrisma.backupRun.findMany).not.toHaveBeenCalled();
+    expect(acquireRestoreLock).not.toHaveBeenCalled();
+    expect(postgres).not.toHaveBeenCalled();
+    expect(mockPrisma.backupRun.upsert).not.toHaveBeenCalled();
+    expect(mockPrisma.selfUpgradeRun.upsert).not.toHaveBeenCalled();
   });
 });
