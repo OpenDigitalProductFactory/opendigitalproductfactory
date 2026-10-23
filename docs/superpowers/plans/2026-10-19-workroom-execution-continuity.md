@@ -98,7 +98,8 @@ Roll out through existing controls by qualified surface. Revert new dispatch/pro
 
 - Decision: decomposed
 - Parent: BI-BCF32886
-- Receipt: blocked-by: the new xlarge parent has no independently approved immutable scope baseline yet; schema-v2 decomposition coverage must bind the published plan after that approval, before any child implementation.
+- Scope baseline: baseline-e344160c-0104-4401-bf38-a3f3564760a7, independently approved against design commit f2c05001c4751f3b7acce860ca557d7209bd15e6 and blob 616803c28bf2b64edea43de88edbbb17a50edf6f.
+- Receipt: blocked-by: live schema-v2 decomposition recording against this published plan is pending; implementation remains gated until its genuine receipt is recorded and checked.
 - Dependencies: P0 attribution precedes performance claims; P1 shared brief precedes cross-surface resume; P2 depends on existing recovery/handoff contracts; P3 depends on attribution and current provider/client capability; P4 consumes P0-P3; P5 consumes P1/P2; P6 observes qualified P0-P5.
 - P0 attribution -> BI-731F7FA2
 - P0 cumulative spend -> BI-CCF1ACBB
@@ -113,9 +114,9 @@ Roll out through existing controls by qualified surface. Revert new dispatch/pro
 - P3 cache hardening -> BI-4761F54E
 - P5 improvement capture and outcome -> BI-IMP-9DA35549
 
-Requirements: AC-CONT-1, AC-CONT-2, AC-CONT-3, AC-CONT-4, AC-CONT-5, AC-CONT-6, AC-CONT-7. Contracts: C-BRIEF, C-WAKE, C-PROVIDER, C-REUSE, C-ATTRIBUTION, C-UX. Flows: F-ENTRY, F-CHECKPOINT, F-HANDOFF, F-CLOSE, F-WAIT, F-OBSERVE. Verification: V-REHYDRATION, V-WAKE, V-PROVIDER, V-REUSE, V-ATTRIBUTION, V-UX, V-PILOT. These labels identify this plan's obligations, not new schema/types or implemented capabilities.
+Baseline objectives (requirementRefs): OBJ-CONTINUITY, OBJ-FLOW, OBJ-REUSE, OBJ-ECONOMY, OBJ-CLARITY. Baseline acceptance (verificationRefs): AC-CONT-1, AC-CONT-2, AC-CONT-3, AC-CONT-4, AC-CONT-5, AC-CONT-6, AC-CONT-7. Contracts: C-BRIEF, C-WAKE, C-PROVIDER, C-REUSE, C-ATTRIBUTION, C-UX. Flows: F-ENTRY, F-CHECKPOINT, F-HANDOFF, F-CLOSE, F-WAIT, F-OBSERVE. Verification: V-REHYDRATION, V-WAKE, V-PROVIDER, V-REUSE, V-ATTRIBUTION, V-UX, V-PILOT. These labels identify this plan's obligations, not new schema/types or implemented capabilities.
 
-After source publication, obtain the current independent parent design approval and immutable scope baseline through the governed reviewer route. Record coverage against this plan's exact commit and blob with each independently shippable mapping and its requirement/contract/flow/verification references; record P6 as internal sequencing. Read back with `check_plan_backlog_coverage` and append its genuine receipt and immutable locator without rewriting historical evidence. If the current coverage reader requires refreshed plan identity after this bookkeeping append, follow its returned contract. Do not fabricate a receipt, self-approve or downgrade the parent's shape to obtain coverage.
+The independent scope approval is recorded above. After publishing the current plan, Record coverage against this plan's exact commit and blob with each independently shippable mapping and its requirement/contract/flow/verification references; record P6 as internal sequencing. Read back with `check_plan_backlog_coverage` and append its genuine receipt and immutable locator without rewriting historical evidence. If the current coverage reader requires refreshed plan identity after this bookkeeping append, follow its returned contract. Do not fabricate a receipt, self-approve or downgrade the parent's shape to obtain coverage.
 
 ## Verification of this planning delivery
 
