@@ -12,6 +12,7 @@ import {
 const item = (overrides: Partial<InboundEcosystemItem> = {}): InboundEcosystemItem => ({
   sourceKind: "upstream-issue",
   sourceId: "412",
+  repository: "acme/widgets",
   title: "Dispatch board loses the second appointment",
   summary: "Booking two jobs in one slot silently drops the later one.",
   workType: "bug",
@@ -27,11 +28,37 @@ describe("toBacklogIngestInput", () => {
     expect(toBacklogIngestInput(item()).source).toBe("user-request");
   });
 
-  it("carries a provenance origin so a re-run dedupes instead of filing a copy", () => {
-    expect(toBacklogIngestInput(item()).origin).toEqual({
-      kind: "ecosystem-upstream-issue",
-      id: "412",
+  it("carries a repository-qualified origin so a re-run reconciles instead of filing a copy (BI-952F08BA)", () => {
+    const input = toBacklogIngestInput(item({ repository: "acme/widgets", url: "https://github.com/Acme/Widgets/issues/412", state: "open" }));
+    expect(input.origin).toEqual({ kind: "ecosystem-upstream-issue", id: "acme/widgets#412" });
+    expect(input.reconcile).toMatchObject({
+      repository: "acme/widgets",
+      sourceUrl: "https://github.com/Acme/Widgets/issues/412",
+      state: "open",
+      legacyId: "412",
+      fingerprint: expect.stringMatching(/^[0-9a-f]{64}$/),
     });
+  });
+
+  it("keeps the same issue number in two repositories distinct", () => {
+    const a = toBacklogIngestInput(item({ repository: "acme/widgets" }));
+    const b = toBacklogIngestInput(item({ repository: "acme/gadgets" }));
+    expect(a.origin?.id).not.toBe(b.origin?.id);
+  });
+
+  it("fingerprints content and state, so edits, closure and reopen are observable", () => {
+    const base = toBacklogIngestInput(item({ repository: "acme/widgets", state: "open" })).reconcile!.fingerprint;
+    expect(toBacklogIngestInput(item({ repository: "acme/widgets", state: "open" })).reconcile!.fingerprint).toBe(base);
+    expect(toBacklogIngestInput(item({ repository: "acme/widgets", state: "closed" })).reconcile!.fingerprint).not.toBe(base);
+    expect(toBacklogIngestInput(item({ repository: "acme/widgets", title: "Edited title" })).reconcile!.fingerprint).not.toBe(base);
+  });
+
+  it("refuses an upstream issue whose repository is unknown rather than filing an unqualified origin", () => {
+    expect(() => toBacklogIngestInput(item({ repository: null }))).toThrow(/repository/);
+  });
+
+  it("leaves peer demand on the existing recurrence semantics", () => {
+    expect(toBacklogIngestInput(item({ sourceKind: "peer-demand", sourceId: "fdm_1" })).reconcile).toBeUndefined();
   });
 
   it("distinguishes the two transports in the origin kind", () => {
@@ -107,10 +134,27 @@ describe("runInboundIssueTriage", () => {
     expect(onFailure).toHaveBeenCalledOnce();
   });
 
+  it("counts created, unchanged, changed and needs-review outcomes separately", async () => {
+    const ingest = vi.fn()
+      .mockResolvedValueOnce({ itemId: "BI-NEW", created: true, outcome: "created" })
+      .mockResolvedValueOnce({ itemId: "BI-SAME", created: false, outcome: "unchanged" })
+      .mockResolvedValueOnce({ itemId: "BI-EDIT", created: false, outcome: "changed" })
+      .mockResolvedValueOnce({ itemId: "", created: false, outcome: "needs-review", reviewCandidates: ["BI-A", "BI-B"] });
+
+    const result = await runInboundIssueTriage({
+      items: [item({ sourceId: "1" }), item({ sourceId: "2" }), item({ sourceId: "3" }), item({ sourceId: "4" })],
+      ingest,
+    });
+
+    expect(result).toMatchObject({ ingested: 1, unchanged: 1, changed: 1, needsReview: 1, failed: 0 });
+    expect(result.itemIds).toEqual(["BI-NEW", "BI-SAME", "BI-EDIT"]);
+    expect(result.reviews).toEqual([{ origin: "ecosystem-upstream-issue:acme/widgets#4", candidates: ["BI-A", "BI-B"] }]);
+  });
+
   it("reports an empty sweep without calling the front door", async () => {
     const ingest = vi.fn();
     expect(await runInboundIssueTriage({ items: [], ingest })).toEqual({
-      ingested: 0, deduped: 0, failed: 0, itemIds: [],
+      ingested: 0, deduped: 0, unchanged: 0, changed: 0, needsReview: 0, failed: 0, itemIds: [], reviews: [],
     });
     expect(ingest).not.toHaveBeenCalled();
   });
@@ -140,6 +184,16 @@ describe("mapUpstreamIssues", () => {
   it("adopts a label that names a known work type, and ignores one that does not", () => {
     expect(mapUpstreamIssues([issue()])[0].workType).toBe("bug");
     expect(mapUpstreamIssues([issue({ labels: ["needs-triage"] })])[0].workType).toBeNull();
+  });
+
+  it("qualifies each issue with the repository its URL names, and carries its state", () => {
+    const mapped = mapUpstreamIssues([issue({ htmlUrl: "https://github.com/Acme/Widgets/issues/412", state: "closed" })])[0];
+    expect(mapped).toMatchObject({ repository: "acme/widgets", state: "closed" });
+  });
+
+  it("falls back to the commissioned repository when the URL names none", () => {
+    const mapped = mapUpstreamIssues([issue()], { owner: "Acme", name: "Widgets" })[0];
+    expect(mapped.repository).toBe("acme/widgets");
   });
 
   it("falls back to the title when the issue has no body", () => {

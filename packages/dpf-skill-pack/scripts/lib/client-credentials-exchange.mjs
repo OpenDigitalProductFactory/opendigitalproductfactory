@@ -18,7 +18,7 @@ export function tokenEndpointFor(mcpUrl) {
   return `${url.origin}/api/oauth/token`;
 }
 
-function postForm(endpoint, form, { timeoutMs }) {
+function postForm(endpoint, form, { timeoutMs, tlsOptions }) {
   const url = new URL(endpoint);
   const requestFn = url.protocol === "https:" ? httpsRequest : httpRequest;
   const body = new URLSearchParams(form).toString();
@@ -26,6 +26,7 @@ function postForm(endpoint, form, { timeoutMs }) {
     const req = requestFn(url, {
       method: "POST",
       agent: false,
+      ...tlsOptions,
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
         "Content-Length": Buffer.byteLength(body),
@@ -57,6 +58,7 @@ export async function exchangeClientCredentials({
   clientSecret,
   scope = "",
   timeoutMs = 10_000,
+  tlsOptions,
   post = postForm,
   now = () => Date.now(),
 }) {
@@ -68,7 +70,7 @@ export async function exchangeClientCredentials({
     resource: new URL(mcpUrl).origin + "/api/mcp/v1",
   };
   if (scope) form.scope = scope;
-  const response = await post(endpoint, form, { timeoutMs });
+  const response = await post(endpoint, form, { timeoutMs, tlsOptions });
   let payload = null;
   try {
     payload = JSON.parse(response.body);

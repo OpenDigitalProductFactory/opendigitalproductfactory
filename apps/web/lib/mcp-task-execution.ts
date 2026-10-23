@@ -1,5 +1,6 @@
 import { EXECUTION_UNCERTAIN_MESSAGE, executionUncertaintyFromError, hasExecutionUncertainty } from "./shared/execution-uncertainty";
 import { reservationIdentity, dispatchIdentity, settleRemoteTask } from "./mcp-task-attempt-state";
+import { captureTaskExecutionFence } from "./shared/task-execution-fence";
 import { projectRemoteTaskReplay } from "./mcp-task-replay-projection";
 import { TASK_IN_FLIGHT_STATES } from "@/lib/tak/task-states";
 import { remoteTaskConversation } from "./mcp-task-conversation";
@@ -107,6 +108,8 @@ export async function executeRemoteTaskAttempt(input: {
     || dispatchIdentity(admittedRun.progressPayload) !== dispatchClaim)) {
     return projectRemoteTaskReplay({ existing: { ...admittedRun, taskRunId: run.taskRunId }, requestMatches: true });
   }
+  const taskExecutionFence = parsed.initiativeReviewBinding ? captureTaskExecutionFence(admittedRun.progressPayload,
+    (admittedRun.a2aMetadata as Record<string, unknown> | null)?.requestDigest) : undefined;
   const settle = (args: Prisma.TaskRunUpdateManyArgs & { where: { taskRunId: string } }) =>
     settleRemoteTask(args, reservation, dispatchClaim);
   // A lost acknowledgement is recovery work, not another independent assessment.
@@ -310,6 +313,7 @@ export async function executeRemoteTaskAttempt(input: {
       threadId: input.threadId,
       taskRunId: run.taskRunId,
       apiTokenId: token.tokenId,
+      taskExecutionFence,
       tokenScope: token.capability,
       // The task's authority scope bounds the reviewer's nested governed dispatch
       // (a writer re-reading its bound artifact); without it that check sees no grants (BI-F8C661D0).

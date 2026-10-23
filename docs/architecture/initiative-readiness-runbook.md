@@ -11,6 +11,17 @@
 
 ## 0. Two "shapes" — do not conflate them
 
+### Approval status is separate from original action evidence
+
+The exact caller-scoped `get_my_approval_status` reader includes a separate
+`actionEvidence` projection for stored provider-account test outcomes. It proves
+the original envelope, tool, actor and input before returning a bounded typed
+result; missing, conflicting and unsupported evidence remain explicit. Pending
+discovery retains its status-only contract. This read never dispatches or replays
+an action, and generic test success supplies neither a Responses verification
+receipt nor a selected-quota transaction receipt. It cannot settle an uncertain
+initiative review or substitute for the gate's independent writer.
+
 ### Medium body criteria and independent acceptance
 
 Effective medium work, including product-linked work, can satisfy its objective
@@ -221,10 +232,19 @@ This is a tracked platform defect, **BI-ECFE0AC2** ("External initiative reviewe
 
 ## 7. Closing a small or medium item: the baseline is the body (BI-0F8E39D5)
 
-A small or medium item's objective baseline is the acceptance criteria in its body. Its shape owes no spec, so never seek spec approval for it. Two different refusals look alike, and the recovery packet now names each one (DI-FDAB20135537):
+For ordinary small or medium work without prior approved scope, the objective
+baseline is the acceptance criteria in its body. Do not create a spec solely
+for that gate. A medium item retaining an independently approved repository
+baseline keeps that approval's amendment writer: when the current design is
+stale, use the server-issued independent spec-approval packet bound to the
+existing baseline and current immutable artifact. Author body criteria cannot
+overwrite it. Inherited scope remains owned by its parent; this route never
+lets a child amend that parent. BI-31159978 repairs this ownership distinction.
+
+For body-owned scope, the recovery packet distinguishes two refusals (DI-FDAB20135537):
 
 - **`acceptance-criteria-missing`: the body has no criteria the parser can read.** Put them under a heading that contains "Acceptance" (for example `## Acceptance criteria`), one criterion per bullet, or use bullets that start with `AC-<id>:`. A bold line is not a heading. Update the body with `update_backlog_item` and retry. BI-FA769D87 was refused this way and closed minutes after its criteria moved under a heading.
-- **`body-baseline-unpersisted`: the criteria are there, but acceptance is unmet.** Platform work is accepted once its merge through branch protection is recognized. Bind the Workroom head to the merged commit, cite `manual_check` (and `ux_verified` when a UI changed), and read any merge-signal reason on the refusal. Other medium work needs an independent objective-mapping receipt, and no lane persists a baseline from body criteria yet. That gap stays open on BI-0F8E39D5. Minting a baseline from the body was weighed and deferred: it would touch the whole reviewer lane and could stale receipts that close today. It will be revisited when an unmerged medium item is actually blocked by it. Do not self-approve.
+- **`body-baseline-unpersisted`: the criteria are readable but no version is retained.** Follow the authorized body-baseline retention procedure above: a valid completion transition can retain the criteria and source identity, then fresh passing evidence and the exact independent acceptance packet are required. It never replaces an approved or inherited baseline or creates a passing receipt. Do not claim completion merely to obtain a baseline; the completion manifest must describe actual delivered work.
 
 ## Approval outcome readback
 

@@ -201,6 +201,9 @@ COPY scripts/lib/worktree-liveness.mjs ./scripts/lib/
 # claims through the shared MCP client (plan 2026-09-08 §10.5 S8).
 COPY scripts/lib/mcp-client.mjs ./scripts/lib/
 COPY scripts/lib/mcp-credential.mjs ./scripts/lib/
+COPY scripts/lib/mcp-host-trust.mjs ./scripts/lib/
+COPY scripts/lib/resolve-compose-install-context.mjs ./scripts/lib/
+COPY scripts/installer/lib/mcp-client-env.sh ./scripts/installer/lib/
 # mcp-credential.mjs re-exports the client_credentials exchange from the skill pack (BI-84C1F526).
 COPY packages/dpf-skill-pack/scripts/lib/client-credentials-exchange.mjs ./packages/dpf-skill-pack/scripts/lib/
 COPY scripts/lib/junction-safe-worktree-remove.mjs ./scripts/lib/
@@ -379,7 +382,8 @@ WORKDIR /app
 # publish path materializes LFS via `actions/checkout` with `lfs: true`; this
 # is the same guarantee for the path that has no GitHub Actions runner.
 # Dockerfile.sandbox installs it for the same class of reason.
-RUN apk add --no-cache docker-cli docker-cli-buildx docker-cli-compose postgresql16-client git git-lfs curl nmap
+# Shared HTTPS tooling consumes the installer-owned Bash environment resolver.
+RUN apk add --no-cache docker-cli docker-cli-buildx docker-cli-compose postgresql16-client git git-lfs curl nmap bash
 ENV NODE_ENV=production
 ENV HOSTNAME=0.0.0.0
 ENV PORT=3000

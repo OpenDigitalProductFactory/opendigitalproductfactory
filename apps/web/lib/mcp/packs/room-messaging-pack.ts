@@ -321,9 +321,14 @@ async function planAccountHandoverHandler(params: Record<string, unknown>, userI
   const plan = await planAccountHandover(prisma as never, { sourceAccount: str(params, "sourceAccount") ?? "" });
   if (!plan.ok) return { success: false, error: "handover_refused", message: plan.error };
   const count = (kind: string) => plan.data.items.filter((i) => i.kind === kind).length;
+  // The handover moves work, not access (BI-9D2199D4): say what stays live.
+  const { accessTokens, refreshGrants } = plan.data.liveAgentCredentials;
+  const access = accessTokens + refreshGrants > 0
+    ? ` The account keeps its access: ${accessTokens} live agent token(s) and ${refreshGrants} refresh grant(s) stay live unless ended under Admin > Platform Development > MCP.`
+    : "";
   return {
     success: true,
-    message: `${plan.data.items.length} item(s) would move from ${plan.data.sourceEmail}: ${count("room")} room(s), ${count("build")} build(s), ${count("scheduled-task")} scheduled task(s). ${plan.data.refused.length} refused.`,
+    message: `${plan.data.items.length} item(s) would move from ${plan.data.sourceEmail}: ${count("room")} room(s), ${count("build")} build(s), ${count("scheduled-task")} scheduled task(s). ${plan.data.refused.length} refused.${access}`,
     data: plan.data,
   };
 }
@@ -502,7 +507,7 @@ const definitions: ToolDefinition[] = [
   {
     name: "plan_account_handover",
     description:
-      "Dry run of handing over an account's live work: every live room it alone coordinates, every live Build Studio build it created, and every scheduled coworker task it owns, each with its new owner (the accountable person of the item's portfolio, then Foundational, then the organization). Items with no chosen owner are refused, never given a guessed one. Returns a digest; apply_account_handover moves exactly that set. Writes nothing.",
+      "Dry run of handing over an account's live work: every live room it alone coordinates, every live Build Studio build it created, and every scheduled coworker task it owns, each with its new owner (the accountable person of the item's portfolio, then Foundational, then the organization). Items with no chosen owner are refused, never given a guessed one. It also reports the account's live agent credentials, which a handover does not revoke. Returns a digest; apply_account_handover moves exactly that set. Writes nothing.",
     inputSchema: {
       type: "object",
       properties: {

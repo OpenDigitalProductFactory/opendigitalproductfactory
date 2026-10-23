@@ -125,6 +125,12 @@ export async function evaluateOrgBusinessDecisionGate(input: {
    * recorded (BI-6DCF772F).
    */
   scoredOptions?: DecisionScoredOption[];
+  /**
+   * The calling coworker's own proposal (BI-AE416D75), recorded beside the
+   * kernel's pick so the trust ledger can measure the coworker. Omit when the
+   * coworker proposed nothing.
+   */
+  proposedOptionId?: string | null;
   domainClass: DecisionDomainClass;
   riskTier: DecisionRiskTier;
   declarations?: DecisionDeclarations;
@@ -154,6 +160,7 @@ export async function evaluateOrgBusinessDecisionGate(input: {
     question: input.question,
     options: input.options,
     scoredOptions: input.scoredOptions,
+    proposedOptionId: input.proposedOptionId ?? null,
     domainClass: input.domainClass,
     riskTier: input.riskTier,
     declarations: input.declarations,

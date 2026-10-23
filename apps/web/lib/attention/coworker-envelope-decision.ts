@@ -5,12 +5,14 @@
 // the exact arguments. This module projects those arguments plus bound
 // subject/gate semantics into owner language. Unknown shapes fail closed.
 
+export const TASK_EXECUTION_FENCE_AUDIT_KEY = "_taskExecutionFence";
 export const GOVERNED_AUDIT_PARAMETER_KEYS = new Set([
   "_surface",
   "_takAlignment",
   "_takPrecondition",
   // The platform approval-resume marker (approval-resume-marker.ts, BI-C8EC05C9).
   "_approvalResume",
+  TASK_EXECUTION_FENCE_AUDIT_KEY,
 ]);
 
 const KNOWN_DECISIONS = ["pass", "fail", "not-applicable"] as const;

@@ -97,7 +97,7 @@ export function projectModelSupplyDomain(
   }
 
   const firstActionable = providers.find((provider) =>
-    ["needs_credentials", "no_models", "unconfigured", "disabled"].includes(
+    ["needs_credentials", "no_models", "public_only", "unconfigured", "disabled"].includes(
       provider.eligibility.state,
     ),
   );
@@ -378,6 +378,7 @@ async function loadModelSupplyProviders(): Promise<AiReadinessProviderInput[]> {
           discoveredModelCount: summary?.totalModels ?? 0,
           cliPoolExhausted: pool?.isExhausted ?? false,
           cliPoolResetHint: pool ? poolResetHint(pool) : null,
+          sensitivityClearance: provider.sensitivityClearance,
         }),
       };
     });

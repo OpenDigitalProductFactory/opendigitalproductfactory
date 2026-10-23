@@ -49,7 +49,8 @@ Metrics instead of filling the journal with low-value chatter.
    to review. Reading quiescence status uses the existing
    `release_plan_read` grant and does not mutate the platform.
 4. In the **Action Ledger**, find the proposal and distinguish pending,
-   executed, rejected, and failed states. Approval is evidence that the named
+   executed, rejected, failed, and expired states. Expired means nobody decided
+   it within the seven-day approval window, so nothing ran. Approval is evidence that the named
    action was authorized; it is not evidence that execution succeeded.
 5. In the **Capability Journal**, find the corresponding execution and inspect
    the coworker, capability, result, and available receipt reference. A failed

@@ -883,6 +883,9 @@
       "docs/design/golden-triangle-vector-reference.md",
       "docs/user-guide/ai-workforce/priority-and-outcomes.md"
     ],
+    "apps/web/lib/golden-triangle/index.ts": [
+      "docs/architecture/agent-standards-dpf-conformance.md"
+    ],
     "apps/web/lib/golden-triangle/receipt.ts": [
       "docs/user-guide/ai-workforce/priority-and-outcomes.md"
     ],
@@ -1111,6 +1114,9 @@
       "docs/architecture/section-navigation.md",
       "docs/maintenance/staleness-report.md"
     ],
+    "apps/web/lib/nonprod/environment-lease-preview-yield.ts": [
+      "docs/architecture/build-gate-runbook.md"
+    ],
     "apps/web/lib/nonprod/gate-client-revision.ts": [
       "docs/architecture/dpf-patterns.md",
       "docs/install/platform-support-watchlist.md"
@@ -1298,9 +1304,7 @@
       "docs/architecture/2026-06-14-ai-cockpit-sysml-architecture-note.md"
     ],
     "apps/web/lib/routing/request-contract.ts": [
-      "docs/architecture/2026-06-14-ai-cockpit-sysml-architecture-note.md",
       "docs/architecture/2026-06-14-odysseus-review-depth-pass.md",
-      "docs/architecture/ai-routing-document-map.md",
       "docs/design/golden-triangle-design.md"
     ],
     "apps/web/lib/routing/task-requirements.email.test.ts": [
@@ -1511,6 +1515,9 @@
     ],
     "apps/web/lib/work-capsules.ts": [
       "docs/architecture/work-shapes-and-the-decision-gate.md"
+    ],
+    "apps/web/lib/work-capsules/authored-head.ts": [
+      "docs/architecture/failure-analysis-and-recovery.md"
     ],
     "apps/web/lib/work-capsules/delivery-task-hub.ts": [
       "docs/user-guide/build-studio/index.md"
@@ -2900,7 +2907,6 @@
       "apps/web/lib/ea/ai-routing-architecture-registry.ts",
       "apps/web/lib/marketing/channels/email-postmark/responder.ts",
       "apps/web/lib/routing/request-contract.email.test.ts",
-      "apps/web/lib/routing/request-contract.ts",
       "apps/web/lib/routing/task-requirements.email.test.ts",
       "apps/web/lib/routing/task-requirements.ts",
       "packages/db/src/seed-ea-sysml2.test.ts"
@@ -2986,6 +2992,7 @@
       "apps/web/lib/autonomy/regulatory-ceiling.ts",
       "apps/web/lib/autonomy/trust-graduation.ts",
       "apps/web/lib/coworker/authorized-surface-runtime.ts",
+      "apps/web/lib/golden-triangle/index.ts",
       "apps/web/lib/identity/aidoc-resolver.ts",
       "apps/web/lib/mcp/backlog-recovery-read.ts",
       "apps/web/lib/mcp/load-tools.ts",
@@ -3020,8 +3027,7 @@
       "apps/web/lib/ea/reconcile-ai-routing-architecture.ts",
       "apps/web/lib/govern/data/policy-decision.ts",
       "apps/web/lib/govern/data/policy-enforcement.ts",
-      "apps/web/lib/inference/routed-inference.ts",
-      "apps/web/lib/routing/request-contract.ts"
+      "apps/web/lib/inference/routed-inference.ts"
     ],
     "docs/architecture/application-boundaries.md": [
       "scripts/check-application-boundaries.mjs"
@@ -3076,6 +3082,7 @@
       "apps/web/lib/build/pr-follow-through.ts",
       "apps/web/lib/build/pull-request-merged-signal.ts",
       "apps/web/lib/build/sandbox/test-scope-guard.ts",
+      "apps/web/lib/nonprod/environment-lease-preview-yield.ts",
       "apps/web/lib/queue/functions/build-pr-delivery-reconcile.ts",
       "apps/web/lib/queue/functions/build-review-verification.ts",
       "packages/dpf-skill-pack/hooks/lib/local-ci-override.mjs",
@@ -3283,6 +3290,7 @@
     ],
     "docs/architecture/failure-analysis-and-recovery.md": [
       "apps/web/lib/change-review/failure-analysis.ts",
+      "apps/web/lib/work-capsules/authored-head.ts",
       "scripts/pregate-preflight.mjs"
     ],
     "docs/architecture/field-service-work-item.md": [

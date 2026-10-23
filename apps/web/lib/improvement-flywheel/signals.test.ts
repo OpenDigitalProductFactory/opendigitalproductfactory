@@ -1,12 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { upsert, update, ingestBacklogItem } = vi.hoisted(() => ({
+const { upsert, update, findUnique, transaction, ingestBacklogItem } = vi.hoisted(() => ({
   upsert: vi.fn(),
   update: vi.fn(),
+  findUnique: vi.fn(),
+  transaction: vi.fn(),
   ingestBacklogItem: vi.fn(),
 }));
 
-vi.mock("@dpf/db", () => ({ prisma: { improvementSignal: { upsert, update } } }));
+vi.mock("@dpf/db", () => ({ prisma: { improvementSignal: { upsert, update, findUnique }, $transaction: transaction } }));
 vi.mock("@/lib/operate/backlog-ingest", () => ({ ingestBacklogItem }));
 
 import { createOrTouchImprovementSignal } from "./signals";
@@ -39,11 +41,28 @@ function memoryStore(seed?: Row) {
     Object.assign(row, data, { recurrenceCount: count });
     return { ...row };
   });
+  findUnique.mockImplementation(async ({ where }) => {
+    const row = rows.get(JSON.stringify([where.sourceType_sourceId.sourceType, where.sourceType_sourceId.sourceId]));
+    return row ? { ...row } : null;
+  });
+  // The per-signal advisory lock serialises filing transactions, as Postgres does.
+  let held = Promise.resolve();
+  transaction.mockImplementation(async (work: (tx: unknown) => Promise<unknown>) => {
+    const prior = held;
+    let release!: () => void;
+    held = new Promise((resolve) => { release = resolve; });
+    await prior;
+    try {
+      return await work({ $executeRaw: vi.fn(), improvementSignal: { findUnique, update } });
+    } finally {
+      release();
+    }
+  });
   return rows;
 }
 
 describe("createOrTouchImprovementSignal", () => {
-  beforeEach(() => { upsert.mockReset(); update.mockReset(); ingestBacklogItem.mockReset(); });
+  beforeEach(() => { upsert.mockReset(); update.mockReset(); findUnique.mockReset(); transaction.mockReset(); ingestBacklogItem.mockReset(); });
 
   it.each(["workroom-flow-bottleneck", "curator-finding"])("preserves existing persistent-observer intake for %s", async (sourceType) => {
     const rows = memoryStore();
@@ -148,6 +167,24 @@ describe("createOrTouchImprovementSignal", () => {
     expect(new Set(results.map((r) => r.signalId)).size).toBe(1);
     expect(results.filter((r) => r.isNew)).toHaveLength(1);
     expect([...rows.values()][0]?.recurrenceCount).toBe(1);
+  });
+
+  // BI-13C8F888: two touches crossing the threshold together both read a null
+  // backlink; only the first may file, the others must return its link.
+  it("files one backlog item when concurrent touches cross the threshold together", async () => {
+    const rows = memoryStore();
+    let n = 0;
+    const fileBacklogItem = vi.fn(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      n += 1;
+      return { itemId: `BI-FILED-${n}` };
+    });
+    const observation = { ...input, sourceType: "workroom-flow-bottleneck" };
+    for (let k = 0; k < 2; k += 1) await createOrTouchImprovementSignal(observation, { fileBacklogItem });
+    const results = await Promise.all([1, 2, 3].map(() => createOrTouchImprovementSignal(observation, { fileBacklogItem })));
+    expect(fileBacklogItem).toHaveBeenCalledTimes(1);
+    expect(results.map((r) => r.backlogItemId)).toEqual(["BI-FILED-1", "BI-FILED-1", "BI-FILED-1"]);
+    expect([...rows.values()][0]?.backlogItemId).toBe("BI-FILED-1");
   });
 
   it("keeps different source identities distinct", async () => {

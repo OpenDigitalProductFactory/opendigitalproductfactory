@@ -133,11 +133,18 @@ export async function createOrTouchImprovementSignal(
   });
   let backlogItemId = row.backlogItemId ?? undefined;
   if (!immutableSource && !backlogItemId && row.recurrenceCount >= SIGNAL_BACKLOG_THRESHOLD) {
-    const filed = await (deps?.fileBacklogItem ?? filePersistentSignal)({ ...input, signalId: row.signalId, recurrenceCount: row.recurrenceCount });
-    if (filed?.itemId) {
-      backlogItemId = filed.itemId;
-      await prisma.improvementSignal.update({ where, data: { backlogItemId } });
-    }
+    // Concurrent touches can all read a null backlink here (BI-13C8F888). A
+    // per-signal lock makes filing one critical section: whoever holds it
+    // re-reads the link and files only when it is still empty.
+    backlogItemId = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`improvement-signal:${row.signalId}`}, 0))`;
+      const current = await tx.improvementSignal.findUnique({ where, select: { backlogItemId: true } });
+      if (current?.backlogItemId) return current.backlogItemId;
+      const filed = await (deps?.fileBacklogItem ?? filePersistentSignal)({ ...input, signalId: row.signalId, recurrenceCount: row.recurrenceCount });
+      if (!filed?.itemId) return undefined;
+      await tx.improvementSignal.update({ where, data: { backlogItemId: filed.itemId } });
+      return filed.itemId;
+    }, { timeout: 30_000 });
   }
   return {
     signalId: row.signalId,

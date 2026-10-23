@@ -919,6 +919,21 @@ identity or retry authority is introduced. Existing controls still decide
 which fallback is eligible; if none is eligible, the result remains a truthful
 infrastructure failure.
 
+### Dated Claude CLI weekly limit (BI-6C8E2561, 2026-10-21)
+
+The Claude CLI states a spent weekly limit as `resets Oct 20, 4pm (UTC)`:
+month, day, clock and IANA zone, but no year. The recorder only read Codex's
+`try again at <date>` form, so this banner took the 60-second default. On the
+live install the `anthropic-sub` pool read healthy from October 16 to October 20
+16:00 UTC, and the capacity drain, the agent-task dispatcher and the Workroom
+drive all counted it as capacity.
+
+The recorder now reads that form. The year is the occurrence nearest now, and
+the clock is converted through the named zone. The reset is recorded as
+`quota_resets_at` with exact confidence, so `getAllCliPoolStatuses` reports the
+pool exhausted until then. The clock-only banner above still names no day, and
+an unknown zone names no instant: both keep the bounded backoff.
+
 ## 18. References
 
 - [Coworker Substrate Status Review](../audits/2026-04-29-cli-substrate-status-review.md) — the audit this spec promotes

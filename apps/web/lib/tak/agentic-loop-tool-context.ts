@@ -15,6 +15,7 @@ export type LoopToolContextInput = {
   agentId: string;
   threadId: string;
   taskRunId?: string | null;
+  taskExecutionFence?: import("@/lib/shared/task-execution-fence").TaskExecutionFence | null;
   apiTokenId?: string | null;
   tokenScope?: GovernedExecuteContext["tokenScope"];
   tokenGrantScopes?: GovernedExecuteContext["tokenGrantScopes"];
@@ -40,6 +41,7 @@ export function loopToolContext(
     agentId: input.agentId,
     threadId: input.threadId,
     taskRunId: input.taskRunId ?? undefined,
+    taskExecutionFence: input.taskExecutionFence,
     apiTokenId: input.apiTokenId ?? undefined,
     tokenScope: input.tokenScope,
     tokenGrantScopes: input.tokenGrantScopes,

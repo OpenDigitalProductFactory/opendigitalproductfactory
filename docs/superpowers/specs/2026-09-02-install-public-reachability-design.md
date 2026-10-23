@@ -4,6 +4,8 @@ status: active
 
 # Install Public Reachability — one contract, pluggable providers
 
+**Program reference (2026-10-19):** [Company connectivity, customer registry and relationship-governed support](2026-10-19-company-connectivity-registry-support-design.md), EP-58240092, reconciles this delivery stream with mobile, registry, MSP exclusivity, provider signup and growth stages. This document still owns the reachability contract. Its historical implementation observations and backlog status are not runtime acceptance; recover retained branches/PRs before replacing work. Refresh the September tool evaluation for the newly documented Cloudflare Tunnels for Platforms offering before a managed-fleet signup.
+
 **Date:** 2026-09-02 · **Epic:** EP-1FABA22D
 **Backlog:** BI-E2E8BD27
 

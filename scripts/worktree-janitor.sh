@@ -86,7 +86,11 @@ record() { # verdict path reason
 
 # ── Main clone detection ──────────────────────────────────────────────────────
 script_dir="$(cd "$(dirname "$0")" && pwd)"
-root="$("$GIT_BIN" -C "$script_dir" worktree list --porcelain | awk '/^worktree /{print $2; exit}')"
+# BI-2EF2E6D3: awk must read ALL input. An early `exit` leaves git writing into a
+# closed pipe once the list outgrows the pipe buffer (~500 worktrees); git takes
+# SIGPIPE, pipefail reports 141 and set -e kills the janitor before it prints a
+# line — every sweep became a silent no-op. sub() also keeps paths with spaces.
+root="$("$GIT_BIN" -C "$script_dir" worktree list --porcelain | awk '/^worktree / && !seen {sub(/^worktree /, ""); print; seen = 1}')"
 if [ -z "${root:-}" ]; then
   echo "  [fail]  could not determine root clone" >&2; exit 1
 fi
@@ -107,8 +111,11 @@ has_active_lease() {
     -H "Content-Type: application/json" \
     -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list_nonprod_environment_leases","arguments":{}}}' \
     2>/dev/null)" || return 1
-  # Check if any active lease worktreePath matches wt_path
-  printf '%s' "$resp" | grep -q "\"$wt_path\""
+  # Check if any active lease worktreePath matches wt_path. Match in-shell, not
+  # `printf | grep -q`: grep -q exits on the first hit, printf can take SIGPIPE,
+  # and pipefail would turn a FOUND lease into "no lease" — pruning a leased
+  # worktree (BI-2EF2E6D3).
+  [[ "$resp" == *"\"$wt_path\""* ]]
 }
 
 # ── Open PR check via gh CLI ──────────────────────────────────────────────
@@ -222,7 +229,7 @@ while IFS= read -r wt_path; do
   age_days=$(( age_secs / 86400 ))
   record KEEP "$wt_path" "branch=$branch unmerged, ${age_days}d old (<${GRACE_DAYS}d grace)"
 
-done < <("$GIT_BIN" -C "$root" worktree list --porcelain | awk '/^worktree /{print $2}')
+done < <("$GIT_BIN" -C "$root" worktree list --porcelain | awk '/^worktree /{sub(/^worktree /, ""); print}')
 
 printf '\nSummary: %d PRUNE  %d KEEP  %d SKIP  %d PINNED\n' \
   "$count_prune" "$count_keep" "$count_skip" "$count_pinned"
