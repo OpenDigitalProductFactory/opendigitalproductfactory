@@ -6,13 +6,56 @@ status: active
 
 - **Backlog item:** BI-E27F3600
 - **Design:** `docs/superpowers/specs/2026-09-26-review-instantiation-by-shape-and-criticality-design.md`
-- **Integration prerequisite:** BI-74B2A8CD merged. Phases 2 and 6 call `resolveDecisionEscalation`, `decisionAllowsStep` and the shared damaging definition it adds to `apps/web/lib/govern/authority/escalation-gate.ts`. No authority/decision integration starts before it lands. The original approved phase 1 may be prepared and tested independently: its pure calculation has no dependency on that module and is not wired into runtime dispatch by this preparation.
+- **Integration prerequisite:** BI-74B2A8CD source landed through PR #6432 at c1febac8743. Phases 2 and 6 reuse `resolveDecisionEscalation`, `decisionAllowsStep` and their shared damaging definition in `apps/web/lib/govern/authority/escalation-gate.ts`. Its separate acceptance remains with its owner; this plan does not close it.
 
 Owner revision, 2026-10-15: target one PR for the related participation and
 consultation repairs. The phases below are internal sequencing, not a requirement
 for six PRs. Reconcile delivery mappings and renew independent coverage for the
 revised design before implementation. Until phase 6, retain the existing decision
 behavior; never enable a hold without its executable reviewer path.
+
+## Current execution brief, 2026-10-23
+
+The objective is one complete participation lifecycle: declared craft obligations,
+authorized admission, durable execution and attributable completion. The phases
+are internal sequencing, not independently shippable features. All ten traceability
+rows below map to BI-E27F3600. UI implementation, routine executor handoffs and
+historical execution settlement retain their existing owners.
+
+The published checkpoint cc2986345131 passed the shared local-CI convergence
+sandbox: 760 suites and 9,872 tests passed, 16 suites and 78 tests were skipped,
+and five tests were todo. Both TypeScript programs passed. This is historical
+source verification, not proof of native participation or a pass for later trees.
+Local merge 1602974dab69 incorporates main f8d1e801fc4c; its normal commit checks
+passed both web TypeScript programs and the database package typecheck.
+
+The independent spec review of design blob f3368430fcc01583bf8df57df62caae16f061a72
+completed with receipt
+initiative-review-v1-d6d18c217e7f7641d0ffe19415cb969ce2a75dcb2a2b75e41e364ecf21b5ff45
+and baseline baseline-c1c09681-bff9-409b-af5a-bf2a45831d5e. The architecture
+reviewer's subsequent submissions were rejected for malformed citations. Its
+unrecorded observations exposed a stale dependency statement and unclear
+activation sequencing; the accompanying design correction addresses those
+facts without claiming an architecture pass. Renew review against the corrected
+artifact, then record current plan coverage and obtain independent plan review.
+
+Remaining implementation is phases 4-6: immutable stage/need identity, atomic
+participant and task admission, distinct authoring and independent-review
+obligations, complete scheduling, revision-bound contributions and author
+disposition. The existing engagement adapter is preparation, not served behavior.
+Enable decision holds only after its reviewer path is executable and verified.
+
+Historical formal tasks ending BF8A1F1B2D2F and 73E9748A68F5 remain untouched;
+their settlement is unknown. Neither this baseline nor a new source review
+settles them. The two routing engagements also remain unfulfilled. CE-724328D6
+names f52f119b46acb6748b29c55a23ee0b8490a3cfd6 in its original free-text input;
+it cannot be relabeled as evidence for a later revision. A supported revision
+association must preserve the original request, input digest, tasks and findings.
+An unknown prior execution never authorizes another execution.
+
+The dated checkpoints below retain their original evidence and limitations.
+Their pending statuses and older mappings describe those dates; the current
+execution brief and live receipts determine the next authorized action.
 
 ## Phase 1: step criticality
 
@@ -228,7 +271,7 @@ do not add an external terminal writer or repurpose the CI-correlation tool.
 - Connect the existing pure `resolveStepReviewNeed` to server-owned preparation, then `resolveSemanticReviewCoordination`. Required authoring professions remain accounted for even when independent review is routine. Every required profession has a result or an explicit unavailable obligation; bounded concurrency never truncates the set.
 - Bind `stageKey`, exact head, criticality, authority, providers, corpus fingerprints and author disposition into immutable request and receipt identity. A stage/head/authority change invalidates reuse. Use the existing semantic background packet forwarding and per-agent checkpoints; coordinate its file owner before editing that module if a real change is needed.
 - Recheck current actor, room, stage and provider authority before each inference and the final independent core review. Craft proposals remain advisory and cannot manufacture blocking authority, calibration or source-read provenance.
-- Extend the existing engagement lifecycle with a supported revision extension and author disposition while retaining prior requests, findings and original task effects. A completion projection must match the current stage and artifact and retain actual source/corpus evidence. Never re-label an earlier critique as coverage for a corrected artifact.
+- Extend the existing engagement lifecycle with a supported revision extension and author disposition while retaining prior requests, findings and original task effects. A completion projection must match the current stage and artifact and retain actual source/corpus evidence. Preserve explicit original artifact locators and free-text scope, including a legacy source named in `surface-or-prototype`; first association must not silently replace it. Revision intent and rationale must be explicit and attributable to the authorized original requester. Never re-label an earlier critique as coverage for a corrected artifact or dispatch another task while prior effects are unknown.
 - Tests: identical files in routine/small and critical/large rooms draw different review depth and name its cause; a declared HTML prototype requires UX before React files exist; more than three required professions all receive accounted outcomes; partial failure cannot pass; stage/head changes and revocation during execution stop later calls; authoring and independent review use separate eligible principals; accepted/rejected author dispositions retain the contribution and rationale.
 
 ## Phase 6: undecided decisions hold for review
@@ -300,26 +343,23 @@ Run the available doc guards and record any unavailable checks as unrun.
 
 ## Backlog coverage
 
-The following is the proposed coverage reconciliation, not an accepted new
-receipt. The checked-in coverage gate allows a plan to preserve a concrete
-blocked-by condition; implementation authority still comes from live receipts.
+Current coverage is pending for the corrected immutable design and this plan.
+The checked-in gate permits this explicit blocked-by condition; this paragraph
+does not grant implementation authority or replace a live coverage receipt.
 
 - Decision: atomic
-- Rationale: the phases in this branch form one participation lifecycle: obligation selection, bounded authorization, durable dispatch and attributable completion must agree before the changed runtime behavior can be released. The isolated helper is preparation without runtime consumers. The owner requested one combined PR; independent approval/handoff and provider-page work remain outside this delivery and with their existing BIs. This supersedes the earlier proposed decomposed label, which incorrectly combined internal sequencing with independently owned related work.
+- Rationale: obligation selection, bounded authorization, durable dispatch, independent review and attributable completion form one behavior and one clean revert. Shipping a hold without its executor, or claiming participation without its complete evidence, is not an independent deliverable. The owner requested one combined PR. UI and executor-handoff implementations remain outside it with their existing owners.
 - Parent: BI-E27F3600
-- Receipt: blocked-by: expanded AC-7 through AC-10 need independently accepted revised scope and plan coverage; exact-head claims return historical passes without a new reviewer packet, while independent-review dispatch requires that packet.
-- Dependencies: BI-74B2A8CD must land before authority/decision integration; revised-scope review and delivery mapping for BI-0AABCD1F remain pending.
-- step-criticality, review-authority, craft-classifier, room-instantiation, need-and-receipts, undecided-hold -> BI-E27F3600 (original six-deliverable coverage; not new scope approval).
-- governed external consultation and executed-result/corpus evidence -> BI-0AABCD1F (triage research, design and final delivery mapping pending).
-- approval and bounded executor-handoff changes -> BI-B22C8E02 (separate active chat; not implemented in this branch).
-- provider-page prototype and compact UX -> BI-7AA4EB6B (separate chat; not implemented in this branch).
+- Receipt: blocked-by: publish the corrected design and plan through the exact-tree gate; renew their independent scope and architecture reviews; record schema-v2 coverage against the resulting current baseline, then obtain plan review.
+- Source dependency: BI-74B2A8CD landed through PR #6432; its acceptance is separate.
+- Mapping: step-criticality, review-authority, craft-classifier, room-instantiation, need-and-receipts, undecided-hold, declared-profession-obligations, complete-craft-scheduling, returned-contribution-and-disposition, explicit-profession-consult -> BI-E27F3600. None is independently shippable.
+- Context intake: BI-0AABCD1F remains triaging research; it does not supply implementation authority or own a second copy of AC-7 through AC-10.
+- Routine same-mandate executor handoff: BI-5366EF78, with its existing owner. Historical BI-B22C8E02 delivery does not complete that successor.
+- Provider-page UX: BI-7AA4EB6B; routing UI: BI-2BBD9D34. Their merged code and screenshots do not establish the missing native UX contribution.
 
-The original immutable six-deliverable coverage belongs to the previous scope.
-This expanded plan has **coverage pending**, not a fabricated replacement receipt.
-Do not implement the expanded scope or runtime integration until the dependency
-and revised coverage above are resolved. Original phase 1 is already covered by
-the accepted OBJ-NEED / AC-1 baseline and original six-deliverable coverage. Its
-source-only preparation does not satisfy AC-1's eventual end-to-end review proof.
+The former six-deliverable coverage stays historical. Copy the newly returned
+receipt here and verify it with `check_plan_backlog_coverage` before phase 4
+implementation. A source-local pass does not satisfy live acceptance.
 The exact-head implementation claim IRD-DC3770D02E22 admitted that existing scope;
 it is not evidence of independent approval of this revision. This remains a
 resumption checkpoint, not a completed design or shipped fix.

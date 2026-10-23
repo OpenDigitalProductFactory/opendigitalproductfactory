@@ -210,13 +210,19 @@ where the founder's "middle band" is resolved by a coworker instead of a person.
   That is data-gated; this design makes enforcement per-step when it happens.
 - Coworker-led promotion of craft material (BI-1C9E7EB2).
 
-## 7. Owner-directed revision, 2026-10-15 â€” pending independent review
+## 7. Owner-directed revision, 2026-10-15
 
 The owner requested delivery-relevant specialists in every Workroom run, including
 their contribution to the deliverable rather than only its final review. The
 owner also requested one PR for related participation and UX consultation repairs.
-This revision is a proposal awaiting renewed design and plan coverage; the old
-receipts do not approve these additions. Research intake: BI-0AABCD1F.
+This revision required renewed design and plan coverage; the earlier receipts
+did not approve these additions. On October 23, the independent spec reviewer
+approved blob f3368430fcc01583bf8df57df62caae16f061a72 at source cc2986345131,
+including AC-7 through AC-10. Its receipt is
+initiative-review-v1-d6d18c217e7f7641d0ffe19415cb969ce2a75dcb2a2b75e41e364ecf21b5ff45.
+Architecture review and current plan coverage remain outstanding. This factual
+reconciliation needs review against its own immutable artifact; it claims no
+implementation or live contribution. Research intake: BI-0AABCD1F.
 
 ### Required participation precedes review authority
 
@@ -364,13 +370,14 @@ must be exercised on the served canonical target after the containing release.
   declares unconditional `consequence: authority`, pinned by a test. This design
   does not disable that gate or change global permissions. Any refinement needs
   a server-verifiable owner mandate and its own authorized authority review.
-- BI-74B2A8CD remains an unmerged prerequisite. Its existing workroom and branch
-  are preserved. Do not invent its functions, switch undecided decisions to
-  `hold` without an executable reviewer path, or claim this combined work ready
-  while that dependency is unresolved.
+- BI-74B2A8CD's escalation-rule source landed through PR #6432 at
+  c1febac8743 and is present in canonical source f8d1e801fc4c. Its live item
+  remains awaiting acceptance under its existing owner. This supplies the source
+  dependency; it does not complete this framework's reviewer path or qualify
+  decision holds. Those still require the implementation and verification below.
 
 
-## 8. Native execution amendment, 2026-10-16 - independent assessment pending
+## 8. Native execution amendment, 2026-10-16
 
 This amendment supersedes section 3.4's proposed external terminal-writer
 mechanism. Source inspection found that `record_semantic_review_outcome` records
@@ -407,9 +414,12 @@ Design Critic.
 
 The executed receipt retains stage, head, criticality, authority, exact selected
 principals, corpus fingerprints and author disposition. The existing global
-calibration ceiling remains in force. `INDEPENDENT_REVIEW_INTERIM` stays unchanged
-until this amended path is executable and verified; this amendment does not
-claim its implementation or native approval.
+calibration ceiling remains in force. The sequence is independent design and
+plan approval, implementation and verification of the reviewer path, then
+activation of decision holds. `INDEPENDENT_REVIEW_INTERIM` stays unchanged until
+that final qualification. Runtime qualification is an activation condition,
+separate from the approval needed to implement the path. Implementation and live
+execution remain unverified.
 
 ### Critique capture transport repair
 
@@ -424,14 +434,17 @@ no grant, consent or publishing authority changes. The refused live request
 remains refused until the normal containing release and a new authorized call.
 
 
-## 9. Current provider qualification and artifact sharing — proposal, not approval
+## 9. Current provider qualification and artifact sharing - proposal, not approval
 
 A read-only live check on October 16 found the UX critic's canonical AGT-906
 active in production with registry/document/spec-plan/browser reads, but without
 file_read. Its registered runtime alias has no independent grant rows. The
 engagement read reported zero active rooms. This establishes neither a completed
-contribution nor permission to add grants. The v1 reader recipe therefore remains
-unavailable for that provider under its actual authority.
+contribution nor permission to add grants. The v1 reader recipe was therefore
+unavailable at that checkpoint. The separately approved file-read grant was
+executed and its canonical row verified on October 19. Current execution must
+still recheck effective grants, revocations, source and room access; the grant
+alone establishes neither a contribution nor permission to share an artifact.
 
 Grant lookup must use the existing canonical coworker authority identity for
 both actor and provider. Check canonical revocations, and separately require
