@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { delimiter, dirname, join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { guardShellEnv, resolveGuardBash } from "./lib/guard-bash.mjs";
@@ -25,7 +25,6 @@ const bash = resolveGuardBash();
 const bashPath = (path) => process.platform === "win32"
   ? resolve(path).replace(/^([A-Za-z]):\\/, (_, drive) => `/${drive.toLowerCase()}/`).replaceAll("\\", "/")
   : resolve(path);
-const pathKey = Object.keys(process.env).find(key => key.toLowerCase() === "path") ?? "PATH";
 const gitAvailable = spawnSync("git", ["--version"], { encoding: "utf8" }).status === 0;
 const lfsAvailable = spawnSync("git", ["lfs", "version"], { encoding: "utf8" }).status === 0;
 const bashAvailable = spawnSync(bash, ["--version"], { encoding: "utf8" }).status === 0;
@@ -54,6 +53,10 @@ function withLfsFixture(run) {
   assert.ok(bashAvailable, "source identity regression requires Bash; the gate must not skip it");
   const root = mkdtempSync(join(tmpdir(), "dpf-promote-source-identity-"));
   const source = join(root, "source");
+  // Native Windows Git LFS treats /dev/null as a relative hooks directory.
+  // Keep any fixture-owned hooks outside the source whose identity is checked.
+  const hooks = join(root, "hooks");
+  mkdirSync(hooks);
   const systemConfig = join(root, "gitconfig-system");
   const globalConfig = join(root, "gitconfig-global");
   // Do not inherit the operator's filters, repository overrides or signing.
@@ -70,7 +73,7 @@ function withLfsFixture(run) {
   });
   writeFileSync(systemConfig, "");
   writeFileSync(globalConfig, "");
-  const git = (args, overrides = {}) => execFileSync("git", ["-c", "core.hooksPath=/dev/null", "-C", source, ...args], {
+  const git = (args, overrides = {}) => execFileSync("git", ["-c", `core.hooksPath=${hooks}`, "-C", source, ...args], {
     env: { ...env, ...overrides }, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 20_000,
   }).trim();
   try {
@@ -94,15 +97,18 @@ function withLfsFixture(run) {
       utimesSync(asset, previous.atime, new Date(previous.mtimeMs + 2000));
     };
     forceContentCheck();
-    return run({ root, source, asset, head, env, git, forceContentCheck });
+    return run({ root, source, hooks, asset, head, env, git, forceContentCheck });
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 }
 
-function runIdentityGuard(fixture, overrides = {}) {
-  return spawnSync(bash, ["-eu", "-c", `${sourceIdentityBlock()}\nprintf 'identity-accepted=%s\\n' "$DPF_VERSION"`], {
-    env: { ...fixture.env, PROMOTE_SOURCE: bashPath(fixture.source), PROMOTE_TARGET_SHA: fixture.head, ...overrides },
+function runIdentityGuard(fixture, { pathPrefix } = {}) {
+  // Git Bash prepends its own Git directories while importing Windows PATH.
+  // Install the fault-injection shim after startup so the real block reaches it.
+  const pathSetup = pathPrefix ? `export PATH=${shellQuote(bashPath(pathPrefix))}:"$PATH"\n` : "";
+  return spawnSync(bash, ["-eu", "-c", `${pathSetup}${sourceIdentityBlock()}\nprintf 'identity-accepted=%s\\n' "$DPF_VERSION"`], {
+    env: { ...fixture.env, PROMOTE_SOURCE: bashPath(fixture.source), PROMOTE_TARGET_SHA: fixture.head },
     encoding: "utf8", timeout: 20_000,
   });
 }
@@ -120,11 +126,12 @@ function withReadOnlySourceLfs(fixture, run) {
     chmodSync(sourceTmp, 0o555);
   }
   try {
-    const baseline = spawnSync("git", ["-c", "core.hooksPath=/dev/null", "-C", fixture.source, "status", "--porcelain"], {
+    const baseline = spawnSync("git", ["-c", `core.hooksPath=${fixture.hooks}`, "-C", fixture.source, "status", "--porcelain"], {
       env: fixture.env, encoding: "utf8", timeout: 20_000,
     });
     assert.notEqual(baseline.status, 0, "the fixture must deny LFS writes inside source before testing the guard");
-    assert.match(baseline.stderr, /(?:permission denied|not a directory|cannot create|file exists)/i);
+    assert.match(baseline.stderr, /(?:permission denied|not a directory|cannot create|file exists|the system cannot find the path specified)/i);
+    assert.match(baseline.stderr, /clean filter 'lfs' failed/);
     return run();
   } finally {
     if (useBlockedPath) {
@@ -210,7 +217,7 @@ test("the real promotion guard refuses Git status errors instead of treating emp
     const shim = join(fixture.root, "git");
     writeFileSync(shim, `#!/bin/sh\nfor arg in "$@"; do\n  if [ "$arg" = status ]; then printf 'fixture status failure\\n' >&2; exit 23; fi\ndone\nexec ${shellQuote(realGit)} "$@"\n`);
     chmodSync(shim, 0o755);
-    const result = runIdentityGuard(fixture, { [pathKey]: `${fixture.root}${delimiter}${fixture.env[pathKey]}` });
+    const result = runIdentityGuard(fixture, { pathPrefix: fixture.root });
     assert.notEqual(result.status, 0, "Git verification errors must block image construction");
     assert.match(result.stderr, /fixture status failure/);
     assert.match(result.stderr, /cannot verify build source status/);
