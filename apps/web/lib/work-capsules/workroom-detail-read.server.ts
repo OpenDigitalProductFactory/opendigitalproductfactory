@@ -69,4 +69,3 @@ export async function readWorkroomDetail(params: Record<string, unknown>, userId
     data,
   };
 }
-

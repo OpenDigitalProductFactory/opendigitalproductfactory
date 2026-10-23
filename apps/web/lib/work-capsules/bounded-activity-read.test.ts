@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { readBoundedActivity } from "./bounded-activity-read";
+import { clampToolResultForModel } from "@/lib/tak/tool-result-budget";
+import type { DataPolicyDecision } from "@/lib/govern/data/policy-decision";
 
 const room = { id: "room-row", capsuleId: "WC-1", activitySequence: 251 };
 const row = (sequence: number) => ({ id: `activity-${sequence}`, sequence, kind: "evidence-recorded",
@@ -9,7 +11,7 @@ const row = (sequence: number) => ({ id: `activity-${sequence}`, sequence, kind:
 function fixture(rows = [row(1), row(2)], allowed = true) {
   const query = vi.fn(async () => rows);
   return { query, canRead: vi.fn(async () => allowed), hasLegacy: vi.fn(async () => false),
-    db: { $queryRaw: query }, room };
+    db: { $queryRaw: query }, room: { ...room } };
 }
 
 describe("bounded Workroom activity read", () => {
@@ -94,7 +96,8 @@ describe("bounded Workroom activity read", () => {
 
   it("reads an exact selected JSON null distinctly from an absent path", async () => {
     const f = fixture();
-    f.query.mockResolvedValue([{ ...row(1), valueExists: true, valueOversized: false, value: null }] as never);
+    f.query.mockResolvedValueOnce([{ ...row(1), valueExists: true, valueOversized: false, value: null, valueText: "null" }] as never)
+      .mockResolvedValueOnce([{ exact: true }] as never);
     expect(await readBoundedActivity(f, { activityId: "activity-1", payloadPath: ["result", "decision"] })).toMatchObject({
       success: true, data: { detail: { value: null, selectedValueComplete: true, fullActivityDelivered: false } },
     });
@@ -104,9 +107,80 @@ describe("bounded Workroom activity read", () => {
     });
   });
 
+  it.each([
+    "9007199254740993", "0.1234567890123456789", "1e-400", "1e400",
+    '{"nested":[9007199254740993]}',
+  ])("withholds a selected value changed by JSON number decoding: %s", async valueText => {
+    const f = fixture();
+    f.query.mockResolvedValueOnce([{ ...row(1), valueExists: true, valueText, value: JSON.parse(valueText) }] as never)
+      .mockResolvedValueOnce([{ exact: false }] as never);
+    const result = await readBoundedActivity(f, { activityId: "activity-1", afterSequence: 7 });
+    expect(result).toMatchObject({ success: false, error: "activity_value_precision_unsupported",
+      data: { log: { nextAfterSequence: 7, incomplete: true } } });
+    expect(JSON.stringify(result)).not.toContain("selectedValueComplete");
+    expect(JSON.stringify(result)).not.toContain("valueText");
+  });
+
+  it.each(["9007199254740992", "0.1", "0", "null", '{"nested":[9007199254740992,0.1]}'])
+    ("delivers a typed selected value whose JSON numeric meaning is exact: %s", async valueText => {
+      const f = fixture();
+      const value = JSON.parse(valueText);
+      f.query.mockResolvedValueOnce([{ ...row(1), valueExists: true, value, valueText }] as never)
+        .mockResolvedValueOnce([{ exact: true }] as never);
+      const result = await readBoundedActivity(f, { activityId: "activity-1" });
+      expect(result).toMatchObject({ success: true, data: { detail: { value, selectedValueComplete: true } } });
+      expect(JSON.stringify(result)).not.toContain("valueText");
+      expect(f.query.mock.calls[1]?.slice(1)).toEqual([valueText, JSON.stringify(value)]);
+    });
+
+  it.each([{ proof: [] }, { proof: [{ exact: null }] }, { proof: [{ exact: "true" }] }])("refuses missing or invalid exactness proof %j", async ({ proof }) => {
+    const f = fixture();
+    f.query.mockResolvedValueOnce([{ ...row(1), valueExists: true, value: 1, valueText: "1" }] as never)
+      .mockResolvedValueOnce(proof as never);
+    expect(await readBoundedActivity(f, { activityId: "activity-1" })).toMatchObject({
+      success: false, error: "activity_value_precision_unsupported",
+    });
+  });
+
+  it.each([true, false])("rechecks admission after the exactness query, even when exact=%s", async exact => {
+    const f = fixture();
+    f.query.mockResolvedValueOnce([{ ...row(1), valueExists: true, value: { private: "retained" }, valueText: '{"private":"retained"}' }] as never)
+      .mockResolvedValueOnce([{ exact }] as never);
+    f.canRead.mockResolvedValueOnce(true).mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    const result = await readBoundedActivity(f, { activityId: "activity-1", afterSequence: 7 });
+    expect(result).toMatchObject({ success: false, error: "workroom_content_access_required", data: { log: { nextAfterSequence: 7 } } });
+    expect(JSON.stringify(result)).not.toContain("retained");
+    expect(f.query).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps an exact selected object visible to the normal context-mask boundary without exposing internal text", async () => {
+    const f = fixture();
+    const value = { customerEmail: "ada@example.com", amount: 0.1 };
+    f.query.mockResolvedValueOnce([{ ...row(1), valueExists: true, value, valueText: JSON.stringify(value) }] as never)
+      .mockResolvedValueOnce([{ exact: true }] as never);
+    const result = await readBoundedActivity(f, { activityId: "activity-1" });
+    expect(result).toMatchObject({ success: true, data: { detail: { value } } });
+    const decision: DataPolicyDecision = {
+      decisionId: "decision-selected-value-mask", organizationId: "org-test", inputHash: "input",
+      effect: "allow-with-obligations", obligations: [{ kind: "mask", profileId: "default-confidential" }],
+      matchedPolicyVersions: ["confidential-projection-mask@1"], assetVersion: "a1", classificationVersion: "c1",
+      authorityVersion: "auth1", explanationCode: "confidential-masked-before-projection", replay: "single-use",
+    };
+    const output = clampToolResultForModel(result, { toolName: "get_workroom", contextMask: {
+      decision, detailUse: "replaceable", matches: [{ dataClass: "customer-records",
+        path: "data.detail.value.customerEmail", reason: "contact-detail", confidence: "deterministic" }],
+    } });
+    expect(output.text).not.toContain(value.customerEmail);
+    expect(output.text).not.toContain("valueText");
+    expect(output.text).toContain("[DPF_TOKEN_");
+    expect(output.truncated).toBe(false);
+  });
+
   it("binds the exact room, row and path as SQL values, including hostile-looking keys", async () => {
     const f = fixture();
-    f.query.mockResolvedValue([{ ...row(1), valueExists: true, value: { headSha: "1".repeat(40) } }] as never);
+    const value = { headSha: "1".repeat(40) };
+    f.query.mockResolvedValueOnce([{ ...row(1), valueExists: true, value, valueText: JSON.stringify(value) }] as never)
+      .mockResolvedValueOnce([{ exact: true }] as never);
     const path = ["'); DROP TABLE x; --", "original"];
     const result = await readBoundedActivity(f, { activityId: "activity-1", payloadPath: path });
     expect(result.success).toBe(true);

@@ -9,7 +9,7 @@ const PAGE_CHARS = DEFAULT_TOOL_RESULT_CHAR_CAP - 600;
 type Row = { id: string; sequence: number | null; kind: string; summary: string;
   summaryShortened: boolean; identityOversized?: boolean; recordedAt: Date | string;
   recordedById: string | null; recordedByAgentId: string | null; toolExecutionId: string | null;
-  value?: unknown; valueExists?: boolean; valueOversized?: boolean; valueType?: string };
+  value?: unknown; valueText?: string | null; valueExists?: boolean; valueOversized?: boolean; valueType?: string };
 type Reader = {
   db: { $queryRaw(query: TemplateStringsArray, ...values: unknown[]): Promise<unknown[]> };
   room: { id: string; capsuleId: string; activitySequence: number };
@@ -38,6 +38,16 @@ function validDetail(params: Record<string, unknown>) {
     && (params.payloadPath === undefined || (Array.isArray(params.payloadPath) && params.payloadPath.length <= 16
       && params.payloadPath.every(key => typeof key === "string" && key.length <= 200)))
     && !(params.activityField === "summary" && params.payloadPath !== undefined);
+}
+
+async function selectedValueIsExact(db: Reader["db"], row: Row) {
+  const decodedText = JSON.stringify(row.value);
+  if (typeof row.valueText !== "string" || typeof decodedText !== "string"
+    || Buffer.byteLength(row.valueText, "utf8") > DETAIL_BYTES || Buffer.byteLength(decodedText, "utf8") > DETAIL_BYTES) return false;
+  // Compare the selected snapshot, not a second activity read. PostgreSQL JSONB
+  // equality preserves numeric meaning that a JavaScript decoder may round.
+  const proof = await db.$queryRaw`SELECT ${row.valueText}::jsonb = ${decodedText}::jsonb AS "exact"`;
+  return (proof[0] as { exact?: boolean } | undefined)?.exact === true;
 }
 
 /** All SQL values are bound parameters. No full payload is selected by the metadata query. */
@@ -70,7 +80,8 @@ export async function readBoundedActivity(reader: Reader, params: Record<string,
       )
       SELECT "id", "sequence", "kind", "identityOversized", "value" IS NOT NULL AS "valueExists", jsonb_typeof("value") AS "valueType",
         COALESCE(octet_length("value"::text) > ${DETAIL_BYTES}, false) AS "valueOversized",
-        CASE WHEN octet_length("value"::text) <= ${DETAIL_BYTES} THEN "value" ELSE NULL END AS "value"
+        CASE WHEN octet_length("value"::text) <= ${DETAIL_BYTES} THEN "value" ELSE NULL END AS "value",
+        CASE WHEN octet_length("value"::text) <= ${DETAIL_BYTES} THEN "value"::text ELSE NULL END AS "valueText"
       FROM selected` as Row[];
     if (!await reader.canRead()) return refusal("workroom_content_access_required", "Current content admission is required.", room.capsuleId, afterSequence);
     const row = rows[0];
@@ -81,6 +92,11 @@ export async function readBoundedActivity(reader: Reader, params: Record<string,
       row.valueType === "object" || row.valueType === "array"
         ? "The selected value exceeds the detail budget. Select a narrower payloadPath; this value has not been delivered."
         : "The oversized scalar is retained but undelivered. No bounded scalar reader is available; do not repeat the same read or infer complete evidence.",
+      room.capsuleId, afterSequence);
+    const exact = await selectedValueIsExact(db, row);
+    if (!await reader.canRead()) return refusal("workroom_content_access_required", "Current content admission is required.", room.capsuleId, afterSequence);
+    if (!exact) return refusal("activity_value_precision_unsupported",
+      "The selected value cannot be delivered without changing its JSON numeric meaning. It remains retained but undelivered. No exact scalar reader is available; do not infer complete evidence.",
       room.capsuleId, afterSequence);
     const result: ToolResult = { success: true, message: "Selected activity value; this is not a full activity receipt.", data: {
       capsuleId: room.capsuleId, activity: { id: row.id, sequence: row.sequence, kind: row.kind },
@@ -120,7 +136,7 @@ export async function readBoundedActivity(reader: Reader, params: Record<string,
     const expected = afterSequence + selected.length + 1;
     if (row.sequence !== expected) return envelope(true);
     if (row.identityOversized) return refusal("activity_identity_budget_exceeded", "Exact activity identity cannot fit; the cursor is unchanged.", room.capsuleId, afterSequence);
-    const { value: _value, valueExists: _exists, valueOversized: _oversized, identityOversized: _identity, ...metadata } = row;
+    const { value: _value, valueText: _text, valueExists: _exists, valueOversized: _oversized, identityOversized: _identity, ...metadata } = row;
     const projected = { ...metadata, payloadDeferred: true,
       detail: { toolName: "get_workroom", arguments: { capsuleId: room.capsuleId, activityMode: "bounded", activityId: row.id } } };
     selected.push(projected);

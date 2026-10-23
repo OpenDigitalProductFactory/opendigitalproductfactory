@@ -798,6 +798,9 @@ large. A successful detail response delivers only that selected value. Missing
 paths and JSON null are distinct. Oversized scalars remain retained and
 undelivered; there is no scalar streaming fallback. Do not repeat an unchanged
 impossible read or infer full evidence from metadata.
+A value whose numbers cannot survive JSON decoding exactly is also refused;
+no rounded value is presented as complete evidence. Select a different field
+when useful. The retained original is never rewritten.
 
 Every read requires current tool authority and canonical room content admission,
 checked before and after selection. Numeric bounds and row IDs grant nothing.

@@ -120,7 +120,8 @@ protected main52fb5e; do not restart the earlier delivered listing work.
 3. Refactor the common result-budget handling for typed activity envelopes.
    Cover 251 rows, escaping/Unicode, fixed upper bound, exact IDs, missing sequence,
    JSON null versus missing path, foreign room/row, revoked admission, parameter
-   binding, and too-small envelopes. Run real SQL checks only in the governed
+   binding, numeric fidelity (large integers, decimals, overflow and underflow),
+   and too-small envelopes. Run real SQL checks only in the governed
    disposable test database; source-local skips are not passes.
 4. Freeze and verify the actual diff, finish graph-linked tests, both web
    typechecks, applicable guards and the full governed gate. Obtain independent

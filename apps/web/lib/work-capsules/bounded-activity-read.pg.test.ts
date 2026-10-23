@@ -94,4 +94,25 @@ describe.skipIf(!databaseUrl)("bounded activity SQL (disposable database)", () =
       nextAfterSequence: 0, incomplete: true, reason: "sequence-gap", legacyRowsPresent: true,
     } } });
   });
+
+  it.each([
+    "9007199254740993", "0.1234567890123456789", "1e-400", "1e400",
+    '{"nested":[9007199254740993]}',
+  ])("refuses a selected JSONB value changed by driver decoding: %s", async valueText => {
+    // Bind raw JSON text so the fixture itself cannot round the stored number.
+    await client.query('UPDATE "WorkCapsuleActivity" SET payload = $1::jsonb WHERE id = $2', [valueText, "activity-2"]);
+    const result = await readBoundedActivity(reader, { activityId: "activity-2", afterSequence: 7 });
+    expect(result).toMatchObject({ success: false, error: "activity_value_precision_unsupported",
+      data: { log: { nextAfterSequence: 7, incomplete: true } } });
+    expect(JSON.stringify(result)).not.toContain("valueText");
+    expect(JSON.stringify(result)).not.toContain("selectedValueComplete");
+  });
+
+  it.each(["9007199254740992", "0.1", "0", "null", '{"nested":[9007199254740992,0.1]}'])
+    ("delivers exact JSONB numeric meaning as typed JSON: %s", async valueText => {
+      await client.query('UPDATE "WorkCapsuleActivity" SET payload = $1::jsonb WHERE id = $2', [valueText, "activity-2"]);
+      const result = await readBoundedActivity(reader, { activityId: "activity-2" });
+      expect(result).toMatchObject({ success: true, data: { detail: { value: JSON.parse(valueText), selectedValueComplete: true } } });
+      expect(JSON.stringify(result)).not.toContain("valueText");
+    });
 });

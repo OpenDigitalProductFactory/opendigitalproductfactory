@@ -266,10 +266,17 @@ The selected structure remains ordinary JSON through the existing classifier,
 context-mask and hidden-Unicode boundary. No base64 or raw string-fragment
 encoding can hide it from that boundary.
 
+Before claiming completeness, compare the decoded value's serialized JSON with
+the original selected JSONB using PostgreSQL semantic equality. The original
+text is bounded by the same 2,048-byte limit, remains internal, and never replaces
+the typed outward value. Numeric rounding, overflow or underflow causes an
+explicit refusal with no delivered value or cursor advance. Recheck current
+content admission after this comparison. This also applies to nested numbers.
+
 Current canonical content admission is checked before and after each activity
 read, using the existing human/assistant resolver. Normal tool grants remain
 required. No cursor, ID, archived ownership field or source SHA grants access.
-Both queries run in one read-only, five-second transaction, with a four-second
+Each reader runs its queries in one read-only, five-second transaction, with a four-second
 statement timeout. Metadata has bounded row count and field transfer; selected
 detail has a bounded application transfer. PostgreSQL may detoast/materialize a
 large JSON value while evaluating its size: these limits do **not** establish a
