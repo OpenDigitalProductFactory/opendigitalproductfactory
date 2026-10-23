@@ -49,12 +49,14 @@ The server's spec search reports that this consumer image excludes the source co
 | Acceptance ID | Objective IDs | Statement |
 | --- | --- | --- |
 | AC-CONT-1 | OBJ-CONTINUITY | Fresh native and supported external sessions resume the same bounded assignment from governed durable references without copying the old transcript; unsupported client capabilities are explicit. |
-| AC-CONT-2 | OBJ-FLOW | Unchanged automatic waits make no inference calls; changed prerequisites resume once through existing server recovery with valid authority, budgets and execution settlement. |
+| AC-CONT-2 | OBJ-FLOW | Unchanged automatic waits make no inference calls; changed prerequisites resume once through existing server recovery with valid authority, budgets and execution settlement; authorized phase transitions require no repeated consent, and independent ready work continues during a genuine wait. |
 | AC-CONT-3 | OBJ-ECONOMY | Each qualified provider/model/endpoint/client combination records current cache and runtime behavior, normalized observed usage and capability gaps; local load, queue, prompt and generation costs remain distinct. |
-| AC-CONT-4 | OBJ-REUSE | Entry, checkpoint, handoff and close route reusable information to its authoritative operational, document, WWMD/WWWD/WSID or graph home with provenance, freshness and retrieval tests. |
+| AC-CONT-4 | OBJ-REUSE | Entry, checkpoint, handoff and close route reusable information to its authoritative operational, document, WWMD/WWWD/WSID or graph home with provenance, freshness and retrieval tests; valid receipts are reused, collection stops at sufficient required proof, and a fresh reader can substantiate outcomes from compact records and canonical evidence. |
 | AC-CONT-5 | OBJ-CLARITY | Workroom readback distinguishes active work, automatic waiting, required human input, delivery and outstanding outcome observation, with one next-action owner and progressive disclosure. |
-| AC-CONT-6 | OBJ-ECONOMY | A matched baseline and bounded pilot report elapsed/active/wait time and observable tokens/cost per verified deliverable across participating sessions, failed handoffs and insufficient evidence; no inferred savings or acceptance. |
+| AC-CONT-6 | OBJ-ECONOMY | A matched baseline and bounded pilot report elapsed/active/wait time, evidence overhead and observable tokens/cost per verified deliverable across all attempts, completion rate and unfinished-work age; avoidable handbacks are distinct from required decisions, and narrower cache or rehydration gains cannot establish overall savings. |
 | AC-CONT-7 | OBJ-FLOW, OBJ-REUSE | Existing repairs retain their own owners and acceptance; every independent implementation deliverable maps to a live BI and current immutable approved coverage before implementation. |
+
+The October 23 amendment adds explicit evidence-reuse, stopping and avoidable-handback checks within AC-CONT-2, AC-CONT-4 and AC-CONT-6. The original October 19 review target remains immutable; amending this source does not settle or replay its uncertain reviewer execution.
 
 These statements are the parent scope. Each existing carrier retains its original criteria; this proposal adds integration obligations, not retroactive approval or a rewritten historical baseline.
 
@@ -95,6 +97,8 @@ Distillation carries source locators, authorship, scope/sensitivity, observation
 
 Do not write or embed every transcript fragment again. Prefer changed durable facts and referenced work products; deduplicate exact events separately from recurrence across independent runs. Use existing retention and supersession policy; no deletion or retention change is authorized here. Measure whether the next eligible run retrieves and uses the information successfully. A stored note alone is not an improvement outcome.
 
+Required acceptance determines the evidence collected. Reuse fresh identity-matched receipts across sessions and phases under the existing evidence planner; regenerate only evidence its invalidation rules require. Keep one concise outcome with canonical proof references. Stop collecting when required proof is sufficient; additional diagnostics need an unresolved question or an existing requirement. Preserve required underlying audit records under current policy. BI-7C1F43E3 owns flow and verification reuse; BI-IMP-9DA35549 owns evidence-use feedback. This integration creates neither a new evidence ledger nor blanket exemptions.
+
 ## 6. Waiting, resumption and avoidance of repeated cold starts
 
 Extend existing checkpoint/reconciler behavior. A wait records reason, owning dependency, expected change, observation fingerprint, next due time, next-action owner and whether provider execution started or is uncertain. Persist before releasing the observer. Events invalidate the cheap durable read model; a bounded periodic reconciliation backstop handles missed events without invoking inference on unchanged state.
@@ -104,6 +108,8 @@ Classify wait causes separately: resource/capacity, provider quota or authentica
 Only changed actionable prerequisites admit a new run. Use current grants, original deadline/attempt budget, request digest, source/document versions, quiescence and complete checkpoint settlement. Preserve completed sibling results. Command receipts/CAS/generation fences prevent concurrent wakes or retries from duplicating dispatch and side effects. A timeout is not proof of a failed or unstarted provider execution. Authority denial stops that action; a cache preference cannot bypass it.
 
 Human approval remains necessary for actions that actually require it. Reuse valid recorded delegation across routine phases. A blocked item has one named owner and a concrete remedy; it does not require the original client to remain loaded. Do not change existing external automations or message other conversations as part of this planning delivery.
+
+A session or phase change does not create a new approval requirement. Before requesting human continuation, resolve whether existing authority and available prerequisites permit the next bounded action. Continue ready independent work within the assignment while another branch waits. A genuine human gate names the unresolved decision and provides the concrete result needed to decide. If an external client cannot resume unattended, expose that capability limit and persist a ready-to-resume brief; do not report an automatic wake that has not been established.
 
 ## 7. Provider and client execution policy
 
@@ -138,6 +144,8 @@ Verify keyboard operation, accessible status text, narrow viewport, light/dark/b
 Extend existing telemetry and improvement records; no parallel spend ledger. Correlate work identity, assignment, TaskRun, native/external session, provider call and receipts where known. Deduplicate by originating execution identity so mirrored/imported events are not billed twice.
 
 Measure wall-clock elapsed, active work, automatic and human wait, provider queue/load/prompt/generation time, compactions, startup/rehydration tokens, repeated reads/setup/reviews, unchanged inference wakes, failure/retry count, cache read/write/uncached coverage, handoff completion and accepted deliverables. Report p50/p95 only with sample count and observation window. Show unknown external usage separately. Historical snapshots and truncated query populations are not a baseline census.
+
+Count avoidable human handbacks separately from genuine decision waits. Report completed versus eligible assignments and the age of unfinished work at cutoff so excluding unfinished work cannot make a slow process look fast. Attribute evidence generation, retrieval and repeated verification to elapsed time and observable cost across all participating attempts. Report the rehydration/wait target alongside complete-deliverable performance; it alone does not establish an overall efficiency improvement. Before the pilot, record permitted complete-deliverable time/cost regression tolerances from the measured baseline and owning decision; absent that decision, do not widen rollout on a narrower metric alone. Audit reconstructability is checked from existing compact records and references, without generating a second audit packet.
 
 Baseline matched work classes before policy changes, stratified by provider/client and verification burden. Begin with the next 10 eligible bounded assignments or 7 days, whichever occurs first. Include a native thread, supported Claude/Codex/Grok paths where access exists, one local inference path and one non-engineering Workroom. Each claimed surface must demonstrate continuation; unavailable surfaces remain unqualified and prevent a universal rollout claim. Compare matching task classes with the same required gates; account for outages and exclusions. Do not benchmark by rerunning side effects or replacing independent acceptance with model self-report.
 
