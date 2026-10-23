@@ -1,3 +1,4 @@
+import { projectBuildPlanCoverage } from "./build-plan-coverage";
 import { validString, validStringArray, validAuthoritySnapshot, validInitiativeGateReceipt, normalizeInitiativeGate as normalizeGate } from "./receipt-validation";
 import { evidenceKindMetadata, isExecutionEvidenceKind } from "../execution-evidence";
 
@@ -342,11 +343,16 @@ type InitiativePlanArtifact = Extract<InitiativeArtifactRef, { kind: "repo-blob-
 function projectPlanCoverage(
   activities: readonly InitiativeReadinessActivity[],
   baseline: Baseline | null,
+  buildPlanDigest?: string | null,
 ): { state: ReadinessEvidenceState; planDigest: string | null; planArtifact: InitiativePlanArtifact | null } {
   const latest = [...activities]
     .filter((activity) => activity.kind === "plan_backlog_coverage")
     .sort((left, right) => right.recordedAt.getTime() - left.recordedAt.getTime() || right.id.localeCompare(left.id))[0];
   if (!latest) return { state: "missing", planDigest: null, planArtifact: null };
+  // BI-6F2872FC: a Build Studio plan is covered by the platform, bound to the
+  // plan's accepted revision rather than to a committed plan document.
+  const buildPlanCoverage = projectBuildPlanCoverage(latest.payload, baseline, buildPlanDigest);
+  if (buildPlanCoverage) return { ...buildPlanCoverage, planArtifact: null };
   const payload = object(latest.payload);
   const artifact = object(payload?.planArtifactRef);
   if (!payload
@@ -429,6 +435,11 @@ export function projectBacklogItemReadiness(args: {
    * criteria it states. Consulted only on the proportional shapes.
    */
   buildDesign?: { reviewPassed: boolean; acceptanceCriteriaCount: number } | null;
+  /**
+   * BI-6F2872FC: the digest of the Build Studio build's current plan. Coverage
+   * recorded for an earlier plan revision reads stale against it.
+   */
+  buildPlanDigest?: string | null;
   completion?: {
     decomposition?: ReadinessEvidenceState;
     deliveryEvidence: ReadinessEvidenceState;
@@ -462,7 +473,8 @@ export function projectBacklogItemReadiness(args: {
   // A body snapshot versions acceptance, not the research artifact. It cannot
   // retroactively stale author research against the previously recorded source.
   const digest = baseline.current?.origin === "item-body" ? null : baseline.current?.artifactDigest ?? null;
-  const projectedCoverage = projectPlanCoverage(inherited ? inherited.activities : args.activities, baseline.current);
+  const projectedCoverage = projectPlanCoverage(inherited ? inherited.activities : args.activities, baseline.current,
+    args.buildPlanDigest);
   // Only the scope owner can amend its design. A child that inherits the
   // parent's scope keeps judging the parent's baseline: it cannot re-approve it.
   const judged = inherited

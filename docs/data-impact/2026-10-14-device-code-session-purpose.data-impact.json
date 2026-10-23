@@ -1,0 +1,43 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "summary": "BI-985F4EC9. Migration 20261014100000_device_code_session_purpose adds the GitHubDeviceFlowPurpose enum and a nullable DeviceCodeSession.purpose column so a GitHub device-flow login is routed to the credential slot chosen when it started (hive-contribution, or the new github-repository-controller CredentialEntry providerId). Additive; no new model; CredentialEntry gains no columns.",
+  "affectedCopies": [
+    "DeviceCodeSession.purpose, written by initiateDeviceFlow and read by pollDeviceFlow (apps/web/lib/actions/github-device-flow.ts)",
+    "CredentialEntry row with providerId github-repository-controller (existing columns, encrypted secretRef via encryptSecret), read by loadManagedRepositoryStatus (apps/web/lib/forge/managed-repository-access.ts) and by resolveGithubToken with preferRepositoryController (issue intake)",
+    "PlatformDevConfig.upstreamRemoteUrl (existing column), now written by saveManagedRepository (apps/web/lib/actions/managed-repository.ts) when the operator saves a repository"
+  ],
+  "privacyAssessment": {
+    "personalData": false,
+    "sensitivity": "internal: a closed purpose label on a short-lived login session. The credential it routes is a secret and stays encrypted at rest in the existing CredentialEntry.secretRef; it is never returned, logged or placed in attention payloads.",
+    "dataSubjectRights": "No content about a person.",
+    "reviewDisposition": "The column follows the session row, which is consumed or deleted on expiry (15-minute device-code lifetime)."
+  },
+  "migration": {
+    "name": "20261014100000_device_code_session_purpose",
+    "backfill": "None: existing rows keep NULL, which pollDeviceFlow reads as hive-contribution, the only purpose that existed before. CREATE TYPE is guarded by duplicate_object and ADD COLUMN uses IF NOT EXISTS, so the migration is re-runnable.",
+    "rollback": "Forward-only. Older code never reads the column. Rollback means reverting the code; a controller session started on new code and polled on old code would store to hive-contribution, so finish or let in-flight sessions expire (15 minutes) before reverting."
+  },
+  "tests": [
+    "apps/web/lib/actions/github-device-flow.test.ts",
+    "apps/web/lib/forge/managed-repository-access.test.ts",
+    "apps/web/lib/actions/managed-repository.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:device-code-session",
+      "prismaModel": "DeviceCodeSession",
+      "lifecycleDisposition": "Existing model (transient device-flow sessions, deleted on consume or expiry); the column follows the row.",
+      "fields": [
+        {
+          "fieldId": "data:device-code-session#purpose",
+          "resolution": "not-applicable",
+          "reason": "Closed operational label (hive-contribution | repository-controller) naming which credential slot a login is for. Not a data-subject attribute.",
+          "provenance": "Set by initiateDeviceFlow from the caller's requested purpose (default hive-contribution); BI-985F4EC9.",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

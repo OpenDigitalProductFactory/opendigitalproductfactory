@@ -43,6 +43,25 @@ function room(over: Partial<BindablePullRequestRoom> = {}): BindablePullRequestR
 }
 
 describe("resolvePullRequestBindings", () => {
+  // BI-A7797C2C: a claim records headSha = baseSha before anything is committed.
+  it("binds a room whose head is still its claim-time base to its branch's PR", () => {
+    const base = "1".repeat(40);
+    const plan = resolvePullRequestBindings({
+      rooms: [room({ headSha: base, baseSha: base })],
+      observations: [observation({ headSha: "2".repeat(40) })],
+    });
+    expect(plan.bindings).toEqual([expect.objectContaining({ capsuleId: "WC-1B73A988", pullRequestNumber: 5029 })]);
+  });
+
+  it("still refuses a room with an authored head that differs from the PR head", () => {
+    const plan = resolvePullRequestBindings({
+      rooms: [room({ headSha: "3".repeat(40), baseSha: "1".repeat(40) })],
+      observations: [observation({ headSha: "2".repeat(40) })],
+    });
+    expect(plan.bindings).toEqual([]);
+    expect(plan.skipped).toEqual([{ capsuleId: "WC-1B73A988", reason: "no-observation-for-branch" }]);
+  });
+
   it("rebinds a reused branch only to its exact current full head", () => {
     const headSha = "a".repeat(40);
     const previous = room({ headSha, pullRequestNumber: 4242, pullRequestUrl: `https://github.com/${REPO}/pull/4242` });

@@ -10,9 +10,11 @@
  *
  * Pure: the archetype's portfolio decomposition and the portfolio flows in.
  */
+import { formatDuration } from "@/lib/datetime";
 import { PORTFOLIO_ROLES, type PortfolioRoleKey } from "@/lib/portfolio/portfolio-role";
 
 import type { PortfolioFlow, ShapeFlowRow } from "./portfolio-flow";
+import { topByWaitTimesQueue } from "./shape-step-measures";
 import { describeHoldCause } from "./workroom-stage-telemetry";
 
 export type PortfolioDecompositionLike = Partial<Record<PortfolioRoleKey, { scope?: string } | undefined>> | null | undefined;
@@ -32,14 +34,24 @@ export function heroShape(flow: Pick<PortfolioFlow, "shapes">): ShapeFlowRow | n
   return flow.shapes[0] ?? null;
 }
 
-/** One sentence naming where the most work waits, or null when nothing waits. */
-export function bottleneckSentence(flow: Pick<PortfolioFlow, "shapes">, titleOf: (shapeKey: string) => string): string | null {
-  let worst: ShapeFlowRow | null = null;
-  for (const shape of flow.shapes) {
-    if (shape.bottleneck && (!worst?.bottleneck || shape.bottleneck.roomsHeld > worst.bottleneck.roomsHeld)) worst = shape;
-  }
-  if (!worst?.bottleneck) return null;
-  const { roomsHeld, stageKey, cause } = worst.bottleneck;
+/** A held step's typical wait, by shape version and step; null when it is too few to measure. */
+export type StageWaitOf = (shapeRef: string, stageKey: string) => number | null;
+
+/**
+ * One sentence naming where the most waiting accrues, or null when nothing
+ * waits. Ranked by rooms held × the step's typical wait (BI-9148060C).
+ */
+export function bottleneckSentence(
+  flow: Pick<PortfolioFlow, "shapes">,
+  titleOf: (shapeKey: string) => string,
+  waitOf: StageWaitOf = () => null,
+): string | null {
+  const piles = flow.shapes.flatMap((shape) =>
+    shape.held.map((hold) => ({ ...hold, shapeKey: shape.shapeKey, waitMs: waitOf(shape.shapeRef, hold.stageKey) })));
+  const top = topByWaitTimesQueue(piles);
+  if (!top) return null;
+  const { roomsHeld, stageKey, cause, waitMs } = top;
   const why = cause === "awaiting-person" ? describeHoldCause(cause) : `blocked: ${describeHoldCause(cause)}`;
-  return `${roomsHeld} ${roomsHeld === 1 ? "room is" : "rooms are"} held at ${stageKey} in ${titleOf(worst.shapeKey)} (${why}).`;
+  const typically = waitMs == null ? "" : `, typically waiting ${formatDuration(waitMs)}`;
+  return `${roomsHeld} ${roomsHeld === 1 ? "room is" : "rooms are"} held at ${stageKey} in ${titleOf(top.shapeKey)}${typically} (${why}).`;
 }

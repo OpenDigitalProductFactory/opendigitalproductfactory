@@ -10,6 +10,7 @@ import LegacyTokenOverrideBanner from "@/components/admin/LegacyTokenOverrideBan
 import { McpOAuthClientManager } from "@/components/admin/McpOAuthClientManager";
 import { McpTokenManager } from "@/components/admin/McpTokenManager";
 import { GovernedBacklogSettings } from "@/components/admin/GovernedBacklogSettings";
+import { ManagedRepositorySection } from "@/components/admin/ManagedRepositorySection";
 import { PlatformDevelopmentForm } from "@/components/admin/PlatformDevelopmentForm";
 import { getAutonomousPlaybookMode } from "@/lib/build/build-studio-config";
 import { auth } from "@/lib/auth";
@@ -35,6 +36,15 @@ import {
 import { isContributionModelEnabled } from "@/lib/flags/contribution-model";
 import { getDisplayPseudonym } from "@/lib/build/identity-privacy";
 import type { PlatformDevPolicyState } from "@/lib/platform-dev-policy";
+import {
+  isRepositoryManagingInstall,
+  loadManagedRepositoryStatus,
+  SUGGESTED_MANAGED_REPOSITORY,
+} from "@/lib/forge/managed-repository-access";
+import {
+  loadInstallationOperatingIntent,
+  type InstallationIntentDb,
+} from "@/lib/installation-journey/operating-intent";
 
 export default async function AdminPlatformDevelopmentPage() {
   const config = await getPlatformDevConfig();
@@ -52,6 +62,13 @@ export default async function AdminPlatformDevelopmentPage() {
   // paste-mode PATs are surfaced via the Advanced disclosure but not as
   // "Connected as @user" since we don't proactively verify their owner.
   const initialConnected = await getGitHubConnectedState().catch(() => null);
+  // BI-985F4EC9: installs that develop the platform name and log in to the
+  // repository they manage. Status is cached for five minutes per check.
+  const operatingIntent = await loadInstallationOperatingIntent(prisma as unknown as InstallationIntentDb)
+    .catch(() => ({ status: "missing" as const }));
+  const managedRepositoryStatus = isRepositoryManagingInstall(operatingIntent)
+    ? await loadManagedRepositoryStatus(prisma).catch(() => null)
+    : null;
 
   // Best-effort base URL for token setup snippets shown in the UI. Prefer the
   // forwarded Host header (which respects any reverse proxy); fall back to
@@ -82,6 +99,11 @@ export default async function AdminPlatformDevelopmentPage() {
       <AdminTabNav />
       <TokenExpiryBanner />
       <LegacyTokenOverrideBanner />
+      {managedRepositoryStatus && (
+        <MessagesProvider locale={language} messages={{ admin: namespaceMessages(language, "admin") }}>
+          <ManagedRepositorySection initialStatus={managedRepositoryStatus} suggestion={SUGGESTED_MANAGED_REPOSITORY} />
+        </MessagesProvider>
+      )}
       {/* BI-D43EB266: the source-merge "Apply update" control moved to the
           single operator update surface at Ops -> Self-Upgrade. This page keeps
           contribution policy + identity config; the update banner now deep-links
