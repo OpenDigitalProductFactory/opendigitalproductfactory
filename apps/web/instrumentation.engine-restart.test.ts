@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/self-upgrade/landed-swap", () => ({ healLandedSwapFalseFailures: vi.fn(async () => 0) }));
 /**
  * BI-75ECED42 — an upgrade killed by the container engine restarting (Docker
@@ -6,7 +7,6 @@ vi.mock("@/lib/self-upgrade/landed-swap", () => ({ healLandedSwapFalseFailures: 
  * run began 14:26:56Z, Docker Desktop restarted at 14:28:41, Postgres came back
  * at 14:29:10.
  */
-import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const m = vi.hoisted(() => ({
   getDeployedSha: vi.fn(),
