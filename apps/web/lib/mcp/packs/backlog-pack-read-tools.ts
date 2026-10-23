@@ -485,15 +485,20 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
     hasPlan,
     evaluatedAt,
   }));
-  const readiness = gateCompletion
+  const deliveryReadiness = gateCompletion
     ? { ...projectedReadiness, completionEvaluation: { source: "completion-gate" as const, mergeDelivery: gateCompletion.mergedThroughGates } }
     : projectedReadiness;
+  const { loadPlanBaselinePrerequisite } = await import("@/lib/backlog/initiative-readiness/plan-baseline-prerequisite");
+  const readiness = { ...deliveryReadiness, planBaselinePrerequisite: await loadPlanBaselinePrerequisite({
+    db: prisma, item, decision: projectedReadiness.decisions?.implementation,
+    currentDesignState: projectedReadiness.currentDesignState,
+  }) };
   const requestedGate = params["recoveryGate"];
   if (requestedGate !== undefined && !isRecoveryReadGate(requestedGate)) {
     return { success: false, error: "invalid_recovery_gate", message: "Choose a declared recoveryGate from get_backlog_item's schema. No review request was delivered." };
   }
   const completion = requestedGate !== undefined
-    ? await recoveryReadDecision(requestedGate, readiness.decisions ?? {}) : readiness.decisions?.completion;
+    ? await recoveryReadDecision(requestedGate, readiness.decisions ?? {}, readiness.planBaselinePrerequisite) : readiness.decisions?.completion;
   const needsTerminalRecovery = currentDesign.evidence.state !== "unavailable" && completion && completion.verdict !== "allowed"
     && (requestedGate !== undefined || [...completion.blockers, ...completion.unmet]
       .some((entry) => ["POST_IMPLEMENTATION_REVIEW_REQUIRED", "PLAN_REVIEW_REQUIRED",

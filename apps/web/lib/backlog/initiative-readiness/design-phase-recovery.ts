@@ -7,7 +7,8 @@ import type {
 } from "@/lib/tak/initiative-readiness-tool-grants";
 
 import type { TerminalRecoveryPorts } from "./terminal-recovery";
-import type { InitiativeReadinessDecision } from "./types";
+import type { InitiativeReadinessDecision, ReadinessRequirementResult } from "./types";
+import { owesPlanCoverage } from "./plan-baseline-prerequisite";
 
 /**
  * BI-817556D8: the independent design reviews (design-spec, spec-approval,
@@ -88,6 +89,7 @@ export function isArchetypePhaseReview(decision: InitiativeReadinessDecision): b
 export function decisionForIndependentReview(
   writerToolName: string,
   decisions: Partial<Record<"plan" | "implementation" | "completion", InitiativeReadinessDecision>>,
+  planBaselinePrerequisite?: ReadinessRequirementResult | null,
 ): InitiativeReadinessDecision | null {
   if (writerToolName === "record_initiative_design_review"
     || writerToolName === "record_initiative_architecture_review") {
@@ -123,12 +125,17 @@ export function decisionForIndependentReview(
     // when coverage needs a baseline. A fix carries only PLAN_REQUIRED here;
     // completion names its baseline owner. Route that prerequisite, not every
     // completion review, and never revive it once coverage is no longer owed.
-    const needsCoverage = [...decision.blockers, ...decision.unmet].some((entry) =>
-      entry.code === "PLAN_REQUIRED" && entry.state === "missing");
+    const needsCoverage = owesPlanCoverage(decision);
     if (writerToolName !== "record_initiative_design_review" || !needsCoverage) return null;
     const isMissingReviewBaseline = (entry: InitiativeReadinessDecision["unmet"][number]) =>
       entry.code === "OBJECTIVE_BASELINE_REQUIRED" && entry.state === "missing"
       && entry.accountableRole === "design-checklist-reviewer";
+    // An explicit null is authoritative; only older callers without the field
+    // may use the legacy completion projection as their prerequisite source.
+    if (planBaselinePrerequisite !== undefined) {
+      return planBaselinePrerequisite && isMissingReviewBaseline(planBaselinePrerequisite)
+        ? { ...decision, blockers: [], unmet: [planBaselinePrerequisite] } : null;
+    }
     const blockers = decisions.completion?.blockers.filter(isMissingReviewBaseline) ?? [];
     const unmet = decisions.completion?.unmet.filter(isMissingReviewBaseline) ?? [];
     return blockers.length || unmet.length ? { ...decision, blockers, unmet } : null;
