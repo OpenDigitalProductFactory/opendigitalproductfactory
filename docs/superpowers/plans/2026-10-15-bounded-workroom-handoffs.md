@@ -35,19 +35,26 @@ Design: [same-mandate handoffs](../specs/2026-10-15-bounded-workroom-handoffs-de
 
 - Decision: atomic
 - Parent: BI-5366EF78
-- Receipt: blocked-by: no initiative scope baseline exists for BI-5366EF78, so the normal coverage writer refused traceability-incomplete.
+- Receipt: pending against the corrected plan artifact. Native spec approval on October 23 established baseline `baseline-645f3eb8-d279-4064-82d1-cc85d3f17d28`; the October 16 missing-baseline refusal below is historical.
 - Rationale: Shared canonical authority repair, payload-bound request/acknowledgement, dependency fencing and transfer must ship together; partial approval removal would weaken the authority boundary.
 - Dependencies: none external to this atomic delivery; independent canonical spec approval, baseline and plan review/coverage are required gates.
 
 Atomic deliverable `bounded-executor-handoff` maps to BI-5366EF78, with no
-dependencies. Requirements AC-1, AC-2, AC-3, AC-4, AC-5; contract
+dependencies. Requirements OBJ-1, OBJ-2, OBJ-3; contract
 `same-mandate-boundary`; flow `request-acknowledge-complete`; verification
-`handoff-concurrency-regressions`. The phases cannot ship independently: removing
+AC-1, AC-2, AC-3, AC-4, AC-5 through `handoff-concurrency-regressions`. The phases cannot ship independently: removing
 approval without receiver acceptance, concurrency checks and the shared writer
 predicate would weaken the existing authority contract.
 
-Coverage is blocked on the missing approved scope baseline. No implementation
-coverage or passing independent review is claimed by this text.
+The following mapping uses the approved baseline IDs. The coverage writer must
+accept this exact committed plan; this text does not claim that receipt or an
+independent plan-review pass.
+
+| Requirement | Planned behavior | Acceptance verification |
+| --- | --- | --- |
+| OBJ-1 | Request and exact receiver acknowledgement reuse valid standing delegation without a new human approval. | AC-1 and AC-5: pending-before-ack writer tests, classification tests and served DEV flow. |
+| OBJ-2 | Canonical room authority, immutable request bindings and shared dependency locks preserve every protected boundary. | AC-1, AC-2, AC-3 and AC-5: denial and stale-state cases, real receipt replay, PostgreSQL races and protected-boundary verification. |
+| OBJ-3 | Existing timeline and readback expose pending, acknowledged, completed and refused states with at-most-once transfer. | AC-3, AC-4 and AC-5: concurrent/duplicate acknowledgements, rollback outcomes and state presentation tests. |
 
 ### October 16 normal coverage attempt and remaining design work
 
