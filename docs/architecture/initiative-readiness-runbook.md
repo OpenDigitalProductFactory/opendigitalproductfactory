@@ -285,3 +285,50 @@ The [MCP authorization procedure](mcp-tool-authorization-runbook.md#recovering-a
 describes the current-authority checks, generation reservation and approval
 continuation. Completion still requires the original task's genuine governed
 writer receipt and the readiness finding it actually records.
+
+
+**Workroom review observations.**
+
+A Workroom includes both native semantic reviews and ordinary initiative reviews
+bound to its existing `initiativeReviewBinding.workroomRef`. The bounded reader
+qualifies the room, repository, branch, subject, source SHA, original requester
+and request digest through the canonical binding parser and readiness lane
+registry. A reviewed plan's immutable artifact version may precede the room's
+source head. Those are separate identities.
+
+Each ordinary gate and original request remains visible. Competing originals,
+unknown identity, unresolved historical executions and incomplete observations
+hold readiness; a newer result cannot silently erase them. The existing review
+disclosure shows the gate, artifact version and original request. Its result
+reference uses `tasks/result` with the exact request digest. Ordinary reviews
+never inherit the semantic-review retry action. The canonical wait projector
+supplies the recorded blocker reason, while `hasExecutionUncertainty` supplies
+uncertainty. Neither task completion nor generic resume hints prove a verdict.
+
+Room admission permits this bounded metadata observation. Full original results
+continue to require the original requester and current subject, room and content
+access. This reader does not grant access, dispatch work, publish a review receipt
+or reconcile unknown remote effects.
+
+Candidate discovery reads at most 21 rows per room and review family, retains 20,
+and explicitly identifies incomplete rooms. Pages are capped at 100 rooms;
+node checkpoints and payload subobjects are independently bounded. One busy room
+cannot consume another's allowance. Two partial ordered expression indexes serve
+the existing immutable request-binding predicates. They do not introduce a new
+metadata writer, relationship or result ledger; canonical identity still comes
+from the existing request and Workroom models. Broader migration of historic
+metadata relationships to typed fields is outside this repair.
+
+The index-only migration changes no row values and needs no data backfill. A
+rollback can leave the indexes present while restoring the previous reader;
+removing them later only affects query cost. Actual-query PostgreSQL tests apply
+the exact index DDL in an isolated schema and inspect the plan with unrelated
+history present. Source tests are not evidence of deployed behavior.
+
+This continuation belongs to BI-CAP-21C511CA / WC-062B8D41, extending the July 27
+shared change reviewer control design. The refactoring separates candidate
+selection, identity qualification and common execution presentation rather than
+creating parallel orchestration. It accounts for at least 20% of this repair.
+UX decision DI-0FFB15FBEE77 selects the existing disclosure over a new status page.
+The original identity repair BI-CAP-437F7745, role-and-room BI-56E9CEC2, original
+settlement BI-7906C73E and release acceptance BI-E3B918C2 retain their own scope.
