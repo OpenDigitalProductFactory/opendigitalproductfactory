@@ -245,6 +245,9 @@ test("gate-worktree.mjs refuses to run when neither an explicit command, the stu
   mkdirSync(join(temp, "scripts", "lib"), { recursive: true });
   mkdirSync(join(temp, "apps", "web", "lib", "nonprod"), { recursive: true });
   cpSync(gateScript, join(temp, "scripts", "gate-worktree.mjs"));
+  for (const name of ["mcp-host-trust.mjs", "resolve-compose-install-context.mjs"]) {
+    cpSync(join(repoRoot, "scripts", "lib", name), join(temp, "scripts", "lib", name));
+  }
   // BI-A254A94C: sandbox admission is a static import. The temp tree has to
   // carry that module and the helpers it imports that this fixture does not
   // already copy, or the refusal path dies before its assertion.
@@ -315,7 +318,7 @@ test("gate-worktree.mjs refuses to run when neither an explicit command, the stu
   );
 
   const { dir } = makeTempRepo();
-  const env = { ...process.env, DPF_MCP_BEARER_TOKEN: "dpfmcp_test", DPF_GATE_OWNER_PROVIDER: "codex", DPF_GATE_OWNER_SESSION_ID: "contract-thread" };
+  const env = { ...process.env, DPF_MCP_URL: "http://127.0.0.1:3000/api/mcp/v1", DPF_MCP_BEARER_TOKEN: "dpfmcp_test", DPF_GATE_OWNER_PROVIDER: "codex", DPF_GATE_OWNER_SESSION_ID: "contract-thread" };
   delete env.DPF_ALLOW_LOCAL_CI_STUB;
   delete env.DPF_LOCAL_CI_COMMAND;
 

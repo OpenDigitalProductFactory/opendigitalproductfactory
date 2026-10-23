@@ -237,6 +237,7 @@ function parseObjectiveMappings(value: unknown): Array<{ objectiveId: string; ev
 async function resolveExternalInitiativeReviewBinding(
   actionKey: string,
   taskRunId: string | undefined,
+  executionFence: import("@/lib/shared/task-execution-fence").TaskExecutionFence | null | undefined,
 ): Promise<{
   itemId: string;
   gate: string;
@@ -244,7 +245,7 @@ async function resolveExternalInitiativeReviewBinding(
   eligibleEvidenceActivityIds?: string[];
   artifactRef: InitiativeArtifactRef;
   workroomRef?: InitiativeReviewBinding["workroomRef"] | null;
-  boundReviewTask?: { taskRunId: string; requestDigest: string };
+  boundReviewTask?: import("@/lib/backlog/initiative-readiness/bound-review-effect").BoundReviewTask;
 } | null> {
   if (!taskRunId) return null;
   const run = await prisma.taskRun.findUnique({
@@ -301,7 +302,7 @@ async function resolveExternalInitiativeReviewBinding(
   return {
     itemId,
     gate,
-    boundReviewTask: { taskRunId, requestDigest: typeof record.requestDigest === "string" ? record.requestDigest : "" },
+    boundReviewTask: { taskRunId, requestDigest: typeof record.requestDigest === "string" ? record.requestDigest : "", executionFence },
     ...(workroomRef !== undefined ? { workroomRef } : {}),
     ...(expectedCurrentBaselineId !== undefined
       ? { expectedCurrentBaselineId: expectedCurrentBaselineId as string | null }
@@ -346,7 +347,7 @@ async function resolveStewardRoomBinding(
 
 function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
   return async (params, userId, context): Promise<ToolResult> => {
-    let binding = await resolveExternalInitiativeReviewBinding(actionKey, context?.taskRunId);
+    let binding = await resolveExternalInitiativeReviewBinding(actionKey, context?.taskRunId, context?.taskExecutionFence);
     if (binding?.workroomRef === null) return { success: false, error: "CANONICAL_DESIGN_AMBIGUOUS",
       message: "The accepted review's workroom binding is malformed. Reconcile the server-issued packet before retrying." };
     if (!binding) {

@@ -2,11 +2,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mock = vi.hoisted(() => ({
   auth: vi.fn(), parse: vi.fn(), eligible: vi.fn(), resolveDefault: vi.fn(),
-  binding: vi.fn(), code: vi.fn(), tx: vi.fn(), log: vi.fn(),
+  binding: vi.fn(), code: vi.fn(), tx: vi.fn(), log: vi.fn(), user: vi.fn(),
 }));
 vi.mock("@/lib/auth", () => ({ auth: mock.auth }));
 vi.mock("@dpf/db", () => ({ prisma: {
   organization: { findFirst: vi.fn().mockResolvedValue({ name: "Install" }) },
+  user: { findUnique: mock.user },
   $transaction: mock.tx,
 } }));
 vi.mock("@/lib/auth/oauth-authorize-request", () => ({
@@ -54,6 +55,7 @@ beforeEach(() => {
   mock.resolveDefault.mockResolvedValue({ kind: "resolved", reason: "alias", selected: codex, candidates: [claude, codex] });
   mock.binding.mockResolvedValue({ id: "binding-row", bindingId: "AB-OAUTH-1" });
   mock.code.mockResolvedValue("dpfoac_code");
+  mock.user.mockResolvedValue({ workHandedOverAt: null });
   mock.tx.mockImplementation(async (fn: (db: unknown) => Promise<unknown>) =>
     fn({ authorizationDecisionLog: { create: mock.log } }));
 });
@@ -181,5 +183,50 @@ describe("consent binds only the account the person confirmed", () => {
     expect(html).toContain('name="confirm_account" value="human" required');
     const back = encodeURIComponent("/api/oauth/authorize?client_id=dpfoc_x&redirect_uri=x");
     expect(html).toContain(`href="/login?callbackUrl=${back.replace(/&/g, "&amp;")}"`);
+  });
+});
+
+// BI-9D2199D4: a handover moves an account's work, not its access. Connecting
+// an agent under that account brings new work back to it, so the person is told
+// and has to say they mean it; the server refuses a Connect that did not.
+describe("consent under an account whose work was handed over", () => {
+  const handedOver = new Date("2026-10-01T02:00:00Z");
+  beforeEach(() => mock.user.mockResolvedValue({ workHandedOverAt: handedOver }));
+
+  it("GET says the account's work was handed over and asks for an acknowledgement", async () => {
+    const res = await GET(new Request("http://127.0.0.1:3000/api/oauth/authorize?client_id=dpfoc_x&redirect_uri=x"));
+    const html = await res.text();
+    expect(html).toContain("work was handed over on 2026-10-01");
+    expect(html).toContain('name="acknowledge_handover" value="human" required');
+    expect(html).toContain("Use a different account");
+  });
+
+  it("GET asks nothing extra of an account whose work was never handed over", async () => {
+    mock.user.mockResolvedValue({ workHandedOverAt: null });
+    const html = await (await GET(new Request("http://127.0.0.1:3000/api/oauth/authorize?client_id=dpfoc_x&redirect_uri=x"))).text();
+    expect(html).not.toContain("acknowledge_handover");
+  });
+
+  it("POST binds nothing without the acknowledgement and shows the screen again", async () => {
+    const response = await POST(form(baseForm));
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("Nothing was connected");
+    expect(mock.binding).not.toHaveBeenCalled();
+    expect(mock.code).not.toHaveBeenCalled();
+  });
+
+  it("POST binds nothing when the acknowledgement names another account", async () => {
+    const response = await POST(form({ ...baseForm, acknowledge_handover: "someone-else" }));
+    expect(response.status).toBe(200);
+    expect(mock.binding).not.toHaveBeenCalled();
+  });
+
+  it("POST binds once acknowledged and records the handover on the audit row", async () => {
+    const response = await POST(form({ ...baseForm, acknowledge_handover: "human" }));
+    expect(response.status).toBe(302);
+    expect(mock.binding).toHaveBeenCalled();
+    expect(mock.log).toHaveBeenCalledWith({ data: expect.objectContaining({
+      rationale: expect.objectContaining({ accountWorkHandedOverAt: handedOver.toISOString() }),
+    }) });
   });
 });

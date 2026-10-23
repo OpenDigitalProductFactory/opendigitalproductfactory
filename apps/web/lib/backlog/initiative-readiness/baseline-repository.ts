@@ -20,7 +20,7 @@ import { resolveReviewerIdentity } from "./reviewer-identity";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import type { InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
 import type { InitiativeGateReceipt } from "./receipt-schema";
-import { boundReviewReceiptId, findBoundReviewWinner, lockBoundReviewEffect, publishBoundReviewEffect,
+import { boundReviewReceiptId, checkBoundReviewWriteExecution, findBoundReviewWinner, lockBoundReviewEffect, publishBoundReviewEffect,
   type BoundReviewTask } from "./bound-review-effect";
 import { ok, type ActionSuccess } from "@/lib/shared/action-result";
 
@@ -321,8 +321,8 @@ export async function recordInitiativeSpecApproval(args: {
   try {
     const effectScope = { ...args, actionKey: "record_initiative_design_review", gate: "spec-approval" as const };
     return await publishBoundReviewEffect<RecordInitiativeSpecApprovalResult>(Boolean(args.boundReviewTask), (winnerOnly) => prisma.$transaction(async (tx) => {
-    const taskRefusal = await lockBoundReviewEffect(tx, effectScope, item.organizationId);
-    if (taskRefusal) return taskRefusal;
+    const taskLock = await lockBoundReviewEffect(tx, effectScope, item.organizationId);
+    if (taskLock.refusal) return taskLock.refusal;
     await tx.$queryRaw`SELECT "id" FROM "BacklogItem" WHERE "id" = ${item.id} FOR UPDATE`;
     if (args.artifactRef.kind === "feature-build-revision") {
       await tx.$queryRaw`SELECT "id" FROM "BuildArtifactRevision" WHERE "id" = ${args.artifactRef.revisionId} FOR SHARE`;
@@ -407,6 +407,8 @@ export async function recordInitiativeSpecApproval(args: {
     }
     if (winnerOnly) return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS",
       error: "Concurrent approval did not leave a qualified winner. No write was retried." };
+    const executionRefusal = checkBoundReviewWriteExecution(effectScope, taskLock.execution);
+    if (executionRefusal) return executionRefusal;
     const chain = validateInitiativeBaselineChainHead(entries, args.expectedCurrentBaselineId);
     if (!chain.ok) return chain;
 

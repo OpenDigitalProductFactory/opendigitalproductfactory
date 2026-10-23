@@ -18,6 +18,11 @@
 //              that its work was handed over (User.workHandedOverAt), so rules
 //              that name an owner for NEW work skip it (BI-858FDE5A).
 //
+// It moves work, not access (BI-9D2199D4). The account can still sign in and
+// its agent credentials stay live: the plan reports them so the approver can
+// end them through the per-person revoke surface, and OAuth consent under the
+// account says its work was handed over and asks the person to confirm.
+//
 // It never assigns the guessed install owner (`fallback`) and never hands work
 // back to the account it is leaving. It runs under the approving person's
 // authority: the MCP tool is an authority-consequence write, so a person with
@@ -55,6 +60,8 @@ export type HandoverPlan = {
   sourceEmail: string;
   items: HandoverItem[];
   refused: HandoverRefusal[];
+  /** Live agent credentials the account still holds. Not moved, not in the digest. */
+  liveAgentCredentials: { accessTokens: number; refreshGrants: number };
   digest: string;
 };
 
@@ -67,6 +74,8 @@ export type AccountHandoverDb = {
   featureBuild: Pick<Db["featureBuild"], "findMany" | "update">;
   buildActivity: Pick<Db["buildActivity"], "create">;
   scheduledAgentTask: Pick<Db["scheduledAgentTask"], "findMany" | "update">;
+  mcpApiToken: Pick<Db["mcpApiToken"], "count">;
+  oAuthRefreshToken: Pick<Db["oAuthRefreshToken"], "count">;
 };
 
 const TERMINAL_ROOM_STATUSES = ["complete", "abandoned", "archived"];
@@ -97,7 +106,7 @@ async function principalOf(db: AccountHandoverDb, userId: string) {
 
 export async function planAccountHandover(
   db: AccountHandoverDb,
-  input: { sourceAccount: string },
+  input: { sourceAccount: string; now?: Date },
 ): Promise<ActionResult<HandoverPlan>> {
   const ref = input.sourceAccount.trim();
   const source = ref
@@ -179,7 +188,14 @@ export async function planAccountHandover(
     items.push({ kind: c.kind, id: c.id, ref: c.ref, toUserId: owner.userId, toPrincipalRef: principal.principalId, source: owner.source });
   }
 
-  return ok({ sourceUserId: source.id, sourceEmail: source.email, items, refused, digest: handoverDigest(items, source.id) });
+  const now = input.now ?? new Date();
+  const [accessTokens, refreshGrants] = await Promise.all([
+    db.mcpApiToken.count({ where: { userId: source.id, revokedAt: null, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] } }),
+    db.oAuthRefreshToken.count({ where: { userId: source.id, revokedAt: null, consumedAt: null, expiresAt: { gt: now } } }),
+  ]);
+
+  return ok({ sourceUserId: source.id, sourceEmail: source.email, items, refused,
+    liveAgentCredentials: { accessTokens, refreshGrants }, digest: handoverDigest(items, source.id) });
 }
 
 export type HandoverResult = {

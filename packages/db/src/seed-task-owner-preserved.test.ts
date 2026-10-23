@@ -19,10 +19,15 @@ import { ensureSysmlProjectionScheduledTask } from "./seed-sysml-projection";
 
 type Row = Record<string, unknown>;
 
-function fakePrisma() {
+function fakePrisma(opts: { foundationalOwner?: boolean } = {}) {
   const tasks = new Map<string, Row>();
   const client = {
-    user: { findFirst: async () => ({ id: "u-oldest-superuser" }) },
+    // BI-F0E946D2: the Foundational accountable person, when recorded, owns a new task.
+    portfolio: { findUnique: async () =>
+      opts.foundationalOwner ? { id: "pf", slug: "foundational", accountablePrincipalId: "p-mark" } : null },
+    organization: { findFirst: async () => null },
+    principalAlias: { findFirst: async () => (opts.foundationalOwner ? { aliasValue: "u-mark" } : null) },
+    user: { findFirst: async ({ where }: { where: { id?: string } }) => (where.id ? { id: where.id } : { id: "u-oldest-superuser" }) },
     scheduledAgentTask: {
       findUnique: async ({ where }: { where: { taskId: string } }) => tasks.get(where.taskId) ?? null,
       create: async ({ data }: { data: Row }) => {
@@ -58,6 +63,13 @@ describe.each(SEEDS)("%s seed", (_name, seed) => {
     await seed(client, new Date("2026-10-01T00:00:00Z"));
     const [task] = [...tasks.values()];
     expect(task.ownerUserId).toBe("u-oldest-superuser");
+  });
+
+  it("gives a new task to the Foundational accountable person, not the oldest superuser", async () => {
+    const { client, tasks } = fakePrisma({ foundationalOwner: true });
+    await seed(client, new Date("2026-10-01T00:00:00Z"));
+    const [task] = [...tasks.values()];
+    expect(task.ownerUserId).toBe("u-mark");
   });
 
   it("leaves an existing task's owner alone on a later run", async () => {

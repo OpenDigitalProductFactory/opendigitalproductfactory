@@ -105,8 +105,10 @@ describe("the gate reads the derived set", () => {
     expect(isGovernedDecisionAction(event)).toBe(true);
   });
 
-  it("still ignores surfaces other than the agentic loop", () => {
+  it("governs the agentic loop and external MCP agents alike, and still ignores operator surfaces (BI-638024F9)", () => {
     installConsequentialToolResolver(getConsequentialToolNames);
+    expect(isGovernedDecisionAction({ toolName: "send_marketing_email", source: "external-jsonrpc" })).toBe(true);
+    expect(isGovernedDecisionAction({ toolName: "send_marketing_email", source: "rest" })).toBe(false);
     expect(
       isGovernedDecisionAction({ toolName: "send_marketing_email", source: "mcp" as never }),
     ).toBe(false);

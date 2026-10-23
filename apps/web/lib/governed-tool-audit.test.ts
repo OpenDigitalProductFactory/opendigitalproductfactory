@@ -28,6 +28,28 @@ const baseTool: ToolDefinition = {
 afterEach(() => setGovernedToolAuditOverridesForTests({}));
 
 describe("writeGovernedToolAudit", () => {
+  it("retains only the server-captured execution fence for an approved continuation", async () => {
+    const create = vi.fn(async (_data: Record<string, unknown>) => ({ id: "audit-1" }));
+    setGovernedToolAuditOverridesForTests({ create });
+    const taskExecutionFence = { schemaVersion: 1 as const, reservation: null, dispatchClaim: "original", authorityDigest: null, requestDigest: "9".repeat(64) };
+    await writeGovernedToolAudit({ toolName: baseTool.name, tool: { ...baseTool, retainAuditParameters: true },
+      rawParams: { path: "spec.md", _taskExecutionFence: { forged: true } }, result: { success: false, error: "approval_required", message: "Approval required." },
+      userId: "user-1", source: "internal-mcp-session", durationMs: 1, context: { taskRunId: "TR-1", taskExecutionFence } });
+    expect(create.mock.calls[0]?.[0]).toMatchObject({ parameters: { path: "spec.md", _taskExecutionFence: taskExecutionFence } });
+    const { originalToolParameters } = await import("./attention/coworker-envelope-decision");
+    expect(originalToolParameters((create.mock.calls[0]?.[0] as Record<string, unknown>).parameters)).toEqual({ path: "spec.md" });
+  });
+
+  it("does not let a caller plant a recovery fence in a retained audit", async () => {
+    const create = vi.fn(async (_data: Record<string, unknown>) => ({ id: "audit-1" }));
+    setGovernedToolAuditOverridesForTests({ create });
+    await writeGovernedToolAudit({ toolName: baseTool.name, tool: { ...baseTool, retainAuditParameters: true },
+      rawParams: { path: "spec.md", _taskExecutionFence: { forged: true } }, result: { success: true, message: "Read completed." },
+      userId: "user-1", source: "external-jsonrpc", durationMs: 1 });
+    expect(create.mock.calls[0]?.[0]).toMatchObject({ parameters: { path: "spec.md" } });
+    expect(((create.mock.calls[0]?.[0] as Record<string, unknown>).parameters as Record<string, unknown>)._taskExecutionFence).toBeUndefined();
+  });
+
   it("retains redacted parameters for an opted-in metrics-only tool while suppressing its result", async () => {
     const create = vi.fn(async () => ({ id: "tool-execution-1" }));
     setGovernedToolAuditOverridesForTests({ create });

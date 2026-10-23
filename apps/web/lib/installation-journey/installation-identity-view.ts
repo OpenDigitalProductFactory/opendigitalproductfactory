@@ -136,6 +136,9 @@ export async function loadInstallationIdentityView(
       environmentClass: environment.environmentClass,
       pairedProductionInstallationRef: stance.pairedProductionInstallationRef ?? null,
     },
+    secondaryPurposes: loaded.status === "valid"
+      ? loaded.intent.secondaryPurposes.filter((secondary) => secondary !== purpose)
+      : [],
     headline: buildIdentityHeadline({ environment, purpose, intentStatus }),
     detail: details.length > 0 ? details.join(" ") : null,
     stances: stanceRows(stance),

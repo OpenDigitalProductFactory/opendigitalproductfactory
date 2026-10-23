@@ -18,6 +18,9 @@ function database() {
       update: vi.fn(),
     },
     workroomActivity: { create: vi.fn(async () => ({ id: "act" })) },
+    // No account here was handed over (BI-C66B6076 reads these before appointing).
+    principalAlias: { findFirst: vi.fn(async () => null) },
+    user: { findFirst: vi.fn(async () => null) },
     workroomParticipant: {
       findMany: vi.fn(async () => []),
       create: vi.fn(async () => ({})),

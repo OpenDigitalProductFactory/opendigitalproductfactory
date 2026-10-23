@@ -100,14 +100,15 @@ describe("bound historical plan receipt publication", () => {
 });
 
 describe("one terminal verdict for an authenticated bound review", () => {
-  const boundReviewTask = { taskRunId: "TR-MCP-BOUND", requestDigest: "9".repeat(64) };
+  const boundReviewTask = { taskRunId: "TR-MCP-BOUND", requestDigest: "9".repeat(64),
+    executionFence: { schemaVersion: 1 as const, reservation: null, dispatchClaim: null, authorityDigest: null, requestDigest: "9".repeat(64) } };
   const boundArgs = { ...args, boundReviewTask };
   type Activity = { id: string; backlogItemId: string; kind: string; gateKey?: string; payload: Record<string, unknown> };
 
   function publication() {
     const activities: Activity[] = [];
     const task = { id: "task-row", taskRunId: boundReviewTask.taskRunId, userId: args.reviewerUserId,
-      currentAgentId: args.reviewerAgentId, status: "working", a2aMetadata: {
+      currentAgentId: args.reviewerAgentId, status: "working", progressPayload: {} as Record<string, unknown>, a2aMetadata: {
         trigger: "external-mcp", requestDigest: boundReviewTask.requestDigest,
         initiativeReviewBinding: { writerToolName: args.actionKey, itemId: args.itemId, gate: args.gate,
           artifactRef, workroomRef, expectedCurrentBaselineId: args.expectedCurrentBaselineId },
@@ -148,6 +149,49 @@ describe("one terminal verdict for an authenticated bound review", () => {
     expect(second.receiptId).toBe(first.receiptId);
     expect(state.activities).toHaveLength(1);
     expect(io.append).toHaveBeenCalledOnce();
+  });
+
+  it.each(["input-required", "completed", "failed", "stalled"])("does not append a new verdict for a %s execution", async (status) => {
+    const state = publication();
+    state.task.status = status;
+    expect(await recordInitiativeGateReceipt(boundArgs)).toMatchObject({ ok: false });
+    expect(state.activities).toHaveLength(0);
+    expect(io.append).not.toHaveBeenCalled();
+  });
+
+  it("does not append while the working task has an uncertain provider outcome", async () => {
+    const state = publication();
+    state.task.progressPayload.executionUncertainty = { schemaVersion: 1, settlement: "unknown" };
+    expect(await recordInitiativeGateReceipt(boundArgs)).toMatchObject({ ok: false });
+    expect(state.activities).toHaveLength(0);
+  });
+
+  it("refuses an unversioned callback instead of borrowing the current execution", async () => {
+    const state = publication();
+    expect(await recordInitiativeGateReceipt({ ...boundArgs, boundReviewTask: {
+      taskRunId: boundReviewTask.taskRunId, requestDigest: boundReviewTask.requestDigest,
+    } })).toMatchObject({ ok: false });
+    expect(state.activities).toHaveLength(0);
+  });
+
+  it.each(["reservation", "dispatch"])("refuses a callback after its %s generation changes", async (change) => {
+    const state = publication();
+    if (change === "reservation") state.task.progressPayload.resumeReservedAt = "2026-10-16T20:00:00.000Z";
+    else state.task.progressPayload.dispatch = { claimedAt: "2026-10-16T20:00:00.000Z" };
+    expect(await recordInitiativeGateReceipt(boundArgs)).toMatchObject({ ok: false });
+    expect(state.activities).toHaveLength(0);
+  });
+
+  it("returns a genuine existing receipt after execution is held without appending another", async () => {
+    const state = publication();
+    const first = await recordInitiativeGateReceipt(boundArgs);
+    if (!first.ok) throw new Error("Expected a canonical receipt before the hold.");
+    state.task.status = "input-required";
+    state.task.progressPayload.executionUncertainty = { schemaVersion: 1, settlement: "unknown" };
+    io.append.mockClear();
+    expect(await recordInitiativeGateReceipt(boundArgs)).toMatchObject({ ok: true, receiptId: first.receiptId, deduplicated: true });
+    expect(io.append).not.toHaveBeenCalled();
+    expect(state.activities).toHaveLength(1);
   });
 
   it("returns the original rejecting verdict instead of publishing a contradictory pass", async () => {

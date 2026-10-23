@@ -34,8 +34,10 @@ export type CliSlotStats = { inFlight: number; queued: number; max: number };
  * floor of one keeps today's progress when the gate is saturated; that task
  * queues for its CLI slot as it always did.
  *
- * Known gap, not fixed here: the pool rows ignore dated weekly resets
- * (BI-0319EE11), so a capped provider can read as healthy until that lands.
+ * A pool with a known dated reset (a Codex "try again at <date>" cap or a
+ * Claude "resets Oct 20, 4pm (UTC)" weekly limit) reads exhausted until that
+ * reset, not for a one-hour cooldown (BI-0319EE11): getAllCliPoolStatuses
+ * reconciles the pool row with the provider's quota_resets_at capacity.
  */
 export function providerSlotsFromCapacity(input: {
   pools: Array<Pick<CliPoolState, "isExhausted" | "weeklyUtilization" | "weeklyObservedAt">>;

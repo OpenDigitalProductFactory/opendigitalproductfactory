@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const posture = vi.hoisted(() => ({ loadAiPlatformPosture: vi.fn() }));
+const posture = vi.hoisted(() => ({ loadAiPlatformPosture: vi.fn(), loadScheduledAgentTaskPosture: vi.fn() }));
 vi.mock("@/lib/ai-platform-posture/get-ai-platform-posture", () => posture);
 
 import { aiPlatformPosturePack } from "./ai-platform-posture-pack";
@@ -13,7 +13,61 @@ const EXPECTED_GRANTS: Record<string, string[]> = {
 };
 
 beforeEach(() => {
-  vi.clearAllMocks();
+  vi.resetAllMocks();
+  posture.loadAiPlatformPosture.mockResolvedValue({ windowHours: 24, providers: [], modelProfiles: [], failoverChain: { fallbackRate: 0 }, scheduledTasks: { counts: { failingAgentTasks: 0, failingJobs: 0 } } });
+});
+
+describe("BI-E725AA43 exact scheduled-task handler", () => {
+  const selected = { generatedAt: "2026-10-21T06:23:00.000Z", scope: "scheduled-task", requestedTaskId: "agent-task-fixture", found: true,
+    scheduledTask: { taskId: "agent-task-fixture", agentId: "platform-engineer", title: "Synthetic monitor", isActive: true, nextRunAt: null, lastStatus: null, lastError: null },
+    truncation: { agentId: false, title: false, lastStatus: false, lastError: false },
+  };
+
+  it("advertises one optional bounded selector while retaining existing authority", () => {
+    expect(aiPlatformPosturePack.definitions[0]?.inputSchema).toMatchObject({ properties: { scheduledTaskId: { type: "string", minLength: 1, maxLength: 200 } }, required: [] });
+    expect(aiPlatformPosturePack.definitions).toHaveLength(1);
+    expect(aiPlatformPosturePack.definitions[0]).toMatchObject({ requiredCapability: "view_platform", sideEffect: false, executionMode: "immediate", annotations: { readOnlyHint: true, idempotentHint: true } });
+    expect(aiPlatformPosturePack.grants.get_ai_platform_posture).toEqual(["agent_control_read"]);
+  });
+
+  it("dispatches the normalized exact selector before the global report even with global options", async () => {
+    posture.loadScheduledAgentTaskPosture.mockResolvedValue(selected);
+    const result = await aiPlatformPosturePack.handlers.get_ai_platform_posture({ scheduledTaskId: " agent-task-fixture ", windowHours: 48, includeRetired: true }, "u1");
+    expect(posture.loadScheduledAgentTaskPosture).toHaveBeenCalledExactlyOnceWith("agent-task-fixture");
+    expect(posture.loadAiPlatformPosture).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ success: true, data: selected });
+    expect(result.message).not.toContain("provider(s)");
+  });
+
+  it.each(["", " \t\n ", null, undefined, 42, false, [], {}, "x".repeat(201)])("refuses supplied malformed selector %j without either reader", async (scheduledTaskId) => {
+    const result = await aiPlatformPosturePack.handlers.get_ai_platform_posture({ scheduledTaskId }, "u1");
+    expect(result.success).toBe(false);
+    expect(result.message).toMatch(/scheduledTaskId/);
+    expect(posture.loadScheduledAgentTaskPosture).not.toHaveBeenCalled();
+    expect(posture.loadAiPlatformPosture).not.toHaveBeenCalled();
+    expect(JSON.stringify(result).length).toBeLessThan(500);
+  });
+
+  it("returns explicit not-found data without pretending null status is a missing row", async () => {
+    posture.loadScheduledAgentTaskPosture.mockResolvedValue({ ...selected, found: false, scheduledTask: null });
+    const result = await aiPlatformPosturePack.handlers.get_ai_platform_posture({ scheduledTaskId: selected.requestedTaskId }, "u1");
+    expect(result).toMatchObject({ success: true, data: { found: false, scheduledTask: null } });
+    expect(result.message).toMatch(/not found/i);
+    expect(posture.loadAiPlatformPosture).not.toHaveBeenCalled();
+  });
+
+  it("bounds the actual handler result when projected fields require maximum JSON escaping", async () => {
+    posture.loadScheduledAgentTaskPosture.mockResolvedValue({ ...selected,
+      requestedTaskId: "\u0000".repeat(200),
+      scheduledTask: { ...selected.scheduledTask, taskId: "\u0000".repeat(200), agentId: "\u0001".repeat(200), title: "\u0002".repeat(300), lastStatus: "\u0003".repeat(100), lastError: "\u0004".repeat(4_000) },
+      truncation: { agentId: true, title: true, lastStatus: true, lastError: true },
+    });
+    const result = await aiPlatformPosturePack.handlers.get_ai_platform_posture({ scheduledTaskId: "\u0000".repeat(200) }, "u1");
+    expect(result.success).toBe(true);
+    expect(result.message).toMatch(/truncated/);
+    expect(JSON.stringify(result).length).toBeLessThan(32_000);
+    expect(posture.loadAiPlatformPosture).not.toHaveBeenCalled();
+  });
 });
 
 describe("ai-platform-posture pack — registration", () => {
@@ -76,6 +130,7 @@ describe("ai-platform-posture pack — handler behavior", () => {
     );
 
     expect(posture.loadAiPlatformPosture).toHaveBeenCalledWith({ windowHours: 48, includeRetired: true });
+    expect(posture.loadScheduledAgentTaskPosture).not.toHaveBeenCalled();
     expect(res.success).toBe(true);
     expect(res.message).toContain("1 provider(s)");
     expect(res.message).toContain("2 model profile(s)");
@@ -99,5 +154,6 @@ describe("ai-platform-posture pack — handler behavior", () => {
     await aiPlatformPosturePack.handlers.get_ai_platform_posture({}, "u1");
 
     expect(posture.loadAiPlatformPosture).toHaveBeenCalledWith({ windowHours: undefined, includeRetired: undefined });
+    expect(posture.loadScheduledAgentTaskPosture).not.toHaveBeenCalled();
   });
 });
