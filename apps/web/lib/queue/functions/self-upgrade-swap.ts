@@ -18,9 +18,10 @@ import {
   runCandidatePreflight,
   type InstallStateMigrationHandoff,
 } from "@/lib/self-upgrade/preflight";
-import { isFeatureBuildDeployed } from "@/lib/self-upgrade/completion";
+import { getDeployedSha, isFeatureBuildDeployed } from "@/lib/self-upgrade/completion";
 import { classifyBuildFailure, formatClassifiedExcerpt } from "@/lib/self-upgrade/build-failure-classifier";
-import { completeRun, failRun, recordPromoterReadiness, recordRunRecoveryPoint } from "@/lib/self-upgrade/run-store";
+import { completeRun, failRun, getRun, recordPromoterReadiness, recordRunRecoveryPoint, type SelfUpgradeRunRow } from "@/lib/self-upgrade/run-store";
+import { resumedSwapAlreadyLanded } from "@/lib/self-upgrade/landed-swap-identity";
 import { clearCooldown, recordCooldown } from "@/lib/self-upgrade/cooldown";
 import { emitUpgradeEvent } from "@/lib/self-upgrade/notifications";
 import {
@@ -29,6 +30,8 @@ import {
   summarizeRecoveryPointFailure,
 } from "@/lib/self-upgrade/recovery-point";
 import { failQuiescenceSwap, signalSwapComplete, signalSwapStarting } from "@/lib/self-upgrade/quiescence";
+import { readDrainControl } from "@/lib/self-upgrade/drain-wait";
+import { isTerminalQuiescenceStatus } from "@/lib/self-upgrade/quiescence-contract";
 import { guardAdmissionClosedForSwap } from "@/lib/self-upgrade/drain-admission";
 
 type PreflightParams = Parameters<typeof runCandidatePreflight>[0];
@@ -70,15 +73,55 @@ async function loadPromoterRuntime() {
 
 export async function finishSelfUpgrade(ctx: SelfUpgradeSwapContext): Promise<Record<string, unknown>> {
   const { runId, quiescenceRunId, dryRun, cooldownMinutes } = ctx;
+  const finalized = (run: Pick<SelfUpgradeRunRow, "status">) => ({
+    ok: run.status === "succeeded", status: "already-finalized", runId, quiescenceRunId, runStatus: run.status,
+  });
+  const retryTerminalHandshake = async (run: Pick<SelfUpgradeRunRow, "status" | "failureLog">) => {
+    if (!quiescenceRunId || !["succeeded", "failed"].includes(run.status)) return;
+    const drain = await readDrainControl(quiescenceRunId);
+    if (!drain || isTerminalQuiescenceStatus(drain.status)) return;
+    if (run.status === "succeeded") await signalSwapComplete(quiescenceRunId);
+    else await failQuiescenceSwap(quiescenceRunId, run.failureLog ?? "Self-upgrade failed");
+  };
+  // The swap kills this worker before the engine can save the step result.
+  // Durable outcomes must be checked before any backup, preflight or promoter.
+  const existing = await getRun(runId);
+  if (existing && ["succeeded", "failed", "cancelled", "skipped", "rolled_back"].includes(existing.status)) {
+    await retryTerminalHandshake(existing);
+    return finalized(existing);
+  }
+  if (!dryRun && existing && resumedSwapAlreadyLanded({
+    deployedSha: await getDeployedSha(), targetSha: ctx.builtStamp, currentSha: existing.currentSha,
+  })) {
+    const completed = await completeRun(runId);
+    if (completed.status !== "succeeded") return finalized(completed);
+    if (quiescenceRunId) await signalSwapComplete(quiescenceRunId);
+    await clearCooldown();
+    await emitUpgradeEvent({ type: "upgrade.succeeded", runId });
+    return { ok: true, status: "succeeded", runId, quiescenceRunId, reason: "already-deployed" };
+  }
   // Cooldowns start when the failure happens, not when the attempt began an
   // hour ago (the drain may have waited that long).
   const now = new Date();
-  const emitFailure = (id: string) => emitUpgradeEvent({ type: "upgrade.failed", runId: id });
+  let preflightFailure: SelfUpgradeRunRow | undefined;
+  const recordPreflightFailure: typeof failRun = async (...args) => {
+    preflightFailure = await failRun(...args);
+    return preflightFailure;
+  };
+  // Preflight records the failure; this owner publishes only the winning outcome.
+  const emitFailure = async () => {};
+  const finishFailure = async (error: string, details: Record<string, unknown>) => {
+    const recorded = preflightFailure ?? await failRun(runId, error);
+    if (recorded?.status && recorded.status !== "failed") return finalized(recorded);
+    await recordCooldown(now, cooldownMinutes);
+    await emitUpgradeEvent({ type: "upgrade.failed", runId, payload: { reason: error } });
+    if (quiescenceRunId) await failQuiescenceSwap(quiescenceRunId, error);
+    return { ok: false, status: "failed", runId, quiescenceRunId, ...details };
+  };
 
-  const signingContext = await loadInstallStateSigningContext({ dryRun, runId, failRun, emitFailure });
+  const signingContext = await loadInstallStateSigningContext({ dryRun, runId, failRun: recordPreflightFailure, emitFailure });
   if (!signingContext.ok) {
-    if (quiescenceRunId) await failQuiescenceSwap(quiescenceRunId, signingContext.reason);
-    return { ok: false, status: "failed", runId, quiescenceRunId, reason: "installer-state-repair-required", excerpt: signingContext.reason };
+    return finishFailure(signingContext.reason, { reason: "installer-state-repair-required", excerpt: signingContext.reason });
   }
   const { runtimeTransitionSecret, hostIdentity } = signingContext;
 
@@ -93,11 +136,7 @@ export async function finishSelfUpgrade(ctx: SelfUpgradeSwapContext): Promise<Re
   }
   if (recoveryPoint.status === "failed") {
     const reason = summarizeRecoveryPointFailure(recoveryPoint);
-    if (quiescenceRunId) await failQuiescenceSwap(quiescenceRunId, reason);
-    await failRun(runId, reason);
-    await recordCooldown(now, cooldownMinutes);
-    await emitUpgradeEvent({ type: "upgrade.failed", runId, payload: { reason } });
-    return { ok: false, status: "failed", runId, quiescenceRunId, reason: "recovery-point-failed", recoveryPoint, excerpt: reason };
+    return finishFailure(reason, { reason: "recovery-point-failed", recoveryPoint, excerpt: reason });
   }
 
   // Signal swap-starting for audit; record the moment we cross the
@@ -112,18 +151,16 @@ export async function finishSelfUpgrade(ctx: SelfUpgradeSwapContext): Promise<Re
   // legitimate state move or TTL expiry.
   const preflightParams: PreflightParams = {
     ...ctx.preflight,
-    runtime: loadPromoterRuntime, recordReadiness: recordPromoterReadiness, failRun, emitFailure,
+    runtime: loadPromoterRuntime, recordReadiness: recordPromoterReadiness, failRun: recordPreflightFailure, emitFailure,
     hostIdentity, runtimeTransitionSecret,
   };
   const refreshed = await refreshMigrationHandoffAfterDrain({
     dryRun, runId, migrationHandoff: ctx.migrationHandoff, resolvedPromoterDigest: ctx.resolvedPromoterDigest,
-    runtimeTransitionSecret, hostIdentity, failRun, emitFailure,
+    runtimeTransitionSecret, hostIdentity, failRun: recordPreflightFailure, emitFailure,
     rerunPreflight: () => runCandidatePreflight(preflightParams),
   });
   if (!refreshed.ok) {
-    if (quiescenceRunId) await failQuiescenceSwap(quiescenceRunId, refreshed.reason);
-    await recordCooldown(now, cooldownMinutes);
-    return { ok: false, status: "failed", runId, quiescenceRunId, reason: "installer-state-repair-required", excerpt: refreshed.reason };
+    return finishFailure(refreshed.reason, { reason: "installer-state-repair-required", excerpt: refreshed.reason });
   }
   if (refreshed.data.refreshed) console.warn(`[self-upgrade] ${runId}: install-state handoff re-bound after the drain (${refreshed.data.code})`);
   const migrationHandoff = refreshed.data.migrationHandoff;
@@ -135,11 +172,7 @@ export async function finishSelfUpgrade(ctx: SelfUpgradeSwapContext): Promise<Re
   if (quiescenceRunId) {
     const guard = await guardAdmissionClosedForSwap(quiescenceRunId, { forced: ctx.force });
     if (!guard.ok) {
-      await failQuiescenceSwap(quiescenceRunId, guard.error);
-      await failRun(runId, `admission-reopened-before-swap: ${guard.error}`);
-      await recordCooldown(now, cooldownMinutes);
-      await emitUpgradeEvent({ type: "upgrade.failed", runId });
-      return { ok: false, status: "failed", runId, quiescenceRunId, reason: "admission-reopened-before-swap", excerpt: guard.error };
+      return finishFailure("admission-reopened-before-swap: " + guard.error, { reason: "admission-reopened-before-swap", excerpt: guard.error });
     }
   }
 
@@ -163,11 +196,7 @@ export async function finishSelfUpgrade(ctx: SelfUpgradeSwapContext): Promise<Re
     // catch the rejection would leave the run stuck "running" — blocking every
     // future trigger.
     const msg = err instanceof Error ? err.message : String(err);
-    if (quiescenceRunId) await failQuiescenceSwap(quiescenceRunId, msg);
-    await failRun(runId, `promoter-spawn-error: ${msg}`);
-    await recordCooldown(now, cooldownMinutes);
-    await emitUpgradeEvent({ type: "upgrade.failed", runId });
-    return { ok: false, status: "failed", runId, quiescenceRunId, excerpt: msg };
+    return finishFailure("promoter-spawn-error: " + msg, { excerpt: msg });
   }
 
   if (result.exitCode === PROMOTER_ALREADY_RUNNING_EXIT_CODE) {
@@ -178,10 +207,9 @@ export async function finishSelfUpgrade(ctx: SelfUpgradeSwapContext): Promise<Re
   }
 
   if (result.exitCode === 0) {
-    // Signal swap-complete BEFORE marking the upgrade succeeded so the
-    // coordinator flips the level back to normal as fast as possible.
+    const completed = await completeRun(runId);
+    if (completed?.status && completed.status !== "succeeded") return finalized(completed);
     if (quiescenceRunId) await signalSwapComplete(quiescenceRunId);
-    await completeRun(runId);
     // A swap succeeded, so the backoff from an earlier defer/fail no longer applies.
     if (!dryRun) await clearCooldown();
     await emitUpgradeEvent({ type: "upgrade.succeeded", runId });
@@ -206,19 +234,7 @@ export async function finishSelfUpgrade(ctx: SelfUpgradeSwapContext): Promise<Re
   const excerpt = formatClassifiedExcerpt(failureClass, rawExcerpt);
   // Promoter failed — signal the coordinator so it flips the level back to
   // normal (critical: without this, the portal stays draining forever).
-  if (quiescenceRunId) await failQuiescenceSwap(quiescenceRunId, excerpt);
-  await failRun(runId, excerpt);
-  await recordCooldown(now, cooldownMinutes);
-  await emitUpgradeEvent({ type: "upgrade.failed", runId });
-  return {
-    ok: false,
-    status: "failed",
-    runId,
-    quiescenceRunId,
-    exitCode: result.exitCode,
-    failureClass: failureClass.class,
-    excerpt,
-  };
+  return finishFailure(excerpt, { exitCode: result.exitCode, failureClass: failureClass.class, excerpt });
 }
 
 /**

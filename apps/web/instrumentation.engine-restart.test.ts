@@ -1,3 +1,4 @@
+vi.mock("@/lib/self-upgrade/landed-swap", () => ({ healLandedSwapFalseFailures: vi.fn(async () => 0) }));
 /**
  * BI-75ECED42 — an upgrade killed by the container engine restarting (Docker
  * Desktop updating itself, a host reboot) is named as that, not as "the

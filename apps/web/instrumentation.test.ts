@@ -1,3 +1,4 @@
+vi.mock("@/lib/self-upgrade/landed-swap", () => ({ healLandedSwapFalseFailures: vi.fn(async () => 0) }));
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   advanceStrandedBuildToReview,
@@ -11,7 +12,6 @@ import {
   syncPlatformVersionOnBoot,
 } from "./instrumentation";
 import { areOptionalStartupTasksEnabled, isInngestSelfSyncOnBootEnabled, isStartupModelRevalidationEnabled } from "@/lib/runtime/env-flags";
-
 const syncPlatformVersionConfigMock = vi.fn();
 const getDeployedShaMock = vi.fn();
 const completeRunMock = vi.fn();
