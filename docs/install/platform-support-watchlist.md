@@ -1,6 +1,8 @@
 # Platform Support Watch-List (living document)
 
-## Saved host CA trust and stale clients (BI-F89C7FBD)
+## Saved host CA trust and stale clients
+
+The historical repair is evidenced by the merged [saved host trust change, PR 6497](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/6497).
 
 The supported Node gate launch (`pnpm run pregate`, including its native gate
 entry) reads existing authorized endpoint/trust through the installer client-env
@@ -33,7 +35,7 @@ existing managed environment reader through Bash, without sourcing saved text.
 Windows launch and fixture tests establish local behavior; adapter simulations
 and shell twin tests do not establish native macOS/Linux execution.
 
-## Contributor preview mount identity on Docker Desktop (BI-0ACB97B5)
+## Contributor preview mount identity on Docker Desktop (BI-0ACB97B5, BI-81AF5884)
 
 The Windows host records the admitted worktree as a drive-absolute path while
 Docker Desktop reports its bind source as `/run/desktop/mnt/host/<drive>/...`.
@@ -43,6 +45,17 @@ another worktree, relative paths and traversal fail closed. Source SHA, lease,
 loopback port, environment class and current ownership checks remain required.
 Regression fixtures cover both verification adapters; a failed initialization
 or binding check never earns a served UX pass.
+
+Desktop may report an admitted POSIX `/Users/...` bind as `/host_mnt/Users/...`.
+Both adapters first preserve direct path equality, then permit this one leading
+namespace translation only when a fresh read from the inspected Docker daemon
+reports `OperatingSystem` exactly `Docker Desktop`. The read is bounded to ten
+seconds and repeated during keeper renewal checks. Missing, failed or native
+Linux metadata supplies no alias authority; existing direct POSIX and Windows
+comparisons remain valid. Case, root, NUL/CR/LF, traversal and prefix lookalikes
+still cannot establish another worktree's identity. Host-only source changes
+cannot update the canonical sign-in issuer; the reviewed release and separately
+authorized install advance must deliver both consumers before served acceptance.
 
 The full local-CI runner also reuses the verified native shell adapter for its
 child environment. Windows fixtures that invoke `sh` must not inherit WSL or

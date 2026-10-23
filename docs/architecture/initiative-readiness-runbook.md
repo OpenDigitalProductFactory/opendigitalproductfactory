@@ -11,6 +11,17 @@
 
 ## 0. Two "shapes" — do not conflate them
 
+### Approval status is separate from original action evidence
+
+The exact caller-scoped `get_my_approval_status` reader includes a separate
+`actionEvidence` projection for stored provider-account test outcomes. It proves
+the original envelope, tool, actor and input before returning a bounded typed
+result; missing, conflicting and unsupported evidence remain explicit. Pending
+discovery retains its status-only contract. This read never dispatches or replays
+an action, and generic test success supplies neither a Responses verification
+receipt nor a selected-quota transaction receipt. It cannot settle an uncertain
+initiative review or substitute for the gate's independent writer.
+
 ### Medium body criteria and independent acceptance
 
 Effective medium work, including product-linked work, can satisfy its objective

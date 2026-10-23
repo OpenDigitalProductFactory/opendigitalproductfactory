@@ -103,7 +103,8 @@ export async function loadCapsuleLivenessInventory(
     take: args.take,
     select: args.portalSummary
       ? { ...INVENTORY_SELECT, id: true, outcomeAnchor: false, scopeClaims: false, servesPortfolioRoles: false, dependsOnPortfolioRoles: false }
-      : args.compact ? { ...INVENTORY_SELECT, outcomeAnchor: false, scopeClaims: false, servesPortfolioRoles: false, dependsOnPortfolioRoles: false } : INVENTORY_SELECT,
+      : args.compact ? { ...INVENTORY_SELECT, outcomeAnchor: false, scopeClaims: false, servesPortfolioRoles: false, dependsOnPortfolioRoles: false,
+          createdByPrincipalId: true, requestedByPrincipalId: true } : INVENTORY_SELECT,
   });
   const titles = args.portalSummary ? await loadWorkroomDisplayTitles(db, rows) : null;
   // One bounded review read for the page, never one query per room. A truncated

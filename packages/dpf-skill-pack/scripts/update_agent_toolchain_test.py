@@ -1168,6 +1168,49 @@ class ClaudeUserScopeDpfServerTest(unittest.TestCase):
 
 
 class AntigravityMcpConfigTest(unittest.TestCase):
+    def test_writes_the_file_agy_and_the_ide_read(self) -> None:
+        # agy 1.4.3 and Antigravity.app read ~/.gemini/config/mcp_config.json;
+        # nothing reads ~/.antigravity/mcp_config.json (BI-4CB3C923).
+        home = Path("/tmp/home")
+        self.assertEqual(updater.antigravity_mcp_config_path(home),
+                         home / ".gemini" / "config" / "mcp_config.json")
+
+    def test_an_empty_config_file_is_converged_not_left_empty(self) -> None:
+        # The operator's file was 0 bytes, so agy listed no MCP servers at all.
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            cfg_path = updater.antigravity_mcp_config_path(home)
+            cfg_path.parent.mkdir(parents=True, exist_ok=True)
+            cfg_path.write_text("")
+            with patch.object(updater, "resolve_antigravity_binary", return_value="/fake/agy"):
+                self.assertEqual(updater.ensure_antigravity_mcp_config(home, updater.DEFAULT_MCP_URL, dry_run=False), "converged")
+            dpf = json.loads(cfg_path.read_text())["mcpServers"]["dpf"]
+            self.assertEqual(dpf["serverUrl"], updater.DEFAULT_MCP_URL)
+            self.assertIs(dpf["disabled"], False)
+
+    def test_unparseable_config_is_left_alone_and_does_not_stop_the_update(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            cfg_path = updater.antigravity_mcp_config_path(home)
+            cfg_path.parent.mkdir(parents=True, exist_ok=True)
+            cfg_path.write_text("{not json")
+            with patch.object(updater, "resolve_antigravity_binary", return_value="/fake/agy"):
+                status = updater.ensure_antigravity_mcp_config(home, updater.DEFAULT_MCP_URL, dry_run=False)
+            self.assertTrue(status.startswith("skipped: cannot parse"), status)
+            self.assertEqual(cfg_path.read_text(), "{not json")
+
+    def test_an_operator_disabled_dpf_entry_stays_disabled(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            cfg_path = updater.antigravity_mcp_config_path(home)
+            cfg_path.parent.mkdir(parents=True, exist_ok=True)
+            cfg_path.write_text(json.dumps({"mcpServers": {"dpf": {"serverUrl": "https://old/api/mcp/v1", "disabled": True}}}))
+            with patch.object(updater, "resolve_antigravity_binary", return_value="/fake/agy"):
+                updater.ensure_antigravity_mcp_config(home, updater.DEFAULT_MCP_URL, dry_run=False)
+            dpf = json.loads(cfg_path.read_text())["mcpServers"]["dpf"]
+            self.assertIs(dpf["disabled"], True)
+            self.assertEqual(dpf["serverUrl"], updater.DEFAULT_MCP_URL)
+
     def test_skipped_when_agy_absent(self) -> None:
         with patch.object(updater, "resolve_antigravity_binary", return_value=None):
             status = updater.ensure_antigravity_mcp_config(
@@ -1192,8 +1235,11 @@ class AntigravityMcpConfigTest(unittest.TestCase):
             self.assertEqual(second, "already current")
             cfg = json.loads(updater.antigravity_mcp_config_path(home).read_text())
             dpf = cfg["mcpServers"]["dpf"]
-            self.assertEqual(dpf["type"], "http")
-            self.assertEqual(dpf["url"], http_url)
+            # agy's own schema (what `agy mcp add` writes), BI-4CB3C923.
+            self.assertEqual(dpf["serverUrl"], http_url)
+            self.assertIs(dpf["disabled"], False)
+            self.assertNotIn("url", dpf)
+            self.assertNotIn("type", dpf)
             self.assertEqual(dpf["headers"]["Authorization"], "Bearer ${DPF_MCP_BEARER_TOKEN}")
             # No plaintext secret is ever written.
             self.assertNotIn("dpfmcp_", updater.antigravity_mcp_config_path(home).read_text())
@@ -2290,6 +2336,29 @@ class CodexRegistrationConvergenceTest(unittest.TestCase):
 
 
 class CodexProjectConfigTest(unittest.TestCase):
+    def test_refusal_is_reported_not_raised(self):
+        # BI-CEDE5B55: on python3 3.9 without tomli the step refuses; the
+        # updater must report that and keep converging the other clients.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config = root / ".codex" / "config.toml"
+            config.parent.mkdir()
+            original = '[mcp_servers.dpf]\nurl="http://127.0.0.1:3000/api/mcp/v1"\n'
+            config.write_text(original)
+            refusal = ValueError("Project Codex TOML requires Python 3.11+ or tomli; configuration unchanged")
+            with patch.object(updater, "ensure_codex_project_config", side_effect=refusal):
+                status = updater.converge_codex_project_config(root, "https://localhost/api/mcp/v1", False)
+            self.assertTrue(status.startswith("unchanged ("), status)
+            self.assertIn("Python 3.11+", status)
+            self.assertEqual(config.read_text(), original)
+
+    def test_status_without_override_is_current(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.assertEqual(
+                updater.converge_codex_project_config(Path(directory), "https://localhost/api/mcp/v1", False),
+                "current",
+            )
+
     def test_missing_file_stays_missing(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

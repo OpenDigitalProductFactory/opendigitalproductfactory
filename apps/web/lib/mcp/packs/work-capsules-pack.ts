@@ -93,6 +93,8 @@ const definitions: ToolDefinition[] = [
         decisionScope: { type: "string", enum: ENUMS.decisionScopes, description: "Filter by WWMD, WWWD, or WSID scope." },
         portfolioRole: { type: "string", enum: ENUMS.portfolioRoles, description: "Filter by primary portfolio role." },
         staleOnly: { type: "boolean", description: "Return only capsules that are NOT truly live (reap candidates). Default false." },
+        headBranch: { type: "string", maxLength: 255, description: "Find the room for this branch, including one another assistant made for you." },
+        pullRequestNumber: { type: "integer", minimum: 1, description: "Find the room for this pull request, including one another assistant made for you." },
         limit: { type: "integer", minimum: 1, maximum: 100, description: "Requested page size (default 5, maximum 100); whole rows are reduced to fit the client budget." },
         cursor: { type: "string", maxLength: 1024, description: "Opaque continuation from this observation. Keep filters unchanged; expiry requires a fresh traversal." },
       },

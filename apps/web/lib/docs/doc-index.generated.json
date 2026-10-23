@@ -2018,6 +2018,7 @@
       "anchors": [
         "initiative-readiness-runbook-who-does-what-when-through-the-gates",
         "0-two-shapes-do-not-conflate-them",
+        "approval-status-is-separate-from-original-action-evidence",
         "medium-body-criteria-and-independent-acceptance",
         "1-the-lifecycle-sequence",
         "2-the-gates-role-actor-evidence-feature-profile",
@@ -2793,6 +2794,7 @@
         "an-undispatched-stage-is-a-pause-and-its-task-owner-is-the-accountable-person",
         "every-stage-is-a-queue",
         "a-named-governed-writer-must-be-attached-not-discovered",
+        "offered-or-not-dispatched-offered-then-corrected-once-bi-62db6c03",
         "a-stage-names-the-tools-it-needs",
         "a-new-shape-version-reaches-a-live-room-only-by-rebind-bi-cb5c0dce",
         "related-references",
@@ -5739,8 +5741,8 @@
       "publishedPortal": false,
       "anchors": [
         "platform-support-watch-list-living-document",
-        "saved-host-ca-trust-and-stale-clients-bi-f89c7fbd",
-        "contributor-preview-mount-identity-on-docker-desktop-bi-0acb97b5",
+        "saved-host-ca-trust-and-stale-clients",
+        "contributor-preview-mount-identity-on-docker-desktop-bi-0acb97b5-bi-81af5884",
         "literal-windows-package-manager-arguments-bi-263055e3",
         "capability-reconciliation-on-release-installs-bi-5acbac50",
         "host-process-inventory-before-admission-bi-6de5a3b6",

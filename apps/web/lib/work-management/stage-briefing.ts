@@ -30,6 +30,11 @@ export type StageBriefInput = {
   capsuleId: string;
   /** The room's own objective — why this room exists at all. */
   roomObjective: string | null;
+  /** The semantic id (BI-*) of the backlog item the room delivers. Without it a
+   *  delivery stage has no subject: 737 of 1030 live build-specialist stage
+   *  records were "blocked", most saying they could not tell what the room
+   *  was for (BI-1DDCE164). */
+  backlogItemKey?: string | null;
   shapeKey: string;
   shapeVersion: string;
   shapeTitle: string | null;
@@ -76,6 +81,9 @@ export function buildStageBrief(input: StageBriefInput): string {
     ``,
     line("Room", input.capsuleId),
     line("Room objective", input.roomObjective),
+    input.backlogItemKey?.trim()
+      ? `Backlog item: ${input.backlogItemKey.trim()}. This is the work the room delivers; read it first with get_backlog_item with itemId "${input.backlogItemKey.trim()}".`
+      : null,
     line("Activity", input.shapeTitle ?? input.shapeKey),
     line("How this activity works", input.shapeDescription),
     ``,
@@ -147,12 +155,14 @@ export function stageBriefInputFromDefinition(input: {
   shapeVersion: string;
   definition: WorkShapeDefinitionContract | null;
   stageKey: string;
+  backlogItemKey?: string | null;
 }): StageBriefInput {
   const { definition, stageKey } = input;
   const stage = definition?.stages.find((candidate) => candidate.key === stageKey);
   return {
     capsuleId: input.capsuleId,
     roomObjective: input.roomObjective,
+    backlogItemKey: input.backlogItemKey ?? null,
     shapeKey: input.shapeKey,
     shapeVersion: input.shapeVersion,
     shapeTitle: definition?.title ?? null,

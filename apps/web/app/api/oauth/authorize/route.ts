@@ -87,7 +87,13 @@ export async function GET(request: Request) {
     url.searchParams, origin, { after: url.searchParams.get("assistant_after") ?? undefined });
 }
 
-const CONSENT_FORM_FIELDS = new Set(["granted_scope", "decision", "acting_coworker", "default_coworker", "assistant_after", "confirm_account"]);
+const CONSENT_FORM_FIELDS = new Set(["granted_scope", "decision", "acting_coworker", "default_coworker", "assistant_after", "confirm_account", "acknowledge_handover"]);
+
+/** When this account's work was handed over, or null (BI-9D2199D4). */
+async function workHandedOverAt(userId: string): Promise<Date | null> {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { workHandedOverAt: true } });
+  return user?.workHandedOverAt ?? null;
+}
 
 /**
  * Build and render the consent screen for a validated request. Shared by the
@@ -101,9 +107,10 @@ async function renderConsentFor(
   request: AuthorizeRequest,
   params: URLSearchParams,
   origin: string,
-  options: { after?: string; driftNotice?: boolean; choiceNotice?: boolean; accountNotice?: boolean } = {},
+  options: { after?: string; driftNotice?: boolean; choiceNotice?: boolean; accountNotice?: boolean; handoverNotice?: boolean } = {},
 ): Promise<Response> {
   const org = await prisma.organization.findFirst({ select: { name: true } });
+  const handedOverAt = await workHandedOverAt(human.userId);
   const { client, scopes, redirectUri, resource } = request;
   const coworkers = await eligibleOAuthCoworkers(human.userId, client.rowId, resource, prisma, { after: options.after });
   if (!coworkers.length) {
@@ -127,6 +134,8 @@ async function renderConsentFor(
       actingUserId: human.userId,
       switchAccountUrl: `/login?callbackUrl=${encodeURIComponent(back)}`,
       accountNotice: options.accountNotice,
+      workHandedOverAt: handedOverAt?.toISOString() ?? null,
+      handoverNotice: options.handoverNotice,
       scopes,
       assistant: { kind: resolution.kind, selected: resolution.selected, candidates: resolution.candidates },
       driftNotice: options.driftNotice,
@@ -208,6 +217,15 @@ export async function POST(request: Request) {
       params, origin, { accountNotice: true });
   }
 
+  // A handover moves the account's work, not its access (BI-9D2199D4). A new
+  // connection under it brings work back to it, so the person must have said
+  // on the page that they mean it, for this account.
+  const handedOverAt = await workHandedOverAt(session.user.id);
+  if (handedOverAt && form.get("acknowledge_handover") !== session.user.id) {
+    return renderConsentFor({ userId: session.user.id, email: session.user.email ?? null }, parsed.request,
+      params, origin, { handoverNotice: true });
+  }
+
   // The human may narrow the request on the consent screen. Their selection is
   // intersected with what was requested — a checkbox can only ever REMOVE
   // authority, never add it, even if the form is tampered with.
@@ -277,6 +295,8 @@ export async function POST(request: Request) {
         // Which assistant the server offered, how it chose, and whether the
         // human overrode it: the per-consent record of the one-click outcome.
         resolution: resolutionAudit,
+        // Set when the person connected under an account whose work was handed over.
+        accountWorkHandedOverAt: handedOverAt?.toISOString() ?? null,
         // How the decision arrived, for a later question about intent.
         submittedFrom: { fetchSite, fetchUser: request.headers.get("sec-fetch-user") } },
       endpointUsed: "/api/oauth/authorize", routeContext: "oauth-consent",

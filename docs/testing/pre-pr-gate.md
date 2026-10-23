@@ -3,7 +3,7 @@
 `pnpm run pregate` applies existing saved host trust even when its desktop parent
 predates the environment setting. A verified TLS probe runs before host guards;
 an unavailable transport exits 88 without a test verdict. See
-[saved host trust](../install/platform-support-watchlist.md#saved-host-ca-trust-and-stale-clients-bi-f89c7fbd)
+[saved host trust](../install/platform-support-watchlist.md#saved-host-ca-trust-and-stale-clients)
 for explicit overrides and certificate diagnostics.
 
 Every pull request against `main` runs the full DPF unit-test suite as a binding
