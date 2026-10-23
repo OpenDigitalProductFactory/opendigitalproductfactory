@@ -426,6 +426,67 @@ Changing objective or acceptance scope requires a new independently approved bas
 
 ---
 
+### 8.5 Current repository design with historical references (BI-E2EEE278)
+
+The baseline is the current canonical selection; a list of Markdown links is
+not a second selection authority. A body may retain references to predecessor
+designs without revoking its independently approved current baseline. The
+October 16 reproduction on source `d9c8ed1fc887527c2a8b893f9a8062519c5a4384`
+found that discovery counted every body spec reference and returned ambiguity
+before provider access. BI-IMP-9DA35549 retains three legitimate references;
+its normal immutable source read succeeded while readiness remained unavailable.
+
+**Repair boundary.** Reuse the existing subject-scoped baseline parser,
+repository artifact locator, exact persisted Workroom tuple, provider reader
+and current-design observation guard. No schema, tool, grant, review writer or
+operator selector is added. Historical body references, receipts and baselines
+remain unchanged. A caller-supplied path, a heading, reference order, or a date
+in a filename cannot establish a trusted selection.
+
+When multiple body references are present, shared discovery may select the
+existing current baseline's repository-design path only after the server has
+resolved one valid current chain for that same subject and repository and the
+path is among the valid referenced paths. Missing, malformed, forked,
+cross-subject, cross-repository or conflicting bindings remain unavailable.
+Without that trusted binding, multiple references retain their ambiguity
+refusal. Single-reference discovery and discovery without body references keep
+their existing behavior. Invalid paths are rejected before selection.
+
+The selected path is read at the exact current Workroom head, with the provider
+verifying its regular-file path and immutable blob. The baseline's old blob is
+not substituted for current bytes. A changed current digest continues through
+the existing amendment/stale-approval rules; selection grants no design
+approval, baseline supersession or implementation admission. Missing provider
+bytes stay unavailable. Removing or changing scope still requires independent
+supersession and the existing objective dispositions.
+
+Claim issuance, current-design observation and terminal packet revalidation
+must use the same server-resolved selection contract. Provider reads remain
+outside transactions; the captured subject, baseline, body and Workroom
+binding are rechecked under the existing admission locks. Binding changes
+during a read refuse admission. Reviewer independence, exact packet equality,
+authorization and retained evidence remain mandatory.
+
+**Ordered repair and acceptance.** First bind this repair's source and research
+to BI-E2EEE278 and obtain its own normal implementation admission. Then add a
+failing three-reference regression before production changes; implement the
+shared selection rule; run focused discovery, current-observation, claim and
+terminal-revalidation tests plus package types. Positive coverage must retain
+all three references. Negative controls cover absent/malformed/forked baseline,
+wrong subject/repository, invalid path, provider failure, changed head/digest,
+and concurrent binding changes. Existing single/no-reference behavior remains
+covered. Obtain an independent source assessment before publication, then use
+protected CI/merge and the sole coordinated containing release. Only a fresh
+supported same-parent readiness result after containing CAN-TEST may establish
+the effect on the original refusal. Do not replay its uncertain reviewer task.
+This section records a proposed bounded repair, not executed tests or approval.
+
+Backlog coverage for this atomic repair: `cmvbclq0200c701o3aqnd4j74`, parent
+and sole delivery mapping `BI-E2EEE278`, no independent dependencies. The
+receipt binds the ordered fix above at commit
+`1f737a9f27a57eb660c5cb060a04202ebb7ee3b4`, blob
+`d67595daf0f5f94768941513b205b24f4d6c726e`; it confers no parent baseline.
+
 ## 9. Plan coverage, dependencies, and traceability
 
 The existing `plan-backlog-coverage` receipt remains the canonical decomposition graph. Its current unversioned payload is treated as legacy version 1. Governed feature/archetype/cross-domain implementation requires version 2; the reader remains capable of projecting version 1 for existing items but version 1 cannot satisfy the new traceability gate. Version 2 adds `schemaVersion: 2`, an immutable plan artifact reference/digest, and the following fields to each independently shippable deliverable:

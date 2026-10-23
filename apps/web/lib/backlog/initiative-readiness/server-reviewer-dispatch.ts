@@ -27,6 +27,7 @@ import "server-only";
 // reason is recorded on the room.
 
 import { prisma } from "@dpf/db";
+import { EXECUTION_UNCERTAIN_MESSAGE } from "@/lib/shared/execution-uncertainty";
 
 import type { GovernedExecuteArgs, GovernedExecuteResult } from "@/lib/mcp-governed-execute-types";
 import { findStandingConnection, findStandingConnectionForUser, type StandingConnection } from "@/lib/mcp/standing-connection";
@@ -341,15 +342,18 @@ export async function dispatchReviewerRequest(args: {
     context: connection.context,
     source: "external-jsonrpc",
   });
+  const executionHeld = result.data?.waitReason === "execution-uncertain";
+  const dispatched = result.success && !executionHeld;
+  const detail = executionHeld ? EXECUTION_UNCERTAIN_MESSAGE : result.error ?? result.message;
   const outcome: RouteOutcome = {
     ...at,
-    outcome: result.success ? "dispatched" : "refused",
-    ...(result.success ? {} : { detail: result.error ?? result.message }),
+    outcome: dispatched ? "dispatched" : "refused",
+    ...(dispatched ? {} : { detail }),
     ...(connection.context.agentId ? { carriedByAgentId: connection.context.agentId } : {}),
   };
-  await record(room, outcome, result.success
+  await record(room, outcome, dispatched
     ? `The platform asked ${String(requestCoworker.targetAgent)} for the independent review this work owes, on the author's connection.`
-    : `The platform could not request the independent review this work owes: ${result.message ?? result.error ?? "refused"}.`);
+    : `The platform could not request the independent review this work owes: ${detail ?? "refused"}.`);
   return outcome;
 }
 

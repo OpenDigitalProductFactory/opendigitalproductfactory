@@ -285,3 +285,40 @@ describe("InstallationIdentityPanel change flow", () => {
     ).toBeInTheDocument();
   });
 });
+
+describe("InstallationIdentityPanel other jobs (DI-A6148958CADB)", () => {
+  it("offers every job except the main one as an optional extra, ticked from the view", () => {
+    render(<InstallationIdentityPanel view={{ ...VIEW, secondaryPurposes: ["grow-channel"] }} />);
+    open();
+    const group = screen.getByRole("group", { name: "Other jobs it also does" });
+    const boxes = group.querySelectorAll('input[type="checkbox"]');
+    expect(boxes).toHaveLength(4);
+    expect(screen.queryByRole("checkbox", { name: "Safely improve another DPF" })).toBeNull();
+    expect(screen.getByRole("checkbox", { name: "Grow DPF in a market or region" })).toBeChecked();
+  });
+
+  it("sends the ticked jobs through the same preview and confirm path", async () => {
+    render(<InstallationIdentityPanel view={VIEW} />);
+    open();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Run our organization" }));
+    fireEvent.click(screen.getByRole("button", { name: /show me the impact/i }));
+    await waitFor(() => expect(mocks.preview).toHaveBeenCalledWith(
+      expect.objectContaining({ secondaryPurposes: ["operate-organization"] }),
+    ));
+    fireEvent.click(await screen.findByRole("button", { name: /yes, this is what it is/i }));
+    await waitFor(() => expect(mocks.declare).toHaveBeenCalledWith(
+      expect.objectContaining({ secondaryPurposes: ["operate-organization"] }),
+      "token-abc",
+    ));
+  });
+
+  it("drops a job from the extras when it becomes the main job", async () => {
+    render(<InstallationIdentityPanel view={{ ...VIEW, secondaryPurposes: ["operate-organization"] }} />);
+    open();
+    fireEvent.change(screen.getByLabelText(/Its main job/i), { target: { value: "operate-organization" } });
+    fireEvent.click(screen.getByRole("button", { name: /show me the impact/i }));
+    await waitFor(() => expect(mocks.preview).toHaveBeenCalledWith(
+      expect.objectContaining({ primaryPurpose: "operate-organization", secondaryPurposes: [] }),
+    ));
+  });
+});

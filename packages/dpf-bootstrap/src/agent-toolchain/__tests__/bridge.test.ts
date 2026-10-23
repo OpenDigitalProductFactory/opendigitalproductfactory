@@ -76,6 +76,37 @@ function baseOptions(
 }
 
 describe("computeAgentToolchainPlan", () => {
+  it.each(["https://localhost", "https://localhost/", "http://127.0.0.1:3000?tenant=demo"])(
+    "keeps the MCP path when the selected input is a portal origin: %s", (mcpEndpoint) => {
+      const plan = computeAgentToolchainPlan(baseOptions({ mcpEndpoint }));
+      const codex = plan.codex!.writes.find(write => write.path === CODEX_PATH)!.content;
+      expect(codex).toContain("/api/mcp/v1");
+      expect("endpoint" in plan.mcpProbe && new URL(plan.mcpProbe.endpoint).pathname).toBe("/api/mcp/v1");
+      const vscode = JSON.parse(plan.mcpClientConfig!.writes.find(write => write.path.includes(".vscode/"))!.content);
+      expect(new URL(vscode.servers.dpf.url).pathname).toBe("/api/mcp/v1");
+      if (mcpEndpoint.includes("tenant=demo")) expect(codex).toContain("tenant=demo");
+    },
+  );
+
+  it("preserves an explicit proxy endpoint path and query", () => {
+    const endpoint = "https://proxy.example/tenant/mcp/?tenant=demo&empty=";
+    const plan = computeAgentToolchainPlan(baseOptions({ mcpEndpoint: endpoint }));
+    expect("endpoint" in plan.mcpProbe && plan.mcpProbe.endpoint).toBe(endpoint);
+    expect(plan.codex!.writes[0].content).toContain("/tenant/mcp/?tenant=demo&empty=&tier=full");
+  });
+
+  it.each(["not-an-endpoint", "ftp://localhost", "https:localhost", "https:///localhost", "https://localhost\\evil",
+    "https://localhost:invalid", "https://u:p@example.test", "https://localhost?api_key=synthetic-secret"])(
+    "refuses unsafe input before reading configuration: %s", (mcpEndpoint) => {
+      let reads = 0;
+      expect(() => computeAgentToolchainPlan(baseOptions({ mcpEndpoint, fs: {
+        existsSync: () => { reads++; return false; },
+        readFileSync: () => { reads++; return ""; },
+      } }))).toThrow(/MCP endpoint/);
+      expect(reads).toBe(0);
+    },
+  );
+
   it("produces a full plan for a fully-present host with fresh configs", () => {
     const plan: AgentToolchainPlan = computeAgentToolchainPlan(baseOptions());
 

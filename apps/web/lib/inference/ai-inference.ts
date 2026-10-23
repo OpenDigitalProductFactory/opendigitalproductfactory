@@ -3,6 +3,7 @@
 // Server actions in actions/*.ts can import from here freely.
 
 import { prisma } from "@dpf/db";
+import { transferLocalNativeContinuation } from "../routing/local-native-continuation";
 import { getLocalThinkingBudgetEvidence } from "./dmr-runtime-config";
 import { providerWorkspaceHeaders } from "./provider-workspace";
 import { computeTokenCost, computeComputeCost } from "@/lib/ai-provider-types";
@@ -386,6 +387,8 @@ export async function callProvider(
   const origin = currentInferenceOrigin();
   let releaseInferenceSlot: (() => void) | null = null;
   let result;
+  let investment: import("../routing/adapter-telemetry-writer").InvestmentAttemptSnapshot | null = null;
+  let investmentGuidance = "";
   try {
     const execute = async () => {
       await assertProviderDispatchCapacity(providerId);
@@ -399,6 +402,12 @@ export async function callProvider(
         if (selectedAccount) await readSelectedProviderAccount(providerId, modelId, effectivePlan);
         if (!selectedAccount || isLocalProviderId(providerId)) await readEnabledRoutingProvider(providerId);
       }
+      if (attribution?.buildId) {
+        const { loadBuildInvestmentContext, UNRESOLVED_INVESTMENT_GUIDANCE } = await import("../portfolio/investment-balance-server");
+        const context = await loadBuildInvestmentContext(prisma, attribution.buildId).catch(() => ({ snapshot: null, guidance: UNRESOLVED_INVESTMENT_GUIDANCE }));
+        investment = context.snapshot;
+        investmentGuidance = context.guidance;
+      }
       await assertGovernedInferenceAuthority(currentInferenceSignal());
       currentInferenceSignal()?.throwIfAborted();
       const parentFetch = providerId === "local" ? currentGovernedInferenceDeadline()?.localFetch : undefined;
@@ -410,7 +419,7 @@ export async function callProvider(
         readLocalThinkingBudgetEvidence: getLocalThinkingBudgetEvidence,
         fetchImpl: parentFetch ? withInferenceCancellationFetch(parentFetch) : providerInferenceFetch,
         messages,
-        systemPrompt,
+        systemPrompt: investmentGuidance ? `${systemPrompt}\n\n${investmentGuidance}` : systemPrompt,
         tools,
         previousResponseId,
         mcpSession,
@@ -437,6 +446,7 @@ export async function callProvider(
     // swallows its own errors so we never mask the original throw.
     const finishedAt = new Date();
     void writeAdapterTelemetry({
+      investment,
       traceId: attribution?.traceId ?? undefined,
       adapterKind: telemetryAdapterKind,
       adapterVersion: selector?.version ?? "unknown",
@@ -492,6 +502,7 @@ export async function callProvider(
   // can't break the user's reply.
   const telemetryFinishedAt = new Date();
   void writeAdapterTelemetry({
+    investment,
     traceId: attribution?.traceId ?? undefined,
     adapterKind: telemetryAdapterKind,
     adapterVersion: selector?.version ?? "unknown",
@@ -505,6 +516,7 @@ export async function callProvider(
     inputTokens: result.usage.inputTokens,
     outputTokens: result.usage.outputTokens,
     cacheCreationInputTokens: result.usage.cacheCreationInputTokens,
+    cachedInputTokens: result.usage.cacheReadInputTokens,
     toolCallsTotal: result.toolCalls.length,
     agentId: attribution?.agentId ?? undefined,
     threadId: attribution?.threadId ?? undefined,
@@ -514,7 +526,7 @@ export async function callProvider(
   });
 
   // 5. Map AdapterResult → InferenceResult
-  return {
+  return transferLocalNativeContinuation<InferenceResult>(result, {
     content: result.text,
     inputTokens: result.usage.inputTokens,
     outputTokens: result.usage.outputTokens,
@@ -527,7 +539,7 @@ export async function callProvider(
     // Adapters may set result.raw (e.g. transcription adapter for Whisper
     // verbose_json segments). Passed through verbatim; undefined when absent.
     ...(result.raw !== undefined && { raw: result.raw }),
-  };
+  });
 }
 
 // ─── Token Usage Logging ─────────────────────────────────────────────────────

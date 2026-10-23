@@ -62,7 +62,8 @@ describe("the proof shape passes the DRC with a test-only ratified gate", () => 
     const findings = runDesignRules(document, await resolveShapeDocument(document, sources), { ratification: testTable, directSites });
     expect(actionable(findings)).toEqual([]);
     // The standing reports are still there: nothing is reported as passed that was not evaluated.
-    expect(findings.filter((finding) => finding.severity === "not-evaluated").map((finding) => finding.code).sort()).toEqual(["C-5", "C-7/SANDBOX-CONTAINMENT"]);
+    expect(findings.filter((finding) => finding.severity === "not-evaluated").map((finding) => finding.code).sort()).toEqual(["C-5"]);
+    expect(findings.find((finding) => finding.code === "C-7/SANDBOX-CONTAINMENT")?.severity).toBe("info");
   });
 });
 

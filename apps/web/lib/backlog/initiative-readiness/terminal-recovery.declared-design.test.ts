@@ -24,6 +24,42 @@ function deps(rooms = [room], baselines: unknown[] = []) {
 }
 
 describe("declared design packet revalidation", () => {
+  it("revalidates the issuer's current-baseline selection without removing historical links", async () => {
+    const path = "docs/superpowers/specs/current.md";
+    const body = `docs/superpowers/specs/ancestor.md docs/superpowers/specs/previous.md ${path}`;
+    const baseline = { schemaVersion: 1, baselineId: "baseline-current", supersedesBaselineId: null,
+      subject: decision.subject, profile: "feature", artifactDigest: "sha256:previous",
+      artifactRef: { kind: "repo-blob-at-commit", repositoryFullName: room.repositoryFullName,
+        commitSha: "1".repeat(40), path, providerBlobId: "4".repeat(40) } };
+    const provider = vi.fn(async () => new Response(JSON.stringify({ type: "file", path, sha: "3".repeat(40) }), { status: 200 }));
+    const providerDb = { credentialEntry: { findUnique: vi.fn(async () => null) },
+      platformDevConfig: { findUnique: vi.fn(async () => ({ upstreamRemoteUrl: null })) },
+      backlogItem: { findFirst: vi.fn(async () => ({ id: "item-row", itemId: room.backlogItemId, body })) },
+      backlogItemActivity: { findMany: vi.fn(async () => [{ id: "baseline-row", kind: "initiative_scope_baseline",
+        recordedAt: new Date(0), payload: baseline }]) },
+      workroom: { findMany: vi.fn(async () => [room]) } };
+    const discover = (input: Parameters<typeof discoverCanonicalDesignArtifact>[0]) => discoverCanonicalDesignArtifact({
+      ...input, db: providerDb as never, fetchImpl: provider as typeof fetch });
+    const feature = { ...decision, unmet: [readinessRequirement({ code: "CANONICAL_DESIGN_REQUIRED", state: "missing",
+      accountableRole: "design-checklist-reviewer" })] };
+    const grants = { agentToolGrant: { findMany: vi.fn(async () => ["initiative_design_review", "file_read"].map(grantKey => ({
+      grantKey, agent: { agentId: "AGT-REVIEWER", displayName: "Independent reviewer", status: "active", archived: false, lifecycleStage: "production" } }))) } };
+    const resolveRecovery = (input: Parameters<typeof resolveInitiativeReviewerRecovery>[0]) => resolveInitiativeReviewerRecovery({ ...input, db: grants });
+    const artifact = await discover({ repositoryFullName: room.repositoryFullName, baseSha: room.baseSha, headSha,
+      headBranch: room.headBranch, subjectItemId: room.backlogItemId, backlogBody: body });
+    expect(artifact.resolved).toBe(true);
+    if (!artifact.resolved) throw new Error("the issuer must resolve current bytes");
+    const issued = await resolveRecovery({ decision: feature, currentAgentId: "AGT-AUTHOR", db: grants,
+      dispatchContext: { workroomId: room.capsuleId, repositoryFullName: room.repositoryFullName, branchName: room.headBranch, headSha },
+      canonicalArtifact: { resolved: true, ...artifact.artifact }, expectedCurrentBaselineId: baseline.baselineId });
+    expect(issued.reviewerRoutes).toHaveLength(1);
+    const revalidated = await resolveTerminalInitiativeRecovery({ decision: feature, currentAgentId: "AGT-AUTHOR",
+      refusedWorkroomId: room.capsuleId, ports: { ...deps([room], [baseline]), loadBacklogBody: async () => body,
+        discoverArtifact: discover, resolveRecovery } });
+    expect(revalidated.reviewerRoutes.map(route => route.requestCoworker))
+      .toEqual(issued.reviewerRoutes.map(route => route.requestCoworker));
+    expect(provider).toHaveBeenCalledTimes(2);
+  });
   it("revalidates the exact claim packet for an unchanged design declared by the live item", async () => {
     const path = "docs/superpowers/specs/existing-design.md";
     const backlogBody = `Design: \`${path}\``;

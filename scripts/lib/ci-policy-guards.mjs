@@ -144,6 +144,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/lib/durable-wait-resumer.test.mjs"),
       // A resumed gate stays on its source and a cancelled wait stays cancelled.
       node("--test", "scripts/lib/gate-resume-pin.test.mjs"),
+      // BI-EB864226: every queued replacement advances the parent's current pin.
+      node("--test", "scripts/lib/gate-reservation-handoff.test.mjs"),
       node("--test", "scripts/gate-worktree-resume.test.mjs"),
     ]),
     guard("host-port-range-guard", "Host Port Range Guard", [
@@ -176,6 +178,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // One MCP JSON-RPC client for scripts: loopback check, credential
       // resolution and transport in one place (plan 2026-09-08 §10.5 S8).
       node("--test", "scripts/lib/mcp-client.test.mjs"),
+      node("--test", "tests/release/mcp-host-trust.test.mjs"),
       conformanceTest("scripts/check-no-hand-rolled-mcp-jsonrpc.test.mjs"),
       node("scripts/check-no-hand-rolled-mcp-jsonrpc.mjs"),
       // One argument parser for every script: node:util parseArgs
@@ -286,6 +289,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // in CI, and drifted on every host until BI-76334D21 caught them.
         "scripts/installer/install-state-transaction.test.mjs",
         "scripts/installer/offline-recovery-authority.test.mjs",
+        "scripts/installer/offline-recovery-enrollment.test.mjs",
         "scripts/installer/offline-recovery-kit.test.mjs",
         "scripts/installer/offline-recovery-kit-prepare.test.mjs",
         "scripts/installer/runtime-apply-lock.test.mjs",
@@ -339,6 +343,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // BI-30E3E229: reads repo files by repo-relative literal path, so it
       // asserts live repository state rather than this guard's logic.
       conformanceTest("scripts/publish-image-release-identity.test.mjs"),
+      conformanceTest("scripts/promote-source-identity.test.mjs"),
     ]),
     guard("docs-link-integrity", "Docs Link Integrity", [
       node("scripts/gen-doc-index.mjs", "--check"),
@@ -371,12 +376,14 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/ci-coverage-config.test.mjs",
         "scripts/ci-evidence-workflow.test.mjs",
         "scripts/ci-build-artifact-workflow.test.mjs",
+        "scripts/ci-workroom-ingestion-scale.test.mjs",
         "scripts/ci-policy-guards.test.mjs",
         "scripts/daily-checkpoint-tag.test.mjs",
       ),
       node(
         "--test",
         "scripts/pr-health.test.mjs",
+        "scripts/published-correction.test.mjs",
         "scripts/check-stuck-auto-merge.test.mjs",
         "scripts/check-failure-readiness.test.mjs",
         "scripts/dev-postgres-pgvector-contract.test.mjs",
@@ -400,7 +407,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/ci-policy-test-inventory.test.mjs",
         "scripts/lib/git-shallow-preflight.test.mjs",
         "scripts/lib/ensure-compile-ready.test.mjs",
+        "scripts/lib/bootstrap-managed-install-proof.test.mjs",
+        "scripts/lib/bootstrap-worktree-deps.test.mjs",
         "scripts/pregate-preflight.test.mjs",
+        "scripts/pregate-preflight-effective-environment.test.mjs",
+        "scripts/lib/pull-request-body.test.mjs",
         "scripts/pregate.test.mjs",
         "scripts/lib/pregate-preflight-receipt.test.mjs",
         "scripts/gate-context.test.mjs",
@@ -875,6 +886,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/worktree-liveness.test.mjs",
         "scripts/lib/worktree-janitor-core.test.mjs",
         "scripts/worktree-janitor.test.mjs",
+        "scripts/worktree-janitor-sh.test.mjs",
         "scripts/lib/worktree-session-heartbeat.test.mjs",
         // BI-DBAD1A1B: SessionEnd process matching accepts only the canonical
         // worktree itself or descendants, never sibling worktrees/CI runners.
@@ -888,6 +900,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/root-clone-refresh.test.mjs",
         "scripts/lib/compose-safety.test.mjs",
         "scripts/lib/promoter-compose-mounts.test.mjs",
+        "scripts/lib/maintenance-epoch-receipt.test.mjs",
+        "scripts/promoter-epoch-evidence.test.mjs",
         "scripts/sandbox-entrypoint.test.mjs",
         "scripts/lib/local-integration-ci.test.mjs",
         // BI-ECAE03F7: the supervisor that fences a long gate run was

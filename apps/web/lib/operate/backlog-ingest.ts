@@ -39,6 +39,21 @@ import {
   type ImplementationCandidate,
 } from "@/lib/operate/implementation-scan";
 import { listRepoSourceFiles } from "@/lib/operate/repo-file-inventory";
+import {
+  backlogOriginMarker,
+  reconcileOrigin,
+  sourceSnapshot,
+  type BacklogIngestOutcome,
+  type OriginReconciliation,
+} from "@/lib/operate/backlog-origin-reconciliation";
+
+export {
+  backlogOriginMarker,
+  parseGithubIssueUrl,
+  qualifiedIssueOriginId,
+  type BacklogIngestOutcome,
+  type OriginReconciliation,
+} from "@/lib/operate/backlog-origin-reconciliation";
 
 const defaultListRepoFiles = listRepoSourceFiles;
 
@@ -82,6 +97,12 @@ export interface BacklogIngestInput {
   archetypeIds?: string[];
   scopeRationale?: string | null;
   lifecycleTags?: string[];
+  /**
+   * Opt-in origin reconciliation for sources that re-deliver the same record
+   * on every poll (BI-952F08BA, spec §6.1). Absent → existing recurrence
+   * semantics (non-terminal dedupe + occurrence bump) are unchanged.
+   */
+  reconcile?: OriginReconciliation;
 }
 
 export interface BacklogIngestResult {
@@ -89,8 +110,12 @@ export interface BacklogIngestResult {
   itemId: string;
   /** Internal cuid (BacklogItem.id) — useful for FK writes by callers. */
   id: string;
-  /** false = matched an existing non-terminal item (deduped, occurrence bumped). */
+  /** false = matched an existing item (or, for needs-review, created nothing). */
   created: boolean;
+  /** Optional for the same reason as `implementationCandidates`. */
+  outcome?: BacklogIngestOutcome;
+  /** For `needs-review`: the item ids that claim this origin ambiguously. */
+  reviewCandidates?: string[];
   /**
    * Files that may ALREADY implement what this item proposes to build
    * (BI-1A1EC5EC). Advisory — the item is still created. Empty when the item is
@@ -145,10 +170,12 @@ export interface IngestBacklogStore {
     update(args: unknown): Promise<unknown>;
     create(args: unknown): Promise<{ id: string; itemId: string }>;
     /** Candidate pool for the duplicate advisory (BI-3722E9A1). */
-    findMany?(args: unknown): Promise<Array<{ itemId: string; title: string; body: string | null; status: string }>>;
+    findMany?(args: unknown): Promise<Array<{ id?: string; itemId: string; title: string; body: string | null; status: string }>>;
   };
   backlogItemActivity: {
     create(args: unknown): Promise<unknown>;
+    /** Origin history for reconciliation (BI-952F08BA). Required when `reconcile` is set. */
+    findMany?(args: unknown): Promise<Array<{ payload: unknown }>>;
   };
   epic: {
     findFirst(args: unknown): Promise<{ id: string } | null>;
@@ -178,11 +205,6 @@ export interface BacklogIngestDeps {
 }
 
 // ─── Pure helpers ─────────────────────────────────────────────────────────────
-
-/** Stable, queryable, human-readable provenance marker embedded in the body. */
-export function backlogOriginMarker(kind: string, id: string): string {
-  return `[origin:${kind}:${id}]`;
-}
 
 export function generateBacklogItemId(prefix?: string): string {
   const suffix = randomUUID().slice(0, 8).toUpperCase();
@@ -340,6 +362,11 @@ function defaultIndexKnowledge(args: { entityId: string; title: string; content:
  * Dedup: when `origin` is supplied and a non-terminal item already carries its
  * marker, the existing item's occurrenceCount is bumped, an intake_origin
  * activity row is appended, and no duplicate is created.
+ *
+ * Reconciled origins (`reconcile` set — a source that re-delivers the same
+ * record on every poll) instead match their one canonical item in ANY status,
+ * never bump counts or change status, and append an intake_origin event only
+ * when the source itself changed. See `reconcileOrigin` (BI-952F08BA).
  */
 export async function ingestBacklogItem(
   input: BacklogIngestInput,
@@ -381,15 +408,30 @@ export async function ingestBacklogItem(
         summary: created
           ? `Filed from ${input.origin.kind} ${input.origin.id}`
           : `Recurrence from ${input.origin.kind} ${input.origin.id}`,
-        payload: { origin: input.origin, created, createdBy: "backlog-ingest" },
+        payload: {
+          origin: input.origin,
+          created,
+          createdBy: "backlog-ingest",
+          ...(input.reconcile ? { source: sourceSnapshot(input.reconcile) } : {}),
+        },
         ...(input.submittedById ? { recordedById: input.submittedById } : {}),
         ...(input.agentId ? { recordedByAgentId: input.agentId } : {}),
       },
     });
   };
 
+  // Reconciled origins (opt-in, spec §6.1): match across EVERY status, never
+  // bump counts, never reopen, record only real source changes.
+  if (input.origin && input.reconcile) {
+    const reconciled = await reconcileOrigin(store, input.origin, input.reconcile, {
+      submittedById: input.submittedById ?? null,
+      agentId: input.agentId ?? null,
+    });
+    if (reconciled) return reconciled;
+  }
+
   // Dedup by origin marker against non-terminal items.
-  if (marker) {
+  if (marker && !input.reconcile) {
     const existing = await store.backlogItem.findFirst({
       where: { body: { contains: marker }, status: { notIn: ["done", "deferred", "retired"] } },
       select: { id: true, itemId: true },
@@ -407,6 +449,7 @@ export async function ingestBacklogItem(
         itemId: existing.itemId,
         id: existing.id,
         created: false,
+        outcome: "recurred",
         implementationCandidates: [],
       };
     }
@@ -592,6 +635,7 @@ export async function ingestBacklogItem(
     itemId: item.itemId,
     id: item.id,
     created: true,
+    outcome: "created",
     implementationCandidates,
     duplicateCandidates,
     duplicateSemanticUnavailable,

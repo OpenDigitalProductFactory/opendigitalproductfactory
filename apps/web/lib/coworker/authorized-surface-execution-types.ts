@@ -22,6 +22,8 @@ export type AuthorizedSurfaceInvocation = {
 
 type AuthorizedSurfaceDispatchResult = {
   success: boolean;
+  /** The governed executor's actual persisted identity, absent when audit is unavailable. */
+  governance?: { toolExecutionId?: string };
   entityId?: string;
   message: string;
   error?: string;

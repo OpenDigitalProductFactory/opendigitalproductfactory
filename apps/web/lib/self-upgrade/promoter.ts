@@ -205,6 +205,8 @@ export type PromoterParams = {
   installStateMigrationEnvelope?: string;
   installStateMigrationSignature?: string;
   installStateMigrationRunId?: string;
+  /** Digest of the actual server-recorded pre-upgrade recovery point. */
+  maintenanceRecoveryPointDigest?: string;
   /** Exact portal-verified carrier retained for orchestration identity/audit. */
   installStateMigrationHandoff?: InstallStateMigrationHandoff;
   /** Verified registry release promoted without a source checkout/build. */
@@ -260,6 +262,7 @@ function validateRuntimeTransitionCommandInputs(params: PromoterParams): void {
   }
   if (params.installStateMigrationEnvelope && !RUNTIME_TRANSITION_ENVELOPE.test(params.installStateMigrationEnvelope)) throw new Error("invalid_install_state_migration_envelope");
   if (params.installStateMigrationSignature && !RUNTIME_TRANSITION_TOKEN.test(params.installStateMigrationSignature)) throw new Error("invalid_install_state_migration_signature");
+  if (params.maintenanceRecoveryPointDigest && !/^[a-f0-9]{64}$/.test(params.maintenanceRecoveryPointDigest)) throw new Error("invalid_maintenance_recovery_digest");
   if (params.canonicalInstallPath && !isSafeRuntimeHostPath(params.canonicalInstallPath)) throw new Error("invalid_canonical_install_path");
   if (params.release && (
     !RELEASE_TAG.test(params.release.tag) ||
@@ -400,6 +403,7 @@ export function buildPromoterCommand(params: PromoterParams): { command: string;
     if (!params.stateDirHostPath || !params.installStateMigrationEnvelope || !params.installStateMigrationSignature || !params.installStateMigrationRunId) throw new Error("install_state_migration_protocol_incomplete");
     args.push("-v", `${params.stateDirHostPath}/runtime-transition.secret:/run/secrets/dpf-runtime-transition:ro`, "-e", `DPF_INSTALL_STATE_MIGRATION_ENVELOPE=${params.installStateMigrationEnvelope}`, "-e", `DPF_INSTALL_STATE_MIGRATION_SIGNATURE=${params.installStateMigrationSignature}`, "-e", `DPF_SELF_UPGRADE_RUN_ID=${params.installStateMigrationRunId}`, "-e", `DPF_PROMOTER_DIGEST=${image}`);
   }
+  if (params.maintenanceRecoveryPointDigest) args.push("-e", `DPF_MAINTENANCE_RECOVERY_POINT_DIGEST=${params.maintenanceRecoveryPointDigest}`);
 
   args.push(image);
   if (params.runtimeTransitionAuthorityOperation) {
@@ -509,6 +513,8 @@ export const PROMOTER_JIT_BUILD_SCRIPT =
   "cp /promoter/scripts/rotate-runtime-transition-secret.mjs \"$BDIR/scripts/rotate-runtime-transition-secret.mjs\" && " +
   "cp /promoter/scripts/lib/transition-signing.mjs \"$BDIR/scripts/lib/transition-signing.mjs\" && " +
   "cp /promoter/scripts/promoter-migration-envelope.mjs \"$BDIR/scripts/promoter-migration-envelope.mjs\" && " +
+  "cp /promoter/scripts/promoter-epoch-evidence.mjs \"$BDIR/scripts/promoter-epoch-evidence.mjs\" && " +
+  "cp /promoter/scripts/lib/maintenance-epoch-receipt.mjs \"$BDIR/scripts/lib/maintenance-epoch-receipt.mjs\" && " +
   "cp /promoter/scripts/installer/validate-install-state.mjs \"$BDIR/scripts/installer/validate-install-state.mjs\" && " +
   "cp /promoter/scripts/installer/migrate-install-state.mjs \"$BDIR/scripts/installer/migrate-install-state.mjs\" && " +
   "cp /promoter/scripts/installer/resolve-host-identity.mjs \"$BDIR/scripts/installer/resolve-host-identity.mjs\" && " +

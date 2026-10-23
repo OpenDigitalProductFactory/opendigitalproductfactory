@@ -36,11 +36,13 @@ import { runDesignRules, type DesignRuleOptions } from "./drc";
 import { emitShapeModule, lowerToDefinition, type LoweredWorkShapeDefinition } from "./emit";
 import type { GppShapeDocument } from "./gpp-shape-schema";
 import { parseShapeDocument } from "./parse";
+import { applyKnownFindings, type KnownFinding } from "./known-findings";
 import { resolveShapeDocument, type GppResolution, type GppResolveSources } from "./resolve";
 
 export type CompileShapeOptions = DesignRuleOptions & {
   /** The source document, repo-relative with forward slashes; written into the module header. */
   sourcePath: string;
+  knownFindings?: readonly KnownFinding[];
 };
 
 export type CompileShapeResult =
@@ -52,6 +54,7 @@ export type CompileShapeResult =
       module: string;
       digest: string;
       diagnostics: GppDiagnostic[];
+      staleKnownFindings: KnownFinding[];
     }
   | { accepted: false; diagnostics: GppDiagnostic[] };
 
@@ -66,17 +69,22 @@ export async function compileShapeDocument(
   sources: GppResolveSources,
   options: CompileShapeOptions,
 ): Promise<CompileShapeResult> {
+  if ((options.knownFindings !== undefined || options.sandboxStages !== undefined) &&
+      !/^apps\/web\/lib\/work-management\/declared-flows\/[a-z0-9-]+\.gpp\.json$/.test(options.sourcePath)) {
+    throw new Error("Known findings and sandbox stages are restricted to declared-flows source documents.");
+  }
   const parsed = parseShapeDocument(text);
   if (!parsed.accepted) return { accepted: false, diagnostics: parsed.diagnostics };
 
   const { document } = parsed;
   const resolution = await resolveShapeDocument(document, sources);
-  const { sourcePath, ...ruleOptions } = options;
-  const diagnostics = sortDiagnostics(runDesignRules(document, resolution, ruleOptions));
+  const { sourcePath, knownFindings = [], ...ruleOptions } = options;
+  const { diagnostics, staleKnownFindings } = applyKnownFindings(
+    sortDiagnostics(runDesignRules(document, resolution, ruleOptions)), knownFindings);
   if (hasBlockingDiagnostic(diagnostics)) return { accepted: false, diagnostics };
 
   const definition = lowerToDefinition(document);
   const digest = shapeDocumentDigest(document);
   const module = emitShapeModule(definition, { sourcePath, digest });
-  return { accepted: true, document, resolution, definition, module, digest, diagnostics };
+  return { accepted: true, document, resolution, definition, module, digest, diagnostics, staleKnownFindings };
 }

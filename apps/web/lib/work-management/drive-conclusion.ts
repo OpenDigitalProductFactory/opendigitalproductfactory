@@ -57,7 +57,9 @@ export type ConclusionKind = (typeof CONCLUSION_KINDS)[number];
  * `unconcluded` while the no-silence walk below stayed green (BI-3ACFD254).
  */
 export const DRIVE_REASONS_BY_ACTION = Object.freeze({
-  do_not_wake: ["missing_shape", "quiet", "no_posture", "cycle_complete", "work_item_inactive"],
+  // `awaiting_agent_capacity`: ready to dispatch but past this tick's agent
+  // capacity; it goes on a later tick (BI-7C0B2BD6, drive-dispatch-cap.ts).
+  do_not_wake: ["missing_shape", "quiet", "no_posture", "cycle_complete", "work_item_inactive", "awaiting_agent_capacity"],
   // `refused_to_stop`: a refuse verdict routed to a declared failure stop, or
   // past its rework bound to the budget stop (GPP Phase 3c PR-3c-3).
   stop: ["unreachable_substrate", "empty_read", "conformance_stop", "success", "refused_to_stop"],
@@ -199,6 +201,8 @@ const IN_MOTION = new Set([
   // The room's work item is done, deferred, retired or delivered; the room
   // waits for the item to be active again (BI-72679FE0).
   "work_item_inactive",
+  // Ready to dispatch, waiting for agent capacity; it dispatches on a later tick (BI-7C0B2BD6).
+  "awaiting_agent_capacity",
   // Another worker holds the stage's lease; the stage stays eligible when it expires.
   "lease_held",
   // A sub-shape stage's child room is running its own work (GPP Phase 3c PR-3c-5).
@@ -244,7 +248,9 @@ export function resolveDriveConclusion(input: DriveConclusionInput): DriveConclu
             ? "The room finished its cycle and waits for its next trigger."
             : reason === "work_item_inactive"
               ? "The room's work item is not active; the drive stands down until it is."
-              : "Work is in motion.",
+              : reason === "awaiting_agent_capacity"
+                ? "Waiting for agent capacity; the stage dispatches on a later tick, oldest-waiting rooms first."
+                : "Work is in motion.",
     };
   }
 

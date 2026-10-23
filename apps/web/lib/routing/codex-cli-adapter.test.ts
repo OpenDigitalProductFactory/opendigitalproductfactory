@@ -29,6 +29,7 @@ vi.mock("@/lib/inference/ai-provider-internals", () => ({
 vi.mock("./execution-adapter-registry", () => ({
   registerExecutionAdapter: vi.fn(),
 }));
+vi.mock("./cli-pool-status", () => ({ recordCliRateLimit: vi.fn(), clearCliRateLimit: vi.fn() }));
 
 vi.mock("./extract-tool-calls", () => ({
   extractToolCalls: vi.fn().mockReturnValue([]),
@@ -309,6 +310,38 @@ describe("codexCliAdapter — E2BIG spawn error classification", () => {
 
   it("classifies ECONNREFUSED as network", async () => {
     expect(await runAndGetSpawnErrorCode("spawn ECONNREFUSED")).toBe("network");
+  });
+});
+
+describe("Codex native effect replay fence", () => {
+  it.each(["close", "error", "structured-error", "empty-result"])("holds an effect-first execution followed by %s", async (event) => {
+    vi.clearAllMocks();
+    const { getDecryptedCredential } = await import("@/lib/inference/ai-provider-internals");
+    vi.mocked(getDecryptedCredential).mockResolvedValue({ secretRef: "fake-test-key", cachedToken: null } as never);
+    mockExecAsync.mockResolvedValue({ stdout: "", stderr: "" });
+    let calls = 0, effects = 0;
+    mockSpawn.mockImplementation(() => {
+      const proc = makeMockProcess();
+      const isExecution = ++calls === 4;
+      process.nextTick(() => {
+        if (!isExecution) { proc.emit("close", 0); return; }
+        effects++;
+        proc.emit("spawn");
+        if (event === "empty-result") { proc.emit("close", 0); return; }
+        if (event === "structured-error") {
+          proc.stdout.emit("data", Buffer.from("Invalid API key · Fix external API key"));
+          proc.emit("close", 0); return;
+        }
+        proc.stderr.emit("data", Buffer.from("ERROR: authentication failed after native effect"));
+        if (event === "close") proc.emit("close", 1);
+        else proc.emit("error", new Error("kill ESRCH"));
+      });
+      return proc;
+    });
+    const { codexCliAdapter } = await import("./codex-cli-adapter");
+    await expect(codexCliAdapter.execute(makeRequest())).rejects.toMatchObject({ name: "NativeCliExecutionUncertainError" });
+    expect(effects).toBe(1);
+    expect(calls).toBe(4);
   });
 });
 

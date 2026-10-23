@@ -3,6 +3,8 @@
  * and fallback chain. Replaces callWithFailover's dispatch loop.
  */
 import { callProvider, InferenceError } from "@/lib/ai-inference";
+import { transferLocalNativeContinuation } from "./local-native-continuation";
+import { GovernedInferenceDeadlineError, withInferenceAuthorityCheck } from "./governed-inference-deadline";
 import { resolveLocalToolCeiling } from "./local-tool-ceiling";
 import { resolveLocalToolFidelityCeiling } from "./local-tool-fidelity";
 import type { ChatMessage, ToolCallEntry } from "./chat-message-types";
@@ -99,12 +101,7 @@ export interface FallbackResult {
   routingEvidence?: import("./provider-suitability/openrouter-policy").OpenRouterRoutingEvidence;
 }
 
-/**
- * Reason-scoped runtime-cooldown durations (ms) for the circuit breaker.
- * Short for self-clearing conditions (rate_limit/overload/transient/provider
- * error); long for conditions that need operator remediation (auth/billing).
- * See spec §4.1 + risk R1.
- */
+/** Runtime circuit cooldowns: short for transient failures; long for auth/billing. */
 const RUNTIME_COOLDOWN_MS: Record<EndpointUnavailableReason, number> = {
   rate_limit: 30_000,
   overloaded: 15_000,
@@ -345,7 +342,10 @@ export async function callWithFallbackChain(
           ? plan
           : buildFallbackPlan(entry, decision, tools, plan);
 
-      const result = await callProvider(
+      const result = await withInferenceAuthorityCheck(async () => {
+        revalidateDispatchScreen(decision, screeningInput, messages, systemPrompt, tools);
+        return true;
+      }, () => callProvider(
         entry.providerId,
         entry.modelId,
         messages,
@@ -358,7 +358,7 @@ export async function callWithFallbackChain(
           ? previousResponseId : undefined,
         mcpSession,
         { traceId, agentId, agentMessageId, buildId, threadId },
-      );
+      ));
 
       // EP-INF-004: Record successful request for rate tracking
       recordRequest(entry.providerId, entry.modelId,
@@ -405,7 +405,7 @@ export async function callWithFallbackChain(
         ? result.raw as Record<string, unknown>
         : null;
       const routingEvidence = raw?.openRouterRoutingEvidence;
-      return {
+      return transferLocalNativeContinuation<FallbackResult>(result, {
         providerId: entry.providerId,
         ...(entry.providerConnectionId ? { providerConnectionId: entry.providerConnectionId, quotaScopeKey: conservativeQuotaScope(entry.providerId) } : {}),
         modelId: entry.modelId,
@@ -435,11 +435,12 @@ export async function callWithFallbackChain(
         ...(routingEvidence && typeof routingEvidence === "object"
           ? { routingEvidence: routingEvidence as import("./provider-suitability/openrouter-policy").OpenRouterRoutingEvidence }
           : {}),
-      };
+      });
     } catch (e) {
       let accountRenewalUnavailable = false;
       // A caller deadline is not provider failure and cannot authorize a retry.
       cancellation?.throwIfAborted();
+      if (e instanceof GovernedInferenceDeadlineError) throw e;
       if (e instanceof ProviderAccountSelectionChangedError) {
         changedAccounts.push(e);
         attempts.push({ endpointId: entry.providerId, error: e.message });

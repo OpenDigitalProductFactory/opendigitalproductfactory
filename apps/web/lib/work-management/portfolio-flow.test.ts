@@ -129,6 +129,25 @@ describe("shapeItemType", () => {
     expect(f.weeklyFlowLoad).toHaveLength(8);
   });
 
+  it("marks the week a shape version replaced an earlier one in the same portfolio", () => {
+    const W = 7 * 24;
+    const v2 = (r: QueueTelemetryRow) => ({ ...r, queueKey: r.queueKey.replace(SHAPE, "delivery-small@1.1.0") });
+    const flows = computePortfolioFlow({
+      rooms: [room("WC-1", "foundational"), room("WC-2", "foundational"), room("WC-3", "manufactureAndDeliver")],
+      rows: [
+        ...run("WC-1", 6 * W, 1),
+        // v1.1.0 first runs 13 days ago in Foundational: the week before this one.
+        ...run("WC-2", 2 * W - 24, 1).map(v2),
+        // In Manufacturing it is the only version seen, so nothing is replaced.
+        ...run("WC-3", 2 * W - 24, 1).map(v2),
+      ],
+      now,
+    });
+    const foundational = flows.find((f) => f.key === "foundational")!;
+    expect(foundational.weeklyVersionChanges).toEqual([[], [], [], [], [], [], ["delivery-small@1.1.0"], []]);
+    expect(flows.find((f) => f.key === "manufactureAndDeliver")!.weeklyVersionChanges.flat()).toEqual([]);
+  });
+
   it("stops counting a cancelled run as in flow when it was cancelled, and keeps it out of flow time", () => {
     const W = 7 * 24;
     const flows = computePortfolioFlow({

@@ -1,0 +1,16 @@
+{
+  "version": "1",
+  "decidedOption": "scoped-claims-and-dated-download-note",
+  "decisionInteractionId": "DI-93B1A8B865BC",
+  "scope": {
+    "files": ["docs/index.html"]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "scoped-claims-and-dated-download-note",
+      "snapshot-status-on-each-download-label"
+    ],
+    "reason": "Preserve the public homepage layout, cards and existing download URLs. Correct unsupported proof, universal enforcement and historical novelty claims in place; use one visible note for dated Word snapshots and the known GPP revision gap. Comparative magnitudes were engineering estimates, not measured usability or safety results. Static rendering and byte checks remain separate evidence."
+  }
+}

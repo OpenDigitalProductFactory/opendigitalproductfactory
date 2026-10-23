@@ -1,5 +1,79 @@
 # Platform Support Watch-List (living document)
 
+## Saved host CA trust and stale clients
+
+The historical repair is evidenced by the merged [saved host trust change, PR 6497](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/6497).
+
+The supported Node gate launch (`pnpm run pregate`, including its native gate
+entry) reads existing authorized endpoint/trust through the installer client-env
+resolver. A desktop client can remain open after setup persists the Windows
+User environment or macOS/Linux managed environment. Its process can therefore
+lack `NODE_EXTRA_CA_CERTS`. Launch resolves the saved setting and starts a fresh
+Node process when the selected roots were not loaded at startup. Child gates
+inherit that environment. Shared native MCP and source OAuth requests also apply
+the selected bundle per request alongside Node's effective default roots.
+
+Trust precedence is explicit `DPF_MCP_CA_FILE`, explicit `DPF_PKI_TRUST_BUNDLE`,
+process `NODE_EXTRA_CA_CERTS`, install bundle, saved user bundle, then the
+existing managed root when present. A selected missing/invalid/expired bundle
+stops with its own diagnostic; it never silently falls back to a different CA.
+Without a managed bundle, ordinary public CA verification remains in effect.
+No certificate is harvested from the endpoint or installed by launch.
+
+A bounded verified TLS handshake precedes host guards, authentication and lease
+admission. It sends no HTTP request or credential. Hostname mismatch, expired
+server certificates, unverified issuer and connectivity errors identify separate
+remedies. HTTP401/403 remain authentication/authorization failures, and a
+confirmed drain retains the existing quiescence wait. Transport/prerequisite
+failure exits 88 with no verdict about the diff. Repair the named configuration
+or managed PKI problem before re-running the gate; do not disable verification.
+A slow quiescence read remains inconclusive after transport verification;
+the existing authoritative late admission still governs writes.
+
+Windows uses the User environment through PowerShell 5.1+. macOS/Linux use the
+existing managed environment reader through Bash, without sourcing saved text.
+Windows launch and fixture tests establish local behavior; adapter simulations
+and shell twin tests do not establish native macOS/Linux execution.
+
+## Contributor preview mount identity on Docker Desktop (BI-0ACB97B5, BI-81AF5884)
+
+The Windows host records the admitted worktree as a drive-absolute path while
+Docker Desktop reports its bind source as `/run/desktop/mnt/host/<drive>/...`.
+The preview supervisor and Linux-hosted sign-in issuer share the same path
+comparison. Translation applies only to a Windows admission; another drive,
+another worktree, relative paths and traversal fail closed. Source SHA, lease,
+loopback port, environment class and current ownership checks remain required.
+Regression fixtures cover both verification adapters; a failed initialization
+or binding check never earns a served UX pass.
+
+Desktop may report an admitted POSIX `/Users/...` bind as `/host_mnt/Users/...`.
+Both adapters first preserve direct path equality, then permit this one leading
+namespace translation only when a fresh read from the inspected Docker daemon
+reports `OperatingSystem` exactly `Docker Desktop`. The read is bounded to ten
+seconds and repeated during keeper renewal checks. Missing, failed or native
+Linux metadata supplies no alias authority; existing direct POSIX and Windows
+comparisons remain valid. Case, root, NUL/CR/LF, traversal and prefix lookalikes
+still cannot establish another worktree's identity. Host-only source changes
+cannot update the canonical sign-in issuer; the reviewed release and separately
+authorized install advance must deliver both consumers before served acceptance.
+
+The full local-CI runner also reuses the verified native shell adapter for its
+child environment. Windows fixtures that invoke `sh` must not inherit WSL or
+depend on an agent manually extending PATH. A missing compatible shell is an
+unavailable prerequisite (exit 88), not a failing product test. The parent
+environment, worker limits, test deadlines and lease fences stay unchanged.
+
+## Literal Windows package-manager arguments (BI-263055E3)
+
+The shared host command resolver launches pnpm/Corepack JavaScript entrypoints
+with Node and a literal argument array; native pnpm executables run directly.
+It honors the selected installation and PATH precedence, supports npm global
+and workspace bin layouts, and refuses unsupported shims without a shell
+fallback. The observed process runner uses the same boundary with shell mode
+disabled. Local-CI version pinning supplies a JavaScript forwarding entrypoint
+so percent expansion, quotes and command separators remain argument data.
+POSIX executable selection is unchanged.
+
 ## Capability reconciliation on release installs (BI-5ACBAC50)
 
 The portal's Linux container is not the host platform. Explicit v2 runtime
@@ -195,7 +269,7 @@ bootstrap runs with the system interpreter.
 | D14 | Edge action polling is configured on one host but silently absent after restart or unreachable from its peer | Windows, macOS, Linux private-LAN installs | The action path spans host-owned certificate/key files, a native Edge process, a persisted Compose secret overlay, private DNS, and TCP `8443`; Docker Desktop cannot repair a missing host file or firewall rule. | ⚠️ The trust bundle is now all-or-none, normal start/install paths restore `docker-compose.edge-actions.yml`, and Caddy provides a dedicated mTLS listener. Physical Mac/Windows reachability and lifecycle acceptance remain in `BI-05EB708F`. | Never advertise `action.execute` from a partial trust bundle. Verify private-name resolution, TCP `8443`, certificate renewal, quarantine, and revocation on each supported host; do not fall back to bearer-only HTTP. |
 | D15 | Candidate promoter preparation silently falls back to Docker's deprecated legacy builder and a progressing cold-cache upgrade is killed after five minutes | Windows, macOS, Linux Docker installs | ✅ `BI-2B4EAFC7`: the portal runtime carries `docker-cli-buildx`, candidate and JIT promoter builds invoke `docker buildx build --load` explicitly, and candidate Docker operations use the governed `DPF_PROMOTER_TIMEOUT_MS` budget (25 minutes by default). | Never rely on Docker's legacy-builder fallback or give candidate preparation a shorter undocumented wall clock than the governed promoter budget. Retain cold-cache contract coverage and `--load`, because immutable digest inspection requires the built image in the local image store. |
 | D16 | Background-job registration reports `fetch failed` and an admitted self-upgrade never dispatches on a source-free install | Linux portal containers on all supported hosts | ✅ BI-3FD07259: with `APP_URL` unset, Node resolved `localhost` to `::1` while the Next listener was reachable only on IPv4; the dispatcher then tried Git target discovery that a release-artifact install does not have. Self-registration now defaults to the server-owned `127.0.0.1` listener, persists only the real PUT outcome, and reconciles a fingerprint-valid stored release binding without creating another run. | A container's `localhost` address family is not the listener contract. For server-to-self calls, use the known listener address; never let a null source resolver override an already authenticated release admission or authorize a Git-source fallback. |
-| D17 | Local-CI gate fences a GREEN run with `host-capacity-lost:host-memory-low` during image export (`#47 sending tarball`) | Windows (Docker Desktop, WSL2) | ✅ `scripts/lib/host-available-memory.mjs` adds the docker-desktop guest reclaimable cache (MemAvailable - MemFree) to `os.freemem()` on win32 (BI-E129F788; Windows twin of BI-EB6DBAF0). | A fence whose reason names memory while `wsl -d docker-desktop -e free -g` shows most memory as buff/cache. |
+| D17 | Host admission undercounts reclaimable memory; local-CI can fence a GREEN image export or queue work despite available capacity | macOS, Linux, Windows (Docker Desktop, WSL2) | ✅ `scripts/lib/host-available-memory.mjs` owns Darwin reclaimable pages, Linux MemAvailable, and the docker-desktop guest cache (MemAvailable - MemFree) added to host free memory on win32 (BI-E129F788; Windows twin of BI-EB6DBAF0). The residual generic runner source repair now reuses that reader under BI-EB6DBAF0: its real-entrypoint fixture went RED at 4 GiB versus 42 GiB expected, then GREEN after the caller change; failed-probe fallback stayed 4 GiB. ⚠️ Canonical delivery and a fresh normally governed runner/scheduler acceptance remain pending; see the existing [resilience design](../superpowers/specs/2026-08-15-resilient-concurrent-development-process.md#61-residual-host-memory-observation-repair--bi-eb6dbaf0). | Reuse the existing available-memory reader for every host claim; test the real claim payload and failed-probe fallback. Preserve profiles, reserves, queue order, leases and failure behavior. A fixture reading is not actual host capacity or runtime acceptance. |
 | D18 | Office documents do not convert, and `.docx`, `.xlsx` and `.pdf` are not read: `convertDocument` returns `converter-unavailable` | any host or target without a docker socket (cloud VM / TAPPaaS / edge shapes that do not mount `/var/run/docker.sock`), or an install with no pinned `doctoolsImage` | 📌 By design (BI-52E565DA). The portal runs `dpf-doctools` one-shot through the docker socket, like the promoter; with no socket or no pinned image (`name@sha256:`), `getConverterAvailability()` reports `no-docker-socket` / `not-configured`, ingestion degrades to the S0 typed-unsupported result, a saved office document or PDF gets no renditions (one `converter-unavailable` lifecycle event per version; a bounded rendition backfill, drained in passes of at most 100 with each pass's counts logged, is requested at portal start and on every pin change, debounced, BI-153EC72C, and also when the probe flips to available, which only fires where something scrapes `/api/metrics`, BI-9D43CBEF; a PDF owes only its `plain_text` rendition, BI-26CD1D1E), `renderDocument` (document generation, BI-3A0E5413) returns the same `converter-unavailable` without spawning, and `dpf_dependency_up{service="doctools"}` stays unset. Since BI-D1B40D43 (S9) the engine is also the only reader of `.docx`, `.xlsx` and `.pdf`: mammoth, read-excel-file and pdf-parse are gone and on the sbom deny list. On such a target a file upload or onboarding capture of one of them is stored with a typed unsupported result (`word-document`, `workbook`, `pdf`) whose reason names the file type and the fallback (plain text or CSV), a Workbooks or incumbent sheet import of an `.xlsx` is refused with the same reason, and brand-document extraction records an `upload-pdf-no-text` / `upload-docx-no-text` gap. CSV, TSV and plain-text files are read in-process and keep working, and the grid's data-only `.xlsx` export (`grid-xlsx.ts`) still writes files. A tag-only reference is refused (`image-unpinned`). The image resolves in this order: the `self_upgrade` row's `doctoolsImage`, then `DPF_DOCTOOLS_IMAGE` (source/dev), then, on a release install, the pin the portal resolves itself (BI-9A2EC54A). It gets that pin the way the promoter gets its own: at boot and every 20 min, `ghcr.io/<GHCR_OWNER>/dpf-doctools:<immutable DPF_IMAGE_TAG>` is resolved (the tag the running container was started from, not install-state's, which promote.sh commits only after the new portal is verified; every boot logs a `[doctools-image] boot:` line, BI-903D22D0) with `docker buildx imagetools inspect`, the same digest `publish-image.yml` records. The pin is stored in `self_upgrade.doctoolsImage` and then pulled by digest, and availability reports `image-missing` until the pull lands. That window is closed ahead of time (BI-698B7F9A): a self-upgrade pulls the TARGET release's `dpf-doctools:<tag>` in the candidate preflight, before the promoter and before the drain, and a pull that does not land fails the run as `doctools-prepull-failed` with nothing installed; the Windows consumer and Linux/macOS customer installers pull the same tag after the other release images and only warn if it fails. A release with no dpf-doctools manifest leaves the key unset and never blocks an upgrade or install, and a moving `latest` tag is not resolved. A customizable (source-built) install has no immutable `DPF_IMAGE_TAG`, so it resolves the same published image for the release tag its clone descends from, read from the `git describe` baked into the portal as `DPF_PLATFORM_VERSION`; a source upgrade re-stamps it, so the pin follows the upgrade (BI-4E18BC28). When no published image is reachable (offline, air-gapped, a lineage that predates dpf-doctools), it builds `Dockerfile.doctools` from a scratch copy of the clone's two build inputs and pins the local image id, then retries the published image on every tick. Its source upgrades pre-pull too: the candidate preflight describes the TARGET commit (`git describe --tags --always <target>`) and pulls that release's `dpf-doctools:<tag>` before the drain, but a pull that does not land only warns, because the install can still build the image after the swap. Compose stays free of any doctools reference (`scripts/doctools-image-contract.test.mjs`, AC-ODC-003), so the pin lives only in the portal's own state. Locked by `apps/web/lib/documents/conversion/*.test.ts`, `apps/web/lib/self-upgrade/doctools-release-image.test.ts`, `apps/web/lib/self-upgrade/doctools-release-image.boot.test.ts`, `apps/web/lib/documents/document-engine-boot.test.ts`, `apps/web/lib/self-upgrade/preflight.test.ts`, `apps/web/lib/self-upgrade/doctools-source-lineage.test.ts` and `scripts/installer/doctools-prepull.test.mjs`. | Never "fix" this by bind-mounting host paths or adding the engine to compose (an optional pinned image there froze `promote-latest`, PR #5290); input and output travel over stdin/stdout only. |
 | D21 | An upgrade or build dies mid-way and every container shows the same start time | macOS and Windows (Docker Desktop) | Docker Desktop installs an update of its own and restarts the engine. Live 2026-10-02: `eventInstallingUpdate` at 14:28:41Z in `com.docker.backend.log`, every container (Postgres included) restarted at 14:29:10, and self-upgrade SUR-8782FCBD died mid-promotion. | ✅ BI-75ECED42: the boot reconciler compares the database server start time with the run start and records `engine-restarted` ("The computer restarted Docker during the update", retryable) instead of "orchestrator did not complete the swap"; `scripts/setup.sh` (macOS) and `scripts/setup.ps1` advise turning automatic updates off. | Turn off Docker Desktop automatic updates on an operated install, and update Docker deliberately between upgrades. When diagnosing, compare `pg_postmaster_start_time()` with the failed run's start before blaming the promoter. |
 | D19 | A spatial view shows "region pack missing" even though a pack was copied onto the host | all | 📌 By design (BI-814F86E1, `DI-63D94E36B0B0`). Map packs live in the `map_data` named volume mounted at `/var/lib/dpf/maps` on the portal (override with `DPF_MAP_DATA_DIR`); the image never carries one. A pack copied to a host directory is invisible until it is placed in that volume with its `<packId>.manifest.json`, and a manifest whose `byteLength` disagrees with the file is reported as invalid (`409`). | Never bind-mount a host map directory into the shared base compose file, and never fetch tiles from a remote host as a fallback. |

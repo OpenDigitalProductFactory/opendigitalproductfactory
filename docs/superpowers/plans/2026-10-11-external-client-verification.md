@@ -329,3 +329,188 @@ old local-CI skill calling it an unnecessary fallback. Align that instruction
 with the real readiness contract: use the existing qualified reference, retain
 private lease/session/path detail on the install, and do not re-run a full gate
 for a body metadata omission.
+
+## Headless assistant identity correction (2026-10-16)
+
+This continuation addresses AC-PREVIEW-4 / R4 in BI-10AC904B. It does not declare
+the other preview criteria or the preserved feature accepted. WC-38F686BF owns
+`fix/headless-coworker-binding`, based on
+`46cce23828404c121d31eb15c82e1621193e60b5`. The initial design claim derived a
+small shape from the legacy unclassified bug; retain the earlier medium
+implementation history and declare medium for this authority-sensitive repair.
+No credential, grant, clearance, native connector, endpoint or runtime changed.
+
+### Reproduction and architecture
+
+The unchanged source binder plus canonical MCP transport returned success with
+`agentBound=false` and no actor. The native connector separately resolves
+AGT-EXT-CODEX. On the named base, a real Node assertion configuring fixture-only
+headless OAuth credentials failed: `resolveMcpAccess` returned null because it
+reads only the PAT. This rules out network, OAuth exchange and agent grants as
+the cause of that source failure. Existing client creation submits only name
+and scopes; its server action accepts an unchecked Agent row reference. The
+token exchange requires a valid active Agent row. Post-fix green and live
+credential qualification remain unrun.
+
+Reuse the existing OAuth eligible-coworker query for both listing and submission;
+semantic assistant IDs must resolve to its returned row IDs. A new headless
+client has no prior client/resource delegation: make that absence explicit in
+the shared query while preserving existing scoped interactive calls. Current
+human eligibility, active/non-archived identity, canonical mirror exclusions,
+token scopes, coworker grants and room admission remain authoritative. Preserve
+intentional account-only clients and the existing PAT migration path. Never
+infer identity from a display name, use another client's credentials, or copy
+the interactive connector's tokens into a shell.
+
+### Design grounding
+
+The existing `/admin/platform-development` form remains the only home. Its
+operator persona needs a named client, an explicit assistant choice and the
+existing permission choices. Reuse shared form fields, notices, report-kit and
+theme tokens; add no navigation or wizard. Account-only clients explain their
+Workroom limit. Missing eligibility, loading, permission and submission errors
+stay inline and must not silently create an anonymous client after a failed
+selection. Identity displayed after creation comes from the saved server result.
+
+The working [HTML prototype](../prototypes/2026-10-16-headless-coworker-binding.html)
+was exercised by selecting Codex and previewing its identity; it creates no key.
+UX advisory engagement CE-7FFF5D1E is requested, not a completed critique.
+Recorded kernel interaction DI-BE040C114168 chose `explicit-existing-assistant`
+over `implicit-client-name` and `separate-credential-wizard`, with high confidence
+and usable signal. This is design advice, not an execution grant. Reject name-only
+identity inference; the existing interactive authority-equivalence default is a
+separate validated mechanism and remains unchanged. The UX-fit manifest records
+this actual choice. Keep existing prose budgets by shortening repeated copy.
+
+### Ordered bounded delivery
+
+1. **HCB-R1 / HCB-CT-IDENTITY / HCB-FLOW-ISSUE / HCB-VC-ISSUE:** add red tests for
+   explicit eligible assistant selection, semantic-to-row binding, account-only
+   compatibility, unauthorized/stale/archived identities and no secret issuance
+   on refusal. Extend the existing OAuth eligibility seam, action and form;
+   re-read eligibility on submission. Test exact persisted identity and display.
+2. **HCB-R2 / HCB-CT-CREDENTIAL / HCB-FLOW-BIND / HCB-VC-BIND:** make the source
+   Workroom binder reuse `mcp-credential.mjs` rather than duplicate PAT-only
+   resolution. Keep endpoint precedence, short timeout and unavailable/refused
+   marker behavior. Test client credentials, explicit credential file, PAT
+   compatibility, absent/malformed config, no secret output and no marker on
+   refusal. No interactive OAuth token extraction or Grok identity substitution.
+3. Resolve graph-linked tests for all three source entries in the Workroom impact
+   contract. Run affected component/action/OAuth tests, Node credential/binder
+   contracts, production/test web typechecks, prose and style guards, doc index
+   and diagrams. Exercise the form's keyboard, narrow viewport and failure states
+   in the governed verification lane; retain measured or recorded-choice UX-fit
+   evidence. Run qualified exact-tree integration and independent source review,
+   then normal DCO publication, protected CI and merge queue.
+4. After canonical deployment and CAN-TEST, qualify the intended source actor
+   through supported credential provisioning using the same account and bounded
+   permissions. Record actual get_my_coworker_profile binding separately from
+   native connector identity. Unavailable provisioning remains unrun; do not
+   manufacture an accepted credential, token, delegated human or review receipt.
+
+This is one atomic correction to the existing approved delivery path: provisioning
+an assistant without consumption leaves the source workflow anonymous, while
+consumption alone cannot supply the missing assistant binding. Use live immutable
+coverage against this continuation before product edits; historical coverage is
+not evidence for these new paths. The existing eight preview criteria remain
+the owning item's full completion contract.
+
+Risks are incorrect row/semantic identity, stale eligibility, authority widening,
+secret exposure and a changed default endpoint. Negative tests must fence each.
+Rollback is a reviewed source revert and normal canonical release. Revoke only
+an explicitly identified newly issued test client through its supported owner
+flow if cleanup is required; never revoke or rotate another client's credential.
+
+### Same-account autonomous provisioning addendum
+
+The UI/resolver-only sequence above is insufficient for autonomous qualification:
+the authorized verification browser belongs to a test persona, not the native
+caller's human. Its client would not prove the intended source authority.
+This addendum supersedes that sequence's assumption that existing issuance is
+enough; all prior reproduction, UI, compatibility and negative-test requirements
+remain. No credential has been issued during this investigation.
+
+Native discovery and the fresh `origin/main` sweep found the Grok-specific
+issuer in `surface-readiness-pack.ts`, backed by `grok-credential-issue.ts` and
+`grok-credentials-client.ts`. OAuthClient already stores the owner, Agent row,
+encrypted secret and scopes. The source graph corroborates those symbols; its
+EXPOSES_TOOL relation remains absent, so it is not absence evidence. A bounded
+EP-CLIENT-CONFIG query found zero tool items and seven open bugs; it did not
+identify another own source-credential issuer. The broad list was truncated and
+is not an exhaustive absence claim. Existing BI-84C1F526 owns Grok provisioning;
+this correction stays in BI-10AC904B and does not reuse Grok's identity.
+
+WWMD DI-1F9835170DA5 recommends `extend-owned-client-mechanism` with high
+confidence and usable signal over human-only provisioning or borrowing another
+credential. This is owning platform direction, not a new runtime grant. Retain
+the tool governor's authority consequence, required build grant, current human
+capability and secret-result redaction. A failure in those controls stops issuance.
+
+**HCB-R3 / HCB-CT-OWN-CLIENT / HCB-FLOW-PROVISION / HCB-VC-OWN-CLIENT:**
+extract the existing owned-client selection, secret preparation/decryption and
+creation mechanism into one helper. Preserve the Grok wrapper's existing scope,
+unbound-upgrade and foreign-binding compatibility. Add a source profile that is
+strictly bound to the native caller's authenticated user and current canonical
+assistant. No arbitrary recipient, assistant or scope parameters are accepted.
+Reuse OAuth eligibility and the current token-to-public-scope check; the fixed
+read/work/build scopes must already fit the caller. Binding to the same assistant
+preserves its dynamic grant intersection rather than minting grants.
+
+Expose `issue_source_credentials_client` in the existing surface-readiness pack,
+with the existing sandbox_execute mapping, view_platform capability, authority
+consequence and credentialsClient secret-result key. It returns only the caller's
+own source client, or creates it once in OAuthClient. Serialize the owner/assistant
+subject in a normal database transaction using the established advisory-lock
+pattern. Recheck eligibility inside that transaction. Refuse anonymous/session-only
+callers, ineligible actors, narrower tokens, multiple current matches, conflicting
+scope/binding and unreadable stored secrets; never mint a replacement to hide a
+conflict. Revoked clients stay revoked. Do not add tables, roles or grant keys.
+
+Add red/green tests for these refusals, repeated issuance, serialization wiring,
+Grok compatibility, registry parity and secret audit redaction. Regenerate the
+existing capability-completeness outputs. Extend the current authorization
+runbook and immutable coverage before coding this new scope, then refresh normal
+implementation admission. The previous UI/resolver green remains attributed to
+that narrower source; it does not qualify this addendum.
+
+After protected merge and canonical deployment, call the new governed tool from
+the native connection, keep its secret out of transcripts, and write only the
+canonical untracked source credential file. Use the existing trusted endpoint
+configuration and canonical resolver/transport. Read back the actual assistant
+and user-bound authority; test an authorized own-room operation through its normal
+admission. Preserve the working native connector, existing credentials and peer
+limits. If the new capability is unavailable or refused, record that exact limit
+instead of borrowing a token, changing scope or claiming same-account proof.
+
+Planning checkpoint: coverage cmvashwbm0lqf01t3ld84so1u was valid against plan
+commit 742b2235269e2a8d6908d80a6a4c1e0e8e9f819e and blob
+a47e1b303e9ca81b4b500ee8594df5993fea6da2. Research receipt
+initiative-ecb71988-33d8-482a-94fa-57066661733a and implementation decision
+IRD-EA3A0E081006 admit this medium/high-sensitivity correction. The server noted
+unresolved funding allocation and missing legacy item size; no budget or funding
+owner was inferred. Current immutable coverage must be refreshed after the final
+source commit, rather than presenting this planning checkpoint as final evidence.
+
+Own-credential approval correction: the static authority declaration alone still
+requires an operator handoff, contradicting HCB-R3 on this declared DEV install.
+Retain that declaration and use the existing narrow-only consequenceForCall
+mechanism for this one empty-input tool, only for an authenticated assistant's
+own client when the canonical stance proves development/evolve-dpf and
+local-permitted credentials. Handler owner, token scope, eligibility, grant
+intersection and serialization checks remain mandatory. Production, unavailable
+stance, unbound callers, arbitrary parameters and all other authority actions
+keep their existing approval consequence. Prove the missing refinement RED, then
+production/unknown/refusal and eligible DEV classification GREEN. This does not
+authorize reviewer invitations or broaden the standing approval mechanism.
+
+Own-credential approval correction: the static authority declaration alone still
+requires an operator handoff, contradicting HCB-R3 on this declared DEV install.
+Retain that declaration and use the existing narrow-only consequenceForCall
+mechanism for this one empty-input tool, only for an authenticated assistant's
+own client when the canonical stance proves development/evolve-dpf and
+local-permitted credentials. Handler owner, token scope, eligibility, grant
+intersection and serialization checks remain mandatory. Production, unavailable
+stance, unbound callers, arbitrary parameters and all other authority actions
+keep their existing approval consequence. Prove the missing refinement RED, then
+production/unknown/refusal and eligible DEV classification GREEN. This does not
+authorize reviewer invitations or broaden the standing approval mechanism.

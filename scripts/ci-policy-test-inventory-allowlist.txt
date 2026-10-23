@@ -64,7 +64,6 @@ scripts/finance-workforce-maturity-matrix.contract.test.mjs
 scripts/gate-worktree-lease.test.mjs
 scripts/hooks/run-hook.test.mjs
 scripts/installer-state-contract.contract.test.mjs
-scripts/lib/bootstrap-worktree-deps.test.mjs
 scripts/lib/capability-service-projection.test.mjs
 scripts/lib/capability-state-hash.test.mjs
 scripts/lib/ci-evidence-receipt.test.mjs

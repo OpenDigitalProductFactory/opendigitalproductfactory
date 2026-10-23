@@ -10,7 +10,12 @@ import { normalizeInitiativeGate as normalizeGate } from "./receipt-validation";
  * an identical OBJ/AC manifest, every receipt the routes produced read stale,
  * and the routes kept asking for the same reviews again (BI-D4BB5AE3).
  *
- * The rule here is the single answer both sides follow:
+ * A server-verified current-head digest takes precedence over the recorded
+ * receipt history below. The caller keeps unavailable current-head evidence
+ * explicitly missing; it never treats the history fallback as verification.
+ * Bulk/legacy callers without that observation retain recorded-only evidence.
+ *
+ * The recorded-history rule is the single fallback both sides follow:
  *
  * - With no newer design receipt, the gates judge the baselined design.
  * - When the newest design-bound receipt recorded after the baseline names a
@@ -32,6 +37,12 @@ export type JudgedDesign = {
   amended: boolean;
 };
 
+/** Server-resolved evidence, never a caller-selected digest. */
+export type CurrentDesignEvidence =
+  | { state: "verified"; digest: string }
+  | { state: "not-applicable" }
+  | { state: "unavailable" };
+
 type ActivityLike = {
   id: string;
   kind: string;
@@ -50,9 +61,14 @@ export function judgedDesignDigest(args: {
   baseline: { artifactDigest: string; recordedAt: Date } | null;
   activities: readonly ActivityLike[];
   planDigest: string | null;
+  currentDesign?: CurrentDesignEvidence;
 }): JudgedDesign {
   const baseline = args.baseline;
   if (!baseline) return { baselineDigest: null, judgedDigest: null, amended: false };
+  if (args.currentDesign?.state === "verified") {
+    return { baselineDigest: baseline.artifactDigest, judgedDigest: args.currentDesign.digest,
+      amended: args.currentDesign.digest !== baseline.artifactDigest };
+  }
   const newest = args.activities
     .filter((activity) => activity.kind === "initiative_gate_receipt"
       && activity.recordedAt > baseline.recordedAt

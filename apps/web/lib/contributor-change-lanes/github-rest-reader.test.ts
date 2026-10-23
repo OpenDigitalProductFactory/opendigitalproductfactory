@@ -358,6 +358,31 @@ describe("resolveGithubToken credential chain", () => {
     expect(token).toBe("backup-token");
   });
 
+  // BI-985F4EC9: issue intake prefers the managed-repository login.
+  it("prefers the repository-controller credential when asked, ahead of github-pr-sync", async () => {
+    const token = await resolveGithubToken(prismaWith({
+      "github-repository-controller": { secretRef: "controller-token", status: "active" },
+      "github-pr-sync": { secretRef: "dedicated-token", status: "active" },
+    }), { preferRepositoryController: true });
+    expect(token).toBe("controller-token");
+  });
+
+  it("falls back to the existing chain when the controller credential is missing or inactive", async () => {
+    const token = await resolveGithubToken(prismaWith({
+      "github-repository-controller": { secretRef: "old", status: "unconfigured" },
+      "hive-contribution": { secretRef: "hive-token", status: "active" },
+    }), { preferRepositoryController: true });
+    expect(token).toBe("hive-token");
+  });
+
+  it("does not read the controller credential for other callers", async () => {
+    const token = await resolveGithubToken(prismaWith({
+      "github-repository-controller": { secretRef: "controller-token", status: "active" },
+      "hive-contribution": { secretRef: "hive-token", status: "active" },
+    }));
+    expect(token).toBe("hive-token");
+  });
+
   it("returns null when the store genuinely holds nothing usable", async () => {
     const previous = process.env.GITHUB_TOKEN;
     delete process.env.GITHUB_TOKEN;

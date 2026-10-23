@@ -1,5 +1,22 @@
 # Backlog & planning runbook
 
+A medium repair that retains an independently approved repository scope keeps
+that scope's amendment authority. A stale design uses the existing independent
+spec-approval writer and current server-issued packet, bound to the prior
+baseline and immutable head. Body acceptance criteria cannot supersede that
+approval. Ordinary body-only medium work still needs no spec approval; inherited
+scope stays with its parent. This distinction restores routing without changing
+approval, author/reviewer separation, or original task settlement (BI-31159978).
+
+An owed amendment remains requestable when valid coverage of the prior baseline
+already allows implementation. If completion marks the baseline stale under the
+design-checklist reviewer, request authorization follows that same obligation
+and retains the prior baseline plus current immutable source. Read
+`get_backlog_item(recoveryGate: "spec-approval")` and submit its packet unchanged.
+Allowed implementation does not approve the amended scope; body criteria,
+inherited scope and a baseline with no owed amendment gain no spec-approval route
+(BI-7531B73C).
+
 An already decomposed xlarge initiative can complete after child delivery and
 outcome reconciliation; its implementation prohibition still stands. Follow the
 [aggregate completion procedure](initiative-readiness-runbook.md#1-the-lifecycle-sequence)
