@@ -1065,7 +1065,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // checked-in routine named, instead of costing an OOM and a retry.
       node("--test", "packages/dpf-skill-pack/hooks/raw-tool-guard.test.mjs"),
       node("--test", "packages/dpf-skill-pack/hooks/portal-image-guard.test.mjs"),
-      node("--test", "packages/dpf-skill-pack/hooks/worktree-create.test.mjs"),
+      conformanceTest("packages/dpf-skill-pack/hooks/worktree-create.test.mjs"),
       // BI-77BE1389: install-folder sessions get the source contract at start.
       node("--test", "packages/dpf-skill-pack/hooks/install-folder-contract.test.mjs"),
       // BI-B1065D41 / BI-1C1483C6: the sixth PreToolUse guard and the
