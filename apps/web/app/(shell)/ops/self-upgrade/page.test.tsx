@@ -476,6 +476,28 @@ describe("SelfUpgradePage", () => {
     );
   });
 
+  it("passes the expected deployed merge identity to the owner summary", async () => {
+    vi.mocked(getSelfUpgradeStatus).mockResolvedValue({
+      ...baseStatus,
+      isFresh: true,
+      targetAvailability: "resolved",
+      targetSha: "a".repeat(40),
+      deployedSha: "b".repeat(40),
+      latestRun: {
+        runId: "SUR-landed-merge",
+        status: "failed",
+        reason: "admission-reopened-before-swap: the drain already ended (completed)",
+        targetSha: "a".repeat(40),
+        deployedSha: "b".repeat(40),
+        completionEvidence: null,
+      },
+    } as never);
+    vi.mocked(listSelfUpgradeRuns).mockResolvedValue({ runs: [], nextCursor: null });
+
+    const html = renderToStaticMarkup(await SelfUpgradePage());
+    expect(html).toContain('data-release-state="up-to-date"');
+    expect(html).not.toContain('data-release-state="failed"');
+  });
   it("keeps retry available after a failed attempt when the release is still newer", async () => {
     vi.mocked(getSelfUpgradeStatus).mockResolvedValue({
       ...baseStatus,
