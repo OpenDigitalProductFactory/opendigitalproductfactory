@@ -1,3 +1,4 @@
+import { NONPROD_ENVIRONMENT_KEYS } from "@/lib/nonprod/environment-lease-lock";
 import type { ToolDefinition } from "@/lib/mcp-tool-types";
 import { HEAVY_RESOURCE_CLASSES } from "@/lib/nonprod/host-resource-policy";
 
@@ -79,7 +80,7 @@ export const nonprodLeaseDefinitions: ToolDefinition[] = [
     inputSchema: {
       type: "object",
       properties: {
-        environmentKey: { type: "string", enum: ["active-candidate", "local-integration-ci", "host-heavy-resource"] },
+        environmentKey: { type: "string", enum: [...NONPROD_ENVIRONMENT_KEYS] },
         ownerProvider: {
           type: "string",
           enum: ["build-studio", "claude", "codex", "grok", "antigravity", "coworker"],

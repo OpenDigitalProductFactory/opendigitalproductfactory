@@ -20,6 +20,7 @@ export type AuthorizedWorkroomDurableTask = {
 };
 
 export type WorkroomDurableTaskRunInput = {
+  actor: AsyncOperationAuthorityActor;
   taskRunId: string;
   userId: string;
   agentId: string;
@@ -176,6 +177,7 @@ export async function admitWorkroomBoundDurableTaskOperation(
     requestDigest: input.request.requestDigest,
   });
   const task = await dependencies.createOrReplayTaskRun({
+    actor: input.actor,
     taskRunId,
     ...identity,
     requestKey: input.request.requestKey,

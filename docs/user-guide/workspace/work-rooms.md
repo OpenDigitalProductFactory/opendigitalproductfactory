@@ -147,6 +147,25 @@ it does not prove that the Workroom outcome is complete.
 
 The **Activity** stream distinguishes messages, asks, coworker handoffs, work changes, decisions, artifacts, governed actions, verification, receipts, and cycle transitions. A message is an update; it is not proof that the outcome was achieved.
 
+### Handing development work to another assistant
+
+An assistant can request a handoff to another assistant already admitted to the
+same room. The request records the destination and next action. **Waiting for
+receiver** means the current executor still owns the work. **Handoff completed**
+appears only after the named receiving assistant acknowledges the request for
+the same human owner.
+
+A same-mandate handoff uses existing authority and standing delegation. It does
+not invite a participant or expand anyone's permissions. Restricted work, linked
+builds, or changes to the room's owner, scope or authority keep their existing
+controlled handover. A destination session is endorsed by the receiving assistant;
+the platform does not authenticate an external chat from its session label.
+
+**Handoff refused** gives the recorded reason. If the room or its lease changed,
+the requesting assistant reads the current room and submits a fresh request.
+Active or queued verification leases and an applicable review exemption must be
+settled through their owning workflow before execution moves.
+
 People and AI coworkers appear together as named participants. Their room role and current work state are separate:
 
 - **Accountable** owns the room outcome.
