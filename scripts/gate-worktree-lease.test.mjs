@@ -24,7 +24,7 @@ import {
   executionPressureFenceReason,
 } from "./gate-worktree.mjs";
 import { readProcessIdentity } from "./lib/local-sandbox-fence.mjs";
-import { callerGateDirectory, gateArtifactStamps, makeTempWorktree } from "./lib/gate-worktree-test-fixtures.mjs";
+import { callerGateDirectory, gateArtifactStamps, makeTempWorktree } from "./fixtures/gate-worktree.mjs";
 
 // BI-D35B85BF. A queued gate now hands its claim to a detached resumer that
 // keeps re-claiming until admitted. These tests assert the exit-75 CONTRACT

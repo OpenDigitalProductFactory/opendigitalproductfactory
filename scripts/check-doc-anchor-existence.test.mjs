@@ -3,10 +3,15 @@
 // lookups mocked (no live install required to prove the guard).
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import * as anchorGate from "./check-doc-anchor-existence.mjs";
+import { resolveMcpCredential } from "./lib/mcp-credential.mjs";
+import { startGateFixtureMcp } from "./fixtures/gate-worktree.mjs";
 
 import {
   classifyId,
@@ -18,6 +23,54 @@ import {
   serializeAnchorBaseline,
   verifyAnchors,
 } from "./check-doc-anchor-existence.mjs";
+
+test("explicit anchor URL and client file win over ambient legacy identity without materializing the refreshable bearer", async () => {
+  const directory = mkdtempSync(path.join(tmpdir(), "dpf-anchor-credential-"));
+  const credentialPath = path.join(directory, "fixture-client.json");
+  writeFileSync(credentialPath, JSON.stringify({ clientId: "fixture-client", clientSecret: "fixture-secret" }));
+  const server = await startGateFixtureMcp(call => ({ itemId: call.args.itemId }));
+  const exchanges = [];
+  try {
+    const connection = anchorGate.resolveDocAnchorConnection({
+      DPF_MCP_URL: ` ${server.url}/api/mcp/v1?tier=full `,
+      DPF_MCP_ENDPOINT: "http://127.0.0.1:1/legacy",
+      DPF_MCP_CLIENT_CREDENTIALS_FILE: credentialPath,
+      DPF_MCP_BEARER_TOKEN: "wrong-legacy-pat",
+    }, { resolveCredential: options => resolveMcpCredential({ ...options, exchange: async args => {
+      exchanges.push(args);
+      return { accessToken: "fixture-token", expiresAt: Date.now() + 300000 };
+    } }) });
+    assert.equal(connection.endpoint, server.url + "/api/mcp/v1?tier=full");
+    assert.equal(connection.bearer.kind, "client_credentials");
+    assert.equal(exchanges.length, 0, "selection must preserve lazy refresh rather than cache a token string");
+    const response = await anchorGate.callTool(connection.endpoint, connection.bearer, "get_backlog_item", { itemId: "BI-81AF5884" });
+    assert.equal(interpretToolResponse("backlog-item", "BI-81AF5884", response), "exists");
+    assert.equal(exchanges.length, 1);
+    assert.equal(exchanges[0].mcpUrl, connection.endpoint);
+    assert.equal(exchanges[0].clientId, "fixture-client");
+    assert.equal(exchanges[0].clientSecret, "fixture-secret");
+    assert.deepEqual(server.calls, [{ name: "get_backlog_item", args: { itemId: "BI-81AF5884" } }]);
+  } finally { await server.close(); rmSync(directory, { recursive: true, force: true }); }
+});
+
+test("anchor connection retains legacy fallback and does not retry malformed client configuration as another identity", () => {
+  const directory = mkdtempSync(path.join(tmpdir(), "dpf-anchor-legacy-"));
+  try {
+    const credentialPath = path.join(directory, "absent.json");
+    const env = { DPF_MCP_ENDPOINT: " http://127.0.0.1:1/legacy ", DPF_MCP_CLIENT_CREDENTIALS_FILE: credentialPath, DPF_MCP_BEARER_TOKEN: "legacy-fixture-token" };
+    assert.deepEqual(anchorGate.resolveDocAnchorConnection(env), { endpoint: "http://127.0.0.1:1/legacy", bearer: "legacy-fixture-token" });
+    assert.equal(anchorGate.resolveDocAnchorConnection({ ...env, DPF_MCP_ENDPOINT: " " }).endpoint, anchorGate.DEFAULT_ENDPOINT);
+    writeFileSync(credentialPath, "not JSON");
+    assert.throws(() => anchorGate.resolveDocAnchorConnection(env), /not valid JSON/);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test("authority evidence unavailable with an echoed anchor remains skipped, never verified or missing", async () => {
+  const unavailable = { result: { isError: true, content: [{ type: "text", text: JSON.stringify({ success: false, error: "authority_evidence_unavailable", itemId: "BI-81AF5884", message: "The authority check is unavailable; this is not a refusal." }) }] } };
+  const pair = { doc: "docs/fixture.md", id: "BI-81AF5884" };
+  const result = await verifyAnchors([pair], async () => interpretToolResponse("backlog-item", pair.id, unavailable));
+  assert.deepEqual(result, { missing: [], skipped: [pair], unverifiable: [], verified: [] });
+});
 
 test("extractAnchorIds finds hex-shaped EP/BI/WC (8) and DI (12) ids, deduped and sorted", () => {
   const md = [

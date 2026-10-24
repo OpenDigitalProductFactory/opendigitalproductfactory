@@ -4,13 +4,14 @@ import { createServer } from "node:http";
 import { createServer as createTlsServer } from "node:https";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { gitText, runGit } from "../lib/git.mjs";
 
 // Test fixtures only. Every gate writes to a disposable Git directory, never
 // the checkout running the suite (BI-53B189C8, BI-BFDB98B6).
 const GATE_ARTIFACT_NAME = /^dpf-(local-ci-|sandbox-freshness|pre-admission-)/;
 export function callerGateDirectory(cwd = process.cwd()) {
-  const result = spawnSync("git", ["rev-parse", "--git-path", "dpf-local-ci-gate.json"], { cwd, encoding: "utf8" });
-  return result.status === 0 && result.stdout.trim() ? dirname(resolve(cwd, result.stdout.trim())) : null;
+  const result = runGit(["rev-parse", "--git-path", "dpf-local-ci-gate.json"], { cwd });
+  return result.ok && result.stdout.trim() ? dirname(resolve(cwd, result.stdout.trim())) : null;
 }
 
 export function gateArtifactStamps(directory) {
@@ -28,11 +29,7 @@ export function gateArtifactStamps(directory) {
 
 export function makeTempWorktree({ pregateScript } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "dpf-gate-worktree-"));
-  const git = (args) => {
-    const result = spawnSync("git", args, { cwd: dir, encoding: "utf8" });
-    if (result.status !== 0) throw new Error("git " + args.join(" ") + " failed: " + (result.stderr || result.stdout));
-    return result.stdout.trim();
-  };
+  const git = (args) => gitText(args, { cwd: dir });
   git(["init", "-q"]);
   git(["config", "user.name", "DPF Test"]);
   git(["config", "user.email", "dpf-test@example.invalid"]);

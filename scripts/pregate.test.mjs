@@ -8,7 +8,7 @@ import { EventEmitter } from "node:events";
 import { tmpdir } from "node:os";
 import { createServer } from "node:http";
 import { readEarlyQuiescenceStatus, readQuiescenceStatus, quiescenceBlocksWrites } from "./lib/gate-quiescence.mjs";
-import { isolatedGateFixtureEnvironment, makeTempWorktree, startGateFixtureMcp } from "./lib/gate-worktree-test-fixtures.mjs";
+import { isolatedGateFixtureEnvironment, makeTempWorktree, startGateFixtureMcp } from "./fixtures/gate-worktree.mjs";
 import { exitCodeForVerdict } from "./lib/pregate-status.mjs";
 
 test("wrapped pregate stops only when stdout is captured and no escape hatch is set", () => {

@@ -13,7 +13,7 @@ import { mcpCall } from "../../scripts/lib/mcp-client.mjs";
 import { readEarlyQuiescenceStatus } from "../../scripts/lib/gate-quiescence.mjs";
 import { runForegroundGate, runGateWithQueuedRevival, runHostPreflight } from "../../scripts/pregate.mjs";
 import { classifyGateExit } from "../../scripts/lib/gate-exit-classification.mjs";
-import { createGateFixtureTls } from "../../scripts/lib/gate-worktree-test-fixtures.mjs";
+import { createGateFixtureTls } from "../../scripts/fixtures/gate-worktree.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const fixture = mkdtempSync(join(tmpdir(), "dpf-tls-"));

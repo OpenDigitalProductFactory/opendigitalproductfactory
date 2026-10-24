@@ -8,7 +8,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
-import { callerGateDirectory, createGateFixtureTls, gateArtifactStamps, isolatedGateFixtureEnvironment, makeTempWorktree, startGateFixtureMcp } from "./lib/gate-worktree-test-fixtures.mjs";
+import { callerGateDirectory, createGateFixtureTls, gateArtifactStamps, isolatedGateFixtureEnvironment, makeTempWorktree, startGateFixtureMcp } from "./fixtures/gate-worktree.mjs";
 import { exitCodeForVerdict } from "./lib/pregate-status.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");

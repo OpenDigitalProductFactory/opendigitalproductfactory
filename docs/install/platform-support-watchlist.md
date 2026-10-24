@@ -32,6 +32,13 @@ completed execution checkpoint; do not manufacture one or finalize it as a pass.
 `pregate:status` remains read-only. Whole-chain loss still requires reconciliation
 of the original durable task and retained evidence before another attempt.
 
+The documentation-anchor preflight uses the same configured MCP URL and
+refreshable client credential as the gate, retaining the legacy endpoint and
+PAT fallback. A stale ambient legacy connection must not override an explicitly
+configured client file and URL. Unavailable authority evidence remains an
+unverified citation with a warning; it is neither a missing item nor a verified
+anchor. No credential export or switch of identity is needed for this check.
+
 ## Saved host CA trust and stale clients
 
 The historical repair is evidenced by the merged [saved host trust change, PR 6497](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/6497).
