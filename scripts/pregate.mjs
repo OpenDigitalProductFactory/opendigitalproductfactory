@@ -17,6 +17,8 @@
 import { parseArgs as utilParseArgs } from "node:util";
 import { scriptArgv } from "./lib/script-argv.mjs";
 import { spawnSync } from "node:child_process";
+import { runForegroundGate, withForegroundCancellation } from "./lib/foreground-gate-process.mjs";
+export { runForegroundGate } from "./lib/foreground-gate-process.mjs";
 import { createObservedProcessRunner } from "./lib/local-ci-process-observer.mjs";
 import { gitTextOrNull } from "./lib/git.mjs";
 import { sandboxDecisionForHead } from "./derived-artifacts-gate.mjs";
@@ -725,7 +727,8 @@ export async function runGateWithQueuedRevival({
   useShell = false,
   env = process.env,
   now = () => Date.now(),
-  spawnSyncImpl = spawnSync,
+  runGateImpl = runForegroundGate,
+  signalSource = process,
   reviveInterruptedQueuedGateImpl = reviveInterruptedQueuedGate,
   recoverInterruptedGateImpl = recoverInterruptedGate,
   stderr = process.stderr,
@@ -737,7 +740,7 @@ export async function runGateWithQueuedRevival({
     env,
     nowMs: now(),
   });
-
+  return withForegroundCancellation(async signal => {
   for (;;) {
     const invocationArgs = queuedRevivals === 0
       ? args
@@ -754,16 +757,16 @@ export async function runGateWithQueuedRevival({
 
     if (useShell) {
       stderr.write("pregate: DPF_PREGATE_FORCE_SH=1 set — routing through compatibility shell entry point.\n");
-      result = spawnSyncImpl("sh", [join(SCRIPT_DIR, "gate-worktree.sh"), ...invocationArgs], { stdio: "inherit" });
+      result = await runGateImpl("sh", [join(SCRIPT_DIR, "gate-worktree.sh"), ...invocationArgs], { env, signal });
     } else {
       stderr.write("pregate: routing through the Node-native gate (scripts/gate-worktree.mjs).\n");
-      result = spawnSyncImpl(process.execPath, [join(SCRIPT_DIR, "gate-worktree.mjs"), ...invocationArgs], { stdio: "inherit" });
+      result = await runGateImpl(process.execPath, [join(SCRIPT_DIR, "gate-worktree.mjs"), ...invocationArgs], { env, signal });
     }
 
     if (result.error || (result.status ?? 1) === 0) {
       return { result, queuedRevivals, timedOut: false };
     }
-    if (now() < queueRevivalWindow.deadlineMs) {
+    if (!signal.aborted && now() < queueRevivalWindow.deadlineMs) {
       const revived = await reviveInterruptedQueuedGateImpl({ args, result });
       if (revived.revived) {
         queuedRevivals += 1;
@@ -774,6 +777,7 @@ export async function runGateWithQueuedRevival({
     await recoverInterruptedGateImpl({ args, result });
     return { result, queuedRevivals, timedOut: false };
   }
+  }, { signalSource });
 }
 
 // Thin, failure-tolerant readers for the two safety guards above. Both fail
