@@ -71,9 +71,25 @@ Whether a review may block is presently one global switch:
 | AC-1 | OBJ-NEED | Two changes touching identical files, in workrooms of different shape or at steps of different criticality, draw different reviews, and the recorded review names the shape and criticality that caused the difference. |
 | AC-2 | OBJ-NEED | A routine step in a small delivery room draws no specialist review for a comment-only change; a critical step in a large room draws the full specialist set for the same files. |
 | AC-3 | OBJ-CRAFT | `selectSemanticReviewSpecialists` and the `SPECIALIST_SYSTEM_PROMPTS` roster are removed; specialists come from `deriveImpactedAcumens` resolved to live coworkers, and a craft added to the registry can review without a code change. |
-| AC-4 | OBJ-INSTANCE | Each specialist review writes a `WorkroomParticipant` row with role `reviewer` and a `TaskRun` bound to the room and head through a review binding; the room timeline shows who reviewed, for which step, at which criticality. |
+| AC-4 | OBJ-INSTANCE | Each required specialist has authorized, room-visible `WorkroomParticipant` membership and a distinct fenced `TaskNode` contribution under one canonical semantic-review `TaskRun`, without replacing existing roles. The immutable request and receipt bind the room, current stage, exact head, criticality and authority, and the timeline attributes each returned contribution. |
 | AC-5 | OBJ-AUTHORITY | The verdict authority (advisory, blocking, or blocking-with-person) for every criticality is computed by one function in the escalation rule module; a conformance test walks every criticality and proves a verdict reaches a person only when the step is damaging. |
 | AC-6 | OBJ-UNDECIDED | With this shipped, `INDEPENDENT_REVIEW_INTERIM` is `hold`: an undecided non-damaging decision holds its step and dispatches an instantiated reviewer, whose verdict releases or blocks it. |
+
+### AC-4 revision, 2026-10-23
+
+Independent finding IF-3415A201C6ED70BB identified a conflict between the original
+AC-4 and section 8's native execution amendment. AC-4 now states that amendment's
+single TaskRun with distinct fenced specialist branches. Required membership,
+independent execution, room/stage/head binding and attributable returned evidence
+remain acceptance requirements; existing participant roles must be preserved.
+Section 3.4 below uses the same contract.
+
+This revises AC-4 from baseline-c1c09681-bff9-409b-af5a-bf2a45831d5e. A passing
+independent spec review must record its explicit AC-4 supersession disposition
+and resolve the finding against this artifact. The prior baseline and failed
+receipt remain history. This author correction does not resolve the finding or
+mint a replacement baseline; renewed plan coverage and plan review follow that
+independent decision.
 
 ## 3. Design
 
@@ -123,34 +139,29 @@ are removed. The persona text comes from the craft's own corpus, which
 
 ### 3.4 Instantiation
 
-A review is dispatched as a `request_coworker` packet with a new
-`stepReviewBinding` that follows the `initiativeReviewBinding` precedent:
+Use the existing immutable semantic-review request and canonical `TaskRun`,
+with a distinct fenced per-agent `TaskNode` obligation for every required craft.
+The full admission and authority conditions are in section 8.
 
-```ts
-stepReviewBinding: {
-  workroomRef: { kind: "workroom-head"; workroomId; repositoryFullName; branchName; headSha };
-  stageKey: string;
-  criticality: "routine" | "consequential" | "critical";
-  professionKey: string | null;      // null for the change-reviewer
-  writerToolName: "record_semantic_review_outcome";
-}
-```
+- Derive room, active stage, head, criticality, authority and complete profession
+  obligations before immutable admission. Keep authoring participation distinct
+  from independent review and exclude authors from independent reviewer roles.
+- Admit participant assignments and that same TaskRun in one transaction through
+  the existing semantic-review admission store. Reuse
+  `room-participant-assignment.server.ts` with its existing explicit assignment
+  source, preserving current roles, removals and restrictive room policy.
+- Repeated admission subscribes to its original task and fenced obligations.
+  Every required profession retains its own executed result or explicit
+  outstanding state; bounded scheduling does not drop obligations.
+- The independent core reviewer evaluates the returned advisory craft proposals.
+  Persist the existing semantic-review receipt in `ExternalEvidenceRecord` with
+  stage, head, criticality, authority, exact principals and corpus provenance.
+  Project attributable results and author disposition onto the room timeline.
 
-- The dispatcher is the existing server-side reviewer dispatch
-  (`backlog/initiative-readiness/server-reviewer-dispatch.ts`), extended. It
-  writes the `TaskRun` idempotently on
-  `requestKey = step-review:<workroom>:<stage>:<head>:<profession>`.
-- Before dispatch it upserts a `WorkroomParticipant` role `reviewer` with
-  `assignmentSource: "step-review"` through the single writer
-  (`work-management/room-participant-assignment.server.ts:82`). The reviewer is
-  visible in the room and admitted to act there.
-- `resolveBoundInitiativeReviewBinding` generalises to recognise
-  `stepReviewBinding`, so the reviewer's writer call carries
-  `independent-reviewer` steering and is decided without an approval envelope,
-  per `escalation-is-a-gate-not-a-trust-tier`.
-- The verdict is the existing semantic-review receipt (`ExternalEvidenceRecord`
-  `semantic-change-review.receipt`). It gains `stageKey`, `criticality` and
-  `authority`, so AC-1's traceability lives on the record itself.
+The earlier external `stepReviewBinding`, separate per-profession TaskRun and
+`assignmentSource: "step-review"` proposal is retired. The native path uses its
+existing fenced checkpoints and receipt writer. `record_semantic_review_outcome`
+continues to record CI correlation; it grants no specialist verdict authority.
 
 ### 3.5 Authority reads the rule table
 
@@ -379,7 +390,7 @@ must be exercised on the served canonical target after the containing release.
 
 ## 8. Native execution amendment, 2026-10-16
 
-This amendment supersedes section 3.4's proposed external terminal-writer
+Sections 3.4 and AC-4 now incorporate this amendment's native execution
 mechanism. Source inspection found that `record_semantic_review_outcome` records
 CI outcome correlation; it does not write the specialist's terminal verdict.
 The UX critic's existing offer is proposal-only. Neither that tool nor the
@@ -389,9 +400,9 @@ Use the existing semantic-review TaskRun and its fenced per-agent TaskNode
 checkpoints. One immutable request names the room, current stage, exact head,
 criticality, authority and complete required-profession selection. Each required
 craft has a distinct persisted branch obligation and attributable result; the
-independent core reviewer evaluates those advisory proposals. This replaces
-AC-4's separate TaskRun per specialist with distinct durable branches of the
-same canonical TaskRun. A request, invitation or checkpoint without a returned
+independent core reviewer evaluates those advisory proposals. AC-4 requires
+these distinct durable branches of the same canonical TaskRun. A request,
+invitation or checkpoint without a returned
 result is not a completed contribution.
 
 Participant assignment and new TaskRun admission must share one transaction,

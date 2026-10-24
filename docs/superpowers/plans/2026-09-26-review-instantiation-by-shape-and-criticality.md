@@ -22,22 +22,30 @@ are internal sequencing, not independently shippable features. All ten traceabil
 rows below map to BI-E27F3600. UI implementation, routine executor handoffs and
 historical execution settlement retain their existing owners.
 
-The published checkpoint cc2986345131 passed the shared local-CI convergence
-sandbox: 760 suites and 9,872 tests passed, 16 suites and 78 tests were skipped,
-and five tests were todo. Both TypeScript programs passed. This is historical
-source verification, not proof of native participation or a pass for later trees.
-Local merge 1602974dab69 incorporates main f8d1e801fc4c; its normal commit checks
-passed both web TypeScript programs and the database package typecheck.
+Published checkpoint eea6ecbed4f2 passed the canonical shared integration gate
+against main 3c6ed3e54fe: 781 test files and 10,162 tests passed, 16 files and
+89 tests were skipped, and five tests were todo. Migrations and typechecks passed.
+Evidence cmvlod3mr0tru01qhjprl74d6 qualifies that source revision, not this later
+document correction or native participation. All 84 host guard groups passed;
+their receipt remained inconclusive because execution identity was not verified
+throughout the run. No host or integration gate was skipped.
 
 The independent spec review of design blob f3368430fcc01583bf8df57df62caae16f061a72
 completed with receipt
 initiative-review-v1-d6d18c217e7f7641d0ffe19415cb969ce2a75dcb2a2b75e41e364ecf21b5ff45
-and baseline baseline-c1c09681-bff9-409b-af5a-bf2a45831d5e. The architecture
-reviewer's subsequent submissions were rejected for malformed citations. Its
-unrecorded observations exposed a stale dependency statement and unclear
-activation sequencing; the accompanying design correction addresses those
-facts without claiming an architecture pass. Renew review against the corrected
-artifact, then record current plan coverage and obtain independent plan review.
+and baseline baseline-c1c09681-bff9-409b-af5a-bf2a45831d5e. Subsequent architecture
+submissions were rejected for malformed citations; their observations prompted
+the dependency and activation-sequence correction in design blob 688f11280fdd.
+That artifact then received a genuine failing spec receipt,
+initiative-review-v1-e3e6af2f5e03c7b9dd7fe4e954a6d05bf09d7421351fb7376586fea5158aba47.
+Finding IF-3415A201C6ED70BB identifies the old AC-4's separate-TaskRun requirement
+conflicting with section 8's native branch model.
+
+This revision reconciles AC-4 and section 3.4 with section 8. Preserve the old
+baseline and failed receipt. Obtain independent resolution and an explicit
+AC-4 supersession disposition on the corrected artifact before renewing scope
+and architecture approval, plan coverage and plan review. The other nine
+acceptance criteria and all five objectives retain their existing statements.
 
 Remaining implementation is phases 4-6: immutable stage/need identity, atomic
 participant and task admission, distinct authoring and independent-review
@@ -256,9 +264,10 @@ and engagement identities while completing the normal publication/evidence path.
 
 ## Phase 4: room-bound instantiation
 
-Design section 8 supersedes the original external `stepReviewBinding` proposal.
-Reuse the semantic-review TaskRun and fenced per-agent TaskNode checkpoints;
-do not add an external terminal writer or repurpose the CI-correlation tool.
+Design sections 3.4 and 8 require one canonical semantic-review TaskRun and
+distinct fenced per-agent TaskNode obligations. Reuse its checkpoints and
+existing participant assignment source. Preserve the CI-correlation tool's
+existing purpose; it is not a specialist terminal writer.
 
 - Extend the immutable contracts in `semantic-change-review.ts` and `semantic-review-request.ts` with server-derived room, current stage, head, criticality, authority and complete profession obligations. Version new requests explicitly; preserve historical packets, identities and unknown effects.
 - Resolve stage facts in `review-specialist-preparation.ts` before selecting providers. Inspect the existing room/shape, item sensitivity and transition-risk readers; an unresolved required fact leaves admission outstanding rather than defaulting to a lower floor. Keep authoring obligations distinct from independent review depth and exclude author identities from every independent reviewer, including the core reviewer.
@@ -286,7 +295,7 @@ do not add an external terminal writer or repurpose the CI-correlation tool.
 | step-criticality | 1 | OBJ-NEED | resolveStepCriticality | design §3.1 | AC-1 |
 | review-authority | 2 | OBJ-AUTHORITY | resolveReviewAuthority | design §3.5 | AC-5 |
 | craft-classifier | 3 | OBJ-CRAFT | deriveImpactedAcumens | design §3.3 | AC-3 |
-| room-instantiation | 4 | OBJ-INSTANCE | immutable semantic request and fenced TaskNode obligations | design §8 supersedes §3.4 | AC-4 |
+| room-instantiation | 4 | OBJ-INSTANCE | immutable semantic request and fenced TaskNode obligations | design §3.4 and §8 | AC-4 |
 | need-and-receipts | 5 | OBJ-NEED | resolveSemanticReviewCoordination | design §3.2 | AC-2 |
 | undecided-hold | 6 | OBJ-UNDECIDED | INDEPENDENT_REVIEW_INTERIM | design §3.6 | AC-6 |
 | declared-profession-obligations | 4-5 | OBJ-CRAFT | requiredProfessions and current-stage preparation | design §7 and §8 | AC-7 |
@@ -351,7 +360,7 @@ does not grant implementation authority or replace a live coverage receipt.
 - Rationale: obligation selection, bounded authorization, durable dispatch, independent review and attributable completion form one behavior and one clean revert. Shipping a hold without its executor, or claiming participation without its complete evidence, is not an independent deliverable. The owner requested one combined PR. UI and executor-handoff implementations remain outside it with their existing owners.
 - Parent: BI-E27F3600
 - Dependencies: BI-74B2A8CD supplies the merged source prerequisite; current independent design and architecture approval, plan coverage and plan review precede phase 4. UI and executor-handoff deliveries retain their separate owners and are not silently included in this graph.
-- Receipt: blocked-by: publish the corrected design and plan through the exact-tree gate; renew their independent scope and architecture reviews; record schema-v2 coverage against the resulting current baseline, then obtain plan review.
+- Receipt: blocked-by: publish the AC-4 correction; independently resolve IF-3415A201C6ED70BB and record its baseline supersession; renew architecture review, schema-v2 coverage and plan review against the resulting current artifacts.
 - Source dependency: BI-74B2A8CD landed through PR #6432; its acceptance is separate.
 - Mapping: step-criticality, review-authority, craft-classifier, room-instantiation, need-and-receipts, undecided-hold, declared-profession-obligations, complete-craft-scheduling, returned-contribution-and-disposition, explicit-profession-consult -> BI-E27F3600. None is independently shippable.
 - Context intake: BI-0AABCD1F remains triaging research; it does not supply implementation authority or own a second copy of AC-7 through AC-10.
