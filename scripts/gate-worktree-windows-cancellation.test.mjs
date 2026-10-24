@@ -142,19 +142,18 @@ for (const scenario of ["success", "cancellation", "failure", "trust-cancellatio
         assert.equal(result.sent, true);
         assert.ok(result.controlWitnessCount > 0, "owned console witness did not receive Ctrl-C");
         assert.equal(state.gatePassed, false);
-        assert.ok(["blocked_child_signal_death", "blocked_wrapper_exited"].includes(state.status), "owner died but native state remained " + state.status);
+        assert.equal(state.status, "blocked_child_signal_death", "the inner owner must persist the observed cancellation");
         const events = state.leaseEvents ?? [];
-        assert.ok(events.some(event => event.type === "signal" && event.signal === "SIGINT") ||
-          events.some(event => event.type === "pregate_interrupted_gate_recovery" && event.releaseSucceeded === true),
-          "native cancellation or wrapper recovery event absent");
+        assert.ok(events.some(event => event.type === "signal" && event.signal === "SIGINT"),
+          "the gate owner did not record the real console signal");
         const recorded = mcp.calls.filter(call => call.name === "record_local_integration_result");
-        if (recorded.length) {
-          assert.equal(recorded.length, 1);
-          assert.equal(recorded[0].args.status, state.status);
-          assert.equal(recorded[0].args.evidence.gatePassed, false);
-          assert.equal(recorded[0].args.leaseId, leaseId);
-          assert.equal(state.evidenceRecordId, "FIXTURE-ONLY-CONSOLE-RESULT");
-        } else assert.equal(state.evidenceRecordId, "");
+        assert.equal(recorded.length, 1, "the inner owner must call the fixture result writer exactly once");
+        assert.equal(recorded[0].args.status, state.status);
+        assert.equal(recorded[0].args.evidence.gatePassed, false);
+        assert.equal(recorded[0].args.leaseId, leaseId);
+        assert.match(recorded[0].args.summary, /gate owner received SIGINT/);
+        assert.doesNotMatch(recorded[0].args.summary, /out of memory|box is quieter/i);
+        assert.equal(state.evidenceRecordId, "FIXTURE-ONLY-CONSOLE-RESULT");
         assert.equal(mcp.calls.some(call => call.name === "record_local_integration_result" && call.args.status === "passed"), false);
         const stopped = readFileSync(heartbeat, "utf8"); await delay(150);
         assert.equal(readFileSync(heartbeat, "utf8"), stopped, "owned child kept writing");
@@ -167,6 +166,7 @@ for (const scenario of ["success", "cancellation", "failure", "trust-cancellatio
         assert.equal(checkpoint.canonicalEvidenceId, null);
         const record = mcp.calls.find(call => call.name === "record_local_integration_result");
         assert.equal(record.args.status, "failed"); assert.equal(record.args.evidence.gatePassed, false);
+        assert.doesNotMatch(record.args.summary, /gate owner received/);
       } else {
         assert.equal(result.exitCode, 0);
         assert.equal(result.sent, false);
