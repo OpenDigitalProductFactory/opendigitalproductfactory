@@ -38,10 +38,15 @@ export type JudgedDesign = {
 };
 
 /** Server-resolved evidence, never a caller-selected digest. */
-export type CurrentDesignEvidence =
+export type CurrentResearchEvidence =
+  | { state: "verified"; receiptId: string; digest: string }
+  | { state: "unavailable" };
+
+export type CurrentDesignEvidence = (
   | { state: "verified"; digest: string }
   | { state: "not-applicable" }
-  | { state: "unavailable" };
+  | { state: "unavailable" }
+) & { research?: CurrentResearchEvidence };
 
 type ActivityLike = {
   id: string;
