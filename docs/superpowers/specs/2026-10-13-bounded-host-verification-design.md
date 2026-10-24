@@ -122,3 +122,11 @@ a violation and blocks admission/readiness. Genuine loader absence remains an
 environment limitation, while explicit observer cancellation, timeout and
 runner failure retain precedence. Actual child-exit regressions cover both
 static diagnostics, native loader absence and the shared readiness consumer.
+
+The same continuation separates generic policy intent from actual local Vitest
+coverage. BI-2227C37C permits affected local selection while cloud verification
+remains exhaustive. A completed exact-stage receipt establishes actual local
+coverage; absent or conflicting evidence remains unknown. New receipts persist
+selection mode and reason. The supported exhaustive override participates in
+the existing pre-admission execution fingerprint, preserving successful-only
+reuse for the requested scope. Historical receipts remain unchanged.
