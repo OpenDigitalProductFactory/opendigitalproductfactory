@@ -1,9 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const db = vi.hoisted(() => ({ workroom: { findUnique: vi.fn() }, workroomActivity: { findMany: vi.fn() },
-  taskRun: { findMany: vi.fn() }, backlogItem: { findMany: vi.fn() }, $queryRaw: vi.fn() }));
+const db = vi.hoisted(() => ({ workroom: { findUnique: vi.fn() }, workroomActivity: { findMany: vi.fn(), findFirst: vi.fn() },
+  taskRun: { findMany: vi.fn() }, backlogItem: { findMany: vi.fn() }, $queryRaw: vi.fn(),
+  $executeRaw: vi.fn(), $transaction: vi.fn() }));
+const roomAccess = vi.hoisted(() => vi.fn(async () => ({ decision: { level: "content" } })));
 vi.mock("@dpf/db", () => ({ prisma: db }));
 vi.mock("../portfolio/investment-balance-server", () => ({ projectItemInvestment: vi.fn(async () => null) }));
+vi.mock("@/lib/work-management/workroom-agent-access.server", () => ({
+  resolveAgentWorkroomAccess: roomAccess,
+  resolveHumanWorkroomAccess: roomAccess,
+}));
 
 import { getWorkCapsuleTool } from "./mcp-handlers";
 import { clampToolResultForModel, MCP_ROUTE_TOOL_RESULT_CHAR_CAP } from "@/lib/tak/tool-result-budget";
@@ -31,6 +37,7 @@ let candidateFailure: Error | null;
 describe("get_workroom native review readback", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    db.$transaction.mockImplementation(async work => work(db));
     db.workroom.findUnique.mockResolvedValue(room);
     db.workroomActivity.findMany.mockResolvedValue([]);
     db.backlogItem.findMany.mockResolvedValue([]);
@@ -127,6 +134,57 @@ describe("get_workroom native review readback", () => {
     expect(JSON.stringify(result.data).length).toBeLessThanOrEqual(100_000);
     expect(result).toMatchObject({ success: true, data: { capsule: { recovery: { state: "working" } },
       log: { afterSequence: 0, activity: [], hasMore: true, incomplete: true, reason: "activity-page-budget-exceeded" } } });
+  });
+
+  it("offers bounded metadata and an exact detail call when a raw activity payload exceeds the budget", async () => {
+    db.workroom.findUnique.mockResolvedValue({ ...room, activitySequence: 1 });
+    db.workroomActivity.findMany.mockResolvedValue([{ id: "oversized-activity", sequence: 1,
+      payload: { result: "x".repeat(150_000) } }]);
+    db.$queryRaw.mockResolvedValue([{ id: "oversized-activity", sequence: 1, kind: "evidence-recorded",
+      summary: "Original review evidence", summaryShortened: false, recordedAt: now,
+      recordedById: "requester-1", recordedByAgentId: "AGT-EXT-CODEX", toolExecutionId: null }]);
+    const result = await getWorkCapsuleTool({ capsuleId: "WC-1", afterSequence: 0, activityMode: "bounded" },
+      "requester-1", { agentId: "AGT-EXT-CODEX" });
+    expect(result).toMatchObject({ success: true, data: { log: { representation: "metadata", payloadsDelivered: false,
+      activity: [{ id: "oversized-activity", detail: { toolName: "get_workroom",
+        arguments: { capsuleId: "WC-1", activityMode: "bounded", activityId: "oversized-activity" } } }] } } });
+    expect(db.workroomActivity.findMany).not.toHaveBeenCalled();
+    expect(db.workroom.findUnique).toHaveBeenCalledExactlyOnceWith({ where: { capsuleId: "WC-1" },
+      select: { id: true, capsuleId: true, activitySequence: true } });
+    expect(JSON.stringify(result).length).toBeLessThan(4000);
+  });
+
+  it("withholds bounded activity on current admission denial without selecting history", async () => {
+    db.workroom.findUnique.mockResolvedValue({ ...room, activitySequence: 1 });
+    roomAccess.mockResolvedValue({ decision: { level: "none" } });
+    const result = await getWorkCapsuleTool({ capsuleId: "WC-1", activityMode: "bounded" }, "requester-1", { agentId: "AGT-EXT-CODEX" });
+    expect(result).toMatchObject({ success: false, error: "workroom_content_access_required" });
+    expect(db.$queryRaw).not.toHaveBeenCalled();
+    expect(db.workroomActivity.findMany).not.toHaveBeenCalled();
+  });
+
+  it("withholds bounded results when admission changes before the response", async () => {
+    db.workroom.findUnique.mockResolvedValue({ ...room, activitySequence: 1 });
+    db.$queryRaw.mockResolvedValue([{ id: "activity-1", sequence: 1, kind: "note", summary: "private-row" }]);
+    roomAccess.mockResolvedValueOnce({ decision: { level: "content" } }).mockResolvedValueOnce({ decision: { level: "none" } });
+    const result = await getWorkCapsuleTool({ capsuleId: "WC-1", activityMode: "bounded" }, "requester-1", { agentId: "AGT-EXT-CODEX" });
+    expect(result).toMatchObject({ success: false, error: "workroom_content_access_required" });
+    expect(JSON.stringify(result)).not.toContain("private-row");
+  });
+
+  it("reports bounded transaction failure without claiming an empty completed range", async () => {
+    db.$transaction.mockRejectedValue(new Error("statement timeout"));
+    expect(await getWorkCapsuleTool({ capsuleId: "WC-1", activityMode: "bounded" }, "requester-1")).toMatchObject({
+      success: false, error: "activity_read_unavailable",
+    });
+    expect(db.workroomActivity.findMany).not.toHaveBeenCalled();
+  });
+
+  it("requires explicit bounded mode for detail arguments instead of silently ignoring them", async () => {
+    expect(await getWorkCapsuleTool({ capsuleId: "WC-1", activityId: "activity-1" }, "requester-1")).toMatchObject({
+      success: false, error: "invalid_activity_read",
+    });
+    expect(db.workroom.findUnique).not.toHaveBeenCalled();
   });
 
   it("keeps current recovery parseable at the actual model-facing response boundary", async () => {

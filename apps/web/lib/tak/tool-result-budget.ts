@@ -91,7 +91,12 @@ export type ClampedToolResult = {
 
 function buildFullText(result: ModelFacingToolResult): string {
   if (!result.success) {
-    const data = result.data as { page?: { version?: number; disposition?: string }; recovery?: { toolName?: string } } | undefined;
+    const data = result.data as { page?: { version?: number; disposition?: string; readKind?: string }; recovery?: { toolName?: string }; log?: { nextAfterSequence?: number; incomplete?: boolean } } | undefined;
+    if (data?.page?.version === 1 && data.page.readKind === "workroom-activity" && data.recovery?.toolName === "get_workroom") {
+      return JSON.stringify({ success: false, error: result.error, message: result.message,
+        data: { page: data.page, log: data.log ? { nextAfterSequence: data.log.nextAfterSequence, incomplete: data.log.incomplete } : undefined,
+          recovery: data.recovery } });
+    }
     if (data?.page?.version === 1 && data.page.disposition === "restart-required" && data.recovery?.toolName === "list_workrooms") {
       return JSON.stringify({ success: false, error: result.error, message: result.message,
         data: { page: data.page, recovery: data.recovery } });
@@ -160,9 +165,12 @@ export function clampToolResultForModel(
   // Typed Workroom pages must never become a successful-looking text prefix.
   // A mask or an unusually small caller cap may enlarge/exceed the pre-sized
   // page. Refuse that envelope explicitly; its cursor must not skip unseen rows.
-  const page = (result.data as { page?: { version?: number; observationId?: string; disposition?: string } } | undefined)?.page;
-  if (page?.version === 1 && (typeof page.observationId === "string" || page.disposition === "restart-required")) {
-    const error = JSON.stringify({ success: false, error: "page_budget_too_small", recovery: "Restart list_workrooms without cursor and with limit:1; preserve filters." });
+  const page = (result.data as { page?: { version?: number; observationId?: string; disposition?: string; readKind?: string } } | undefined)?.page;
+  if (page?.version === 1 && (typeof page.observationId === "string" || page.disposition === "restart-required" || page.readKind === "workroom-activity")) {
+    const recovery = page.readKind === "workroom-activity"
+      ? "Repeat get_workroom with activityMode:bounded, the unchanged sequence bounds and activityLimit:1, or select a narrower payloadPath. No cursor advancement is authorized."
+      : "Restart list_workrooms without cursor and with limit:1; preserve filters.";
+    const error = JSON.stringify({ success: false, error: "page_budget_too_small", recovery });
     return { text: error.length <= maxChars ? error : maxChars >= 2 ? "{}" : "", truncated: true, originalChars: full.length,
       ...hidden, ...(handle ? { rehydrationHandle: handle } : {}) };
   }

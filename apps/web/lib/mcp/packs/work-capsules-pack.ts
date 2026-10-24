@@ -106,12 +106,18 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "get_workroom",
-    description: "Fetch one Workroom with its recent activity timeline. Pass afterSequence to read the room's ordered log from a position you already hold: every later activity exactly once, in order (the room's activitySequence is the latest). Read-only.",
+    description: "Fetch one Workroom with its recent activity timeline. Pass afterSequence to read the room's ordered log from a position you already hold: every later activity exactly once, in order (the room's activitySequence is the latest). Use activityMode:bounded for finite metadata pages or exact selected-value detail. Metadata defers payload evidence; it is not a complete receipt. Read-only.",
     inputSchema: {
       type: "object",
       properties: {
         capsuleId: { type: "string", description: "Semantic Workroom id (WC-*)." },
         afterSequence: { type: "integer", minimum: 0, description: "Return data.log.activity: rows with sequence greater than this, oldest first, up to 200 (data.log.hasMore says when to read again)." },
+        activityMode: { type: "string", enum: ["bounded"], description: "Read bounded metadata or selected detail instead of the full room. Recheck current content admission on each read." },
+        throughSequence: { type: "integer", minimum: 0, description: "Bounded mode: preserve the first page's upper sequence bound while reading nextAfterSequence. Later writes are outside this range." },
+        activityLimit: { type: "integer", minimum: 1, maximum: 20, description: "Bounded mode: requested metadata page size; whole records may fill the budget sooner." },
+        activityId: { type: "string", maxLength: 200, description: "Bounded mode: exact activity ID in this room for a selected-value read. No history cursor is advanced." },
+        activityField: { type: "string", enum: ["payload", "summary"], description: "Detail field; defaults to payload. Large values are refused with a narrower-path instruction." },
+        payloadPath: { type: "array", maxItems: 16, items: { type: "string", maxLength: 200 }, description: "Detail only: object keys or array indexes within payload. Empty selects the whole payload; a selected value is not a full activity receipt." },
       },
       required: ["capsuleId"],
     },
