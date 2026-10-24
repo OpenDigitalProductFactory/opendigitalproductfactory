@@ -245,7 +245,7 @@ test("gate-worktree.mjs refuses to run when neither an explicit command, the stu
   mkdirSync(join(temp, "scripts", "lib"), { recursive: true });
   mkdirSync(join(temp, "apps", "web", "lib", "nonprod"), { recursive: true });
   cpSync(gateScript, join(temp, "scripts", "gate-worktree.mjs"));
-  for (const name of ["mcp-host-trust.mjs", "resolve-compose-install-context.mjs"]) {
+  for (const name of ["mcp-host-trust.mjs", "foreground-gate-process.mjs", "resolve-compose-install-context.mjs"]) {
     cpSync(join(repoRoot, "scripts", "lib", name), join(temp, "scripts", "lib", name));
   }
   // BI-A254A94C: sandbox admission is a static import. The temp tree has to

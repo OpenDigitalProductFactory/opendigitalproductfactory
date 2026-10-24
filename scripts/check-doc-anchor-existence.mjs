@@ -33,8 +33,8 @@
 //   node scripts/check-doc-anchor-existence.mjs            # check (CI)
 //   node scripts/check-doc-anchor-existence.mjs --update   # regenerate the grandfather baseline
 //
-// Endpoint: $DPF_MCP_ENDPOINT (default http://127.0.0.1:3000/api/mcp/v1),
-// bearer $DPF_MCP_BEARER_TOKEN.
+// Endpoint: $DPF_MCP_URL, then legacy $DPF_MCP_ENDPOINT, then loopback default.
+// Credentials use the shared client-credentials resolver and legacy PAT fallback.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -44,6 +44,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { formatTxtBudgetHeader, parseTxtBudgetHeader } from "./lib/baseline-budget.mjs";
 import { listChangedFiles, runGit } from "./lib/git-changed-files.mjs";
 import { mcpPost } from "./lib/mcp-client.mjs";
+import { resolveMcpCredential } from "./lib/mcp-credential.mjs";
 
 export { listChangedFiles, runGit };
 
@@ -51,6 +52,13 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
 const BASELINE_PATH = path.join(REPO_ROOT, "scripts", "doc-anchor-baseline.txt");
 export const DEFAULT_ENDPOINT = "http://127.0.0.1:3000/api/mcp/v1";
 const FETCH_TIMEOUT_MS = 5000;
+
+// Keep the refreshable bearer and selected endpoint together. A malformed
+// configured client must remain unavailable, never retry as another identity.
+export function resolveDocAnchorConnection(env = process.env, { resolveCredential = resolveMcpCredential } = {}) {
+  const endpoint = env.DPF_MCP_URL?.trim() || env.DPF_MCP_ENDPOINT?.trim() || DEFAULT_ENDPOINT;
+  return { endpoint, bearer: resolveCredential({ mcpUrl: endpoint, env }).bearer };
+}
 
 const DEFAULT_BUDGET = Object.freeze({ owner: "platform-architecture", expiry: "2026-11-16" });
 const BUDGET_NOTE_LINES = Object.freeze([
@@ -274,14 +282,15 @@ async function main() {
     return;
   }
 
-  const token = process.env.DPF_MCP_BEARER_TOKEN;
-  const endpoint = process.env.DPF_MCP_ENDPOINT || DEFAULT_ENDPOINT;
-  if (!token) {
-    console.warn(`[doc-anchor] WARN: ${newPairs.length} new citation(s) NOT verified — DPF_MCP_BEARER_TOKEN unset (no live install on this runner). Skipped:`);
+  let connection;
+  try { connection = resolveDocAnchorConnection(); } catch { /* Missing or invalid configured credentials are unknown. */ }
+  if (!connection) {
+    console.warn(`[doc-anchor] WARN: ${newPairs.length} new citation(s) NOT verified — configured MCP credential unavailable. Skipped:`);
     for (const p of newPairs) console.warn(`  ~ ${p.doc}: ${p.id}`);
     console.warn("[doc-anchor] Passing (degraded). Verify on an install with the portal up before merge.");
     return;
   }
+  const { endpoint, bearer: token } = connection;
 
   let epicListing = null; // one list_epics call serves every EP-* id
   const lookup = async (kind, id) => {
