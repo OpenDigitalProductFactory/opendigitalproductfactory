@@ -1,6 +1,6 @@
 import { prisma } from "@dpf/db";
 import type { ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
-import type { InitiativeReadinessDecision } from "@/lib/backlog/initiative-readiness";
+import type { InitiativeReadinessDecision, ReadinessRequirementResult } from "@/lib/backlog/initiative-readiness";
 import { currentUserContext } from "@/lib/govern/current-user-context";
 import { can } from "@/lib/permissions";
 import { expandGrants } from "@/lib/tak/agent-grants";
@@ -164,10 +164,11 @@ export async function authorizeCoworkerRequest(
   if (options?.sourceOnly && item.data?.scopeKind !== "platform") {
     return deny("Source-only classification requires a platform-scoped review.");
   }
-  const readiness = item.data?.readiness as { decisions?: Partial<Record<"plan" | "implementation" | "completion", InitiativeReadinessDecision>> } | undefined;
+  const readiness = item.data?.readiness as { decisions?: Partial<Record<"plan" | "implementation" | "completion", InitiativeReadinessDecision>>;
+    planBaselinePrerequisite?: ReadinessRequirementResult | null } | undefined;
   if (!item.success || !readiness?.decisions) return deny("This item's readiness could not be resolved.");
   const { decisionForIndependentReview } = await import("@/lib/backlog/initiative-readiness/design-phase-recovery");
-  const decision = decisionForIndependentReview(binding.writerToolName, readiness.decisions);
+  const decision = decisionForIndependentReview(binding.writerToolName, readiness.decisions, readiness.planBaselinePrerequisite);
   if (!decision) return !options?.sourceOnly && await hasCompletedReview(params, userId, context)
     ? { bounded: true } : deny("This item has no pending review for the requested lane.");
   if (decision.verdict === "allowed") return !options?.sourceOnly && await hasCompletedReview(params, userId, context)

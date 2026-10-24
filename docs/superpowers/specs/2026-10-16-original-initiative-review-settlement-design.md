@@ -513,3 +513,31 @@ omit it and return `proofInventoryUnavailable: "budget"` if that marker fits;
 otherwise return the complete base without the marker. A valid locator three
 characters longer exercises the marker-omission boundary. Base overflow still
 returns the original over-budget refusal. Neither path authorizes replay.
+
+## October 23 bounded recovery: issued review admission
+
+The live implementation claim for BI-7906C73E issued a spec-approval packet
+because plan coverage lacked its objective baseline. Admission rejected that
+exact packet with "This item has no pending review for the requested lane."
+A merged diagnostic contribution had made delivery completion allowed; that
+projection erased the prerequisite the admission selector used. No task was
+created by the refused request.
+
+Keep delivery completion unchanged. Resolve the missing planning prerequisite
+from the complete own and inherited baseline history, and pass that compact
+observation to the existing independent-review selector for both bounded reads
+and request admission. Only input-required implementation with missing plan
+coverage qualifies. An unavailable design observation or any retained baseline
+history suppresses the new route. Read failures remain failures. Explicit null
+means no observed prerequisite; legacy callers without the field retain their
+existing behavior.
+
+The claim-to-admission regression reproduces the native rejection before the
+repair. Verification covers the exact bounded packet, retained/inherited and
+malformed history, changed authority, and unresolved original reviews. The
+change introduces no writer, settlement proof, replay permission or exemption
+from independent review. Historical DED689F4DDF6 remains UNKNOWN; native baseline
+and plan review are unrun. This bounded DEV admission repair follows the existing
+recovery procedure with independent source assessment, normal tests, DCO,
+local gate and protected publication. It does not deliver the full historical
+recovery specification or BI-5366EF78's receiver acknowledgement.
