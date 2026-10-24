@@ -5,10 +5,20 @@ import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDatabaseClient } from "@dpf/db";
+import { createHandoffDependencyPostgresFixture } from "../../../../packages/db/src/handoff-dependency-postgres-fixture";
 vi.mock("@/lib/portal-context/invalidation", () => ({ revalidatePortalContext: vi.fn() }));
 vi.mock("./receipted-tool", () => ({ hasBoundCommandTransaction: () => true }));
-const fixture = vi.hoisted(() => ({ prisma: null as any, onReceiptTransaction: undefined as ((tx: ReceiptDb) => Promise<void>) | undefined, onExemptionTransaction: undefined as ((tx: RawTx) => Promise<void>) | undefined, beforeTransfer: undefined as ((tx: RawTx) => Promise<void>) | undefined, beforeEvidenceRead: undefined as (() => Promise<void>) | undefined, beforeEvidenceInsert: undefined as ((tx: RawTx) => Promise<void>) | undefined }));
+const fixture = vi.hoisted(() => ({ prisma: null as any, telemetry: new Set<Promise<void>>(), afterEnvironmentLocks: undefined as (() => Promise<void>) | undefined, onReceiptTransaction: undefined as ((tx: ReceiptDb) => Promise<void>) | undefined, onExemptionTransaction: undefined as ((tx: RawTx) => Promise<void>) | undefined, beforeTransfer: undefined as ((tx: RawTx) => Promise<void>) | undefined, beforeEvidenceRead: undefined as (() => Promise<void>) | undefined, beforeEvidenceInsert: undefined as ((tx: RawTx) => Promise<void>) | undefined }));
 vi.mock("@dpf/db", async (original) => ({ ...await original<typeof import("@dpf/db")>(), get prisma() { return fixture.prisma; } }));
+vi.mock("@/lib/queue/queue-telemetry", async (original) => {
+  const actual = await original<typeof import("@/lib/queue/queue-telemetry")>();
+  return { ...actual, recordQueueTransition: (...args: Parameters<typeof actual.recordQueueTransition>) => {
+    const pending = actual.recordQueueTransition(...args);
+    fixture.telemetry.add(pending);
+    void pending.finally(() => fixture.telemetry.delete(pending));
+    return pending;
+  } };
+});
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/install/environment-class", () => ({ loadEnvironmentClassResolution: async () => ({ environmentClass: "development" }) }));
 vi.mock("@/lib/installation-journey/operating-intent", () => ({ loadInstallationOperatingIntent: async () => ({ status: "valid", intent: { primaryPurpose: "evolve-dpf" } }) }));
@@ -24,14 +34,15 @@ vi.mock("@/lib/work-management/workroom-agent-access.server", async (original) =
 }));
 import { commandAuthorityScopeKey, commandPayloadBinding, runReceiptedCommand, type ReceiptDb } from "./command-receipts";
 import { recordSemanticReviewExemption } from "../change-review/semantic-review-policy-exemption";
-import { lockAllNonprodEnvironments, lockNonprodEnvironment, NONPROD_ENVIRONMENT_KEYS } from "../nonprod/environment-lease-lock";
+import { lockAllNonprodEnvironments, NONPROD_ENVIRONMENT_KEYS, type NonprodEnvironmentKey } from "../nonprod/environment-lease-lock";
+import { claimNonprodEnvironmentLease, releaseNonprodEnvironmentLease, renewNonprodEnvironmentLease } from "../nonprod/environment-lease";
 import { reassignCapsuleExecutor } from "./reassign-executor-handler";
 import { parseBoundedHandoffCommand } from "./bounded-handoff-command";
 import type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
 import type { ToolResult } from "@/lib/mcp-tool-types";
 const configured = process.env.DATABASE_URL?.trim() ?? "";
 const DATABASE_URL = process.env.DPF_JOBS_TEST_DATABASE_URL?.trim() || (() => { try { return /^\/dpf_local_ci_[01]$/.test(new URL(configured).pathname) ? configured : ""; } catch { return ""; } })();
-const SCHEMA = "dpf_handoff_test_" + randomUUID().replaceAll("-", "");
+const SCHEMA = "dpf_handoff_dependency_" + randomUUID().replaceAll("-", "");
 type RawTx = Pick<ReturnType<typeof createDatabaseClient>, "$queryRaw" | "$executeRaw">;
 const source: WorkCapsuleActor = { userId: "owner", principalId: "human", agentId: "AGT-EXT-CLAUDE", agentPrincipalId: "claude" };
 const receiver: WorkCapsuleActor = { ...source, agentId: "AGT-EXT-CODEX", agentPrincipalId: "codex" };
@@ -83,26 +94,29 @@ function port(tx: RawTx): ReceiptDb & CapsuleDb & { workroomActivity: CapsuleDb[
   };
 }
 describe.skipIf(!DATABASE_URL)("bounded handoff transaction protocol (PostgreSQL)", () => {
-  let pool: Pool; let prisma: ReturnType<typeof createDatabaseClient>;
+  let pool: Pool; let prisma: ReturnType<typeof createHandoffDependencyPostgresFixture>["prisma"];
   beforeAll(async () => {
     pool = new Pool({ connectionString: DATABASE_URL, options: "-c search_path=" + SCHEMA });
     await pool.query('CREATE SCHEMA "' + SCHEMA + '"');
-    const url = new URL(DATABASE_URL); url.searchParams.set("options", "-c search_path=" + SCHEMA); prisma = createDatabaseClient(url.toString());
+    prisma = createHandoffDependencyPostgresFixture(DATABASE_URL, SCHEMA).prisma;
+    // Empty structures from the already-migrated disposable database, never its rows.
+    for (const table of ["NonProductionEnvironmentLease", "QueueTelemetryEvent", "PlatformConfig", "TaskRun"]) {
+      await pool.query(`CREATE TABLE "${table}" (LIKE public."${table}" INCLUDING ALL)`);
+    }
     await pool.query(`CREATE TABLE "WorkCapsule" (id TEXT PRIMARY KEY, "capsuleId" TEXT UNIQUE, "executorKind" TEXT, "executorRef" TEXT, "leaseHolderPrincipalId" TEXT, "leaseExpiresAt" TIMESTAMP(3), "featureBuildId" TEXT, "createdByPrincipalId" TEXT, "requestedByPrincipalId" TEXT, transfers INT DEFAULT 0, "headSha" TEXT, "repositoryFullName" TEXT, "headBranch" TEXT);
       CREATE TABLE "WorkCapsuleActivity" (id TEXT PRIMARY KEY, "workCapsuleId" TEXT REFERENCES "WorkCapsule"(id), kind TEXT, summary TEXT, payload JSONB, "recordedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP, "recordedById" TEXT, "recordedByAgentId" TEXT, "commandScopeKey" TEXT, "commandKey" TEXT, UNIQUE("commandScopeKey", "commandKey"));
-      CREATE TABLE "NonProductionEnvironmentLease" ("leaseId" TEXT PRIMARY KEY, "ownerSessionId" TEXT, status TEXT, "environmentKey" TEXT);
       CREATE TABLE "ExternalEvidenceRecord" (id TEXT PRIMARY KEY, "workCapsuleId" TEXT, "operationType" TEXT, details JSONB);
       CREATE TABLE "Agent" (id TEXT PRIMARY KEY, "agentId" TEXT); CREATE TABLE "BacklogItem" (id TEXT PRIMARY KEY, "itemId" TEXT);
       CREATE TABLE "Principal" (id TEXT PRIMARY KEY); CREATE TABLE "PrincipalAlias" (id TEXT PRIMARY KEY, "principalId" TEXT, issuer TEXT, "aliasType" TEXT, "aliasValue" TEXT);
       CREATE TABLE "User" (id TEXT PRIMARY KEY); CREATE TABLE "WorkItem" (id TEXT PRIMARY KEY); CREATE TABLE "WorkCapsuleParticipant" (id TEXT PRIMARY KEY, "workroomId" TEXT);`);
   });
-  afterAll(async () => { await prisma?.$disconnect(); if (pool) { try { await pool.query('DROP SCHEMA IF EXISTS "' + SCHEMA + '" CASCADE'); } finally { await pool.end(); } } });
-  beforeEach(async () => { fixture.onReceiptTransaction = undefined; fixture.onExemptionTransaction = undefined; fixture.beforeTransfer = undefined; fixture.beforeEvidenceRead = undefined; fixture.beforeEvidenceInsert = undefined; fixture.prisma = { ...port(prisma), $transaction: (fn: any, options: any) => prisma.$transaction(async (tx) => { await fixture.onExemptionTransaction?.(tx); return fn(port(tx)); }, options) }; await pool.query(`TRUNCATE "WorkCapsuleActivity", "NonProductionEnvironmentLease", "ExternalEvidenceRecord"; DELETE FROM "WorkCapsule"; INSERT INTO "WorkCapsule" (id, "capsuleId", "executorKind", "executorRef", "leaseHolderPrincipalId", "leaseExpiresAt", "createdByPrincipalId", "requestedByPrincipalId") VALUES ('row-1','WC-1','claude-desktop','source-chat','human',clock_timestamp()+interval '30 minutes','human','human'); UPDATE "WorkCapsule" SET "headSha"='${HEAD}', "repositoryFullName"='owner/repo', "headBranch"='fix/topic'`); });
+  afterAll(async () => { while (fixture.telemetry.size) await Promise.all([...fixture.telemetry]); await prisma?.$disconnect(); if (pool) { try { await pool.query('DROP SCHEMA IF EXISTS "' + SCHEMA + '" CASCADE'); } finally { await pool.end(); } } });
+  beforeEach(async () => { while (fixture.telemetry.size) await Promise.all([...fixture.telemetry]); fixture.afterEnvironmentLocks = undefined; fixture.onReceiptTransaction = undefined; fixture.onExemptionTransaction = undefined; fixture.beforeTransfer = undefined; fixture.beforeEvidenceRead = undefined; fixture.beforeEvidenceInsert = undefined; fixture.prisma = { ...port(prisma), queueTelemetryEvent: prisma.queueTelemetryEvent, $transaction: (fn: any, options: any) => prisma.$transaction(async (tx) => { await fixture.onExemptionTransaction?.(tx); return fn(port(tx)); }, options) }; await pool.query(`TRUNCATE "WorkCapsuleActivity", "NonProductionEnvironmentLease", "ExternalEvidenceRecord", "QueueTelemetryEvent", "TaskRun", "PlatformConfig"; DELETE FROM "WorkCapsule"; INSERT INTO "WorkCapsule" (id, "capsuleId", "executorKind", "executorRef", "leaseHolderPrincipalId", "leaseExpiresAt", "createdByPrincipalId", "requestedByPrincipalId") VALUES ('row-1','WC-1','claude-desktop','source-chat','human',clock_timestamp()+interval '30 minutes','human','human'); UPDATE "WorkCapsule" SET "headSha"='${HEAD}', "repositoryFullName"='owner/repo', "headBranch"='fix/topic'`); });
   async function call(params: Record<string, unknown>, actor = source) {
     const command = parseBoundedHandoffCommand(params)!;
     const db = { ...port(prisma), $transaction: <T>(fn: (tx: ReceiptDb) => Promise<T>, options?: any) => prisma.$transaction((tx) => fn(port(tx)), options) };
     try {
-      return await runReceiptedCommand<ToolResult>({ db, commandType: "reassign-executor", authorityScopeKey: commandAuthorityScopeKey(actor), actor: { userId: actor.userId, agentId: actor.agentId }, commandId: command.commandId, target: { kind: "workroom", id: "WC-1" }, payloadBinding: commandPayloadBinding(command), beforeRoomLock: async (tx) => { await fixture.onReceiptTransaction?.(tx); await lockAllNonprodEnvironments(tx); },
+      return await runReceiptedCommand<ToolResult>({ db, commandType: "reassign-executor", authorityScopeKey: commandAuthorityScopeKey(actor), actor: { userId: actor.userId, agentId: actor.agentId }, commandId: command.commandId, target: { kind: "workroom", id: "WC-1" }, payloadBinding: commandPayloadBinding(command), beforeRoomLock: async (tx) => { await fixture.onReceiptTransaction?.(tx); await lockAllNonprodEnvironments(tx); await fixture.afterEnvironmentLocks?.(); },
         run: async (tx) => { const result = await reassignCapsuleExecutor({ params, db: tx as CapsuleDb, resolveActor: async () => actor }); if (!result.success) throw Object.assign(new Error(result.message), { result }); return result; },
         rejectionOf: (error: any) => error.result ? { code: error.result.error, message: error.message, data: { result: error.result } } : null });
     } catch (error: any) { return error.result ?? error.rejection?.data?.result ?? { success: false, error: error.code }; }
@@ -144,13 +158,49 @@ describe.skipIf(!DATABASE_URL)("bounded handoff transaction protocol (PostgreSQL
     }
     throw new Error("PostgreSQL did not observe process " + waiter + " waiting for " + holder);
   }
-  it.each(NONPROD_ENVIRONMENT_KEYS)("observes a %s lease inserted before the shared fence", async (environmentKey) => {
+  type LeaseTransaction = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+  type LeaseTransactionOptions = Parameters<typeof prisma.$transaction>[1];
+  function leaseDb(hooks: {
+    started?: (tx: LeaseTransaction) => Promise<void>;
+    beforeCommit?: (tx: LeaseTransaction) => Promise<void>;
+  } = {}): typeof prisma {
+    // Observe the real allocator transaction; do not replace its lock or mutation.
+    return new Proxy(prisma, {
+      get(target, property, receiver) {
+        if (property === "$transaction") {
+          return <T>(body: (tx: LeaseTransaction) => Promise<T>, options?: LeaseTransactionOptions) =>
+            target.$transaction(async (tx) => {
+              await hooks.started?.(tx);
+              const result = await body(tx);
+              await hooks.beforeCommit?.(tx);
+              return result;
+            }, options);
+        }
+        const value = Reflect.get(target, property, receiver);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+  }
+  function leaseInput(environmentKey: NonprodEnvironmentKey, ownerSessionId = "source-chat", claimKey = `pg-claim:${randomUUID()}`): Parameters<typeof claimNonprodEnvironmentLease>[0] {
+    return { db: prisma, environmentKey, ownerProvider: "codex", ownerSessionId, claimKey,
+      purpose: "Isolated PostgreSQL handoff race", url: "http://fixture.invalid", ports: [],
+      expiresAt: new Date(Date.now() + 600_000),
+      ...(environmentKey === "host-heavy-resource" ? { resourceClass: "typescript", expectedMemoryBytes: 6 * 1024 ** 3,
+        ownerProcessId: 123, ownerProcessIdentity: "fixture-process", hostResource: {
+          totalMemoryBytes: 128 * 1024 ** 3, availableMemoryBytes: 64 * 1024 ** 3, inferenceResident: false,
+        } } : {}),
+    };
+  }
+  it.each(NONPROD_ENVIRONMENT_KEYS)("observes actual %s allocation committed before the handoff fence", async (environmentKey) => {
     const locked = signal<number>(), waiting = signal<number>(), release = signal();
     fixture.onReceiptTransaction = async (tx) => { waiting.resolve(await backendPid(tx)); };
-    const allocation = prisma.$transaction(async (tx) => { await lockNonprodEnvironment(tx, environmentKey); locked.resolve(await backendPid(tx)); await release.promise; await tx.$executeRaw`INSERT INTO "NonProductionEnvironmentLease" VALUES ('lease-fixture','source-chat','queued',${environmentKey})`; });
+    const allocation = claimNonprodEnvironmentLease({ ...leaseInput(environmentKey), db: leaseDb({ beforeCommit: async (tx) => {
+      locked.resolve(await backendPid(tx)); await release.promise;
+    } }) });
     const holder = await locked.promise; const handoff = call(request);
     try { await waitForBlockedBy(await waiting.promise, holder); } finally { release.resolve(); }
-    await allocation; expect(await handoff).toMatchObject({ success: false, error: "handoff-lease-dependency" });
+    expect(await allocation).toMatchObject({ status: "admitted" });
+    expect(await handoff).toMatchObject({ success: false, error: "handoff-lease-dependency" });
     expect((await pool.query('SELECT transfers FROM "WorkCapsule"')).rows[0].transfers).toBe(0);
   });
   it("refuses a handoff after actual exemption publication wins the room fence", async () => {
@@ -174,15 +224,84 @@ describe.skipIf(!DATABASE_URL)("bounded handoff transaction protocol (PostgreSQL
     expect(await handoff).toMatchObject({ success: true }); expect(await publication).toMatchObject({ success: false, error: "review_exemption_refused" });
     expect((await pool.query('SELECT count(*)::int AS n FROM "ExternalEvidenceRecord"')).rows[0].n).toBe(0);
   });
-  it.each(NONPROD_ENVIRONMENT_KEYS)("keeps a later %s allocation separate from a completed handoff", async (environmentKey) => {
+  it.each(NONPROD_ENVIRONMENT_KEYS)("keeps later actual %s allocation separate from a completed handoff", async (environmentKey) => {
     const id = await pending(); const locked = signal<number>(), waiting = signal<number>(), release = signal();
     fixture.beforeTransfer = async (tx) => { locked.resolve(await backendPid(tx)); await release.promise; };
     const handoff = call(ack(id,"ack-first"),receiver); const holder = await locked.promise;
-    const allocation = prisma.$transaction(async (tx) => { waiting.resolve(await backendPid(tx)); await lockNonprodEnvironment(tx, environmentKey); await tx.$executeRaw`INSERT INTO "NonProductionEnvironmentLease" VALUES ('later-lease','source-chat','active',${environmentKey})`; });
+    const allocation = claimNonprodEnvironmentLease({ ...leaseInput(environmentKey), db: leaseDb({ started: async (tx) => { waiting.resolve(await backendPid(tx)); } }) });
     try { await waitForBlockedBy(await waiting.promise, holder); } finally { release.resolve(); }
-    expect((await handoff).success).toBe(true); await allocation;
-    expect((await pool.query('SELECT "ownerSessionId" FROM "NonProductionEnvironmentLease"')).rows[0].ownerSessionId).toBe("source-chat");
+    expect((await handoff).success).toBe(true);
+    expect(await allocation).toMatchObject({ status: "admitted", lease: { ownerSessionId: "source-chat" } });
     expect((await pool.query('SELECT transfers FROM "WorkCapsule"')).rows[0].transfers).toBe(1);
+  });
+  it.each(["lease-first", "handoff-first"] as const)("serializes actual terminal gate resumption (%s)", async (order) => {
+    const input = leaseInput("local-integration-ci", "source-chat", `gate:${"e".repeat(64)}`);
+    const initial = await claimNonprodEnvironmentLease(input);
+    expect(initial.status).toBe("admitted");
+    await releaseNonprodEnvironmentLease({ db: prisma, leaseId: initial.lease.leaseId, ownerSessionId: "source-chat" });
+    const id = await pending();
+    const held = signal<number>(), waiting = signal<number>(), release = signal();
+    let resumed: ReturnType<typeof claimNonprodEnvironmentLease>;
+    let handoff: ReturnType<typeof call>;
+    if (order === "lease-first") {
+      fixture.onReceiptTransaction = async (tx) => { waiting.resolve(await backendPid(tx)); };
+      resumed = claimNonprodEnvironmentLease({ ...input, resumeLeaseId: initial.lease.leaseId,
+        db: leaseDb({ beforeCommit: async (tx) => { held.resolve(await backendPid(tx)); await release.promise; } }) });
+      const holder = await held.promise; handoff = call(ack(id,"ack-terminal"),receiver);
+      try { await waitForBlockedBy(await waiting.promise, holder); } finally { release.resolve(); }
+    } else {
+      fixture.beforeTransfer = async (tx) => { held.resolve(await backendPid(tx)); await release.promise; };
+      handoff = call(ack(id,"ack-terminal"),receiver); const holder = await held.promise;
+      resumed = claimNonprodEnvironmentLease({ ...input, resumeLeaseId: initial.lease.leaseId,
+        db: leaseDb({ started: async (tx) => { waiting.resolve(await backendPid(tx)); } }) });
+      try { await waitForBlockedBy(await waiting.promise, holder); } finally { release.resolve(); }
+    }
+    expect(await resumed).toMatchObject({ status: "admitted", lease: { leaseId: initial.lease.leaseId, ownerSessionId: "source-chat" } });
+    expect(await handoff).toMatchObject(order === "lease-first"
+      ? { success: false, error: "handoff-lease-dependency" } : { success: true });
+    expect((await pool.query('SELECT transfers FROM "WorkCapsule"')).rows[0].transfers).toBe(order === "lease-first" ? 0 : 1);
+  });
+  it.each(["release-first", "handoff-first"] as const)("keeps a queued dependency protected through actual release and admission (%s)", async (order) => {
+    const id = await pending();
+    const occupant = await claimNonprodEnvironmentLease(leaseInput("active-candidate", "unrelated-session"));
+    const queued = await claimNonprodEnvironmentLease(leaseInput("active-candidate"));
+    expect(occupant.status).toBe("admitted"); expect(queued.status).toBe("queued");
+    const held = signal<number>(), waiting = signal<number>(), release = signal();
+    let released: ReturnType<typeof releaseNonprodEnvironmentLease>;
+    let handoff: ReturnType<typeof call>;
+    if (order === "release-first") {
+      fixture.onReceiptTransaction = async (tx) => { waiting.resolve(await backendPid(tx)); };
+      released = releaseNonprodEnvironmentLease({ leaseId: occupant.lease.leaseId,
+        db: leaseDb({ beforeCommit: async (tx) => { held.resolve(await backendPid(tx)); await release.promise; } }) });
+      const holder = await held.promise; handoff = call(ack(id,"ack-queued"),receiver);
+      try { await waitForBlockedBy(await waiting.promise, holder); } finally { release.resolve(); }
+    } else {
+      let handoffPid = 0;
+      fixture.onReceiptTransaction = async (tx) => { handoffPid = await backendPid(tx); };
+      fixture.afterEnvironmentLocks = async () => { held.resolve(handoffPid); await release.promise; };
+      handoff = call(ack(id,"ack-queued"),receiver); const holder = await held.promise;
+      released = releaseNonprodEnvironmentLease({ leaseId: occupant.lease.leaseId,
+        db: leaseDb({ started: async (tx) => { waiting.resolve(await backendPid(tx)); } }) });
+      try { await waitForBlockedBy(await waiting.promise, holder); } finally { release.resolve(); }
+    }
+    expect(await released).toMatchObject({ status: "released" });
+    expect(await handoff).toMatchObject({ success: false, error: "handoff-lease-dependency" });
+    expect(await prisma.nonProductionEnvironmentLease.findUnique({ where: { leaseId: queued.lease.leaseId } }))
+      .toMatchObject({ status: "active", ownerSessionId: "source-chat" });
+    expect((await pool.query('SELECT transfers FROM "WorkCapsule"')).rows[0].transfers).toBe(0);
+  });
+  it.each(["renew-first", "concurrent"] as const)("refuses an existing dependency across actual renewal (%s)", async (order) => {
+    const id = await pending();
+    const lease = await claimNonprodEnvironmentLease(leaseInput("active-candidate"));
+    expect(lease.status).toBe("admitted");
+    const renew = () => renewNonprodEnvironmentLease({ db: prisma, leaseId: lease.lease.leaseId,
+      ownerSessionId: "source-chat", ttlMs: 600_000 });
+    const [renewal, handoff] = order === "renew-first"
+      ? [await renew(), await call(ack(id,"ack-renew-resource"),receiver)]
+      : await Promise.all([renew(), call(ack(id,"ack-renew-resource"),receiver)]);
+    expect(renewal).toMatchObject({ status: "renewed" });
+    expect(handoff).toMatchObject({ success: false, error: "handoff-lease-dependency" });
+    expect((await pool.query('SELECT transfers FROM "WorkCapsule"')).rows[0].transfers).toBe(0);
   });
   it("rolls back the transfer when durable completion publication fails", async () => {
     const id = await pending(); await pool.query(`ALTER TABLE "WorkCapsuleActivity" ADD CONSTRAINT reject_completion CHECK (payload->>'state' IS DISTINCT FROM 'completed')`);
