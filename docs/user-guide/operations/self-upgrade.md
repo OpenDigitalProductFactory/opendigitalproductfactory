@@ -32,8 +32,11 @@ is unavailable and does not offer or queue an upgrade.
    trigger.
 
    A waiting update stays named on the card while an upgrade is running
-   (**Installing now**) and after one fails (**Update still pending**), so a
-   failed or in-progress attempt never reads as being up to date.
+   (**Installing now**) and after one fails (**Update still pending**). If an
+   update was installed but its resumed completion step reported that the
+   drain had already ended, the card checks that the failed attempt's target
+   is actually running before disregarding that specific reporting error.
+   Other failures remain visible, even when the install is current.
 2. Review the pending upgrade and what it will change before triggering anything.
    **What's in this update?** compares the running build with the resolved
    update. Consumer installs read published source changes without needing a
@@ -143,6 +146,9 @@ upgrade. Nothing is lost by waiting.
   along with whether re-running is likely to help. Some causes (your changes
   clashing with the update, uncommitted local edits) will not clear on a retry
   and say so; those need a decision rather than another attempt.
+- A failure recorded after the target version starts does not prove a rollback
+  occurred. The card identifies when that version is running and the failure
+  still needs review; it does not claim the previous version is running.
 - The deployment log remains the full diagnosis behind that summary. Read it
   when the stated cause is not enough, not to discover what the cause was.
 - If dispatch is indeterminate, leave the action alone while the server
