@@ -82,6 +82,33 @@ describe("inherited scope with child-owned research", () => {
     expect(requirement(project({ currentDesign: { state: "not-applicable", research: { state: "unavailable" } } }))?.nextAction)
       .toContain("Restore its Workroom source binding and provider access before recording more research");
   });
+  it.each(["document-version", "feature-build-revision"] as const)(
+    "preserves existing matching and stale digest rules for inherited %s research", kind => {
+      const own = receipt("non-repository", "research");
+      const payload = { ...own.payload, subject: { kind: "backlog-item", id: "BI-CHILD" },
+        artifactRef: kind === "document-version" ? { kind, versionId: "document-1" } : { kind, revisionId: "revision-1" } };
+      const currentDesign: CurrentDesignEvidence = { state: "not-applicable", research: { state: "unavailable" } };
+      const current = project({ activities: [{ ...own, payload }], currentDesign });
+      expect(requirement(current)?.state).toBe("pass");
+      expect(current.decision.verdict).toBe("allowed");
+      const stale = project({ activities: [{ ...own, payload: { ...payload, artifactDigest: "sha256:changed" } }], currentDesign });
+      expect(requirement(stale)?.state).toBe("stale");
+      expect(stale.decision.verdict).not.toBe("allowed");
+      expect(requirement(stale)?.nextAction).not.toContain("Restore its Workroom source binding");
+    });
+  it.each(["document-version", "feature-build-revision"] as const)(
+    "preserves current failure and latest-malformed precedence for inherited %s research", kind => {
+      const own = receipt("non-repository", "research");
+      const payload = { ...own.payload, subject: { kind: "backlog-item", id: "BI-CHILD" },
+        artifactRef: kind === "document-version" ? { kind, versionId: "document-1" } : { kind, revisionId: "revision-1" } };
+      const currentDesign: CurrentDesignEvidence = { state: "not-applicable", research: { state: "unavailable" } };
+      const failed = project({ activities: [{ ...own, payload: { ...payload, decision: "fail" } }], currentDesign });
+      expect(failed.decision.blockers).toContainEqual(expect.objectContaining({ state: "fail", accountableRole: "design-author" }));
+      const malformed = { ...own, id: "newer-malformed", recordedAt: new Date("2026-10-24"), payload: {} };
+      const refused = project({ activities: [{ ...own, payload }, malformed], currentDesign });
+      expect(requirement(refused)?.state).toBe("malformed");
+      expect(refused.decision.verdict).not.toBe("allowed");
+    });
   it("preserves standalone research projection without a child observation", () => {
     const projection = project({ item, activities: readyActivities(), inheritedScope: null,
       currentDesign: { state: "not-applicable", research: { state: "unavailable" } } });

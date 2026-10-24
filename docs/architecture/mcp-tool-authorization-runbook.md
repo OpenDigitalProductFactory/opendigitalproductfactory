@@ -781,3 +781,30 @@ reset attempts or qualify historical recovery. Deploy compatible writers before
 admitting these sessions. Roll back by disabling admission while retaining the
 compatible fence and readers; a pre-fence binary requires separately proven
 capability retirement and reconciled effects.
+
+## Bounded Workroom activity reads
+
+When `get_workroom` cannot deliver a raw activity page within its budget, preserve
+the unadvanced cursor. Use the same tool with `activityMode: "bounded"` and the
+same `afterSequence` to read activity metadata without loading raw payloads.
+Preserve the returned `throughSequence` while continuing with
+`nextAfterSequence`. `activityLimit` is an upper bound (1..20); fewer whole rows
+may fit. Metadata explicitly defers payload evidence and is not a full receipt.
+
+Each row supplies an exact same-room detail call. Add `activityId` in bounded
+mode to read its payload, or `activityField: "summary"` for summary text.
+`payloadPath` selects object keys or array indexes when a structured value is too
+large. A successful detail response delivers only that selected value. Missing
+paths and JSON null are distinct. Oversized scalars remain retained and
+undelivered; there is no scalar streaming fallback. Do not repeat an unchanged
+impossible read or infer full evidence from metadata.
+A value whose numbers cannot survive JSON decoding exactly is also refused;
+no rounded value is presented as complete evidence. Select a different field
+when useful. The retained original is never rewritten.
+
+Every read requires current tool authority and canonical room content admission,
+checked before and after selection. Numeric bounds and row IDs grant nothing.
+A sequence gap leaves the range unadvanced. `legacyRowsPresent` marks rows with
+no sequence; sequenced traversal cannot establish complete legacy history.
+The default room reader and legacy alias retain their existing behavior. These
+reads never settle, resume or replace a historical execution.

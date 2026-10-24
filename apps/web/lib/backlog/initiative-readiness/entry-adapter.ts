@@ -246,7 +246,8 @@ function projectGateReceipt(
   // A child authors its own research on its own source; it cannot approve or
   // amend the parent's design. An unavailable/newer own receipt still wins over
   // an older or inherited pass, and never becomes approval by omission.
-  if (gate === "research" && digests.ownResearch) {
+  if (gate === "research" && digests.ownResearch
+    && object(payload.artifactRef)?.kind === "repo-blob-at-commit") {
     const observed = digests.ownResearch;
     return { state: observed.state === "verified" && observed.receiptId === activity.id
       && observed.digest === payload.artifactDigest ? decision as ReadinessEvidenceState : "stale",
@@ -273,20 +274,22 @@ function latestGateStates(
   activities: readonly InitiativeReadinessActivity[],
   digests: AcceptedDigests,
   itemId: string,
-): { states: Map<string, ReadinessEvidenceState>; malformed: boolean } {
+): { states: Map<string, ReadinessEvidenceState>; malformed: boolean; researchArtifactKind: unknown } {
   const latest = [...activities]
     .filter((activity) => activity.kind === "initiative_gate_receipt")
     .sort((left, right) => right.recordedAt.getTime() - left.recordedAt.getTime() || right.id.localeCompare(left.id));
   const states = new Map<string, ReadinessEvidenceState>();
   let malformed = false;
+  let researchArtifactKind: unknown = null;
   for (const activity of latest) {
     const gate = normalizeGate(activity.gateKey);
     if (gate && states.has(gate)) continue;
+    if (gate === "research") researchArtifactKind = object(object(activity.payload)?.artifactRef)?.kind;
     const projected = projectGateReceipt(activity, digests, itemId);
     malformed ||= projected.malformed;
     if (projected.gate) states.set(projected.gate, projected.state);
   }
-  return { states, malformed };
+  return { states, malformed, researchArtifactKind };
 }
 
 function state(states: ReadonlyMap<string, ReadinessEvidenceState>, gate: string): ReadinessEvidenceState {
@@ -502,6 +505,7 @@ export function projectBacklogItemReadiness(args: {
     ? { ...digests, ownResearch: args.currentDesign?.research ?? { state: "unavailable" } }
     : digests, args.item.itemId);
   const ownResearchUnavailable = inherited && ownReceipts.states.get("research") === "stale"
+    && ownReceipts.researchArtifactKind === "repo-blob-at-commit"
     && args.currentDesign?.research?.state !== "verified";
   const parentReceipts = inherited ? latestGateStates(inherited.activities, digests, inherited.parentItemId) : null;
   const receipts = parentReceipts

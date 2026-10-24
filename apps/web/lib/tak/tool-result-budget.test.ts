@@ -29,6 +29,25 @@ describe("resolveToolResultCharCap", () => {
 });
 
 describe("clampToolResultForModel", () => {
+  it("refuses an oversized typed activity page instead of emitting a successful JSON prefix", () => {
+    const result = clampToolResultForModel({ success: true, data: {
+      page: { version: 1, readKind: "workroom-activity", disposition: "more" },
+      log: { activity: [{ summary: "x".repeat(20_000) }], nextAfterSequence: 42 },
+    } }, { maxChars: 1000, toolName: "get_workroom" });
+    expect(result.truncated).toBe(true);
+    expect(JSON.parse(result.text)).toMatchObject({ success: false, error: "page_budget_too_small" });
+    expect(result.text).not.toContain('"nextAfterSequence":42');
+  });
+
+  it("preserves the bounded activity refusal and unchanged cursor in model-facing readback", () => {
+    const result = clampToolResultForModel({ success: false, error: "activity_value_budget_exceeded", data: {
+      page: { version: 1, readKind: "workroom-activity", disposition: "refused" },
+      log: { nextAfterSequence: 7 }, recovery: { toolName: "get_workroom", arguments: { capsuleId: "WC-1", activityMode: "bounded" } },
+    } }, { toolName: "get_workroom" });
+    expect(JSON.parse(result.text)).toMatchObject({ success: false, data: { log: { nextAfterSequence: 7 },
+      recovery: { toolName: "get_workroom" } } });
+  });
+
   it("masks a governed tool result before model-facing serialization", () => {
     const decision: DataPolicyDecision = {
       decisionId: "decision-tool-mask",
