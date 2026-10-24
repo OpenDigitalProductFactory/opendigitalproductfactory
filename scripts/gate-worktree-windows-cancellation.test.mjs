@@ -21,6 +21,15 @@ async function until(predicate, describe, timeoutMs = 20000) {
   throw new Error("Fixture timed out: " + describe);
 }
 
+function assertNaturalJobClosure(drain) {
+  assert.equal(drain?.outcome, "naturally-empty", JSON.stringify(drain));
+  assert.equal(drain.finalActiveCount, 0);
+  assert.deepEqual(drain.finalMembers, []);
+  assert.equal(drain.failure, null);
+  assert.equal(drain.budgetMs, 2000);
+  assert.ok(drain.elapsedMs >= 0 && drain.elapsedMs < drain.budgetMs);
+  assert.ok(drain.snapshots.length > 0);
+}
 function pnpmBatch() {
   const resolved = spawnSync("where.exe", ["pnpm.cmd"], { encoding: "utf8" });
   assert.equal(resolved.status, 0, resolved.stderr);
@@ -132,12 +141,14 @@ for (const scenario of ["success", "cancellation", "failure", "trust-cancellatio
       assert.equal(result?.failure, null, JSON.stringify(result));
       assert.deepEqual(result.liveBeforeHarnessCleanup, [], JSON.stringify(result));
       assert.equal(json(join(evidence, "driver-cleanup.json"))?.emergencyCleanup, false);
-      assert.equal(json(join(evidence, "launcher-result.json"))?.emergencyCleanup, false);
+      const launcher = json(join(evidence, "launcher-result.json"));
+      assert.equal(launcher?.emergencyCleanup, false, JSON.stringify(launcher));
+      assertNaturalJobClosure(launcher?.jobDrain);
       const state = json(stateFile);
       assert.ok(state, "native marker missing: " + JSON.stringify(result));
       assert.equal(state.sha, head);
       assert.ok(mcp.calls.some(call => call.name === "claim_nonprod_environment_lease"));
-      assert.ok(mcp.calls.some(call => call.name === "release_nonprod_environment_lease"), "native lease release absent");
+      assert.equal(mcp.calls.filter(call => call.name === "release_nonprod_environment_lease").length, 1, "native owner must release the fixture lease exactly once");
       if (cancel) {
         assert.equal(result.sent, true);
         assert.ok(result.controlWitnessCount > 0, "owned console witness did not receive Ctrl-C");
@@ -202,6 +213,68 @@ for (const scenario of ["success", "cancellation", "failure", "trust-cancellatio
         calls: mcp.calls, state: json(stateFile), runnerFailure, output }, null, 2));
       t.diagnostic("Fixture evidence retained: " + evidence);
       assert.deepEqual(gateArtifactStamps(callerGateDirectory(root)), originalStamps, "caller gate artifacts changed");
+    }
+  });
+}
+
+for (const probe of ["empty", "short-lived", "persistent", "query-failure", "identity-failure"]) {
+  test("Windows owned Job drain " + probe, { skip: process.platform !== "win32", timeout: 30000 }, async t => {
+    const evidence = mkdtempSync(join(tmpdir(), "dpf-job-drain-"));
+    const configuration = join(evidence, "configuration.json");
+    const child = join(evidence, "probe-child.mjs");
+    const ready = join(evidence, "probe-child-ready.json"), release = join(evidence, "probe-exit.request");
+    const heartbeat = join(evidence, "probe-heartbeat.txt");
+    writeFileSync(child, [
+      'import {appendFileSync,existsSync,writeFileSync} from "node:fs";',
+      'writeFileSync(' + JSON.stringify(ready) + ',JSON.stringify({pid:process.pid}));',
+      'const timer=setInterval(()=>{appendFileSync(' + JSON.stringify(heartbeat) + ',"x");',
+      ...(probe === "short-lived" ? ['if(existsSync(' + JSON.stringify(release) + ')){clearInterval(timer);setTimeout(()=>process.exit(0),100);}'] : []),
+      '},25);',
+    ].join("\n"));
+    writeFileSync(configuration, JSON.stringify({ worktree: evidence, evidenceDirectory: evidence,
+      jobProbe: { kind: probe, node: process.execPath, child } }));
+    const launcher = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", nativeHelper, "-Configuration", configuration],
+      { cwd: root, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+    let output = "";
+    for (const stream of [launcher.stdout, launcher.stderr]) stream.on("data", chunk => { output = (output + chunk).slice(-32768); });
+    const closed = once(launcher, "close");
+    try {
+      const [exitCode] = await closed;
+      const result = json(join(evidence, "launcher-result.json"));
+      assert.ok(result, output);
+      const drain = result.jobDrain;
+      if (probe === "empty" || probe === "short-lived") {
+        assert.equal(exitCode, 0, output + JSON.stringify(result));
+        assert.equal(result.failure, null);
+        assert.equal(result.emergencyCleanup, false);
+        assertNaturalJobClosure(drain);
+        if (probe === "empty") assert.equal(drain.initialActiveCount, 0);
+        else {
+          const identity = json(join(evidence, "probe-identity.json"));
+          assert.ok(drain.initialActiveCount > 0);
+          assert.ok(drain.initialMembers.includes(identity.identity), JSON.stringify(drain));
+          assert.equal(identity.pid, json(ready).pid);
+          assert.match(identity.identity, /^\d+:\d+$/);
+          assert.equal(identity.consoleMember, false, "probe must cover a descendant absent from console membership");
+        }
+      } else {
+        assert.notEqual(exitCode, 0, output + JSON.stringify(result));
+        assert.equal(result.emergencyCleanup, true, JSON.stringify(result));
+        assert.equal(drain.outcome, probe === "persistent" ? "timed-out" : "observation-failed");
+        assert.ok(result.failure);
+        if (probe === "persistent") {
+          assert.ok(drain.finalActiveCount > 0);
+          assert.ok(drain.elapsedMs >= drain.budgetMs);
+          assert.ok(drain.finalMembers.includes(json(join(evidence, "probe-identity.json")).identity));
+        } else assert.ok(drain.failure, JSON.stringify(drain));
+      }
+      if (probe !== "empty") {
+        const stopped = readFileSync(heartbeat, "utf8"); await delay(100);
+        assert.equal(readFileSync(heartbeat, "utf8"), stopped, "owned probe survived closure or emergency containment");
+      }
+    } finally {
+      if (launcher.exitCode === null) { writeFileSync(join(evidence, "abort.request"), "bounded test teardown\n"); await closed; }
+      t.diagnostic("Job-drain fixture retained: " + evidence);
     }
   });
 }

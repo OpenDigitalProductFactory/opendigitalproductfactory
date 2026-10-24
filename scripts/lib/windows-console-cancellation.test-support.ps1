@@ -84,6 +84,7 @@ public static class DpfConsoleFixture {
     [DllImport("kernel32.dll", SetLastError=true)] static extern bool SetInformationJobObject(IntPtr handle,int kind,ref Limits limits,uint size);
     [DllImport("kernel32.dll", SetLastError=true)] static extern bool AssignProcessToJobObject(IntPtr jobHandle,IntPtr process);
     [DllImport("kernel32.dll", SetLastError=true)] static extern bool QueryInformationJobObject(IntPtr handle,int kind,IntPtr info,uint size,out uint returned);
+    [DllImport("kernel32.dll", SetLastError=true)] static extern bool IsProcessInJob(IntPtr process,IntPtr jobHandle,out bool member);
     [DllImport("kernel32.dll", SetLastError=true)] static extern bool SetConsoleCtrlHandler(Handler callback,bool add);
     [DllImport("kernel32.dll", SetLastError=true)] static extern uint GetConsoleProcessList(uint[] processes,uint count);
     [DllImport("kernel32.dll", SetLastError=true)] static extern bool GenerateConsoleCtrlEvent(uint kind,uint group);
@@ -98,18 +99,23 @@ public static class DpfConsoleFixture {
             throw new ArgumentException("Unsupported command metacharacter in owned fixture argument");
         return "\""+value+"\"";
     }
-    public static OwnedProcess Launch(string application,string arguments,string directory,bool newConsole) {
+    public static void CreateOwnedJob() {
+        if(job!=IntPtr.Zero) throw new InvalidOperationException("Owned Job already created");
+        job=CreateJobObject(IntPtr.Zero,null); Check(job!=IntPtr.Zero);
+        var limits=new Limits(); limits.flags=0x2000;
+        Check(SetInformationJobObject(job,9,ref limits,(uint)Marshal.SizeOf(limits)));
+    }
+    public static OwnedProcess Launch(string application,string arguments,string directory,bool newConsole,bool noConsole=false) {
         var startup = new Startup(); startup.cb=(uint)Marshal.SizeOf(startup);
         startup.flags=1; startup.show=0; // STARTF_USESHOWWINDOW, SW_HIDE; genuine console handles.
         ProcessInfo info;
         uint flags=0x400|0x4; // UNICODE_ENVIRONMENT, SUSPENDED until its authoritative handle is retained.
         if(newConsole) flags|=0x10;
+        if(noConsole) flags|=0x08000000; // CREATE_NO_WINDOW, test-only non-console descendant.
         Check(CreateProcessW(application,new StringBuilder(Quote(application)+" "+arguments),IntPtr.Zero,IntPtr.Zero,false,flags,IntPtr.Zero,directory,ref startup,out info));
         try {
             if(newConsole) {
-                job=CreateJobObject(IntPtr.Zero,null); Check(job!=IntPtr.Zero);
-                var limits=new Limits(); limits.flags=0x2000;
-                Check(SetInformationJobObject(job,9,ref limits,(uint)Marshal.SizeOf(limits)));
+                CreateOwnedJob();
                 Check(AssignProcessToJobObject(job,info.process));
             }
             var process=new OwnedProcess((int)info.pid,info.process);
@@ -188,6 +194,57 @@ public static class DpfConsoleFixture {
         foreach(var pair in owned) if(!pair.Value.HasExited) result.Add(pair.Key+":"+pair.Value.StartTime.ToUniversalTime().Ticks);
         return result.ToArray();
     }
+    public static string LaunchJobProbe(string application,string arguments,string directory) {
+        // The enclosing launcher Job remains the owner; the driver deliberately
+        // does not retain this non-console child in its console-only inventory.
+        var process=Launch(application,arguments,directory,false,true);
+        string identity=process.Id+":"+process.StartTime.ToUniversalTime().Ticks;
+        owned.Remove(process.Id); Check(CloseHandle(process.Handle));
+        return identity;
+    }
+    public sealed class JobSnapshot {
+        public int? activeCount;
+        public string[] members=new string[0];
+        public string failure;
+    }
+    static int ActiveJobCount() {
+        var info=Marshal.AllocHGlobal(48);
+        try {
+            uint returned; Check(QueryInformationJobObject(job,1,info,48,out returned));
+            return Marshal.ReadInt32(info,40);
+        } finally { Marshal.FreeHGlobal(info); }
+    }
+    public static JobSnapshot ObserveJob(string fault) {
+        var observation=new JobSnapshot();
+        // Query the owned kernel Job only; PID values never grant kill authority.
+        const int capacity=128; int size=8+IntPtr.Size*capacity;
+        var info=Marshal.AllocHGlobal(size);
+        try {
+            if(job==IntPtr.Zero) throw new InvalidOperationException("Owned Job handle unavailable");
+            uint returned;
+            Check(QueryInformationJobObject(fault=="query-failure" ? new IntPtr(-1) : job,3,info,(uint)size,out returned));
+            int assigned=Marshal.ReadInt32(info,0), count=Marshal.ReadInt32(info,4);
+            if(count<0 || count>capacity || assigned!=count)
+                throw new InvalidOperationException("Owned Job membership exceeds observation bound");
+            observation.activeCount=ActiveJobCount();
+            var identities=new List<string>();
+            for(int index=0;index<count;index++) {
+                int pid=checked((int)Marshal.ReadIntPtr(info,8+index*IntPtr.Size).ToInt64());
+                var handle=OpenProcess(0x100000|0x1000,false,pid); Check(handle!=IntPtr.Zero);
+                try {
+                    // Use a deliberately invalid observation handle in the failure
+                    // probe. Containment always retains the real owned Job handle.
+                    var process=new OwnedProcess(pid,fault=="identity-failure" ? IntPtr.Zero : handle);
+                    bool member; Check(IsProcessInJob(handle,job,out member));
+                    if(!member) throw new InvalidOperationException("Observed process left owned Job before identity validation");
+                    identities.Add(pid+":"+process.StartTime.ToUniversalTime().Ticks);
+                    observation.members=identities.ToArray();
+                } finally { Check(CloseHandle(handle)); }
+            }
+        } catch(Exception error) { observation.failure=error.Message; }
+        finally { Marshal.FreeHGlobal(info); }
+        return observation;
+    }
     public static bool CleanupOwned() {
         bool emergency=false;
         try { foreach(var pair in owned) {
@@ -197,21 +254,14 @@ public static class DpfConsoleFixture {
         } } finally { try { if(job!=IntPtr.Zero) {
             // The enclosing harness Job contains every driver descendant,
             // including processes whose console/stdio differs from cmd.exe.
-            var info=Marshal.AllocHGlobal(48);
             try {
-                uint returned;
-                Check(QueryInformationJobObject(job,1,info,48,out returned));
-                if(Marshal.ReadInt32(info,40)>0) {
+                if(ActiveJobCount()>0) {
                     emergency=true; Check(TerminateJobObject(job,99));
-                    var deadline=DateTime.UtcNow.AddSeconds(5);
-                    do {
-                        Check(QueryInformationJobObject(job,1,info,48,out returned));
-                        if(Marshal.ReadInt32(info,40)==0) break;
-                        Thread.Sleep(25);
-                    } while(DateTime.UtcNow<deadline);
-                    if(Marshal.ReadInt32(info,40)!=0) throw new InvalidOperationException("Owned Job closure unproven");
+                    var elapsed=Stopwatch.StartNew();
+                    while(ActiveJobCount()>0 && elapsed.ElapsedMilliseconds<5000) Thread.Sleep(25);
+                    if(ActiveJobCount()!=0) throw new InvalidOperationException("Owned Job closure unproven");
                 }
-            } finally { Marshal.FreeHGlobal(info); Check(CloseHandle(job));job=IntPtr.Zero; }
+            } finally { Check(CloseHandle(job));job=IntPtr.Zero; }
         } } finally {
             foreach(var pair in owned) Check(CloseHandle(pair.Value.Handle));
             owned.Clear();
@@ -226,25 +276,67 @@ function Write-FixtureJson([string]$Name, $Value) {
     [IO.File]::WriteAllText($path, ($Value | ConvertTo-Json -Depth 10), [Text.UTF8Encoding]::new($false))
 }
 
+function Wait-OwnedJobClosure([string]$Fault) {
+    $budgetMs = 2000
+    $elapsed = [Diagnostics.Stopwatch]::StartNew()
+    $snapshots = [Collections.Generic.List[object]]::new()
+    $result = @{ outcome='timed-out'; budgetMs=$budgetMs; elapsedMs=0; initialActiveCount=$null; finalActiveCount=$null; initialMembers=@(); finalMembers=@(); failure=$null; snapshots=$snapshots }
+    try {
+        do {
+            $snapshot = [DpfConsoleFixture]::ObserveJob($Fault)
+            $entry = @{ elapsedMs=$elapsed.ElapsedMilliseconds; activeCount=$snapshot.activeCount; members=@($snapshot.members); failure=$snapshot.failure }
+            $snapshots.Add($entry)
+            if ($snapshots.Count -eq 1) { $result.initialActiveCount=$entry.activeCount; $result.initialMembers=$entry.members }
+            $result.finalActiveCount=$entry.activeCount; $result.finalMembers=$entry.members
+            $result.elapsedMs=$elapsed.ElapsedMilliseconds
+            Write-FixtureJson 'job-drain-progress.json' $result
+            if ($snapshot.failure) { throw $snapshot.failure }
+            if ($snapshot.activeCount -eq 0 -and $snapshot.members.Length -eq 0 -and $result.elapsedMs -lt $budgetMs) {
+                $result.outcome='naturally-empty'
+                break
+            }
+            if ($result.elapsedMs -ge $budgetMs) { break }
+            if ($config.jobProbe.kind -eq 'short-lived') {
+                [IO.File]::WriteAllText((Join-Path $config.evidenceDirectory 'probe-exit.request'), 'observed owned child')
+            }
+            Start-Sleep -Milliseconds ([Math]::Min(25,$budgetMs-$result.elapsedMs))
+        } while ($elapsed.ElapsedMilliseconds -lt $budgetMs)
+    } catch { $result.outcome='observation-failed'; $result.failure=$_.Exception.Message }
+    $result.elapsedMs=$elapsed.ElapsedMilliseconds
+    if ($result.outcome -eq 'naturally-empty' -and $result.elapsedMs -ge $budgetMs) { $result.outcome='timed-out' }
+    Write-FixtureJson 'job-drain-progress.json' $result
+    return $result
+}
+
 if (-not $Driver) {
     $process = $null
     $failure = $null
+    $jobDrain = $null
     try {
-        $arguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File ' + [DpfConsoleFixture]::Quote($PSCommandPath) + ' -Configuration ' + [DpfConsoleFixture]::Quote($Configuration) + ' -Driver'
-        $process = [DpfConsoleFixture]::Launch((Join-Path $PSHOME 'powershell.exe'), $arguments, $config.worktree, $true)
-        Write-FixtureJson 'launcher.json' @{ driverPid=$process.Id; driverBirth=$process.StartTime.ToUniversalTime().Ticks }
-        $deadline = [DateTime]::UtcNow.AddSeconds(35)
-        while (-not $process.WaitForExit(100)) {
-            if (Test-Path -LiteralPath (Join-Path $config.evidenceDirectory 'abort.request')) { throw 'Parent requested fixture emergency cleanup' }
-            if ([DateTime]::UtcNow -ge $deadline) { throw 'Private console driver exceeded 35 seconds' }
+        if ($config.jobProbe.kind -eq 'empty') { [DpfConsoleFixture]::CreateOwnedJob() }
+        else {
+            $arguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File ' + [DpfConsoleFixture]::Quote($PSCommandPath) + ' -Configuration ' + [DpfConsoleFixture]::Quote($Configuration) + ' -Driver'
+            $process = [DpfConsoleFixture]::Launch((Join-Path $PSHOME 'powershell.exe'), $arguments, $config.worktree, $true)
+            Write-FixtureJson 'launcher.json' @{ driverPid=$process.Id; driverBirth=$process.StartTime.ToUniversalTime().Ticks }
+            $deadline = [DateTime]::UtcNow.AddSeconds(35)
+            while (-not $process.WaitForExit(100)) {
+                if (Test-Path -LiteralPath (Join-Path $config.evidenceDirectory 'abort.request')) { throw 'Parent requested fixture emergency cleanup' }
+                if ([DateTime]::UtcNow -ge $deadline) { throw 'Private console driver exceeded 35 seconds' }
+            }
+            if ($process.ExitCode -ne 0) { throw ('Private console driver exit ' + $process.ExitCode) }
         }
-        if ($process.ExitCode -ne 0) { throw ('Private console driver exit ' + $process.ExitCode) }
+        $jobDrain = Wait-OwnedJobClosure ([string]$config.jobProbe.kind)
+        if ($jobDrain.outcome -ne 'naturally-empty') { throw ('Owned Job natural closure ' + $jobDrain.outcome + ': ' + $jobDrain.failure) }
     } catch { $failure = $_.Exception.Message }
     finally {
-        $emergency = [DpfConsoleFixture]::CleanupOwned()
-        Write-FixtureJson 'launcher-result.json' @{ failure=$failure; emergencyCleanup=$emergency }
+        $emergency = $null
+        $cleanupFailure = $null
+        try { $emergency = [DpfConsoleFixture]::CleanupOwned() }
+        catch { $cleanupFailure=$_.Exception.Message; if (-not $failure) { $failure=$cleanupFailure } }
+        if ($emergency -and -not $failure) { $failure='Owned Job required emergency cleanup' }
+        Write-FixtureJson 'launcher-result.json' @{ failure=$failure; emergencyCleanup=$emergency; cleanupFailure=$cleanupFailure; jobDrain=$jobDrain }
     }
-    if ($failure) { Write-Error $failure }
+    if ($failure) { [Console]::Error.WriteLine($failure); exit 1 }
     exit 0
 }
 
@@ -259,6 +351,19 @@ try {
     [DpfConsoleFixture]::InitializeDriver()
     $initial = [DpfConsoleFixture]::Members()
     if ($initial.Count -ne 1 -or $initial[0] -ne $PID) { throw 'Driver console was not created exclusively for this fixture' }
+    if ($config.jobProbe) {
+        if ($config.jobProbe.kind -ne 'empty') {
+            $identity = [DpfConsoleFixture]::LaunchJobProbe($config.jobProbe.node, [DpfConsoleFixture]::Quote($config.jobProbe.child), $config.worktree)
+            $probePid = [int]($identity.Split(':')[0])
+            $readyDeadline = [DateTime]::UtcNow.AddSeconds(5)
+            while (-not (Test-Path -LiteralPath (Join-Path $config.evidenceDirectory 'probe-heartbeat.txt'))) {
+                if ([DateTime]::UtcNow -ge $readyDeadline) { throw 'Owned Job probe did not become ready' }
+                Start-Sleep -Milliseconds 25
+            }
+            Write-FixtureJson 'probe-identity.json' @{ identity=$identity; pid=$probePid; consoleMember=([DpfConsoleFixture]::Members() -contains $probePid) }
+        }
+        return # The existing finally records console closure, then this driver exits.
+    }
     $quoted = @($config.arguments | ForEach-Object { [DpfConsoleFixture]::Quote([string]$_) })
     $command = '/d /s /c "' + [DpfConsoleFixture]::Quote($config.pnpm) + ' ' + ($quoted -join ' ') + '"'
     $target = [DpfConsoleFixture]::Launch($env:ComSpec, $command, $config.worktree, $false)
