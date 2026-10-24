@@ -49,13 +49,10 @@ export interface CapsuleActivityRow {
   recordedById?: string | null;
 }
 
-/**
- * Map raw capsule-activity rows to session entries. Typed agent activities get a
- * plain label and their own tone; everything else is toned "lifecycle" and
- * labelled from its kind (e.g. "evidence-recorded" → "Evidence recorded").
- * Input order is preserved (callers pass newest-first).
- */
-function handoffPresentation(row: CapsuleActivityRow): Pick<AgentSessionEntry, "tone" | "label" | "summary"> | null {
+/** Receipt-backed handoff outcomes shared by the agent and canonical Workroom feeds. */
+export function presentBoundedHandoffReceipt(
+  row: Pick<CapsuleActivityRow, "kind" | "payload" | "summary">,
+): Pick<AgentSessionEntry, "tone" | "label" | "summary"> | null {
   const payload = isRecord(row.payload) ? row.payload : null;
   // Activity JSON is caller-controlled. Only command receipts establish these outcomes.
   if (row.kind === "command-accepted" && payload?.commandType === "reassign-executor") {
@@ -78,9 +75,15 @@ function handoffPresentation(row: CapsuleActivityRow): Pick<AgentSessionEntry, "
   return { tone: "error", label: "Handoff refused", summary: typeof result?.message === "string" ? result.message : row.summary };
 }
 
+/**
+ * Map raw capsule-activity rows to session entries. Typed agent activities get a
+ * plain label and their own tone; everything else is toned "lifecycle" and
+ * labelled from its kind (e.g. "evidence-recorded" → "Evidence recorded").
+ * Input order is preserved (callers pass newest-first).
+ */
 export function presentAgentSession(rows: CapsuleActivityRow[]): AgentSessionEntry[] {
   return rows.map((row) => {
-    const handoff = handoffPresentation(row);
+    const handoff = presentBoundedHandoffReceipt(row);
     if (handoff) return { id: row.id, ...handoff, recordedAt: row.recordedAt, actor: actorOf(row) };
     if (isAgentActivityKind(row.kind)) {
       return {
@@ -108,5 +111,5 @@ export function presentAgentSession(rows: CapsuleActivityRow[]): AgentSessionEnt
 
 /** True when the feed has at least one typed agent activity (vs only plumbing). */
 export function hasAgentActivity(rows: CapsuleActivityRow[]): boolean {
-  return rows.some((row) => isAgentActivityKind(row.kind) || handoffPresentation(row) !== null);
+  return rows.some((row) => isAgentActivityKind(row.kind) || presentBoundedHandoffReceipt(row) !== null);
 }

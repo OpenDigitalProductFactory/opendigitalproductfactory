@@ -15,6 +15,7 @@ import { WorkroomBodyContent } from "./workroom/WorkroomBody";
 import type { WorkspaceWorkCaseDetailView } from "@/lib/work-management/workspace-case-loader";
 import type { WorkroomView } from "@/lib/work-management/room-types";
 import { composeRoomReviewProfile } from "@/lib/work-management/room-review-profile";
+import { normalizeWorkroomActivities, roomActivitiesFromCapsuleActivity } from "@/lib/work-management/room-activity";
 
 const renderToStaticMarkup = (node: ReactNode) => renderMarkup(
   <MessagesProvider locale={DEFAULT_LOCALE} messages={{ workrooms: namespaceMessages(DEFAULT_LOCALE, "workrooms") }}>{node}</MessagesProvider>,
@@ -378,6 +379,30 @@ describe("WorkCaseDetailView", () => {
 
     expect(html).not.toContain("Share an update");
     expect(html).toContain("Room details");
+  });
+
+  it.each([
+    ["pending-acknowledgement", "Waiting for receiver", "The executor and lease have not changed."],
+    ["completed", "Handoff completed", "Receiving assistant acknowledged; handoff completed."],
+    ["refused", "Handoff refused", "The room lease was renewed; request a fresh handoff."],
+  ] as const)("renders a canonical %s receipt with its explanation", (state, label, message) => {
+    const result = { success: state !== "refused", message,
+      data: { handoff: { kind: "bounded-handoff", state } } };
+    const summary = `reassign-executor ${state === "refused" ? "refused" : "accepted"} (command handoff-1)`;
+    const activity = normalizeWorkroomActivities(roomActivitiesFromCapsuleActivity([{
+      id: "handoff-receipt", workCapsuleId: "room-row", recordedAt: "2026-10-24T12:00:00.000Z",
+      kind: state === "refused" ? "command-rejected" : "command-accepted", summary,
+      payload: { commandType: "reassign-executor", ...(state === "refused"
+        ? { rejection: { data: { result } } } : { result }) },
+    }], new Map([["room-row", "WC-ROOM"]])));
+    const handoffRoom = { ...room, activity };
+    const html = renderToStaticMarkup(
+      <WorkroomBodyContent detail={{ ...detail, room: handoffRoom }} room={handoffRoom}
+        mode="detail" onModeChange={() => {}} />,
+    );
+    expect(html).toContain('aria-label="Coworker handoff"');
+    expect(html).toContain(`${label}: ${message}`);
+    expect(html).not.toContain(summary);
   });
 
   it("renders detailed activity kinds with distinct accessible labels", () => {
