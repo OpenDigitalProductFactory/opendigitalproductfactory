@@ -106,12 +106,18 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "get_workroom",
-    description: "Fetch one Workroom with its recent activity timeline. Pass afterSequence to read the room's ordered log from a position you already hold: every later activity exactly once, in order (the room's activitySequence is the latest). Read-only.",
+    description: "Fetch one Workroom with its recent activity timeline. Pass afterSequence to read the room's ordered log from a position you already hold: every later activity exactly once, in order (the room's activitySequence is the latest). Use activityMode:bounded for finite metadata pages or exact selected-value detail. Metadata defers payload evidence; it is not a complete receipt. Read-only.",
     inputSchema: {
       type: "object",
       properties: {
         capsuleId: { type: "string", description: "Semantic Workroom id (WC-*)." },
         afterSequence: { type: "integer", minimum: 0, description: "Return data.log.activity: rows with sequence greater than this, oldest first, up to 200 (data.log.hasMore says when to read again)." },
+        activityMode: { type: "string", enum: ["bounded"], description: "Read bounded metadata or selected detail instead of the full room. Recheck current content admission on each read." },
+        throughSequence: { type: "integer", minimum: 0, description: "Bounded mode: preserve the first page's upper sequence bound while reading nextAfterSequence. Later writes are outside this range." },
+        activityLimit: { type: "integer", minimum: 1, maximum: 20, description: "Bounded mode: requested metadata page size; whole records may fill the budget sooner." },
+        activityId: { type: "string", maxLength: 200, description: "Bounded mode: exact activity ID in this room for a selected-value read. No history cursor is advanced." },
+        activityField: { type: "string", enum: ["payload", "summary"], description: "Detail field; defaults to payload. Large values are refused with a narrower-path instruction." },
+        payloadPath: { type: "array", maxItems: 16, items: { type: "string", maxLength: 200 }, description: "Detail only: object keys or array indexes within payload. Empty selects the whole payload; a selected value is not a full activity receipt." },
       },
       required: ["capsuleId"],
     },
@@ -462,24 +468,30 @@ const definitions: ToolDefinition[] = [
   {
     name: "reassign_workroom_executor",
     description:
-      "Hand a Workroom off to a different executor: change the executor, transfer the active lease to the caller, and record an executor-changed event with the handoff manifest (next action, open risks, evidence digest). Renders as a plain status event, not raw agent plumbing.",
+      "Hand off a Workroom within its existing mandate: request records the receiver and next action; acknowledge transfers execution only after that receiver accepts. Omitting phase keeps the existing governed reassignment path.",
     inputSchema: {
       type: "object",
       properties: {
         commandId: COMMAND_ID_PROPERTY,
         capsuleId: { type: "string", description: "Semantic Workroom id (WC-*)." },
+        phase: { type: "string", enum: ["request", "acknowledge"], description: "Request a same-mandate handoff or acknowledge it as the receiving assistant." },
+        requestId: { type: "string", description: "Request activity id to acknowledge; returned by the request phase." },
+        targetAgentId: { type: "string", description: "Semantic id of the already-admitted receiving assistant." },
+        expectedExecutorKind: { type: "string", enum: ENUMS.executors, description: "Current executor kind read from get_workroom." },
+        expectedExecutorRef: { type: "string", description: "Current executor session read from get_workroom." },
         toExecutorKind: { type: "string", enum: ENUMS.executors, description: "Executor taking over the work." },
         toExecutorRef: { type: "string", description: "Optional session/owner id for the receiving executor." },
         reason: { type: "string", description: "Why the handoff is happening." },
         handoffManifest: { type: "object", description: "Optional handoff context: next action, open risks, evidence digest, branch/worktree, suggested receiver." },
         expectedLeaseHolderPrincipalId: { type: ["string", "null"], description: "The lease holder you read from get_workroom. When given, the handoff is refused with lease_holder_changed if someone else now holds the lease." },
       },
-      required: ["capsuleId", "toExecutorKind"],
+      required: ["capsuleId"],
     },
     requiredCapability: "manage_backlog",
     sideEffect: true,
     // changes identity or authority → consult-gated (TAK §8.4.1).
     consequence: "authority",
+    consequenceForCall: call => import("@/lib/work-capsules/bounded-handoff-tool").then(m => m.boundedHandoffConsequenceForCall(call)),
   },
   {
     name: "start_external_work",
@@ -560,7 +572,10 @@ export const workCapsulesPack: ToolPack = {
     rebind_workroom_shape: (params, userId, context) =>
       import("@/lib/work-capsules/workroom-shape-rebind-handler").then((m) => m.rebindWorkroomShapeTool(params, userId, context)),
     record_workroom_evidence: (params, userId, context) => receipted("record-evidence", (m) => m.recordCapsuleEvidenceTool)(params, userId, context),
-    reassign_workroom_executor: (params, userId, context) => receipted("reassign-executor", (m) => m.reassignCapsuleExecutorTool)(params, userId, context),
+    reassign_workroom_executor: (params, userId, context) => Promise.all([
+      HANDLERS(), import("@/lib/work-capsules/receipted-tool"), import("@/lib/work-capsules/bounded-handoff-tool"),
+    ]).then(([m, r, handoff]) => r.receiptedWorkroomTool("reassign-executor", m.reassignCapsuleExecutorTool as never,
+      { prepare: handoff.prepareBoundedHandoff })(params, userId, context as never)),
     start_external_work: (params, userId, context) => HANDLERS().then((m) => m.startExternalWorkTool(params, userId, context)),
     record_agent_activity: (params, userId, context) => receipted("record-activity", (m) => m.recordAgentActivityTool)(params, userId, context),
     // Legacy workroom names — callable, deliberately NOT advertised in `definitions`.

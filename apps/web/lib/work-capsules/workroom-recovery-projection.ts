@@ -14,7 +14,8 @@ type WorkroomIdentity = {
   leaseHolderPrincipalId?: string | null;
 };
 
-type ReviewProjection = Pick<Awaited<ReturnType<typeof loadSemanticReviewRoomProjection>>, "runs" | "partial" | "attentionReason">;
+type ReviewProjection = Pick<Awaited<ReturnType<typeof loadSemanticReviewRoomProjection>>, "runs" | "partial" | "attentionReason">
+  & { partialCapsuleIds?: readonly string[] };
 
 type WorkroomReadback = { capsule: Record<string, unknown>; log?: { afterSequence: number; activity: unknown[]; hasMore: boolean } };
 
@@ -55,67 +56,100 @@ export function boundWorkroomRecoveryReadback(data: WorkroomReadback, fits: (val
   return fits(bounded) ? bounded : null;
 }
 
+const REVIEW_EXECUTION_LIMIT = 20;
+const inspectOriginal = "Inspect this original request.";
+
 /** One observed execution shape for current and explicitly historical facts. */
 function projectReviewExecution(run: ReviewProjection["runs"][number], nextAction = run.nextAction) {
   const recorded = projectRecordedTaskState(run.status);
+  const ordinary = run.reviewKind === "initiative-review";
   const receipt = run.status === "completed" || (run.status === "input-required" && run.receipt?.decision === "inconclusive")
     ? run.receipt : null;
+  const requestDigest = ordinary && /^[a-f0-9]{64}$/i.test(run.requestDigest ?? "") ? run.requestDigest : null;
   return {
     taskRunId: run.taskRunId, status: run.status, identityScope: run.identityScope,
+    reviewKind: run.reviewKind ?? "semantic-review", reviewGate: run.reviewGate ?? null,
+    artifactVersion: run.artifactVersion ?? null, requestDigest,
+    executionUncertain: run.executionUncertain ?? false, identityConflict: run.identityConflict ?? false,
     sourceHeadSha: run.sourceHeadSha ?? null,
     pending: recorded === "unknown" ? null : recorded !== "terminal",
     accountableOwner: { agentId: run.requesterAgentId ?? null, userId: run.requesterId, displayName: run.requesterName ?? null },
-    reason: run.reason, nextAction,
-    resultAction: run.requesterId ? { method: "tasks/result" as const, params: { taskId: run.taskRunId }, requiredUserId: run.requesterId } : null,
+    reason: run.reason, nextAction: ordinary ? inspectOriginal : nextAction,
+    resultAction: run.requesterId ? { method: "tasks/result" as const,
+      params: { taskId: run.taskRunId, ...(requestDigest ? { requestDigest } : {}) }, requiredUserId: run.requesterId } : null,
     heartbeat: run.heartbeat, lastHeartbeatAt: run.lastHeartbeatAt, readAt: run.readAt,
-    budget: run.budget, receipt: receipt ?? null,
+    budget: ordinary ? { deadlineAt: null, recoveryAttempt: null } : run.budget, receipt: receipt ?? null,
   };
+}
+
+function reviewExecutionState(run: ReviewProjection["runs"][number]) {
+  const execution = projectReviewExecution(run);
+  const recorded = projectRecordedTaskState(run.status);
+  // Prior generation receipts cannot replace a resumed generation's state.
+  const reason = run.executionUncertain ? "review-execution-uncertain"
+    : execution.receipt?.decision === "fail" ? "review-failed"
+      : execution.receipt?.decision === "inconclusive" ? run.reason ?? "review-inconclusive"
+        : recorded === "terminal" && !execution.receipt ? "review-receipt-unavailable"
+          : recorded === "waiting" || recorded === "unknown" ? run.reason ?? ("review-" + recorded) : null;
+  const state = run.executionUncertain || reason === "review-receipt-unavailable" ? "unknown" as const
+    : execution.receipt?.decision === "fail" ? "blocked" as const
+      : execution.receipt?.decision === "inconclusive" ? "waiting" as const : recorded;
+  return { execution, state, reason };
 }
 
 /** Observations are readback, never completion evidence or retry authorization. */
 function projectSemanticRecovery(room: WorkroomIdentity, view: ReviewProjection, recoveryItemId: string | null) {
   const runs = view.runs.filter(run => run.capsuleId === room.capsuleId);
-  const current = runs.filter(run => run.identityScope === "current" && room.headSha && run.sourceHeadSha
-    && run.sourceHeadSha.toLowerCase() === room.headSha.toLowerCase());
-  if (!view.partial && runs.length === 0) return null;
-  const run = current.length === 1 ? current[0] : null;
+  const partial = view.partialCapsuleIds && room.capsuleId
+    ? view.partialCapsuleIds.includes(room.capsuleId) : view.partial;
+  if (!partial && runs.length === 0) return null;
+  const current = runs.filter(run => run.identityScope === "current" && isFullSourceCommitSha(room.headSha)
+    && isFullSourceCommitSha(run.sourceHeadSha) && run.sourceHeadSha!.toLowerCase() === room.headSha!.toLowerCase());
   const historical = runs.filter(run => run.identityScope === "historical");
-  const recorded = run ? projectRecordedTaskState(run.status) : "unknown";
-  // Retry retains prior receipts. They are historical while a new generation
-  // executes, and must not replace that generation's working/queued state.
-  const execution = run ? projectReviewExecution(run) : null;
-  const receipt = execution?.receipt;
-  const reason = view.partial ? "review-observation-incomplete"
-    : current.length > 1 ? "review-identity-conflict"
-      : !run ? "current-review-unavailable"
-        : receipt?.decision === "fail" ? "review-failed"
-          : receipt?.decision === "inconclusive" ? run.reason ?? "review-inconclusive"
-            : recorded === "terminal" && !receipt ? "review-receipt-unavailable"
-              : recorded === "waiting" || recorded === "unknown" ? run.reason ?? `review-${recorded}` : null;
-  const state = view.partial || current.length !== 1 || reason === "review-receipt-unavailable" ? "unknown" as const
-    : receipt?.decision === "fail" ? "blocked" as const
-      : receipt?.decision === "inconclusive" ? "waiting" as const : recorded;
-  const needsIssuer = view.partial || current.length !== 1;
-  // The issuer owns recovery and exact packet selection. A repeat of this same
-  // bounded observation cannot repair source absence, truncation or conflict.
+  const ordinary = runs.some(run => run.reviewKind === "initiative-review");
+  const conflict = runs.some(run => run.identityConflict) || current.filter(run => run.reviewKind !== "initiative-review").length > 1;
+  const unresolvedHistory = historical.find(run => run.reviewKind === "initiative-review"
+    && (run.executionUncertain || reviewExecutionState(run).state !== "terminal"));
+  const unknownIdentity = runs.some(run => run.reviewKind === "initiative-review" && !current.includes(run) && !historical.includes(run));
+  const truncated = runs.length > REVIEW_EXECUTION_LIMIT || partial;
+  const observations = current.map(reviewExecutionState);
+  const selected = ["unknown", "blocked", "waiting", "working", "queued", "terminal"]
+    .flatMap(state => observations.filter(observation => observation.state === state))[0];
+  const structuralReason = truncated ? "review-observation-incomplete"
+    : conflict ? "review-identity-conflict"
+      : unresolvedHistory ? "historical-review-unresolved"
+        : unknownIdentity ? "review-identity-unknown"
+          : current.length === 0 ? "current-review-unavailable" : null;
+  const reason = structuralReason ?? selected?.reason ?? null;
+  const state = structuralReason ? "unknown" as const : selected?.state ?? "unknown" as const;
+  const needsIssuer = truncated || conflict || unknownIdentity || current.length === 0;
+  const responsibleExecution = unresolvedHistory ? projectReviewExecution(unresolvedHistory) : selected?.execution;
+  // Ordinary gates retain their exact original-result route. Native semantic
+  // recovery packets cannot authorize a replacement for an ordinary review.
   const issuerAction = recoveryItemId ? { toolName: "get_backlog_item" as const,
-    args: { itemId: recoveryItemId, recoveryGate: "post-implementation-review" as const } } : null;
-  const nextAction = needsIssuer
-    ? issuerAction
-      ? "The delivery coordinator must read get_backlog_item with post-implementation-review recovery for the current source. Historical reviews do not authorize a retry or publication."
-      : room.backlogItemId
-        ? "Resolve this Workroom's recorded backlog linkage through its delivery coordinator; no semantic item ID could be confirmed. Do not retry historical work."
-        : "Link this Workroom to its governing backlog item through the existing delivery coordinator, then read that item's post-implementation-review recovery. Do not retry historical work."
-    : run?.nextAction ?? view.attentionReason ?? "Read this Workroom again to resolve the current review identity and evidence.";
+    args: { itemId: recoveryItemId, ...(!ordinary ? { recoveryGate: "post-implementation-review" as const } : {}) } } : null;
+  const nextAction = ordinary ? needsIssuer
+    ? "The delivery coordinator must resolve incomplete or conflicting evidence; inspect each original request."
+    : inspectOriginal
+    : needsIssuer
+      ? issuerAction
+        ? "The delivery coordinator must read get_backlog_item with post-implementation-review recovery for the current source. Historical reviews do not authorize a retry or publication."
+        : room.backlogItemId
+          ? "Resolve this Workroom's recorded backlog linkage through its delivery coordinator; no semantic item ID could be confirmed. Do not retry historical work."
+          : "Link this Workroom to its governing backlog item through the existing delivery coordinator, then read that item's post-implementation-review recovery. Do not retry historical work."
+      : responsibleExecution?.nextAction ?? view.attentionReason ?? "Read this Workroom again to resolve the current review identity and evidence.";
+  const execution = current.length === 1 && !structuralReason ? projectReviewExecution(current[0], nextAction) : null;
   return {
     state,
-    reviewerExecution: execution ? { ...execution, nextAction } : null,
+    reviewerExecution: execution,
+    reviewerExecutions: runs.slice(0, REVIEW_EXECUTION_LIMIT).map(run => projectReviewExecution(run)),
+    reviewerExecutionsTruncated: truncated,
     historicalReviewerExecutions: historical.slice(0, 5).map(run => projectReviewExecution(run,
       "Historical source only. Inspect the recorded result with its requester identity; use the current item's recovery for further action.")),
-    historicalReviewHistoryTruncated: historical.length > 5 || view.partial,
+    historicalReviewHistoryTruncated: historical.length > 5 || partial,
     blocker: reason ? { reason,
-      accountableOwner: needsIssuer ? { principalId: room.leaseHolderPrincipalId ?? null, role: "delivery-coordinator" as const } : execution?.accountableOwner ?? null,
-      nextAction, action: needsIssuer ? issuerAction : execution?.resultAction ?? null } : null,
+      accountableOwner: needsIssuer ? { principalId: room.leaseHolderPrincipalId ?? null, role: "delivery-coordinator" as const } : responsibleExecution?.accountableOwner ?? null,
+      nextAction, action: needsIssuer ? issuerAction : responsibleExecution?.resultAction ?? null } : null,
   };
 }
 
@@ -209,6 +243,8 @@ export function projectWorkroomRecovery(
       : semantic?.state ?? executionState ?? "actionable" as const,
     prerequisite,
     reviewerExecution: recoveryExecution,
+    reviewerExecutions: semantic?.reviewerExecutions ?? (recoveryExecution ? [recoveryExecution] : []),
+    reviewerExecutionsTruncated: semantic?.reviewerExecutionsTruncated ?? false,
     historicalReviewerExecutions: semantic?.historicalReviewerExecutions ?? [],
     historicalReviewHistoryTruncated: semantic?.historicalReviewHistoryTruncated ?? false,
     blocker: prerequisite ? { reason: "source-identity-missing", accountableRole: prerequisite.accountableRole,

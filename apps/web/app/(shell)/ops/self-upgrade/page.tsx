@@ -175,6 +175,7 @@ export default async function SelfUpgradePage() {
             status: effectiveStatus.latestRun.status,
             reason: effectiveStatus.latestRun.reason,
             targetSha: effectiveStatus.latestRun.targetSha,
+            deployedSha: effectiveStatus.latestRun.deployedSha,
           }
         : null,
       latestRunImpact: effectiveStatus.latestRunImpact,

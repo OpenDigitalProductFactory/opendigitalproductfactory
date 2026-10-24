@@ -2676,6 +2676,8 @@ async function main() {
   } : classifyGateOutcome({
     freshnessVerdict: freshnessReport ? freshnessReport.verdict : "",
     gateExitCode: runResult.status,
+    // Only this owner's signal handlers establish an observed interruption.
+    receivedSignal,
     // BI-FCC1DCB2: the conflicting paths, quoted only from THIS run's metadata.
     mergeConflict: metadataMergeConflictForRun(contentMetadata, { leaseId, sha }),
     // BI-B62A6686: P1001 on prisma migrate deploy is read from this run's log.
@@ -3001,7 +3003,6 @@ async function main() {
   }
   if (outcome.status === "blocked_child_signal_death") {
     process.stderr.write(`gate-worktree: BLOCKED (child signal death): ${outcome.summary}\n`);
-    process.stderr.write("gate-worktree: this is infrastructure evidence, not a product failure; retry on a quieter host\n");
     process.exit(EXIT_CHILD_SIGNAL_DEATH);
   }
   die("gate failed");

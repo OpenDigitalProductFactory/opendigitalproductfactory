@@ -11,6 +11,11 @@ import { isIP } from "node:net";
 import { resolveDpfStatePath } from "./resolve-compose-install-context.mjs";
 import { scriptArgv } from "./script-argv.mjs";
 import { parseArgs } from "node:util";
+import { GATE_CANCELLATION_GRACE_MS, GATE_CLOSE_GRACE_MS, runForegroundGate, withForegroundCancellation } from "./foreground-gate-process.mjs";
+
+// Enclose the inner gate's close budget plus its existing 10s MCP release and
+// local recovery. Equal parent/child deadlines could kill the final writer.
+const TRUST_REEXEC_CANCELLATION_GRACE_MS = GATE_CANCELLATION_GRACE_MS + GATE_CLOSE_GRACE_MS + 20_000;
 
 const library = resolve(dirname(fileURLToPath(import.meta.url)), "../installer/lib");
 const configuredBundle = env => env.DPF_MCP_CA_FILE || env.DPF_PKI_TRUST_BUNDLE || env.NODE_EXTRA_CA_CERTS;
@@ -117,7 +122,7 @@ export async function probeMcpTransport({ mcpUrl, tlsOptions = {}, timeoutMs = 2
 // Configure BEFORE any credential exchange/lease/check; start a fresh Node when
 // inherited startup roots do not contain the resolved CA. No request is replayed.
 export async function runWithHostMcpTrust(main, { args = process.argv.slice(2), env = process.env,
-  resolveImpl = resolveHostMcpTrust, spawnImpl = spawn } = {}) {
+  resolveImpl = resolveHostMcpTrust, spawnImpl = spawn, signalSource = process } = {}) {
   if (args.includes("--help") || args.includes("-h") || args.includes("--dry-run")) return main();
   try {
     const { values } = parseArgs({ args: scriptArgv(args), strict: false, allowPositionals: true,
@@ -128,15 +133,15 @@ export async function runWithHostMcpTrust(main, { args = process.argv.slice(2), 
     if (trust.certificates.some(pem => !loaded.has(new X509Certificate(pem).fingerprint256))) {
       if (env.DPF_HOST_TRUST_REEXEC === wanted) throw trustError("mcp_ca_startup_unavailable",
         "A fresh Node process could not load the selected CA. Check Node startup restrictions and the bundle's read permissions.");
-      const child = spawnImpl(process.execPath, [...process.execArgv, process.argv[1], ...args], {
-        env: { ...trust.env, DPF_HOST_TRUST_REEXEC: wanted }, stdio: "inherit", windowsHide: true });
-      const forward = signal => child.kill(signal);
-      const interrupt = () => forward("SIGINT"), terminate = () => forward("SIGTERM");
-      process.once("SIGINT", interrupt); process.once("SIGTERM", terminate);
-      try { return await new Promise((resolveChild, reject) => {
-        child.once("error", reject);
-        child.once("close", (code, signal) => resolveChild(code ?? (signal === "SIGINT" ? 130 : 88)));
-      }); } finally { process.removeListener("SIGINT", interrupt); process.removeListener("SIGTERM", terminate); }
+      // Return without awaiting inside the setup catch: errors after starting
+      // the real owner are not an unrun trust prerequisite and must not replay.
+      return withForegroundCancellation(async signal => {
+        const result = await runForegroundGate(process.execPath, [...process.execArgv, process.argv[1], ...args], {
+          env: { ...trust.env, DPF_HOST_TRUST_REEXEC: wanted }, spawnImpl, signal, windowsHide: true,
+          cancellationGraceMs: TRUST_REEXEC_CANCELLATION_GRACE_MS });
+        if (result.error) throw result.error;
+        return result.status ?? (result.signal === "SIGINT" ? 130 : 88);
+      }, { signalSource });
     }
     Object.assign(env, trust.env);
     delete env.DPF_HOST_TRUST_REEXEC;

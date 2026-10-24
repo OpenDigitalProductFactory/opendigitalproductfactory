@@ -70,12 +70,16 @@ function isUniqueConflict(error: unknown): boolean {
 export class PrismaAsyncOperationStore
   extends PrismaAsyncOperationQueryStore
   implements AsyncOperationAdmissionStore {
+  constructor(db: AsyncOperationDatabase, private readonly admission?: {
+    beforeAdmission(tx: AsyncOperationDatabase, input: CreateOrReplayAsyncOperationInput): Promise<void>;
+  }) { super(db); }
 
   async createOrReplay(
     input: CreateOrReplayAsyncOperationInput,
   ): Promise<{ operation: AsyncOperationRecord; replayed: boolean }> {
     try {
       return await this.db.$transaction(async (tx) => {
+        await this.admission?.beforeAdmission(tx, input);
         const existing = await tx.asyncInferenceOp.findUnique({
           where: {
             authorityScopeKey_requestKey: {
@@ -125,17 +129,15 @@ export class PrismaAsyncOperationStore
 
       // Concurrent create won. Read the canonical row in a fresh transaction;
       // PostgreSQL aborts the transaction containing the unique violation.
-      const existing = await this.db.asyncInferenceOp.findUnique({
-        where: {
-          authorityScopeKey_requestKey: {
-            authorityScopeKey: input.authorityScopeKey,
-            requestKey: input.requestKey,
-          },
-        },
+      return this.db.$transaction(async (tx) => {
+        await this.admission?.beforeAdmission(tx, input);
+        const existing = await tx.asyncInferenceOp.findUnique({ where: { authorityScopeKey_requestKey: {
+          authorityScopeKey: input.authorityScopeKey, requestKey: input.requestKey,
+        } } });
+        if (!existing) throw error;
+        assertReplayIdentity(existing, input);
+        return { operation: mapAsyncOperationRow(existing), replayed: true };
       });
-      if (!existing) throw error;
-      assertReplayIdentity(existing, input);
-      return { operation: mapAsyncOperationRow(existing), replayed: true };
     }
   }
 
