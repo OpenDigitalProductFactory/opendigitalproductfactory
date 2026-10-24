@@ -6,6 +6,8 @@
 // plumbing (created, adopted, evidence-recorded, …) is kept as muted context.
 // Pure + unit-testable; the React feed renders these entries.
 
+import { isRecord } from "@/lib/shared/coerce";
+
 import { isAgentActivityKind, type AgentActivityKind } from "@/lib/work-capsules";
 
 export type AgentSessionTone = AgentActivityKind | "lifecycle";
@@ -40,6 +42,7 @@ function actorOf(row: {
 export interface CapsuleActivityRow {
   id: string;
   kind: string;
+  payload?: unknown;
   summary: string;
   recordedAt: Date;
   recordedByAgentId?: string | null;
@@ -52,8 +55,33 @@ export interface CapsuleActivityRow {
  * labelled from its kind (e.g. "evidence-recorded" → "Evidence recorded").
  * Input order is preserved (callers pass newest-first).
  */
+function handoffPresentation(row: CapsuleActivityRow): Pick<AgentSessionEntry, "tone" | "label" | "summary"> | null {
+  const payload = isRecord(row.payload) ? row.payload : null;
+  // Activity JSON is caller-controlled. Only command receipts establish these outcomes.
+  if (row.kind === "command-accepted" && payload?.commandType === "reassign-executor") {
+    const result = isRecord(payload.result) ? payload.result : null;
+    const data = isRecord(result?.data) ? result.data : null;
+    const handoff = isRecord(data?.handoff) ? data.handoff : null;
+    if (result?.success === true && handoff?.kind === "bounded-handoff") {
+      const summary = typeof result.message === "string" ? result.message : row.summary;
+      if (handoff.state === "pending-acknowledgement") return { tone: "lifecycle", label: "Waiting for receiver", summary };
+      if (handoff.state === "completed") return { tone: "action", label: "Handoff completed", summary };
+    }
+  }
+  if (row.kind !== "command-rejected" || payload?.commandType !== "reassign-executor") return null;
+  const rejection = isRecord(payload.rejection) ? payload.rejection : null;
+  const data = isRecord(rejection?.data) ? rejection.data : null;
+  const result = isRecord(data?.result) ? data.result : null;
+  const resultData = isRecord(result?.data) ? result.data : null;
+  const handoff = isRecord(resultData?.handoff) ? resultData.handoff : null;
+  if (!handoff) return null;
+  return { tone: "error", label: "Handoff refused", summary: typeof result?.message === "string" ? result.message : row.summary };
+}
+
 export function presentAgentSession(rows: CapsuleActivityRow[]): AgentSessionEntry[] {
   return rows.map((row) => {
+    const handoff = handoffPresentation(row);
+    if (handoff) return { id: row.id, ...handoff, recordedAt: row.recordedAt, actor: actorOf(row) };
     if (isAgentActivityKind(row.kind)) {
       return {
         id: row.id,
@@ -80,5 +108,5 @@ export function presentAgentSession(rows: CapsuleActivityRow[]): AgentSessionEnt
 
 /** True when the feed has at least one typed agent activity (vs only plumbing). */
 export function hasAgentActivity(rows: CapsuleActivityRow[]): boolean {
-  return rows.some((row) => isAgentActivityKind(row.kind));
+  return rows.some((row) => isAgentActivityKind(row.kind) || handoffPresentation(row) !== null);
 }

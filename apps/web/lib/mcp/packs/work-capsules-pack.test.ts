@@ -763,3 +763,16 @@ describe("work capsule MCP tools", () => {
     }));
   });
 });
+
+
+describe("bounded handoff tool contract", () => {
+  it("exposes request and acknowledgement while retaining authority as the default", async () => {
+    const { workCapsulesPack } = await import("./work-capsules-pack");
+    const tool = workCapsulesPack.definitions.find(t => t.name === "reassign_workroom_executor")!;
+    expect(tool.consequence).toBe("authority");
+    expect(tool.consequenceForCall).toBeTypeOf("function");
+    expect(tool.inputSchema.properties).toMatchObject({ phase: { enum: ["request", "acknowledge"] }, requestId: { type: "string" }, targetAgentId: { type: "string" }, expectedExecutorRef: { type: "string" } });
+    expect(tool.inputSchema.required).toEqual(["capsuleId"]);
+    expect(workCapsulesPack.grants.reassign_workroom_executor).toEqual(["work_capsule_write"]);
+  });
+});

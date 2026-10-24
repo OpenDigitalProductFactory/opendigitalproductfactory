@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Bounded Workroom handoffs implementation plan
 
 Backlog: BI-5366EF78, successor to BI-B22C8E02. PR #6202 remains frozen.
