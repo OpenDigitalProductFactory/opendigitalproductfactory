@@ -114,3 +114,11 @@ BI-56E9CEC2 remain separate. Managed dependency readiness (including current
 pinned compiler aliases) is inspected independently before expanding this fix.
 No other session's worktree is used. No runtime assets are edited and no manual
 image or deployment path is introduced.
+
+The AC-HOST-003 continuation in WC-7A91FE56 narrows the shared preflight and PR
+readiness environment classifier to runtime diagnostic lines. Static import
+guards can exit 1 and explain `ERR_MODULE_NOT_FOUND`; that explanation remains
+a violation and blocks admission/readiness. Genuine loader absence remains an
+environment limitation, while explicit observer cancellation, timeout and
+runner failure retain precedence. Actual child-exit regressions cover both
+static diagnostics, native loader absence and the shared readiness consumer.
