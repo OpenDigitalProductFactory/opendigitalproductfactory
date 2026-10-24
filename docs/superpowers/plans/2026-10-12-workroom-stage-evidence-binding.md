@@ -41,7 +41,8 @@ Continuation: BI-9DC43E17 / WC-2EE23DD6, branch `fix/workroom-inflight-refresh`,
 base `3c6ed3e54fed49ecb6af43d4672bf5fb5223233b`. Preserve the original
 WC-042C344C, PR 6445, its failed scope request and the existing acceptance case.
 The original merged execution is intentionally archived; this continuation owns
-only the newly observed refresh defect. Design admission IRD-2D14ED5F09F5 is
+the observed refresh failure and the responsive evidence disclosure defect below.
+Design admission IRD-2D14ED5F09F5 is
 allowed. Production implementation remains held until BI-B87514F5 is deployed
 and a current native implementation claim is allowed. The original research
 receipt is retained; do not fabricate replacement evidence to satisfy the old
@@ -119,3 +120,47 @@ liveness-inventory.test.ts. This continuation does not edit those files. Its new
 shared-loader tests are workspace-case-detail.server.test.ts. No production path
 has been edited during preparation, and a source-only dependency classification
 is not test evidence.
+## October 24 narrow evidence disclosure amendment
+
+This remains BI-9DC43E17 / WC-2EE23DD6 and the same operator-view deliverable.
+The recorded acceptance criterion already requires: "Narrow/mobile, keyboard,
+screen-reader, dark/light, loading, partial, stale, failed, empty, and reconnect
+states pass the platform usability standards and UX budget gate."
+Preserve the published refresh plan at commit
+`27782e7f3d4f66968fe117a63bb35013abb29325` and its evidence; this amendment adds
+one observed failure in that existing responsive contract, not a new work item.
+
+On served f8d1e80, keyboard-opening Observed execution (20 events / 2 receipts)
+at a 375px viewport increased document scroll width from 360px to 375px while
+client width stayed 360px; actual horizontal scroll reached 15px. Closing the
+disclosure restored 360px and reopening reproduced the failure in both themes.
+The nested evidence summary's text range reached 374.97px with normal wrapping;
+its containing element boxes remained within the viewport. The outer summary
+was 40px high. This is a measured browser failure, not a JSDOM layout result.
+
+The existing `Evidence` renderer in `WorkroomShape.tsx` serves selected-step
+records, events and receipts. Add wrapping and the existing 44px target and
+focus-visible theme treatment to its summary, sharing the local disclosure
+styling with Observed execution where applicable. Preserve full journal labels,
+source/receipt identities, keys, order and native details/summary behavior.
+Use the adjacent evidence component's wrapping convention and verify long
+unbroken identifiers in the browser. Do not hide horizontal overflow, truncate
+record labels, introduce global CSS, or add another component substrate.
+
+After native implementation admission, include the retained long checkpoint
+label and a long source identity in the actual evidence fixture. Keep this
+layout correction in `WorkroomShape.tsx` and its existing test path alongside
+the refresh repair; do not edit the F646-owned tests listed above. Component
+checks preserve complete evidence and disclosure behavior, but cannot prove
+layout through mocked geometry or CSS-class assertions.
+
+On the canonical deployed image, keyboard-open, close and reopen both levels
+of evidence disclosure at 375px in light and dark themes. Require document
+scroll width no greater than client width apart from one pixel of rounding,
+no horizontal scrolling, summaries at least 44px high, retained keyboard focus
+and readable complete text. Repeat the in-flight refresh failure with evidence
+open: disclosure, focus, selected step, filter, layout and previous readAt remain
+intact. Then verify one successful explicit refresh applies a valid atomic
+snapshot. Existing admission, independent review, governed gate and release
+requirements above remain; this design amendment reports no repaired runtime
+or passing implementation test.
