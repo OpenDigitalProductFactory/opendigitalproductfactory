@@ -1,7 +1,8 @@
 import { prisma } from "@dpf/db";
 import { createHash } from "node:crypto";
-import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import type { CurrentDesignEvidence } from "./judged-design-artifact";
+import { prepareCurrentArtifactObservation } from "./current-artifact-observation";
+import { prepareCurrentResearchObservation, type CurrentResearchPorts } from "./current-research-artifact";
 import type { InitiativeArtifactRef } from "./receipt-schema";
 import { isFullSourceCommitSha } from "@/lib/work-capsules/work-capsule-branch-identity";
 
@@ -27,7 +28,9 @@ type BoundDesign = {
   artifactRef: Extract<InitiativeArtifactRef, { kind: "repo-blob-at-commit" }>;
   room: { capsuleId: string; repositoryFullName: string; baseSha: string; headSha: string; headBranch: string };
 };
-type CurrentDesignBinding = BoundDesign | { kind: "not-applicable" | "unavailable" };
+type CurrentDesignBinding = BoundDesign
+  | { kind: "not-applicable"; mayInheritResearch?: true }
+  | { kind: "unavailable" };
 type ClaimSource = {
   repositoryFullName: string; headBranch: string;
   baseSha?: string | null; headSha?: string | null;
@@ -43,7 +46,8 @@ async function loadCurrentDesignBinding(itemId: string, db: CurrentDesignDb, cla
   const baseline = parseReadinessBaselines(activities, item.itemId);
   if (baseline.malformed || baseline.ambiguous) return { kind: "unavailable" };
   // A child with only inherited scope never authors a parent amendment.
-  if (!baseline.current || baseline.current.origin === "item-body") return { kind: "not-applicable" };
+  if (!baseline.current) return { kind: "not-applicable", mayInheritResearch: true };
+  if (baseline.current.origin === "item-body") return { kind: "not-applicable" };
   if (!baseline.current.artifactRef) return { kind: "unavailable" };
   if (baseline.current.artifactRef.kind !== "repo-blob-at-commit") return { kind: "not-applicable" };
   // A claim tuple narrows the persisted subject binding; it supplies neither
@@ -97,6 +101,7 @@ export async function prepareCurrentDesignObservation(args: {
     loadBinding: (itemId: string, db: CurrentDesignDb, claimSource?: ClaimSource) => Promise<CurrentDesignBinding>;
     readCurrentArtifact: (binding: BoundDesign) => Promise<CurrentDesignEvidence>;
     lockBinding: (binding: BoundDesign, db: CurrentDesignDb) => Promise<void>;
+    research: CurrentResearchPorts;
   }>;
 }): Promise<{ evidence: CurrentDesignEvidence; admissionGuard: (tx: CurrentDesignDb) => Promise<CurrentDesignEvidence> }> {
   const db = args.db ?? prisma;
@@ -106,28 +111,26 @@ export async function prepareCurrentDesignObservation(args: {
     headBranch: args.claimSource.headBranch, baseSha: args.claimSource.baseSha, headSha: args.claimSource.headSha } : undefined;
   const read = args.ports?.readCurrentArtifact ?? readCurrentDesignArtifact;
   const unavailable = { state: "unavailable" } as const;
-  let initial: CurrentDesignBinding;
-  let evidence: CurrentDesignEvidence;
-  try {
-    initial = await load(args.itemId, db, claimSource);
-    evidence = initial.kind === "bound" ? await read(initial) : { state: initial.kind };
-    if (canonicalJson(await load(args.itemId, db, claimSource)) !== canonicalJson(initial)) evidence = unavailable;
-  } catch {
-    initial = { kind: "unavailable" }; evidence = unavailable;
-  }
-  return { evidence, admissionGuard: async tx => {
-    if (evidence.state === "unavailable") return unavailable;
-    try {
-      if (initial.kind === "bound") {
-        if (args.ports?.lockBinding) await args.ports.lockBinding(initial, tx);
-        else {
-          if (!tx.$queryRaw) return unavailable;
-          await tx.$queryRaw`SELECT "id" FROM "BacklogItem" WHERE "id" = ${initial.itemRowId} FOR UPDATE`;
-          await tx.$queryRaw`SELECT "id" FROM "WorkCapsule" WHERE "capsuleId" = ${initial.room.capsuleId} FOR SHARE`;
-        }
-      }
-      return canonicalJson(await load(args.itemId, tx, claimSource)) === canonicalJson(initial) ? evidence : unavailable;
-    } catch { return unavailable; }
+  let mayInheritResearch = false;
+  const design = await prepareCurrentArtifactObservation<CurrentDesignBinding, CurrentDesignEvidence>({
+    db, load: currentDb => load(args.itemId, currentDb as CurrentDesignDb, claimSource), read,
+    unbound: binding => {
+      mayInheritResearch = binding.kind === "not-applicable" && binding.mayInheritResearch === true;
+      return { state: binding.kind };
+    }, unavailable,
+    isUnavailable: evidence => evidence.state === "unavailable",
+    lock: args.ports?.lockBinding ? (binding, currentDb) => args.ports!.lockBinding!(binding, currentDb as CurrentDesignDb) : undefined,
+  });
+  // Own body/document baselines cannot inherit, so do not fetch unused research
+  // bytes for those subjects. The projector remains the inheritance authority.
+  const research = design.evidence.state === "not-applicable" && mayInheritResearch
+    ? await prepareCurrentResearchObservation({ itemId: args.itemId, db, claimSource, ports: args.ports?.research }) : null;
+  const combine = (evidence: CurrentDesignEvidence, ownResearch: CurrentDesignEvidence["research"]) =>
+    ownResearch ? { ...evidence, research: ownResearch } : evidence;
+  return { evidence: combine(design.evidence, research?.evidence), admissionGuard: async tx => {
+    const ownResearch = research ? await research.admissionGuard(tx) : undefined;
+    const evidence = await design.admissionGuard(tx);
+    return combine(evidence, ownResearch);
   } };
 }
 
