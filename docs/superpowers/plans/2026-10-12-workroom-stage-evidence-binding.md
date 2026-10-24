@@ -34,3 +34,88 @@ partial, stale/malformed bindings never satisfy a requirement, and all journal
 receipts remain observed rather than stage verdicts. No schema, new ledger, runner,
 authorization change, or replay is needed. Prove the >20-event regression first,
 then test deduplication, source drift, unavailable reads, and room isolation.
+
+## October 23 in-flight refresh continuation
+
+Continuation: BI-9DC43E17 / WC-2EE23DD6, branch `fix/workroom-inflight-refresh`,
+base `3c6ed3e54fed49ecb6af43d4672bf5fb5223233b`. Preserve the original
+WC-042C344C, PR 6445, its failed scope request and the existing acceptance case.
+The original merged execution is intentionally archived; this continuation owns
+only the newly observed refresh defect. Design admission IRD-2D14ED5F09F5 is
+allowed. Production implementation remains held until BI-B87514F5 is deployed
+and a current native implementation claim is allowed. The original research
+receipt is retained; do not fabricate replacement evidence to satisfy the old
+parent/child digest mismatch.
+
+### Observed failure and chosen repair
+
+On served f8d1e80, aborting one actual case RSC GET while the browser stayed online
+caused a hard document navigation, moved focus from Refresh state to the body,
+and closed Projection gaps. Existing partial-source refresh acceptance passed;
+RV-WORKROOM-INFLIGHT-FAILURE-F8-20261023 remains failed. A browser online hint or
+preflight request cannot cover a connection lost after the refresh dispatch.
+
+Replace that refresh transport with one authenticated JSON projection read owned
+by the mounted process section. Extract the page's authorized case/room selection
+into a shared server detail loader used by both the page and the new projection
+route. Reuse workspace-case-loader, workroom-only-case-projection, projectRoomShape
+and existing access checks; no parallel status model or unguarded room lookup.
+
+The response binds the canonical case key and expected exact Workroom row ID.
+An explicit room selection remains explicit; changed or ambiguous selection is a
+conflict rather than silently choosing the newest room. Return graph, definition,
+mode/current-cycle context and flow-map state as one snapshot from that selected
+room. Validate identity before applying it. Surfaces that carry one readAt change
+atomically; a flow-map failure is explicit and cannot leave an old map under a
+fresh badge. Other page panels retain their own truthful age.
+
+The client owns one abortable manual request and a finite read deadline. Reject
+repeat activation while pending; abort on target change/unmount and ignore late
+results from another generation. Keep the prior snapshot, selected step, list/map
+choice, filters, disclosure state and focus during transient failure. Replace the
+snapshot only with a complete, identity-valid response. No automatic refresh on
+mount, visibility, focus, online events or retry timers; no router.refresh,
+global fetch patch, reload, or preflight reachability probe.
+
+Use typed session-required (401), unavailable/forbidden (404 without disclosing
+which), selection-changed (409), and sanitized read-failed (500) outcomes.
+Session/access loss must hide the protected process content and provide a clear
+manual recovery action; it must not leave protected content presented as current.
+An ordinary transport failure retains the saved snapshot and explains that a
+manual retry is available. Keep the existing themed button, 44px target, polite
+announcements and focus behavior; do not steal focus if the operator moved it.
+
+### Test-first and delivery sequence
+
+1. Prepare a real WorkroomShapeSection behavioral test as an external design
+   artifact using existing process/freshness components and a controlled fetch boundary.
+   Start in List view with a selected step/filter and open evidence disclosures.
+   Require one owned request, reject it after dispatch, and assert retained
+   focus, selection, filter, disclosures, definition and exact checked text,
+   visible failure and zero router refresh. After native implementation admission, place the regression test in source and observe RED against unchanged production code.
+2. After native implementation admission, implement the shared authorized loader,
+   JSON route, typed snapshot and manual controller; separate freshness display
+   from transport. This shared loader/controller extraction is the refactoring
+   investment and avoids duplicated authorization or derived status rules.
+3. Add focused tests for atomic graph/definition/flow-map replacement, partial
+   health preservation, exact case/room mismatch, finite timeout, stale late
+   response after target switch, cancellation, rapid duplicate activation, no
+   background retry and session/access loss. Test authorization using the actual
+   existing loader seams; route errors must not leak raw provider/server text.
+4. Resolve the final scope's change-impact contract; run affected tests and both
+   web TypeScript programs. Preserve the existing aging/offline/focus tests while
+   replacing their unrealistic promise-returning router refresh mock. Update the
+   user guide and measured UX-fit manifest for the implemented surface.
+5. Root owns independent exact-source review, the single governed gate and normal
+   PR/release coordination. On the canonical deployed image, repeat the actual
+   in-flight JSON failure at narrow width, verify no document navigation and
+   retained interactions, then verify one successful explicit retry. Do not mark
+   parent initiative or other scenarios complete from this repair.
+
+The existing F646 owner retains workspace-case-loader.test.ts,
+workroom-only-case-projection.test.ts, workroom-execution-evidence.test.ts,
+workroom-initiative-evidence.test.ts, mcp-workroom-recovery.test.ts and
+liveness-inventory.test.ts. This continuation does not edit those files. Its new
+shared-loader tests are workspace-case-detail.server.test.ts. No production path
+has been edited during preparation, and a source-only dependency classification
+is not test evidence.
