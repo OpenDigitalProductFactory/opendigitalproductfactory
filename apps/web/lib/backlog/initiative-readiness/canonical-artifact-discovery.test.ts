@@ -49,9 +49,10 @@ describe("current canonical design observation", () => {
     expect(prepared.evidence).toEqual({ state: "unavailable" });
     expect(await prepared.admissionGuard({} as never)).toEqual({ state: "unavailable" });
   });
-  it("does not read provider bytes for inherited, document or absent own repository scope", async () => {
+  it("does not read provider bytes without an own design or research receipt", async () => {
     const p = ports(); p.loadBinding.mockResolvedValue({ kind: "not-applicable" });
-    const prepared = await prepareCurrentDesignObservation({ itemId: "BI-X", ports: p });
+    const { store } = stored(); store.backlogItemActivity.findMany.mockResolvedValue([]);
+    const prepared = await prepareCurrentDesignObservation({ itemId: "BI-X", db: store as never, ports: p });
     expect(prepared.evidence).toEqual({ state: "not-applicable" });
     expect(p.readCurrentArtifact).not.toHaveBeenCalled();
   });
