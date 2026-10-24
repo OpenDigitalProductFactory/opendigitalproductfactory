@@ -1,3 +1,4 @@
+import { presentBoundedHandoffReceipt } from "../work-capsules/agent-activity-presenter";
 import type { WorkCaseActorRef, WorkCaseSourceRef } from "./case-types";
 import type { WorkCapsuleActivityRow } from "./receipt-envelope";
 import type {
@@ -28,23 +29,27 @@ export function roomActivitiesFromCapsuleActivity(
   rows: readonly WorkCapsuleActivityRow[],
   capsuleIdByRowId: ReadonlyMap<string, string>,
 ): WorkroomActivityInput[] {
-  return rows.map((row) => ({
-    sourceEventId: row.id,
-    kind: KNOWN_ACTIVITY_KINDS.has(row.kind as WorkroomActivityKind)
-      ? (row.kind as WorkroomActivityKind)
-      : "external-event",
-    occurredAt: row.recordedAt,
-    actorRef: {
-      actorKind: row.recordedByAgentId ? "agent" : row.recordedById ? "person" : "system",
-      actorId: row.recordedByAgentId ?? row.recordedById ?? undefined,
-    },
-    summary: row.summary,
-    sourceRef: {
-      kind: "work-capsule",
-      id: capsuleIdByRowId.get(row.workCapsuleId) ?? row.workCapsuleId,
-      status: row.kind,
-    },
-  }));
+  return rows.map((row): WorkroomActivityInput => {
+    const handoff = presentBoundedHandoffReceipt(row);
+    return {
+      sourceEventId: row.id,
+      kind: handoff ? "coworker-handoff"
+        : KNOWN_ACTIVITY_KINDS.has(row.kind as WorkroomActivityKind)
+          ? (row.kind as WorkroomActivityKind)
+          : "external-event",
+      occurredAt: row.recordedAt,
+      actorRef: {
+        actorKind: row.recordedByAgentId ? "agent" : row.recordedById ? "person" : "system",
+        actorId: row.recordedByAgentId ?? row.recordedById ?? undefined,
+      },
+      summary: handoff ? `${handoff.label}: ${handoff.summary}` : row.summary,
+      sourceRef: {
+        kind: "work-capsule",
+        id: capsuleIdByRowId.get(row.workCapsuleId) ?? row.workCapsuleId,
+        status: row.kind,
+      },
+    };
+  });
 }
 
 function defaultEmphasis(

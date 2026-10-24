@@ -468,24 +468,30 @@ const definitions: ToolDefinition[] = [
   {
     name: "reassign_workroom_executor",
     description:
-      "Hand a Workroom off to a different executor: change the executor, transfer the active lease to the caller, and record an executor-changed event with the handoff manifest (next action, open risks, evidence digest). Renders as a plain status event, not raw agent plumbing.",
+      "Hand off a Workroom within its existing mandate: request records the receiver and next action; acknowledge transfers execution only after that receiver accepts. Omitting phase keeps the existing governed reassignment path.",
     inputSchema: {
       type: "object",
       properties: {
         commandId: COMMAND_ID_PROPERTY,
         capsuleId: { type: "string", description: "Semantic Workroom id (WC-*)." },
+        phase: { type: "string", enum: ["request", "acknowledge"], description: "Request a same-mandate handoff or acknowledge it as the receiving assistant." },
+        requestId: { type: "string", description: "Request activity id to acknowledge; returned by the request phase." },
+        targetAgentId: { type: "string", description: "Semantic id of the already-admitted receiving assistant." },
+        expectedExecutorKind: { type: "string", enum: ENUMS.executors, description: "Current executor kind read from get_workroom." },
+        expectedExecutorRef: { type: "string", description: "Current executor session read from get_workroom." },
         toExecutorKind: { type: "string", enum: ENUMS.executors, description: "Executor taking over the work." },
         toExecutorRef: { type: "string", description: "Optional session/owner id for the receiving executor." },
         reason: { type: "string", description: "Why the handoff is happening." },
         handoffManifest: { type: "object", description: "Optional handoff context: next action, open risks, evidence digest, branch/worktree, suggested receiver." },
         expectedLeaseHolderPrincipalId: { type: ["string", "null"], description: "The lease holder you read from get_workroom. When given, the handoff is refused with lease_holder_changed if someone else now holds the lease." },
       },
-      required: ["capsuleId", "toExecutorKind"],
+      required: ["capsuleId"],
     },
     requiredCapability: "manage_backlog",
     sideEffect: true,
     // changes identity or authority → consult-gated (TAK §8.4.1).
     consequence: "authority",
+    consequenceForCall: call => import("@/lib/work-capsules/bounded-handoff-tool").then(m => m.boundedHandoffConsequenceForCall(call)),
   },
   {
     name: "start_external_work",
@@ -566,7 +572,10 @@ export const workCapsulesPack: ToolPack = {
     rebind_workroom_shape: (params, userId, context) =>
       import("@/lib/work-capsules/workroom-shape-rebind-handler").then((m) => m.rebindWorkroomShapeTool(params, userId, context)),
     record_workroom_evidence: (params, userId, context) => receipted("record-evidence", (m) => m.recordCapsuleEvidenceTool)(params, userId, context),
-    reassign_workroom_executor: (params, userId, context) => receipted("reassign-executor", (m) => m.reassignCapsuleExecutorTool)(params, userId, context),
+    reassign_workroom_executor: (params, userId, context) => Promise.all([
+      HANDLERS(), import("@/lib/work-capsules/receipted-tool"), import("@/lib/work-capsules/bounded-handoff-tool"),
+    ]).then(([m, r, handoff]) => r.receiptedWorkroomTool("reassign-executor", m.reassignCapsuleExecutorTool as never,
+      { prepare: handoff.prepareBoundedHandoff })(params, userId, context as never)),
     start_external_work: (params, userId, context) => HANDLERS().then((m) => m.startExternalWorkTool(params, userId, context)),
     record_agent_activity: (params, userId, context) => receipted("record-activity", (m) => m.recordAgentActivityTool)(params, userId, context),
     // Legacy workroom names — callable, deliberately NOT advertised in `definitions`.

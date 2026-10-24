@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { prisma, type Prisma } from "@dpf/db";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
-import { recordExternalEvidence } from "@/lib/actions/external-evidence";
+import { recordExternalEvidenceInStore } from "@/lib/observability/external-evidence-store";
 import { humanApprovalForConsumption, humanApprovalForExecution } from "@/lib/coworker/human-approved-execution";
 import { fingerprintCoworkerInput } from "@/lib/govern/authority/coworker-authority-decision";
 import { loadEnvironmentClassResolution } from "@/lib/install/environment-class";
@@ -113,18 +113,25 @@ export async function recordSemanticReviewExemption(params: Record<string, unkno
   const bindings = await resolveBindings(value, room.id);
   if (!bindings) return refuse("Current executed verification and a separate reviewer record are required; failed checks remain failed.");
   if (await findCurrentSemanticFailure(room.id, room.headSha)) return refuse("A failed current review requires repair.");
-  // Re-read immediately before capture; subsequent head movement invalidates the record at consumption.
-  const finalRoom = await prisma.workroom.findUnique({ where: { capsuleId: String(params.capsuleId) } });
-  if (finalRoom?.headSha !== room.headSha || finalRoom.repositoryFullName !== room.repositoryFullName) return refuse("Workroom identity changed while authorizing the exception.");
-  const details = { ...value, ...bindings, schemaVersion: SEMANTIC_REVIEW_EXEMPTION_SCHEMA_VERSION,
-    policyVersion: CHANGE_REVIEW_POLICY_VERSION, sourceRepository: room.repositoryFullName, sourceBranch: room.headBranch,
-    approvedByUserId: userId, approvalDeciderUserId: approval.approverUserId, approvalOnBehalfOfUserId: approval.onBehalfOf,
-    authorityEnvelopeId: approval.envelopeId, authorityInputFingerprint: fingerprintCoworkerInput(params),
-    issuedAt: new Date().toISOString(), nativeReview: "UNRUN" };
-  const record = await recordExternalEvidence({ actorUserId: userId, recordedByAgentId: context.agentId,
-    routeContext: "change-review", operationType, target: room.capsuleId, provider: "dpf-change-review", workCapsuleId: room.id,
-    resultSummary: "Operator accepted a bounded DEV exception; native review UNRUN, assessment independence UNVERIFIED.", details: details as Prisma.InputJsonValue });
-  return { success: true, entityId: record.id, message: "Publication exception recorded; native review UNRUN and assessment independence UNVERIFIED.", data: { exemption: { ...details, evidenceId: record.id } } };
+  // Share the room fence with bounded handoff. A final unlocked read leaves
+  // a transfer window between the source check and evidence insertion.
+  return prisma.$transaction(async tx => {
+    await tx.$queryRaw`SELECT "id" FROM "WorkCapsule" WHERE "id" = ${room.id} FOR UPDATE`;
+    const finalRoom = await tx.workroom.findUnique({ where: { id: room.id } });
+    if (finalRoom?.headSha !== room.headSha || finalRoom.repositoryFullName !== room.repositoryFullName
+      || finalRoom.headBranch !== room.headBranch || finalRoom.executorRef !== room.executorRef) {
+      return refuse("Workroom identity changed while authorizing the exception.");
+    }
+    const details = { ...value, ...bindings, schemaVersion: SEMANTIC_REVIEW_EXEMPTION_SCHEMA_VERSION,
+      policyVersion: CHANGE_REVIEW_POLICY_VERSION, sourceRepository: room.repositoryFullName, sourceBranch: room.headBranch,
+      approvedByUserId: userId, approvalDeciderUserId: approval.approverUserId, approvalOnBehalfOfUserId: approval.onBehalfOf,
+      authorityEnvelopeId: approval.envelopeId, authorityInputFingerprint: fingerprintCoworkerInput(params),
+      issuedAt: new Date().toISOString(), nativeReview: "UNRUN" };
+    const record = await recordExternalEvidenceInStore({ actorUserId: userId, recordedByAgentId: context.agentId,
+      routeContext: "change-review", operationType, target: room.capsuleId, provider: "dpf-change-review", workCapsuleId: room.id,
+      resultSummary: "Operator accepted a bounded DEV exception; native review UNRUN, assessment independence UNVERIFIED.", details: details as Prisma.InputJsonValue }, tx);
+    return { success: true, entityId: record.id, message: "Publication exception recorded; native review UNRUN and assessment independence UNVERIFIED.", data: { exemption: { ...details, evidenceId: record.id } } };
+  }, { isolationLevel: "ReadCommitted" });
 }
 
 export async function resolveWorkroomReviewExemption(capsuleId: string, roomId: string, headSha: string) {
