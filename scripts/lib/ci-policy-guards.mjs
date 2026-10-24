@@ -131,6 +131,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/gate-worktree-process-identity.test.mjs"),
       node("--test", "scripts/gate-stdin-regression.test.mjs"),
       node("--test", "scripts/lib/gate-execution-checkpoint.test.mjs"),
+      // BI-BFDB98B6: exercise real pnpm.cmd console cancellation on Windows.
+      node("--test", "scripts/gate-worktree-windows-cancellation.test.mjs"),
       // BI-24D5D7C2: the control-plane watchdog aborts a 13-minute build after
       // two consecutive probe failures, and an inner mcpCall deadline was
       // classified as "request-failed" — an operator reads that as a broken

@@ -3,16 +3,14 @@ import { spawn, spawnSync } from "node:child_process";
 import {
   existsSync,
   mkdtempSync,
-  readdirSync,
   readFileSync,
   rmSync,
-  statSync,
   writeFileSync,
 } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import test from "node:test";
 
 import {
@@ -26,6 +24,7 @@ import {
   executionPressureFenceReason,
 } from "./gate-worktree.mjs";
 import { readProcessIdentity } from "./lib/local-sandbox-fence.mjs";
+import { callerGateDirectory, gateArtifactStamps, makeTempWorktree } from "./lib/gate-worktree-test-fixtures.mjs";
 
 // BI-D35B85BF. A queued gate now hands its claim to a detached resumer that
 // keeps re-claiming until admitted. These tests assert the exit-75 CONTRACT
@@ -40,38 +39,6 @@ process.env.DPF_DURABLE_RESUMER = "off";
 // running the suite. `pregate:status` then quoted a fixture's evidence id as
 // that worktree's gate. The stamps are taken before any test runs, and the last
 // test in this file compares them.
-const GATE_ARTIFACT_NAME = /^dpf-(local-ci-|sandbox-freshness|pre-admission-)/;
-
-function callerGateDirectory() {
-  const result = spawnSync("git", ["rev-parse", "--git-path", "dpf-local-ci-gate.json"], {
-    cwd: process.cwd(),
-    encoding: "utf8",
-  });
-  if (result.status !== 0 || !result.stdout.trim()) return null;
-  return dirname(resolve(process.cwd(), result.stdout.trim()));
-}
-
-function gateArtifactStamps(directory) {
-  const stamps = new Map();
-  if (!directory) return stamps;
-  let names = [];
-  try {
-    names = readdirSync(directory);
-  } catch {
-    return stamps;
-  }
-  for (const name of names) {
-    if (!GATE_ARTIFACT_NAME.test(name)) continue;
-    try {
-      const stat = statSync(join(directory, name));
-      stamps.set(name, `${stat.mtimeMs}:${stat.size}`);
-    } catch {
-      // Removed between the listing and the stat; it is not a write.
-    }
-  }
-  return stamps;
-}
-
 const CALLER_GATE_DIRECTORY = callerGateDirectory();
 const CALLER_GATE_ARTIFACTS_BEFORE = gateArtifactStamps(CALLER_GATE_DIRECTORY);
 
@@ -148,27 +115,6 @@ function isolatedFencePath() {
 const LEASE_EXPIRED_AT = "2020-01-01T00:00:00.000Z";
 const EVIDENCE_ISSUED_AT = "2999-01-01T00:00:00.000Z";
 const EVIDENCE_EXPIRES_AT = "2999-01-02T00:00:00.000Z";
-
-function makeTempWorktree() {
-  const dir = mkdtempSync(join(tmpdir(), "dpf-gate-worktree-"));
-  const git = (args) => {
-    const result = spawnSync("git", args, { cwd: dir, encoding: "utf8" });
-    if (result.status !== 0) {
-      throw new Error(`git ${args.join(" ")} failed: ${result.stderr || result.stdout}`);
-    }
-  };
-  git(["init", "-q"]);
-  git(["config", "user.name", "DPF Test"]);
-  git(["config", "user.email", "dpf-test@example.invalid"]);
-  writeFileSync(join(dir, "README.md"), "gate test\n");
-  git(["add", "README.md"]);
-  git(["commit", "-q", "-m", "init"]);
-  git(["update-ref", "refs/remotes/origin/main", "HEAD"]);
-  writeFileSync(join(dir, "runtime.mjs"), "export const candidate = true;\n");
-  git(["add", "runtime.mjs"]);
-  git(["commit", "-q", "-m", "runtime candidate"]);
-  return dir;
-}
 
 function makeDocumentationWorktree() {
   const dir = mkdtempSync(join(tmpdir(), "dpf-gate-doc-worktree-"));
