@@ -350,6 +350,7 @@ does not grant implementation authority or replace a live coverage receipt.
 - Decision: atomic
 - Rationale: obligation selection, bounded authorization, durable dispatch, independent review and attributable completion form one behavior and one clean revert. Shipping a hold without its executor, or claiming participation without its complete evidence, is not an independent deliverable. The owner requested one combined PR. UI and executor-handoff implementations remain outside it with their existing owners.
 - Parent: BI-E27F3600
+- Dependencies: BI-74B2A8CD supplies the merged source prerequisite; current independent design and architecture approval, plan coverage and plan review precede phase 4. UI and executor-handoff deliveries retain their separate owners and are not silently included in this graph.
 - Receipt: blocked-by: publish the corrected design and plan through the exact-tree gate; renew their independent scope and architecture reviews; record schema-v2 coverage against the resulting current baseline, then obtain plan review.
 - Source dependency: BI-74B2A8CD landed through PR #6432; its acceptance is separate.
 - Mapping: step-criticality, review-authority, craft-classifier, room-instantiation, need-and-receipts, undecided-hold, declared-profession-obligations, complete-craft-scheduling, returned-contribution-and-disposition, explicit-profession-consult -> BI-E27F3600. None is independently shippable.
