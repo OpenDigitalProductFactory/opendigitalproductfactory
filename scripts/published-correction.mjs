@@ -279,7 +279,8 @@ export async function verifyPublishedCorrection({ cwd = process.cwd(), relatedTe
     if (!stageIdentityMatches(identity, identityNow()) || git(["rev-parse", "HEAD"]) !== head || git(["rev-parse", "HEAD^{tree}"]) !== tree
       || git(["branch", "--show-current"]) !== branch || git(["status", "--porcelain"])) throw new Error("Source identity changed during correction verification.");
     if (!stageIdentityMatches(contextIdentity(context), contextIdentity(contextReader(cwd)))) throw new Error("Published PR or protection changed during correction verification.");
-    const completedAt = new Date(now()).toISOString(), expiresAt = new Date(now() + CORRECTION_TTL_MS).toISOString();
+    const completedMs = now();
+    const completedAt = new Date(completedMs).toISOString(), expiresAt = new Date(completedMs + CORRECTION_TTL_MS).toISOString();
     const result = { branch, sha: head, gatePassed: false, skipped: true, status: "gate-unrun", expiresAt,
       skipReason: "published-correction: affected checks executed; integration delegated to protected GitHub",
       publicationCorrection: { schemaVersion: 1, repositoryFullName: pr.repositoryFullName, branch, sha: head, tree,

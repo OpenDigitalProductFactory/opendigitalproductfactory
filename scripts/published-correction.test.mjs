@@ -646,3 +646,18 @@ test("stale source, modified plan and changed protection cannot supply retry map
     } finally { fixture.remove(); }
   });
 });
+
+
+test("completion and expiry share one clock instant without widening the proof lifetime", async () => {
+  const fixture = gitFixture();
+  let tick = Date.now() + 1000;
+  try {
+    fixture.write(2); fixture.git("add", "."); fixture.git("commit", "--quiet", "-m", "clock boundary correction");
+    const contextReader = () => { const context = fixture.contextReader(); context.protection.observedAt = new Date(tick).toISOString(); return context; };
+    const result = await verifyPublishedCorrection({ ...fixture.options, contextReader, now: () => tick++ });
+    const proof = result.publicationCorrection;
+    assert.equal(Date.parse(proof.expiresAt) - Date.parse(proof.completedAt), 60 * 60_000);
+    assert.equal(classifyPublishedCorrection(result, { now: tick }).ok, true);
+    assert.equal(classifyPublishedCorrection(result, { now: Date.parse(proof.expiresAt) }).ok, false);
+  } finally { fixture.remove(); }
+});
