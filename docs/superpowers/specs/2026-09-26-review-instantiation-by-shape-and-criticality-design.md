@@ -175,7 +175,23 @@ unqualified does not complete AC-6. If qualification cannot run or current
 authority/calibration forbids it, record that condition and keep activation
 outstanding; do not bypass the ceiling or call the feature delivered.
 
-## 4. Research and governing sources
+## 4. Research & Benchmarking
+
+The comparison covers two open-source delivery/review systems and two commercial
+review products. The inspected configuration and API entities below explain the
+adopted distinction between an obligation, eligible actor and returned result.
+They are benchmarks, not dependencies or DPF authority sources.
+
+| Comparator | Inspected model | Adopted pattern and rejected substitution |
+|---|---|---|
+| BMAD Method, open source | [Team configuration](https://docs.bmad-method.org/customize/adopt-bmad-across-a-team/) separates `[agents.<code>]` roster descriptors from `[workflow]` facts, knowledge sources and completion hooks. Its [agent inventory](https://docs.bmad-method.org/reference/skills-and-agents/) distinguishes agent personas from executable workflow skills. | Adopt explicit craft context and workflow-specific obligations. Reject a roster descriptor or loaded persona as proof of authorized execution. DPF keeps current grants, task identity and results in its server coordination plane. Reuse the [existing dependency evaluation](../../security/tool-evaluations/2026-09-15-bmad-method.md); install no second process framework. |
+| Gerrit, open source | [LabelDefinitionInfo](https://gerrit-review.googlesource.com/Documentation/rest-api-projects.html#label-definition-info) separates label values, branch applicability, copy conditions and self-approval policy; submit requirements are separate entities. | Adopt policy-bound verdicts and explicit freshness across revisions. Reject selecting review need or authority solely from a reviewer name or copying an old vote without its qualifying condition. |
+| GitHub, commercial | [Pull-request review responses](https://docs.github.com/en/rest/pulls/reviews#list-reviews-for-a-pull-request) carry reviewer, state and commit identity separately from requested ownership in CODEOWNERS. | Adopt attributable revision-bound results. Reject treating an ownership/request row as a completed review or path ownership as the only source of review depth. |
+| GitLab, commercial | [Approval rules and state](https://docs.gitlab.com/api/merge_request_approvals/) distinguish required counts, eligible users/groups and approvals. The approval API can require an exact HEAD `sha` and rejects a mismatch. | Adopt complete obligation accounting, eligibility and current-revision checks. Reject a concurrency cap as a reduction in required coverage. Numeric approval counts alone cannot prove that the required professions contributed. |
+
+The gap filled here is the combination of declared profession obligations,
+room/stage criticality, current authority and durable returned contributions.
+Source-path ownership or prompt personas alone cannot provide that contract.
 
 [GitHub CODEOWNERS](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners)
 separates path ownership from branch protection requiring approval.
