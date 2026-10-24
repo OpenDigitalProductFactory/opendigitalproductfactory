@@ -1,4 +1,4 @@
-node_modules/
+node_modules
 .next/
 dist/
 *.tsbuildinfo
@@ -65,12 +65,16 @@ tmp/
 .codex-runtime/
 docs/prompts/
 
-# MCP client configs contain live bearer tokens — must never be committed.
-# .mcp.json (Claude Code CLI) and .vscode/mcp.json (Claude Code VS Code
-# extension via VS Code's native MCP store) both carry an Authorization
-# header in plaintext. Use the "Connect Claude Code" flow from
-# Admin > Platform Development to (re)generate these locally.
+# MCP client configs are local files — must never be committed.
+# .vscode/mcp.json (VS Code's native MCP store) is written per host by
+# scripts/dpf-bootstrap-agent-toolchain.* and copied into worktrees by
+# scripts/sync-mcp-worktrees.*. On https, Claude Code's dpf connector is the
+# dpf-platform plugin (BI-5201141C); a project .mcp.json is written only on a
+# plain-http install or in explicit legacy mode, and never copied into
+# worktrees. .mcp.json was tracked despite this rule until BI-A5C757A2; the
+# tracked http+header shape overrode every https bootstrap.
 .mcp.json
+.mcp.json.pre-single-connector
 .vscode/mcp.json
 
 # services/adp ships in its own Docker image (services/adp/Dockerfile) which
@@ -98,6 +102,8 @@ services/adp/pnpm-lock.yaml
 /sbom/internalization-candidates.md
 /sbom/stale-override-audit.json
 /sbom/stale-override-audit.md
+/sbom/typescript-checker-currency.json
+/sbom/typescript-checker-currency.md
 /sbom/security-sweep.json
 /sbom/security-sweep.md
 
@@ -127,6 +133,13 @@ dev/null/
 # it never dirties the tree (which would muddy the janitor's dirty signal and block
 # a worktree's own Tier-A SessionEnd reap).
 .dpf-session-heartbeat.json
+
+# The Build Studio sandbox's own Auth.js secret, generated on the sandbox
+# workspace volume by scripts/sandbox-entrypoint.sh (BI-F1C680C7). This file is
+# copied into that workspace at bootstrap, so the rule keeps the secret out of
+# every build commit, diff and promotion.
+.dpf-sandbox-auth-secret
+.dpf-sandbox-auth-secret.*
 
 # Sandbox build worktrees. Build Studio creates .builds/<buildId>/ inside the
 # sandbox source tree and its GC removes them again, so tracking this path makes

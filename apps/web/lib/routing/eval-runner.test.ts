@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { getTestsForDimension } from "./golden-tests";
 
 // Mocks for the runDimensionEval integration test. The pure-function tests in
 // this file don't touch either module, so the mocks are inert for them.
@@ -6,12 +7,20 @@ const evalState = vi.hoisted(() => ({
   profileUpdates: [] as Array<Record<string, unknown>>,
   callCount: 0,
   errorMessage: "The operation was aborted due to timeout",
+  truncatedAt: null as number | null,
+  expectedResponses: {} as Record<string, string>,
   // BI-C8164664: in-flight + reaper guard test fixtures
   inflightRun: null as { runId: string; startedAt: Date } | null,
   createCount: 0,
   reapedCount: 0,
   // BI-C8164664: recency-cooldown fixture
   lastEvalAt: null as Date | null,
+  modelClass: "chat",
+  outputModalities: ["text"] as string[],
+  executionPlans: [] as Array<unknown>,
+  dispatchAttributions: [] as Array<{ traceId?: string; threadId?: string } | undefined>,
+  createdRunIds: [] as string[],
+  savedRuns: [] as Array<{ where: { runId: string }; data: { results: { dimensions: Array<{ tests: Array<{ traceId?: string }> }> } } }>,
   // BI-32426CA0: last-endpoint-standing guard fixtures
   selfClearance: ["public", "internal", "confidential", "restricted"] as string[],
   peerClearances: [] as string[][],
@@ -27,8 +36,16 @@ vi.mock("@/lib/ai-inference", () => {
   }
   return {
     InferenceError,
-    callProvider: vi.fn(async () => {
+    callProvider: vi.fn(async (...args: unknown[]) => {
       evalState.callCount++;
+      evalState.executionPlans.push(args[5]);
+      evalState.dispatchAttributions.push(args[8] as { traceId?: string; threadId?: string } | undefined);
+      if (evalState.truncatedAt !== null) {
+        const messages = args[2] as Array<{ content: string }>;
+        return { content: evalState.expectedResponses[messages[0]?.content ?? ""] ?? "OK",
+          truncated: evalState.callCount === evalState.truncatedAt, inputTokens: 1,
+          outputTokens: 1, inferenceMs: 1 };
+      }
       throw new InferenceError(evalState.errorMessage, "network");
     }),
   };
@@ -42,6 +59,8 @@ vi.mock("@dpf/db", () => ({
         evalCount: 0,
         modelStatus: "active",
         lastEvalAt: evalState.lastEvalAt,
+        modelClass: evalState.modelClass,
+        outputModalities: evalState.outputModalities,
         // Clearance of the profile under test, for the last-endpoint-standing
         // guard (BI-32426CA0). Extra keys are ignored by the other suites.
         provider: { sensitivityClearance: evalState.selfClearance },
@@ -62,11 +81,15 @@ vi.mock("@dpf/db", () => ({
       // BI-C8164664: serve the recent-in-flight fixture; assert that runs older
       // than the guard window are reaped rather than re-counted as in-flight.
       findFirst: vi.fn(async () => evalState.inflightRun),
-      create: vi.fn(async () => {
+      create: vi.fn(async (args: { data: { runId: string } }) => {
         evalState.createCount++;
+        evalState.createdRunIds.push(args.data.runId);
         return {};
       }),
-      update: vi.fn(async () => ({})),
+      update: vi.fn(async (args: { where: { runId: string }; data: { results: { dimensions: Array<{ tests: Array<{ traceId?: string }> }> } } }) => {
+        evalState.savedRuns.push(args);
+        return {};
+      }),
       updateMany: vi.fn(async (args: { where: { startedAt?: { lte?: Date } } }) => {
         // Test reaper: pretend one stale row was reaped whenever the where clause
         // includes the `lte` cutoff filter the eval-runner uses.
@@ -323,6 +346,43 @@ describe("errorEndsEvalCycle (whole-endpoint short-circuit predicate)", () => {
   });
 });
 
+describe("known-incomplete golden calibration", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    evalState.profileUpdates.length = 0;
+    evalState.callCount = 0;
+    evalState.inflightRun = null;
+    evalState.lastEvalAt = null;
+    evalState.modelClass = "chat";
+    evalState.outputModalities = ["text"];
+    evalState.savedRuns.length = 0;
+    evalState.dispatchAttributions.length = 0;
+    evalState.expectedResponses = Object.fromEntries(getTestsForDimension("reasoning").map(t => [t.prompt, t.expectedOutput ?? "OK"]));
+  });
+  afterEach(() => { evalState.truncatedAt = null; evalState.expectedResponses = {}; vi.useRealTimers(); });
+
+  it.each([1, 6])("holds all quality/lifecycle writes when call %i is known-truncated", async truncatedAt => {
+    evalState.truncatedAt = truncatedAt;
+    const pending = runDimensionEval("local", "selected-model", "test", { force: true });
+    await vi.runAllTimersAsync();
+    const result = await pending;
+    expect(evalState.callCount).toBe(truncatedAt);
+    expect(result.hasDrift).toBe(false);
+    expect(result.hasSevereDrift).toBe(false);
+    expect(result.dimensions.every(d => d.newScore === d.previousScore)).toBe(true);
+    const qualityFields = ["reasoning", "codegen", "toolFidelity", "instructionFollowingScore", "structuredOutputScore",
+      "conversational", "contextRetention", "supportsToolUse", "capabilities", "profileSource", "profileConfidence",
+      "evalCount", "modelStatus", "retiredAt", "retiredReason"];
+    for (const update of evalState.profileUpdates) {
+      for (const field of qualityFields) expect(update).not.toHaveProperty(field);
+    }
+    expect(evalState.savedRuns[0]?.data).toMatchObject({ status: "incomplete", avgScore: null });
+    const observation = evalState.savedRuns[0]?.data.results.dimensions.at(-1)?.tests[0];
+    expect(observation).toMatchObject({ score: null, truncated: true, traceId: expect.stringMatching(/^[a-f0-9]{32}$/) });
+    expect(observation?.traceId).toBe(evalState.dispatchAttributions.at(-1)?.traceId);
+  });
+});
+
 describe("runDimensionEval — whole-endpoint short-circuit", () => {
   beforeEach(() => {
     evalState.profileUpdates.length = 0;
@@ -332,6 +392,46 @@ describe("runDimensionEval — whole-endpoint short-circuit", () => {
     evalState.createCount = 0;
     evalState.reapedCount = 0;
     evalState.lastEvalAt = null;
+    evalState.modelClass = "chat";
+    evalState.outputModalities = ["text"];
+    evalState.executionPlans.length = 0;
+    evalState.dispatchAttributions.length = 0;
+    evalState.createdRunIds.length = 0;
+    evalState.savedRuns.length = 0;
+  });
+
+  it("skips stale and forced embedding evaluations without writes or inference", async () => {
+    evalState.modelClass = "embedding";
+    evalState.outputModalities = ["embeddings"];
+    try {
+      const result = await runDimensionEval("local", "nomic-embed-text-v1.5", "test", { force: true });
+      expect(result.skipped).toBe(true);
+      expect(evalState.callCount).toBe(0);
+      expect(evalState.createCount).toBe(0);
+      expect(evalState.profileUpdates).toEqual([]);
+    } finally {
+      evalState.modelClass = "chat";
+      evalState.outputModalities = ["text"];
+    }
+  });
+
+  it("passes the declared golden-test budget to the inference adapter", async () => {
+    await runDimensionEval("local", "qwen", "test");
+    expect(evalState.executionPlans[0]).toMatchObject({
+      maxTokens: 100,
+      contractFamily: "model-calibration.dimension",
+      providerId: "local",
+    });
+  });
+
+  it("joins a real calibration run's stored test result to its provider dispatch trace", async () => {
+    const result = await runDimensionEval("local", "qwen", "test");
+    const attribution = evalState.dispatchAttributions[0];
+    expect(attribution).toMatchObject({ traceId: expect.stringMatching(/^[a-f0-9]{32}$/) });
+    expect(attribution).not.toHaveProperty("threadId");
+    expect(evalState.createdRunIds[0]).toBe(result.testRunId);
+    expect(evalState.savedRuns[0]?.where.runId).toBe(result.testRunId);
+    expect(evalState.savedRuns[0]?.data.results.dimensions[0]?.tests[0]?.traceId).toBe(attribution?.traceId);
   });
 
   it("stops after the first timed-out probe instead of grinding every test", async () => {

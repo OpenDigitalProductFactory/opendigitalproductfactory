@@ -4,10 +4,13 @@ import {
 } from "./async-operation-contract";
 import type { AsyncOperationRecord } from "./async-operation-lifecycle";
 import { ASYNC_INFERENCE_INDETERMINATE_RETRY_MS } from "./async-operation-constants";
+// From the shared leaf, not ./async-operation-store (which re-exports it): the
+// store imports the lifecycle, which imports the provider, which imports this
+// worker, so importing the store here closed a module load-order cycle.
 import {
   AsyncOperationLeaseLostError,
   type AsyncOperationLeaseClaim,
-} from "./async-operation-store";
+} from "./async-operation-store-shared";
 
 const DEFAULT_LEASE_MS = 45_000;
 
@@ -103,12 +106,28 @@ export type AsyncProviderStartReconciliation =
   | { kind: "failed"; error: string }
   | { kind: "unresolved" };
 
+/**
+ * Whether the row can legally reach its provider. `unsatisfiable` names a
+ * precondition no retry can ever meet (for example a durable TaskRun binding
+ * that was never written), so the worker settles the row instead of throwing.
+ */
+export type AsyncOperationDispatchBinding =
+  | { kind: "bound" }
+  | { kind: "unsatisfiable"; error: string };
+
 export interface AsyncOperationWorkerDependencies {
   store: AsyncOperationWorkerStore;
   now(): Date;
   startProvider(operation: AsyncOperationRecord): Promise<{ providerOperationId: string }>;
   pollProvider(operation: AsyncOperationRecord): Promise<AsyncProviderPollResult>;
   reconcileIndeterminateStart(operation: AsyncOperationRecord): Promise<AsyncProviderStartReconciliation>;
+  /**
+   * Optional dispatch precondition evaluated under the fenced lease, before any
+   * provider call. A throw before the claim leaves the row with no lease and no
+   * next poll, so bounded cron recovery re-enqueues it on every tick forever;
+   * an unsatisfiable answer here becomes a durable `failed` transition instead.
+   */
+  resolveDispatchBinding?(operation: AsyncOperationRecord): Promise<AsyncOperationDispatchBinding>;
 }
 
 export type AsyncOperationWorkerResult = {
@@ -288,6 +307,20 @@ export async function runDurableAsyncOperationWorker(
       phase: "expired-before-provider-call",
     });
     return { status: "expired", disposition: "expired" };
+  }
+
+  // A binding that can never be satisfied is a terminal fact about the row,
+  // not a transient fault. Settling it here, under the lease, is what stops
+  // recovery from waking the same orphan on every cron tick.
+  const binding = dependencies.resolveDispatchBinding
+    ? await dependencies.resolveDispatchBinding(operation)
+    : { kind: "bound" as const };
+  if (binding.kind === "unsatisfiable") {
+    await transition(dependencies, operation, claim, now, "failed", {
+      phase: "dispatch-binding-unsatisfiable",
+      error: binding.error,
+    }, { errorMessage: binding.error });
+    return { status: "failed", disposition: "failed" };
   }
 
   if (operation.status === "pending") {

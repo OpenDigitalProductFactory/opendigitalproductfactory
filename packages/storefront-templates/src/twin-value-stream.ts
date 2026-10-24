@@ -38,6 +38,11 @@ export interface TwinStageBinding {
   queueKeys: string[];
   /** Twin zone keys where this stage's work physically happens. */
   zoneKeys: string[];
+  /** True when this stage comes from the universal backbone that a leaf profile
+   *  composes with (BI-4B11F98E) rather than from the archetype's own lanes. An
+   *  archetype with no leaf profile has no inherited stages: its backbone IS its
+   *  stream. */
+  inherited: boolean;
 }
 
 export interface TwinValueStreamBinding {
@@ -131,6 +136,7 @@ export function deriveTwinValueStreamBinding(archetype: ArchetypeDefinition): Tw
     zoneToStage[zone.key] = matchRule(zone.key, ZONE_RULES, available, primary);
   }
 
+  const hasLeafProfile = ovs.streams.some((stream) => stream.key !== "operational-value-stream");
   const stages: TwinStageBinding[] = ovs.stages
     .slice()
     .sort((a, b) => a.order - b.order)
@@ -139,6 +145,7 @@ export function deriveTwinValueStreamBinding(archetype: ArchetypeDefinition): Tw
       stageLabel: s.label,
       order: s.order,
       loadBearing: s.loadBearing,
+      inherited: hasLeafProfile && s.streamKey === "operational-value-stream",
       queueKeys: profile.queues.filter((q) => queueToStage[q.key] === s.key).map((q) => q.key),
       zoneKeys: profile.zones.filter((z) => zoneToStage[z.key] === s.key).map((z) => z.key),
     }));

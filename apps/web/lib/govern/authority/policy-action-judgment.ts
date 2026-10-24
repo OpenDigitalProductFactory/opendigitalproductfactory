@@ -2,6 +2,8 @@ import "server-only";
 
 import type { ToolPackHandler } from "@/lib/mcp/tool-pack";
 import type { KernelConsultPolicyProjection } from "@/lib/decision/kernel-consult-ledger";
+import { INITIATIVE_READINESS_LANES } from "@/lib/tak/initiative-readiness-tool-grants";
+import { isExactAuthorResearchParams } from "./coworker-authority-decision";
 import type { PolicyAuthorityProjectionAttempt } from "./coworker-tool-authority-gate";
 
 type JudgmentInput = Parameters<PolicyAuthorityProjectionAttempt>[0];
@@ -16,6 +18,121 @@ export type PolicyActionJudgmentRequest = {
   context: Parameters<ToolPackHandler>[2];
   policyRecord: KernelConsultPolicyProjection;
 };
+
+export type RoutinePolicyActionIneligibility =
+  | "platform-scope-required"
+  | "backlog-subject-required"
+  | "immutable-review-binding-required"
+  | "review-binding-mismatch"
+  | "workroom-binding-required"
+  | "workroom-binding-mismatch"
+  | "gate-not-authorized"
+  | "internal-action-required"
+  | "immediate-action-required"
+  | "side-effect-required"
+  | "consequential-action-requires-human"
+  | "operator-policy-requires-approval"
+  | "non-pass-decision"
+  | "findings-present";
+
+export type RoutinePolicyActionEligibility =
+  | { eligible: true }
+  | { eligible: false; reason: RoutinePolicyActionIneligibility };
+
+/**
+ * Admit bounded evidence recording whose writer, backlog item,
+ * canonical blob and Workroom head are all fixed by server-validated TaskRun
+ * metadata. This is deliberately narrower than generic coworker authority.
+ */
+export function routinePolicyActionEligibility(
+  input: JudgmentInput["authorityInput"],
+): RoutinePolicyActionEligibility {
+  if (input.organizationId !== "platform") {
+    return { eligible: false, reason: "platform-scope-required" };
+  }
+  if (input.subject?.kind !== "backlog-item") {
+    return { eligible: false, reason: "backlog-subject-required" };
+  }
+  const binding = input.task?.initiativeReviewBinding;
+  const author = input.authorResearchBinding;
+  if (author && (input.action.toolName !== "record_initiative_evidence"
+    || !isExactAuthorResearchParams(input.rawParams)
+    || input.subject.id !== author.itemId
+    || input.rawParams.itemId !== author.itemId
+    || (input.rawParams.artifactRef as { revisionId: string }).revisionId !== author.revisionId
+    || input.rawParams.reason !== author.reason
+    || input.authContext.actingHumanUserId !== author.authorUserId
+    || input.authContext.principalId !== author.authorPrincipalId
+    || input.action.routeContext !== `/build/work/${author.workroomId}`
+    || input.room?.workroomId !== author.workroomId
+    || !input.action.agentGrantAllowed || input.action.roomAuthorityAllowed === false)) {
+    return { eligible: false, reason: "review-binding-mismatch" };
+  }
+  if (!binding && !author) {
+    return { eligible: false, reason: "immutable-review-binding-required" };
+  }
+  if (binding && (
+    binding.writerToolName !== input.action.toolName
+    || binding.itemId !== input.subject.id
+  )) {
+    return { eligible: false, reason: "review-binding-mismatch" };
+  }
+  const workroom = binding?.workroomRef;
+  if (binding && !workroom) {
+    return { eligible: false, reason: "workroom-binding-required" };
+  }
+  // A repository blob must sit at the Workroom head; a Build Studio revision is
+  // bound by its own immutable id and digest, not by a commit (BI-926A7E90).
+  if (binding && workroom && (
+    binding.artifactRef.repositoryFullName !== workroom.repositoryFullName
+    || (binding.artifactRef.kind === "repo-blob-at-commit" && binding.artifactRef.commitSha !== workroom.headSha)
+  )) {
+    return { eligible: false, reason: "workroom-binding-mismatch" };
+  }
+  const lane = INITIATIVE_READINESS_LANES[input.action.toolName];
+  if (!lane || !lane.gates.some((gate) => gate === (binding?.gate ?? "research"))) {
+    return { eligible: false, reason: "gate-not-authorized" };
+  }
+  if (
+    input.integration.required
+    || input.dataPolicy.sensitivity !== "internal"
+  ) {
+    return { eligible: false, reason: "internal-action-required" };
+  }
+  if (input.action.executionMode !== "immediate") {
+    return { eligible: false, reason: "immediate-action-required" };
+  }
+  if (!input.action.sideEffect) {
+    return { eligible: false, reason: "side-effect-required" };
+  }
+  if (input.action.consequence) {
+    return { eligible: false, reason: "consequential-action-requires-human" };
+  }
+  if (input.action.policyProjectionAllowed === false) {
+    return { eligible: false, reason: "operator-policy-requires-approval" };
+  }
+  const findings = input.rawParams.findings;
+  const resolved = input.rawParams.resolvedFindingRefs;
+  if (
+    !Array.isArray(findings)
+    || !Array.isArray(resolved)
+    || resolved.length > 0
+  ) {
+    return { eligible: false, reason: "findings-present" };
+  }
+  // Recording an unresolved failure produces evidence, not permission to
+  // proceed. The receipt writer validates the findings; readiness retains the
+  // failed gate. Waivers and finding resolutions never enter this class.
+  if (input.rawParams.decision === "fail" && findings.length > 0) {
+    return { eligible: true };
+  }
+  if (input.rawParams.decision !== "pass") {
+    return { eligible: false, reason: "non-pass-decision" };
+  }
+  return findings.length === 0
+    ? { eligible: true }
+    : { eligible: false, reason: "findings-present" };
+}
 
 /**
  * Build the one action-specific WWMD question from verified server context.
@@ -51,8 +168,16 @@ export function buildPolicyActionJudgmentRequest(
         `Should WWMD authorize the exact bounded initiative-readiness action ${actionKey} ` +
         `for ${subjectRef} at ${routeContext}, bound to immutable input fingerprint ` +
         `${approvalBinding.inputFingerprint}? Apply Mark's current promoted DPF principles. ` +
-        "Proceed only when the bounded action is justified; defer on ambiguity and decline when policy opposes it.",
+        "Proceed only when the bounded action is justified; defer on ambiguity and decline when policy opposes it."
+        + (authorityInput.authorResearchBinding
+          ? ` This is only the creator's authored research fact at accepted revision ${authorityInput.authorResearchBinding.revisionId},`
+            + ` digest ${authorityInput.authorResearchBinding.valueDigest}, in Workroom ${authorityInput.authorResearchBinding.workroomId}.`
+            + " It grants neither work-start approval nor an independent review verdict; unknown author agent remains unknown."
+          : ""),
       callingPopulation: "in_platform_coworker",
+      // BI-9C384562: name the owning scope; the population heuristic alone routes
+      // an in-platform coworker to the organization profile.
+      decisionDomain: "platform-development",
       callingSurface: "policy-action-authority",
       consumerContexts: ["build-studio", "initiative-readiness"],
       ringScope: ["ring-2-workflow", "ring-4-sandbox-prod"],
@@ -134,6 +259,10 @@ export async function producePolicyActionJudgment(
   input: JudgmentInput,
   overrides: { runPrincipleDecision?: PrincipleRunner } = {},
 ): Promise<void> {
+  const eligibility = routinePolicyActionEligibility(input.authorityInput);
+  if (!eligibility.eligible) {
+    throw new Error(`routine policy action is ineligible: ${eligibility.reason}`);
+  }
   const request = buildPolicyActionJudgmentRequest(input);
   const runPrincipleDecision = overrides.runPrincipleDecision
     ?? (await import("@/lib/mcp/packs/principle-decide-pack")).runPrincipleDecision;

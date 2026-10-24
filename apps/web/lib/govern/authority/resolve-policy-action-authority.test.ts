@@ -8,7 +8,7 @@ describe("resolveAndPersistPolicyActionAuthority", () => {
     const now = new Date("2026-08-23T12:00:00.000Z");
     const authorityInput: CoworkerAuthorityInput = {
       now,
-      organizationId: "org-canonical",
+      organizationId: "platform",
       authContext: {
         principalId: "principal-mark",
         principalAliases: [],
@@ -45,8 +45,29 @@ describe("resolveAndPersistPolicyActionAuthority", () => {
         decisionVersionsCurrent: true,
         decisionVersionIds: ["PV-7"],
       },
-      task: null,
-      rawParams: { itemId: "BI-F0715C9C", commitSha: "abc123" },
+      task: {
+        taskRunId: "TR-BOUND",
+        initiativeReviewBinding: {
+          writerToolName: "record_initiative_design_review",
+          itemId: "BI-F0715C9C",
+          gate: "spec-approval",
+          workroomRef: {
+            kind: "workroom-head",
+            workroomId: "WC-BOUND",
+            repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+            branchName: "fix/wwmd-exact-bound-receipts",
+            headSha: "abc123",
+          },
+          artifactRef: {
+            kind: "repo-blob-at-commit",
+            repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+            commitSha: "abc123",
+            path: "docs/superpowers/specs/exact-bound.md",
+            providerBlobId: "blob-abc123",
+          },
+        },
+      },
+      rawParams: { decision: "pass", findings: [], resolvedFindingRefs: [] },
       approval: null,
     };
     const approvalBinding = buildCoworkerApprovalBinding(authorityInput);
@@ -84,7 +105,7 @@ describe("resolveAndPersistPolicyActionAuthority", () => {
         policyActionBinding: {
           actionKey: "record_initiative_design_review",
           subject: { kind: "backlog-item", id: "BI-F0715C9C" },
-          organizationId: "org-canonical",
+          organizationId: "platform",
           professionId: null,
           routeContext: "/tool/record_initiative_design_review",
           artifactFingerprint: approvalBinding.inputFingerprint,
@@ -115,7 +136,7 @@ describe("resolveAndPersistPolicyActionAuthority", () => {
         userContext: { platformRole: "admin", isSuperuser: false },
         context: {
           agentId: "AGT-WS-DEV",
-          organizationId: "org-canonical",
+          organizationId: "platform",
           routeContext: "/tool/record_initiative_design_review",
         },
         source: "agentic-loop",
@@ -130,9 +151,14 @@ describe("resolveAndPersistPolicyActionAuthority", () => {
     }));
     expect(authorizationCreate).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
-        organizationId: "org-canonical",
+        organizationId: null,
         policyVersion: "PV-7",
-        rationale: expect.objectContaining({ interactionId: "DI-BOUND-YES" }),
+        rationale: expect.objectContaining({
+          interactionId: "DI-BOUND-YES",
+          contributionLedger: [{ principleId: "P-1", contribution: 3.1 }],
+          artifactFingerprint: approvalBinding.inputFingerprint,
+          approvalBindingFingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
+        }),
       }),
     }));
 
@@ -152,7 +178,7 @@ describe("resolveAndPersistPolicyActionAuthority", () => {
         userContext: { platformRole: "admin", isSuperuser: false },
         context: {
           agentId: "AGT-WS-DEV",
-          organizationId: "org-canonical",
+          organizationId: "platform",
           routeContext: "/tool/record_initiative_design_review",
         },
         source: "agentic-loop",
@@ -162,10 +188,42 @@ describe("resolveAndPersistPolicyActionAuthority", () => {
     }, db as never);
 
     expect(declined).toMatchObject({
-      outcome: "denied",
-      reasonCode: "policy-declined",
+      outcome: "not-authorized",
+      explanation: expect.stringContaining("explicitly declined"),
     });
     expect(authorizationCreate).toHaveBeenCalledTimes(1);
+
+    // BI-9C384562: the live DEV shape — a sealed, high-confidence, autonomy-
+    // eligible yes whose policy version nobody has ratified. The projector
+    // must not root autonomy in an unsigned policy, so this falls to the
+    // human; ratifying the version once (decision-perspective-ratify.ts) is
+    // what turns the same row into an approval.
+    decisionFind.mockResolvedValue([{
+      ...decisionRow,
+      profileVersion: { versionId: "PV-7", promotedByPrincipalId: null },
+    }]);
+    const unratified = await resolveAndPersistPolicyActionAuthority({
+      execution: {
+        toolName: "record_initiative_design_review",
+        rawParams: authorityInput.rawParams,
+        userId: "user-mark",
+        userContext: { platformRole: "admin", isSuperuser: false },
+        context: {
+          agentId: "AGT-WS-DEV",
+          organizationId: "platform",
+          routeContext: "/tool/record_initiative_design_review",
+        },
+        source: "agentic-loop",
+      },
+      authorityInput,
+      approvalBinding,
+    }, db as never, { produceJudgment: vi.fn().mockResolvedValue(undefined) });
+    expect(unratified).toMatchObject({
+      outcome: "not-authorized",
+      explanation: expect.stringContaining("Human decision required"),
+    });
+    expect(authorizationCreate).toHaveBeenCalledTimes(1);
+    decisionFind.mockResolvedValue([decisionRow]);
 
     decisionFind.mockResolvedValueOnce([{
       ...decisionRow,
@@ -182,7 +240,7 @@ describe("resolveAndPersistPolicyActionAuthority", () => {
         userContext: { platformRole: "admin", isSuperuser: false },
         context: {
           agentId: "AGT-WS-DEV",
-          organizationId: "org-canonical",
+          organizationId: "platform",
           routeContext: "/tool/record_initiative_design_review",
         },
         source: "agentic-loop",
@@ -192,8 +250,8 @@ describe("resolveAndPersistPolicyActionAuthority", () => {
     }, db as never);
 
     expect(dualControl).toMatchObject({
-      outcome: "resolution-required",
-      reasonCode: "dual-control-required",
+      outcome: "not-authorized",
+      explanation: expect.stringContaining("distinct human approver"),
     });
     expect(authorizationCreate).toHaveBeenCalledTimes(1);
 
@@ -214,7 +272,7 @@ describe("resolveAndPersistPolicyActionAuthority", () => {
         userContext: { platformRole: "admin", isSuperuser: false },
         context: {
           agentId: "AGT-WS-DEV",
-          organizationId: "org-canonical",
+          organizationId: "platform",
           routeContext: "/tool/record_initiative_design_review",
         },
         source: "agentic-loop",
@@ -223,11 +281,42 @@ describe("resolveAndPersistPolicyActionAuthority", () => {
       approvalBinding,
     }, db as never);
 
-    expect(uncertain).toEqual({ outcome: "not-authorized" });
+    expect(uncertain).toMatchObject({
+      outcome: "not-authorized",
+      explanation: expect.stringContaining("missing a current, explicit"),
+    });
     expect(authorizationCreate).toHaveBeenCalledTimes(1);
+
+    const authorInput = structuredClone(authorityInput);
+    authorInput.task = null;
+    authorInput.action.toolName = "record_initiative_evidence";
+    authorInput.action.routeContext = "/build/work/WC-AUTHOR";
+    authorInput.room = { workroomId: "WC-AUTHOR", collaborationShape: null, workShapeKey: null };
+    authorInput.authorResearchBinding = { itemId: "BI-F0715C9C", buildId: "FB-AUTHOR", revisionId: "revision-author",
+      valueDigest: "sha256:value", contentDigest: "sha256:bytes", authorUserId: "user-mark", authorPrincipalId: "principal-mark",
+      authorAgentId: null, workroomId: "WC-AUTHOR", reason: "Canonical research", authorityVersion: null, roomPolicyDigest: "sha256:room" };
+    authorInput.rawParams = { itemId: "BI-F0715C9C", gate: "research", decision: "pass",
+      artifactRef: { kind: "feature-build-revision", revisionId: "revision-author" }, reason: "Canonical research", findings: [], resolvedFindingRefs: [] };
+    const authorBinding = buildCoworkerApprovalBinding(authorInput);
+    decisionFind.mockResolvedValue([{ ...decisionRow, outcomePayload: { ...decisionRow.outcomePayload,
+      policyActionBinding: { ...decisionRow.outcomePayload.policyActionBinding, actionKey: authorInput.action.toolName,
+        routeContext: authorInput.action.routeContext, artifactFingerprint: authorBinding.inputFingerprint } } }]);
+    const authorResult = await resolveAndPersistPolicyActionAuthority({ execution: {
+      toolName: authorInput.action.toolName, rawParams: authorInput.rawParams, userId: "user-mark",
+      userContext: { platformRole: "admin", isSuperuser: false }, context: { agentId: "AGT-WS-DEV", routeContext: authorInput.action.routeContext }, source: "agentic-loop",
+    }, authorityInput: authorInput, approvalBinding: authorBinding }, db as never);
+    expect(authorResult).toMatchObject({ outcome: "approved" });
+    expect(authorizationCreate).toHaveBeenLastCalledWith(expect.objectContaining({ data: expect.objectContaining({
+      rationale: expect.objectContaining({ authorResearchBinding: authorInput.authorResearchBinding, artifactFingerprint: authorBinding.inputFingerprint }),
+    }) }));
+    expect(envelopeCreate).toHaveBeenLastCalledWith(expect.objectContaining({ data: expect.objectContaining({ taskRunId: null }) }));
   });
 
-  it("produces one exact WWMD judgment when none exists, then reloads and projects it", async () => {
+  it.each([
+    { decision: "pass", findings: [] },
+    { decision: "fail", findings: [{ issue: "The measured default remains unspecified.", severity: "important",
+      evidence: { blobId: "blob-abc123", startLine: 79, endLine: 79, quote: "Default: TBD" } }] },
+  ])("produces and projects exact WWMD authority to record $decision evidence", async (assessment) => {
     const now = new Date("2026-08-31T17:00:00.000Z");
     const authorityInput: CoworkerAuthorityInput = {
       now,
@@ -249,8 +338,29 @@ describe("resolveAndPersistPolicyActionAuthority", () => {
       subject: { kind: "backlog-item" as const, id: "BI-2014236E" },
       delegation: null, integration: { required: false, state: "not-required" as const },
       dataPolicy: { sensitivity: "internal" as const, maskingRequired: false, maskingSatisfied: true, decisionVersionsCurrent: true, decisionVersionIds: ["PV-7"] },
-      task: null,
-      rawParams: { itemId: "BI-2014236E" }, approval: null,
+      task: {
+        taskRunId: "TR-EXACT",
+        initiativeReviewBinding: {
+          writerToolName: "record_initiative_evidence",
+          itemId: "BI-2014236E",
+          gate: "research",
+          workroomRef: {
+            kind: "workroom-head",
+            workroomId: "WC-48A3D214",
+            repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+            branchName: "fix/wwmd-exact-bound-receipts",
+            headSha: "abc123",
+          },
+          artifactRef: {
+            kind: "repo-blob-at-commit",
+            repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+            commitSha: "abc123",
+            path: "docs/superpowers/specs/exact-bound.md",
+            providerBlobId: "blob-abc123",
+          },
+        },
+      },
+      rawParams: { ...assessment, resolvedFindingRefs: [] }, approval: null,
     };
     const approvalBinding = buildCoworkerApprovalBinding(authorityInput);
     const exactRow = {
@@ -306,7 +416,7 @@ describe("resolveAndPersistPolicyActionAuthority", () => {
       { execution, authorityInput, approvalBinding }, db as never, { produceJudgment },
     );
     expect(produceJudgment).toHaveBeenCalledOnce();
-    expect(declined).toMatchObject({ outcome: "denied", reasonCode: "policy-declined" });
+    expect(declined).toMatchObject({ outcome: "not-authorized", explanation: expect.stringContaining("explicitly declined") });
 
     produceJudgment.mockClear();
     findMany.mockReset().mockResolvedValueOnce([]).mockResolvedValueOnce([{
@@ -323,6 +433,6 @@ describe("resolveAndPersistPolicyActionAuthority", () => {
       { execution, authorityInput, approvalBinding }, db as never, { produceJudgment },
     );
     expect(produceJudgment).toHaveBeenCalledOnce();
-    expect(mismatched).toEqual({ outcome: "not-authorized" });
+    expect(mismatched).toMatchObject({ outcome: "not-authorized", explanation: expect.stringContaining("WWMD did not produce") });
   });
 });

@@ -413,3 +413,102 @@ test("evaluatePrHealth: a slot-1 PASS for head is a note and READY (end to end t
   assert.equal(r.ready, true);
   assert.match(r.notes.join("\n"), /local-CI sandbox gate passed/);
 });
+
+// BI-02E5F2A1: gate-infrastructure-unavailable is evidence-gated and reads as gate-UNRUN.
+const INFRA_EVIDENCE = {
+  code: "gate-infrastructure-unavailable",
+  tool: "claim_nonprod_environment_lease",
+  kind: "credential-rejected",
+  message: "unauthorized: invalid or expired token",
+  statusCode: 401,
+  probedAt: "2026-09-18T00:00:00.000Z",
+  durationMs: 12,
+};
+
+test("localCi: gate-infrastructure-unavailable WITH captured evidence is ready but reported gate-UNRUN, never passed", () => {
+  const r = evalPr({
+    meta: okMeta,
+    checks: [pass("Typecheck")],
+    threads: [],
+    localCi: {
+      headSha: HEAD,
+      docsOnly: false,
+      attestation: null,
+      stateRecord: {
+        branch: "feat/x", sha: HEAD, gatePassed: false, skipped: true, gateUnrun: true, status: "gate-unrun",
+        skipReason: "gate-infrastructure-unavailable: contributor token dead",
+        infrastructureEvidence: INFRA_EVIDENCE,
+      },
+    },
+  });
+  assert.equal(r.ready, true);
+  const notes = r.notes.join("\n");
+  assert.match(notes, /gate UNRUN/);
+  assert.match(notes, /credential-rejected: unauthorized: invalid or expired token/);
+  assert.match(notes, /NOT a pass/);
+  assert.doesNotMatch(notes, /gate passed/);
+});
+
+test("localCi: gate-infrastructure-unavailable WITHOUT captured evidence is a blocker (prose is not evidence)", () => {
+  const r = evalPr({
+    meta: okMeta,
+    checks: [pass("Typecheck")],
+    threads: [],
+    localCi: {
+      headSha: HEAD,
+      docsOnly: false,
+      attestation: null,
+      stateRecord: {
+        branch: "feat/x", sha: HEAD, gatePassed: false, skipped: true,
+        skipReason: "gate-infrastructure-unavailable: I promise the portal was down",
+      },
+    },
+  });
+  assert.equal(r.ready, false);
+  assert.match(r.blockers.join("\n"), /requires machine-captured evidence/);
+});
+
+test("localCi: gate-infrastructure-unavailable as a PR-body trailer is a blocker", () => {
+  const r = evalPr({
+    meta: okMeta,
+    checks: [pass("Typecheck")],
+    threads: [],
+    localCi: {
+      headSha: HEAD, docsOnly: false, stateRecord: null,
+      attestation: { kind: "override", value: "gate-infrastructure-unavailable: portal down" },
+    },
+  });
+  assert.equal(r.ready, false);
+  assert.match(r.blockers.join("\n"), /a trailer is prose, not evidence/);
+});
+
+// BI-53B189C8. A DPF_ALLOW_LOCAL_CI_STUB run records gatePassed:true without
+// building anything. It is marked testStub, and it must never clear the
+// local-CI requirement for a PR.
+test("selectLocalCiStateRecord: a test-stub PASS for HEAD is not the live pass", () => {
+  const picked = selectLocalCiStateRecord({
+    headSha: HEAD_SHA,
+    records: [
+      { slotKey: "slot-0", state: { branch: "fix/admitted-owner-recovery", sha: HEAD_SHA, gatePassed: true, status: "passed", testStub: true, expiresAt: future } },
+      { slotKey: "slot-1", state: { branch: "feat/x", sha: HEAD_SHA, gatePassed: false, skipped: true, skipReason: "docs-adjacent: only" } },
+    ],
+  });
+  assert.equal(picked.slotKey, "slot-1");
+});
+
+test("localCi: a test-stub record for the head SHA is a blocker, not a pass", () => {
+  const r = evaluatePrHealth({
+    meta: okMeta,
+    checks: [pass("Typecheck")],
+    threads: [],
+    localCi: {
+      headSha: HEAD_SHA,
+      docsOnly: false,
+      attestation: null,
+      stateRecord: { branch: "fix/admitted-owner-recovery", sha: HEAD_SHA, gatePassed: true, status: "passed", testStub: true },
+    },
+  });
+  assert.equal(r.ready, false);
+  assert.doesNotMatch(r.notes.join("\n"), /local-CI sandbox gate passed/);
+  assert.match(r.blockers.join("\n"), /DPF_ALLOW_LOCAL_CI_STUB/);
+});

@@ -2,7 +2,7 @@
 // BI-8D98C5E6 / DI-BC2255C06EC5: one provider page in Platform Integrations;
 // contextual publishing stays in the existing Customer Marketing queue.
 
-import type { PurposeContractModule } from ".";
+import type { PurposeContractModule } from "../page-purpose";
 
 export const WORDPRESS_PURPOSE_CONTRACTS: PurposeContractModule = [
   {

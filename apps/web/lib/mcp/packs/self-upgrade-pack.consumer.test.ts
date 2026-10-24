@@ -6,6 +6,9 @@ const mocks = vi.hoisted(() => ({
   readSelfUpgradeSupport: vi.fn(),
   resolveReleaseBatchStatus: vi.fn(),
   getLatestRun: vi.fn(),
+  getLastCheckedAt: vi.fn(),
+  getScheduledDecline: vi.fn(),
+  getDeferredUpgradeRequest: vi.fn(),
 }));
 
 vi.mock("@/lib/self-upgrade/request", () => ({
@@ -22,6 +25,22 @@ vi.mock("@/lib/self-upgrade/release-batch-status", () => ({
 }));
 vi.mock("@/lib/self-upgrade/run-store", () => ({
   getLatestRun: mocks.getLatestRun,
+}));
+vi.mock("@/lib/self-upgrade/last-check", () => ({
+  getLastCheckedAt: mocks.getLastCheckedAt,
+}));
+// Keep the real schedule arithmetic; stub only its DB reader, so the status the
+// test asserts is produced by the same functions the cron gate uses.
+vi.mock("@/lib/self-upgrade/scheduled-gate", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/self-upgrade/scheduled-gate")>()),
+  getScheduledDecline: mocks.getScheduledDecline,
+  recordScheduledDecline: vi.fn(),
+}));
+
+// Keep the real pending arithmetic; stub only the DB reader.
+vi.mock("@/lib/self-upgrade/deferred-request", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/self-upgrade/deferred-request")>()),
+  getDeferredUpgradeRequest: mocks.getDeferredUpgradeRequest,
 }));
 
 import { selfUpgradePack } from "./self-upgrade-pack";
@@ -56,6 +75,8 @@ describe("self-upgrade MCP tools on consumer installs", () => {
       support,
     });
     mocks.getLatestRun.mockResolvedValue(null);
+    mocks.getLastCheckedAt.mockResolvedValue(null);
+    mocks.getScheduledDecline.mockResolvedValue(null);
   });
 
   it("returns the queued artifact-native dispatch result", async () => {
@@ -75,8 +96,59 @@ describe("self-upgrade MCP tools on consumer installs", () => {
   it("reports enabled and routine-upgrade eligible", async () => {
     expect(await call("get_self_upgrade_queue_status")).toMatchObject({
       success: true,
-      data: { supported: true, enabled: true, routineUpgradeEligible: true },
+      data: {
+        supported: true,
+        enabled: true,
+        routineUpgradeEligible: true,
+        releaseBatchEligible: true,
+        nextScheduledCheckAt: null,
+        scheduledGate: null,
+      },
     });
+  });
+
+  it("BI-3CA18934: is NOT routine-eligible while the unattended check is throttled, and says when it is due", async () => {
+    mocks.getSelfUpgradeConfig.mockResolvedValue({ enabled: true, sourceMode: "upstream", checkIntervalHours: 24 });
+    mocks.getLastCheckedAt.mockResolvedValue(new Date(Date.now() - 2 * 60 * 60 * 1000));
+    mocks.getScheduledDecline.mockResolvedValue({
+      reason: "interval-not-elapsed",
+      at: new Date().toISOString(),
+    });
+
+    const result = await call("get_self_upgrade_queue_status") as unknown as {
+      data: { routineUpgradeEligible: boolean; releaseBatchEligible: boolean; nextScheduledCheckAt: string | null; checkIntervalHours: number; scheduledGate: { reason: string } | null };
+    };
+
+    // The release batch still allows an upgrade; the unattended path does not.
+    expect(result.data.releaseBatchEligible).toBe(true);
+    expect(result.data.routineUpgradeEligible).toBe(false);
+    expect(result.data.checkIntervalHours).toBe(24);
+    expect(result.data.nextScheduledCheckAt).not.toBeNull();
+    expect(result.data.scheduledGate).toMatchObject({ reason: "interval-not-elapsed" });
+  });
+
+  it("BI-3CA18934: drops a stale decline recorded before the last successful check", async () => {
+    mocks.getSelfUpgradeConfig.mockResolvedValue({ enabled: true, sourceMode: "upstream", checkIntervalHours: 24 });
+    mocks.getLastCheckedAt.mockResolvedValue(new Date("2026-09-07T05:39:09.895Z"));
+    mocks.getScheduledDecline.mockResolvedValue({ reason: "outside-window", at: "2026-09-07T04:00:00.000Z" });
+
+    const result = await call("get_self_upgrade_queue_status") as unknown as { data: { scheduledGate: unknown } };
+    expect(result.data.scheduledGate).toBeNull();
+  });
+
+  it("BI-2128872C: reports an agent request still waiting for the next window, and drops a fulfilled one", async () => {
+    mocks.getSelfUpgradeConfig.mockResolvedValue({ enabled: true, sourceMode: "upstream", checkIntervalHours: 24 });
+    mocks.getLastCheckedAt.mockResolvedValue(new Date("2026-10-07T10:00:00.000Z"));
+    mocks.getScheduledDecline.mockResolvedValue(null);
+    const deferred = { requestedBy: "mcp:codex", requestedAt: "2026-10-07T15:20:00.000Z", runAt: "2026-10-07T22:00:00.000Z" };
+    mocks.getDeferredUpgradeRequest.mockResolvedValue(deferred);
+
+    const pending = await call("get_self_upgrade_queue_status") as unknown as { data: { deferredRequest: unknown } };
+    expect(pending.data.deferredRequest).toEqual(deferred);
+
+    mocks.getLastCheckedAt.mockResolvedValue(new Date("2026-10-07T22:00:00.000Z"));
+    const fulfilled = await call("get_self_upgrade_queue_status") as unknown as { data: { deferredRequest: unknown } };
+    expect(fulfilled.data.deferredRequest).toBeNull();
   });
 
   it("reports that the promoter is release-managed", async () => {

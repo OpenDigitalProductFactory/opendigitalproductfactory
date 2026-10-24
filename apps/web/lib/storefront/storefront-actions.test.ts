@@ -142,6 +142,43 @@ describe("submitDonation", () => {
   });
 });
 
+describe("submitOrder currency", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue(
+      mockPublishedStorefront as never,
+    );
+    vi.mocked(prisma.storefrontItem.findMany).mockResolvedValue([
+      { itemId: "item-one", name: "Haircut", priceAmount: { toNumber: () => 45 }, catalogItem: null },
+    ] as never);
+    vi.mocked(prisma.storefrontOrder.create).mockResolvedValue({
+      id: "order-row",
+      orderRef: "ORD-TESTREF",
+    } as never);
+    vi.mocked(prisma.storefrontOrderLineItem.create).mockResolvedValue({ id: "line" } as never);
+  });
+
+  function storedOrderCurrency(): string {
+    const call = vi.mocked(prisma.storefrontOrder.create).mock.calls[0]?.[0] as {
+      data: { currency: string };
+    };
+    return call.data.currency;
+  }
+
+  // The order path kept the `?? "GBP"` default that BI-685ADDCD removed from
+  // donations, so a USD shop's order placed without a currency was booked in
+  // pounds (BI-6030131C).
+  it("records an order without a currency in the workspace's own currency", async () => {
+    vi.mocked(prisma.orgSettings.findFirst).mockResolvedValue({ baseCurrency: "USD" } as never);
+    await submitOrder("salon", {
+      customerEmail: "walk-in@example.com",
+      items: [{ itemId: "item-one", name: "Haircut", qty: 1, unitPrice: 45 }],
+      totalAmount: 45,
+    });
+    expect(storedOrderCurrency()).toBe("USD");
+  });
+});
+
 describe("submitOrder Product Sold traceability", () => {
   beforeEach(() => {
     vi.clearAllMocks();

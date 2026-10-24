@@ -13,10 +13,10 @@ import { auth } from "@/lib/auth";
 import { can, getGrantedCapabilities } from "@/lib/permissions";
 import { AgentModelRoutingCard } from "@/components/platform/AgentModelRoutingCard";
 import { CapabilitiesEditor } from "@/components/platform/coworker-record/CapabilitiesEditor";
+import { previewCoworkerGrantReconciliation } from "@/lib/tak/coworker-grant-reconciliation";
 import { RecordActionsMenu } from "@/components/platform/coworker-record/RecordActionsMenu";
-import { CoworkerPriorityControl } from "@/components/golden-triangle/CoworkerPriorityControl";
+import { CoworkerPriorityNote } from "@/components/platform/coworker-record/CoworkerPriorityNote";
 import { CoworkerProactivityNote } from "@/components/platform/coworker-record/CoworkerProactivityNote";
-import { getCoworkerPostureInheritance } from "@/lib/actions/golden-triangle";
 import {
   loadCoworkerRecord,
 } from "@/lib/coworker-record/load-record";
@@ -142,13 +142,9 @@ export default async function AgentDetailPage({
   // for the Profession & Knowledge tab. Null when the coworker is unmapped.
   // The install's resolved archetype is shown so the operator sees which corpus
   // slice this coworker is served (the "noted at setup" surface).
-  const [corpusSignals, installVariant, postureInheritance] = await Promise.all([
+  const [corpusSignals, installVariant] = await Promise.all([
     profession.family ? loadFamilyCorpusSignals(profession.family.professionKey) : null,
     resolveInstallVariantContext(prisma),
-    // WS4: the effective Golden-Triangle posture + its inheritance provenance,
-    // keyed by the BUSINESS agentId (the per-agent posture map key). Session-gated
-    // + fail-open inside the action, so a read failure renders the Balanced cold-start.
-    getCoworkerPostureInheritance(agent.agentId),
   ]);
 
   // Model-routing card data (kept page-side: needs the live provider catalog).
@@ -386,16 +382,23 @@ export default async function AgentDetailPage({
       : { state: "not-configured" },
     services: record.services,
   });
+  const permissionReview = canWrite ? await previewCoworkerGrantReconciliation(record.authority.agentId)
+    .then((preview) => ({ preview, error: null }))
+    .catch(() => ({ preview: null, error: "Permission review could not be loaded. Try reviewing again." }))
+    : { preview: null, error: null };
   const capabilitiesEditor = (
     <CapabilitiesEditor
-      agentCuid={record.runtime.id}
-      agentBusinessId={record.runtime.agentId}
+      agentCuid={record.authority.id}
+      agentBusinessId={record.authority.agentId}
+      skillAgentBusinessId={record.runtime.agentId}
       slugId={record.runtime.slugId}
-      heldGrants={record.runtime.heldGrantKeys}
+      heldGrants={record.authority.heldGrantKeys}
       allGrantKeys={knownGrantKeys()}
       assignedSkills={assignedSkills}
       catalogSkills={catalogSkillRows}
       canWrite={canWrite}
+      permissionPreview={permissionReview.preview}
+      permissionPreviewError={permissionReview.error}
     />
   );
 
@@ -421,16 +424,9 @@ export default async function AgentDetailPage({
     />
   );
 
-  // WS4: per-coworker priority control (client). Reads the effective posture +
-  // inheritance resolved above; canWrite gates the editable presets/triangle and
-  // the save/reset actions (read-only chip view otherwise).
-  const priorityControl = (
-    <CoworkerPriorityControl agentId={agent.agentId} inheritance={postureInheritance} canWrite={canWrite} />
-  );
-
-  // WS4: a one-word badge on the Priority tab so an override is visible without
-  // opening it ("set" = this coworker has its own override; otherwise inherited).
-  const priorityBadge = postureInheritance.hasOwnOverride ? "set" : null;
+  // BI-7ADEBDC1: priority is a Workroom parameter; the record points at the room.
+  const priorityControl = <CoworkerPriorityNote />;
+  const priorityBadge = null;
   const needsAndPlaybooksCount =
     capabilityNeedReview.summary.total + workPatternReadModel.summary.totalPatterns;
 

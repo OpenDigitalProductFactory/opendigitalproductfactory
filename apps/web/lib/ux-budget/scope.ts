@@ -217,6 +217,38 @@ export function isStructurallyHidden(tag: TagToken): boolean {
   return false;
 }
 
+/**
+ * Live-region roles — the same set the ratchet's structure projection drops
+ * (ratchet.ts TRANSIENT_ROLES). `status` and `alert` are implicit live regions
+ * per WAI-ARIA; `log`, `marquee` and `timer` likewise.
+ */
+const LIVE_REGION_ROLES = new Set(["alert", "status", "log", "marquee", "timer"]);
+
+/**
+ * A live region announces TRANSIENT state — a toast, a polling status, a
+ * screen-reader summary that a client effect rewrites as the page settles. Its
+ * words are not "visible on arrival": they exist to describe a change, so
+ * whether they are populated at capture time is a hydration race, not a
+ * property of the surface. The structure projection already ignores these
+ * roles (ratchet.ts); the word budget did not, so a route could measure the
+ * same DOM shape with a different count — /inventory carries an
+ * `aria-live` graph-scope announcement that is empty on the server render
+ * and filled in by a client effect (BI-99909E53).
+ *
+ * `aria-live="off"` is an explicit opt-out and stays counted. A live region
+ * that HOLDS A CONTROL is not an announcement either — the report-kit
+ * `EmptyState` is `role="status"` and carries the page's primary action
+ * (/performance) — so only control-free live regions are excised; see
+ * `excisePassiveLiveRegions`.
+ */
+export function isLiveRegion(tag: TagToken): boolean {
+  const live = tag.attrs["aria-live"]?.toLowerCase();
+  if (live !== undefined && live !== "" && live !== "off") return true;
+  const role = tag.attrs.role?.toLowerCase();
+  if (!role) return false;
+  return role.split(/\s+/).some((token) => LIVE_REGION_ROLES.has(token));
+}
+
 /** True when the element carries progressive-disclosure semantics at all. */
 export function isDisclosureRegion(tag: TagToken): boolean {
   return (
@@ -233,7 +265,24 @@ export function isDisclosureRegion(tag: TagToken): boolean {
  */
 export function defaultVisibleHtml(html: string): string {
   const rendered = removeSubtrees(html, (tag) => NON_RENDERED.has(tag.name));
-  return removeSubtrees(promoteClosedSummaries(rendered), isStructurallyHidden);
+  return excisePassiveLiveRegions(
+    removeSubtrees(promoteClosedSummaries(rendered), isStructurallyHidden),
+  );
+}
+
+const INTERACTIVE_TAG_RE = /<(?:a|button|input|select|textarea)\b/i;
+
+/**
+ * Drop live regions that contain no control. One that does (an `EmptyState`
+ * with its action link) is a surface the owner acts on, and excising it would
+ * report the action as buried behind a collapse it is not behind.
+ */
+function excisePassiveLiveRegions(html: string): string {
+  let out = html;
+  for (const block of extractSubtrees(html, isLiveRegion)) {
+    if (!INTERACTIVE_TAG_RE.test(block)) out = out.replace(block, "");
+  }
+  return out;
 }
 
 /**

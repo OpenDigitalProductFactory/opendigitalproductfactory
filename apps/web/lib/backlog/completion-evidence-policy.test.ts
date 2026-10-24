@@ -40,6 +40,15 @@ function input(overrides: Partial<CompletionEvidencePolicyInput> = {}): Completi
 }
 
 describe("evaluateCompletionEvidence", () => {
+  it.each(["test_fail", "build_fail", "ux_fail", "migration_fail"] as const)("never grants completion credit for cited %s", (kind) => {
+    const result = evaluateCompletionEvidence(input({
+      rawManifest: { workClass: "operational", evidenceActivityIds: ["negative"] },
+      evidence: [fact("negative", kind)],
+    }));
+    expect(result.allowed).toBe(false);
+    expect(result.acceptanceEvidenceRefs).not.toContain("negative");
+  });
+
   it("allows a proportionate implementation manifest", () => {
     expect(evaluateCompletionEvidence(input())).toMatchObject({
       allowed: true,
@@ -58,6 +67,48 @@ describe("evaluateCompletionEvidence", () => {
       evidence: [fact("spec", "spec_review")],
     }));
     expect(result.allowed).toBe(true);
+  });
+
+  it("returns only valid cited manual or UX evidence as substantive acceptance refs", () => {
+    const result = evaluateCompletionEvidence(input({
+      item: { id: "row-1", itemId: "BI-DOC", status: "open", workType: "doc" },
+      rawManifest: {
+        workClass: "documentation",
+        evidenceActivityIds: ["spec", "manual", "ux"],
+      },
+      evidence: [
+        fact("spec", "spec_review"),
+        fact("manual", "manual_check"),
+        fact("ux", "ux_verified"),
+      ],
+    }));
+
+    expect(result).toMatchObject({
+      allowed: true,
+      acceptanceEvidenceRefs: ["manual", "ux"],
+    });
+  });
+
+  // BI-4A222439: the newer UX failure used to be silent here because ux is
+  // not a required dimension for documentation; a current failure now blocks
+  // in any dimension, and the stale pass is still never returned as acceptance.
+  it("does not return stale UX acceptance when a newer UX failure exists, and blocks on it", () => {
+    const result = evaluateCompletionEvidence(input({
+      item: { id: "row-1", itemId: "BI-DOC", status: "open", workType: "doc" },
+      rawManifest: {
+        workClass: "documentation",
+        evidenceActivityIds: ["spec", "ux-pass"],
+      },
+      evidence: [
+        fact("spec", "spec_review"),
+        fact("ux-pass", "ux_verified", new Date("2026-07-26T09:00:00.000Z")),
+        fact("ux-fail", "ux_fail", new Date("2026-07-26T11:00:00.000Z")),
+      ],
+    }));
+
+    expect(result.allowed).toBe(false);
+    expect(result.blockers).toContainEqual(expect.objectContaining({ code: "newer-failure", dimension: "ux" }));
+    expect(result.acceptanceEvidenceRefs).toEqual([]);
   });
 
   it("allows verified-existing work with source and manual verification", () => {
@@ -204,5 +255,72 @@ describe("evaluateCompletionEvidence", () => {
       evidence: [],
     }));
     expect(result).toMatchObject({ allowed: true, noOp: true, blockers: [] });
+  });
+});
+
+// BI-4A222439: the acceptance sweep closed BI-1B5BE5F4 while its newest ux
+// evidence was ux_fail. A failure that is still the newest word in its
+// dimension blocks done whatever the manifest declares, and is reported even
+// when no manifest is supplied, so every close path reads the same failures.
+describe("current failing evidence (BI-4A222439)", () => {
+  const uxNotApplicable = {
+    workClass: "implementation",
+    evidenceActivityIds: ["source", "tests", "build"],
+    ux: { disposition: "not-applicable", reason: "No user interface files or routes changed." },
+    migration: { disposition: "not-applicable", reason: "No database schema or persisted data changed." },
+  };
+
+  it("a newest ux_fail blocks a manifest that declares ux not-applicable", () => {
+    const result = evaluateCompletionEvidence(input({
+      rawManifest: uxNotApplicable,
+      evidence: [
+        fact("source", "source_verified"),
+        fact("tests", "test_pass"),
+        fact("build", "build_pass"),
+        fact("ux-pass", "ux_verified", new Date("2026-07-26T09:00:00Z")),
+        fact("ux-fail", "ux_fail", new Date("2026-07-26T11:00:00Z")),
+      ],
+    }));
+    expect(result.allowed).toBe(false);
+    expect(result.blockers).toContainEqual(expect.objectContaining({
+      code: "newer-failure", dimension: "ux", evidenceActivityId: "ux-fail",
+    }));
+    expect(result.currentFailures).toEqual([{ dimension: "ux", evidenceActivityId: "ux-fail", evidenceKind: "ux_fail" }]);
+  });
+
+  it("reports current failures even when no manifest is supplied", () => {
+    const result = evaluateCompletionEvidence(input({
+      rawManifest: undefined,
+      evidence: [fact("ux-fail", "ux_fail")],
+    }));
+    expect(result.allowed).toBe(false);
+    expect(result.currentFailures).toEqual([{ dimension: "ux", evidenceActivityId: "ux-fail", evidenceKind: "ux_fail" }]);
+  });
+
+  it("a later pass in the same dimension supersedes the failure", () => {
+    const result = evaluateCompletionEvidence(input({
+      evidence: [
+        fact("source", "source_verified"),
+        fact("tests", "test_pass"),
+        fact("build", "build_pass"),
+        fact("ux-fail", "ux_fail", new Date("2026-07-26T09:00:00Z")),
+        fact("ux-pass", "ux_verified", new Date("2026-07-26T11:00:00Z")),
+      ],
+    }));
+    expect(result.allowed).toBe(true);
+    expect(result.currentFailures).toEqual([]);
+  });
+
+  it("a failure outside the completion window is not current", () => {
+    const result = evaluateCompletionEvidence(input({
+      evidence: [
+        fact("source", "source_verified"),
+        fact("tests", "test_pass"),
+        fact("build", "build_pass"),
+        fact("old-ux-fail", "ux_fail", new Date("2026-07-20T00:00:00Z")),
+      ],
+    }));
+    expect(result.allowed).toBe(true);
+    expect(result.currentFailures).toEqual([]);
   });
 });

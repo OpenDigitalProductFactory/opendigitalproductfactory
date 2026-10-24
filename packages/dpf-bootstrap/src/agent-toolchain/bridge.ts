@@ -1,3 +1,4 @@
+import { mcpClientBearerHeaderRequired, type McpAuthMode, type McpClient } from "@dpf/integration-shared/mcp-client-credential-policy";
 /**
  * Node bridge for the agent-toolchain bootstrap planning library.
  *
@@ -11,8 +12,9 @@
  */
 
 import { existsSync, readFileSync, statSync } from "node:fs";
+import { join, resolve } from "node:path";
 
-import { planCodexConfig, type CodexConfigPlan } from "./codex-config";
+import { planCodexConfig, planCodexProjectConfig, type CodexConfigPlan } from "./codex-config";
 import {
   planMcpClientConfig,
   mcpClientConfigPaths,
@@ -42,6 +44,7 @@ import {
 import type { ReadinessState } from "./types";
 
 export type AgentToolchainPlan = {
+  compatibilityClients: McpClient[];
   /** Repo root the plan was computed against (echo for adapter diagnostics). */
   repoRoot: string;
   /** Whether the host has Claude CLI on PATH (caller-supplied detection). */
@@ -65,7 +68,7 @@ export type AgentToolchainPlan = {
   antigravity: { present: boolean } | null;
   /** TOML upsert plan for the contributor's Codex config (null when Codex CLI absent). */
   codex: CodexConfigPlan | null;
-  /** Repo-root .mcp.json + .vscode/mcp.json writes (env-backed, secret-free). */
+  /** Repo-root .vscode/mcp.json writes, plus .mcp.json on http/legacy only (env-backed, secret-free). */
   mcpClientConfig: McpClientConfigPlan;
   /** JSON upsert plan for installed_plugins.json (null when Claude CLI absent). */
   claude: ClaudePluginConfigPlan | null;
@@ -97,6 +100,7 @@ export type AgentToolchainPlan = {
 };
 
 export type ComputeAgentToolchainPlanOptions = {
+  authMode?: McpAuthMode;
   /** Absolute path to the contributor's DPF repo root (this worktree). */
   repoRoot: string;
   /** Path to `~/.codex/config.toml`. */
@@ -152,9 +156,34 @@ export type ComputeAgentToolchainPlanOptions = {
   };
 };
 
+function normalizeMcpEndpoint(endpoint: string): string {
+  try {
+    const parsed = new URL(endpoint);
+    const credentialKeys = new Set([
+      "access_token", "accesstoken", "refresh_token", "refreshtoken", "token", "api_key", "apikey", "key",
+      "authorization", "client_secret", "clientsecret", "secret", "password",
+    ]);
+    if (!/^https?:\/\/[^/]/i.test(endpoint) || endpoint.includes("\\")
+      || !["http:", "https:"].includes(parsed.protocol) || !parsed.hostname || parsed.username || parsed.password
+      || /\s/.test(endpoint) || [...parsed.searchParams.keys()].some(key => credentialKeys.has(key.toLowerCase().replaceAll("-", "_")))) {
+      throw new Error("Unsafe endpoint");
+    }
+    if (parsed.pathname === "/") {
+      parsed.pathname = "/api/mcp/v1";
+      return parsed.toString();
+    }
+    return endpoint;
+  } catch {
+    throw new Error("MCP endpoint must be a credential-free HTTP(S) URL");
+  }
+}
+
 export function computeAgentToolchainPlan(
   options: ComputeAgentToolchainPlanOptions,
 ): AgentToolchainPlan {
+  // Validate once, before reading any host configuration; every client and probe
+  // receives the same resource. A portal-origin shorthand is not an MCP route.
+  options = { ...options, mcpEndpoint: normalizeMcpEndpoint(options.mcpEndpoint) };
   const fs = options.fs ?? {};
   const _readFile =
     fs.readFileSync ?? ((p: string, e: BufferEncoding) => readFileSync(p, e));
@@ -177,7 +206,15 @@ export function computeAgentToolchainPlan(
       // Platform-owned, not planner-owned: the base is resolved once and handed
       // to each client (spec 2026-09-02-platform-owned-client-configuration §1).
       options.worktreeBase,
+      options.authMode,
     );
+    const projectPath = join(options.repoRoot, ".codex", "config.toml");
+    if (resolve(projectPath) !== resolve(options.codexConfigPath) && _exists(projectPath)) {
+      const project = planCodexProjectConfig(_readFile(projectPath, "utf8"), projectPath, options.mcpEndpoint, options.authMode);
+      codex.writes.push(...project.writes);
+      codex.preservedUserIntent ||= project.preservedUserIntent;
+      codex.rationale += `; ${project.rationale}`;
+    }
   }
 
   // Claude plan (skipped when Claude CLI absent).
@@ -195,7 +232,7 @@ export function computeAgentToolchainPlan(
   }
 
   // Grok plan (skipped when Grok CLI absent). Dedicated TOML wiring for
-  // [mcp_servers.dpf] using the grok.mcp.json descriptor (env-var token).
+  // [mcp_servers.dpf] using bearer_token_file (design 12.4.7).
   let grok: { present: boolean; config?: GrokConfigPlan } | null = null;
   if (options.grokCliPresent && options.grokConfigPath) {
     const grokText = _exists(options.grokConfigPath)
@@ -237,15 +274,17 @@ export function computeAgentToolchainPlan(
     },
   );
 
-  // MCP client config (.mcp.json + .vscode/mcp.json) — always planned: the
-  // files are env-backed (no secret), so they converge whether or not a token
-  // exists yet. The clients read the token from DPF_MCP_BEARER_TOKEN at runtime.
+  // MCP client config (.vscode/mcp.json, plus .mcp.json only where Claude
+  // cannot authorize by OAuth -- on https the dpf-platform plugin owns the
+  // Claude connector, BI-5201141C) -- always planned: the files are env-backed
+  // (no secret), so they converge whether or not a token exists yet.
   const { mcpJsonPath, vscodeJsonPath } = mcpClientConfigPaths(options.repoRoot);
   const mcpClientConfig = planMcpClientConfig(
     options.repoRoot,
     options.mcpEndpoint,
     _exists(mcpJsonPath) ? _readFile(mcpJsonPath, "utf8") : null,
     _exists(vscodeJsonPath) ? _readFile(vscodeJsonPath, "utf8") : null,
+    options.authMode,
   );
 
   const mcpProbe = planMcpReadinessProbe(options.mcpEndpoint, options.hasToken);
@@ -267,6 +306,7 @@ export function computeAgentToolchainPlan(
   // every write applies cleanly but probes haven't run yet. This lets the
   // install banner pre-warn for missing CLIs / tokens.
   const previewReadiness = computeReadinessState({
+    mcpAuthorization: { mode: options.authMode ?? "oauth", verified: false },
     claudeCodeWired: options.claudeCliPresent,
     codexWired: options.codexCliPresent,
     grokWired: options.grokCliPresent,
@@ -278,6 +318,10 @@ export function computeAgentToolchainPlan(
   });
 
   return {
+    compatibilityClients: ([
+      ["codex", options.codexCliPresent], ["claude", options.claudeCliPresent],
+      ["grok", options.grokCliPresent], ["antigravity", options.antigravityCliPresent],
+    ] as Array<[McpClient, boolean | undefined]>).filter(([client, present]) => present && mcpClientBearerHeaderRequired(options.mcpEndpoint, client, options.authMode)).map(([client]) => client),
     repoRoot: options.repoRoot,
     claudeCliPresent: options.claudeCliPresent,
     codexCliPresent: options.codexCliPresent,

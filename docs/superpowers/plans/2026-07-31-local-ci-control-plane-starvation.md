@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Local-CI Control-Plane Starvation Implementation Plan
 
 - **Status:** ready for implementation
@@ -145,3 +149,37 @@ restore unbounded execution as an operational workaround; leave capacity at one 
 classify gates blocked until a safe replacement is deployed. Builder containers are
 slot-scoped cache infrastructure and may be removed only through the governed local-CI
 cleanup/recovery path.
+
+## 2026-09-12 amendment: BI-06AE6833 memory blocker
+
+WC-3064DEE4 implements the companion spec's page-worker and admission memory
+budget amendment on `fix/build-memory-budget`. This is one bounded-build repair;
+the reviewer visibility candidate remains separate and immutable for its review.
+
+1. Extend the existing pool resource manifest and headroom calculation. Withdraw
+   the contradicted builder calibration, retain the hard ceiling, and reserve
+   the Docker safety floor. Consolidate policy in the existing shared helper.
+2. Bind the canonical Next build to a single memory-aware page-worker budget;
+   verify unknown, constrained and large hosts without creating a second build path.
+3. Run source tests for admission boundaries, worker limits and existing builder
+   isolation. Run dependency-based checks only with valid readiness evidence or
+   in the canonical shared verification environment.
+4. Obtain independent review and protected build verification, then release
+   through the existing pipeline. Capture actual worker count, build memory peak
+   and portal/MCP/database/Docker health before claiming the memory repair delivered.
+
+Source verification so far: 22 budget/pool tests and 20 bounded-builder/manifest
+tests pass. The affected capacity-profile Vitest suite also passes all 20 tests.
+The initial managed readiness probe refused an unclassified `@parcel/watcher`
+install script. The companion spec now records its explicit deny disposition:
+use locked prebuilt binaries, without source compilation during install. Readiness
+now reports compile-ready; 37 policy/bootstrap tests pass and a Windows x64
+snapshot/create-event check exercised the prebuilt binary successfully. Linux
+binary loading and the production build still require canonical verification.
+This amendment does not close the overarching execution/portal acceptance work.
+
+## Dependency readiness verification
+
+The companion design records the explicit deny disposition for the existing
+`@parcel/watcher` install hook. Verify managed readiness and the locked Windows
+and Linux prebuilt binaries; keep production build acceptance separate.

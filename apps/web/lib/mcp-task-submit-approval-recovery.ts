@@ -1,4 +1,4 @@
-import { prisma } from "@dpf/db";
+import { prisma, type Prisma } from "@dpf/db";
 import { resolveCanonicalAgentId } from "@dpf/db/agent-identity";
 import type { UserContext } from "@/lib/permissions";
 import { markTaskRunWorking } from "@/lib/observability/heartbeat";
@@ -6,16 +6,18 @@ import { executeAutonomousWorkTool } from "@/lib/tak/autonomous-work-run";
 
 import { recoverStaleApprovedRemoteTask } from "./mcp-task-approval-recovery";
 import {
+  classifyApprovalCallAgainst,
+  type ClassifyApprovalCall,
+} from "@/lib/coworker/approval-classification";
+import {
   describeExternalApprovalLocation,
   withExternalApprovalLocation,
 } from "./mcp/external-approval-location";
 import { isStaleApprovalRecoveryRun } from "./mcp-task-approval-recovery-contract";
-import type {
-  ExistingRemoteTask,
-  RemoteTaskSubmitAuth,
-  RemoteTaskSubmitOutcome,
-  RemoteTaskSubmitParams,
-} from "./mcp-task-submit";
+import type { ExistingRemoteTask, RemoteTaskSubmitAuth, RemoteTaskSubmitOutcome } from "./mcp-task-submit-types";
+import type { RemoteTaskSubmitParams } from "./mcp-task-submit-params";
+import { GOVERNED_AUDIT_PARAMETER_KEYS, TASK_EXECUTION_FENCE_AUDIT_KEY } from "./attention/coworker-envelope-decision";
+import { parseTaskExecutionFence } from "./shared/task-execution-fence";
 
 /**
  * Resuming an approved writer and recovering an expired one are the same
@@ -36,12 +38,6 @@ type ApprovedRemoteTaskEnvelope = {
   manifestActionId: string;
 };
 
-const GOVERNED_AUDIT_PARAMETER_KEYS = new Set([
-  "_surface",
-  "_takAlignment",
-  "_takPrecondition",
-]);
-
 function originalToolParameters(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   return Object.fromEntries(
@@ -56,14 +52,47 @@ export async function resumeApprovedRemoteTask(input: {
   userContext: UserContext;
   parsed: RemoteTaskSubmitParams;
 }): Promise<RemoteTaskSubmitOutcome | null> {
+  return resumeApprovedTask({
+    existing: input.existing,
+    userId: input.token.userId,
+    tokenId: input.token.tokenId,
+    tokenScope: input.token.capability,
+    userContext: input.userContext,
+    routeContext: input.parsed.routeContext,
+    agentId: input.parsed.agentId,
+    riskClass: input.parsed.riskClass,
+    reviewWriterToolName: input.parsed.initiativeReviewBinding?.writerToolName ?? null,
+  });
+}
+
+/**
+ * Who resumes an approved writer, and under which credential. A client replay
+ * supplies these from its request; the approval itself supplies them from the
+ * stored TaskRun (BI-9FD11E5E). Both take the same reservation below, so only
+ * one of them runs the writer.
+ */
+export type ApprovedTaskResume = {
+  existing: ExistingRemoteTask;
+  userId: string;
+  tokenId: string;
+  tokenScope: "read" | "write";
+  userContext: UserContext;
+  routeContext: string;
+  agentId: string;
+  riskClass: string;
+  /** The review writer, when the task carries an initiative review binding. */
+  reviewWriterToolName: string | null;
+};
+
+export async function resumeApprovedTask(input: ApprovedTaskResume): Promise<RemoteTaskSubmitOutcome | null> {
   const recoveringCompletedProjection = input.existing.status === "completed";
   if (input.existing.status !== "input-required" && !recoveringCompletedProjection) return null;
-  if (recoveringCompletedProjection && !input.parsed.initiativeReviewBinding) return null;
+  if (recoveringCompletedProjection && !input.reviewWriterToolName) return null;
 
   const envelope = await prisma.coworkerActionEnvelope.findFirst({
     where: {
       taskRunId: input.existing.taskRunId,
-      delegatingUserId: input.token.userId,
+      delegatingUserId: input.userId,
       status: "approved",
       expiresAt: { gt: new Date() },
     },
@@ -73,7 +102,7 @@ export async function resumeApprovedRemoteTask(input: {
   if (!envelope) return null;
   if (
     recoveringCompletedProjection
-    && envelope.manifestActionId !== input.parsed.initiativeReviewBinding?.writerToolName
+    && envelope.manifestActionId !== input.reviewWriterToolName
   ) return null;
 
   const proposedExecution = await prisma.toolExecution.findFirst({
@@ -88,6 +117,7 @@ export async function resumeApprovedRemoteTask(input: {
   });
   const args = originalToolParameters(proposedExecution?.parameters);
   if (!args) return null;
+  const executionFence = parseTaskExecutionFence((proposedExecution?.parameters as Record<string, unknown> | null)?.[TASK_EXECUTION_FENCE_AUDIT_KEY]);
 
   const reservation = await prisma.taskRun.updateMany({
     where: {
@@ -112,14 +142,15 @@ export async function resumeApprovedRemoteTask(input: {
   const result = await executeAutonomousWorkTool({
     toolName: envelope.manifestActionId,
     args,
-    userId: input.token.userId,
+    userId: input.userId,
     userContext: input.userContext,
-    routeContext: input.parsed.routeContext,
-    agentId: resolveCanonicalAgentId(input.parsed.agentId),
+    routeContext: input.routeContext,
+    agentId: resolveCanonicalAgentId(input.agentId),
     threadId: envelope.threadId,
     taskRunId: input.existing.taskRunId,
-    apiTokenId: input.token.tokenId,
-    tokenScope: input.token.capability,
+    apiTokenId: input.tokenId,
+    ...(executionFence ? { taskExecutionFence: executionFence } : {}),
+    tokenScope: input.tokenScope,
     externalAccessEnabled: true,
   });
   const currentRun = await prisma.taskRun.findUnique({
@@ -129,21 +160,28 @@ export async function resumeApprovedRemoteTask(input: {
   const status = currentRun?.status === "input-required"
     ? "input-required"
     : result.success ? "completed" : "failed";
+  const progressPayload: Record<string, Prisma.InputJsonValue | null> = {
+    ...(input.existing.progressPayload && typeof input.existing.progressPayload === "object"
+      && !Array.isArray(input.existing.progressPayload)
+      ? input.existing.progressPayload as Prisma.InputJsonObject
+      : {}),
+    summary: result.message,
+    riskClass: input.riskClass,
+    executedToolCount: 1,
+    resumedFromApproval: true,
+    requiresApproval: status === "input-required",
+  };
+  if (status === "completed") {
+    delete progressPayload.terminalWriterWait;
+    delete progressPayload.terminalWriterEscalation;
+    delete progressPayload.terminalWriterContextFailure;
+  }
   await prisma.taskRun.update({
     where: { taskRunId: input.existing.taskRunId },
     data: {
       status,
       ...(status === "input-required" ? {} : { completedAt: new Date() }),
-      progressPayload: {
-        ...(input.existing.progressPayload && typeof input.existing.progressPayload === "object"
-          && !Array.isArray(input.existing.progressPayload)
-          ? input.existing.progressPayload as Record<string, unknown>
-          : {}),
-        summary: result.message,
-        riskClass: input.parsed.riskClass,
-        executedToolCount: 1,
-        resumedFromApproval: true,
-      },
+      progressPayload,
     },
   });
 
@@ -171,6 +209,20 @@ export async function resumeApprovedRemoteTask(input: {
  * unexpired envelopes. `failed` is accepted only by the transaction's narrower
  * exact-Workroom-head prerequisite check.
  */
+/**
+ * The replacement envelope's lifetime follows the stored writer call's current
+ * classification (BI-0012E6CA). The registry is bound here, at a module already
+ * inside the web import cycle, so the recovery transaction stays out of it.
+ */
+const classifyAgainstToolRegistry: ClassifyApprovalCall = async (call) => {
+  try {
+    const { PLATFORM_TOOLS } = await import("./mcp-tools");
+    return classifyApprovalCallAgainst(PLATFORM_TOOLS, call);
+  } catch {
+    return "unclassified";
+  }
+};
+
 const RECOVERABLE_STATUSES = new Set(["working", "stalled", "input-required", "failed"]);
 
 /**
@@ -203,7 +255,7 @@ export async function recoverStaleApprovalOnReplay(input: {
     userId: input.token.userId,
     agentId: resolveCanonicalAgentId(input.parsed.agentId),
     writerToolName: input.writerToolName,
-  });
+  }, undefined, classifyAgainstToolRegistry);
 
   if (recovery?.kind === "fresh-approval-required") {
     return {

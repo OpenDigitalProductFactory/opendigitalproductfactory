@@ -1,11 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { createObjectiveMappingRequestKey } from "@/lib/mcp-task-objective-mapping-request-key";
+import { bodyCriteriaVersion } from "./body-baseline-version";
+import { createPullRequestObservation } from "@/lib/contributor-change-lanes/pull-request-observation";
+
 const mocks = vi.hoisted(() => ({
   itemFindUnique: vi.fn(),
   authorityFindUnique: vi.fn(),
   principalFindMany: vi.fn(),
   create: vi.fn(),
   transaction: vi.fn(),
+  loadCapsuleLivenessInventory: vi.fn(),
+  resolveAgentWorkroomAccess: vi.fn(),
 }));
 
 vi.mock("@dpf/db", () => ({
@@ -18,22 +24,161 @@ vi.mock("@dpf/db", () => ({
   },
 }));
 
+vi.mock("@/lib/work-capsules/liveness-inventory", () => ({
+  loadCapsuleLivenessInventory: mocks.loadCapsuleLivenessInventory,
+}));
+vi.mock("@/lib/work-management/workroom-agent-access.server", () => ({
+  resolveAgentWorkroomAccess: mocks.resolveAgentWorkroomAccess,
+}));
+
 import {
   normalizeInitiativeObjectiveMappings,
   recordInitiativeObjectiveMappingProposal,
 } from "./objective-mapping-repository";
 
-function transactionDb() {
+const baselineRecordedAt = new Date("2026-09-04T12:00:00.000Z");
+const repositoryFullName = "OpenDigitalProductFactory/opendigitalproductfactory";
+const headSha = "2".repeat(40);
+const artifactCommitSha = "3".repeat(40);
+const providerBlobId = "4".repeat(40);
+
+function objectiveMappingBinding(eligibleEvidenceActivityIds = ["E-1"]) {
+  return {
+    writerToolName: "record_initiative_evidence",
+    itemId: "BI-PLATFORM",
+    gate: "objective-mapping" as const,
+    expectedCurrentBaselineId: "baseline-1",
+    eligibleEvidenceActivityIds,
+    workroomRef: {
+      kind: "workroom-head" as const,
+      workroomId: "WC-PLATFORM",
+      repositoryFullName,
+      branchName: "fix/objective-mapping",
+      headSha,
+    },
+    artifactRef: {
+      kind: "repo-blob-at-commit" as const,
+      repositoryFullName,
+      commitSha: artifactCommitSha,
+      path: "docs/superpowers/specs/objective-mapping-design.md",
+      providerBlobId,
+    },
+  };
+}
+
+function persistedTaskRun(overrides: Record<string, unknown> = {}) {
+  const binding = objectiveMappingBinding();
+  const packet = {
+    targetAgent: "agent-1",
+    objective: "Map every current objective to bounded evidence.",
+    questionPacketSummary: "Objective mapping for BI-PLATFORM",
+    requiredToolNames: ["read_source_at_version", "record_initiative_evidence"],
+    binding,
+  };
+  return {
+    taskRunId: "TR-MCP-MAPPING",
+    userId: "user-1",
+    currentAgentId: "agent-1",
+    status: "working",
+    completedAt: null,
+    archivedAt: null,
+    title: packet.questionPacketSummary,
+    objective: packet.objective,
+    authorityScope: [
+      ...packet.requiredToolNames.map((name) => `tool:${name}`),
+      "backlog-item:BI-PLATFORM",
+    ],
+    a2aMetadata: {
+      trigger: "external-mcp",
+      requestedAgentId: packet.targetAgent,
+      requestObjective: packet.objective,
+      idempotencyKey: createObjectiveMappingRequestKey(packet),
+      initiativeReviewBinding: binding,
+    },
+    ...overrides,
+  };
+}
+
+function baselineActivity(options: {
+  id?: string;
+  baselineId?: string;
+  supersedesBaselineId?: string | null;
+  recordedAt?: Date;
+} = {}) {
+  return {
+    id: options.id ?? "BASELINE-ACTIVITY-1",
+    backlogItemId: "row-1",
+    kind: "initiative_scope_baseline",
+    recordedAt: options.recordedAt ?? baselineRecordedAt,
+    payload: {
+      schemaVersion: 1,
+      baselineId: options.baselineId ?? "baseline-1",
+      supersedesBaselineId: options.supersedesBaselineId ?? null,
+      artifactDigest: "sha256:design",
+      subject: { kind: "backlog-item", id: "BI-PLATFORM" },
+      objectiveStatements: [{ objectiveId: "OBJ-TEST-001" }],
+      acceptanceStatements: [],
+      artifactRef: objectiveMappingBinding().artifactRef,
+    },
+  };
+}
+
+function validMappingActivity(id = "MAP-VALID", recordedAt = new Date("2026-09-04T12:02:00.000Z")) {
+  return {
+    id,
+    backlogItemId: "row-1",
+    kind: "initiative_objective_mapping",
+    recordedAt,
+    payload: {
+      schemaVersion: 1,
+      proposalId: id,
+      subject: { kind: "backlog-item", id: "BI-PLATFORM" },
+      baselineId: "baseline-1",
+      artifactDigest: "sha256:design",
+      mappings: [{ objectiveId: "OBJ-TEST-001", evidenceRefs: ["E-1"] }],
+    },
+  };
+}
+
+function transactionDb(evidence = [{
+  id: "E-1",
+  backlogItemId: "row-1",
+  kind: "evidence",
+  recordedAt: new Date("2026-09-04T12:01:00.000Z"),
+  payload: { evidenceKind: "test_pass" },
+}], options: {
+  taskRun?: ReturnType<typeof persistedTaskRun> | null;
+  workroomHeadSha?: string;
+  workroom?: Record<string, unknown>;
+  baseline?: ReturnType<typeof baselineActivity>;
+  baselines?: Array<ReturnType<typeof baselineActivity>>;
+  mappings?: Array<ReturnType<typeof validMappingActivity>>;
+} = {}) {
+  const baselines = options.baselines ?? [options.baseline ?? baselineActivity()];
   return {
     $queryRaw: vi.fn(async () => []),
+    taskRun: {
+      findUnique: vi.fn().mockResolvedValue(options.taskRun === undefined ? persistedTaskRun() : options.taskRun),
+    },
+    workroom: {
+      findUnique: vi.fn().mockResolvedValue({
+        id: "room-row-1",
+        capsuleId: "WC-PLATFORM",
+        backlogItemId: "BI-PLATFORM",
+        repositoryFullName,
+        headBranch: "fix/objective-mapping",
+        headSha: options.workroomHeadSha ?? headSha,
+        archivedAt: null,
+        status: "working",
+        ...options.workroom,
+      }),
+    },
     backlogItemActivity: {
-      findMany: vi.fn(async () => [{ payload: {
-        baselineId: "baseline-1",
-        supersedesBaselineId: null,
-        artifactDigest: "sha256:design",
-        objectiveStatements: [{ objectiveId: "OBJ-TEST-001" }],
-        acceptanceStatements: [],
-      } }]),
+      findMany: vi.fn(async (query: { where?: { kind?: string } }) => query.where?.kind === "evidence"
+        ? evidence
+        : query.where?.kind === "initiative_objective_mapping"
+          ? options.mappings ?? []
+          : baselines),
       create: mocks.create.mockImplementation(async ({ data }) => data),
     },
   };
@@ -41,9 +186,11 @@ function transactionDb() {
 
 function proposalArgs() {
   return {
+    taskRunId: "TR-MCP-MAPPING",
     itemId: "BI-PLATFORM",
     baselineId: "baseline-1",
-    mappings: [{ objectiveId: "OBJ-TEST-001", evidenceRefs: ["verification:unit-1"] }],
+    mappings: [{ objectiveId: "OBJ-TEST-001", evidenceRefs: ["E-1"] }],
+    eligibleEvidenceActivityIds: ["E-1"],
     reason: "Proposed evidence for independent terminal reconciliation.",
     proposerUserId: "user-1",
     proposerAgentId: "agent-1",
@@ -86,16 +233,20 @@ describe("recordInitiativeObjectiveMappingProposal", () => {
       organizationId: null,
     });
     mocks.principalFindMany.mockResolvedValue([{ principal: { principalId: "principal-1" } }]);
+    mocks.loadCapsuleLivenessInventory.mockResolvedValue({
+      capsulesAll: [{ capsuleId: "WC-PLATFORM", isLive: true }],
+      livenessSummary: {},
+    });
+    mocks.resolveAgentWorkroomAccess.mockResolvedValue({ decision: { level: "content" } });
     mocks.transaction.mockImplementation(async (work) => work(transactionDb()));
   });
 
   it("records platform-scoped authority with the canonical platform sentinel", async () => {
     const result = await recordInitiativeObjectiveMappingProposal(proposalArgs());
 
-    expect(result).toMatchObject({
-      ok: true,
-      proposal: { authoritySnapshot: { organizationId: "platform" } },
-    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error);
+    expect(result.proposal).toMatchObject({ authoritySnapshot: { organizationId: "platform" } });
     expect(mocks.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         payload: expect.objectContaining({
@@ -103,6 +254,330 @@ describe("recordInitiativeObjectiveMappingProposal", () => {
         }),
       }),
     });
+  });
+
+  function bodyWriterFixture(authorPrincipalId = "principal-author") {
+    const body = "## Acceptance\n- Verify independent delivery.";
+    const version = bodyCriteriaVersion(body)!;
+    const artifactRef = { kind: "document-version" as const, repositoryFullName,
+      versionId: "version-body", valueDigest: "sha256:retained-body" };
+    const binding = { ...objectiveMappingBinding(), artifactRef };
+    const packet = { targetAgent: "agent-1", objective: "Map every current objective to bounded evidence.",
+      questionPacketSummary: "Objective mapping for BI-PLATFORM",
+      requiredToolNames: ["read_source_at_version", "record_initiative_evidence"], binding };
+    const run = persistedTaskRun({ a2aMetadata: { trigger: "external-mcp", requestedAgentId: "agent-1",
+      requestObjective: packet.objective, idempotencyKey: createObjectiveMappingRequestKey(packet), initiativeReviewBinding: binding } });
+    const base = baselineActivity();
+    const baseline = { ...base, payload: { ...base.payload, origin: "item-body", artifactRef,
+      authoritySnapshot: { organizationId: "platform" }, criteriaDigest: version.criteriaDigest,
+      sourceIdentity: { repositoryFullName, headSha }, bodyAuthorPrincipalId: "author-row",
+      sourceAuthorPrincipalId: "author-row", authorAgentId: "author-agent",
+      objectiveStatements: [], acceptanceStatements: version.acceptanceStatements } };
+    const tx = { ...transactionDb(undefined, { taskRun: run, baseline: baseline as never }),
+      backlogItem: { findUnique: vi.fn().mockResolvedValue({ itemId: "BI-PLATFORM", organizationId: null, body }) },
+      principal: { findMany: vi.fn().mockResolvedValue([{ principalId: authorPrincipalId }]) } };
+    const args = { ...proposalArgs(), mappings: [{ objectiveId: "AC-BODY-001", evidenceRefs: ["E-1"] }] };
+    mocks.itemFindUnique.mockResolvedValue({ id: "row-1", itemId: "BI-PLATFORM", organizationId: null, body });
+    mocks.transaction.mockImplementation(async (work) => work(tx));
+    return { tx, args, baseline };
+  }
+
+  it("writes an independently bound retained-body mapping and reuses an exact retry", async () => {
+    const { tx, args, baseline } = bodyWriterFixture();
+    const first = await recordInitiativeObjectiveMappingProposal(args);
+    expect(first.ok).toBe(true);
+    if (!first.ok) throw new Error(first.error);
+    tx.backlogItemActivity.findMany.mockImplementation(async (query) => query.where?.kind === "initiative_objective_mapping"
+      ? [{ id: first.proposalId, backlogItemId: "row-1", kind: "initiative_objective_mapping",
+        recordedAt: new Date("2026-09-04T12:02:00.000Z"), payload: first.proposal }]
+      : query.where?.kind === "evidence"
+        ? [{ id: "E-1", backlogItemId: "row-1", kind: "evidence", recordedAt: new Date("2026-09-04T12:01:00.000Z"), payload: { evidenceKind: "test_pass" } }]
+        : [baseline as never]);
+    const retry = await recordInitiativeObjectiveMappingProposal(args);
+    expect(retry).toMatchObject({ ok: true, proposalId: first.proposalId });
+    expect(mocks.create).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([true, false])("requires exact merged source proof for archived body author (valid=%s)", async valid => {
+    const { tx, args } = bodyWriterFixture();
+    const room = { id: "room-row-1", capsuleId: "WC-PLATFORM", backlogItemId: "BI-PLATFORM",
+      repositoryFullName, headBranch: "fix/objective-mapping", headSha, baseSha: "b".repeat(40),
+      createdByPrincipalId: "author-row", status: "archived", pullRequestNumber: 6265,
+      archivedAt: null, createdAt: new Date("2026-10-15T06:00:00Z") };
+    tx.workroom.findUnique.mockResolvedValue(room);
+    const db = { ...tx, workroom: { ...tx.workroom,
+      findMany: vi.fn(async ({ where }) => where.archivedAt === null ? [] : [room]) },
+      contributorInventorySnapshot: { findMany: vi.fn().mockResolvedValue([{ payload: createPullRequestObservation({
+        repositoryFullName, number: 6265, url: `https://github.com/${repositoryFullName}/pull/6265`, title: "repair",
+        headBranch: room.headBranch, headSha: valid ? headSha : "f".repeat(40), state: "merged", isDraft: false,
+        mergeStateStatus: null, mergeCommitSha: "c".repeat(40), mergedAt: "2026-10-16T05:00:00Z",
+        providerUpdatedAt: "2026-10-16T05:00:00Z", observedAt: "2026-10-16T05:01:00Z" }) }]) } };
+    mocks.transaction.mockImplementation(async work => work(db));
+    mocks.loadCapsuleLivenessInventory.mockResolvedValue({ capsulesAll: [{ isLive: false }] });
+    const result = await recordInitiativeObjectiveMappingProposal(args);
+    expect(result.ok).toBe(valid);
+    if (!valid) expect(mocks.create).not.toHaveBeenCalled();
+    expect(room.status).toBe("archived");
+  });
+
+  it("rejects the retained criteria or source author at the receipt writer", async () => {
+    const { args } = bodyWriterFixture("principal-1");
+    await expect(recordInitiativeObjectiveMappingProposal(args)).resolves.toMatchObject({ ok: false, code: "AUTHORIZATION_DENIED" });
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects revoked paired Workroom admission after criteria were read", async () => {
+    const { args } = bodyWriterFixture();
+    mocks.resolveAgentWorkroomAccess.mockResolvedValue({ decision: { level: "header" } });
+    await expect(recordInitiativeObjectiveMappingProposal(args)).resolves.toMatchObject({ ok: false, code: "AUTHORIZATION_DENIED" });
+    expect(mocks.resolveAgentWorkroomAccess).toHaveBeenCalledWith({ userId: "user-1", agentId: "agent-1", workroomId: "room-row-1", requested: "content" });
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects changed body criteria again under the receipt transaction lock", async () => {
+    const { tx, args } = bodyWriterFixture();
+    tx.backlogItem.findUnique.mockResolvedValue({ itemId: "BI-PLATFORM", organizationId: null, body: "## Acceptance\n- Changed requirement." });
+    await expect(recordInitiativeObjectiveMappingProposal(args)).resolves.toMatchObject({ ok: false, code: "OBJECTIVE_BASELINE_CONFLICT" });
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects a direct call without a bound executing TaskRun", async () => {
+    await expect(recordInitiativeObjectiveMappingProposal({
+      ...proposalArgs(),
+      taskRunId: null,
+    })).resolves.toMatchObject({
+      ok: false,
+      code: "AUTHORIZATION_DENIED",
+    });
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(mocks.transaction).not.toHaveBeenCalled();
+  });
+
+  it("rejects an executing TaskRun whose objective-mapping key is not server-derived", async () => {
+    const taskRun = persistedTaskRun();
+    taskRun.a2aMetadata.idempotencyKey = `${taskRun.a2aMetadata.idempotencyKey}-caller-suffix`;
+    mocks.transaction.mockImplementation(async (work) => work(transactionDb(undefined, { taskRun })));
+
+    await expect(recordInitiativeObjectiveMappingProposal(proposalArgs())).resolves.toMatchObject({
+      ok: false,
+      code: "OBJECTIVE_MAPPING_AUTHORITY_CONFLICT",
+    });
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects a stale executing TaskRun after the live Workroom head advances", async () => {
+    mocks.transaction.mockImplementation(async (work) => work(transactionDb(undefined, {
+      workroomHeadSha: "5".repeat(40),
+    })));
+
+    await expect(recordInitiativeObjectiveMappingProposal(proposalArgs())).resolves.toMatchObject({
+      ok: false,
+      code: "OBJECTIVE_MAPPING_AUTHORITY_CONFLICT",
+    });
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["terminal", { status: "completed", completedAt: new Date("2026-09-04T12:03:00.000Z") }],
+    ["archived", { archivedAt: new Date("2026-09-04T12:03:00.000Z") }],
+    ["different delegating user", { userId: "user-other" }],
+    ["different acting agent", { currentAgentId: "agent-other" }],
+    ["missing backlog authority", {
+      authorityScope: ["tool:read_source_at_version", "tool:record_initiative_evidence"],
+    }],
+  ])("rejects a %s TaskRun authority packet", async (_label, overrides) => {
+    mocks.transaction.mockImplementation(async (work) => work(transactionDb(undefined, {
+      taskRun: persistedTaskRun(overrides),
+    })));
+
+    await expect(recordInitiativeObjectiveMappingProposal(proposalArgs())).resolves.toMatchObject({
+      ok: false,
+      code: "OBJECTIVE_MAPPING_AUTHORITY_CONFLICT",
+    });
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects a caller agent that differs from the TaskRun's bound reviewer", async () => {
+    await expect(recordInitiativeObjectiveMappingProposal({
+      ...proposalArgs(),
+      proposerAgentId: "agent-other",
+    })).resolves.toMatchObject({
+      ok: false,
+      code: "OBJECTIVE_MAPPING_AUTHORITY_CONFLICT",
+    });
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects an identity-matching Workroom that is not canonically live", async () => {
+    mocks.loadCapsuleLivenessInventory.mockResolvedValue({
+      capsulesAll: [{ capsuleId: "WC-PLATFORM", isLive: false }],
+      livenessSummary: {},
+    });
+
+    await expect(recordInitiativeObjectiveMappingProposal(proposalArgs())).resolves.toMatchObject({
+      ok: false,
+      code: "OBJECTIVE_MAPPING_AUTHORITY_CONFLICT",
+    });
+    expect(mocks.loadCapsuleLivenessInventory).toHaveBeenCalledTimes(1);
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects when the current baseline artifact differs from the TaskRun binding", async () => {
+    const baseline = baselineActivity();
+    baseline.payload.artifactRef.providerBlobId = "6".repeat(40);
+    mocks.transaction.mockImplementation(async (work) => work(transactionDb(undefined, { baseline })));
+
+    await expect(recordInitiativeObjectiveMappingProposal(proposalArgs())).resolves.toMatchObject({
+      ok: false,
+      code: "OBJECTIVE_BASELINE_CONFLICT",
+    });
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects a baseline whose canonical subject differs from the mapped backlog item", async () => {
+    const baseline = baselineActivity();
+    baseline.payload.subject.id = "BI-OTHER";
+    mocks.transaction.mockImplementation(async (work) => work(transactionDb(undefined, { baseline })));
+
+    await expect(recordInitiativeObjectiveMappingProposal(proposalArgs())).resolves.toMatchObject({
+      ok: false,
+      code: "OBJECTIVE_BASELINE_CONFLICT",
+    });
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it("BI-2515F779: accepts a decomposed child mapped against the baseline it inherits from its parent", async () => {
+    const parentBaseline = baselineActivity();
+    parentBaseline.backlogItemId = "row-parent";
+    parentBaseline.payload.subject.id = "BI-PARENT";
+    const coverage = {
+      id: "cov-1",
+      backlogItemId: "row-parent",
+      payload: {
+        schemaVersion: 2,
+        decision: "decomposed",
+        planPath: "docs/superpowers/plans/plan.md",
+        deliverables: [{ key: "slice", backlogItemId: "BI-PLATFORM" }],
+      },
+    };
+    const db = transactionDb();
+    const findMany = vi.fn(async (query: { where?: { kind?: string | { in?: string[] }; backlogItemId?: unknown } }) => {
+      const kind = query.where?.kind;
+      if (kind === "evidence") return db.backlogItemActivity.findMany({ where: { kind: "evidence" } });
+      if (kind === "initiative_objective_mapping") return [];
+      if (kind === "initiative_scope_baseline") return []; // the child minted none
+      if (kind === "plan_backlog_coverage") return [coverage];
+      if (typeof kind === "object" && kind?.in?.includes("initiative_scope_baseline")) return [parentBaseline];
+      return [];
+    });
+    const tx = {
+      ...db,
+      backlogItem: { findFirst: vi.fn().mockResolvedValue({ itemId: "BI-PARENT" }) },
+      backlogItemActivity: { ...db.backlogItemActivity, findMany },
+    };
+    mocks.transaction.mockImplementation(async (work) => work(tx));
+
+    await expect(recordInitiativeObjectiveMappingProposal(proposalArgs())).resolves.toMatchObject({ ok: true });
+    expect(mocks.create).toHaveBeenCalled();
+    // The coverage lookup names the child; the parent's chain supplied the baseline.
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ kind: "plan_backlog_coverage" }) }));
+  });
+
+  it("rejects when the TaskRun baseline is no longer the current chain head", async () => {
+    const original = baselineActivity();
+    const successor = baselineActivity({
+      id: "BASELINE-ACTIVITY-2",
+      recordedAt: new Date("2026-09-04T12:00:30.000Z"),
+      baselineId: "baseline-2",
+      supersedesBaselineId: "baseline-1",
+    });
+    mocks.transaction.mockImplementation(async (work) => work(transactionDb(undefined, {
+      baselines: [original, successor],
+    })));
+
+    await expect(recordInitiativeObjectiveMappingProposal(proposalArgs())).resolves.toMatchObject({
+      ok: false,
+      code: "OBJECTIVE_BASELINE_CONFLICT",
+    });
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects when the current eligible evidence set differs from the immutable TaskRun binding", async () => {
+    const evidence = [
+      {
+        id: "E-1",
+        backlogItemId: "row-1",
+        kind: "evidence",
+        recordedAt: new Date("2026-09-04T12:01:00.000Z"),
+        payload: { evidenceKind: "test_pass" },
+      },
+      {
+        id: "E-2",
+        backlogItemId: "row-1",
+        kind: "evidence",
+        recordedAt: new Date("2026-09-04T12:01:01.000Z"),
+        payload: { evidenceKind: "test_pass" },
+      },
+    ];
+    mocks.transaction.mockImplementation(async (work) => work(transactionDb(evidence)));
+
+    await expect(recordInitiativeObjectiveMappingProposal(proposalArgs())).resolves.toMatchObject({
+      ok: false,
+      code: "OBJECTIVE_RECONCILIATION_REQUIRED",
+    });
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects a second append when the newest current mapping is canonically valid", async () => {
+    mocks.transaction.mockImplementation(async (work) => work(transactionDb(undefined, {
+      mappings: [validMappingActivity()],
+    })));
+
+    await expect(recordInitiativeObjectiveMappingProposal(proposalArgs())).resolves.toMatchObject({
+      ok: false,
+      code: "OBJECTIVE_MAPPING_ALREADY_EXISTS",
+    });
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it("allows one correction when a malformed mapping is newer than an older valid mapping", async () => {
+    const malformed = validMappingActivity("MAP-MALFORMED", new Date("2026-09-04T12:03:00.000Z"));
+    malformed.payload.mappings = [];
+    mocks.transaction.mockImplementation(async (work) => work(transactionDb(undefined, {
+      mappings: [malformed, validMappingActivity("MAP-OLDER")],
+    })));
+
+    await expect(recordInitiativeObjectiveMappingProposal(proposalArgs())).resolves.toMatchObject({ ok: true });
+    expect(mocks.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects the live malformed source-document evidence reference before appending", async () => {
+    const args = proposalArgs();
+    args.mappings = [{
+      objectiveId: "OBJ-TEST-001",
+      evidenceRefs: ["docs/superpowers/specs/2026-08-30-some-design.md"],
+    }];
+
+    await expect(recordInitiativeObjectiveMappingProposal(args)).resolves.toMatchObject({
+      ok: false,
+      code: "OBJECTIVE_RECONCILIATION_REQUIRED",
+    });
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["missing", []],
+    ["foreign", [{ id: "E-1", backlogItemId: "row-other", kind: "evidence", recordedAt: new Date("2026-09-04T12:01:00.000Z"), payload: { evidenceKind: "test_pass" } }]],
+    ["pre-baseline", [{ id: "E-1", backlogItemId: "row-1", kind: "evidence", recordedAt: new Date("2026-09-04T11:59:00.000Z"), payload: { evidenceKind: "test_pass" } }]],
+    ["failing", [{ id: "E-1", backlogItemId: "row-1", kind: "evidence", recordedAt: new Date("2026-09-04T12:01:00.000Z"), payload: { evidenceKind: "test_fail" } }]],
+  ])("rejects %s activity rows even when their ids appear in the binding", async (_label, evidence) => {
+    mocks.transaction.mockImplementation(async (work) => work(transactionDb(evidence)));
+
+    await expect(recordInitiativeObjectiveMappingProposal(proposalArgs())).resolves.toMatchObject({
+      ok: false,
+      code: "OBJECTIVE_RECONCILIATION_REQUIRED",
+    });
+    expect(mocks.create).not.toHaveBeenCalled();
   });
 
   it("rejects tenant-bound authority for a platform-scoped initiative", async () => {

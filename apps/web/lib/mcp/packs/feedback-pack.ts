@@ -12,7 +12,7 @@
 // ToolExecutionContext). Definitions moved verbatim out of the inline
 // PLATFORM_TOOLS array; grants mirror TOOL_TO_GRANTS.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 
 const definitions: ToolDefinition[] = [
@@ -46,6 +46,7 @@ const definitions: ToolDefinition[] = [
     requiredCapability: null,
     sideEffect: true,
     consequence: "outward",
+    consequenceScope: "platform",
   },
   {
     name: "register_tech_debt",

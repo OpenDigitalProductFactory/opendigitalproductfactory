@@ -1,5 +1,8 @@
 #!/usr/bin/env node
-import { spawn, spawnSync } from "node:child_process";
+import { parseArgs as utilParseArgs } from "node:util";
+import { scriptArgv } from "./lib/script-argv.mjs";
+import { execFile, spawn, spawnSync } from "node:child_process";
+import { gitTextOrNull } from "./lib/git.mjs";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -9,9 +12,15 @@ import {
   buildxBuildArgs,
   buildxCreateArgs,
   classifyBoundedBuildExit,
+  observedBuildWorkers,
   postgresContainerProbeArgs,
   validateBuilderInspection,
 } from "./lib/local-ci-bounded-builder.mjs";
+import {
+  builderMemorySampleArgs,
+  parseBuilderMemorySample,
+  summarizeBuilderMemory,
+} from "./lib/local-ci-builder-memory.mjs";
 import {
   buildxRmArgs,
   buildxStopArgs,
@@ -40,8 +49,15 @@ const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const BUILDKIT_CONFIG = join(SCRIPT_DIR, "config", "local-ci-buildkitd.toml");
 
 function valueAfter(flag) {
-  const index = process.argv.indexOf(flag);
-  return index >= 0 ? process.argv[index + 1] || "" : "";
+  // strict: false keeps the old tolerance: flags this script does not read are ignored.
+  const { values } = utilParseArgs({
+    args: scriptArgv(),
+    strict: false,
+    allowPositionals: true,
+    options: { "tag": { type: "string" }, "slot-key": { type: "string" }, "candidate": { type: "string" } },
+  });
+  const value = values[flag.replace(/^--/, "")];
+  return typeof value === "string" ? value : "";
 }
 
 function usage() {
@@ -219,7 +235,7 @@ export function isTimeoutRejection(error) {
     || (error instanceof Error && error.name === "TimeoutError");
 }
 
-async function timedProbe(run, timeoutMs = CONTROL_PLANE_PROBE_TIMEOUT_MS) {
+export async function timedProbe(run, timeoutMs = CONTROL_PLANE_PROBE_TIMEOUT_MS) {
   const started = Date.now();
   let timer;
   try {
@@ -229,11 +245,23 @@ async function timedProbe(run, timeoutMs = CONTROL_PLANE_PROBE_TIMEOUT_MS) {
         timer = setTimeout(() => reject(new Error("timeout")), timeoutMs);
       }),
     ]);
-    return {
-      healthy: value === true,
-      elapsedMs: Date.now() - started,
-      ...(value === true ? {} : { reason: "invalid-response" }),
-    };
+    const elapsedMs = Date.now() - started;
+    if (value === true) return { healthy: true, elapsedMs };
+    // BI-3A008EBC: a probe that already knows WHY it failed keeps its own
+    // verdict. Collapsing every non-true value into "invalid-response" is what
+    // made a wedged engine, an absent engine and a missing binary one string.
+    // A bare boolean still behaves exactly as it always did, so the portal, MCP
+    // and postgres probes that share this helper are untouched.
+    if (value && typeof value === "object") {
+      const healthy = value.healthy === true;
+      return {
+        healthy,
+        elapsedMs,
+        ...(healthy ? {} : { reason: value.reason || "invalid-response" }),
+        ...(value.detail ? { detail: value.detail } : {}),
+      };
+    }
+    return { healthy: false, elapsedMs, reason: "invalid-response" };
   } catch (error) {
     return {
       healthy: false,
@@ -249,22 +277,159 @@ async function timedProbe(run, timeoutMs = CONTROL_PLANE_PROBE_TIMEOUT_MS) {
   }
 }
 
-async function commandHealthy(command, args, timeoutMs) {
+/**
+ * BI-3A008EBC. How much of a failing command's stderr reaches the evidence.
+ * `docker info` prints the one sentence that separates a wedged engine from an
+ * absent one, so discarding stderr discarded the diagnosis; the payload is
+ * written to disk, so this is a bounded tail rather than the lot.
+ */
+const COMMAND_STDERR_TAIL_LIMIT = 2_000;
+
+/**
+ * Run a command and report WHAT happened, not merely whether it worked.
+ *
+ * This used to resolve a bare boolean with `stdio: "ignore"`, so the exit code,
+ * the stderr and the spawn error were all thrown away and every failure became
+ * one indistinguishable reason. `spawnImpl` is injected only so the four failure
+ * shapes can be unit-tested without a Docker engine.
+ */
+export async function commandHealthy(command, args, timeoutMs, { spawnImpl = spawn } = {}) {
   return await new Promise((resolve) => {
-    const child = spawn(command, args, { stdio: "ignore", windowsHide: true, shell: false });
+    let stderrTail = "";
+    let settled = false;
+    const child = spawnImpl(command, args, {
+      stdio: ["ignore", "ignore", "pipe"],
+      windowsHide: true,
+      shell: false,
+    });
+    const settle = (outcome) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve({
+        healthy: false,
+        exitCode: null,
+        stderrTail,
+        spawnError: null,
+        timedOut: false,
+        ...outcome,
+      });
+    };
     const timer = setTimeout(() => {
-      child.kill();
-      resolve(false);
+      // A probe that gave up must not leave the child running.
+      try {
+        child.kill();
+      } catch {
+        // already gone
+      }
+      settle({ timedOut: true });
     }, timeoutMs);
-    child.once("error", () => {
-      clearTimeout(timer);
-      resolve(false);
+    child.stderr?.on("data", (chunk) => {
+      stderrTail = `${stderrTail}${chunk}`.slice(-COMMAND_STDERR_TAIL_LIMIT);
     });
-    child.once("close", (code) => {
-      clearTimeout(timer);
-      resolve(code === 0);
-    });
+    child.once("error", (error) => settle({ spawnError: error }));
+    child.once("close", (code) => settle({ healthy: code === 0, exitCode: code }));
   });
+}
+
+/**
+ * The phrasings Docker uses when the engine is not there to talk to, as opposed
+ * to being there and answering badly. Windows names the missing named pipe,
+ * POSIX the missing socket. Both mean "start Docker", which is a different
+ * operator action from "recover the wedged engine".
+ */
+const DOCKER_ENGINE_UNREACHABLE_PATTERNS = [
+  /cannot find the file specified/i,
+  /cannot find the path specified/i,
+  /is the docker daemon running/i,
+  /cannot connect to the docker daemon/i,
+  /failed to connect to the docker api/i,
+  /no such file or directory/i,
+];
+
+/**
+ * BI-3A008EBC. Name the docker failure the probe actually observed.
+ *
+ * Observed 2026-09-10 with 13 GB of host memory free: the engine was wedged and
+ * answering HTTP 500 while the gate reported
+ * `blocked_control_plane_starvation docker:invalid-response`. The remedy was
+ * clearing orphaned AF_UNIX sockets (BI-DDA569D9) and had nothing to do with
+ * memory — but four conditions with four different remedies shared one string,
+ * so seven outages were worked around by hand and never diagnosed.
+ *
+ * The unrecognised case still answers `invalid-response`: a failure we cannot
+ * classify is not a licence to invent a cause.
+ */
+export function classifyDockerProbeFailure({
+  exitCode = null,
+  stderrTail = "",
+  spawnError = null,
+  timedOut = false,
+} = {}) {
+  if (spawnError) {
+    return spawnError.code === "ENOENT"
+      ? "binary-missing"
+      : `spawn-failed (${spawnError.code || "unknown"})`;
+  }
+  // A deadline is a deadline (BI-24D5D7C2), and it outranks whatever partial
+  // stderr was captured before it fired.
+  if (timedOut) return "timeout";
+  const text = String(stderrTail || "");
+  if (DOCKER_ENGINE_UNREACHABLE_PATTERNS.some((pattern) => pattern.test(text))) {
+    return "engine-unreachable";
+  }
+  const status = text.match(/returned\s+(\d{3})\b/i)
+    || text.match(/\b(\d{3})\s+internal server error/i);
+  if (status) return `engine-error (${status[1]})`;
+  if (/error during connect|requested api version/i.test(text)) return "engine-error";
+  void exitCode;
+  return "invalid-response";
+}
+
+/**
+ * BI-3A008EBC. The inner command owns a STRICTLY SHORTER deadline than the
+ * `timedProbe` wrapping it. Both were previously handed the same
+ * CONTROL_PLANE_PROBE_TIMEOUT_MS, so two timers raced on an identical deadline
+ * and whichever fired first decided the label — a genuine docker deadline was
+ * reported as `invalid-response` nondeterministically, silently bypassing the
+ * classification BI-24D5D7C2 shipped.
+ */
+const DOCKER_PROBE_COMMAND_TIMEOUT_MS = Math.max(
+  1_000,
+  Math.floor(CONTROL_PLANE_PROBE_TIMEOUT_MS * 0.8),
+);
+
+async function dockerCommandProbe(args, timeoutMs = DOCKER_PROBE_COMMAND_TIMEOUT_MS) {
+  const outcome = await commandHealthy("docker", args, timeoutMs);
+  if (outcome.healthy) return true;
+  return {
+    healthy: false,
+    reason: classifyDockerProbeFailure(outcome),
+    detail: {
+      exitCode: outcome.exitCode,
+      timedOut: outcome.timedOut,
+      ...(outcome.spawnError
+        ? { spawnError: outcome.spawnError.code || String(outcome.spawnError.message || "") }
+        : {}),
+      ...(outcome.stderrTail ? { stderrTail: outcome.stderrTail } : {}),
+    },
+  };
+}
+
+/**
+ * BI-3A008EBC. The `blocked_control_plane_starvation` status value is persisted
+ * in gate records and read by scripts/lib/pregate-status.mjs, so it is not
+ * renamed here — but when the engine itself answered badly, the word
+ * "starvation" asserts a cause the probe never established and sends the
+ * operator to free memory that was never short. Say what was actually seen.
+ */
+export function controlPlaneEngineAdvisory(failures) {
+  const engine = (Array.isArray(failures) ? failures : [])
+    .map((failure) => String(failure))
+    .find((failure) => /:(engine-error|engine-unreachable|binary-missing)\b/.test(failure));
+  if (!engine) return null;
+  return `the engine itself answered badly (${engine}) — this is NOT host memory pressure;`
+    + " recover the engine and re-gate the same SHA (orphaned-socket recovery: BI-DDA569D9)";
 }
 
 async function probePostgres(databaseUrl) {
@@ -299,7 +464,9 @@ function resolveControlPlanePostgresProbe() {
     container,
     environment: inspected.stdout,
   });
-  return () => commandHealthy("docker", args, 2_500);
+  // BI-3A008EBC: the postgres container probe shells out to docker too, so a
+  // wedged engine must not be reported here as an opaque invalid-response either.
+  return () => dockerCommandProbe(args, 2_500);
 }
 
 async function probeControlPlane(postgresProbe) {
@@ -327,15 +494,61 @@ async function probeControlPlane(postgresProbe) {
       });
       return response?.success === true;
     }),
-    timedProbe(() => commandHealthy("docker", ["info"], CONTROL_PLANE_PROBE_TIMEOUT_MS)),
+    timedProbe(() => dockerCommandProbe(["info"])),
     timedProbe(postgresProbe),
   ]);
   return { portal, mcp, docker, postgres };
 }
 
 function resolveGit(args) {
-  const result = spawnSync("git", args, { encoding: "utf8", shell: false });
-  return result.status === 0 ? result.stdout.trim() : null;
+  return gitTextOrNull(args, { cwd: process.cwd() });
+}
+
+// BI-D3BF53A9: sample the builder's own cgroup while it builds. Async, so a slow
+// `docker exec` never stalls the control-plane watchdog, and best-effort: a
+// sample that cannot be read is skipped, never a reason to fail the build.
+const BUILDER_MEMORY_SAMPLE_INTERVAL_MS = 5_000;
+
+function sampleBuilderMemory(builder) {
+  return new Promise((resolveSample) => {
+    execFile("docker", builderMemorySampleArgs(builder.container), {
+      encoding: "utf8",
+      timeout: 10_000,
+      windowsHide: true,
+    }, (error, stdout) => {
+      resolveSample(error && !stdout ? null : parseBuilderMemorySample(stdout));
+    });
+  });
+}
+
+function builderContainerStartedAt(builder) {
+  const inspected = runDocker([
+    "inspect", builder.container, "--format", "{{.State.StartedAt}}",
+  ], 15_000);
+  return inspected.status === 0 ? inspected.stdout.trim() || null : null;
+}
+
+function startBuilderMemorySampler(builder) {
+  const samples = [];
+  let inFlight = false;
+  const timer = setInterval(() => {
+    if (inFlight) return;
+    inFlight = true;
+    sampleBuilderMemory(builder).then((sample) => {
+      if (sample) samples.push(sample);
+      inFlight = false;
+    });
+  }, BUILDER_MEMORY_SAMPLE_INTERVAL_MS);
+  timer.unref?.();
+  return {
+    samples,
+    async finish() {
+      clearInterval(timer);
+      // Read memory.peak once more AFTER the build and BEFORE cool-down stops
+      // the builder: stopping it discards the cgroup and its high-water.
+      return sampleBuilderMemory(builder);
+    },
+  };
 }
 
 function writeEvidence(path, payload) {
@@ -486,6 +699,8 @@ async function main() {
     writeEvidence(evidencePath, payload);
     stageReceipt.complete(payload.status, payload);
     process.stderr.write(`[local-ci-bounded-build] ${payload.status} ${payload.failures.join(",")}\n`);
+    const advisory = controlPlaneEngineAdvisory(payload.failures);
+    if (advisory) process.stderr.write(`[local-ci-bounded-build] ${advisory}\n`);
     return EXIT_CONTROL_PLANE_STARVATION;
   }
 
@@ -522,6 +737,8 @@ async function main() {
       shell: false,
       detached: process.platform !== "win32",
     });
+    const buildStartedAt = new Date().toISOString();
+    const memorySampler = startBuilderMemorySampler(builder);
     let childComplete = false;
     let childExit = null;
     let buildOutput = "";
@@ -570,6 +787,14 @@ async function main() {
       exitCode: childExit,
       output: buildOutput,
     });
+    const builderMemory = summarizeBuilderMemory({
+      samples: memorySampler.samples,
+      finalSample: await memorySampler.finish(),
+      containerStartedAt: builderContainerStartedAt(builder),
+      buildStartedAt,
+      memoryLimitBytes: builder.memoryBytes,
+      observedWorkers: observedBuildWorkers(buildOutput),
+    });
     const finalStatus = watchdog.status === "blocked_control_plane_starvation"
       ? watchdog.status
       : buildOutcome.status;
@@ -587,17 +812,51 @@ async function main() {
       failures,
       samples: [...preflight.samples, ...watchdog.samples],
       buildExitCode: childExit,
+      builderMemory,
       termination,
       artifact: finalStatus === "healthy"
         ? { imageTag: tag, imageId: localImageId(tag) }
         : null,
     };
     writeEvidence(evidencePath, payload);
+    process.stdout.write(
+      `[local-ci-bounded-build] builder memory: ${builderMemory.status}`
+        + (builderMemory.peakBytes
+          ? ` peak=${builderMemory.peakBytes} bytes (${builderMemory.peakScope})`
+            + ` sampledAnon=${builderMemory.sampledMaxAnonBytes ?? "?"}`
+            + ` sampledNodeRss=${builderMemory.sampledMaxNodeRssTotalBytes ?? "?"}`
+          : ` (${builderMemory.reason})`)
+        + ` cap=${builder.memoryBytes}\n`,
+    );
     const receiptStatus = canonicalStageReceiptStatus(finalStatus);
     stageReceipt.complete(receiptStatus, payload);
     if (finalStatus === "blocked_control_plane_starvation") {
       process.stderr.write(`[local-ci-bounded-build] ${finalStatus} ${failures.join(",")}\n`);
-      exitCode = EXIT_CONTROL_PLANE_STARVATION;
+      // BI-5A1FBCA6: say WHICH failure. Three different things record this one
+      // status, and they have three different remedies. Only the watchdog's
+      // verdict is about the shared control plane, so only it gets the engine
+      // advisory; the builder exhausting its OWN cap gets the numbers instead.
+      if (watchdog.status === "blocked_control_plane_starvation") {
+        const advisory = controlPlaneEngineAdvisory(failures);
+        if (advisory) process.stderr.write(`[local-ci-bounded-build] ${advisory}\n`);
+        exitCode = EXIT_CONTROL_PLANE_STARVATION;
+      } else {
+        // The control plane being healthy the whole time is the single most
+        // useful fact when the builder was the one that ran out. All of this was
+        // already known here and none of it was printed.
+        const healthy = watchdog.samples.length;
+        process.stderr.write(
+          "[local-ci-bounded-build] the BUILDER exhausted its own memory cap; "
+            + `the shared control plane stayed healthy for all ${healthy} probe(s). `
+            + `cap=${policy.memoryBytes} bytes parallelism=${policy.maxParallelism}`
+            + `${buildOutcome.observedWorkers ? ` observedWorkers=${buildOutcome.observedWorkers}` : ""}`
+            + `${buildOutcome.killedStep ? ` killedStep=${buildOutcome.killedStep}` : ""}\n`,
+        );
+        process.stderr.write(
+          "[local-ci-bounded-build] this is build capacity, NOT Docker, PostgreSQL or the portal.\n",
+        );
+        exitCode = buildOutcome.exitCode;
+      }
     } else {
       // Retention runs ONLY on a green build, so the slot always keeps a working
       // image: the one just produced supersedes the slot's older images. Gating on

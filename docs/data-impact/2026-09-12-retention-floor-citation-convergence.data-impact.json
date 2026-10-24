@@ -1,0 +1,45 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [
+    "Seeded retention-floor obligations (packages/db/src/seed-retention-floor-obligations.ts)",
+    "Compliance obligation surfaces (/compliance/obligations and the regulation detail page)",
+    "Retention sweep obligation-floor derivation (apps/web/lib/operate/retention/obligation-floors.ts)"
+  ],
+  "privacyAssessment": {
+    "personalData": false,
+    "sensitivity": "internal compliance configuration",
+    "dataSubjectRights": "not-applicable — the row states a regulator's rule (a duration and the categories it binds) and attaches it to a regulation. It describes no person.",
+    "reviewDisposition": "No data-subject workflow is introduced or changed. Retention windows are unaffected in both directions: the row's stated minimum does not change, only which regulation it hangs from, and foldObligationFloors reads the minimum rather than the citation."
+  },
+  "migration": {
+    "name": "none — seed convergence, no schema change",
+    "backfill": "The seed now looks a floor's obligation up by `reference` alone rather than by (regulationId, reference), so a floor that has moved to the regulation it names re-points the EXISTING row instead of minting a second one. On an install that already seeded the misattributed public-sector floor, the next seed run moves that row from REG-US-EPA-NPDES to REG-US-STATE-PUBLIC-RECORDS. On a fresh install nothing moves. On this development install no retention-floor obligation has been seeded yet, so the first run is pure create.",
+    "rollback": "Forward-only and fully reversible by the same mechanism: reverting the code makes the next seed re-point the row back by the old alphabetical pick. Nothing is deleted, so nothing is unrecoverable."
+  },
+  "tests": [
+    "apps/web/lib/operate/retention/obligation-floors.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:obligation#retention-floor-seed-rows",
+      "prismaModel": "Obligation",
+      "lifecycleDisposition": "Obligation is a regulated compliance record and stays one. No row is created, destroyed, or re-identified by this change: an existing seeded floor keeps its id, its obligationId, its linked controls and its collected evidence, and only its parent regulation changes. Delete-and-recreate was considered and rejected precisely because it would orphan those links.",
+      "fields": [
+        {
+          "fieldId": "data:obligation#regulationId",
+          "resolution": "governed",
+          "reason": "A floor moves from the regulation that merely sorted first alphabetically to the regulation it names. Without the move the platform cites the Clean Water Act as the source of a records-retention minimum on chat transcripts, which is a compliance claim it must not make (BI-0C723E18). The move is an update in place, so the obligation's identity and its relationships survive it.",
+          "provenance": "BI-0C723E18; verified against this install's 63 active regulations: 5 of 5 floors attach by preference after the fix, 4 of 5 before it."
+        },
+        {
+          "fieldId": "data:obligation#reference",
+          "resolution": "governed",
+          "reason": "The lookup is now keyed on `reference` alone, which is this seed's own idempotency key and is written by no other code path. A hand-authored obligation cannot match, so operator-authored compliance content is out of range. At most one row per reference can exist, because before this change a floor could attach to only one regulation.",
+          "provenance": "BI-0C723E18; RETENTION_FLOOR_OBLIGATIONS reference prefix `retention/floor/`."
+        }
+      ]
+    }
+  ]
+}

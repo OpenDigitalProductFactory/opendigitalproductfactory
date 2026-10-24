@@ -15,6 +15,7 @@
 // error, not a 5xx returned to the Edge Node binary.
 
 import { prisma } from "@dpf/db";
+import type { AuditClass } from "../audit-classes";
 
 /**
  * Sentinel userId for Edge Node calls. Edge Nodes are unattended
@@ -48,6 +49,18 @@ export type EdgeAuditRoute =
   | "edge.discovery_runs.submit"
   | "edge.federation_candidates.submit"
   | "edge.adapters";
+
+/** Audit class per Edge route — see lib/audit-classes.ts for the vocabulary. */
+export function edgeAuditClass(route: EdgeAuditRoute): AuditClass {
+  switch (route) {
+    case "edge.heartbeat":
+      return "metrics_only";
+    case "edge.enroll":
+      return "ledger";
+    default:
+      return "journal";
+  }
+}
 
 export type EdgeAuditInput = {
   /** Logical tool name; doubles as the toolName column. */
@@ -126,6 +139,12 @@ export async function writeEdgeNodeAudit(input: EdgeAuditInput): Promise<void> {
     executionMode: EDGE_NODE_AUDIT_EXECUTION_MODE,
     routeContext: input.routeContext,
     durationMs,
+    // BI-A55A651B: Edge rows used to leave auditClass NULL, so 23k heartbeats
+    // per fortnight fell into the ledger's one-year window. A heartbeat is
+    // read chatter (metrics_only); every other Edge route mutates estate
+    // state and is a journal entry. Enrollment is a credential event and
+    // stays ledger.
+    auditClass: edgeAuditClass(input.route),
     summary: buildShortSummary(input),
   };
 

@@ -17,7 +17,7 @@
 // `list_open_decision_reviews`); grants mirror agent-grants.ts TOOL_TO_GRANTS,
 // which stays the gating source.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 // Type-only: erased at build time, so the handler keeps its lazy-import shape.
 import type { SourceAccess } from "@/lib/decision/evidence-reverification";

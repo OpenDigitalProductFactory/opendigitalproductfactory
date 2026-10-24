@@ -144,11 +144,12 @@ requirement is that **DPF be the authority** for installs that have none. Adopti
 authentik satisfies the requirement by moving it — the install still depends on a
 second identity system, and DPF is demoted to a provisioning source.
 
-It also collides with a defect DPF already has. `apps/web/lib/govern/auth.ts` never
-reads `Principal`: authentication is `User`-rooted while all TAK/GAID authorization
-is `Principal`-rooted. DPF is already paying the cost of two identity roots. Adding
-a third, across a network hop with a sync protocol, compounds a defect the epic
-exists to retire.
+It also collided with a defect DPF had when this evaluation was written:
+authentication was credential-record-rooted while TAK/GAID authorization was
+`Principal`-rooted. BI-E22C3D75 closes that gap for workforce, customer-password,
+and social sign-in. Each path now verifies its credential or provider assertion,
+then resolves one active `Principal` before issuing a session. Adding authentik as
+a third identity root would reintroduce the split this work removed.
 
 Scenario B fits. DPF already has the spine (`Principal` + `PrincipalAlias`, with
 GAID as an alias type), the projection (`/platform/identity/directory`), the

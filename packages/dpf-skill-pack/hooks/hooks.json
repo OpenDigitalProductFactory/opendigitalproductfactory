@@ -6,35 +6,48 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/lease-guard.mjs\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/lease-guard.mjs\"",
+            "statusMessage": "Check the environment lease before starting a server"
           },
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/root-clone-guard.mjs\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/root-clone-guard.mjs\"",
+            "statusMessage": "Protect the shared source checkout from unsafe changes"
           },
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/compose-guard.mjs\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/compose-guard.mjs\"",
+            "statusMessage": "Protect shared services from destructive Compose commands"
           },
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/portal-image-guard.mjs\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/raw-tool-guard.mjs\"",
+            "statusMessage": "Redirect raw tsc, root-level vitest and npx to the checked-in routines"
           },
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/lease-punt-guard.mjs\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/portal-image-guard.mjs\"",
+            "statusMessage": "Keep portal image changes on the verified release path"
           },
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/pregate-evidence-guard.mjs\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/lease-punt-guard.mjs\"",
+            "statusMessage": "Check runtime verification has a provisioned environment"
           },
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/pregate-invocation-guard.mjs\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/pregate-evidence-guard.mjs\"",
+            "statusMessage": "Check verification evidence before publishing code"
           },
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/workroom-claim-guard.mjs\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/pregate-invocation-guard.mjs\"",
+            "statusMessage": "Check the verification command can run and report its result"
+          },
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/workroom-claim-guard.mjs\"",
+            "statusMessage": "Check this source change belongs to a claimed Workroom"
           }
         ]
       },
@@ -43,7 +56,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/decision-routing-guard.mjs\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/decision-routing-guard.mjs\"",
+            "statusMessage": "Check platform guidance before asking for a decision"
           }
         ]
       },
@@ -52,31 +66,38 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/root-clone-guard.mjs\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/root-clone-guard.mjs\"",
+            "statusMessage": "Protect the shared source checkout from unsafe changes"
           },
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/plan-backlog-coverage-guard.mjs\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/plan-backlog-coverage-guard.mjs\"",
+            "statusMessage": "Check planned deliverables are tracked before source edits"
           },
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/ux-fit-precheck.mjs\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/ux-fit-precheck.mjs\"",
+            "statusMessage": "Remind the author to review usability for UI changes"
           },
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/spec-plan-doc-precheck.mjs\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/spec-plan-doc-precheck.mjs\"",
+            "statusMessage": "Remind the author to include required design and documentation"
           },
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/design-grounding-precheck.mjs\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/design-grounding-precheck.mjs\"",
+            "statusMessage": "Remind the author to check existing design and implementation"
           },
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/tool-economy-precheck.mjs\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/tool-economy-precheck.mjs\"",
+            "statusMessage": "Remind the author to keep tool descriptions and results bounded"
           },
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/workroom-claim-guard.mjs\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/workroom-claim-guard.mjs\"",
+            "statusMessage": "Check this source change belongs to a claimed Workroom"
           }
         ]
       }
@@ -86,7 +107,20 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/worktree-create.mjs\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/worktree-create.mjs\"",
+            "statusMessage": "Create an isolated worktree in the shared worktree directory"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "^mcp__.+__(adopt_worktree|heartbeat_workroom|claim_workroom_scope|claim_backlog_item_for_work|create_workroom)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/workroom-claim-refresh.mjs\"",
+            "statusMessage": "Cache the renewed Workroom claim for this worktree"
           }
         ]
       }
@@ -96,7 +130,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/process-spine-health-check.mjs\" --hook"
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/install-folder-contract.mjs\"",
+            "statusMessage": "Load the source contract when the session opens in the install folder"
           }
         ]
       },
@@ -104,7 +139,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/governance-freshness-check.mjs\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/uncommitted-work-guard.mjs\" --snapshot",
+            "statusMessage": "Note work that was already uncommitted when the session started"
           }
         ]
       },
@@ -112,7 +148,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/worktree-session-hygiene.mjs\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/process-spine-health-check.mjs\" --hook",
+            "statusMessage": "Check required DPF skills are installed and exposed"
           }
         ]
       },
@@ -120,7 +157,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/worktree-session-heartbeat.mjs\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/pretooluse-guard-selftest.mjs\"",
+            "statusMessage": "Check the safety guards can block in this session"
           }
         ]
       },
@@ -128,7 +166,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/root-clone-freshness.mjs\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/governance-freshness-check.mjs\"",
+            "statusMessage": "Check this checkout has current process guards"
           }
         ]
       },
@@ -136,7 +175,44 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/worktree-readiness-banner.mjs\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/worktree-session-hygiene.mjs\"",
+            "statusMessage": "Check worktree location and unused checkout inventory"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/worktree-session-heartbeat.mjs\"",
+            "statusMessage": "Refresh this session heartbeat to protect active work"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/root-clone-freshness.mjs\"",
+            "statusMessage": "Safely fast-forward the clean shared source checkout"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/worktree-readiness-banner.mjs\"",
+            "statusMessage": "Report which checks this worktree is ready to run"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/toolchain-freshness.mjs\"",
+            "statusMessage": "Check the installed DPF tools match the portal's release"
           }
         ]
       }
@@ -146,7 +222,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/uncommitted-work-guard.mjs\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/uncommitted-work-guard.mjs\"",
+            "statusMessage": "Warn about uncommitted work before the session ends"
           }
         ]
       },
@@ -154,7 +231,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/worktree-session-heartbeat.mjs\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/worktree-session-heartbeat.mjs\"",
+            "statusMessage": "Remove the ended session heartbeat"
           }
         ]
       },
@@ -162,7 +240,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/worktree-session-hygiene.mjs\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/worktree-session-hygiene.mjs\"",
+            "statusMessage": "Reap this checkout only when merged, clean and no longer in use"
           }
         ]
       }
@@ -172,7 +251,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/uncommitted-work-guard.mjs\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/uncommitted-work-guard.mjs\"",
+            "statusMessage": "Warn about uncommitted work before ending the turn"
           }
         ]
       },
@@ -180,7 +260,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/worktree-session-heartbeat.mjs\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/worktree-session-heartbeat.mjs\"",
+            "statusMessage": "Refresh this session heartbeat to protect active work"
           }
         ]
       }

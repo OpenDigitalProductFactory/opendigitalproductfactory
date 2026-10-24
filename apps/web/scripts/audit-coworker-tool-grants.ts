@@ -134,6 +134,31 @@ function loadToolToGrants(): Record<string, string[]> {
       path: "apps/web/lib/tak/banking-tool-grants.ts",
       pattern: /BANKING_TOOL_GRANTS[^=]*= \{([\s\S]*?)\n\}/,
     },
+    {
+      // Managed-document tools (doc_*, create_presentation; BI-543819B1), spread into TOOL_TO_GRANTS.
+      path: "apps/web/lib/tak/document-tool-grants.ts",
+      pattern: /DOCUMENT_TOOL_GRANTS[^=]*= \{([\s\S]*?)\n\}/,
+    },
+    {
+      // Contributor inventory reads (BI-EBF0F6EE), spread into TOOL_TO_GRANTS.
+      path: "apps/web/lib/tak/contributor-inventory-tool-grants.ts",
+      pattern: /CONTRIBUTOR_INVENTORY_TOOL_GRANTS[^=]*= \{([\s\S]*?)\n\}/,
+    },
+    {
+      // Payables reads: bills and supplier agreements (BI-EBF0F6EE), spread into TOOL_TO_GRANTS.
+      path: "apps/web/lib/tak/payables-tool-grants.ts",
+      pattern: /PAYABLES_TOOL_GRANTS[^=]*= \{([\s\S]*?)\n\}/,
+    },
+    {
+      // Provider controls retain their shared management grant after extraction.
+      path: "apps/web/lib/tak/provider-management-tool-grants.ts",
+      pattern: /PROVIDER_MANAGEMENT_TOOL_GRANTS[^=]*= \{([\s\S]*?)\n\}/,
+    },
+    {
+      // Platform updates and explicit reconciliation share this canonical map.
+      path: "apps/web/lib/tak/platform-update-tool-grants.ts",
+      pattern: /PLATFORM_UPDATE_TOOL_GRANTS[^=]*= \{([\s\S]*?)\n\}/,
+    },
   ];
 
   for (const source of sources) {

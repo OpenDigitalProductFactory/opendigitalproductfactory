@@ -47,8 +47,8 @@ vi.mock("@/lib/self-upgrade/merge-point", () => ({
   }),
 }));
 
-vi.mock("@/components/ops/OpsTabNav", () => ({
-  OpsTabNav: () => <div data-testid="ops-tab-nav" />,
+vi.mock("@/components/platform/PlatformTabNav", () => ({
+  PlatformTabNav: () => <div data-testid="platform-tab-nav" />,
 }));
 
 // BI-D43EB266: the source-merge sub-step is folded into the Self-Upgrade page.
@@ -141,6 +141,12 @@ vi.mock("@/components/ops/LocalChangesLedger", () => ({
   LocalChangesLedger: () => <div data-testid="local-changes-ledger" />,
 }));
 
+// BI-E7974C18: the connected agent clients section renders for real; only its loader is faked.
+vi.mock("@/lib/agent-toolchain/connected-clients", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/agent-toolchain/connected-clients")>()),
+  loadConnectedAgentClients: vi.fn(),
+}));
+
 // The page reads the Simple/Full nav-mode cookie to decide the Advanced default.
 // vi.hoisted so the (hoisted) vi.mock factory can reference the fn without a TDZ.
 const { mockCookieGet } = vi.hoisted(() => ({ mockCookieGet: vi.fn() }));
@@ -152,6 +158,7 @@ import { getSelfUpgradeStatus, listSelfUpgradeRuns } from "@/lib/actions/promoti
 import { getPlatformDevConfig } from "@/lib/actions/platform-dev-config";
 import { loadPersistedImpactSummary, summarizeUpgradeImpact } from "@/lib/self-upgrade/impact";
 import { resolveUpgradeMergePoints } from "@/lib/self-upgrade/merge-point";
+import { loadConnectedAgentClients } from "@/lib/agent-toolchain/connected-clients";
 import SelfUpgradePage from "./page";
 
 beforeEach(() => {
@@ -160,6 +167,7 @@ beforeEach(() => {
   vi.mocked(getPlatformDevConfig).mockResolvedValue(null as never);
   // Default nav-mode: no cookie → Full (operator) → Advanced expanded.
   mockCookieGet.mockReturnValue(undefined);
+  vi.mocked(loadConnectedAgentClients).mockResolvedValue({ release: { packVersion: "0.4.0", fingerprint: "1111111111aa" }, clients: [], truncated: false });
 });
 
 const baseStatus = {
@@ -243,14 +251,14 @@ const baseStatus = {
 };
 
 describe("SelfUpgradePage", () => {
-  it("renders page title and ops tab nav", async () => {
+  it("renders page title and platform tab nav", async () => {
     vi.mocked(getSelfUpgradeStatus).mockResolvedValue(baseStatus);
     vi.mocked(listSelfUpgradeRuns).mockResolvedValue({ runs: [], nextCursor: null });
 
     const html = renderToStaticMarkup(await SelfUpgradePage());
 
     expect(html).toContain("Self-Upgrade");
-    expect(html).toContain('data-testid="ops-tab-nav"');
+    expect(html).toContain('data-testid="platform-tab-nav"');
     expect(html).toContain('data-testid="self-upgrade-client"');
     expect(html).not.toContain("plain-language status");
     expect(html).not.toContain("Run logs, runtime and security checks");
@@ -468,6 +476,28 @@ describe("SelfUpgradePage", () => {
     );
   });
 
+  it("passes the expected deployed merge identity to the owner summary", async () => {
+    vi.mocked(getSelfUpgradeStatus).mockResolvedValue({
+      ...baseStatus,
+      isFresh: true,
+      targetAvailability: "resolved",
+      targetSha: "a".repeat(40),
+      deployedSha: "b".repeat(40),
+      latestRun: {
+        runId: "SUR-landed-merge",
+        status: "failed",
+        reason: "admission-reopened-before-swap: the drain already ended (completed)",
+        targetSha: "a".repeat(40),
+        deployedSha: "b".repeat(40),
+        completionEvidence: null,
+      },
+    } as never);
+    vi.mocked(listSelfUpgradeRuns).mockResolvedValue({ runs: [], nextCursor: null });
+
+    const html = renderToStaticMarkup(await SelfUpgradePage());
+    expect(html).toContain('data-release-state="up-to-date"');
+    expect(html).not.toContain('data-release-state="failed"');
+  });
   it("keeps retry available after a failed attempt when the release is still newer", async () => {
     vi.mocked(getSelfUpgradeStatus).mockResolvedValue({
       ...baseStatus,
@@ -537,4 +567,35 @@ describe("SelfUpgradePage", () => {
   // are asserted in that component's own tests, not here. This page test owns
   // the page-level concern: the trigger is rendered co-located with the
   // release card, ahead of (outside) the collapsible Advanced section.
+
+  it("shows the connected agent clients section, with an empty state before any client connects (BI-E7974C18)", async () => {
+    vi.mocked(getSelfUpgradeStatus).mockResolvedValue(baseStatus);
+    vi.mocked(listSelfUpgradeRuns).mockResolvedValue({ runs: [], nextCursor: null });
+
+    const html = renderToStaticMarkup(await SelfUpgradePage());
+
+    expect(html).toContain('data-component="connected-agent-clients"');
+    expect(html).toContain("Connected agent clients");
+    expect(html).toContain("No agent client has connected yet.");
+  });
+
+  it("lists a behind client and keeps rendering when the list cannot be read (BI-E7974C18)", async () => {
+    vi.mocked(getSelfUpgradeStatus).mockResolvedValue(baseStatus);
+    vi.mocked(listSelfUpgradeRuns).mockResolvedValue({ runs: [], nextCursor: null });
+    vi.mocked(loadConnectedAgentClients).mockResolvedValueOnce({
+      release: { packVersion: "0.4.0", fingerprint: "1111111111aa" },
+      truncated: false,
+      clients: [{ credentialRef: "token:b", product: "Codex", probable: false, authMode: "bearer", standing: "stale", loadedVersion: "0.3.0", loadedFingerprint: "2222222222bb", lastSeen: new Date(), behind: true }],
+    });
+
+    const listed = renderToStaticMarkup(await SelfUpgradePage());
+    expect(listed).toContain("Codex");
+    expect(listed).toContain("Behind");
+    expect(listed).toContain("0 of 1 up to date");
+
+    vi.mocked(loadConnectedAgentClients).mockRejectedValueOnce(new Error("db down"));
+    const failed = renderToStaticMarkup(await SelfUpgradePage());
+    expect(failed).toContain("could not be read");
+    expect(failed).toContain('data-testid="self-upgrade-client"');
+  });
 });

@@ -46,6 +46,8 @@ interface ChannelBacklogItem {
   status: string;
   sensitivity: string;
   scopeKind: string | null;
+  archetypeCategories: string[];
+  archetypeIds: string[];
   workType: string | null;
   occurrenceCount: number;
   createdAt: Date;
@@ -240,6 +242,9 @@ export async function selectLocalDemandForLink(
         status: true,
         sensitivity: true,
         scopeKind: true,
+        // BI-7ED79807: archetype scope travels so a receiver can decide relevance.
+        archetypeCategories: true,
+        archetypeIds: true,
         workType: true,
         occurrenceCount: true,
         createdAt: true,
@@ -306,6 +311,10 @@ export async function selectLocalDemandForLink(
       workType: item.workType,
       occurrenceCount: item.occurrenceCount,
       product: item.digitalProduct?.productId ?? null,
+      // BI-7ED79807: archetype scope travels so a receiver can decide relevance.
+      scopeKind: item.scopeKind,
+      archetypeCategories: item.archetypeCategories,
+      archetypeIds: item.archetypeIds,
       createdAt: item.createdAt,
       updatedAt: item.updatedAt,
     },

@@ -25,9 +25,9 @@ scrape_configs:
       - targets: ["postgres-exporter:9187"]
 
   # A commented-out job must not count:
-  # - job_name: "neo4j"
+  # - job_name: "legacy-graph"
   #   static_configs:
-  #     - targets: ["neo4j:2004"]
+  #     - targets: ["legacy-graph:2004"]
 
   - job_name: "sandbox"
     static_configs:

@@ -4,7 +4,7 @@
 // exact cohort the org (pass A) and kernel (pass B) retrieval passes exclude
 // by construction. These tests pin the opt-in third pass on the Postgres
 // lexical path (the semantic path shares the same input contract and cohort
-// definition; its Qdrant filter is exercised via the shared cohort test on
+// definition; its vector filter is exercised via the shared cohort test on
 // searchWikiPages below).
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -12,14 +12,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const db = vi.hoisted(() => ({
   wikiPage: { findMany: vi.fn() },
 }));
-const qdrant = vi.hoisted(() => ({
+const vectorStore = vi.hoisted(() => ({
   searchSimilar: vi.fn(),
 }));
 vi.mock("@dpf/db", () => ({
   prisma: db,
-  QDRANT_COLLECTIONS: { WIKI_PAGES: "wiki-pages" },
+  VECTOR_COLLECTIONS: { WIKI_PAGES: "wiki-pages" },
   upsertVectors: vi.fn(),
-  searchSimilar: (...a: unknown[]) => qdrant.searchSimilar(...a),
+  searchSimilar: (...a: unknown[]) => vectorStore.searchSimilar(...a),
   deleteVectors: vi.fn(),
 }));
 
@@ -89,9 +89,9 @@ describe("lexical retrieval — profession pass (BI-CC44E74F)", () => {
 });
 
 describe("semantic retrieval — profession pass (BI-CC44E74F)", () => {
-  it("runs a third Qdrant pass over the isKernel:false / organizationId:null cohort when opted in", async () => {
+  it("runs a third vector pass over the isKernel:false / organizationId:null cohort when opted in", async () => {
     embedding.generateEmbedding.mockResolvedValue([0.1, 0.2]);
-    qdrant.searchSimilar.mockResolvedValue([]);
+    vectorStore.searchSimilar.mockResolvedValue([]);
     db.wikiPage.findMany.mockResolvedValue([]); // lexical fallback on empty semantic results
     await searchWikiPages({
       query: "referential integrity",
@@ -100,11 +100,11 @@ describe("semantic retrieval — profession pass (BI-CC44E74F)", () => {
       professionKeys: ["data-architect"],
     });
     // Pass B (kernel) + pass C (profession); no org pass without an org.
-    expect(qdrant.searchSimilar).toHaveBeenCalledTimes(2);
+    expect(vectorStore.searchSimilar).toHaveBeenCalledTimes(2);
     // Located by its cohort filter rather than by call index: pass C runs
     // before pass B (BI-F3FB4F41), so the ordinal is not part of the contract.
     type Clause = { key: string; match: Record<string, unknown> };
-    const professionFilter = qdrant.searchSimilar.mock.calls
+    const professionFilter = vectorStore.searchSimilar.mock.calls
       .map((c: unknown[]) => c[2] as { must: Clause[] })
       .find((f) => f.must.some((m) => m.key === "isKernel" && m.match.value === false))!;
     expect(professionFilter.must).toEqual(
@@ -117,11 +117,11 @@ describe("semantic retrieval — profession pass (BI-CC44E74F)", () => {
 
   it("does not run the profession pass by default", async () => {
     embedding.generateEmbedding.mockResolvedValue([0.1, 0.2]);
-    qdrant.searchSimilar.mockResolvedValue([
+    vectorStore.searchSimilar.mockResolvedValue([
       { score: 0.9, payload: { entityId: "k1", slug: "principles/x", title: "X", pageKind: "principle", isKernel: true, organizationId: null, kernelPageId: null, contentPreview: "" } },
     ]);
     await searchWikiPages({ query: "anything", organizationId: null });
-    expect(qdrant.searchSimilar).toHaveBeenCalledTimes(1);
+    expect(vectorStore.searchSimilar).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -136,7 +136,7 @@ describe("semantic retrieval — profession pass (BI-CC44E74F)", () => {
 describe("semantic retrieval — profession share on a dense corpus (BI-F3FB4F41)", () => {
   const vec = Array.from({ length: 8 }, () => 0.1);
 
-  /** Qdrant-shaped hit whose payload carries the fields projectResult reads. */
+  /** Vector-store-shaped hit whose payload carries the fields projectResult reads. */
   const hit = (slug: string, isKernel: boolean, organizationId: string | null, score: number) => ({
     id: slug,
     score,
@@ -156,7 +156,7 @@ describe("semantic retrieval — profession share on a dense corpus (BI-F3FB4F41
 
   /** Routes each pass by the filter it was called with, then honours its limit. */
   const denseCorpus = () => {
-    qdrant.searchSimilar.mockImplementation(
+    vectorStore.searchSimilar.mockImplementation(
       async (_c: string, _v: number[], filter: Record<string, unknown>, lim: number) => {
         const must = (filter.must ?? []) as Array<{ key: string; match: { value: unknown } }>;
         const clause = (key: string) => must.find((m) => m.key === key)?.match?.value;

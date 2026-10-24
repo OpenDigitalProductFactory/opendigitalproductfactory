@@ -1,0 +1,21 @@
+{
+  "version": "1",
+  "accountableOwner": "Mark Bodman (markdbodman@gmail.com)",
+  "summary": "BI-8CFA1CA8. Add AgentModelConfig.residencyPolicy (local_only|approved_cloud|any_enabled, nullable; null reads as any_enabled) so an agent's data-residency guarantee is stated rather than inferred from pinnedProviderId == 'local'. Previously one portal control carried two unrelated decisions: clearing a provider preference silently relaxed a residency guarantee and choosing 'local' from a routing dropdown silently imposed one. Additive and non-destructive; the migration backfills 'local_only' only for configs that are currently local-pinned and therefore already routed local_only, so behaviour on existing installs is unchanged. Composes with the per-task-type TaskRequirement.residencyPolicy as before — the stricter of the two wins. Stored as text to match the existing representation of the same axis on TaskRequirement; typing the whole residency axis as a Prisma enum is deliberately left to a separate change so the axis does not carry two representations mid-flight. Migration: 20260918100000_agent_model_config_residency_policy.",
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "AgentModelConfig",
+      "lifecycleDisposition": "retain-with-item",
+      "fields": [
+        {
+          "name": "residencyPolicy",
+          "resolution": "governed",
+          "reason": "Declares where an agent's inference may be executed — local hardware only, approved cloud providers, or any enabled provider. It is a data-residency control, not personal data: it constrains which providers may receive the agent's prompts and tool payloads. Enforced in routing as a hard fence, so it must be explicit and auditable rather than derived from an unrelated routing preference.",
+          "provenance": "Operator-set on the agent's model configuration. Backfilled once from the pre-existing inference (pinnedProviderId = 'local') to preserve current behaviour; no external source thereafter.",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

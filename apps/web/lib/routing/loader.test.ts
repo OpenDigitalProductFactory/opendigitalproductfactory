@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  loadEndpointManifests,
+  loadEndpointManifests as readEndpointManifests,
+  loadEnableCandidateManifests as readEnableCandidateManifests,
   loadOverrides,
   loadPolicyRules,
   invalidateRoutingLoaderCache,
@@ -10,8 +11,9 @@ import type { InferenceDataScreenReceipt } from "@/lib/inference/data-screening/
 import type { RouteDecision } from "./types";
 import { MODEL_ROUTING_ENDPOINT_TYPES } from "./provider-eligibility";
 
-const { mockPrisma, mockProviderHasConfiguredCredential } = vi.hoisted(() => ({
+const { mockPrisma, mockProviderHasConfiguredCredential, mockServedContext } = vi.hoisted(() => ({
   mockPrisma: {
+    aiProviderConnection: { findMany: vi.fn().mockResolvedValue([]) },
     routeDecisionLog: {
       create: vi.fn().mockResolvedValue({ id: "decision-log-1" }),
     },
@@ -26,12 +28,15 @@ const { mockPrisma, mockProviderHasConfiguredCredential } = vi.hoisted(() => ({
     },
   },
   mockProviderHasConfiguredCredential: vi.fn(),
+  mockServedContext: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock("@dpf/db", () => ({ prisma: mockPrisma }));
 vi.mock("@/lib/ai-provider-internals", () => ({
   providerHasConfiguredCredential: mockProviderHasConfiguredCredential,
 }));
+const loadEndpointManifests = (now?: number) => readEndpointManifests(now, mockServedContext);
+const loadEnableCandidateManifests = () => readEnableCandidateManifests(mockServedContext);
 
 describe("persistRouteDecision", () => {
   beforeEach(() => {
@@ -210,6 +215,84 @@ describe("routing-loader cache (BI-OPT-ROUTING-CACHE)", () => {
     description: "demo",
     condition: { kind: "noop" },
   };
+  const localProfile = (output: number | null = null) => ({
+    ...profileRow, providerId: "local", modelId: "ai/qwen3.8:27b", maxOutputTokens: output,
+    maxContextTokens: 262144,
+    provider: { ...profileRow.provider, providerId: "local", authMethod: "none",
+      baseUrl: null, endpoint: "http://model-runner.docker.internal/v1", maxOutputTokens: null },
+  });
+
+  it("bounds local completion by the observed shared window instead of rejecting absent output metadata", async () => {
+    mockPrisma.modelProfile.findMany.mockResolvedValue([localProfile()]);
+    mockServedContext.mockResolvedValue(40960);
+    const [manifest] = await loadEndpointManifests();
+    expect(manifest).toMatchObject({ maxContextTokens: 40960, maxOutputTokens: 40960 });
+    expect(mockServedContext).toHaveBeenCalledWith(undefined, expect.objectContaining({
+      modelId: "ai/qwen3.8:27b", provider: expect.objectContaining({ providerId: "local" }),
+    }));
+  });
+
+  it("does not reuse another reader's local capacity or invent capacity without a reader", async () => {
+    mockPrisma.modelProfile.findMany.mockResolvedValue([localProfile()]);
+    mockServedContext.mockResolvedValue(40960);
+    expect((await loadEndpointManifests(100000))[0]?.maxOutputTokens).toBe(40960);
+    expect((await readEndpointManifests(100001))[0]?.maxOutputTokens).toBeNull();
+    const unavailableReader = vi.fn().mockResolvedValue(null);
+    expect((await readEndpointManifests(100002, unavailableReader))[0]?.maxContextTokens).toBeNull();
+  });
+
+  it("carries selected runtime support alongside observed capacity without trusting stored parameters", async () => {
+    mockPrisma.modelProfile.findMany.mockResolvedValue([localProfile()]);
+    const evidence = { dialect: "llama.cpp-b9879" as const, modelDigest: "digest", engineIdentity: "engine", templateDigest: "template", configDigest: "config", observedAt: Date.now() };
+    const [manifest] = await readEndpointManifests(Date.now(), async () => ({ contextTokens: 131072, thinkingBudgetEvidence: evidence }));
+    expect(manifest).toMatchObject({ maxContextTokens: 131072, localThinkingBudgetEvidence: evidence });
+    const [unknown] = await readEndpointManifests(Date.now(), async () => ({ contextTokens: 131072 }));
+    expect(unknown?.localThinkingBudgetEvidence).toBeUndefined();
+  });
+
+  it("leaves embedding capacity on its existing metadata path", async () => {
+    mockPrisma.modelProfile.findMany.mockResolvedValue([{ ...localProfile(8192), modelClass: "embedding" }]);
+    expect((await loadEndpointManifests())[0]).toMatchObject({ maxContextTokens: 262144, maxOutputTokens: 8192 });
+    expect(mockServedContext).not.toHaveBeenCalled();
+  });
+
+  it("preserves a lower explicit local output cap", async () => {
+    mockPrisma.modelProfile.findMany.mockResolvedValue([localProfile(8192)]);
+    mockServedContext.mockResolvedValue(40960);
+    expect((await loadEndpointManifests())[0]).toMatchObject({ maxContextTokens: 40960, maxOutputTokens: 8192 });
+  });
+
+  it("drops expired observed capacity when the runtime becomes unreadable", async () => {
+    mockPrisma.modelProfile.findMany.mockResolvedValue([localProfile()]);
+    mockServedContext.mockResolvedValueOnce(40960).mockResolvedValueOnce(null);
+    expect((await loadEndpointManifests(100000))[0]?.maxContextTokens).toBe(40960);
+    expect((await loadEndpointManifests(129999))[0]?.maxContextTokens).toBe(40960);
+    expect((await loadEndpointManifests(130000))[0]?.maxContextTokens).toBeNull();
+    expect(mockServedContext).toHaveBeenCalledTimes(2);
+  });
+
+  it("uses the same observed bounds for enable-candidate previews", async () => {
+    mockPrisma.modelProfile.findMany.mockResolvedValue([localProfile()]);
+    mockServedContext.mockResolvedValue(40960);
+    expect((await loadEnableCandidateManifests())[0]).toMatchObject({
+      status: "active", maxContextTokens: 40960, maxOutputTokens: 40960,
+    });
+  });
+
+  it.each([null, 0, -1, Number.NaN, Number.POSITIVE_INFINITY, 40960.5])(
+    "does not substitute advertised context when served capacity is invalid: %s", async (served) => {
+      mockPrisma.modelProfile.findMany.mockResolvedValue([localProfile()]);
+      mockServedContext.mockResolvedValue(served);
+      expect((await loadEndpointManifests())[0]).toMatchObject({ maxContextTokens: null, maxOutputTokens: null });
+    },
+  );
+
+  it("does not derive cloud output capacity from a context limit", async () => {
+    mockPrisma.modelProfile.findMany.mockResolvedValue([{ ...profileRow, maxOutputTokens: null,
+      provider: { ...profileRow.provider, maxOutputTokens: null } }]);
+    expect((await loadEndpointManifests())[0]?.maxOutputTokens).toBeNull();
+    expect(mockServedContext).not.toHaveBeenCalled();
+  });
   const overrideRow = {
     endpointId: "anthropic:claude-sonnet",
     taskType: "code-gen",

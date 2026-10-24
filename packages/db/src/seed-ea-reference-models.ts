@@ -6,18 +6,27 @@ import {
   normalizePriorityClass,
   slugifyReferenceModelName,
 } from "./reference-model-import.js";
-import { readWorkbook, requireSheetData, sheetDataToObjects } from "./excel-sheet-reader.js";
-import type {
-  FunctionalCriteriaRow,
-  ParticipationMatrixRow,
-  ValueStreamActivityRow,
-} from "./reference-model-types.js";
+import { IT4IT_REFERENCE_JSON_PATH, loadIt4itReferenceRows } from "./it4it-reference-data.js";
+import {
+  referenceModelAppliesToInstall,
+  type InstallArchetype,
+} from "./reference-model-applicability";
+
+// Re-exported so the seed stays the one place callers already know to look for
+// this rule; the rule itself now lives in one module the read path shares
+// (BI-C44EAEE6).
+export {
+  REFERENCE_MODEL_ARCHETYPES,
+  describeReferenceModelApplicability,
+  referenceModelAppliesToInstall,
+  type InstallArchetype,
+} from "./reference-model-applicability";
+
 
 // __dirname is packages/db/src at runtime (tsx) — three levels up is repo root (/app in container).
 // The prior four-level climb landed at / and made the IT4IT workbook unfindable on every install.
 const REPO_ROOT = process.env.DPF_DATA_ROOT ?? join(__dirname, "..", "..", "..");
 const REFERENCE_ROOT = join(REPO_ROOT, "docs", "Reference");
-const IT4IT_WORKBOOK_PATH = join(REFERENCE_ROOT, "IT4IT_Functional_Criteria_Taxonomy.xlsx");
 
 function slugifyPart(value: string): string {
   return value
@@ -29,44 +38,6 @@ function slugifyPart(value: string): string {
 
 function buildElementSlug(kind: string, ...parts: string[]): string {
   return [kind, ...parts.map(slugifyPart)].filter(Boolean).join("__");
-}
-
-async function loadIt4itWorkbook() {
-  const workbook = await readWorkbook(IT4IT_WORKBOOK_PATH);
-
-  const functionalRows = sheetDataToObjects(requireSheetData(workbook, "IT4IT Functional Criteria"));
-  const valueStreamRows = sheetDataToObjects(requireSheetData(workbook, "Value Stream Activities"));
-  const participationRows = sheetDataToObjects(requireSheetData(workbook, "FC Participation Matrix"));
-
-  return {
-    functionalRows: functionalRows.map<FunctionalCriteriaRow>((row) => ({
-      capabilityGroup: String(row["Level 1: Capability Group"] ?? "").trim(),
-      functionName: String(row["Level 2: Function"] ?? "").trim(),
-      componentName: String(row["Level 3: Functional Component"] ?? "").trim(),
-      criteria: String(row["Functional Criteria"] ?? "").trim(),
-      referenceSection: row["Reference Section"] == null ? null : String(row["Reference Section"]).trim(),
-    })),
-    valueStreamRows: valueStreamRows.map<ValueStreamActivityRow>((row) => ({
-      valueStream: String(row["Value Stream"] ?? "").trim(),
-      valueStreamStage: String(row["Value Stream Stage"] ?? "").trim(),
-      criteria: String(row["Activity Criteria"] ?? "").trim(),
-      referenceSection: row["Reference Section"] == null ? null : String(row["Reference Section"]).trim(),
-    })),
-    participationRows: participationRows.map<ParticipationMatrixRow>((row) => {
-      const participationByColumn: Record<string, string | null> = {};
-      for (const [key, value] of Object.entries(row)) {
-        if (key === "Value Stream" || key === "Value Stream Stage" || key === "Ref") continue;
-        participationByColumn[key] = value == null ? null : String(value).trim();
-      }
-
-      return {
-        valueStream: String(row["Value Stream"] ?? "").trim(),
-        valueStreamStage: String(row["Value Stream Stage"] ?? "").trim(),
-        reference: row["Ref"] == null ? null : String(row["Ref"]).trim(),
-        participationByColumn,
-      };
-    }),
-  };
 }
 
 async function upsertElement(args: {
@@ -169,27 +140,6 @@ const BIAN_SD_TO_CAPABILITY_KEY: Readonly<Record<string, string>> = {
 };
 
 /**
- * Which archetypes an industry-specific reference model serves.
- *
- * Entries may be archetype CATEGORY slugs (`banking-financial-services`) or
- * specific archetype ids (`credit-union`), matching either — the same contract
- * `RegulationApplicability.archetypes` already uses, so an operator reads one
- * rule for "is this vertical content mine?", not two.
- *
- * An empty/absent list means universal: IT4IT describes IT management for any
- * organisation that runs IT, which is every install.
- */
-const REFERENCE_MODEL_ARCHETYPES: Readonly<Record<string, readonly string[]>> = {
-  bian_service_landscape_v14_0_0: ["banking-financial-services"],
-};
-
-/** The install's declared archetype, as category slug + specific archetype id. */
-interface InstallArchetype {
-  category: string | null;
-  archetypeId: string | null;
-}
-
-/**
  * Read the install's setup-chosen archetype. `StorefrontConfig.archetypeId` is a
  * cuid FK, not a slug, so the join to StorefrontArchetype is required to reach
  * the category/id slugs the applicability lists are written in.
@@ -213,24 +163,6 @@ async function resolveInstallArchetype(): Promise<InstallArchetype> {
     category: archetype?.category ?? null,
     archetypeId: archetype?.archetypeId ?? null,
   };
-}
-
-/**
- * Does this install need the element hierarchy for `modelSlug`?
- *
- * Universal models (no declared archetypes) always apply. An industry model
- * applies only when the install's category or archetype id is in its list.
- */
-export function referenceModelAppliesToInstall(
-  modelSlug: string,
-  install: InstallArchetype,
-  archetypesBySlug: Readonly<Record<string, readonly string[]>> = REFERENCE_MODEL_ARCHETYPES,
-): boolean {
-  const archetypes = archetypesBySlug[modelSlug];
-  if (!archetypes || archetypes.length === 0) return true;
-  return archetypes.some(
-    (a) => a === install.category || a === install.archetypeId,
-  );
 }
 
 async function seedBianReferenceModel(modelId: string): Promise<void> {
@@ -358,7 +290,10 @@ export async function seedEaReferenceModels(): Promise<void> {
     });
   }
 
-  const { functionalRows, valueStreamRows, participationRows } = await loadIt4itWorkbook();
+  // BI-B470264D: committed JSON generated from the workbook at dev time. The
+  // seed never parses the .xlsx, so neither a spreadsheet parser nor LFS
+  // content in the image is on the portal-init path (BI-FEE26C36).
+  const { functionalRows, valueStreamRows, participationRows } = loadIt4itReferenceRows();
 
   const domainIds = new Map<string, string>();
   const functionIds = new Map<string, string>();
@@ -565,7 +500,7 @@ export async function seedEaReferenceModels(): Promise<void> {
   });
   if (it4itElementCount === 0) {
     throw new Error(
-      `IT4IT reference model imported zero elements from ${IT4IT_WORKBOOK_PATH} — the workbook read did not throw but produced no rows (check for an LFS pointer stub or an empty/relabelled sheet).`
+      `IT4IT reference model imported zero elements from ${IT4IT_REFERENCE_JSON_PATH} — the read did not throw but produced no rows (regenerate it with scripts/generate-it4it-reference-json.ts and check for an empty/relabelled sheet).`
     );
   }
 

@@ -4,6 +4,30 @@ status: draft
 
 # External MCP coworker handoff through auth-bound tasks
 
+## OAuth handoff parity (2026-09-21, BI-6804F720)
+
+The live OAuth-authenticated caller reproduces `external_handoff_context_required`
+before dispatch even though the MCP transport admitted the call. This supersedes
+the PAT-only wording below: both admitted OAuth access tokens and PATs use the
+same adapter and task authority contract. The adapter preserves the authenticated
+token source and capability; it does not relabel OAuth as PAT or accept a
+threadless session JWT. No caller-supplied identity or grant expansion is added.
+
+Background dispatch and capacity-event resume revalidate the original token row.
+OAuth additionally uses the existing `isCurrentOAuthAccessToken` predicate,
+including access-token kind, lifetime, and present, unrevoked client. Expired or
+revoked authority remains a refusal; this change neither refreshes credentials
+nor resets review budgets. The same immutable request key, digest, task identity,
+and execution fencing remain authoritative.
+
+Acceptance: OAuth and PAT handoff preserve token source and scope; invalid
+external contexts fail before submission; an OAuth capacity wait resumes the
+original task; revoked/deleted clients, expired tokens, refresh tokens and lost
+write capability cannot start execution. Reuse the current auth-bound task and
+OAuth authentication designs; no migration, new tool or parallel task store.
+The live check must dispatch a named independent reviewer through OAuth and read
+back its durable outcome after this source change has merged and been deployed.
+
 **Backlog item:** BI-6804F720
 **Workroom:** WC-4DC4E103
 **Blocks:** BI-2C50F548
@@ -485,6 +509,66 @@ writer recovery retain their existing explicit token projection. This keeps
 the receipt repository's three-part requirement intact: independent reviewer,
 recorded authority decision, and authenticated write/admin token scope.
 
+### 2026-09-05 bounded technical-receipt amendment (BI-921B7DC2)
+
+The preceding exception is too narrow. It keys generic approval suppression to
+whether the initiative-readiness lane is independently reviewed. Research is a
+technical readiness receipt but is intentionally not marked independent: the
+Portfolio Advisor may verify and record reproduction evidence without being a
+second artifact approver. As a result, a fully server-bound research TaskRun is
+still wrapped in a `CoworkerActionEnvelope` and asks the business owner to
+ratify a technical finding they cannot responsibly assess.
+
+WWMD decision `DI-50CBE054E410` selected the bounded technical-review option at
+high confidence. The authority boundary is the validated server-issued
+`initiativeReviewBinding`, not the lane's independent-review flag. That packet
+already fixes one BacklogItem, one immutable artifact revision, one gate, and
+one `record_initiative_*` writer; the TaskRun authority scope and reviewer tool
+grant must match it exactly. The receipt repositories retain their own role,
+token-scope, tenant, and author/reviewer-separation checks. An explicit
+operator `hitlPolicy: "always"` continues to require approval.
+
+This does **not** create a general coworker-write exemption. Unbound writer
+calls, malformed or mismatched packets, other side-effecting tools, and mission,
+spend, destructive, externally visible, legal, clinical, privacy, or safety
+actions continue through their existing approval or denial paths.
+
+Run-local enforcement override: on 2026-09-04 the authenticated operator said
+"make this change" after rejecting the owner-facing technical approval. For
+this branch and BI-921B7DC2 only, that direction authorizes implementation of
+the narrow authority-policy correction while `RESEARCH_REQUIRED` is circular:
+the only eligible research writer is blocked by the defect being repaired. It
+does not mark research or plan as passed; both remain **unrun** until a fresh
+server-bound reviewer completes them after the fix is live. It does not bypass
+tool grants, author/reviewer separation, DCO, protected PR delivery, build
+gates, or canonical-runtime verification. It expires when this PR merges or
+the branch is abandoned.
+
+**OBJ-BTRA-1:** Let a qualified technical coworker record an exact,
+server-bound initiative-readiness receipt without asking the business owner to
+approve a judgment they cannot evaluate, while preserving every consequential
+human-control boundary.
+
+| Acceptance criterion | Objective | Statement |
+|---|---|---|
+| AC-BTRA-1 | OBJ-BTRA-1 | A valid server-bound research receipt executes under generic tier and side-effect defaults without creating a CoworkerActionEnvelope. |
+| AC-BTRA-2 | OBJ-BTRA-1 | Explicit `hitlPolicy: "always"`, unbound calls, malformed or mismatched bindings, missing grants, and wrong subjects retain their existing approval or denial behavior. |
+| AC-BTRA-3 | OBJ-BTRA-1 | Non-readiness mission, spend, destructive, external, legal, clinical, privacy, and safety actions receive no authority from this exception. |
+| AC-BTRA-4 | OBJ-BTRA-1 | Canonical-runtime replay completes the technical TaskRun, persists its receipt, and leaves no owner-facing approval envelope for that call. |
+
+Ordered fix sequence:
+
+1. Add a regression proving a bound `record_initiative_evidence` research
+   receipt is not re-wrapped by the generic tier/side-effect policy.
+2. Rename the pure policy input from independent-review language to bounded
+   initiative-review language and derive it from the already-validated binding,
+   without adding another writer allow-list.
+3. Keep `hitlPolicy: "always"` first in precedence; keep unbound calls on the
+   generic policy.
+4. Run the focused authority tests, typecheck/preflight gates, protected CI,
+   then replay the BI-69803ACC research handoff on the canonical install and
+   verify a persisted receipt, completed TaskRun, and no owner envelope.
+
 ## Acceptance criteria traceability
 
 | BI acceptance criterion | Design coverage |
@@ -494,6 +578,7 @@ recorded authority decision, and authenticated write/admin token scope.
 | Missing/invalid identity is typed and actionable | Explicit error table and repair messages |
 | Codex/Claude/Grok/embedded/generic compatibility | Shared handler lane and host-metadata test matrix |
 | Regression reproduces and proves fixed propagation | Unit, integration, and live functional verification plan |
+| Bound research receipt does not ask the business owner to approve | 2026-09-05 bounded technical-receipt amendment; exact binding + writer/grant/scope checks remain authoritative |
 
 ## Open review questions
 

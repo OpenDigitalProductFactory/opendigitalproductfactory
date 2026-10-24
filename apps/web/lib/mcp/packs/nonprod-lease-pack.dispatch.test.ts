@@ -38,6 +38,7 @@ vi.mock("@/lib/nonprod/environment-lease", async (importOriginal) => ({
 
 vi.mock("@/lib/nonprod/local-integration", () => ({
   recordLocalIntegrationResult: mockRecordLocalIntegrationResult,
+  TEST_STUB_EVIDENCE_REFUSED: "test_stub_evidence_refused",
 }));
 
 vi.mock("@/lib/nonprod/durable-wait", () => ({

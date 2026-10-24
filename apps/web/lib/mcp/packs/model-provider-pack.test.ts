@@ -7,6 +7,7 @@ const db = vi.hoisted(() => ({
       create: vi.fn(),
       update: vi.fn(),
     },
+    aiProviderConnection: { findUnique: vi.fn() },
     featureBuild: {
       findUnique: vi.fn(),
       findFirst: vi.fn(),
@@ -34,6 +35,13 @@ const lazyNode = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/shared/lazy-node", () => lazyNode);
 
+const accounts = vi.hoisted(() => ({ addProviderAccount: vi.fn(), configureProviderAccount: vi.fn(), setProviderAccountEnabled: vi.fn() }));
+const accountRead = vi.hoisted(() => ({ getProviderAccounts: vi.fn() }));
+const accountAuth = vi.hoisted(() => ({ testProviderAuthInternal: vi.fn() }));
+vi.mock("@/lib/inference/provider-account-management", () => accounts);
+vi.mock("@/lib/inference/ai-provider-data", () => accountRead);
+vi.mock("@/lib/actions/provider-auth-test", () => accountAuth);
+
 import { modelProviderPack } from "./model-provider-pack";
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 
@@ -43,6 +51,8 @@ const EXPECTED_TOOLS = [
   "describe_committed_model",
   "add_provider",
   "update_provider_category",
+  "get_provider_accounts",
+  "manage_provider_account",
 ];
 
 const EXPECTED_GRANTS: Record<string, string[]> = {
@@ -51,6 +61,8 @@ const EXPECTED_GRANTS: Record<string, string[]> = {
   describe_model: ["sandbox_execute"],
   add_provider: ["agent_control_read"],
   update_provider_category: ["agent_control_read"],
+  get_provider_accounts: ["agent_control_read"],
+  manage_provider_account: ["agent_control_read"],
 };
 
 beforeEach(() => {
@@ -58,7 +70,7 @@ beforeEach(() => {
 });
 
 describe("model-provider pack — registration", () => {
-  it("exposes exactly the five model & provider tools", () => {
+  it("exposes all model and provider controls", () => {
     expect(modelProviderPack.definitions.map((d) => d.name).sort()).toEqual([...EXPECTED_TOOLS].sort());
     expect(Object.keys(modelProviderPack.handlers).sort()).toEqual([...EXPECTED_TOOLS].sort());
     expect(modelProviderPack.packId).toBe("model-provider");
@@ -103,6 +115,46 @@ describe("model-provider pack — registration", () => {
 });
 
 describe("model-provider pack — handler behavior (delegation preserved)", () => {
+  it("lists a bounded page and returns the last visible account as its continuation", async () => {
+    accountRead.getProviderAccounts.mockResolvedValue([{ connectionId: "a" }, { connectionId: "b" }, { connectionId: "c" }]);
+    const out = await modelProviderPack.handlers.get_provider_accounts({ providerId: "openai", limit: 2, cursor: "previous" }, "u1");
+    expect(accountRead.getProviderAccounts).toHaveBeenCalledWith("openai", { limit: 3, cursor: "previous" });
+    expect(out.data).toEqual({ accounts: [{ connectionId: "a" }, { connectionId: "b" }], nextCursor: "b" });
+  });
+
+  it("requires an account identity and refuses cross-provider operations before changing credentials", async () => {
+    expect(await modelProviderPack.handlers.manage_provider_account({ operation: "configure", providerId: "openai" }, "u1")).toMatchObject({ success: false });
+    db.prisma.aiProviderConnection.findUnique.mockResolvedValue({ providerId: "anthropic", connectionId: "b" });
+    expect(await modelProviderPack.handlers.manage_provider_account({ operation: "configure", providerId: "openai", connectionId: "b", secretRef: "new" }, "u1")).toMatchObject({ success: false });
+    expect(accounts.configureProviderAccount).not.toHaveBeenCalled();
+  });
+
+  it("configures and tests the selected account without a provider-wide authentication probe", async () => {
+    db.prisma.aiProviderConnection.findUnique.mockResolvedValue({ providerId: "openai", connectionId: "b" });
+    accounts.configureProviderAccount.mockResolvedValue({ ok: true });
+    accountAuth.testProviderAuthInternal.mockResolvedValue({ ok: true, message: "Connected" });
+    expect(await modelProviderPack.handlers.manage_provider_account({ operation: "configure", connectionId: "b", secretRef: "new" }, "u1")).toMatchObject({ success: true });
+    expect(accounts.configureProviderAccount).toHaveBeenCalledWith({ connectionId: "b", secretRef: "new" });
+    expect(await modelProviderPack.handlers.manage_provider_account({ operation: "test", connectionId: "b" }, "u1")).toMatchObject({ success: true });
+    expect(accountAuth.testProviderAuthInternal).toHaveBeenCalledWith("openai", false, "b");
+  });
+
+  it("marks account secrets for audit redaction and retains the provider-management capability", () => {
+    const definition = modelProviderPack.definitions.find((entry) => entry.name === "manage_provider_account")!;
+    const fields = definition.inputSchema.properties as Record<string, { writeOnly?: boolean }>;
+    expect(fields.secretRef.writeOnly).toBe(true);
+    expect(fields.clientSecret.writeOnly).toBe(true);
+    expect(definition.requiredCapability).toBe("manage_provider_connections");
+  });
+
+  it.each(["codex", "chatgpt"])("uses verification-only execution for the canonical %s subscription", async providerId => {
+    const connectionId = `provider-default-${providerId}`;
+    db.prisma.aiProviderConnection.findUnique.mockResolvedValue({ providerId, connectionId });
+    accountAuth.testProviderAuthInternal.mockResolvedValue({ ok: true, message: "Verified" });
+    expect(await modelProviderPack.handlers.manage_provider_account({ operation: "test", connectionId }, "u1")).toMatchObject({ success: true });
+    expect(accountAuth.testProviderAuthInternal).toHaveBeenCalledWith(providerId, false, connectionId, { verificationOnly: true });
+  });
+
   it("resolve_model_selection delegates and formats the verdict + summary", async () => {
     phaseResolution.resolveModelSelectionByPhase.mockResolvedValue({ verdict: "all-local", summary: "all phases local" });
     const res = await modelProviderPack.handlers.resolve_model_selection({}, "u1");

@@ -119,6 +119,13 @@ export function useVoiceCapture(options: UseVoiceCaptureOptions): UseVoiceCaptur
   // We track whether stop() was triggered by visibility change so we can
   // suppress the upload in that case.
   const abortRef = useRef<boolean>(false);
+  // The idle-reset timer below outlives the component unless it is tracked and
+  // cleared: its callback sets state, React schedules through react-dom, and
+  // the scheduler reaches for `window`. In the app that is a setState-after-
+  // unmount leak; under vitest the environment is already torn down, so it
+  // throws "window is not defined" and fails the whole shard (BI-BAD950F9).
+  const idleResetRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mountedRef = useRef<boolean>(true);
 
   const supported = isVoiceCaptureSupported();
 
@@ -173,7 +180,11 @@ export function useVoiceCapture(options: UseVoiceCaptureOptions): UseVoiceCaptur
       setState("result");
       // Auto-return to idle so the next recording starts cleanly. UI surfaces
       // briefly show the result state via the onTranscript callback flow.
-      setTimeout(() => setState("idle"), 0);
+      if (idleResetRef.current) clearTimeout(idleResetRef.current);
+      idleResetRef.current = setTimeout(() => {
+        idleResetRef.current = null;
+        if (mountedRef.current) setState("idle");
+      }, 0);
     },
     [context, threadId, onTranscript, fail],
   );
@@ -193,7 +204,15 @@ export function useVoiceCapture(options: UseVoiceCaptureOptions): UseVoiceCaptur
 
   // ── Cleanup on unmount ─────────────────────────────────────────────────────
   useEffect(() => {
-    return () => cleanupStream();
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (idleResetRef.current) {
+        clearTimeout(idleResetRef.current);
+        idleResetRef.current = null;
+      }
+      cleanupStream();
+    };
   }, [cleanupStream]);
 
   // ── start() ────────────────────────────────────────────────────────────────

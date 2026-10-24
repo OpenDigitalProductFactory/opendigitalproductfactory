@@ -7,10 +7,16 @@
  * See: docs/superpowers/specs/2026-03-20-contract-based-selection-design.md
  */
 
+import { terminalWriterDispatchContract, type TerminalWriterDispatchContract } from "./execution-adapter-types";
 import type { RequestContract } from "./request-contract";
-import type { EndpointManifest } from "./types";
+import type { EndpointManifest, RouteDecision } from "./types";
 import type { RecipeRow, RoutedExecutionPlan } from "./recipe-types";
-import type { HarnessRecipe } from "./harness-recipe";
+import { resolveSamplingProfile, type ResolvedSampling } from "./sampling-profile";
+import { effectiveSampling } from "./vendor-sampling-catalog";
+import { expressEffort, resolveEffort, type ReasoningDepth } from "./effort-expression";
+import { applyHarnessConfidenceOverride, bindHarnessRecipeForActivity, type HarnessRecipe, type HarnessBindingHint } from "./harness-recipe";
+import type { ActivityHarnessConfidenceOverride } from "./activity-harness-governance";
+import type { ActivityContract } from "./activity-contract";
 import { usesResponsesApi, usesCliAdapter, usesCodexCli } from "./provider-utils";
 import {
   compileOpenRouterExecutionPolicy,
@@ -44,6 +50,109 @@ export function resolveDefaultExecutionAdapter(
   return "chat";
 }
 
+/**
+ * The terminal-writer dispatch contract the provider that actually ran was held
+ * to (BI-C35576A9). Undefined when no provider ran ("unknown" / empty), so a
+ * TaskRun record never claims a contract for a dispatch that did not happen.
+ */
+export function terminalWriterDispatchContractForProvider(
+  providerId: string | null | undefined,
+): TerminalWriterDispatchContract | undefined {
+  const id = providerId?.trim();
+  if (!id || id === "unknown") return undefined;
+  return terminalWriterDispatchContract(resolveDefaultExecutionAdapter(id));
+}
+
+// ── Situational parameters (BI-1F5DAABC / BI-40DA6D05 / BI-DBAFEC10) ────────
+
+/**
+ * What the endpoint tells us about the model, for parameter resolution. A subset
+ * of EndpointManifest so the plan builders can be called with a light object in
+ * tests and with the real manifest in the pipeline.
+ */
+export type ParameterizationContext = Pick<
+  EndpointManifest,
+  "providerId" | "modelId" | "modelFamily" | "modelClass" | "maxOutputTokens" | "capabilities"
+> & { sampling?: import("./model-card-types").ModelCardSampling | null; localThinkingBudgetEvidence?: EndpointManifest["localThinkingBudgetEvidence"] };
+
+/**
+ * Resolve effort and sampling for one call, and fold them into the plan.
+ *
+ * This runs on BOTH plan-building paths. Before this, the only parameter logic
+ * lived in the champion-recipe maintenance job, so any dispatch that did not
+ * match a recipe row went out with `providerSettings: {}` — provider defaults.
+ */
+function resolvePlanEffort(contract: RequestContract, ctx: ParameterizationContext) {
+  const effort = resolveEffort({
+    reasoningDepth: contract.reasoningDepth as ReasoningDepth,
+    estimatedInputTokens: contract.estimatedInputTokens,
+    maxOutputTokens: ctx.maxOutputTokens,
+    capabilities: ctx.capabilities,
+  });
+
+  return { ...expressEffort(ctx.providerId, effort, ctx.capabilities, {
+    modelClass: ctx.modelClass,
+    isLocalNative: isLocalNativeProvider(ctx.providerId),
+    localThinkingBudgetEvidence: ctx.localThinkingBudgetEvidence,
+  }), requestedBudgetTokens: effort.budgetTokens };
+
+}
+
+function applySituationalParameters(
+  plan: RoutedExecutionPlan,
+  contract: RequestContract,
+  ctx: ParameterizationContext | undefined,
+  recipeSettings: Record<string, unknown> | null,
+): RoutedExecutionPlan {
+  if (!ctx) return plan;
+
+  const expression = resolvePlanEffort(contract, ctx);
+
+  const sampling: ResolvedSampling = resolveSamplingProfile({
+    sampling: effectiveSampling(ctx),
+    contractFamily: contract.contractFamily,
+    thinking: expression.thinking,
+    strictSchema: contract.requiresStrictSchema,
+    recipeSettings,
+  });
+
+  const next: RoutedExecutionPlan = {
+    ...plan,
+    providerSettings: { ...plan.providerSettings, ...expression.settings },
+    ...(expression.settings.thinking_budget_tokens !== undefined && ctx.localThinkingBudgetEvidence
+      ? { localThinkingBudgetEvidence: ctx.localThinkingBudgetEvidence } : {}),
+    maxTokens: plan.maxTokens + expression.extraMaxTokens,
+    sampling: {
+      values: sampling.values,
+      provenance: sampling.provenance,
+      mode: sampling.mode,
+      ...(sampling.dropped.length > 0 ? { dropped: sampling.dropped } : {}),
+    },
+    ...(expression.effortUnexpressed ? { effortUnexpressed: true } : {}),
+  };
+  if (expression.settings.thinking_budget_tokens !== undefined && expression.requestedBudgetTokens !== null) {
+    next.localThinkingBudgetRequest = expression.requestedBudgetTokens;
+    const reserve = Math.min(next.maxTokens - 1, Math.max(2048, Math.ceil(next.maxTokens / 4)));
+    if (!Number.isSafeInteger(next.maxTokens) || next.maxTokens <= 1) throw new Error("Invalid local completion allowance");
+    next.providerSettings.thinking_budget_tokens = Math.min(expression.requestedBudgetTokens, next.maxTokens - reserve);
+  }
+
+  // `temperature` stays the canonical top-level field the adapters already read;
+  // the sampling record carries the rest plus provenance for the explanation.
+  if (sampling.values.temperature !== undefined) {
+    next.temperature = sampling.values.temperature;
+  } else if (sampling.dropped.includes("temperature")) {
+    delete next.temperature;
+  }
+
+  return next;
+}
+
+function isLocalNativeProvider(providerId: string): boolean {
+  const id = providerId.toLowerCase();
+  return id === "local" || id === "ollama";
+}
+
 // ── buildPlanFromRecipe ──────────────────────────────────────────────────────
 
 /**
@@ -59,6 +168,7 @@ export function resolveDefaultExecutionAdapter(
 export function buildPlanFromRecipe(
   recipe: RecipeRow,
   contract: RequestContract,
+  ctx?: ParameterizationContext,
 ): RoutedExecutionPlan {
   const settings =
     recipe.providerSettings !== null &&
@@ -120,7 +230,10 @@ export function buildPlanFromRecipe(
     );
   }
 
-  return plan;
+  // The recipe's own temperature is the champion/challenger learning layer; the
+  // resolver treats it as such and may still be narrowed by an operator override
+  // or dropped when the model rejects it.
+  return applySituationalParameters(plan, contract, ctx, settings as Record<string, unknown>);
 }
 
 // ── buildDefaultPlan ─────────────────────────────────────────────────────────
@@ -140,6 +253,8 @@ export function buildDefaultPlan(
   endpoint: EndpointManifest,
   contract: RequestContract,
 ): RoutedExecutionPlan {
+  // "Default" now means "vendor and contract parameters, without recipe
+  // learning" — not "no parameters". That distinction is the whole of BI-1F5DAABC.
   const toolPolicy: RoutedExecutionPlan["toolPolicy"] = {};
   if (contract.requiresTools) {
     toolPolicy.toolChoice = "auto";
@@ -173,10 +288,41 @@ export function buildDefaultPlan(
   if (endpoint.providerId === "openrouter" && contract.openRouterObligations) {
     plan.openRouterPolicy = compileOpenRouterExecutionPolicy(contract.openRouterObligations);
   }
-  return plan;
+  return applySituationalParameters(plan, contract, endpoint, null);
 }
 
 // ── attachHarnessRecipeToPlan ───────────────────────────────────────────────
+
+/** An explicit activity allowance is a total completion budget, including thinking. */
+export function activityBudgetExclusion(
+  endpoint: EndpointManifest,
+  contract: RequestContract,
+  activity?: ActivityContract,
+): string | null {
+  if (!activity) return null;
+  const { maxInputTokens, maxOutputTokens } = activity.tokenEnvelope;
+  if (![maxInputTokens, maxOutputTokens].every(n => Number.isSafeInteger(n) && n > 0)) {
+    return "Invalid activity token envelope";
+  }
+  if (contract.estimatedInputTokens > maxInputTokens) return "Activity input allowance exceeded";
+  if (resolvePlanEffort(contract, endpoint).extraMaxTokens >= maxOutputTokens) {
+    return "Activity completion allowance leaves no room beyond fixed thinking budget";
+  }
+  if (endpoint.maxOutputTokens === null || !Number.isSafeInteger(endpoint.maxOutputTokens) || endpoint.maxOutputTokens <= 0) {
+    return "Activity completion capacity is unknown; refresh endpoint capacity evidence";
+  }
+  if (endpoint.maxOutputTokens < maxOutputTokens) {
+    return "Activity completion allowance exceeds known model output capacity";
+  }
+  if (endpoint.maxContextTokens === null || !Number.isSafeInteger(endpoint.maxContextTokens) || endpoint.maxContextTokens <= 0) {
+    return "Activity context capacity is unknown; refresh endpoint capacity evidence";
+  }
+  if (endpoint.maxContextTokens <
+      Math.max(contract.minContextTokens ?? 0, contract.estimatedInputTokens + maxOutputTokens)) {
+    return "Activity input and completion allowance exceeds known model context capacity";
+  }
+  return null;
+}
 
 export function attachHarnessRecipeToPlan(
   plan: RoutedExecutionPlan,
@@ -198,4 +344,95 @@ export function attachHarnessRecipeToPlan(
       executionAdapterHint: harnessRecipe.executionAdapterHint,
     },
   };
+}
+
+/** Bind admitted activity execution settings and its governed harness together. */
+export function bindActivityExecutionPlan(
+  plan: RoutedExecutionPlan,
+  activity: ActivityContract,
+  hint: HarnessBindingHint,
+  overrides?: ActivityHarnessConfidenceOverride[],
+): RoutedExecutionPlan {
+  const harness = applyHarnessConfidenceOverride(
+    bindHarnessRecipeForActivity(activity, hint), hint, overrides,
+  );
+  const total = activity.tokenEnvelope.maxOutputTokens;
+  if (!Number.isSafeInteger(total) || total <= 0) throw new Error("Invalid activity completion allowance");
+  const reserve = Math.min(total - 1, Math.max(2048, Math.ceil(total / 4)));
+  const bounded = (value: unknown): number => {
+    if (typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0) {
+      throw new Error("Invalid activity thinking allowance");
+    }
+    if (total <= 1) throw new Error("Activity completion allowance leaves no final output room");
+    return Math.min(value, total - reserve);
+  };
+  const providerSettings = { ...plan.providerSettings };
+  if (providerSettings.thinking_budget_tokens !== undefined) {
+    providerSettings.thinking_budget_tokens = bounded(plan.localThinkingBudgetRequest ?? providerSettings.thinking_budget_tokens);
+  }
+  const thinking = providerSettings.thinking as { type?: string; budget_tokens?: unknown } | undefined;
+  if (thinking?.type === "enabled") {
+    const budget = bounded(thinking.budget_tokens);
+    if (budget < 1024) throw new Error("Activity allowance cannot accommodate provider minimum thinking budget");
+    providerSettings.thinking = { ...thinking, budget_tokens: budget };
+  }
+  const thinkingConfig = providerSettings.thinkingConfig as { thinkingBudget?: unknown } | undefined;
+  if (thinkingConfig?.thinkingBudget !== undefined) {
+    providerSettings.thinkingConfig = { ...thinkingConfig, thinkingBudget: bounded(thinkingConfig.thinkingBudget) };
+  }
+  return attachHarnessRecipeToPlan({
+    ...plan,
+    providerSettings,
+    maxTokens: total,
+    completionAllowance: total,
+    responsePolicy: {
+      ...plan.responsePolicy,
+      strictSchema: plan.responsePolicy.strictSchema || harness.responsePolicy.strictSchema || activity.successShape === "json",
+    },
+  }, harness);
+}
+
+function buildFallbackProviderSettings(
+  sourcePlan?: RoutedExecutionPlan,
+): RoutedExecutionPlan["providerSettings"] {
+  const settings = sourcePlan?.providerSettings ?? {};
+  const effort = (settings as Record<string, unknown>).effort;
+  return effort ? { effort } : {};
+}
+
+export function buildFallbackPlan(
+  entry: { providerId: string; modelId: string; providerConnectionId?: string; providerConnectionVersion?: string; accountAuthMethod?: string; executionChannel?: string },
+  decision: RouteDecision,
+  tools?: Array<Record<string, unknown>>,
+  sourcePlan?: RoutedExecutionPlan,
+): RoutedExecutionPlan {
+  const toolPolicy: RoutedExecutionPlan["toolPolicy"] = {
+    ...(sourcePlan?.toolPolicy ?? {}),
+  };
+  if ((tools?.length ?? 0) > 0 && toolPolicy.toolChoice === undefined) {
+    toolPolicy.toolChoice = "auto";
+  }
+
+  const fallbackPlan: RoutedExecutionPlan = {
+    providerId: entry.providerId,
+    ...(entry.providerConnectionId ? { providerConnectionId: entry.providerConnectionId, providerConnectionVersion: entry.providerConnectionVersion, accountAuthMethod: entry.accountAuthMethod, executionChannel: entry.executionChannel } : {}),
+    modelId: entry.modelId,
+    recipeId: null,
+    contractFamily: sourcePlan?.contractFamily ?? decision.taskType,
+    executionAdapter: entry.executionChannel === "direct-api" && (usesCliAdapter(entry.providerId) || usesCodexCli(entry.providerId))
+      ? usesCodexCli(entry.providerId) ? "responses" : "chat"
+      : resolveDefaultExecutionAdapter(entry.providerId),
+    maxTokens: sourcePlan?.maxTokens ?? 4096,
+    providerSettings: buildFallbackProviderSettings(sourcePlan),
+    toolPolicy,
+    responsePolicy: sourcePlan?.responsePolicy ?? {},
+    ...(sourcePlan?.temperature !== undefined ? { temperature: sourcePlan.temperature } : {}),
+    ...(sourcePlan?.openRouterObligations
+      ? { openRouterObligations: sourcePlan.openRouterObligations }
+      : {}),
+  };
+  if (entry.providerId === "openrouter" && sourcePlan?.openRouterObligations) {
+    fallbackPlan.openRouterPolicy = compileOpenRouterExecutionPolicy(sourcePlan.openRouterObligations);
+  }
+  return fallbackPlan;
 }

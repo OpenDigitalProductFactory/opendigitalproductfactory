@@ -1,0 +1,22 @@
+{
+  "version": "1",
+  "decidedOption": "auditable-packet-plus-slices",
+  "decisionInteractionId": "DI-6E3E979EC8CE",
+  "scope": {
+    "files": [
+      "docs/superpowers/audits/2026-09-06-portal-ux-simplification-thread-audit.md",
+      "docs/superpowers/plans/2026-09-06-portal-ux-simplification-execution-plan.md",
+      "docs/superpowers/plans/2026-05-26-portal-ux-simplification-spine.md",
+      "docs/superpowers/plans/2026-05-26-pipedrive-crm-marketing-slice-1.md"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "status-only",
+      "big-bang-refactor",
+      "auditable-packet-plus-slices"
+    ],
+    "note": "WWMD decision DI-6E3E979EC8CE recommended publishing an auditable packet plus one-BI-per-slice execution queue over a status-only reply or a broad direct refactor. The choice keeps the UX work source-controlled, keeps Build Studio out of the path while it is unreliable, maps independently shippable work to live backlog items, and prevents a new feature from becoming another unowned portal surface."
+  }
+}

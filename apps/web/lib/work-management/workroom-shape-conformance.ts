@@ -14,6 +14,9 @@ import {
 import type { WorkroomParticipantRole, WorkroomParticipantView } from "./room-types";
 import type { WorkShapeDefinitionContract } from "./work-shapes";
 import { ok, type ActionSuccess } from "@/lib/shared/action-result";
+import { isCompletingWorkroomDriveReceipt } from "./workroom-drive-receipts";
+import { stageElementId } from "@/lib/gpp/shape-language/element-ids";
+import { buildShapeFlowGraph, type GppFlowGraph } from "./work-shape-flow-graph";
 
 export const WORKROOM_SHAPE_CONFORMANCE_DEVIATIONS = [
   "unresolved_work_shape",
@@ -60,6 +63,12 @@ export type WorkroomShapeConformance = {
   processOverseerPrincipalRef: string | null;
   processOverseerSource: "explicit" | "derived" | "none";
   currentStageKey: string | null;
+  /**
+   * Graph rooms only (GPP Phase 3c PR-3c-2): every stage the drive's marking
+   * holds, in document order, so the room view marks each one current. Absent
+   * on every sequential room, which has the one `currentStageKey`.
+   */
+  currentStageKeys?: string[];
   nextPermittedStageKey: string | null;
   observed: WorkroomShapeObservedState;
   deviations: WorkroomShapeConformanceDeviation[];
@@ -85,11 +94,22 @@ export const WORKROOM_COORDINATOR_ELIGIBILITY_STATES = [
   "narrowed",
   "suspended",
   "incompatible",
+  // An absent qualification SCHEME is not a failed qualification (DI-FF4A015CF917,
+  // margin 5.420). A precondition nothing on the platform can satisfy is a
+  // permanent denial, not a safeguard; this state records that honestly and does
+  // not block, while a scheme that exists and is unmet blocks exactly as before.
+  "not-applicable",
   "unknown",
 ] as const;
 
 export type WorkroomCoordinatorEligibilityState =
   (typeof WORKROOM_COORDINATOR_ELIGIBILITY_STATES)[number];
+
+/** States that do NOT raise a deviation. `eligible` is a positive verdict;
+ *  `not-applicable` means the platform has no scheme to verdict against, so
+ *  there is nothing for this coworker to fail. Every other state — including
+ *  `unknown` — still blocks. */
+const SATISFIED_ELIGIBILITY: ReadonlySet<string> = new Set(["eligible", "not-applicable"]);
 
 export type WorkroomCoordinatorEligibility = {
   jsi: WorkroomCoordinatorEligibilityState;
@@ -116,6 +136,26 @@ export type WorkroomShapeConformanceInput = {
   requiredRoles?: readonly WorkroomParticipantRole[];
   coordinatorEligibility?: WorkroomCoordinatorEligibility | null;
   checkedAt?: Date | string;
+  /**
+   * Graph shapes only (GPP Phase 3c, BI-8875C9DF). When present, the stage
+   * order is checked against the shape's flow graph instead of array indexes:
+   * - `enabled`: the stages the drive's marking permits now, in document order;
+   * - `delivered`: per stage key, whether it holds a completing receipt at its
+   *   current iteration;
+   * - `reworkRoute`: the declared route of a recorded refuse verdict, the one
+   *   backward move that is legal (PR-3c-3 supplies it).
+   * Absent, the existing index checks run exactly as before.
+   */
+  flowOrder?: {
+    enabled: readonly string[];
+    delivered: Readonly<Record<string, boolean>>;
+    reworkRoute?: { from: string; to: string };
+  };
+  /**
+   * Graph rooms only (PR-3c-2): every currently marked stage, echoed on the
+   * result as `currentStageKeys` for the room view. It changes no check.
+   */
+  currentStageKeys?: readonly string[];
 };
 
 function iso(value: Date | string | undefined): string {
@@ -187,6 +227,57 @@ function stageIndex(definition: WorkShapeDefinitionContract, key: string | null)
   return definition.stages.findIndex((stage) => stage.key === key);
 }
 
+/** The nearest stages a stage's token comes from, walking back through split and join nodes. */
+function stagePredecessors(graph: GppFlowGraph, stageId: string): string[] {
+  const out = new Set<string>();
+  const seen = new Set<string>();
+  const queue = [...(graph.predecessors.get(stageId) ?? [])];
+  while (queue.length > 0) {
+    const id = queue.shift() as string;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const node = graph.nodes.get(id);
+    if (node?.kind === "stage" && node.stageKey !== undefined) out.add(node.stageKey);
+    else queue.push(...(graph.predecessors.get(id) ?? []));
+  }
+  return [...out];
+}
+
+/**
+ * Stage-order deviations for a graph shape (Phase 3c). A proposed stage must be
+ * one the flow enables now, or the declared route of a recorded refuse
+ * verdict; and every forward predecessor stage must have delivered its token
+ * in this iteration, unless the stage is the start or the rework target.
+ */
+function flowOrderDeviations(
+  input: WorkroomShapeConformanceInput,
+  flowOrder: NonNullable<WorkroomShapeConformanceInput["flowOrder"]>,
+): WorkroomShapeConformanceDeviation[] {
+  const deviations: WorkroomShapeConformanceDeviation[] = [];
+  const onShape = (key: string) => input.definition.stages.some((stage) => stage.key === key);
+  const proposed = input.proposedStageKey;
+  if (proposed && !onShape(proposed)) {
+    return [{ code: "out_of_order_stage", summary: `Proposed stage ${proposed} is not on the declared shape.` }];
+  }
+  if (input.currentStageKey && !onShape(input.currentStageKey)) {
+    return [{ code: "out_of_order_stage", summary: `Current stage ${input.currentStageKey} is not on the declared shape.` }];
+  }
+  if (!proposed) return deviations;
+  const reworkTarget = flowOrder.reworkRoute?.to === proposed;
+  if (!reworkTarget && !flowOrder.enabled.includes(proposed)) {
+    deviations.push({ code: "out_of_order_stage", summary: `Stage ${proposed} is not enabled by the shape's flow.` });
+  }
+  const graph = buildShapeFlowGraph(input.definition);
+  const stageId = stageElementId(proposed);
+  if (!reworkTarget && graph.start !== stageId) {
+    for (const prior of stagePredecessors(graph, stageId)) {
+      if (flowOrder.delivered[prior] === true) continue;
+      deviations.push({ code: "missing_prerequisite_receipt", summary: `Stage ${proposed} lacks a receipt from ${prior}.` });
+    }
+  }
+  return deviations;
+}
+
 function uniqueRoles(participants: readonly WorkroomParticipantView[]): Set<WorkroomParticipantRole> {
   const roles = new Set<WorkroomParticipantRole>();
   for (const participant of participants) {
@@ -250,13 +341,13 @@ export function evaluateWorkroomShapeConformance(
       jsi: "unknown" as const,
       authorityBinding: "unknown" as const,
     };
-    if (eligibility.authorityBinding !== "eligible") {
+    if (!SATISFIED_ELIGIBILITY.has(eligibility.authorityBinding)) {
       deviations.push({
         code: "coordinator_authority_binding_ineligible",
         summary: `The AI Process Overseer's TAK authority binding is ${eligibility.authorityBinding}.`,
       });
     }
-    if (eligibility.jsi !== "eligible") {
+    if (!SATISFIED_ELIGIBILITY.has(eligibility.jsi)) {
       deviations.push({
         code: "coordinator_jsi_ineligible",
         summary: `The AI Process Overseer's JSI qualification is ${eligibility.jsi}.`,
@@ -298,7 +389,9 @@ export function evaluateWorkroomShapeConformance(
 
   const currentIndex = stageIndex(input.definition, input.currentStageKey);
   const proposedIndex = stageIndex(input.definition, input.proposedStageKey);
-  if (input.proposedStageKey && proposedIndex < 0) {
+  if (input.flowOrder) {
+    deviations.push(...flowOrderDeviations(input, input.flowOrder));
+  } else if (input.proposedStageKey && proposedIndex < 0) {
     deviations.push({
       code: "out_of_order_stage",
       summary: `Proposed stage ${input.proposedStageKey} is not on the declared shape.`,
@@ -327,7 +420,9 @@ export function evaluateWorkroomShapeConformance(
     input.proposedStageKey &&
     input.currentStageKey &&
     proposedIndex === currentIndex &&
-    input.receipts.some((receipt) => receipt.stageKey === input.currentStageKey)
+    input.receipts.some((receipt) =>
+      isCompletingWorkroomDriveReceipt(receipt, input.currentStageKey!),
+    )
   ) {
     deviations.push({
       code: "out_of_order_stage",
@@ -344,9 +439,11 @@ export function evaluateWorkroomShapeConformance(
     });
   }
 
-  if (proposedIndex > 0) {
+  if (!input.flowOrder && proposedIndex > 0) {
     const prior = input.definition.stages[proposedIndex - 1];
-    const hasReceipt = input.receipts.some((receipt) => receipt.stageKey === prior.key);
+    const hasReceipt = input.receipts.some((receipt) =>
+      isCompletingWorkroomDriveReceipt(receipt, prior.key),
+    );
     if (!hasReceipt) {
       deviations.push({
         code: "missing_prerequisite_receipt",
@@ -414,7 +511,9 @@ export function evaluateWorkroomShapeConformance(
   const pause = normalizedDeviations.length > 0;
 
   let nextPermittedStageKey: string | null = null;
-  if (!pause && input.definition.stages.length > 0) {
+  if (!pause && input.flowOrder) {
+    nextPermittedStageKey = input.flowOrder.enabled[0] ?? null;
+  } else if (!pause && input.definition.stages.length > 0) {
     if (!input.currentStageKey) {
       nextPermittedStageKey = input.definition.stages[0]?.key ?? null;
     } else if (currentIndex >= 0 && currentIndex + 1 < input.definition.stages.length) {
@@ -443,6 +542,7 @@ export function evaluateWorkroomShapeConformance(
     processOverseerPrincipalRef,
     processOverseerSource,
     currentStageKey: input.currentStageKey,
+    ...(input.currentStageKeys ? { currentStageKeys: [...input.currentStageKeys] } : {}),
     nextPermittedStageKey: disposition === "continue"
       ? (input.proposedStageKey ?? nextPermittedStageKey)
       : disposition === "complete"

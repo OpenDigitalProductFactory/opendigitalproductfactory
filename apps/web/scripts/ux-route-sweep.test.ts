@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { resolveSweepPath } from "./ux-sweep-route-params";
+import { visibleTextFileName } from "./ux-sweep-visible-text";
 
 import {
   BROWSER_EVALUATION_RUNTIME,
@@ -396,5 +397,13 @@ describe("resolveSweepPath (BI-DE67A3EC)", () => {
     expect(message).toContain("/ops/thing/[id]");
     expect(message).toContain("ux:sweep-fixture");
     expect(message).toContain("SWEEP_RESOLVABLE_DYNAMIC_ROUTES");
+  });
+});
+
+describe("visible-text diagnostics (BI-99909E53)", () => {
+  it("names one file per route without path separators", () => {
+    expect(visibleTextFileName("/workspace/inbox")).toBe("workspace__inbox.txt");
+    expect(visibleTextFileName("/")).toBe("root.txt");
+    expect(visibleTextFileName("/platform/ai/providers")).toBe("platform__ai__providers.txt");
   });
 });

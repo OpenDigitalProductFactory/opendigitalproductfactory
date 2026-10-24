@@ -2,6 +2,8 @@
 // Edge actions. This module is pure so the portal, dispatch gate, native-agent
 // fixtures, and future Connections preview all share one parser.
 
+import { isRecord } from "@dpf/validators";
+
 export const ORGANIZATION_JOIN_ACTION_TYPES = [
   "organization.join.issue",
   "organization.join.import",
@@ -52,10 +54,6 @@ const SAFE_TOKEN = /^[A-Za-z0-9._-]{1,4096}$/;
 const MAX_JOIN_PACKAGE_BYTES = 64 * 1024;
 const MIN_TTL_SECONDS = 5 * 60;
 const MAX_TTL_SECONDS = 15 * 60;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
 
 function hasExactKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
   const keys = Object.keys(value).sort();
@@ -108,10 +106,31 @@ export function parseOrganizationJoinDispatchParameters(
   return parseOrganizationJoinRequest(actionType, parameters, now);
 }
 
+/** The preview plus the one-time enrollment authority the CA honours exactly once. */
+export interface OrganizationJoinPackageMaterial extends OrganizationJoinPackagePreview {
+  enrollmentToken: string;
+}
+
 export function parseOrganizationJoinPackage(
   raw: string,
   now: Date = new Date(),
 ): ParseResult<OrganizationJoinPackagePreview> {
+  const parsed = parseOrganizationJoinPackageMaterial(raw, now);
+  if (!parsed.ok) return parsed;
+  const { enrollmentToken: _token, ...preview } = parsed.value;
+  return { ...parsed, value: preview };
+}
+
+/**
+ * The full material a member portal needs to turn the package into a
+ * certificate (EP-ZERO-CONFIG-FEDERATION, portal-mediated membership): the
+ * preview facts plus the enrollment token. Never render the token; it is the
+ * credential the organization CA accepts once.
+ */
+export function parseOrganizationJoinPackageMaterial(
+  raw: string,
+  now: Date = new Date(),
+): ParseResult<OrganizationJoinPackageMaterial> {
   if (typeof raw !== "string" || new TextEncoder().encode(raw).byteLength > MAX_JOIN_PACKAGE_BYTES || raw.includes("\0")) {
     return { ok: false, reason: "invalid-join-package" };
   }
@@ -152,7 +171,7 @@ export function parseOrganizationJoinPackage(
   }
   return {
     ok: true,
-    value: { packageId, caUrl, rootFingerprint, intendedPeer, intendedSans, expiresAt },
+    value: { packageId, caUrl, rootFingerprint, intendedPeer, intendedSans, expiresAt, enrollmentToken: fields.get("enrollment_token")! },
   };
 }
 

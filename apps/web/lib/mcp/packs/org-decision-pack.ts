@@ -9,9 +9,13 @@
 // recommendation; the human still validates the final action. The grant mirrors
 // agent-grants.ts TOOL_TO_GRANTS, which stays the gating source.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+// Static: the module is pure and dependency-free, so a lazy import buys nothing
+// and gives the bundler a second copy of the same chunk to place.
+import { admitToOrgBusinessGate } from "@/lib/decision-perspective/decision-scope-admission";
+import { TOOL_CONSEQUENCES, type ToolConsequence } from "@/lib/tool-consequence";
 
 const definitions: ToolDefinition[] = [
   {
@@ -45,7 +49,7 @@ const definitions: ToolDefinition[] = [
   {
     name: "evaluate_org_business_decision",
     description:
-      "Weigh a business decision against your organization's own recorded stance (its mission and how-we-decide profile), returning a confidence-scored recommendation and recording the outcome to the decision ledger. Falls back to platform defaults only as advisory when your organization has not recorded a stance for this kind of decision, and escalates to a human when confidence is low or no applicable guidance exists. Use this to ground a business call in what the organization would do, rather than deciding unaided.",
+      "Weigh a business decision against your organization's recorded stance and record its evaluation and escalation route. Damaging decisions require a person; unresolved non-damaging decisions require independent review. Platform fallback is advisory when the organization has no applicable stance. Declare known consequences and configured threshold crossings so they remain visible even when evaluation fails.",
     inputSchema: {
       type: "object",
       properties: {
@@ -66,6 +70,14 @@ const definitions: ToolDefinition[] = [
           type: "string",
           enum: ["low", "medium", "high", "critical"],
           description: "How consequential the decision is; higher tiers require more confidence before a recommendation.",
+        },
+        consequence: { type: "string", enum: [...TOOL_CONSEQUENCES], description: "Optional declared outward, irreversible or authority consequence of this decision." },
+        thresholdExceeded: { type: "boolean", description: "Optional known fact that this decision crosses an applicable configured threshold. Omit when no threshold is configured; do not invent one." },
+        decisionScope: {
+          type: "string",
+          enum: ["wwmd", "wwwd", "wsid"],
+          description:
+            "Which scope OWNS this question — name it before the gate answers. wwwd: what this business sells, who it serves, what it charges or promises, how it treats customers and their data; the test is whether this business is free to answer differently from another in the same trade. wwmd: how the platform is built, operated or released, or how a supplier's product works. wsid: what a qualified practitioner should do — legal, privacy, regulatory, clinical, accounting; a business sets its posture around these but does not decide the craft answer, and lawful basis is not a business preference. Omitting it is refused with decision_scope_required and a pick list: put that list to the owner and re-call, never guess. It is deliberately NOT inferred from the question wording — that is how a question this business never owned reaches its queue unanswerable.",
         },
       },
       required: ["question", "options", "domainClass", "riskTier"],
@@ -113,6 +125,12 @@ async function evaluateOrgBusinessDecision(
   const options = Array.isArray(params["options"]) ? params["options"].map((o) => String(o)) : [];
   const domainClass = String(params["domainClass"] ?? "");
   const riskTier = String(params["riskTier"] ?? "");
+  const consequence = params["consequence"];
+  const thresholdExceeded = params["thresholdExceeded"];
+  if ((consequence !== undefined && consequence !== null && !TOOL_CONSEQUENCES.includes(consequence as ToolConsequence))
+    || (thresholdExceeded !== undefined && typeof thresholdExceeded !== "boolean")) {
+    return { success: false, error: "invalid_params", message: "Provide a valid declared consequence and a boolean thresholdExceeded fact when known." };
+  }
   if (
     !question ||
     options.length === 0 ||
@@ -131,6 +149,27 @@ async function evaluateOrgBusinessDecision(
     return { success: false, error: "invalid_params", message: parsedFeatures.message };
   }
 
+  // Name the scope before the gate answers (BI-13C38318,
+  // decisions-belong-to-their-scope). Not inferred from the question text: a
+  // question this business never owned reaching the owner's queue is the defect
+  // being closed, and guessing the owner from wording is how it got there.
+  const admission = admitToOrgBusinessGate({ declaredScope: params["decisionScope"] });
+  if (!admission.admitted) {
+    return admission.reason === "wrong-scope"
+      ? {
+          success: false,
+          error: "decision_scope_mismatch",
+          message: admission.message,
+          data: { owningScope: admission.scope, route: admission.route },
+        }
+      : {
+          success: false,
+          error: "decision_scope_required",
+          message: admission.message,
+          data: { pickList: admission.pickList },
+        };
+  }
+
   const decision = await evaluateOrgBusinessDecisionGate({
     db: prisma,
     organizationId: org.id,
@@ -139,6 +178,10 @@ async function evaluateOrgBusinessDecision(
     scoredOptions: parsedFeatures.scoredOptions,
     domainClass: domainClass as Parameters<typeof evaluateOrgBusinessDecisionGate>[0]["domainClass"],
     riskTier: riskTier as Parameters<typeof evaluateOrgBusinessDecisionGate>[0]["riskTier"],
+    declarations: {
+      ...(consequence !== undefined ? { consequence: consequence as ToolConsequence | null } : {}),
+      ...(thresholdExceeded !== undefined ? { thresholdExceeded: thresholdExceeded as boolean } : {}),
+    },
     routeContext: context?.routeContext ?? "/coworker-business",
     triggeredByUserId: userId,
     caller: callerFromContext(context),
@@ -153,6 +196,7 @@ async function evaluateOrgBusinessDecision(
       interactionId: decision.interactionId,
       allowed: decision.allowed,
       outcomeType: decision.evaluation.outcomeType,
+      escalation: decision.evaluation.escalation ?? null,
       confidenceScore: decision.evaluation.confidenceScore,
       // Content-aware directional verdict (BI-7E1F128A): approve/decline/mixed/none
       // and the [-1,1] alignment behind it, so an off-mission decision surfaces a

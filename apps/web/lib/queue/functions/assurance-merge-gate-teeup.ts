@@ -1,5 +1,5 @@
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 
 // Assurance remediation lane P2.2 (BI-204EE70B) — the WWMD merge gate, running
@@ -12,7 +12,7 @@ import { gateAtEntry } from "../quiescence-gates";
 //
 // Cron :47 (a free minute, off the contention ticks); only acts in the 02:00–06:00
 // UTC off-hours window (shared with the P1 promote lane).
-export const assuranceMergeGateScheduled = inngest.createFunction(
+export const assuranceMergeGateScheduled = jobs.createFunction(
   {
     id: "assurance/merge-gate-scheduled",
     retries: 2,
@@ -20,7 +20,7 @@ export const assuranceMergeGateScheduled = inngest.createFunction(
     triggers: [cron("47 * * * *")],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "assurance/merge-gate-scheduled");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     return step.run("assurance-merge-gate", async () => {

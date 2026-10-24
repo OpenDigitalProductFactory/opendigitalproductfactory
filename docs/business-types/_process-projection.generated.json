@@ -335,6 +335,112 @@
               "handoffToStageKey": "intake-identify-triage"
             }
           ]
+        },
+        {
+          "key": "operational-value-stream",
+          "label": "Pet Rescue operational value stream",
+          "purpose": "Create and deliver value for Pet Rescue",
+          "input": "Interest or demand",
+          "output": "Delivered value and an accountable relationship",
+          "responsibleRole": "Business operator",
+          "stages": [
+            {
+              "key": "attract",
+              "label": "Attract & Discover",
+              "order": 410,
+              "loadBearing": false,
+              "capabilityBindings": [],
+              "metricBindings": [
+                "storefront-published"
+              ],
+              "trustGateKeys": [],
+              "streamKey": "operational-value-stream",
+              "input": null,
+              "output": null,
+              "responsibleRole": null,
+              "handoffToStageKey": null
+            },
+            {
+              "key": "capture",
+              "label": "Capture Demand",
+              "order": 420,
+              "loadBearing": true,
+              "capabilityBindings": [],
+              "metricBindings": [
+                "inbox-submissions",
+                "capture-conversion"
+              ],
+              "trustGateKeys": [],
+              "streamKey": "operational-value-stream",
+              "input": null,
+              "output": null,
+              "responsibleRole": null,
+              "handoffToStageKey": null
+            },
+            {
+              "key": "settle",
+              "label": "Settle & Account",
+              "order": 450,
+              "loadBearing": false,
+              "capabilityBindings": [],
+              "metricBindings": [
+                "donation-receipt"
+              ],
+              "trustGateKeys": [],
+              "streamKey": "operational-value-stream",
+              "input": null,
+              "output": null,
+              "responsibleRole": null,
+              "handoffToStageKey": null
+            },
+            {
+              "key": "trust-compliance",
+              "label": "Trust & Compliance",
+              "order": 470,
+              "loadBearing": false,
+              "capabilityBindings": [],
+              "metricBindings": [
+                "obligations-status"
+              ],
+              "trustGateKeys": [
+                "intake-authority-and-safeguarding",
+                "immediate-welfare-triage",
+                "safe-capacity-decision",
+                "quarantine-and-placement-safety",
+                "veterinary-approval",
+                "safe-care-transfer",
+                "welfare-escalation",
+                "adoption-readiness-approval",
+                "safe-public-disclosure",
+                "eligibility-and-safeguarding",
+                "home-and-landlord-check",
+                "match-approval",
+                "custody-transfer-approval",
+                "return-and-reentry-safety"
+              ],
+              "streamKey": "operational-value-stream",
+              "input": null,
+              "output": null,
+              "responsibleRole": null,
+              "handoffToStageKey": null
+            },
+            {
+              "key": "operate-improve",
+              "label": "Operate & Improve",
+              "order": 480,
+              "loadBearing": false,
+              "capabilityBindings": [],
+              "metricBindings": [
+                "backlog-throughput"
+              ],
+              "trustGateKeys": [],
+              "streamKey": "operational-value-stream",
+              "input": null,
+              "output": null,
+              "responsibleRole": null,
+              "handoffToStageKey": null
+            }
+          ]
         }
       ],
       "supportingCapabilities": [

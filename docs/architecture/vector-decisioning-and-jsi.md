@@ -200,6 +200,21 @@ is exactly where a new idea surfaces. The goal is better-sorted escalations, not
 direction is unaffected — saying no to an off-stance idea is low-consequence and does not need the
 owner's live call.
 
+Sorting escalations also means separating the ones the operator can act on from the ones they cannot.
+Every scored consult carries `decidability` (BI-5843CD9C): the highest confidence this material could
+reach at this risk tier, whether that clears the 0.7 band, and which weighting factor caps it when it
+does not. A sub-band escalation is then either `material-below-confidence` — more or better material
+would help — or `ceiling-below-recommendation-band`, where nothing authored can help because the
+ceiling itself sits under the band.
+
+That second case is common and was previously invisible. `effectiveWeight` is a product, so one low
+factor caps an entire set: seeded doctrine lands as `candidate` (0.45), giving ceilings of 0.35 at
+medium risk and 0.20 at high against a 0.7 band. BI-0F3D5F94 measured exactly those figures across
+five acumens holding between 3 and 12 rows — volume changed nothing. Reported as a plain escalation,
+it read as considered judgement, and the natural operator response was to author more material, which
+was the one action guaranteed not to work. Whether seeded doctrine *should* be able to recommend is a
+governance question that BI-0F3D5F94 owns; `decidability` makes it visible enough to ask.
+
 The recent-override penalty counts times the owner OVERRULED the profile in that class — the gate
 recommended one option and the human chose another. It deliberately does not count answering an
 escalation that carried no recommendation, nor an answer that agreed, nor one where no structured

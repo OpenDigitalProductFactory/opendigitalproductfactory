@@ -115,8 +115,20 @@ describe("skill-eligibility ratchet (BI-8AD9D018, corrected by BI-4B0C27D4)", ()
   /** Frozen per-role eligible counts. Lower one when you genuinely reduce a
    *  role's set; never raise one without saying why in the PR. */
   const ELIGIBLE_BASELINE: Record<string, number> = {
-    "admin-assistant": 7,
-    "build-specialist": 29,
+    // +1 each (admin-assistant 7 -> 8, ea-architect 13 -> 14, finance-controller
+    // 8 -> 9): create-office-document (BI-012487AA) is these roles' only guide to
+    // create_report, create_letter, create_sheet and create_drawing, granted in the
+    // same change. Additive capability, not drift; its narrow triggerPattern
+    // (report, letter, spreadsheet, diagram) ranks it only when asked.
+    "admin-assistant": 8,
+    // ── BI-4CE4F52F / BI-5C1978C7 pattern: five services in the coworker service
+    //    catalog advertised a backingSkillId that resolved to NOTHING — an
+    //    advertised capability with no skill behind it. Each of these five roles
+    //    gains exactly the one skill that backs its own service, derived from the
+    //    inputs, outputs and authority boundary that service already declares.
+    //    Additive capability, not drift: the service was already published, so
+    //    this makes an existing promise real rather than adding a new one.
+    "build-specialist": 30,
     // 9 -> 10: compliance-requirements-review was added to back
     // svc-compliance-pci-requirements, whose backingSkillId resolved to nothing
     // (BI-5C1978C7) — an advertised service with no skill behind it. The raise is
@@ -124,22 +136,56 @@ describe("skill-eligibility ratchet (BI-8AD9D018, corrected by BI-4B0C27D4)", ()
     // DEFAULT_SKILL_SUMMARY_CAP (12), so the whole set is presentable in one turn
     // and no skill becomes unreachable. Peers run 14-32.
     "compliance-officer": 10,
-    coo: 8,
-    "customer-advisor": 9,
+    // ── BI-4CE4F52F: nine coworkers gained their own recurring standing-work
+    //    skill, so nine sets grow by exactly one. Each of these coworkers
+    //    ALREADY ran this work on this cadence from the self-task registry; the
+    //    skill is its own statement of a rhythm it was already keeping, and the
+    //    cadence is held equal to the registry's by check-self-task-cadence-parity.
+    //    Additive capability, not drift: one skill each, with a narrow
+    //    triggerPattern, and the five roles that had no entry here land at 7 —
+    //    the 6-skill wildcard tax plus one of their own, well under
+    //    DEFAULT_SKILL_SUMMARY_CAP (12), so nothing becomes unreachable.
+    coo: 9,
+    "customer-advisor": 10,
     "data-architect": 9,
     "doc-specialist": 11,
     "documentation-specialist": 10,
-    "ea-architect": 13,
+    "ea-architect": 14,
     "external-catalog-scout": 8,
     "external-coding-agent": 18,
-    "farm-ranch-steward": 6,
+    "farm-ranch-steward": 7,
+    // Both had no entry, so the ratchet read them as 0. Each now holds exactly
+    // one skill of its own on top of the 6-skill wildcard tax: the qualifications
+    // axis asked what tools and skills the role needs, and neither had an answer
+    // authored for it (BI-4CE4F52F).
+    "change-reviewer": 7,
+    "security-engineer": 7,
+    // These five had no entry, so the ratchet read them as 0. Each now holds
+    // exactly one skill of its own on top of the wildcard tax (BI-4CE4F52F).
+    bookkeeper: 7,
+    // 7 -> 8: likewise two — burn-revenue-runway-read (standing work) and
+    //    provider-cost-intake (backs svc-finance-provider-cost-intake).
+    // 8 -> 9: create-office-document (BI-012487AA), see admin-assistant above.
+    "finance-controller": 9,
+    "integration-engineer": 7,
+    "time-off-advisor": 7,
+    "ux-design-critic": 7,
     "hr-specialist": 9,
     "inventory-specialist": 14,
     "market-research-analyst": 7,
-    "marketing-specialist": 12,
+    // 12 -> 13: create-presentation (BI-543819B1) is the strategist's only path to
+    // a deck; it backs the create_presentation tool granted in the same change.
+    // Additive capability, not drift. At 13 the set is one over
+    // DEFAULT_SKILL_SUMMARY_CAP, so relevance ranking picks per turn; its narrow
+    // triggerPattern (deck, slides, presentation, pptx) ranks it only when asked.
+    // 14 -> 15: gained a skill from EACH change — acquisition-brief-refresh
+    //    (standing work) and marketing-collaboration-intake (backs
+    //    svc-marketing-partner-intake). A max-merge of the two branches read 14
+    //    and the ratchet caught it.
+    "marketing-specialist": 15,
     "onboarding-coo": 6,
     "ops-coordinator": 13,
-    "platform-engineer": 32,
+    "platform-engineer": 33,
     "portfolio-advisor": 14,
     "software-engineer": 14,
 
@@ -151,7 +197,7 @@ describe("skill-eligibility ratchet (BI-8AD9D018, corrected by BI-4B0C27D4)", ()
     "external-claude-code": 7,
     "external-codex": 7,
     "external-grok": 7,
-    "legal-operations-counsel": 7,
+    "legal-operations-counsel": 8,
     "licensing-specialist": 7,
     "soc-incident-commander": 7,
     "soc-investigator": 7,
@@ -159,6 +205,22 @@ describe("skill-eligibility ratchet (BI-8AD9D018, corrected by BI-4B0C27D4)", ()
     "soc-triage-analyst": 7,
     "storefront-advisor": 7,
     "ux-accessibility-agent": 7,
+    // Value-stream orchestrators + finance specialist, seeded from the IT4IT
+    // lattice because each carries an authored persona. 6 wildcard + 1 authored
+    // recurring skill = 7.
+    "consume-orchestrator": 7,
+    "deploy-orchestrator": 7,
+    "evaluate-orchestrator": 7,
+    "explore-orchestrator": 7,
+    "finance-agent": 7,
+    // New identity (2026-09-09, BI-4F7BB48B): the six wildcard skills plus its
+    // one authored cadence skill, mailroom-acknowledgement-sweep. Same shape as
+    // soc-triage-analyst and finance-agent; nothing else is eligible for it.
+    "mailroom-coordinator": 7,
+    "governance-orchestrator": 7,
+    "integrate-orchestrator": 7,
+    "operate-orchestrator": 7,
+    "release-orchestrator": 7,
 
   };
 

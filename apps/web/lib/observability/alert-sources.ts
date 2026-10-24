@@ -45,7 +45,7 @@ export type AlertSourceSystem = "prometheus" | "loki-ruler";
 
 /**
  * Prometheus-compatible alert shape, shared by both evaluators. Structurally a
- * superset of the frontend's MonitoringAlert (health-summary.ts), so the
+ * superset of the frontend's MonitoringAlert (monitoring-jobs.ts), so the
  * display route can hand these straight to the client — the extra
  * `sourceSystem`/`value` fields are ignored there and used by the cron for
  * source-attributed reconciliation.

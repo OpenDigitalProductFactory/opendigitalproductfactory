@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "mode": "shadow",
-  "receiptSchemaVersion": "semantic-change-review-receipt.v2",
-  "policyVersion": "semantic-change-review-policy.v2",
-  "reviewerVersion": "change-reviewer.v1",
+  "receiptSchemaVersion": "semantic-change-review-receipt.v3",
+  "policyVersion": "semantic-change-review-policy.v3",
+  "reviewerVersion": "change-reviewer.v2",
   "calibration": {
     "externalCompletedSamples": 0,
     "buildStudioCompletedSamples": 0,

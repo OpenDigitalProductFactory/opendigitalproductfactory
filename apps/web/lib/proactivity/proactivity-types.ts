@@ -28,6 +28,12 @@ export const PROACTIVITY_ACTIVITY_FAMILIES = [
   // carries a different cadence and a different approval boundary from
   // producing campaign creative nobody asked for yet.
   "marketing-campaign",
+  // BI-784D20FD: the ecosystem cadence — voting on what the ecosystem submitted,
+  // seeing what applies to this install, and hearing what shipped. Without a
+  // family the resolver cannot describe this coworker at all, so no posture
+  // could govern it and it would never act unprompted (the same reason
+  // marketing-campaign exists above).
+  "ecosystem-participation",
 ] as const;
 export type ProactivityActivityFamily = (typeof PROACTIVITY_ACTIVITY_FAMILIES)[number];
 

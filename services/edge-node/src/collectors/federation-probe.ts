@@ -22,7 +22,7 @@ import {
   federationAdvertisementSchema,
   type FederationAdvertisement,
   type FederationCandidate,
-} from "@dpf/validators";
+} from "../lib/federation-contract";
 
 /** Per-probe timeout. A peer that cannot answer promptly is not on this segment. */
 export const PROBE_TIMEOUT_MS = 1_500;

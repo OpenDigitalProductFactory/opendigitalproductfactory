@@ -242,3 +242,23 @@ test("fetched short of total counts as truncated even without the flag", () => {
 test("an unparseable listing is never treated as a complete one", () => {
   assert.equal(isTruncatedListing("<html>gateway timeout</html>"), true);
 });
+
+// Seen live 2026-09-06: a 222-epic catalog came back from the MCP server's
+// per-call context budget as a 6 KB `structuredContent._preview` naming four
+// epics, with `_truncated: true` (underscore) — and every other correctly
+// cited epic was declared missing.
+test("the MCP server's context-budget preview (_truncated) counts as truncated", () => {
+  const budgeted = JSON.stringify({
+    result: {
+      content: [{ type: "text", text: "{\"success\":true,\"message\":\"Listed 222 epic(s) (222 of 222 fetched)…\"}" }],
+      isError: false,
+      structuredContent: {
+        _truncated: true,
+        _note: "Result exceeded the per-call context budget; re-call with filter/pagination/range parameters to narrow it.",
+        _originalChars: 132349,
+        _preview: "{\"epics\":[{\"epicId\":\"EP-AAAA1111\"},{\"epicId\":\"EP-BBBB2222\"}",
+      },
+    },
+  });
+  assert.equal(isTruncatedListing(budgeted), true);
+});

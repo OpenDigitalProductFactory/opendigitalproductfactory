@@ -16,6 +16,7 @@ import type {
   WorkforceCoworker,
   WorkforcePlatformRun,
 } from "@/lib/platform-runtime/workforce-activity";
+import { BREAK_FIX_SHARE_FINDING_THRESHOLD } from "@/lib/platform-runtime/break-fix-share";
 
 const REFRESH_INTERVAL_MS = 12_000;
 
@@ -131,8 +132,15 @@ export function WorkforceNowShell({ initialData }: { initialData: WorkforceActiv
         <Kpi
           label="Governance"
           value={`${pulse.quietOverThresholdCount + pulse.coworkersWithoutOwnerCount}`}
-          sub={`${pulse.quietOverThresholdCount} quiet · ${pulse.coworkersWithoutOwnerCount} no owner`}
-          flag={pulse.quietOverThresholdCount + pulse.coworkersWithoutOwnerCount > 0}
+          sub={
+            pulse.doneWeekCount > 0
+              ? `${pulse.quietOverThresholdCount} quiet · ${pulse.coworkersWithoutOwnerCount} no owner · ${Math.round(pulse.breakFixShareWeek * 100)}% break-fix this week`
+              : `${pulse.quietOverThresholdCount} quiet · ${pulse.coworkersWithoutOwnerCount} no owner`
+          }
+          flag={
+            pulse.quietOverThresholdCount + pulse.coworkersWithoutOwnerCount > 0
+            || pulse.breakFixShareWeek > BREAK_FIX_SHARE_FINDING_THRESHOLD
+          }
         />
       </div>
 

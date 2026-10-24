@@ -35,6 +35,8 @@ The current platform runtime is a containerized application stack centered on th
 | `postgres` | The single datastore: system of record for transactional data, **plus** the graph mirror (`graph_node` / `graph_edge`) for topology and impact, **plus** vector storage via `pgvector` for semantic indexing and memory. Built from `docker/postgres/Dockerfile` so the `vector` and `ltree` extensions can never drift out of the image |
 | `inngest` | Durable execution engine for scheduled jobs, event-driven workflows, and retryable background tasks |
 | `redis` | In-memory store backing Inngest's job queue and state |
+| `loki` | Log store for every container's stdout/stderr, 14-day retention. Always-on, not profile-gated: it reads logs through the Docker socket with no host-path bind mount, so it runs identically on macOS/Windows Docker Desktop and native Linux (BI-F8024A9D) |
+| `alloy` | Log shipper that discovers every container on the local Docker daemon and tails it into `loki`. Always-on for the same reason; a new compose service is tailed automatically on the next 15s discovery refresh, with no per-service wiring |
 | Docker Model Runner | Local AI inference built into Docker Desktop 4.40+ — no separate container needed. Models managed via `docker model pull`. On Linux installs without Docker Desktop, Ollama in compose substitutes; on TAPPaaS deployments, the customer's AI Stack Ollama / LiteLLM serves the same role. The runtime contract (`DPF_LLM_PROVIDER`, `LLM_BASE_URL`) is universal — see Doctrine Contract 9. |
 | External AI providers | Optional provider layer used when the tenant enables remote model access |
 
@@ -338,7 +340,7 @@ No single query surface has all three. This is why the platform renders its own 
 
 ### Grafana's Role: Power-User Escape Hatch
 
-Grafana ships as an **opt-in** power-user tool — it is not started by `docker compose up` (enable it with `docker compose --profile observability-ui up -d grafana`). It serves a different audience and purpose than the platform UI:
+Grafana ships as an **opt-in** power-user tool — it starts only when the `runtime:deep-observability` capability is enabled, never from a bare `docker compose up`. It serves a different audience and purpose than the platform UI:
 
 | | Platform UI | Grafana |
 |---|---|---|
@@ -403,7 +405,9 @@ flowchart TB
 
 ### Monitoring Stack Topology
 
-The monitoring stack (Prometheus, Loki, Alloy, Grafana, and the metric exporters) is **capability-activated, not default**: every one of them sits behind the `runtime-deep-observability` Compose profile and starts only when the `runtime:deep-observability` capability is enabled. An installation that has not enabled it collects nothing, and the metric-backed surfaces have no source. Grafana is a further step again — the platform renders its own context-aware dashboards and delivers alerts via the Inngest poll-bridge rather than through Grafana, so the Grafana UI is for power users.
+Log capture and metrics are split. **Loki and Alloy are always on**: they belong to `runtime:core`, carry no Compose profile, and run within the budgets in `config/install-resource-budgets.json` (BI-F8024A9D), so container logs are captured on every install. **Prometheus, Grafana and the PostgreSQL exporter are optional**: they sit behind the `runtime-deep-observability` Compose profile and start only when the `runtime:deep-observability` capability is enabled. An installation that has not enabled it collects no metrics, and the metric-backed surfaces have no source. Grafana is a further step again — the platform renders its own context-aware dashboards and delivers alerts via the Inngest poll-bridge rather than through Grafana, so the Grafana UI is for power users. The operator makes this choice: both installers ask (or take `-Monitoring On|Off` / `--monitoring on|off`), and **Settings → Monitoring** (`/admin/settings/monitoring`) shows whether it is really running and turns it on or off through the governed capability transition. With it off, health surfaces say "Monitoring is off on this install" rather than reporting an outage. Design: [monitoring as an operator choice](../superpowers/specs/2026-10-13-monitoring-operator-choice-design.md) (BI-83260BB3).
+
+On an install that was upgraded rather than freshly installed, the stack's containers are created by the self-upgrade's service-reconcile step once the capability is enabled. If one of them cannot be created, the upgrade is shown as degraded in the Upgrade Center and names the missing services. See [capability-driven runtime profiles](capability-driven-runtime-profiles.md).
 
 ⟦runtime: this paragraph previously claimed the headless stack "runs as part of the default Docker Compose stack". That was false against the Compose file and it made a real drift harder to spot — BI-5ACBAC50 found a live install whose capability state read `runtime:deep-observability: active` while no collector existed. Verify against `docker-compose.yml` profiles before restating it.⟧
 

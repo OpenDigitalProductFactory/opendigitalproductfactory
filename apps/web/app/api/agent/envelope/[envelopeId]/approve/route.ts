@@ -21,7 +21,11 @@
 import { NextResponse } from "next/server";
 
 import { auth } from "@/lib/auth";
-import { approveEnvelope } from "@/lib/coworker/envelope-actions";
+import { runApprovedExternalRequest, runApprovedPlatformRequest } from "@/lib/coworker/approved-request-run";
+import type { ApprovedRequestRun, PlatformRequestRun } from "@/lib/coworker/approved-request-run-types";
+import { approveEnvelope, describeOnBehalfDecision } from "@/lib/coworker/envelope-actions";
+import { readOnBehalfRequest } from "@/lib/coworker/envelope-on-behalf-request";
+import { recordApprovalOutcome } from "@/lib/coworker/approval-outcome-store";
 
 type RouteContext = {
   params: Promise<{ envelopeId: string }>;
@@ -29,7 +33,15 @@ type RouteContext = {
 
 export const dynamic = "force-dynamic";
 
-export async function POST(_request: Request, context: RouteContext): Promise<Response> {
+/** What is recorded for a platform run: a settled run is its recorded outcome (BI-C8EC05C9). */
+function recordablePlatformRun(run: PlatformRequestRun): ApprovedRequestRun {
+  if (run.status !== "settled") return run;
+  return run.outcome === "executed"
+    ? { status: "executed", message: run.message, ...(run.entityId ? { entityId: run.entityId } : {}) }
+    : { status: "failed", message: run.message };
+}
+
+export async function POST(request: Request, context: RouteContext): Promise<Response> {
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -40,10 +52,42 @@ export async function POST(_request: Request, context: RouteContext): Promise<Re
     return NextResponse.json({ error: "envelopeId required" }, { status: 400 });
   }
 
-  const result = await approveEnvelope(envelopeId, session.user.id);
+  // BI-7BCC87BB (AC-OVERRIDE): an admin may decide on the owner's behalf, with a reason.
+  const onBehalf = await readOnBehalfRequest(request, session.user);
+  const result = onBehalf
+    ? await approveEnvelope(envelopeId, session.user.id, onBehalf)
+    : await approveEnvelope(envelopeId, session.user.id);
   if (!result.ok) {
     return NextResponse.json({ error: result.reason }, { status: result.httpStatus });
   }
+  const decidedOnBehalf = onBehalf ? await describeOnBehalfDecision(result.envelope.argsJson) : null;
 
-  return NextResponse.json({ ok: true, envelope: result.envelope });
+  // BI-12E5DD91: the approval completes the call it approved. A direct MCP
+  // call runs here, once, through the governed executor; a call parked inside
+  // an external task resumes that task (BI-9FD11E5E). The approval itself is
+  // already recorded, so a run that cannot happen is reported, never an error.
+  // BI-C8EC05C9: a call the platform parked for itself (its park row carries
+  // the approval-resume marker) is checked FIRST, because a converted
+  // scheduled request has a TaskRun and is not an external task to resume.
+  // Without the marker this falls through to the external path unchanged.
+  const execution = await runApprovedPlatformRequest(envelopeId).then(
+    (platform) => (platform ? recordablePlatformRun(platform) : runApprovedExternalRequest(envelopeId)),
+  ).catch((error: unknown) => ({
+    status: "failed" as const,
+    message: error instanceof Error ? error.message : "The approved action could not be run.",
+  }));
+  const response = { ok: true, envelope: result.envelope, execution, ...(decidedOnBehalf ? { onBehalf: decidedOnBehalf } : {}) };
+  try {
+    // The receipt belongs to the owner's request; an admin deciding for them is its actor.
+    await (decidedOnBehalf
+      ? recordApprovalOutcome(envelopeId, result.envelope.delegatingUserId, execution, undefined, session.user.id)
+      : recordApprovalOutcome(envelopeId, session.user.id, execution));
+  } catch {
+    // Approval/execution may already have happened. Never return an ordinary
+    // retryable decision error that invites another authorization attempt.
+    return NextResponse.json({ ...response,
+      outcomeWarning: "The decision was saved, but its result could not be saved. Do not approve again; your assistant must check the target before retrying.",
+    });
+  }
+  return NextResponse.json(response);
 }

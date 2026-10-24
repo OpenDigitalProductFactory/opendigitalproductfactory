@@ -62,7 +62,7 @@ variable "portal_cidr_blocks" {
 }
 
 variable "root_volume_size_gb" {
-  description = "Root EBS volume size in GiB. Must accommodate the OS, Docker images (~10 GB each), and Docker volumes (Postgres, Neo4j, Qdrant)."
+  description = "Root EBS volume size in GiB. Must accommodate the OS, Docker images (~10 GB each), and Docker volumes (Postgres, backups, sandbox workspace)."
   type        = number
   default     = 50
 }

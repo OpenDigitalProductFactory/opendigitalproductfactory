@@ -24,22 +24,6 @@
  * owning epic, not a side effect of the M6 conformance gate.
  */
 export const TOOL_REACHABILITY_EXEMPTIONS: Readonly<Record<string, string>> = {
-  // ── Coworker catalog / engagement (A2A marketplace surface) ──────────────
-  analyze_coworker_engagement_refinement:
-    "SEALED: requires coworker_catalog_read, held by no registry agent — the coworker-marketplace surface has no owning coworker yet; granting is that epic's call.",
-  list_coworker_services:
-    "SEALED: requires coworker_catalog_read, held by no registry agent — same coworker-marketplace grant decision as analyze_coworker_engagement_refinement.",
-  list_coworker_offers:
-    "SEALED: requires coworker_catalog_read, held by no registry agent — same coworker-marketplace grant decision.",
-  get_coworker_offer:
-    "SEALED: requires coworker_catalog_read, held by no registry agent — same coworker-marketplace grant decision.",
-  resolve_coworker_offer_agent_card:
-    "SEALED: requires coworker_catalog_read, held by no registry agent — same coworker-marketplace grant decision.",
-  request_coworker_engagement:
-    "SEALED: requires coworker_engagement_write, held by no registry agent — engagement spawning is a side-effecting authority the owning epic must assign deliberately.",
-  spawn_subagents:
-    "SEALED: requires coworker_engagement_write, held by no registry agent — same deliberate-assignment call as request_coworker_engagement.",
-
   // ── Thread orchestration ─────────────────────────────────────────────────
   get_thread_result:
     "SEALED: requires thread_read, held by no registry agent — thread-orchestration tools are exercised by the platform runtime today, not by granted coworkers.",
@@ -62,11 +46,6 @@ export const TOOL_REACHABILITY_EXEMPTIONS: Readonly<Record<string, string>> = {
   screen_set_input:
     "SEALED: requires coworker_screen_fill, held by no registry agent — screen-fill is deliberately ungranted until the screen-drive trust tier assigns it (the read/drive grants are similarly scoped).",
 
-  // ── Internal / runtime-invoked ───────────────────────────────────────────
-  get_fleet_readiness:
-    "NO ENTRY: absent from TOOL_TO_GRANTS entirely (deny-by-default) — fleet-readiness is read by platform surfaces, not coworkers; needs an owning-epic decision on whether to expose it.",
-  record_surface_readiness:
-    "NO ENTRY: absent from TOOL_TO_GRANTS entirely (deny-by-default) — surface-readiness recording is runtime-internal today; exposing it to coworkers is an owning-epic decision.",
   // The 12 banking books-loop tools (S-FIN, BI-DE27D34E) left this list when the
   // Bookkeeper coworker (BI-7D50DC56, S-BK) landed holding banking_read/banking_write
   // in agent_registry.json — they are reachable now, so the ratchet shrinks.

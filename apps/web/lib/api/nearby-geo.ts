@@ -8,42 +8,18 @@
  * Earth-shape edge cases.
  */
 
-const EARTH_RADIUS_KM = 6371;
+import { haversineMeters, type GeoPoint } from "@dpf/types";
 
-function toRad(deg: number): number {
-  return (deg * Math.PI) / 180;
-}
-
-export interface GeoPoint {
-  latitude: number;
-  longitude: number;
-}
+export type { GeoPoint };
 
 /**
- * Distance in km between two WGS84 points. Returns `Infinity` if either
- * point is missing valid coordinates, so callers using `<= radiusKm` filter
- * out malformed rows automatically.
+ * Distance in km between two WGS84 points, from the shared geofence module
+ * (BI-C318C227 §2.4) so nearby discovery and site geofences measure alike.
+ * Returns `Infinity` if either point is missing valid coordinates, so callers
+ * using `<= radiusKm` filter out malformed rows automatically.
  */
 export function haversineKm(a: GeoPoint | null, b: GeoPoint | null): number {
-  if (!a || !b) return Infinity;
-  if (
-    !Number.isFinite(a.latitude) ||
-    !Number.isFinite(a.longitude) ||
-    !Number.isFinite(b.latitude) ||
-    !Number.isFinite(b.longitude)
-  ) {
-    return Infinity;
-  }
-  const lat1 = toRad(a.latitude);
-  const lat2 = toRad(b.latitude);
-  const dLat = toRad(b.latitude - a.latitude);
-  const dLng = toRad(b.longitude - a.longitude);
-  const sinDLat = Math.sin(dLat / 2);
-  const sinDLng = Math.sin(dLng / 2);
-  const h =
-    sinDLat * sinDLat + Math.cos(lat1) * Math.cos(lat2) * sinDLng * sinDLng;
-  const c = 2 * Math.asin(Math.min(1, Math.sqrt(h)));
-  return EARTH_RADIUS_KM * c;
+  return haversineMeters(a, b) / 1000;
 }
 
 /** Round km to one decimal place — the row-display precision. */

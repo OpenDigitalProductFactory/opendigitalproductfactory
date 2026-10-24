@@ -48,10 +48,26 @@ export type SensitivityLevel = PrincipalSensitivity | "development";
  */
 export type ProviderTier = "bundled" | "user_configured";
 
+export type LocalThinkingBudgetEvidence = {
+  dialect: "llama.cpp-b9879";
+  modelDigest: string;
+  engineIdentity: string;
+  templateDigest: string;
+  configDigest: string;
+  observedAt: number;
+};
+
 export interface EndpointManifest {
   // Identity
   id: string;
   providerId: string;
+  /** Explicit account identity; absent only for legacy caller-built manifests. */
+  providerConnectionId?: string;
+  providerConnectionVersion?: string;
+  /** Catalog profile identity remains shared across account candidates. */
+  modelProfileId?: string;
+  accountAuthMethod?: string;
+  executionChannel?: string;
   modelId: string;     // from ModelProfile
   name: string;
   endpointType: string;
@@ -130,6 +146,7 @@ export interface EndpointManifest {
   capabilities: import("./model-card-types").ModelCardCapabilities;
   pricing: import("./model-card-types").ModelCardPricing;
   supportedParameters: string[];
+  localThinkingBudgetEvidence?: LocalThinkingBudgetEvidence;
   deprecationDate: Date | null;
   metadataSource: string;
   metadataConfidence: string;
@@ -173,6 +190,11 @@ export interface PolicyCondition {
 export interface CandidateTrace {
   endpointId: string;
   providerId: string;
+  providerConnectionId?: string;
+  providerConnectionVersion?: string;
+  modelProfileId?: string;
+  accountAuthMethod?: string;
+  executionChannel?: string;
   modelId: string;
   endpointName: string;
   fitnessScore: number;
@@ -198,6 +220,14 @@ export interface RouteDecision {
   policyRulesApplied: string[];
   /** Structured preference outcome; avoids coupling behavior to reason text. */
   preferenceResolution?: RoutePreferenceResolution;
+  /**
+   * BI-A08285BC: how much confidence routing had in this answer — the floor it
+   * had to relax, how many candidates actually competed, whether a fallback was
+   * used. Structural for the same reason preferenceResolution is: behaviour must
+   * not depend on parsing `reason`. Deliberation activation reads it to decide
+   * whether the output needs a second look.
+   */
+  routingConfidence?: import("@/lib/deliberation/routing-confidence").RoutingConfidenceSignal;
   taskType: string;
   sensitivity: SensitivityLevel;
   timestamp: Date;
@@ -224,6 +254,9 @@ export interface RoutePreferenceResolution {
     kind: RoutePreferenceKind;
     value: string;
     endpointId: string;
+    /** BI-7F2FBDA3: set when this model was chosen as the successor of an unavailable preference. */
+    successorOf?: string;
+    successorBasis?: "same-family" | "same-provider";
   }>;
   unavailable: Array<{ kind: RoutePreferenceKind; value: string }>;
   fallbackUsed: boolean;

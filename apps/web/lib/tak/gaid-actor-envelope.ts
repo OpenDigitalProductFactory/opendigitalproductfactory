@@ -1,6 +1,6 @@
-import { prisma } from "@dpf/db";
+import { prisma, type Prisma } from "@dpf/db";
 
-import type { GovernedExecuteArgs } from "@/lib/mcp-governed-execute";
+import type { GovernedExecuteArgs } from "@/lib/mcp-governed-execute-types";
 
 export type GaidActorEnvelope = {
   principalId: string;
@@ -18,12 +18,16 @@ export function setGaidActorResolverOverrideForTests(override: GaidActorResolver
   resolverOverride = override;
 }
 
-export async function resolveGaidActorEnvelope(args: GovernedExecuteArgs): Promise<GaidActorEnvelope | null> {
+/** `db` defaults to the shared client; the AC-PROBE runner passes a read-only transaction (BI-129EFFD1). */
+export async function resolveGaidActorEnvelope(
+  args: GovernedExecuteArgs,
+  db: Pick<Prisma.TransactionClient, "principalAlias"> = prisma,
+): Promise<GaidActorEnvelope | null> {
   if (resolverOverride) return resolverOverride(args);
   const actorAlias = args.context?.agentId
     ? { aliasType: "agent", aliasValue: args.context.agentId, issuer: "" }
     : { aliasType: "user", aliasValue: args.userId, issuer: "" };
-  const alias = await prisma.principalAlias.findFirst({
+  const alias = await db.principalAlias.findFirst({
     where: actorAlias,
     select: {
       principal: {

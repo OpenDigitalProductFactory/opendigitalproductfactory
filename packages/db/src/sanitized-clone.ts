@@ -1,10 +1,17 @@
 // packages/db/src/sanitized-clone.ts
 // Sanitized clone pipeline -- copies production data to dev with PII obfuscation.
 // Classification driven by table-classification.ts.
+// Postgres-only: since BET-5 (BI-A1E864A5) the graph mirror and vectors live in
+// Postgres, so they ride along in the Postgres clone; the former graph-store
+// clone step was removed in BI-B1977CEE.
 
 import { getTableSensitivity } from "./table-classification";
 import { spawn, type ChildProcess } from "node:child_process";
 import { pipeline } from "node:stream/promises";
+import { Client } from "pg";
+import { copySanitizedCursorBatches } from "./sanitized-clone-batches";
+import { buildSanitizedInsertStatements, quoteIdentifier, type ColumnTypeInfo } from "./sanitized-clone-sql";
+export { prepareInsertParameter, quoteIdentifier, type ColumnTypeInfo } from "./sanitized-clone-sql";
 import { provisionContributorPreviewAdmin, requireContributorPreviewPassword } from "./contributor-preview-auth";
 
 // -- Obfuscation Helpers --
@@ -108,21 +115,12 @@ const AUDIT_TABLES = new Set([
 /** Maximum audit records to clone per table */
 const AUDIT_RECORD_LIMIT = 50;
 
-export type ColumnTypeInfo = {
-  dataType: string;
-  udtName: string;
-};
-
 export type CloneColumnInfo = ColumnTypeInfo & {
   columnName: string;
   isGenerated: boolean;
 };
 
 const OMITTED_NATIVE_TYPES = new Set(["tsvector", "vector"]);
-
-export function quoteIdentifier(identifier: string): string {
-  return `"${identifier.replace(/"/g, '""')}"`;
-}
 
 /**
  * Build a SELECT projection that never asks Prisma to deserialize native
@@ -258,79 +256,6 @@ export function assertDistinctDatabaseIdentities(
   }
 }
 
-export function prepareInsertParameter(
-  value: unknown,
-  columnType: ColumnTypeInfo | undefined,
-  paramIdx: number,
-): { placeholder: string; value: unknown } {
-  const placeholder = `$${paramIdx}`;
-
-  if (value === null || value === undefined) {
-    return { placeholder, value: null };
-  }
-
-  if (columnType?.dataType === "json" || columnType?.dataType === "jsonb") {
-    return {
-      placeholder: `${placeholder}::${columnType.dataType}`,
-      value: JSON.stringify(value),
-    };
-  }
-
-  if (columnType?.dataType === "ARRAY" && Array.isArray(value)) {
-    return {
-      placeholder: `${placeholder}::${arrayElementTypeCast(columnType.udtName)}`,
-      value: toPostgresTextArrayLiteral(value),
-    };
-  }
-
-  if (
-    columnType &&
-    typeof value === "object" &&
-    !(value instanceof Date) &&
-    !Buffer.isBuffer(value)
-  ) {
-    const toString = (value as { toString?: () => string }).toString;
-    if (typeof toString === "function" && toString !== Object.prototype.toString) {
-      return { placeholder, value: toString.call(value) };
-    }
-    return { placeholder, value };
-  }
-
-  if (typeof value === "object" && !(value instanceof Date) && !Buffer.isBuffer(value)) {
-    if (Array.isArray(value)) {
-      // PostgreSQL array columns need an array literal. JSON/JSONB arrays are
-      // handled above from catalog type information.
-      return {
-        placeholder: `${placeholder}::text[]`,
-        value: toPostgresTextArrayLiteral(value),
-      };
-    }
-
-    return {
-      placeholder: `${placeholder}::jsonb`,
-      value: JSON.stringify(value),
-    };
-  }
-
-  return { placeholder, value };
-}
-
-function toPostgresTextArrayLiteral(value: unknown[]): string {
-  return `{${value.map((item: unknown) => `"${String(item).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`).join(",")}}`;
-}
-
-function arrayElementTypeCast(arrayUdtName: string): string {
-  if (!arrayUdtName.startsWith("_") || arrayUdtName.length === 1) {
-    throw new Error(`Unexpected PostgreSQL array UDT name: ${arrayUdtName}`);
-  }
-
-  // PostgreSQL exposes array UDTs as _<element-type>. Quote the catalog-owned
-  // identifier so built-ins (int4/text) and case-sensitive custom enums both
-  // resolve without treating any part of the name as SQL syntax.
-  const elementType = arrayUdtName.slice(1).replaceAll('"', '""');
-  return `"${elementType}"[]`;
-}
-
 /**
  * Run the sanitized clone from production to dev.
  * Both DATABASE_URL (dev) and PRODUCTION_DATABASE_URL (production) must be set.
@@ -352,11 +277,15 @@ export async function runSanitizedClone(): Promise<void> {
   const devAdapter = new PrismaPg({ connectionString: devUrl });
   const prod = new PrismaClient({ adapter: prodAdapter });
   const dev = new PrismaClient({ adapter: devAdapter });
+  const sanitizedSource = new Client({ connectionString: prodUrl });
 
   try {
     console.log("[sanitized-clone] Connecting to production and dev databases...");
     await prod.$connect();
     await dev.$connect();
+    await sanitizedSource.connect();
+    // All confidential tables share one read-only snapshot and user ranking.
+    await sanitizedSource.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
 
     const [productionIdentity, destinationIdentity] = await Promise.all([
       readDatabaseIdentity(prod),
@@ -374,14 +303,19 @@ export async function runSanitizedClone(): Promise<void> {
         const tables = await listPublicTables(prod, false);
         console.log(`[sanitized-clone] Found ${tables.length} tables to process`);
 
-        // Build a stable ID-to-index map from the User table for deterministic obfuscation.
-        // This happens after the initial reset so even an early source-query failure
-        // cannot leave a previously partial preview dataset available.
-        const userIdMap = new Map<string, number>();
-        const users: Array<{ id: string }> = await prod.$queryRaw`SELECT id FROM "User" ORDER BY id`;
-        users.forEach((u, i) => userIdMap.set(u.id, i + 1));
-
-        let autoIndex = users.length;
+        // PostgreSQL owns user ranking; never materialize a User map in JS.
+        const userCount = (await sanitizedSource.query('SELECT count(*) AS count FROM "User"')).rows;
+        let autoIndex = Number(userCount[0]?.count ?? 0);
+        const insertSanitizedRows = createSanitizedCloneInsertWriter(dev);
+        const writeSanitizedBatch = async (tableName: string, rows: Array<Record<string, unknown>>) => {
+          for (let i = 0; i < rows.length; i++) {
+            const row = rows[i]!;
+            const userIndex = row.__dpfCloneUserIndex;
+            delete row.__dpfCloneUserIndex;
+            rows[i] = sanitizeConfidentialRow(row, userIndex == null ? ++autoIndex : Number(userIndex));
+          }
+          await insertSanitizedRows(tableName, rows);
+        };
 
         for (const { tablename } of tables) {
           if (!destinationTableNames.has(tablename)) {
@@ -409,9 +343,8 @@ export async function runSanitizedClone(): Promise<void> {
           if (AUDIT_TABLES.has(tablename)) {
             const copyCount = Math.min(rowCount, AUDIT_RECORD_LIMIT);
             console.log(`  AUDIT (last ${copyCount} of ${rowCount}): ${tablename}`);
-            const rows = await selectRowsForSanitization(prod, dev, tablename, copyCount);
-            const obfuscated = obfuscateRows(rows, userIdMap, () => ++autoIndex);
-            await insertRowsWithReplicationDisabled(dev, tablename, obfuscated);
+            await copyRowsForSanitization(sanitizedSource, prod, dev, tablename,
+              rows => writeSanitizedBatch(tablename, rows), copyCount);
             continue;
           }
 
@@ -420,9 +353,8 @@ export async function runSanitizedClone(): Promise<void> {
             await copyTableCompatible(tablename, prodUrl, devUrl, prod, dev);
           } else if (sensitivity === "confidential") {
             console.log(`  OBFUSCATE (confidential): ${tablename} (${rowCount} rows)`);
-            const rows = await selectRowsForSanitization(prod, dev, tablename);
-            const obfuscated = obfuscateRows(rows, userIdMap, () => ++autoIndex);
-            await insertRowsWithReplicationDisabled(dev, tablename, obfuscated);
+            await copyRowsForSanitization(sanitizedSource, prod, dev, tablename,
+              rows => writeSanitizedBatch(tablename, rows));
           }
         }
 
@@ -430,8 +362,10 @@ export async function runSanitizedClone(): Promise<void> {
       },
     );
 
+    await sanitizedSource.query("COMMIT");
     console.log("[sanitized-clone] PostgreSQL clone complete");
   } finally {
+    await sanitizedSource.end();
     await prod.$disconnect();
     await dev.$disconnect();
   }
@@ -474,12 +408,14 @@ async function resetDestinationData(
   await client.$executeRawUnsafe(resetSql);
 }
 
-async function selectRowsForSanitization(
+async function copyRowsForSanitization(
+  source: Client,
   sourceClient: RawDatabaseClient,
   destinationClient: RawDatabaseClient,
   tableName: string,
+  write: (rows: Array<Record<string, unknown>>) => Promise<void>,
   limit?: number,
-): Promise<Array<Record<string, unknown>>> {
+): Promise<void> {
   const [sourceColumns, destinationColumns] = await Promise.all([
     getCloneColumns(sourceClient, tableName),
     getCloneColumns(destinationClient, tableName),
@@ -494,31 +430,29 @@ async function selectRowsForSanitization(
   );
 
   const quotedTable = quoteIdentifier(tableName);
-  const orderColumn = compatibleColumns.has("createdAt")
-    ? quoteIdentifier("createdAt")
-    : compatibleColumns.has("id")
-      ? quoteIdentifier("id")
-      : null;
-  const orderClause = limit && orderColumn ? ` ORDER BY ${orderColumn} DESC` : "";
+  const ordering = limit && compatibleColumns.has("createdAt")
+    ? ["createdAt", ...(compatibleColumns.has("id") ? ["id"] : [])]
+    : compatibleColumns.has("id") ? ["id"] : [];
+  const orderSql = ordering.length
+    ? ordering.map(column => quoteIdentifier(column) + (limit ? " DESC" : " ASC")).join(", ")
+    : "ctid";
   const limitClause = limit ? ` LIMIT ${Math.max(0, Math.trunc(limit))}` : "";
+  // Match the existing obfuscator's first non-null id/userId/createdById rule.
+  const references = ["id", "userId", "createdById"].filter(column => compatibleColumns.has(column));
+  const referenceSql = references.map(column => `r.${quoteIdentifier(column)}::text`).join(", ");
+  // Carry the ordering through the join; batch boundaries cannot change aliases.
+  const rowsSql = `SELECT ${selectList}, row_number() OVER (ORDER BY ${orderSql}) AS "__dpfCloneRowOrder" FROM ${quotedTable} ORDER BY ${orderSql}${limitClause}`;
+  const selectSql = references.length
+    ? `SELECT r.*, u."__dpfCloneUserIndex" FROM (${rowsSql}) r LEFT JOIN
+       (SELECT id, row_number() OVER (ORDER BY id) AS "__dpfCloneUserIndex" FROM "User") u
+       ON u.id = ${references.length === 1 ? referenceSql : `COALESCE(${referenceSql})`}
+       ORDER BY r."__dpfCloneRowOrder"`
+    : rowsSql;
+  await copySanitizedCursorBatches(source, selectSql, async rows => {
+    for (const row of rows) delete row.__dpfCloneRowOrder;
+    await write(rows);
+  }, 50, false);
 
-  return sourceClient.$queryRawUnsafe<Array<Record<string, unknown>>>(
-    `SELECT ${selectList} FROM ${quotedTable}${orderClause}${limitClause}`,
-  );
-}
-
-function obfuscateRows(
-  rows: Array<Record<string, unknown>>,
-  userIdMap: ReadonlyMap<string, number>,
-  nextIndex: () => number,
-): Array<Record<string, unknown>> {
-  return rows.map((row) => {
-    const userId = (row.id ?? row.userId ?? row.createdById) as string | undefined;
-    const idx = userId && userIdMap.has(userId)
-      ? userIdMap.get(userId)!
-      : nextIndex();
-    return sanitizeConfidentialRow(row, idx);
-  });
 }
 
 /**
@@ -605,30 +539,10 @@ async function insertRows(
   client: RawDatabaseClient,
   tableName: string,
   rows: Array<Record<string, unknown>>,
+  columnTypes: ReadonlyMap<string, ColumnTypeInfo>,
 ): Promise<void> {
-  if (rows.length === 0) return;
-
-  const columnTypes = await getColumnTypes(client, tableName);
-
-  for (const row of rows) {
-    const columns = Object.keys(row);
-    const values: unknown[] = [];
-    const castPlaceholders: string[] = [];
-    let paramIdx = 1;
-
-    for (const col of columns) {
-      const prepared = prepareInsertParameter(row[col], columnTypes.get(col), paramIdx);
-      castPlaceholders.push(prepared.placeholder);
-      values.push(prepared.value);
-      paramIdx++;
-    }
-
-    const columnList = columns.map(quoteIdentifier).join(", ");
-
-    await client.$executeRawUnsafe(
-      `INSERT INTO ${quoteIdentifier(tableName)} (${columnList}) VALUES (${castPlaceholders.join(", ")}) ON CONFLICT DO NOTHING`,
-      ...values,
-    );
+  for (const statement of buildSanitizedInsertStatements(tableName, rows, columnTypes)) {
+    await client.$executeRawUnsafe(statement.sql, ...statement.values);
   }
 }
 
@@ -644,29 +558,39 @@ export const SANITIZED_CLONE_INSERT_TRANSACTION_POLICY: Readonly<SanitizedCloneI
   timeoutMs: 30_000,
 });
 
+/** One clone attempt owns this cache; a new clone never reuses another schema's metadata. */
+export function createSanitizedCloneInsertWriter(
+  client: PrismaClient,
+  policy: Readonly<SanitizedCloneInsertTransactionPolicy> = SANITIZED_CLONE_INSERT_TRANSACTION_POLICY,
+): (tableName: string, rows: Array<Record<string, unknown>>) => Promise<void> {
+  const typesByTable = new Map<string, Map<string, ColumnTypeInfo>>();
+  return async (tableName, rows) => {
+    const batchSize = Math.max(1, Math.trunc(policy.batchSize));
+    for (let offset = 0; offset < rows.length; offset += batchSize) {
+      const batch = rows.slice(offset, offset + batchSize);
+      await client.$transaction(async transaction => {
+        // Pin trigger suppression to the connection used by these bounded writes.
+        // Existing destination-wide cleanup still owns clone publication safety.
+        await transaction.$executeRawUnsafe("SET LOCAL session_replication_role = replica");
+        let columnTypes = typesByTable.get(tableName);
+        if (!columnTypes) {
+          columnTypes = await getColumnTypes(transaction, tableName);
+          typesByTable.set(tableName, columnTypes);
+        }
+        await insertRows(transaction, tableName, batch, columnTypes);
+      }, { maxWait: policy.maxWaitMs, timeout: policy.timeoutMs });
+    }
+  };
+}
+
+/** Compatibility entry: one direct call is an isolated attempt. */
 export async function insertRowsWithReplicationDisabled(
   client: PrismaClient,
   tableName: string,
   rows: Array<Record<string, unknown>>,
   policy: Readonly<SanitizedCloneInsertTransactionPolicy> = SANITIZED_CLONE_INSERT_TRANSACTION_POLICY,
 ): Promise<void> {
-  if (rows.length === 0) return;
-
-  const batchSize = Math.max(1, Math.trunc(policy.batchSize));
-  for (let offset = 0; offset < rows.length; offset += batchSize) {
-    const batch = rows.slice(offset, offset + batchSize);
-    await client.$transaction(async (transaction) => {
-      // PrismaPg uses a pool, so a SET issued before the transaction is not
-      // guaranteed to govern the connection used by the inserts. SET LOCAL
-      // pins the trigger posture to each bounded batch transaction and restores
-      // it automatically. Destination-wide cleanup owns clone atomicity.
-      await transaction.$executeRawUnsafe("SET LOCAL session_replication_role = replica");
-      await insertRows(transaction, tableName, batch);
-    }, {
-      maxWait: policy.maxWaitMs,
-      timeout: policy.timeoutMs,
-    });
-  }
+  await createSanitizedCloneInsertWriter(client, policy)(tableName, rows);
 }
 
 async function getColumnTypes(
@@ -723,71 +647,10 @@ async function getCloneColumns(
   }));
 }
 
-// ── Neo4j Clone Pipeline ─────────────────────────────────────────────────────
-
-/**
- * Clone Neo4j graph structure from production to dev with PII obfuscation.
- * Uses HTTP API. Both NEO4J_URI (dev) and PRODUCTION_NEO4J_URI (prod) must be set.
- */
-export async function runNeo4jClone(): Promise<void> {
-  const prodUri = process.env.PRODUCTION_NEO4J_URI;
-  const devUri = process.env.NEO4J_URI;
-  const prodUser = process.env.PRODUCTION_NEO4J_USER ?? process.env.NEO4J_USER ?? "neo4j";
-  const prodPassword = process.env.PRODUCTION_NEO4J_PASSWORD ?? process.env.NEO4J_PASSWORD ?? "dpf_dev_password";
-
-  if (!prodUri) {
-    console.log("[sanitized-clone] PRODUCTION_NEO4J_URI not set, skipping Neo4j clone");
-    return;
-  }
-  if (!devUri) {
-    console.log("[sanitized-clone] NEO4J_URI not set, skipping Neo4j clone");
-    return;
-  }
-
-  // Extract host:port from bolt:// URIs for HTTP access
-  const prodHttpUrl = prodUri.replace("bolt://", "http://").replace(":7687", ":7474");
-
-  const auth = Buffer.from(`${prodUser}:${prodPassword}`).toString("base64");
-  const headers = {
-    "Content-Type": "application/json",
-    Authorization: `Basic ${auth}`,
-  };
-
-  console.log("[sanitized-clone] Exporting Neo4j graph from production...");
-
-  try {
-    const exportResponse = await fetch(`${prodHttpUrl}/db/neo4j/tx/commit`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        statements: [
-          { statement: "MATCH (n) RETURN count(n) as nodeCount" },
-          { statement: "MATCH ()-[r]->() RETURN count(r) as relCount" },
-        ],
-      }),
-    });
-
-    if (!exportResponse.ok) {
-      console.log(`[sanitized-clone] Neo4j export failed: ${exportResponse.status}, skipping`);
-      return;
-    }
-
-    const exportData = await exportResponse.json() as { results?: { data?: { row?: number[] }[] }[] };
-    const nodeCount = exportData.results?.[0]?.data?.[0]?.row?.[0] ?? 0;
-    const relCount = exportData.results?.[1]?.data?.[0]?.row?.[0] ?? 0;
-
-    console.log(`[sanitized-clone] Neo4j production has ${nodeCount} nodes, ${relCount} relationships`);
-    console.log("[sanitized-clone] Neo4j clone: structure counted (full APOC import TBD)");
-  } catch (err) {
-    console.log(`[sanitized-clone] Neo4j clone skipped: ${err instanceof Error ? err.message : String(err)}`);
-  }
-}
-
 // ── CLI Entry Point ──────────────────────────────────────────────────────────
 
 if (process.argv[1]?.endsWith("sanitized-clone.ts") || process.argv[1]?.endsWith("sanitized-clone.js")) {
   runSanitizedClone()
-    .then(() => runNeo4jClone())
     .then(() => {
       console.log("[sanitized-clone] Done");
       process.exit(0);

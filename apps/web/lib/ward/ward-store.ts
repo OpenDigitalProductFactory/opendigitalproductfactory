@@ -46,7 +46,17 @@ interface FindMany<T> {
 export interface WardStoreClient {
   resource?: { findMany: FindMany<KennelRow & { kindSlug?: string }> };
   resourceCapacityAllocation?: { findMany: FindMany<OccupancyRow> };
-  adoptableAnimal?: { findMany: FindMany<{ animalRef: string; name: string; status: string }> };
+  animalProfile?: { findMany: FindMany<WardAnimal> };
+}
+
+export interface WardAnimal {
+  animalRef: string;
+  name: string;
+}
+
+export interface WardWorkspace {
+  board: WardBoard | null;
+  animals: WardAnimal[];
 }
 
 /** Animals that have left are not population and are not placed. */
@@ -55,60 +65,77 @@ export function isInCare(status: string | null | undefined): boolean {
 }
 
 /**
- * Load the board. Returns `null` when the organization has no housing recorded
- * at all — a shelter that has never told the system about a kennel has not
- * answered "none free", and the caller must be able to tell those apart.
+ * Load the operational Ward workspace from its two canonical authorities.
+ * Housing can be unrecorded without erasing the animal roster, so the roster
+ * is returned beside the nullable capacity projection rather than inside it.
+ */
+export async function loadWardWorkspace(input: {
+  organizationId: string;
+  db: WardStoreClient;
+}): Promise<WardWorkspace> {
+  const { organizationId, db } = input;
+  const [kennels, animalRows] = await Promise.all([
+    db.resource?.findMany
+      ? db.resource.findMany({
+          where: {
+            organizationId,
+            kindSlug: { in: [...HOUSING_KIND_SLUGS] },
+            lifecycle: "active",
+          },
+          select: {
+            id: true,
+            label: true,
+            kindSlug: true,
+            serviceArea: true,
+            capacity: true,
+            blockedReason: true,
+            lifecycle: true,
+            version: true,
+          },
+        })
+      : Promise.resolve([] as Array<KennelRow & { kindSlug?: string }>),
+    db.animalProfile?.findMany
+      ? db.animalProfile.findMany({
+          where: {
+            organizationId,
+            lifecycleStatus: { in: ["in_care", "placement_ready"] },
+          },
+          orderBy: [{ name: "asc" }, { animalRef: "asc" }],
+          select: { animalRef: true, name: true },
+        })
+      : Promise.resolve([] as WardAnimal[]),
+  ]);
+
+  const animals = animalRows
+    .map(({ animalRef, name }) => ({ animalRef, name }))
+    .sort((left, right) => left.name.localeCompare(right.name) || left.animalRef.localeCompare(right.animalRef));
+  if (kennels.length === 0) return { board: null, animals };
+
+  const occupancy = db.resourceCapacityAllocation?.findMany
+    ? await db.resourceCapacityAllocation.findMany({
+        where: {
+          organizationId,
+          demandSlug: ANIMAL_OCCUPANCY_DEMAND_SLUG,
+          releasedAt: null,
+        },
+        select: { id: true, resourceId: true, demandRef: true, startsAt: true, releasedAt: true },
+      })
+    : [];
+
+  const animalNames = new Map(animals.map((animal) => [animal.animalRef, animal.name]));
+
+  return { board: buildWardBoard({ kennels, occupancy, animalNames }), animals };
+}
+
+/**
+ * Compatibility projection for capacity consumers that need only the board.
+ * Returns `null` when the organization has no housing recorded at all.
  */
 export async function loadWardBoard(input: {
   organizationId: string;
   db: WardStoreClient;
 }): Promise<WardBoard | null> {
-  const { organizationId, db } = input;
-  if (!db.resource?.findMany) return null;
-
-  const kennels = await db.resource.findMany({
-    where: {
-      organizationId,
-      kindSlug: { in: [...HOUSING_KIND_SLUGS] },
-      lifecycle: "active",
-    },
-    select: {
-      id: true,
-      label: true,
-      kindSlug: true,
-      serviceArea: true,
-      capacity: true,
-      blockedReason: true,
-      lifecycle: true,
-      version: true,
-    },
-  });
-  if (kennels.length === 0) return null;
-
-  const [occupancy, animals] = await Promise.all([
-    db.resourceCapacityAllocation?.findMany
-      ? db.resourceCapacityAllocation.findMany({
-          where: {
-            organizationId,
-            demandSlug: ANIMAL_OCCUPANCY_DEMAND_SLUG,
-            releasedAt: null,
-          },
-          select: { id: true, resourceId: true, demandRef: true, startsAt: true, releasedAt: true },
-        })
-      : Promise.resolve([] as OccupancyRow[]),
-    db.adoptableAnimal?.findMany
-      ? db.adoptableAnimal.findMany({
-          where: { organizationId },
-          select: { animalRef: true, name: true, status: true },
-        })
-      : Promise.resolve([] as Array<{ animalRef: string; name: string; status: string }>),
-  ]);
-
-  const animalNames = new Map(
-    animals.filter((animal) => isInCare(animal.status)).map((animal) => [animal.animalRef, animal.name]),
-  );
-
-  return buildWardBoard({ kennels, occupancy, animalNames });
+  return (await loadWardWorkspace(input)).board;
 }
 
 /**

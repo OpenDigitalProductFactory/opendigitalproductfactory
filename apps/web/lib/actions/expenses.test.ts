@@ -45,6 +45,7 @@ import { can } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
 import {
   createExpenseClaim,
+  getExpenseClaim,
   listExpenseClaims,
   submitExpenseClaim,
   respondToExpenseApproval,
@@ -281,5 +282,67 @@ describe("markExpenseReimbursed", () => {
     const updateArgs = mockPrisma.expenseClaim.update.mock.calls[0][0];
     expect(updateArgs.data.status).toBe("paid");
     expect(updateArgs.data.paidAt).toBeInstanceOf(Date);
+  });
+});
+
+// Any signed-in user could read any expense claim, and the detail page handed
+// them its approvalToken — which respondToExpenseApproval accepts on its own,
+// with no session check. So a colleague (or the claimant) could approve a claim
+// they had no authority over (BI-D43F1516). getExpenseClaim is the chokepoint:
+// listExpenseClaims already scopes by manage_finance, and this makes the single
+// read agree with it.
+describe("getExpenseClaim authorisation (BI-D43F1516)", () => {
+  const claim = {
+    id: "claim-1",
+    employeeId: "emp-owner",
+    status: "submitted",
+    approvalToken: "tok-secret",
+    items: [],
+    employee: { id: "emp-owner", displayName: "Owner", workEmail: "owner@test.com" },
+    approvedBy: null,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockAuth.mockResolvedValue({ user: { id: "user-other", platformRole: "member", isSuperuser: false } });
+    mockPrisma.expenseClaim.findUnique.mockResolvedValue(claim);
+  });
+
+  it("does not give a non-finance colleague another employee's claim", async () => {
+    mockCan.mockReturnValue(false);
+    // The viewer has an employee profile, but it is not the claimant's.
+    mockPrisma.employeeProfile.findFirst.mockResolvedValue({ id: "emp-other" });
+
+    expect(await getExpenseClaim("claim-1")).toBeNull();
+  });
+
+  it("gives the claimant their own claim, but never the approval token", async () => {
+    mockCan.mockReturnValue(false);
+    mockPrisma.employeeProfile.findFirst.mockResolvedValue({ id: "emp-owner" });
+
+    const result = await getExpenseClaim("claim-1");
+
+    expect(result).not.toBeNull();
+    expect(result?.id).toBe("claim-1");
+    // The token is the approval capability. A claimant holding it could approve
+    // their own claim through the storefront route.
+    expect(result?.approvalToken).toBeNull();
+  });
+
+  it("gives a finance manager the claim with its token, so approval still works", async () => {
+    mockCan.mockReturnValue(true);
+
+    const result = await getExpenseClaim("claim-1");
+
+    expect(result?.approvalToken).toBe("tok-secret");
+    // A manager is not filtered to their own employee profile.
+    expect(mockPrisma.employeeProfile.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("returns null when a non-finance viewer has no employee profile at all", async () => {
+    mockCan.mockReturnValue(false);
+    mockPrisma.employeeProfile.findFirst.mockResolvedValue(null);
+
+    expect(await getExpenseClaim("claim-1")).toBeNull();
   });
 });

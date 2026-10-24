@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// Mock the vector seed phase so tests are deterministic (no Qdrant required).
+// Mock the vector seed phase so tests are deterministic (no vector store required).
 const searchWikiPagesStub = vi.hoisted(() => vi.fn());
 vi.mock("./embeddings", () => ({
   searchWikiPages: (args: unknown) => searchWikiPagesStub(args),
@@ -330,7 +330,7 @@ describe("searchByPPR", () => {
     expect(results).toEqual([]);
   });
 
-  it("returns empty when seeds exist but none are present in the subgraph (stale Qdrant)", async () => {
+  it("returns empty when seeds exist but none are present in the subgraph (stale vector index)", async () => {
     searchWikiPagesStub.mockResolvedValueOnce([
       { pageId: "missing", slug: "x", title: "X", pageKind: "entity", contentPreview: "", isKernel: false, organizationId: "org_t", kernelPageId: null, score: 0.9, source: "org" },
     ]);

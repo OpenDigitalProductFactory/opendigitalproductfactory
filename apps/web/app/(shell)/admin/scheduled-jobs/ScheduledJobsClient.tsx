@@ -27,8 +27,12 @@ import type {
   WorkHealth,
 } from "@/lib/operate/scheduled-jobs/work-model";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { useT } from "@/lib/i18n/use-t";
+
+import { INTAKE_CONTROLLER_JOB_ID } from "@/lib/operate/scheduled-jobs/intake-controller-commission";
 
 import { EditScheduleDialog } from "./EditScheduleDialog";
+import { IntakeControllerPanel } from "./IntakeControllerPanel";
 import { ScheduleWindowChart } from "./ScheduleWindowChart";
 
 type Banner = { kind: "ok" | "error"; text: string } | null;
@@ -134,6 +138,7 @@ function Td({ children, className }: { children: React.ReactNode; className?: st
 const ATTENTION: WorkHealth[] = ["error", "overdue", "never"];
 
 export function ScheduledJobsClient({ initialJobs }: { initialJobs: ScheduledWorkView[] }) {
+  const t = useT("admin");
   const [jobs, setJobs] = useState<ScheduledWorkView[]>(initialJobs);
   const [banner, setBanner] = useState<Banner>(null);
   const [pendingJob, setPendingJob] = useState<string | null>(null);
@@ -173,6 +178,7 @@ export function ScheduledJobsClient({ initialJobs }: { initialJobs: ScheduledWor
     [jobs],
   );
   const spent = useMemo(() => jobs.filter((j) => j.retirable), [jobs]);
+  const hasIntakeController = jobs.some((j) => j.jobId === INTAKE_CONTROLLER_JOB_ID);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -286,6 +292,8 @@ export function ScheduledJobsClient({ initialJobs }: { initialJobs: ScheduledWor
           </span>
         )}
       </div>
+
+      {hasIntakeController && <IntakeControllerPanel onChanged={refresh} />}
 
       <ScheduleWindowChart
         jobs={jobs}
@@ -497,7 +505,7 @@ export function ScheduledJobsClient({ initialJobs }: { initialJobs: ScheduledWor
                         </div>
                         {job.substrate === "inngest-cron" && job.inCatalog && (
                           <div className="text-dpf-caption mt-0.5" style={{ color: "var(--dpf-muted)" }}>
-                            cron set in code
+                            set in code
                           </div>
                         )}
                       </Td>
@@ -509,8 +517,14 @@ export function ScheduledJobsClient({ initialJobs }: { initialJobs: ScheduledWor
                           </div>
                         ) : (
                           <div className="text-dpf-caption" style={{ color: "var(--dpf-muted)" }}>
-                            records no run data
+                            no run data
                           </div>
+                        )}
+                        {job.lastRunSummary && (
+                          <details className="text-dpf-caption mt-1 max-w-xs">
+                            <summary className="cursor-pointer" style={{ color: "var(--dpf-accent)" }}>{t("scheduledWork.lastResult")}</summary>
+                            <p className="mt-1" style={{ color: "var(--dpf-muted)" }}>{job.lastRunSummary}</p>
+                          </details>
                         )}
                         {job.lastError && (
                           <div className="text-dpf-caption mt-0.5 max-w-xs" style={{ color: "var(--dpf-error)" }}>

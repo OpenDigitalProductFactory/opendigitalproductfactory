@@ -2,6 +2,13 @@
 
 Living reference for all UI development. All developers and AI agents must follow these standards when creating or reviewing UI code.
 
+For outcome-based route audits and redesign acceptance, use the
+[portal page and flow evaluation framework](architecture/portal-ux-evaluation-framework.md)
+and its [scorecard](testing/portal-ux-scorecard-template.md). It connects the
+existing page-purpose contracts and UX budgets below to persona tasks, workroom
+disclosure, navigation fit and evidence. Counts alone do not establish that a
+user can complete the job.
+
 ## Color System
 
 Every UI component uses CSS custom properties for all color roles. These properties are set by the branding system via `buildBrandingStyleTag()` and fall back to defaults in `globals.css`.
@@ -181,7 +188,12 @@ redesign lands — debt recorded, never hidden.
 It boots the real portal against an ephemeral database, drives every static page route with
 Playwright, and measures the **served DOM** — not an SSR string, which has neither client
 components nor honest visibility. Computed-invisible nodes are pruned in the page first, so
-a `hidden md:block` utility is resolved by the browser that actually applied it.
+a `hidden md:block` utility is resolved by the browser that actually applied it. The portal
+under test boots in measurement runtime with a **pinned clock** (`DPF_MEASUREMENT_NOW`), so copy
+that is calendar arithmetic over code-defined dates — the inbox's compliance-evidence "lapses in
+N days" — measures the same on any day; live regions (`aria-live`, `status`/`alert` roles) are
+not counted as words visible on arrival. Details and the evidence behind both:
+[CI evidence — UX route-sweep stability](testing/ci-evidence.md#ux-route-sweep-stability).
 
 Three enforcement modes, decided by `lib/ux-budget/ratchet.ts`:
 
@@ -326,6 +338,13 @@ Every asynchronous action MUST show a visible, consistent activity indicator. A 
 | Never | Skeleton **and** spinner together — pick one | — |
 
 **Refreshing existing content:** keep the current content visible and dimmed (`opacity`) with the region marked `aria-busy`, and show the spinner on the trigger. Don't blank out good content to show a placeholder.
+
+**Process evidence:** use the shared `workroomStage` status domain. `passed`
+requires a verification verdict; `observed` records an event without asserting
+success; `unknown` lacks proof; `cancelled` is separate from completion. A terminal
+room state does not prove that earlier steps passed. Keep intended definitions,
+observed execution, and any simulation distinct, with a keyboard-accessible list
+and step inspector. Do not turn stage position into an estimated percentage.
 
 **Accessibility (required):**
 - Mark the region being updated with `aria-busy="true"`.
@@ -499,7 +518,7 @@ technical names for a real mechanism, not language a business owner can act on.
 - **Oversight language comes from one module.** `apps/web/lib/workforce/oversight-copy.ts`
   is the single source of truth: **Employee only / Needs approval / Employee review /
   Runs on its own**, with colour resolved through the `employeeOversight` intent
-  namespace in `apps/web/components/ui/report-kit/statusColors.ts`. Never declare a
+  namespace in `apps/web/lib/ui-model/statusColors.ts`. Never declare a
   local tier→label or tier→colour map. Six components carried drifted ones — two with
   raw hex — before this rule existed.
 - **Resolve the role in prose.** Use **employee** for a workforce member and **owner**
@@ -537,9 +556,10 @@ Customer marketing surfaces (`/customer/marketing`, `/customer/marketing/strateg
 
 ### Fit engine (source of truth)
 
-`apps/web/lib/marketing/archetype-fit.ts` — `assessArchetypeFit({ text, category })` returns a deterministic `{ severity: "ok" | "warn" | "block", blocked, findings, summary }`:
+`apps/web/lib/marketing/archetype-fit.ts` — `assessArchetypeFit({ text, category, ownOffer })` returns a deterministic `{ severity: "ok" | "warn" | "block", blocked, findings, summary }`:
 
-- **platform-leak → `block`.** Software-platform / DPF-internal terms are foreign to *every* customer archetype and can never be published. Blocked artifacts are badged **"Imported / test data — blocked from publish"** and cannot pass Approve, Send email, or Publish to LinkedIn.
+- **platform-leak → `block`.** Software-platform / DPF-internal terms are foreign to a customer's audience and are not published. Blocked artifacts are badged **"Imported / test data — blocked from publish"** and cannot pass Approve, Send email, or Publish to LinkedIn.
+- **A business may market what it sells.** A leak term is exempt when it names the organization's *own* offer — it appears in its active storefront offers, tagline, description, or business-context value proposition (`buildOwnOfferText`). Software-industry vocabulary (SaaS, software platform, codebase, technical founder, agentic, AI workflow) is the software-platform category's own language. So the platform vendor, and any partner reselling the platform, can market it; a restaurant still cannot leak it. The drafter is told exactly the terms the guard still blocks (`platformLeakTermsFor`).
 - **off-archetype → `warn`.** Vocabulary distinctive to a *different* archetype (e.g. banking "APY", education "enrolment") surfaces a warning to confirm fit before sending; it does not hard-block, because cross-sell copy can be legitimate.
 - The active archetype's own vocabulary never warns.
 
@@ -548,6 +568,10 @@ Customer marketing surfaces (`/customer/marketing`, `/customer/marketing/strateg
 - **Server (authoritative):** `guardDraftArchetypeFit` blocks Approve (`actions.ts`) and `publishApprovedDraft` (`publish.ts`) blocks Publish/Send — client warnings alone are never trusted.
 - **UI:** the approval queue, publish buttons, and saved campaign/asset artifacts (`/campaigns`) render the fit badge/notice and disable release on a hard block.
 - **Drafter:** `draft-builder.ts` derives audience, tone, and CTA vocabulary from the archetype playbook (`lib/tak/marketing-playbooks.ts`) instead of a hardcoded software-founder voice, so generated copy is on-archetype by construction.
+
+### Selling to other archetypes
+
+A business whose own offer is the platform markets to buyers who are themselves archetypes. `apps/web/lib/marketing/buyer-archetype-value.ts` is the product source for each buyer category's benefits, emphasis and claim boundary (test-guarded to cover every category). The drafter resolves the buyer a task names ("HVAC contractors") and writes to that owner's benefit; `suggest_campaign_ideas` gives the coworker the catalog so it plans one campaign per buyer type.
 
 ### First-viewport decision
 

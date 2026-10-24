@@ -18,7 +18,6 @@
 import { test, expect, Page } from "@playwright/test";
 import {
   loginToDPF,
-  waitForCoworkerIdle,
   extractLastResponse,
   sendAndWait,
   extractBuildId,

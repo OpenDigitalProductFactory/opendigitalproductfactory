@@ -11,6 +11,7 @@ import {
   type PolicyAuthorityProjectionInput,
 } from "./policy-authority-projector";
 import type { PolicyAuthorityProjectionAttempt } from "./coworker-tool-authority-gate";
+import { approvalLifetimeMs } from "@/lib/coworker/approval-lifetime";
 
 const PROJECTABLE_ACTIONS = new Set(Object.keys(INITIATIVE_READINESS_LANES));
 const MAX_JUDGMENT_AGE_MS = 60 * 60 * 1000;
@@ -139,6 +140,14 @@ export async function resolveAndPersistPolicyActionAuthority(
 ): ReturnType<PolicyAuthorityProjectionAttempt> {
     const { execution, authorityInput, approvalBinding } = input;
     if (!PROJECTABLE_ACTIONS.has(execution.toolName)) return { outcome: "not-authorized" };
+    const { routinePolicyActionEligibility } = await import("./policy-action-judgment");
+    const eligibility = routinePolicyActionEligibility(authorityInput);
+    if (!eligibility.eligible) {
+      return {
+        outcome: "not-authorized",
+        explanation: `Human decision required: ${eligibility.reason}.`,
+      };
+    }
     const actingHumanUserId = authorityInput.authContext.actingHumanUserId;
     const actingAgentId = authorityInput.authContext.actingAgentId;
     if (!actingHumanUserId || !actingAgentId || !authorityInput.subject) return { outcome: "not-authorized" };
@@ -207,6 +216,11 @@ export async function resolveAndPersistPolicyActionAuthority(
       const profileScope = record(row.profile.scope);
       const projection = projectPolicyAuthority({
         now,
+        // Sized by the call's resolved consequence (BI-0012E6CA); the
+        // delegation's own expiry still caps it inside the projector.
+        ttlMs: approvalLifetimeMs(
+          authorityInput.action.consequence === undefined ? "unclassified" : authorityInput.action.consequence,
+        ),
         binding: {
           gate,
           actionKey: execution.toolName,
@@ -268,22 +282,15 @@ export async function resolveAndPersistPolicyActionAuthority(
       });
       if (projection.outcome === "deny") {
         return {
-          outcome: "denied",
-          reasonCode: projection.reasonCode === "policy-declined"
-            ? "policy-declined"
-            : "policy-authorization-invalid",
-          explanation: projection.explanation,
+          outcome: "not-authorized",
+          explanation: `Human decision required: ${projection.explanation}`,
         };
       }
       if (projection.outcome === "resolve") {
-        if (projection.reasonCode === "dual-control-required") {
-          return {
-            outcome: "resolution-required",
-            reasonCode: "dual-control-required",
-            explanation: projection.explanation,
-          };
-        }
-        return { outcome: "not-authorized" };
+        return {
+          outcome: "not-authorized",
+          explanation: `Human decision required: ${projection.explanation}`,
+        };
       }
       const persisted = await persistPolicyAuthorityProjection({
         db,
@@ -298,7 +305,12 @@ export async function resolveAndPersistPolicyActionAuthority(
         expiresAt: projection.expiresAt,
       };
     }
-    if (producedJudgment) return { outcome: "not-authorized" };
+    if (producedJudgment) {
+      return {
+        outcome: "not-authorized",
+        explanation: "Human decision required: WWMD did not produce an exact, high-confidence, autonomy-eligible authorization.",
+      };
+    }
     producedJudgment = true;
     try {
       const produceJudgment = overrides.produceJudgment
@@ -310,7 +322,10 @@ export async function resolveAndPersistPolicyActionAuthority(
         "[policy-action-authority] WWMD judgment unavailable:",
         error instanceof Error ? error.message : String(error),
       );
-      return { outcome: "not-authorized" };
+      return {
+        outcome: "not-authorized",
+        explanation: "Human decision required: the exact WWMD judgment is unavailable.",
+      };
     }
     }
 }

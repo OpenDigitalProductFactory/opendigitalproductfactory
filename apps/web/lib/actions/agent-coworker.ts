@@ -1,19 +1,23 @@
 "use server";
 import { randomUUID } from "node:crypto";
+import { buildAttachmentContext } from "@/lib/tak/attachment-context";
 import { prisma } from "@dpf/db";
 import { validateMessageInput, type AgentMessageRow } from "@/lib/agent-coworker-types";
 import { generateCannedResponse } from "@/lib/agent-routing";
 import { loadOpeningBriefingPayload } from "@/lib/agent/opening-briefing-loader";
 import type { OpeningBriefingPayload } from "@/lib/agent/opening-briefing";
 import { resolveAgentForRouteWithPrompts } from "@/lib/tak/agent-routing-server";
-import { serializeMessage, loadProviderInfo } from "@/lib/agent-coworker-data";
+import { serializeMessage, loadProviderInfo, loadInlineApprovalRequests } from "@/lib/agent-coworker-data";
 import {
   NoAllowedProvidersForSensitivityError,
   NoProvidersAvailableError,
 } from "@/lib/ai-provider-priority";
 import { NoEligibleEndpointsError } from "@/lib/routed-inference";
-import { logTokenUsage, type ChatMessage } from "@/lib/ai-inference";
+import type { ChatMessage } from "@/lib/routing/chat-message-types";
+import { logTokenUsage } from "@/lib/ai-inference";
 import { buildCoworkerContextKey } from "@/lib/agent-coworker-context";
+import { resolveWithheldHistory } from "@/lib/tak/thread-history-withholding";
+import { getKnowledgePointersForRoute } from "@/lib/actions/route-knowledge-pointers";
 import {
   buildFormAssistInstruction,
   extractFormAssistResult,
@@ -21,7 +25,7 @@ import {
 } from "@/lib/agent-form-assist";
 // mcp-tools is imported dynamically at call sites to avoid NFT whole-project tracing;
 // type-only imports are erased at build time and safe.
-import type { ToolDefinition } from "@/lib/mcp-tools";
+import type { ToolDefinition } from "@/lib/mcp-tool-types";
 import { sanitizeForLog } from "@/lib/security/safe-log";
 import { getActionsForRoute } from "@/lib/agent-action-registry";
 import { getBuildContextSection } from "@/lib/build-agent-prompts";
@@ -68,9 +72,8 @@ import {
 } from "@/lib/wiki/perspective-intent";
 import { getGrantedCapabilities, getDeniedCapabilities } from "@/lib/permissions";
 import { classifyTask } from "@/lib/task-classifier";
-import { getTaskType } from "@/lib/task-types";
 import { applyProviderRouteModelPreference } from "@/lib/ai-provider-route-context";
-import { loadPerformanceProfiles, ensurePerformanceProfile } from "@/lib/agent-router-data";
+import { loadPerformanceProfiles } from "@/lib/agent-router-data";
 import type { RoutingMeta } from "@/lib/process-observer-hook";
 import {
   executeAutonomousAgenticLoop,
@@ -359,12 +362,13 @@ export async function sendMessage(input: {
   content: string;
   routeContext: string;
   coworkerMode?: "advise" | "act";
-  externalAccessEnabled?: boolean;
-  elevatedFormFillEnabled?: boolean;
+  /** Page form DATA only; whether to fill it is resolved from the Workroom (spec 8.2). */
   formAssistContext?: AgentFormAssistContext;
   buildId?: string;
   attachmentId?: string;
   questionPacket?: QuestionPacket | null;
+  /** Row already written by /api/agent/send before it acknowledged (BI-DEFA25EE). */
+  acceptedUserMessageId?: string;
 }): Promise<
   | { userMessage: AgentMessageRow; agentMessage: AgentMessageRow; systemMessage?: AgentMessageRow; formAssistUpdate?: Record<string, unknown> }
   | { error: string }
@@ -385,6 +389,16 @@ export async function sendMessage(input: {
   if (validationError) return { error: validationError };
 
   const trimmedContent = input.content.trim();
+  const userMsgSelect = { id: true, role: true, content: true, agentId: true, routeContext: true, createdAt: true } as const;
+  // BI-DEFA25EE: reuse the row the send route already persisted; the match on
+  // thread, role and content keeps a caller from steering a turn with a stray id.
+  const acceptedUserMsg = input.acceptedUserMessageId
+    ? await prisma.agentMessage.findFirst({
+        where: { id: input.acceptedUserMessageId, threadId: input.threadId, role: "user", content: trimmedContent },
+        select: userMsgSelect,
+      })
+    : null;
+  if (input.acceptedUserMessageId && !acceptedUserMsg) return { error: "Message not found" };
 
   // Handle "re-enable" command — last-resort provider recovery
   if (trimmedContent.toLowerCase() === "re-enable") {
@@ -419,39 +433,34 @@ export async function sendMessage(input: {
       );
 
       return {
-        userMessage: serializeMessage(await prisma.agentMessage.create({
+        userMessage: serializeMessage(acceptedUserMsg ?? await prisma.agentMessage.create({
           data: { threadId: input.threadId, role: "user", content: trimmedContent, routeContext: input.routeContext },
-          select: { id: true, role: true, content: true, agentId: true, routeContext: true, createdAt: true },
+          select: userMsgSelect,
         })),
         agentMessage: serializeMessage(sysMsg),
       };
     }
   }
 
-  // Persist user message
-  const userMsg = await prisma.agentMessage.create({
+  // Persist user message (unless the send route already did)
+  const userMsg = acceptedUserMsg ?? await prisma.agentMessage.create({
     data: {
       threadId: input.threadId,
       role: "user",
       content: trimmedContent,
       routeContext: input.routeContext,
     },
-    select: {
-      id: true,
-      role: true,
-      content: true,
-      agentId: true,
-      routeContext: true,
-      createdAt: true,
-    },
+    select: userMsgSelect,
   });
 
   // Link attachment to the user message if provided
   if (input.attachmentId) {
-    await prisma.agentAttachment.update({
-      where: { id: input.attachmentId },
-      data: { messageId: userMsg.id },
-    });
+    if (!acceptedUserMsg) {
+      await prisma.agentAttachment.update({
+        where: { id: input.attachmentId },
+        data: { messageId: userMsg.id },
+      });
+    }
     // Re-fetch so the serialized response includes the attachment
     const linked = await prisma.agentAttachment.findMany({
       where: { messageId: userMsg.id },
@@ -466,36 +475,10 @@ export async function sendMessage(input: {
     orderBy: { createdAt: "asc" },
     select: { fileName: true, parsedContent: true, mimeType: true },
   });
-  let attachmentContext: string | null = null;
-  // Images are injected as vision content blocks (below), not as text — exclude
-  // them from the textual file-context summary so they don't surface as
-  // "uploaded but content not available".
-  const docAttachments = threadAttachments.filter((att) => !att.mimeType?.startsWith("image/"));
-  if (docAttachments.length > 0) {
-    const summaries = docAttachments.map((att) => {
-      const parsed = att.parsedContent as Record<string, unknown> | null;
-      if (!parsed) return `- ${att.fileName} (uploaded but content not available)`;
-      const summary = parsed.summary ?? "";
-      const columns = Array.isArray(parsed.columns) ? `\n  Columns: ${(parsed.columns as string[]).join(", ")}` : "";
-      // Include sample data rows for spreadsheets
-      let sampleData = "";
-      if (Array.isArray(parsed.sampleRows) && (parsed.sampleRows as string[][]).length > 0) {
-        const rows = parsed.sampleRows as string[][];
-        const header = Array.isArray(parsed.columns) ? (parsed.columns as string[]).join(" | ") : "";
-        const dataLines = rows.map((r) => r.join(" | ")).join("\n    ");
-        sampleData = header ? `\n  Data:\n    ${header}\n    ${dataLines}` : `\n  Data:\n    ${dataLines}`;
-      }
-      const text = typeof parsed.fullText === "string" ? `\n  Content: ${(parsed.fullText as string).slice(0, 2000)}` : "";
-      return `- ${att.fileName}: ${summary}${columns}${sampleData}${text}`;
-    });
-    attachmentContext = [
-      "",
-      "FILE UPLOADS — THE USER HAS UPLOADED FILES. THEIR CONTENT IS BELOW.",
-      "You CAN see this data. Do NOT say you cannot read files. Use this data to answer the user's question.",
-      "",
-      ...summaries,
-    ].join("\n");
-  }
+  // Images are injected as vision content blocks (below), not as text. Each
+  // document's content is fenced as data the file cannot forge, with hidden
+  // Unicode removed (BI-18FAC854).
+  const attachmentContext = buildAttachmentContext(threadAttachments);
 
   // If the message's attachment is an image, build a vision content block from
   // it (downscaled base64 data URL). Documents stay on the text path above;
@@ -550,14 +533,25 @@ export async function sendMessage(input: {
   );
   const portalContextPrompt = portalContextPromptContext?.section ?? null;
 
+  const { loadRoomTurnAuthority } = await import("@/lib/work-management/room-turn-authority.server");
+  const roomAuthority = await loadRoomTurnAuthority({ agentId: agent.agentId, routeContext: input.routeContext,
+    capsuleId: portalContextPromptContext?.envelope.work?.capsule?.capsuleId ?? null });
+
   // Build inference context: recent window + semantic recall for older context.
   // Build phases need more context (research findings, schema details, tool results)
   // because the agentic loop's tool call results aren't persisted in messages.
   // Conversation phases use a shorter window to prevent context poisoning.
   const isBuildPhase = input.routeContext === "/build";
   const RECENT_WINDOW = isBuildPhase ? 20 : 8;
+  // BI-706530B2: withhold earlier history from DISPATCH (never from the owner's
+  // view) at all three doors. See lib/tak/thread-history-withholding.ts.
+  const withheld = await resolveWithheldHistory(prisma, input.threadId);
   const recentMessages = await prisma.agentMessage.findMany({
-    where: { threadId: input.threadId, role: { in: ["user", "assistant"] } },
+    where: {
+      threadId: input.threadId,
+      role: { in: ["user", "assistant"] },
+      ...withheld.windowWhere,
+    },
     orderBy: { createdAt: "desc" },
     take: RECENT_WINDOW,
     select: { id: true, role: true, content: true },
@@ -575,6 +569,7 @@ export async function sendMessage(input: {
     historyTokens += msgTokens;
   }
   const windowMessageIds = new Set(trimmedMessages.map((m) => m.id));
+  const withheldRecallExclusions = withheld.recallExclusions(windowMessageIds);
   let chatHistory: ChatMessage[] = trimmedMessages.map((m) => ({
     role: m.role as ChatMessage["role"],
     content: m.content,
@@ -598,7 +593,9 @@ export async function sendMessage(input: {
   // no-op until a checkpoint exists; non-fatal on any error.
   try {
     const { loadThreadCheckpointMessage } = await import("@/lib/tak/thread-checkpoint-runner");
-    const checkpointMessage = await loadThreadCheckpointMessage(input.threadId);
+    const checkpointMessage = withheld.checkpointAllowed
+      ? await loadThreadCheckpointMessage(input.threadId)
+      : null;
     if (checkpointMessage) {
       labelled = prependLabelled(labelled, checkpointMessage, "thread-checkpoint");
     }
@@ -698,12 +695,8 @@ export async function sendMessage(input: {
   // attributes each tool call to the active skill.
   let activeSkillId: string | null = null;
 
-  // BI-E35A8AA4 drove the Initiative block from this coworker's saved Proactivity
-  // choice. BI-87C9C91C removed that identity ownership: this is the interactive
-  // turn path with no Workroom in scope, so it takes the platform default and who
-  // is staffed to the conversation cannot change its initiative. `null` IS that
-  // default (buildInitiativeBlock maps it to balanced) — byte-identical to an
-  // agent with no saved preference. Spec §3.1.
+  // BI-87C9C91C: proactivity is room-owned; the interactive turn takes the
+  // platform default (`null` → balanced in buildInitiativeBlock). Spec §3.1.
   const proactivityLevel: ProactivityLevel | null = null;
 
   // Resolve the LOCAL model's served context ONCE up front — it sizes BOTH the
@@ -767,7 +760,7 @@ export async function sendMessage(input: {
       query: input.content,
       currentThreadId: input.threadId,
       limit: 8,
-      excludeMessageIds: windowMessageIds,
+      excludeMessageIds: withheldRecallExclusions,
     });
     const factsContext = governedMemory.factsContext;
     const factsCompressed = governedMemory.factsCompressed;
@@ -949,7 +942,7 @@ export async function sendMessage(input: {
       routeContext: input.routeContext,
       userId: user.id!,
       chatHistory,
-      elevatedFormFillEnabled: input.elevatedFormFillEnabled,
+      elevatedFormFillEnabled: roomAuthority.handsOn.enabled,
       formAssistContext: input.formAssistContext,
     });
     resolvedBuildId = coworkerExtra.resolvedBuildId;
@@ -1055,7 +1048,7 @@ export async function sendMessage(input: {
       promptSections.push("", portalContextPrompt);
     }
 
-    if (input.elevatedFormFillEnabled && input.formAssistContext) {
+    if (roomAuthority.handsOn.enabled && input.formAssistContext) {
       promptSections.push("", buildFormAssistInstruction(input.formAssistContext));
     }
 
@@ -1260,11 +1253,10 @@ export async function sendMessage(input: {
     isSuperuser: user.isSuperuser,
   };
   const allPlatformTools = await getAvailableTools(toolUserContext, {
-    externalAccessEnabled: input.externalAccessEnabled === true,
+    externalAccessEnabled: roomAuthority.externalAccess.enabled,
     // Skip mode filtering here — applied to merged set
-    unifiedMode: useUnified,
-    agentId: agent.agentId,
-    additionalGrants: coworkerDefaultGrants,
+    unifiedMode: useUnified, agentId: agent.agentId,
+    additionalGrants: coworkerDefaultGrants, roomAuthorizedGrants: roomAuthority.authorizedGrants,
   });
 
   // Get page-specific actions
@@ -1306,7 +1298,7 @@ export async function sendMessage(input: {
   }
 
   // BI-867263F4: in Advise mode, keep the side-effecting tools and let the loop
-  // capture each call as an AgentActionProposal, so the coworker's recommended
+  // raise each call as an approval request (envelope), so the coworker's recommended
   // actions surface as selectable Approve/Reject cards instead of prose that
   // asks the employee to flip a global toggle. Off in Act mode (tools run) and
   // during a build phase (phase gating owns the surface).
@@ -1406,12 +1398,11 @@ export async function sendMessage(input: {
   const attachedTools = deferredTools.length > 0 ? [LOAD_TOOLS_TOOL, ...budgetedTools] : budgetedTools;
 
   let disabledExternalTools: Array<{ name: string; description: string }> = [];
-  if (input.externalAccessEnabled !== true) {
+  if (!roomAuthority.externalAccess.enabled) {
     const externalEnabledPlatformTools = await getAvailableTools(toolUserContext, {
       externalAccessEnabled: true,
-      unifiedMode: useUnified,
-      agentId: agent.agentId,
-      additionalGrants: coworkerDefaultGrants,
+      unifiedMode: useUnified, agentId: agent.agentId,
+      additionalGrants: coworkerDefaultGrants, roomAuthorizedGrants: roomAuthority.authorizedGrants,
     });
     disabledExternalTools = getExternalAccessToolSummaries(
       filterToolsForCoworkerRuntime(externalEnabledPlatformTools, {
@@ -1610,8 +1601,8 @@ export async function sendMessage(input: {
     mergedTools,
   });
 
-  // When external access is enabled, tell the agent about its web tools
-  if (input.externalAccessEnabled) {
+  // When the room admits web tools, tell the agent about them
+  if (roomAuthority.externalAccess.enabled) {
     const externalTools = availableTools.filter((t) => t.requiresExternalAccess);
     if (externalTools.length > 0) {
       const toolList = externalTools.map((t) => `- ${t.name}: ${t.description}`).join("\n");
@@ -1643,7 +1634,7 @@ export async function sendMessage(input: {
     taskRequiresWebSearch: taskClassification.requiresWebSearch,
     externalTools: disabledExternalTools,
   })) {
-    populatedPrompt += buildExternalAccessDisabledInstruction(disabledExternalTools);
+    populatedPrompt += buildExternalAccessDisabledInstruction(disabledExternalTools, roomAuthority);
     await recordExternalAccessPermissionAudit({
       decision: "request",
       threadId: input.threadId,
@@ -1845,7 +1836,6 @@ export async function sendMessage(input: {
 
     if (activeBuild && buildPlan?.tasks?.length && !buildAlreadyComplete) {
       const { runBuildOrchestrator } = await import("@/lib/build/build-orchestrator");
-      const { agentEventBus } = await import("@/lib/agent-event-bus");
 
       const orchestratorResult = await runBuildOrchestrator({
         buildId: activeBuild.buildId,
@@ -1962,6 +1952,7 @@ export async function sendMessage(input: {
         agentDisplayName: agent.agentName,
         buildPhase: activeBuild?.phase ?? null,
         featureBuildId: activeBuild?.id ?? null,
+        coworkerMode: input.coworkerMode ?? "advise",
         activeSkillId,
         agentMessageId: pendingAgentMessageId,
         // sendMessage is the user-typed-a-question path. Chat mode disables the
@@ -1969,9 +1960,10 @@ export async function sendMessage(input: {
         // conversational reply ("yes do the truck list first") does not
         // false-positive into a PlatformIssueReport.
         interactionMode: "chat",
+        roomTurn: roomAuthority,
         // BI-867263F4: Advise mode surfaces recommended actions as proposals —
         // the loop diverts each side-effecting non-artifact call to an
-        // AgentActionProposal card instead of executing it.
+        // approval request (envelope) card instead of executing it (BI-7BCC87BB).
         proposeSideEffects: surfaceAsProposals,
         ...(Object.keys(modelReqs).length > 0 ? { modelRequirements: modelReqs } : {}),
         onProgress: (event) => agentEventBus.emit(input.threadId, event),
@@ -1986,36 +1978,27 @@ export async function sendMessage(input: {
     // EP-ASYNC-COWORKER-001: done event moved to caller (API route) so it fires
     // AFTER message persistence, enabling SSE-driven async completion.
 
-    // Handle proposal — agent wants to take a side-effecting action that needs approval
-    if (agenticResult.proposal) {
-      const tc = agenticResult.proposal;
-      const proposalId = "AP-" + Math.random().toString(36).substring(2, 7).toUpperCase();
+    // BI-7BCC87BB (spec D2 S1): a declared-proposal call raised approval requests bound to the
+    // exact call; the turn ends on them and the message lists them inline (no AgentActionProposal).
+    if (agenticResult.pendingApproval) {
       const agentMsg = await prisma.agentMessage.create({
         data: {
           id: pendingAgentMessageId,
           threadId: input.threadId, role: "assistant",
           taskRunId: currentTaskRun?.taskRunId ?? null,
-          content: tc.content || `I'd like to ${tc.name.replace(/_/g, " ")} with the following details.`,
+          content: agenticResult.content,
           agentId: agent.agentId, routeContext: input.routeContext,
           providerId: agenticResult.providerId,
           modelId: agenticResult.modelId,
           taskType: taskTypeId !== "unknown" ? taskTypeId : null,
           routedEndpointId: null, // EP-INF-009b: routing handled per-iteration by routeAndCall
-          contextTrace, // BI-3E218D80 — proposal path (see also the plain-response write)
+          contextTrace, // BI-3E218D80 — pending-approval path (see also the plain-response write)
         },
         select: { id: true, role: true, content: true, agentId: true, routeContext: true, createdAt: true },
       });
-      const proposal = await prisma.agentActionProposal.create({
-        data: {
-          proposalId, threadId: input.threadId, messageId: agentMsg.id,
-          taskRunId: currentTaskRun?.taskRunId ?? null,
-          agentId: agent.agentId, actionType: tc.name,
-          parameters: tc.arguments as import("@dpf/db").Prisma.InputJsonValue, status: "proposed",
-        },
-        select: { proposalId: true, actionType: true, parameters: true, status: true, resultEntityId: true, resultError: true },
-      });
+      const approvalRequests = await loadInlineApprovalRequests([agentMsg]);
       observeConversation(input.threadId, input.routeContext).catch((err) => console.error("[process-observer]", err));
-      return { userMessage: serializeMessage(userMsg), agentMessage: serializeMessage(agentMsg, proposal) };
+      return { userMessage: serializeMessage(userMsg), agentMessage: serializeMessage(agentMsg, undefined, undefined, approvalRequests.get(agentMsg.id)) };
     }
 
     // The Golden Triangle review already ran inside executeAutonomousAgenticLoop.
@@ -2032,15 +2015,15 @@ export async function sendMessage(input: {
     };
     responseIsSystemFailure = Boolean(agenticResult.failure);
 
-    // Caveat a blind local answer, but not one grounded in authoritative ASC state.
+    // Caveat blind local answers; preserve the loop's evidence provenance.
     responseContent = applyLocalDegradationCaveat(result.content, {
       providerId: result.providerId,
       executedToolCount: agenticResult.executedTools.length,
       authoritativeSurfaceEvidence: agenticResult.authoritativeSurfaceEvidence,
+      suppliedSourceEvidence: !responseIsSystemFailure && agenticResult.suppliedSourceEvidence,
     });
     responseProviderId = result.providerId;
     responseModelId = result.modelId;
-
     // ── Scout research dispatch: runs BEFORE ideate research ──
     if (activeBuildPhase === "ideate" && resolvedBuildId) {
       const buildForScout = await prisma.featureBuild.findUnique({
@@ -2340,7 +2323,7 @@ export async function sendMessage(input: {
   }
   } // close if (!responseContent)
 
-  if (input.elevatedFormFillEnabled && input.formAssistContext) {
+  if (roomAuthority.handsOn.enabled && input.formAssistContext) {
     const extracted = extractFormAssistResult(responseContent, input.formAssistContext);
     responseContent = extracted.displayContent;
     formAssistUpdate = extracted.fieldUpdates ?? undefined;
@@ -2413,7 +2396,7 @@ export async function sendMessage(input: {
       modelId: responseIsSystemFailure ? null : responseModelId,
       taskType: taskTypeId !== "unknown" ? taskTypeId : null,
       routedEndpointId: null, // EP-INF-009b: routing is per-iteration via routeAndCall
-      contextTrace, // BI-3E218D80 — plain-response path (see also the proposal write)
+      contextTrace, // BI-3E218D80 — plain-response path (see also the pending-approval write)
     },
     select: {
       id: true,
@@ -2443,7 +2426,7 @@ export async function sendMessage(input: {
     await resolveAIDocForAgent(agent.agentId).catch(() => null)
   )?.operating_profile_fingerprint ?? null;
 
-  // Fire-and-forget: store conversation memories in Qdrant
+  // Fire-and-forget: store conversation memories in the vector store
   import("@/lib/semantic-memory").then(({ storeConversationMemory }) => {
     const memBase = {
       userId: user.id!,
@@ -2630,73 +2613,6 @@ export async function clearConversation(input: {
  * Costs ~45 tokens instead of ~150 for full summaries.
  * The agent uses search_knowledge_base to pull full content when needed.
  */
-async function getKnowledgePointersForRoute(routeContext: string): Promise<string> {
-  const productMatch = routeContext.match(/\/portfolio\/product\/([^/]+)/);
-  const portfolioMatch = !productMatch && routeContext.match(/\/portfolio\/([^/]+)/);
-
-  if (!productMatch && !portfolioMatch) return "";
-
-  const { searchKnowledgeArticles } = await import("@/lib/semantic-memory");
-
-  if (productMatch) {
-    const productId = productMatch[1];
-    const product = await prisma.digitalProduct.findUnique({
-      where: { id: productId },
-      select: { name: true },
-    });
-    if (!product) return "";
-
-    const articles = await searchKnowledgeArticles({
-      query: product.name,
-      productId,
-      limit: 3,
-    });
-    if (articles.length === 0) return "";
-
-    // Enrich with utility-generated abstracts from DB when available
-    const abstracts = await prisma.knowledgeArticle.findMany({
-      where: { articleId: { in: articles.map((a) => a.articleId) } },
-      select: { articleId: true, abstract: true },
-    });
-    const abstractMap = new Map(abstracts.map((a) => [a.articleId, a.abstract]));
-
-    const lines = articles.map((a) => {
-      const abs = abstractMap.get(a.articleId);
-      return abs ? `- ${a.articleId}: "${a.title}" (${a.category}) — ${abs}` : `- ${a.articleId}: "${a.title}" (${a.category})`;
-    });
-    return `KNOWLEDGE: ${articles.length} articles for ${product.name} — use search_knowledge_base for details.\n${lines.join("\n")}`;
-  }
-
-  if (portfolioMatch) {
-    const portfolioSlug = portfolioMatch[1];
-    const portfolio = await prisma.portfolio.findUnique({
-      where: { slug: portfolioSlug },
-      select: { id: true, name: true },
-    });
-    if (!portfolio) return "";
-
-    const articles = await searchKnowledgeArticles({
-      query: portfolio.name,
-      portfolioId: portfolio.id,
-      limit: 3,
-    });
-    if (articles.length === 0) return "";
-
-    const abstracts = await prisma.knowledgeArticle.findMany({
-      where: { articleId: { in: articles.map((a) => a.articleId) } },
-      select: { articleId: true, abstract: true },
-    });
-    const abstractMap = new Map(abstracts.map((a) => [a.articleId, a.abstract]));
-
-    const lines = articles.map((a) => {
-      const abs = abstractMap.get(a.articleId);
-      return abs ? `- ${a.articleId}: "${a.title}" (${a.category}) — ${abs}` : `- ${a.articleId}: "${a.title}" (${a.category})`;
-    });
-    return `KNOWLEDGE: ${articles.length} articles for ${portfolio.name} portfolio — use search_knowledge_base for details.\n${lines.join("\n")}`;
-  }
-
-  return "";
-}
 
 // ─── Marketing Skill Rules ─────────────────────────────────────────────
 
@@ -2742,24 +2658,10 @@ export async function cancelThread(
   input: { threadId: string },
   userId: string,
 ): Promise<{ ok: boolean }> {
-  const thread = await prisma.agentThread.findUnique({
-    where: { id: input.threadId },
-    select: { id: true, userId: true, cancelledAt: true },
-  });
-  if (!thread) {
-    throw new Error(`Thread ${input.threadId} not found.`);
-  }
-  if (thread.userId !== userId) {
-    throw new Error("Unauthorized: thread is owned by another user.");
-  }
-  if (thread.cancelledAt) {
-    return { ok: true };
-  }
-  await prisma.agentThread.update({
-    where: { id: input.threadId },
-    data: { cancelledAt: new Date() },
-  });
-  return { ok: true };
+  // BI-259F6743: stops the thread and its delegated children, not only the row.
+  const { cancelThreadTree } = await import("@/lib/tak/thread-cancellation");
+  const { ok } = await cancelThreadTree(input.threadId, userId);
+  return { ok };
 }
 
 export async function getThreadResult(

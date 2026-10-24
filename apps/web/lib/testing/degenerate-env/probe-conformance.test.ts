@@ -83,13 +83,6 @@ const PROBE_WAIVERS: Array<{ module: string; reason: string }> = [
       "enumerated with degenerate coverage. A second registry row here would double-count " +
       "the same probe.",
   },
-  {
-    module: "lib/actions/platform-dev-config.ts",
-    reason:
-      "existsSync(.git/MERGE_HEAD) reads a merge-in-progress marker inside a tree already " +
-      "known to be a checkout — git-state detail, not a source-availability probe deciding " +
-      "whether the environment can be trusted.",
-  },
 ];
 
 /**

@@ -39,10 +39,12 @@
 //      or a deliberately-expired fixture), annotate the line with
 //      `clock-bomb-guard: allow <reason>` so the exemption is stated, not silent.
 
-import { execFileSync } from "node:child_process";
+
+import { exitUnresolvable, listChangedFiles } from "./lib/git-changed-files.mjs";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { runGit } from "./lib/git.mjs";
 
 const TEST_FILE = /\.(test|spec)\.[cm]?tsx?$/;
 
@@ -73,13 +75,8 @@ const CLOCK_PINNED =
 
 const ALLOW_MARKER = /clock-bomb-guard:\s*allow/;
 
-function git(...args) {
-  try {
-    return execFileSync("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
-  } catch (error) {
-    return error.stdout?.toString() ?? "";
-  }
-}
+// Fail-open as before: partial stdout (or "") when git fails.
+const git = (...args) => runGit(args, { cwd: process.cwd() }).stdout;
 
 /** Reject anything that is not a plain ref, so a hostile BASE_SHA cannot inject args. */
 function safeRef(value, label) {
@@ -97,10 +94,14 @@ function resolveBase() {
 }
 
 function changedTestFiles(base) {
-  return git("diff", "--name-only", "--diff-filter=AM", `${base}...HEAD`)
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
+  // BI-B6433DC6: an unresolvable base is not an empty change set. The bare
+  // `git()` above swallows git's non-zero exit into "", which read as "no test
+  // files changed" — a clean pass from a guard that never saw the diff.
+  const listed = listChangedFiles(base, { diffArgs: ["--diff-filter=AM"] });
+  if (listed.status === "unresolvable") {
+    exitUnresolvable("clock-bomb-guard", base, listed.detail);
+  }
+  return listed.files
     .filter((file) => TEST_FILE.test(file))
     .filter((file) => existsSync(file));
 }

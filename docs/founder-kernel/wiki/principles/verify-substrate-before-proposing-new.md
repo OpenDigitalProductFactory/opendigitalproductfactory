@@ -81,6 +81,19 @@ Before writing a spec / plan that proposes new substrate:
   needed values
 - Proposing a new epic for work already tracked in an existing epic
 
+
+## Two checks, and the report looks identical either way
+
+"Is there already a backlog item for this?" and "does this already exist?" are different questions. Answering the first does not answer the second, and the write-up afterwards reads the same whichever you did.
+
+A detector for documentation staleness was filed as new work after five backlog and portfolio sweeps concluded the substrate was absent. A working detector with a weekly refresh had existed the whole time. Every sweep run was real; all of them were about backlog rows.
+
+The omission of a check is invisible when the evidence is prose you write yourself. Nothing in that record distinguished "searched the code and found nothing" from "never searched the code".
+
+- **Guess the filename the thing would have, and look for it.** For a staleness detector that is one listing of `scripts/*stale*`. This beats semantic search, because implementations are named literally and backlog items are named conceptually.
+- **A backlog or portfolio search does not search source.** It returning nothing is not evidence the capability is absent. Pair it with a code-graph search and a literal grep, every time.
+- **State which sweeps ran and which did not.** "Code sweep: not run" is worth more in a report than five sweeps summarized as "substrate absent".
+
 ## Related principles
 
 - [`consult-specs-first`](consult-specs-first.md) — the design-time

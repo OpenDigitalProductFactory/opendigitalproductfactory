@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { FINANCE_FAMILIES, getFinanceFamily } from "@/components/finance/finance-nav";
+import { FINANCE_FAMILIES, getFinanceFamily } from "@/lib/navigation/finance-nav";
 import { SectionNav } from "@/components/shell/SectionNav";
 
 // Rendering is delegated to the shared SectionNav (BI-ARCH-SECTIONNAV); this wrapper

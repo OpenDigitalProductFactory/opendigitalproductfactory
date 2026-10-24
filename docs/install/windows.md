@@ -80,6 +80,13 @@ to use DPF**:
 Your choice is saved to `%USERPROFILE%\.dpf\.install-mode` and reused on
 re-runs without re-prompting.
 
+Office document conversion works in both modes with no extra step. A
+Customizable install does not build the converter image: the portal pins
+the `dpf-doctools` image published for the release your clone descends
+from, by digest, and pins it again after every upgrade. Only when no
+published image can be reached (offline or air-gapped) does it build
+`Dockerfile.doctools` from your clone instead.
+
 ### What the installer does
 
 1. **Preflight** — verifies Docker Desktop / WSL2, and (Customizable mode)
@@ -89,7 +96,21 @@ re-runs without re-prompting.
 3. **Compose chain** — assembles `docker-compose.yml` (+
    `docker-compose.release.yml` in consumer mode) and the Edge Node overlay.
 4. **`.env` generation** — only on first install; an existing `.env` is
-   preserved.
+   preserved. A re-run only adds generated secrets the file is missing:
+   `DPF_GIT_WEBHOOK_SECRET`, the GPP permit signing key
+   `DPF_GPP_PERMIT_SECRET`, the reach-link and delegation-receipt signing keys
+   `DPF_ATTENTION_REACH_SECRET` and `DPF_DELEGATION_RECEIPT_SECRET`, the
+   self-upgrade target-binding and delivery-task cursor signing keys
+   `DPF_SELF_UPGRADE_TARGET_BINDING_SECRET` and
+   `DPF_DELIVERY_TASK_CURSOR_SECRET` (so `AUTH_SECRET` no longer signs any of
+   them; anything signed with `AUTH_SECRET` before the upgrade keeps verifying
+   until 9 November 2026), and
+   the Inngest `INNGEST_SIGNING_KEY` and
+   `INNGEST_EVENT_KEY`. A real value already set is never rotated. The
+   installer also replaces an Inngest key that still
+   holds the old public default (`abcdef0123456789` / `deadbeefcafebabe`),
+   because anyone who knows the signing key can start background jobs. A
+   self-upgrade does the same for an install that is never re-installed.
 5. **Images** —
    - *Ready to go:* `docker compose pull` of the CI-stamped GHCR images.
    - *Customizable:* a [Docker-memory preflight](#docker-memory), then
@@ -97,10 +118,21 @@ re-runs without re-prompting.
      and `DPF_PLATFORM_VERSION` (`git describe --tags`) so
      `/ops/self-upgrade` reports the correct identity, then
      `docker compose build`.
-6. **`docker compose up -d`** — brings up postgres, portal-init
+6. **HTTPS at the canonical address** — the install becomes its own
+   certificate authority and serves the portal over https at one address:
+   `https://localhost` when it serves only this machine, or the machine's
+   DNS name when the network resolves it here. It writes `PUBLIC_URL` and
+   adds the certificate to your user's trusted roots, so Windows asks you to
+   confirm once. AI clients such as Claude Code sign in with OAuth only over
+   https. It also saves the AI client address (`DPF_MCP_URL`) and the
+   certificate bundle (`NODE_EXTRA_CA_CERTS`) in your user environment on
+   every run, so clients you open afterwards find the install. If this step
+   fails, the portal stays at `http://localhost:3000` and
+   the installer says so.
+7. **`docker compose up -d`** — brings up postgres, portal-init
    (migrations + seed), and the portal.
-7. **Health check** — polls `http://localhost:3000/api/health`.
-8. **Edge Node bootstrap** — mints a single-use auto-approve token, downloads
+8. **Health check** — polls `http://localhost:3000/api/health`.
+9. **Edge Node bootstrap** — mints a single-use auto-approve token, downloads
    and checksum-verifies the native Go Edge Node, and supervises it with a
    Windows Scheduled Task at logon. The host process owns the physical
    multicast interfaces that Docker Desktop hides from Linux containers. It
@@ -117,7 +149,7 @@ re-runs without re-prompting.
    will not validate — still pairs, but through the short code both operators
    confirm. The pairing screen names which condition could not be proved, so a
    peer that should be pairing automatically and is not tells you why.
-9. **Autostart** — registers a Windows **Scheduled Task** so the stack
+10. **Autostart** — registers a Windows **Scheduled Task** so the stack
    starts at logon (see [Autostart](#autostart)).
 
 ### Login
@@ -128,8 +160,27 @@ Login credentials are written to `.env` in the install directory:
 - **Password:** `ADMIN_PASSWORD` in `.env` (randomly generated on first
   install). Change it after first login.
 
-The portal is at **`http://localhost:3000`** — always use `localhost`,
-not the machine's LAN IP.
+The portal is at the address the installer printed, normally
+**`https://localhost`** (its `PUBLIC_URL` in `.env`). Other addresses, such as
+`http://localhost:3000` or the machine's LAN IP, redirect there. If HTTPS setup
+failed, use `http://localhost:3000`.
+
+## Network exposure after install
+
+A default install listens on this machine only. Every published port (the
+portal on 3000 and 1455, postgres 5432, redis 6379, inngest 8288, the sandbox
+on 3035) binds to `127.0.0.1`, so nothing on your LAN can reach the portal
+or its admin login. This is set by one value in the install's `.env`:
+
+```
+DPF_HOST_BIND_ADDRESS=127.0.0.1
+```
+
+To serve the LAN deliberately, set it to `0.0.0.0` and run `docker compose
+up -d` again. An install created before this key existed keeps the exposure
+it already had: the upgrade writes `0.0.0.0` into its `.env` and says so in a
+comment, so LAN access does not vanish silently. Remote access without LAN
+exposure goes through `PUBLIC_URL` and the edge path.
 
 ## Day-to-day
 
@@ -200,9 +251,23 @@ uninstall, or a volume removal destroys them. Capture them first:
 pnpm --filter @dpf/db backlog:capture -- --out D:\DPF-backups\backlog\capture
 ```
 
-That writes one recovery bundle per epic, a manifest, and a list of anything it
-could not represent. Restore on another installation with
-`pnpm --filter @dpf/db backlog:reconcile -- <bundle.json> --apply`.
+That writes one recovery bundle per epic, a manifest, `workrooms.json` (the
+Workroom rows that bind each item to its branch, worktree, lease and evidence),
+and a list of anything it could not represent. Restore on another installation
+with `pnpm --filter @dpf/db backlog:reconcile -- <bundle.json> --apply`.
+
+Put the Workrooms back on the new install with
+`pnpm --filter @dpf/db workrooms:restore -- --from <directory>`. It reports and
+changes nothing until you add `--apply`. A room whose worktree no longer exists
+is still restored, as archived with the reason recorded, because destroying a
+working tree is not the same as the work never having existed. A room the new
+install already has is left alone, so running it twice is safe.
+
+`dpf-reinstall.ps1` and `scripts\fresh-install.ps1` also take a full `pg_dump`
+into `D:\DPF-backups\pre-destructive\<date>\` immediately before they run
+`docker compose down -v`, and refuse to continue if that dump fails.
+`-SkipPreDestructiveDump` is the only way past, and it costs every row that is
+not mirrored elsewhere (BI-F9939341).
 
 ## Docker memory
 
@@ -246,10 +311,15 @@ DPF_LLM_PROVIDER=external
 DPF coworkers support voice **input** (speech-to-text) and voice
 **output** (text-to-speech).
 
-**Speech-to-text (STT) — works out of the box.** The bundled `dpf-stt`
-container (faster-whisper) is profile-free, so it starts on a plain
-install and the coworker mic button works immediately. CPU-friendly; no
-GPU required.
+**Speech-to-text (STT) — connect a provider.** DPF ships no speech
+container. Voice input becomes available as soon as you configure a
+provider that can transcribe, under **Platform Tools → Communications**.
+Any provider serving an OpenAI-compatible `/v1/audio/transcriptions`
+endpoint works, including OpenAI and Groq. If you would rather audio
+never left your own network, run your own speech server — speaches and
+whisper.cpp server are both MIT-licensed — and give DPF its address under
+the self-hosted speech provider. DPF stopped bundling one so that a third
+party's registry housekeeping could no longer block platform releases.
 
 **Text-to-speech (TTS) — automatic on an NVIDIA GPU.** Spoken output
 uses the bundled `dpf-tts` container (Chatterbox — self-hosted, no API
@@ -291,6 +361,24 @@ lines, then `wsl --shutdown` and restart Docker Desktop. This is the
 **Build fails with an out-of-memory / killed error (Customizable mode).**
 The Docker VM is under-provisioned — see [Docker memory](#docker-memory).
 
+**Builds fail later with `host-capacity-lost:host-memory-low`.**
+The opposite problem: the Docker VM is over-provisioned and starving the host.
+Preflight warns when the VM exceeds half of host RAM. On Windows this is usually
+benign — WSL2 sizes dynamically and `autoMemoryReclaim` returns freed pages — but
+an explicit `memory=` in `%USERPROFILE%\.wslconfig` pins it. Remove or lower it,
+then `wsl --shutdown`. (On macOS the VM is fixed-size and never returns memory to
+the host, so over-allocation there ratchets until builds fail.)
+
+**Containers cannot be stopped, or the platform reports the Docker VM is wedged.**
+Processes stuck in uninterruptible I/O (for example a `sync` against a dead file
+share) survive `docker kill`; only a Docker VM restart clears them. Do not run
+`wsl --shutdown` by hand while DPF is running. The platform raises a "Docker VM is
+wedged" condition, and the portal's Health tab offers **Restart Docker VM**. It
+drains the platform, then the native Edge agent on this machine stops Docker
+Desktop, shuts the VM down, clears Docker's stale socket folders, and starts
+Docker and DPF again. It never reboots Windows. Every install runs that agent
+for host upkeep; `-WithEdge` only adds network discovery (BI-28EFE18A).
+
 **`/api/health` returns 500.**
 The database migrations may not have completed. Tail the portal-init
 container: `docker compose logs portal-init`.
@@ -303,13 +391,6 @@ is skipped, and the installer no longer leaks a raw `docker: 'model' is not
 a docker command` error. Update Docker Desktop and re-run the installer to
 pull the model, or point the portal at an external LLM provider under
 Admin → Providers.
-
-**Install log says an "optional sidecar … image is unavailable upstream".**
-The bundled voice speech-to-text sidecar (`dpf-stt`) is pulled from a
-third-party registry that occasionally prunes its image tag. When that
-happens the installer brings the platform up *without* voice input rather
-than failing the whole install — everything else works. Re-run the
-installer later to pick the image up once it's available again.
 
 **`install-dpf.bat` closed instantly / "running scripts is disabled".**
 Run it from an elevated prompt; the `.bat` launcher passes

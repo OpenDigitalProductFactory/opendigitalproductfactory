@@ -1,15 +1,28 @@
+---
+status: active
+---
+
 # Portal UX Simplification Spine
 
 | Field | Value |
 | ----- | ----- |
 | Status | Active working plan + circulation packet |
-| Date | 2026-05-26 |
-| Branch | `feat/portal-ux-simplification` |
-| Primary anchors | [`2026-04-17-portal-navigation-consolidation-design.md`](../specs/2026-04-17-portal-navigation-consolidation-design.md), [`2026-05-20-portal-ux-audit.md`](../audits/2026-05-20-portal-ux-audit.md), [`2026-05-24-vertical-workspace-home-design.md`](../specs/2026-05-24-vertical-workspace-home-design.md), [`2026-05-16-ux-auditor-coworker-design.md`](../specs/2026-05-16-ux-auditor-coworker-design.md), [`2026-05-26-pipedrive-crm-marketing-ux-fit-review.md`](../audits/2026-05-26-pipedrive-crm-marketing-ux-fit-review.md) |
-| Live backlog anchors | `EP-2b79c5c6-8a63-4184-9076-5257bb271cdd` (manual UX audit intake), `EP-WWMD-MCP`, `EP-BUILD-STUDIO-UX`, `EP-AI-OPSMAP`, `EP-REDUCTION-GEAR-ARCH` |
+| Date | 2026-05-26; refreshed 2026-09-06 |
+| Branch | Historical: `feat/portal-ux-simplification`; closeout packet: `doc/ux-thread-outcomes-closure` |
+| Primary anchors | [`2026-04-17-portal-navigation-consolidation-design.md`](../specs/2026-04-17-portal-navigation-consolidation-design.md), [`2026-05-20-portal-ux-audit.md`](../audits/2026-05-20-portal-ux-audit.md), [`2026-05-24-vertical-workspace-home-design.md`](../specs/2026-05-24-vertical-workspace-home-design.md), [`2026-05-16-ux-auditor-coworker-design.md`](../specs/2026-05-16-ux-auditor-coworker-design.md), [`2026-05-26-pipedrive-crm-marketing-ux-fit-review.md`](../audits/2026-05-26-pipedrive-crm-marketing-ux-fit-review.md), [`2026-09-06-portal-ux-simplification-thread-audit.md`](../audits/2026-09-06-portal-ux-simplification-thread-audit.md), [`2026-09-06-portal-ux-simplification-execution-plan.md`](2026-09-06-portal-ux-simplification-execution-plan.md) |
+| Live backlog anchors | `EP-4FF5273F`, `BI-436A9466` (closeout packet), `BI-5A1A3C13` (delegate substrate), `BI-971D6F22` (Workspace first viewport), `BI-36A2CF08` (Workspace coworker trust), `BI-1F0B4184` (Business terminology), `BI-CEB3FDF8` (empty states), `BI-FFCE0D22` (Platform AI source truth), `BI-D8E00326` (CRM marketing follow-on), `EP-WWMD-MCP`, `EP-BUILD-STUDIO-UX`, `EP-AI-OPSMAP`, `EP-REDUCTION-GEAR-ARCH` |
 | Execution mode | Outside Build Studio until the Build Studio UX/runtime is reliable enough to own this work |
 
 ## Review Packet For Circulation
+
+The September follow-up (`BI-D09EE31E`, `WC-302E3E59`) establishes the
+[objective evaluation framework](../../architecture/portal-ux-evaluation-framework.md)
+and [page/flow scorecard](../../testing/portal-ux-scorecard-template.md).
+Use those as the single measurement method. The September audit remains a dated
+evidence packet; the [execution plan](2026-09-06-portal-ux-simplification-execution-plan.md)
+owns current priority and sampling. Numbered slices below identify scope, not
+mandatory execution order. WWMD `DI-BED2443DAD54` selects extension of existing
+purpose/budget contracts rather than a second UX registry or scoring service.
 
 Use this document as the single review packet for the cross-functional audit pass. Reviewers should comment on factual accuracy, user/persona fit, sequencing, and missing risk. They should not bikeshed visual style in the abstract; every comment should name the route, persona, user harm, and evidence needed.
 
@@ -53,6 +66,10 @@ Recommendation: accept / change / defer / reject
 
 ## Status Notes
 
+- 2026-09-06 closeout: the current circulatable audit is now [`2026-09-06-portal-ux-simplification-thread-audit.md`](../audits/2026-09-06-portal-ux-simplification-thread-audit.md), and the executable queue is now [`2026-09-06-portal-ux-simplification-execution-plan.md`](2026-09-06-portal-ux-simplification-execution-plan.md).
+- 2026-09-06 source inventory: `origin/main` contains 367 page routes and 652 page/API route files. The route-budget baseline covers 205 measured routes. This confirms the simplification problem is now one of recall, routing, and first-use legibility rather than merely a few broken links.
+- 2026-09-06 delivery split: PR #5091 merged the `delegate` interaction-shape substrate into source at `874fc01f1e47b0e0e675868a5f338564bfb8416c`, but live served verification still needs self-upgrade/readiness evidence before the outcome is called delivered into the platform.
+- 2026-09-06 backlog split: the open human-facing work now has explicit follow-up items: `BI-971D6F22`, `BI-36A2CF08`, `BI-1F0B4184`, `BI-CEB3FDF8`, and `BI-FFCE0D22`.
 - The manual audit intake epic was live-verified through DB fallback on 2026-05-26 because MCP transport was unavailable in this session. The epic exists as `open` with zero items. That makes it a valid intake anchor, but accepted findings still need backlog materialization.
 - Slice 1 has already landed branch work for the Six-C Context route, readiness affordance, and KPI route regression coverage. The plan below keeps the full Slice 1 scope because 404 recovery still needs to be tightened.
 - Treat the 2026-05-20 audit as the baseline evidence, and the `feat/portal-ux-simplification` branch as current in-flight remediation. Do not rewrite baseline findings as if they are current after a slice has fixed them; add status notes instead.
@@ -116,6 +133,19 @@ The latest manual UX audit (`2026-05-20-portal-ux-audit.md`) plus follow-on loca
 
 ## 3. Design Principles For This Refactor
 
+Judge the user's route from trigger to accepted outcome using the framework's
+ten dimensions. Fewer words, links or cards are useful only when the user can
+still recognize the work, reach its action and trust the result. Do not start a
+layout from the database entities or require every page to become a dashboard.
+
+The operator's revised allocation is **80% refactoring and consolidation, 20%
+net new**. Collapse existing redundancy before adding surfaces. Inspect the guts
+of each item: a card, row or drawer must not expose fields, statuses, controls or
+dependency details merely because they exist internally. The framework's
+item-detail inventory and dependency review define what to keep, summarize,
+disclose, restrict, merge or remove. This includes unnecessary details with
+perfectly readable labels, not only raw IDs and technical jargon.
+
 1. Audience before system map. A founder/operator, dispatcher, clinic scheduler, retail worker, contributor, and customer should not all see the same first screen.
 2. The primary shell is a memory aid, not a database menu. Navigation should group by user intent and work object.
 3. Every number, status pill, and readiness cell must either drill into the objects that produced it or render as non-clickable explanatory status.
@@ -126,6 +156,45 @@ The latest manual UX audit (`2026-05-20-portal-ux-audit.md`) plus follow-on loca
 8. Refactoring is part of each slice. Reserve time to remove mixed concepts or duplicated patterns rather than only layering new UI over old structure.
 9. Trust is a first-view requirement. If a link, coworker response, KPI, or status cannot explain what happened and what the user can do next, it does not belong in the primary decision surface.
 10. Feature fit comes before feature surface area. Every new UI plan must name its owning area, route family, persona, navigation layer, component reuse path, empty state, and evidence before implementation starts.
+
+### 3.1 Navigation design principles
+
+1. **Give each job one canonical home.** Record the user's intent for every rail
+   entry, section link, tab, filter and contextual command. Secondary shortcuts
+   land at that same home with object/filter context; they do not create parallel
+   screens or duplicate work state.
+2. **Assign each navigation layer a different job.** AppRail chooses a durable
+   area; section navigation chooses sibling work families; local tabs choose
+   meaningful views of one object; filters select data; contextual commands act
+   on that data. Remove layers expressing the same choice. A primary action is
+   not a navigation category.
+3. **Make route families understandable without remembering URLs.** Heading,
+   rail/section label and breadcrumb describe the same work. Prefer literal
+   outcome/work-object language; resolve People/Employee and internal
+   Portal/Storefront contradictions through the existing nav model. Renaming a
+   label does not itself justify moving the route.
+4. **Keep feature work local.** Customer marketing belongs in Business > Customer.
+   A new feature does not earn a global AppRail item, Workspace card or generic
+   coworker launcher merely by existing. Search or a contextual shortcut can
+   improve discovery without another navigation tier.
+5. **Workrooms carry work context across areas.** Link from an exception or work
+   object to its canonical room. Parent summaries reveal relevant children and
+   evidence on demand; preserve a clear path back, selection and scroll state.
+   Operational rooms, architecture definitions and operator diagnostics are
+   distinct intents, not three competing homes for doing the same job.
+6. **Separate internal management from external service.** `/storefront` is
+   internal management; `/portal` and `/s/[slug]` are customer-facing experiences.
+   Customer navigation must not expose internal management or other customers'
+   work. Authorization shapes both destinations and visible summaries.
+7. **Adapt priority without forking IA.** Existing archetype workspace profiles
+   may change first content, terminology and default filters; reuse route and
+   work identity. Worker/volunteer starts must not inherit an administrator's
+   setup or platform operations menu as their default task surface.
+8. **Make discovery and recovery testable.** Audit first-click destination,
+   direct-link entry, browser back, parent return, permission denial and missing
+   route recovery. Navigation must never send a prompt or silently start work.
+   Keep actions adjacent to the context that motivates them and reachable by
+   keyboard and touch.
 
 ## 4. Persona Acceptance Gates
 
@@ -142,6 +211,11 @@ Every slice must name the user it is improving before it changes IA. The same co
 ### 4.1 UX Feature Fit Gate
 
 Use this gate before accepting any UI-impacting feature plan, including route additions, tab additions, dashboard bands, metric tiles, coworker launchers, and workflow entry points.
+
+Complete the [framework's standing gate](../../architecture/portal-ux-evaluation-framework.md#5-standing-ux-design-and-fit-gate)
+and attach its scorecard. This table is the spine's intake summary; the framework
+owns measurement definitions, blocker rules and evidence requirements. A design
+fit verdict is not a runtime task pass.
 
 | Gate | Required answer |
 | ---- | --------------- |
@@ -240,7 +314,9 @@ Verification:
 
 Scope:
 
-- Reduce the first viewport to command strip, core signals, readiness, and work in motion.
+- Compose the first viewport from the persona's priority outcome, next decision
+  and relevant work in motion. A command strip, signals or readiness band is
+  included only when it helps that job; these are not mandatory dashboard bands.
 - Move lower-frequency launch tiles below the first decision surface or behind a clearer grouped launcher.
 - Replace any repeated generic explanation with a compact help/info affordance.
 - Add a persona-first acceptance script for founder/operator and one configured worker persona. The first viewport must answer "what needs my attention now?" before it offers a site map.
@@ -248,7 +324,9 @@ Scope:
 Verification:
 
 - Browser screenshots at desktop and narrow widths.
-- Link-count reduction from the current `/workspace` baseline.
+- Comparable before/after scorecard showing task completion and reduced avoidable
+  choice/traversal cost; the May full-page link count is historical context, not
+  a current first-viewport baseline.
 - Evidence that the primary action and priority exception are visible without scrolling on desktop and mobile.
 - No overlapping text, no horizontal overflow, and no navigation layer duplicates between AppRail, section tabs, and local launchers.
 
@@ -341,6 +419,11 @@ Verification:
 - Prefer small PR-sized slices.
 - Use MCP/backlog state before filing new work.
 - For any incoming UI plan, run the §4.1 fit gate and capture the result in the plan or a linked audit before implementation starts.
-- Keep refactoring inside each slice rather than accumulating cleanup debt. Spend roughly 20% of implementation effort removing mixed concepts, duplicated patterns, or leaky abstractions discovered by that slice.
+- Allocate 80% of implementation effort to refactoring/consolidation and at most
+  20% to justified net-new capability. Retire duplicate surfaces, components,
+  projections and unnecessary external dependency paths; remove unnecessary
+  internal detail from individual items. Record actual removals and migrated
+  consumers, not only reduced visible counts. New work must prove an existing
+  capability cannot be reused or refactored to deliver the outcome.
 - Do not route this through Build Studio until Build Studio can produce reliable UX verification evidence.
 - No slice is done with screenshots alone. Each UI slice needs a persona task outcome and a failure-mode check.

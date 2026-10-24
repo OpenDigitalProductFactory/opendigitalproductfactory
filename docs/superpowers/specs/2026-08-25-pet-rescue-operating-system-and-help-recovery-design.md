@@ -148,10 +148,12 @@ contextual index so missing or renamed content never becomes a record 404.
 | AC-RESCUE-IDENTITY-01 | OBJ-RESCUE-IDENTITY | Existing public animals gain a stable operational identity without invented custody, care, or outcome facts. |
 | AC-RESCUE-INTAKE-01 | OBJ-RESCUE-INTAKE | An operator can admit, stage, hold, outcome, and later re-admit an animal while retaining the prior episode and events. |
 | AC-RESCUE-CAPACITY-01 | OBJ-RESCUE-CAPACITY | Intake and animal detail read the same Resource and ResourceCapacityAllocation facts as the delivered ward surface, including unknown and blocked capacity. |
+| AC-RESCUE-CAPACITY-02 | OBJ-RESCUE-IDENTITY, OBJ-RESCUE-CAPACITY | The Ward housing selector reads the organization-scoped, in-care `AnimalProfile` roster even when no housing Resource exists; absence of housing is never presented as absence of animals. |
 | AC-RESCUE-CARE-01 | OBJ-RESCUE-CARE | An operator can see due care, missed or exceptional care, appointments, and a correctable clinical/welfare history for one animal. |
 | AC-RESCUE-ADOPTION-01 | OBJ-RESCUE-ADOPTION | An inquiry can become a screened application and placement, and a return preserves the placement before opening a new custody episode. |
 | AC-RESCUE-STEWARDSHIP-01 | OBJ-RESCUE-STEWARDSHIP | Restricted balances and animal cost use posted fund and subject dimensions, not a parallel rescue ledger. |
 | AC-RESCUE-HOME-01 | OBJ-RESCUE-HOME | Every first-viewport signal drills into a bounded operational queue and unavailable data is distinguished from a truthful zero. |
+| AC-RESCUE-HOME-02 | OBJ-RESCUE-HOME | At 390×844, every Rescue operations destination remains legible and non-overlapping without horizontal navigation overflow, while retaining a 44px target, source/keyboard order, focus behavior, and the compact desktop layout. |
 | AC-HELP-RECOVERY-01 | OBJ-HELP-RECOVERY | Header Help, legacy aliases, missing seeds, and unknown direct slugs render a valid documentation destination with recovery context and intact authorization. |
 
 ## 3. Research & benchmarking
@@ -555,6 +557,30 @@ layout contract. Rendered narrow/wide and light/dark screenshots are produced as
 implementation verification evidence after the real routes exist; they are not
 retroactively described as design inputs.
 
+### 7.5 Exact-served acceptance repair
+
+`BI-24FDCB9D` repairs the two contradictions observed on immutable release
+`4e48b40a727b9a1bf02b355c69a2c661ab4af275`. It does not add a model, route, or
+alternate rescue workflow. The repair order is intentionally small and
+test-first:
+
+1. Prove that a Ward with no housing rows loses the canonical in-care roster,
+   then make the Ward page and board projection consume one organization-scoped
+   `AnimalProfile` roster (`in_care` and `placement_ready`).
+2. Prove that the seven-link Rescue navigation has an unsafe narrow-viewport
+   layout contract, then use a wrapping, fixed-column narrow layout that keeps
+   every label inside its 44px target and restores the existing compact row at
+   the desktop breakpoint.
+3. Run the Ward and Rescue component regressions, affected Ward suites,
+   typecheck, prose/style guards, protected CI/DCO, and exact-served desktop plus
+   390×844 acceptance. A local gate that cannot obtain its shared slot is
+   `INCONCLUSIVE`, never a pass.
+
+The work is atomic because `BI-7A38F667` cannot pass release acceptance while
+either contradiction remains. `BI-D2A51B36` still owns housing occupancy and
+`BI-7A38F667` still owns the Rescue cockpit; this repair only reconnects their
+already-approved read and navigation contracts.
+
 ## 8. Resilient Help contract
 
 ### 8.1 Stable identity
@@ -700,6 +726,7 @@ production-rollout risk, not an implied capability of this scope.
 | Adoption and return | `BI-A442F129` | application/placement transaction tests, running adoption flow |
 | Restricted funds and animal-cost attribution | `BI-E861E8B8` | posting/dimension/reconciliation tests, bounded stewardship readouts |
 | Pet Rescue home | `BI-7A38F667` | partial-result aggregation tests, responsive/themed cockpit verification |
+| Exact-served roster and responsive-navigation repair | `BI-24FDCB9D` | first-failing Ward/Rescue regressions, protected CI/DCO, exact repaired served-SHA desktop and 390×844 verification |
 
 The delivery decision is `decomposed`: each row is independently shippable and
 retains its own BI and test-first evidence, while the operator-directed packaging

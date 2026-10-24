@@ -1,4 +1,5 @@
 import { requirementEvidenceLane, requirementNextAction } from "./readiness-guidance";
+import { effectiveShape, shapeRaise, shapeRequirements, type ShapeRequirement } from "./shape-requirements";
 import type {
   InitiativeReadinessDecision,
   InitiativeReadinessFacts,
@@ -8,15 +9,9 @@ import type {
   ReadinessTarget,
 } from "./types";
 
-export const INITIATIVE_READINESS_POLICY_VERSION = "initiative-readiness.v2";
+export const INITIATIVE_READINESS_POLICY_VERSION = "initiative-readiness.v3";
 
-type Requirement = {
-  code: ReadinessCode;
-  state: ReadinessEvidenceState;
-  accountableRole: string;
-  failCode?: ReadinessCode;
-  allowNotApplicable?: boolean;
-};
+type Requirement = ShapeRequirement;
 
 function requirement(
   code: ReadinessCode,
@@ -105,20 +100,34 @@ function implementationRequirements(facts: InitiativeReadinessFacts): Requiremen
 }
 
 function completionRequirements(facts: InitiativeReadinessFacts): Requirement[] {
-  return [
+  const requirements = [
     ...implementationRequirements(facts),
     requirement("DELIVERY_EVIDENCE_REQUIRED", facts.deliveryEvidence, "delivery-coordinator"),
     requirement("ACCEPTANCE_EVIDENCE_REQUIRED", facts.acceptanceEvidence, "acceptance-reviewer"),
-    requirement("OBJECTIVE_BASELINE_REQUIRED", facts.objectiveBaseline, "design-checklist-reviewer"),
-    requirement("OBJECTIVE_RECONCILIATION_REQUIRED", facts.objectiveReconciliation, "acceptance-reviewer"),
   ];
+  if (facts.profile !== "doc-only") {
+    requirements.push(
+      requirement("OBJECTIVE_BASELINE_REQUIRED", facts.objectiveBaseline, "design-checklist-reviewer"),
+      requirement("OBJECTIVE_RECONCILIATION_REQUIRED", facts.objectiveReconciliation, "acceptance-reviewer"),
+    );
+  }
+  return requirements;
 }
 
-function requirementsFor(facts: InitiativeReadinessFacts, target: ReadinessTarget): Requirement[] {
+function profileRequirementsFor(facts: InitiativeReadinessFacts, target: ReadinessTarget): Requirement[] {
   if (target === "design") return designRequirements(facts);
   if (target === "plan") return planRequirements(facts);
   if (target === "implementation") return implementationRequirements(facts);
   return completionRequirements(facts);
+}
+
+/**
+ * v3: a shaped item is gated by (shape, sensitivity, target); an unshaped one
+ * by the v2 profile tables exactly as before (kernel ruling 5).
+ */
+function requirementsFor(facts: InitiativeReadinessFacts, target: ReadinessTarget): Requirement[] {
+  if (facts.shape) return shapeRequirements(facts, target, profileRequirementsFor);
+  return profileRequirementsFor(facts, target);
 }
 
 /**
@@ -136,6 +145,11 @@ function result(
   state: ReadinessEvidenceState | "blocked",
   accountableRole: string,
 ): ReadinessRequirementResult {
+  // Guidance must describe the table that was actually applied. A declared
+  // small raised to medium owes medium's item-body baseline, and saying
+  // "spec-approval" there sends the author to a lane its shape never uses
+  // (BI-BD60DC91).
+  const appliedShape = facts.shape ? effectiveShape(facts.shape, facts.sensitivity, facts.profile, facts.workType) : null;
   const unreadEvidenceRefs = state === "pass" ? [] : facts.unreadEvidenceRefs?.[code] ?? [];
   return {
     code,
@@ -146,11 +160,44 @@ function result(
     unreadEvidenceRefs,
     nextAction: requirementNextAction({
       code,
+      accountableRole,
       profile: facts.profile,
+      shape: appliedShape,
       state,
       unreadEvidenceRefs,
       reasons: facts.requirementReasons?.[code],
     }),
+  };
+}
+
+/**
+ * Report the shape that actually gated this evaluation (BI-BD60DC91).
+ *
+ * Sensitivity raises the shape silently, so a one-file fix can owe a medium
+ * item's independent baseline because its body mentions a keyword while
+ * describing the blast radius. Naming the declared shape, the effective one and
+ * the sensitivity between them does not change a single verdict — it makes the
+ * raise legible to the operator and to the recovery packet.
+ */
+function shapeDecisionOf(facts: InitiativeReadinessFacts): NonNullable<InitiativeReadinessDecision["shapeDecision"]> {
+  const { effective, refused } = shapeRaise(facts.shape!, facts.sensitivity, facts.profile, facts.workType);
+  const subject = facts.workType === "refactor" ? "a refactor" : `a ${facts.profile} item`;
+  return {
+    declared: facts.shape!,
+    effective,
+    sensitivity: facts.sensitivity ?? null,
+    raised: effective !== facts.shape,
+    // BI-243BC956: name what raised it, so an author can tell a changed schema
+    // from a word in a sentence.
+    trigger: facts.sensitivityTrigger ?? null,
+    ...(refused
+      ? {
+        refusedRaise: {
+          shape: refused,
+          reason: `Sensitivity asked for ${refused}, but ${subject} at ${refused} would owe gates with no reachable route; capped at ${effective}.`,
+        },
+      }
+      : {}),
   };
 }
 
@@ -198,6 +245,10 @@ export function evaluateInitiativeReadiness(
     subject: facts.subject,
     transitionObject: facts.transitionObject,
     profile: facts.profile,
+    // Omitted, not null, for an unshaped item: the decision object is compared
+    // by deep equality against replayed terminal decisions, so an always-present
+    // key would invalidate every decision persisted before this change.
+    ...(facts.shape ? { shapeDecision: shapeDecisionOf(facts) } : {}),
     target,
     verdict: blockers.length > 0 ? "denied" : unmet.length > 0 ? "input-required" : "allowed",
     satisfied,

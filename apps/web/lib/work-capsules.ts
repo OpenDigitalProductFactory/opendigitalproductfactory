@@ -1,4 +1,5 @@
 import { slugify } from "@/lib/shared/slugify";
+import { WORK_SHAPE_EVIDENCE_KINDS } from "@/lib/work-management/work-shape-evidence-kinds";
 
 export const WORK_CAPSULE_STATUSES = [
   "draft",
@@ -30,6 +31,13 @@ export const WORK_CAPSULE_SOURCES = [
   "worker-onboarding",
   "worker-change",
   "worker-offboarding",
+  // Platform maintenance rooms (embedding-coverage-workroom.ts). This value was
+  // written by a raw upsert without being registered here or in the DB check
+  // constraint, so the row it created could never be updated by anyone —
+  // every UPDATE re-validated the NOT VALID check and failed (BI-A5EEB5D1).
+  // The parity test beside the converger keeps this list and the migration
+  // that mirrors it from drifting apart again.
+  "platform-maintenance",
 ] as const;
 
 /**
@@ -58,9 +66,23 @@ export function capsuleRepositoryFullName(
   source: string,
   provided: string | null | undefined,
   platformDefault: () => string,
+  idempotencyKey?: string,
 ): string | null {
-  return provided?.trim() || (BUSINESS_WORK_CAPSULE_SOURCES.has(source) ? null : platformDefault());
+  if (provided?.trim()) return provided.trim();
+  if (BUSINESS_WORK_CAPSULE_SOURCES.has(source)) return null;
+  return idempotencyKey?.startsWith(SUB_SHAPE_ROOM_KEY_PREFIX) ? null : platformDefault();
 }
+
+/**
+ * The idempotency-key namespace of a sub-shape child room (GPP Phase 3c
+ * PR-3c-5, design §9.2): `sub-shape:<parent>:<cycle>:<stage>:<iteration>`. The
+ * work-shape drive creates such a room to run a stage's child shape. It
+ * coordinates process work, not a change to this repository, so it records
+ * no repository: with one, the publication boundary
+ * (assertWorkroomPublishable) would refuse to complete it for want of a
+ * reviewed head it can never have.
+ */
+export const SUB_SHAPE_ROOM_KEY_PREFIX = "sub-shape:";
 
 export type WorkCapsuleSource = (typeof WORK_CAPSULE_SOURCES)[number];
 
@@ -127,6 +149,8 @@ export const WORK_CAPSULE_ACTIVITY_KINDS = [
   "executor-changed",
   "scope-claimed",
   "scope-released",
+  // BI-CB5C0DCE: a governed move of the room's work-shape pin to a newer version.
+  "workshape-rebound",
   "work-intent-declared",
   "change-impact-planned",
   "evidence-recorded",
@@ -241,6 +265,10 @@ export const WORK_CAPSULE_BRANCH_TAXONOMIES = [
 
 export type WorkCapsuleBranchTaxonomy = (typeof WORK_CAPSULE_BRANCH_TAXONOMIES)[number];
 
+// The six generic media kinds, plus every kind a work-shape stage declares.
+// A stage advances only on recorded evidence of a kind it declared, so the
+// shapes' vocabulary must be accepted here or no stage can ever advance
+// (DI-BE0348CE9229; guarded by stage-evidence-kind-parity.test.ts).
 export const WORK_CAPSULE_EVIDENCE_KINDS = [
   "test",
   "build",
@@ -248,6 +276,7 @@ export const WORK_CAPSULE_EVIDENCE_KINDS = [
   "verification",
   "lint",
   "note",
+  ...WORK_SHAPE_EVIDENCE_KINDS,
 ] as const;
 
 export type WorkCapsuleEvidenceKind = (typeof WORK_CAPSULE_EVIDENCE_KINDS)[number];
@@ -290,7 +319,7 @@ const EXECUTOR_SET = new Set<string>(WORK_CAPSULE_EXECUTOR_KINDS);
 const ACTIVITY_SET = new Set<string>(WORK_CAPSULE_ACTIVITY_KINDS);
 const TAXONOMY_SET = new Set<string>(WORK_CAPSULE_BRANCH_TAXONOMIES);
 const EVIDENCE_KIND_SET = new Set<string>(WORK_CAPSULE_EVIDENCE_KINDS);
-const SCOPE_KIND_SET = new Set<ScopeClaim["kind"]>([
+export const SCOPE_KIND_SET: ReadonlySet<ScopeClaim["kind"]> = new Set<ScopeClaim["kind"]>([
   "path",
   "module",
   "package",

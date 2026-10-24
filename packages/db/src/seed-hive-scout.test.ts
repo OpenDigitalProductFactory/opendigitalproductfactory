@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -12,6 +12,13 @@ import {
 } from "./hive-scout-config";
 import { parseFrontmatter } from "./seed-skills";
 import { ensureHiveScoutScheduledTask } from "./seed-hive-scout";
+
+// No accountable owner recorded: the seed falls back to the superuser guess (BI-F0E946D2).
+const noAccountableOwner = {
+  portfolio: { findUnique: async () => null },
+  organization: { findFirst: async () => null },
+  principalAlias: { findFirst: async () => null },
+};
 
 describe("Hive Scout seed helper", () => {
   const user = {
@@ -132,21 +139,17 @@ describe("Hive Scout seed helper", () => {
       join(routePersonaDirectory, "inventory-specialist.prompt.md"),
       "utf8",
     );
-    const estatePrompt = readFileSync(
-      join(routePersonaDirectory, "estate-specialist.prompt.md"),
-      "utf8",
-    );
 
     expect(inventoryPrompt).toContain(noRepeatRule);
-    expect(estatePrompt).toContain(noRepeatRule);
+
+    // BI-5CCBF85B: `estate-specialist.prompt.md` used to sit beside this file as
+    // a hand-synced near-duplicate, because the prompt loader keyed on filename
+    // and could not alias two names onto one coworker. It resolves by the
+    // declared agent_id now, so AGT-WS-INVENTORY has exactly one job
+    // description and the copy that had to be kept in sync is gone.
     expect(
-      estatePrompt
-        .replace("name: estate-specialist", "name: inventory-specialist")
-        .replace(
-          "<!-- This file is intentionally a near-duplicate of inventory-specialist.prompt.md. Both names alias to agent_id AGT-WS-INVENTORY. Keep them in sync until the prompt loader supports aliasing natively. -->\n\n",
-          "",
-        ),
-    ).toBe(inventoryPrompt);
+      existsSync(join(routePersonaDirectory, "estate-specialist.prompt.md")),
+    ).toBe(false);
   });
 
   it("ships the seeded Hive Scout ambiguity-reviewer prompt", () => {
@@ -177,7 +180,7 @@ describe("Hive Scout seed helper", () => {
     scheduledAgentTask.findUnique.mockResolvedValue(null);
 
     const result = await ensureHiveScoutScheduledTask(
-      { user, scheduledAgentTask, scheduledJob } as never,
+      { ...noAccountableOwner, user, scheduledAgentTask, scheduledJob } as never,
       new Date("2026-05-11T12:00:00Z"),
     );
 
@@ -200,30 +203,32 @@ describe("Hive Scout seed helper", () => {
     );
   });
 
-  it("updates the existing task and preserves nextRunAt", async () => {
+  it("updates the existing task, preserves nextRunAt, and keeps its owner (BI-87AE4BF6)", async () => {
     process.env.INSTALL_TIMEZONE = "America/Chicago";
     user.findFirst.mockResolvedValue({ id: "user-admin" });
     scheduledAgentTask.findUnique.mockResolvedValue({
       taskId: HIVE_SCOUT_TASK_ID,
       schedule: HIVE_SCOUT_SCHEDULE,
       nextRunAt: new Date("2026-05-12T08:17:00Z"),
+      ownerUserId: "user-mark",
     });
 
     const result = await ensureHiveScoutScheduledTask(
-      { user, scheduledAgentTask, scheduledJob } as never,
+      { ...noAccountableOwner, user, scheduledAgentTask, scheduledJob } as never,
       new Date("2026-05-11T12:00:00Z"),
     );
 
-    expect(result).toEqual({ created: false, ownerUserId: "user-admin" });
-    expect(scheduledAgentTask.update).toHaveBeenCalledWith({
-      where: { taskId: HIVE_SCOUT_TASK_ID },
-      data: expect.objectContaining({
-        agentId: HIVE_SCOUT_AGENT_ID,
-        timezone: "America/Chicago",
-        ownerUserId: "user-admin",
-        nextRunAt: new Date("2026-05-12T08:17:00Z"),
-      }),
-    });
+    // A task handed over to its portfolio's owner must not be re-owned to the
+    // oldest superuser by the next seed run (every self-upgrade runs it).
+    expect(result).toEqual({ created: false, ownerUserId: "user-mark" });
+    const data = scheduledAgentTask.update.mock.calls[0][0].data;
+    expect(data).toEqual(expect.objectContaining({
+      agentId: HIVE_SCOUT_AGENT_ID,
+      timezone: "America/Chicago",
+      nextRunAt: new Date("2026-05-12T08:17:00Z"), // clock-bomb-guard: allow the seed receives a fixed `now` (2026-05-11) argument, so no wall-clock comparison
+    }));
+    expect(data).not.toHaveProperty("ownerUserId");
+    expect(user.findFirst).not.toHaveBeenCalled();
   });
 
   it("recomputes nextRunAt when the existing task is outside the current cadence window", async () => {
@@ -236,7 +241,7 @@ describe("Hive Scout seed helper", () => {
 
     const now = new Date("2026-05-11T12:00:00Z");
     await ensureHiveScoutScheduledTask(
-      { user, scheduledAgentTask, scheduledJob } as never,
+      { ...noAccountableOwner, user, scheduledAgentTask, scheduledJob } as never,
       now,
     );
 
@@ -262,7 +267,7 @@ describe("Hive Scout seed helper", () => {
 
     await expect(
       ensureHiveScoutScheduledTask(
-        { user, scheduledAgentTask, scheduledJob } as never,
+        { ...noAccountableOwner, user, scheduledAgentTask, scheduledJob } as never,
         new Date("2026-05-11T12:00:00Z"),
       ),
     ).rejects.toThrow("seed: no superuser found");

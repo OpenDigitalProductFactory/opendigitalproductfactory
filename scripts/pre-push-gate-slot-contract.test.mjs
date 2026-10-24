@@ -64,3 +64,67 @@ test("the canonical reader is slot-aware and PASS-gated on exit code", () => {
     "pregate-status.mjs must exit non-zero for any verdict that is not a PASS for the current HEAD",
   );
 });
+
+// BI-02E5F2A1: `gate-infrastructure-unavailable` is evidence-gated in the hook.
+test("the hook allowlists gate-infrastructure-unavailable in its inline code set", () => {
+  const inlineSet = hook.slice(hook.indexOf("const codes = new Set(["), hook.indexOf("]);", hook.indexOf("const codes = new Set([")));
+  assert.match(inlineSet, /"gate-infrastructure-unavailable"/);
+});
+
+test("the hook captures the lease-claim failure BEFORE writing the override record, and refuses without the probe", () => {
+  const probe = hook.indexOf("node scripts/pre-push-gate-infrastructure-probe.mjs");
+  const writer = hook.indexOf("infrastructureEvidence = probe.evidence");
+  assert.notEqual(probe, -1, "the hook must re-attempt the lease claim via the probe");
+  assert.notEqual(writer, -1, "the record must embed the captured evidence");
+  assert.ok(probe < writer, "evidence is captured before the record is written");
+  assert.match(hook, /\[ ! -f "scripts\/pre-push-gate-infrastructure-probe\.mjs" \][\s\S]*?refusing/, "a checkout without the probe cannot capture evidence and must refuse the code");
+  assert.match(hook, /gate-infrastructure-unavailable refused: no infrastructure failure was captured/);
+});
+
+test("the gate-infrastructure-unavailable record is gate-UNRUN, never a pass", () => {
+  assert.match(hook, /record\.status = "gate-unrun";\s*\n\s*record\.gateUnrun = true;/);
+  assert.match(hook, /gate-UNRUN recorded for/);
+  assert.doesNotMatch(hook, /gatePassed:\s*true[\s\S]*infrastructureEvidence/, "the evidence path must not mint a pass");
+});
+
+// BI-53B189C8: the hook's own record readers (the slot selector and the legacy
+// fallback for trees without pregate-status.mjs) must refuse a
+// DPF_ALLOW_LOCAL_CI_STUB record exactly as the canonical reader does.
+test("the hook's inline readers refuse a test-stub record", () => {
+  assert.match(
+    hook,
+    /state\.gatePassed === true && state\.testStub !== true/,
+    "the slot selector must not pick a testStub record as the passing slot",
+  );
+  const legacy = hook.slice(hook.indexOf('if [ ! -f "$state_file" ]'));
+  assert.match(
+    legacy,
+    /if \(state\.testStub === true\) \{[\s\S]*?process\.exit\(1\)/,
+    "the legacy reader must refuse a testStub record",
+  );
+});
+
+// Cloud agent sessions (claude.ai/code, CLAUDE_CODE_REMOTE=true) cannot run
+// pregate. The hook records their push under external-contribution-no-install
+// through the same override writer, only after a genuine PASS was ruled out.
+test("the cloud-session path runs after the PASS verdict and records through the override writer", () => {
+  const verdict = hook.indexOf("if node scripts/pregate-status.mjs; then");
+  const cloud = hook.indexOf('if [ "${CLAUDE_CODE_REMOTE:-}" = "true" ]; then');
+  const refusal = hook.indexOf('echo "[pre-push-gate] Run the sandbox gate first:  pnpm run pregate" >&2', cloud);
+  assert.notEqual(verdict, -1, "the PASS verdict must still be consulted");
+  assert.notEqual(cloud, -1, "the cloud-session path is missing");
+  assert.ok(verdict < cloud, "a genuine PASS must win over the cloud-session record");
+  assert.ok(cloud < refusal, "the cloud-session path must come before the refusal");
+  assert.match(hook.slice(cloud, refusal), /recorded_override/, "the cloud path must use the shared override writer");
+  assert.match(hook, /recorded_override\(\) \{/, "the override writer must be a shared function");
+});
+
+test("the hook's cloud-session reason matches the shared constant", async () => {
+  const { CLOUD_AGENT_SESSION_OVERRIDE_REASON } = await import(
+    "../packages/dpf-skill-pack/hooks/lib/local-ci-override.mjs"
+  );
+  assert.ok(
+    hook.includes(`DPF_SKIP_PREPUSH_GATE_REASON="${CLOUD_AGENT_SESSION_OVERRIDE_REASON}"`),
+    "the inline reason in .githooks/pre-push-gate must equal CLOUD_AGENT_SESSION_OVERRIDE_REASON",
+  );
+});

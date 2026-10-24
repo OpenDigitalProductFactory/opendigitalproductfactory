@@ -261,6 +261,7 @@ model RuntimeTarget {
 }
 
 model RuntimeVerification {
+  automationUsers         User[]
   id                      String                 @id @default(cuid())
   verificationId          String                 @unique
   kind                    String
@@ -291,6 +292,7 @@ model RuntimeVerification {
   @@index([featureBuildId, kind, status])
   @@index([workCapsuleId, kind, status])
   @@index([kind, status])
+  @@index([gitPromotionCandidateId])
 }
 
 // Per-run audit row for the contributor-inventory-sync Inngest cron. Mirrors
@@ -353,6 +355,7 @@ model ContributorInventorySnapshot {
   @@unique([source, sourceKey, syncRunId])
   @@index([source, syncRunId])
   @@index([source, fetchedAt])
+  @@index([syncRunId])
 }
 
 model CodeGraphIndexState {
@@ -705,6 +708,7 @@ model AssuranceRun {
   @@index([buildId, startedAt(sort: Desc)])
   @@index([digitalProductId, startedAt(sort: Desc)])
   @@index([adapterKey, status])
+  @@index([releaseBundleId])
 }
 
 model BomDocument {
@@ -738,6 +742,8 @@ model BomDocument {
   @@index([digitalProductId, generatedAt(sort: Desc)])
   @@index([digest])
   @@index([status])
+  @@index([artifactRevisionId])
+  @@index([assuranceRunId])
 }
 
 model BomComponent {
@@ -928,6 +934,8 @@ model ReleaseBundle {
   @@index([status])
 }
 
+/// Tool runs during a build. Operational build trail; 90 days covers post-build investigation.
+/// @dpf lifecycle=telemetry-bounded retention=90d sensitivity=internal categories=telemetry timeAxis=createdAt
 model BuildActivity {
   id        String       @id @default(cuid())
   buildId   String
@@ -940,6 +948,8 @@ model BuildActivity {
   @@index([createdAt])
 }
 
+/// One row per AI specialist dispatch attempt/retry. Build telemetry; 90 days.
+/// @dpf lifecycle=telemetry-bounded retention=90d categories=telemetry timeAxis=startedAt
 model BuildDispatchAttempt {
   id               String       @id @default(cuid())
   buildId          String
@@ -1051,7 +1061,13 @@ model TaskRun {
   title                String
   objective            String                   @db.Text
   source               String                   @default("coworker") // coworker | build | skill | proactive
-  /// A2A-aligned task states: submitted | working | input-required | auth-required | completed | failed | canceled | rejected | archived
+  /// Closed set, enforced by "TaskRun_status_closed_set" (20260916140000) and
+  /// single-sourced from TASK_STATES in apps/web/lib/tak/task-states.ts, which a
+  /// parity test pins against the constraint (BI-9F6AFFA0). The nine A2A-aligned
+  /// states — submitted | working | input-required | auth-required | completed |
+  /// failed | canceled | rejected | archived — plus four DPF runtime states:
+  /// stalled, quiescing, paused-for-upgrade, paused-for-upgrade-forced. This
+  /// comment is no longer the constraint; do not widen the set here alone.
   status               String                   @default("submitted")
   authorityScope       Json?
   a2aMetadata          Json?
@@ -1102,6 +1118,8 @@ model TaskRun {
 // thresholds in effect) and the resulting operator outcome (retry,
 // abandon, escalate). Used by the Build Studio phase panel history
 // strip and as candidate WWMD profile material in v2.
+/// Build Studio stall detections + operator outcomes. Operational; 90 days.
+/// @dpf lifecycle=telemetry-bounded retention=90d categories=telemetry timeAxis=createdAt
 model StallEvent {
   id                  String    @id @default(cuid())
   taskRunId           String
@@ -1148,6 +1166,8 @@ model StallEvent {
 // substrate (e.g., SelfUpgradeRun.runId).
 //
 // Spec: docs/superpowers/specs/2026-05-24-activity-quiescence-protocol-design.md §5.1
+/// Activity-quiescence drain orchestration records. Coordination audit; 90 days.
+/// @dpf lifecycle=telemetry-bounded retention=90d categories=telemetry timeAxis=startedAt
 model QuiescenceRun {
   id           String  @id @default(cuid())
   // Public/human-readable id (e.g., "QR-2026-05-24-abc123"). Used in event
@@ -1222,6 +1242,14 @@ model QuiescenceRun {
   // never escalated; an audit entry is also appended to forcedSurfaces.
   shipForceEscalatedAt DateTime?
   shipForceEscalatedBy String?
+
+  // BI-F9EE05E5: operator Abort, recorded durably before any wake-up event is
+  // sent. The job engine delivers an event only to a step already waiting for
+  // it, so an Abort sent while the coordinator is mid-check would otherwise be
+  // lost. The coordinator reads these on every check and ends the drain as
+  // aborted; the swap guard refuses a run that carries them. First writer wins.
+  abortRequestedAt DateTime?
+  abortRequestedBy String?
 
   @@index([trigger, startedAt])
   // Stuck-coordinator query: status NOT IN (terminal) AND lastHeartbeatAt < cutoff.
@@ -1353,6 +1381,8 @@ enum SelfUpgradeDispatchStatus {
   dispatch_failed
 }
 
+/// Platform self-upgrade orchestration history. Low volume but operationally valuable; one year of deployment history.
+/// @dpf lifecycle=telemetry-bounded retention=365d sensitivity=internal categories=telemetry timeAxis=createdAt
 model SelfUpgradeRun {
   id                    String    @id @default(cuid())
   runId                 String    @unique

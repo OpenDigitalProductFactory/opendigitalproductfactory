@@ -51,3 +51,29 @@ test("allows mappings to existing BIs and requires dependency recording", () => 
 - Receipt: receipt-mapped-1`));
   assert.deepEqual(result, { ok: true, errors: [] });
 });
+
+test("accepts a plan whose receipt names the concrete blocking condition (merge does not wait on reviewer capacity)", () => {
+  const result = validatePlanText(
+    "docs/superpowers/plans/blocked.md",
+    header(`- Decision: decomposed
+- Parent: \`BI-PARENT\`
+- Receipt: blocked-by: no initiative scope baseline exists for BI-PARENT (spec-approval receipt not yet recorded)
+- Rationale: each child is one clean revert.
+- Dependencies: slice-a -> \`BI-A\` (none); slice-b -> \`BI-B\` (BI-A)`),
+  );
+  assert.deepEqual(result.errors, []);
+  assert.equal(result.ok, true);
+});
+
+test("rejects a blocked-by receipt that names no real condition", () => {
+  const result = validatePlanText(
+    "docs/superpowers/plans/blocked-vague.md",
+    header(`- Decision: decomposed
+- Parent: \`BI-PARENT\`
+- Receipt: blocked-by: later
+- Rationale: each child is one clean revert.
+- Dependencies: slice-a -> \`BI-A\` (none)`),
+  );
+  assert.equal(result.ok, false);
+  assert.match(result.errors.join(" "), /concrete blocking condition/);
+});

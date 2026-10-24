@@ -32,7 +32,7 @@ import { RUNNER_FAILURE_EXIT_CODE } from "./check-guards.mjs";
 import { loadPinnedGuardTypeScript } from "./lib/load-pinned-guard-typescript.mjs";
 import { shouldRunPreflight } from "./pregate.mjs";
 
-const repoRoot = new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
+const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 const preflightCli = join(repoRoot, "scripts", "pregate-preflight.mjs");
 const pregateCli = join(repoRoot, "scripts", "pregate.mjs");
 
@@ -131,18 +131,40 @@ test("buildPreflightPlan includes only commit-range-safe pull-request gates", ()
   for (const id of LOCAL_SAFE_PR_GUARD_IDS) {
     assert.ok(ids.has(id), `expected local-safe gate ${id} in the plan`);
   }
-  // PR-body-dependent and tree-mutating gates must never run host-side.
-  assert.ok(!ids.has("seed-fit-gate"), "seed-fit-gate reads the PR body");
+  // BI-4F1E9249: seed-fit-gate now reads the commit range like its sibling
+  // decision gates, so it CAN answer host-side and must be planned. Its former
+  // exclusion cost a full CI round trip on #5291.
+  assert.ok(ids.has("seed-fit-gate"), "seed-fit-gate reads the commit range");
+  // Tree-mutating gates must never run host-side. This reason does not expire.
   assert.ok(!ids.has("decision-baseline"), "decision-baseline merges origin/main");
+});
+
+test("a decision guard that can read the commit range is not excluded from the preflight", () => {
+  // The generalisation of BI-4F1E9249. A gate excluded for "needs the PR body"
+  // is excluded for a removable reason: the decision can travel in the commit.
+  // Only a gate that MUTATES the tree has a reason that does not expire.
+  const CANNOT_ANSWER_HOST_SIDE = new Set(["decision-baseline"]);
+  const planned = new Set(buildPreflightPlan().map((entry) => entry.id));
+  const excluded = POLICY_GUARD_PROFILES["pull-request"]
+    .map((entry) => entry.id)
+    .filter((id) => !planned.has(id));
+  assert.deepEqual(
+    excluded.filter((id) => !CANNOT_ANSWER_HOST_SIDE.has(id)),
+    [],
+    "A pull-request gate is excluded from the preflight for a reason that can expire. "
+      + "If it needs the PR body, teach it to read the commit range instead (BI-4F1E9249).",
+  );
 });
 
 test("buildPreflightPlan runs every pull-request gate that can answer host-side", () => {
   // Parity with CI's pull-request profile is the point of the preflight. A gate
   // omitted here is one a push can only discover in CI — which is what happened
-  // to Docs Impact on #4558. Only the two gates that CANNOT answer before a push
-  // may be missing; anything else added to the profile must be triaged into or
-  // out of LOCAL_SAFE_PR_GUARD_IDS deliberately, and this test is the prompt.
-  const CANNOT_ANSWER_HOST_SIDE = new Set(["seed-fit-gate", "decision-baseline"]);
+  // to Docs Impact on #4558, and to Seed Contribution Fit on #5291. Only a gate
+  // that CANNOT answer before a push may be missing, and after BI-4F1E9249 that
+  // is one gate: the tree-mutating decision-baseline. Anything else added to the
+  // profile must be triaged into or out of LOCAL_SAFE_PR_GUARD_IDS deliberately,
+  // and this test is the prompt.
+  const CANNOT_ANSWER_HOST_SIDE = new Set(["decision-baseline"]);
   const planned = new Set(buildPreflightPlan().map((entry) => entry.id));
   const missing = POLICY_GUARD_PROFILES["pull-request"]
     .map((entry) => entry.id)
@@ -574,4 +596,68 @@ test("every guard declared code-only has an import closure that references no do
     }
   }
   assert.deepEqual(offenders, [], "declared code-only guards reference docs inputs:\n" + offenders.join("\n"));
+});
+
+// ── hook environment hygiene (BI-062F5687) ───────────────────────────────────
+
+test("createDefaultExecute hands guards an environment without git's repository-locating variables", async () => {
+  const { createDefaultExecute } = await import("./lib/pregate-preflight.mjs");
+  const execute = createDefaultExecute({
+    ...process.env,
+    GIT_DIR: "/definitely/not/a/repo/.git",
+    GIT_WORK_TREE: "/definitely/not/a/repo",
+    GIT_INDEX_FILE: "/definitely/not/a/repo/.git/index",
+  });
+  const probe = 'const bad=["GIT_DIR","GIT_WORK_TREE","GIT_INDEX_FILE"].filter((k)=>k in process.env);process.stdout.write(JSON.stringify(bad));';
+  const result = await execute("node", ["-e", probe]);
+  assert.equal(result.exitCode, 0, result.output);
+  assert.equal(result.output.trim(), "[]");
+});
+
+test("createDefaultExecute runs guards with git's automatic maintenance off (BI-E0FEB8E9)", async () => {
+  const { createDefaultExecute } = await import("./lib/pregate-preflight.mjs");
+  const execute = createDefaultExecute({ ...process.env });
+  // --show-origin: a repository or global config that already says false must
+  // not satisfy this; the runner itself has to set it for every guard.
+  const result = await execute("git", ["config", "--show-origin", "--get", "maintenance.auto"]);
+  assert.equal(result.exitCode, 0, result.output);
+  assert.match(result.output.trim(), /^command line:\s+false$/);
+});
+
+test("host command deadline is distinct from violation and never becomes a pass", async () => {
+  const { createDefaultExecute } = await import("./lib/pregate-preflight.mjs");
+  const progress = [];
+  const execute = createDefaultExecute(process.env, { maxDurationMs: 100,
+    terminationGraceMs: 100, closeGraceMs: 100, progress: event => progress.push(event) });
+  const result = await execute(process.execPath, ["-e", "setInterval(()=>{},1000)"], { guardId: "hanging" });
+  assert.equal(result.outcome, "timed_out");
+  assert.notEqual(result.exitCode, 0);
+  assert.ok(progress.some(event => event.guardId === "hanging"));
+});
+
+test("preflight awaits asynchronous guard failures instead of inventing a clean result", async () => {
+  const result = await runPreflight({ env: {}, plan: PLAN.slice(0, 1),
+    execute: async () => ({ exitCode: 1, output: "actual violation", runnerFailure: false }) });
+  assert.equal(result.ok, false);
+  assert.equal(result.entries[0].status, "failed");
+});
+
+test("a zero-exit guard with failed progress recording cannot supply PASS", async () => {
+  const { createDefaultExecute } = await import("./lib/pregate-preflight.mjs");
+  let observations = 0;
+  const execute = createDefaultExecute(process.env,{progress:() => {
+    if (++observations === 2) throw new Error("receipt persistence unavailable");
+  }});
+  const result = await execute(process.execPath,["-e","process.exit(0)"]);
+  assert.equal(result.outcome,"runner_failed");
+  assert.notEqual(result.exitCode,0);
+});
+
+test("preflight receipt exceptions report unrun without leaking exception contents", async () => {
+  const {runPreflightEntrypoint} = await import("./pregate-preflight.mjs");
+  let output="";
+  const status=await runPreflightEntrypoint(async () => {throw Object.assign(new Error("fixture-secret"),{code:"ENOSPC"});},text=>{output+=text;});
+  assert.equal(status,88);
+  assert.match(output,/inconclusive.*ENOSPC/);
+  assert.doesNotMatch(output,/fixture-secret/);
 });

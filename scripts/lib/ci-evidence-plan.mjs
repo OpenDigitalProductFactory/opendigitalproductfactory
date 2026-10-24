@@ -89,7 +89,7 @@ function packageOwner(path, packageRoots) {
 }
 
 function testStem(path) {
-  return path.replace(/\.[cm]?[jt]sx?$/, "");
+  return path.replace(/\.([cm]?[jt]sx?|py)$/, "");
 }
 
 function colocatedTests(path, knownTests) {
@@ -99,6 +99,10 @@ function colocatedTests(path, knownTests) {
   return knownTests.filter((testPath) => (
     testPath.startsWith(`${stem}.test.`)
     || testPath.startsWith(`${stem}.spec.`)
+    // Python colocates as `<stem>_test.py` rather than `<stem>.test.py`, so the
+    // JS-shaped prefixes above never match it. Without this a Python source file
+    // is production-with-no-tests, which escalates the whole run.
+    || testPath === `${stem}_test.py`
     || (
       basename
       && testPath.startsWith(`${directory ? `${directory}/` : ""}__tests__/${basename}.`)

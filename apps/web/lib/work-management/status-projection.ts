@@ -33,6 +33,10 @@ export interface WorkCaseStatusProjectionInput {
     verificationId: string;
     status: string;
   } | null;
+  coworkerEngagement?: {
+    engagementId: string;
+    status: string;
+  } | null;
   source?: {
     sourceType: string;
     sourceId: string;
@@ -305,6 +309,66 @@ function projectTaskRun(taskRun: { taskRunId: string; status: string }): WorkCas
   });
 }
 
+function projectCoworkerEngagement(
+  engagement: NonNullable<WorkCaseStatusProjectionInput["coworkerEngagement"]>,
+): WorkCaseStateProjection | null {
+  const status = normalized(engagement.status);
+  const sourceRef = ref("coworker-engagement", engagement.engagementId, engagement.status);
+  if (status === "needs-approval") {
+    return projection({
+      state: "awaiting-decision",
+      reason: "Coworker engagement is waiting for approval before work can continue.",
+      sourceRef,
+      blockingActorKind: "decision",
+      a2aStatus: "input-required",
+    });
+  }
+  if (status === "requested") {
+    return projection({
+      state: "intake",
+      reason: "Coworker engagement has been requested.",
+      sourceRef,
+    });
+  }
+  if (status === "accepted") {
+    return projection({
+      state: "triage",
+      reason: "Coworker engagement has been accepted and is ready to start.",
+      sourceRef,
+    });
+  }
+  if (status === "in-progress") {
+    return projection({
+      state: "active",
+      reason: "Coworker engagement is in progress.",
+      sourceRef,
+    });
+  }
+  if (status === "completed") {
+    return projection({
+      state: "resolved",
+      reason: "Coworker engagement completed.",
+      sourceRef,
+    });
+  }
+  if (status === "rejected") {
+    return projection({
+      state: "cancelled",
+      reason: "Coworker engagement was rejected.",
+      sourceRef,
+      a2aStatus: "rejected",
+    });
+  }
+  if (status === "cancelled" || status === "canceled") {
+    return projection({
+      state: "cancelled",
+      reason: "Coworker engagement was cancelled.",
+      sourceRef,
+    });
+  }
+  return null;
+}
+
 /** Single projection entry point for every registered durable work carrier. */
 export function projectWorkUnitState(workUnit: WorkUnit): WorkCaseStateProjection {
   const { carrier, carrierId } = workUnit.identity;
@@ -314,6 +378,9 @@ export function projectWorkUnitState(workUnit: WorkUnit): WorkCaseStateProjectio
   }
   if (carrier === "work-item") {
     return projectWorkCaseState({ workItem: { itemId: carrierId, status } });
+  }
+  if (carrier === "coworker-engagement") {
+    return projectWorkCaseState({ coworkerEngagement: { engagementId: carrierId, status } });
   }
   return projectTaskRun({ taskRunId: carrierId, status });
 }
@@ -336,6 +403,10 @@ export function projectWorkCaseState(
   if (input.workItem) {
     const workItemProjection = projectWorkItem(input.workItem);
     if (workItemProjection) return workItemProjection;
+  }
+  if (input.coworkerEngagement) {
+    const engagementProjection = projectCoworkerEngagement(input.coworkerEngagement);
+    if (engagementProjection) return engagementProjection;
   }
   if (input.source) {
     return projection({

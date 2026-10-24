@@ -364,7 +364,14 @@ describe("registry-unavailable carries the HTTP status", () => {
     expect(result.detail).toBe(`HTTP ${status}`);
   });
 
-  it("leaves detail unset when the failure is not an HTTP status", async () => {
+  // BI-1E8C1930 — this used to assert `detail` stayed UNSET for a non-HTTP
+  // failure, on the reasoning that a detail which is not a status would mislead.
+  // A live install disproved it: the update control vanished, every page load
+  // logged a bare `registry-unavailable`, and the whole GHCR chain succeeded
+  // when replayed by hand in the same container. The evidence excluded every
+  // lane that explains itself and said nothing about the one that does not.
+  // Silence was the misleading part.
+  it("names the error class when the failure is not an HTTP status", async () => {
     const transportFactory = vi.fn(() => ({
       fetch: vi.fn(async () => {
         throw new TypeError("fetch failed");
@@ -382,6 +389,127 @@ describe("registry-unavailable carries the HTTP status", () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.reason).toBe("registry-unavailable");
-    expect(result.detail).toBeUndefined();
+    expect(result.detail).toBe("TypeError: fetch failed");
+  });
+
+  // Undici reports a transport fault as a bare TypeError with the real
+  // condition nested underneath, so reading `code` off the top-level error
+  // finds nothing. This is the shape that actually reaches production.
+  it("reports the nested undici cause code", async () => {
+    const nested = new TypeError("fetch failed", {
+      cause: Object.assign(new Error("Connect Timeout Error"), {
+        code: "UND_ERR_CONNECT_TIMEOUT",
+      }),
+    });
+    const transportFactory = vi.fn(() => ({
+      fetch: vi.fn(async () => {
+        throw nested;
+      }),
+      close: vi.fn(async () => undefined),
+    })) as never;
+
+    const result = await readRegistryReleaseCandidate({
+      owner: OWNER,
+      channelTag: "latest",
+      architecture: "amd64",
+      transportFactory,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.detail).toBe("TypeError: fetch failed (UND_ERR_CONNECT_TIMEOUT)");
+  });
+
+  it("finds a code nested more than one level down", async () => {
+    const deep = new TypeError("fetch failed", {
+      cause: new Error("socket layer", {
+        cause: Object.assign(new Error("certificate rejected"), {
+          code: "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+        }),
+      }),
+    });
+    const transportFactory = vi.fn(() => ({
+      fetch: vi.fn(async () => {
+        throw deep;
+      }),
+      close: vi.fn(async () => undefined),
+    })) as never;
+
+    const result = await readRegistryReleaseCandidate({
+      owner: OWNER,
+      channelTag: "latest",
+      architecture: "amd64",
+      transportFactory,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.detail).toBe(
+      "TypeError: fetch failed (UNABLE_TO_VERIFY_LEAF_SIGNATURE)",
+    );
+  });
+
+  // A registry read carries bearer tokens and signed redirect URLs, and this
+  // string reaches a log an operator reads. The message is bounded so a long
+  // error can never spill one into it.
+  it("bounds the message it reports", async () => {
+    const transportFactory = vi.fn(() => ({
+      fetch: vi.fn(async () => {
+        throw new Error("x".repeat(500));
+      }),
+      close: vi.fn(async () => undefined),
+    })) as never;
+
+    const result = await readRegistryReleaseCandidate({
+      owner: OWNER,
+      channelTag: "latest",
+      architecture: "amd64",
+      transportFactory,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.detail).toBe(`Error: ${"x".repeat(120)}`);
+  });
+
+  it("survives a throw that is not an Error at all", async () => {
+    const transportFactory = vi.fn(() => ({
+      fetch: vi.fn(async () => {
+        throw "registry exploded";
+      }),
+      close: vi.fn(async () => undefined),
+    })) as never;
+
+    const result = await readRegistryReleaseCandidate({
+      owner: OWNER,
+      channelTag: "latest",
+      architecture: "amd64",
+      transportFactory,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe("registry-unavailable");
+    expect(result.detail).toBe("non-error throw (string)");
+  });
+
+  // The HTTP lane must keep its exact status text — the new detail must not
+  // start decorating failures that already explain themselves.
+  it("leaves an HTTP failure's detail exactly as it was", async () => {
+    const transportFactory = vi.fn(() => ({
+      fetch: vi.fn(async () => new Response("", { status: 429 })),
+      close: vi.fn(async () => undefined),
+    })) as never;
+
+    const result = await readRegistryReleaseCandidate({
+      owner: OWNER,
+      channelTag: "latest",
+      architecture: "amd64",
+      transportFactory,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.detail).toBe("HTTP 429");
   });
 });

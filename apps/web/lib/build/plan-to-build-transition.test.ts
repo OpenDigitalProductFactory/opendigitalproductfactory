@@ -13,9 +13,15 @@ const evaluateWwmdGateMock = vi.fn();
 const isSandboxAvailableMock = vi.fn();
 const startBuildBranchMock = vi.fn();
 const startBuildPhaseRunMock = vi.fn();
+const admitPhaseTransitionMock = vi.fn();
 const completeBuildPhaseRunMock = vi.fn();
 const dispatchBuildMock = vi.fn();
 const enforceInitiativeReadinessMock = vi.fn();
+
+const ensureCoverageMock = vi.fn(async () => ({ recorded: false, reason: "already-covered" }));
+vi.mock("@/lib/build/record-build-plan-coverage", () => ({
+  ensureBuildPlanCoverage: (...a: unknown[]) => ensureCoverageMock(...(a as [])),
+}));
 
 vi.mock("@dpf/db", () => {
   const prisma = {
@@ -50,6 +56,7 @@ vi.mock("@/lib/build/sandbox/build-branch", () => ({
   startBuildBranch: (...a: unknown[]) => startBuildBranchMock(...a),
 }));
 vi.mock("@/lib/build/build-phase-run", () => ({
+  admitPhaseTransition: (...a: unknown[]) => admitPhaseTransitionMock(...a),
   startBuildPhaseRun: (...a: unknown[]) => startBuildPhaseRunMock(...a),
   completeBuildPhaseRun: (...a: unknown[]) => completeBuildPhaseRunMock(...a),
 }));
@@ -134,6 +141,7 @@ describe("performPlanToBuildTransition (BI-05208DE5)", () => {
     isSandboxAvailableMock.mockReset().mockResolvedValue(true);
     startBuildBranchMock.mockReset().mockResolvedValue(null);
     startBuildPhaseRunMock.mockReset().mockResolvedValue(undefined);
+    admitPhaseTransitionMock.mockReset().mockResolvedValue(true);
     completeBuildPhaseRunMock.mockReset().mockResolvedValue(undefined);
     dispatchBuildMock.mockReset().mockResolvedValue({ kind: "dispatched" });
     enforceInitiativeReadinessMock.mockReset().mockResolvedValue({ allowed: true, message: "allowed" });
@@ -147,6 +155,18 @@ describe("performPlanToBuildTransition (BI-05208DE5)", () => {
     expect(out).toEqual({ kind: "gate-blocked", reason: "PLAN_COVERAGE_REQUIRED" });
     expect(startBuildBranchMock).not.toHaveBeenCalled();
     expect(updateMock).not.toHaveBeenCalledWith(expect.objectContaining({ data: { phase: "build" } }));
+  });
+
+  // BI-F9EE05E5 slice B: during an upgrade drain the next phase waits. It
+  // used to flip anyway while only the phase-run row was refused, so the
+  // drain saw no open phase while the build worked.
+  it("waits during an upgrade drain: no branch, no phase write, not counted as a failure", async () => {
+    admitPhaseTransitionMock.mockResolvedValueOnce(false);
+    const out = await performPlanToBuildTransition({ buildId: "FB-X", userId: "u1" });
+    expect(out).toEqual({ kind: "not-ready", reason: "waiting for the platform upgrade to finish" });
+    expect(admitPhaseTransitionMock).toHaveBeenCalledWith("FB-X", "plan", "build");
+    expect(startBuildBranchMock).not.toHaveBeenCalled();
+    expect(updateMock).not.toHaveBeenCalled();
   });
 
   it("advances a complete, reviewed, WWMD-recommended plan to build (initializes branch, flips phase, dispatches)", async () => {
@@ -277,5 +297,23 @@ describe("performPlanToBuildTransition (BI-05208DE5)", () => {
     expect(updateMock).not.toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ phase: "abandoned" }) }),
     );
+  });
+});
+
+describe("plan coverage before the readiness gate (BI-6F2872FC)", () => {
+  it("records the reviewed plan's coverage before judging the transition", async () => {
+    ensureCoverageMock.mockClear();
+    findUniqueMock.mockResolvedValueOnce(planBuild());
+    await performPlanToBuildTransition({ buildId: "FB-X", userId: "u1" });
+    expect(ensureCoverageMock).toHaveBeenCalledWith("FB-X");
+  });
+
+  it("does not cover a plan whose review did not pass, nor an escalated build", async () => {
+    ensureCoverageMock.mockClear();
+    findUniqueMock.mockResolvedValueOnce(planBuild({ planReview: { decision: "fail" } }));
+    await performPlanToBuildTransition({ buildId: "FB-X", userId: "u1" });
+    findUniqueMock.mockResolvedValueOnce(planBuild({ buildExecState: { planAdvance: { failures: 3, escalatedAt: "2026-09-23T00:00:00Z" } } }));
+    await performPlanToBuildTransition({ buildId: "FB-X", userId: "u1" });
+    expect(ensureCoverageMock).not.toHaveBeenCalled();
   });
 });

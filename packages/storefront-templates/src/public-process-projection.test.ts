@@ -25,6 +25,9 @@ describe("public archetype process projection", () => {
     expect(html).toContain("Health and welfare");
     expect(html).toContain("Adoption and placement");
     expect(html).toContain("Return and re-enter care");
-    expect(html).not.toContain("Capture Demand");
+    // BI-4B11F98E: the backbone stages the leaf lanes do not cover are now
+    // published too, so a rescue's page shows how it takes demand in and settles.
+    expect(html).toContain("Capture Demand");
+    expect(html).toContain("Settle &amp; Account");
   });
 });

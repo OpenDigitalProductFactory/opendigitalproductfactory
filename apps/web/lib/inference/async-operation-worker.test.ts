@@ -284,6 +284,72 @@ describe("durable async operation worker", () => {
     expect(result).toEqual({ status: "failed", disposition: "failed" });
   });
 
+  it("settles an unsatisfiable dispatch binding as failed under the fenced lease instead of throwing", async () => {
+    const store = workerStore();
+    const deps = {
+      ...dependencies(store),
+      resolveDispatchBinding: vi.fn().mockResolvedValue({
+        kind: "unsatisfiable" as const,
+        error: "DURABLE_INFERENCE_TASKRUN_BINDING_MISSING",
+      }),
+    };
+
+    const result = await runDurableAsyncOperationWorker({ operationId: "op-1", workerId: "worker-1" }, deps);
+
+    expect(store.claimOperation).toHaveBeenCalledTimes(1);
+    expect(deps.resolveDispatchBinding).toHaveBeenCalledWith(expect.objectContaining({
+      id: "op-1",
+      leaseOwner: "worker-1",
+    }));
+    expect(store.markStartAttempted).not.toHaveBeenCalled();
+    expect(deps.startProvider).not.toHaveBeenCalled();
+    expect(store.transitionOwned).toHaveBeenCalledWith(expect.objectContaining({
+      from: "pending",
+      to: "failed",
+      workerId: "worker-1",
+      checkpoint: {
+        phase: "dispatch-binding-unsatisfiable",
+        error: "DURABLE_INFERENCE_TASKRUN_BINDING_MISSING",
+      },
+      data: { errorMessage: "DURABLE_INFERENCE_TASKRUN_BINDING_MISSING" },
+    }));
+    expect(result).toEqual({ status: "failed", disposition: "failed" });
+  });
+
+  it("settles an unsatisfiable dispatch binding on a running row without polling the provider", async () => {
+    const store = workerStore(operation({ status: "running", providerOperationId: "operations/provider-1" }));
+    const deps = {
+      ...dependencies(store),
+      resolveDispatchBinding: vi.fn().mockResolvedValue({
+        kind: "unsatisfiable" as const,
+        error: "DURABLE_INFERENCE_TASKRUN_BINDING_MISSING",
+      }),
+    };
+
+    const result = await runDurableAsyncOperationWorker({ operationId: "op-1", workerId: "worker-1" }, deps);
+
+    expect(deps.pollProvider).not.toHaveBeenCalled();
+    expect(store.transitionOwned).toHaveBeenCalledWith(expect.objectContaining({
+      from: "running",
+      to: "failed",
+      data: { errorMessage: "DURABLE_INFERENCE_TASKRUN_BINDING_MISSING" },
+    }));
+    expect(result).toEqual({ status: "failed", disposition: "failed" });
+  });
+
+  it("dispatches normally when the binding resolver reports the operation bound", async () => {
+    const store = workerStore();
+    const deps = {
+      ...dependencies(store),
+      resolveDispatchBinding: vi.fn().mockResolvedValue({ kind: "bound" as const }),
+    };
+
+    const result = await runDurableAsyncOperationWorker({ operationId: "op-1", workerId: "worker-1" }, deps);
+
+    expect(deps.startProvider).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ status: "running", disposition: "started" });
+  });
+
   it("persists terminal result and provenance after a completed poll", async () => {
     const store = workerStore(operation({ status: "running", providerOperationId: "operations/provider-1" }));
     const deps = dependencies(store);

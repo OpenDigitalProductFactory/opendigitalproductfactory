@@ -12,10 +12,6 @@
       "mcp__dpf__propose_improvement"
     ]
   },
-  "enableAllProjectMcpServers": true,
-  "enabledMcpjsonServers": [
-    "dpf"
-  ],
   "hooks": {
     "PreToolUse": [
       {
@@ -32,6 +28,10 @@
           {
             "type": "command",
             "command": "node \"${CLAUDE_PROJECT_DIR}/packages/dpf-skill-pack/hooks/compose-guard.mjs\""
+          },
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/packages/dpf-skill-pack/hooks/raw-tool-guard.mjs\""
           },
           {
             "type": "command",
@@ -95,6 +95,15 @@
       }
     ],
     "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/packages/dpf-skill-pack/hooks/uncommitted-work-guard.mjs\" --snapshot",
+            "async": false
+          }
+        ]
+      },
       {
         "matcher": "*",
         "hooks": [

@@ -1,0 +1,19 @@
+{
+  "version": "1",
+  "decidedOption": "inline-on-board-when-full",
+  "decisionInteractionId": "DI-4E55C1354F74",
+  "scope": {
+    "files": [
+      "apps/web/components/ward/CapacityReview.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "inline-on-board-when-full",
+      "dedicated-triage-route",
+      "coworker-raises-in-cockpit"
+    ],
+    "note": "Where a full shelter's capacity review appears — the ranked, justified shortlist a person must decide about when every kennel is occupied. Scored through principle_decide against a dedicated triage route and a cockpit decision card. The composite is deliberately NOT cited as the reason: the feature vectors were author-supplied and ungrounded (requireEvidence was not set), so the score largely restates the author's own prior, and its margin is inflated by retrieval that admitted plainly unrelated commandments — CAN-SPAM, GDPR and double-entry bookkeeping were among the 49 principles applied to a UI placement, and double-entry alone separated the three options by 0.065 (BI-8B04594C). The organization's own mission contributed exactly zero, because it is retrieved in semantic mode without a dimension vector (BI-E98B8650). What survives that scepticism is one differential, interpretable signal, the same one that decided the map: \"Do the work; don't task the operator with what an agent can do\" scores POSITIVE for inline (+0.148) and NEGATIVE for both alternatives (-0.098 for a separate route, -0.146 for a cockpit card). Sending a worker elsewhere to read a shortlist the agent already assembled, or waiting for them to notice a card, is tasking the operator with the assembly. \"Show the consequence before the confirm\" agrees (0.153 against 0.088 and 0.013), and no commandment opposed the choice. The recorded interaction DI-4E55C1354F74 resolves to a DEFERRAL, not a pick — the ux-design corpus holds no material for this class and principle_decide could not record its own outcome on this install (profile-not-provisioned, BI-8BB292BE). That is stated rather than dressed up: a cited id must mean what it says. The review renders ONLY when free units reach zero, so the list exists because the building is full rather than because a screen had room for it. Hard exclusions run before any scoring, so a legal hold, an approved adopter, an unanswered applicant, an open assessment or a recorded outcome removes an animal entirely and no combination of factors can score it back on; each exclusion is tested against the worst possible ranking profile. Every exclusion is named with its reason so a worker can check the machine's work, every ranking factor is printed in plain words, and the panel carries no control that acts: AnimalOutcomeType.euthanasia exists in the schema and nothing here writes it. Occupied units also gain the animal's own photograph from the primaryPhotoAssetId already stored, and a line naming the person coming for them where an application is live — \"Every non-text element needs a text alternative\" is met by alt text carrying the animal's name, and name and state remain in the list view for anyone the map does not serve."
+  }
+}

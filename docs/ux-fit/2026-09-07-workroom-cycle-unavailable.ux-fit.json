@@ -1,0 +1,17 @@
+{
+  "version": "1",
+  "decidedOption": "named-unavailable-state",
+  "decisionInteractionId": "DI-89ACB51383C3",
+  "scope": {
+    "files": ["apps/web/components/workspace/workroom/WorkroomCycles.tsx"]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "named-unavailable-state",
+      "reuse-healthy-idle-copy",
+      "hide-cycle-section",
+      "show-raw-reason-code"
+    ]
+  }
+}

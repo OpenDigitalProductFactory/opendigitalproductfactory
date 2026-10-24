@@ -4,7 +4,7 @@
 
 import { writeFileSync, mkdirSync } from "fs";
 import { join } from "path";
-import { readWorkbook, requireSheetData, sheetDataToObjects } from "../src/excel-sheet-reader";
+import { readWorkbook, requireSheetData, sheetDataToObjects } from "./lib/excel-sheet-reader";
 
 const XLSX_PATH = join(__dirname, "..", "..", "..", "docs", "Reference", "4_portfolio_Reworked_V3_Definitions_IT4IT.xlsx");
 const OUT_DIR   = join(__dirname, "..", "data");

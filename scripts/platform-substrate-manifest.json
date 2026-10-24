@@ -32,7 +32,8 @@
       "profiles": [],
       "ports": [],
       "volumes": [
-        "dpf-source-code:/workspace"
+        "dpf-source-code:/workspace",
+        "${DPF_STATE_DIR:-${HOME}/.dpf}:/dpf-state:ro"
       ],
       "dependsOn": [
         "postgres"
@@ -55,15 +56,16 @@
       "defaultRequired": true,
       "profiles": [],
       "ports": [
-        "3000:3000",
-        "1455:3000",
-        "${DPF_LDAP_BIND_ADDRESS:-127.0.0.1}:${DPF_LDAP_PORT:-636}:${DPF_LDAP_PORT:-636}"
+        "${DPF_HOST_BIND_ADDRESS:-127.0.0.1}:3000:3000",
+        "${DPF_HOST_BIND_ADDRESS:-127.0.0.1}:1455:3000",
+        "${DPF_LDAP_BIND_ADDRESS:-${DPF_HOST_BIND_ADDRESS:-127.0.0.1}}:${DPF_LDAP_PORT:-636}:${DPF_LDAP_PORT:-636}"
       ],
       "volumes": [
         "/var/run/docker.sock:/var/run/docker.sock",
         "dpf-source-code:/workspace",
         "sandbox_workspace:/sandbox-workspace",
         "browser_evidence:/evidence:ro",
+        "map_data:/var/lib/dpf/maps",
         "${DPF_BACKUPS_HOST_PATH:-${DPF_HOST_INSTALL_PATH:-.}/backups}:/backups",
         "${DPF_HOST_INSTALL_PATH:-.}:/host-dpf",
         "${DPF_WORKTREE_BASE:-${DPF_HOST_INSTALL_PATH:-.}-worktrees}:/host-worktrees",
@@ -143,7 +145,7 @@
         "runtime-build"
       ],
       "ports": [
-        "3035:3000"
+        "${DPF_HOST_BIND_ADDRESS:-127.0.0.1}:3035:3000"
       ],
       "volumes": [
         "sandbox_workspace:/workspace"
@@ -199,7 +201,7 @@
         "runtime-browser-automation"
       ],
       "ports": [
-        "8500:8500"
+        "${DPF_HOST_BIND_ADDRESS:-127.0.0.1}:8500:8500"
       ],
       "volumes": [
         "browser_evidence:/evidence",
@@ -226,7 +228,7 @@
         "integrations-adp"
       ],
       "ports": [
-        "8600:8600"
+        "${DPF_HOST_BIND_ADDRESS:-127.0.0.1}:8600:8600"
       ],
       "volumes": [],
       "dependsOn": [
@@ -252,7 +254,7 @@
         "integration-test"
       ],
       "ports": [
-        "8700:8700"
+        "${DPF_HOST_BIND_ADDRESS:-127.0.0.1}:8700:8700"
       ],
       "volumes": [],
       "dependsOn": [],
@@ -276,7 +278,7 @@
         "dev"
       ],
       "ports": [
-        "5433:5432"
+        "${DPF_HOST_BIND_ADDRESS:-127.0.0.1}:5433:5432"
       ],
       "volumes": [
         "dev_pgdata:/var/lib/postgresql/data"
@@ -343,7 +345,7 @@
         "dev"
       ],
       "ports": [
-        "3001:3000"
+        "${DPF_HOST_BIND_ADDRESS:-127.0.0.1}:3001:3000"
       ],
       "volumes": [
         ".:/workspace",
@@ -386,7 +388,7 @@
         "observability-ui"
       ],
       "ports": [
-        "9090:9090"
+        "${DPF_HOST_BIND_ADDRESS:-127.0.0.1}:9090:9090"
       ],
       "volumes": [
         "./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro",
@@ -415,7 +417,7 @@
         "observability-ui"
       ],
       "ports": [
-        "3002:3000"
+        "${DPF_HOST_BIND_ADDRESS:-127.0.0.1}:3002:3000"
       ],
       "volumes": [
         "./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro",
@@ -437,14 +439,11 @@
     },
     {
       "service": "loki",
-      "class": "capability-activated",
-      "capability": "runtime:deep-observability",
-      "boundaryReason": "Separate loki runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-      "defaultRequired": false,
-      "profiles": [
-        "runtime-deep-observability",
-        "observability-ui"
-      ],
+      "class": "universal-core",
+      "capability": "runtime:core",
+      "boundaryReason": "Universal log store: container log capture is a platform guarantee, not an opt-in capability (BI-F8024A9D). Reads logs via the Docker socket with no host-path bind mount, so it runs on every supported host.",
+      "defaultRequired": true,
+      "profiles": [],
       "ports": [
         "127.0.0.1:3100:3100"
       ],
@@ -462,18 +461,15 @@
         "macos",
         "linux"
       ],
-      "targetClassification": "capability-activated"
+      "targetClassification": "universal-core"
     },
     {
       "service": "alloy",
-      "class": "capability-activated",
-      "capability": "runtime:deep-observability",
-      "boundaryReason": "Separate alloy runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-      "defaultRequired": false,
-      "profiles": [
-        "runtime-deep-observability",
-        "observability-ui"
-      ],
+      "class": "universal-core",
+      "capability": "runtime:core",
+      "boundaryReason": "Universal log shipper feeding loki; promoted with it (BI-F8024A9D) because a capture layer nobody enabled is a capture layer that does not exist.",
+      "defaultRequired": true,
+      "profiles": [],
       "ports": [],
       "volumes": [
         "./monitoring/alloy/config.alloy:/etc/alloy/config.alloy:ro",
@@ -491,7 +487,7 @@
         "macos",
         "linux"
       ],
-      "targetClassification": "capability-activated"
+      "targetClassification": "universal-core"
     },
     {
       "service": "cadvisor",
@@ -503,7 +499,7 @@
         "linux-monitoring"
       ],
       "ports": [
-        "8080:8080"
+        "${DPF_HOST_BIND_ADDRESS:-127.0.0.1}:8080:8080"
       ],
       "volumes": [
         "/var/run/docker.sock:/var/run/docker.sock:ro",
@@ -529,7 +525,7 @@
         "linux-monitoring"
       ],
       "ports": [
-        "9100:9100"
+        "${DPF_HOST_BIND_ADDRESS:-127.0.0.1}:9100:9100"
       ],
       "volumes": [
         "/proc:/host/proc:ro",
@@ -556,7 +552,7 @@
         "observability-ui"
       ],
       "ports": [
-        "9187:9187"
+        "${DPF_HOST_BIND_ADDRESS:-127.0.0.1}:9187:9187"
       ],
       "volumes": [
         "./monitoring/postgres-exporter/postgres_exporter.yml:/postgres_exporter.yml:ro"
@@ -582,7 +578,7 @@
       "defaultRequired": true,
       "profiles": [],
       "ports": [
-        "6379:6379"
+        "${DPF_HOST_BIND_ADDRESS:-127.0.0.1}:6379:6379"
       ],
       "volumes": [
         "redis_data:/data"
@@ -630,8 +626,8 @@
       "defaultRequired": true,
       "profiles": [],
       "ports": [
-        "8288:8288",
-        "8289:8289"
+        "${DPF_HOST_BIND_ADDRESS:-127.0.0.1}:8288:8288",
+        "${DPF_HOST_BIND_ADDRESS:-127.0.0.1}:8289:8289"
       ],
       "volumes": [],
       "dependsOn": [
@@ -649,37 +645,10 @@
       "targetClassification": "universal-core"
     },
     {
-      "service": "dpf-stt",
-      "class": "capability-activated",
-      "capability": "runtime:local-speech",
-      "boundaryReason": "Separate dpf-stt runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-      "defaultRequired": false,
-      "profiles": [
-        "runtime-local-speech",
-        "tts"
-      ],
-      "ports": [
-        "127.0.0.1:8765:9000"
-      ],
-      "volumes": [
-        "dpf_stt_models:/app/models"
-      ],
-      "dependsOn": [],
-      "canonicalDataOwner": "none",
-      "backupPolicy": "excluded-rebuildable",
-      "healthSemantics": "compose-healthcheck",
-      "hostPlatforms": [
-        "windows",
-        "macos",
-        "linux"
-      ],
-      "targetClassification": "capability-activated"
-    },
-    {
       "service": "dpf-tts",
       "class": "capability-activated",
       "capability": "runtime:local-speech",
-      "boundaryReason": "Separate dpf-tts runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
+      "boundaryReason": "Docker speech runtime for Windows/Linux; macOS uses the host-native Chatterbox service declared by its platform overlay.",
       "defaultRequired": false,
       "profiles": [
         "runtime-local-speech",
@@ -697,7 +666,6 @@
       "healthSemantics": "compose-healthcheck",
       "hostPlatforms": [
         "windows",
-        "macos",
         "linux"
       ],
       "targetClassification": "capability-activated"
@@ -712,7 +680,7 @@
         "runtime-external-ai"
       ],
       "ports": [
-        "11434:11434"
+        "127.0.0.1:11434:11434"
       ],
       "volumes": [
         "ollama_data:/root/.ollama"

@@ -8,8 +8,8 @@ import {
   projectToolAccessDomain,
   summarizeAiReadinessState,
   type AiReadinessProviderInput,
-  type AiReadinessDomain,
 } from "./readiness-summary";
+import type { AiReadinessDomain } from "./readiness-summary-types";
 import type { ContributorMcpReadiness } from "@/lib/mcp/contributor-readiness";
 import type { RoutingEligibilityState } from "@/lib/routing/provider-routing-eligibility";
 
@@ -94,6 +94,14 @@ describe("projectModelSupplyDomain", () => {
     expect(domain.state).toBe("attention");
     expect(domain.blocker?.primaryActionLabel).toBe("Open providers");
     expect(domain.blocker?.href).toBe("/platform/ai/providers");
+  });
+
+  it("does not count a public-only provider as model supply (BI-1BF425BF)", () => {
+    const domain = projectModelSupplyDomain([provider("public_only")]);
+
+    expect(domain.state).toBe("attention");
+    expect(domain.summary).toContain("none routable");
+    expect(domain.blocker?.code).toBe("public_only");
   });
 
   it("is blocked when no model providers are configured", () => {

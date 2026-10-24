@@ -16,6 +16,7 @@ const DECISION_PRESENTATION: Record<
 
 export function semanticReviewDecisionPresentation(
   decision: SemanticReviewDecision,
+  executionIncomplete = false,
 ): SemanticReviewDecisionPresentation {
-  return DECISION_PRESENTATION[decision];
+  return DECISION_PRESENTATION[executionIncomplete ? "inconclusive" : decision];
 }

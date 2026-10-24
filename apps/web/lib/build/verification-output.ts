@@ -1,4 +1,17 @@
+import type { FailureAnalysis } from "@/lib/change-review/failure-analysis";
+
+/** Existing Build Studio verification payload, shared by authoring and review. */
+export type VerificationOutput = {
+  failureAnalysis?: FailureAnalysis;
+  testsPassed: number;
+  testsFailed: number;
+  typecheckPassed: boolean;
+  fullOutput: string;
+  timestamp: string;
+};
+
 import type { BuildFailureAxis } from "./progress-visibility-types";
+import { isRecord } from "@/lib/shared/coerce";
 
 export type NormalizedVerificationOutput = {
   typecheckPassed: boolean | null;
@@ -8,8 +21,6 @@ export type NormalizedVerificationOutput = {
   observedAt: string | null;
   failureAxis: BuildFailureAxis | null;
 };
-
-type JsonRecord = Record<string, unknown>;
 
 export function normalizeVerificationOutput(value: unknown): NormalizedVerificationOutput {
   if (!isRecord(value)) {
@@ -91,10 +102,6 @@ function firstString(...values: unknown[]): string | null {
     }
   }
   return null;
-}
-
-function isRecord(value: unknown): value is JsonRecord {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function stringOrNull(value: unknown): string | null {

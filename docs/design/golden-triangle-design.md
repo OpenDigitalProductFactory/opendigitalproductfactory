@@ -115,6 +115,7 @@ DPF already has most of the hard plumbing this design needs:
 - Cost-per-success ranking: [`apps/web/lib/routing/cost-ranking.ts`](../../apps/web/lib/routing/cost-ranking.ts)
 - The `effort` lever (thinking-budget) and adapter mapping: [`apps/web/lib/routing/chat-adapter.ts`](../../apps/web/lib/routing/chat-adapter.ts)
 - Multi-perspective deliberation (perspective/review count): [`apps/web/lib/queue/functions/deliberation-run.ts`](../../apps/web/lib/queue/functions/deliberation-run.ts)
+  - **2026-09-15:** branches now execute through `routeAndCall` rather than only being routed, so perspective count is a real cost lever — each branch is an inference call, and `budgetUsd` halts a panel on observed token usage instead of a `+= 0` placeholder. Before this, raising the perspective count cost nothing and produced nothing.
 - Decision scopes and audit ledger: [`docs/user-guide/ai-workforce/decision-perspective.md`](../user-guide/ai-workforce/decision-perspective.md)
 - Cost governance and token telemetry: [`docs/superpowers/specs/2026-05-19-ai-cost-governance.md`](../superpowers/specs/2026-05-19-ai-cost-governance.md)
 - Provider/model scoring convergence: [`docs/superpowers/specs/2026-06-19-provider-model-scoring-convergence-design.md`](../superpowers/specs/2026-06-19-provider-model-scoring-convergence-design.md)

@@ -108,7 +108,7 @@ export async function loadWorkroomPostureContext(ref: {
       inherited: {
         proactivityPlan,
         priority: priority?.preference ?? null,
-        source: priority?.source === "agent" ? "agent" : "platform",
+        source: "platform",
       },
       operatingHours: hours
         ? {

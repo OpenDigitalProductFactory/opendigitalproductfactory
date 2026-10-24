@@ -11,6 +11,7 @@ import {
 } from "./trust-graduation";
 
 const DEFAULT_REQUIRED_EVIDENCE = "operator-policy-review";
+const POLICY_GAP_REQUIRED_EVIDENCE = Object.freeze(["independent-review", "policy-gap-report"]);
 
 export type RegulatoryAutonomyPolicyStatus = "draft" | "active" | "retired";
 
@@ -81,16 +82,20 @@ export function resolveRegulatoryAutonomyCeiling(
     });
   }
 
+  // BI-E30C0F4F (operator decision 2026-10-07): a person is engaged only where a
+  // matched policy names its regulation or written policy. No match is a policy
+  // gap: a setup finding to fill, not a human approval. The work runs supervised,
+  // with an independent AI reviewer approving its consequential steps.
   if (matches.length === 0) {
     return {
-      ceiling: "propose",
+      ceiling: "supervised",
       defaulted: true,
-      humanControlRequired: true,
-      requiredEvidence: [DEFAULT_REQUIRED_EVIDENCE],
+      humanControlRequired: false,
+      requiredEvidence: [...POLICY_GAP_REQUIRED_EVIDENCE],
       matchedPolicies: [],
       matchedBasis: [],
       reason:
-        "No active regulatory autonomy policy matched this industry, jurisdiction, and activity class; defaulting to propose until an operator/compliance policy review sets the ceiling.",
+        "Policy gap: no active autonomy policy matched this industry, jurisdiction, and activity class. Running supervised under an independent reviewer; the gap is reported so a policy can be written.",
     };
   }
 

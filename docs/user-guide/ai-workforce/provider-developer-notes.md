@@ -76,10 +76,52 @@ The `refreshOAuthToken()` function handles automatic token refresh. It uses the 
 - Category: `agent` — different behavior from `direct` providers
 - CANNOT discover models via /v1/models with subscription token (different backend)
 - Test connection: credential status check only (no API call)
+- OAuth scope: `openid profile email offline_access`, defaulted in `createOAuthFlow()` for any `auth.openai.com` authorize URL when `CredentialEntry.scope` is empty (a configured scope wins). Without `offline_access` OpenAI issues no refresh token. The Codex CLI's own login additionally requests `api.connectors.read api.connectors.invoke`; DPF does not need them. Never send `api.responses.write` (invalid, removed in e8a1551799b).
+- A token response without a refresh token never overwrites a stored one; when a credential has no refresh token and is past expiry, `refreshOAuthToken()` marks it and its codex/chatgpt sibling `expired`.
 - Has linked MCP service (`codex-agent`) that auto-activates on OAuth connect
 - The `/auth/callback` route does NOT require session auth (runs on different port, session cookie not available)
 
 ### Docker Model Runner / Ollama
+
+The existing `run_endpoint_tests` MCP operation also supports `fidelityOnly: true`
+with explicit `endpointId`, `modelId`, `providerConnectionId` and
+`fidelityObservationIndex`. Ask the coworker
+to run this mode for one configured local account/model; it cannot be combined
+with ordinary probes, scenarios, concurrency tests or exhaustive scopes.
+Start at index `0`. Each request performs at most one observation and returns a
+server-issued `runId` with `checkpoint.nextIndex` and `checkpoint.state`. Continue
+by supplying that `fidelityRunId` and the next index explicitly. Nine golden
+prompts at each surface (8/15/24/32/48) require 45 distinct continuations; a
+request does not promise to run that matrix automatically. Selection and actual
+governed-read results remain separate in the existing test-run history.
+It changes no model ratings, confidence or production tool limits.
+
+Replaying a completed index returns its stored observation without running the
+next case. The database checkpoint survives a disconnected caller or portal
+restart; a currently authorized executor must request continuation. A started
+case whose execution is unknown becomes `held` and is never stolen or retried.
+Stop on `held`, `busy` or unknown execution; retain its history for diagnosis.
+Legacy matrix runs remain immutable and cannot be resumed with this protocol.
+
+Each step uses the existing origin's finite admission budget and the selected
+model's canonical execution policy, bounded by any real inherited deadline or
+cancellation. Acquiring capacity starts the execution window; it does not prove
+that provider bytes were dispatched. Timing reports waiting, after-acquisition
+or unknown phase separately. A canceled or expired observation stays incomplete,
+and a late worker cannot overwrite its checkpoint or qualify a cohort. Current
+human, token, agent, room, catalog and runtime authority is checked again before
+inference dispatch and before recording a successful governed read. The drain
+registry conservatively covers one patient step; it grants no extra authority.
+
+This mode needs positive served-source and observed model/runtime identity.
+Its initial identity reader reuses the existing audited DMR parser/template
+proof; unsupported engines or model templates remain unrun rather than inheriting
+another model's results. A changed identity, missing permissions, invalid tool
+arguments or incomplete response cannot qualify a cohort. Three observations
+per task class do not meet the five-observation class-specific minimum.
+The result's `runtimeAcceptance` remains unverified until independently accepted.
+An expired turn cannot start a read or qualify from late audit verification.
+Ordinary OAuth clients can use this mode without a conversation thread.
 
 - Auth method: `none`
 - Auto-activates when reachable
@@ -104,4 +146,4 @@ The `refreshOAuthToken()` function handles automatic token refresh. It uses the 
 - **Different token exchange formats** — Anthropic needs JSON + state, OpenAI needs form-encoded without state. Always check when adding a new provider.
 - **Session cookies don't cross ports** — callback routes on different ports (e.g., 1455 for Codex) can't use `auth()` for session verification. Use the `OAuthPendingFlow.state` for CSRF protection instead.
 - **Docker redirects use 0.0.0.0** — inside Docker, `request.url` resolves to `http://0.0.0.0:3000`. Callback routes must use `appBase()` helper for redirect URLs.
-- **Build cache** — after changing `provider-oauth.ts`, always verify the new code is deployed with a clean build (`docker compose build --no-cache portal`). Stale builds are a common source of confusion.
+- **Deployed source identity** — after changing `provider-oauth.ts`, use the qualified canonical release and governed self-upgrade path. Confirm the served source contains the change.

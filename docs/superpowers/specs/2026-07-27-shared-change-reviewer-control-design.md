@@ -1,6 +1,6 @@
 ---
 title: Shared Change Reviewer Control
-status: accepted
+status: binding
 date: 2026-07-27
 owner: platform
 reviewed_by: codex-desktop
@@ -252,6 +252,436 @@ slice; the Work Capsule/Build timeline is the canonical surface.
 - GitHub/CI correlation reuses `ExternalEvidenceRecord` and Work Capsule
   activity with operation type `semantic-change-review.outcome`; no review table
   or dashboard is introduced.
+
+## Amendment: evidenced failure analysis and recovery readiness
+
+Status: proposed on 2026-09-06; implementation and independent approval pending.
+This section supersedes the earlier documentation auto-pass and shadow rollout
+for failure-analysis readiness. It extends the same review/evidence contract.
+
+### Objectives and acceptance
+
+**OBJ-FAILURE-001:** Prevent avoidable failures by analysing business consequences
+during design and refreshing the analysis against the delivered change.
+
+**OBJ-FAILURE-002:** Require independently challenged, current verification and
+accountable disposition before PR publication or promotion on every surface.
+
+**OBJ-FAILURE-003:** Recover review execution without false passes, false code
+findings, duplicate execution, or technical approval requests to business owners.
+
+**OBJ-FAILURE-004:** Learn from escaped failures through existing outcome evidence.
+
+| Acceptance criterion | Objective links | Observable result |
+| --- | --- | --- |
+| AC-FAILURE-001 | OBJ-FAILURE-001 | Every change, including docs/config/process/tests, identifies workflows, affected people, invariants, authority/data boundaries, and a versioned design analysis; a final-diff refresh identifies eliminated opportunities and remaining failures. |
+| AC-FAILURE-002 | OBJ-FAILURE-001, OBJ-FAILURE-002 | Each credible failure names trigger/assumption, business/user effect, severity/exposure, prevention or elimination, containment, detection, recovery/compensation, evidence and accountable remaining-risk disposition. |
+| AC-FAILURE-003 | OBJ-FAILURE-002 | Empty checkboxes, blanket zero-risk assurances, plausible narratives without verified material evidence, unknown dispositions and stale receipts cannot satisfy server delivery or authoritative PR/merge readiness. |
+| AC-FAILURE-004 | OBJ-FAILURE-002 | Evidence resolves in the current Workroom and repository against the final immutable change and current policy; expected and observed results are recorded, and unrun checks remain unverified. |
+| AC-FAILURE-005 | OBJ-FAILURE-001, OBJ-FAILURE-002 | An independent existing reviewer challenges omissions and justified low-impact applicability; grants, principal independence, explicit approval policy and accountable risk acceptance remain enforced. |
+| AC-FAILURE-006 | OBJ-FAILURE-003 | Missing evidence, changed diff, stale receipt, reviewer outage, denial, retry/replay and lost response have regression coverage; infrastructure remains inconclusive and has bounded same-identity recovery. |
+| AC-FAILURE-007 | OBJ-FAILURE-003 | A valid internal review recovery packet reaches its independent coworker without owner technical approval; mismatched binding, insufficient grants, explicit always-approval and genuine business-risk decisions preserve their boundary. |
+| AC-FAILURE-008 | OBJ-FAILURE-004 | Existing outcome evidence records escaped failure counts and links incident/scenario follow-up; unavailable observations remain unknown rather than zero. |
+
+### Design grounding and ownership
+
+Reviewed source: `apps/web/lib/change-review/semantic-change-review.ts`,
+`semantic-change-review-operation.ts`, `semantic-review-enforcement.ts`,
+`semantic-review-single-flight.ts`, and the `change-review-pack.ts` MCP adapter;
+`apps/web/lib/work-management/policy-envelope.ts` and the Workroom transition
+in `apps/web/lib/work-capsules/work-capsule-store.ts`; the existing initiative
+review binding described in the backlog-and-planning runbook; and
+`scripts/lib/semantic-review-gate.mjs` plus `scripts/semantic-review-policy.json`.
+The companion process specification remains
+[Resilient Concurrent Development Process](2026-08-15-resilient-concurrent-development-process.md).
+
+The per-work-kind evidence initiative owns which regression, typecheck, docs,
+behavior-preservation and UX evidence a kind of work owes. This amendment owns
+failure-scenario completeness, mitigation-to-evidence relationships, final-change
+freshness, and independent challenge. Both extend the existing evidence decision;
+neither creates a second evidence engine. Peer-owned coordination records remain
+read-only; confirm the interface with their accountable owner through the existing
+coordination plane. Install-local identifiers belong only in that plane.
+
+### Evidence contract
+
+Store the analysis in the existing immutable review receipt/evidence payload,
+with its versioned design reference and final-change binding. No new table,
+reviewer role, mutable approval store or client-owned guarantee is introduced.
+Use one pure validation contract from the shared review operation, server
+delivery/promotion evaluator and authoritative PR check. Adapters resolve trusted
+evidence and identity; prose or caller-supplied success flags do not establish them.
+
+The payload records affected workflows/people, invariants and boundaries; design
+artifact reference; final diff identity; eliminated opportunities with rationale;
+remaining scenarios; and justified applicability for failure families. Each
+scenario has a stable local key, trigger, effect, severity/exposure, prevention,
+containment, detection, recovery, verification references and accountable risk
+disposition. A mitigation reference resolves to existing verification evidence
+with expected/observed behavior and execution status for this change. Accepted
+material risk additionally resolves to an existing authority decision covering
+that risk; naming an owner is not acceptance. Repair-required risks block.
+
+Consider input/permission errors, identity/tenant/peer mix-ups, slow/unavailable
+dependencies, credential expiry, retries/duplicates, races/stale responses,
+partial writes, restart/cancellation, paging/capacity, version skew, migration,
+backfill and rollback. Consider common-cause combinations. Applicability is an
+explained judgment, not a requirement to add speculative code for every family.
+A spelling correction may carry one evidenced scope disposition. A workflow or
+gate change needs scenarios and negative-path verification. Neither receives a
+pass merely because fields are nonempty. Independent semantic review assesses
+adequacy and searches for omitted scenarios against the actual artifact.
+
+### Enforcement and recovery
+
+Require analysis before independent review can mint a publication receipt.
+Bind analysis and resolved evidence digest into the existing review identity and
+single-flight key, alongside base/head/diff, policy and reviewer versions.
+Changing analysis, verification, policy or diff invalidates reuse. A design-stage
+receipt cannot authorize final-code publication. Resolve repository head and
+evidence ownership server-side; do not trust an external client's supplied hash.
+
+Wire this same decision into Workroom review/promotion transitions, the assembled
+Build Studio promotion path and authoritative PR/merge checks. A local sidecar
+or PR-template section is explanatory convenience, never the authority. Required
+failure evidence is enforced even where semantic-review rollout remains shadow;
+legacy receipts require refresh rather than being grandfathered into readiness.
+Deploy the producer and consumers together, bump contract/policy versions, and
+exercise existing-install convergence before declaring the gate active.
+
+Missing/stale material evidence means repair the evidence. Transport/capacity or
+unreadable reviewer input means inconclusive; retain the same TaskRun/key and
+reconcile durable state after a lost response before dispatching again. Reuse
+terminal evidence only after complete freshness validation. Keep recovery within
+existing bounded attempts; exhaustion routes to the technical delivery authority
+with identity, attempts, evidence and next action, not generic owner sign-off.
+Denial is not an outage and is never retried around its grants or identity boundary.
+
+Use the existing server-issued initiativeReviewBinding recovery packet unchanged
+for routine internal design/plan reviews. Do not ask the business owner to choose
+reviewers or validate technical details. Explicit always-approval, real authority
+changes and material business-risk acceptance retain their existing decision path.
+
+### Failure analysis of this gate
+
+| Trigger and effect | Eliminated/prevented opportunity | Containment, detection and recovery | Evidence and accountable disposition |
+| --- | --- | --- | --- |
+| Missing/stale analysis permits a defect that interrupts animal care, donations or volunteer coordination. | One shared predicate eliminates divergent adapter rules; exact identity prevents reuse across changes. | Deny readiness with missing/stale evidence detail; refresh analysis and independently re-review. | Negative omission, stale policy/head/evidence and alternate-surface tests; delivery authority owns unresolved gaps. |
+| Reviewer dependency outage blocks a necessary repair; fabricated pass exposes users to unreviewed behavior. | Durable single-flight avoids duplicate requests; completed evidence is checked before reuse. | Inconclusive execution, bounded retry and durable readback after lost response; technical coordinator handles exhaustion. | Outage, restart, retry and lost-response tests; no semantic verdict is claimed until review completes. |
+| Wrong tenant, peer, principal or forged risk acceptance releases an unauthorized change. | Existing scope/grant intersection and independent receipt writer remain authoritative. | Deny exact mismatch, retain audit reason, route a concrete authority decision only where needed. | Binding/grant/independence and accepted-risk provenance tests; governance authority owns disposition. |
+| Valid internal recovery is misrouted to a nontechnical owner, delaying service repairs. | Reuse validated review binding rather than infer permission from prose or generic HITL tier. | Existing TaskRun envelope states internal recovery or actual approval boundary. | Valid-packet bypass and explicit always-approval/mismatch regressions; technical coordinator owns recovery. |
+| Duplicate/lost persistence response or policy upgrade produces misleading readiness. | Idempotent execution and immutable evidence references eliminate blind replay. | Reconcile durable receipt and candidate identity, reject old schema/policy, retry boundedly. | Replay, partial-write, version-skew and response-loss tests; no rollback claim for external effects. |
+
+Rollback of software does not retract published code, undo external effects or
+restore destructive migrations. Emergency exceptions use existing accountable
+promotion authority and explicit scope/expiry; they must not masquerade as passed
+failure evidence. Unknown failure modes remain possible after a valid review.
+
+### Research & Benchmarking
+
+- [Google SRE NALSD](https://sre.google/workbook/non-abstract-design/): adopt
+  iterative design around concrete business constraints and failure domains;
+  reject copying Google's resource scale into every small DPF change.
+- [SLSA verification summaries](https://slsa.dev/spec/v1.2/verification_summary):
+  adopt artifact, verifier and policy binding; do not claim SLSA certification or
+  create another attestation database from this analogy.
+- [OPA decision logs](https://www.openpolicyagent.org/docs/management-decision-logs):
+  adopt traceable decisions with input and policy revision; reuse DPF evidence
+  storage rather than add OPA or an independent audit transport.
+
+### Verification, UX and operating limits
+
+Verification maps AC-FAILURE-001/002/003 to contract negative tests and independent
+review; AC-FAILURE-004 to trusted evidence resolution/freshness tests;
+AC-FAILURE-005/007 to real grant and bound-review routing tests;
+AC-FAILURE-006 to single-flight fault tests; AC-FAILURE-008 to outcome persistence
+and missing-observation tests. Exercise Workroom and PR readiness with missing,
+current and then stale evidence on the governed nonproduction verification path.
+Record exact commands and observed results after implementation; this table is
+a test plan, not evidence of a pass.
+
+Reuse the Workroom timeline: default copy names what is missing and the recovery
+action; technical detail expands to scenario/evidence/owner links. No navigation
+or dashboard is added. Verify quiet internal routing and concrete authority
+escalation against the running app. Reserve approximately 20 percent of this
+delivery for consolidating shared validation and adapter decisions.
+
+Bound payload and resolved-evidence counts, fail visibly on truncation, and avoid
+scanning all Workroom history per transition. Scale with a bounded receipt lookup
+per candidate and a linear scenario pass; portfolio-wide aggregation remains in
+the existing outcome pipeline. Resource/concurrency work owns higher throughput.
+An incident links escaped failure evidence and a scenario follow-up through the
+same outcome record; no fixed checklist proves exhaustive foresight.
+
+## Endpoint eligibility recovery repair — BI-DB4E6F81
+
+### Design grounding
+
+Extend routed-inference, the leaf inference-error contract, routing-exclusion-buckets,
+semantic-review-background checkpoints, recovery-policy/readback and the existing
+Tasks/Workroom recovery controls. No new scheduler, model permission or state table.
+Live TaskRun TR-GATE-6A2F39DE6AF2748BCF40D1CA remained input-required with
+provider-outcome-uncertain at 2026-10-16T03:11:57.092Z. On c38edb55c0d,
+the routing and recovery regressions fail: initial refusal lacks dispatch proof
+and safe diagnostics, and readback recommends another unchanged retry.
+
+The caller's internal floor does not establish effective screened sensitivity.
+Provider reconciliation can follow a provider attempt and finish with an eligibility
+refusal; therefore the final exception type alone cannot prove zero dispatch.
+Preserve screening, clearance, residency, complete diff and independent verdict.
+
+### Ordered atomic fix
+
+All steps map to BI-DB4E6F81. ELIGIBILITY-CONTRACT, ELIGIBILITY-FLOW,
+ELIGIBILITY-ACCEPTANCE and ELIGIBILITY-VERIFY are one delivery: readback without
+durable dispatch evidence would mislead, and checkpointing without recovery
+admission would permit pointless paid retries.
+
+1. ELIGIBILITY-VERIFY: retain failing routing/recovery tests; add direct typed,
+   wrapped, reconciliation-after-dispatch and mixed sibling regressions.
+2. ELIGIBILITY-CONTRACT: move the existing error class to the leaf error module,
+   keeping its public re-export. Only an initial routing refusal gains zero-dispatch
+   proof. Attach effective sensitivity/residency and bounded exclusion counts using
+   existing buckets; never persist prompts, endpoint identifiers or raw errors.
+3. ELIGIBILITY-FLOW: checkpoint proven refusals as inconclusive, preserve successful
+   siblings and ambiguous execution. Project safe diagnostics to Tasks/Workroom;
+   unchanged eligibility requires fresh scoped remediation evidence before retry.
+   Preserve the immutable packet, original deadline/attempt budget and existing
+   qualified expired-successor admission. No automatic retries or budget reset.
+4. ELIGIBILITY-ACCEPTANCE: run affected tests, typecheck, style and shared integration
+   gate; independently review and deliver through DCO PR/merge queue. Exercise
+   served Tasks and Workroom recovery after canonical deployment, and obtain an
+   independent verdict or record a precise remaining blocker. Source checks alone
+   do not close the item or its blocked deliveries.
+
+Risk: falsely proving zero dispatch can repeat paid work. Only the direct typed
+error from a routing call with no reconciliation is eligible; wrapped errors stay
+unknown. A failed checkpoint write stays unknown. Unknown exclusions remain
+explicitly other. Rollback removes the additive projection without erasing stored
+requests/checkpoints; unknown recovery metadata must remain fenced.
+
+### Backlog coverage and observed routing limits
+
+Atomic coverage: `cmvaf16ny37kb01rx56n3fvt1`, implementation parent BI-DB4E6F81,
+with ELIGIBILITY-CONTRACT / ELIGIBILITY-FLOW / ELIGIBILITY-ACCEPTANCE /
+ELIGIBILITY-VERIFY mapped together and no independent delivery dependency.
+Eligibility remediation uses the existing scoped health receipt with
+`semanticReviewRecovery.eligibilityVerified=true`; a transport-only check is
+insufficient. The admission and readback predicates share this interpretation.
+
+Read-only inspection of the original stored routing decision found 44 excluded
+endpoints: 28 for residency, seven for clearance, seven for structured output,
+one for model class and one for context (40,960 available versus 72,117 required).
+These are the recorded constraints of that occurrence, not claims that every
+current review has the same prompt or route. Historical uncertain TaskNodes are
+not retroactively relabeled from logs or timestamps. Native served acceptance
+must use current exact-request evidence, with screening and provider policy intact.
+
+## Recovery repair — BI-8ECEC429
+
+Status: implementation plan, 2026-10-02. This extends the existing request,
+TaskRun, TaskNode, Workroom evidence and single-flight contracts. No new
+scheduler, table, provider, reviewer identity or permission bypass is proposed.
+
+### Reproduction and scope
+
+At source `c578984092dfe48c7ee94f3ee155636674817bba`, a rejected branch leaves
+its TaskNode running. The worker calls every branch exception uncertain,
+including a typed capacity refusal before provider dispatch. After expiry,
+single-flight subscribes that parked task while retry rejects its deadline.
+The standard task result tells a parked caller to keep polling. Canonical
+runtime observations and exact task identities are retained in the owning
+Workroom; the original provider incident and lifecycle defects are distinct.
+Routing, screening, provider clearance and residency remain authoritative.
+
+### Existing item acceptance (verbatim)
+
+1. Preserve prior immutable request, deadline, attempts, receipts and inconclusive outcome.
+2. After verified infrastructure remediation, an explicitly authorized supported recovery can admit a bounded successor for the same immutable change; it cannot silently refresh a consumed budget.
+3. Recheck current requester, authority, grants, verification freshness and quiescence before successor admission.
+4. Concurrent calls admit at most one successor; late prior responses cannot publish into the new generation.
+5. Actual semantic failures, revoked authority, unresolved execution and absent remediation cannot be reclassified as infrastructure success.
+6. UI/API readback explains whether recovery is possible and identifies the canonical next action; fresh independent acceptance is still mandatory.
+
+### Ordered implementation and verification
+
+All steps belong to one atomic repair, BI-8ECEC429. Classification, settlement,
+recovery admission and readback must agree before publication; a status-only
+change would still strand execution, and an admission-only change could repeat
+work without sufficient evidence. These phases are internal sequencing.
+
+1. Reproduce capacity refusal and expired replay in existing worker,
+   single-flight and task-lifecycle tests before changing implementation.
+   Resolve graph-linked tests and retain the failing output.
+2. Settle known pre-dispatch capacity refusals as infrastructure-inconclusive
+   branch checkpoints, preserving successful siblings. Unknown transport or
+   executor loss stays uncertain, with durable stopped/uncertain branch state
+   and bounded diagnostic codes rather than raw provider payloads. Never
+   repeat a provider call to repair a checkpoint transaction.
+3. Extend the existing explicit recovery operation for an expired request.
+   Require confirmation, scoped recorded remediation evidence and current
+   authority/freshness checks. Preserve the predecessor packet, attempts,
+   deadline and evidence. Atomically fence the predecessor and bind at most
+   one successor with a separate bounded window and immutable change identity.
+   Repeated submission must join the latest generation, never reuse an older
+   verdict. Unresolved execution, actual failing verdicts and missing evidence
+   are not successor admission. A successor cannot create an unlimited chain.
+4. Project active execution, infrastructure wait, uncertain execution,
+   authorization required, expiry and completed review through existing task
+   and Workroom views. State whether polling can help, the immutable deadline,
+   remaining attempts and the canonical recovery action. Availability conveys
+   no authority. Keep sensitive request bodies out of status responses.
+5. Inject duplicate recovery, lost executor, late old responses, expired and
+   stale receipt replay, revoked grants, changed evidence, quiescence and
+   persistence faults. Confirm one executing generation, retained completed
+   checkpoints, no silent paid replay and no fabricated verdict.
+6. Run affected suites, package typecheck, style guard, canonical shared gate,
+   independent exact-change review, DCO PR and merge queue. Deploy through
+   canonical self-upgrade, then exercise the original affected workflow and
+   record its genuine independent verdict, including a failing verdict if that
+   is what review finds. Keep unavailable checks unrun and report blockers to
+   the original delivery owner; do not close that owner's broader work.
+
+### Traceability, risks and rollback
+
+Coverage keys: REVIEW-RECOVERY-CONTRACT (immutable authority and budget),
+REVIEW-RECOVERY-FLOW (settle, reconcile, admit, execute, observe),
+REVIEW-RECOVERY-VERIFY (failure injection plus canonical workflow verdict).
+The implementation parent is BI-8ECEC429; the six acceptance statements above
+are its requirement references. Live plan coverage binds this immutable design
+and the claimed edit scope before implementation.
+
+The main risks are duplicate paid work, lost completed evidence, stale verdict
+reuse, unauthorized renewal and secret-bearing diagnostics. Transactional
+fences and deterministic identities contain races; current authority and
+freshness checks contain stale consent; allowlisted diagnostics protect data.
+No request or historical receipt is rewritten or deleted. A code rollback must
+fail closed on unsupported recovery metadata and must not reopen a fenced
+predecessor. Deployment uses its canonical recovery point and rollback checks.
+There is no alternate route around independent review if this repair's own
+review cannot execute; use only a checked-in, authorized recovery procedure.
+
+### Provider transport remediation found during acceptance
+
+The original workflow's two network failures occurred approximately five
+minutes after dispatch. Source inspection on `1a8a1f57bf` found that the
+off-threadpool Undici transport retained its 300-second headers and body
+defaults even though the governed Qwen reviewer has a 600-second caller
+deadline. Real-socket failure injection reproduces both premature cutoffs.
+The historical errors discarded their transport cause, so timing alone does
+not establish that every original failure had this cause.
+
+Complete the existing infrastructure-remediation step by passing the canonical
+local timeout ceiling to the process-lived provider transport. Generic fetch
+users retain their defaults. Shorter caller signals, DNS isolation, finite
+transport limits, review deadlines, attempts and admission remain intact.
+Verify delayed headers and bodies beyond the old cutoff, caller cancellation,
+and the finite backstop before the shared gate and independent review. Deploy
+through the same governed path, then refresh real health and settlement
+evidence before the original bounded successor. A probe's unrun cases remain
+unrun; transport health is not an independent review verdict.
+
+Coverage refresh: `cmut5p46zbh2c01jz92q7uyn8`, BI-8ECEC429, atomic recovery
+outcome; this remediation completes the acceptance workflow, not a new review
+identity or an expansion of its authority or budget.
+
+Workroom readback successor, BI-CAP-21C511CA (2026-10-16): the canonical
+`tasks/result` method already returns the owning caller's durable native
+receipt. Actual execution on served `b338f06e581e` returned the completed
+review and receipt for `TR-GATE-3256136A0BEA51AB05122665`. The remaining defect
+is that `get_workroom` projects only the optional direct `taskRun` relation;
+semantic reviews linked by capsule metadata disappear from its recovery view.
+
+Extend the existing `loadSemanticReviewRoomProjection` read model and
+`projectWorkroomRecovery`, rather than adding a status ledger, task reader,
+review scheduler or permission. The current immutable source's review must
+show its recorded state, heartbeat freshness, requester, budget, precise wait
+reason, canonical next action and final receipt summary. Historical requests
+cannot become the current verdict. Partial or unreadable review evidence stays
+explicitly unknown; it cannot produce an actionable or passing readiness claim.
+Missing source identity retains the existing repair packet and priority.
+
+Full receipts continue through `tasks/result` under its existing requester
+auth-context check. A Workroom summary never confers access to another caller's
+task details, provider payloads or failure analysis. This is an additive read
+projection over existing records, with no migration or authority change; rollback
+reverts that projection while preserving every request and receipt. Shared
+liveness and detail readbacks must use the same reducer. BI-7CCCA696 separately
+owns automatic continuation of proven pre-dispatch capacity waits; this successor
+does not retry inference or alter expired-review replacement BI-8ECEC429.
+
+The recovery view must survive the MCP route's existing result budget. Keep
+ordinary detail responses unchanged. For an oversized room, retain exact source,
+ownership/CAS fields and the recovery view, and explicitly list omitted bulk
+fields instead of allowing the route to replace the entire room with a preview.
+Never shorten a commit, owner, path or lease identity. If even those exact facts
+cannot fit, return a bounded refusal. An oversized activity page is explicitly
+incomplete and cannot advance its cursor; full large-activity detail remains
+BI-3CE72645, not a fabricated empty or completed page.
+
+## Automatic pre-dispatch capacity continuation — BI-7CCCA696
+
+Extend the recovery mechanism above within its original immutable request and
+budget. This repair is separate from BI-8ECEC429's explicitly authorized expired
+successors and BI-DB4E6F81's endpoint-eligibility remediation. The latter's
+no-dispatch eligibility proof does not authorize automatic capacity recovery.
+BI-CAP-21C511CA remains the Workroom receipt/readback owner. Canonical identity
+BI-CAP-437F7745 and role/room configuration BI-56E9CEC2 are dependencies, not
+additional scope here.
+
+### Reproduction and alternatives
+
+On `86e552f4d8ebc6dae30e22438c35293b6bef023b`, checkpointBranch accepts a
+capacity error by name and the reconciler excludes input-required tasks. The
+existing explicit recovery route requires a client even after capacity returns.
+The new worker regression first failed because an ordinary Error with a copied
+capacity name was recorded as a completed pre-dispatch refusal. Baseline worker,
+request and recovery-policy suites passed110 tests before this regression.
+Recorded logs and source provenance live in WC-82EAA947.
+
+Choose positive checkpoint proof and the existing reconciler over two rejected
+alternatives: automatically retrying every inconclusive review risks duplicate
+paid execution; adding a client timer or second queue cannot provide the
+server-owned recovery guarantee. Existing typed capacity policy, immutable
+request, transactional generation fences, outbox and checkpoint store already
+provide the necessary substrate. This bug repair adds no dependency or schema.
+
+### Ordered repair and acceptance
+
+Implement the single atomic outcome through
+`docs/superpowers/plans/2026-10-16-semantic-capacity-auto-resume.md`, whose
+AC-AUTO-1 through AC-AUTO-5 quote the live item criteria. CT-CAPACITY-PROOF and
+FLOW-SETTLE require the real LocalProviderCapacityDeferredError class; copied
+names, wrapped causes and model strings remain uncertain. Persist a versioned,
+request-bound no-provider-started proof only after the real refusal settles.
+
+CT-CHECKPOINT-SET and FLOW-ELIGIBILITY require the complete expected branch set,
+passing siblings, at least one proven refusal and no unfinished, foreign,
+failed or unsupported outcome. Unknown legacy checkpoints stay manual.
+CT-BOUNDED-RESUME and FLOW-RECONCILE extend the bounded existing reconciler:
+cheap capacity observation, persisted bounded backoff, original deadline and
+consumed attempt counters, current authority/source/failure-evidence checks,
+quiescence, and one CAS-admitted generation. Capacity remains advisory; actual
+dispatch still enforces its admission policy. A concurrent refusal can become
+another bounded wait, never a reason to clear counters or renew the window.
+
+CT-OBSERVED-RECOVERY and FLOW-READBACK project that persisted wait and final
+native receipt through existing task/Workroom readers. Preserve explicit retry,
+expired successors and independent verdicts. At least20% relevant refactoring
+consolidates checkpoint/budget/readback eligibility rather than duplicating it.
+
+VC-TYPED-DEFERRAL, VC-NO-REPLAY, VC-SINGLE-GENERATION and VC-TRUTHFUL-STATE
+cover lookalike/wrapped errors, unavailable-then-recovered capacity, retained
+passing siblings, final receipt, concurrent reconciliation, unknown execution,
+actual fail, cancellation, stale source/evidence, authority loss, quiescence and
+budget exhaustion. Denied cases make zero provider calls. Run affected tests,
+typechecks and policy guards, independent review, DCO and protected merge queue.
+Deploy canonically before recording served automatic-continuation acceptance.
+No historical uncertain task is replayed to prove this repair.
+
+Rollback through a signed revert, preserving requests, checkpoints, deadlines,
+attempt history and receipts. Unsupported proof versions stay ineligible.
+Source delivery is not deployed verification; an unavailable check stays unrun.
 
 ## Non-goals
 

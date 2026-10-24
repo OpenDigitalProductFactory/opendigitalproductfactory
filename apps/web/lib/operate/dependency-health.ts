@@ -3,10 +3,11 @@
 // never see them: the local model runner (DMR) and STT (Speaches). Sets the
 // dpf_dependency_up{service} gauge, refreshed on each /api/metrics scrape.
 // Mirrors the TTS probe in lib/voice-synthesis/service-status.ts
-// (BI-B2E777EB). [BI-963DBB05] (neo4j retired by BET-5.)
+// (BI-B2E777EB). [BI-963DBB05]
 
 import { dependencyUp } from "@/lib/metrics"
 import { getOllamaBaseUrl } from "@/lib/inference/ollama-url"
+import { probeDoctoolsAndResumeRenditions } from "@/lib/documents/rendition-trigger"
 
 const PROBE_TIMEOUT_MS = 3000
 
@@ -28,15 +29,32 @@ export async function probeModelRunner(): Promise<boolean> {
   return probe(`${getOllamaBaseUrl().replace(/\/$/, "")}/models`)
 }
 
-/** STT (Speaches) exposes /v1/models but no Prometheus metrics. */
-export async function probeStt(): Promise<boolean> {
-  const base = (process.env.STT_BASE_URL ?? "http://dpf-stt:9000").replace(/\/$/, "")
-  return probe(`${base}/v1/models`)
+/**
+ * Self-hosted STT, when the operator runs one.
+ *
+ * Speech is provider-managed (BI-F7E9A541): DPF ships no speech container, so
+ * there is no default address to probe. Returning null means "no local STT
+ * dependency exists", which is different from "it is down" — probing a
+ * hard-coded sidecar address that nothing serves would pin
+ * dpf_dependency_up{service="stt"} at 0 on every install and alert on a
+ * dependency the platform does not have. A hosted provider is not probed here
+ * either; its health is provider-reconciled, not a local dependency.
+ */
+export async function probeStt(): Promise<boolean | null> {
+  const configured = process.env.STT_BASE_URL?.trim()
+  if (!configured) return null
+  return probe(`${configured.replace(/\/$/, "")}/v1/models`)
 }
 
-const SERVICES: Array<readonly [string, () => Promise<boolean>]> = [
+// The office document converter (BI-52E565DA) is an OPTIONAL dependency: its
+// probe answers null on an install with no docker socket or no configured
+// dpf-doctools image, so its absence there is never an outage. The wrapper
+// also requests a bounded rendition backfill when the converter becomes
+// available (BI-9D43CBEF); the answer it returns is the probe's, unchanged.
+const SERVICES: Array<readonly [string, () => Promise<boolean | null>]> = [
   ["model-runner", probeModelRunner],
   ["stt", probeStt],
+  ["doctools", probeDoctoolsAndResumeRenditions],
 ]
 
 /**
@@ -48,7 +66,12 @@ export async function refreshDependencyMetrics(): Promise<void> {
   await Promise.all(
     SERVICES.map(async ([service, fn]) => {
       try {
-        dependencyUp.labels(service).set((await fn()) ? 1 : 0)
+        const result = await fn()
+        // null = this install has no such local dependency. Leave the gauge
+        // unset rather than publishing a permanent 0, which would read as an
+        // outage of something that was never deployed.
+        if (result === null) return
+        dependencyUp.labels(service).set(result ? 1 : 0)
       } catch {
         dependencyUp.labels(service).set(0)
       }

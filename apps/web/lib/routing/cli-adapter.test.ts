@@ -2,7 +2,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 
 // ── Mocks ───────────────────────────────────────────────────────────────────
 
-vi.mock("@/lib/ai-inference", () => {
+vi.mock("@/lib/routing/inference-error", () => {
   class InferenceError extends Error {
     name = "InferenceError";
     constructor(
@@ -71,6 +71,7 @@ vi.mock("@/lib/shared/lazy-node", () => ({
 // can assert on the (path, content, mode) it was handed WITHOUT the content ever
 // touching a command string.
 const mockWriteSandboxFile = vi.fn((..._args: unknown[]): Promise<void> => Promise.resolve());
+vi.mock("./cli-pool-status", () => ({ recordCliRateLimit: vi.fn(), clearCliRateLimit: vi.fn() }));
 vi.mock("@/lib/build/sandbox/agent-cli-runtime", () => ({
   writeSandboxFile: (...args: unknown[]) => mockWriteSandboxFile(...args),
 }));
@@ -90,7 +91,7 @@ function sandboxWriteFor(pathSubstring: string): SandboxWriteParams | undefined 
     .map((c) => c[0] as unknown as SandboxWriteParams)
     .find((p) => p.path.includes(pathSubstring));
 }
-import { InferenceError } from "@/lib/ai-inference";
+import { InferenceError } from "@/lib/routing/inference-error";
 import type { AdapterRequest } from "./adapter-types";
 import type { RoutedExecutionPlan } from "./recipe-types";
 import { EventEmitter } from "events";
@@ -118,6 +119,7 @@ function makeRequest(overrides?: Partial<AdapterRequest>): AdapterRequest {
     modelId: "claude-sonnet-4-6",
     plan: makePlan(),
     provider: { baseUrl: "cli://local", headers: {} },
+    fetchImpl: globalThis.fetch,
     messages: [{ role: "user", content: "Hello" }],
     systemPrompt: "You are a helpful assistant.",
     ...overrides,
@@ -146,6 +148,11 @@ function createMockProcess(stdout: string, exitCode = 0) {
 // ── Tests ───────────────────────────────────────────────────────────────────
 
 describe("cliAdapter", () => {
+  it("does not return partial native output as success after a failed child", async () => {
+    mockGetProviderBearerToken.mockResolvedValue({ token: "fake-oauth-token" });
+    mockSpawn.mockReturnValue(createMockProcess("Started native tool execution", 1));
+    await expect(cliAdapter.execute(makeRequest())).rejects.toMatchObject({ name: "NativeCliExecutionUncertainError" });
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     mockExecAsync.mockResolvedValue({ stdout: "", stderr: "" });
@@ -198,7 +205,7 @@ describe("cliAdapter", () => {
     );
   });
 
-  it("reaps the in-sandbox process tree on dispatch timeout (BI-F36E7510)", async () => {
+  it("returns an uncertain execution after the container watchdog budget without guessing container PIDs", async () => {
     vi.useFakeTimers();
     try {
       mockGetProviderBearerToken.mockResolvedValue({ token: "sk-ant-oat01-test" });
@@ -217,29 +224,25 @@ describe("cliAdapter", () => {
       const p = cliAdapter.execute(makeRequest());
       p.catch(() => {}); // prevent unhandled-rejection noise before we assert
 
-      // Advance past CLI_TIMEOUT_MS — the dispatch timer fires.
-      await vi.advanceTimersByTimeAsync(600_000);
+      // The host gives the container watchdog time to settle its owned child.
+      await vi.advanceTimersByTimeAsync(615_000);
 
       // The local docker-exec client is signalled...
       expect(proc.kill).toHaveBeenCalledWith("SIGTERM");
-      // ...AND the in-container tree is reaped (the actual fix): a docker exec
-      // that SIGTERMs the recorded pid + the runner sh.
+      // Container cleanup is owned by its supervisor, not a PID-file lookup.
       const calls = mockExecAsync.mock.calls.map((c) => String(c[0]));
-      const termReap = calls.find(
-        (cmd) => /kill -TERM/.test(cmd) && /(cli-pid-|cli-run-)/.test(cmd),
-      );
-      expect(termReap).toBeDefined();
+      expect(calls.some(cmd => /kill -TERM|pkill/.test(cmd))).toBe(false);
 
-      // After the grace period it escalates to SIGKILL.
+      // The host must never escalate against a potentially recycled PID.
       await vi.advanceTimersByTimeAsync(3_000);
       const killReap = mockExecAsync.mock.calls
         .map((c) => String(c[0]))
         .some((cmd) => /kill -KILL/.test(cmd) && /(cli-pid-|cli-run-)/.test(cmd));
-      expect(killReap).toBe(true);
+      expect(killReap).toBe(false);
 
       // The wrapper dies → the dispatch rejects as a timeout.
       proc.emit("close", null);
-      await expect(p).rejects.toThrow(/timed out/i);
+      await expect(p).rejects.toThrow(/did not return a settled result/i);
     } finally {
       vi.useRealTimers();
     }
@@ -316,30 +319,23 @@ describe("cliAdapter", () => {
     await cliAdapter.execute(makeRequest());
 
     const decodedScript = sandboxWriteFor("cli-run-")!.content;
+    const config = JSON.parse(decodedScript.match(/const config = (.+);/)![1]!);
+    expect(config.env.CLAUDE_CONFIG_DIR).toMatch(/^\/tmp\/dpf-claude-auth-/);
 
     // The regression itself: never cd into the project tree.
-    expect(decodedScript).not.toContain("cd /workspace");
-    // An empty per-run directory, created before use so `cd` cannot fail.
-    expect(decodedScript).toMatch(/mkdir -p \/tmp\/cli-cwd-/);
-    expect(decodedScript).toMatch(/cd \/tmp\/cli-cwd-/);
-    // Order matters: mkdir must precede cd.
-    expect(decodedScript.indexOf("mkdir -p /tmp/cli-cwd-"))
-      .toBeLessThan(decodedScript.indexOf("cd /tmp/cli-cwd-"));
+    expect(config.cwd).toBe(config.env.CLAUDE_CONFIG_DIR);
+    expect(config.cwd).not.toContain("/workspace");
+    expect(decodedScript).not.toContain("sk-ant-oat01-test-token");
   });
 
-  it("removes the neutral working directory when the call is cleaned up", async () => {
+  it("leaves a launched private directory's cleanup to its container supervisor", async () => {
     mockGetProviderBearerToken.mockResolvedValue({ token: "sk-ant-oat01-test-token" });
     const cliOutput = JSON.stringify({ result: "OK", usage: {} });
     mockSpawn.mockReturnValue(createMockProcess(cliOutput));
 
     await cliAdapter.execute(makeRequest());
 
-    const cleanup = mockExecAsync.mock.calls
-      .map((c) => String(c[0]))
-      .find((cmd) => /rmdir \/tmp\/cli-cwd-/.test(cmd));
-    expect(cleanup).toBeDefined();
-    // Cleanup must never fail the call — the dir may already be gone.
-    expect(cleanup).toContain("|| true");
+    expect(mockExecAsync.mock.calls.some(([command]) => /rm -rf|rmdir/.test(String(command)))).toBe(false);
   });
 
   it("handles CLI process error with auth failure classification", async () => {
@@ -452,10 +448,10 @@ describe("cliAdapter", () => {
 
     await cliAdapter.execute(makeRequest());
 
-    // Verify cleanup exec was called with rm -f
-    const execCalls = mockExecAsync.mock.calls.map(c => c[0] as string);
-    const cleanupCall = execCalls.find(c => c.includes("rm -f"));
-    expect(cleanupCall).toBeDefined();
+    const runner = sandboxWriteFor("cli-run-")!.content;
+    const config = JSON.parse(runner.match(/const config = (.+);/)![1]!);
+    expect(config.promptFile.startsWith(`${config.home}/`)).toBe(true);
+    expect(config.systemPromptFile.startsWith(`${config.home}/`)).toBe(true);
   });
 
   // ── Native-MCP mode ────────────────────────────────────────────────────────
@@ -465,6 +461,34 @@ describe("cliAdapter", () => {
   // text; the CLI surfaces them as native mcp__dpf__* tool_use definitions and
   // dispatches them through the MCP server. This is the post-#516 architecture.
   describe("native-MCP mode", () => {
+    it.each(["close", "error", "structured-error", "empty-result", "malformed-result"])("holds an effect-first native execution followed by %s", async (event) => {
+      mockGetProviderBearerToken.mockResolvedValue({ token: "fake-native-token" });
+      mockCreateMcpSessionToken.mockResolvedValue("fake-native-session");
+      let effects = 0;
+      mockSpawn.mockImplementation(() => {
+        const proc = new EventEmitter() as ReturnType<typeof createMockProcess>;
+        proc.stdout = new EventEmitter(); proc.stderr = new EventEmitter(); proc.kill = vi.fn();
+        process.nextTick(() => {
+          effects++;
+          proc.emit("spawn");
+          if (event === "empty-result" || event === "malformed-result") {
+            proc.stdout.emit("data", Buffer.from(event === "empty-result" ? "" : "Lost terminal JSON"));
+            proc.emit("close", 0); return;
+          }
+          if (event === "structured-error") {
+            proc.stdout.emit("data", Buffer.from(JSON.stringify({ is_error: true, result: "Authentication failed after a native tool effect" })));
+            proc.emit("close", 0); return;
+          }
+          proc.stderr.emit("data", Buffer.from("authentication unavailable after a native tool effect"));
+          if (event === "close") proc.emit("close", 1);
+          else proc.emit("error", new Error("kill ESRCH"));
+        });
+        return proc;
+      });
+      await expect(cliAdapter.execute(makeMcpRequest())).rejects.toMatchObject({ name: "NativeCliExecutionUncertainError" });
+      expect(effects).toBe(1);
+      expect(mockSpawn).toHaveBeenCalledTimes(1);
+    });
     function makeMcpRequest(): AdapterRequest {
       return makeRequest({
         tools: [
@@ -495,11 +519,14 @@ describe("cliAdapter", () => {
     }
 
     it("mints a session JWT and writes an mcp-config when mcpSession + tools present", async () => {
+      const taskExecutionFence = { schemaVersion: 1 as const, reservation: "original", dispatchClaim: "dispatch", authorityDigest: null, requestDigest: "9".repeat(64) };
       mockGetProviderBearerToken.mockResolvedValue({ token: "sk-ant-oat01-x" });
       mockCreateMcpSessionToken.mockResolvedValue("eyJ.test.jwt");
-      mockSpawn.mockReturnValue(createMockProcess(JSON.stringify({ result: "ok", usage: {} })));
+      mockSpawn.mockReturnValue(createMockProcess(JSON.stringify({ type: "result", subtype: "success", is_error: false, result: "ok", usage: {} })));
 
-      await cliAdapter.execute(makeMcpRequest());
+      const request = makeMcpRequest();
+      request.mcpSession = { ...request.mcpSession!, taskRunId: "TR-BOUND", taskExecutionFence };
+      await cliAdapter.execute(request);
 
       expect(mockCreateMcpSessionToken).toHaveBeenCalledTimes(1);
       const mintArgs = mockCreateMcpSessionToken.mock.calls[0]![0] as Record<string, unknown>;
@@ -507,25 +534,24 @@ describe("cliAdapter", () => {
       expect(mintArgs.agentId).toBe("build-specialist");
       expect(mintArgs.threadId).toBe("thread-abc");
       expect(mintArgs.routeContext).toBe("/build");
+      expect(mintArgs.taskRunId).toBe("TR-BOUND");
+      expect(mintArgs.taskExecutionFence).toEqual(taskExecutionFence);
       expect(mintArgs.capability).toBe("write"); // create_backlog_item is side-effecting
       expect(mintArgs.scopes).toContain("backlog_read");
       expect(mintArgs.scopes).toContain("backlog_write");
 
-      // mcp-config file write — chown to the node user + chmod 644 so the Claude
-      // CLI process can read the config. These are now params to writeSandboxFile
-      // (the JWT-bearing content flows via stdin, never the command surface).
+      // The private config reaches the node user via stdin, never argv.
       const mcpWrite = sandboxWriteFor("cli-mcp-");
       expect(mcpWrite).toBeDefined();
       expect(mcpWrite!.chownNodeUser).toBe(true);
-      expect(mcpWrite!.mode).toBe("644");
-      // The short-lived JWT is carried in the config content, not in argv.
+      expect(mcpWrite!.mode).toBe("600");
       expect(mcpWrite!.content).toContain("eyJ.test.jwt");
     });
 
     it("includes --mcp-config + --strict-mcp-config in the runner script", async () => {
       mockGetProviderBearerToken.mockResolvedValue({ token: "sk-ant-oat01-x" });
       mockCreateMcpSessionToken.mockResolvedValue("eyJ.test.jwt");
-      mockSpawn.mockReturnValue(createMockProcess(JSON.stringify({ result: "ok", usage: {} })));
+      mockSpawn.mockReturnValue(createMockProcess(JSON.stringify({ type: "result", subtype: "success", is_error: false, result: "ok", usage: {} })));
 
       await cliAdapter.execute(makeMcpRequest());
 
@@ -541,7 +567,7 @@ describe("cliAdapter", () => {
     it("does NOT inject the text-described tool list into the system prompt", async () => {
       mockGetProviderBearerToken.mockResolvedValue({ token: "sk-ant-oat01-x" });
       mockCreateMcpSessionToken.mockResolvedValue("eyJ.test.jwt");
-      mockSpawn.mockReturnValue(createMockProcess(JSON.stringify({ result: "ok", usage: {} })));
+      mockSpawn.mockReturnValue(createMockProcess(JSON.stringify({ type: "result", subtype: "success", is_error: false, result: "ok", usage: {} })));
 
       await cliAdapter.execute(makeMcpRequest());
 
@@ -556,7 +582,7 @@ describe("cliAdapter", () => {
     it("falls back to legacy text-tool mode when JWT minting fails", async () => {
       mockGetProviderBearerToken.mockResolvedValue({ token: "sk-ant-oat01-x" });
       mockCreateMcpSessionToken.mockRejectedValue(new Error("AUTH_SECRET missing"));
-      mockSpawn.mockReturnValue(createMockProcess(JSON.stringify({ result: "ok", usage: {} })));
+      mockSpawn.mockReturnValue(createMockProcess(JSON.stringify({ type: "result", subtype: "success", is_error: false, result: "ok", usage: {} })));
 
       await cliAdapter.execute(makeMcpRequest());
 
@@ -571,7 +597,7 @@ describe("cliAdapter", () => {
 
     it("falls back to legacy mode when mcpSession is absent", async () => {
       mockGetProviderBearerToken.mockResolvedValue({ token: "sk-ant-oat01-x" });
-      mockSpawn.mockReturnValue(createMockProcess(JSON.stringify({ result: "ok", usage: {} })));
+      mockSpawn.mockReturnValue(createMockProcess(JSON.stringify({ type: "result", subtype: "success", is_error: false, result: "ok", usage: {} })));
 
       // Same tools as makeMcpRequest, but no mcpSession — eval runner / non-coworker case.
       await cliAdapter.execute(
@@ -594,7 +620,7 @@ describe("cliAdapter", () => {
     it("derives capability=read when no tools require write grants", async () => {
       mockGetProviderBearerToken.mockResolvedValue({ token: "sk-ant-oat01-x" });
       mockCreateMcpSessionToken.mockResolvedValue("eyJ.test.jwt");
-      mockSpawn.mockReturnValue(createMockProcess(JSON.stringify({ result: "ok", usage: {} })));
+      mockSpawn.mockReturnValue(createMockProcess(JSON.stringify({ type: "result", subtype: "success", is_error: false, result: "ok", usage: {} })));
 
       await cliAdapter.execute(
         makeRequest({
@@ -620,13 +646,12 @@ describe("cliAdapter", () => {
     it("cleanup includes the mcp-config file", async () => {
       mockGetProviderBearerToken.mockResolvedValue({ token: "sk-ant-oat01-x" });
       mockCreateMcpSessionToken.mockResolvedValue("eyJ.test.jwt");
-      mockSpawn.mockReturnValue(createMockProcess(JSON.stringify({ result: "ok", usage: {} })));
+      mockSpawn.mockReturnValue(createMockProcess(JSON.stringify({ type: "result", subtype: "success", is_error: false, result: "ok", usage: {} })));
 
       await cliAdapter.execute(makeMcpRequest());
 
-      const execCalls = mockExecAsync.mock.calls.map((c) => c[0] as string);
-      const cleanup = execCalls.find((c) => c.includes("rm -f"));
-      expect(cleanup).toContain("cli-mcp-");
+      const config = JSON.parse(sandboxWriteFor("cli-run-")!.content.match(/const config = (.+);/)![1]!);
+      expect(sandboxWriteFor("cli-mcp-")!.path.startsWith(`${config.home}/`)).toBe(true);
     });
 
     it("strips mcp__dpf__* tool_use blocks the CLI surfaces (Phase 6 double-dispatch protection)", async () => {
@@ -637,6 +662,7 @@ describe("cliAdapter", () => {
       // but also leaves an unresolved tool_use block in the output. The
       // adapter must NOT pass that to the agentic loop or it would re-execute.
       const cliOutput = JSON.stringify({
+        type: "result", subtype: "success", is_error: false,
         result: "Found 64 open items.",
         content: [
           { type: "text", text: "Done" },
@@ -753,5 +779,21 @@ describe("parseCliJsonOutput", () => {
     // crash the new field — it must default to [].
     const parsed = parseCliJsonOutput("plain error text, not JSON");
     expect(parsed.cliPreExecutedNames).toEqual([]);
+  });
+});
+
+// BI-CCF1ACBB: Anthropic's input_tokens is the UNCACHED input only; the prompt
+// the model actually read is in the cache fields. Both parsers must keep them.
+describe("CLI parsers keep prompt-cache usage (BI-CCF1ACBB)", () => {
+  const usage = { input_tokens: 17, output_tokens: 900, cache_creation_input_tokens: 12000, cache_read_input_tokens: 30000 };
+  const expected = { inputTokens: 17, outputTokens: 900, cacheCreationInputTokens: 12000, cacheReadInputTokens: 30000 };
+
+  it("from the stream result event", () => {
+    const stream = ['{"type":"assistant","content":"ok"}', JSON.stringify({ type: "result", result: "ok", usage })].join("\n");
+    expect(parseCliStreamOutput(stream).usage).toEqual(expected);
+  });
+
+  it("from the final JSON", () => {
+    expect(parseCliJsonOutput(JSON.stringify({ result: "ok", usage })).usage).toEqual(expected);
   });
 });

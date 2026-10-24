@@ -17,6 +17,7 @@
 
 import { composeToolPacks } from "./tool-registry";
 import { deliberationSiemPack } from "./packs/deliberation-siem-pack";
+import { statutoryRatePack } from "./packs/statutory-rate-pack";
 import { roomMessagingPack } from "./packs/room-messaging-pack";
 import { runtimeCoordinationPack } from "./packs/runtime-coordination-pack";
 import { workCapsulesPack } from "./packs/work-capsules-pack";
@@ -46,6 +47,8 @@ import { mdmStewardshipPack } from "./packs/mdm-stewardship-pack";
 import { crmContactsPack } from "./packs/crm-contacts-pack";
 import { crmEnrichmentPack } from "./packs/crm-enrichment-pack";
 import { storefrontActivityPack } from "./packs/storefront-activity-pack";
+import { contributorInventoryPack } from "./packs/contributor-inventory-pack";
+import { payablesPack } from "./packs/payables-pack";
 import { stockCoveragePack } from "./packs/stock-coverage-pack";
 import { queueAwarenessPack } from "./packs/queue-awareness-pack";
 import { documentPack } from "./packs/document-pack";
@@ -54,6 +57,7 @@ import { surfacePack } from "./packs/surface-pack";
 import { nonprodLeasePack } from "./packs/nonprod-lease-pack";
 import { knowledgePack } from "./packs/knowledge-pack";
 import { demandScoringPack } from "./packs/demand-scoring-pack";
+import { portfolioBudgetPack } from "./packs/portfolio-budget-pack";
 import { workforcePack } from "./packs/workforce-pack";
 import { policyPack } from "./packs/policy-pack";
 import { staffingPack } from "./packs/staffing-pack";
@@ -96,6 +100,7 @@ import { buildVisibilityPack } from "./packs/build-visibility-pack";
 import { buildEvidenceExtraPack } from "./packs/build-evidence-extra-pack";
 import { changeReviewPack } from "./packs/change-review-pack";
 import { principleDecidePack } from "./packs/principle-decide-pack";
+import { decisionOutcomePack } from "./packs/decision-outcome-pack";
 import { decisionReverifyPack } from "./packs/decision-reverify-pack";
 import { productOutcomesPack } from "./packs/product-outcomes-pack";
 import { initiativeReadinessPack } from "./packs/initiative-readiness-pack";
@@ -106,10 +111,12 @@ import { buildLifecyclePack } from "./packs/build-lifecycle-pack";
 import { buildReviewPack } from "./packs/build-review-pack";
 import { buildChangePack } from "./packs/build-change-pack";
 import { gateContextPack } from "./packs/gate-context-pack";
+import { federationMembershipPack } from "./packs/federation-membership-pack";
 import { uxVerificationPack } from "./packs/ux-verification-pack";
 
 export const TOOL_PACK_REGISTRY = composeToolPacks([
   deliberationSiemPack,
+  statutoryRatePack,
   roomMessagingPack,
   runtimeCoordinationPack,
   workCapsulesPack,
@@ -128,6 +135,7 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   activityRoutingPack,
   selfUpgradePack,
   uxVerificationPack,
+  federationMembershipPack,
   coworkerServiceCatalogPack,
   coworkerToolGrantPack,
   coworkerEstablishPack,
@@ -139,6 +147,8 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   crmContactsPack,
   crmEnrichmentPack,
   storefrontActivityPack,
+  contributorInventoryPack,
+  payablesPack,
   stockCoveragePack,
   queueAwarenessPack,
   documentPack,
@@ -147,6 +157,7 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   nonprodLeasePack,
   knowledgePack,
   demandScoringPack,
+  portfolioBudgetPack,
   workforcePack,
   policyPack,
   staffingPack,
@@ -195,6 +206,7 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   buildEvidenceExtraPack,
   changeReviewPack,
   principleDecidePack,
+  decisionOutcomePack,
   decisionReverifyPack,
   productOutcomesPack,
   initiativeReadinessPack,

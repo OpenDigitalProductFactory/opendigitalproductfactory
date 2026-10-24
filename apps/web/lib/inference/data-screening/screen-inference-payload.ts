@@ -1,4 +1,6 @@
-import type { ChatMessage } from "@/lib/inference/ai-inference";
+import type { ChatMessage } from "@/lib/routing/chat-message-types";
+import { createHash } from "node:crypto";
+import { observeLocalNativeContinuationPolicy } from "@/lib/routing/local-native-continuation";
 import type {
   DestinationClass,
   ProcessingPurposeKey,
@@ -80,6 +82,21 @@ export type ScreenInferencePayloadInput = {
   >;
 };
 
+/**
+ * The payload index at which the exchange under way starts: the last user-role
+ * message. Everything below it is history the owner may not remember writing.
+ *
+ * -1 when the payload carries no user message at all (a system-initiated
+ * screen), which reads as "no message is current" and keeps every match in
+ * history — the conservative side, since it never claims the owner caused it.
+ */
+function currentTurnStartIndex(messages: readonly { role: string }[]): number {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index]?.role === "user") return index;
+  }
+  return -1;
+}
+
 export function screenInferencePayload(
   input: ScreenInferencePayloadInput,
 ): InferenceDataScreenResult {
@@ -87,7 +104,7 @@ export function screenInferencePayload(
     input.governedData,
     hintsFromActivity(input.activityContract),
   );
-  const classification = classifyInferencePayload({
+  const classify = () => classifyInferencePayload({
     messages: input.messages,
     systemPrompt: input.systemPrompt,
     systemPromptInstructionSpans: input.systemPromptInstructionSpans,
@@ -96,12 +113,13 @@ export function screenInferencePayload(
     taskType: input.taskType,
     governedData,
   });
+  let classification = classify();
   const destinationClass = input.destinationClass ?? "external-service";
   const policyVersions = input.policyVersionSource?.();
   const prior = input.appliedTransformationSource?.() ?? input.appliedTransformation;
-  const policy = evaluateInferenceDispatchPolicy({
+  const evaluate = (current: typeof classification) => evaluateInferenceDispatchPolicy({
     organizationId: input.organizationId ?? DEFAULT_ORGANIZATION_ID,
-    classification,
+    classification: current,
     governedData,
     destinationClass,
     purpose: input.purpose,
@@ -111,6 +129,20 @@ export function screenInferencePayload(
     policyBundleVersion: policyVersions?.policyBundleVersion,
     transformation: prior?.transformation ?? "none",
   });
+  let policy = evaluate(classification);
+  // A receipt's default classificationVersion is its PAYLOAD hash. Observe
+  // actual policy versions instead, so appending a turn does not erase replay.
+  const policyDigest = createHash("sha256").update(JSON.stringify({
+    asset: policyVersions?.assetVersion ?? null,
+    classification: policyVersions?.classificationVersion ?? null,
+    authority: policyVersions?.authorityVersion ?? null,
+    bundle: policyVersions?.policyBundleVersion ?? null,
+    packs: [...policy.policyPackVersions].sort(),
+  })).digest("hex");
+  if (observeLocalNativeContinuationPolicy(policyDigest)) {
+    classification = classify();
+    policy = evaluate(classification);
+  }
 
   const originalSensitivity = normalizeRoutingSensitivity(input.routeContext?.sensitivity);
   const declaredPayloadSensitivity = originalSensitivity === "development"
@@ -223,6 +255,12 @@ export function screenInferencePayload(
       // here because it is not itself a business-data confidentiality level.
       measuredSensitivity: routedPayloadSensitivity,
       declaredSensitivity: declaredPayloadSensitivity,
+      // Where the exchange under way begins, so a local-only verdict can be
+      // attributed to history rather than to the message the owner just sent
+      // (BI-706530B2). An index, never content. The provenance paths already
+      // carry indices; without this anchor there is nothing to compare them
+      // against, and "something earlier pinned this thread" is underivable.
+      currentTurnStartIndex: currentTurnStartIndex(input.messages),
       sensitivityFloorApplied: sensitivity !== routedPayloadSensitivity,
       rawPayloadStored: false,
     },

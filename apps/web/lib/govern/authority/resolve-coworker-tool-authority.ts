@@ -1,17 +1,28 @@
+import { isImmutablePageReader } from "@/lib/tak/terminal-tool-policy";
 import "server-only";
+
+import { coworkerSelfTaskMandatedTools } from "@/lib/operate/scheduled-jobs/coworker-self-task-mandate";
+
+/** Public task-run ids for the scheduled trigger carry this prefix (autonomous-work-run.ts). */
+const SCHEDULED_RUN_PREFIX = "TR-SCHED-";
 
 import { prisma } from "@dpf/db";
 import { coerceDataSensitivity } from "@dpf/db/principal-sensitivity";
 
 import { findApprovedAuthorityEnvelope } from "@/lib/coworker/authority-approval-envelope";
+import { resolveCallConsequence } from "@/lib/tool-consequence";
+import { getWorkCaseAction } from "@/lib/work-management/action-registry";
 import { loadEffectiveAuthContext } from "@/lib/identity/load-effective-auth-context";
-import type { GovernedExecuteContext } from "@/lib/mcp-governed-execute";
+import type { GovernedExecuteContext } from "@/lib/mcp-governed-execute-types";
 import { getGrantedCapabilities } from "@/lib/permissions";
+import type { EscalationSteering } from "./escalation-gate";
+import { roomAuthorizesTool } from "@/lib/work-management/room-turn-authority";
+import { loadScheduledRoomMandate, type RoomMandateDb } from "@/lib/work-management/room-stage-mandate";
 import {
   parseInitiativeReviewBinding,
+  type InitiativeReviewBinding,
   validateInitiativeReviewAuthorityScope,
 } from "@/lib/mcp-task-review-contract";
-import { INITIATIVE_READINESS_LANES } from "@/lib/tak/initiative-readiness-tool-grants";
 
 import {
   buildCoworkerApprovalBinding,
@@ -102,13 +113,26 @@ function objectRecord(value: unknown): Record<string, unknown> | null {
 /** Return the server-bound initiative only for a fully validated external MCP
  * review. Once binding metadata is present, every mismatch fails closed rather
  * than falling back to model-visible writer arguments. */
-export function resolveBoundInitiativeReviewItem(
+export function resolveBoundInitiativeReviewBinding(
   task: InitiativeReviewTask | null,
   executingToolName: string,
-): string | null {
+): InitiativeReviewBinding | null {
   if (!task) return null;
   const metadata = objectRecord(task.a2aMetadata);
-  if (!metadata || metadata["initiativeReviewBinding"] === undefined) return null;
+  // `== null` catches BOTH an absent key and a persisted JSON null. It used to
+  // be `=== undefined`, which a JSON null slips past: summon_coworker stores the
+  // key unconditionally, so an ORDINARY dispatch with no review binding at all
+  // arrived here as `null`, fell through to parseInitiativeReviewBinding(null),
+  // and threw "invalid immutable initiative review binding". The gate then
+  // rejected every governed tool on that task with "verified authority context
+  // is unavailable".
+  //
+  // Observed 2026-09-06: the Compliance Officer was dispatched to research a
+  // statutory rate, loaded its tools successfully, and had search_public_web
+  // rejected twice. Nothing about that task involved an initiative review. This
+  // failed closed on the absence of a thing that was never required, which is
+  // the one direction a fail-closed check must not fire in.
+  if (!metadata || metadata["initiativeReviewBinding"] == null) return null;
   const sourceRef = objectRecord(metadata["sourceRef"]);
   if (
     metadata["trigger"] !== "external-mcp"
@@ -122,7 +146,7 @@ export function resolveBoundInitiativeReviewItem(
   }
   if (binding.writerToolName !== executingToolName) {
     if (
-      executingToolName === "read_source_at_version"
+      isImmutablePageReader(executingToolName)
       || executingToolName === "search_source_at_version"
     ) return null;
     throw new Error("The immutable initiative review writer tool does not match the executing tool.");
@@ -137,7 +161,39 @@ export function resolveBoundInitiativeReviewItem(
       : `tool:${binding.writerToolName}`;
     throw new Error(`The external TaskRun is missing exact authority scope ${required}.`);
   }
-  return binding.itemId;
+  return binding;
+}
+
+/**
+ * The item a bound initiative write is about, from server facts only. An
+ * external run names it in its bound packet; an acceptance steward room's
+ * scheduled run names it through the packet the platform issued its room
+ * (BI-099A0BA3, security review L1: before this the subject came from model
+ * arguments, so the decision could carry no object and a tenant item's
+ * organization could not be matched). Null when neither applies.
+ */
+export async function resolveTrustedInitiativeItemId(input: {
+  task: InitiativeReviewTask | null;
+  toolName: string;
+  boundItemId: string | null;
+  loadStewardItemId: (taskRunId: string) => Promise<string | null>;
+}): Promise<string | null> {
+  if (input.boundItemId) return input.boundItemId;
+  if (input.toolName !== "record_initiative_evidence" || !input.task?.taskRunId.startsWith(SCHEDULED_RUN_PREFIX)) return null;
+  return input.loadStewardItemId(input.task.taskRunId);
+}
+
+async function loadAcceptanceStewardItemId(taskRunId: string): Promise<string | null> {
+  const { resolveAcceptanceStewardRunBinding } = await import("@/lib/backlog/acceptance-sweep/steward-objective-mapping-authority");
+  const steward = await resolveAcceptanceStewardRunBinding(taskRunId);
+  return steward?.ok ? steward.data.itemId : null;
+}
+
+export function resolveBoundInitiativeReviewItem(
+  task: InitiativeReviewTask | null,
+  executingToolName: string,
+): string | null {
+  return resolveBoundInitiativeReviewBinding(task, executingToolName)?.itemId ?? null;
 }
 
 /** Resolve initiative subject and organization from the canonical item. Caller
@@ -183,19 +239,17 @@ export async function resolveInitiativeAuthorityContext(input: {
 export function deriveCoworkerApprovalPolicy(input: {
   hitlTierDefault: number;
   hitlPolicy: string | null;
-  serverBoundIndependentReview?: boolean;
+  serverBoundInitiativeReview?: boolean;
 }): CoworkerApprovalPolicy {
   const policy = input.hitlPolicy?.trim().toLowerCase() ?? "";
-  // A server-issued initiative-review TaskRun is already constrained to one
-  // immutable artifact, one backlog item, one exact writer, and a separately
-  // granted reviewer principal. Requiring the delegating employee to approve
-  // that writer again turns the independent review into a human proxy gate and
-  // makes the single-human installation path impossible to complete.
-  // `always` is an explicit operator policy and still wins. A numeric tier is
-  // only the coworker's generic default, so it must not re-wrap this already
-  // authorized independent-review boundary in a second human approval.
+  // Immutable binding constrains the action but does not authorize it. Bound
+  // side effects always enter the action-specific policy seam, where routine
+  // platform receipts may receive exact WWMD authority and every exception
+  // falls back to the ordinary human decision envelope.
   if (policy === "always") return "all";
-  if (input.serverBoundIndependentReview) return "none";
+  if (input.serverBoundInitiativeReview && input.hitlTierDefault >= 3) {
+    return "side-effects";
+  }
   if (input.hitlTierDefault <= 1) return "all";
   if (
     input.hitlTierDefault === 2
@@ -205,6 +259,78 @@ export function deriveCoworkerApprovalPolicy(input: {
     return "side-effects";
   }
   return "none";
+}
+
+/**
+ * BI-6B3DA9DD — the ONLY producers of automated steering, both server-resolved.
+ *
+ * `independent-reviewer`: the call carries a server-validated immutable
+ * initiative-review binding. `resolveBoundInitiativeReviewBinding` fails closed
+ * on every mismatch and the writer lane refuses an author reviewing their own
+ * artifact, so separation of duties is already enforced as distinct principals
+ * by the time the binding exists — a human click adds nothing to it.
+ *
+ * `room-authority`: the turn runs in a Workroom the coworker participates in
+ * whose resolved action boundary is `preauthorized` — the room definition is
+ * the recorded decision (EP-WORK-POSTURE §8.2). `advise` and `propose` supply
+ * no steering, so a room can only ever narrow what a coworker may do alone.
+ */
+export function resolveSteering(input: {
+  initiativeReviewBinding: InitiativeReviewBinding | null;
+  roomAuthority: { actionBoundary?: string | null; memberOfRoom?: boolean } | null;
+  /**
+   * The governed scheduled task this turn runs under, if any, and the writes
+   * its registry entry declares. Server-resolved from the self-task registry —
+   * a model cannot assert it and a client cannot send it.
+   */
+  /**
+   * The run this turn belongs to and the coworker acting. A scheduled run's
+   * public id is minted server-side with a SCHED prefix, so it is a fact about
+   * the run rather than anything a model or client can assert.
+   */
+  taskRunId?: string | null;
+  agentId?: string | null;
+  /** The tool being called, matched against the cadence's declared writes. */
+  toolName?: string;
+  /**
+   * BI-C1781121: the writes the Workroom stage that started this scheduled run
+   * declares for this agent (room-stage-mandate.ts), server-resolved from the
+   * run's sourceRef, the room's shape and its role binding.
+   */
+  roomMandatedTools?: readonly string[] | null;
+  /**
+   * BI-12E5DD91: the OAuth consent the MCP route revalidated on this request.
+   * Steers only when it names the coworker actually acting.
+   */
+  connectionDelegation?: { authorityBindingId: string; agentId: string } | null;
+}): EscalationSteering {
+  if (input.initiativeReviewBinding) return "independent-reviewer";
+  const room = input.roomAuthority;
+  if (room && room.memberOfRoom !== false && room.actionBoundary === "preauthorized") {
+    return "room-authority";
+  }
+  // Scoped to the declared tools alone: installing a cadence authorizes the
+  // writes it named, and nothing else the run may decide to attempt.
+  if (input.taskRunId?.startsWith(SCHEDULED_RUN_PREFIX) && input.agentId && input.toolName) {
+    const mandated = coworkerSelfTaskMandatedTools(input.agentId);
+    if (mandated?.includes(input.toolName)) return "scheduled-mandate";
+    if (input.roomMandatedTools?.includes(input.toolName)) return "scheduled-mandate";
+  }
+  const connection = input.connectionDelegation;
+  if (
+    connection?.authorityBindingId.trim()
+    && input.agentId
+    && connection.agentId === input.agentId
+  ) {
+    return "connection-delegation";
+  }
+  return "none";
+}
+
+/** A Work Case action the registry marks consequential elevates the call. */
+function isWorkCaseConsequential(workCase: { action: string }): boolean {
+  const action = getWorkCaseAction(workCase.action);
+  return action?.consequential === true;
 }
 
 export function deriveAllowedRouteContexts(
@@ -224,11 +350,27 @@ function authSource(
 }
 
 /**
+ * BI-C8EC05C9 (spec D2 S2): the propose boundary reaches the escalation gate,
+ * and under it no policy projection may approve on a person's behalf
+ * (policy-action-judgment.ts reads policyProjectionAllowed). Without it,
+ * projection is allowed unless the operator's HITL policy is "always".
+ */
+export function proposeBoundaryAuthority(
+  context: Pick<GovernedExecuteContext, "proposeBoundary"> | undefined,
+  hitlPolicy: string | null | undefined,
+): { proposeBoundary?: true; policyProjectionAllowed: boolean } {
+  const operatorAllows = hitlPolicy?.trim().toLowerCase() !== "always";
+  return context?.proposeBoundary === true
+    ? { proposeBoundary: true, policyProjectionAllowed: false }
+    : { policyProjectionAllowed: operatorAllows };
+}
+
+/**
  * Resolve the server-owned inputs for the pure authority evaluator. Model
  * output and caller-provided policy claims never enter this function.
  */
-export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
-  async ({ execution, tool, agentGrantAllowed }, db: AuthorityDb = prisma as unknown as AuthorityDb) => {
+export const resolveCoworkerToolAuthorityInput =
+  (async ({ execution, tool, agentGrantAllowed }, db: AuthorityDb = prisma as unknown as AuthorityDb) => {
     const actingAgentId = execution.context?.agentId;
     if (!actingAgentId) {
       throw new Error("Coworker authority resolution requires an agent identity.");
@@ -278,10 +420,16 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
             },
           })
         : null;
-    const trustedBoundItemId = resolveBoundInitiativeReviewItem(
+    const initiativeReviewBinding = resolveBoundInitiativeReviewBinding(
       task,
       execution.toolName,
     );
+    const trustedBoundItemId = await resolveTrustedInitiativeItemId({
+      task,
+      toolName: execution.toolName,
+      boundItemId: initiativeReviewBinding?.itemId ?? null,
+      loadStewardItemId: loadAcceptanceStewardItemId,
+    });
     const [agent, delegation, initiativeAuthority] = await Promise.all([
       agentPromise,
       delegationPromise,
@@ -322,10 +470,9 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
     const approvalPolicy = deriveCoworkerApprovalPolicy({
       hitlTierDefault: agent.hitlTierDefault,
       hitlPolicy: agent.governanceProfile?.hitlPolicy ?? null,
-      serverBoundIndependentReview: Boolean(
-        trustedBoundItemId
-        && INITIATIVE_READINESS_LANES[execution.toolName]?.independent === true,
-      ),
+      // Only an external review binding changes the approval policy; a steward
+      // run is steered by its room's declared mandate instead.
+      serverBoundInitiativeReview: Boolean(initiativeReviewBinding),
     });
     const sensitivity = coerceDataSensitivity(agent.sensitivity);
     const decisionVersionIds = [
@@ -333,21 +480,68 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
       agent.governanceProfile?.updatedAt.toISOString(),
     ].filter((value): value is string => Boolean(value));
 
+    const roomAuthority = execution.context?.roomAuthority ?? null;
+    const authorResearchBinding = execution.toolName === "record_initiative_evidence" && !initiativeReviewBinding && initiativeAuthority.subject.kind === "backlog-item"
+      ? await (await import("@/lib/build/author-research-policy-binding")).resolveAuthorResearchPolicyBinding({ toolName: execution.toolName, params: execution.rawParams,
+          userId: execution.userId, agentId: agent.agentId, itemId: initiativeAuthority.subject.id,
+          routeContext: execution.context?.routeContext ?? null }, db as never)
+      : null;
+    const callConsequence = await resolveCallConsequence(tool, {
+      toolName: execution.toolName,
+      params: execution.rawParams,
+      userId: execution.userId,
+      context: { agentId: execution.context?.agentId, authSource: execution.context?.authSource },
+    });
     const input: CoworkerAuthorityInput = {
       authContext: effectiveAuth,
+      ...(authorResearchBinding ? { authorResearchBinding } : {}),
       organizationId: initiativeAuthority.organizationId,
       action: {
         toolName: execution.toolName,
         requiredCapability: tool.requiredCapability,
         agentGrantAllowed,
+        roomAuthorityAllowed: roomAuthorizesTool(
+          execution.toolName,
+          roomAuthority?.authorizedGrants,
+          tool.discoveredPolicyGrants,
+        ),
         sideEffect: tool.sideEffect === true,
         executionMode: tool.executionMode ?? "immediate",
         routeContext: execution.context?.routeContext ?? null,
         allowedRouteContexts: deriveAllowedRouteContexts(tool.screenSurface),
         approvalPolicy,
+        ...proposeBoundaryAuthority(execution.context, agent.governanceProfile?.hitlPolicy),
+        consequence: callConsequence.consequence,
+        ...(callConsequence.refinement ? { consequenceRefinement: callConsequence.refinement } : {}),
+        ...(execution.context?.workCase
+          ? { workCaseConsequential: isWorkCaseConsequential(execution.context.workCase) }
+          : {}),
         requiresDelegationChain: Boolean(execution.context?.delegationChainId),
       },
+      // BI-6B3DA9DD: what can decide this without a person. Recorded facts only.
+      steering: resolveSteering({
+        taskRunId: execution.context?.taskRunId ?? null,
+        agentId: execution.context?.agentId ?? null,
+        toolName: execution.toolName,
+        initiativeReviewBinding,
+        roomAuthority: execution.context?.roomAuthority ?? null,
+        connectionDelegation: execution.context?.connectionDelegation ?? null,
+        roomMandatedTools: task
+          ? await loadScheduledRoomMandate(db as unknown as RoomMandateDb, {
+              taskRunId: task.taskRunId,
+              a2aMetadata: task.a2aMetadata,
+              agentIds: [agent.agentId, actingAgentId],
+            })
+          : null,
+      }),
       subject: initiativeAuthority.subject,
+      room: roomAuthority
+        ? {
+            workroomId: roomAuthority.workroomId ?? "",
+            collaborationShape: roomAuthority.collaborationShape,
+            workShapeKey: roomAuthority.workShapeKey,
+          }
+        : null,
       delegation: delegation
         ? {
             chainId: delegation.chainId,
@@ -359,10 +553,12 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
         : null,
       integration: {
         required: tool.requiresExternalAccess === true,
+        // Server-resolved (room + standing grant, BI-947780FE): an external
+        // tool the turn was not admitted to is "disconnected", never guessed.
         state: tool.requiresExternalAccess
           ? execution.context?.externalAccessEnabled === true
             ? "connected"
-            : "unknown"
+            : "disconnected"
           : "not-required",
       },
       dataPolicy: {
@@ -372,7 +568,13 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
         decisionVersionsCurrent: true,
         decisionVersionIds,
       },
-      task,
+      task: task
+        ? {
+            taskRunId: task.taskRunId,
+            parentTaskRunId: task.parentTaskRunId,
+            ...(initiativeReviewBinding ? { initiativeReviewBinding } : {}),
+          }
+        : null,
       rawParams: execution.rawParams,
       approval: null,
     };
@@ -386,4 +588,6 @@ export const resolveCoworkerToolAuthorityInput: CoworkerAuthorityInputResolver =
       ...input,
       approval,
     };
-  };
+  // `satisfies`, not an annotation: the optional `db` stays callable, so the
+  // AC-PROBE runner can evaluate on a read-only transaction (BI-129EFFD1).
+  }) satisfies CoworkerAuthorityInputResolver;

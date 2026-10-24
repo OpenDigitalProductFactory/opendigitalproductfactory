@@ -12,6 +12,7 @@ import {
   WORKTREE_JANITOR_AUTO_REAP_FLAG,
   type ScanOutcome,
   WORKTREE_JANITOR_MAX_FLAG,
+  scanKeptForUnknownLiveness,
   DEFAULT_MAX_WORKTREES,
   resolveMaxWorktrees,
 } from "./worktree-janitor";
@@ -150,6 +151,58 @@ describe("worktree-janitor schedule invariants (BI-42FA7DD8)", () => {
     expect(result.skipped).toBe(false);
     if (result.skipped || "healthy" in result) throw new Error("expected a summary");
     expect(result.mode).toBe("live");
+  });
+
+  it("stays in observe mode over the bound when liveness could not be read", async () => {
+    // The bound shipped in #4987 would otherwise reap automatically on a scan
+    // whose liveness picture was incomplete — which is how a dormant classifier
+    // flaw becomes fleet-wide damage.
+    const modes: string[] = [];
+    const runScan = vi.fn(async (mode: "dry-run" | "live") => {
+      modes.push(mode);
+      const outcome = scanOutcome(mode);
+      if (outcome.available) {
+        outcome.scan.decisions = [
+          {
+            path: "/wt/unknown",
+            branch: "fix/x",
+            verdict: "KEEP",
+            reason: "Workroom claims unreadable (no token) — refusing to reap on absent evidence",
+            tier: null,
+          },
+        ];
+      }
+      return outcome;
+    });
+
+    const result = await runWorktreeJanitor({
+      env: { ...ENABLED, [WORKTREE_JANITOR_MAX_FLAG]: "0" },
+      runScan,
+    });
+
+    expect(modes).toEqual(["dry-run"]);
+    expect(result.skipped).toBe(false);
+    if (result.skipped || "healthy" in result) throw new Error("expected a summary");
+    expect(result.mode).toBe("dry-run");
+  });
+
+  it("detects a scan that kept work for unknown liveness", () => {
+    expect(
+      scanKeptForUnknownLiveness({
+        mode: "dry-run",
+        available: true,
+        decisions: [
+          { path: "/a", branch: "b", verdict: "KEEP", reason: "refusing to reap on absent evidence", tier: null },
+        ],
+      } as never),
+    ).toBe(true);
+    expect(
+      scanKeptForUnknownLiveness({
+        mode: "dry-run",
+        available: true,
+        decisions: [{ path: "/a", branch: "b", verdict: "KEEP", reason: "open PR", tier: null }],
+      } as never),
+    ).toBe(false);
   });
 
   it("stays an observation while under the bound", async () => {

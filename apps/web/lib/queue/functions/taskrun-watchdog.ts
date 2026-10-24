@@ -16,8 +16,8 @@
  *
  * See docs/superpowers/specs/2026-05-19-build-studio-stall-detection.md §5.7, §6.2.
  */
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import {
   decideStall,
   shouldSurfaceBuildFailure,
@@ -27,6 +27,7 @@ import {
 import { buildStallSurface, mergeVerificationPatch } from "@/lib/observability/stall-surface";
 import { isStallWatchdogEnabled } from "@/lib/shared/feature-flags";
 import { reapInertStuckBuilds } from "@/lib/build/inert-build-reaper";
+import { reconcileTerminalBuildPhaseRuns } from "@/lib/self-upgrade/quiescence";
 import { TASK_LIVE_STATES } from "@/lib/tak/task-states";
 import { newestSignal, isStale } from "@/lib/shared/staleness";
 import { reap } from "@/lib/operate/reap";
@@ -64,9 +65,11 @@ export async function recoverStuckQuiescenceCoordinators(now: Date): Promise<num
   const stuckCoordinators = await prisma.quiescenceRun.findMany({
     where: {
       // Only reap coordinators wedged in a DRAIN phase (pending/preparing/
-      // draining). Those heartbeat every wait-tick, so a >2min gap means the
-      // coordinator crashed and is holding the platform draining — the exact
-      // case this reaper exists for.
+      // draining/awaiting-operator). Those heartbeat on every wait check (at
+      // most ~60s apart, BI-F9EE05E5), so a >2min gap means the coordinator
+      // crashed and is holding the platform draining — the exact case this
+      // reaper exists for. Keyed on lastHeartbeatAt, never on how long the
+      // drain has waited: an upgrade may legitimately wait an hour or more.
       //
       // Do NOT reap `ready-to-swap` or `swapping`: at ready-to-swap the
       // coordinator parks in `step.waitForEvent(swap-complete)` and stops
@@ -106,7 +109,7 @@ export async function recoverStuckQuiescenceCoordinators(now: Date): Promise<num
         completedAt: now,
       });
       await setQuiescenceLevel("normal", null);
-      await inngest.send({
+      await jobs.send({
         name: "platform.quiescence-cleared",
         data: {
           runId: sc.runId,
@@ -229,7 +232,7 @@ export async function recoverStuckQuiescingTaskRuns(now: Date): Promise<number> 
   return recovered;
 }
 
-export const taskrunWatchdog = inngest.createFunction(
+export const taskrunWatchdog = jobs.createFunction(
   {
     id: "ops/taskrun-watchdog",
     retries: 0,
@@ -243,6 +246,16 @@ export const taskrunWatchdog = inngest.createFunction(
     // seeded, or no build is stalled. (It previously sat after all three of
     // those returns and so almost never ran — the 4-day Inngest outage.)
     const quiescenceRecovered = await recoverStuckQuiescenceCoordinators(new Date());
+
+    // BI-59164941: close phase runs whose build is already terminal, every tick.
+    // Quiescence closes them too, but only when a self-upgrade is captured, so
+    // between upgrades a failed or abandoned build read as work in flight.
+    let terminalPhaseRunsClosed = 0;
+    try {
+      terminalPhaseRunsClosed = await reconcileTerminalBuildPhaseRuns(new Date());
+    } catch (err) {
+      console.warn("[taskrun-watchdog] terminal phase-run reconcile failed:", err);
+    }
 
     // BI-8F45BA74: recover orphaned `quiescing` TaskRuns (dead loops that never
     // cooperatively exited a drain) every tick, before any early-return — they
@@ -275,6 +288,8 @@ export const taskrunWatchdog = inngest.createFunction(
     // DPF_WORKCAPSULE_REAPER_ENABLED=1, and live actuation only when additionally
     // DPF_WORKCAPSULE_REAPER_AUTO_REAP=1 (mirrors the runtime-artifact / worktree
     // janitors). Best-effort. DB-only (junction-safe: never touches worktrees).
+    // BI-ED6EA694: AUTO_REAP guards abandoning UNMERGED work; merged rooms are
+    // archived whenever the reaper is enabled, or they pile up until they are held.
     let workCapsulesReapCandidates = 0;
     let workCapsulesReaped = 0;
     try {
@@ -287,6 +302,7 @@ export const taskrunWatchdog = inngest.createFunction(
           db: capsuleDb as never,
           now: new Date(),
           dryRun: !autoReap,
+          closeDelivered: true,
         });
         workCapsulesReapCandidates = result.candidates.length;
         workCapsulesReaped = result.reaped;
@@ -301,6 +317,33 @@ export const taskrunWatchdog = inngest.createFunction(
       console.warn("[taskrun-watchdog] work-capsule reaper failed:", err);
     }
 
+    // BI-A5EEB5D1 (kernel: a room is reachable by construction): anchor rooms that
+    // carry no Workroom.workItemId, so their case page resolves. Passes each
+    // through the one canonical anchor helper in a bounded batch. Unlike the
+    // reaper this is ADDITIVE and reversible — a WorkItem is created, nothing is
+    // deleted — so it actuates by default and the fix reaches every install
+    // with no operator action (DI-B3E42B8A9B48). Kill switch only. Best-effort.
+    let workroomsAnchored = 0;
+    try {
+      const { WORKROOM_ANCHOR_CONVERGER_KILL_SWITCH, convergeWorkroomAnchorsWithPrisma } =
+        await import("@/lib/work-capsules/workroom-anchor-converger.server");
+      if (process.env[WORKROOM_ANCHOR_CONVERGER_KILL_SWITCH] !== "1") {
+        const result = await convergeWorkroomAnchorsWithPrisma();
+        workroomsAnchored = result.anchored;
+        if (result.anchored > 0 || result.failed.length > 0) {
+          console.warn(
+            `[workroom-anchor-converger] anchored ${result.anchored}/${result.candidates} room(s)` +
+              ` (${result.created} case(s) minted)` +
+              (result.failed.length > 0
+                ? `; ${result.failed.length} failed: ${result.failed.map((f) => `${f.capsuleId} (${f.reason})`).join(", ")}`
+                : ""),
+          );
+        }
+      }
+    } catch (err) {
+      console.warn("[taskrun-watchdog] workroom anchor converger failed:", err);
+    }
+
     // BI-B62B9F1E: release stale BacklogItem claims (dead sessions) so they do
     // not linger as "active" operator noise. Complements the atomic reclaim path.
     let staleBacklogClaimsReaped = 0;
@@ -313,14 +356,14 @@ export const taskrunWatchdog = inngest.createFunction(
     }
 
     if (!(await isStallWatchdogEnabled())) {
-      return { skipped: true, reason: "flag-off", quiescenceRecovered, quiescingTaskRunsRecovered, inertBuildsReaped, workCapsulesReapCandidates, workCapsulesReaped, staleBacklogClaimsReaped };
+      return { skipped: true, reason: "flag-off", quiescenceRecovered, terminalPhaseRunsClosed, quiescingTaskRunsRecovered, inertBuildsReaped, workCapsulesReapCandidates, workCapsulesReaped, workroomsAnchored, staleBacklogClaimsReaped };
     }
 
     const { prisma } = await import("@dpf/db");
 
     const thresholds = await prisma.buildStudioStallThreshold.findMany();
     if (thresholds.length === 0) {
-      return { skipped: true, reason: "no-thresholds-seeded", quiescenceRecovered, quiescingTaskRunsRecovered, inertBuildsReaped, workCapsulesReapCandidates, workCapsulesReaped, staleBacklogClaimsReaped };
+      return { skipped: true, reason: "no-thresholds-seeded", quiescenceRecovered, terminalPhaseRunsClosed, quiescingTaskRunsRecovered, inertBuildsReaped, workCapsulesReapCandidates, workCapsulesReaped, workroomsAnchored, staleBacklogClaimsReaped };
     }
 
     // Coarse SQL filter using the smallest applicable thresholds across all
@@ -372,7 +415,7 @@ export const taskrunWatchdog = inngest.createFunction(
     }
 
     if (decisions.length === 0) {
-      return { processed: 0, quiescenceRecovered, quiescingTaskRunsRecovered, inertBuildsReaped, workCapsulesReapCandidates, workCapsulesReaped };
+      return { processed: 0, quiescenceRecovered, terminalPhaseRunsClosed, quiescingTaskRunsRecovered, inertBuildsReaped, workCapsulesReapCandidates, workCapsulesReaped, workroomsAnchored };
     }
 
     // Batch id-resolution: business taskRunId → cuid id for FK writes.
@@ -494,7 +537,7 @@ export const taskrunWatchdog = inngest.createFunction(
           const payload = {
             title: `Task stalled in ${d.candidate.phase ?? "unknown"} phase`,
             body: `Watchdog detected ${d.reason} after ${d.threshold.heartbeatTimeoutSeconds}s heartbeat / ${d.threshold.totalPhaseTimeoutSeconds}s total budget.`,
-            deepLink: d.candidate.buildId ? `/build` : `/platform/ai/operations`,
+            deepLink: d.candidate.buildId ? `/build` : `/platform/ai/build-studio`,
           };
 
           if (existing) {
@@ -532,6 +575,6 @@ export const taskrunWatchdog = inngest.createFunction(
       processed += 1;
     }
 
-    return { processed, quiescenceRecovered, quiescingTaskRunsRecovered, inertBuildsReaped, workCapsulesReapCandidates, workCapsulesReaped };
+    return { processed, quiescenceRecovered, terminalPhaseRunsClosed, quiescingTaskRunsRecovered, inertBuildsReaped, workCapsulesReapCandidates, workCapsulesReaped, workroomsAnchored };
   },
 );

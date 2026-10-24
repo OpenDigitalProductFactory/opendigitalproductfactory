@@ -67,16 +67,32 @@ describe("deriveOperationalValueStream — invariants across all archetypes", ()
 });
 
 describe("deriveOperationalValueStream — representative archetypes", () => {
-  it("pet-rescue: projects intake, welfare, and placement instead of a commercial funnel", () => {
+  it("pet-rescue: composes intake, welfare, and placement over the shared backbone", () => {
     const ovs = ovsmFor("pet-rescue");
 
+    // The three leaf lanes lead; the backbone lane carries what they do not cover.
     expect(ovs.streams.map((stream) => stream.label)).toEqual([
       "Intake and safe placement",
       "Health and welfare",
       "Adoption and placement",
+      "Pet Rescue operational value stream",
     ]);
-    expect(ovs.stages.map((stage) => stage.key)).not.toContain("capture");
-    expect(ovs.stages.map((stage) => stage.label)).not.toContain("Capture Demand");
+    // BI-4B11F98E: a leaf profile extends the backbone, so the stages no leaf
+    // stage covers are recovered rather than silently dropped. A donor-funded
+    // rescue must still attract, capture, settle, comply and improve.
+    for (const recovered of [
+      "attract",
+      "capture",
+      "settle",
+      "trust-compliance",
+      "operate-improve",
+    ]) {
+      expect(ovs.stages.map((stage) => stage.key)).toContain(recovered);
+    }
+    // The three the leaf lanes declare they cover are NOT duplicated back in.
+    for (const covered of ["qualify", "deliver", "retain"]) {
+      expect(ovs.stages.map((stage) => stage.key)).not.toContain(covered);
+    }
     expect(ovs.stages.map((stage) => stage.key)).toEqual(
       expect.arrayContaining([
         "intake-capacity-decision",
@@ -203,5 +219,52 @@ describe("deriveOperationalValueStream — representative archetypes", () => {
     expect(ovs.capacityUnit).toBe("service-throughput");
     expect(ovs.demandSignature).toBe("steady");
     expect(ovs.trustGates).toContain("strict-estate-separation");
+  });
+});
+
+describe("leaf profiles compose with the backbone (BI-4B11F98E)", () => {
+  it("retains every backbone stage no leaf stage covers", () => {
+    const ovs = ovsmFor("pet-rescue");
+    const keys = ovs.stages.map((stage) => stage.key);
+    // 16 leaf stages + the 5 backbone stages the leaf lanes do not cover.
+    expect(keys).toHaveLength(21);
+    expect(ovs.streams).toHaveLength(4);
+  });
+
+  it("keeps the composed stage list monotonically ordered", () => {
+    const orders = ovsmFor("pet-rescue").stages.map((stage) => stage.order);
+    expect([...orders]).toEqual([...orders].sort((a, b) => a - b));
+  });
+
+  it("leaves an archetype with no leaf profile exactly as it was", () => {
+    // animal-shelter sets valueStreams: undefined deliberately.
+    const ovs = ovsmFor("animal-shelter");
+    expect(ovs.streams.map((stream) => stream.key)).toEqual(["operational-value-stream"]);
+    expect(ovs.declaredBackboneOmissions).toEqual([]);
+    for (const stage of ["attract", "capture", "qualify", "deliver", "settle", "retain"]) {
+      expect(ovs.stages.map((s) => s.key)).toContain(stage);
+    }
+  });
+
+  it("reports a declared omission with its reason instead of losing it silently", () => {
+    const base = ALL_ARCHETYPES.find((a) => a.archetypeId === "pet-rescue")!;
+    const withOmission = {
+      ...base,
+      activationProfile: {
+        ...base.activationProfile!,
+        processProfile: {
+          ...base.activationProfile!.processProfile!,
+          omittedBackboneStages: [
+            { stageKey: "settle", reason: "This rescue takes no money of any kind" },
+          ],
+        },
+      },
+    };
+
+    const ovs = deriveOperationalValueStream(withOmission);
+    expect(ovs.stages.map((stage) => stage.key)).not.toContain("settle");
+    expect(ovs.declaredBackboneOmissions).toEqual([
+      { stageKey: "settle", reason: "This rescue takes no money of any kind" },
+    ]);
   });
 });

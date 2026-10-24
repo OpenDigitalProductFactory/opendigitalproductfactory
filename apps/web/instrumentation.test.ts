@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+vi.mock("@/lib/self-upgrade/landed-swap", () => ({ healLandedSwapFalseFailures: vi.fn(async () => 0) }));
 import {
   advanceStrandedBuildToReview,
   reconcileDeployedShipBuilds,
@@ -11,7 +12,6 @@ import {
   syncPlatformVersionOnBoot,
 } from "./instrumentation";
 import { areOptionalStartupTasksEnabled, isInngestSelfSyncOnBootEnabled, isStartupModelRevalidationEnabled } from "@/lib/runtime/env-flags";
-
 const syncPlatformVersionConfigMock = vi.fn();
 const getDeployedShaMock = vi.fn();
 const completeRunMock = vi.fn();
@@ -22,6 +22,7 @@ const featureBuildFindUniqueMock = vi.fn();
 const featureBuildUpdateMock = vi.fn();
 const featureBuildUpdateManyMock = vi.fn();
 const buildActivityCreateMock = vi.fn();
+const buildActivityFindManyMock = vi.fn();
 const getScopedVerificationForBuildMock = vi.fn();
 const queueBuildReviewVerificationMock = vi.fn();
 const productVersionFindManyMock = vi.fn();
@@ -47,6 +48,7 @@ vi.mock("@/lib/build-flow-state", () => ({
 
 vi.mock("@/lib/self-upgrade/quiescence", () => ({
   reconcileQuiescenceOnBoot: (...args: unknown[]) => reconcileQuiescenceOnBootMock(...args),
+  getQuiescenceLevel: async () => "normal", // BI-E9DAA23F pause cases: instrumentation.upgrade-pause.test.ts
 }));
 
 vi.mock("@/lib/self-upgrade/run-store", () => ({
@@ -67,6 +69,8 @@ vi.mock("@dpf/db", () => ({
     },
     buildActivity: {
       create: (...args: unknown[]) => buildActivityCreateMock(...args),
+      findMany: (...args: unknown[]) => buildActivityFindManyMock(...args),
+      findFirst: async () => null,
     },
     productVersion: {
       findMany: (...args: unknown[]) => productVersionFindManyMock(...args),
@@ -103,11 +107,11 @@ beforeEach(() => {
   isFeatureBuildDeployedMock.mockReset();
   reconcileBuildCompletionMock.mockReset();
   completeLocalDeliveryBuildMock.mockReset();
-  reconcileQuiescenceOnBootMock.mockReset();
-  reconcileQuiescenceOnBootMock.mockResolvedValue({ reconciled: 0, failed: 0 });
+  reconcileQuiescenceOnBootMock.mockReset().mockResolvedValue({ reconciled: 0, failed: 0 });
   featureBuildUpdateMock.mockResolvedValue({});
   featureBuildUpdateManyMock.mockResolvedValue({ count: 1 });
   buildActivityCreateMock.mockResolvedValue({});
+  buildActivityFindManyMock.mockReset().mockResolvedValue([]);
   queueBuildReviewVerificationMock.mockResolvedValue(undefined);
   productVersionFindManyMock.mockResolvedValue([]);
   changePromotionUpdateManyMock.mockResolvedValue({ count: 0 });
@@ -521,6 +525,21 @@ describe("recoverContradictoryBuildExecStatesOnBoot (FIX 1)", () => {
     expect(updateArg.data.buildExecState).toEqual({ __dbnull: true });
   });
 
+  // BI-5BF650CB: the reconciler runs on an interval, and the auto-dispatched
+  // orchestrator writes BuildActivity but no exec step. FB-8255C0E5 was coding
+  // (171 sandbox commands) when its checkpoint was cleared as "missing-step".
+  it("leaves a build that is actively working alone even when its checkpoint looks contradictory", async () => {
+    featureBuildFindManyMock.mockResolvedValueOnce([
+      { buildId: "BLD-LIVE", buildExecState: { sourceCurrency: { a: 1 } }, verificationOut: null },
+    ]);
+    buildActivityFindManyMock.mockResolvedValueOnce([{ buildId: "BLD-LIVE" }]);
+
+    const result = await recoverContradictoryBuildExecStatesOnBoot({ log: vi.fn(), error: vi.fn() });
+
+    expect(result).toEqual({ recovered: 0, cleared: 0, failedCoerced: 0 });
+    expect(featureBuildUpdateMock).not.toHaveBeenCalled();
+  });
+
   it("clears a complete-no-verify checkpoint for a clean restart", async () => {
     featureBuildFindManyMock.mockResolvedValueOnce([
       { buildId: "BLD-NOVERIFY", buildExecState: { step: "complete" }, verificationOut: null },
@@ -622,6 +641,23 @@ describe("resumeStrandedBuildsOnBoot (FIX 2)", () => {
     expect(buildActivityCreateMock).toHaveBeenCalledTimes(1);
   });
 
+  // BI-5BF650CB: FeatureBuild.updatedAt is not a liveness signal for the
+  // orchestrator, which records progress as BuildActivity. Re-dispatching a build
+  // that is mid-run started a second pipeline that wiped /workspace node_modules
+  // under the first (FB-8255C0E5, 22:38).
+  it("does not re-dispatch a build-phase row that has recent activity", async () => {
+    featureBuildFindManyMock.mockResolvedValueOnce([
+      { buildId: "BLD-CODING", phase: "build", buildExecState: null, verificationOut: null, createdById: "u", createdAt: new Date(), parentEpicId: null },
+    ]);
+    buildActivityFindManyMock.mockResolvedValueOnce([{ buildId: "BLD-CODING" }]);
+    const dispatch = vi.fn();
+
+    const result = await resumeStrandedBuildsOnBoot({ dispatch }, { log: vi.fn(), error: vi.fn() });
+
+    expect(result).toEqual({ resumed: 0, flagged: 0, advanced: 0, abandoned: 0 });
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
   it("ages out a build-phase strand with null exec-state once past the cap (BI-B036209D)", async () => {
     const old = new Date(Date.now() - 20 * 24 * 60 * 60 * 1000); // 20 days > 7-day cap
     featureBuildFindManyMock.mockResolvedValueOnce([
@@ -674,7 +710,7 @@ describe("resumeStrandedBuildsOnBoot (FIX 2)", () => {
     expect(resumePreBuild).toHaveBeenCalledWith({ buildId: "BLD-IDEATE", phase: "ideate", userId: "user-1" });
     expect(resumePreBuild).toHaveBeenCalledWith({ buildId: "BLD-PLAN", phase: "plan", userId: "user-2" });
     expect(resumePreBuild).toHaveBeenCalledWith({ buildId: "BLD-REVIEW", phase: "review", userId: "user-3" });
-    expect(buildActivityCreateMock).toHaveBeenCalledTimes(3); // one resume signal each
+    expect(buildActivityCreateMock).not.toHaveBeenCalled(); // BI-817413E1: the resumer's outcome row is the record
   });
 
   // BI-A009313E: age-out cap. A build created past the abandon threshold while
@@ -917,7 +953,7 @@ describe("scheduleInitialCodeGraphBootstrap", () => {
   });
 
   it("logs initializer failures without throwing", async () => {
-    const boom = new Error("neo4j unavailable");
+    const boom = new Error("graph mirror unavailable");
     const ensure = vi.fn().mockRejectedValue(boom);
     const log = vi.fn();
     const error = vi.fn();

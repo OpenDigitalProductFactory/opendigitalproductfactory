@@ -1,5 +1,6 @@
 import { prisma } from "@dpf/db";
 import { getOrgSettings } from "@/lib/actions/currency";
+import { getT } from "@/lib/i18n/t.server";
 import { getCurrencySymbol } from "@/lib/currency-symbol";
 import { FinanceSummaryCard } from "@/components/finance/FinanceSummaryCard";
 import { FinanceTabNav } from "@/components/finance/FinanceTabNav";
@@ -10,6 +11,7 @@ import {
 } from "@/lib/finance/ai-provider-finance";
 
 export default async function FinanceSpendPage() {
+  const t = await getT("shell");
   const [payables, submittedExpenseClaims, supplierCount, purchaseOrderCount, outboundPayments, orgSettings, aiOverview] =
     await Promise.all([
       prisma.bill.aggregate({
@@ -64,6 +66,13 @@ export default async function FinanceSpendPage() {
             { label: "Submitted claims", value: `${submittedExpenseClaims}` },
             { label: "Personal expenses", value: "See my expenses" },
           ]}
+        />
+        {/* EP-2FB6C0CC (BI-DD763B93): Mileage had no link; it lives with the other spend records. */}
+        <FinanceSummaryCard
+          title={t("finance.mileageTitle")}
+          description={t("finance.mileageDescription")}
+          href="/finance/mileage"
+          accentColor="var(--dpf-info)"
         />
         <FinanceSummaryCard
           title="Suppliers"

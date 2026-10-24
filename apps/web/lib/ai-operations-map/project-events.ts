@@ -1,5 +1,6 @@
 import type { AuditClass } from "@/lib/audit-classes";
 import { slugify } from "@/lib/shared/slugify";
+import { semanticReviewRecoveryObservation, readSemanticReviewBudget } from "@/lib/change-review/semantic-review-recovery-policy";
 import type { TaskState } from "@/lib/tak/task-states";
 import { SOFTWARE_PLATFORM_MAP_TEMPLATE } from "./templates";
 import { classifyRunStatus } from "./operations-run-read-model";
@@ -216,9 +217,15 @@ export function projectTaskRun(
 ): OperationsMapProjection {
   const stationId = resolveTaskRunStationId(row, template);
   const label = row.source === "proactive" ? "Scheduled task run" : "Task run";
+  const nativeReview = row.a2aMetadata !== null && typeof row.a2aMetadata === "object"
+    && "gateKind" in row.a2aMetadata && row.a2aMetadata.gateKind === "semantic-review";
+  const reviewRecovery = nativeReview ? semanticReviewRecoveryObservation(row.status, row.progressPayload) : null;
 
   return {
     id: `task-run:${row.id}`,
+    recovery: reviewRecovery?.manualRecoveryWait
+      ? "semantic-review" : row.status === "stalled" ? "stalled" : undefined,
+    reviewBudget: nativeReview ? readSemanticReviewBudget(row.progressPayload) : undefined,
     occurredAt: row.startedAt.toISOString(),
     actorAgentId: row.currentAgentId,
     source: "task-run",
@@ -228,7 +235,9 @@ export function projectTaskRun(
     },
     severity: severityForTaskRunStatus(row.status),
     label,
-    summary: `${row.title} (${row.status})`,
+    summary: `${row.title} (${row.status})${nativeReview && row.status === "auth-required"
+      ? ". The original requester must inspect the submitting authority before recovery. Signing in again does not replace this request's saved credentials; the server rechecks their validity and grants."
+      : reviewRecovery?.capacityRecovery ? `. ${reviewRecovery.nextAction}` : ""}`,
     refs: {
       taskRunId: row.taskRunId,
     },
@@ -277,7 +286,7 @@ export function projectToolExecutionReceipt(
       coworkerHref: row.toolExecution
         ? `/platform/ai/agent/${encodeURIComponent(row.toolExecution.agentId)}`
         : undefined,
-      historyHref: `/platform/ai/history?toolReceiptId=${encodeURIComponent(row.id)}`,
+      historyHref: `/platform/audit/ledger?toolReceiptId=${encodeURIComponent(row.id)}`,
     },
   };
 }
@@ -340,7 +349,7 @@ export function projectExternalEvidence(
       externalEvidenceRecordId: row.id,
     },
     links: {
-      historyHref: `/platform/ai/history?externalEvidenceRecordId=${encodeURIComponent(row.id)}`,
+      historyHref: `/platform/audit/ledger?externalEvidenceRecordId=${encodeURIComponent(row.id)}`,
     },
   };
 }

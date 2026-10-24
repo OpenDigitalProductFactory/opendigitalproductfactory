@@ -7,13 +7,24 @@
 // (and passes the same arguments the switch case did). Definitions are moved
 // verbatim from mcp-tools.ts; grants mirror agent-grants.ts TOOL_TO_GRANTS.
 
-import type { ToolDefinition } from "@/lib/mcp-tools";
+import type { ToolDefinition } from "@/lib/mcp-tool-types";
 import { runtimeCoordinationToolEnums } from "@/lib/runtime-coordination/mcp-handlers";
 import type { ToolPack } from "../tool-pack";
 
 const ENUMS = runtimeCoordinationToolEnums();
 
 const definitions: ToolDefinition[] = [
+  {
+    name: "verify_archetype_projection",
+    title: "Verify archetype room lifecycle",
+    description: "Verify the deployed archetype room lifecycle in a transaction-owned fixture on DEV/test only. Checks bindings, repeat, withdrawal, restoration and retained history, then rolls back all fixture data. No existing organization can be selected.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    requiredCapability: "manage_platform",
+    executionMode: "immediate",
+    // Like isolated sandbox validation: observations only, no committed writes.
+    // The handler owns a rollback-only fixture and rejects business identities.
+    sideEffect: false,
+  },
   {
     name: "register_runtime_target",
     description:
@@ -139,6 +150,8 @@ export const runtimeCoordinationPack: ToolPack = {
   packId: "runtime-coordination",
   definitions,
   handlers: {
+    verify_archetype_projection: (params, userId) => import("@/lib/storefront/verify-archetype-projection")
+      .then(m => m.verifyArchetypeProjectionTool(params, userId)),
     register_runtime_target: (params, userId, context) =>
       HANDLERS().then((m) => m.registerRuntimeTargetTool(params, userId, context)),
     heartbeat_runtime_target: (params) => HANDLERS().then((m) => m.heartbeatRuntimeTargetTool(params)),
@@ -150,6 +163,7 @@ export const runtimeCoordinationPack: ToolPack = {
       HANDLERS().then((m) => m.getRuntimeCoordinationMapTool(params)),
   },
   grants: {
+    verify_archetype_projection: ["sandbox_execute"],
     register_runtime_target: ["work_capsule_write"],
     heartbeat_runtime_target: ["work_capsule_write"],
     release_runtime_target: ["work_capsule_write"],

@@ -12,6 +12,8 @@ import {
 import { ok, type ActionSuccess } from "@/lib/shared/action-result";
 import type { InitiativeArtifactRef } from "./receipt-schema";
 import type { InitiativeSubject } from "./types";
+import type { InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
+import { canonicalPlanMatchesArtifact, type CanonicalPlanSourceProof } from "./canonical-plan-source";
 
 type RepositoryLocator = Extract<InitiativeArtifactRef, { kind: "repo-blob-at-commit" }>;
 
@@ -62,7 +64,7 @@ function encodePath(path: string): string | null {
 }
 
 type RepositoryProviderBlobResult =
-  | ActionSuccess<Uint8Array>
+  | (ActionSuccess<Uint8Array> & { /** The blob the provider actually served; equals expectedBlobId when one was given. */ blobId: string })
   | {
       ok: false;
       code:
@@ -79,6 +81,7 @@ type GithubJsonFailure = {
   kind: "transport" | "http" | "unreadable";
   attempts: number;
   status?: number;
+  transportCode?: string;
 };
 
 type GithubJsonResult =
@@ -87,6 +90,22 @@ type GithubJsonResult =
 
 const RETRYABLE_PROVIDER_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
 const MAX_PROVIDER_ATTEMPTS = 2;
+
+// Preserve useful transport evidence without returning messages, URLs, headers,
+// or arbitrary provider-defined codes that may contain credentials.
+const SAFE_TRANSPORT_CODES = new Set([
+  "UND_ERR_CONNECT_TIMEOUT", "UND_ERR_HEADERS_TIMEOUT", "UND_ERR_BODY_TIMEOUT",
+  "UND_ERR_SOCKET", "ENOTFOUND", "EAI_AGAIN", "ECONNRESET", "ECONNREFUSED", "ETIMEDOUT",
+]);
+
+function safeTransportCode(cause: unknown): string | undefined {
+  for (let depth = 0; depth < 4 && cause && typeof cause === "object"; depth += 1) {
+    const error = cause as { code?: unknown; cause?: unknown };
+    if (typeof error.code === "string" && SAFE_TRANSPORT_CODES.has(error.code)) return error.code;
+    cause = error.cause;
+  }
+  return undefined;
+}
 
 function providerAttemptLabel(attempts: number): string {
   return `${attempts} ${attempts === 1 ? "attempt" : "attempts"}`;
@@ -98,7 +117,7 @@ function providerFailureMessage(
 ): string {
   const attempts = providerAttemptLabel(failure.attempts);
   if (failure.kind === "transport") {
-    return `Repository provider could not resolve ${labels.unavailable} after ${attempts} (transport failure).`;
+    return `Repository provider could not resolve ${labels.unavailable} after ${attempts} (transport failure${failure.transportCode ? `: ${failure.transportCode}` : ""}).`;
   }
   if (failure.kind === "http") {
     return `Repository provider could not resolve ${labels.unavailable} after ${attempts} (HTTP ${failure.status}).`;
@@ -122,9 +141,9 @@ async function fetchGithubJson(args: {
         },
         cache: "no-store",
       });
-    } catch {
+    } catch (cause) {
       if (attempt < MAX_PROVIDER_ATTEMPTS) continue;
-      return { ok: false, kind: "transport", attempts: attempt };
+      return { ok: false, kind: "transport", attempts: attempt, transportCode: safeTransportCode(cause) };
     }
     if (!response.ok) {
       await cancelGithubResponseBody(response);
@@ -141,7 +160,7 @@ async function fetchGithubJson(args: {
   return { ok: false, kind: "transport", attempts: MAX_PROVIDER_ATTEMPTS };
 }
 
-function decodeGithubContent(payload: unknown, expectedBlobId: string): RepositoryProviderBlobResult {
+function decodeGithubContent(payload: unknown, expectedBlobId: string | null): RepositoryProviderBlobResult {
   if (!payload || typeof payload !== "object") {
     return { ok: false, code: "IMMUTABLE_SOURCE_UNAVAILABLE", error: "Repository provider returned unreadable artifact metadata." };
   }
@@ -149,15 +168,21 @@ function decodeGithubContent(payload: unknown, expectedBlobId: string): Reposito
   if (row.type !== "file" || row.encoding !== "base64" || typeof row.content !== "string") {
     return { ok: false, code: "IMMUTABLE_SOURCE_UNAVAILABLE", error: "Repository provider returned unreadable artifact metadata." };
   }
-  if (row.sha !== expectedBlobId) {
+  if (typeof row.sha !== "string" || !/^[a-f0-9]{40}$/i.test(row.sha)) {
+    return { ok: false, code: "IMMUTABLE_SOURCE_UNAVAILABLE", error: "Repository provider returned unreadable artifact metadata." };
+  }
+  // A commit + path locator is already immutable; the blob id is verification
+  // when the caller has one, not a precondition for serving the artifact.
+  if (expectedBlobId !== null && row.sha !== expectedBlobId) {
     return { ok: false, code: "IMMUTABLE_BLOB_MISMATCH", error: "Repository provider blob identity does not match the requested locator." };
   }
+  const blobId = row.sha;
   if (typeof row.size === "number" && row.size > MAX_REPOSITORY_ARTIFACT_BYTES) {
     return { ok: false, code: "IMMUTABLE_SOURCE_TOO_LARGE", error: "Repository artifact exceeds the 1 MiB immutable reader ceiling." };
   }
   const bytes = Buffer.from(row.content.replace(/\s/g, ""), "base64");
   return bytes.byteLength <= MAX_REPOSITORY_ARTIFACT_BYTES
-    ? ok(bytes)
+    ? { ...ok(bytes), blobId }
     : { ok: false, code: "IMMUTABLE_SOURCE_TOO_LARGE", error: "Repository artifact exceeds the 1 MiB immutable reader ceiling." };
 }
 
@@ -167,11 +192,15 @@ async function fetchRepositoryProviderBlob(args: {
   token: string | null;
   commitSha: string;
   path: string;
-  expectedBlobId: string;
+  expectedBlobId: string | null;
   fetchImpl: typeof fetch;
 }): Promise<RepositoryProviderBlobResult> {
   const encodedPath = encodePath(args.path);
-  if (!encodedPath || !/^[a-f0-9]{40}$/i.test(args.commitSha) || !/^[a-f0-9]{40}$/i.test(args.expectedBlobId)) {
+  if (
+    !encodedPath
+    || !/^[a-f0-9]{40}$/i.test(args.commitSha)
+    || (args.expectedBlobId !== null && !/^[a-f0-9]{40}$/i.test(args.expectedBlobId))
+  ) {
     return { ok: false, code: "IMMUTABLE_SOURCE_IDENTITY_INVALID", error: "Repository artifact locator is not a recognized immutable provider blob." };
   }
   const result = await fetchGithubJson({
@@ -201,7 +230,8 @@ export async function readRepositoryProviderBlob(args: {
   repositoryFullName: string;
   commitSha: string;
   path: string;
-  expectedBlobId: string;
+  /** Verification when known. A commit + path locator is served without it. */
+  expectedBlobId?: string | null;
   db?: Pick<RepositoryArtifactDb, "credentialEntry" | "platformDevConfig" | "scheduledJob">;
   fetchImpl?: typeof fetch;
   transportFactory?: () => GithubReadTransport;
@@ -236,7 +266,7 @@ export async function readRepositoryProviderBlob(args: {
       token,
       commitSha: args.commitSha,
       path: args.path,
-      expectedBlobId: args.expectedBlobId,
+      expectedBlobId: args.expectedBlobId ?? null,
       fetchImpl: args.fetchImpl ?? transport!.fetch,
     });
   } finally {
@@ -270,6 +300,10 @@ function describeCapsuleHead(capsule: { capsuleId: string; headBranch: string | 
 export async function resolveRepositoryArtifact(args: {
   locator: RepositoryLocator;
   subject: InitiativeSubject;
+  /** Internal context from the accepted TaskRun; never a caller-selected head. */
+  workroomRef?: InitiativeReviewBinding["workroomRef"];
+  /** Current baseline/coverage proof resolved internally by the receipt writer. */
+  canonicalPlanProof?: CanonicalPlanSourceProof;
   db?: RepositoryArtifactDb;
   fetchImpl?: typeof fetch;
   transportFactory?: () => GithubReadTransport;
@@ -325,9 +359,22 @@ export async function resolveRepositoryArtifact(args: {
       },
     },
   });
-  const capsules = candidates.filter(
-    (candidate) => (candidate.headSha ?? "").toLocaleLowerCase("en-US") === args.locator.commitSha.toLocaleLowerCase("en-US"),
-  );
+  const boundRoom = args.workroomRef;
+  const planProof = args.canonicalPlanProof;
+  if (planProof && (!boundRoom || args.subject.kind !== "backlog-item" || planProof.itemId !== args.subject.id
+    || !planProof.baselineId || !planProof.scopeOwnerItemId || !/^sha256:[a-f0-9]{64}$/i.test(planProof.digest)
+    || !canonicalPlanMatchesArtifact(planProof, args.locator))) {
+    return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS", error: "The canonical plan proof does not match this accepted review's subject and immutable artifact." };
+  }
+  if (boundRoom && (boundRoom.kind !== "workroom-head"
+    || boundRoom.repositoryFullName !== args.locator.repositoryFullName
+    || !/^[a-f0-9]{40}$/i.test(boundRoom.headSha))) {
+    return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS", error: "The accepted review's workroom binding is invalid for this repository artifact." };
+  }
+  const capsules = candidates.filter((candidate) => boundRoom
+    ? candidate.capsuleId === boundRoom.workroomId && candidate.headBranch === boundRoom.branchName
+      && candidate.headSha?.toLowerCase() === boundRoom.headSha.toLowerCase()
+    : (candidate.headSha ?? "").toLowerCase() === args.locator.commitSha.toLowerCase());
   if (capsules.length > 1) {
     return {
       ok: false,
@@ -338,11 +385,17 @@ export async function resolveRepositoryArtifact(args: {
     };
   }
   if (capsules.length === 0) {
+    if (boundRoom) {
+      return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS",
+        error: "The accepted review's exact live workroom, subject, branch or head changed. Reconcile the review packet with the actual workroom; do not rewrite the head to the historical artifact commit." };
+    }
     return {
       ok: false,
       code: "CANONICAL_DESIGN_AMBIGUOUS",
       error: candidates.length === 0
-        ? `No live workroom for this subject is bound to ${args.locator.repositoryFullName}. Claim or adopt the branch first (claim_backlog_item_for_work or adopt_worktree), then retry.`
+        // BI-77C600B2: a plain implementation claim can be refused at the very
+        // research gate this receipt satisfies; a design-intent claim cannot.
+        ? `No live workroom for this subject is bound to ${args.locator.repositoryFullName}. Bind one first: claim_backlog_item_for_work with workIntent "design" (it does not owe research), or adopt_worktree; then retry.`
         : `No live workroom for this subject records head ${args.locator.commitSha}: ${
           candidates.map(describeCapsuleHead).join("; ")
         }${candidates.length === CAPSULE_CANDIDATE_LIMIT ? ` (first ${CAPSULE_CANDIDATE_LIMIT} shown)` : ""}. Sync the branch head with adopt_worktree(headBranch, headSha=${args.locator.commitSha}) — an amend, rebase, or squash after adoption rewrites the sha — then retry.`,
@@ -368,6 +421,17 @@ export async function resolveRepositoryArtifact(args: {
   }
   const fetchImpl = args.fetchImpl ?? transport!.fetch;
   try {
+    if (boundRoom && !planProof && boundRoom.headSha.toLowerCase() !== args.locator.commitSha.toLowerCase()) {
+      // The review retains the immutable original locator. A later branch head
+      // may own it only when the provider proves the same path/blob is present.
+      const currentBlob = await fetchRepositoryProviderBlob({
+        owner: expectedRepo.owner, repo: expectedRepo.name, token, commitSha: boundRoom.headSha,
+        path: args.locator.path, expectedBlobId: args.locator.providerBlobId, fetchImpl,
+      });
+      if (!currentBlob.ok) return { ok: false,
+        code: currentBlob.code === "IMMUTABLE_BLOB_MISMATCH" ? "CANONICAL_DESIGN_AMBIGUOUS" : "CANONICAL_DESIGN_REQUIRED",
+        error: currentBlob.error };
+    }
     const commitResult = await fetchGithubJson({
       url: `https://api.github.com/repos/${encodeURIComponent(expectedRepo.owner)}/${encodeURIComponent(expectedRepo.name)}/commits/${encodeURIComponent(args.locator.commitSha)}`,
       token,
@@ -460,10 +524,14 @@ export async function resolveRepositoryArtifact(args: {
       error: providerBlob.error,
     };
   }
+    const digest = `sha256:${createHash("sha256").update(providerBlob.data).digest("hex")}`;
+    if (planProof && digest !== planProof.digest) {
+      return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS", error: "The verified immutable plan bytes do not match the current coverage digest." };
+    }
     return {
       ok: true,
       artifact: {
-        digest: `sha256:${createHash("sha256").update(providerBlob.data).digest("hex")}`,
+        digest,
         bytes: providerBlob.data,
         authorPrincipalId,
         authorAgentId,

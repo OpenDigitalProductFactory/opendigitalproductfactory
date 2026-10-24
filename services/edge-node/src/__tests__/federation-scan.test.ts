@@ -349,4 +349,31 @@ describe("runFederationScanLoop", () => {
       }),
     ).resolves.toBeUndefined();
   });
+  it("publishes nothing when it cannot tell a peer apart from itself", async () => {
+    // Observed live 2026-09-05: resolveSelfDiscoveryId returns null on any
+    // failure, and the exclusion is `selfDiscoveryId && ...`, so a null id
+    // silently dropped the guard and the install submitted ITSELF as two peers.
+    const submitFederationCandidates = vi.fn(async () => ({ ok: true }));
+    const probeAdapter: FederationProbeAdapter = {
+      fetchAdvertisement: async (url: string) => {
+        // The authority (self) is unreachable this pass; the peer answers, and
+        // it is in fact this same install reached by another address.
+        if (url.startsWith("http://portal:3000")) return null;
+        return { status: 200, body: JSON.stringify(advertisement) };
+      },
+    };
+
+    await runFederationScanLoop({
+      config,
+      api: { submitFederationCandidates } as never,
+      state: state("trusted"),
+      settings,
+      probeAdapter,
+      sleep: async () => {},
+      log: () => {},
+      maxIterations: 1,
+    });
+
+    expect(submitFederationCandidates).not.toHaveBeenCalled();
+  });
 });

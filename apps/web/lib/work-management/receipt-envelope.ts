@@ -1,4 +1,5 @@
 import type { GoldenTriangleReceipt } from "@/lib/golden-triangle/receipt";
+import { readStageEvidenceBinding } from "./workroom-stage-evidence-binding";
 
 import type {
   WorkCaseActionVerb,
@@ -25,6 +26,13 @@ export interface ReceiptEnvelope {
   inputDigest?: string;
   outputDigest?: unknown;
   policyRefs: readonly string[];
+  /** Current-source evidence for a declared requirement; never a stage verdict. */
+  processEvidence?: {
+    definitionRef: string;
+    stageKey: string;
+    evidenceKind: string;
+    relationship: "required-evidence";
+  };
   governance?: {
     collaborationShape: WorkroomShapeKey;
     authorityLadderLevel: "none" | "discover" | "content" | "action";
@@ -86,6 +94,8 @@ export interface WorkCapsuleActivityRow {
   summary: string;
   payload?: unknown;
   recordedAt: DateLike;
+  recordedById?: string | null;
+  recordedByAgentId?: string | null;
 }
 
 export interface WorkItemMessageRow {
@@ -268,19 +278,28 @@ export function fromToolExecutionReceipt(
   };
 }
 
-export function fromWorkCapsuleActivity(row: WorkCapsuleActivityRow): ReceiptEnvelope {
-  return observedEnvelope({
+export function fromWorkCapsuleActivity(row: WorkCapsuleActivityRow, options: {
+  capsuleId?: string;
+  room?: Parameters<typeof readStageEvidenceBinding>[1];
+} = {}): ReceiptEnvelope {
+  const receipt = observedEnvelope({
     receiptId: `work-capsule-activity:${row.id}`,
     sourceRef: {
       kind: "work-capsule",
-      id: row.workCapsuleId,
+      id: options.capsuleId ?? row.workCapsuleId,
       status: row.kind,
     },
     rawRef: { table: "WorkroomActivity", id: row.id },
     summary: row.summary,
     occurredAt: row.recordedAt,
     outputDigest: row.payload,
+    actorRef: {
+      actorKind: row.recordedByAgentId ? "agent" : row.recordedById ? "person" : "system",
+      actorId: row.recordedByAgentId ?? row.recordedById ?? undefined,
+    },
   });
+  const binding = row.kind === "evidence-recorded" ? readStageEvidenceBinding(row.payload, options.room) : undefined;
+  return binding ? { ...receipt, processEvidence: binding } : receipt;
 }
 
 export function fromWorkItemMessage(row: WorkItemMessageRow): ReceiptEnvelope {

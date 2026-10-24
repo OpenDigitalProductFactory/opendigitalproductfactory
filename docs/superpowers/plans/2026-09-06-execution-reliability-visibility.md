@@ -1,0 +1,1305 @@
+---
+status: active
+---
+
+# Execution reliability and process visibility
+
+## October 16 prospective launch-evidence preparation (BI-06AE6833)
+
+WC-1D447592 owns the fresh CLI launch-binding gap identified by original
+task99B4B339F227 after servedc38. Normal DESIGN admission and two exact document
+claims are accepted. Reuse the prospective amendment in
+[maintenance evidence](../specs/2026-10-15-maintenance-epoch-recovery-evidence.md#prospective-cli-launch-binding--october-16-design-amendment).
+
+This is preparation, not an admitted implementation plan. First establish fit
+of the existing AsyncInferenceOp lifecycle and local sandbox execution boundary;
+TaskArtifact is evidence only. A native execution handle cannot be mislabeled a
+provider-issued operation ID. Map CL-1 through CL-5 to the existing canonical
+attempt/lease/start-indeterminate/transition substrate, and reject any design
+that introduces another scheduler or uses absent observations as no-start proof.
+
+The design's immutable-target, duplicate-start, crash, stale-fence, cancellation
+and evidence-integrity fixtures are required before source implementation.
+Independent assessment, live deliverable mapping/coverage and normal
+implementation admission remain outstanding. Preserve the existing original
+review99 at bf94ff7ed5f48d481b6afdff9990c3157b76735e and its request digest;
+do not submit a replacement review or claim this prospective work settles it.
+
+This preparation is separate from the admitted BI-8B8731EE canonical-verdict
+dedup primitive, BI-6BA00C83 approval-consumer correction and the approval-target
+display repair below. It does not hold the already coordinated next release cut.
+
+## October 16 approved runtime target outcome (BI-06AE6833, WC-1D447592)
+
+Original approval cmv9vetqp01la01olbsbz684d remains unknown even though its exact
+target RCT-BI5-RECOVERY95-20261015 committed succeeded with a verified host
+receipt and one terminal event. The v2026.10.16 advance preserves its original
+receipt, completion time and event count. Recover the observation, not execution.
+
+1. Extend the existing approval outcome store and shared pure projection. Keep
+   native user-and-assistant isolation and history's owner predicate. Resolve
+   only an approved reconcile_runtime_capabilities request whose original
+   parameters match its stored input fingerprint, tool and actor binding.
+2. Read the exact transition, bound to the requesting actor and full immutable
+   reconciliation packet. Require trusted request/decision chronology, terminal
+   succeeded state and completion, a structurally valid applied signed receipt,
+   exact envelope identity and the identical committed succeeded event receipt.
+   Missing, conflicting, unsigned, malformed, pending or failed evidence cannot
+   produce success. Preserve existing terminal-envelope and explicit receipt
+   precedence; never use current enabled settings or another transition.
+3. Trust the established server-only verified completion transaction as durable
+   historical evidence. Do not depend on today's signing secret, host filesystem
+   or actuator for history reads: legitimate key rotation does not erase a
+   previously verified outcome. This adds no execution authority, reservation,
+   receipt, target mutation, table, workflow or retry. Share the resolver between
+   native exact reads and browser history, and reuse original parameter rules.
+4. First reproduce the exact unknown-to-executed defect. Cover mismatched actor,
+   request fingerprint, target, packet, envelope, receipt, event and chronology;
+   absent/nonterminal/failed/rollback evidence; unrelated actions; caller
+   isolation; existing outcome precedence; malformed-row isolation; and readable
+   historical outcomes without current secret access. Run affected tests,
+   typechecks, impact guards, governed verification and independent assessment.
+5. Publish through protected PR/queue, qualify the next canonical containing
+   release, then verify the SAME original approval through native read and its
+   deep-linked Inbox. Compare the SAME target receipt, timestamps and event count
+   before/after. Never reapply the host action to make the display pass.
+
+This is one atomic observation repair under the existing execution-reliability
+objective. Approximately one fifth consolidates parameter and outcome resolution
+across readers. It does not settle original uncertain provider executions,
+authorize retries or satisfy the remaining seven-scenario, nested or OAuth
+acceptance. Current source/release delivery and those obligations stay separate.
+
+Coverage for this amendment:
+
+- approved-runtime-target-outcome maps OBJ-DELIVERY-VISIBILITY,
+  OBJ-DELIVERY-CONVERGENCE, OBJ-DELIVERY-MEASUREMENT and OBJ-DELIVERY-REFACTOR
+  to AC-DELIVERY-VISIBILITY, AC-DELIVERY-CONVERGENCE, AC-DELIVERY-ADMISSION,
+  AC-DELIVERY-MEASUREMENT and AC-DELIVERY-REFACTOR. Contracts are
+  exact-approved-input-fingerprint, actor-bound-runtime-target,
+  durable-verified-terminal-receipt and caller-scoped-approval-outcome. Flows are
+  original-approval-to-original-transition and native-and-inbox-shared-projection.
+  It depends on parent-verification-dependencies for whole-objective completion.
+- parent-verification-dependencies retains pending OBJ-DELIVERY-VISIBILITY,
+  OBJ-DELIVERY-CAMPAIGN, OBJ-DELIVERY-PLACEMENT, OBJ-DELIVERY-CONVERGENCE,
+  OBJ-DELIVERY-MEASUREMENT and OBJ-DELIVERY-REFACTOR; acceptance remains
+  AC-DELIVERY-VISIBILITY, AC-DELIVERY-CAMPAIGN, AC-DELIVERY-PLACEMENT,
+  AC-DELIVERY-CONVERGENCE, AC-DELIVERY-ADMISSION, AC-DELIVERY-MEASUREMENT and
+  AC-DELIVERY-REFACTOR. Existing flows parent-delivery-convergence,
+  parent-placement-and-campaign and parent-runtime-and-outcome-verification
+  remain governed by docs/superpowers/specs/2026-09-03-local-first-agentic-delivery-throughput-design.md.
+  This row preserves traceability; it is not new implementation or acceptance.
+
+## October 11 owned review recovery readback (BI-CAP-3147C64B)
+
+WC-502E167E repairs the missing observation path for expired semantic reviews.
+On source 03372734, tasks/get and tasks/result disclose the recovery budget but
+omit the node identities required by the existing bounded-successor admission.
+The original task TR-GATE-4D5BC04629BEAEEE9E15D172 demonstrates the gap.
+
+Extend both existing owner-bound reads with at most 100 node identities, recorded
+statuses and digest binding, plus current task/digest/room-scoped remediation
+evidence. Read no other caller's detail and return no raw provider output or
+diagnostic text. Unknown provider execution remains unknown; inactive and failed
+statuses do not establish settlement. Truncation cannot establish full coverage.
+Extract the existing remediation predicate so readback and retry share freshness,
+identity and proof rules. This consolidation is the refactoring portion of the
+repair. No schema, grant, reviewer dispatch or approval-policy change is needed.
+
+Verify owner isolation, omitted identities, uncertain outcomes, proof freshness,
+node coverage and bounded output with source regressions, then run the shared
+gate. After deployment, read the original task and digest and reconcile actual
+provider execution before requesting a successor. This repair is observation,
+not evidence that AC6 or the original review has passed.
+
+## September 27 cancellation settlement repair (BI-06AE6833, WC-C9B549CC)
+
+Runtime evidence cmuke4i3b0biz01qs0vq0zpim records a cancelled TaskRun becoming
+input-required after its in-flight reviewer returned. Exact-source evidence
+cmukel8sy0n1i01qs8x38h0vu identifies unconditional post-inference updates in
+mcp-task-execution.ts on deployed 0d827752. Implementation admission
+IRD-98CCDCB589C9 reuses the existing objective, design and plan gates.
+
+1. Reproduce cancellation during inference across missing-writer, capacity,
+   successful completion, failure and exception settlement. Include cancellation
+   between the settlement read and write; a pre-read alone is insufficient.
+2. Consolidate settlement through a conditional database transition. Preserve
+   terminal state and return the persisted outcome when another transition wins.
+   Inspect existing attempt identity before choosing the fence; do not introduce
+   a parallel task ledger or reset retry budgets.
+3. Preserve approval waits and verified writer receipts. Late inference output
+   may remain historical evidence but cannot report a cancelled task as resumable.
+4. Run related tests, typechecks and the exact-tree gate, obtain independent
+   review and protected merge, then repeat cancellation on the canonical release.
+
+At least one fifth of this repair consolidates repeated settlement behavior.
+Source tests do not satisfy runtime acceptance or close the broader objective.
+
+## September 21 observed pause reconciliation (BI-06AE6833, WC-99AECC86)
+
+Runtime verification RV-EXECUTION-5969966-20260921 found that WC-9CECAF46 displays a missing-coordinator pause in Details while Overview says no immediate attention is needed. Reconcile attention and next action in the existing shared room read model from its conformance result; preserve independent case attention and never convert a pause into completion. Test the real missing-coordinator condition first. Keep intended advance conditions separate from currently permitted transitions even before any stage has started. The observed lane must distinguish activity events from receipts, retaining source identity and no inferred verdict. Reuse shared projections and existing disclosure primitives; no new execution authority or storage. Header accountability must consume the existing effective-human-accountability result rather than selecting a participant independently. Preserve unknown and conflicting states. This extends the same objective and allocates at least one fifth of the change to consolidating these divergent projections. Protected checks and a new canonical release with repeat live acceptance remain required.
+
+UX fit: DI-AB55BD5548FD selects extend-existing-inspector over separate-activity-page, high confidence and autonomy eligible, with no commandment conflict. Shared read-model composition and single-source accountability govern the repair. Independent review found and reproduced terminal-room attention regression; closed/cancelled rooms retain their terminal action while diagnostic conformance remains visible. The 94 affected tests and both TypeScript programs pass; these are source results, not new runtime acceptance.
+
+## September 21 selected Workroom context (BI-06AE6833, WC-99AECC86)
+
+Live navigation on both 0961596 and 5cdafb1 drops the selected capsule at the canonical-case redirect. Preserve the capsule as navigation context while retaining one case per WorkItem. Constrain the existing room query by both WorkItem and selected capsule, refuse an unavailable selection before reading execution evidence, and return the resolved row identity for the workforce reader. Remove the independent oldest-room lookup so process, participants, evidence and workforce use the same selection. Reuse the existing WorkItem and standalone content authorization; do not grant access through a query parameter.
+
+Use the existing process inspector and navigation primitives, with no new control or route. First reproduce lost selection and cross-case refusal, then verify selected-only journal and participant reads, canonical query round-trip, existing unselected behavior, and standalone authorization. Reuse the shared evidence adapter from PR5470. Approximately one fifth of this repair consolidates selection and removes duplicated room resolution. Protected CI and deployed enterprise-to-room acceptance remain required; PR5470's combined release is independent of this follow-up.
+
+Status: implementation in progress; broader execution/portal coverage remains pending.
+Workroom: WC-4A72DC95. Parent delivery item: BI-06AE6833.
+Decision: DI-515AD614CCF6, harden existing DPF/Inngest execution.
+Canonical design: [throughput design sections 8.1–8.7](../specs/2026-09-03-local-first-agentic-delivery-throughput-design.md).
+
+## September 21 standalone execution projection (WC-99AECC86)
+
+Current main 5cdafb1 exposes standalone rooms through the canonical case route,
+but its standalone loader omits scope claims, driver state and execution evidence.
+The anchored loader already reads these facts. Extend the existing standalone
+projection and extract one bounded journal/reviewer reader used by both loaders.
+This continues BI-06AE6833 and its portal coverage rather than opening an initiative.
+
+Keep persisted definition/version, declared boundary and driver observations intact.
+Read journal entries by database room identity and reviewers by stable capsule ID.
+Missing readers, failed reads and truncated windows are partial projections; they
+are not empty successful executions. Journal entries and task snapshots remain
+observations, never successful gate verdicts. Missing purpose and scope stay gaps.
+Propagate reviewer attention to both the room and case summary.
+
+The standalone route must pass the effective authenticated principal to the
+loader. Before reading execution, reuse Workroom content admission and clearance:
+resolve creator/requester/holder and active roster membership through canonical
+principal references, and enforce the declared sensitivity ceiling. Absence of
+auth context, admission or clearance returns no detail and performs no evidence
+query. Presence and structural containment do not confer admission.
+
+UX fit remains fits-with-guardrails within the existing Workspace case route and
+its shape, observed-execution and evidence components. No new navigation, actions,
+status styling or authority is introduced. The source of truth is the persisted
+Workroom, WorkroomActivity and correlated TaskRun, through the shared read model.
+Verify both anchored and standalone readers, partial history, reviewer failures,
+and unknown boundaries, then exercise the served standalone room after release.
+
+Consolidation removes the anchored loader's separate journal query, identity map,
+receipt conversion and reviewer loading in favor of the shared reader. Source
+regressions reproduced missing shape/evidence and false healthy readback before
+repair. This is not proof of the seven runtime recovery scenarios, nesting or
+archetype coverage; those remain acceptance obligations for the overall outcome.
+
+## 2026-09-12 reviewer source classification repair
+
+WC-C7F9AB04 extends BI-06AE6833 after the memory review exposed another routing
+defect. Task TR-GATE-17CAD3AAE52422739C8CFF11 and screen
+`screen_d67cb7b6c5cda47d` recorded customer-contact classification and local-only
+routing. The exact artifact contains memory byte literals matching the phone
+detector and a versioned dependency patch filename matching the email detector.
+The global local-only setting and task-specific override are absent. These facts
+explain route restriction; they do not prove the subsequent provider failure.
+
+1. Reproduce the five artifact matches through the public classifier, while
+   retaining real and ambiguous phone/email evidence, including mixed messages.
+2. Extend the existing span exception mechanism for explicit unquoted resource
+   byte quantities and versioned dependency patch paths. Never exempt an entire
+   source block, message, caller or Workroom. Preserve all other screening rules.
+3. Consolidate contact-specific span handling outside the general classifier;
+   rerun authorship, classification and policy tests with typechecks and guards.
+4. Obtain exact-source review and protected merge checks, then verify ordinary
+   development review can use an eligible external route on the canonical image.
+   Actual customer contacts and an explicit local-only policy must remain enforced.
+
+Related prior work BI-EBE25715 and BI-67CAF494 is retained, not duplicated or
+modified on its owning peer. This repair does not certify the seven execution
+scenarios or close the overarching portal objective.
+
+## Design grounding
+
+Reconciles published amendment 58b4480b against main 729c017e7d6. The three
+human-authored files were unchanged from that amendment's parent on current main;
+the patch applied cleanly. Regenerate the doc index rather than copying its old
+generated bytes. Prior review evidence on WC-2F78BAD8 does not approve this tree.
+
+Reuse work-capsule-store/adopt-worktree-handler, WorkShapeDefinition,
+workroom-drive and drive-resolution, TaskRun/AsyncInferenceOp, initiative receipt
+writers, WorkroomRelation, shape-projection, WorkroomShape, EA process-extract /
+reconcile-process and workroom-architecture. The coordinated-workrooms design
+owns the platform/archetype/instance ownership ladder. Do not create replacement
+rooms, task ledgers, schedulers, or an organizational authority hierarchy in UI code.
+
+## Backlog coverage
+
+Proposed decomposed graph below; this is not a coverage receipt. Record the
+immutable plan with record_plan_backlog_coverage after the independent spec
+approval establishes the scope baseline. Preserve its returned receipt ID here.
+The supported implementation claim is allowed (IRD-CB79336589A7, 2026-09-06),
+using the current shared approved baseline and coverage. This proposed broader
+mapping does not replace that coverage or certify the whole initiative.
+
+| Key | Existing item | Depends on | Objectives | Acceptance |
+| --- | --- | --- | --- | --- |
+| binding | BI-06AE6833 | none | OBJ-EXEC-01 | AC-EXEC-01 |
+| admission | BI-06AE6833, WC-27D00458 | none | OBJ-DELIVERY-CONVERGENCE | AC-DELIVERY-ADMISSION |
+| recovery | BI-801313EB | binding, admission | OBJ-EXEC-02 | AC-EXEC-02, AC-EXEC-03, AC-EXEC-04, AC-EXEC-05 |
+| portal | BI-9DC43E17 | binding, recovery | OBJ-EXEC-03, OBJ-EXEC-04 | AC-EXEC-06, AC-EXEC-07, AC-EXEC-08, AC-EXEC-09 |
+
+Each row is independently reviewable/revertible and uses existing ownership.
+BI-801313EB currently has another paused Workroom; arrange governed handoff before
+editing its implementation. No forced co-claim or duplicate initiative is implied.
+
+The admission deliverable is independently owned by WC-27D00458 on
+`fix/semantic-review-provider-admission`. Its
+[focused plan](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/ac85b97f95a0480ca72e29b37695a4b0d2bbc217/docs/superpowers/plans/2026-09-06-semantic-review-provider-admission.md)
+provides the implementation/verification contract (blob
+`3fe9c155d0ca45b455d9cfe38593e0fed69c2895`, coverage receipt
+`cmtqfaemg02bc01p3br91qj6e`, review receipt
+`initiative-3098e534-708c-41c3-be54-2c3b46bab065`); this task must not edit
+`routed-semantic-review.ts` or duplicate that runtime change. This row maps the
+existing work into the combined decomposition, not a second assignment.
+
+Baseline coordination, 2026-09-06: retain approved baseline
+`baseline-524959f8-8508-4c5a-afbf-8bc285f77587` at
+`7d22b24673c138036685312387a425984c7a330d` until the admission PR lands. The
+combined specification preserves its provider-admission section and every
+OBJ-DELIVERY / AC-DELIVERY identifier, adding the execution/visibility objectives.
+Only then request one explicit combined baseline supersession with dispositions
+for every retained objective. Do not replay older spec-approval requests with
+`expectedCurrentBaselineId=null`. Neither the current shared baseline nor this
+proposed mapping is permission to declare the broader initiative complete.
+
+## 1. Shape round trip
+
+Contract CONTRACT-EXEC-BINDING; flow FLOW-EXEC-BINDING.
+
+Claim exact handler, store, scope-claim and registry paths; consume the returned
+changeImpactContract tests and guards. First reproduce creation/update loss in
+behavior tests through adoption. Centralize scope parsing and omission-preserving
+merge; preserve collaboration, activity, posture and unrelated ownership claims.
+Validate exact registry/version and reject unavailable references. Unchanged
+replay preserves timestamps. Use transaction/compare-and-swap for concurrent
+updates and reject stale ownership without mutating another executor's binding.
+Keep retained versions readable and record old/new shape in the existing activity.
+
+Verify handler/store create, re-adopt, replay, explicit version selection, invalid
+version, claim/release preservation, ownership conflict and concurrent update.
+Run affected tests and typecheck, review, push and protected CI. After governed
+deployment use MCP adoption/readback on a controlled room and the requested
+existing room without changing its executor; no direct DB patch.
+
+## 2. Reviewer recovery
+
+Contract CONTRACT-EXEC-REVIEW; flow FLOW-EXEC-REVIEW.
+
+After authorized ownership coordination, extend existing terminal-writer recovery,
+async lifecycle and Workroom driver. Bind request identity to immutable artifact,
+gate, baseline and independent reviewer. Atomically claim work and persist the
+attempt before provider dispatch. Reuse existing provider admission and approved
+call recovery. Persist bounded successor route/history and aggregate deadline;
+provider replacement cannot reset budget or broaden authority. Reconcile a lost
+notification from existing receipt writers; readiness is reevaluated after receipt
+commit. Completion, missing writer, rejected writer, infrastructure wait and
+approval wait remain distinct. Replace duplicate recovery projections and admission
+predicates with the existing shared contracts. Keep work within the named objective.
+
+Run all seven scenarios: normal completion, provider failure, process restart,
+duplicate event, approval wait, exhausted recovery and stale projection. Capture
+operation/attempt/receipt identity and external-effect count before/after restart
+and replay. Test head/baseline supersession and revoked authority. No blanket
+exactly-once claim: ambiguous provider start is an owned reconciliation state.
+
+## 3. Connected portal
+
+Contract CONTRACT-EXEC-PROJECTION; flow FLOW-EXEC-NAVIGATION.
+
+Extend existing architecture and Workroom readers with one bounded shared
+projection. Enterprise joins outcomes/value streams/capabilities/services; room
+coordination joins owners/relations/queues; execution joins exact shape/cycle,
+TaskRun/provider attempts and current receipts. Return freshness, provenance and
+projection gaps. Reuse source keys and report EA drift via existing conformance.
+Document supported BPMN and SysML mappings without generic-graph conformance claims.
+
+Extend shared canvas/ShapeGraph with stable lanes, readable labels, breadcrumbs,
+preserved search/filter/selection, step inspection and an accessible list. Each
+step answers the six questions in the design. Distinguish intended, observed and
+simulation modes. Show parent/child context and independent completion obligations.
+Inspect archetype definitions and render applicable requirements and missing
+coverage explicitly; do not turn business work into source-delivery flows.
+
+Verify projection behavior with contradictory/missing/stale sources, cycles,
+partial pages and revoked actions. Drive enterprise-to-evidence navigation on
+the leased running nonproduction portal in light/dark and narrow/wide views;
+check keyboard, focus, list alternative and reduced motion. Save screenshots
+and exact served SHA with runtime verification evidence.
+
+## Consolidation allocation
+
+Reserve approximately 20% of implementation effort: 8% scope parse/merge/readback,
+7% transition/recovery/admission projection, 5% visualization/read-model reuse.
+Record actual removed duplicate predicates/helpers and changed callers in delivery
+evidence. New abstractions alone do not count. Consolidate inside each rollbackable
+slice, rather than doing an unrelated repository-wide refactor.
+
+## Gates, risks and rollback
+
+Run affected source tests/typecheck and mandatory guards; production build through
+protected cloud CI and runtime verification through the shared nonproduction
+lease/canonical advance. Use independent exact-revision reviews, signed commits,
+mechanical PR health and protected merge queue. Advance the install only through
+the governed self-upgrade path. No migrations are planned; if required, amend
+the design and prove forward migration against existing data.
+
+Risks: scope overwrite, stale-worker effects, double recovery dispatch, false gate
+approval, ambiguous provider start, UI inference from weak evidence, and authority
+leaking through nesting. Refuse or report unknown on each boundary. Roll back
+source slices independently; retain existing shape definitions and historical
+receipts. Disable new recovery admission before rollback and reconcile in-flight
+attempts; never delete evidence or reinterpret a v2 occurrence as v1.
+
+Completion requires architecture decision, amended specs, implemented/released
+slice, seven scenario proofs, portal navigation screenshots and explicit remaining
+gaps. This plan and a passing unit suite alone do not complete the goal.
+
+## Observed baseline and UX fit — 2026-09-06
+
+Decision: fits-with-guardrails. Workspace owns the operational experience;
+Products / Architecture owns the definition and realization views. The primary
+persona is the operator locating delayed work and deciding whether an authorized
+action is needed. Extend local page navigation and contextual drill-through only.
+The canonical room stays at `/workspace/cases/[caseKey]`; `/ops/workrooms` is its
+inventory, and `/ea/workrooms` and `/ea/views/[id]` are architecture entry points.
+
+Authenticated inspection of the development install found:
+
+| Surface / source | Observed | Required correction |
+| --- | --- | --- |
+| `/ops/workrooms` | 27 live rooms; 173 retained records; inventory rows emphasize executor, branch and lease | Retain bounded inventory; expose actual waiting cause and next owner/action, not lease freshness as execution progress |
+| `/workspace/cases/backlog-item%3ABI-06AE6833` | No immediate attention needed; Assign owner; missing outcome, scope, participants and authority; no reviewer task shown | Join the exact initiative-review binding to the room; distinguish missing boundary facts from an actual reviewer wait |
+| `/ea/workrooms` | Zero active team definitions and zero live links, despite active operational rooms | Display a definition-to-occurrence projection gap; zero linked definitions is not zero operational work |
+| TaskRun database, read-only | Research and architecture at missing-terminal-writer attempt 1; design review at attempt 2 after an identical replay; zero tools executed and no receipts | Preserve same task and immutable artifact; show provider noncompliance, bounded attempts, responsible recovery and missing receipt separately |
+| Source `shape-projection.ts` | Earlier stages become passed from coarse case-state order; terminal states mark current stage passed | Remove unsupported success inference; distinguish recorded state from verified stage completion, including cancellation |
+
+The exact reviewed spec blob remains `d5d9fce0746b45ef46ec00a9d760295780027376`
+at source commit `cd5aaf90caa84472ac849bc55686ead1d9d44795`. Live observations
+used `v2026.09.05-wwmd-decision-value.1`; they do not verify these proposed changes.
+The Workroom evidence records the three TaskRun IDs and replay result. The writer
+contract repair is already owned under BI-8B8731EE; consume its governed release,
+then resume the retained review task. Do not create another repair initiative.
+
+Reuse `WorkroomShapeSection`, `WorkroomShape`, the EA canvas, and
+`ArchitectureDrillthroughPanel`. Reporting controls use report-kit `FilterBar`,
+`DataTable`, `StatusBadge`, `Notice` and `EmptyState`; source-state interpretation
+belongs in the shared projection, not component-local color or status maps.
+Selecting a step navigates/inspects only. Any recovery command uses the existing
+authorization and preview contract; a graph click must not dispatch a coworker.
+
+The first viewport shows the operation, actual state, named wait and next action.
+The inspector progressively reveals why, owner, permitted transitions, evidence,
+and affected work. Keyboard-selectable nodes and the list share stable IDs and
+selection. URL context retains view, search, filter and selection on back navigation.
+Layout order follows definition and containment identity, not changing status or
+timestamps. A failed read retains the last observed timestamp with an explicit stale
+label; missing data is unknown. Simulation uses separate labeled input and cannot
+write runtime evidence. Measure the UX-fit manifest against served DOM before merge.
+
+Conway and nesting acceptance follows the existing operating standard §§9.1–9.5,
+not a new organization chart: separate structural containment from spawn provenance,
+dependencies, blocks and contributions; a cycle is a child room only when it needs
+independent accountability/control/outcome evidence. Portfolio placement is
+aspect-based. Show applicable versioned archetype/profile requirements and instance
+tailoring, including human/physical evidence obligations where applicable. A parent
+rollup cannot accept a child's outcome or grant the child's executor authority.
+The source-delivery reviewer slice exercises software execution and independent
+human/AI review boundaries. It must explicitly report physical/archetype scenario
+coverage still absent rather than imply those business requirements are verified.
+
+Baseline source checks: 62 existing tests passed in the governed worktree across
+`work-capsule-store.test.ts`, `scope-input-parity.test.ts` and
+`workroom-shape-claim.test.ts`. The parity test covers `create_workroom`'s parser,
+not the separate adoption parser. This baseline therefore does not disprove the
+reported adoption defect. Add behavior coverage through both creation and adoption,
+with persisted/read-back mixed claims, rather than only widening a structural test.
+
+## Implementation evidence: shape persistence
+
+Source regression tests reproduced dropped MCP adoption input, omitted creation
+claims, ignored re-adoption/resume scope, claim/release erasure, legacy-object
+loss, stale overwrites, and false success after duplicate creation/adoption with
+different scope. Each regression failed before its corresponding repair.
+
+The shared scope ingress and patch module now preserves omitted fields, mixed
+claims and unchanged binding timestamps. Persistence validates the exact registered
+definition version. Scope updates compare the original JSON and row timestamp,
+and refuse a conflicting executor session. A conflicting duplicate does not
+acknowledge the requested binding as stored. Delivery claim binding reuses this
+patch contract instead of its own destructive JSON filter.
+
+These are source-local results, not deployed runtime verification. The seven
+reviewer scenarios, canonical release, portal navigation and screenshots remain
+required. No new version migration or historical definition archive is claimed:
+the current registry provides one version per key and rejects unavailable versions.
+
+## Implementation evidence: process inspection
+
+The existing shared shape renderer now supports selected-step inspection, keyboard
+focus, search/state filters, a list alternative, and URL-preserved context. Intended
+definitions and observed room receipts are separate. Projection tests reject inferred
+completion from terminal case state, cancellation, or an unverified recommendation;
+a continuing process is not labeled as waiting. Stage colors use the shared registry.
+
+Thirty-five affected tests and web typecheck pass. This is source evidence only.
+The six required question headings and accessible controls exceed the old component's
+three-word source-copy baseline. The scoped baseline amendment implements that explicit
+user requirement; it does not relax any other file or prose axis. The progressive
+inspector is chosen over repeated full cards and a separate detail route. Consultation
+DI-B8832D1C621B recorded the comparison but lacked contextual embedding retrieval;
+its score is incomplete, not a kernel approval. The implementation judgment and this
+limitation are recorded in WC-4A72DC95 and the UX-fit manifest.
+
+Remaining: authoritative receipt-to-step correlation, recovery scenario execution,
+enterprise navigation, nested contribution closure, archetype-specific coverage,
+served viewport/accessibility checks and screenshots. None is certified by DOM tests.
+
+The next increment connects the existing EA Workrooms page to bounded, directly
+observed open rooms. Operation filtering happens before the row limit; truncation
+and missing value-stream placement are explicit. The existing count is relabeled
+as linked rooms, because it includes terminal rooms and cannot establish liveness.
+Returning from the process inspector restores the selected operation and disclosure.
+The expanded focused suite passes 42 tests across six files. Broader EA canvas,
+operational-health and accountability projections still require implementation.
+
+The case loader now projects recorded Workroom evidence through the existing receipt
+adapter, preserving the journal row identity, actor and payload. Journal assertions
+remain observed events rather than verified completion. A bounded journal read reports
+partial source health when more records exist. The expanded regression suite passes
+67 tests across ten files, including case loading, receipt adapters and detail views.
+These results do not establish receipt-to-step correlation or runtime recovery.
+
+The first merged-tree preflight identified missing architecture/user-interface guidance
+and a convergence declaration; both are addressed in this increment. The prose baseline
+is copied by the canonical Dockerfile and advances with the governed image release.
+The release gate and served portal checks remain outstanding.
+
+## Implementation evidence: driver ownership
+
+Driver regressions reproduced two dispatches from one expired lease, dispatch after
+completion, scheduling after ownership replacement, and loss of a concurrent room
+update. Acquisition now compares the observed lease atomically. Scheduling checks
+the unexpired lease inside the transaction that creates or updates the task. Snapshot
+writes compare the read revision and retain the dispatch lease fence; journal creation
+commits with the snapshot. A driver that encounters another owner's lease records an
+observation without replacing that owner's snapshot. The effect adapter accepts an
+explicit database dependency so concurrent source tests cannot escape into a live client.
+
+The expanded driver suite passed 59 tests across five files. The preceding driver
+increment also passed web typecheck. Candidate selection now normalizes legacy object
+claims and treats scalar/null claims as empty before expanding JSON in SQL, matching
+the existing tolerant shape reader. A query-contract regression failed before this
+repair and passed after it; this is not yet a PostgreSQL runtime scenario.
+This protects scheduling and snapshot persistence; provider effects, autonomous reviewer
+successors and crash/restart reconciliation still require their own runtime proof.
+
+The merged-tree CI attempt at 96e96509cf0 completed migration setup and typecheck,
+then reported six failing coworker-page tests whose navigation mocks omitted the newly
+used shared-renderer hooks. Its wrapper also lost the MCP connection during a portal
+restart. The test failures were repaired in 9dec47a95ac; the wrapper interruption
+does not erase them or establish a gate pass.
+
+All 65 source preflight guards passed at d5119dd78c28. Its merged-code gate queued
+without admission because host stage headroom was low. That request was cancelled
+when the legacy-carrier query repair superseded the candidate; no CI pass is claimed.
+
+## Implementation evidence: missing reviewer receipt recovery
+
+The existing external TaskRun reconciler and worker now share one admission check
+for an explicit `prose-without-required-writer` wait. The reconciler includes this
+case even when ordinary asynchronous submission is disabled. The worker rebuilds
+the persisted request, verifies current credential authority and enters the existing
+same-TaskRun replay path, retaining its immutable artifact and generation reservation.
+Recorded writer attempts, approval envelopes, invalid bindings, unknown waits and
+the existing three-attempt ceiling prevent automatic replay.
+
+Both missing-receipt regressions failed before implementation. The expanded suites
+passed 62 tests across seven files, including two concurrent replay requests admitting
+one provider loop through a simulated atomic reservation. Typecheck also passed.
+The code-graph impact lookup was unavailable during the governed runtime restart;
+colocated suites, a bounded caller search and the queue-function tests supplied the
+fallback coverage. These source tests are not PostgreSQL concurrency or live restart
+evidence. Native inline semantic review, interrupted in-flight provider calls and the
+complete seven-scenario portal demonstration remain outstanding.
+
+The first cloud sweep measured all 213 eligible routes. Production build, typecheck,
+unit suites and ADP integration passed. The two changed routes required structural
+baseline review; the Workroom arrival also grew from 250 to 329 words with two
+filter fields. Optional filters and detailed projection gaps now use collapsed
+disclosures, retaining the process and selected-step answers on arrival. The explicit
+four-word search/filter disclosure label raises only this component's source-copy
+baseline from 48 to 52; it reduces served arrival load rather than adding an always
+visible form. Fresh served measurement and the route-only baseline review remain
+required. The independent review of this repair was infrastructure-inconclusive
+because two responses could not be parsed, not a semantic pass.
+
+The branch browser measurement at `fc622d4d054` reduced Workroom arrival from
+329 to 300 words and filter fields/choices from 2/10 to 0/0; the selected-step
+inspector stays available. EA arrival measured 222 words against the old 239.
+Both surfaces retain zero undersized controls and the two pre-existing axe
+violations; these are not accessibility-clean claims. The manual workflow
+`34076669743` supplies the measured accessibility snapshots. Only `/ea/workrooms`
+and `/workspace/cases/[caseKey]` are re-frozen for these intentional feature changes;
+every other route remains unchanged. The Workroom's additional 50 words relative
+to the pre-feature baseline expose state, freshness and the requested inspection,
+within its 450-word absolute budget. Protected enforcing CI must accept this
+reviewed baseline before merge. Functional runtime scenarios remain outstanding.
+
+## Reviewer transport and retry repair
+
+PR #5167 merged as `6751cec01fe`; accessibility follow-up #5182 is separate.
+Canonical readiness last observed `9283441fe711` after the governed upgrade;
+it still requires advancement for the core slice at `6751cec01fe`.
+TaskRun `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-2C001C673264` exposes
+the next execution defect: Gemini was eligible at 02:56:12 UTC on September 7,
+then excluded by the request denylist at 02:56:52. Both persisted screening
+receipts allowed the request with a log-use obligation. The remaining Codex
+CLI adapter refused the required terminal writer. Source inspection identifies
+unconditional provider rotation on a terminal nudge. It also identifies the
+Gemini adapter dropping every tool-result message and assistant tool call,
+including the immutable evidence already read by the reviewer.
+
+Repair this existing path before extending the runtime acceptance exercise:
+
+1. Reproduce omitted evidence at the outgoing HTTP request, and keep call/result
+   identities and native Gemini continuation signatures in the shared tool-call
+   contract. Use one provider formatter; preserve normalized execution evidence
+   separately from the original provider call in conversation history.
+2. Carry the existing required-tool-choice contract into endpoint eligibility.
+   Reuse the dispatch adapter's incompatibility rule so a required writer cannot
+   select a known incompatible CLI adapter or degrade to prose.
+3. Rotate only a writer-phase prose failure when another eligible route exists.
+   Reader recovery and correctable receipt feedback do not establish provider
+   noncompliance. With no eligible alternative, retain the existing bounded
+   retry without removing policy exclusions or bypassing approvals.
+4. Test actual HTTP payloads, native and cross-provider history, capability
+   exclusions, bounded retries, canonical writer duplication, approval waits,
+   and exhaustion. These source checks do not establish live restart recovery.
+
+Google's [function-calling continuation contract](https://ai.google.dev/gemini-api/docs/generate-content/thought-signatures)
+requires returned signatures on native function calls and describes history
+transfer from other models. The adapter boundary owns those wire details;
+Workrooms, governed tools and screening retain execution and data authority.
+Consolidating the duplicated tool-call types, provider message formatting and
+required-call capability checks contributes to the requested refactoring share.
+
+Source verification reproduced the missing Gemini evidence, premature rotation,
+and required-tool routing defects before repair. The focused suites pass 65 tests,
+the related suites pass 294, and routing/fallback suites pass 99, including a
+regression that forbids stripping required tools on compatibility retry. Web
+typechecking, module-size, style, prose and whitespace checks pass. These suites
+overlap in coverage and are not distinct runtime scenarios. Full preflight and
+review of the final repair tree remain required before publication.
+
+## Native review persistence, next implementation unit
+
+The current native `review_semantic_change` handler persists a TaskRun identity,
+then awaits reviewer branches inline. It does not persist `operationInput` and
+marks the TaskRun working before dispatch. A restart can therefore leave an
+unresumable subscription. The release owner confirmed no competing implementation
+on 2026-09-07. Extend this same Workroom and the selected DPF/Inngest decision.
+
+1. Persist the versioned immutable request as a TaskArtifact nested in TaskRun
+   creation, with a digest, submitting actor reference and absolute deadline.
+   Persist queue intent in the same write. Do not store credentials or duplicate
+   the packet in a second ledger. Older tasks without a packet remain explicitly
+   unrecoverable until an authorized caller supplies a new request.
+2. Extend the existing task execution event and reconciliation path. Revalidate
+   current actor, credential, grants and Workroom authority before dispatch.
+   Persist each reviewer branch's result before aggregate finalization. Completed
+   branches are reused by exact identity; expired or ambiguous in-flight calls
+   cannot silently become successful or trigger an unbounded replacement.
+3. Fence each claim and finalization against terminal status, attempt and version.
+   Commit the canonical receipt and task completion atomically; repeat delivery
+   returns the same evidence identity. Cancellation or supersession wins over a
+   late result. Provider continuation uses the existing AsyncInferenceOp contract
+   when supported; a CLI process is not a resumable provider operation.
+4. Expose pending, running, approval, recovery, exhaustion and stale state through
+   the existing task and Workroom projections. Test lost enqueue, process restart,
+   concurrent duplicate delivery, revoked authority and late completion before
+   exercising the canonical portal. Define and test an explicit persisted-packet
+   size limit; the inspected handler has no artifact-length check. Reuse existing
+   queue batch limits; this unit remains under EP-ABB3AC9D.
+
+Inngest [durable steps](https://www.inngest.com/docs/learn/inngest-functions)
+provide checkpoints, but [event deduplication](https://www.inngest.com/docs/guides/handling-idempotency)
+has a 24-hour window. Database claim and receipt fences remain necessary across
+that window. This is an implementation plan, not a delivered durability claim.
+
+## September 7 runtime acceptance and native admission
+
+The canonical release `v2026.09.07-workroom-execution-visibility.1`, target
+`f3c7bd183c1a9a4e62d5143ec24f8019684bd2d2`, passed publisher `34084039523`
+and release `34084039575`. Normal upgrade `SUR-DE459EDA` succeeded and exact-target
+readiness returned CAN-TEST. This establishes deployment, not acceptance.
+Reviewer transport repair #5186 subsequently merged as `793d0855ecf`.
+
+The actual `/ea` → `/ea/workrooms` → `WC-4A72DC95` journey returned a 404.
+The Workroom belongs to backlog case `BI-06AE6833`; it does not own a separate
+WorkItem whose source is `work-capsule`. The loader now follows the existing
+capsule foreign key, preserves the canonical case identity, and selects the
+requested capsule when reading its process. Fourteen loader tests pass. Runtime
+retest after release remains required. The canonical backlog case opens today,
+but the observed EA view still has no linked value-stream teams, and its flat
+200-room coordination list does not meet the complete navigation objective.
+
+Native review admission now stores a bounded, versioned TaskArtifact and queue
+intent in the same TaskRun creation. The existing execution event, two-minute
+reconciler, current authority check, generation reservation and heartbeat own the
+server run. Completed TaskNode branches are reused by request digest. The receipt,
+room evidence and final TaskRun state commit in one transaction; activity is
+published after commit. The existing Tasks result method reads the canonical
+receipt through its caller/task/Workroom binding and reports missing evidence.
+Cancellation compares the observed state and revision before writing.
+
+The affected source suite passes 164 tests, including duplicate admission and
+delivery, lost enqueue, revoked authority, deadline exhaustion, completed-branch
+restart and cancellation races. These are source tests, not the seven live
+acceptance scenarios. An interrupted synchronous provider branch remains an
+explicit reconciliation wait; this implementation does not manufacture a
+provider handle or repeat an uncertain call. Integrating the existing
+AsyncInferenceOp continuation contract, authorized recovery and its portal
+projection remains required for the full reviewer-recovery acceptance.
+
+Refactoring consolidates the request vocabulary and digest contract, canonical
+task states, reviewer branch dispatch, transactional external-evidence writer,
+and deferred activity publication. The broader goal still requires the versioned
+reviewer flow, actual nesting and accountable coordination, archetype-specific
+model bindings, and the complete enterprise-to-evidence runtime demonstration.
+
+## September 8 reviewer evidence continuity
+
+On served `a2b81dbadb5182c0d758586ad857e59abff7bc5f`, reviewer task
+`TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-A16253D3AB7B` read the correct
+176-line immutable pagination design, then recorded a PASS rationale describing
+client-side enumeration. The 10,825-character artifact instead proposes bounded
+server-side snapshots. Receipt `initiative-14488665-0fb5-4941-8a86-9d7bd7e5b22a`
+does not establish substantive acceptance. Its history remains intact.
+
+Source reproduction identifies a second compaction pass: even with a 1,048,576
+token model window, it reduces each tool message to about 1,500 characters. The
+options begin after character 3,500. The regression fails before the repair and
+passes when governed reader messages retain the existing model-facing budget.
+This proves evidence loss; it does not prove every cause of the model's rationale.
+
+The loop records model-facing truncation separately from successful tool execution.
+A truncated source page cannot authorize a terminal writer. The reader remains
+available for smaller pages of the same immutable artifact, within its existing
+attempt budget. Full traversal restores writer eligibility. The repair does not
+raise global caps or equate a recorded PASS with factual correctness. Re-release,
+an independent grounded review and runtime acceptance remain required.
+
+The September 8 creation check produced `WC-9CECAF46` on the canonical
+nonproduction portal with `delivery-small@1.0.0`, `change-consequential`, WWMD,
+the served persona and outcome anchor intact in an independent MCP readback.
+Retrying that exact idempotency key was incorrectly refused: PostgreSQL JSONB
+changed the outcome-anchor key order, and the scope comparator used serialized
+insertion order as equality. The failing source regression reproduces the
+refusal. Reuse the canonical JSON comparator for object scope and change evidence;
+retain ordered-array comparison and refusal for genuinely different scope.
+The same live retry must pass after release before this check is closed.
+
+The Workroom recovery projection also treated every nonterminal TaskRun as
+queued, including input/authorization waits, watchdog stalls and upgrade pauses.
+The regression now distinguishes queued, recorded-working, waiting and unknown
+states; an unrecognized status cannot establish pending execution. Terminal-state
+classification moves to the existing pure task-state module, preserving the MCP
+export while removing a runtime/database import from the projection. This does
+not infer fresh heartbeats or successful delivery from a stored task status.
+
+Authorized native recovery extends the existing operator TaskRun retry action.
+The original requester must explicitly confirm replacing an uncertain, tool-free
+inference attempt; provider charges may recur, but the old generation cannot
+write a receipt. Keep the original immutable packet, deadline and three-recovery
+ceiling. Reuse completed reviewer checkpoints, retain superseded attempt evidence,
+and enqueue the same TaskRun through its existing durable outbox. Expired requests,
+revoked authority and exhausted recovery are refused, with no new deadline or
+implicit grant. This is recovery of read-only inference, not replay permission
+for an arbitrary external effect or a claim of provider-side exactly-once execution.
+
+PR #5222 passed source build, typecheck and affected tests, but its protected UX
+sweep twice reported 397 arrival words against the Workroom route's 390-word
+baseline. The second run did not reproduce the inventory regression. Cause is
+unresolved. Capture the existing bounded failure screenshot during confirmation
+of a budget regression, while the measured page is still open; the existing CI
+failure artifact publishes it. Keep the baseline and blocking verdict unchanged.
+This adds diagnostic evidence, not portal acceptance or permission to merge.
+
+Completion readback must include the stored initiative readiness decision in the
+existing bounded subject activity query. Its omission made the existing allowed
+decision reuse path unreachable. The test double now applies that real query
+filter: the regression fails before the repair, and 36 affected tests pass after
+it. Reuse still requires matching evidence and the existing authorization checks.
+No missing verdict is manufactured, and unfinished outcomes remain unfinished.
+
+The confirmed CI screenshot exposes the boundary notice repeating every missing
+field in both prose and a list. Keep the direction, full list and existing repair
+control; remove the repeated enumeration. This is a demonstrated UI duplication,
+not a diagnosis of the original seven-word measurement difference. The baseline
+and protected sweep remain unchanged.
+
+The Workroom loader previously missed native reviewer TaskRuns until final journal
+evidence arrived. Read only native runs correlated by capsule identity, with bounded
+run and checkpoint history, into the existing observed-evidence projection. Preserve
+requester/reviewer identity, timestamps, last recorded reason and source references.
+Do not infer permitted transitions or verified completion from task status. Report
+unavailable or truncated sources explicitly. Share recorded-state classification
+with recovery and the heartbeat threshold with the worker; use canonical JSON guards.
+These changes plus the boundary regression pass 104 affected source tests. Live
+navigation and scenario acceptance still depend on canonical deployment.
+
+The Pet Rescue closure trace adds an exact historical reviewer format to the
+same recovery work (BI-06AE6833, downstream BI-7A38F667). Preserve TaskRun
+`993C47DEE56A` unchanged and use the existing deterministic successor contract.
+The old whole objective uses `at <head>` and `at that commit`; the current
+producer requires `at Workroom head <head>` and explicit finite evidence. Freeze
+the exact fixture and identity/authority mismatch cases, share current objective
+formatting with the producer, and recognize only the complete prior template.
+Verify key evolution, producer, terminal recovery, repository admission and
+external-task idempotency before protected publication. A canonical live receipt
+and product closure are separate required acceptance, not implied by these tests.
+
+## September 8 served navigation follow-up
+
+### Immutable objective recovery readback (BI-06AE6833)
+
+The accepted Pet Rescue successor `66484EEC63EE` preserves its 1236-character
+request in `a2aMetadata.requestObjective`; `TaskRun.objective` is a 1000-character
+display projection. The terminal history reader incorrectly compares that
+projection with the immutable replay. Repair the existing history reader, under
+WC-5C67495F, independently of navigation PR #5235. First reproduce accepted
+submission, missing terminal writer, and unchanged same-task replay through the
+action-time admission guard. Prefer valid full metadata; legacy fallback applies
+only when the metadata field is absent, and existing authenticated request-key
+validation must still prove the complete identity. Present invalid metadata must
+fail closed. Test genuine objective, identity, evidence and authority conflicts.
+Preserve all historical tasks and receipts. After protected release, resume only
+the accepted successor and require a real writer receipt before product closure.
+Consolidate history parsing at its existing shared loader; both recovery and
+submission admission consume it. No schema, UI or policy change is required.
+
+Normal upgrade SUR-3B5A6D60 succeeded on ed7cf82c501f; live readiness returned
+CAN-TEST. Creation-key retry reuses WC-9CECAF46, and governed adoption preserves
+all 120 unrelated path claims and the versioned delivery shape. These are bounded
+acceptance results, not completion of the broader objective.
+
+The served EA coordination link now opens the Workroom, but its canonical-case
+redirect drops operation and process query context. Preserve the query through
+that existing redirect, including repeated filter values, using the canonical
+case helper. The selected-step screenshot also exposes 21 concatenated source
+identities under affected work. Reuse report-kit's CollapsibleList for a short
+preview and full inspectable identities; explicitly distinguish linked records
+from established impact. Do not invent dependency effects or receipt correlation.
+
+UX fit: fits-with-guardrails, within Workspace's existing case inspector for the
+operator tracing actual work. Only local navigation and disclosure change; no
+coworker dispatch or authority mutation. Retain the existing progressive-inspector
+decision, theme tokens, six questions and unknown states. Verify redirect query
+round-trip, full reference disclosure, keyboard/list selection, protected route
+budgets and served navigation. Team bindings, actual nesting, step-linked runtime
+receipts and the seven live recovery scenarios remain outstanding.
+
+The protected sweep for PR #5235 measured all 213 eligible routes. Its only
+blocking result was the intentional paragraph/list structure added for linked
+records on the Workroom route; no numeric budget regressed. The reviewed failure
+screenshot and prescribed fresh measurement 34294055045 both show 369 arrival
+words. Update only that route's measured accessibility snapshot, retaining every
+numeric limit and every other route. The fresh measurement passed; the amended
+commit still requires independent review and protected CI.
+
+## September 12 reviewer outcome visibility
+
+WC-4B4B03F5 continues BI-06AE6833 on current main. Include native semantic
+reviews in the existing bounded recent TaskRun query, regardless of status;
+retain the separate outstanding-wait query and identity deduplication. Share
+the reviewer query predicate in the canonical Operations Map run read model.
+This preserves completed outcomes within the selected start-time window and
+existing source cap; it does not claim an unlimited historical ledger.
+
+Resolve the selected inspector against loaded evidence rather than the filtered
+list so changing a filter does not erase navigation context. No cached state or
+inferred completion is introduced. Verify query bounds, terminal reviewer
+projection without a recovery action, deduplication, and filter navigation.
+Protected CI and live portal verification remain required before completion.
+
+## September 13 recovery readback (WC-958DA760, BI-06AE6833)
+
+Live review TR-GATE-17CAD3AAE52422739C8CFF11 expired but still offers Resume review. Consolidate deadline/retry-budget evaluation into one pure policy used by the existing server recovery guard and existing inspector. Preserve server-side requester, immutable packet, consent, authority, quiescence and compare-and-swap checks. Load only the existing progress fields needed to explain the budget; unknown or malformed evidence must not imply permission. Show the recorded deadline, attempt count and unavailable reason, retaining history navigation. Re-evaluate at the deadline and before confirmation. Tests first: future/expired/invalid deadlines, exhausted/malformed counters, missing projection evidence, and no retry dispatch after expiry. This is an existing-inspector repair using shared primitives and theme tokens; no new route or control. Record source verification separately from later deployed acceptance. Approximately one fifth of this repair consolidates recovery policy and projection logic.
+
+UX-fit decision DI-DDD94F1471A4 selected existing-inspector-explanation over a dedicated recovery-detail route (high confidence, autonomy eligible, no commandment conflict). The committed propose-n-pick manifest points to that canonical decision; estimates used in option scoring are not claimed as measured visual metrics. Deployed acceptance remains separate.
+
+## September 13 screening evidence readback (WC-710B477C, BI-06AE6833)
+
+The c448 live reviewer probe recorded six screening receipts and six correlated provider responses, while Operations Map reported zero screening coverage. The loader omits the receipt and its privacy adapter hardcodes null. Select the existing receipt and reconstruct only the five fields in SafeInferenceScreenReceipt. Validate the version and field types; missing, malformed or unsupported receipts remain uncovered. Never expose raw payloads, match values, input hashes or arbitrary JSON fields. Reuse the existing conformance calculation and inspector; no new metrics, routes or controls. Test the real loader seam, mixed covered/missing records, blocked-route evidence and malicious extra fields before implementation. Verify against the same six existing live receipts after protected release, without another provider request. Consolidation remains in the existing shared privacy adapter rather than creating a parallel evidence store.
+
+## September 13 reviewer source-analysis intent (WC-132508EC, BI-06AE6833)
+
+Canonical c448 probe logs show the exact failure: the first model answer described the supplied historical source diff, then the /build evidence classifier injected a live-operational-data nudge. Subsequent calls searched for monitoring tools and lost the original task. Repair the existing shared intent classifier, not the prompt or evidence authority: recognize explicit analysis of supplied source as source-based work, excluding quoted code from intent cues. Preserve requests for live state before or after the artifact, mixed requests, ordinary build/backlog/provider questions and the existing no-evidence refusal. Do not treat 'no tools' as an exemption. Reuse one source-analysis classifier at the taxonomy and fallback evidence boundary. Test the original request shape, fenced and unified diffs, mixed/live counterexamples, and the actual agentic loop returning the first grounded source answer without a recovery call. No tool grants, dispatch authority, payload screening or terminal writer checks change. After protected deployment, one bounded original-artifact acceptance must return the requested cap, reserve and limitation; source tests alone do not complete that acceptance.
+
+## September 21 OAuth reviewer authority (WC-99AECC86, BI-06AE6833)
+
+Native review TR-GATE-0DD6B07CACCAE873D4507112 was admitted with passing exact-revision local integration evidence, then stopped before provider dispatch. Its immutable actor uses OAuth; the worker recognizes only PAT/session authentication. Extend the existing durable authority reader to resolve OAuth's same McpApiToken record. Reuse a shared current-token predicate with transport resolution; preserve token expiry, reject token/client revocation and missing clients, and retain coarse scope, tool grants, current user, agent grants and TaskRun ownership. Admission already validates the resource audience; the worker uses only the server-persisted actor reference. Do not substitute credentials, refresh a token on behalf of the client, or accept expired authority. Test active OAuth and revoked, expired, wrong-kind, read-scope and grant/assignment counterexamples before implementation. This fixes authentication compatibility; it does not claim the seven recovery scenarios passed. Keep this source repair separate from the observed-state UI PR and verify a fresh native run after canonical release.
+
+The same run is visible under Operations Map's Activity projection details, but its authorization wait omits the shared recovery explanation. Include native auth-required runs in that existing inspector, retain the original deadline and attempt count, and explain that the requester must inspect the saved authority. A new sign-in cannot replace the immutable packet's credentials. Reuse the existing recovery controls and their expiry/limit checks; do not add another recovery surface or infer that authority has been restored. The regression must fail before the projection repair and distinguish ordinary non-review authorization waits.
+
+Consolidate the recoverable-wait classifier between the server and map projection. Permit an authorization wait to resume only after the original saved authority passes current validation, with requester, confirmation, budget, quiescence and concurrent-update checks unchanged. Preserve prior execution evidence without claiming that a provider started. First-failing server coverage reproduces the previously excluded authorization state; positive restoration and denied-authority/exhausted-budget counterexamples must pass together.
+
+## Multi-Workroom case selection (DI-1544D18CEAE3)
+
+BI-06AE6833: when an authorized case has multiple rooms and no room is selected,
+show an explicit room choice before loading participants or execution. Different
+rooms may each have a coordinator; combining them violates the single-room
+ownership contract. Reuse the case route, shared surfaces and canonical URL
+builder, preserving operation and filter context. Bound the choices and label
+truncation. Verify selection isolation and accessible links before runtime checks.
+
+## Authorized replacement of inconclusive checkpoints
+
+On September 21, TR-GATE-90A419BE5A6A4FFB8F049AE3 recorded authorized recovery
+attempt 1 but retained only its original two invalid-JSON checkpoints. The worker
+reuses every completed checkpoint across generations, including inconclusive
+results. Extend the existing checkpoint transaction: reuse valid verdicts and
+same-generation results; replace a prior-generation inconclusive result only
+after the existing recovery admission has authorized the new generation. Retain
+the prior result and diagnostics, link its successor, and distinguish a known
+inconclusive response from an unknown provider outcome. Do not change authority,
+confirmation, deadline, attempt limits, execution fences or external effect rules.
+First reproduce the failed replacement, then cover verdict reuse, same-generation
+duplicate handling and retained evidence. Provider response validity remains a
+separate observed failure requiring diagnosis; retry is not a success claim.
+
+## Recorded role waits in the process header
+
+Live WC-0FE180F2 records a role-stage wait while its header reports no attention.
+The two case loaders retain the current stage but drop the drive's pending action.
+Consolidate their observation assembly in the existing drive-state reader and
+project only an attention action with matching stage and recorded principal.
+Use that recorded wait in the shared read model, preserving stronger process
+interventions and reviewer waits. Ignore malformed, mismatched and terminal-room
+waits. This read repair does not dispatch a role or infer progress from a tick.
+
+## Reviewer fallback model classification
+
+Native review B982 fell back to gemini-3-pro-image and returned invalid JSON.
+The live profile classifies that image model as chat and advertises tool use.
+Google's [model specification](https://ai.google.dev/gemini-api/docs/models/gemini-3-pro-image)
+states that function calling and structured outputs are unsupported. Reuse the
+existing Gemini modality derivation for classification instead of the adapter's
+hardcoded text-only input. Share classification between discovery and card
+extraction; image generation remains available to image requests, while the
+existing text-task filter excludes it from reviewer fallback. Correct known
+unsupported capabilities without inventing positive capability claims for other
+image models. Verify discovery, cards and routing exclusion, then refresh through
+the governed metadata path after release. The raw malformed answer remains
+unavailable; classification is a verified defect, not proof of its exact syntax.
+### Coordination discovery and return context (2026-09-21)
+
+Live acceptance found 381 open rooms but only the first 200 reachable from
+Coordination, with no search or next page. Extend the existing architecture
+loader with database-side title/identity search, canonical status filtering and
+stable identity keyset pagination. Keep the 200-row bound, label each page as an
+observation, and preserve operation, search, status and cursor through the
+canonical case redirect and the process return link. Reuse FilterBar and the
+stored drive observation projection for recorded waits; never infer execution
+from updatedAt or assignment. Verify combined unmapped-operation/search filters,
+page boundaries, malformed input and round-trip navigation before release.
+
+UX fit: fits with guardrails, recorded as DI-4A3C8C3C9ACC (high-confidence
+proceed). Platform EA is the canonical home; the operator uses local filters
+and read-only room links. FilterBar, StatusBadge and the drive projection remain
+shared. Preserve collapsed discovery controls on initial arrival, report page
+counts rather than totals, and show an actionable empty result. No prompt send
+or dispatch is attached to navigation. Source checks and deployed desktop/mobile,
+keyboard, theme and return-context acceptance remain required.
+
+The intentional disclosure and paging structure is measured by successful cloud
+UX sweep 35570886614 against source 6509aecaed0ba2584e82b9f0588334d7b53633d1.
+Re-freeze only `/ea/workrooms` from its emitted baseline under this PR's review:
+arrival text falls from 237 to 162 words; all other numeric axes are unchanged.
+The two existing axe violations remain unresolved, not an accessibility pass.
+No other route baseline or sweep rule changes. The architecture guide now
+documents the same search, paging and return-context behavior.
+
+### Reviewer execution inspection in the existing room
+
+Live release de6f45 shows a stored requester as Unknown and makes a reviewer wait
+readable only as a generic receipt. Extend the existing bounded reviewer reader
+with a typed observation of the same TaskRun, checkpoint identities, reason,
+requester, recorded next action, read time and immutable recovery budget. Carry
+that observation through both room loaders. Keep intended definition steps and
+observed runs separate; a completed checkpoint is not a verified verdict.
+
+Reuse StalledTaskRecoveryActions inside the existing Observed execution disclosure.
+The server retains requester, saved authority, confirmation, deadline, attempt
+and concurrency checks. Share budget extraction with Operations Map and use the
+canonical actor fields for both events and receipts. This consolidation is part
+of the refactoring allocation, not a second recovery implementation. Test missing
+and corrupt budgets, terminal runs, failed reads, room isolation, and requester
+identity before the source repair. Review runtime source and UI independently;
+do not label an authorization rejection or stale read as successful recovery.
+
+UX fit DI-E1D9AF1E894D recommends shared-room-inspection over map-only-recovery
+with high confidence. Details stay inside the existing disclosure, use theme
+tokens and native keyboard controls, and name unknown facts. Register the new
+component's measured 63-word source-copy budget without growing existing entries.
+Runtime acceptance and existing accessibility defects remain open.
+
+The completed provider response also carries a truncation flag. The reviewer
+currently ignores it, so even syntactically valid partial output can be treated
+as a verdict. Fail that branch as inconclusive with a specific recorded reason
+before parsing; retain no response text and do not change output budgets or relax
+the parser. This is a verified source gap, not a claim that truncation caused the
+current live invalid-JSON responses. Prove it using valid JSON marked truncated.
+
+### Nested responsibility must remain evidence-based
+
+PWA-04 requires ambiguous parents to be correctable setup, but the current
+resolver silently returns the organization owner. Its bounded ancestor reader
+also drops the unresolved frontier after ten levels, making an unseen delegated
+owner look absent. Preserve the frontier and report incomplete lineage only if
+resolution reaches it without an explicit assignment. Report competing parents
+instead of falling back. Keep explicit room/nearest-ancestor assignments and
+ordinary organization fallback intact. Share these facts between the drive and
+room workforce reader; change no authority or relationship writes. Reproduce both
+counterexamples and test overrides, complete lineage, cycles and dependencies.
+
+### Coordination ownership and relationships
+
+Extend the existing Coordination list under BI-06AE6833 and BI-9DC43E17 with
+recorded accountable ownership and bounded WorkroomRelation observations.
+DI-2CB67542C613 selects shared-coordination-context over opening every room
+individually, with high-confidence proceed. Use one batched ancestor/participant
+read and the existing human-accountability resolver; share that reader with the
+single-room drive path. Assignment never substitutes for accountability.
+
+Disclose parent, child and dependency links within each existing row, preserving
+operation/search/status/page context. Render missing readers, failed queries and
+truncated relationships explicitly. Do not infer blocking from an edge alone or
+call recorded containment successful delegation. Reuse native disclosures,
+theme tokens and canonical case identity. Test shared ancestors, query bounds,
+unknown ownership, dependency direction and navigation context before release.
+At least one fifth of this batch consolidates ancestry/accountability reads.
+
+### External requester's native recovery adapter
+
+BI-801313EB already requires durable resume without the original client. Current
+main exposes retryPersistedSemanticReview only through the portal session action;
+the MCP change-review pack can admit a request but cannot submit its confirmed
+recovery. A virtual surface requires a separate governed coworker context and is
+not an alternate grant. Extend the existing change-review pack with a thin
+retry_semantic_review adapter to the same recovery function. Bind identity from
+the authenticated user, never a payload user ID; require explicit confirmation
+of replacement inference cost. Keep current tool grants, original requester,
+saved authority, deadline, attempts, quiescence and concurrent-generation fences.
+No new execution, ledger, retry policy or privilege is introduced. Test missing
+confirmation, another requester, expired/revoked authority, non-native tasks and
+successful forwarding. A denied call remains denied and is not accepted evidence.
+
+Deployed inspection on c6e5718 found that an expired review still answers
+"retry-review" under its next-action question, contradicting the disabled Resume
+control. Share the recovery budget clock and presentation between that answer
+and the action control. Test expiration during an open page, exhausted and unknown
+budgets. Preserve raw recorded actions in request history; describe permitted
+recovery in plain language. Read the requester's existing employee display name
+when present, retaining the user identity and an explicit unknown-name fallback.
+Translate known reason codes without inferring a provider failure cause.
+
+The reviewed `/ea/workrooms` route measurement from workflow 35580754120
+adds only the collapsed owner/link disclosure to its accessibility structure.
+Refresh that route's structural baseline alone: all numeric axes remain unchanged
+(162 visible words, 22 lead words, one primary action, zero visible fields).
+The two existing axe violations remain recorded; this is not an accessibility pass.
+
+### Reviewer response contract and safe failure diagnosis
+
+The next actual review, TR-GATE-57C976FB4645325A907F9900, recorded three
+successful provider telemetry rows but only one completed checkpoint. The worker
+retains provider-outcome-uncertain and discards the rejected branch's error. The
+cause is unknown. Extend the existing failure record with the last attempted
+checkpoint phase and allowlisted error kind/code only, never error messages or
+provider content. Preserve the generation fence, original deadline and manual
+recovery requirement. Verify read, provider and write failures independently;
+no retry is introduced by diagnostic capture.
+
+Release3 review TR-GATE-6B57503C6CF9DF933ADE9985 records one truncated branch
+and two invalid-JSON branches. Strict validation correctly withheld a verdict.
+The response prompt itself demonstrates invalid JSON (`"pass" or "fail"`) and
+the operation appends an additional object-shaped failure-analysis instruction.
+These are verified contract defects; they do not establish the exact syntax of
+the unretained provider responses. Extend BI-801313EB and the existing review
+contract: emit one valid JSON example including required failure analysis, keep
+enum guidance outside it, and remove the duplicate appended instruction. Preserve
+the Build Studio compatibility profile. Add only content-free JSON structure
+counts to invalid-response diagnostics and validate their checkpoint readback.
+Never store source excerpts, arbitrary parser messages or provider text; never
+accept malformed JSON, reset an attempt budget, or infer a semantic pass.
+First-failing tests must cover the complete prompt example and bounded diagnostic
+round-trip, including quoted braces and malformed/untrusted checkpoints. Run the
+graph-linked reviewer, publication and recovery tests before governed release;
+then verify the actual provider result and confirmed recovery on the live install.
+
+### Open-page projection freshness
+
+Release4 acceptance recorded a stale open page showing zero recovery attempts
+while the authoritative request had advanced to one. Extend the existing
+Workspace process inspection with an explicit snapshot-age warning and a
+read-only Refresh action. Read time remains the server-provided readAt, never a
+client click timestamp. Missing, invalid or future read times are unknown; after
+one minute the snapshot is labeled stale. This is a display freshness threshold,
+not a claim that the server or underlying evidence stopped progressing.
+
+UX fit: fits-with-guardrails in the existing Workroom detail, for an operator
+checking waits. Reuse Button, LocalTime and the existing deadline-clock behavior;
+extract the clock so recovery expiry and snapshot expiry share timer cleanup and
+visibility handling. Refresh preserves URL, selection, filters and disclosure
+state. It starts no inference or recovery. No automatic execution depends on it.
+Keep the latest evidence time separate from snapshot age and retain projection
+gaps. Tests must show aging without navigation, unknown times, failed/no-change
+refresh remaining stale, and a newer server read clearing the warning. Live
+verification and measured UX-fit evidence remain required before delivery.
+
+The same acceptance run exposed raw accountable principal IDs. Live readback
+confirms the organization's top accountable Principal has displayName admin.
+Both batch coordination and single-room readers only look for names in room
+participant rows, so they miss organization owners who are not participants.
+Share one bounded name resolver across both readers: reuse participant names,
+then batch-read only unresolved accountable IDs from Principal. Do not add a
+participant, infer another owner, or change inherited responsibility. Preserve
+unknown names when the principal cannot be resolved; verify the page performs
+one lookup for a shared organization owner.
+
+### Checkpoint transaction failure containment
+
+Release5 review TR-GATE-9AC60ECCAFAA6A344BB254BA failed with Prisma P2028
+on checkpoint read and, after one authorized recovery, checkpoint write. The
+underlying timeout cause is unknown. Source inspection confirms that one branch
+failure immediately parks the entire TaskRun, preventing successful siblings
+from saving their results. Delay that wait until the existing all-settled
+dispatcher has drained its branches. Keep cancellation and generation fencing.
+
+Share a bounded database-only retry wrapper between checkpoint reads and writes.
+Retry only Prisma transaction errors P2028/P2034, at most three times within the
+original deadline, with short backoff. Never wrap provider execution or final
+receipt publication in this retry. An ambiguously committed read must still see
+the running checkpoint and refuse another provider call. Repeated writes save
+the same result under the generation fence. Retain unknown outcomes on exhaustion.
+First-failing tests cover sibling retention, transient read/write failure and
+retry exhaustion; add cancellation, deadline and ambiguous-read cases before
+the functional gate. Reuse existing checkpoint records and recovery policy.
+
+### Current change identity and retained PR history
+
+WC-99AECC86 still records PR 5470 after advancing its head to cfc451d7.
+The inventory binder excludes fully bound rooms, while the backlog PR actuator
+updates by repository and branch without checking the authored head. Inventory
+also drops the provider head before calling that actuator. A reused branch can
+therefore preserve or restore an earlier delivery as the current one.
+
+Extend BI-06AE6833 and the existing verified observation contract. Consolidate
+binding writes behind the current repository, branch and full head identity,
+with compare-and-swap and an atomic activity entry retaining the previous PR.
+An absent head cannot authorize replacement; an observation for another head
+cannot alter current binding. Preserve idempotency, bounded inventory batches,
+provider freshness checks and explicit incomplete coverage. Keep backlog status
+transitions separate from PR binding so they cannot become a second writer.
+Test a reused branch, late older delivery, duplicate observation, concurrent
+head advance and journal rollback before implementation is accepted. This is
+not permission to edit runtime rows or infer that a merged PR completes the
+overarching initiative.
+
+The reviewer projection has the same identity risk: late activity on an old
+request can dominate current attention. Read only bounded identity fields from
+the existing immutable TaskArtifact, correlated by TaskRun, actor, request digest,
+gate key and Workroom. Compare source commit SHA with the Workroom commit SHA,
+never with a tree hash. The latest issued request for that head is current;
+earlier requests remain historical. Missing correlation is unknown and partial.
+Do not load full review prompts into the portal. Display the classification in
+the existing disclosure, and do not offer recovery for historical requests.
+Working generations must describe server continuation, not the previous wait.
+Show a bounded verdict summary only from the correlated ExternalEvidenceRecord,
+matching request head, diff, policy and reviewer version. Its observed verdict
+does not confer publication permission or complete a Workroom stage.
+
+The required UX sweep for PR 5482 measured the added Refresh state button as
+an intentional accessibility-tree change. Workflow 35670278421 remeasured the
+exact published UI head. Adopt only the case route's measurement: 385 visible
+words (down from 397), one primary action, zero visible fields, and the additional
+button. The two existing axe violations remain recorded. This baseline update
+does not claim that the full live execution experience has passed acceptance.
+
+## September 22 compact snapshot follow-up
+
+The exact761ec56 UX sweep35671984175 measured392 arrival words against385,
+with no structural or other numeric regression. Its screenshot retains the
+freshness sentence and localized timestamp; the earlier385 measurement is not
+proof of every hydrated state. DI-584304A4B6C8 selected compact shared inspector
+copy and numeric localized dates over raising the arrival budget. The initial
+DI-208F89A7300F consultation lacked feature scores and supplied no usable choice.
+
+Keep recent, stale and unknown explicit. Preserve date, time and timezone via
+LocalTime, the original sixty-second expiry and read-only Refresh state action.
+Current/historical request labels and correlated receipt summaries remain inside
+Observed execution. The updated UX manifest covers both changed components.
+The385-word limit remains; the next protected sweep must verify the result.
+
+### Captured route reading load, 2026-09-22
+
+Protected run 35673719251 measured 392 arrival words against the retained 385 baseline. Its captured text omits the live freshness sentence and timestamp numbers; compacting those did not change the count. Under DI-584304A4B6C8, shorten the shared workforce accountability explanation from 23 to 12 words, preserving the distinction between answering for outcomes, coordination, and permissions. Owner identity and missing-owner guidance remain visible. The final protected route measurement is still required; no baseline increase or passed runtime claim is made. This copy clarification needs no separate user-guide change.
+
+Run exception: the operator's existing Sept21 authorization to bypass the three known Windows Bash PKI mode-0600 fixtures applies to this same Workroom's copy follow-up gate. The Release Asset Contract host fixture verdict is skipped, never passed; canonical Linux and protected PR/release gates remain mandatory. Git Bash must be on PATH so the separate Janitor shell tests actually run. The copy-only workforce file is intentionally absent from the control manifest because the UX classifier rejects it as over-broad; its design reasoning is recorded above.
+
+Local-CI-Override: docs-adjacent: Only the shared workforce explanatory prose, its existing text assertion, and verification notes changed after canonical PASS5415282865288589979dfcf5b4aa273d8e9ca97d (cmubylf5019jk01ru8lq2o1if). Nine affected tests and both TypeScript programs passed. Same-head50b6 retries ended without gate verdict despite first-run2865 tests and completed BuildKit build stage; they remain inconclusive. This exception uses docs/testing/pre-pr-gate.md's prose-in-code route, not a claim that the current full gate passed. Protected cloud build, route sweep, DCO and merge queue remain required. The prose reduction is eleven words; the earlier absolute23-to12 count was off by one at each end.
+## Recorded initiative context in the enterprise view
+
+Continue BI-9DC43E17 through the existing EA Workrooms loader and route.
+DI-83DB469D1ADB selected extending this operation context over a new dashboard.
+Resolve Workroom.epicId against both existing Epic identities, combine aliases,
+and label unresolved references. Read at most201 membership groups, display200
+with an explicit partial label, and resolve a selected canonical Epic separately
+so selection is not limited by the inventory page. Unknown selection returns no
+rooms rather than broadening into all operations.
+
+Show initiative title, recorded description, scope and observed open-room counts
+in a disclosure. Select by its named link; preserve that identity in the existing
+Operation filter and subsequent room, process and evidence links. Keep initiative
+membership separate from value-stream, capability, containment and authority
+relationships. The room remains a real execution carrier, not a synthetic EA task.
+The existing organization archetype is unchanged.
+
+Source checks first reproduced three missing identity/filter behaviors and one
+missing route selection; the initial33 loader/page checks passed after wiring.
+Add bounded-read, ambiguous-reference and unavailable-selection coverage before
+handoff. Source coverage does not prove deployed enterprise-to-evidence acceptance.
+
+Search initiative names and semantic IDs before the bounded membership read so
+an initiative beyond the first page remains discoverable. Preserve initiative
+search through coordination, room and process navigation. Reuse FilterBar's URL
+form with opt-in preserved keys; exclude editable facets to avoid duplicate form
+fields. Existing consumers retain their behavior. Reuse CollapsibleList for the
+initiative preview and one identity-field projection for both inventory and
+selection. These changes consolidate navigation and projection logic rather
+than adding another dashboard or client-side execution authority.
+
+The four affected test files pass 55 tests, including bounded search, identity
+aliases, unresolved selection, form context and process return navigation. The
+shared FilterBar has 14 source consumers including its test file; its new option
+is opt-in. Protected runtime verification remains required.
+
+The source-copy guard measures 119 words instead of 63 on the EA route after
+adding initiative search and explicit unknown, partial and missing-link states.
+Record only this file's measured source-copy baseline. All other prose axes
+remain zero, and the page's reading-grade check passes. The initiative inventory
+starts collapsed and previews five rows when opened. This does not increase the
+separate frozen live-route budget; the protected UX sweep must still pass.
+
+Canonical integration passed on f8a895168d1086ac0ec6e45de003004479549a9a:
+715 tests in 136 files, both TypeScript programs, migrations, guards and a
+production image. Earlier host-runner interruptions remain unexplained; no
+memory-exhaustion cause was established. The later four-word copy correction
+passed all 55 focused tests, both TypeScript programs and the protected cloud
+production build. These are revision-specific results, not current deployment
+acceptance.
+
+Protected UX measurement on the copy correction records 162 arrival words,
+matching the unchanged budget, with no metric regression. Workflow 35816892791
+measured the intentional initiative search/disclosure accessibility structure.
+Review its captured page and replace only /ea/workrooms's ariaSnapshot; retain
+every numeric budget and every unrelated route. Refresh against current main
+and rerun the same 55 focused tests. Final protected checks and live navigation
+remain required. The known Windows PKI fixture exception does not turn an unrun
+or failing check into a pass.
+
+## Evidence reader consolidation, September 23
+
+Before adding definition-step correlation, consolidate the duplicated persisted
+initiative receipt validation in entry-adapter and projection. Both readers must
+require the receipt's policy identity, immutable artifact locator, authority
+snapshot, reviewer identity and finding disposition. Keep semantic subject
+matching explicit: a database row ID is not the backlog item's semantic ID.
+Retain the existing plan/design digest freshness rules, inherited-baseline
+behavior and malformed-newest-row precedence. This refactor adds no execution
+authority and does not convert readiness recognition into a stage receipt.
+
+The regression first returned pass for a receipt missing policyVersion. After
+the shared validator, 61 tests across both projections, readiness guidance and
+MCP backlog reads pass. Existing wrong-subject and stale-plan tests remain green.
+Portal navigation PR 5487 merged through protected checks. This evidence-reader
+increment has not been deployed or accepted as the complete vertical slice.
+
+Live RV-C21-PIR-PROJECTION-GAP-20260923 reproduces the next gap: BI-70B2ED84
+has a passing independent PIR and an enforced completion decision, but its
+Workroom inspector shows zero receipts. Extend the shared evidence reader for
+anchored and standalone rooms with the latest governed initiative gate rows.
+Validate subject, receipt, authority and immutable source identity using the
+shared validator. Bind a receipt to a declared evidence requirement only when
+the repository and exact Workroom head match its source artifact. Older or
+unresolved artifacts stay visible as historical observations, never current
+step proof. Keep definition/version in the projected binding and expose partial
+reads. Required-evidence correlation is not a stage-completion receipt and must
+not advance the runner, mark a stage passed or close the room.
+
+After merging current main, 177 focused tests across 17 files pass, including
+cross-repository and unknown-definition-version refusal to bind step evidence.
+These source checks do not replace canonical build or deployed UX verification.
+
+### Terminal execution ownership repair (BI-06AE6833)
+
+A late inference result revived a canceled TaskRun. Bind execution to the admitted
+reservation and dispatch identity, and settle every outcome through one conditional
+status/updatedAt write. Preserve dispatch budget metadata. Review-context hydration
+uses the same fence; cancellation or replacement during loading returns the durable
+state without changing context or starting inference. The existing reservation helper
+already enters working with a heartbeat; hydration only refreshes that heartbeat.
+
+Keep request parsing and attempt-state transitions in focused modules, and share the
+stateful test database adapter across recovery suites. Regression cases cover canceled
+inference, stale admission, canceled hydration and replacement during hydration.
+No operator workflow or configuration changes: this restores the documented cancellation
+and same-task retry contract. Source tests and review do not prove deployed acceptance.
+
+### October 16 prospective native lifecycle compatibility
+
+Continue the existing maintenance-epoch spec's prospective CLI amendment under
+BI-06AE6833/WC-1D447592. Normal design admission IRD-0A77CE9467D0 and the two
+existing document claims permit this preparation only. Original plan review99
+remains uncertain; this amendment does not retry it or admit runtime changes.
+
+The architecture audit requires a real adapter/storage compatibility contract.
+Kernel decision DI-418EB31838D7 selects the existing AsyncInferenceOp lifecycle
+with an explicit native identity version and typed execution handle. Preserve
+remote version1 provider IDs; reuse registered Claude/Codex adapter kinds and
+the existing worker, authority, queue, transitions and cursor readers. The spec
+is the single home for the handle fields, boundary table and compatibility
+matrix; do not duplicate their detailed contract here.
+
+1. Verify the actual current source inventory: provider/context parser, database
+   constraints, store/query filters, worker, queue/runtime, Workroom/Task readers,
+   cancel path and outbox. Map legacy0, remote1, proposed native2, malformed/future
+   rows and mixed-worker/rollback behavior. Do not enable a native admission yet.
+2. Prove the additive canonical representation with source-local database and
+   injected process/provider fixtures. Real create IDs must be durable before
+   start; test a lost response at every boundary and no repeat create/start.
+   Preserve the synchronous caller contract without another inference/scheduler.
+3. Assess the exact amended design and representation/migration. Obtain current
+   mapping/coverage and normal Large implementation admission before editing
+   runtime code. If the original review's uncertainty prevents a supported new
+   admission, retain that explicit blocker; do not invent a replacement key.
+4. After admission, consolidate both adapters' target/handle/observation helpers
+   while retaining exact remote behavior. Run affected and adversarial tests,
+   both typechecks, impact guards and the governed exact-tree gate. Publish
+   through independent source review, DCO and the protected merge queue.
+5. Qualify a containing canonical release and verify an actual safe prospective
+   launch/result or an attributable unavailable state. Never use that evidence
+   to manufacture original99/941/870/755 membership or effect settlement.
+
+Recovery101's authenticated retirement and current Sandbox reconciliation are
+credited only for their actual epoch. The original seven scenarios, approval
+outcome projection, nested Workroom and complete OAuth acceptance remain open.
+The reported post-publication stage-fold delay is not a proven source defect:
+the canonical drive folds evidence before its inactive-work check, and its
+15-minute schedule plus the deployment drain can explain the stale snapshot.
+Observe a healthy scheduled tick before proposing a corrective stage writer.

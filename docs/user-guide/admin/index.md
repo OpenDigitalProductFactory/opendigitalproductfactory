@@ -10,6 +10,8 @@ The Admin area is the control centre for platform configuration. It is where adm
 
 ## Key Concepts
 
+**Diagnostic outcomes.** A command can run and still fail. Your coworker's result keeps its diagnostic output and reports failure when the command exits with an error. A successful command reports its exit status; an unavailable status stays unknown. Approval gives permission to attempt an action, rather than proof that it worked. Checking a recent approved request returns the actual action's recorded outcome and does not repeat the action. If no execution evidence is available, the outcome remains unconfirmed.
+
 - **User Management** — Creating, editing, and deactivating user accounts. Each user has a role, optional superuser status, and profile information.
 - **Role & Capability Matrix** — The mapping of roles to capabilities. Admins can review the full matrix and understand what each role can and cannot do.
 - **Branding Configuration** — The organization's name, logo, colours, and display preferences. Applied across the internal shell and the customer-facing storefront.
@@ -23,6 +25,14 @@ The Admin area is the control centre for platform configuration. It is where adm
 - Update branding settings and preview how they appear across the platform
 - Maintain reference data tables used by portfolios, compliance, HR, and other areas
 - Configure storefront settings including domain routing and public storefront behaviour
+- See and change the organization's accountable owner under **Admin > Settings**. The page shows one line — **Accountable owner: <name> · Change** — and **Change** opens a picker of active people with sign-in accounts. Every Workroom without its own owner answers to this person. First-install setup records the owner account here; changing it requires platform-management rights and is recorded in the compliance audit trail with the previous and new owner. When nothing is recorded, the line reads **No accountable owner recorded · Set**.
+- Turn monitoring (Prometheus and Grafana) on or off at `/admin/settings/monitoring`. The page shows whether it is really running, its memory and CPU cost, and the last change; turning it on or off needs platform-management rights and reports the outcome. If the monitoring record disagrees with what is running, the button offers to match the record to the install instead; it stays locked only when the capability records are incomplete or unreadable, and says why. Details: [Turning monitoring on or off](../ai-workforce/index.md#turning-monitoring-on-or-off).
+- Choose your own language and time zone under **Admin > Settings > Language and region**. Both default to the organization's settings. English is the only language available today; administrators also see two test languages that show every screen in placeholder text, so untranslated wording and right-to-left layout problems are easy to spot.
+- End one person's access to a shared AI client under **Admin > Platform Development**. In **Keys for automated tools**, open **People** on a client such as Claude Code to see who is connected through it and when they last used it. **Revoke this person's access** asks for a reason, disconnects only that person, and records who revoked it and why. Everyone else stays connected, and the person can reconnect by signing in again. **Revoke** on the row itself still disconnects everyone using that client.
+- Name the GitHub repository this install manages, and log in to it, under **Admin > Platform Development** in **Managed repository**. The section appears only when the install's confirmed purpose is developing the platform. Type the repository as `owner/name` or its URL and select **Save**; the suggested repository is not saved until you do, and **Not now** leaves it unset. **Connect GitHub** shows a code to enter on GitHub. The platform asks only for public-repository access when the repository is public. Each repository shows one status: **Connected**, **Read only** (the login cannot label issues), **No access**, **Login expired**, **Not connected** or **Couldn't check** (with the time of the last answer). **Check again** re-checks it. Until it shows **Connected**, a "Connect your repository" item stays in your inbox.
+- Let Build Studio pick up work on its own, and choose whether spare weekly AI allowance is used, under **Admin > Platform Development** on the card **Let Build Studio pick up work on its own**. The main switch turns on the governed backlog lane. Under **Daily limit and the autopilot switches** you set how many items are teed up per day and turn **Use spare weekly AI allowance** (the capacity drain) on or off; the drain only acts while the lane is on. Select **Save** to apply. Details: [What Build Studio starts next](../operations/index.md#what-build-studio-starts-next).
+- Let the daily acceptance sweep close finished work, or stop it, under **Admin > Platform Development** on the card **Let the acceptance sweep close finished work**. When it is on, the sweep closes only items that already pass every completion check, up to a limit per run. The card shows who allowed it, when and why, and what the last sweep closed. Allowing or stopping it asks for a reason. You see the card only if you can manage both the platform and the backlog. Details: [Acceptance sweep](../../operations/acceptance-sweep.md).
+- Let agents run delivery stages within budget, or stop them, under **Admin > Platform Development** on the card **Let agents run delivery stages within budget**. It is off until you allow it. When it is on, a delivery room's author stages (the design note, reproducing a fault, implementing) go to the Software Engineer coworker, but only when the work's portfolio has a budget set this quarter and its committed points still fit that budget. Merging, deploying and acceptance still wait for a person, and xlarge work never starts. A room that cannot run waits for a person as before, and its drive record says which condition is missing: the setting is off, no budget is set, the budget is used up, or the work has no size or portfolio. Allowing or stopping it asks for a reason, and the card shows who did it and when. You see the card only if you can manage the platform.
 
 ## Graph Explorer
 
@@ -81,6 +91,33 @@ The register is split into three lanes, because they are different kinds of thin
   claims that were never scheduled work at all. Nothing here runs again;
   **Retire** clears it from the register.
 
+**Issue intake controller** sits under the attention line, closed by default. It
+says whether this installation is commissioned to read and triage issues on the
+platform repository. Open it to see each requirement marked **Pass**, **Fail** or
+**Not checked**, with the reason for any failure. The installation must be a
+production install whose confirmed main or other job is developing the platform
+(set under **About this installation** in your workspace). The upstream
+repository must be set, and you must own the issue-triage room.
+**Become the room's owner** makes you its owner; any current owner stays in the
+room, and the change is recorded there. **Commission** stays unavailable, naming
+the failing requirement, until every requirement passes. Once commissioned, the
+panel shows the room, the repository, who commissioned it and when. Only someone
+who can manage the platform can take ownership or commission.
+
+The hourly **Backlog triage drain** assesses new or changed items. Once an item
+needs review, unchanged work is skipped on subsequent sweeps; it stays visible
+in triaging for you or a coworker to decide. Editing its decision inputs or
+returning it to triaging after another status makes it eligible again. Model,
+ledger and apply failures retry with backoff, up to three attempts. Each sweep
+starts at most 25 assessments and waits at most five minutes for model work.
+Provider transports keep their own cancellation limits; a late reply cannot
+advance an item after the assessment has timed out.
+
+Expand **Last result** on the row to see assessed, advanced, review, error,
+unchanged/waiting, changed and unassessed counts. **Idle** means the sweep ran
+with no eligible assessment; **needs-review** means it produced judgments for
+review. Errors name their category, and a budget-limited run says work remains.
+
 **What needs attention** sits at the top and counts only real problems: a job
 that reported an error, and a job that is **overdue** — its next run came and
 went. A job that has stopped firing no longer looks healthy.
@@ -109,3 +146,14 @@ immediately, a coworker task is queued for the next dispatcher tick. **Edit**
 opens on the cadence the job actually runs at, accepts either a frequency or a
 cron expression, and previews the next fire before you save. Coworker work cannot
 be scheduled more often than daily.
+
+The **Agent task dispatch** job starts coworker work every five minutes, up to 20
+due tasks per tick. Those tasks run side by side rather than one after another.
+How many run at once is the lower of two limits: the coworker's own concurrency
+limit (a coworker with a limit of 2 never runs more than two of its tasks at
+once) and the free slots in the shared AI CLI pool (four by default). When a
+provider in that pool reports it is rate-limited or out of its weekly allowance,
+the tick runs tasks one at a time. A task that fails
+does not stop the rest of the tick. If a platform upgrade starts draining
+work part-way through a tick, tasks that have not started yet wait for the next
+tick after the upgrade.

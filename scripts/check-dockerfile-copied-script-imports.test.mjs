@@ -9,9 +9,12 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 
 import {
+  MIN_DOCKERFILE_COPIED_SCRIPTS,
   findMissingCopiedImports,
+  findMissingCopiedImportsInRepo,
   logicalLines,
   parseStages,
   staticRelativeImports,
@@ -19,7 +22,7 @@ import {
 } from "./check-dockerfile-copied-script-imports.mjs";
 
 const REPO_ROOT = path.resolve(
-  path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1")),
+  path.dirname(fileURLToPath(new URL(import.meta.url))),
   "..",
 );
 
@@ -58,6 +61,24 @@ test("reads static imports but ignores dynamic ones", () => {
     ].join("\n"),
   );
   assert.deepEqual(specs.sort(), ["../lib/b.mjs", "./lib/a.mjs", "./lib/side-effect.mjs"]);
+});
+
+// Regression: generate-platform-sbom.mjs imports ../lib/pnpm-lock.mjs with a
+// binding list over several lines, which the single-line pattern never saw.
+test("reads a static import whose binding list spans lines", () => {
+  const specs = staticRelativeImports(
+    [
+      "import {",
+      "  parseImporters as parseLockImporters,",
+      "  unquote,",
+      '} from "../lib/pnpm-lock.mjs";',
+      "export {",
+      "  x,",
+      "} from './lib/x.mjs';",
+      "const y = Buffer.from('z');",
+    ].join("\n"),
+  );
+  assert.deepEqual(specs.sort(), ["../lib/pnpm-lock.mjs", "./lib/x.mjs"]);
 });
 
 // The measured regression: set-hooks-path.mjs gained a top-level import of
@@ -111,5 +132,35 @@ test("the checked-in Dockerfile satisfies the invariant", () => {
   assert.deepEqual(
     violations.map((v) => `${v.stage}: ${v.importer} -> ${v.missing}`),
     [],
+  );
+});
+
+test("every root-context Dockerfile satisfies the invariant, service images included", () => {
+  const violations = findMissingCopiedImportsInRepo(REPO_ROOT);
+  assert.deepEqual(
+    violations.map((v) => `${v.dockerfile} ${v.stage}: ${v.importer} -> ${v.missing}`),
+    [],
+  );
+});
+
+test("counts each copied script it reads, so the floor can refuse an empty parse", () => {
+  const stats = { checked: 0 };
+  findMissingCopiedImports(
+    "FROM node AS deps\nWORKDIR /app\nCOPY scripts/a.mjs scripts/b.mjs ./scripts/\nCOPY scripts/gone.mjs ./scripts/\nCOPY package.json ./\n",
+    (src) => (src === "scripts/gone.mjs" ? null : "export const x = 1;\n"),
+    stats,
+  );
+  assert.equal(stats.checked, 2);
+  const empty = { checked: 0 };
+  findMissingCopiedImports("FROM node AS deps\nRUN true\n", () => "", empty);
+  assert.equal(empty.checked, 0);
+});
+
+test("the checked-in Dockerfiles clear the floor", () => {
+  const stats = { checked: 0 };
+  findMissingCopiedImportsInRepo(REPO_ROOT, stats);
+  assert.ok(
+    stats.checked >= MIN_DOCKERFILE_COPIED_SCRIPTS,
+    `read ${stats.checked} Dockerfile-copied scripts, floor ${MIN_DOCKERFILE_COPIED_SCRIPTS}`,
   );
 });

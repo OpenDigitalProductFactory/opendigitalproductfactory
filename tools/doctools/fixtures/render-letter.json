@@ -1,0 +1,36 @@
+{
+ "formats": [
+  "docx",
+  "pdf"
+ ],
+ "previews": {
+  "maxPages": 2,
+  "dpi": 48
+ },
+ "content": {
+  "family": "letter",
+  "title": "DPFRENDERLETTER Thank you",
+  "subject": "Your gift",
+  "sender": {
+   "name": "Smoke Test Rescue",
+   "lines": [
+    "1 Shelter Road"
+   ]
+  },
+  "recipient": {
+   "name": "Ada Lovelace",
+   "lines": [
+    "12 Analytical Way",
+    "London"
+   ]
+  },
+  "date": "25 September 2026",
+  "salutation": "Dear Ada,",
+  "paragraphs": [
+   "DPFRENDERLETTER Thank you for your generous gift.",
+   "It paid for a month of vet care."
+  ],
+  "closing": "With gratitude,",
+  "signatureName": "The Smoke Test team"
+ }
+}

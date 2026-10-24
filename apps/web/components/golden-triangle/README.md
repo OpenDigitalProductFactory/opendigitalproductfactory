@@ -9,7 +9,7 @@
   2. **Triangle (opt-in fine-tune):** a draggable point inside a Cost / Quality / Time triangle (pointer + keyboard on the thumb).
   3. **Numeric inputs (canonical accessible control):** three labelled percent inputs — a 2D drag surface is *not* a 1-D ARIA slider, so the numeric/preset layer is the accessible source of truth.
 - **`GoldenTrianglePriorityPanel`** — a stateful host (view-local state) for the platform-default settings surface.
-- **`CoworkerPriorityDock`** — the per-coworker control docked in-flow at the composer (collapsed by default to a colour-graded chip; expands to the full control). Replaced the old `CoworkerPriorityControl` header popover, which clipped off the panel edge.
+- **Per-coworker controls: retired (BI-7ADEBDC1, 2026-09-08).** `CoworkerPriorityDock` and `CoworkerPriorityControl` are gone. The triangle is a parameter of the Workroom definition, edited on the room's posture control (`components/workspace/workroom/WorkroomPostureControl.tsx`); every collaboration shape carries a default preset (`lib/work-management/room-shapes.ts`).
 - **`posture-display.ts`** — pure helpers: triangle geometry (`weightsToPoint` / `pointToWeights`), preset metadata, `postureLabel()` (a meaningful label at every position — the preset name, or the corner a dragged posture leans toward like "Lower Cost", never a bare "Custom"), `describeConfigured()` (the configured-chip explanation, derived from the **real Slice 1 compiler** so the UI never drifts), `TRIANGLE_AXIS_GUIDE` (the min/max explainer), and `balanceState()` for the colour cue.
 
 ## Balance colouring
@@ -20,7 +20,7 @@ The triangle shades by balance: **green** when the three axes are centred, throu
 
 - **`/platform/ai/assignments`** (the unified **"Priority & Models"** surface) — the full platform-default
   control, embedded on top of the advanced per-coworker guardrails. `/platform/ai/priority` redirects here.
-- **AI coworker composer** — `CoworkerPriorityDock`, a compact chip + popover that sets the per-coworker posture.
+- **Workroom posture control** — the room's own triangle, saved onto `scopeClaims.workroomPosture.priority` and consumed by routing through `RouteAndCallOptions.workroomPriority`.
 
 Per-scope persistence (Slice 4) and the receipt/outcome view (Slice 3b) are wired: posture is stored
 migration-free on the platform `DecisionPerspectiveProfile.autonomyPolicy`, and outcomes render at

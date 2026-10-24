@@ -6,12 +6,16 @@
 
 import { Prisma } from "@dpf/db";
 import type { prisma } from "@dpf/db";
-import { isFounderActionable } from "@/lib/founder-review/queue";
+import { isFounderActionable, normalizeFounderReviewQuestion } from "@/lib/founder-review/queue";
+import { retractionOf } from "@/lib/decision-perspective/retract-superseded";
+import { humanEscalationWhere, isHumanEscalation, type HumanEscalationRow } from "@/lib/decision-perspective/human-escalation";
+import { humanDecisionReviewMessage } from "@/lib/decision-perspective/decision-escalation";
 import type { AttentionItem, AttentionRiskClass, ResidueReason } from "../types";
 
 type Db = typeof prisma;
 
-export type DecisionInteractionRow = {
+export type DecisionInteractionRow = HumanEscalationRow & {
+  escalationReason?: string | null;
   interactionId: string;
   question: string;
   outcomeType: string;
@@ -27,6 +31,10 @@ export type DecisionInteractionRow = {
   /** Governance gate that produced the row — 'profession' rows are advisory. */
   gateKey: string | null;
   createdAt: Date;
+  /** The gate's own record of how it resolved, including any retraction marker. */
+  outcomePayload?: unknown;
+  /** Open drafted resolutions for this decision (at most one is live). */
+  resolutionProposals?: { summary: string }[];
 };
 
 /**
@@ -67,42 +75,115 @@ function residueFor(row: DecisionInteractionRow): ResidueReason {
 }
 
 /** Pure projection of one unresolved decision into an attention item. */
-export function aiDecisionToAttentionItem(row: DecisionInteractionRow): AttentionItem {
+export function aiDecisionToAttentionItem(
+  row: DecisionInteractionRow,
+  /**
+   * The drafted resolution waiting on this decision, when a panel produced one
+   * (BI-C62127B9). Its presence changes what the owner is being asked for: not
+   * "go work this out" but "rule on what your coworkers drafted".
+   */
+  proposal?: { summary: string } | null,
+  /**
+   * How many unresolved rows are asking this same question. Shown so repeated
+   * demand stays visible after collapsing, rather than being silently hidden
+   * (BI-13C38318).
+   */
+  occurrences = 1,
+): AttentionItem {
   const blast = row.buildId ? `build ${row.buildId}` : row.taskRunId ? "a coworker task" : undefined;
-  const decisionHref = `/platform/ai/decisions/${encodeURIComponent(row.interactionId)}`;
+  const decisionHref = `/coworker-decisions/decisions/${encodeURIComponent(row.interactionId)}`;
   return {
     id: `ai-decision:${row.interactionId}`,
     source: "ai-decision",
     title: clip(row.question),
-    context: row.rationale ?? "The governed scopes could not resolve this decision.",
+    context: [
+      row.escalationRoute === "human" ? humanDecisionReviewMessage(row.escalationReason) : null,
+      proposal?.summary ?? row.rationale ?? "The governed scopes could not resolve this decision.",
+      occurrences > 1 ? `Asked ${occurrences} times and still unresolved.` : null,
+    ]
+      .filter(Boolean)
+      .join(" "),
     decisionClass: { scorability: "unscorable" },
     riskClass: riskFromTier(row.riskTier),
     triage: {
       timeToAct: "none",
       residueReason: residueFor(row),
       blastRadius: blast,
-      decideEffort: "judgment",
+      // A drafted resolution turns judgment into a review: the work of
+      // deciding has been done, and what is left is whether the owner agrees.
+      decideEffort: proposal ? "review" : "judgment",
       irreversible: false,
     },
     createdAtIso: row.createdAt.toISOString(),
     actions: [
-      { kind: "open-in-context", label: "Review evidence", href: decisionHref },
+      {
+        kind: "open-in-context",
+        label: proposal ? "Review the suggestion" : "Review evidence",
+        href: decisionHref,
+      },
     ],
     deepLink: decisionHref,
     audience: { operator: true },
   };
 }
 
+/**
+ * How many rows to read before collapsing duplicates.
+ *
+ * The cap used to be the render limit applied directly in SQL, which starved
+ * the feed: on the customer 0 install 39 of 53 unresolved rows were the SAME
+ * question, so a genuine decision ranked below them was never loaded at all —
+ * not merely buried. Read a wide window, collapse, then cap (BI-13C38318).
+ */
+const DECISION_SCAN_LIMIT = 500;
+const DECISION_RENDER_LIMIT = 50;
+
+/**
+ * Collapse rows that ask the same question of the same gate, newest first.
+ *
+ * The founder-review queue has always deduped; this source did not, so one
+ * question produced one card there and 39 here. The normaliser is imported
+ * rather than re-derived so the two surfaces cannot drift again.
+ */
+export function dedupeDecisionRows<T extends Pick<DecisionInteractionRow, "question" | "gateKey">>(
+  rows: T[],
+): Array<{ row: T; occurrences: number }> {
+  const byKey = new Map<string, { row: T; occurrences: number }>();
+  for (const row of rows) {
+    const key = `${row.gateKey ?? "?"}|${normalizeFounderReviewQuestion(row.question)}`;
+    const seen = byKey.get(key);
+    // Rows arrive newest-first, so the first of a group is the one to show.
+    if (seen) seen.occurrences += 1;
+    else byKey.set(key, { row, occurrences: 1 });
+  }
+  return [...byKey.values()];
+}
+
+function isShadowVerdict(payload: unknown): boolean {
+  return Boolean(payload && typeof payload === "object" && (payload as { enforcement?: unknown }).enforcement === "shadow");
+}
+
+/** Builds whose plan-gate question is moot: they have left plan, or were abandoned. */
+async function buildsPastPlan(db: Db, rows: Array<{ buildId: string | null; domainClass: string | null }>): Promise<Set<string>> {
+  const buildIds = [...new Set(rows.filter((row) => row.domainClass === "plan-readiness" && row.buildId).map((row) => row.buildId as string))];
+  const featureBuild = (db as { featureBuild?: { findMany?: (args: unknown) => Promise<Array<{ buildId: string; phase: string }>> } }).featureBuild;
+  if (buildIds.length === 0 || !featureBuild?.findMany) return new Set();
+  const builds = await featureBuild.findMany({ where: { buildId: { in: buildIds } }, select: { buildId: true, phase: true } });
+  return new Set(builds.filter((build) => build.phase !== "plan" && build.phase !== "ideate").map((build) => build.buildId));
+}
+
 export async function loadAiDecisionItems(db: Db): Promise<AttentionItem[]> {
   const rows = await db.decisionInteraction.findMany({
     // humanOutcome IS NULL == still unresolved residue (Json? → DB NULL).
-    where: { outcomeType: { in: ["escalate", "defer"] }, humanOutcome: { equals: Prisma.DbNull } },
+    where: humanEscalationWhere({ humanOutcome: { equals: Prisma.DbNull } }),
     orderBy: { createdAt: "desc" },
-    take: 50,
+    take: DECISION_SCAN_LIMIT,
     select: {
       interactionId: true,
       question: true,
       outcomeType: true,
+      escalationRoute: true,
+      escalationReason: true,
       riskTier: true,
       principleConflict: true,
       rationale: true,
@@ -112,9 +193,41 @@ export async function loadAiDecisionItems(db: Db): Promise<AttentionItem[]> {
       domainClass: true,
       gateKey: true,
       createdAt: true,
+      // Needed to spot a retraction marker (BI-13C38318).
+      outcomePayload: true,
+      // The open drafted resolution, when one exists (BI-C62127B9). Read here
+      // rather than in a second pass so the inbox cannot show "needs your
+      // judgment" for a decision that already has an answer waiting.
+      resolutionProposals: {
+        where: { status: "proposed", lifecycle: "active" },
+        select: { summary: true },
+        take: 1,
+      },
     },
   });
   // Keep only rows a human should actually decide; drop agent-internal consults
-  // and fail-open advisories (BI-6EC1EE25).
-  return rows.filter((row) => isFounderActionable(row)).map(aiDecisionToAttentionItem);
+  // and fail-open advisories (BI-6EC1EE25), and retracted rows whose routing
+  // basis no longer holds (BI-13C38318). Filter BEFORE collapsing so a row that
+  // should not be here cannot become the representative of its group — a
+  // retracted row standing in for a live one would hide a real decision behind
+  // a question nobody still has.
+  // BI-7FFFBEE3 slice B: a verdict that cannot block is audit evidence, not a
+  // question for a person: one recorded in shadow enforcement, or a plan-gate
+  // escalation whose build has already left plan (or was abandoned).
+  const mootBuildIds = await buildsPastPlan(db, rows);
+  const actionable = rows.filter((row) =>
+    isHumanEscalation(row)
+    && isFounderActionable(row)
+    && !retractionOf(row.outcomePayload)
+    && !isShadowVerdict(row.outcomePayload)
+    && !(row.domainClass === "plan-readiness" && row.buildId !== null && mootBuildIds.has(row.buildId)));
+  return dedupeDecisionRows(actionable)
+    .slice(0, DECISION_RENDER_LIMIT)
+    .map(({ row, occurrences }) =>
+      aiDecisionToAttentionItem(
+        row,
+        row.resolutionProposals?.[0] ?? null,
+        occurrences,
+      ),
+    );
 }

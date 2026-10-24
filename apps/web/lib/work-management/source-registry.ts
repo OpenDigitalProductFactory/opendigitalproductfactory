@@ -8,6 +8,15 @@ import type {
   WorkroomMode,
   WorkroomOutcomePacketCategory,
 } from "./room-types";
+import type {
+  WorkCaseRoomMeasure,
+  WorkCaseRoomToolGrant,
+  WorkCaseRoomTrigger,
+} from "./room-definition-contract";
+import { MAILROOM_QUEUE_SOURCE_ENTRY } from "./source-registry-mailroom";
+import { OBSERVED_RECEIPT_POLICY, SCHEDULED_TRANSITIONS, STANDING_ROOM_PROJECTION } from "./source-registry-shared";
+
+export { STANDING_ROOM_PROJECTION } from "./source-registry-shared";
 
 export const WORK_CASE_WORK_ITEM_SOURCE_TYPES = [
   "task-node",
@@ -19,6 +28,7 @@ export const WORK_CASE_WORK_ITEM_SOURCE_TYPES = [
   "field-service-job",
   "data-control-operation",
   "bookkeeping-period",
+  "mailroom-queue",
 ] as const;
 
 export type WorkCaseWorkItemSourceType =
@@ -52,8 +62,12 @@ export interface WorkCaseRoomProjectionPolicy {
   };
 }
 
+export * from "./room-definition-contract";
+
 export interface WorkCaseSourceRegistryEntry {
   sourceKey: string;
+  /** Compatibility address; review inventories count its canonical definition once. */
+  canonicalSourceKey?: string;
   definitionVersion: number;
   displayLabel: string;
   owningArea: string;
@@ -65,6 +79,12 @@ export interface WorkCaseSourceRegistryEntry {
   supportedTransitions: readonly WorkCaseSupportedTransition[];
   receiptPolicy: WorkCaseReceiptPolicy;
   roomProjection: WorkCaseRoomProjectionPolicy;
+  /** How the room starts itself. Null where the opener is genuinely imperative. */
+  trigger: WorkCaseRoomTrigger | null;
+  /** Ceiling on tool authority inside the room; intersected, never additive. */
+  toolGrant: WorkCaseRoomToolGrant;
+  /** What the room reports about itself. */
+  measures: readonly WorkCaseRoomMeasure[];
 }
 
 const STANDARD_TRANSITIONS =
@@ -79,31 +99,8 @@ const APPROVAL_TRANSITIONS = [
   "cancel",
 ] as const satisfies readonly WorkCaseSupportedTransition[];
 
-const SCHEDULED_TRANSITIONS = [
-  "claim",
-  "pause",
-  "needs-input",
-  "resume",
-  "verify",
-  "complete",
-  "cancel",
-  "open-cycle",
-  "pause-cycle",
-  "verify-cycle",
-  "complete-cycle",
-  "carry-over",
-  "renew",
-  "split",
-  "archive",
-] as const satisfies readonly WorkCaseSupportedTransition[];
-
 const GOVERNED_RECEIPT_POLICY = {
   defaultReceiptKind: "governed-action",
-  receiptRequiredForConsequentialTransition: true,
-} as const satisfies WorkCaseReceiptPolicy;
-
-const OBSERVED_RECEIPT_POLICY = {
-  defaultReceiptKind: "observed-event",
   receiptRequiredForConsequentialTransition: true,
 } as const satisfies WorkCaseReceiptPolicy;
 
@@ -123,14 +120,6 @@ const APPROVAL_ROOM_PROJECTION = {
   },
 } as const satisfies WorkCaseRoomProjectionPolicy;
 
-const STANDING_ROOM_PROJECTION = {
-  mode: "standing",
-  cycleCarrierPrecedence: ["work-item", "work-capsule", "task-run"],
-  outcomePacket: {
-    requiredCategories: ["receipts", "evidence"],
-  },
-} as const satisfies WorkCaseRoomProjectionPolicy;
-
 // The Bookkeeping Work Room (BI-F8B6CF81, S-ROOM). A standing room — the books loop recurs each
 // period (monthly close). Its Outcome Packet must carry reconciliation `evidence`, the
 // `receipts` for every governed banking write, and the `decisions` the owner signed off — the
@@ -146,7 +135,7 @@ const BOOKKEEPING_ROOM_PROJECTION = {
 export const WORK_CASE_SOURCE_REGISTRY = [
   {
     sourceKey: "task-node",
-    definitionVersion: 1,
+    definitionVersion: 2,
     displayLabel: "Task node",
     owningArea: "workflow-orchestration",
     domainCategory: "workflow",
@@ -157,10 +146,25 @@ export const WORK_CASE_SOURCE_REGISTRY = [
     supportedTransitions: STANDARD_TRANSITIONS,
     receiptPolicy: GOVERNED_RECEIPT_POLICY,
     roomProjection: FINITE_ROOM_PROJECTION,
+    trigger: {
+      kind: "event",
+      signal: "task-node-ready",
+      description: "The orchestrator marks a node ready when its predecessors close.",
+    },
+    toolGrant: {
+      grantKeys: [
+        "work_room_read",
+        "work_room_write",
+        "thread_write",
+      ],
+    },
+    measures: [
+      { key: "node-cycle-time", label: "Node cycle time", bindingKey: "lead-time" },
+    ],
   },
   {
     sourceKey: "backlog-item",
-    definitionVersion: 1,
+    definitionVersion: 2,
     displayLabel: "Backlog item",
     owningArea: "platform-backlog",
     domainCategory: "platform-development",
@@ -171,10 +175,21 @@ export const WORK_CASE_SOURCE_REGISTRY = [
     supportedTransitions: STANDARD_TRANSITIONS,
     receiptPolicy: GOVERNED_RECEIPT_POLICY,
     roomProjection: FINITE_ROOM_PROJECTION,
+    trigger: null,
+    toolGrant: {
+      grantKeys: [
+        "backlog_read",
+        "backlog_write",
+        "work_room_read",
+      ],
+    },
+    measures: [
+      { key: "throughput", label: "Items closed per week", bindingKey: "backlog-throughput" },
+    ],
   },
   {
     sourceKey: "work-capsule",
-    definitionVersion: 1,
+    definitionVersion: 2,
     displayLabel: "Work capsule",
     owningArea: "work-convergence",
     domainCategory: "platform-development",
@@ -185,10 +200,21 @@ export const WORK_CASE_SOURCE_REGISTRY = [
     supportedTransitions: STANDARD_TRANSITIONS,
     receiptPolicy: GOVERNED_RECEIPT_POLICY,
     roomProjection: FINITE_ROOM_PROJECTION,
+    trigger: null,
+    toolGrant: {
+      grantKeys: [
+        "work_capsule_read",
+        "work_capsule_write",
+        "work_capsule_adopt",
+      ],
+    },
+    measures: [
+      { key: "capsule-age", label: "Time since last evidence", bindingKey: "backlog-throughput" },
+    ],
   },
   {
     sourceKey: "approval",
-    definitionVersion: 1,
+    definitionVersion: 2,
     displayLabel: "Approval request",
     owningArea: "decision-ledger",
     domainCategory: "approval",
@@ -199,10 +225,24 @@ export const WORK_CASE_SOURCE_REGISTRY = [
     supportedTransitions: APPROVAL_TRANSITIONS,
     receiptPolicy: GOVERNED_RECEIPT_POLICY,
     roomProjection: APPROVAL_ROOM_PROJECTION,
+    trigger: {
+      kind: "event",
+      signal: "approval-requested",
+      description: "A governed action needs a decision before it can proceed.",
+    },
+    toolGrant: {
+      grantKeys: [
+        "work_room_read",
+        "decision_record_create",
+      ],
+    },
+    measures: [
+      { key: "decision-age", label: "Time a decision has waited", bindingKey: "lead-time" },
+    ],
   },
   {
     sourceKey: "data-control-operation",
-    definitionVersion: 1,
+    definitionVersion: 2,
     displayLabel: "Data control operation",
     owningArea: "data-governance",
     domainCategory: "data-control",
@@ -213,10 +253,25 @@ export const WORK_CASE_SOURCE_REGISTRY = [
     supportedTransitions: STANDARD_TRANSITIONS,
     receiptPolicy: GOVERNED_RECEIPT_POLICY,
     roomProjection: APPROVAL_ROOM_PROJECTION,
+    trigger: {
+      kind: "event",
+      signal: "data-control-operation-requested",
+      description: "A retention, export, or erasure action enters the queue.",
+    },
+    toolGrant: {
+      grantKeys: [
+        "work_room_read",
+        "data_governance_validate",
+        "retention_record_write",
+      ],
+    },
+    measures: [
+      { key: "reconciliation-state", label: "Targets still unreconciled", bindingKey: "obligations-status" },
+    ],
   },
   {
     sourceKey: "manual-task",
-    definitionVersion: 1,
+    definitionVersion: 2,
     displayLabel: "Manual task",
     owningArea: "workspace",
     domainCategory: "human-work",
@@ -227,10 +282,20 @@ export const WORK_CASE_SOURCE_REGISTRY = [
     supportedTransitions: STANDARD_TRANSITIONS,
     receiptPolicy: GOVERNED_RECEIPT_POLICY,
     roomProjection: FINITE_ROOM_PROJECTION,
+    trigger: null,
+    toolGrant: {
+      grantKeys: [
+        "work_room_read",
+        "work_room_write",
+      ],
+    },
+    measures: [
+      { key: "task-age", label: "Time since the task was entered", bindingKey: "lead-time" },
+    ],
   },
   {
     sourceKey: "scheduled",
-    definitionVersion: 1,
+    definitionVersion: 2,
     displayLabel: "Scheduled work",
     owningArea: "scheduler",
     domainCategory: "scheduled-work",
@@ -241,13 +306,28 @@ export const WORK_CASE_SOURCE_REGISTRY = [
     supportedTransitions: SCHEDULED_TRANSITIONS,
     receiptPolicy: OBSERVED_RECEIPT_POLICY,
     roomProjection: STANDING_ROOM_PROJECTION,
+    trigger: {
+      kind: "cadence",
+      rrule: "FREQ=DAILY",
+      description: "The schedule's own recurrence opens each occurrence.",
+    },
+    toolGrant: {
+      grantKeys: [
+        "work_room_read",
+        "work_room_write",
+        "schedule_write",
+      ],
+    },
+    measures: [
+      { key: "occurrences-due", label: "Occurrences past their window", bindingKey: "obligations-status" },
+    ],
   },
   {
     // Bookkeeping Work Room (BI-F8B6CF81, S-ROOM). A standing, cyclic room — the day-to-day books
     // loop recurs each period. Governed receipts because its writes (statement import, account
     // create, rule mutation) are consequential; decision scope is the customer's own books (WWWD).
     sourceKey: "bookkeeping-period",
-    definitionVersion: 1,
+    definitionVersion: 2,
     displayLabel: "Bookkeeping period",
     owningArea: "finance",
     domainCategory: "bookkeeping",
@@ -258,10 +338,29 @@ export const WORK_CASE_SOURCE_REGISTRY = [
     supportedTransitions: SCHEDULED_TRANSITIONS,
     receiptPolicy: GOVERNED_RECEIPT_POLICY,
     roomProjection: BOOKKEEPING_ROOM_PROJECTION,
+    trigger: {
+      kind: "cadence",
+      rrule: "FREQ=MONTHLY;BYMONTHDAY=1",
+      description: "Each period close opens the next books cycle.",
+    },
+    toolGrant: {
+      grantKeys: [
+        "work_room_read",
+        "work_room_write",
+        "banking_read",
+        "banking_write",
+        "financial_read",
+      ],
+    },
+    measures: [
+      { key: "open-exceptions", label: "Unreconciled items in the period", bindingKey: "obligations-status" },
+      { key: "period-close-age", label: "Days the period has stayed open", bindingKey: "lead-time" },
+    ],
   },
+  MAILROOM_QUEUE_SOURCE_ENTRY,
   {
     sourceKey: "engagement",
-    definitionVersion: 1,
+    definitionVersion: 2,
     displayLabel: "Engagement",
     owningArea: "crm",
     domainCategory: "customer-engagement",
@@ -272,10 +371,22 @@ export const WORK_CASE_SOURCE_REGISTRY = [
     supportedTransitions: STANDARD_TRANSITIONS,
     receiptPolicy: OBSERVED_RECEIPT_POLICY,
     roomProjection: FINITE_ROOM_PROJECTION,
+    trigger: null,
+    toolGrant: {
+      grantKeys: [
+        "work_room_read",
+        "crm_read",
+        "crm_write",
+        "work_engagement_read",
+      ],
+    },
+    measures: [
+      { key: "engagement-stage-age", label: "Time in the current stage", bindingKey: "lead-time" },
+    ],
   },
   {
     sourceKey: "opportunity",
-    definitionVersion: 1,
+    definitionVersion: 2,
     displayLabel: "Opportunity",
     owningArea: "crm",
     domainCategory: "sales",
@@ -286,10 +397,21 @@ export const WORK_CASE_SOURCE_REGISTRY = [
     supportedTransitions: STANDARD_TRANSITIONS,
     receiptPolicy: OBSERVED_RECEIPT_POLICY,
     roomProjection: FINITE_ROOM_PROJECTION,
+    trigger: null,
+    toolGrant: {
+      grantKeys: [
+        "work_room_read",
+        "crm_read",
+        "crm_write",
+      ],
+    },
+    measures: [
+      { key: "stage-age", label: "Time in the current stage", bindingKey: "lead-time" },
+    ],
   },
   {
     sourceKey: "booking",
-    definitionVersion: 1,
+    definitionVersion: 2,
     displayLabel: "Storefront booking",
     owningArea: "storefront",
     domainCategory: "customer-service",
@@ -300,10 +422,27 @@ export const WORK_CASE_SOURCE_REGISTRY = [
     supportedTransitions: STANDARD_TRANSITIONS,
     receiptPolicy: OBSERVED_RECEIPT_POLICY,
     roomProjection: FINITE_ROOM_PROJECTION,
+    trigger: {
+      kind: "event",
+      signal: "storefront-booking-confirmed",
+      description: "A customer confirms a booking on the storefront.",
+    },
+    toolGrant: {
+      grantKeys: [
+        "work_room_read",
+        "crm_read",
+        "resource_reservation_read",
+        "resource_reservation_write",
+      ],
+    },
+    measures: [
+      { key: "no-show-rate", label: "Confirmed bookings not attended", bindingKey: "no-show-rate" },
+    ],
   },
   {
     sourceKey: "storefront-booking",
-    definitionVersion: 1,
+    canonicalSourceKey: "booking",
+    definitionVersion: 2,
     displayLabel: "Storefront booking",
     owningArea: "storefront",
     domainCategory: "customer-service",
@@ -314,10 +453,26 @@ export const WORK_CASE_SOURCE_REGISTRY = [
     supportedTransitions: STANDARD_TRANSITIONS,
     receiptPolicy: OBSERVED_RECEIPT_POLICY,
     roomProjection: FINITE_ROOM_PROJECTION,
+    trigger: {
+      kind: "event",
+      signal: "storefront-booking-confirmed",
+      description: "Alias of the booking trigger; kept for older callers.",
+    },
+    toolGrant: {
+      grantKeys: [
+        "work_room_read",
+        "crm_read",
+        "resource_reservation_read",
+        "resource_reservation_write",
+      ],
+    },
+    measures: [
+      { key: "no-show-rate", label: "Confirmed bookings not attended", bindingKey: "no-show-rate" },
+    ],
   },
   {
     sourceKey: "activity",
-    definitionVersion: 1,
+    definitionVersion: 2,
     displayLabel: "Activity",
     owningArea: "crm",
     domainCategory: "customer-activity",
@@ -328,6 +483,42 @@ export const WORK_CASE_SOURCE_REGISTRY = [
     supportedTransitions: STANDARD_TRANSITIONS,
     receiptPolicy: OBSERVED_RECEIPT_POLICY,
     roomProjection: FINITE_ROOM_PROJECTION,
+    trigger: null,
+    toolGrant: {
+      grantKeys: [
+        "work_room_read",
+        "crm_read",
+        "crm_write",
+      ],
+    },
+    measures: [
+      { key: "activity-age", label: "Time since the activity fell due", bindingKey: "lead-time" },
+    ],
+  },
+  {
+    sourceKey: "coworker-engagement",
+    definitionVersion: 1,
+    displayLabel: "Coworker engagement",
+    owningArea: "ai-workforce",
+    domainCategory: "coworker-service",
+    defaultDecisionScope: "wwwd",
+    accountResolverKey: null,
+    titleProjection: "Use the requested outcome for the coworker service engagement.",
+    summaryProjection: "Use the coworker service, provider, approval context, and engagement status.",
+    supportedTransitions: STANDARD_TRANSITIONS,
+    receiptPolicy: GOVERNED_RECEIPT_POLICY,
+    roomProjection: FINITE_ROOM_PROJECTION,
+    // An engagement is requested by a person, never scheduled or thresholded.
+    trigger: null,
+    toolGrant: {
+      grantKeys: [
+        "work_room_read",
+        "work_room_write",
+      ],
+    },
+    measures: [
+      { key: "engagement-age", label: "Time since the engagement was requested", bindingKey: "lead-time" },
+    ],
   },
   // ─── Employment lifecycle (EP-862820FD, BI-28EFA338) ────────────────────────
   //
@@ -361,6 +552,17 @@ export const WORK_CASE_SOURCE_REGISTRY = [
     supportedTransitions: STANDARD_TRANSITIONS,
     receiptPolicy: GOVERNED_RECEIPT_POLICY,
     roomProjection: FINITE_ROOM_PROJECTION,
+    // Opened by a governed employment event, never by schedule or threshold.
+    trigger: null,
+    toolGrant: {
+      grantKeys: [
+        "work_room_read",
+        "work_room_write",
+      ],
+    },
+    measures: [
+      { key: "worker-onboarding-age", label: "Time since the room opened", bindingKey: "lead-time" },
+    ],
   },
   {
     sourceKey: "worker-change",
@@ -376,6 +578,17 @@ export const WORK_CASE_SOURCE_REGISTRY = [
     supportedTransitions: STANDARD_TRANSITIONS,
     receiptPolicy: GOVERNED_RECEIPT_POLICY,
     roomProjection: FINITE_ROOM_PROJECTION,
+    // Opened by a governed employment event, never by schedule or threshold.
+    trigger: null,
+    toolGrant: {
+      grantKeys: [
+        "work_room_read",
+        "work_room_write",
+      ],
+    },
+    measures: [
+      { key: "worker-change-age", label: "Time since the room opened", bindingKey: "lead-time" },
+    ],
   },
   {
     sourceKey: "worker-offboarding",
@@ -395,6 +608,17 @@ export const WORK_CASE_SOURCE_REGISTRY = [
     supportedTransitions: STANDARD_TRANSITIONS,
     receiptPolicy: GOVERNED_RECEIPT_POLICY,
     roomProjection: FINITE_ROOM_PROJECTION,
+    // Opened by a governed employment event, never by schedule or threshold.
+    trigger: null,
+    toolGrant: {
+      grantKeys: [
+        "work_room_read",
+        "work_room_write",
+      ],
+    },
+    measures: [
+      { key: "worker-offboarding-age", label: "Time since the room opened", bindingKey: "lead-time" },
+    ],
   },
   {
     sourceKey: "worker-classification-review",
@@ -416,6 +640,17 @@ export const WORK_CASE_SOURCE_REGISTRY = [
     supportedTransitions: STANDARD_TRANSITIONS,
     receiptPolicy: GOVERNED_RECEIPT_POLICY,
     roomProjection: STANDING_ROOM_PROJECTION,
+    // Opened by a governed employment event, never by schedule or threshold.
+    trigger: null,
+    toolGrant: {
+      grantKeys: [
+        "work_room_read",
+        "work_room_write",
+      ],
+    },
+    measures: [
+      { key: "worker-classification-review-age", label: "Time since the room opened", bindingKey: "lead-time" },
+    ],
   },
   {
     sourceKey: "referral-intake",
@@ -435,13 +670,24 @@ export const WORK_CASE_SOURCE_REGISTRY = [
     supportedTransitions: STANDARD_TRANSITIONS,
     receiptPolicy: GOVERNED_RECEIPT_POLICY,
     roomProjection: FINITE_ROOM_PROJECTION,
+    // Opened by a governed employment event, never by schedule or threshold.
+    trigger: null,
+    toolGrant: {
+      grantKeys: [
+        "work_room_read",
+        "work_room_write",
+      ],
+    },
+    measures: [
+      { key: "referral-intake-age", label: "Time since the room opened", bindingKey: "lead-time" },
+    ],
   },
   {
     // A field-service job dispatched to a provider from a confirmed booking.
     // Account resolution flows through the originating booking, so this source
     // is not itself an account-resolver key.
     sourceKey: "field-service-job",
-    definitionVersion: 1,
+    definitionVersion: 2,
     displayLabel: "Field service job",
     owningArea: "storefront",
     domainCategory: "field-dispatch",
@@ -452,6 +698,22 @@ export const WORK_CASE_SOURCE_REGISTRY = [
     supportedTransitions: STANDARD_TRANSITIONS,
     receiptPolicy: OBSERVED_RECEIPT_POLICY,
     roomProjection: FINITE_ROOM_PROJECTION,
+    trigger: {
+      kind: "event",
+      signal: "field-service-job-dispatched",
+      description: "A confirmed booking dispatches a job to a provider.",
+    },
+    toolGrant: {
+      grantKeys: [
+        "work_room_read",
+        "crm_read",
+        "resource_reservation_read",
+        "schedule_write",
+      ],
+    },
+    measures: [
+      { key: "jobs-open", label: "Dispatched jobs not yet closed", bindingKey: "fulfilment" },
+    ],
   },
 ] as const satisfies readonly WorkCaseSourceRegistryEntry[];
 
@@ -472,6 +734,18 @@ export function getWorkCaseSourceEntry(
   return SOURCE_REGISTRY_BY_KEY.get(normalized) ?? null;
 }
 
+/** Resolve aliases for definition-level review without changing occurrence addresses. */
+export function getCanonicalWorkCaseSourceEntry(sourceKey: string): WorkCaseSourceRegistryEntry | null {
+  const seen = new Set<string>();
+  let entry = getWorkCaseSourceEntry(sourceKey);
+  while (entry?.canonicalSourceKey) {
+    if (seen.has(entry.sourceKey)) return null;
+    seen.add(entry.sourceKey);
+    entry = getWorkCaseSourceEntry(entry.canonicalSourceKey);
+  }
+  return entry;
+}
+
 export function getWorkroomDefinitionIdentity(
   sourceKey: string | null | undefined,
 ): WorkroomDefinitionIdentity | null {
@@ -487,6 +761,7 @@ export function getWorkroomDefinitionIdentity(
     decisionScope: entry.defaultDecisionScope,
   };
 }
+
 
 export function getWorkCaseAccountResolverKey(
   sourceKey: string | null | undefined,

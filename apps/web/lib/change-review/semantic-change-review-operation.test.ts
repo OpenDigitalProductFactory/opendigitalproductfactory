@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { parseSemanticReviewResponse } from "./semantic-change-review";
+import { failureAnalysisFixture } from "./failure-analysis.test-fixtures";
 import {
   runSemanticChangeReview,
   selectSemanticReviewSpecialists,
@@ -29,14 +30,38 @@ function input(overrides: Partial<SemanticChangeReviewOperationInput> = {}): Sem
     identity,
     repairRound: 0,
     mode: "enforce",
+    ...failureAnalysisFixture(overrides.identity ?? identity),
     ...overrides,
   };
 }
 
 describe("semantic change-review operation", () => {
+  it("carries the parsed role through review and prevents cross-role reuse", async () => {
+    const dispatch = vi.fn().mockResolvedValue({ decision: "pass", issues: [], summary: "Design reviewed.",
+      failureAnalysisReview: { adequate: true, rationale: "The proposed failure recovery and verification strategy is credible." } });
+    const spec = await runSemanticChangeReview(input({ artifactType: "spec" }), { dispatch, legacyContract: false });
+    expect(dispatch.mock.calls[0][0]).toContain("requirements, acceptance criteria");
+    expect(spec.receipt.artifactType).toBe("spec");
+    expect(spec.receipt.schemaVersion).toBe("semantic-change-review-receipt.v3");
+    const plan = await runSemanticChangeReview(input({ artifactType: "plan", priorReceipt: spec.receipt }), { dispatch, legacyContract: false });
+    expect(plan.reusedFreshReceipt).toBe(false);
+    expect(plan.staleReasons).toContain("artifact-type-changed");
+    expect(dispatch).toHaveBeenCalledTimes(2);
+  });
+
+  it("finishes legacy packets using their original prompt and receipt contract", async () => {
+    const dispatch = vi.fn().mockResolvedValue({ decision: "pass", issues: [], summary: "Legacy review.",
+      failureAnalysisReview: { adequate: true, rationale: "The existing failure analysis is adequately supported by the evidence." } });
+    const out = await runSemanticChangeReview(input({ artifactType: "plan" }), { dispatch, legacyContract: true });
+    expect(dispatch.mock.calls[0][0]).toContain("CODE CHANGES:");
+    expect(out.receipt.artifactType).toBeUndefined();
+    expect(out.receipt.schemaVersion).toBe("semantic-change-review-receipt.v2");
+    expect(out.receipt.reviewerVersion).toBe("change-reviewer.v1");
+  });
+
   it("requires independent review for runtime code before publication", async () => {
     const dispatch = vi.fn().mockResolvedValue({
-      decision: "pass",
+      decision: "pass", failureAnalysisReview: { adequate: true, rationale: "Challenged stale evidence and recovery paths against the executed test." },
       issues: [],
       summary: "Runtime change is correct and covered.",
     });
@@ -44,6 +69,10 @@ describe("semantic change-review operation", () => {
     const out = await runSemanticChangeReview(input(), { dispatch });
 
     expect(dispatch).toHaveBeenCalledOnce();
+    const prompt = dispatch.mock.calls[0][0] as string;
+    const example = JSON.parse(prompt.split("RESPOND WITH EXACTLY THIS JSON FORMAT (no other text):\n")[1]);
+    expect(example.failureAnalysisReview).toEqual({ adequate: true, rationale: expect.any(String) });
+    expect(prompt).not.toContain("Also return");
     expect(out.activation.activate).toBe(true);
     expect(out.receipt.disposition).toBe("reviewed");
     expect(out.mayPublish).toBe(true);
@@ -86,7 +115,7 @@ describe("semantic change-review operation", () => {
   it.each(["codex-desktop", "claude-desktop", "grok-desktop"])(
     "routes %s runtime delivery through review before publication",
     async (authorSurface) => {
-      const dispatch = vi.fn().mockResolvedValue({ decision: "pass", issues: [], summary: "Pass." });
+      const dispatch = vi.fn().mockResolvedValue({ decision: "pass", failureAnalysisReview: { adequate: true, rationale: "Challenged stale evidence and recovery paths against the executed test." }, issues: [], summary: "Pass." });
       const out = await runSemanticChangeReview(input({ authorSurface }), { dispatch });
       expect(dispatch).toHaveBeenCalledOnce();
       expect(out.mayPublish).toBe(true);
@@ -94,8 +123,8 @@ describe("semantic change-review operation", () => {
     },
   );
 
-  it("auto-passes a low-risk docs-only change with durable evidence", async () => {
-    const dispatch = vi.fn();
+  it("independently challenges a low-risk docs-only change with proportionate evidence", async () => {
+    const dispatch = vi.fn().mockResolvedValue({ decision: "pass", failureAnalysisReview: { adequate: true, rationale: "Challenged stale evidence and recovery paths against the executed test." }, issues: [], summary: "Documentation failure analysis reviewed." });
     const out = await runSemanticChangeReview(
       input({
         artifactType: "spec",
@@ -106,15 +135,15 @@ describe("semantic change-review operation", () => {
       { dispatch },
     );
 
-    expect(dispatch).not.toHaveBeenCalled();
-    expect(out.receipt.disposition).toBe("auto-pass");
+    expect(dispatch).toHaveBeenCalledOnce();
+    expect(out.receipt.disposition).toBe("reviewed");
     expect(out.evidence.activity.payload).toEqual(out.receipt);
     expect(out.evidence.externalEvidence.details).toEqual(out.receipt);
     expect(out.mayPublish).toBe(true);
   });
 
   it("reuses a fresh receipt and re-reviews a stale receipt", async () => {
-    const firstDispatch = vi.fn().mockResolvedValue({ decision: "pass", issues: [], summary: "Pass." });
+    const firstDispatch = vi.fn().mockResolvedValue({ decision: "pass", failureAnalysisReview: { adequate: true, rationale: "Challenged stale evidence and recovery paths against the executed test." }, issues: [], summary: "Pass." });
     const first = await runSemanticChangeReview(input(), { dispatch: firstDispatch });
     const reuseDispatch = vi.fn();
     const reused = await runSemanticChangeReview(input({ priorReceipt: first.receipt }), { dispatch: reuseDispatch });
@@ -122,7 +151,7 @@ describe("semantic change-review operation", () => {
     expect(reuseDispatch).not.toHaveBeenCalled();
     expect(reused.reusedFreshReceipt).toBe(true);
 
-    const staleDispatch = vi.fn().mockResolvedValue({ decision: "pass", issues: [], summary: "Re-reviewed." });
+    const staleDispatch = vi.fn().mockResolvedValue({ decision: "pass", failureAnalysisReview: { adequate: true, rationale: "Challenged stale evidence and recovery paths against the executed test." }, issues: [], summary: "Re-reviewed." });
     const stale = await runSemanticChangeReview(
       input({
         identity: { ...identity, headTreeHash: "d".repeat(40) },
@@ -146,7 +175,7 @@ describe("semantic change-review operation", () => {
       }),
     });
     const retryDispatch = vi.fn().mockResolvedValue({
-      decision: "pass",
+      decision: "pass", failureAnalysisReview: { adequate: true, rationale: "Challenged stale evidence and recovery paths against the executed test." },
       issues: [],
       summary: "The retry completed with no semantic findings.",
     });
@@ -171,12 +200,12 @@ describe("semantic change-review operation", () => {
     const out = await runSemanticChangeReview(input({ repairRound: 2 }), { dispatch });
 
     expect(out.repairLimitReached).toBe(true);
-    expect(out.nextAction).toBe("operator-review");
+    expect(out.nextAction).toBe("internal-review-recovery");
     expect(out.mayPublish).toBe(false);
   });
 
   it("uses the identical evidence projection for external and Build Studio surfaces", async () => {
-    const dispatch = vi.fn().mockResolvedValue({ decision: "pass", issues: [], summary: "Pass." });
+    const dispatch = vi.fn().mockResolvedValue({ decision: "pass", failureAnalysisReview: { adequate: true, rationale: "Challenged stale evidence and recovery paths against the executed test." }, issues: [], summary: "Pass." });
     const external = await runSemanticChangeReview(input({ surface: "external" }), { dispatch });
     const studio = await runSemanticChangeReview(input({ surface: "build-studio" }), { dispatch });
 
@@ -204,7 +233,7 @@ describe("semantic change-review operation", () => {
     )).rejects.toThrow("stable committed tree");
   });
 
-  it("supports shadow-only rollback without discarding the failed receipt", async () => {
+  it("does not allow shadow mode to bypass the mandatory reviewed analysis", async () => {
     const out = await runSemanticChangeReview(
       input({ mode: "shadow" }),
       {
@@ -217,8 +246,8 @@ describe("semantic change-review operation", () => {
     );
 
     expect(out.receipt.result.decision).toBe("fail");
-    expect(out.mayPublish).toBe(true);
-    expect(out.nextAction).toBe("shadow-observe");
+    expect(out.mayPublish).toBe(false);
+    expect(out.nextAction).toBe("repair");
   });
 
   it("classifies exhausted review capacity as inconclusive instead of a semantic rejection", async () => {

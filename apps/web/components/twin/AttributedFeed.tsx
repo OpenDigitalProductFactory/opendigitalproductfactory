@@ -6,7 +6,7 @@
 // invisible automation. Pure + server-usable.
 
 import { ActorMark } from "./ActorMark";
-import type { FeedEventData } from "./types";
+import type { FeedEventData } from "@/lib/twin/kit-types";
 
 export interface AttributedFeedProps {
   events: FeedEventData[];

@@ -107,3 +107,39 @@ describe("site-address-validation", () => {
     });
   });
 });
+
+// OSMF Nominatim usage policy (BI-3099EACD):
+// https://operations.osmfoundation.org/policies/nominatim/
+describe("Nominatim usage policy", () => {
+  const ok = () => vi.fn().mockResolvedValue({ ok: true, json: async () => [] });
+
+  it("answers a repeated query from the cache instead of calling Nominatim again", async () => {
+    const fetchImpl = ok();
+    const sleep = vi.fn(async () => {});
+    await searchValidatedSiteAddresses("123 Main St Dallas", { fetchImpl, sleep });
+    await searchValidatedSiteAddresses("  123   main st DALLAS ", { fetchImpl, sleep });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("spaces calls at least one second apart across concurrent searches", async () => {
+    let clock = 10_000;
+    const now = () => clock;
+    const waits: number[] = [];
+    const sleep = vi.fn(async (ms: number) => { waits.push(ms); clock += ms; });
+    const fetchImpl = ok();
+    await Promise.all([
+      searchValidatedSiteAddresses("1 First Street", { fetchImpl, now, sleep }),
+      searchValidatedSiteAddresses("2 Second Street", { fetchImpl, now, sleep }),
+      searchValidatedSiteAddresses("3 Third Street", { fetchImpl, now, sleep }),
+    ]);
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    expect(waits).toEqual([1000, 1000]);
+  });
+
+  it("identifies the application and how to reach it", async () => {
+    const fetchImpl = ok();
+    await searchValidatedSiteAddresses("10 Downing Street London", { fetchImpl, sleep: async () => {} });
+    const headers = fetchImpl.mock.calls[0][1].headers as Record<string, string>;
+    expect(headers["User-Agent"]).toMatch(/^OpenDigitalProductFactory\/site-address-validation \(\+https:\/\/github\.com\/OpenDigitalProductFactory\/opendigitalproductfactory\)$/);
+  });
+});

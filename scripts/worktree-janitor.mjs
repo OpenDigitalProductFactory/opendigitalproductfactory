@@ -37,46 +37,59 @@ import {
   isWorktreeSessionLive,
   heartbeatTtlMs,
 } from "./lib/worktree-session-heartbeat.mjs";
+import {
+  loadActiveWorkroomPaths,
+  pathHasActiveClaim,
+} from "./lib/worktree-liveness.mjs";
+import { runGit as runGitShared } from "./lib/git.mjs";
+import { mcpPost } from "./lib/mcp-client.mjs";
+import { parseArgs as utilParseArgs } from "node:util";
+import { scriptArgv } from "./lib/script-argv.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_GRACE = 14;
 
 function parseArgs(argv) {
-  let dryRun = true;
-  let tierAOnly = false;
-  let graceDays = DEFAULT_GRACE;
-  let json = false;
-  let root = process.env.DPF_REPO_ROOT || process.env.PROJECT_ROOT || "";
-  for (let i = 0; i < argv.length; i += 1) {
-    const a = argv[i];
-    if (a === "--dry-run") dryRun = true;
-    else if (a === "--live") dryRun = false;
-    else if (a === "--tier-a-only") tierAOnly = true;
-    else if (a === "--json") json = true;
-    else if (a === "--grace-days") graceDays = Number(argv[++i]);
-    else if (a.startsWith("--grace-days=")) graceDays = Number(a.split("=")[1]);
-    else if (a === "--root") root = argv[++i];
-    else if (a === "-h" || a === "--help") {
-      console.log(readFileSync(fileURLToPath(import.meta.url), "utf8").split("\n").slice(0, 35).join("\n"));
-      process.exit(0);
-    }
+  // strict: false keeps the old tolerance: unknown flags are ignored.
+  const { values, tokens } = utilParseArgs({
+    args: scriptArgv(argv),
+    strict: false,
+    allowPositionals: true,
+    tokens: true,
+    options: {
+      "dry-run": { type: "boolean" },
+      live: { type: "boolean" },
+      "tier-a-only": { type: "boolean" },
+      json: { type: "boolean" },
+      "grace-days": { type: "string" },
+      root: { type: "string" },
+      /** Scope the scan to ONE branch's worktree (BI-848360EF). Default: every worktree. */
+      branch: { type: "string" },
+      help: { type: "boolean", short: "h" },
+    },
+  });
+  if (values.help) {
+    console.log(readFileSync(fileURLToPath(import.meta.url), "utf8").split("\n").slice(0, 35).join("\n"));
+    process.exit(0);
   }
+  const text = (value) => (typeof value === "string" ? value : undefined);
+  // --dry-run and --live toggle one mode; the last one given wins.
+  const mode = tokens.findLast((token) => token.kind === "option" && (token.name === "dry-run" || token.name === "live"));
+  let graceDays = values["grace-days"] === undefined ? DEFAULT_GRACE : Number(text(values["grace-days"]));
   if (!Number.isFinite(graceDays) || graceDays < 1) graceDays = DEFAULT_GRACE;
-  return { dryRun, tierAOnly, graceDays, json, root };
+  return {
+    dryRun: mode?.name !== "live",
+    tierAOnly: values["tier-a-only"] === true,
+    graceDays,
+    json: values.json === true,
+    root: values.root === undefined ? process.env.DPF_REPO_ROOT || process.env.PROJECT_ROOT || "" : text(values.root),
+    branch: values.branch === undefined ? null : text(values.branch),
+  };
 }
 
 function runGit(args, cwd) {
-  const r = spawnSync("git", args, {
-    cwd: cwd || undefined,
-    encoding: "utf8",
-    windowsHide: true,
-  });
-  return {
-    ok: r.status === 0,
-    stdout: (r.stdout || "").trim(),
-    stderr: (r.stderr || "").trim(),
-    status: r.status ?? 1,
-  };
+  const r = runGitShared(args, { cwd: cwd || process.cwd() });
+  return { ok: r.ok, stdout: r.stdout.trim(), stderr: r.ok ? "" : r.stderr.trim(), status: r.status };
 }
 
 function resolveRoot(explicit) {
@@ -194,37 +207,22 @@ function ageDays(wtPath) {
  * portal down, curl missing), so the scheduled run died every time while an
  * interactive run with a live token appeared to work.
  */
-function loadLeasePaths() {
+async function loadLeasePaths() {
   const token = process.env.DPF_MCP_BEARER_TOKEN;
   if (!token) return "";
   const url = process.env.DPF_MCP_URL || "http://127.0.0.1:3000/api/mcp/v1";
-  const body = JSON.stringify({
-    jsonrpc: "2.0",
-    id: 1,
-    method: "tools/call",
-    params: { name: "list_nonprod_environment_leases", arguments: {} },
-  });
-  const r = spawnSync(
-    "curl",
-    [
-      "-sS",
-      "-X",
-      "POST",
-      url,
-      "-H",
-      `Authorization: Bearer ${token}`,
-      "-H",
-      "Content-Type: application/json",
-      "-d",
-      body,
-      "--max-time",
-      "8",
-    ],
-    { encoding: "utf8", windowsHide: true },
-  );
-  if (r.status !== 0 || !r.stdout) return "";
-  // Match any path-like substrings later via includes on raw payload.
-  return r.stdout;
+  try {
+    const reply = await mcpPost("tools/call", { name: "list_nonprod_environment_leases", arguments: {} }, {
+      mcpUrl: url,
+      bearerToken: token,
+      timeoutMs: 8_000,
+    });
+    if (reply.status < 200 || reply.status >= 300) return "";
+    // Match any path-like substrings later via includes on raw payload.
+    return reply.text;
+  } catch {
+    return "";
+  }
 }
 
 function pathHasLease(leasePayload, wtPath) {
@@ -233,7 +231,7 @@ function pathHasLease(leasePayload, wtPath) {
   return leasePayload.includes(wtPath) || leasePayload.includes(norm);
 }
 
-function gatherFacts(root, entry, prIndex, leasePayload, ttlMs) {
+function gatherFacts(root, entry, prIndex, leasePayload, ttlMs, claims) {
   const wtPath = entry.path;
   const branch = entry.detached ? null : entry.branch;
   const isRoot = path.resolve(wtPath) === path.resolve(root);
@@ -250,6 +248,12 @@ function gatherFacts(root, entry, prIndex, leasePayload, ttlMs) {
     // Liveness + abandoned-merge signals — never checked on the root clone.
     hasLiveSession: branch && !isRoot ? isWorktreeSessionLive(wtPath, { ttlMs }) : false,
     midMerge: branch && !isRoot ? isMidMerge(wtPath) : false,
+    // Platform-owned liveness. The heartbeat above only exists for Claude Code;
+    // the Workroom claim is written by every surface, so it answers for all of
+    // them — and when it cannot be read we refuse rather than guess.
+    hasActiveClaim: branch && !isRoot ? pathHasActiveClaim(claims.activePaths, wtPath) : false,
+    claimSourceUnavailable: branch && !isRoot ? !claims.available : false,
+    claimSourceReason: claims.reason,
   };
 }
 
@@ -271,7 +275,7 @@ function removeWorktree(root, wtPath, branch) {
   };
 }
 
-function main(argv = process.argv.slice(2)) {
+async function main(argv = process.argv.slice(2)) {
   const args = parseArgs(argv);
   let root;
   try {
@@ -297,14 +301,42 @@ function main(argv = process.argv.slice(2)) {
 
   const entries = listWorktrees(root);
   const prIndex = loadPrBranchIndex();
-  const leasePayload = loadLeasePaths();
+  const leasePayload = await loadLeasePaths();
+  // Ask the platform who owns what, once, for the whole scan.
+  const claims = await loadActiveWorkroomPaths();
+  if (!claims.available) {
+    console.error(
+      `[worktree-janitor] Workroom claims UNREADABLE (${claims.reason}) — every worktree will be ` +
+        "kept. A reaper that cannot ask who is working must not decide that nobody is.",
+    );
+  }
   const ttlMs = heartbeatTtlMs(process.env);
   const policy = args.tierAOnly ? "tier-a-only" : "all";
   const decisions = [];
   const removals = [];
 
-  for (const entry of entries) {
-    const facts = gatherFacts(root, entry, prIndex, leasePayload, ttlMs);
+  // A merge tells us exactly ONE worktree just became reapable. Scanning the
+  // whole fleet to act on one is wasteful and widens the blast radius of a
+  // mistake, so `--branch` narrows the scan without touching a single rule:
+  // every verdict below is still produced by `classifyWorktree`, which refuses
+  // a live session, an active Workroom claim, a pin, a lease and an open PR.
+  //
+  // That ordering is load-bearing here specifically. classifyWorktree puts the
+  // liveness gate ABOVE the merged/Tier-A check precisely because "the moment a
+  // live session's PR merges, its clean tree first becomes Tier-A eligible —
+  // exactly when it must NOT be reaped". A merge-triggered reaper is the caller
+  // that walks straight into that window, so it must go through the classifier
+  // rather than around it.
+  const scanned = args.branch
+    ? entries.filter((e) => e.branch === args.branch)
+    : entries;
+
+  if (args.branch && scanned.length === 0) {
+    console.error(`[worktree-janitor] no worktree on branch ${args.branch}; nothing to scan.`);
+  }
+
+  for (const entry of scanned) {
+    const facts = gatherFacts(root, entry, prIndex, leasePayload, ttlMs, claims);
     const { verdict, reason, tier } = classifyWorktree(facts, { graceDays: args.graceDays });
     const row = {
       path: facts.path,

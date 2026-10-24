@@ -1,13 +1,8 @@
-// BET-5 (BI-A1E864A5): pgvector-backed vector store, a drop-in replacement for qdrant.ts.
-// Reimplements the same exported surface (QDRANT_COLLECTIONS, VectorPoint, SearchResult,
-// upsertVectors, searchSimilar, deleteVectors, scrollPoints, hashToNumber, ensureCollections,
-// ensurePayloadIndexes, isQdrantHealthy) on Postgres + pgvector so the ~dozen call sites in
-// wiki/inference/documents/sandbox migrate with an import swap. Vectors live in the
-// `vector_embedding` table (see the 20260714110000 migration); access is raw SQL because
-// Prisma can't model the `vector` type.
-//
-// NOT YET WIRED: callers still import from ./qdrant until the cutover repoints them behind a
-// flag and the A/B parity check (pgvector vs live Qdrant) passes.
+// Vector store on Postgres + pgvector. Exports VECTOR_COLLECTIONS, VectorPoint,
+// SearchResult, upsertVectors, searchSimilar, deleteVectors, scrollPoints,
+// hashToNumber, ensureCollections, ensurePayloadIndexes and isVectorStoreHealthy.
+// Vectors live in the `vector_embedding` table (see the 20260714110000 migration);
+// access is raw SQL because Prisma can't model the `vector` type.
 
 import { prisma } from "./client";
 
@@ -18,7 +13,7 @@ const COLLECTIONS = {
   DOCUMENTS: "documents",
 } as const;
 
-export { COLLECTIONS as QDRANT_COLLECTIONS };
+export { COLLECTIONS as VECTOR_COLLECTIONS };
 
 export type VectorPoint = {
   id: string;
@@ -32,7 +27,7 @@ export type SearchResult = {
   payload: Record<string, unknown>;
 };
 
-/** Identical to qdrant.ts: stable string→numeric id so point ids match across the cutover. */
+/** Stable string→numeric id, so a point id never changes for the same source key. */
 export function hashToNumber(str: string): number {
   let hash = 0;
   for (let i = 0; i < str.length; i++) {
@@ -42,17 +37,17 @@ export function hashToNumber(str: string): number {
   return Math.abs(hash);
 }
 
-// ─── Qdrant filter DSL → SQL ─────────────────────────────────────────────────
-// Callers pass Qdrant-shaped filters: { must?, should?, must_not? } where a
+// ─── Filter DSL → SQL ────────────────────────────────────────────────────────
+// Callers pass filters shaped { must?, should?, must_not? } where a
 // Clause is { key, match: { value } | { any: [...] } } and `value` may be null.
 // `must` = AND, `should` = OR, `must_not` = AND of negations. Payload values may be
-// scalars OR arrays (Qdrant matches a value against an array key by containment), so
+// scalars OR arrays (a value matches an array key by containment), so
 // each equality checks both. Exported so app-side callers can type their clause arrays.
 export type MatchClause = {
   key: string;
   match: { value?: unknown } | { any?: unknown[] };
 };
-export type QdrantFilter = {
+export type VectorFilter = {
   must?: MatchClause[];
   should?: MatchClause[];
   must_not?: MatchClause[];
@@ -60,7 +55,7 @@ export type QdrantFilter = {
 
 /** Exported for unit testing the translation without a database. */
 export function buildFilterSql(
-  filter: QdrantFilter,
+  filter: VectorFilter,
   params: unknown[],
 ): string {
   const clauseSql = (c: MatchClause): string => {
@@ -76,7 +71,7 @@ export function buildFilterSql(
     }
     const value = (c.match as { value?: unknown }).value;
     if (value === null) {
-      // Qdrant match:{value:null} → key absent or JSON null.
+      // match:{value:null} → key absent or JSON null.
       return `(NOT (payload ? ${keyLit}) OR payload->${keyLit} = 'null'::jsonb)`;
     }
     params.push(JSON.stringify(value));
@@ -92,7 +87,7 @@ export function buildFilterSql(
     parts.push(`(${filter.should.map(clauseSql).join(" OR ")})`);
   }
   if (filter.must_not?.length) {
-    // Qdrant must_not: the row must not match ANY negated clause → AND of NOTs.
+    // must_not: the row must not match ANY negated clause → AND of NOTs.
     parts.push(filter.must_not.map((c) => `NOT ${clauseSql(c)}`).join(" AND "));
   }
   return parts.length ? `AND ${parts.join(" AND ")}` : "";
@@ -136,7 +131,7 @@ export async function upsertVectors(
 export async function searchSimilar(
   collection: string,
   vector: number[],
-  filter?: QdrantFilter,
+  filter?: VectorFilter,
   limit = 5,
   scoreThreshold = 0.7,
 ): Promise<SearchResult[]> {
@@ -161,7 +156,7 @@ export async function searchSimilar(
 
 export async function deleteVectors(
   collection: string,
-  filter: QdrantFilter,
+  filter: VectorFilter,
 ): Promise<void> {
   const params: unknown[] = [collection];
   const filterSql = filter ? buildFilterSql(filter, params) : "";
@@ -173,7 +168,7 @@ export async function deleteVectors(
 
 export async function scrollPoints(
   collection: string,
-  filter: QdrantFilter,
+  filter: VectorFilter,
   limit = 100,
 ): Promise<Array<{ id: number; payload: Record<string, unknown> }>> {
   const params: unknown[] = [collection];
@@ -187,7 +182,7 @@ export async function scrollPoints(
   return rows.map((r) => ({ id: Number(r.id), payload: r.payload }));
 }
 
-export async function isQdrantHealthy(): Promise<boolean> {
+export async function isVectorStoreHealthy(): Promise<boolean> {
   try {
     await prisma.$queryRawUnsafe("SELECT 1");
     return true;

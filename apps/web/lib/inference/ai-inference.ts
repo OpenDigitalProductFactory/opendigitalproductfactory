@@ -3,6 +3,9 @@
 // Server actions in actions/*.ts can import from here freely.
 
 import { prisma } from "@dpf/db";
+import { transferLocalNativeContinuation } from "../routing/local-native-continuation";
+import { getLocalThinkingBudgetEvidence } from "./dmr-runtime-config";
+import { providerWorkspaceHeaders } from "./provider-workspace";
 import { computeTokenCost, computeComputeCost } from "@/lib/ai-provider-types";
 import {
   aiInferenceDuration,
@@ -20,6 +23,8 @@ import {
   ANTHROPIC_OAUTH_BETA_HEADERS,
 } from "@/lib/ai-provider-internals";
 import type { RoutedExecutionPlan } from "../routing/recipe-types";
+import type { ChatMessage, ToolCallEntry } from "../routing/chat-message-types";
+import { resolveRuntimeConnectionStatus } from "../routing/provider-suitability/onboarding-recommendation";
 import { resolveDefaultExecutionAdapter } from "../routing/execution-plan";
 import { getExecutionAdapter } from "../routing/execution-adapter-registry";
 import { resolveExecutionAdapter } from "../routing/resolve-execution-adapter";
@@ -27,14 +32,12 @@ import {
   parseExecutionAdapterSelector,
   type ExecutionAdapterSelector,
 } from "../routing/execution-adapter-types";
+import { applyRequiredToolChoiceGuard } from "./terminal-writer-dispatch-guard";
 import { writeAdapterTelemetry } from "../routing/adapter-telemetry-writer";
 import { getCliPoolStatus } from "../routing/cli-pool-status";
 import {
-  classifyProviderCapacity,
-  type ProviderCapacityClassification,
-} from "../routing/provider-capacity";
-import {
   clearProviderCapacityStatus,
+  capacityAccountIdentity,
   recordProviderCapacityStatus,
 } from "../routing/provider-capacity/store";
 import "../routing/chat-adapter"; // side-effect: registers "chat" adapter
@@ -48,79 +51,32 @@ import "../routing/codex-cli-adapter"; // codex: registers "codex-cli" adapter
 import {
   acquireInferenceSlot,
   currentInferenceOrigin,
+  currentInferenceSignal,
   engineKeyForProvider,
 } from "./inference-admission";
 import { assertProviderDispatchCapacity } from "@/lib/routing/local-provider-capacity";
+import { isLocalProviderId } from "@/lib/routing/provider-locality";
+import { withLocalInferenceLock } from "@/lib/queue/resource-lane";
+import { providerInferenceFetch, withInferenceCancellationFetch } from "./provider-inference-transport";
+import { assertGovernedInferenceAuthority, currentGovernedInferenceDeadline } from "@/lib/routing/governed-inference-deadline";
+import { InferenceError } from "../routing/inference-error";
+import { accountAuthMethod, providerAccountExecutionBlock, ProviderAccountSelectionChangedError } from "../routing/provider-account-candidates";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-/** Anthropic-style content blocks for structured tool-calling messages */
-export type ContentBlock =
-  | { type: "text"; text: string }
-  /**
-   * Image input for multimodal models. Carried in OpenAI Chat Completions wire
-   * form (`image_url` with a data: URL or http(s) URL); converted to the
-   * Anthropic `image` source block by formatMessageForAnthropic. Enables vision
-   * models (e.g. local Gemma 4 via Docker Model Runner) to receive screenshots.
-   */
-  | { type: "image_url"; image_url: { url: string; detail?: "auto" | "low" | "high" } }
-  /**
-   * Audio input for multimodal models (ASR / diarization / audio understanding).
-   * OpenAI Chat Completions wire form (`input_audio` with base64 data + format).
-   * Verified on-machine (2026-06-15): local Gemma 4 12B transcribes a wav via
-   * Docker Model Runner through this exact block. Anthropic has no audio-input
-   * block, so this is OpenAI-compatible only — routing sends audio to an
-   * audio-capable endpoint via the `audioInput` floor, never to Anthropic.
-   */
-  | { type: "input_audio"; input_audio: { data: string; format: "wav" | "mp3" } }
-  | { type: "tool_use"; id: string; name: string; input: Record<string, unknown> }
-  | { type: "tool_result"; tool_use_id: string; content: string };
-
-/** True when content carries only text/image blocks — the subset both the OpenAI
- *  AND Anthropic formatters can pass through (Anthropic has no audio block). */
-function isMultimodalInputContent(content: ContentBlock[]): boolean {
-  return content.length > 0 && content.every((b) => b.type === "text" || b.type === "image_url");
-}
-
-/** True when content carries only model-facing input blocks the OpenAI Chat
- *  Completions API accepts natively (text / image / audio). Superset of the
- *  Anthropic predicate — used only by the OpenAI formatter passthrough. */
-function isOpenAIInputContent(content: ContentBlock[]): boolean {
-  return (
-    content.length > 0 &&
-    content.every((b) => b.type === "text" || b.type === "image_url" || b.type === "input_audio")
-  );
-}
-
-/** Convert an OpenAI-style image_url (data: URL) to an Anthropic image source block. */
-function imageUrlToAnthropicBlock(url: string): Record<string, unknown> {
-  const m = /^data:([^;]+);base64,(.*)$/s.exec(url);
-  if (m) {
-    return { type: "image", source: { type: "base64", media_type: m[1], data: m[2] } };
-  }
-  // Anthropic also accepts URL image sources.
-  return { type: "image", source: { type: "url", url } };
-}
-
-export type ChatMessage = {
-  role: "user" | "assistant" | "system" | "tool";
-  content: string | ContentBlock[];
-  /** Tool calls the assistant made (present when role=assistant and model called tools) */
-  toolCalls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
-  /** For role=tool messages: which tool call this result responds to */
-  toolCallId?: string;
-};
 export type InferenceResult = {
   content: string;
   inputTokens: number;
   outputTokens: number;
   inferenceMs: number;
   asyncOperation?: import("../routing/adapter-types").AsyncOperationStartResult;
-  toolCalls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
+  toolCalls?: ToolCallEntry[];
   /** Responses API: chain subsequent calls with this ID for conversation state. */
   responseId?: string;
   /** True when the provider stopped at the output-token ceiling (BI-1D144CC1). */
   truncated?: boolean;
+  /** Actual provider completion reason; never inferred from content or truncation. */
+  finishReason?: string;
   /**
    * Verbatim provider response body (matches AdapterResult.raw). Optional —
    * adapters may leave it undefined when nothing useful exists beyond `content`.
@@ -134,85 +90,10 @@ export type InferenceResult = {
 };
 
 // ─── Error Types ─────────────────────────────────────────────────────────────
+// Defined in the leaf routing/inference-error and re-exported here (spec 2026-09-30
+// §4.2): the adapters import the leaf, which keeps module load order acyclic.
 
-export class InferenceError extends Error {
-  constructor(
-    message: string,
-    public readonly code: "network" | "auth" | "rate_limit" | "overloaded" | "model_not_found" | "provider_error" | "transient" | "billing" | "request_too_large",
-    public readonly providerId: string,
-    public readonly statusCode?: number,
-    public readonly headers?: Record<string, string>,
-    public readonly rawBody?: string,
-    public readonly capacity?: ProviderCapacityClassification,
-    /**
-     * True when a LOCAL pool check refused the call before it left the process,
-     * because the pool is known-saturated until a known reset time.
-     *
-     * This is not an upstream 429. Nothing was asked of the provider, and
-     * waiting on this endpoint cannot make it answer sooner — the reset is
-     * wall-clock. The fallback chain uses this to skip its wait-and-retry and
-     * move to the next provider immediately, which is what the pool check was
-     * always trying to cause (BI-52C6FE5A).
-     */
-    public readonly localPoolExhausted?: boolean,
-  ) {
-    super(message);
-    this.name = "InferenceError";
-  }
-}
-
-export function classifyHttpError(
-  status: number,
-  providerId: string,
-  body: string,
-  responseHeaders?: Headers,
-): InferenceError {
-  // Extract rate-limit-relevant headers
-  const rateLimitHeaders: Record<string, string> | undefined = responseHeaders
-    ? Object.fromEntries(
-        [...responseHeaders.entries()].filter(
-          ([k]) =>
-            k.startsWith("x-ratelimit") ||
-            k.startsWith("anthropic-ratelimit") ||
-            k === "retry-after",
-        ),
-      )
-    : undefined;
-
-  const headers = rateLimitHeaders && Object.keys(rateLimitHeaders).length > 0
-    ? rateLimitHeaders
-    : undefined;
-  const capacity = classifyProviderCapacity({
-    providerId,
-    statusCode: status,
-    headers: responseHeaders ?? headers,
-    bodyText: body,
-    now: new Date(),
-  });
-
-  if (status === 401 || status === 403) {
-    return new InferenceError(`Auth failed for ${providerId}: ${body.slice(0, 200)}`, "auth", providerId, status, headers, body, capacity);
-  }
-  if (status === 402 || capacity.state === "billing_action_required" || capacity.state === "unsupported_plan") {
-    return new InferenceError(`Billing error on ${providerId}: ${body.slice(0, 200)}`, "billing", providerId, status, headers, body, capacity);
-  }
-  if (status === 413) {
-    return new InferenceError(`Request too large for ${providerId}: ${body.slice(0, 200)}`, "request_too_large", providerId, status, headers, body, capacity);
-  }
-  if (status === 429) {
-    return new InferenceError(`Rate limited by ${providerId}`, "rate_limit", providerId, status, headers, body, capacity);
-  }
-  if (status === 529 || /\b529\b|overloaded/i.test(body)) {
-    return new InferenceError(`Provider overloaded on ${providerId}: ${body.slice(0, 300)}`, "overloaded", providerId, status, headers, body, capacity);
-  }
-  if (status === 404) {
-    return new InferenceError(`Model not found on ${providerId}: ${body.slice(0, 200)}`, "model_not_found", providerId, status, headers, body, capacity);
-  }
-  if (status === 408 || status === 500 || status === 502 || status === 503 || status === 504) {
-    return new InferenceError(`Transient error (${status}) from ${providerId}: ${body.slice(0, 200)}`, "transient", providerId, status, headers, body, capacity);
-  }
-  return new InferenceError(`HTTP ${status} from ${providerId}: ${body.slice(0, 300)}`, "provider_error", providerId, status, headers, body, capacity);
-}
+export { InferenceError, classifyHttpError } from "../routing/inference-error";
 
 // ─── Build Auth Headers ──────────────────────────────────────────────────────
 
@@ -220,6 +101,8 @@ async function buildAuthHeaders(
   providerId: string,
   authMethod: string | null,
   authHeader: string | null,
+  connectionId?: string,
+  expectedExecutionVersion?: string,
 ): Promise<Record<string, string>> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -227,15 +110,16 @@ async function buildAuthHeaders(
   };
 
   if (authMethod === "api_key") {
-    const cred = await getDecryptedCredential(providerId);
+    const cred = connectionId ? await getDecryptedCredential(providerId, connectionId, expectedExecutionVersion) : await getDecryptedCredential(providerId);
     if (!cred?.secretRef || !authHeader) throw new InferenceError("No credential configured", "auth", providerId);
+    Object.assign(headers, providerWorkspaceHeaders(providerId, cred.providerWorkspaceId));
     headers[authHeader] = authHeader === "Authorization" ? `Bearer ${cred.secretRef}` : cred.secretRef;
   } else if (authMethod === "oauth2_client_credentials") {
-    const tokenResult = await getProviderBearerToken(providerId);
+    const tokenResult = connectionId ? await getProviderBearerToken(providerId, connectionId, expectedExecutionVersion) : await getProviderBearerToken(providerId);
     if ("error" in tokenResult) throw new InferenceError(tokenResult.error, "auth", providerId);
     headers["Authorization"] = `Bearer ${tokenResult.token}`;
   } else if (authMethod === "oauth2_authorization_code") {
-    const tokenResult = await getProviderBearerToken(providerId);
+    const tokenResult = connectionId ? await getProviderBearerToken(providerId, connectionId, expectedExecutionVersion) : await getProviderBearerToken(providerId);
     if ("error" in tokenResult) throw new InferenceError(tokenResult.error, "auth", providerId);
     headers["Authorization"] = `Bearer ${tokenResult.token}`;
     if (isAnthropicProvider(providerId)) {
@@ -245,6 +129,23 @@ async function buildAuthHeaders(
   // "none" auth (e.g., local Ollama) — no auth headers needed
 
   return headers;
+}
+
+async function readSelectedProviderAccount(providerId: string, modelId: string, plan: RoutedExecutionPlan) {
+  if (plan.providerConnectionId === undefined) return null;
+  if (!plan.providerConnectionId.trim()) throw new ProviderAccountSelectionChangedError(providerId, "Selected provider account identity is invalid");
+  if (plan.providerId !== providerId || plan.modelId !== modelId) throw new ProviderAccountSelectionChangedError(providerId, "Selected provider account plan does not match the request");
+  const [account, lifecycle] = await Promise.all([
+    prisma.aiProviderConnection.findUnique({ where: { connectionId: plan.providerConnectionId, providerId },
+      select: { id: true, connectionId: true, providerId: true, status: true, authMethod: true, executionChannel: true,
+        credentialEntryId: true, credentialEntry: { select: { id: true, status: true, updatedAt: true, secretRef: true, clientSecret: true, cachedToken: true, refreshToken: true } },
+        accessibleModelIds: true, modelsVerifiedAt: true, evidenceStatus: true, updatedAt: true, accountClass: true, supplierContractId: true, lastReviewedAt: true } }),
+    prisma.modelProvider.findUnique({ where: { providerId }, select: { status: true } }),
+  ]);
+  const block = providerAccountExecutionBlock(account, plan);
+  if (block) throw new ProviderAccountSelectionChangedError(providerId, block);
+  if (!lifecycle || !["active", "degraded"].includes(lifecycle.status)) throw new ProviderAccountSelectionChangedError(providerId, "Provider account is not enabled for routing");
+  return account;
 }
 
 async function resolveExecutionBaseUrl(
@@ -263,188 +164,50 @@ async function resolveExecutionBaseUrl(
   return provider.baseUrl ?? provider.endpoint;
 }
 
-// ─── Tool Call Extraction Helpers ─────────────────────────────────────────────
-
-/** Extract tool calls from Anthropic content blocks, preserving IDs */
-export function extractAnthropicToolCalls(
-  contentBlocks: Array<{ type?: string; id?: string; name?: string; input?: Record<string, unknown> }>,
-): Array<{ id: string; name: string; arguments: Record<string, unknown> }> {
-  return contentBlocks
-    .filter((b) => b.type === "tool_use" && b.name)
-    .map((b) => ({
-      id: b.id ?? `synth_${Math.random().toString(36).slice(2, 9)}`,
-      name: b.name!,
-      arguments: b.input ?? {},
-    }));
-}
-
-/** Extract tool calls from OpenAI-compatible tool_calls array, preserving IDs */
-export function extractOpenAIToolCalls(
-  rawToolCalls: Array<{ id?: string; function?: { name?: string; arguments?: string } }>,
-): Array<{ id: string; name: string; arguments: Record<string, unknown> }> {
-  return rawToolCalls
-    .filter((tc) => tc.function?.name)
-    .map((tc) => ({
-      id: tc.id ?? `synth_${Math.random().toString(36).slice(2, 9)}`,
-      name: tc.function!.name!,
-      arguments: tc.function?.arguments ? JSON.parse(tc.function.arguments) as Record<string, unknown> : {},
-    }));
-}
-
-/**
- * Extract tool calls embedded as text when the model runner doesn't translate
- * them to structured `tool_calls`. Handles two formats:
- *
- * 1. Standard Gemma/Llama JSON:  <tool_call>{"name":"fn","arguments":{...}}</tool_call>
- * 2. Gemma template variant:     <|tool_call>call: fn{key: "value"}<tool_call|>
- *
- * Returns { toolCalls, cleanText } where cleanText has the markers stripped.
- */
-export function extractTextualToolCalls(
-  text: string,
-): { toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }>; cleanText: string } {
-  const toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }> = [];
-  let cleanText = text;
-
-  // Format 1: <tool_call>{"name":"fn","arguments":{...}}</tool_call>
-  const jsonPattern = /<tool_call>([\s\S]*?)<\/tool_call>/g;
-  cleanText = cleanText.replace(jsonPattern, (_, inner) => {
-    try {
-      const parsed = JSON.parse(inner.trim()) as { name?: string; arguments?: Record<string, unknown> };
-      if (parsed.name) {
-        toolCalls.push({
-          id: `text_${Math.random().toString(36).slice(2, 9)}`,
-          name: parsed.name,
-          arguments: parsed.arguments ?? {},
-        });
-      }
-    } catch {
-      // malformed — skip
-    }
-    return "";
-  });
-
-  // Format 2: <|tool_call>call: fn{key: "value", ...}<tool_call|>
-  // Also covers <|tool_call>fn({"key":"value"})<tool_call|> variants.
-  const templatePattern = /<\|tool_call\>(?:call:\s*)?(\w+)\s*[\({]([\s\S]*?)[\)}]?\s*<tool_call\|>/g;
-  cleanText = cleanText.replace(templatePattern, (_, name: string, argsRaw: string) => {
-    try {
-      // argsRaw may be JS-like object literal — attempt JSON parse after key-quoting
-      const jsonified = argsRaw
-        .trim()
-        // Add quotes around unquoted keys: word: → "word":
-        .replace(/([{,]\s*)(\w+)\s*:/g, '$1"$2":')
-        // Ensure leading brace
-        .replace(/^([^{])/, '{$1')
-        .replace(/([^}])$/, '$1}');
-      const args = JSON.parse(jsonified) as Record<string, unknown>;
-      toolCalls.push({
-        id: `text_${Math.random().toString(36).slice(2, 9)}`,
-        name,
-        arguments: args,
-      });
-    } catch {
-      // fallback: treat entire argsRaw as a single "query" param
-      toolCalls.push({
-        id: `text_${Math.random().toString(36).slice(2, 9)}`,
-        name,
-        arguments: { query: argsRaw.trim() },
-      });
-    }
-    return "";
-  });
-
-  // Strip any leftover <eos> tokens from local models
-  cleanText = cleanText.replace(/<eos>/g, "").trim();
-
-  return { toolCalls, cleanText };
-}
-
-// ─── Message Formatting Helpers ──────────────────────────────────────────────
-
-/** Format a ChatMessage for the Anthropic Messages API */
-export function formatMessageForAnthropic(msg: ChatMessage): Record<string, unknown> {
-  // Tool result messages → Anthropic uses role=user with tool_result content block
-  if (msg.role === "tool" && msg.toolCallId) {
-    return {
-      role: "user",
-      content: [{ type: "tool_result", tool_use_id: msg.toolCallId, content: typeof msg.content === "string" ? msg.content : "" }],
-    };
-  }
-  // Assistant messages with tool calls → content block array with text + tool_use blocks
-  if (msg.role === "assistant" && msg.toolCalls && msg.toolCalls.length > 0) {
-    const textContent = typeof msg.content === "string" ? msg.content : "";
-    return {
-      role: "assistant",
-      content: [
-        ...(textContent ? [{ type: "text" as const, text: textContent }] : []),
-        ...msg.toolCalls.map((tc) => ({ type: "tool_use" as const, id: tc.id, name: tc.name, input: tc.arguments })),
-      ],
-    };
-  }
-  // Multimodal user input (text + image blocks) → Anthropic content array.
-  if (Array.isArray(msg.content) && isMultimodalInputContent(msg.content)) {
-    return {
-      role: msg.role,
-      content: msg.content.map((b) => {
-        if (b.type === "image_url") return imageUrlToAnthropicBlock(b.image_url.url);
-        // isMultimodalInputContent guarantees the only other member is text.
-        return { type: "text", text: b.type === "text" ? b.text : "" };
+async function readEnabledRoutingProvider(providerId: string) {
+  if (!isLocalProviderId(providerId)) {
+    const [connection, lifecycle] = await Promise.all([
+      prisma.aiProviderConnection.findUnique({
+        where: { connectionId: `provider-default-${providerId}` }, select: { status: true },
       }),
-    };
+      prisma.modelProvider.findUnique({ where: { providerId }, select: { status: true } }),
+    ]);
+    // Legacy direct callers can predate the default account. An existing account
+    // and provider lifecycle both remain authoritative after admission. Resuming
+    // an operator pause must not clear an independent automatic provider hold.
+    const effectiveStatus = lifecycle
+      ? connection ? resolveRuntimeConnectionStatus(lifecycle.status, connection.status) : lifecycle.status
+      : connection?.status;
+    if ((connection || lifecycle) && !["active", "degraded"].includes(effectiveStatus ?? "")) {
+      throw new InferenceError("Provider account is not enabled for routing", "provider_error", providerId);
+    }
+    return null;
   }
-  // Plain messages — pass through with string content
-  return { role: msg.role, content: typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content) };
+  const [provider, connection] = await Promise.all([
+    prisma.modelProvider.findUnique({ where: { providerId } }),
+    prisma.aiProviderConnection.findUnique({
+      where: { connectionId: `provider-default-${providerId}` },
+      select: { status: true },
+    }),
+  ]);
+  if (!provider || !["active", "degraded"].includes(provider.status)
+    || !connection || !["active", "degraded"].includes(connection.status)) {
+    throw new InferenceError("Local provider is not enabled for routing", "provider_error", providerId);
+  }
+  return provider;
 }
 
-/** Format a ChatMessage for the OpenAI Chat Completions API */
-export function formatMessageForOpenAI(msg: ChatMessage): Record<string, unknown> {
-  // Tool result messages → role=tool with tool_call_id
-  if (msg.role === "tool" && msg.toolCallId) {
-    return { role: "tool", tool_call_id: msg.toolCallId, content: typeof msg.content === "string" ? msg.content : "" };
-  }
-  // Assistant messages with tool calls → tool_calls field
-  if (msg.role === "assistant" && msg.toolCalls && msg.toolCalls.length > 0) {
-    return {
-      role: "assistant",
-      content: typeof msg.content === "string" ? msg.content : "",
-      tool_calls: msg.toolCalls.map((tc) => ({
-        id: tc.id, type: "function",
-        function: { name: tc.name, arguments: JSON.stringify(tc.arguments) },
-      })),
-    };
-  }
-  // Multimodal user input (text + image_url + input_audio blocks) → pass through
-  // as-is; this is already the OpenAI Chat Completions multimodal wire format.
-  if (Array.isArray(msg.content) && isOpenAIInputContent(msg.content)) {
-    return { role: msg.role, content: msg.content };
-  }
-  // Plain messages — pass through with string content
-  return { role: msg.role, content: typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content) };
-}
+// ─── Tool Call Extraction & Message Formatting ──────────────────────────────
+// Pure helpers, defined in the leaf routing/provider-message-format.
 
-/** Format a ChatMessage for the OpenAI Responses API input array */
-export function formatMessageForResponses(msg: ChatMessage): Array<Record<string, unknown>> {
-  const textContent = typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content);
-
-  if (msg.role === "tool" && msg.toolCallId) {
-    return [{ type: "function_call_output", call_id: msg.toolCallId, output: textContent }];
-  }
-
-  if (msg.role === "assistant" && msg.toolCalls && msg.toolCalls.length > 0) {
-    return [
-      ...(textContent ? [{ role: "assistant", content: textContent }] : []),
-      ...msg.toolCalls.map((tc) => ({
-        type: "function_call",
-        call_id: tc.id,
-        name: tc.name,
-        arguments: JSON.stringify(tc.arguments),
-      })),
-    ];
-  }
-
-  return [{ role: msg.role, content: textContent }];
-}
+export {
+  extractAnthropicToolCalls,
+  extractOpenAIToolCalls,
+  extractTextualToolCalls,
+  formatMessageForAnthropic,
+  formatMessageForOpenAI,
+  formatMessageForResponses,
+} from "../routing/provider-message-format";
 
 // ─── callProvider ────────────────────────────────────────────────────────────
 
@@ -466,11 +229,55 @@ export async function callProvider(
     buildId?: string | null;
   },
 ): Promise<InferenceResult> {
+  currentInferenceSignal()?.throwIfAborted();
+  await assertGovernedInferenceAuthority(currentInferenceSignal());
+  currentInferenceSignal()?.throwIfAborted();
+  // Resolve adapter enforceability before capacity or budget accounting. A
+  // plan/adapter capability miss is not a provider request and must not consume
+  // budget, wait on host capacity, or mutate provider health through fallback.
+  let effectivePlan: RoutedExecutionPlan = plan ?? {
+    providerId,
+    modelId,
+    recipeId: null,
+    contractFamily: "unknown",
+    executionAdapter: resolveDefaultExecutionAdapter(providerId),
+    maxTokens: 4096,
+    providerSettings: {},
+    toolPolicy: (tools?.length ?? 0) > 0 ? { toolChoice: "auto" } : {},
+    responsePolicy: {},
+  };
+  const executionAdapterRaw = effectivePlan.executionAdapter;
+  let selector: ExecutionAdapterSelector | null;
+  try {
+    selector = parseExecutionAdapterSelector(executionAdapterRaw);
+  } catch (e) {
+    if (typeof executionAdapterRaw !== "string") throw e;
+    selector = null;
+  }
+  const isCliAdapter = selector !== null
+    && (selector.kind === "claude-code-cli" || selector.kind === "codex-cli");
+  // Required tool choice on an adapter that cannot force it: refuse, or — for a
+  // bound terminal writer reachable through a governed MCP session — dispatch
+  // under the receipt-verified contract (BI-C35576A9). See the guard module.
+  const guard = applyRequiredToolChoiceGuard({
+    plan: effectivePlan,
+    selector,
+    tools,
+    providerId,
+    hasGovernedMcpSession: Boolean(mcpSession),
+  });
+  if (guard.kind === "refuse") throw new InferenceError(guard.message, guard.code, providerId);
+  effectivePlan = guard.plan;
+
   // Host capacity is a dispatch constraint, not a routing hint. Enforce it at
   // the shared adapter boundary so direct, agentic, evaluation and fallback
   // callers cannot start a local model while governed local CI owns the host.
-  await assertProviderDispatchCapacity(providerId);
-
+  // Revalidate an older routing selection before waiting for or using local capacity.
+  // Transcription uses its registry adapter and has no model-routing connection.
+  const needsModelConnection = executionAdapterRaw !== "transcription";
+  const selectedAccount = needsModelConnection ? await readSelectedProviderAccount(providerId, modelId, effectivePlan) : null;
+  const capacityAccount = selectedAccount ? capacityAccountIdentity(selectedAccount) : undefined;
+  const localProvider = needsModelConnection && (!selectedAccount || isLocalProviderId(providerId)) ? await readEnabledRoutingProvider(providerId) : null;
   // 0. EP-COST-001 Phase 2 — pre-call budget gate.
   // Check the agent's daily token budget before dispatching. If the agent has
   // consumed ≥100% of its registry limit today, throw a billing error so the
@@ -523,74 +330,23 @@ export async function callProvider(
     }
   }
 
+  // An exclusive host reservation refuses promptly; ordinary local runner
+  // contention waits for admission below. Recheck the reservation at dispatch.
+  await assertProviderDispatchCapacity(providerId);
+
   // 1. Resolve provider (DB lookup + auth headers)
-  const provider = await prisma.modelProvider.findUnique({ where: { providerId } });
+  const provider = localProvider ?? await prisma.modelProvider.findUnique({ where: { providerId } });
   if (!provider) throw new InferenceError("Provider not found", "provider_error", providerId);
-
-  // 2. Build minimal plan if none provided (backward compat)
-  const effectivePlan: RoutedExecutionPlan = plan ?? {
-    providerId,
-    modelId,
-    recipeId: null,
-    contractFamily: "unknown",
-    executionAdapter: resolveDefaultExecutionAdapter(providerId),
-    maxTokens: 4096,
-    providerSettings: {},
-    toolPolicy: (tools?.length ?? 0) > 0 ? { toolChoice: "auto" } : {},
-    responsePolicy: {},
-  };
-
-  // Phase A6: route the executionAdapter through the structured selector +
-  // capability-aware resolver. Legacy string values for CLI/chat kinds round-trip
-  // through parseExecutionAdapterSelector; legacy strings outside the structured
-  // taxonomy (responses, embedding, image_gen, async, transcription) fall through
-  // to the registry directly so existing routes are unchanged.
-  const executionAdapterRaw = effectivePlan.executionAdapter;
-  let selector: ExecutionAdapterSelector | null;
-  try {
-    selector = parseExecutionAdapterSelector(executionAdapterRaw);
-  } catch (e) {
-    if (typeof executionAdapterRaw !== "string") {
-      // Object input that failed validation — propagate.
-      throw e;
-    }
-    selector = null;
-  }
 
   // CLI adapters (anthropic-sub, codex) resolve their own auth and spawn CLI
   // binaries — they do not need HTTP base URL or auth headers.
-  const isCliAdapter =
-    selector !== null &&
-    (selector.kind === "claude-code-cli" || selector.kind === "codex-cli");
-  const soleToolFunction = tools?.length === 1 ? tools[0]?.["function"] : undefined;
-  const soleToolName = soleToolFunction && typeof soleToolFunction === "object" && !Array.isArray(soleToolFunction)
-    ? (soleToolFunction as Record<string, unknown>)["name"]
-    : undefined;
-  const callerGuardsSoleTerminalWriter = Boolean(
-    mcpSession
-    && typeof soleToolName === "string"
-    && effectivePlan.responsePolicy.terminalWriterToolName === soleToolName,
-  );
-  if (effectivePlan.toolPolicy.toolChoice === "required" && isCliAdapter && !callerGuardsSoleTerminalWriter) {
-    throw new InferenceError(
-      `Execution adapter ${selector?.kind ?? String(executionAdapterRaw)} cannot enforce required tool choice.`,
-      "provider_error",
-      providerId,
-    );
-  }
-  if (effectivePlan.toolPolicy.toolChoice === "required" && isCliAdapter) {
-    console.info(
-      `[ai-inference] Delegating exact terminal-writer completion enforcement to the caller policy for ${String(soleToolName)}.`,
-    );
-  }
-
   // EP-COST Phase 4: consult CliPoolStatus before dispatching a CLI-backed call.
   // If the pool is known-exhausted (resetAt is in the future), throw rate_limit
   // so routed-inference.ts falls back to the next provider in the priority list
   // rather than firing into an already-saturated CLI pool.
   if (isCliAdapter && selector !== null) {
     const cliAdapterType = selector.kind === "claude-code-cli" ? "claude-cli" : "codex-cli";
-    const poolState = await getCliPoolStatus(cliAdapterType);
+    const poolState = await getCliPoolStatus(cliAdapterType, plan?.providerConnectionId ? { providerId, providerConnectionId: plan.providerConnectionId } : undefined);
     if (poolState?.isExhausted) {
       const waitSecs = poolState.secondsUntilReset ?? "unknown";
       throw new InferenceError(
@@ -608,7 +364,7 @@ export async function callProvider(
 
   const baseUrl = isCliAdapter ? "cli://local" : await resolveExecutionBaseUrl(providerId, provider);
   if (!baseUrl) throw new InferenceError("No base URL configured", "provider_error", providerId);
-  const headers = isCliAdapter ? {} : await buildAuthHeaders(providerId, provider.authMethod, provider.authHeader);
+  const headers = isCliAdapter ? {} : await buildAuthHeaders(providerId, selectedAccount ? accountAuthMethod(selectedAccount.authMethod) : provider.authMethod, provider.authHeader, effectivePlan.providerConnectionId, effectivePlan.providerConnectionVersion);
 
   // 3. Dispatch to adapter (instrumented for Prometheus metrics)
   const adapter =
@@ -624,39 +380,73 @@ export async function callProvider(
     selector !== null
       ? selector.kind
       : `legacy:${typeof executionAdapterRaw === "string" ? executionAdapterRaw : "unknown"}`;
-  // Admission gate: bound concurrent inference per engine so a fleet of
-  // autonomous coworkers can't overload a scarce backend (local model ≈ 1-2
-  // concurrent before latency collapses; remote = provider rate limit / cost).
-  // Interactive turns take priority over autonomous/background work, so a human
-  // waiting on a reply never queues behind a scheduled brief. Held only across
-  // the actual inference call, released in `finally`. See inference-admission.ts.
-  const engineKey = engineKeyForProvider(providerId);
-  const releaseInferenceSlot = await acquireInferenceSlot(engineKey, currentInferenceOrigin(), {
-    providerId,
-    modelId,
-  });
+  // Local HTTP and sandbox inference share the one compute:local-inference
+  // ResourceLane. Remote providers retain the multi-slot provider semaphore.
+  // Keeping these paths disjoint prevents local HTTP from holding one admission
+  // slot while it waits on another queue.
+  const origin = currentInferenceOrigin();
+  let releaseInferenceSlot: (() => void) | null = null;
   let result;
+  let investment: import("../routing/adapter-telemetry-writer").InvestmentAttemptSnapshot | null = null;
+  let investmentGuidance = "";
   try {
-    result = await adapter.execute({
-      providerId,
-      modelId,
-      plan: effectivePlan,
-      provider: { baseUrl, headers },
-      messages,
-      systemPrompt,
-      tools,
-      previousResponseId,
-      mcpSession,
-    });
+    const execute = async () => {
+      await assertProviderDispatchCapacity(providerId);
+      if (!isLocalProviderId(providerId)) {
+        const { assertLocalGpuFree } = await import("@/lib/inference/host-gpu-admission");
+        await assertLocalGpuFree({ providerId, modelId });
+      }
+      // Queued work has not started inference yet. A disable during admission
+      // invalidates its earlier selection before any provider bytes are sent.
+      if (needsModelConnection) {
+        if (selectedAccount) await readSelectedProviderAccount(providerId, modelId, effectivePlan);
+        if (!selectedAccount || isLocalProviderId(providerId)) await readEnabledRoutingProvider(providerId);
+      }
+      if (attribution?.buildId) {
+        const { loadBuildInvestmentContext, UNRESOLVED_INVESTMENT_GUIDANCE } = await import("../portfolio/investment-balance-server");
+        const context = await loadBuildInvestmentContext(prisma, attribution.buildId).catch(() => ({ snapshot: null, guidance: UNRESOLVED_INVESTMENT_GUIDANCE }));
+        investment = context.snapshot;
+        investmentGuidance = context.guidance;
+      }
+      await assertGovernedInferenceAuthority(currentInferenceSignal());
+      currentInferenceSignal()?.throwIfAborted();
+      const parentFetch = providerId === "local" ? currentGovernedInferenceDeadline()?.localFetch : undefined;
+      return adapter.execute({
+        providerId,
+        modelId,
+        plan: effectivePlan,
+        provider: { baseUrl, headers },
+        readLocalThinkingBudgetEvidence: getLocalThinkingBudgetEvidence,
+        fetchImpl: parentFetch ? withInferenceCancellationFetch(parentFetch) : providerInferenceFetch,
+        messages,
+        systemPrompt: investmentGuidance ? `${systemPrompt}\n\n${investmentGuidance}` : systemPrompt,
+        tools,
+        previousResponseId,
+        mcpSession,
+      });
+    };
+    if (isLocalProviderId(providerId)) {
+      result = await withLocalInferenceLock(execute, { modelId, origin,
+        signal: currentInferenceSignal(currentGovernedInferenceDeadline()?.signal) });
+    } else {
+      releaseInferenceSlot = await acquireInferenceSlot(engineKeyForProvider(providerId), origin, {
+        providerId,
+        modelId,
+        signal: currentInferenceSignal(currentGovernedInferenceDeadline()?.signal),
+      });
+      result = await execute();
+    }
     endTimer();
   } catch (err) {
     endTimer();
-    const errorType = err instanceof InferenceError ? err.code : "unknown";
+    const cancelled = currentInferenceSignal()?.aborted && err === currentInferenceSignal()?.reason;
+    const errorType = cancelled ? "cancelled" : err instanceof InferenceError ? err.code : "unknown";
     aiInferenceErrors.inc({ provider: providerId, error_type: errorType });
     // Phase A7: telemetry write before re-throw. Fire-and-forget — the writer
     // swallows its own errors so we never mask the original throw.
     const finishedAt = new Date();
     void writeAdapterTelemetry({
+      investment,
       traceId: attribution?.traceId ?? undefined,
       adapterKind: telemetryAdapterKind,
       adapterVersion: selector?.version ?? "unknown",
@@ -667,7 +457,7 @@ export async function callProvider(
       finishedAt,
       durationMs: finishedAt.getTime() - telemetryStartedAt.getTime(),
       status: "error",
-      errorClass: err instanceof InferenceError ? err.code : "unknown",
+      errorClass: errorType,
       httpStatus: err instanceof InferenceError ? err.statusCode : undefined,
       refusalReason: err instanceof InferenceError
         ? (err.rawBody ?? err.message)
@@ -678,9 +468,10 @@ export async function callProvider(
       skillId: attribution?.skillId ?? undefined,
       agentMessageId: attribution?.agentMessageId ?? undefined,
     });
-    if (err instanceof InferenceError && err.capacity) {
+    if (err instanceof InferenceError && err.capacity && (!selectedAccount || capacityAccount || localProvider)) {
       void recordProviderCapacityStatus({
         providerId,
+        ...(capacityAccount ? { account: capacityAccount } : {}),
         classification: err.capacity,
         source: "api",
         rawSnippet: err.rawBody ?? err.message,
@@ -690,10 +481,10 @@ export async function callProvider(
     }
     throw err;
   } finally {
-    releaseInferenceSlot();
+    releaseInferenceSlot?.();
   }
 
-  void clearProviderCapacityStatus({ providerId, source: "api" }).catch((capacityErr) => {
+  if (!selectedAccount || capacityAccount || localProvider) void clearProviderCapacityStatus({ providerId, source: "api", ...(capacityAccount ? { account: capacityAccount } : {}) }).catch((capacityErr) => {
     console.warn("[ai-inference] Failed to clear provider capacity:", capacityErr);
   });
 
@@ -711,6 +502,7 @@ export async function callProvider(
   // can't break the user's reply.
   const telemetryFinishedAt = new Date();
   void writeAdapterTelemetry({
+    investment,
     traceId: attribution?.traceId ?? undefined,
     adapterKind: telemetryAdapterKind,
     adapterVersion: selector?.version ?? "unknown",
@@ -724,6 +516,7 @@ export async function callProvider(
     inputTokens: result.usage.inputTokens,
     outputTokens: result.usage.outputTokens,
     cacheCreationInputTokens: result.usage.cacheCreationInputTokens,
+    cachedInputTokens: result.usage.cacheReadInputTokens,
     toolCallsTotal: result.toolCalls.length,
     agentId: attribution?.agentId ?? undefined,
     threadId: attribution?.threadId ?? undefined,
@@ -733,7 +526,7 @@ export async function callProvider(
   });
 
   // 5. Map AdapterResult → InferenceResult
-  return {
+  return transferLocalNativeContinuation<InferenceResult>(result, {
     content: result.text,
     inputTokens: result.usage.inputTokens,
     outputTokens: result.usage.outputTokens,
@@ -742,10 +535,11 @@ export async function callProvider(
     ...(result.toolCalls.length > 0 && { toolCalls: result.toolCalls }),
     responseId: result.responseId,
     truncated: result.truncated ?? false,
+    ...(result.finishReason !== undefined && { finishReason: result.finishReason }),
     // Adapters may set result.raw (e.g. transcription adapter for Whisper
     // verbose_json segments). Passed through verbatim; undefined when absent.
     ...(result.raw !== undefined && { raw: result.raw }),
-  };
+  });
 }
 
 // ─── Token Usage Logging ─────────────────────────────────────────────────────
@@ -754,6 +548,8 @@ export async function logTokenUsage(input: {
   traceId?: string | null;
   agentId: string;
   providerId: string;
+  providerConnectionId?: string;
+  quotaScopeKey?: string;
   contextKey: string;
   inputTokens: number;
   outputTokens: number;
@@ -778,7 +574,6 @@ export async function logTokenUsage(input: {
       );
     }
   }
-
   // Record cost metric for Prometheus
   if (costUsd > 0) {
     aiInferenceCostUsd.inc({ provider: input.providerId }, costUsd);
@@ -789,6 +584,7 @@ export async function logTokenUsage(input: {
       traceId:      input.traceId ?? null,
       agentId:      input.agentId,
       providerId:   input.providerId,
+      ...(input.providerConnectionId ? { recordedProviderConnectionRef: input.providerConnectionId, quotaScopeKey: input.quotaScopeKey ?? null } : {}),
       contextKey:   input.contextKey,
       inputTokens:  input.inputTokens,
       outputTokens: input.outputTokens,

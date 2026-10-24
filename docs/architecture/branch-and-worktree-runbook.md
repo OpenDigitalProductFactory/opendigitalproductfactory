@@ -39,9 +39,9 @@ Never share a working tree across sessions: it causes index/HEAD collisions and 
 
 ## Seeding a new worktree
 
-`.mcp.json` and `.vscode/mcp.json` are gitignored — they carry your local `dpfmcp_...` bearer token — so `git worktree add` does not carry them across.
+Claude Code's `dpf` connector is the `dpf-platform` plugin, so every worktree has it without a per-worktree file; no project `.mcp.json` is copied (a second `dpf` entry would load beside the plugin's, BI-5201141C). `.vscode/mcp.json` is gitignored local connection configuration, so `git worktree add` does not carry it across.
 
-From inside the new worktree, run `scripts/dpf-bootstrap-agent-toolchain.ps1` (Windows) or `bash scripts/dpf-bootstrap-agent-toolchain.sh` (macOS / Linux). It copies MCP config from the root clone, converges Claude Code + Codex CLI plugin state, seeds kernel-tier memory, runs read-only MCP + smoke probes, and prints a single six-state readiness banner. Re-running on a converged worktree is a no-op.
+From inside the new worktree, run `scripts/dpf-bootstrap-agent-toolchain.ps1` (Windows) or `bash scripts/dpf-bootstrap-agent-toolchain.sh` (macOS / Linux). It copies `.vscode/mcp.json` from the root clone when present, converges Claude Code + Codex CLI plugin state, seeds kernel-tier memory, runs read-only MCP + smoke probes, and prints a readiness banner; the readiness record lands in `~/.dpf/agent-toolchain-state.json`, never in `install-state.json`, so running it while a self-upgrade is draining is safe (BI-95DF1BFC). Re-running on a converged worktree is a no-op. Supported interactive connections default to OAuth, including Codex on HTTP loopback. An explicit process `DPF_MCP_URL` wins; otherwise setup uses the saved https user preference, then an HTTPS `PUBLIC_URL`. With none selected, the skill-pack updater's canonical `https://localhost/api/mcp/v1` applies (BI-772023BC). Only https endpoints persist for future sessions; Codex and Grok keep any loopback-http choice in their own configs (BI-8FD7C0C9). When the Grok command is installed, the same bootstrap creates one client_credentials client for the installing operator and refreshes `~/.grok/dpf-mcp-token` before it expires. Grok reads that file; no token is pasted, and revoking the client in Admin stops later refreshes. Setup never mints a PAT because OAuth authorization is pending; the banner distinguishes written configuration from a verified connection. For explicit legacy credentials and client compatibility requirements, follow the [MCP authorization runbook](mcp-tool-authorization-runbook.md).
 
 The legacy `scripts/seed-worktree-mcp.{ps1,sh}` and `scripts/ensure-dpf-skill-pack.{ps1,sh}` scripts now shim into the new bootstrap; both names continue to work for one release cycle. ⟦runtime: expiry UNANCHORED — names no release or date, so it cannot expire on its own; anchor it or drop the legacy names⟧
 
@@ -61,6 +61,16 @@ any unclassified install script keeps the tree `source-only` and emits a stable
 that key as the backlog intake origin so the canonical ingester increments one
 occurrence instead of filing one review per worktree.
 
+A successful managed install can retain qualified dependency evidence in this
+worktree's Git metadata when pnpm omits its build record after a no-op install.
+Ordinary probes still check current artifacts, dependency resolution, workspace
+links, staleness and unclassified scripts. Changed install inputs or metadata,
+failed installs and missing or invalid evidence prevent reuse. This evidence is
+not a build/test result and grants no build-script permission.
+Each probe rediscovers workspace manifests, so editing, adding or removing a
+package invalidates prior evidence. Custom hooks, patches and unsupported
+workspace formats keep the normal managed-install path.
+
 ## Compose project isolation
 
 `docker-compose.yml` defaults to the root project `dpf`; linked worktrees must override it with an ignored `.env` value such as `COMPOSE_PROJECT_NAME=dpf-<topic>`. The worktree MCP seed scripts write this automatically.
@@ -73,17 +83,21 @@ Do not run `docker compose up`, `docker compose down`, or profile/harness Compos
 
 Before serious implementation: `git fetch origin main`, confirm your base is current, rebase if not. The `SessionStart` `worktree-freshness` hook (`scripts/hooks/worktree-freshness.{sh,ps1}`) prints a warning automatically when it detects a stale base; silence with `DPF_SKIP_WORKTREE_FRESHNESS=1`.
 
+**A stale base also serves a stale RULEBOOK, which is the quieter half (BI-9A46E89C).** `CLAUDE.md` imports `AGENTS.md` **from the worktree**, so an agent on an old base is governed by a superseded copy of the operating contract — and cannot detect that from the inside, because the stale copy does not know it is stale. The consequence is not a merge conflict but a **false negative**: every "does this already exist?" check runs against the old tree, so a rule, principle, helper or guard that exists on `main` reads as absent, and the agent rebuilds or re-proposes what is already canonical. Measured 2026-09-16 on a worktree 835 commits behind: `AGENTS.md` had gained "A gate that could not run is not a verdict" (2026-09-05) and **24 kernel-principle files** had moved, none visible; that session rebuilt a helper that existed (`git-changed-files.mjs`) and proposed a principle that existed (`report-only-the-verdict-you-reached`). The hook therefore reports instruction-plane drift **independently of the commit-count threshold** — one commit can add a commandment — and names the false-negative consequence explicitly, because the commit count alone reads as "your code may conflict" and gets worked past. Review what moved with `git diff $(git merge-base HEAD origin/main) origin/main -- AGENTS.md docs/founder-kernel/wiki/principles`.
+
 The durable fix is to create worktrees from a freshly-fetched `origin/main` in the first place.
 
 ## Root-clone freshness — the shared root must stay on current `main`
 
 This is a *different* concern from worktree-base freshness above: peer worktrees junction `@dpf/*` workspace packages into the **shared root clone**'s source tree, so if the root clone's own checkout falls behind `origin/main`, `pregate-preflight` aborts with *"Stale root clone detected (BI-A900EA3F)"* for **every** worktree until the root is fast-forwarded — even worktrees whose own branch is perfectly current.
 
-The `SessionStart` `root-clone-freshness` hook (`packages/dpf-skill-pack/hooks/root-clone-freshness.mjs`) fast-forwards the root clone to `origin/main` automatically at session start — **fast-forward only**, and only when the root is on `main` and clean. It **refuses** (and prints an advisory) when the root is off-main, detached, or dirty, because those states mean work is stranded there and a forced move would corrupt it. Run it by hand any time with `node scripts/root-clone-refresh.mjs [--json]`; silence the hook with `DPF_SKIP_ROOT_CLONE_REFRESH=1`. This runs the same safe `git merge --ff-only origin/main` that the stale-root-clone detector already recommends, so it never conflicts with the root-clone delete/mutation guard.
+The `SessionStart` `root-clone-freshness` hook (`packages/dpf-skill-pack/hooks/root-clone-freshness.mjs`) fast-forwards the root clone to `origin/main` automatically at session start — **fast-forward only**, and only when the root is on `main`. It **refuses** (and prints an advisory) when the root is off-main or detached, because work may be stranded there and a forced move would corrupt it. Uncommitted files do not block it unless the incoming commits change one of them. A dirty file nothing upstream touches is carried across unchanged; an overlapping one is named in the refusal (BI-F676CC23 — one bootstrap-written `.mcp.json` used to freeze the root for days). Run it by hand any time with `node scripts/root-clone-refresh.mjs [--json]`; silence the hook with `DPF_SKIP_ROOT_CLONE_REFRESH=1`. This runs the same safe `git merge --ff-only origin/main` that the stale-root-clone detector already recommends, so it never conflicts with the root-clone delete/mutation guard.
 
 ## Reaping safety — a live session's worktree is never reaped
 
 The worktree janitor (`scripts/worktree-janitor.mjs`, fleet backstop; and the SessionEnd reaper) removes merged+clean worktrees. Two safety rails keep it from removing a worktree out from under work:
+
+The SessionEnd reaper (`scripts/hooks/session-reaper.sh`) also terminates the ending session's own node sidecars and releases the leases that session owns. It is scoped on purpose: a process counts as the session's only when its command line names the session's worktree *outside* `node_modules` (shared binaries prove nothing about ownership) and names no other worktree; and a lease is released only when its `ownerSessionId` is the ending session. A session started in the root clone therefore never reaps a sibling worktree's local-CI gate run, which is how three gate runs died by SIGTERM on 2026-09-06 (BI-B0122A22).
 
 - **Live-session gate.** A session writes a gitignored `.dpf-session-heartbeat.json` marker into its worktree, refreshed every turn by the `worktree-session-heartbeat` hook (SessionStart/Stop) and removed on SessionEnd. The janitor treats a fresh marker (TTL default 60 min, `DPF_WORKTREE_SESSION_HEARTBEAT_TTL_MIN`) as `KEEP`, **outranking** Tier-A eligibility — because a live session's tree first becomes Tier-A the moment its own PR merges, which is exactly when it must not be reaped.
 - **Abandoned-merge quarantine.** A worktree with `MERGE_HEAD` present and **no** live session is classified `FLAG_ABANDONED_MERGE`: surfaced in the janitor summary and never auto-reaped, since an interrupted merge can hide un-reconciled work. A *live* session's in-progress merge is kept, not flagged.
@@ -101,3 +115,27 @@ This checkout is shallow (`git rev-parse --is-shallow-repository` → `true`), s
 ## Housekeeping
 
 If `SessionStart` prints `DPF HOUSEKEEPING DUE`, run it. The `janitor-throttle` hook (`scripts/hooks/janitor-throttle.{sh,ps1}`) fires at most once per 24h across all worktrees. Comply; don't skip silently. Details are in the hook's own header comment.
+
+## When a worktree is removed
+
+Three paths remove a worktree, and all three end at the same classifier so they cannot disagree:
+
+1. **SessionEnd hook** (`worktree-session-hygiene.mjs`) — the primary path. Reaps *this session's* tree when it is Tier A. It cannot help when the PR merges after the thread ends, which is the normal case.
+2. **Merge event** (`build/pr-merged-reap`, BI-848360EF) — runs the janitor scoped to the merged branch with `--branch`. This is the path that covers the gap above.
+3. **Daily fleet sweep** (`worktreeJanitor`, 05:40) — the backstop for leftovers after a crash, and for clients that write no heartbeat.
+
+Every one of them calls `classifyWorktree`, so a live session heartbeat, an active Workroom claim, `.worktree-pinned`, an active lease, an open PR or a dirty tree refuses the reap regardless of which path asked.
+
+Removal always goes through the junction-safe helper. A worktree here carries roughly 28 junctions into the root clone's `node_modules` and `apps/web/node_modules/*`; a recursive delete that follows one destroys the root clone's dependencies, which is what happened on 2026-08-15. Unlink each reparse point first, verify none remain, and only then remove the tree.
+
+## Task-specific operating rules
+
+- **All changes land via PR against `main`, DCO-signed, scoped to one clean revert.** Including the maintainer's. Topic branches named by intent: `feat/`, `fix/`, `chore/`, `doc/`, `clean/<slug>`, from `main`. → [kernel principle](../founder-kernel/wiki/principles/one-concern-per-pr.md)
+- **Always push after committing.** Local-only commits are invisible to CI. → [kernel principle](../founder-kernel/wiki/principles/always-push-after-committing.md)
+- **PR creation means ready to merge.** A pushed branch — not a PR — is the handoff/recovery artifact while work is in flight. No draft PRs, no `--draft`. Open only when the build gate is green and the author believes it is mergeable. → [kernel principle](../founder-kernel/wiki/principles/all-changes-land-via-pr.md)
+- **Merge via the merge queue**, never by hand: `gh pr merge <n> --squash --auto`.
+- **Verify merge-readiness mechanically** — `pnpm pr:health [<n>]`, never a visual scan of some checks.
+- **One thread = one branch + one worktree**, in the dedicated sibling base. Never share a working tree across sessions. Implement and commit from the worktree — it is source-control isolation only (§1), so harness friction inside one is a harness limitation, not a product defect. → [kernel principle](../founder-kernel/wiki/principles/worktree-per-session.md)
+- **Keep the root clone as the merge/release worktree** — read-only for active feature work. → [kernel principle](../founder-kernel/wiki/principles/keep-root-clone-as-merge-worktree.md)
+- **Branch guard before implementation and commit:** never build on `HEAD (no branch)` or `main`. Completion requires a pushed branch or PR. → [kernel principle](../founder-kernel/wiki/principles/branch-guard-before-implementation.md)
+- **Refresh a stale worktree base before serious implementation** (`git fetch origin main`), and **never run a bare `git rebase origin/main`** on this shallow clone — see the runbook for the recovery.

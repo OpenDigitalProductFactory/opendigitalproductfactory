@@ -1,0 +1,64 @@
+{
+  "$comment": "Convergence-Impact Gate registry (BI-B19BE117). A changed file matching one of these surfaces reaches an EXISTING install only through some convergence mechanism (self-upgrade promoter, installer re-run, session-start hook convergence, seed re-run) or not at all. The gate does not know which; it requires the PR to say. Keep this registry NARROW: every kind here has a documented instance of biting an existing install. Add a kind only with the BI that proves the bite. Regexes match repo-relative POSIX paths.",
+  "schemaVersion": 1,
+  "surfaces": [
+    {
+      "kind": "compose",
+      "why": "Compose files, Dockerfiles and container entrypoints define the running topology. promote.sh composes from the new release assets, but a dropped service is never removed (BI-922EBB99) and a new volume var is never provisioned (#3262).",
+      "patterns": [
+        "^docker-compose[^/]*\\.yml$",
+        "^Dockerfile[^/]*$",
+        "^docker-entrypoint\\.sh$",
+        "^scripts/lib/dev-portal-entrypoint\\.sh$",
+        "^promoter-contract\\.json$"
+      ]
+    },
+    {
+      "kind": "env-contract",
+      "why": "A key added to .env.example exists only on installs created after it. The installer writes .env once; an existing install keeps the file it has (BI-FEE77B68 had to special-case DPF_HOST_BIND_ADDRESS).",
+      "patterns": ["^\\.env[^/]*\\.example$"]
+    },
+    {
+      "kind": "installer",
+      "why": "Installer, launcher, promoter and install-state code is what an existing install runs to become the next version. A change here that assumes the new launcher is already present deadlocks the crossing (BI-BE8BBDE9).",
+      "patterns": [
+        "^(install|uninstall)-dpf\\.(sh|ps1|bat)$",
+        "^dpf-(start|stop|reinstall|release)\\.(sh|ps1|bat)$",
+        "^scripts/(fresh-install|setup|dpf-start|dpf-stop|redeploy-portal)\\.(sh|ps1)$",
+        "^scripts/installer/",
+        "^scripts/promote\\.sh$",
+        "^scripts/promoter-[^/]+\\.mjs$",
+        "^scripts/portal-migrate-boot\\.sh$"
+      ]
+    },
+    {
+      "kind": "git-hooks",
+      "why": "Hook logic converges only when something re-runs the converger. BI-3727106F: 68 of 85 worktrees pushed ungated because convergence was install-time only.",
+      "patterns": [
+        "^\\.githooks/",
+        "^scripts/set-hooks-path\\.mjs$",
+        "^scripts/lib/(hooks-dir|converge-hooks-dir)\\.mjs$"
+      ]
+    },
+    {
+      "kind": "install-config",
+      "why": "config/ is COPYd into the image and read at boot; a new key or budget changes behaviour on every install that upgrades, and a removed one strands installs that still carry it.",
+      "patterns": ["^config/"]
+    }
+  ],
+  "imageCopy": {
+    "$comment": "Files the portal image COPYs BY NAME are parsed live from these Dockerfiles. A rename or move breaks the image build for every install that upgrades. Directory COPY sources are not classified (they are app source, reached by the normal image rebuild); only single-file sources outside the ignore set are.",
+    "dockerfiles": ["Dockerfile"],
+    "ignorePrefixes": ["apps/", "packages/", "patches/", "docs/"],
+    "ignoreFiles": ["package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "tsconfig.base.json", ".gitignore"]
+  },
+  "seedContent": {
+    "$comment": "Canonical seed content is classified through the same registry the Seed-Fit gate uses, so the two never disagree about what is seed. Seed-Fit asks whether the content belongs; this gate asks whether an existing install ever receives it.",
+    "registry": "config/seed-content-paths.json"
+  },
+  "excludePatterns": [
+    "\\.(test|spec|contract\\.test)\\.[cm]?[jt]sx?$",
+    "(^|/)__tests__/",
+    "^docs/testing/fixtures/"
+  ]
+}

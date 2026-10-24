@@ -17,6 +17,7 @@
 import { normalizeLocator, type StructuredLocator } from "@/lib/deliberation/evidence";
 import { CLAIM_EVIDENCE_GRADES, type ClaimEvidenceGrade } from "@/lib/deliberation/types";
 import { digestEvidence } from "@/lib/decision/decision-chain";
+import { readOptionRecords } from "@/lib/decision/option-input-contract";
 
 /** One citation attached to a single option's single dimension score. */
 export type EvidenceRef = {
@@ -204,13 +205,23 @@ export type LedgerEvidenceArgs = {
 
 /**
  * Parse a tool-call `params` object (with `options`, `evidence`, `requireEvidence`)
- * and run the grounding pass. Returns the grounded feature map keyed by option id
+ * and run the grounding pass. Returns the grounded features in caller order
  * and the args the kernel-consult ledger needs. Extracted from the pack handler so
  * the hot-path module stays small.
  */
 export function groundOptionsFromParams(params: Record<string, unknown>): {
   grounding: GroundingResult;
-  groundedFeaturesById: Map<string, Record<string, number>>;
+  /**
+   * Grounded features in caller order — positional, NOT keyed by option id.
+   *
+   * BI-9889566B: this was a `Map` keyed on the caller-supplied id, so any two
+   * options sharing an id (including the empty string every id-less option
+   * collapsed to) silently overwrote each other, last one winning. Identity
+   * supplied by the caller cannot be trusted to be unique; a position always
+   * is. `validateOptionIdentities` keeps the ids meaningful for the ledger and
+   * the evidence map; this keeps the feature handoff correct regardless.
+   */
+  groundedFeaturesByIndex: Record<string, number>[];
   ledgerArgs: LedgerEvidenceArgs;
 } {
   const requireEvidence = params["requireEvidence"] === true;
@@ -222,22 +233,20 @@ export function groundOptionsFromParams(params: Record<string, unknown>): {
       : undefined;
   const optionsParam = Array.isArray(params["options"]) ? params["options"] : [];
   const grounding = groundOptionFeatures({
-    options: optionsParam
-      .filter((o): o is Record<string, unknown> => typeof o === "object" && o !== null)
-      .map((o) => ({
-        id: String(o["id"] ?? ""),
-        description: String(o["description"] ?? ""),
-        features:
-          typeof o["features"] === "object" && o["features"] !== null && !Array.isArray(o["features"])
-            ? (o["features"] as Record<string, number>)
-            : undefined,
-      })),
+    options: readOptionRecords(optionsParam).map((o) => ({
+      id: String(o["id"] ?? ""),
+      description: String(o["description"] ?? ""),
+      features:
+        typeof o["features"] === "object" && o["features"] !== null && !Array.isArray(o["features"])
+          ? (o["features"] as Record<string, number>)
+          : undefined,
+    })),
     evidence,
     requireEvidence,
   });
   return {
     grounding,
-    groundedFeaturesById: new Map(grounding.options.map((o) => [o.id, o.features ?? {}])),
+    groundedFeaturesByIndex: grounding.options.map((o) => o.features ?? {}),
     ledgerArgs: {
       citations: grounding.citations,
       scoredCriteria: Object.fromEntries(grounding.options.map((o) => [o.id, o.features ?? {}])),
@@ -254,14 +263,13 @@ export function groundOptionsFromParams(params: Record<string, unknown>): {
  */
 export async function buildScoredDecisionOptions(input: {
   optionsParam: unknown[];
-  groundedFeaturesById: Map<string, Record<string, number>>;
+  groundedFeaturesByIndex: Record<string, number>[];
   generateEmbedding: (text: string) => Promise<number[] | null | undefined>;
 }): Promise<import("@/lib/decision/option-scoring").DecisionOption[]> {
   return Promise.all(
-    input.optionsParam
-      .filter((o): o is Record<string, unknown> => typeof o === "object" && o !== null)
-      .map(async (o) => {
-        const features = input.groundedFeaturesById.get(String(o["id"] ?? "")) ?? {};
+    readOptionRecords(input.optionsParam)
+      .map(async (o, index) => {
+        const features = input.groundedFeaturesByIndex[index] ?? {};
         const description = String(o["description"] ?? "");
         let embedding: number[] | undefined;
         if (Array.isArray(o["embedding"])) {

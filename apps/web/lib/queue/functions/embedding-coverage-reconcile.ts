@@ -19,8 +19,8 @@
 // schedule until it succeeds, and reports what it did into the corpus-health
 // Workroom so a run is observable without anyone going looking.
 
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 import {
   EMBEDDING_COVERAGE_CRON,
@@ -41,7 +41,7 @@ export async function runEmbeddingCoverageJob(): Promise<CoverageReport> {
   return recordCoverageRun({ db: prisma as never, result });
 }
 
-export const embeddingCoverageReconcileScheduled = inngest.createFunction(
+export const embeddingCoverageReconcileScheduled = jobs.createFunction(
   {
     id: EMBEDDING_COVERAGE_INNGEST_ID,
     retries: 1,
@@ -51,13 +51,13 @@ export const embeddingCoverageReconcileScheduled = inngest.createFunction(
     triggers: [cron(EMBEDDING_COVERAGE_CRON)],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, EMBEDDING_COVERAGE_INNGEST_ID);
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
     return step.run("embedding-coverage-reconcile", () => runEmbeddingCoverageJob());
   },
 );
 
-export const embeddingCoverageReconcileRunNow = inngest.createFunction(
+export const embeddingCoverageReconcileRunNow = jobs.createFunction(
   {
     id: EMBEDDING_COVERAGE_RUN_NOW_INNGEST_ID,
     retries: 0,
@@ -65,7 +65,7 @@ export const embeddingCoverageReconcileRunNow = inngest.createFunction(
     triggers: [{ event: EMBEDDING_COVERAGE_REQUESTED_EVENT }],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, EMBEDDING_COVERAGE_RUN_NOW_INNGEST_ID);
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
     return step.run("embedding-coverage-reconcile", () => runEmbeddingCoverageJob());
   },

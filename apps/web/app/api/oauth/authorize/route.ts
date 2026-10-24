@@ -28,6 +28,14 @@ import {
   resolveResourceOrigin,
 } from "@/lib/auth/oauth-metadata";
 import { createAuthorizationCode } from "@/lib/auth/oauth-tokens";
+import {
+  eligibleOAuthCoworkers,
+  resolveDefaultOAuthCoworker,
+  createOAuthConsentBinding,
+  OAUTH_SETUP_REQUIRED,
+  type EligibleCoworker,
+} from "@/lib/auth/oauth-identity-binding";
+import type { AuthorizeRequest } from "@/lib/auth/oauth-authorize-request";
 import { touchClient } from "@/lib/auth/oauth-clients";
 import { parseScopeParam } from "@/lib/auth/oauth-scope-map";
 import {
@@ -75,22 +83,72 @@ export async function GET(request: Request) {
     );
   }
 
+  return renderConsentFor({ userId: session.user.id, email: session.user.email ?? null }, parsed.request,
+    url.searchParams, origin, { after: url.searchParams.get("assistant_after") ?? undefined });
+}
+
+const CONSENT_FORM_FIELDS = new Set(["granted_scope", "decision", "acting_coworker", "default_coworker", "assistant_after", "confirm_account", "acknowledge_handover"]);
+
+/** When this account's work was handed over, or null (BI-9D2199D4). */
+async function workHandedOverAt(userId: string): Promise<Date | null> {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { workHandedOverAt: true } });
+  return user?.workHandedOverAt ?? null;
+}
+
+/**
+ * Build and render the consent screen for a validated request. Shared by the
+ * GET and by the POST's drift re-render, so both show exactly what the
+ * server would bind: the eligible set, then the server-resolved default.
+ * The client name is display data throughout — the resolver looks at it
+ * last, and only inside a class it has already proven authority-equal.
+ */
+async function renderConsentFor(
+  human: { userId: string; email: string | null },
+  request: AuthorizeRequest,
+  params: URLSearchParams,
+  origin: string,
+  options: { after?: string; driftNotice?: boolean; choiceNotice?: boolean; accountNotice?: boolean; handoverNotice?: boolean } = {},
+): Promise<Response> {
   const org = await prisma.organization.findFirst({ select: { name: true } });
-  const { client, scopes, redirectUri, resource } = parsed.request;
+  const handedOverAt = await workHandedOverAt(human.userId);
+  const { client, scopes, redirectUri, resource } = request;
+  const coworkers = await eligibleOAuthCoworkers(human.userId, client.rowId, resource, prisma, { after: options.after });
+  if (!coworkers.length) {
+    return htmlResponse(renderConsentRefusal("Assistant setup needs approval",
+      "Ask your administrator to approve an assistant role for this connection, then reconnect."), 403);
+  }
+  const page = coworkers.slice(0, 50);
+  // The request itself, without the consent form's own fields, so signing in
+  // as someone else comes back to the same authorization request.
+  const requestParams = [...params.entries()].filter(([k]) => !CONSENT_FORM_FIELDS.has(k));
+  const back = `${OAUTH_AUTHORIZE_PATH}?${new URLSearchParams(requestParams).toString()}`;
+  const resolution = await resolveDefaultOAuthCoworker({ userId: human.userId, resource, eligible: page,
+    client: { rowId: client.rowId, clientName: client.clientName, redirectUris: client.redirectUris } }, prisma);
 
   return htmlResponse(
     renderConsentPage({
       clientName: client.clientName,
       selfAsserted: client.selfAsserted,
       installationName: org?.name ?? "this installation",
-      actingUser: session.user.email ?? session.user.id,
+      actingUser: human.email ?? human.userId,
+      actingUserId: human.userId,
+      switchAccountUrl: `/login?callbackUrl=${encodeURIComponent(back)}`,
+      accountNotice: options.accountNotice,
+      workHandedOverAt: handedOverAt?.toISOString() ?? null,
+      handoverNotice: options.handoverNotice,
       scopes,
+      assistant: { kind: resolution.kind, selected: resolution.selected, candidates: resolution.candidates },
+      driftNotice: options.driftNotice,
+      choiceNotice: options.choiceNotice,
+      nextAssistantsUrl: coworkers.length > 50 ? (() => {
+        const next = new URLSearchParams(params);
+        next.set("assistant_after", coworkers[49].agentId);
+        return `${OAUTH_AUTHORIZE_PATH}?${next.toString()}`;
+      })() : undefined,
       resource: resource || canonicalResourceUri(origin),
       redirectUri,
       // Echoed verbatim so the POST re-derives the same request from scratch.
-      hiddenParams: [...url.searchParams.entries()].filter(
-        ([k]) => k !== "granted_scope" && k !== "decision",
-      ),
+      hiddenParams: requestParams,
     }),
   );
 }
@@ -109,6 +167,12 @@ export async function POST(request: Request) {
   const requestOrigin = request.headers.get("origin");
   if (requestOrigin && requestOrigin !== origin) {
     return directError("invalid_request", "Cross-origin consent submissions are refused.", 403);
+  }
+  // Fetch metadata says the same thing for browsers that send it; a consent
+  // form posts from its own page, so anything but same-origin is refused.
+  const fetchSite = request.headers.get("sec-fetch-site");
+  if (fetchSite && fetchSite !== "same-origin") {
+    return directError("invalid_request", "Consent can only be given from the consent page itself.", 403);
   }
 
   const session = await auth();
@@ -144,6 +208,24 @@ export async function POST(request: Request) {
     );
   }
 
+  // The account is the person's decision, not the browser's (BI-07D21B4A).
+  // The page carries the session user id it showed; a Connect without it, or
+  // with another account's id because the session changed underneath the
+  // page, binds nothing and shows the screen again for the current account.
+  if (form.get("confirm_account") !== session.user.id) {
+    return renderConsentFor({ userId: session.user.id, email: session.user.email ?? null }, parsed.request,
+      params, origin, { accountNotice: true });
+  }
+
+  // A handover moves the account's work, not its access (BI-9D2199D4). A new
+  // connection under it brings work back to it, so the person must have said
+  // on the page that they mean it, for this account.
+  const handedOverAt = await workHandedOverAt(session.user.id);
+  if (handedOverAt && form.get("acknowledge_handover") !== session.user.id) {
+    return renderConsentFor({ userId: session.user.id, email: session.user.email ?? null }, parsed.request,
+      params, origin, { handoverNotice: true });
+  }
+
   // The human may narrow the request on the consent screen. Their selection is
   // intersected with what was requested — a checkbox can only ever REMOVE
   // authority, never add it, even if the form is tampered with.
@@ -162,40 +244,65 @@ export async function POST(request: Request) {
     );
   }
 
-  const code = await createAuthorizationCode({
-    oauthClientRowId: client.rowId,
-    userId: session.user.id,
-    redirectUri,
-    codeChallenge,
-    resource,
-    publicScopes: approved,
+  // Which assistant. The human either left the server's default in place or
+  // chose another eligible one from the disclosure. An unchanged default is
+  // re-derived here and must come out the same; if eligibility or authority
+  // signatures moved between the GET and this POST, the screen is shown again
+  // with the new answer rather than binding an identity the human never saw.
+  const agentId = typeof form.get("acting_coworker") === "string" ? String(form.get("acting_coworker")) : "";
+  const shownDefault = typeof form.get("default_coworker") === "string" ? String(form.get("default_coworker")) : "";
+  const eligible = await eligibleOAuthCoworkers(session.user.id, client.rowId, resource, prisma);
+  if (!agentId && eligible.length > 0) {
+    // Assistants that differ in authority are a choice the person makes; a
+    // Connect without one binds nothing and asks again.
+    return renderConsentFor({ userId: session.user.id, email: session.user.email ?? null }, parsed.request,
+      params, origin, { choiceNotice: true });
+  }
+  if (!agentId || !eligible.some((agent) => agent.agentId === agentId)) {
+    return directError("access_denied", OAUTH_SETUP_REQUIRED, 403);
+  }
+  // Re-derive the server's answer in every case: it is the drift check when
+  // the default was left in place, and it is what the audit row needs to say
+  // whether this consent was one click (AC-OC-7 is measured from these rows).
+  const page: EligibleCoworker[] = eligible.slice(0, 50);
+  const resolution = await resolveDefaultOAuthCoworker({ userId: session.user.id, resource, eligible: page,
+    client: { rowId: client.rowId, clientName: client.clientName, redirectUris: client.redirectUris } }, prisma);
+  if (shownDefault && agentId === shownDefault && resolution.selected.agentId !== agentId) {
+    return renderConsentFor({ userId: session.user.id, email: session.user.email ?? null }, parsed.request,
+      params, origin, { driftNotice: true });
+  }
+  const resolutionAudit = {
+    kind: resolution.kind,
+    reason: resolution.kind === "resolved" ? resolution.reason : null,
+    defaultAgentId: resolution.selected.agentId,
+    changedByHuman: agentId !== resolution.selected.agentId,
+  };
+  const code = await prisma.$transaction(async (db) => {
+    const binding = await createOAuthConsentBinding({ userId: session.user.id,
+      clientId: client.rowId, resource, agentId, scopes: approved }, db);
+    const issuedCode = await createAuthorizationCode({
+      oauthClientRowId: client.rowId, userId: session.user.id, redirectUri,
+      codeChallenge, resource, publicScopes: approved, authorityBindingId: binding.id,
+    }, db);
+    await db.authorizationDecisionLog.create({ data: {
+      authorityBindingId: binding.id,
+      decisionId: `oauth-consent-${crypto.randomUUID()}`,
+      actorType: "human", actorRef: session.user.id, humanContextRef: session.user.id,
+      agentContextRef: agentId, actionKey: "oauth_authorize", objectRef: resource,
+      decision: "allow", rationale: { bindingId: binding.bindingId,
+        clientId: client.clientId, registrationKind: client.registrationKind,
+        requestedScopes: parsed.request.scopes, approvedScopes: approved,
+        // Which assistant the server offered, how it chose, and whether the
+        // human overrode it: the per-consent record of the one-click outcome.
+        resolution: resolutionAudit,
+        // Set when the person connected under an account whose work was handed over.
+        accountWorkHandedOverAt: handedOverAt?.toISOString() ?? null,
+        // How the decision arrived, for a later question about intent.
+        submittedFrom: { fetchSite, fetchUser: request.headers.get("sec-fetch-user") } },
+      endpointUsed: "/api/oauth/authorize", routeContext: "oauth-consent",
+    } });
+    return issuedCode;
   });
-
-  // The consent decision is an authorization event and belongs in the audit
-  // stream beside every other one, not only in the token row it produced.
-  await prisma.authorizationDecisionLog
-    .create({
-      data: {
-        decisionId: `oauth-consent-${crypto.randomUUID()}`,
-        actorType: "human",
-        actorRef: session.user.id,
-        humanContextRef: session.user.id,
-        actionKey: "oauth_authorize",
-        objectRef: resource,
-        decision: "allow",
-        rationale: {
-          clientId: client.clientId,
-          clientName: client.clientName,
-          registrationKind: client.registrationKind,
-          selfAsserted: client.selfAsserted,
-          requestedScopes: parsed.request.scopes,
-          approvedScopes: approved,
-        },
-        endpointUsed: "/api/oauth/authorize",
-        routeContext: "oauth-consent",
-      },
-    })
-    .catch(() => undefined);
 
   touchClient(client.rowId);
   return NextResponse.redirect(buildCodeRedirect(redirectUri, code, state), 302);

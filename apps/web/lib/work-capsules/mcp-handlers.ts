@@ -1,7 +1,12 @@
+import { normalizePersistedScope, parseScopeInput } from "./scope-input";
+import { STAGE_EVIDENCE_OUTCOMES, type StageEvidenceOutcome } from "@/lib/work-management/stage-evidence-receipts";
 import { prisma } from "@dpf/db";
-import { ensureCapsuleWorkItemAnchorNonFatal } from "@/lib/work-capsules/capsule-workitem-anchor.server";
+import {
+  anchorCapsuleByIdNonFatal,
+  ensureCapsuleWorkItemAnchorNonFatal,
+} from "@/lib/work-capsules/capsule-workitem-anchor.server";
 import { computeChangeImpactContract } from "@/lib/build/gate-context-bridge";
-import type { ToolResult } from "@/lib/mcp-tools";
+import type { ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { resolveTerminalInitiativeRecovery } from "@/lib/backlog/initiative-readiness/terminal-recovery";
 import {
@@ -25,36 +30,39 @@ import {
   isWorkCapsulePortfolioRole,
   isWorkCapsuleSource,
   isWorkCapsuleStatus,
-  normalizeWorkCapsuleScopeInput,
+  SCOPE_KIND_SET,
   WORK_CAPSULE_WORKROOM_SHAPES,
   type ScopeClaim,
   type WorkCapsuleEvidenceKind,
-  type WorkCapsuleScopeInput,
 } from "@/lib/work-capsules";
 import type { BacklogBindingReader } from "./adopt-backlog-binding";
-import { adoptWorktree } from "./adopt-worktree-handler";
+import { adoptWorktree, establishNewRoomOwnership } from "./adopt-worktree-handler";
+import { reassignCapsuleExecutor } from "./reassign-executor-handler";
+import { WorkroomLeaseHeldError } from "./workroom-lease";
 import {
-  adoptWorktreeCapsule,
   claimWorkCapsuleScope,
   createWorkCapsule,
   heartbeatWorkCapsule,
-  reassignWorkCapsuleExecutor,
   planCapsuleWorkspace,
   releaseWorkCapsuleScope,
   recordWorkCapsuleEvidence,
   recordAgentActivity,
   updateWorkCapsuleStatus,
   WorkCapsuleCompletionDeniedError,
-  ScopeOverlapError,
+  WorkCapsulePublicationRefusedError,
   type CapsuleDb,
   type WorkCapsuleActor,
 } from "./work-capsule-store";
 import { listLocalBranches } from "./git-scanner";
+import { publicationRefusedToolResult } from "./publication-refusal";
+import { describeStageEvidenceReach } from "@/lib/work-management/stage-evidence-reach";
 import { ensureExternalSessionCapsule } from "./external-session-capture";
-import { branchOccupiedResult, invalidScopeResult } from "./mcp-result-errors";
+import { invalidScopeResult, scopeClaimRefusal } from "./mcp-result-errors";
 import { claimBacklogItemForWork } from "./claim-backlog-item-handler";
 import { createWorkroomBoundToBacklogItem } from "./create-workroom-binding";
 import { workCapsuleActor as actor } from "./handler-actor";
+import { commandDb } from "./receipted-tool";
+import { parseScopeReleaseClaims, scopeReleaseWasOrdinary } from "./scope-release-authorization";
 type ToolContext = {
   routeContext?: string;
   agentId?: string;
@@ -84,38 +92,18 @@ function stringParam(params: Record<string, unknown>, key: string): string | nul
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 
-function numberParam(params: Record<string, unknown>, key: string): number | null {
-  const value = params[key];
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
-function parseScopeInput(params: Record<string, unknown>): WorkCapsuleScopeInput {
-  // Every key the tool schema advertises under scopeProperties must appear here.
-  // This function picks fields explicitly, so a field added to the schema and to
-  // the normalizer but not to this list is accepted by the caller, dropped here,
-  // and answered `success: true` — the same defect `backlogItemId` had on
-  // adopt_worktree. scope-input-parity.test.ts is what keeps the two in step.
-  return {
-    workroomShape: params.workroomShape,
-    workShape: params.workShape,
-    decisionScope: params.decisionScope,
-    portfolioRole: params.portfolioRole,
-    servedPersona: params.servedPersona,
-    activityKind: params.activityKind,
-    outcomeAnchor: params.outcomeAnchor,
-    servesPortfolioRoles: params.servesPortfolioRoles,
-    dependsOnPortfolioRoles: params.dependsOnPortfolioRoles,
-  };
-}
-
+// Inside a receipted command (BI-763D6E01) this is the command's transaction.
 function workCapsuleDb(): CapsuleDb {
-  return prisma as unknown as CapsuleDb;
+  return commandDb();
 }
+// An ordinary write renews the writer's own lease; it never takes another
+// principal's live lease (BI-A7601AED).
 async function renewLeaseAfterCapsuleWrite(capsuleId: string, currentActor: WorkCapsuleActor) {
   return heartbeatWorkCapsule({
     db: workCapsuleDb(),
     capsuleId,
     actor: currentActor,
+    onHeldByOther: "keep",
   });
 }
 
@@ -130,7 +118,6 @@ async function runAutoRenewedCapsuleWrite(args: {
   return renewLeaseAfterCapsuleWrite(args.capsuleId, currentActor);
 }
 
-const SCOPE_KINDS = new Set<ScopeClaim["kind"]>(["path", "module", "package", "route", "skill", "prompt"]);
 const SCOPE_INTENTS = new Set<ScopeClaim["intent"]>(["edit", "read"]);
 
 function parseClaimInputs(params: Record<string, unknown>): Array<Pick<ScopeClaim, "kind" | "value" | "intent">> | null {
@@ -144,7 +131,7 @@ function parseClaimInputs(params: Record<string, unknown>): Array<Pick<ScopeClai
     const kind = typeof candidate.kind === "string" ? candidate.kind : "";
     const value = typeof candidate.value === "string" ? candidate.value.trim() : "";
     const intent = typeof candidate.intent === "string" ? candidate.intent : "";
-    if (!SCOPE_KINDS.has(kind as ScopeClaim["kind"]) || !SCOPE_INTENTS.has(intent as ScopeClaim["intent"]) || !value) {
+    if (!SCOPE_KIND_SET.has(kind as ScopeClaim["kind"]) || !SCOPE_INTENTS.has(intent as ScopeClaim["intent"]) || !value) {
       return null;
     }
     parsed.push({ kind: kind as ScopeClaim["kind"], value, intent: intent as ScopeClaim["intent"] });
@@ -153,24 +140,7 @@ function parseClaimInputs(params: Record<string, unknown>): Array<Pick<ScopeClai
   return parsed.length > 0 ? parsed : null;
 }
 
-function parseReleaseInputs(params: Record<string, unknown>): Array<Pick<ScopeClaim, "kind" | "value">> | null {
-  const claims = params.claims;
-  if (!Array.isArray(claims)) return null;
-
-  const parsed: Array<Pick<ScopeClaim, "kind" | "value">> = [];
-  for (const claim of claims) {
-    if (!claim || typeof claim !== "object") return null;
-    const candidate = claim as Record<string, unknown>;
-    const kind = typeof candidate.kind === "string" ? candidate.kind : "";
-    const value = typeof candidate.value === "string" ? candidate.value.trim() : "";
-    if (!SCOPE_KINDS.has(kind as ScopeClaim["kind"]) || !value) return null;
-    parsed.push({ kind: kind as ScopeClaim["kind"], value });
-  }
-
-  return parsed.length > 0 ? parsed : null;
-}
-
-export async function listWorkCapsulesTool(params: Record<string, unknown>): Promise<ToolResult> {
+export async function listWorkCapsulesTool(params: Record<string, unknown>, userId: string, context?: ToolExecutionContext): Promise<ToolResult> {
   const status = stringParam(params, "status");
   const decisionScope = stringParam(params, "decisionScope");
   const portfolioRole = stringParam(params, "portfolioRole");
@@ -196,60 +166,17 @@ export async function listWorkCapsulesTool(params: Record<string, unknown>): Pro
     };
   }
 
-  const limit = numberParam(params, "limit");
-  // WS9 (BI-CBAAEA94): `staleOnly` returns only NOT-truly-live capsules (the reap
-  // lens); default false keeps the tool a full inventory. Liveness is derived
-  // from lease/build/sync — never updatedAt (a daily-heartbeat artifact).
-  const staleOnly = params["staleOnly"] === true;
-  const where = {
-    ...(status ? { status } : {}),
-    ...(decisionScope ? { decisionScope } : {}),
-    ...(portfolioRole ? { portfolioRole } : {}),
-  };
-  const take = limit === null ? 50 : Math.min(Math.max(Math.trunc(limit), 1), 100);
-  const { loadCapsuleLivenessInventory } = await import("@/lib/work-capsules/liveness-inventory");
-  const { capsulesAll, livenessSummary } = await loadCapsuleLivenessInventory(prisma as never, { where, take });
-  const capsules = staleOnly ? capsulesAll.filter((c) => !c.isLive) : capsulesAll;
-
-  return {
-    success: true,
-    message:
-      `Listed ${capsules.length} work capsule(s). Liveness (updatedAt is NOT a liveness signal): ` +
-      `${livenessSummary.live} live, ${livenessSummary.reapable} reap-candidate of ${livenessSummary.scanned} scanned.`,
-    data: { capsules, livenessSummary },
-  };
+  const { listWorkroomObservation } = await import("./list-observation");
+  if ((params.cursor !== undefined && typeof params.cursor !== "string")
+    || (params.limit !== undefined && (typeof params.limit !== "number" || !Number.isInteger(params.limit) || params.limit < 1 || params.limit > 100))) {
+    return { success: false, error: "invalid_page_input", message: "Use a string cursor and an integer limit from 1 to 100." };
+  }
+  return listWorkroomObservation(prisma as never, { ...params, status, decisionScope, portfolioRole }, userId, context);
 }
 
-export async function getWorkCapsuleTool(params: Record<string, unknown>): Promise<ToolResult> {
-  const capsuleId = stringParam(params, "capsuleId");
-  if (!capsuleId) {
-    return { success: false, error: "missing_capsuleId", message: "capsuleId is required." };
-  }
-
-  const capsule = await prisma.workroom.findUnique({
-    where: { capsuleId },
-    include: {
-      activities: {
-        orderBy: { recordedAt: "desc" },
-        take: 25,
-      },
-    },
-  });
-
-  if (!capsule) {
-    return {
-      success: false,
-      error: "not_found",
-      message: `Work Capsule ${capsuleId} not found.`,
-    };
-  }
-
-  return {
-    success: true,
-    entityId: capsule.capsuleId,
-    message: `Loaded ${capsule.capsuleId}.`,
-    data: { capsule },
-  };
+export async function getWorkCapsuleTool(params: Record<string, unknown>, userId?: string, context?: ToolContext): Promise<ToolResult> {
+  const { readWorkroomDetail } = await import("./workroom-detail-read.server");
+  return readWorkroomDetail(params, userId, context);
 }
 
 export async function adoptWorktreeTool(
@@ -308,16 +235,8 @@ export async function claimCapsuleScopeTool(
       }),
     });
   } catch (error) {
-    if (error instanceof ScopeOverlapError) {
-      return {
-        success: false,
-        error: "scope_conflict",
-        message:
-          `Scope overlaps ${error.conflicts.length} active claim(s) on another Work Capsule. ` +
-          "Coordinate with the holder, claim different scope, or pass force=true to deliberately co-claim.",
-        data: { conflicts: error.conflicts },
-      };
-    }
+    const refusal = scopeClaimRefusal(error);
+    if (refusal) return refusal;
     throw error;
   }
 
@@ -372,6 +291,9 @@ export async function updateWorkCapsuleStatusTool(
         data: { code: error.result.code, readiness: error.result.decision, recovery },
       };
     }
+    if (error instanceof WorkCapsulePublicationRefusedError) {
+      return publicationRefusedToolResult(error, { capsuleId, status });
+    }
     throw error;
   }
 
@@ -386,7 +308,7 @@ export async function updateWorkCapsuleStatusTool(
 export async function releaseCapsuleScopeTool(
   params: Record<string, unknown>,
   userId: string,
-  context: ToolContext,
+  context: ToolExecutionContext | undefined,
 ): Promise<ToolResult> {
   const capsuleId = stringParam(params, "capsuleId");
   // BI-MCP-EFF-6EBA2407: agents passed a single claim object or empty array and
@@ -402,7 +324,7 @@ export async function releaseCapsuleScopeTool(
       data: { retryable: false },
     };
   }
-  const claims = parseReleaseInputs(params);
+  const claims = parseScopeReleaseClaims(params.claims);
   if (!capsuleId || !claims) {
     return {
       success: false,
@@ -417,6 +339,7 @@ export async function releaseCapsuleScopeTool(
 
   const db = workCapsuleDb();
   try {
+    const ownScopeOnly = await scopeReleaseWasOrdinary(userId, context);
     const renewedCapsule = await runAutoRenewedCapsuleWrite({
       capsuleId,
       userId,
@@ -426,6 +349,7 @@ export async function releaseCapsuleScopeTool(
         capsuleId,
         claims,
         actor: currentActor,
+        ownScopeOnly,
       }),
     });
 
@@ -487,7 +411,7 @@ export async function createWorkCapsuleTool(
     ? executorKind
     : null;
   try {
-    normalizeWorkCapsuleScopeInput(parseScopeInput(params));
+    normalizePersistedScope(parseScopeInput(params));
   } catch (error) {
     return invalidScopeResult(error);
   }
@@ -510,10 +434,14 @@ export async function createWorkCapsuleTool(
   if (!bound.created) return bound.refusal;
   const capsule = bound.capsule;
   await ensureCapsuleWorkItemAnchorNonFatal(capsule, "created");
+  // BI-36FC2981: a created room is born owned, exactly as an adopted one is.
+  const ownership = capsule.backlogItemId
+    ? await establishNewRoomOwnership(workCapsuleDb(), capsule.id, resolvedActor, "create")
+    : null;
   return {
     success: true,
     entityId: capsule.capsuleId,
-    message: `Created Work Capsule ${capsule.capsuleId}.`,
+    message: [`Created Work Capsule ${capsule.capsuleId}.`, ownership ?? ""].filter(Boolean).join(" "),
     data: { capsule },
   };
 }
@@ -583,11 +511,22 @@ export async function heartbeatCapsuleTool(
     return { success: false, error: "missing_capsuleId", message: "capsuleId is required." };
   }
 
-  const capsule = await heartbeatWorkCapsule({
-    db: workCapsuleDb(),
-    capsuleId,
-    actor: await actor(userId, context),
-  });
+  let capsule;
+  try {
+    capsule = await heartbeatWorkCapsule({
+      db: workCapsuleDb(),
+      capsuleId,
+      actor: await actor(userId, context),
+    });
+  } catch (error) {
+    if (!(error instanceof WorkroomLeaseHeldError)) throw error;
+    return {
+      success: false,
+      error: error.code,
+      message: error.message,
+      data: { holderPrincipalId: error.holderPrincipalId, leaseExpiresAt: error.leaseExpiresAt.toISOString() },
+    };
+  }
 
   return {
     success: true,
@@ -602,46 +541,7 @@ export async function reassignCapsuleExecutorTool(
   userId: string,
   context: ToolContext,
 ): Promise<ToolResult> {
-  const capsuleId = stringParam(params, "capsuleId");
-  const toExecutorKind = stringParam(params, "toExecutorKind");
-  if (!capsuleId || !toExecutorKind) {
-    return { success: false, error: "invalid_input", message: "capsuleId and toExecutorKind are required." };
-  }
-  if (!isWorkCapsuleExecutorKind(toExecutorKind)) {
-    return {
-      success: false,
-      error: "invalid_executor_kind",
-      message: `toExecutorKind must be one of: ${WORK_CAPSULE_EXECUTOR_KINDS.join(", ")}.`,
-    };
-  }
-  const manifest =
-    params["handoffManifest"] && typeof params["handoffManifest"] === "object" && !Array.isArray(params["handoffManifest"])
-      ? (params["handoffManifest"] as Record<string, unknown>)
-      : undefined;
-
-  try {
-    const capsule = await reassignWorkCapsuleExecutor({
-      db: workCapsuleDb(),
-      capsuleId,
-      toExecutorKind,
-      toExecutorRef: stringParam(params, "toExecutorRef") ?? undefined,
-      reason: stringParam(params, "reason") ?? undefined,
-      handoffManifest: manifest,
-      actor: await actor(userId, context),
-    });
-    return {
-      success: true,
-      entityId: capsule.capsuleId,
-      message: `Reassigned ${capsule.capsuleId} to ${toExecutorKind}; lease transferred.`,
-      data: { capsule },
-    };
-  } catch (error) {
-    return {
-      success: false,
-      error: "reassign_failed",
-      message: getErrorMessage(error),
-    };
-  }
+  return reassignCapsuleExecutor({ params, db: workCapsuleDb(), resolveActor: () => actor(userId, context) });
 }
 
 export async function recordCapsuleEvidenceTool(
@@ -671,6 +571,10 @@ export async function recordCapsuleEvidenceTool(
   const evidence: {
     kind: WorkCapsuleEvidenceKind;
     summary: string;
+    // The stage this evidence completes. Without it the drive cannot tell a
+    // stage outcome from a room-level note, and the stage never advances.
+    stageKey?: string;
+    outcome?: StageEvidenceOutcome;
     command?: string;
     url?: string;
     targetId?: string;
@@ -681,6 +585,22 @@ export async function recordCapsuleEvidenceTool(
     kind: rawKind,
     summary,
   };
+  const stageKey = stringParam(params, "stageKey");
+  if (stageKey) {
+    // Stage evidence must say what happened. A coworker that could not do the
+    // work records that too, through this same write — and a blocker must never
+    // be read as the stage being done. Refuse rather than guess (fail closed).
+    const outcome = stringParam(params, "outcome");
+    if (!outcome || !(STAGE_EVIDENCE_OUTCOMES as readonly string[]).includes(outcome)) {
+      return {
+        success: false,
+        error: "invalid_outcome",
+        message: `Stage evidence needs outcome: ${STAGE_EVIDENCE_OUTCOMES.join(" or ")} — "completed" when the stage's work is done, "blocked" with what stopped you.`,
+      };
+    }
+    evidence.stageKey = stageKey;
+    evidence.outcome = outcome as StageEvidenceOutcome;
+  }
   const command = stringParam(params, "command");
   const url = stringParam(params, "url");
   const targetId = stringParam(params, "targetId");
@@ -706,11 +626,15 @@ export async function recordCapsuleEvidenceTool(
     }),
   });
 
+  // BI-C9912C22: say whether the drive can advance the stage from this, or why not.
+  const stageReach = describeStageEvidenceReach(renewedCapsule.workspaceState, {
+    stageKey: evidence.stageKey ?? null, outcome: evidence.outcome ?? null,
+  });
   return {
     success: true,
     entityId: renewedCapsule.capsuleId,
-    message: `Recorded evidence for ${renewedCapsule.capsuleId}.`,
-    data: { capsule: renewedCapsule },
+    message: [`Recorded evidence for ${renewedCapsule.capsuleId}.`, stageReach?.message].filter(Boolean).join(" "),
+    data: { capsule: renewedCapsule, ...(stageReach ? { stageReach } : {}) },
   };
 }
 
@@ -737,6 +661,11 @@ export async function startExternalWorkTool(
     repositoryFullName: stringParam(params, "repositoryFullName"),
     baseBranch: stringParam(params, "baseBranch"),
   });
+  // Both branches of ensureExternalSessionCapsule create the room without its
+  // WorkItem anchor — the dominant producer of the 289 unreachable rooms
+  // measured on the live install (BI-A5EEB5D1). Anchor it here, the way the
+  // adopt handler does.
+  await anchorCapsuleByIdNonFatal(capsuleId, "started");
 
   return {
     success: true,

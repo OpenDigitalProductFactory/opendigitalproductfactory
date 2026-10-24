@@ -5,7 +5,7 @@ status: active
 # Change-delivery latency — tier by risk, fail open on infrastructure
 
 - **Epic:** EP-ABB3AC9D
-- **Backlog items:** BI-D908DA0A, BI-E58B57EC, BI-D088D06D, BI-8CDA7F95, BI-282AE0BC, BI-C09ECA63, BI-6332DD3D, BI-397EBDD6, BI-2C0A01CD
+- **Backlog items:** BI-D908DA0A, BI-E58B57EC, BI-D088D06D, BI-8CDA7F95, BI-282AE0BC, BI-C09ECA63, BI-6332DD3D, BI-397EBDD6, BI-2C0A01CD, BI-41C3E303, BI-3A008EBC
 - **Decision ledger:** DI-0DD38401DF9F (`principle_decide`, high stakes, no commandment conflict)
 - **Profile:** refactor
 - **Authored:** 2026-08-29
@@ -370,6 +370,119 @@ Stated as an invariant that a guard can enforce:
 Commandment-tier checks — auth, DCO, secret scanning, migration safety — are
 explicitly out of scope for every tiering, sampling and caching change in this
 spec. They run in every tier they run in today.
+
+#### Corollary: a qualifier on a PASS may never be read as a verdict (BI-41C3E303, 2026-09-10)
+
+The invariant above constrains what a gate may **write**. It said nothing about
+what the reader may **conclude**, and the reader found a way around it.
+
+`evidencePending` means *the gate passed and publication of that pass has not
+finished*. It is a qualifier on a PASS. But `gate-worktree.mjs` legitimately
+writes it alongside `gatePassed: false` for `blocked_control_plane_starvation`,
+because the local evidence is worth preserving across a control-plane outage even
+when the run never graded the diff. `classifySlotRecord` tested `evidencePending`
+**before** `gatePassed`, so such a record short-circuited into:
+
+```
+local-CI gate: PENDING
+  reason  gate passed but evidence publication is pending (tool_threw) — finish with: pnpm run pregate -- --finalize-evidence
+```
+
+Observed on `fix/principle-decide-requires-option-id` @ `04f681eae8d6`. The gate
+had not passed, and `--finalize-evidence` then refused with *no exact published
+PASS is available to finalize* — the authoritative verdict surface asserted a
+state its own record contradicted, and sent the operator to an action that cannot
+succeed. That is the failure `make-silent-failures-observable` forbids, arriving
+through the reader rather than the writer.
+
+So the invariant extends:
+
+> A field that qualifies a PASS is never evaluated before the record is known to
+> BE a pass. `classifySlotRecord` classifies `gatePassed !== true` first, and
+> reaches the PENDING branch only on a record that passed.
+
+Concretely: the unpassed-record classification is extracted into
+`classifyUnpassedRecord`, and the PENDING branch now sits after it, so no future
+qualifier can be inserted above the pass check by accident. A record whose gate
+did not pass and that still holds unpublished evidence reports its real verdict —
+`INCONCLUSIVE` for the infrastructure statuses, `FAIL` for a genuine failure — and
+its reason names the pending publication as *not* a pass, without naming
+`--finalize-evidence`, whose only correct next action is to re-gate the SHA.
+
+The two other consumers of these records were already correct and are unchanged:
+`.githooks/pre-push-gate` exits on `gatePassed !== true` before it ever looks at
+`evidencePending`, and `scripts/pr-health.mjs` tests
+`gatePassed !== true || evidencePending === true`. Only the reader disagreed with
+them.
+
+#### Corollary: naming the reason is part of the invariant (BI-3A008EBC, 2026-09-12)
+
+The invariant says an infrastructure block *"reports `INCONCLUSIVE`, **names the
+recorded reason**, and leaves the SHA re-runnable."* The probe that produces that
+reason could not name it.
+
+`scripts/local-ci-bounded-build.mjs` sampled docker through
+`commandHealthy("docker", ["info"], …)`, which resolved a **boolean** with
+`stdio: "ignore"`. Exit code, stderr and spawn error were all discarded, and
+`timedProbe` mapped every non-true value to one string. Four conditions with four
+different operator actions became `docker:invalid-response`:
+
+| actual condition | correct next action | reported |
+| --- | --- | --- |
+| engine wedged, daemon answered HTTP 500 | recover the engine — clear the orphaned AF_UNIX sockets (BI-DDA569D9) | `invalid-response` |
+| engine not running, named pipe absent | start Docker | `invalid-response` |
+| `docker` not on PATH (spawn ENOENT) | repair the toolchain | `invalid-response` |
+| engine healthy but slow | free host memory, or wait | `invalid-response` |
+
+Observed 2026-09-10 on `fix/pregate-status-pending-requires-gate-passed`: two gate
+attempts abandoned with
+`blocked_control_plane_starvation docker:invalid-response,postgres:invalid-response`
+while the host had **13 GB free**. Nothing was starved; the engine was wedged.
+BI-DDA569D9 records **seven** occurrences of that wedge, *"every one worked around
+by hand and never diagnosed"* — the gate ran through several of them and blamed
+memory each time.
+
+`docker info` already prints the distinguishing sentence — *"request returned 500
+Internal Server Error … check if the server supports the requested API version"*
+versus *"open //./pipe/dockerDesktopLinuxEngine: The system cannot find the file
+specified"* — and `stdio: "ignore"` threw it away.
+
+So the invariant extends:
+
+> Naming the reason means naming the reason **observed**, not a category. A probe
+> that discards the evidence distinguishing two causes has not named either, and a
+> status value asserting a cause the probe never established is a fabrication even
+> when the verdict is correct.
+
+Concretely: `commandHealthy` returns `{ healthy, exitCode, stderrTail, spawnError,
+timedOut }`; `classifyDockerProbeFailure` maps that to `engine-error (<status>)`,
+`engine-unreachable`, `binary-missing` or `timeout`, and still answers
+`invalid-response` for a shape it does not recognise — an unclassifiable failure is
+not a licence to invent a cause. `timedProbe` carries a probe's own verdict through
+and leaves the boolean probes (portal, MCP, postgres) behaving exactly as before.
+
+The `blocked_control_plane_starvation` status value is **not** renamed: it is
+persisted in gate records and read by `scripts/lib/pregate-status.mjs`. Instead,
+when a docker reason names the engine, the abandonment line carries an advisory
+saying this is not host memory pressure and pointing at the engine recovery. A
+`timeout` or an `invalid-response` earns no advisory, because those genuinely are
+consistent with starvation.
+
+##### The same lines silently bypassed BI-24D5D7C2
+
+`BI-24D5D7C2` established *"a deadline is a deadline"* and taught `timedProbe` to
+classify a rejection as `timeout` rather than `request-failed`. The docker probe
+never reached that code: `commandHealthy` took its **own** `timeoutMs` — handed the
+same `CONTROL_PLANE_PROBE_TIMEOUT_MS` as the `timedProbe` wrapping it — and on
+expiry *resolved `false`* instead of rejecting. Two timers raced on an identical
+deadline, so a genuine docker deadline was labelled `invalid-response`
+nondeterministically. The inner command now owns a strictly shorter budget, so the
+event is classified once, as a timeout.
+
+The general rule, which is why this belongs in the design rather than only in the
+diff: **a helper that collapses a rich failure into a boolean defeats every
+classification built on top of it.** The fix is not a wider set of reason strings;
+it is not throwing the evidence away at the bottom of the stack.
 
 ## Scope — this change
 

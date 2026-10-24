@@ -96,14 +96,13 @@ describe("Golden-Triangle hot-path no-regression", () => {
     expect(governed.budgetClass).not.toBe(baseline.budgetClass);
   });
 
-  it("(b') a coworker's own posture governs over the platform default", async () => {
+  it("(b') a legacy per-agent posture no longer governs — identity is not a posture scope (BI-7ADEBDC1)", async () => {
     const governed = await contractAtSeam(
       "summarization",
       "agent-x",
       client({ platform: BALANCED, perAgent: { "agent-x": ASSURED } }),
     );
-    expect(governed.budgetClass).toBe("quality_first");
-    expect(governed.reasoningDepth).toBe("high");
+    expect(governed.budgetClass).not.toBe("quality_first");
   });
 
   it("never lets a non-Balanced posture get silently overridden by the Assignments budgetClass default", async () => {
@@ -112,7 +111,7 @@ describe("Golden-Triangle hot-path no-regression", () => {
     const governed = await contractAtSeam(
       "summarization",
       "agent-x",
-      client({ perAgent: { "agent-x": ASSURED } }),
+      client({ platform: ASSURED }),
       "balanced", // AgentModelConfig.budgetClass default, always present
     );
     expect(governed.budgetClass).toBe("quality_first");

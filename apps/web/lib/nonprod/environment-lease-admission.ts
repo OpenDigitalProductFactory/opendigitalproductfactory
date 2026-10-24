@@ -34,6 +34,44 @@ function compareQueued(left: AdmissionLease, right: AdmissionLease): number {
  * waiter keeps its FIFO position (it is not expired) but may neither take a
  * slot nor block a younger waiter that is provably alive.
  */
+/**
+ * How long a queued row may go without a beat before it is treated as
+ * abandoned and reaped, rather than holding its reservation to `expiresAt`.
+ *
+ * BI-D35B85BF Wanted 3. A queued row's wait deadline is two hours, so a waiter
+ * whose owner walked away kept a reservation for two hours after the last sign
+ * of life. Measured 2026-09-10: seven queued rows, several with beats frozen
+ * over an hour earlier, against a two-slot pool - the queue looked deep while
+ * most of its depth was abandoned.
+ *
+ * Ten minutes is ~20x the detached resumer's ~30s re-claim cadence and 5x the
+ * 120s admitted TTL, so a live waiter can lose several consecutive re-claims to
+ * a busy host and still keep its place. It only ever applies to environments
+ * that pass it, so an environment whose waiters legitimately beat slowly is
+ * unaffected.
+ */
+export const ABANDONED_QUEUE_ROW_AFTER_MS = 10 * 60_000;
+
+/**
+ * Has this queued row gone silent long enough to be reaped?
+ *
+ * Distinct from `waiterProvesLiveness`, which decides whether a waiter may take
+ * a slot RIGHT NOW: a waiter can fail that check for a few seconds and recover.
+ * This one decides whether the row should exist at all.
+ */
+export function queueRowIsAbandoned(
+  lease: AdmissionLease,
+  now: Date,
+  abandonedAfterMs: number | undefined,
+): boolean {
+  if (abandonedAfterMs === undefined) return false;
+  if (lease.status !== "queued") return false;
+  const lastBeat = lease.heartbeatAt ?? lease.queuedAt ?? null;
+  // No beat recorded at all is not evidence of abandonment; the TTL still bounds it.
+  if (!lastBeat) return false;
+  return now.getTime() - lastBeat.getTime() > abandonedAfterMs;
+}
+
 export function waiterProvesLiveness(
   lease: AdmissionLease,
   now: Date,
@@ -65,14 +103,19 @@ export function planEnvironmentAdmission(input: {
   now: Date;
   slotKeys: string[];
   livenessWindowMs?: number;
+  /** Reap a queued row silent for longer than this (BI-D35B85BF Wanted 3). */
+  abandonedWaiterAfterMs?: number;
   admissibleLeaseIds?: string[];
 }): EnvironmentAdmissionPlan {
   const slotKeys = [...new Set(input.slotKeys)].sort((left, right) =>
     left.localeCompare(right));
   const expiredLeaseIds = input.leases
     .filter((lease) =>
-      (lease.status === "active" || lease.status === "queued")
-      && lease.expiresAt.getTime() <= input.now.getTime())
+      ((lease.status === "active" || lease.status === "queued")
+        && lease.expiresAt.getTime() <= input.now.getTime())
+      // A queued row whose owner stopped beating is reaped now rather than
+      // holding a reservation until its two-hour wait deadline.
+      || queueRowIsAbandoned(lease, input.now, input.abandonedWaiterAfterMs))
     .map((lease) => lease.id)
     .sort((left, right) => left.localeCompare(right));
   const expired = new Set(expiredLeaseIds);

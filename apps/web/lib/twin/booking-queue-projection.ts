@@ -1,4 +1,4 @@
-import type { QueueItemData } from "@/components/twin";
+import type { QueueItemData } from "./kit-types";
 
 import {
   humanizeWait,

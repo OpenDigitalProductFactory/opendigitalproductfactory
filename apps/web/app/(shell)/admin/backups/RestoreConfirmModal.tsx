@@ -8,6 +8,7 @@ import {
 } from "@/lib/actions/backup-restore";
 import { RESTORE_CONFIRMATION_TEXT } from "@/lib/operate/backups/restore-types";
 import type { RestoreImpactPreview } from "@/lib/operate/backups/restore-types";
+import { formatTimestamp } from "@/lib/datetime";
 
 interface Props {
   preview: RestoreImpactPreview;
@@ -20,11 +21,6 @@ function formatBytes(n: number | null): string {
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
   if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
   return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`;
-}
-
-function formatTimestamp(s: string | null): string {
-  if (!s) return "—";
-  return new Date(s).toLocaleString();
 }
 
 export function RestoreConfirmModal({ preview, onClose, onConfirmed }: Props) {
@@ -68,18 +64,10 @@ export function RestoreConfirmModal({ preview, onClose, onConfirmed }: Props) {
         <div className="flex items-start justify-between mb-4">
           <div>
             <h2 className="text-lg font-bold text-[var(--dpf-text)]">
-              {preview.target === "neo4j"
-                ? "Restore Neo4j from backup"
-                : preview.target === "qdrant"
-                  ? "Restore Qdrant from backup"
-                  : "Restore Postgres from backup"}
+              Restore Postgres from backup
             </h2>
             <p className="text-xs text-[var(--dpf-muted)] mt-1">
-              {preview.target === "neo4j"
-                ? "This replaces the graph database with the selected dump. Neo4j restarts briefly."
-                : preview.target === "qdrant"
-                  ? "This replaces all Qdrant vector collections with the selected snapshot."
-                  : "This action replaces the current database with the contents of the selected dump."}
+              This action replaces the current database with the contents of the selected dump.
             </p>
           </div>
           <button

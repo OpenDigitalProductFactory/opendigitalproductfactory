@@ -33,7 +33,8 @@ import {
   estimateModelVramGb,
   type HostMemory,
 } from "./local-model-policy";
-import { getServedContextTokens, setServedContextTokens } from "./dmr-runtime-config";
+import { getServedContextTokens, setServedContextTokens, getLocalThinkingBudgetEvidence } from "./dmr-runtime-config";
+import { canonicalLocalModelKey } from "./local-model-management";
 import type { LocalPresence } from "@/lib/routing/local-tool-ceiling";
 
 /**
@@ -280,14 +281,15 @@ type LocalGenerationProbe =
 
 async function probeLocalGenerationModel(
   fetchImpl: typeof fetch = fetch,
+  selected?: { modelId: string; provider?: Parameters<typeof getOllamaBaseUrl>[0] },
 ): Promise<LocalGenerationProbe> {
   // Wrap so getServedContextTokens' internal GET also gets a timeout (it issues
   // its own fetch without a signal), so a hung DMR can never stall a coworker turn.
   const withTimeout: typeof fetch = (url, init) =>
     fetchImpl(url, { ...init, signal: init?.signal ?? AbortSignal.timeout(2500) });
   try {
-    const oaiBase = getOllamaBaseUrl().replace(/\/$/, "");
-    const apiRoot = getOllamaApiRoot();
+    const oaiBase = getOllamaBaseUrl(selected?.provider).replace(/\/$/, "");
+    const apiRoot = getOllamaApiRoot(selected?.provider);
     const modelsUrl = oaiBase.endsWith("/v1") ? `${oaiBase}/models` : `${oaiBase}/v1/models`;
     let modelId: string | null = null;
     let cardDefault: number | null = null;
@@ -299,7 +301,8 @@ async function probeLocalGenerationModel(
       const body = (await res.json()) as {
         data?: Array<{ id?: string; dmr?: { context_window?: number } }>;
       };
-      const gen = (body.data ?? []).find((m) => m.id && !isEmbeddingModelId(m.id));
+      const gen = (body.data ?? []).find((m) => m.id && !isEmbeddingModelId(m.id) &&
+        (!selected || canonicalLocalModelKey(m.id) === canonicalLocalModelKey(selected.modelId)));
       modelId = gen?.id ?? null;
       cardDefault = typeof gen?.dmr?.context_window === "number" ? gen.dmr.context_window : null;
     } catch (err) {
@@ -309,6 +312,10 @@ async function probeLocalGenerationModel(
     // POSITIVE finding of absence, not a failure to read.
     if (!modelId) return { status: "no-model" };
     const served = await getServedContextTokens(apiRoot, modelId, withTimeout);
+    // Admission cannot substitute advertised capacity for an unread runtime.
+    if (selected && !served.supported) {
+      return { status: "unreachable", reason: served.reason ?? "runtime context unavailable" };
+    }
     // Override wins; else the card default is what DMR actually serves right now.
     return { status: "served", modelId, contextTokens: served.contextTokens ?? cardDefault ?? null };
   } catch (err) {
@@ -334,9 +341,23 @@ async function probeLocalGenerationModel(
  */
 export async function resolveLocalServedContextTokens(
   fetchImpl: typeof fetch = fetch,
+  selected?: { modelId: string; provider?: Parameters<typeof getOllamaBaseUrl>[0] },
 ): Promise<number | null> {
-  const probe = await probeLocalGenerationModel(fetchImpl);
-  return probe.status === "served" ? probe.contextTokens : null;
+  const probe = await probeLocalGenerationModel(fetchImpl, selected);
+  const tokens = probe.status === "served" ? probe.contextTokens : null;
+  return tokens !== null && Number.isSafeInteger(tokens) && tokens > 0 ? tokens : null;
+}
+
+/** Selected runtime facts for routing, without mutating or loading the model. */
+export async function resolveLocalRoutingRuntime(
+  fetchImpl: typeof fetch = fetch,
+  selected: { modelId: string; provider?: Parameters<typeof getOllamaBaseUrl>[0] },
+): Promise<{ contextTokens: number | null; thinkingBudgetEvidence?: import("@/lib/routing/types").LocalThinkingBudgetEvidence }> {
+  const contextTokens = await resolveLocalServedContextTokens(fetchImpl, selected);
+  const thinkingBudgetEvidence = contextTokens === null ? undefined : await getLocalThinkingBudgetEvidence(
+    getOllamaApiRoot(selected.provider), selected.modelId, fetchImpl,
+  );
+  return { contextTokens, ...(thinkingBudgetEvidence ? { thinkingBudgetEvidence } : {}) };
 }
 
 /**

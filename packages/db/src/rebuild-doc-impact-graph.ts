@@ -12,7 +12,7 @@
 // knows a default location", which is the same shape as every other rebuild
 // runner in this package.
 //
-// Mirrors neo4j-rebuild-documents.ts: clear the labels this projection owns, then
+// Mirrors rebuild-documents-graph.ts: clear the labels this projection owns, then
 // re-project. Clearing first is what makes an edge REMOVED from the manifest
 // actually disappear — projectDocImpactManifest alone is upsert-only.
 

@@ -32,6 +32,16 @@
       "memory": "1g",
       "cpus": "1.0",
       "rationale": "Durable execution engine; promoted to the core runtime and bounded independently from the portal."
+    },
+    "loki": {
+      "memory": "1g",
+      "cpus": "1.0",
+      "rationale": "Log store with 14-day retention; promoted to the core runtime (BI-F8024A9D) because log capture must not be optional. Bounded so a flooding container costs disk and retention, never the host."
+    },
+    "alloy": {
+      "memory": "512m",
+      "cpus": "0.5",
+      "rationale": "Log shipper tailing the Docker socket; promoted alongside loki (BI-F8024A9D). Small steady footprint — it forwards rather than stores."
     }
   },
   "optionalProfileServices": {
@@ -40,6 +50,29 @@
       "cpus": "2.0",
       "profiles": ["runtime-local-speech", "tts"],
       "notes": "BI-A0A0568F: keep profile-gated; do not promote to always-on. Idle-process elimination is the preferred long-term path."
+    },
+    "prometheus": {
+      "memory": "1g",
+      "cpus": "1.0",
+      "profiles": ["runtime-deep-observability", "observability-ui"],
+      "notes": "BI-D6769E2F: operator-chosen monitoring (BI-83260BB3). 15-day TSDB over the platform's own scrape targets. Initial bound; measured steady state is recorded once monitoring is turned on, and any bound above 70% steady state is raised."
+    },
+    "grafana": {
+      "memory": "512m",
+      "cpus": "0.5",
+      "profiles": ["runtime-deep-observability", "observability-ui"],
+      "notes": "BI-D6769E2F: power-user dashboards; idle most of the time. Initial bound, verified with prometheus."
+    },
+    "postgres-exporter": {
+      "memory": "128m",
+      "cpus": "0.25",
+      "profiles": ["runtime-deep-observability", "observability-ui"],
+      "notes": "BI-D6769E2F: single small Go exporter polled by prometheus. Initial bound, verified with prometheus."
+    },
+    "sandbox": {
+      "cpus": "4.0",
+      "profiles": ["runtime-build"],
+      "notes": "BI-F5D4FA50: Build Studio sandbox. CPU-bounded so one build cannot close the local-CI pool for host-cpu-high; vitest and jest workers capped at 2 in its env. No memory ceiling yet: next build and tsc inside it have not been sized, and an OOM-killed build is worse than a slow one."
     }
   }
 }

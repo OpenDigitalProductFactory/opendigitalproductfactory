@@ -25,6 +25,7 @@
 //   it is exhaustively unit-testable.
 
 import { WORK_CAPSULE_IDLE_STALE_MS } from "@/lib/work-capsules";
+import type { PrFollowThroughStatus } from "@/lib/build/pr-follow-through";
 
 /** Capsule statuses that mean the work is already closed out. */
 const TERMINAL_STATUSES = new Set(["complete", "abandoned", "archived"]);
@@ -44,6 +45,10 @@ const TERMINAL_TASK_RUN_STATUSES = new Set([
 export type WorkCapsuleLiveness =
   /** Demonstrably live: valid lease, open PR, or recent real activity. */
   | "live"
+  /** The room's PR is open and red, no repair is in flight and the repair
+   *  budget is spent or withheld: it waits on a person (BI-88341B5D §3.7).
+   *  Held (never reaped while the PR is open) but not working. */
+  | "stalled"
   /** Work is DELIVERED: its branch head is reachable from the trunk (merged).
    *  The session need not resume; the room is closed out as delivered, not
    *  abandoned. Detected procedurally from local git reachability — no LLM, no
@@ -58,6 +63,13 @@ export type WorkCapsuleLiveness =
   /** Lease-backed executor whose lease elapsed past the resume grace — the
    *  session is truly gone. */
   | "lease-expired"
+  /** Lease is VALID but nothing says work is happening. `heartbeatWorkCapsule`
+   *  writes only `leaseHolderPrincipalId` and `leaseExpiresAt`, so a loop that
+   *  only heartbeats renews the lease forever with nothing to show for it. The
+   *  room is held, not worked. NOT reapable: the lease is still valid and the
+   *  holder may resume at any moment — the reaper waits for expiry as before
+   *  (BI-7271460C). */
+  | "leased-idle"
   /** Linked Build Studio build is complete/failed/abandoned — nothing to do. */
   | "build-terminal"
   /** Linked TaskRun/turn is terminal while stale session state still claims activity. */
@@ -70,6 +82,18 @@ export type WorkCapsuleLiveness =
   | "terminal"
   /** Null lease, no build/sync signal, but recent enough to withhold judgment. */
   | "no-signal";
+
+/**
+ * Is an agent demonstrably WORKING in this room, as opposed to merely holding it?
+ *
+ * `isLive` on the verdict answers the weaker, safety-oriented question ("is it
+ * held — do not steal or reap"), which `leased-idle` satisfies. An operator
+ * surface asking "who is actually working" must ask this instead, or it repeats
+ * the conflation this exists to remove (BI-7271460C).
+ */
+export function isDemonstrablyWorking(liveness: WorkCapsuleLiveness): boolean {
+  return liveness === "live" || liveness === "durable-wait";
+}
 
 /** How a governed reaper should close a room the classifier says to act on. */
 export type WorkCapsuleDisposition =
@@ -96,6 +120,10 @@ const REAPABLE_LIVENESS = new Set<WorkCapsuleLiveness>([
  *  DELIVERED (merged) room bypasses the grace: it need not resume. */
 export const WORK_CAPSULE_PAUSE_GRACE_MS = 24 * 60 * 60 * 1000;
 
+/** Provider "open" is a renewable liveness fact, not a permanent property. */
+export const WORK_CAPSULE_OPEN_PR_FRESHNESS_MS = 20 * 60 * 1000;
+const PROVIDER_CLOCK_SKEW_MS = 5 * 60 * 1000;
+
 export type CapsuleLivenessInput = {
   status: string;
   executorKind: string | null;
@@ -104,6 +132,11 @@ export type CapsuleLivenessInput = {
   updatedAt: Date;
   pullRequestUrl: string | null;
   pullRequestNumber?: number | null;
+  /** Verified provider state for this exact repository/PR/authored-head tuple. */
+  pullRequestObservation?: {
+    state: "open" | "merged" | "closed";
+    observedAt: Date;
+  } | null;
   /**
    * Snapshot of the linked Build Studio FeatureBuild, when this capsule is a
    * build-studio capsule and the caller has loaded it. `phase` drives the
@@ -115,12 +148,18 @@ export type CapsuleLivenessInput = {
   taskRun?: { status: string | null; updatedAt: Date | null } | null;
   durableWait?: { state: "queued" | "active"; signaledAt: Date | null } | null;
   /**
-   * Whether this capsule's work is DELIVERED, computed by the caller from LOCAL
-   * git reachability (branch head reachable from the trunk = merged) — never the
-   * GitHub PR API and never an LLM. When `merged` is true the room is closed out
-   * as delivered regardless of lease state. Absent/null when not computed.
+   * Whether this capsule's work is DELIVERED, computed by the caller from a
+   * verified provider observation or positive local git reachability — never an
+   * LLM. When `merged` is true the room is closed out regardless of lease state.
    */
   deliveredSignal?: { merged: boolean } | null;
+  /**
+   * The room's PR follow-through status and when the reconciler last read it
+   * from the provider (BI-88341B5D §3.7). An open PR counts as live only while
+   * follow-through is watching, repairing or queued; awaiting a person reads
+   * `stalled`. Absent for callers that have not loaded it.
+   */
+  prFollowThrough?: { status: PrFollowThroughStatus; observedAt: Date } | null;
 };
 
 export type CapsuleLivenessVerdict = {
@@ -145,8 +184,42 @@ export type CapsuleLivenessVerdict = {
   trueLivenessAt: Date | null;
 };
 
-function hasOpenPr(input: CapsuleLivenessInput): boolean {
-  return Boolean(input.pullRequestUrl) || (input.pullRequestNumber ?? 0) > 0;
+function freshFollowThrough(input: CapsuleLivenessInput, now: Date): PrFollowThroughStatus | null {
+  const followThrough = input.prFollowThrough;
+  if (!followThrough) return null;
+  const age = now.getTime() - followThrough.observedAt.getTime();
+  return age >= -PROVIDER_CLOCK_SKEW_MS && age <= WORK_CAPSULE_OPEN_PR_FRESHNESS_MS ? followThrough.status : null;
+}
+
+function hasOpenPr(input: CapsuleLivenessInput, now: Date): boolean {
+  if (
+    !input.pullRequestObservation ||
+    input.pullRequestObservation.state !== "open" ||
+    (!input.pullRequestUrl && (input.pullRequestNumber ?? 0) <= 0)
+  ) {
+    return false;
+  }
+  const age = now.getTime() - input.pullRequestObservation.observedAt.getTime();
+  return age >= -PROVIDER_CLOCK_SKEW_MS && age <= WORK_CAPSULE_OPEN_PR_FRESHNESS_MS;
+}
+
+/**
+ * The freshest signal that only advances when real work happens.
+ *
+ * Deliberately excludes `leaseExpiresAt` (a heartbeat moves it with no work
+ * behind it) and `updatedAt` (the 14:00 birth-time mask). Shared by the leased
+ * and null-lease branches so both answer "is work happening" the same way,
+ * rather than the lease branch answering an easier question (BI-7271460C).
+ */
+function freshestWorkSignal(
+  input: CapsuleLivenessInput,
+  build: { lastActivityAt?: Date | null } | null,
+): Date | null {
+  const buildActivityAt = build?.lastActivityAt ?? null;
+  if (buildActivityAt && input.lastSyncedAt) {
+    return new Date(Math.max(buildActivityAt.getTime(), input.lastSyncedAt.getTime()));
+  }
+  return buildActivityAt ?? input.lastSyncedAt ?? null;
 }
 
 function humanAge(ms: number): string {
@@ -181,10 +254,18 @@ export function classifyWorkCapsuleLiveness(
     liveness,
     // `paused` reads as live so a token-limited session that may resume is never
     // shown as dead or reaped; `delivered` does NOT (it should be closed out).
+    // `isLive` answers "is this room HELD — keep hands off", which is what
+    // ownership, claim refusal and the reaper all need. It is NOT "is an agent
+    // demonstrably working": `leased-idle` is held under a valid lease with
+    // nothing to show, and weakening it here would let a second agent steal a
+    // branch someone still holds. Ask `liveness === "live"` for the stronger
+    // question; the two were one field and that was the defect (BI-7271460C).
     isLive:
       liveness === "live" ||
+      liveness === "stalled" ||
       liveness === "durable-wait" ||
       liveness === "no-signal" ||
+      liveness === "leased-idle" ||
       liveness === "paused",
     isReapable: REAPABLE_LIVENESS.has(liveness),
     disposition:
@@ -201,10 +282,8 @@ export function classifyWorkCapsuleLiveness(
     return verdict("terminal", `Capsule already ${input.status}.`, null);
   }
 
-  // DELIVERED wins over every liveness signal: if the branch head is reachable
-  // from the trunk (merged — computed locally, no GitHub API, no LLM) the work
-  // is done and the session need not resume, so close out as delivered rather
-  // than waiting on a lease or mislabelling it abandoned.
+  // DELIVERED wins over every liveness signal. The caller may prove it from an
+  // exact authenticated provider merge or positive local trunk reachability.
   if (input.deliveredSignal?.merged) {
     return verdict(
       "delivered",
@@ -215,9 +294,30 @@ export function classifyWorkCapsuleLiveness(
 
   // An open PR is the live artifact even if the authoring session's lease has
   // since lapsed — the work is in review / the merge queue, not abandoned.
-  if (hasOpenPr(input)) {
-    const label = input.pullRequestNumber ? `PR #${input.pullRequestNumber}` : "an open PR";
-    return verdict("live", `Parked in review as ${label}.`, input.lastSyncedAt ?? null);
+  // Liveness reads CI (BI-88341B5D §3.7): an open PR is live only while its
+  // follow-through is moving it; a red PR waiting on a person is stalled.
+  const followThrough = freshFollowThrough(input, now);
+  const prLabel = input.pullRequestNumber ? `PR #${input.pullRequestNumber}` : "an open PR";
+  if (followThrough === "awaiting-person") {
+    return verdict(
+      "stalled",
+      `${prLabel} is red with no repair in flight; it waits on a person (see the room's PR follow-through activity).`,
+      input.prFollowThrough?.observedAt ?? null,
+    );
+  }
+  if (followThrough === "watching" || followThrough === "repairing" || followThrough === "queued") {
+    return verdict(
+      "live",
+      `${prLabel} is open; follow-through is ${followThrough} (verified provider observation).`,
+      input.prFollowThrough?.observedAt ?? null,
+    );
+  }
+  if (hasOpenPr(input, now)) {
+    return verdict(
+      "live",
+      `Parked in review as ${prLabel} (verified provider observation).`,
+      input.pullRequestObservation?.observedAt ?? null,
+    );
   }
 
   const taskRun = input.taskRun ?? null;
@@ -278,16 +378,44 @@ export function classifyWorkCapsuleLiveness(
         input.leaseExpiresAt,
       );
     }
+    // A valid lease says someone HOLDS this room. It does not say work is
+    // happening, and the two were conflated (BI-7271460C). `heartbeatWorkCapsule`
+    // updates only the lease holder and expiry — no sync, no evidence — so an
+    // agent that heartbeats every 30 minutes and does nothing else reads exactly
+    // like an agent delivering. WC-1B73A988 read `live` for three days on a
+    // branch whose PR had already merged, because the lease alone answered.
+    //
+    // So the lease is necessary, not sufficient: it must be backed by the same
+    // real signal the null-lease branch below already demands. `leaseExpiresAt`
+    // is deliberately NOT a candidate signal here — that is the circularity.
     const remaining = humanAge(input.leaseExpiresAt.getTime() - now.getTime());
-    return verdict("live", `Lease valid for ${remaining}.`, input.leaseExpiresAt);
+    const leasedSignalAt = freshestWorkSignal(input, build);
+    if (leasedSignalAt) {
+      const age = now.getTime() - leasedSignalAt.getTime();
+      if (age <= idleMs) {
+        return verdict(
+          "live",
+          `Lease valid for ${remaining}; work signal ${humanAge(age)} ago.`,
+          leasedSignalAt,
+        );
+      }
+      return verdict(
+        "leased-idle",
+        `Lease valid for ${remaining}, but no work signal for ${humanAge(age)} (past the ${humanAge(idleMs)} idle floor) — a heartbeat renews the lease without doing work.`,
+        leasedSignalAt,
+      );
+    }
+    return verdict(
+      "leased-idle",
+      `Lease valid for ${remaining}, but nothing has recorded work on this room — a heartbeat renews the lease without doing work.`,
+      null,
+    );
   }
 
-  // Null lease (e.g. a Build Studio capsule): use the freshest REAL signal.
-  const buildActivityAt = build?.lastActivityAt ?? null;
-  const signalAt =
-    buildActivityAt && input.lastSyncedAt
-      ? new Date(Math.max(buildActivityAt.getTime(), input.lastSyncedAt.getTime()))
-      : buildActivityAt ?? input.lastSyncedAt ?? null;
+  // Null lease (e.g. a Build Studio capsule): use the freshest REAL signal — the
+  // same one the leased branch above now demands, from the same helper, so the
+  // two branches cannot drift into answering different questions.
+  const signalAt = freshestWorkSignal(input, build);
 
   if (signalAt) {
     const age = now.getTime() - signalAt.getTime();

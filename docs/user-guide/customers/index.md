@@ -78,6 +78,15 @@ The section navigation is permission-aware:
   of the funnel is fed by your **direct and reseller leads** (accounts in the
   early prospect/qualified lifecycle stages), so a direct- or channel-sourced
   pipeline is represented without a storefront.
+- **Customer map** (`/customer?view=map`) — your customer sites on a street
+  map, the sites that are not on it yet, and your service areas. Administrators
+  also see which street maps your locations need and whether they are
+  installed. See [Customer map](customer-map.md) and
+  [Map packs](../platform/map-packs.md).
+- **Footprint** (`/customer/footprint`) — a world map by country of where you
+  sell, where your customers are, where you are deployed, and where an
+  English-only product fits, with a table of the same numbers. Customers with no
+  site address are counted as "Not placed". See [Market footprint](market-footprint.md).
 - **Marketing** (`/customer/marketing`) — acquisition strategy, campaigns,
   approval queues, publishing, and proposed automation. This tab requires the
   marketing capability and is covered in [Marketing](marketing.md).
@@ -261,6 +270,8 @@ pitch (how many tools the platform consolidates) before a sales conversation.
 
 ## Related Guides
 
+- [Market footprint](market-footprint.md)
+- [Customer map](customer-map.md)
 - [Marketing](marketing.md)
 - [Storefront setup and launch](../storefront/setup-and-launch.md)
 - [Storefront inbox and enquiries](../storefront/inbox-and-enquiries.md)

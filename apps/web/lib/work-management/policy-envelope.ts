@@ -5,6 +5,7 @@ import {
   type WorkCaseAccountabilityDenialReason,
 } from "./accountability";
 import { getWorkCaseAction } from "./action-registry";
+import { gateDenialContract, type GateDisposition } from "./gate-shaping";
 import type {
   WorkCaseActionVerb,
   WorkCaseEnforcementMode,
@@ -89,13 +90,30 @@ export type WorkCasePolicyDecision =
       ok: false;
       reason: WorkCasePolicyDenialReason;
       message: string;
+      /**
+       * What KIND of no this is (BI-81780B4A): one the caller can shape and
+       * retry, one that needs a person, or one that never yields. Without it
+       * every refusal read the same, so a coworker either stopped on something
+       * it could have fixed in one move or ground against a stop that was
+       * never going to give.
+       */
+      disposition: GateDisposition;
+      /** What to change before retrying. Null for escalate and hard-no. */
+      shapeHint: string | null;
     };
 
 function deny(
   reason: WorkCasePolicyDenialReason,
   message: string,
 ): WorkCasePolicyDecision {
-  return { ok: false, reason, message };
+  const contract = gateDenialContract(reason);
+  return {
+    ok: false,
+    reason,
+    message,
+    disposition: contract.disposition,
+    shapeHint: contract.shapeHint,
+  };
 }
 
 function requiresApprovedCoworkerEnvelope(input: WorkCasePolicyInput): boolean {

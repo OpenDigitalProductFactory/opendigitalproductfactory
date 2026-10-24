@@ -38,10 +38,15 @@ import {
 
 // Single SoT for override codes (BI-563F6AB6) — shared with PreToolUse guards.
 import {
+  GATE_INFRASTRUCTURE_UNAVAILABLE_CODE,
   LOCAL_CI_OVERRIDE_REASON_CODES,
+  classifyGateInfrastructureEvidence,
   classifyLocalCiOverride,
 } from "../packages/dpf-skill-pack/hooks/lib/local-ci-override.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
+import { classifyPublishedCorrection } from "../packages/dpf-skill-pack/hooks/lib/published-correction.mjs";
+import { inspectCorrectionRecord } from "./published-correction.mjs";
+import { isTestStubGateRecord } from "./lib/local-ci-gate-state.mjs";
 import {
   LOCAL_CI_SLOT_KEYS,
   createLocalCiSlotManifest,
@@ -68,6 +73,8 @@ export function selectLocalCiStateRecord({ headSha, records, now = Date.now() })
   const forHead = usable.filter((r) => headSha && r.state.sha === headSha);
   const livePass = forHead.find((r) => {
     if (r.state.gatePassed !== true || r.state.evidencePending === true) return false;
+    // BI-53B189C8: a stub run passes without building anything.
+    if (isTestStubGateRecord(r.state)) return false;
     const expiry = Date.parse(r.state.expiresAt || "");
     return !Number.isFinite(expiry) || expiry > now;
   });
@@ -161,7 +168,7 @@ export function isDocsOnlyFileSet(files) {
  * @returns {{ ready: boolean, blockers: string[], notes: string[],
  *             counts: { checksTotal: number, failing: number, pending: number, unresolvedThreads: number } }}
  */
-export function evaluatePrHealth({ meta = {}, checks = [], threads = [], localCi = null } = {}) {
+export function evaluatePrHealth({ meta = {}, checks = [], threads = [], localCi = null, now = Date.now() } = {}) {
   const blockers = [];
   const notes = [];
 
@@ -221,14 +228,35 @@ export function evaluatePrHealth({ meta = {}, checks = [], threads = [], localCi
   // blockers — agents cannot green-wash "unit tests only".
   if (localCi) {
     const rec = localCi.stateRecord;
-    const recMatchesHead = rec && localCi.headSha && rec.sha === localCi.headSha;
+    // BI-53B189C8: a DPF_ALLOW_LOCAL_CI_STUB record says passed without building
+    // anything. It counts as no record at all, and the blocker names it.
+    const stubForHead = Boolean(rec && localCi.headSha && rec.sha === localCi.headSha && isTestStubGateRecord(rec));
+    const recMatchesHead = rec && localCi.headSha && rec.sha === localCi.headSha && !stubForHead;
     if (localCi.docsOnly) {
       notes.push("local-CI gate not required — docs-only change set");
     } else if (recMatchesHead && rec.gatePassed === true) {
       notes.push(`local-CI sandbox gate passed for head ${localCi.headSha.slice(0, 12)}`);
     } else if (recMatchesHead && rec.skipped && rec.skipReason) {
       const classified = classifyLocalCiOverride(rec.skipReason);
-      if (classified.ok) {
+      if (classified.ok && classified.code === "published-correction") {
+        const qualified = classifyPublishedCorrection(rec, { sha: localCi.headSha, branch: localCi.headBranch ?? rec.branch, repositoryFullName: localCi.repositoryFullName, now });
+        if (qualified.ok && localCi.publicationInspection?.ok === true && localCi.publicationInspection.state === rec) notes.push(qualified.reason);
+        else if (qualified.ok) blockers.push("Published correction lacks fresh source/plan/environment/protection inspection.");
+        else blockers.push(qualified.reason);
+      } else if (classified.ok && classified.code === GATE_INFRASTRUCTURE_UNAVAILABLE_CODE) {
+        // BI-02E5F2A1: this code is evidence-gated, not attestation-gated. The
+        // hook's probe must have captured the failed lease claim; the push is
+        // reported as gate-UNRUN, never passed, and cloud CI is the safety net.
+        const evidence = classifyGateInfrastructureEvidence(rec.infrastructureEvidence);
+        if (evidence.ok) {
+          notes.push(
+            `local-CI gate UNRUN for head ${localCi.headSha.slice(0, 12)} — gate infrastructure unavailable ` +
+              `at push time (${evidence.kind}: ${evidence.message}); NOT a pass — cloud CI is the safety net`,
+          );
+        } else {
+          blockers.push(`local-CI push-time override rejected: ${evidence.reason}`);
+        }
+      } else if (classified.ok) {
         notes.push(
           `local-CI gate overridden at push time (code=${classified.code}` +
             (classified.detail ? `; ${classified.detail}` : "") +
@@ -246,7 +274,16 @@ export function evaluatePrHealth({ meta = {}, checks = [], threads = [], localCi
         );
       } else if (localCi.attestation.kind === "override") {
         const classified = classifyLocalCiOverride(localCi.attestation.value);
-        if (classified.ok) {
+        if (classified.ok && classified.code === "published-correction") {
+          blockers.push("Published correction requires current-head machine proof; a prose trailer cannot delegate integration.");
+        } else if (classified.ok && classified.code === GATE_INFRASTRUCTURE_UNAVAILABLE_CODE) {
+          // A PR-body/commit trailer is prose; the only evidence for this code
+          // is what the hook captured at push time in the gate record.
+          blockers.push(
+            `local-CI PR-body override rejected: ${GATE_INFRASTRUCTURE_UNAVAILABLE_CODE} is accepted only ` +
+              "as a push-time record carrying the hook's captured lease-claim failure — a trailer is prose, not evidence",
+          );
+        } else if (classified.ok) {
           notes.push(
             `local-CI override attestation in commit history or PR body (code=${classified.code}` +
               (classified.detail ? `; ${classified.detail}` : "") +
@@ -262,6 +299,12 @@ export function evaluatePrHealth({ meta = {}, checks = [], threads = [], localCi
           `unknown local-CI attestation kind ${JSON.stringify(localCi.attestation.kind)}`,
         );
       }
+    } else if (stubForHead) {
+      blockers.push(
+        `the local-CI record for head ${localCi.headSha.slice(0, 12)} was written by the ` +
+          `DPF_ALLOW_LOCAL_CI_STUB=1 test stub (branch ${rec.branch || "unknown"}) — no sandbox build ran, ` +
+          "so it is not evidence. Run `pnpm run pregate` from the branch worktree.",
+      );
     } else {
       blockers.push(
         "no local-CI sandbox evidence for the PR head SHA — run `pnpm run pregate` from the " +
@@ -322,7 +365,7 @@ function fetchPrState(prArg) {
   }
 
   const meta = JSON.parse(
-    gh(["pr", "view", number, "--json", "number,title,state,mergeable,mergeStateStatus,isDraft,baseRefName,headRefOid,body,files,commits"]),
+    gh(["pr", "view", number, "--json", "number,title,state,mergeable,mergeStateStatus,isDraft,baseRefName,headRefName,headRefOid,body,files,commits"]),
   );
 
   let checks = [];
@@ -337,8 +380,10 @@ function fetchPrState(prArg) {
 
   // Review threads are NOT in `gh pr checks` — fetch via GraphQL.
   let threads = [];
+  let repositoryFullName = null;
   try {
     const repo = JSON.parse(gh(["repo", "view", "--json", "owner,name"]));
+    repositoryFullName = `${repo.owner.login}/${repo.name}`;
     const query =
       "query($o:String!,$n:String!,$p:Int!){repository(owner:$o,name:$n){pullRequest(number:$p){" +
       "reviewThreads(first:100){nodes{isResolved isOutdated path line}}}}}";
@@ -367,16 +412,27 @@ function fetchPrState(prArg) {
   // compatibility fallback for older contributions.
   // Every slot's record is consulted, not just slot-0 (BI-5529B5AC).
   let stateRecord = null;
+  let publicationInspection = null;
   try {
     stateRecord = selectLocalCiStateRecord({
       headSha: meta.headRefOid,
       records: readLocalCiSlotRecords(),
     })?.state ?? null;
+    const inspected = inspectCorrectionRecord();
+    const correction = inspected.ok ? inspected.state : null;
+    if (repositoryFullName && correction?.sha === meta.headRefOid
+      && classifyPublishedCorrection(correction, { sha: meta.headRefOid, branch: meta.headRefName, repositoryFullName }).ok) {
+      stateRecord = correction;
+      publicationInspection = inspected;
+    }
   } catch {
     /* no local gate record — attestation/docs-only carry the verdict */
   }
   const localCi = {
     headSha: meta.headRefOid,
+    headBranch: meta.headRefName,
+    repositoryFullName,
+    publicationInspection,
     docsOnly: isDocsOnlyFileSet(meta.files),
     attestation: parseLocalCiAttestation(
       meta.body,

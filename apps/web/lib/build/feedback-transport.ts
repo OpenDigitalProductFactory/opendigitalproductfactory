@@ -44,7 +44,7 @@ export interface FeedbackFileContext {
 }
 
 export interface FeedbackTransport {
-  readonly kind: "direct" | "relay" | "noop";
+  readonly kind: "direct" | "relay" | "federation" | "noop";
   file(
     payload: RedactedIssuePayload,
     ctx: FeedbackFileContext,
@@ -192,13 +192,50 @@ class NoopTransport implements FeedbackTransport {
   }
 }
 
+/**
+ * Projects the report as federated DEMAND rather than an opaque issue
+ * (BI-B423912F).
+ *
+ * This is the fix for the channel split: an issue filed as a GitHub issue is
+ * pseudonymous and unvotable, while the federated demand channel is the one that
+ * carries the interest/endorsement activities the ballot depends on. An install
+ * that HAS a trusted link should therefore submit where its submission can be
+ * corroborated and voted on, not where it lands mute.
+ *
+ * The projection itself is injected: this module stays sync and Prisma-free,
+ * exactly as the relay client is injected today.
+ */
+class FederationDemandTransport implements FeedbackTransport {
+  readonly kind = "federation" as const;
+
+  constructor(private readonly project: FederationDemandClient) {}
+
+  async file(
+    payload: RedactedIssuePayload,
+    ctx: FeedbackFileContext,
+  ): Promise<FeedbackTransportResult> {
+    return this.project(payload, ctx);
+  }
+}
+
 // ─── Selection ────────────────────────────────────────────────────────────────
+
+export type FederationDemandClient = (
+  payload: RedactedIssuePayload,
+  ctx: FeedbackFileContext,
+) => Promise<FeedbackTransportResult>;
 
 export interface TransportSelectionConfig {
   /** PlatformDevConfig.upstreamRelayUrl — when set, prefer the relay. */
   upstreamRelayUrl: string | null;
   /** Whether resolveHiveToken() yielded a token (resolved by the caller, kept async-free here). */
   hasToken: boolean;
+  /**
+   * Whether this install holds a trusted federation link that can carry demand
+   * (BI-B423912F). When it does, demand is preferred: it is the only channel on
+   * which a submission can be corroborated and voted on.
+   */
+  hasTrustedFederationLink?: boolean;
 }
 
 /**
@@ -210,8 +247,13 @@ export interface TransportSelectionConfig {
  */
 export function selectTransport(
   config: TransportSelectionConfig,
-  deps: { relayClient?: RelayHttpClient } = {},
+  deps: { relayClient?: RelayHttpClient; federationClient?: FederationDemandClient } = {},
 ): FeedbackTransport {
+  // Demand first when a trusted link exists: a submission that lands as an
+  // opaque issue cannot be voted on, and being heard is the point.
+  if (config.hasTrustedFederationLink && deps.federationClient) {
+    return new FederationDemandTransport(deps.federationClient);
+  }
   if (config.upstreamRelayUrl) {
     return new RelayTransport(config.upstreamRelayUrl, deps.relayClient);
   }

@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockAuth, mockPrisma, mockPromote } = vi.hoisted(() => ({
+const { mockAuth, mockPrisma, mockPromote, mockOperation } = vi.hoisted(() => ({
   mockAuth: vi.fn(),
+  mockOperation: vi.fn(),
   mockPrisma: {
     backlogItem: {
       findUnique: vi.fn(),
@@ -25,6 +26,7 @@ const { mockAuth, mockPrisma, mockPromote } = vi.hoisted(() => ({
 vi.mock("@/lib/auth", () => ({
   auth: mockAuth,
 }));
+vi.mock("@/lib/govern/operation-authority", () => ({ currentOperationAuthority: mockOperation }));
 
 vi.mock("@dpf/db", () => ({
   prisma: mockPrisma,
@@ -44,6 +46,7 @@ import { createBuildStudioBacklogIntake, startBacklogBuild } from "@/lib/actions
 describe("startBacklogBuild", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockOperation.mockResolvedValue({ userId: "user-1", platformRole: "HR-000", isSuperuser: true });
     mockAuth.mockResolvedValue({
       user: {
         id: "user-1",
@@ -61,6 +64,13 @@ describe("startBacklogBuild", () => {
       portfolioId: "portfolio-1",
     });
     mockPrisma.backlogItemActivity.create.mockResolvedValue({});
+  });
+
+  it("denies promotion when current permissions no longer allow the MCP operation", async () => {
+    mockOperation.mockResolvedValue(null);
+    await expect(startBacklogBuild("BI-EXAMPLE")).rejects.toThrow("permission");
+    expect(mockPromote).not.toHaveBeenCalled();
+    expect(mockPrisma.backlogItem.findUnique).not.toHaveBeenCalled();
   });
 
   it("files Build Studio intake as an open build-triaged backlog item with a required portfolio", async () => {

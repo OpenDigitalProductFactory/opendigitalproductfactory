@@ -20,6 +20,7 @@
     ],
     "allowJs": true,
     "noEmit": true,
+    "allowImportingTsExtensions": true,
     "incremental": true,
     "esModuleInterop": true,
     "resolveJsonModule": true,
@@ -33,6 +34,15 @@
   ],
   "exclude": [
     "node_modules",
-    "scripts"
+    "scripts",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "e2e",
+    "tests",
+    "test-support",
+    "test-setup.ts",
+    "vitest.config.ts",
+    "vitest.path-aliases.ts",
+    "vitest.clock-shift-setup.ts"
   ]
 }

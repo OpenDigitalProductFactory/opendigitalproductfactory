@@ -27,6 +27,7 @@ import { GapAnswerForm } from "./gap-answer-form";
 import { WeightProposalForm } from "./weight-proposal-form";
 import { listOpenWeightAdjustmentProposals } from "@/lib/decision-perspective/weight-proposal-store";
 import { listHeldProfessionMaterial } from "@/lib/decision-perspective/held-material-store";
+import { CraftConsultDemandList } from "./craft-consult-demand-list";
 import { HeldMaterialList } from "./held-material-list";
 import { clusterDecisionReviewRowsSemantic } from "@/lib/decision/review-clustering";
 import {
@@ -41,7 +42,10 @@ export const metadata = {
   title: "Decision review",
 };
 
-const UNRESOLVED = ["defer", "escalate"];
+import { listCraftConsultDemand } from "@/lib/decision-perspective/craft-consult-demand";
+import { ownerRulingQueueWhere } from "@/lib/decision-perspective/owner-ruling-queue";
+
+import { humanEscalationWhere } from "@/lib/decision-perspective/human-escalation";
 
 const OPERATOR_ACTIONABLE_WHERE: Prisma.DecisionInteractionWhereInput = {
   question: { not: "" },
@@ -112,6 +116,17 @@ export default async function DecisionReviewPage({
   searchParams?: ReviewSearchParams;
 }) {
   const { focus: focusDomainClass = null } = (await searchParams) ?? {};
+  // BI-EB5E9BE3: resolve the ownership boundary BEFORE the batch, so the inbox
+  // query can select on it. Previously the profile was fetched inside the same
+  // Promise.all and therefore could not narrow the inbox, which is why the
+  // predicate fell back to a route string.
+  const organizationProfileIds = (
+    await prisma.decisionPerspectiveProfile.findMany({
+      where: { kind: "organization" },
+      select: { profileId: true },
+    })
+  ).map((p) => p.profileId);
+
   const [
     conflictRows,
     unresolvedRows,
@@ -122,6 +137,7 @@ export default async function DecisionReviewPage({
     weightProposalRows,
     heldMaterialFamilies,
     openProposalRows,
+    craftConsultDemand,
   ] = await Promise.all([
       prisma.decisionInteraction.findMany({
         where: {
@@ -148,7 +164,7 @@ export default async function DecisionReviewPage({
         // Only rows the operator hasn't already answered (humanOutcome null) —
         // once answered via the loop below they resolve and drop off.
         where: {
-          outcomeType: { in: UNRESOLVED },
+          AND: [humanEscalationWhere()],
           humanOutcome: { equals: Prisma.DbNull },
           ...OPERATOR_ACTIONABLE_WHERE,
         },
@@ -164,12 +180,8 @@ export default async function DecisionReviewPage({
       // Unresolved WWWD business decisions (no build, unanswered) — the
       // inline capture loop's inbox (BI-9677364B).
       prisma.decisionInteraction.findMany({
-        where: {
-          outcomeType: { in: UNRESOLVED },
-          buildId: null,
-          routeContext: "/coworker-business",
-          humanOutcome: { equals: Prisma.DbNull },
-        },
+        // BI-EB5E9BE3: ownership, not route. See owner-ruling-queue.ts.
+        where: ownerRulingQueueWhere(organizationProfileIds, Prisma.DbNull),
         orderBy: { createdAt: "desc" },
         take: 20,
         select: {
@@ -179,6 +191,7 @@ export default async function DecisionReviewPage({
           question: true,
           riskTier: true,
           outcomeType: true,
+          escalationRoute: true,
           createdAt: true,
           scoredOptions: true,
           recommendedOptionId: true,
@@ -219,6 +232,10 @@ export default async function DecisionReviewPage({
           interaction: { select: { interactionId: true } },
         },
       }),
+      // Craft consults the specialist could not answer from its own corpus
+      // (BI-6BB728F1). Profession rows are excluded from the operator queue
+      // above by design; this is the one place their volume is shown.
+      listCraftConsultDemand(prisma),
     ]);
 
   // Re-score the canonical decisions against the current corpus and surface any
@@ -342,6 +359,8 @@ export default async function DecisionReviewPage({
       })()}
 
       <HeldMaterialList families={heldMaterialFamilies} />
+
+      <CraftConsultDemandList demand={craftConsultDemand} />
 
       <OrgDecisionCaptureList decisions={openOrgDecisions} />
 

@@ -5,8 +5,8 @@
 #
 # Invoked by dpf-shell-guard.sh AFTER the operator typed-confirms a
 # destructive command, BEFORE the real binary is exec'd. We route by
-# command shape to the matching snapshot strategy (pg_dump / neo4j-admin
-# dump / git stash / etc.), write the snapshot to
+# command shape to the matching snapshot strategy (pg_dump / git stash /
+# etc.), write the snapshot to
 # $DPF_BACKUPS_HOST_PATH/pre-destructive/<YYYY-MM-DD>/<fingerprint>-<ts>.<ext>,
 # and log a structured trace line.
 #
@@ -54,8 +54,6 @@ fi
 POSTGRES_CONTAINER="${DPF_PRODUCTION_DB_CONTAINER:-dpf-postgres-1}"
 POSTGRES_USER="${POSTGRES_USER:-dpf}"
 POSTGRES_DB="${POSTGRES_DB:-dpf}"
-NEO4J_CONTAINER="${DPF_NEO4J_CONTAINER:-dpf-neo4j-1}"
-NEO4J_DATABASE="${DPF_NEO4J_DATABASE:-neo4j}"
 
 DATE_DIR="$(date -u +%Y-%m-%d)"
 TS="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -117,25 +115,6 @@ snapshot_pg_dump() {
     return 1
 }
 
-snapshot_neo4j() {
-    FINGERPRINT="$1"
-    SNAPSHOT_PATH="$SNAPSHOT_DAY/${FINGERPRINT}-${TS}.neo4j.dump"
-    trace "strategy=neo4j container=$NEO4J_CONTAINER db=$NEO4J_DATABASE target=$SNAPSHOT_PATH"
-    # neo4j-admin database dump requires Neo4j stopped. Since the destructive
-    # command we're snapshotting is itself about to take it offline, stopping
-    # it just to snapshot is wasted complexity. Defer to the most recent
-    # successful nightly Neo4j backup as the recovery artifact.
-    if [ -d "$BACKUPS_HOST_PATH/neo4j" ]; then
-        LATEST_NEO4J_BACKUP="$(ls -1dt "$BACKUPS_HOST_PATH"/neo4j/*/ 2>/dev/null | head -1)"
-        if [ -n "$LATEST_NEO4J_BACKUP" ]; then
-            write_audit "DEFERRED" "neo4j" "$LATEST_NEO4J_BACKUP" "deferred to nightly Neo4j backup (online dump would require stopping the DB)"
-            return 0
-        fi
-    fi
-    write_audit "FAILED" "neo4j" "$SNAPSHOT_PATH" "no nightly Neo4j backup found to defer to"
-    return 1
-}
-
 snapshot_git_stash() {
     FINGERPRINT="$1"
     REPO="${PWD:-$INSTALL_ROOT}"
@@ -190,21 +169,12 @@ route_and_snapshot() {
         "docker volume rm "*"dpf_pgdata"*)
             snapshot_pg_dump "docker-volume-rm-pgdata"
             return $? ;;
-        "docker volume rm "*"dpf_neo4jdata"*)
-            snapshot_neo4j "docker-volume-rm-neo4jdata"
-            return $? ;;
         "docker volume rm "*)
             snapshot_pg_dump "docker-volume-rm-other"
             return $? ;;
         "docker compose down "*"-v"*)
-            PG_RC=0
-            snapshot_pg_dump "docker-compose-down-v" || PG_RC=$?
-            NEO_RC=0
-            snapshot_neo4j "docker-compose-down-v" || NEO_RC=$?
-            if [ "$PG_RC" -ne 0 ] && [ "$NEO_RC" -ne 0 ]; then
-                return 1
-            fi
-            return 0 ;;
+            snapshot_pg_dump "docker-compose-down-v"
+            return $? ;;
         "prisma migrate reset"*|"pnpm "*"prisma migrate reset"*)
             snapshot_pg_dump "prisma-migrate-reset"
             return $? ;;

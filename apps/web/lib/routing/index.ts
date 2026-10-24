@@ -156,7 +156,6 @@ export type {
   AdapterResult,
   AsyncOperationStartResult,
   ResolvedProvider,
-  ToolCallEntry,
 } from "./adapter-types";
 export { registerExecutionAdapter, getExecutionAdapter } from "./execution-adapter-registry";
 export { chatAdapter } from "./chat-adapter";

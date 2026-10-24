@@ -28,7 +28,7 @@ import {
   queryBacklog,
 } from "./backlog-pack-read-tools";
 import type { BacklogIngestInput } from "@/lib/operate/backlog-ingest";
-import type { ToolResult } from "@/lib/mcp-tools";
+import type { ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { tryAcquireBacklogClaimAtomic } from "@/lib/backlog/claim-on-start";
 import { normalizeCompletionEvidenceManifest } from "@/lib/backlog/completion-evidence-policy";
@@ -143,8 +143,17 @@ async function createBacklogItem(
       });
     }
     const { withScanAdvisory } = await import("@/lib/operate/implementation-scan");
+    const { renderFilingDuplicateAdvisory } = await import("@/lib/demand/dedup");
     const created = `Created backlog item ${result.itemId}`;
-    const message = withScanAdvisory(created, result.implementationCandidates ?? []);
+    // Both advisories ride the success message, the shape the implementation
+    // scan established (BI-1A1EC5EC): the filer sees them at the moment they
+    // can still act cheaply, and neither can refuse the filing (BI-3722E9A1).
+    const scanned = withScanAdvisory(created, result.implementationCandidates ?? []);
+    const duplicateAdvisory = renderFilingDuplicateAdvisory(
+      result.duplicateCandidates ?? [],
+      result.duplicateSemanticUnavailable ?? null,
+    );
+    const message = duplicateAdvisory ? `${scanned}\n\n${duplicateAdvisory}` : scanned;
     return { success: true, entityId: result.itemId, message };
   } catch (err) {
     const msg =
@@ -214,8 +223,8 @@ async function processBacklogForBuildStudio(
     ? Math.min(Math.max(0, Math.floor(requestedLimitRaw)), configuredCap)
     : configuredCap;
 
-  const { inngest } = await import("@/lib/queue/inngest-client");
-  await inngest.send({
+  const { jobs } = await import("@/lib/jobs");
+  await jobs.send({
     name: "build/backlog-tee-up.requested",
     data: {
       userId,
@@ -269,7 +278,7 @@ async function updateBacklogItemStatus(
     return {
       success: false,
       error: "invalid_status",
-      message: `status must be one of triaging|open|in-progress|done|deferred|retired, got ${target}`,
+      message: `status must be one of triaging|open|in-progress|awaiting-acceptance|done|deferred|retired, got ${target}`,
     };
   const deferral = target === "deferred"
     ? normalizeDeferralInput(params["deferral"])
@@ -326,7 +335,9 @@ async function updateBacklogItemStatus(
   // race on the same row; the loser's WHERE fails (count=0) → claim_conflict.
   // Stale claims reclaim inline; force=true takes over. Release on leave.
   const forceClaim = params["force"] === true;
-  if (item.status === target && target !== "deferred") {
+  const isCompletionEvidenceReconciliation =
+    target === "done" && params["completionEvidence"] !== undefined;
+  if (item.status === target && target !== "deferred" && !isCompletionEvidenceReconciliation) {
     return {
       success: true,
       entityId: itemIdRaw,
@@ -516,6 +527,18 @@ async function updateBacklogItemStatus(
       }
     })();
   }
+  // BI-AE9FCB4C: a retired item's hive mirror closes with its reason. (done
+  // goes through the terminal adapter, which dispatches its own close.)
+  if (updated.status === "retired") {
+    void (async () => {
+      try {
+        const { closeUpstreamIssueInBackground } = await import("@/lib/build/issue-bridge");
+        closeUpstreamIssueInBackground({ kind: "backlog", id: item.id });
+      } catch (err) {
+        console.warn(`[issue-bridge] upstream close dispatch failed for ${updated.itemId}: ${getErrorMessage(err)}`);
+      }
+    })();
+  }
   return {
     success: true,
     entityId: updated.itemId,
@@ -638,7 +661,8 @@ async function linkBacklogItemToEpic(
 const handlers: Record<string, ToolPackHandler> = {
   create_backlog_item: (params, userId, context) => createBacklogItem(params, userId, context),
   triage_backlog_item: (params) => triageBacklogItem(params),
-  retire_backlog_item: (params, userId, context) => retireBacklogItem(params, userId, context),
+  retire_backlog_item: (params, userId, context) =>
+    settleReservationsAfter(params, retireBacklogItem(params, userId, context)),
   size_backlog_item: (params) => sizeBacklogItem(params),
   process_backlog_for_build_studio: (params, userId, context) => processBacklogForBuildStudio(params, userId, context),
   update_backlog_item: (params, userId, context) =>
@@ -648,11 +672,32 @@ const handlers: Record<string, ToolPackHandler> = {
   update_epic: (params, userId, context) => updateEpic(params, userId, context),
   list_epics: (params) => listEpics(params),
   list_backlog_items: (params) => listBacklogItems(params),
-  get_backlog_item: (params) => getBacklogItem(params),
-  update_backlog_item_status: (params, userId, context) => updateBacklogItemStatus(params, userId, context),
+    get_backlog_item: (params, userId, context) => getBacklogItem(params, context?.agentId ?? null, userId, context),
+  update_backlog_item_status: (params, userId, context) =>
+    settleReservationsAfter(params, updateBacklogItemStatus(params, userId, context)),
   link_backlog_item_to_epic: (params, userId, context) => linkBacklogItemToEpic(params, userId, context),
   get_next_recommended_work: (params) => getNextRecommendedWork(params),
 };
+
+/**
+ * Settle the item's budget reservation right after a status change
+ * (BI-EF265C9A). Best-effort: the scheduled sweep settles anything this misses,
+ * so a failure here never fails the status change.
+ */
+async function settleReservationsAfter(params: Record<string, unknown>, result: Promise<ToolResult>): Promise<ToolResult> {
+  const outcome = await result;
+  const itemId = typeof params["itemId"] === "string" ? params["itemId"] : null;
+  if (outcome.success && itemId) {
+    try {
+      const { settleBudgetReservations } = await import("@/lib/portfolio/budget-reservation");
+      const { prisma } = await import("@dpf/db");
+      await settleBudgetReservations(prisma as never, { itemIds: [itemId] });
+    } catch {
+      // the scheduled sweep settles it
+    }
+  }
+  return outcome;
+}
 
 export const backlogPack: ToolPack = {
   packId: "backlog",

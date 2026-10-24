@@ -1,0 +1,24 @@
+{
+  "version": "1",
+  "decidedOption": "metadata-tile-plus-grid-column",
+  "decisionInteractionId": "DI-02DD01E89947",
+  "scope": {
+    "files": ["apps/web/app/(shell)/compliance/obligations/[id]/page.tsx"]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "metadata-tile-plus-grid-column",
+      "dedicated-retention-section",
+      "derived-elsewhere-only"
+    ],
+    "recordedVia": "principle_decide (decisionType: design, callingPopulation: external_coding_agent)",
+    "composite": 11.316,
+    "margin": 2.428,
+    "confidence": "high",
+    "autonomyEligible": true,
+    "topContributors": ["Research and Use Standards", "Classify ambiguous requests before acting"],
+    "whyNotSweepMeasurement": "/compliance/obligations/[id] is sweepEligible:false in apps/web/lib/ux-budget/route-shells.generated.json with reason dynamic-fixture-required — the sweep fixture mints no obligation, so it publishes no concrete path for this dynamic route and the served DOM cannot be measured. A sweep-measurement manifest for this route would therefore have to carry numbers no run produced. Making the route measurable means adding its honest fixture context, which is its own change; it is filed rather than folded in here.",
+    "notes": "First call scored every option at zero because no option carried a features map (recorded as DI-1B3C524AE2FC, insufficient_signal). Re-called with per-option feature vectors over the principle dimensions; DI-02DD01E89947 is the adjudicated result and the one this manifest cites."
+  }
+}

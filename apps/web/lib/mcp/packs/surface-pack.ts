@@ -7,7 +7,7 @@ import {
   isToolAllowedByGrants,
   TOOL_TO_GRANTS,
 } from "@/lib/tak/agent-grants";
-import type { ToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
 const MODE_VALUES: SurfaceMode[] = [

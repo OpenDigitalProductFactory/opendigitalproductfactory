@@ -1,6 +1,7 @@
-import type { ToolConsequence, ToolDefinition } from "@/lib/mcp-tools";
+import type { ToolDefinition } from "@/lib/mcp-tool-types";
+import type { ToolConsequence, ToolConsequenceScope } from "@/lib/tool-consequence";
 import { getWorkCaseAction } from "@/lib/work-management/action-registry";
-import type { WorkCaseExecutionContext } from "@/lib/work-management/work-case-governance-hook";
+import type { WorkCaseExecutionContext } from "@/lib/mcp-governed-execute-types";
 import type { WorkroomShapeKey } from "@/lib/work-management/room-shapes";
 
 export const CONSEQUENCE_CLASSES = ["routine-read", "ordinary-mutation", "consequential-mutation"] as const;
@@ -54,9 +55,22 @@ const EXPLICIT = new Set<string>(ALIGNMENT_CONSEQUENTIAL_TOOL_NAMES);
 export const PRECONDITION_TOOL_NAMES = ["transition_employee_status"] as const;
 const PRECONDITION = new Set<string>(PRECONDITION_TOOL_NAMES);
 
-/** Alignment applies to what leaves the business, not to internal platform ops. */
-function alignmentRequiredFor(toolName: string, consequence: ToolConsequence | undefined): boolean {
-  return consequence === "outward" || EXPLICIT.has(toolName);
+/**
+ * Alignment applies to what leaves the BUSINESS, not to platform development
+ * or operations that merely leave the install. An outward tool that declares
+ * `consequenceScope: "platform"` (a PR, a hive contribution, a discovery
+ * sweep) is governed by the founder kernel, not the customer's WWWD stance —
+ * routing it there produced empty "create portal pr:" escalations the business
+ * owner could not meaningfully answer (BI-63B14D4B). It stays consequential
+ * (receipted, outward-reviewed); only the WWWD alignment consult is skipped.
+ */
+function alignmentRequiredFor(
+  toolName: string,
+  consequence: ToolConsequence | undefined,
+  scope: ToolConsequenceScope | undefined,
+): boolean {
+  if (EXPLICIT.has(toolName)) return true;
+  return consequence === "outward" && scope !== "platform";
 }
 
 export function collaborationShapeForTool(
@@ -79,17 +93,18 @@ export function collaborationShapeForTool(
  * Work Case metadata may elevate but never downgrade a call.
  */
 export function classifyConsequentialTool(input: {
-  tool: Pick<ToolDefinition, "sideEffect" | "consequence">;
+  tool: Pick<ToolDefinition, "sideEffect" | "consequence" | "consequenceScope">;
   toolName: string;
   workCase?: WorkCaseExecutionContext;
 }): ConsequentialToolClassification {
   const consequence = input.tool.consequence;
+  const scope = input.tool.consequenceScope;
   const action = input.workCase ? getWorkCaseAction(input.workCase.action) : undefined;
   if (action?.consequential) {
     return {
       class: "consequential-mutation",
       consequential: true,
-      alignmentRequired: alignmentRequiredFor(input.toolName, consequence),
+      alignmentRequired: alignmentRequiredFor(input.toolName, consequence, scope),
       preconditionRequired: PRECONDITION.has(input.toolName),
       collaborationShape: collaborationShapeForTool(input.toolName, consequence) ?? "change-consequential",
       reason: "work-case-consequential",
@@ -102,7 +117,7 @@ export function classifyConsequentialTool(input: {
     return {
       class: "consequential-mutation",
       consequential: true,
-      alignmentRequired: alignmentRequiredFor(input.toolName, consequence),
+      alignmentRequired: alignmentRequiredFor(input.toolName, consequence, scope),
       preconditionRequired: PRECONDITION.has(input.toolName),
       collaborationShape: collaborationShapeForTool(input.toolName, consequence),
       reason: consequence === "outward" ? "declared-outward" : "declared-irreversible",
@@ -111,7 +126,7 @@ export function classifyConsequentialTool(input: {
   if (input.tool.sideEffect && (EXPLICIT.has(input.toolName) || PRECONDITION.has(input.toolName))) {
     return {
       class: "consequential-mutation", consequential: true,
-      alignmentRequired: alignmentRequiredFor(input.toolName, consequence),
+      alignmentRequired: alignmentRequiredFor(input.toolName, consequence, scope),
       preconditionRequired: PRECONDITION.has(input.toolName),
       collaborationShape: collaborationShapeForTool(input.toolName, consequence), reason: "explicit-policy",
     };

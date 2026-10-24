@@ -1,5 +1,5 @@
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 
 // Staleness escalation thresholds for the 15-minute code-graph reconcile
@@ -80,7 +80,7 @@ async function recordCodeGraphDefer(): Promise<void> {
   });
 }
 
-export const codeGraphReconcileScheduled = inngest.createFunction(
+export const codeGraphReconcileScheduled = jobs.createFunction(
   {
     id: "ops/code-graph-reconcile-scheduled",
     retries: 1,
@@ -88,7 +88,7 @@ export const codeGraphReconcileScheduled = inngest.createFunction(
     triggers: [cron("*/15 * * * *")],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "ops/code-graph-reconcile-scheduled");
     if (!gate.proceed) {
       // BI-9BF17415: record the deferral as a counter before bailing, so a job
       // repeatedly starved by the drain gate surfaces instead of silently skipping.
@@ -108,6 +108,19 @@ export const codeGraphReconcileScheduled = inngest.createFunction(
     });
     if (!enabled) return { skipped: true, reason: "job_disabled_by_operator" };
 
+    // BI-DC2758DE (founder decision on DI-B26D16D64C62): keep the workspace
+    // clone's origin/main current. It is otherwise fetched only when Build
+    // Studio starts a build, so the graph indexed an old main, the merge signal
+    // reported merged work as unmerged, and reviewers could not read recent
+    // artifacts (BI-B61B4FF3). Best-effort: a failed fetch never fails the job.
+    const trunkRefresh = await step.run("refresh-workspace-trunk", async () => {
+      const { getGitRoot } = await import("@/lib/build/code-graph/git-snapshot");
+      const { refreshTrunkRef, trunkRefExists } = await import("@/lib/work-capsules/git-scanner");
+      const root = getGitRoot();
+      if (!(await trunkRefExists(root))) return { status: "skipped" as const, reason: "no-trunk-ref" };
+      return refreshTrunkRef(root);
+    });
+
     try {
       const result = await step.run("reconcile-code-graph-scheduled", async () => {
         const { reconcileCodeGraph } = await import("@/lib/build/code-graph-refresh");
@@ -116,7 +129,7 @@ export const codeGraphReconcileScheduled = inngest.createFunction(
       await step.run("record-job-ok", async () => {
         await recordCodeGraphJob("ok");
       });
-      return result;
+      return { ...result, trunkRefresh };
     } catch (error) {
       await step.run("record-job-error", async () => {
         await recordCodeGraphJob("error", error instanceof Error ? error.message : "Unknown reconcile failure");
@@ -126,7 +139,7 @@ export const codeGraphReconcileScheduled = inngest.createFunction(
   },
 );
 
-export const codeGraphReconcileEvent = inngest.createFunction(
+export const codeGraphReconcileEvent = jobs.createFunction(
   {
     id: "ops/code-graph-reconcile-event",
     retries: 1,

@@ -25,9 +25,21 @@ function fakePrisma(data: {
   delegated?: unknown[];
   handoffs?: unknown[];
   evidence?: unknown[];
+  doneWeek?: unknown[];
+  breakFixDone?: unknown[];
 }) {
   return {
-    agent: { findMany: async () => data.agents },
+    agent: {
+      // Honour the loader's filters: the roster query asks for coworkers, the
+      // follow-up asks for specific agent ids. An agent with no `type` is a coworker.
+      findMany: async (args?: { where?: { type?: string; agentId?: { in: string[] } } }) =>
+        (data.agents as Array<{ agentId: string; type?: string }>).filter((row) => {
+          const where = args?.where ?? {};
+          if (where.type && (row.type ?? "coworker") !== where.type) return false;
+          if (where.agentId && !where.agentId.in.includes(row.agentId)) return false;
+          return true;
+        }),
+    },
     taskRun: { findMany: async () => data.liveRuns ?? [] },
     toolExecution: {
       groupBy: async (args: { by: string[] }) =>
@@ -36,11 +48,32 @@ function fakePrisma(data: {
     tokenUsage: { groupBy: async () => data.tokens ?? [] },
     delegationChain: { groupBy: async () => data.delegated ?? [] },
     phaseHandoff: { groupBy: async () => data.handoffs ?? [] },
-    backlogItemActivity: { groupBy: async () => data.evidence ?? [] },
+    backlogItemActivity: { groupBy: async () => data.evidence ?? [], findMany: async () => data.breakFixDone ?? [] },
+    backlogItem: { findMany: async () => data.doneWeek ?? [] },
   } as never;
 }
 
 describe("loadWorkforceActivity", () => {
+  it("counts a non-coworker agent with a live run as working, and leaves idle ones off (BI-F0B07F2B)", async () => {
+    const prisma = fakePrisma({
+      agents: [
+        agent({ agentId: "cw", displayName: "Coworker" }),
+        agent({ agentId: "spec-live", displayName: "Live Specialist", type: "specialist" }),
+        agent({ agentId: "spec-idle", displayName: "Idle Specialist", type: "specialist" }),
+      ],
+      liveRuns: [
+        { taskRunId: "r1", status: "working", title: "Coworker task", currentAgentId: "cw", startedAt: new Date(NOW - 60_000), lastHeartbeatAt: new Date(NOW - 10_000) },
+        { taskRunId: "r2", status: "working", title: "Specialist task", currentAgentId: "spec-live", startedAt: new Date(NOW - 60_000), lastHeartbeatAt: new Date(NOW - 10_000) },
+      ],
+    });
+    const view = await loadWorkforceActivity({ prisma, now: () => NOW });
+    expect(view.working.map((c) => c.agentId).sort()).toEqual(["cw", "spec-live"]);
+    expect(view.pulse.workingCount).toBe(2);
+    expect(view.pulse.totalCount).toBe(2);
+    expect(view.platformWork).toEqual([]);
+    expect([...view.working, ...view.quiet].some((c) => c.agentId === "spec-idle")).toBe(false);
+  });
+
   it("uses only the canonical live states and never reports stalled work as working (BI-FDB25FA6)", async () => {
     let taskRunWhere: unknown;
     const prisma = fakePrisma({
@@ -158,7 +191,8 @@ describe("loadWorkforceActivity", () => {
       tokenUsage: { groupBy: async () => [] },
       delegationChain: { groupBy: async () => [] },
       phaseHandoff: { groupBy: async () => [] },
-      backlogItemActivity: { groupBy: async () => [] },
+      backlogItemActivity: { groupBy: async () => [], findMany: async () => [] },
+      backlogItem: { findMany: async () => [] },
     } as never;
     await loadWorkforceActivity({ prisma, now: () => NOW });
     // the tool-by-tool outcome query is the one filtered to success:true
@@ -270,5 +304,22 @@ describe("loadWorkforceActivity", () => {
     });
     expect(wf.pulse.platformWorkCount).toBe(2);
     expect(wf.pulse.workingCount).toBe(1);
+  });
+});
+
+describe("break-fix share of the rolling week (BI-F2FEC1EB)", () => {
+  it("counts declared break-fix items among items closed in the last 7 days and reports the share", async () => {
+    const { loadWorkforceActivity } = await import("./workforce-activity");
+    const prisma = fakePrisma({
+      agents: [],
+      doneWeek: [{ id: "a" }, { id: "b" }, { id: "c" }, { id: "d" }],
+      breakFixDone: [{ backlogItemId: "a" }, { backlogItemId: "a" }],
+    });
+    const wf = await loadWorkforceActivity({ prisma: prisma as never, now: () => Date.parse("2026-09-06T12:00:00Z") });
+    expect(wf.pulse.doneWeekCount).toBe(4);
+    expect(wf.pulse.breakFixDoneWeekCount).toBe(1);
+    expect(wf.pulse.breakFixShareWeek).toBeCloseTo(0.25);
+    const empty = await loadWorkforceActivity({ prisma: fakePrisma({ agents: [] }) as never, now: () => Date.parse("2026-09-06T12:00:00Z") });
+    expect(empty.pulse.breakFixShareWeek).toBe(0);
   });
 });

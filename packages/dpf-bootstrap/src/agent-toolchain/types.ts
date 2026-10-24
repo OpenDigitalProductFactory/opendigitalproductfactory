@@ -1,3 +1,4 @@
+import type { DeliveryReadinessReport } from "./delivery-readiness-contract";
 /**
  * Shared types across the agent-toolchain bootstrap planning library.
  *
@@ -22,7 +23,7 @@ export type PlanWriteMode = "create" | "update" | "preserve-user-edit";
  * adapter boundary.
  */
 export type McpReadinessProbeResult =
-  | { ok: true; toolCount: number; observedAt: string }
+  | { ok: true; toolCount: number; observedAt: string; delivery?: DeliveryReadinessReport }
   | {
       ok: false;
       reason:
@@ -31,8 +32,10 @@ export type McpReadinessProbeResult =
         | "mcp-unavailable"
         | "endpoint_unreachable"
         | "scope_insufficient"
+        | "coworker_grants_insufficient"
         | "unexpected_shape";
       httpStatus: number | null;
+      delivery?: DeliveryReadinessReport;
     };
 
 /**
@@ -58,6 +61,7 @@ export type SmokeTestResult =
  * Source of truth for installer banner copy lives in `readiness-state.ts`.
  */
 export type ReadinessState =
+  | "authorization_pending"
   | "ready"
   | "partial"
   | "missing_cli"
@@ -68,9 +72,11 @@ export type ReadinessState =
   | "failed_smoke";
 
 /**
- * The full `agentToolchain` block persisted into `~/.dpf/install-state.json`.
+ * The full agent-toolchain block persisted to `~/.dpf/agent-toolchain-state.json`
+ * (a sidecar, never a key inside `install-state.json` — BI-95DF1BFC).
  */
 export type AgentToolchainState = {
+  mcpAuthorization?: { mode: "oauth" | "legacy"; verified: boolean };
   appliedAt: string;
   dpfPlatformVersion: string;
   /**

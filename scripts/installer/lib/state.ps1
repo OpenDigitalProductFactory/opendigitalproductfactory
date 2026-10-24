@@ -162,6 +162,28 @@ function Write-DpfStateCandidate {
     if (-not (Test-DpfStateFileValid $Path)) { throw "install_state_post_write_schema_validation_failed" }
 }
 
+# Agent-client readiness sidecar. Rewritten on every client session start, so it
+# must NEVER live inside install-state.json: the self-upgrade binds that file
+# byte-for-byte in a signed handoff, and a bootstrap landing during the drain
+# fenced a live upgrade (SUR-4758058F, BI-95DF1BFC). Plain atomic write, no
+# install-state lock, no schema gate - nothing in the install transition reads it.
+function Get-DpfAgentToolchainStatePath {
+    return (Join-Path (Get-DpfStateDir) "agent-toolchain-state.json")
+}
+
+function Write-DpfAgentToolchainState {
+    param([Parameter(Mandatory)]$State)
+    $path = Get-DpfAgentToolchainStatePath
+    $dir = Split-Path -Parent $path
+    if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+    $temp = Join-Path $dir (".agent-toolchain-state.json.tmp-" + [guid]::NewGuid().ToString("n"))
+    $encoding = New-Object Text.UTF8Encoding($false)
+    [IO.File]::WriteAllText($temp, ($State | ConvertTo-Json -Depth 20), $encoding)
+    Flush-DpfStateFile $temp
+    Move-Item -LiteralPath $temp -Destination $path -Force
+    return $path
+}
+
 # Initialize a fresh state file at the canonical path. Idempotent.
 # Args: $InstallerVersion, $InstallPath
 function Initialize-DpfState {
@@ -316,6 +338,54 @@ function Resolve-DpfCapabilityComposeProfiles {
     $json = & node @arguments
     if ($LASTEXITCODE -ne 0) { throw "capability_profile_resolution_failed" }
     return ($json | ConvertFrom-Json)
+}
+
+# Installer monitoring question (BI-31F11C37, design 2026-10-13 sections 4-5).
+# The Node helper owns the cost arithmetic and the decision record; PowerShell
+# only transports its results. Set-DpfMonitoringChoice must run BEFORE
+# Resolve-DpfCapabilityComposeProfiles so the first compose up honours it.
+function Get-DpfMonitoringChoiceHelper {
+    param([string]$InstallDir = (Get-Location).Path)
+    $helper = Join-Path $InstallDir "scripts\installer\monitoring-choice.mjs"
+    if (-not (Test-Path -LiteralPath $helper)) { throw "monitoring_choice_helper_missing" }
+    return $helper
+}
+
+# Returns the cost phrase, e.g. "about 1.6 GB memory and 1.75 CPU", computed from
+# config/install-resource-budgets.json.
+function Get-DpfMonitoringCost {
+    param([string]$InstallDir = (Get-Location).Path)
+    $text = & node (Get-DpfMonitoringChoiceHelper -InstallDir $InstallDir) cost --text
+    if ($LASTEXITCODE -ne 0) { throw "monitoring_cost_unavailable" }
+    return ([string]$text).Trim()
+}
+
+# True unless an enabled/disabled monitoring decision is already recorded.
+function Test-DpfMonitoringPromptNeeded {
+    param([string]$InstallDir = (Get-Location).Path)
+    if (-not (Test-Path -LiteralPath (Get-DpfStatePath))) { return $true }
+    $answer = & node (Get-DpfMonitoringChoiceHelper -InstallDir $InstallDir) needs-prompt --state (Get-DpfStatePath)
+    if ($LASTEXITCODE -ne 0) { throw "monitoring_choice_read_failed" }
+    return (([string]$answer).Trim() -eq "true")
+}
+
+# Record the monitoring choice. $Choice: on | off | none (headless, no flag).
+# $Source: installer-prompt | installer-flag | headless-default.
+function Set-DpfMonitoringChoice {
+    param(
+        [string]$InstallDir = (Get-Location).Path,
+        [Parameter(Mandatory)][ValidateSet("on", "off", "none")][string]$Choice,
+        [Parameter(Mandatory)][ValidateSet("installer-prompt", "installer-flag", "headless-default")][string]$Source
+    )
+    $helper = Get-DpfMonitoringChoiceHelper -InstallDir $InstallDir
+    Initialize-DpfState -InstallPath $InstallDir
+    # The decision map exists from schema v2; migrate an older state first, the
+    # same way Resolve-DpfCapabilityComposeProfiles does.
+    $schemaStatus = Test-DpfStateSchema
+    if ($schemaStatus -eq 3) { Invoke-DpfStateMigration }
+    elseif ($schemaStatus -ne 0) { throw "install_state_schema_unsupported" }
+    & node $helper apply --state (Get-DpfStatePath) --choice $Choice.ToLowerInvariant() --source $Source | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "monitoring_choice_record_failed" }
 }
 
 function Get-DpfCapabilityProfileArgs {

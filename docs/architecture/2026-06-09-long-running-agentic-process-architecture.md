@@ -1,5 +1,25 @@
 # Durable Long-Running Agentic Processes — architecture assessment
 
+**Operator provider pauses:** optional expiry runs through the existing jobs
+facade, with `ScheduledJob` holding the operation identity and resume time.
+A five-minute reconciliation job repairs overdue timers after restart or event
+delivery failure. A matching timer checks health and the current operation
+inside the serialized resume path; it cannot lift a newer or indefinite pause.
+See the [provider control guide](../user-guide/ai-workforce/provider-ollama.md).
+
+**Current authority implementation:** durable process reconnects read tool grants
+from the canonical coworker Agent row on each request, with revocation tombstones
+taking precedence. Known alias rows are not an alternate authority source.
+Administrator reconciliation of legacy differences requires explicit approval.
+
+**Review execution recovery:** an incomplete design or plan reviewer panel keeps
+the saved artifact and last completed semantic round. Missing or inconclusive
+reviewers do not approve work, create document findings, consume revision rounds,
+or trigger document regeneration. The review panel and readiness strip show the
+execution wait separately from completed individual verdicts. Retry only after
+reviewer execution recovers; original execution records remain intact. See the
+[MCP recovery contract](mcp-tool-authorization-runbook.md).
+
 **Date:** 2026-06-09
 **Status:** Assessment / direction-setting. Not a build spec. The phased recommendations in §8 become backlog items, each promoted through Build Studio in the normal way.
 **Audience:** Operator (Mark), platform architects, the Build Studio sub-agents, and any coworker that owns a process which runs longer than a single request.
@@ -30,7 +50,7 @@ This assessment respects [`verify-substrate-before-proposing-new`](../founder-ke
 
 ## 1. The problem, stated precisely
 
-Build Studio is a five-phase agentic pipeline (`ideate → plan → build → review → ship`, plus terminal `complete`/`failed`) defined in [`apps/web/lib/explore/feature-build-types.ts:441`](../../apps/web/lib/explore/feature-build-types.ts) with the transition matrix at [`feature-build-types.ts:657`](../../apps/web/lib/explore/feature-build-types.ts). The build phase is driven by `runBuildOrchestrator()` at [`apps/web/lib/build/build-orchestrator.ts:951`](../../apps/web/lib/build/build-orchestrator.ts), entered fire-and-forget via `autoExecuteBuild()` (defined at [`apps/web/lib/actions/build.ts:735`](../../apps/web/lib/actions/build.ts), called at `:710`/`:876`/`:908`/`:1149`).
+Build Studio is a five-phase agentic pipeline (`ideate → plan → build → review → ship`, plus terminal `complete`/`failed`; a build rebased onto main at ship returns to `review` to re-earn its evidence on the new tree, BI-76BD65E6) defined in [`apps/web/lib/explore/feature-build-types.ts:441`](../../apps/web/lib/explore/feature-build-types.ts) with the transition matrix at [`feature-build-types.ts:657`](../../apps/web/lib/explore/feature-build-types.ts). The build phase is driven by `runBuildOrchestrator()` at [`apps/web/lib/build/build-orchestrator.ts:951`](../../apps/web/lib/build/build-orchestrator.ts), entered fire-and-forget via `autoExecuteBuild()` (defined at [`apps/web/lib/actions/build.ts:735`](../../apps/web/lib/actions/build.ts), called at `:710`/`:876`/`:908`/`:1149`).
 
 We have spent months hardening it and it remains fragile. The concrete, observed failure modes:
 
@@ -101,7 +121,7 @@ The good news, and the reframe: **DPF already implements most of §2.4.** It is 
 
 | Industry primitive | DPF substrate that already exists | Where |
 |---|---|---|
-| Durable execution engine (journal + retry + cron) | **Inngest** — `step.run` journaling, per-function `retries`, `concurrency` limits, and the cron + event function registries in `queue/functions/index.ts` (59 scheduled and 35 event functions as of 2026-08-16). Counts drift with every new job, so treat `lib/operate/scheduled-jobs/catalog.ts` as the authority — a parity test fails the build if a scheduled function is missing from it | [`apps/web/lib/queue/inngest-client.ts`](../../apps/web/lib/queue/inngest-client.ts), [`apps/web/lib/queue/functions/index.ts`](../../apps/web/lib/queue/functions/index.ts) |
+| Durable execution engine (journal + retry + cron) | **Inngest** — `step.run` journaling, per-function `retries`, `concurrency` limits, and the cron + event function registries in `queue/functions/index.ts` (59 scheduled and 35 event functions as of 2026-08-16). Counts drift with every new job, so treat `lib/operate/scheduled-jobs/catalog.ts` as the authority — a parity test fails the build if a scheduled function is missing from it. Since 2026-09-26 every function and send site goes through the `@/lib/jobs` facade, which admits only the job features in use; the Inngest client is its adapter, and a CI guard (`scripts/check-no-direct-job-engine-import.mjs`) refuses engine imports anywhere else ([job engine spec](../superpowers/specs/2026-09-25-postgres-durable-job-engine-design.md) §6) | [`apps/web/lib/jobs/index.ts`](../../apps/web/lib/jobs/index.ts), [`apps/web/lib/jobs/inngest-adapter.ts`](../../apps/web/lib/jobs/inngest-adapter.ts), [`apps/web/lib/queue/functions/index.ts`](../../apps/web/lib/queue/functions/index.ts) |
 | Durable unit of work / session | **`TaskRun`** — universal task tracker with status enum (`submitted·working·input-required·auth-required·completed·failed·canceled·rejected·archived`), `source`, heartbeat | `schema.prisma` `TaskRun`; [`apps/web/lib/tak/autonomous-work-run.ts`](../../apps/web/lib/tak/autonomous-work-run.ts) |
 | Explicit multi-state state machine + checkpoints | **`QuiescenceRun`** — `pending → preparing → draining → ready-to-swap → swapping → completed`, `enteredStateAt` JSON timestamps, snapshots, heartbeat | [`apps/web/lib/queue/functions/quiescence-run.ts`](../../apps/web/lib/queue/functions/quiescence-run.ts) |
 | Liveness / staleness contract | **`StallEvent`** + `TaskRun.lastHeartbeatAt` + `taskrun-watchdog` cron (retry/abandon/escalate) | [`apps/web/lib/queue/functions/taskrun-watchdog.ts`](../../apps/web/lib/queue/functions/taskrun-watchdog.ts) |
@@ -166,7 +186,7 @@ Distilled from §2–§4 and the founder kernel. These are the acceptance criter
 3. **One explicit, user-visible state machine per process**, with `awaiting-input`, `error`, and `stale` as first-class states. State is a product surface. *(Linear six-state model.)*
 4. **Workflows where you can, agents where you must.** The deterministic engine owns *what comes next and where artifacts live*; the model makes *bounded* decisions inside that frame. *(Anthropic; Praetorian/AWS consensus.)*
 5. **Side effects are idempotent, individually retryable steps.** A step that re-runs must not double-execute (no silent dropped writes, no double-published campaign asset, no double-posted journal entry).
-6. **Human accountability at a non-bypassable gate.** Consequential boundaries (ship a PR, publish a campaign, post to the GL) require a recorded human/operator approval. Governance approves *evidence, not provenance* — the gate ratifies evidence quality regardless of who produced it.
+6. **Accountability and current authority at consequential boundaries.** Apply the existing policy for publishing, financial effects and other consequential actions. Reuse valid standing authorization; obtain a human decision only when scope, authority or unresolved judgment requires one. An internal retry or executor replacement alone is not a new approval boundary. Governance approves *evidence, not provenance*.
 7. **Liveness contracts, not silent hangs.** Heartbeats + staleness thresholds + a watchdog that retries/abandons/escalates. *(Linear `stale`; DPF `StallEvent`.)*
 8. **Bounded autonomy via external circuit breakers.** Per-step timeouts, iteration caps, and spend ceilings enforced *outside* the model so a runaway run "fails small, not crashes big."
 9. **Plan as an editable, durable artifact**, with revert-and-re-plan preferred over patching an in-flight run. *(Cursor Plan Mode.)*
@@ -184,6 +204,70 @@ Distilled from §2–§4 and the founder kernel. These are the acceptance criter
 
 ---
 
+### 5.1 Common recovery contract
+
+This contract applies to every agentic process, including a short tool action
+that can outlive its caller. It extends the existing TaskRun, Workroom,
+AsyncInferenceOp and durable queue contracts. It introduces no parallel engine,
+ledger, universal approval step or client-owned recovery loop.
+
+1. **Work has stable identity.** Persist the immutable request, owning process,
+   version and relevant evidence references before dispatch. Keep business work
+   identity separate from execution attempts, sessions and credentials. Resume
+   the same operation for the same authorized request; an intentional successor
+   records its predecessor and reason. Changed intent is a new operation.
+2. **Progress survives interruption.** Persist checkpoints, pending dispatch,
+   provider handles and committed results in their existing authoritative
+   stores. Reconcile a lost response against committed state before invoking
+   inference or publishing again. A successful tool call, a saved receipt and a
+   satisfied gate are distinct facts.
+3. **Effects are reconciled before replay.** Use stable effect keys and atomic
+   state transitions where available. An ambiguous remote outcome requires
+   provider reconciliation or explicit repair, not a blind repeat. Compensation
+   is domain-specific and must not claim to undo irreversible effects.
+4. **Authority is current; ownership is durable.** Validate the current human,
+   organization, coworker, consent and resource scope on resume or reassignment.
+   Credential refresh within a valid authority family preserves task identity;
+   revoked authority pauses access. An authorized takeover records the prior
+   and new executor without discarding work or history. Executor replacement
+   alone preserves accountability; an authorized accountable-owner transfer
+   records its own before/after identity and authority.
+5. **The platform drives bounded recovery.** Queue delivery and reconciliation
+   operate without the original client. Classify transient dependency failures,
+   exhausted capacity, missing decisions, denied authority and actual defects.
+   Retain retry budgets across restarts and replacements. At exhaustion, persist
+   a specific next action and responsible owner, or a justified terminal
+   disposition. Neither an infinite loop nor silent abandonment is recovery.
+6. **Recovery is visible and verifiable.** Show the last committed progress,
+   current attempt, uncertainty, responsible owner and next action in the
+   existing work surface. Notifications wake a reader; canonical state decides
+   what happened. A replacement human or agent can continue from those records
+   without reconstructing a private conversation.
+
+#### Interruption acceptance matrix
+
+Apply relevant rows through existing failure-analysis and verification evidence;
+record why a row does not apply. This is one shared contract, not a fresh
+checklist approval on every retry.
+
+| Interruption or boundary | Required observation |
+|---|---|
+| Caller disconnects or is killed after dispatch | Server-owned work progresses or exposes a bounded wait; reconnect retrieves the same operation. |
+| Worker restarts or an upgrade interrupts a step | Completed effects are retained; the unfinished step resumes under its recorded version or an explicit migration. |
+| Response is lost after an effect or receipt commits | Reconciliation returns the committed result and advances once; no duplicate effect, inference or approval. |
+| Duplicate delivery or competing executors | A fenced claim or compare-and-set admits one valid transition; a stale worker cannot overwrite its successor. |
+| Credential rotates or an executor is reassigned | Authorized recovery retains work identity and evidence; another human, tenant, consent or resource cannot inherit access. |
+| Provider, source reader or budget becomes unavailable | Progress and real continuation cursors survive; retry is bounded and wakes on a relevant change. Exhaustion names a repair or terminal disposition. |
+| Authority is revoked or the request/artifact is superseded | Resume refuses the stale authority or evidence and supplies the supported repair; it never invents approval. |
+| No eligible replacement or a nonrepeatable effect is uncertain | Work remains visible with an accountable owner and reconciliation/compensation path; it is not silently marked successful. |
+
+Coverage belongs to the owning adapter's tests and runtime evidence. Updating
+this architecture does not establish fleet-wide conformance. The September 2026
+review incident proved the difference: receipt validation and completion were
+repaired, while access-token-based task identity still required its own OAuth
+repair. Existing async-operation recovery and provider-outage work likewise
+retain their own acceptance obligations.
+
 ## 6. Target architecture — the Durable Agentic Process (DAP)
 
 A single pattern that every long-horizon process is an instance of. It is mostly *assembly of existing DPF substrate* under one name.
@@ -200,10 +284,10 @@ A single pattern that every long-horizon process is an instance of. It is mostly
                                         │ drives
         ┌───────────────────────────────┼───────────────────────────────┐
         ▼                                ▼                                ▼
-  Inngest workflow fn            Phase gates (HITL)              Watchdog (liveness)
-  step.run per phase /           WWMD principle_decide           StallEvent +
-  per task → journaled,          + recorded operator             taskrun-watchdog →
-  retried, resumable             approval (non-bypassable)       retry/abandon/escalate
+  Inngest workflow fn            Scope-appropriate gates         Watchdog (liveness)
+  step.run per phase /           WWMD / WWWD / profession        StallEvent +
+  per task → journaled,          + current authority             taskrun-watchdog →
+  retried, resumable             + required decisions            retry/abandon/escalate
         │
         ▼
   Bounded sub-agent steps (orchestrator-workers)
@@ -223,11 +307,34 @@ A single pattern that every long-horizon process is an instance of. It is mostly
 1. **Durable object** — generalize `TaskRun` into (or alias it as) `ProcessRun` with a `kind` discriminator and a domain `phase` (§7.4). One row, stable id, owns the state machine, plan artifact, evidence, heartbeat, and version.
 2. **Durable execution** — the orchestration is an **Inngest function** with one `step.run` per phase (and per task within a phase). The journal gives resume-from-last-step *for free*, deleting the title-match resume logic and the boot-reconciliation hooks.
 3. **Explicit state machine** — the domain phase enum (Build Studio's already exists; marketing/close get their own) *plus* the cross-domain status (`working/awaiting-input/error/stale`) borrowed from `TaskRun`. Both rendered in the UI.
-4. **HITL gates** — `principle_decide` + recorded operator approval at consequential boundaries; suspend the workflow (`step.waitForEvent`) at the gate and resume on the approval event, rather than blocking a process.
+4. **Decision and authority gates** — existing policy and settled direction in the owning scope determine whether a decision is needed: WWMD for platform development, WWWD for the organization's business, profession authority for craft. Where human input is required, persist the wait and resume on its recorded response rather than blocking a process. Reuse unchanged authorization and evidence during recovery.
 5. **Liveness + circuit breakers** — `lastHeartbeatAt` + `StallEvent` watchdog + per-step timeout + iteration/spend caps.
 6. **Experience layer** — the operator-facing surface that *renders* layers 1–5 and *feeds* the gate in layer 4: a `kind`-agnostic process graph, truth-source-honest progress, a cross-process inbox + notification transport for `awaiting-input` / terminal states, recovery affordances, and an editable plan. Generalized from the Build Studio components that already exist (§3.2), not built new. **Designed in depth — trust calibration, attention/notification policy, situational-awareness gates, progressive disclosure, the cross-process inbox, and UX acceptance metrics — in the companion [`2026-06-09-dap-experience-layer-design.md`](2026-06-09-dap-experience-layer-design.md).**
 
 **Implemented external Task slice (2026-08-31):** ordinary MCP `TaskRun` submissions now use the existing self-hosted Inngest substrate as a durable execution outbox. Submission commits the task and immutable request/authentication binding before enqueue; the worker claims it with the canonical heartbeat-aware compare-and-set transition, runs the unchanged governed executor, and emits status only after committed transitions. A scheduled two-minute reconciliation job re-enqueues bounded pending work after a portal restart or lost delivery. Streamable HTTP GET/SSE pushes MCP `notifications/tasks/status`; `tasks/get` and `tasks/list` remain the recovery and compatibility path. This realizes “notify, don't poll” as **push first, bounded polling second**—not push-only—and deliberately avoids caller-selected webhooks or a second task ledger.
+
+**Implemented upgrade drain that waits for work (2026-10-01, BI-F9EE05E5 slice A):** the `QuiescenceRun` coordinator (`queue/functions/quiescence-run.ts`) no longer stops in-flight work when a self-upgrade drains. Admission closes at drain start. TaskRuns are flipped to `quiescing` only once hard blockers clear (or on operator force), so live build phases run to completion and are never reaped while they still heartbeat. The wait checks once per tick and sleeps on an operator-control event between checks. It pauses in the non-terminal `awaiting-operator` status at a configurable bound (default 60 minutes), and an operator abort is recorded durably (`QuiescenceRun.abortRequestedAt/By`). The self-upgrade job runs as separate pre-drain, wait and swap steps (`self-upgrade-steps.ts`, `self-upgrade-swap.ts`) rather than one long request. The wait helpers live in `self-upgrade/drain-wait.ts`, admission re-assertion and the swap guard in `drain-admission.ts`, and the import-free status contract in `quiescence-contract.ts`. Reconcilers and the stuck-coordinator watchdog key on heartbeat and swap state, never on run age. Design: Activity Quiescence Protocol §11a.
+
+**Implemented guard-finding repair (2026-09-30, BI-B2EEA6DE):** when a Build Studio build's finalize gauntlet fails on its own change, the review job hands the build back to its build phase and sends `build/gauntlet.repair`. That event-only function, registered in `queue/functions/index.ts` with per-build concurrency 1, dispatches one repair task through the orchestrator's specialist dispatch (`runGauntletRepairTask`) and returns the build to review. The bound (two hand-backs, then one operator escalation) and the state (`verificationOut.gauntletRepair`, pointing at the evidence record) live in `lib/build/gauntlet-repair.ts`.
+
+**Implemented async delivery projection (2026-09-04):** the Delivery task hub reads authorized durable async-operation handles through their server-owned `TaskRun` or Workroom binding. One event-only function registered in `queue/functions/index.ts` consumes committed async transition locators, re-reads canonical state, writes a deterministic `status-changed` activity to the existing Workroom ledger, and wakes the bounded list stream. Recent terminal transitions may also create one deduplicated semantic notification. The event payload never supplies status, Workroom, recipient, result, or notification authority, and this projection adds neither a scheduler nor a second execution or task ledger.
+
+**Deliberation branches execute (2026-09-15):** the runner was durable and
+resumable from the start, but it only ever *routed* a branch — `routeEndpointV2`
+chose a provider and model, the choice was recorded, and the node was marked
+complete without a call. Every branch finished in zero seconds, so the
+synthesizer found no positions to merge and every run on every pattern returned
+"Insufficient evidence to produce a recommendation" (measured: review 1207/1210,
+debate 198/198, governance-triage 263/275 — one distinct outcome between them).
+Branches now dispatch through `routeAndCall`, the canonical route-and-execute
+entry point, carrying the role's persona and the run's `brief`; the reply is
+persisted to `TaskNode.outputSnapshot` and parsed into the `BranchArtifact`
+fields the synthesizer already consumed. `OrchestrateDeliberationInput` gained
+`brief` / `subject`, because the engine previously had no channel for what it
+was deliberating about. Budget accounting moved from a `+= 0` placeholder to
+observed token usage, so `budgetUsd` now actually halts a panel. The durable
+execution properties described above are unchanged — this fills the dispatch
+step inside them.
 
 **What is deliberately *not* adopted:** Temporal/Restate/DBOS as a new engine. DPF already runs Inngest, which provides the same journaling/retry/resume semantics. Adding a second durable engine would violate single-source-of-truth and the simplicity principle. The lesson from Cursor is *"put the agent loop on durable execution,"* not *"use Temporal specifically."*
 
@@ -445,3 +552,14 @@ The implication is the opposite of "lock in the subscription": **the flat-rate a
 ---
 
 *This is an assessment. Every recommendation in §7–§8 enters the backlog and is promoted through Build Studio; nothing here is authorization to write feature code directly.*
+
+## Merge-triggered subscribers (BI-A6E4D205, BI-848360EF)
+
+`build/pr-merged.received` is emitted by the signed GitHub webhook receiver when a `pull_request` closes as merged. It carries repository, number, head branch, head sha, merge commit and merge time.
+
+Two subscribers consume it, both registered in `eventFunctions` — they have no cron and must never appear in `scheduledFunctions`, which is the registry the admin Scheduled Jobs surface renders and whose parity guard requires a `SCHEDULED_JOB_CATALOG` row:
+
+- **`build/pr-merged-binding`** binds the Workroom to the pull request that delivered it, via `resolvePullRequestBindings`. It never repoints a room already bound to a different number, and a re-delivered webhook is a no-op by construction.
+- **`build/pr-merged-reap`** runs the worktree janitor scoped to the merged branch. It implements no reaping rules of its own; see the branch-and-worktree runbook for why that delegation matters.
+
+Both are idempotent, because GitHub re-delivers webhooks. Neither asserts success when it cannot reach its subject.

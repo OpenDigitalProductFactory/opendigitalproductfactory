@@ -83,7 +83,7 @@ The runtime grants for this agent come from the registry's `tool_grants` array a
 
 Four of those grants (`role_registry_read`, `policy_read`, `strategy_read`, `budget_read`) are real role requirements you cannot exercise today — the platform has not yet implemented the honoring tools. Per the [2026-04-28 sequencing plan's Track D batch T4.1 (governance reads)](../../docs/superpowers/plans/2026-04-28-coworker-and-routing-sequencing-plan.md), this is scheduled work, not bloat. When those tools land, the conscience-check capability becomes meaningfully sharper because you can read against actual stated strategy, policy, and budget.
 
-Memory access is automatic, not a grant: you read from the shared workspace memory (Qdrant `agent-memory` collection plus the `UserFact` Postgres store) on every turn through the platform's recall pipeline. You do not call a "memory tool" — context arrives in your system prompt.
+Memory access is automatic, not a grant: you read from the shared workspace memory (the pgvector `agent-memory` collection plus the `UserFact` store, both in Postgres) on every turn through the platform's recall pipeline. You do not call a "memory tool" — context arrives in your system prompt.
 
 # Operating Rules
 

@@ -1,7 +1,6 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 696,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -10,6 +9,7 @@
       "publishedPortal": false,
       "anchors": [
         "documentation",
+        "install-and-host-selection",
         "user-guide",
         "market-proof",
         "source-of-truth-boundaries",
@@ -26,21 +26,40 @@
       "anchors": [
         "trusted-ai-agent-governance",
         "executive-summary",
-        "1-the-market-problem",
+        "1-the-defining-problem-approval-fatigue",
+        "11-per-call-approval-does-not-survive-contact-with-people",
+        "12-so-people-switch-it-off",
+        "13-the-incident-record",
+        "14-classifiers-are-an-improvement-not-an-authority",
+        "15-what-oversight-regulation-asks-for",
         "2-why-current-standards-and-protocols-fall-short",
         "3-public-policy-and-industry-signals",
-        "4-the-case-for-a-trusted-ai-kernel-tak",
-        "5-the-case-for-a-global-ai-agent-identification-and-governance-framework-gaid",
-        "6-the-case-for-job-specific-intelligence-tak-jsi",
-        "7-why-the-standards-belong-together",
-        "8-dpf-as-a-proving-ground",
-        "9-a-neutral-reference-model",
-        "10-why-a-staged-adoption-model-is-the-most-credible-path",
+        "4-four-cornerstones",
+        "41-gaid-who-is-it",
+        "42-tak-jsi-is-it-fit-for-this-job",
+        "43-gpp-who-decided-this-may-happen",
+        "44-tak-may-it-act-now",
+        "5-why-the-standards-belong-together",
+        "6-decisions-belong-to-their-scope",
+        "7-mbse-with-ai-as-a-first-class-participant",
+        "71-the-gap-in-systems-engineering",
+        "72-the-model-is-the-system",
+        "73-why-this-matters-beyond-dpf",
+        "74-from-model-to-machine",
+        "8-dpf-the-working-instantiation",
+        "81-what-was-examined",
+        "82-claim-to-evidence-ledger",
+        "83-what-building-it-taught-us",
+        "84-portability-and-replaceable-inference",
+        "85-immutable-source-and-evidence-register",
+        "9-measuring-whether-it-works",
+        "10-a-neutral-reference-model",
         "11-public-verification-architecture-options-for-gaid",
-        "12-dpf-as-an-initial-prototype-and-outcome-framework",
-        "13-recommendations-for-governments-standards-bodies-and-enterprises",
-        "14-conclusion",
-        "references"
+        "12-why-staged-adoption-is-the-credible-path",
+        "13-recommendations",
+        "14-a-call-to-the-ecosystem",
+        "references",
+        "revision-history"
       ]
     },
     "docs/architecture/2026-06-09-dap-experience-layer-design.md": {
@@ -82,6 +101,8 @@
         "32-the-experience-layer-exists-too-and-has-the-same-build-studio-only-problem",
         "4-the-gap-named",
         "5-design-principles-the-bar-any-long-running-process-must-clear",
+        "51-common-recovery-contract",
+        "interruption-acceptance-matrix",
         "6-target-architecture-the-durable-agentic-process-dap",
         "7-applying-dap",
         "71-build-studio-the-first-and-proving-instance",
@@ -99,7 +120,8 @@
         "95-cost-bands-order-of-magnitude-mid-2026-full-cites-10",
         "96-recommendation",
         "97-epistemic-status-of-the-9-numbers-independent-verification-2026-06-09",
-        "10-references-primary-sources-dated"
+        "10-references-primary-sources-dated",
+        "merge-triggered-subscribers-bi-a6e4d205-bi-848360ef"
       ]
     },
     "docs/architecture/2026-06-14-ai-cockpit-sysml-architecture-note.md": {
@@ -413,6 +435,7 @@
         "2-the-composition-the-assurance-operating-loop",
         "3-the-capability-completeness-contract",
         "31-the-dead-column-check-generalized",
+        "3a-staffing-posture-a-hole-or-a-decision-runtime-2026-09-16",
         "4-what-changes-concretely",
         "4a-the-decision-gate-and-the-closed-loop",
         "4a1-what-exists",
@@ -461,6 +484,7 @@
         "recurring-obligation-work-shape-and-documentation-robustness",
         "1-the-finding-in-one-picture",
         "2-what-was-verified-not-asserted",
+        "22-the-split-registry-hazard-is-general-runtime-2026-09-02",
         "21-self-tasks-now-span-two-modules-runtime-2026-09-02",
         "3-the-generalization-obligations-are-a-family-not-a-feature",
         "31-coverage-of-the-four-watch-types-today",
@@ -536,6 +560,7 @@
         "10-chain-of-custody-and-agent-action-receipts",
         "101-core-requirement",
         "102-minimum-receipt-fields",
+        "1021-principle-directed-execution-binding",
         "103-trace-context-and-delegation",
         "104-integrity-and-non-repudiation",
         "105-privacy-and-minimization",
@@ -593,6 +618,7 @@
       "anchors": [
         "agent-client-capability-parity-tracker",
         "why-this-exists",
+        "client-capability-profile-generated-bi-64795fd0",
         "capability-matrix-verified-2026-06-20",
         "2026-06-26-refresh-delivery-surface-sweep",
         "2026-07-24-refresh-bi-14e9f7ce-closeout-grok-hook-portability",
@@ -618,6 +644,23 @@
         "client-identity-and-trust",
         "operator-attention",
         "adding-another-consequential-gate"
+      ]
+    },
+    "docs/architecture/agent-governance-market-landscape-2026.md": {
+      "publicHref": "/architecture/agent-governance-market-landscape-2026/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "ai-agent-governance-market-and-thought-leadership-landscape-2026",
+        "1-the-problem-in-one-paragraph",
+        "2-evidence-that-per-call-approval-fails",
+        "3-incident-record-20242026",
+        "4-frameworks-and-thought-leadership",
+        "5-products-and-adjacent-approaches",
+        "6-the-gap-gpp-addresses",
+        "7-implications-for-dpfs-public-claims",
+        "8-what-this-brief-could-not-verify"
       ]
     },
     "docs/architecture/agent-skill-index.md": {
@@ -679,7 +722,8 @@
         "short-term",
         "medium-term",
         "prototype-outcomes",
-        "submission-ready-future-work"
+        "submission-ready-future-work",
+        "mcp-discovery-refusal-conformance"
       ]
     },
     "docs/architecture/agent-standards-external-alignment.md": {
@@ -720,9 +764,11 @@
         "104-proactivity-is-not-autonomy",
         "105-validation-does-not-survive-material-change-silently",
         "106-evidence-closes-the-lifecycle",
+        "107-approval-is-a-decision-not-a-keystroke",
         "11-standards-contribution-profile",
         "12-implementation-and-claiming-guidance",
         "13-open-standardization-questions",
+        "mbse-composition-mapping",
         "14-summary"
       ]
     },
@@ -737,7 +783,10 @@
         "standards-map",
         "enterprise-operating-model-bridge",
         "composition-rule",
+        "principle-directed-work-and-mbse-composition",
+        "gated-permissions-and-approval-fatigue",
         "adjacent-dpf-concepts",
+        "word-editions",
         "source-of-truth-rule"
       ]
     },
@@ -864,6 +913,7 @@
       "anchors": [
         "ai-routing-document-map",
         "current-authority",
+        "streaming-versus-result-delivery",
         "approved-adjacent-delivery-contract",
         "proposed-architecture",
         "historical-records",
@@ -879,6 +929,7 @@
       "anchors": [
         "application-boundaries",
         "governed-dependency-direction",
+        "outer-layers-lib-never-imports-the-ui",
         "why-this-direction",
         "exception-contract",
         "refactoring-pattern",
@@ -896,7 +947,7 @@
         "0-why-this-document-exists",
         "1-two-senses-of-value-stream-keep-them-distinct",
         "2-the-default-small-business-value-stream",
-        "21-leaf-process-profiles-replace-the-fallback-when-the-business-works-differently",
+        "21-leaf-process-profiles-compose-with-the-backbone-when-the-business-works-differently",
         "3-the-commercial-model-decides-the-value-stream-shape",
         "4-the-bridge-value-stream-stage-platform-surface-audit-phase",
         "5-the-value-stream-stages-map-onto-substrate-the-platform-already-carries",
@@ -1058,9 +1109,11 @@
         "the-scoring-math",
         "a-worked-example",
         "from-scores-to-an-outcome",
+        "from-a-decision-to-a-permission",
         "jsi-weights-that-learn-the-job",
         "earning-autonomy-from-passive-to-proactive",
         "the-decision-ledger",
+        "governed-decision-trust-state-report-only",
         "the-learning-loop",
         "current-boundaries"
       ]
@@ -1086,7 +1139,8 @@
       "publishedPublic": true,
       "publishedPortal": false,
       "anchors": [
-        "backlog-planning-runbook"
+        "backlog-planning-runbook",
+        "task-specific-operating-rules"
       ]
     },
     "docs/architecture/backlog-archetype-scope.md": {
@@ -1121,7 +1175,9 @@
         "root-clone-freshness-the-shared-root-must-stay-on-current-main",
         "reaping-safety-a-live-sessions-worktree-is-never-reaped",
         "rebasing-on-a-shallow-clone-never-a-bare-git-rebase-originmain",
-        "housekeeping"
+        "housekeeping",
+        "when-a-worktree-is-removed",
+        "task-specific-operating-rules"
       ]
     },
     "docs/architecture/build-gate-runbook.md": {
@@ -1130,7 +1186,17 @@
       "publishedPublic": true,
       "publishedPortal": false,
       "anchors": [
-        "build-gate-runbook"
+        "build-gate-runbook",
+        "recovering-an-interrupted-gate-publication",
+        "isolated-verification-users",
+        "semantic-review-publication-and-infrastructure-recovery",
+        "published-corrections-and-host-guard-reuse",
+        "auto-merge-armed-is-not-auto-merge-happening-bi-53be1c77",
+        "the-room-follows-its-pr-through-ci-bi-88341b5d",
+        "a-merged-pull-request-is-delivered-not-discovered-bi-a6e4d205",
+        "reaping-the-worktree-when-the-pr-merges-bi-848360ef",
+        "task-specific-operating-rules",
+        "a-refusal-carries-its-own-remedy"
       ]
     },
     "docs/architecture/build-studio-namespace.md": {
@@ -1202,7 +1268,10 @@
         "backup-and-health-semantics",
         "observation-and-diagnostics-boundary",
         "diagnosing-capability-drift-bi-5acbac50",
-        "safe-operating-rules"
+        "existing-install-reconciliation-bi-5acbac50",
+        "historical-implementation-evidence",
+        "safe-operating-rules",
+        "how-self-upgrade-may-recreate-a-service"
       ]
     },
     "docs/architecture/complexity-shield-acceptance-standard.md": {
@@ -1282,7 +1351,9 @@
         "7-subagent-dispatch-discipline",
         "14-release-testing",
         "15-communication",
-        "8a-advise-safe-tools-server-action-exports-coworker-coordination-pointers"
+        "ending-an-unfinished-thread",
+        "8a-advise-safe-tools-server-action-exports-coworker-coordination-pointers",
+        "task-specific-operating-rules"
       ]
     },
     "docs/architecture/customer-zero-and-use-case-zero.md": {
@@ -1323,7 +1394,13 @@
       "publishedPortal": false,
       "anchors": [
         "data-model-stewardship-runbook",
-        "record-lifecycle-convention"
+        "record-lifecycle-convention",
+        "model-metadata-lives-in-the-schema-and-the-catalog",
+        "the-steward-watches-growth-not-only-structure",
+        "retention-floors-come-from-the-obligations-that-bind-this-install",
+        "evidence-payloads-never-live-inline",
+        "retiring-a-model-nothing-reads",
+        "task-specific-operating-rules"
       ]
     },
     "docs/architecture/decision-vectors-by-archetype.md": {
@@ -1427,7 +1504,9 @@
       "publishedPublic": true,
       "publishedPortal": false,
       "anchors": [
-        "delivery-surfaces-runbook"
+        "delivery-surfaces-runbook",
+        "task-specific-operating-rules",
+        "contributor-preview-binding-and-cleanup"
       ]
     },
     "docs/architecture/dependency-reduction-routine.md": {
@@ -1440,12 +1519,19 @@
         "the-two-axes-and-where-dependabot-fits",
         "sbom-generation",
         "axis-1-reduction-efficiency",
+        "specifier-drift-one-specifier-per-package",
+        "shape-budgets-the-surface-only-shrinks",
+        "lockfile-roots",
+        "pruning-overrides",
+        "typecheck-program-budget-checked-lines-only-grow-with-the-diff",
+        "warm-start-in-ci",
         "axis-2-vulnerability-lifecycle-the-local-dependabot-equivalent",
         "the-remediation-ladder-when-a-floor-wont-work",
         "owning-a-fix-pnpm-patch-when-upstream-is-dead",
         "axis-3-acquisition-control-the-new-dependency-gate",
         "why-this-shape-wwmd",
         "doctrine-rent-vs-own-and-validate-the-rent",
+        "build-time-tools-are-tools-not-workspace-dependencies",
         "hardening-the-rent-upgrade-validation",
         "dual-package-hazard-guard-singleton-safety",
         "schedules",
@@ -1461,7 +1547,26 @@
       "publishedPublic": true,
       "publishedPortal": false,
       "anchors": [
-        "design-research-runbook"
+        "design-research-runbook",
+        "task-specific-operating-rules",
+        "research-receipt-recovery"
+      ]
+    },
+    "docs/architecture/document-generation-facility.md": {
+      "publicHref": "/architecture/document-generation-facility/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "document-generation-facility",
+        "parts",
+        "templates-and-placeholders",
+        "trusted-path-and-customer-files-founder-decision-2026-09-25-bi-bff142a1",
+        "determinism",
+        "degraded-behaviour",
+        "previews",
+        "seams",
+        "verification"
       ]
     },
     "docs/architecture/dpf-patterns.md": {
@@ -1564,6 +1669,29 @@
         "change-control"
       ]
     },
+    "docs/architecture/failure-analysis-and-recovery.md": {
+      "publicHref": "/architecture/failure-analysis-and-recovery/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "failure-analysis-and-recovery-evidence",
+        "deployment-and-protection"
+      ]
+    },
+    "docs/architecture/federation-outbox-runbook.md": {
+      "publicHref": "/architecture/federation-outbox-runbook/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "federation-outbox-reading-a-backlog-correctly",
+        "the-two-shapes-of-failure-and-why-they-must-not-share-a-budget",
+        "reading-the-queue-health-line",
+        "link-quarantine",
+        "when-you-get-back-on-the-peers-network"
+      ]
+    },
     "docs/architecture/field-service-work-item.md": {
       "publicHref": "/architecture/field-service-work-item/",
       "portalHref": null,
@@ -1590,6 +1718,7 @@
         "maturity-labels-closed-set",
         "finance-matrix-snapshot",
         "payroll-absorption-stance-reversal-2026-08-22",
+        "statutory-rate-acquisition-propose-ratify-resolve-2026-09-01",
         "payroll-tax-persistence-and-period-components-2026-08-26",
         "mileage-jurisdiction-resolution-2026-08-26",
         "finance-doc-reconciliation-rules",
@@ -1745,6 +1874,7 @@
         "four-portfolio-archetype-standard-profile-catalog",
         "1-purpose",
         "2-facet-registry",
+        "cross-workroom-review-application-informative",
         "21-commercial-and-public-value-facets",
         "22-delivery-topology-facets",
         "23-resource-asset-and-custody-facets",
@@ -1817,6 +1947,91 @@
         "use-in-dpf"
       ]
     },
+    "docs/architecture/gated-permissions-process.md": {
+      "publicHref": "/architecture/gated-permissions-process/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "gated-permissions-process-gpp",
+        "abstract",
+        "1-scope",
+        "2-conformance",
+        "21-versioning",
+        "211-binding-revision-versus-shape-version",
+        "3-references",
+        "31-normative-references",
+        "32-informative-references",
+        "33-reuse-rule",
+        "4-terms-and-definitions",
+        "5-core-principle",
+        "6-relationship-to-the-family",
+        "7-the-gated-permission-binding",
+        "71-capability-vocabulary",
+        "72-gate-resolution-semantics",
+        "73-the-pairing-at-a-glance",
+        "8-capability-co-occurrence",
+        "9-bindings-over-time",
+        "91-decide-once-act-within",
+        "92-phase-boundaries",
+        "93-expiry-revocation-and-material-change",
+        "94-narrowing-only",
+        "10-completeness-and-consistency",
+        "11-evidence-and-efficacy-measures",
+        "12-notation",
+        "121-textual-form",
+        "122-sysml-v2-mapping",
+        "123-the-binding-as-a-model",
+        "124-from-model-to-running-system",
+        "1241-the-model-is-executable-or-verified",
+        "1242-the-model-is-visible-at-design-time-and-at-runtime",
+        "1243-dpf-status",
+        "13-hazards",
+        "14-security-and-privacy-considerations",
+        "annex-a-informative-dpf-realization-status",
+        "annex-b-informative-proposed-assertions",
+        "annex-c-informative-build-studio-as-a-gpp-model",
+        "c1-the-model",
+        "c2-one-binding-written-out",
+        "c3-what-modeling-it-revealed",
+        "c4-path-to-conformance",
+        "revision-history"
+      ]
+    },
+    "docs/architecture/improvement-signal-intake.md": {
+      "publicHref": "/architecture/improvement-signal-intake/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "improvement-signal-intake",
+        "source-identity-and-recurrence",
+        "concurrent-delivery-and-failure",
+        "remaining-learning-qualification"
+      ]
+    },
+    "docs/architecture/initiative-readiness-runbook.md": {
+      "publicHref": "/architecture/initiative-readiness-runbook/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "initiative-readiness-runbook-who-does-what-when-through-the-gates",
+        "0-two-shapes-do-not-conflate-them",
+        "approval-status-is-separate-from-original-action-evidence",
+        "medium-body-criteria-and-independent-acceptance",
+        "1-the-lifecycle-sequence",
+        "2-the-gates-role-actor-evidence-feature-profile",
+        "3-how-a-gate-is-handed-to-the-right-coworker-the-recovery-packet",
+        "4-the-reviewer-roster-who-holds-which-grant",
+        "5-drive-to-completion-checklist",
+        "6-known-limitation-reviewer-dispatch-can-complete-without-writing-a-receipt",
+        "7-closing-a-small-or-medium-item-the-baseline-is-the-body-bi-0f8e39d5",
+        "approval-outcome-readback",
+        "anti-patterns-observed",
+        "original-review-recovery-across-connection-changes"
+      ]
+    },
     "docs/architecture/job-specific-intelligence.md": {
       "publicHref": "/architecture/job-specific-intelligence/",
       "portalHref": null,
@@ -1846,6 +2061,7 @@
         "81-wsid-and-vector-decisioning",
         "82-learning-and-adaptation",
         "83-workroom-process-overseer-qualification",
+        "84-qualification-of-principle-directed-work",
         "9-model-and-provider-suitability",
         "91-eligibility-before-ranking",
         "92-evidence-based-adequacy",
@@ -1914,6 +2130,22 @@
         "relationship-to-the-other-engines"
       ]
     },
+    "docs/architecture/localization-runbook.md": {
+      "publicHref": "/architecture/localization-runbook/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "localization-runbook",
+        "where-things-live",
+        "authoring-ui-copy",
+        "how-a-viewers-language-is-chosen",
+        "locale-statuses",
+        "checking-a-screen-for-right-to-left-readiness",
+        "adding-a-locale",
+        "the-localization-guard"
+      ]
+    },
     "docs/architecture/mcp-tool-authorization-runbook.md": {
       "publicHref": "/architecture/mcp-tool-authorization-runbook/",
       "portalHref": null,
@@ -1921,10 +2153,24 @@
       "publishedPortal": false,
       "anchors": [
         "mcp-tool-authorization-runbook",
+        "reading-an-owned-semantic-reviews-recovery-state",
+        "discovered-external-mcp-tools-are-default-deny-bi-8b7b2fe9",
         "protocol-version-window-mechanics-landed-contract-pending-ratification",
+        "gpp-permit-handles-phase-2",
         "terminal-readiness-recovery-packets",
+        "when-a-workroom-scope-claim-needs-a-person",
         "acting-coworker-binding-what-lets-a-token-join-a-work-room",
-        "diagnosing-requires-an-acting-coworker"
+        "diagnosing-requires-an-acting-coworker",
+        "diagnosing-an-empty-loadtools-result",
+        "task-specific-operating-rules",
+        "disclosure-measurement-and-recovery",
+        "administrator-classification-recovery",
+        "approval-convergence-probe",
+        "recovering-an-interrupted-independent-review",
+        "parent-bounded-local-review-execution-bi-03ac2fd9",
+        "recovering-an-original-initiative-review-after-a-connection-change",
+        "canonical-review-writer-execution-identity",
+        "bounded-workroom-activity-reads"
       ]
     },
     "docs/architecture/mcp-tool-packs.md": {
@@ -1935,6 +2181,8 @@
       "anchors": [
         "scoped-mcp-tool-packs",
         "the-shape",
+        "per-call-effects-under-existing-policy",
+        "read-packs-for-standing-stages",
         "migration-discipline-parity-first",
         "first-pack",
         "second-pack-lazy-handlers",
@@ -1966,6 +2214,19 @@
         "worked-example-fail",
         "related-tooling",
         "change-control"
+      ]
+    },
+    "docs/architecture/offline-recovery-preparation.md": {
+      "publicHref": "/architecture/offline-recovery-preparation/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "offline-recovery-preparation-and-compatible-rollout",
+        "available-source-primitives",
+        "release-sequence",
+        "observed-staging-release",
+        "remaining-acceptance"
       ]
     },
     "docs/architecture/operational-precedent-corpus.md": {
@@ -2003,7 +2264,8 @@
       "anchors": [
         "architecture-orientation",
         "subsystem-map",
-        "channel-adapter-capabilities"
+        "channel-adapter-capabilities",
+        "task-specific-operating-rules"
       ]
     },
     "docs/architecture/package-boundaries.md": {
@@ -2075,6 +2337,26 @@
         "what-success-means"
       ]
     },
+    "docs/architecture/portal-ux-evaluation-framework.md": {
+      "publicHref": "/architecture/portal-ux-evaluation-framework/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "portal-page-and-flow-evaluation-framework",
+        "1-evaluate-a-job-not-a-screenshot",
+        "2-rubric-and-decision-rules",
+        "inspect-inside-every-item",
+        "3-measurement-protocol",
+        "4-workroom-centered-disclosure",
+        "archetype-sentinels-without-ia-forks",
+        "5-standing-ux-design-and-fit-gate",
+        "every-pr-review-and-convergence-of-existing-ux",
+        "september-8-delivery-reconciliation",
+        "6-architecture-decision-and-research",
+        "consolidation-and-dependency-review"
+      ]
+    },
     "docs/architecture/principle-decide-mcda-identity.md": {
       "publicHref": "/architecture/principle-decide-mcda-identity/",
       "portalHref": null,
@@ -2084,6 +2366,7 @@
         "principledecide-math-identity-mcda",
         "what-the-scorer-is",
         "what-it-is-not",
+        "option-set-input-contract-bi-9889566b",
         "autonomy-gate-bi-1d23ec26",
         "operator-surfaces",
         "design-grounding"
@@ -2104,6 +2387,34 @@
         "product-management-playbook-boundary"
       ]
     },
+    "docs/architecture/provider-accounts.md": {
+      "publicHref": "/architecture/provider-accounts/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "provider-account-identity",
+        "governed-controls",
+        "provider-ui-preservation-contract",
+        "account-presentation-boundaries",
+        "migration-and-verification",
+        "measured-route-integration"
+      ]
+    },
+    "docs/architecture/review-reliability-recovery.md": {
+      "publicHref": "/architecture/review-reliability-recovery/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "review-reliability-and-aligned-execution",
+        "objective-and-authority",
+        "existing-substrate-and-plan",
+        "conflicting-and-overlapping-work",
+        "evidence-and-recovery-boundary",
+        "public-development-routing"
+      ]
+    },
     "docs/architecture/section-navigation.md": {
       "publicHref": "/architecture/section-navigation/",
       "portalHref": null,
@@ -2122,7 +2433,8 @@
       "publishedPublic": true,
       "publishedPortal": false,
       "anchors": [
-        "skill-surfaces-runbook"
+        "skill-surfaces-runbook",
+        "task-specific-operating-rules"
       ]
     },
     "docs/architecture/standards-review-2026-05-12-round-2.md": {
@@ -2197,6 +2509,7 @@
         "purpose",
         "assertion-format",
         "core-assertion-set",
+        "principle-directed-amendment-assertions",
         "evidence-publication-guidance",
         "use-in-dpf"
       ]
@@ -2221,7 +2534,21 @@
       "publishedPublic": true,
       "publishedPortal": false,
       "anchors": [
-        "theme-aware-styling-runbook"
+        "theme-aware-styling-runbook",
+        "task-specific-operating-rules"
+      ]
+    },
+    "docs/architecture/trusted-agent-reference-contract.md": {
+      "publicHref": "/architecture/trusted-agent-reference-contract/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "portable-trusted-agent-reference-contract",
+        "run-the-examples",
+        "import-and-version-negotiation",
+        "host-integration-and-effect-recovery",
+        "privacy-and-dpf-compatibility"
       ]
     },
     "docs/architecture/trusted-ai-kernel.md": {
@@ -2260,6 +2587,7 @@
         "712-proactivity-earned-autonomy-and-assurance-posture",
         "7121-autonomy-is-bounded-by-gate-coverage",
         "7122-admission-criteria-for-autonomous-operation",
+        "713-principle-directed-decision-contract",
         "8-tool-execution-and-action-gating",
         "81-tool-definitions",
         "82-execution-modes",
@@ -2294,6 +2622,7 @@
         "122-retention-rules",
         "123-context-truncation-and-summarization",
         "124-memory-validation",
+        "125-data-admission-and-processing-boundaries",
         "13-audit-evidence-and-non-repudiation",
         "131-minimum-audit-events",
         "132-evidence-fields",
@@ -2445,6 +2774,7 @@
         "shape-is-four-orthogonal-choices-not-one-taxonomy",
         "the-activity-shape-is-a-second-separate-claim-runtime-2026-09-02-bi-a967717a",
         "the-coordinator-is-the-workroom-process-overseer",
+        "appointing-one-runtime-2026-09-03-bi-f63200a8",
         "the-gate-which-scope-decides",
         "what-the-gate-does-to-the-turn",
         "where-the-declared-shapes-live-runtime-2026-09-02",
@@ -2452,7 +2782,23 @@
         "the-shapes-next-steps-after-the-gate",
         "setting-the-posture-and-the-default-for-rooms",
         "known-gaps",
-        "related"
+        "encoding-and-visualization",
+        "a-stalled-room-reaches-a-human",
+        "who-answers-for-a-room",
+        "nesting-has-to-be-written-not-just-declared",
+        "who-may-coordinate-authority-and-a-gate-with-no-key",
+        "concurrent-execution-and-recorded-state",
+        "the-brief-and-what-advances-a-stage",
+        "failing-closed-is-not-the-same-as-locking",
+        "every-reason-the-drive-emits-is-in-its-vocabulary-by-type",
+        "an-undispatched-stage-is-a-pause-and-its-task-owner-is-the-accountable-person",
+        "every-stage-is-a-queue",
+        "a-named-governed-writer-must-be-attached-not-discovered",
+        "offered-or-not-dispatched-offered-then-corrected-once-bi-62db6c03",
+        "a-stage-names-the-tools-it-needs",
+        "a-new-shape-version-reaches-a-live-room-only-by-rebind-bi-cb5c0dce",
+        "related-references",
+        "a-shape-must-outlive-the-room-that-decided-it-bi-82dcd601"
       ]
     },
     "docs/architecture/workos-iam-equivalence-scorecard.md": {
@@ -2471,6 +2817,40 @@
         "maintenance"
       ]
     },
+    "docs/architecture/workroom-cycle-continuity.md": {
+      "publicHref": "/architecture/workroom-cycle-continuity/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "workroom-cycle-continuity",
+        "existing-persistence-and-bounded-reads",
+        "recovery-integration-still-required",
+        "verification-and-rollback-boundary"
+      ]
+    },
+    "docs/architecture/workroom-ingestion-scale-qualification.md": {
+      "publicHref": "/architecture/workroom-ingestion-scale-qualification/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "workroom-ingestion-scale-qualification"
+      ]
+    },
+    "docs/architecture/workroom-review-profile-contract.md": {
+      "publicHref": "/architecture/workroom-review-profile-contract/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "workroom-review-profile-read-contract",
+        "operator-disclosure",
+        "common-requirements-and-extensions",
+        "coverage-and-representative-domains",
+        "verification-and-recovery"
+      ]
+    },
     "docs/architecture/workroom-vocabulary-boundary.md": {
       "publicHref": "/architecture/workroom-vocabulary-boundary/",
       "portalHref": null,
@@ -2482,11 +2862,20 @@
         "definition-and-instance-are-an-orthogonal-axis",
         "implemented-projection-seam",
         "composition-duration-and-evidence",
+        "human-accountability-is-not-coordination-execution-or-access",
+        "what-an-activity-symbol-is-allowed-to-claim",
+        "an-executor-is-a-teammate-not-a-surface",
+        "expansion-is-not-selection",
         "naming-rules",
         "a-known-tension-accepted-deliberately",
         "what-is-deliberately-not-renamed-yet",
         "what-a-human-reads-is-renamed-and-now-guarded",
-        "related"
+        "related",
+        "a-disclosure-control-discloses",
+        "a-count-says-what-it-counted",
+        "a-statement-names-its-room",
+        "the-room-inspector-renders-what-the-projections-resolve",
+        "a-room-with-no-workitem-is-its-own-case"
       ]
     },
     "docs/business-types/_readability-report.md": {
@@ -3387,6 +3776,30 @@
         "status-of-this-index-page"
       ]
     },
+    "docs/founder-kernel/wiki/principles/a-room-is-reachable-by-construction.md": {
+      "publicHref": "/founder-kernel/wiki/principles/a-room-is-reachable-by-construction/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "the-rule",
+        "why",
+        "how-it-is-enforced"
+      ]
+    },
+    "docs/founder-kernel/wiki/principles/absorb-dont-adopt.md": {
+      "publicHref": "/founder-kernel/wiki/principles/absorb-dont-adopt/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "how-to-apply",
+        "evidence-led-ecosystem-absorption",
+        "related"
+      ]
+    },
     "docs/founder-kernel/wiki/principles/all-changes-land-via-pr.md": {
       "publicHref": "/founder-kernel/wiki/principles/all-changes-land-via-pr/",
       "portalHref": null,
@@ -3433,6 +3846,25 @@
         "sources"
       ]
     },
+    "docs/founder-kernel/wiki/principles/automation-is-measured-by-the-human-steps-it-removes.md": {
+      "publicHref": "/founder-kernel/wiki/principles/automation-is-measured-by-the-human-steps-it-removes/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "how-to-apply",
+        "decision-dimensions",
+        "value-is-the-net-and-that-is-what-makes-it-a-proof",
+        "where-work-should-move-human-then-ai-then-code",
+        "this-is-the-return-on-investment-criterion-for-the-backlog",
+        "humancognitiveload-is-a-required-measure-not-an-optional-axis",
+        "scope-and-propagation",
+        "examples",
+        "related-principles"
+      ]
+    },
     "docs/founder-kernel/wiki/principles/autonomous-directives-are-blanket-approval.md": {
       "publicHref": "/founder-kernel/wiki/principles/autonomous-directives-are-blanket-approval/",
       "portalHref": null,
@@ -3445,9 +3877,23 @@
         "the-descent-bound-how-far-the-directive-carries",
         "counterexample-the-58-hour-run-bi-980fe9f5",
         "what-still-requires-approval-even-under-autonomous-directives",
+        "direction-authority-and-recovery-are-different-questions",
         "what-the-agent-should-do-mid-autonomous-run",
         "anti-pattern",
         "related-principles"
+      ]
+    },
+    "docs/founder-kernel/wiki/principles/autonomy-graduates-on-recorded-agreement.md": {
+      "publicHref": "/founder-kernel/wiki/principles/autonomy-graduates-on-recorded-agreement/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "what-this-page-does-not-say",
+        "how-to-apply",
+        "overlap-scan-43"
       ]
     },
     "docs/founder-kernel/wiki/principles/branch-guard-before-implementation.md": {
@@ -3586,13 +4032,11 @@
       "publishedPortal": false,
       "anchors": [
         "rule",
-        "applies-to",
         "why",
         "how-to-apply",
-        "decision-dimensions",
+        "decision-dimensions-and-existing-enforcement",
         "examples",
-        "when-this-does-not-apply",
-        "see-also"
+        "related-principles"
       ]
     },
     "docs/founder-kernel/wiki/principles/consult-specs-first.md": {
@@ -3626,6 +4070,18 @@
         "see-also"
       ]
     },
+    "docs/founder-kernel/wiki/principles/contribute-pseudonymously-not-anonymously.md": {
+      "publicHref": "/founder-kernel/wiki/principles/contribute-pseudonymously-not-anonymously/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "how-to-apply",
+        "related"
+      ]
+    },
     "docs/founder-kernel/wiki/principles/count-the-operations-to-outcome.md": {
       "publicHref": "/founder-kernel/wiki/principles/count-the-operations-to-outcome/",
       "portalHref": null,
@@ -3650,6 +4106,7 @@
         "why",
         "applies-to",
         "how-to-apply",
+        "continuity-and-replaceable-inference",
         "reference-implementations",
         "decision-dimensions",
         "examples"
@@ -3744,6 +4201,7 @@
         "decision-dimensions",
         "examples",
         "sources",
+        "amendment-2026-09-22-progressive-disclosure-hides-machinery-never-the-guarantee",
         "overlap-scan-43"
       ]
     },
@@ -3775,6 +4233,7 @@
         "decision-dimensions",
         "examples",
         "when-this-does-not-apply",
+        "amendment-2026-09-22-a-reach-limit-is-a-recorded-outcome-not-a-silent-stall",
         "see-also"
       ]
     },
@@ -3821,6 +4280,18 @@
         "decision-dimensions",
         "examples",
         "related"
+      ]
+    },
+    "docs/founder-kernel/wiki/principles/escalation-is-a-gate-not-a-trust-tier.md": {
+      "publicHref": "/founder-kernel/wiki/principles/escalation-is-a-gate-not-a-trust-tier/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "decision-outcomes",
+        "why",
+        "how-to-apply"
       ]
     },
     "docs/founder-kernel/wiki/principles/evidence-before-diagnosis.md": {
@@ -3910,7 +4381,19 @@
         "how-to-apply",
         "decision-dimensions",
         "examples",
-        "sources"
+        "sources",
+        "amendment-2026-09-22-i-did-not-click-it-is-inconclusive-not-a-pass"
+      ]
+    },
+    "docs/founder-kernel/wiki/principles/gates-proportional-to-shape.md": {
+      "publicHref": "/founder-kernel/wiki/principles/gates-proportional-to-shape/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "gates-are-proportional-to-the-shape-of-the-work",
+        "the-rule",
+        "where-it-lives"
       ]
     },
     "docs/founder-kernel/wiki/principles/governance-approves-evidence-not-provenance.md": {
@@ -3920,6 +4403,7 @@
       "publishedPortal": false,
       "anchors": [
         "governance-approves-evidence-not-provenance",
+        "evidence-must-serve-a-decision",
         "the-rule",
         "two-ways-this-gets-violated",
         "how-to-apply",
@@ -3927,6 +4411,7 @@
         "anti-pattern",
         "additivity-to-never-fabricate",
         "why-one-rule-not-a-per-case-enumeration",
+        "the-rule-governs-estimates-not-only-gates",
         "related-principles"
       ]
     },
@@ -3938,11 +4423,10 @@
       "anchors": [
         "rule",
         "why",
-        "applies-to",
         "how-to-apply",
         "decision-dimensions",
         "examples",
-        "sources"
+        "related-principles"
       ]
     },
     "docs/founder-kernel/wiki/principles/image-identity-equals-bytes.md": {
@@ -4239,7 +4723,8 @@
         "applies-to",
         "how-to-apply",
         "decision-dimensions",
-        "overlap-scan-43"
+        "overlap-scan-43",
+        "amendment-2026-09-22-background-work-has-a-named-home-the-coworker"
       ]
     },
     "docs/founder-kernel/wiki/principles/optimize-for-the-whole.md": {
@@ -4272,6 +4757,18 @@
         "related-principles"
       ]
     },
+    "docs/founder-kernel/wiki/principles/paused-work-is-not-abandoned-work.md": {
+      "publicHref": "/founder-kernel/wiki/principles/paused-work-is-not-abandoned-work/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "how-to-apply",
+        "related"
+      ]
+    },
     "docs/founder-kernel/wiki/principles/plan-before-install-paths.md": {
       "publicHref": "/founder-kernel/wiki/principles/plan-before-install-paths/",
       "portalHref": null,
@@ -4298,6 +4795,8 @@
         "why",
         "what-this-does-not-license",
         "how-to-apply",
+        "recovery-is-a-platform-guarantee",
+        "server-ownership",
         "decision-dimensions",
         "related"
       ]
@@ -4388,7 +4887,8 @@
         "the-acknowledgement-as-state-requirement",
         "anti-pattern",
         "penalty",
-        "related-principles"
+        "related-principles",
+        "amendment-2026-09-22-a-genuine-fork-is-a-button-not-a-sentence-to-answer"
       ]
     },
     "docs/founder-kernel/wiki/principles/prose-is-not-a-control-gate.md": {
@@ -4558,6 +5058,18 @@
         "sources"
       ]
     },
+    "docs/founder-kernel/wiki/principles/seed-is-bootstrap-runtime-is-truth.md": {
+      "publicHref": "/founder-kernel/wiki/principles/seed-is-bootstrap-runtime-is-truth/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "how-to-apply",
+        "related"
+      ]
+    },
     "docs/founder-kernel/wiki/principles/selective-memory-not-total-recall.md": {
       "publicHref": "/founder-kernel/wiki/principles/selective-memory-not-total-recall/",
       "portalHref": null,
@@ -4674,6 +5186,7 @@
         "specific-tactics",
         "seed-change-pre-push-checklist",
         "penalty",
+        "amendment-2026-09-22-this-applies-to-a-shared-state-write-not-only-to-verification",
         "related-principles"
       ]
     },
@@ -4692,6 +5205,18 @@
         "sources"
       ]
     },
+    "docs/founder-kernel/wiki/principles/submitting-work-is-not-accepting-it.md": {
+      "publicHref": "/founder-kernel/wiki/principles/submitting-work-is-not-accepting-it/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "how-to-apply",
+        "related"
+      ]
+    },
     "docs/founder-kernel/wiki/principles/substrate-cleanup-before-substrate-addition.md": {
       "publicHref": "/founder-kernel/wiki/principles/substrate-cleanup-before-substrate-addition/",
       "portalHref": null,
@@ -4706,7 +5231,8 @@
         "the-contract",
         "anti-patterns",
         "related-principles",
-        "spec-references"
+        "spec-references",
+        "amendment-2026-09-22-surface-a-deprecation-when-you-meet-it-and-price-a-big-one"
       ]
     },
     "docs/founder-kernel/wiki/principles/supersession-is-a-mechanical-act.md": {
@@ -4751,6 +5277,18 @@
         "examples",
         "when-this-does-not-apply",
         "see-also"
+      ]
+    },
+    "docs/founder-kernel/wiki/principles/the-platform-is-a-conduit-not-a-broker.md": {
+      "publicHref": "/founder-kernel/wiki/principles/the-platform-is-a-conduit-not-a-broker/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "how-to-apply",
+        "related"
       ]
     },
     "docs/founder-kernel/wiki/principles/trust-is-prospective-not-retrospective.md": {
@@ -4804,6 +5342,7 @@
         "why-this-exists",
         "the-contract",
         "anti-pattern",
+        "two-checks-and-the-report-looks-identical-either-way",
         "related-principles"
       ]
     },
@@ -5122,14 +5661,17 @@
       "publishedPortal": false,
       "anchors": [
         "choosing-hardware-for-dpf",
+        "linux-pilot-target",
         "the-short-recommendation",
+        "a-mac-mini-for-everyday-business-operations",
+        "local-ai-for-professional-firms",
         "machines-available-now",
         "provider-assisted-operations",
         "local-first-windows-with-nvidia",
         "local-first-apple-unified-memory",
         "why-unified-memory-changes-the-calculation",
         "model-and-context-sizing",
-        "shared-memory-systems-not-yet-in-the-standard-profile",
+        "compact-linux-candidates-qualification-required",
         "before-ordering"
       ]
     },
@@ -5140,12 +5682,17 @@
       "publishedPortal": false,
       "anchors": [
         "dpf-install-guide-linux-native-docker",
-        "supported-environment",
+        "recommended-first-deployment",
+        "compatibility-and-prerequisites",
         "prerequisites",
-        "quick-start",
+        "pilot-installation-handoff",
+        "source-repairs-awaiting-native-acceptance",
+        "contributor-office-document-conversion",
         "contributor-separate-dev-workspace-from-install-recommended-bi-0856a4ce-phase-1",
         "what-the-installer-does",
         "login",
+        "network-exposure-after-install",
+        "pilot-acceptance-checks",
         "day-to-day",
         "edge-node-whats-running-and-why",
         "llm-provider",
@@ -5156,7 +5703,7 @@
         "uninstall",
         "help-us-graduate-to-ga",
         "going-further",
-        "connecting-claude-code-or-vs-code-via-mcp"
+        "connecting-an-agent-through-mcp"
       ]
     },
     "docs/install/macos.md": {
@@ -5169,10 +5716,12 @@
         "supported-environment",
         "recommended-hardware",
         "prerequisites",
+        "docker-memory-during-installation",
         "quick-start",
         "contributor-separate-dev-workspace-from-install-recommended-bi-0856a4ce-phase-1",
         "what-the-installer-does",
         "login",
+        "network-exposure-after-install",
         "day-to-day",
         "llm-provider",
         "voice-stt-tts",
@@ -5192,13 +5741,26 @@
       "publishedPortal": false,
       "anchors": [
         "platform-support-watch-list-living-document",
+        "saved-host-ca-trust-and-stale-clients",
+        "contributor-preview-mount-identity-on-docker-desktop-bi-0acb97b5-bi-81af5884",
+        "literal-windows-package-manager-arguments-bi-263055e3",
+        "capability-reconciliation-on-release-installs-bi-5acbac50",
+        "host-process-inventory-before-admission-bi-6de5a3b6",
+        "host-claim-transport-and-windows-command-launch-bi-091a2dcf",
+        "windows-host-guard-interpreters-bi-ba5f777a",
+        "macos-docker-memory-allocation-bi-dc4352e8",
+        "repository-local-codex-endpoint-overrides-bi-9f258707",
         "target-environments",
         "how-to-use-this-file",
         "1-monitoring-telemetry",
         "2-shell-scripts-bsd-vs-gnu-coreutils",
         "3-docker-compose",
         "4-git-repo-hygiene",
-        "recurring-meta-pattern"
+        "room-route-guard-on-windows",
+        "recurring-meta-pattern",
+        "persisted-mcp-endpoint-recovery-bi-9f258707",
+        "required-services-after-container-driven-upgrades-bi-fffea4ed",
+        "linux-pilot-startup-repairs-2026-10-03"
       ]
     },
     "docs/install/scratch-install-rehearsal.md": {
@@ -5240,6 +5802,7 @@
       "publishedPortal": false,
       "anchors": [
         "dpf-install-verification-runbook",
+        "linux-customer-handoff",
         "verification-matrix",
         "fastest-path-one-command-for-the-whole-sweep",
         "linux-macos",
@@ -5279,6 +5842,7 @@
         "quick-start",
         "what-the-installer-does",
         "login",
+        "network-exposure-after-install",
         "day-to-day",
         "declare-what-the-installation-is-for",
         "work-created-on-an-installation-lives-only-there",
@@ -5290,6 +5854,16 @@
         "uninstall",
         "going-further",
         "connecting-claude-code-or-vs-code-via-mcp"
+      ]
+    },
+    "docs/install/workroom-activity-migration-recovery.md": {
+      "publicHref": "/install/workroom-activity-migration-recovery/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "workroom-activity-migration-recovery",
+        "verification"
       ]
     },
     "docs/install/worktree-janitor-schedule.md": {
@@ -5305,6 +5879,7 @@
         "what-gets-registered",
         "reading-the-output",
         "checking-it-ran",
+        "scoping-to-one-branch-and-the-merge-trigger-bi-848360ef",
         "related"
       ]
     },
@@ -5342,16 +5917,16 @@
         "evidence-weight-1-ceiling-2",
         "every-agent",
         "widest-gaps-detail",
-        "agt-100-policy-enforcement-agent-declared-only-48-attainable",
-        "agt-101-strategy-alignment-agent-declared-only-48-attainable",
-        "agt-102-portfolio-backlog-agent-declared-only-48-attainable",
-        "agt-110-portfolio-rationalization-agent-declared-only-48-attainable",
-        "agt-111-investment-analysis-agent-declared-only-48-attainable",
-        "agt-112-gap-analysis-agent-declared-only-48-attainable",
-        "agt-113-scope-agreement-agent-declared-only-48-attainable",
-        "agt-120-product-backlog-prioritization-agent-declared-only-48-attainable",
-        "agt-121-architecture-definition-agent-declared-only-48-attainable",
-        "agt-122-roadmap-assembly-agent-declared-only-48-attainable",
+        "agt-100-policy-enforcement-agent-deliberately-unstaffed-48-attainable",
+        "agt-101-strategy-alignment-agent-deliberately-unstaffed-48-attainable",
+        "agt-102-portfolio-backlog-agent-deliberately-unstaffed-48-attainable",
+        "agt-110-portfolio-rationalization-agent-deliberately-unstaffed-48-attainable",
+        "agt-111-investment-analysis-agent-deliberately-unstaffed-48-attainable",
+        "agt-112-gap-analysis-agent-deliberately-unstaffed-48-attainable",
+        "agt-113-scope-agreement-agent-deliberately-unstaffed-48-attainable",
+        "agt-120-product-backlog-prioritization-agent-deliberately-unstaffed-48-attainable",
+        "agt-121-architecture-definition-agent-deliberately-unstaffed-48-attainable",
+        "agt-122-roadmap-assembly-agent-deliberately-unstaffed-48-attainable",
         "assignto-health"
       ]
     },
@@ -5484,6 +6059,21 @@
         "8-message-house",
         "9-backlog-anchors",
         "10-sources-and-market-signals"
+      ]
+    },
+    "docs/operations/acceptance-sweep.md": {
+      "publicHref": "/operations/acceptance-sweep/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "acceptance-sweep-operator-runbook",
+        "medium-work-whose-criteria-are-in-its-body",
+        "closing-items-the-gate-already-allows-off-by-default",
+        "what-the-summary-tells-you",
+        "who-verifies-an-item-that-is-not-closable",
+        "how-the-portal-knows-work-was-merged",
+        "known-limit"
       ]
     },
     "docs/operations/ai-provider-compliance-source-renewal-runbook.md": {
@@ -5638,6 +6228,7 @@
       "anchors": [
         "dpf-install-operations",
         "quick-start",
+        "linux-pilot-and-private-startup-state",
         "capability-resolved-runtime-profiles",
         "consumer-release-assets",
         "fresh-install-runtime-and-recovery",
@@ -5695,6 +6286,7 @@
       "publishedPortal": false,
       "anchors": [
         "local-ci-sandbox-slots",
+        "owned-development-lease-cleanup",
         "host-wide-heavyweight-resource-admission",
         "current-operating-mode",
         "peer-slot-host-fencing",
@@ -5752,7 +6344,9 @@
         "platform-split-linux-vs-windows-hostinfra-alerts",
         "status-decisions-2026-06-25-objective-completed",
         "new-alert-checklist-a-detector-is-a-feature-verify-it-functionally",
-        "alert-delivery"
+        "alert-delivery",
+        "log-capture-runs-by-default-bi-f8024a9d",
+        "a-monitor-that-cannot-see-must-say-so-bi-adb574ab"
       ]
     },
     "docs/operations/oss-repo-identity-hygiene.md": {
@@ -5859,6 +6453,16 @@
         "composition-with-other-dr-hardening-features"
       ]
     },
+    "docs/operations/workroom-pagination.md": {
+      "publicHref": "/operations/workroom-pagination/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "enumerating-workrooms-through-mcp",
+        "executor-and-invocation"
+      ]
+    },
     "docs/personas/README.md": {
       "publicHref": "/personas/README/",
       "portalHref": null,
@@ -5961,6 +6565,7 @@
         "archetype-scoped-marketing-content-bi-cc580161",
         "fit-engine-source-of-truth",
         "enforcement-points-1",
+        "selling-to-other-archetypes",
         "first-viewport-decision",
         "standards-referenced",
         "operator-identity-and-personalization",
@@ -7074,6 +7679,7 @@
         "heuristic",
         "why",
         "the-expert-trade-off",
+        "how-to-make-the-portal-faster",
         "see-also"
       ]
     },
@@ -7244,6 +7850,7 @@
       "anchors": [
         "rule",
         "how-to-apply",
+        "re-evaluation-and-continuity",
         "provider-examples",
         "see-also"
       ]
@@ -8526,6 +9133,7 @@
         "why",
         "applies-to",
         "how-to-apply",
+        "analysis-tools-and-inference-providers",
         "decision-dimensions",
         "examples",
         "sources"
@@ -8795,6 +9403,150 @@
         "form-of-the-output"
       ]
     },
+    "docs/publications/trusted-agent-engineering/README.md": {
+      "publicHref": "/publications/trusted-agent-engineering/README/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "trusted-agent-engineering-publisher-review-packet",
+        "editorial-delivery-and-acceptance",
+        "source-baseline",
+        "claims-boundary",
+        "withdrawal-and-correction"
+      ]
+    },
+    "docs/publications/trusted-agent-engineering/chapter-01-engineering-the-working-system.md": {
+      "publicHref": "/publications/trusted-agent-engineering/chapter-01-engineering-the-working-system/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "chapter-1-engineering-the-working-system",
+        "begin-with-the-operating-composition",
+        "five-statements-that-should-not-collapse-into-done",
+        "principles-direct-policies-constrain-grants-authorize",
+        "use-hard-constraints-before-preferences",
+        "four-standards-around-one-effect",
+        "a-kernel-metaphor-with-an-explicit-boundary",
+        "model-the-relationships-then-prove-their-realization",
+        "make-the-human-decision-useful",
+        "a-small-design-exercise"
+      ]
+    },
+    "docs/publications/trusted-agent-engineering/chapter-02-synthetic-expense-control-loop.md": {
+      "publicHref": "/publications/trusted-agent-engineering/chapter-02-synthetic-expense-control-loop/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "chapter-6-a-synthetic-expense-control-loop",
+        "freeze-the-teaching-world",
+        "give-the-work-stages",
+        "establish-identity-and-job-scope",
+        "resolve-the-policy-question",
+        "resolve-the-gated-permission",
+        "bind-one-exact-effect",
+        "put-the-durable-boundary-around-dispatch",
+        "lose-the-response",
+        "revoke-authority-between-recommendation-and-use",
+        "challenge-the-claim-before-reporting-it",
+        "show-the-operator-what-remains"
+      ]
+    },
+    "docs/publications/trusted-agent-engineering/publisher-proposal.md": {
+      "publicHref": "/publications/trusted-agent-engineering/publisher-proposal/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "book-proposal-engineering-accountable-agents",
+        "the-book-in-one-paragraph",
+        "reader-and-practical-promise",
+        "why-this-book-now",
+        "comparable-titles-and-differentiation",
+        "structure-and-annotated-contents",
+        "cases-artifacts-and-evidence-policy",
+        "companion-material-and-rights-boundary",
+        "delivery-schedule-and-submission-boundary"
+      ]
+    },
+    "docs/publications/trusted-agent-tbm/README.md": {
+      "publicHref": "/publications/trusted-agent-tbm/README/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "trusted-agent-engineering-lftbm-discussion-packet",
+        "use-the-packet",
+        "canonical-owners",
+        "file-provenance-and-reproduction"
+      ]
+    },
+    "docs/publications/trusted-agent-tbm/demo-script.md": {
+      "publicHref": "/publications/trusted-agent-tbm/demo-script/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "synthetic-expense-demonstration-script-and-static-fallback",
+        "opening-statement",
+        "readiness-manifest",
+        "seven-minute-walkthrough",
+        "frozen-vector-proposal",
+        "static-fallback-annotated-specimen",
+        "recording-plan"
+      ]
+    },
+    "docs/publications/trusted-agent-tbm/governance-options.md": {
+      "publicHref": "/publications/trusted-agent-tbm/governance-options/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "governance-and-intellectual-property-discussion-options",
+        "recommended-meeting-request",
+        "options",
+        "proposed-operating-terms-for-review",
+        "owner-decisions-before-filing"
+      ]
+    },
+    "docs/publications/trusted-agent-tbm/known-gaps.md": {
+      "publicHref": "/publications/trusted-agent-tbm/known-gaps/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "known-gaps-and-claim-limits"
+      ]
+    },
+    "docs/publications/trusted-agent-tbm/meeting-brief.md": {
+      "publicHref": "/publications/trusted-agent-tbm/meeting-brief/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "trusted-agent-execution",
+        "the-proposal",
+        "four-responsibilities",
+        "model-the-execution-chain",
+        "evidence-before-adoption",
+        "two-contexts-one-contract",
+        "measure-acceptable-work",
+        "the-collaboration-request",
+        "sources-and-current-limits"
+      ]
+    },
+    "docs/publications/trusted-agent-tbm/sources.md": {
+      "publicHref": "/publications/trusted-agent-tbm/sources/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "meeting-packet-source-register",
+        "existing-dpf-source-owners"
+      ]
+    },
     "docs/runbooks/2026-07-18-self-upgrade-mounts-denied-state-dir.md": {
       "publicHref": "/runbooks/2026-07-18-self-upgrade-mounts-denied-state-dir/",
       "portalHref": null,
@@ -8827,6 +9579,20 @@
         "related"
       ]
     },
+    "docs/runbooks/2026-09-05-security-sweep-credential.md": {
+      "publicHref": "/runbooks/2026-09-05-security-sweep-credential/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "security-sweep-credential-read-all-three-alert-surfaces",
+        "symptom",
+        "credential-order-what-the-workflows-try",
+        "operator-step-once-by-a-repository-admin",
+        "verify-the-sweep-is-complete",
+        "rollback"
+      ]
+    },
     "docs/runbooks/bet5-windows-self-upgrade.md": {
       "publicHref": "/runbooks/bet5-windows-self-upgrade/",
       "portalHref": null,
@@ -8843,6 +9609,7 @@
         "step-2-trigger-the-upgrade",
         "step-3-monitor-the-chain",
         "step-4-verify-postgres-only-done-criteria",
+        "first-question-after-any-failed-upgrade-how-far-did-it-get",
         "if-it-fails-anyway-recovery",
         "failure-class-host-out-of-memory-candidate-build-enomem",
         "failure-class-promoter-context-n1-a-new-copy-made-the-candidate-unbuildable",
@@ -9058,6 +9825,89 @@
         "re-evaluation-triggers"
       ]
     },
+    "docs/security/tool-evaluations/2026-09-15-bmad-method.md": {
+      "publicHref": "/security/tool-evaluations/2026-09-15-bmad-method/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "bmad-method-tool-evaluation",
+        "executive-decision",
+        "what-bmad-is",
+        "where-dpf-already-stands",
+        "the-decisive-conflict",
+        "security-findings-cosai",
+        "compliance",
+        "architecture-fit",
+        "integration-test",
+        "what-dpf-should-harvest",
+        "conditions-and-re-evaluation",
+        "sources"
+      ]
+    },
+    "docs/security/tool-evaluations/2026-09-24-libreoffice-headless.md": {
+      "publicHref": "/security/tool-evaluations/2026-09-24-libreoffice-headless/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "tool-evaluation-libreoffice-headless-dpf-doctools-image",
+        "cosai-security-findings",
+        "compliance-and-architecture-fit",
+        "integration-evidence",
+        "conditions",
+        "addendum-2026-09-25-dpf-render-bi-3a0e5413-slice-s6",
+        "addendum-2026-09-25-the-trusted-document-path-bi-bff142a1",
+        "sources"
+      ]
+    },
+    "docs/security/tool-evaluations/2026-09-25-maplibre-pmtiles.md": {
+      "publicHref": "/security/tool-evaluations/2026-09-25-maplibre-pmtiles/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "tool-evaluation-maplibre-gl-js-and-pmtiles",
+        "what-is-evaluated",
+        "cosai-security-findings",
+        "compliance-and-architecture-fit",
+        "conditions"
+      ]
+    },
+    "docs/security/tool-evaluations/2026-09-29-cloudflare-tunnel.md": {
+      "publicHref": "/security/tool-evaluations/2026-09-29-cloudflare-tunnel/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "tool-evaluation-cloudflare-tunnel-cloudflared-v202693",
+        "pre-exposure-defects-in-dpf-block-any-public-reachability",
+        "verified-facts-about-the-tool",
+        "cosai-security-findings",
+        "compliance",
+        "architecture-fit",
+        "integration-evidence",
+        "conditions",
+        "sources"
+      ]
+    },
+    "docs/security/tool-evaluations/2026-10-07-chatterbox-tts-api.md": {
+      "publicHref": "/security/tool-evaluations/2026-10-07-chatterbox-tts-api/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "tool-evaluation-travisvnchatterbox-tts-api-v101-dpf-tts-re-pin",
+        "what-is-evaluated",
+        "api-compatibility-source-read-at-upstream-tag-v101",
+        "cosai-security-findings",
+        "compliance",
+        "architecture-fit",
+        "integration-test-results",
+        "conditions",
+        "re-evaluation"
+      ]
+    },
     "docs/specs/device-identification-and-portfolio-placement-spec.md": {
       "publicHref": "/specs/device-identification-and-portfolio-placement-spec/",
       "portalHref": null,
@@ -9195,6 +10045,69 @@
         "7-the-plan-to-accommodate-impacted-organisations-phased",
         "8-suggested-forum-flow-architects-audience",
         "9-key-sources"
+      ]
+    },
+    "docs/strategy/2026-09-us-dependency-inventory-and-sovereign-channel.md": {
+      "publicHref": "/strategy/2026-09-us-dependency-inventory-and-sovereign-channel/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "us-vendor-dependency-inventory-the-sovereign-open-source-channel-sept-2026",
+        "1-classification",
+        "2-inventory",
+        "21-required-on-the-supported-install-path-the-ones-that-matter",
+        "22-operator-opt-in-not-structural-disclose-dont-remove",
+        "23-required-only-for-a-specific-feature",
+        "24-oss-us-low-risk-sbom-disclosure-only",
+        "3-mapping-onto-work-that-already-exists",
+        "4-tappaas-verified-facts-sept-2026",
+        "5-is-the-sovereign-open-source-ecosystem-a-valid-path-to-market",
+        "51-parties-plausibly-interested-to-qualify-not-claims-of-interest",
+        "52-caveats-dont-overclaim",
+        "6-recommended-next-steps"
+      ]
+    },
+    "docs/strategy/2026-10-11-company-led-capability-consolidation-handoff.md": {
+      "publicHref": "/strategy/2026-10-11-company-led-capability-consolidation-handoff/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "company-led-capability-consolidation-workroom-and-standards-handoff",
+        "outcome-and-scope",
+        "existing-design-and-implementation",
+        "apply-the-candidate-standards-through-their-existing-owners",
+        "proposed-business-journey-within-existing-workroom-contracts",
+        "delivery-sequence-and-acceptance-evidence",
+        "ui-refinement",
+        "measurement-sovereignty-and-rollback",
+        "promotion-to-governed-implementation-after-recovery"
+      ]
+    },
+    "docs/strategy/2026-10-11-rea-absorption-and-hardware-neutral-business-ai.md": {
+      "publicHref": "/strategy/2026-10-11-rea-absorption-and-hardware-neutral-business-ai/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rea-absorption-and-hardware-neutral-business-ai",
+        "verified-upstream-project",
+        "how-dpf-arrived-here",
+        "existing-architecture-to-extend",
+        "proposed-investigation-and-absorption-flow",
+        "business-interaction-and-ui-design",
+        "phased-delivery-proposal",
+        "refactoring-allocation-and-dependency-control",
+        "future-expansion-across-customer-ecosystems",
+        "organizational-control-and-trusted-business-ai",
+        "cada-and-the-existing-sovereignty-programme",
+        "hardware-access-and-operating-economics",
+        "preparing-dpf-for-fast-capable-inference",
+        "bottlenecks-after-inference-becomes-fast",
+        "continuity-under-ownership-and-jurisdiction-changes",
+        "competitive-framing",
+        "evidence-and-next-delivery-boundary"
       ]
     },
     "docs/testing/archetype-audit-plan.md": {
@@ -10648,6 +11561,21 @@
         "populated-performance-live-acceptance"
       ]
     },
+    "docs/testing/portal-ux-scorecard-template.md": {
+      "publicHref": "/testing/portal-ux-scorecard-template/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "portal-page-flow-scorecard-template",
+        "identity-and-purpose",
+        "measures",
+        "rubric",
+        "task-and-state-evidence",
+        "disposition-and-refactoring",
+        "item-detail-and-dependency-inventory"
+      ]
+    },
     "docs/testing/pr-health.md": {
       "publicHref": "/testing/pr-health/",
       "portalHref": null,
@@ -10660,6 +11588,7 @@
         "observation-versus-merge-authority",
         "know-the-constraints-before-you-write-pnpm-gatecontext",
         "before-a-pr-exists-pnpm-prready",
+        "corrections-after-publication",
         "local-ci-infrastructure-outcomes",
         "tests-ci"
       ]
@@ -10676,6 +11605,7 @@
         "what-runs-in-ci",
         "policy-guard-profiles",
         "re-evaluating-a-trailer-or-label-without-pushing",
+        "a-scoped-seed-fit-answer-names-its-mechanism",
         "where-ci-runs-it",
         "run-locally-before-pushing",
         "the-pre-push-gate-pregate-default-on",
@@ -10692,6 +11622,7 @@
         "live-blocker-references-guard",
         "agent-principal-convergence-guard",
         "label-association-guard-ratchet",
+        "room-addressing-guard",
         "what-this-gate-is-not"
       ]
     },
@@ -10889,6 +11820,8 @@
       "publishedPortal": true,
       "anchors": [
         "overview",
+        "accounts-and-provider-setup",
+        "routing-status-and-temporary-pauses",
         "authentication-methods",
         "api-key",
         "oauth-sign-in",
@@ -10899,6 +11832,7 @@
         "how-oauth-works",
         "choosing-the-right-method",
         "business-safe-review",
+        "break-glass-accepting-a-risk-on-purpose",
         "openrouter-and-other-router-accounts",
         "finance-bridge",
         "where-to-review-it",
@@ -10953,9 +11887,12 @@
         "what-decision-perspective-does",
         "consequential-action-alignment",
         "the-confidence-model",
+        "measuring-how-often-a-coworker-agrees-with-you",
         "the-inheritance-chain",
         "profile-kinds",
+        "what-onboarding-seeds-for-wwwd",
         "the-profession-scope-wsid",
+        "ratifying-a-policy-once",
         "calling-the-gate",
         "the-voice-layer",
         "speech-to-text-input",
@@ -10989,7 +11926,8 @@
         "6-the-receipt-is-what-you-review",
         "known-limits",
         "related",
-        "the-pace-a-room-runs-at"
+        "the-pace-a-room-runs-at",
+        "continuing-a-review-after-a-connection-changes"
       ]
     },
     "docs/user-guide/ai-workforce/index.md": {
@@ -11007,6 +11945,7 @@
         "reading-the-skills-catalog",
         "related-routes",
         "reading-runtime-health",
+        "turning-monitoring-on-or-off",
         "coworker-routing",
         "context-budget-what-recent-turns-were-given",
         "capability-completeness",
@@ -11032,6 +11971,8 @@
         "how-models-enter-the-system",
         "path-1-static-seed-install-time",
         "path-2-dynamic-discovery-runtime",
+        "when-the-connections-page-takes-longer-to-load",
+        "where-ai-may-run",
         "quality-tiers",
         "agent-model-configuration",
         "default-agent-tiers",
@@ -11040,6 +11981,7 @@
         "evidence-belongs-to-the-connected-account",
         "continuous-review-and-rollout",
         "how-routing-adapts-over-time",
+        "local-requests-while-background-work-is-running",
         "provider-specific-notes",
         "anthropic-oauth-subscription",
         "chatgpt-openai-subscription",
@@ -11062,6 +12004,17 @@
         "honest-limits",
         "related",
         "how-work-rooms-behave"
+      ]
+    },
+    "docs/user-guide/ai-workforce/provider-account-routing.md": {
+      "publicHref": "/user-guide/ai-workforce/provider-account-routing/",
+      "portalHref": "/docs/ai-workforce/provider-account-routing",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "choose-accounts-for-the-work",
+        "capacity-and-recovery",
+        "usage-records"
       ]
     },
     "docs/user-guide/ai-workforce/provider-anthropic.md": {
@@ -11093,6 +12046,7 @@
         "api-key-pay-per-token",
         "setting-up-oauth",
         "agent-provider-vs-standard-provider",
+        "coworker-verification-on-development-deployments",
         "linked-mcp-service",
         "chatgpt-provider-automatic",
         "technical-notes-provider-integration",
@@ -11129,6 +12083,7 @@
         "overview",
         "how-it-works",
         "setup",
+        "pausing-local-ai",
         "pulling-models",
         "model-discovery-and-profiling",
         "local-multimodal-input-vision-audio",
@@ -11183,8 +12138,11 @@
       "anchors": [
         "overview",
         "key-concepts",
+        "reference-models-and-your-archetype",
         "workroom-definitions",
         "what-you-can-do",
+        "exporting-a-view-as-a-drawing",
+        "importing-a-visio-or-draw-diagram",
         "ai-coworker-identity",
         "following-a-concern-across-views"
       ]
@@ -11217,6 +12175,7 @@
         "pull-requests-and-security-gates",
         "pre-pr-security-gates",
         "autonomous-merge-queue-delivery",
+        "when-the-platform-moved-on-before-the-pull-request-opened",
         "configuration",
         "safety-guarantees"
       ]
@@ -11466,6 +12425,7 @@
         "commit-and-push-fast",
         "worktrees-are-source-control-isolation-not-runtime-isolation",
         "heavy-local-commands-use-a-shared-host-resource-lane",
+        "recover-a-review-blocked-by-endpoint-eligibility",
         "clean-up-when-merged",
         "webhooks-closing-the-promotion-loop",
         "adhering-to-the-portals-processes",
@@ -11513,6 +12473,32 @@
         "related"
       ]
     },
+    "docs/user-guide/coworker-permission-reconciliation.md": {
+      "publicHref": "/user-guide/coworker-permission-reconciliation/",
+      "portalHref": "/docs/coworker-permission-reconciliation",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "review-coworker-permissions"
+      ]
+    },
+    "docs/user-guide/customers/customer-map.md": {
+      "publicHref": "/user-guide/customers/customer-map/",
+      "portalHref": "/docs/customers/customer-map",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "use-this-doc-for",
+        "open-the-map",
+        "sites-that-are-not-on-the-map",
+        "find-locations-automatically",
+        "confirm-a-sites-location-from-the-phone",
+        "service-areas",
+        "draw-an-area",
+        "read-the-coverage",
+        "related"
+      ]
+    },
     "docs/user-guide/customers/index.md": {
       "publicHref": "/user-guide/customers/",
       "portalHref": "/docs/customers/index",
@@ -11535,6 +12521,19 @@
         "related-guides"
       ]
     },
+    "docs/user-guide/customers/market-footprint.md": {
+      "publicHref": "/user-guide/customers/market-footprint/",
+      "portalHref": "/docs/customers/market-footprint",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "use-this-doc-for",
+        "where-to-find-it",
+        "what-it-shows",
+        "customers-that-are-not-placed",
+        "where-the-numbers-come-from"
+      ]
+    },
     "docs/user-guide/customers/marketing.md": {
       "publicHref": "/user-guide/customers/marketing/",
       "portalHref": "/docs/customers/marketing",
@@ -11548,6 +12547,8 @@
         "build-a-campaign-before-building-assets",
         "review-and-publish",
         "quarantined-or-imported-content",
+        "marketing-to-other-business-types",
+        "correcting-a-plan-that-started-wrong",
         "understand-the-two-funnels",
         "treat-automation-as-a-proposal",
         "a-practical-operating-rhythm",
@@ -11555,6 +12556,7 @@
         "during-the-campaign",
         "after-the-review-window",
         "asking-the-marketing-strategist-about-a-campaign",
+        "ask-for-a-presentation",
         "what-to-watch",
         "related-guides"
       ]
@@ -11611,6 +12613,7 @@
         "starting-an-invoice-from-context",
         "decisions-recovery-and-evidence",
         "sent-documents-are-kept",
+        "invoice-pdfs-use-document-conversion",
         "what-you-can-edit-and-when",
         "status-movement-is-governed",
         "void-versus-delete",
@@ -11711,6 +12714,7 @@
         "close-readiness-workflow",
         "what-to-watch",
         "recovery-and-evidence",
+        "ask-for-a-branded-report-workbook-or-letter",
         "related-help"
       ]
     },
@@ -11770,6 +12774,7 @@
       "publishedPortal": true,
       "anchors": [
         "use-this-doc-for",
+        "before-first-login-on-linux",
         "workflow",
         "help-visibility-policy"
       ]
@@ -11799,6 +12804,7 @@
         "manage-roles-and-account-access",
         "what-is-not-yet-a-people-page-workflow",
         "who-can-approve-leave",
+        "when-a-coworker-recommends-a-leave-decision",
         "evidence-and-recovery-checklist"
       ]
     },
@@ -11819,6 +12825,15 @@
         "architecture-and-standards",
         "specifications-and-plans",
         "documentation-freshness"
+      ]
+    },
+    "docs/user-guide/investment-allocation.md": {
+      "publicHref": "/user-guide/investment-allocation/",
+      "portalHref": "/docs/investment-allocation",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "investment-allocation"
       ]
     },
     "docs/user-guide/market-archetypes.md": {
@@ -11880,6 +12895,9 @@
         "reading-epic-progress",
         "shared-demand",
         "activate-local-demand",
+        "what-build-studio-starts-next",
+        "use-spare-weekly-ai-allowance-capacity-drain",
+        "proposed-scores",
         "founder-shared-portfolio",
         "promotions",
         "being-reached-when-you-are-away",
@@ -11889,6 +12907,7 @@
         "what-this-installation-is",
         "who-runs-this-installation",
         "what-your-ai-coworkers-may-do-here",
+        "operational-posture-across-your-installations",
         "correcting-the-identity"
       ]
     },
@@ -11914,6 +12933,23 @@
         "osi-layer-model"
       ]
     },
+    "docs/user-guide/operations/portfolio-budgets.md": {
+      "publicHref": "/user-guide/operations/portfolio-budgets/",
+      "portalHref": "/docs/operations/portfolio-budgets",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "use-this-doc-for",
+        "overview",
+        "reading-the-panel",
+        "what-a-quarter-is-charged-for",
+        "which-portfolio-an-item-counts-against",
+        "setting-a-budget",
+        "choosing-who-answers-for-each-portfolio",
+        "confirming-an-epics-portfolio",
+        "how-budgets-steer-work"
+      ]
+    },
     "docs/user-guide/operations/self-upgrade.md": {
       "publicHref": "/user-guide/operations/self-upgrade/",
       "portalHref": "/docs/operations/self-upgrade",
@@ -11923,10 +12959,14 @@
         "use-this-doc-for",
         "overview",
         "workflow",
+        "who-can-upgrade-outside-the-maintenance-window",
+        "when-work-is-still-running",
         "what-happens-if-you-do-nothing",
         "what-is-reversible",
         "recovery-and-help",
-        "what-to-watch"
+        "connected-agent-clients",
+        "what-to-watch",
+        "when-required-services-are-degraded"
       ]
     },
     "docs/user-guide/platform/address-validation-providers.md": {
@@ -11939,6 +12979,8 @@
         "why-it-matters",
         "choose-a-provider",
         "geography-hint",
+        "using-the-free-nominatim-service",
+        "finding-map-locations-for-existing-sites",
         "setup-steps",
         "what-to-watch",
         "related"
@@ -11953,9 +12995,16 @@
         "use-this-doc-for",
         "workflow",
         "read-the-routing-picture",
+        "follow-traffic",
+        "investigate-stops-and-provider-setup",
+        "evaluate-outcomes",
+        "technical-architecture-and-replay",
+        "confirm-a-routing-override",
         "architecture-and-evidence",
+        "understanding-background-inference",
         "when-a-coworker-says-it-used-the-backup-model",
         "what-to-watch",
+        "repair-disagreement-in-installed-runtime-capabilities",
         "defaults-for-work-rooms"
       ]
     },
@@ -11971,6 +13020,19 @@
         "separate-the-failure-domains",
         "change-and-recovery-rules",
         "what-to-watch"
+      ]
+    },
+    "docs/user-guide/platform/deployment-country-sharing.md": {
+      "publicHref": "/user-guide/platform/deployment-country-sharing/",
+      "portalHref": "/docs/platform/deployment-country-sharing",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "use-this-doc-for",
+        "where-to-find-it",
+        "what-it-does",
+        "if-the-switch-is-unavailable",
+        "related"
       ]
     },
     "docs/user-guide/platform/discovery-operations.md": {
@@ -12035,6 +13097,21 @@
         "connections"
       ]
     },
+    "docs/user-guide/platform/map-packs.md": {
+      "publicHref": "/user-guide/platform/map-packs/",
+      "portalHref": "/docs/platform/map-packs",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "use-this-doc-for",
+        "why-it-matters",
+        "what-works-without-a-map-pack",
+        "what-a-map-pack-adds",
+        "which-map-pack-you-need",
+        "attribution",
+        "privacy"
+      ]
+    },
     "docs/user-guide/platform/tools-and-integrations.md": {
       "publicHref": "/user-guide/platform/tools-and-integrations/",
       "portalHref": "/docs/platform/tools-and-integrations",
@@ -12045,6 +13122,7 @@
         "start-with-the-object-you-are-managing",
         "read-marketplace-readiness",
         "connect-and-verify",
+        "review-tools-a-service-discovers",
         "native-integration-previews",
         "troubleshooting-and-recovery",
         "what-to-watch"
@@ -12164,6 +13242,7 @@
         "use-this-doc-for",
         "workflow",
         "managing-a-row",
+        "writing-your-section-text",
         "fixing-generated-content-that-doesnt-fit",
         "what-to-watch",
         "purchase-traceability"
@@ -12250,6 +13329,7 @@
         "workflow",
         "authoritative-state",
         "ai-coworker-support",
+        "your-business-stances",
         "reading-the-decision-log",
         "escalated-and-deferred-decisions-what-to-do",
         "suggestions-your-coworkers-drafted",
@@ -12266,7 +13346,8 @@
         "overview",
         "key-concepts",
         "what-shows-up-here",
-        "what-you-can-do"
+        "what-you-can-do",
+        "how-long-a-coworkers-request-waits"
       ]
     },
     "docs/user-guide/workspace/documents.md": {
@@ -12277,6 +13358,9 @@
       "anchors": [
         "use-this-doc-for",
         "workflow",
+        "office-files",
+        "export",
+        "slide-previews",
         "authoritative-state",
         "ai-coworker-support",
         "what-to-watch"
@@ -12289,15 +13373,33 @@
       "publishedPortal": true,
       "anchors": [
         "overview",
+        "checking-an-approval-result",
         "operations-and-performance",
         "spatial-operations-for-tables-and-rooms",
         "the-ward-for-a-shelter",
         "rescue-operations",
+        "when-the-ward-is-full",
+        "admitting-an-animal",
+        "daily-care-rounds",
+        "veterinary-visits",
+        "adoptions",
         "confirming-an-operational-suggestion",
         "which-installation-you-are-on",
         "correcting-the-identity",
         "key-concepts",
         "what-you-can-do"
+      ]
+    },
+    "docs/user-guide/workspace/supported-file-formats.md": {
+      "publicHref": "/user-guide/workspace/supported-file-formats/",
+      "portalHref": "/docs/workspace/supported-file-formats",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "use-this-doc-for",
+        "which-files-are-read",
+        "hidden-characters-are-removed",
+        "when-the-converter-is-off"
       ]
     },
     "docs/user-guide/workspace/work-rooms.md": {
@@ -12309,13 +13411,36 @@
         "overview",
         "what-you-see-first",
         "activity-and-participants",
+        "delegation-and-recovery",
+        "inspecting-the-process",
+        "reading-the-flow-map",
+        "how-work-flows-in-each-area",
+        "the-main-value-stream-on-your-home-page",
+        "when-work-keeps-piling-up",
         "access-and-other-channels",
         "finite-and-standing-rooms",
+        "defining-the-room",
         "pace-and-priority",
         "changing-it",
+        "what-how-hard-should-it-push-now-reaches",
         "setting-a-default-for-every-room",
         "giving-a-room-its-shape",
-        "incomplete-or-unavailable-rooms"
+        "a-shape-is-a-model-the-platform-checks",
+        "incomplete-or-unavailable-rooms",
+        "who-is-accountable-and-who-is-working",
+        "who-an-ai-coworkers-stage-runs-for",
+        "when-an-account-stops-being-used",
+        "opening-a-workroom-that-has-no-work-item"
+      ]
+    },
+    "docs/user-guide/workspace/workbooks.md": {
+      "publicHref": "/user-guide/workspace/workbooks/",
+      "portalHref": "/docs/workspace/workbooks",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "use-this-doc-for",
+        "export"
       ]
     },
     "docs/ux-fit/2026-07-31-build-studio-owner-brief-proof-design-grounding.md": {

@@ -17,6 +17,40 @@ function retryAtFromSeconds(now: Date, seconds: number): Date {
   return new Date(now.getTime() + seconds * 1000);
 }
 
+type UsageLimitBody = {
+  error?: { type?: string; resets_at?: number | string; resets_in_seconds?: number };
+};
+
+/**
+ * OpenAI-family usage-limit bodies carry the reset time inline
+ * ({"error":{"type":"usage_limit_reached","resets_at":<epoch s>,"resets_in_seconds":n}}).
+ * Lift it so the snapshot has a retryAt instead of an open-ended backoff.
+ */
+function parseUsageLimitResetAt(bodyText: string | undefined, now: Date): Date | undefined {
+  if (!bodyText) return undefined;
+  let parsed: UsageLimitBody;
+  try {
+    parsed = JSON.parse(bodyText) as UsageLimitBody;
+  } catch {
+    return undefined;
+  }
+  const err = parsed?.error;
+  if (!err || typeof err !== "object") return undefined;
+  if (typeof err.resets_in_seconds === "number" && Number.isFinite(err.resets_in_seconds)) {
+    return retryAtFromSeconds(now, Math.max(0, err.resets_in_seconds));
+  }
+  const raw = err.resets_at;
+  if (typeof raw === "number" && Number.isFinite(raw)) {
+    const date = new Date(raw > 10_000_000_000 ? raw : raw * 1000);
+    return Number.isNaN(date.getTime()) ? undefined : date;
+  }
+  if (typeof raw === "string") {
+    const date = new Date(raw);
+    return Number.isNaN(date.getTime()) ? undefined : date;
+  }
+  return undefined;
+}
+
 function isZaiProvider(providerId: string): boolean {
   return providerId === "zai" || providerId === "zai-coding";
 }
@@ -38,6 +72,21 @@ export function classifyProviderCapacity(
       retryAfterSeconds,
       safeSummary: "The provider is temporarily rate limited. DPF will retry after the provider's reset time.",
       confidence: "header",
+      isHumanActionRequired: false,
+    };
+  }
+
+  const usageResetAt = input.statusCode === 429
+    ? parseUsageLimitResetAt(input.bodyText, input.now)
+    : undefined;
+  if (usageResetAt) {
+    return {
+      state: "rate_limited",
+      action: "retry_at",
+      retryAt: usageResetAt,
+      retryAfterSeconds: Math.max(0, Math.ceil((usageResetAt.getTime() - input.now.getTime()) / 1000)),
+      safeSummary: "The provider's usage limit is reached. DPF will retry when the provider says it resets.",
+      confidence: "exact",
       isHumanActionRequired: false,
     };
   }

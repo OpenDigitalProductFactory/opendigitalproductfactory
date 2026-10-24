@@ -10,7 +10,11 @@ const { mockAccept, mockSelfUrl, mockEstate } = vi.hoisted(() => ({
 vi.mock("@dpf/db", () => ({ prisma: { platformConfig: { findUnique: vi.fn().mockResolvedValue(null) } } }));
 vi.mock("@/lib/federation/organization-membership", () => ({ acceptOrganizationEnrolment: mockAccept }));
 vi.mock("@/lib/federation/self-authority", () => ({ resolveLocalFederationAuthorityUrl: mockSelfUrl }));
-vi.mock("@/lib/install/estate-identity", () => ({ loadEstateNameResolution: mockEstate }));
+vi.mock("@/lib/install/estate-identity", () => ({
+  loadEstateNameResolution: mockEstate,
+  // BI-CA54ACC8: the route composes its store through this builder.
+  prismaEstateIdentityStore: vi.fn(() => ({ readConfig: async () => null, readOrganizationName: async () => null })),
+}));
 
 import { POST } from "./route";
 

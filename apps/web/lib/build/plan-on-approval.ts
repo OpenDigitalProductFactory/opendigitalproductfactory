@@ -24,9 +24,11 @@
 //
 // Called from: reviewDesignDoc success path in mcp-tools.ts (fire-and-forget).
 
+import { runAsBuildPhase } from "@/lib/build/build-phase-inference-origin";
 import { prisma } from "@dpf/db";
 import { denialForNextAttempt, denyAfterUnparseable } from "@/lib/build/plan-generation-retry";
-import { normalizeBuildPlanPaths } from "./build-plan-paths";
+import { nearestExistingDirectory, normalizeBuildPlanPaths, type UnresolvedModifyPathHint } from "./build-plan-paths";
+import { buildDesignAcceptanceCriteria } from "@/lib/backlog/initiative-readiness/render-build-design-text";
 import { escalateBuildToHuman, SELF_FIX_CLASS } from "@/lib/build/escalate-build-to-human";
 
 function logBuildActivity(buildId: string, tool: string, summary: string): Promise<void> {
@@ -38,7 +40,9 @@ type PlanDispatchOutcome =
   | { kind: "skipped-already-has-plan"; reason: string }
   | { kind: "skipped-wrong-phase"; reason: string }
   | { kind: "dispatched-success"; taskCount: number; durationMs: number }
-  | { kind: "dispatched-failure"; error: string; durationMs: number };
+  | { kind: "dispatched-failure"; error: string; durationMs: number }
+  /** BI-5098ECEC: the host was busy; nothing is known about the plan and no repair round is spent. */
+  | { kind: "deferred-capacity"; reason: string; durationMs: number };
 
 /** A plan-review blocking issue fed back into a revision round (BI-99B06AD1). */
 export type PlanReviewIssue = { severity: string; description: string };
@@ -57,6 +61,33 @@ export function formatPlanReviewFeedback(issues: ReadonlyArray<PlanReviewIssue>)
   return `\nThis is a REVISION. Your previous plan was REJECTED by review for these blocking issues — the revised plan MUST resolve every one of them:\n${lines}\n`;
 }
 
+/**
+ * Paths a previous plan tried to MODIFY that do not exist in the repo. The
+ * design doc may still name them (it was written before a rename), so the
+ * planner is told affirmatively which paths are dead and where the nearest
+ * live directory is. Pure; "" when there is nothing to say.
+ */
+export function formatKnownMissingPaths(hints: ReadonlyArray<UnresolvedModifyPathHint>): string {
+  if (!hints || hints.length === 0) return "";
+  const lines = hints
+    .slice(0, 20)
+    .map((h) => `- ${h.path}${h.nearestExistingDirectory ? ` (does not exist; nearest existing directory: ${h.nearestExistingDirectory}/)` : " (does not exist)"}`)
+    .join("\n");
+  return `\nPATHS THAT DO NOT EXIST — a previous plan tried to modify them. Even if the design names them, they were removed or renamed. Do NOT use action "modify" on any of them: either pick the real file from VERIFIED FILES or the nearest existing directory, or use action "create".\n${lines}\n`;
+}
+
+const MISSING_MODIFY_TARGET_RE = /missing modify target:\s*(\S+)/i;
+
+/** Lift the reviewer's "Plan refers to missing modify target: X" issues back into path hints. */
+export function missingPathsFromReviewIssues(issues: ReadonlyArray<PlanReviewIssue>): UnresolvedModifyPathHint[] {
+  const paths = new Set<string>();
+  for (const issue of issues ?? []) {
+    const match = String(issue.description ?? "").match(MISSING_MODIFY_TARGET_RE);
+    if (match?.[1]) paths.add(match[1]);
+  }
+  return [...paths].map((path) => ({ path, nearestExistingDirectory: nearestExistingDirectory(path) }));
+}
+
 /** Build the plan-generation prompt from the design doc. */
 function buildPlanGenerationPrompt(params: {
   title: string;
@@ -65,8 +96,9 @@ function buildPlanGenerationPrompt(params: {
   biBody: string | null;
   verifiedPaths?: string[];  // actual paths confirmed to exist in the codebase
   priorReviewIssues?: ReadonlyArray<PlanReviewIssue>; // BI-99B06AD1: revision feedback
+  knownMissingPaths?: ReadonlyArray<UnresolvedModifyPathHint>; // paths a prior plan tried to modify that do not exist
 }): string {
-  const { title, designDoc, biTitle, biBody, verifiedPaths, priorReviewIssues } = params;
+  const { title, designDoc, biTitle, biBody, verifiedPaths, priorReviewIssues, knownMissingPaths } = params;
   const dd = designDoc as {
     problemStatement?: string;
     dataModel?: string;
@@ -78,15 +110,19 @@ function buildPlanGenerationPrompt(params: {
     accessibility?: string;
   };
 
-  const acceptance = Array.isArray(dd.acceptanceCriteria)
-    ? dd.acceptanceCriteria.join("; ")
-    : (dd.acceptanceCriteria ?? "Not specified");
+  // BI-6F2872FC: number the criteria exactly as the design's scope baseline
+  // does, so each task can name the ids it satisfies and the platform can
+  // trace the plan to the approved acceptance criteria.
+  const acceptanceIds = buildDesignAcceptanceCriteria(designDoc);
+  const acceptance = acceptanceIds.length > 0
+    ? `\n${acceptanceIds.map(({ id, statement }) => `- ${id}: ${statement}`).join("\n")}`
+    : typeof dd.acceptanceCriteria === "string" ? dd.acceptanceCriteria : "Not specified";
 
   return `You are generating an implementation plan for a Build Studio feature build.
 
 FEATURE: ${title}
 ${biTitle ? `BACKLOG ITEM: ${biTitle}` : ""}
-${formatPlanReviewFeedback(priorReviewIssues ?? [])}
+${formatPlanReviewFeedback(priorReviewIssues ?? [])}${formatKnownMissingPaths(knownMissingPaths ?? [])}
 APPROVED DESIGN DOCUMENT:
 Problem: ${dd.problemStatement ?? "See BI body"}
 Data Model: ${dd.dataModel ?? "None"}
@@ -107,7 +143,8 @@ Generate a concrete implementation plan. Respond with ONLY valid JSON matching t
       "title": "<task title>",
       "testFirst": "<how to verify before implementing>",
       "implement": "<exact change with specific file paths and patterns to follow>",
-      "verify": "<how to confirm the task worked>"
+      "verify": "<how to confirm the task worked>",
+      "satisfies": ["<AC id>", "..."]
     }
   ]
 }
@@ -116,7 +153,8 @@ CRITICAL RULES:
 - ALL paths MUST be monorepo-relative: "apps/web/...", "packages/db/...", NOT "lib/..." or "src/..."
 - ONLY use paths from the VERIFIED FILES section below for "modify" actions. Do NOT invent paths.
 - For "create" actions, use the same directory as the nearest related existing file.
-- Each task MUST have: title, testFirst, implement, verify
+- Each task MUST have: title, testFirst, implement, verify, satisfies
+- satisfies lists the acceptance ids (AC-1, AC-2, ...) from the Acceptance Criteria above that the task delivers; use only those ids, and make sure every acceptance id is named by at least one task
 - implement MUST reference specific existing files/patterns (e.g. "follow pattern in apps/web/lib/actions/build.ts")
 - Tasks should be 2-5 minutes of work each — atomic, bite-sized. ONE specific file operation per task.
 - NEVER combine multiple file edits or a test + implementation in one task
@@ -180,7 +218,7 @@ export function parsePlanJson(
  * failed review's blocking issues back so the model produces a REVISED plan that
  * resolves them. Returns the normalized plan or a human-readable error.
  */
-async function generateNormalizedPlan(args: {
+export async function generateNormalizedPlan(args: {
   title: string;
   designDoc: Record<string, unknown>;
   biTitle: string | null;
@@ -189,12 +227,22 @@ async function generateNormalizedPlan(args: {
   priorReviewIssues?: ReadonlyArray<PlanReviewIssue>;
   /** EP-MODEL-TIER-ROUTING: capability tier for plan generation. */
   modelTier?: "local" | "robust";
+  /** Routing sensitivity from mapBuildDeliverableToRoutingSensitivity; defaults to development (source code). */
+  sensitivity?: "development" | "internal" | "confidential";
   /** FeatureBuild this generation belongs to — threaded into AdapterRunTelemetry
    *  so completeBuildPhaseRun can meter the plan phase (BI-0A6B8B38). */
   buildId?: string;
   log: (summary: string) => Promise<void>;
 }): Promise<{ plan: { fileStructure?: unknown[]; tasks?: unknown[] } } | { error: string }> {
   const { routeAndCall } = await import("@/lib/inference/routed-inference");
+  const { BUILD_PHASE_ROUTE_OPTIONS } = await import("@/lib/build/build-phase-route-options");
+  // Paths the reviewer already refused, plus whatever this call's own
+  // normalization refuses: the second generation round below is prompted with
+  // both so a dead path is never re-targeted blind (FB-2684020A).
+  let knownMissingPaths: UnresolvedModifyPathHint[] = missingPathsFromReviewIssues(args.priorReviewIssues ?? []);
+  const PATH_ROUNDS_MAX = 2;
+  let normalized: ReturnType<typeof normalizeBuildPlanPaths> | null = null;
+  for (let pathRound = 1; pathRound <= PATH_ROUNDS_MAX; pathRound++) {
   const prompt = buildPlanGenerationPrompt({
     title: args.title,
     designDoc: args.designDoc,
@@ -202,6 +250,7 @@ async function generateNormalizedPlan(args: {
     biBody: args.biBody,
     verifiedPaths: args.verifiedPaths,
     priorReviewIssues: args.priorReviewIssues,
+    knownMissingPaths,
   });
 
   const PLAN_GEN_MAX_ATTEMPTS = 2;
@@ -222,8 +271,9 @@ async function generateNormalizedPlan(args: {
     const response = await routeAndCall(
       [{ role: "user" as const, content: prompt }],
       systemPrompt,
-      "internal",
+      args.sensitivity ?? "development",
       {
+        ...BUILD_PHASE_ROUTE_OPTIONS,
         budgetClass: "quality_first",
         ...(args.modelTier ? { modelTier: args.modelTier } : {}),
         ...(args.buildId ? { buildId: args.buildId } : {}),
@@ -261,16 +311,23 @@ async function generateNormalizedPlan(args: {
   if (!Array.isArray(planObj.fileStructure) || !Array.isArray(planObj.tasks)) return { error: "Plan JSON missing fileStructure or tasks arrays" };
   if (planObj.tasks.length === 0) return { error: "Plan generation returned 0 tasks" };
 
-  const normalized = normalizeBuildPlanPaths(planObj as Parameters<typeof normalizeBuildPlanPaths>[0]);
-  return { plan: normalized.plan };
+  normalized = normalizeBuildPlanPaths(planObj as Parameters<typeof normalizeBuildPlanPaths>[0]);
+  if (normalized.unresolvedModifyPaths.length === 0 || pathRound === PATH_ROUNDS_MAX) break;
+  await args.log(
+    `Plan targets ${normalized.unresolvedModifyPaths.length} modify path(s) that do not exist (${normalized.unresolvedModifyPaths.slice(0, 3).join(", ")}) — regenerating with the dead paths named.`,
+  );
+  const seen = new Set(knownMissingPaths.map((h) => h.path));
+  knownMissingPaths = [...knownMissingPaths, ...normalized.unresolvedModifyPathHints.filter((h) => !seen.has(h.path))];
+  }
+  return { plan: normalized!.plan };
 }
 
 /** Read the persisted planReview decision + issues after a reviewBuildPlan run. */
-async function readPlanReview(buildId: string): Promise<{ decision: string; issues: PlanReviewIssue[] } | null> {
+async function readPlanReview(buildId: string): Promise<{ decision: string; issues: PlanReviewIssue[]; reviewIncomplete?: boolean } | null> {
   const row = await prisma.featureBuild.findUnique({ where: { buildId }, select: { planReview: true } }).catch(() => null);
-  const pr = row?.planReview as { decision?: string; issues?: PlanReviewIssue[] } | null;
+  const pr = row?.planReview as { decision?: string; issues?: PlanReviewIssue[]; reviewIncomplete?: boolean } | null;
   if (!pr || typeof pr.decision !== "string") return null;
-  return { decision: pr.decision, issues: Array.isArray(pr.issues) ? pr.issues : [] };
+  return { decision: pr.decision, issues: Array.isArray(pr.issues) ? pr.issues : [], reviewIncomplete: pr.reviewIncomplete === true };
 }
 
 /** Run reviewBuildPlan (dual reviewers + gate + auto-advance-on-pass) for a build. */
@@ -295,7 +352,7 @@ async function runPlanReview(buildId: string, userId: string, log: (s: string) =
  * advanced from ideate → plan. Designed to be called fire-and-forget from the
  * reviewDesignDoc success path; never throws.
  */
-export async function dispatchPlanForApprovedBuild(params: {
+async function dispatchPlanForApprovedBuildInner(params: {
   buildId: string;
   userId: string;
   /** Local-tuning: when a build is RESUMED with an existing plan that already
@@ -371,12 +428,17 @@ export async function dispatchPlanForApprovedBuild(params: {
     // BI-B24D4C84: pass the rightsizing opts (as the autonomous callers do) so
     // this takes the quality-first branch rather than the legacy size-only one,
     // which pinned every small/medium build to the local tier.
-    const { getModelTier, deriveDeliverableSensitivity } = await import("@/lib/explore/build-process-matrix");
+    const { getModelTier, deriveDeliverableSensitivity, mapBuildDeliverableToRoutingSensitivity } = await import("@/lib/explore/build-process-matrix");
     const { isModelTierRoutingEnabled, isQualityFirstRightsizingEnabled } = await import("./build-studio-config");
     const planSensitivity = deriveDeliverableSensitivity({
       text: `${build.title ?? ""}\n${build.description ?? ""}`,
       workType: build.kind,
     });
+    // Founder ruling 2026-08-12: ordinary builds route as development work; only
+    // elevated/high deliverables demand internal/confidential clearance. The
+    // literal "internal" this used to send excluded every public-cleared cloud
+    // dev engine from plan generation.
+    const planRouteSensitivity = mapBuildDeliverableToRoutingSensitivity(planSensitivity);
     const planQualityFirst = await isQualityFirstRightsizingEnabled();
     const planModelTier = (await isModelTierRoutingEnabled())
       ? getModelTier(build.kind, biEffortSize, {
@@ -428,6 +490,7 @@ export async function dispatchPlanForApprovedBuild(params: {
       biBody,
       verifiedPaths,
       modelTier: planModelTier,
+      sensitivity: planRouteSensitivity,
       log,
     });
     if ("error" in gen) {
@@ -456,7 +519,12 @@ export async function dispatchPlanForApprovedBuild(params: {
     // revision that never ran is NOT self-repair exhausted, and must not be
     // treated as one.
     let regenerated = false;
-    while (review?.decision === "fail" && round < PLAN_FIX_MAX_ROUNDS) {
+    // BI-A87DE5E1: stop once the build has left plan (an advisory advance) —
+    // rewriting buildPlan under a running orchestrator swaps the plan mid-build.
+    const { shouldReviseRejectedPlan } = await import("./plan-review-advisory");
+    const phaseNow = async () =>
+      (await prisma.featureBuild.findUnique({ where: { buildId }, select: { phase: true } }).catch(() => null))?.phase ?? null;
+    while (shouldReviseRejectedPlan(review, await phaseNow()) && round < PLAN_FIX_MAX_ROUNDS) {
       round++;
       await log(`Plan review failed — revising (round ${round}/${PLAN_FIX_MAX_ROUNDS}) against ${review.issues.length} blocking issue(s)`);
       const revised = await generateNormalizedPlan({
@@ -468,6 +536,7 @@ export async function dispatchPlanForApprovedBuild(params: {
         verifiedPaths,
         priorReviewIssues: review.issues,
         modelTier: planModelTier,
+        sensitivity: planRouteSensitivity,
         log,
       });
       if ("error" in revised) {
@@ -502,17 +571,20 @@ export async function dispatchPlanForApprovedBuild(params: {
     );
     const fixOutcome = resolveReviewFixOutcome({
       reviewFailed: review?.decision === "fail",
+      reviewIncomplete: review?.reviewIncomplete,
       regenerated,
     });
 
     if (outcomeKeepsBuildRecoverable(fixOutcome)) {
       await log(
-        `Plan repair could not generate a plan in ${round} round(s) — no endpoint produced one. `
+        (fixOutcome === "blocked-review-incomplete"
+          ? "Plan review could not complete; the plan has not been rejected. "
+          : `Plan repair could not generate a plan in ${round} round(s) — no endpoint produced one. `)
         + "Leaving the build recoverable; the existing plan and review are kept.",
       );
       return {
         kind: "dispatched-failure",
-        error: "blocked-no-regeneration",
+        error: fixOutcome,
         durationMs: Date.now() - t0,
       };
     }
@@ -544,8 +616,22 @@ export async function dispatchPlanForApprovedBuild(params: {
       durationMs: Date.now() - t0,
     };
   } catch (err) {
+    const { describeCapacityDeferral } = await import("./capacity-deferral");
+    const deferral = describeCapacityDeferral(err);
+    if (deferral) {
+      // BI-5098ECEC: a busy host is not a failed plan; the reconciler re-drives.
+      try { await log(`Plan dispatch deferred: ${deferral.message.slice(0, 220)}`); } catch (_) { /**/ }
+      return { kind: "deferred-capacity", reason: deferral.message, durationMs: Date.now() - t0 };
+    }
     const msg = String(err instanceof Error ? err.message : err).slice(0, 300);
     try { await log(`Plan dispatch failed: ${msg}`); } catch (_) { /**/ }
     return { kind: "dispatched-failure", error: msg, durationMs: Date.now() - t0 };
   }
+}
+
+/** Build-phase entry: runs under the autonomous inference origin (BI-2F9DE752). */
+export function dispatchPlanForApprovedBuild(
+  params: Parameters<typeof dispatchPlanForApprovedBuildInner>[0],
+): ReturnType<typeof dispatchPlanForApprovedBuildInner> {
+  return runAsBuildPhase(() => dispatchPlanForApprovedBuildInner(params));
 }

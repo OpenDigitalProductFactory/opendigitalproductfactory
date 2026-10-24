@@ -2,9 +2,25 @@
 
 ## Purpose
 
-This document assesses the current `DPF` implementation against the `TAK`, `GAID`, and `TAK-JSI`
-standards family. The canonical ownership map is
+This document retains accumulated, source-declared first-pass notes about `DPF`
+and the `TAK`, `GAID`, and `TAK-JSI` standards family. The canonical ownership map is
 [agent-standards-family.md](agent-standards-family.md).
+
+**Publication review: October 16, 2026.** Source locators and claim boundaries
+were checked against repository revision
+`250447587496308226abc10aca79ee006ecd10f6`. The existing row labels below are
+historical source assessments, not new test results or a current live-install
+verdict. This publication check did not execute every referenced control, measure
+reachability, establish an applicable-clause denominator, or verify a qualification.
+The date identifies this bounded publication review; it does not date or renew
+the underlying implementation claims.
+
+BI-2AB781FA and BI-F3C2EC7A retain the assessed clause/test/evidence replacement
+and DPF demonstration. Their result must identify the exact normative versions,
+claim subject, source/runtime identity, applicable clauses, executed tests,
+evidence and assessment date before a current conformance result is published.
+File presence and the locators in these tables are research entry points, not
+that evidence. Known partial and unassessed states remain open.
 
 Status values:
 
@@ -13,7 +29,9 @@ Status values:
 - `Not Implemented`
 - `Not Yet Assessable`
 
-This is a first-pass conformance view. It is intended to show where `DPF` already demonstrates relevant controls and where additional work would be required to claim higher-assurance conformance.
+This first-pass view identifies source-declared controls and research gaps. It
+cannot establish what the present installation enforces or support a
+higher-assurance claim without the separately owned assessment evidence.
 
 For the purposes of this document, `DPF` is treated as the initial implementation prototype for the standards family, not as a claim of full present-day conformance.
 
@@ -24,6 +42,11 @@ The companion verification rubrics intended to make future conformance claims re
 - `docs/architecture/jsi-conformance-tests.md`
 
 ## TAK Conformance
+
+Tool grant reads and administrator edits resolve known coworker aliases to one
+canonical Agent row. Revocation tombstones take precedence; missing authority
+fails closed. Conflicting legacy rows are reconciled only through a fresh,
+administrator-approved preview, without merging their grants automatically.
 
 | Control Area | Status | Evidence Path | Notes | Recommended Next Step |
 |--------------|--------|---------------|-------|-----------------------|
@@ -38,8 +61,8 @@ The companion verification rubrics intended to make future conformance claims re
 | Injection defenses | Partially Implemented | `apps/web/lib/tak/prompt-assembler.ts`, `apps/web/lib/tak/agentic-loop.ts`, `apps/web/lib/mcp-tools.ts` | The runtime includes fabrication detection, tool-use nudging, parameter sanitization, and sensitivity-aware prompting. These are real controls, but not yet a complete injection-defense architecture across prompts, tools, skills, and connectors. | Add explicit prompt-injection and connector-compromise handling with policy outcomes and test coverage. |
 | Evaluation and red teaming | Partially Implemented | `docs/superpowers/specs/2026-03-25-tool-evaluation-pipeline-design.md`, runtime heuristics in `apps/web/lib/tak/agentic-loop.ts` | `DPF` has strong design intent and governance work, but the runtime evidence reviewed here does not yet show a fully integrated `TAK` conformance evaluation suite. | Define a repeatable `TAK` verification harness and red-team pack, then store the resulting evidence as part of conformance claims. |
 | Proactivity boundary enforcement | Partially Implemented | `apps/web/lib/proactivity/`, `apps/web/lib/actions/agent-task-scheduler.ts`, `apps/web/lib/performance/business-analysis-watch-run.ts` | DPF resolves scoped proactivity plans and enforces scheduled-task action boundaries, including proposal paths. Watched business analysis additionally binds execution to an explicitly accepted plan fingerprint and emits evidence only for typed material changes. The control is not yet uniformly intersected with a `TAK-JSI` qualification status across every runtime surface. | Add qualification status to the canonical runtime boundary calculation and test that higher proactivity never widens it. |
-| Evidence-earned autonomy | Implemented (substrate) | `apps/web/lib/autonomy/trust-graduation.ts`, `apps/web/lib/autonomy/regulatory-ceiling.ts`, `packages/db/prisma/schema.prisma` | DPF has activity/risk-scoped trust graduation, regulatory ceilings, and regression-oriented policy substrate. This is relevant `TAK` machinery, but it is not yet fed by a formal job qualification. | Intersect the existing trust ceiling with an active `TAK-JSI` qualification ceiling. |
-| Golden Triangle separation | Partially Implemented | `apps/web/lib/golden-triangle.ts`, `apps/web/lib/actions/golden-triangle.ts` | DPF models cost/quality/time posture independently from agent identity and local autonomy. Formal qualification-aware route eligibility is not yet integrated. | Compile Golden Triangle posture only after hard job, data, provider, and oversight eligibility. |
+| Evidence-earned autonomy | Implemented (substrate) | `apps/web/lib/autonomy/trust-graduation.ts`, `apps/web/lib/autonomy/regulatory-ceiling.ts`, `packages/db/prisma/schema/` | DPF has activity/risk-scoped trust graduation, regulatory ceilings, and regression-oriented policy substrate. This is relevant `TAK` machinery, but it is not yet fed by a formal job qualification. | Intersect the existing trust ceiling with an active `TAK-JSI` qualification ceiling. |
+| Golden Triangle separation | Partially Implemented | `apps/web/lib/golden-triangle/index.ts`, `apps/web/lib/actions/golden-triangle.ts` | DPF models cost/quality/time posture independently from agent identity and local autonomy. Formal qualification-aware route eligibility is not yet integrated. | Compile Golden Triangle posture only after hard job, data, provider, and oversight eligibility. |
 
 ## GAID Conformance
 
@@ -73,8 +96,8 @@ This section assesses existing substrate only. It does not claim that DPF curren
 | Profession and decision doctrine | Partially Implemented | `docs/professions/`, `apps/web/lib/decision-perspective/`, `packages/db/src/seed-decision-perspective.ts` | WSID-style doctrine and decision-perspective substrate exist. Versioned job-qualification binding and rank/completeness checks are not yet conformance evidence. | Bind stable corpus and decision-axis versions into the first qualification scheme. |
 | Operating-profile identity binding | Partially Implemented | `apps/web/lib/identity/aidoc-resolver.ts`, `apps/web/lib/tak/agent-card-service.ts` | DPF projects agent identity and operating metadata but does not yet issue a qualification record bound to a canonical `GAID` and fingerprint. | Add qualification references to the internal `AIDoc` projection before any qualification is advertised. |
 | Job-specific evaluation | Not Implemented | `docs/superpowers/specs/2026-03-25-tool-evaluation-pipeline-design.md` | Generic evaluation design exists, but no completed job-profile assessment pack and qualification decision were found. | Implement a representative scenario pack with critical failures and declared thresholds. |
-| Model/provider eligibility | Partially Implemented | `apps/web/lib/model-routing/`, `apps/web/lib/golden-triangle.ts` | DPF has routing and resource-posture concepts, but no formal job-profile eligibility contract was found. | Apply hard data, residency, provider, modality, tool, context, and job-fit filters before ranking. |
-| Data stewardship | Partially Implemented | `packages/db/prisma/schema.prisma`, platform data-governance surfaces | DPF has sensitivity and governance substrate, but qualification-specific data ownership, quality, purpose, and evidence-minimization fields are not yet composed. | Make a named steward and data-quality contract mandatory in each data-bearing job profile. |
+| Model/provider eligibility | Partially Implemented | `apps/web/lib/routing/request-contract.ts`, `apps/web/lib/golden-triangle/index.ts` | DPF has routing and resource-posture concepts, but no formal job-profile eligibility contract was found. | Apply hard data, residency, provider, modality, tool, context, and job-fit filters before ranking. |
+| Data stewardship | Partially Implemented | `packages/db/prisma/schema/`, platform data-governance surfaces | DPF has sensitivity and governance substrate, but qualification-specific data ownership, quality, purpose, and evidence-minimization fields are not yet composed. | Make a named steward and data-quality contract mandatory in each data-bearing job profile. |
 | Qualification lifecycle | Not Implemented | Current implementation review | No qualification-specific issue, expiry, surveillance, revalidation, restriction, suspension, or revocation record was found. | Implement the `TAK-JSI` status model and material-change triggers without duplicating the existing autonomy ledger. |
 | Qualification-aware runtime ceiling | Not Implemented | `apps/web/lib/autonomy/`, `apps/web/lib/proactivity/` | DPF can enforce proactivity and regulatory/trust ceilings, but there is no active job-qualification ceiling in the intersection. | Add qualification status and scope as a fail-closed input to runtime action posture. |
 
@@ -92,7 +115,7 @@ Assessed against `docs/architecture/context-engineering-standards.md` (P1–P13)
 | P10 Deterministic enforcement | Implemented | `apps/web/lib/mcp-tools.ts` (kernel gate), `packages/dpf-skill-pack/hooks/` | Kernel runtime gate + PreToolUse prechecks (incl. `tool-economy-precheck.mjs`). |
 | P11 Persist/re-inject across compaction | Partially Implemented | `apps/web/lib/tak/agentic-loop.ts` | `withPlanReminder` keeps the plan out of the compacted window; memory-fact re-injection tracked as R9. |
 | P12 Empirical measurement | Partially Implemented (Phase 1) | `apps/web/lib/tak/context-economy-metrics.ts` | Per-turn tool-surface gauge (count + est. definition tokens, banded vs the 15-tool cliff) + tool-selection accuracy, logged in the agentic loop. Cross-task tokens-per-task rollup staged (Phase 2). |
-| Deferred tool exposure on external CLI path | Implemented | `apps/web/lib/mcp/tool-tier.ts`, `apps/web/lib/mcp/load-tools.ts`, `apps/web/lib/tak/tool-intent.ts`, `packages/integration-shared/src/mcp-catalog-tier.ts` | Claude Code/Codex bootstrap with explicit `?tier=full` for host-native lazy attachment; generic/Grok/unknown clients default to core and expand by exact name or intent through `load_tools`. Client-host callability is verified separately from protocol conformance. |
+| Deferred tool exposure on external CLI path | Implemented | `apps/web/lib/mcp/tool-tier.ts`, `apps/web/lib/mcp/load-tools.ts`, `apps/web/lib/tak/tool-intent.ts`, `packages/integration-shared/src/mcp-catalog-tier.ts` | Claude Code/Codex bootstrap with explicit `?tier=full` for host-native lazy attachment; generic/Grok/unknown clients default to core and expand by exact name or intent through `load_tools`. The core tier carries the writers that CLOSE governed work — `update_backlog_item_status`, `record_execution_evidence`, and the nonprod lease claim/release pair — so a core client can finish what it starts rather than reaching for `?tier=full` to recover them. Client-host callability is verified separately from protocol conformance. |
 
 Recommended next steps for this area are tracked in `docs/superpowers/specs/2026-06-20-context-engineering-tool-efficiency-design.md` (R3, R4, R6, R7, R8, R9) and kept current by `docs/architecture/agent-client-capability-parity.md`.
 
@@ -130,3 +153,24 @@ The most important prototype outcomes implied by the current standards refresh a
 - Expose `GAID` claims through `MCP`, `A2A`, and HTTP transport profiles.
 - Build repeatable `TAK`, `GAID`, and `TAK-JSI` conformance suites and preserve the resulting evidence.
 - Extend `DPF` from platform-local identity into a demonstrable cross-boundary trust implementation suitable for standards-body review.
+
+### MCP discovery refusal conformance
+
+Progressive tool discovery is an authorization-preserving projection. Empty
+results carry a structured reason and finite next step, while reviewer-only
+initiative writers point to the server-issued `get_backlog_item` reviewer route.
+The discovery response never converts catalog visibility into a grant or
+collapses a separate reviewer identity into the requesting author.
+
+For a large readiness response, `get_backlog_item(itemId, recoveryGate)` returns
+one complete current request without the item's body or other request objects.
+The bounded projection checks exact Workroom content access and refuses an
+oversized request explicitly rather than returning a partial packet. Re-read the
+same gate after source or readiness changes; submit only the issued request,
+unchanged. Research recovery names the author-owned evidence writer and never
+creates an independent research reviewer. Packet delivery is not a review
+receipt or acceptance. A bounded plan read uses the current server-derived
+OAuth task family for existing retry history; caller input cannot select or
+reset that authority. The shared projection lives in
+`apps/web/lib/mcp/backlog-recovery-read.ts`; existing readiness and dispatch
+remain the authority for eligibility and immutable packet equality.

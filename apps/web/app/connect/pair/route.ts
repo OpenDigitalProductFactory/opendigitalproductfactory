@@ -10,14 +10,12 @@ import {
   revealIncomingNearbyPairing,
 } from "@/lib/federation/nearby-pairing-service";
 import { checkNearbyPairingRateLimit } from "@/lib/federation/nearby-pairing-rate-limit";
+import { clientAddressKey } from "@/lib/security/client-address";
 
 const MAX_BODY_BYTES = 8 * 1024;
 
 function requesterKey(request: NextRequest): string {
-  const forwarded = request.headers.get("x-forwarded-for")?.split(",", 1)[0]?.trim();
-  const real = request.headers.get("x-real-ip")?.trim();
-  const value = forwarded || real || "unknown";
-  return value.length <= 80 ? value : value.slice(0, 80);
+  return clientAddressKey(request.headers);
 }
 
 function error(status: number, code: string, message: string): NextResponse {

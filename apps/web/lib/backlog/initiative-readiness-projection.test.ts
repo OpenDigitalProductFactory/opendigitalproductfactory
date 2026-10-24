@@ -17,6 +17,7 @@ function row(overrides: Partial<InitiativeGateActivityRow> = {}): InitiativeGate
       receiptId: overrides.id ?? "row-1",
       gate: overrides.gateKey ?? "architecture-review",
       decision: "pass",
+      policyVersion: "initiative-readiness.v3",
       artifactDigest: "sha256:current",
       artifactAuthorRef: "principal:author|agent:author-agent",
       reviewerPrincipalId: "reviewer",
@@ -42,6 +43,14 @@ function row(overrides: Partial<InitiativeGateActivityRow> = {}): InitiativeGate
 }
 
 describe("initiative readiness projection", () => {
+  it("rejects a receipt without the policy identity required by readiness", () => {
+    const receipt = row();
+    const payload = { ...(receipt.payload as Record<string, unknown>) };
+    delete payload.policyVersion;
+    expect(projectInitiativeGateEvidence([{ ...receipt, payload }], {
+      itemIds: ["item-1"], expectedArtifactDigest: "sha256:current",
+    })[0]?.state).toBe("malformed");
+  });
   it("bounds long histories to one newest row per item and gate with deterministic ties", () => {
     const rows = Array.from({ length: 500 }, (_, index) => row({
       id: `row-${String(index).padStart(4, "0")}`,

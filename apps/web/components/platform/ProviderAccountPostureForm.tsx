@@ -8,11 +8,13 @@ type AccountClass = "regular" | "business-team" | "enterprise" | "unknown";
 
 export function ProviderAccountPostureForm({
   providerId,
+  connectionId,
   canWrite,
   initial,
   requiredRegions = [],
 }: {
   providerId: string;
+  connectionId?: string;
   canWrite: boolean;
   requiredRegions?: string[];
   initial: {
@@ -99,6 +101,7 @@ export function ProviderAccountPostureForm({
         <button type="button" disabled={!canWrite || pending} className="rounded bg-[var(--dpf-accent)] px-3 py-2 text-xs font-semibold text-[var(--dpf-on-accent)] disabled:opacity-50" onClick={() => startTransition(async () => {
           const result = await updateProviderConnectionPosture({
             providerId,
+            ...(connectionId === undefined ? {} : { connectionId }),
             accountClass,
             noTraining: noTraining === "unknown" ? null : noTraining === "yes",
             ...(requiredRegions.length > 0 ? {

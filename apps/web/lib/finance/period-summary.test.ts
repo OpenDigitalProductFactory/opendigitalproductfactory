@@ -248,12 +248,12 @@ describe("getFinancePeriodSummary", () => {
     expect(summary.gaps.some((g) => g.includes("span 2 currencies"))).toBe(true);
   });
 
-  it("falls back to GBP when OrgSettings is missing", async () => {
+  it("falls back to USD, never GBP, when OrgSettings is missing (BI-6030131C)", async () => {
     mockPrisma.orgSettings.findFirst.mockResolvedValueOnce(null);
     const summary = await getFinancePeriodSummary({
       period: "month-to-date",
       now: new Date("2026-05-14T12:00:00Z"),
     });
-    expect(summary.currency).toBe("GBP");
+    expect(summary.currency).toBe("USD");
   });
 });

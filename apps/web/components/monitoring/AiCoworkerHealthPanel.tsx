@@ -6,7 +6,7 @@ import { TONE_COLOR } from "./health-summary";
 
 export function AiCoworkerHealthPanel() {
   const { data: inferenceUp, offline } = useMetricQuery('up{job="model-runner"}');
-  // BET-5 retired Qdrant: coworker memory is pgvector inside Postgres, so the
+  // Coworker memory is pgvector inside Postgres (BET-5), so the
   // memory store is reachable iff Postgres is up (BI-31FDC859). Semantic-memory
   // health is refined below by dpf_semantic_memory_errors_total.
   const { data: memoryStoreUp } = useMetricQuery('up{job="postgres"}');

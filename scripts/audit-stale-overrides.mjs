@@ -145,7 +145,7 @@ async function fetchAllDependabotAlerts({ repo, token }) {
     if (res.status === 403) {
       throw new Error(
         "GitHub API 403 reading Dependabot alerts — the default GITHUB_TOKEN cannot read this surface. " +
-          "Set the DEPENDABOT_ALERTS_TOKEN repository secret to a token with the security_events scope.",
+          "Set the SECURITY_SWEEP_APP_ID + SECURITY_SWEEP_APP_PRIVATE_KEY repository secrets (GitHub App with Dependabot alerts: read and Secret scanning alerts: read), or DEPENDABOT_ALERTS_TOKEN (fine-grained PAT with the same permissions).",
       );
     }
     if (!res.ok) throw new Error(`GitHub API ${res.status} ${res.statusText}`);

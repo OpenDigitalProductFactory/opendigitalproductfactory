@@ -1,9 +1,60 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { convergeUxSweepFixture } from "./ux-sweep-fixture-core.mjs";
+import { convergeUxSweepFixture, convergeUxSweepEstate, uxSweepEstateFacts } from "./ux-sweep-fixture-core.mjs";
 
 const NOW = new Date("2026-07-28T19:30:00.000Z");
+
+function estateDb(existing = null) {
+  const rows = { run: existing, olderRuns: [] };
+  return { rows, db: {
+    discoveryRun: { findFirst: async ({ where } = {}) => {
+      const runs = [rows.run, ...rows.olderRuns].filter(Boolean);
+      return where?.sourceSlug?.not ? runs.find(r => r.sourceSlug !== where.sourceSlug.not) ?? null : runs[0] ?? null;
+    } },
+  } };
+}
+
+test("estate fixture populates a complete repeatable discovery before shell bootstrap and replays idempotently", async () => {
+  const { db, rows } = estateDb();
+  let calls = 0;
+  const persist = async (facts, meta) => {
+    calls++;
+    assert.deepEqual(facts, uxSweepEstateFacts());
+    assert.equal(facts.items.length, 10);
+    assert.equal(facts.relationships.filter(r => r.relationshipType === "MEMBER_OF").length, 3);
+    rows.run = { id: "canonical-run", ...meta, status: "completed" };
+    return { runId: rows.run.id };
+  };
+  await convergeUxSweepEstate(db, NOW, persist);
+  assert.equal(rows.run.status, "completed");
+  assert.equal(rows.run.sourceSlug, "ux-route-sweep");
+  const first = JSON.stringify(rows.run);
+  await convergeUxSweepEstate(db, NOW, persist);
+  assert.equal(JSON.stringify(rows.run), first);
+  assert.equal(calls, 1);
+});
+
+test("estate fixture preserves existing real discovery instead of replacing its observations", async () => {
+  const existing = { id: "real-run", sourceSlug: "dpf_bootstrap", status: "completed" };
+  const { db, rows } = estateDb(existing);
+  assert.equal(await convergeUxSweepEstate(db, NOW, () => assert.fail("must preserve real observations")), null);
+  assert.equal(rows.run, existing);
+});
+
+test("a partial estate write cannot produce a completed-run sentinel", async () => {
+  const { db, rows } = estateDb();
+  await assert.rejects(convergeUxSweepEstate(db, NOW, async () => { throw new Error("fixture write failed"); }), /fixture write failed/);
+  assert.equal(rows.run, null);
+});
+
+test("a newer fixture run cannot hide older real observations", async () => {
+  const latest = { id: "fixture-run", sourceSlug: "ux-route-sweep", status: "completed" };
+  const { db, rows } = estateDb(latest);
+  rows.olderRuns.push({ id: "older-real", sourceSlug: "dpf_bootstrap", status: "completed" });
+  assert.equal(await convergeUxSweepEstate(db, NOW, () => assert.fail("must preserve older real observations")), null);
+  assert.equal(rows.run, latest);
+});
 
 function fixtureDb({ setupComplete, hasQueue = true, hasArchetype = true, hasStorefront = false }) {
   const calls = {

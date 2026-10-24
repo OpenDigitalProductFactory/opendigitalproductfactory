@@ -1,0 +1,35 @@
+{
+  "version": "1",
+  "decidedOption": "rename-in-place-no-budget-change",
+  "scope": {
+    "files": [
+      "apps/web/components/platform/identity/IdentityTabNav.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "sweep-measurement",
+    "baselineComparison": "held",
+    "measured": {
+      "/platform/identity/agents": {
+        "defaultVisibleWords": 3439,
+        "leadBandWords": 0,
+        "primaryActions": 1,
+        "visibleFields": 0,
+        "maxChoicesPerControl": 0,
+        "subLegibleControls": 0,
+        "buriedPrimaryAction": 0,
+        "axeViolations": 2
+      },
+      "/platform/audit/operations": {
+        "defaultVisibleWords": 122,
+        "leadBandWords": 0,
+        "primaryActions": 1,
+        "visibleFields": 0,
+        "maxChoicesPerControl": 0,
+        "subLegibleControls": 0,
+        "buriedPrimaryAction": 0,
+        "axeViolations": 2
+      }
+    }
+  }
+}

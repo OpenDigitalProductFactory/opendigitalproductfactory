@@ -137,6 +137,19 @@ describe("projectCapabilityServiceHealth", () => {
     expect(item?.action.length).toBeGreaterThan(0);
   });
 
+  it("links an inactive monitoring service's existing action to the monitoring switch (BI-8BBFE50B)", () => {
+    const result = projectCapabilityServiceHealth(
+      operationalState({
+        enabledRuntimeCapabilities: ["runtime:core"],
+        serviceRequirements: [operationalState().serviceRequirements[0]!],
+        observedServices: { portal: { composePresent: true, healthy: true } },
+        serviceStates: { portal: "required", prometheus: "optional_inactive", "browser-use": "optional_inactive" },
+      }),
+    );
+    expect(result.items.find((item) => item.key === "prometheus")?.actionHref).toBe("/admin/settings/monitoring");
+    expect(result.items.find((item) => item.key === "browser-use")?.actionHref).toBeUndefined();
+  });
+
   it("degrades aggregate health for missing required and degraded optional services", () => {
     const missingRequired = projectCapabilityServiceHealth(
       operationalState({
@@ -279,10 +292,10 @@ describe("projectCapabilityServiceHealth", () => {
         observedServices: {
           portal: { composePresent: true, healthy: true },
           "browser-use": { composePresent: true, healthy: true },
-          qdrant: { composePresent: true, healthy: true },
+          "mystery-store": { composePresent: true, healthy: true },
         },
       }),
-      error: "unknown_service_observation:qdrant",
+      error: "unknown_service_observation:mystery-store",
     },
     {
       name: "provider observation",

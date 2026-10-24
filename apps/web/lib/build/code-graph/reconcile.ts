@@ -13,10 +13,9 @@ import {
 import { resolveIndexSource } from "./default-branch-source";
 import {
   clearCodeGraph,
-  ensureCodeGraphNeo4jSchema,
   syncTrackedFile,
   syncTrackedFilesFull,
-} from "./neo4j-projection";
+} from "./graph-projection";
 import {
   clearCodeGraphFileHashes,
   countCodeGraphFileHashes,
@@ -221,7 +220,6 @@ export async function reconcileCodeGraph(input: ReconcileCodeGraphInput): Promis
     const files = orderCodeGraphFilesForProjection(
       plan.mode === "full" ? await listTrackedFiles(readRoot) : plan.changedFiles,
     );
-    await ensureCodeGraphNeo4jSchema();
     if (plan.mode === "full") {
       await clearCodeGraph(graphKey);
       await clearCodeGraphFileHashes(graphKey);

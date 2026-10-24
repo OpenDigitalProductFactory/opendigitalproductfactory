@@ -1,0 +1,61 @@
+flowchart LR
+    subgraph LIFE["PAAW DigitalProduct lifecycle-state axis"]
+        IDEA["Idea<br/>Value hypothesis and candidate Product"]
+        EVAL["Evaluate<br/>Outcomes, portfolio decision, feasibility and architecture"]
+        BUILD["Build<br/>Design, acquire, compose, test, release and deploy"]
+        LIVE["Operate<br/>Offer, consume, execute work, support and improve"]
+        RETIRE["Retire<br/>Withdraw offers, bindings, services and instances; retain evidence"]
+        IDEA --> EVAL --> BUILD --> LIVE --> RETIRE
+        LIVE -. "outcome and assurance feedback" .-> EVAL
+    end
+
+    subgraph ITNET["IT4IT 3.0.1 seven-stream value network - non-linear"]
+        HUB(("Connected<br/>value network"))
+        IEV["Evaluate"] --- HUB
+        IEX["Explore"] --- HUB
+        IIN["Integrate"] --- HUB
+        IDE["Deploy"] --- HUB
+        IRE["Release"] --- HUB
+        ICO["Consume"] --- HUB
+        IOP["Operate"] --- HUB
+    end
+
+    IDEA -. "candidate and portfolio inputs" .-> IEV
+    EVAL -. "discovery, architecture and roadmap" .-> IEX
+    BUILD -. "release composition" .-> IIN
+    BUILD -. "desired and actual realization" .-> IDE
+    LIVE -. "offer definition and publication" .-> IRE
+    LIVE -. "agreement, entitlement and usage" .-> ICO
+    LIVE -. "observe, diagnose and restore" .-> IOP
+    RETIRE -. "closure can affect every stream" .-> HUB
+
+    PORT["Portfolio and outcome governance across every product state"]
+    PORT -.-> IDEA
+    PORT -.-> EVAL
+    PORT -.-> BUILD
+    PORT -.-> LIVE
+    PORT -.-> RETIRE
+
+    PILOT["Pilot or controlled PoC"]
+    CANCEL["No-go or cancel"]
+    SUSPEND["Suspend or restrict"]
+    BUILD --> PILOT --> LIVE
+    IDEA -.-> CANCEL
+    EVAL -.-> CANCEL
+    PILOT -.-> CANCEL
+    LIVE --> SUSPEND
+    SUSPEND --> LIVE
+    SUSPEND --> RETIRE
+
+    subgraph ASSURE["Cross-cutting assurance loop"]
+        ASSESS["Assess"] --> CONTROL["Control"] --> MONITOR["Monitor"] --> REMEDIATE["Remediate and revalidate"] --> ASSESS
+    end
+    IDEA -.-> ASSESS
+    EVAL -.-> ASSESS
+    BUILD -.-> CONTROL
+    LIVE -.-> MONITOR
+    REMEDIATE -. "reopen evaluation, build or operation" .-> EVAL
+
+    DISC["Bottom-up discovery"] --> PROV["Provisional typed projections and Gaps"] --> REC["Reconcile identity, design, release and ownership"]
+    REC -.-> EVAL
+    REC -.-> LIVE

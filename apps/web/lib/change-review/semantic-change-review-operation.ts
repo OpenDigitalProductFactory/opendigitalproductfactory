@@ -1,9 +1,10 @@
 import {
   CHANGE_REVIEW_POLICY_VERSION,
   CHANGE_REVIEWER_VERSION,
+  LEGACY_CHANGE_REVIEWER_VERSION,
+  SEMANTIC_REVIEW_ARTIFACT_CONTRACT_VERSION,
   assessSemanticReviewReceiptFreshness,
   buildSemanticChangeReviewPrompt,
-  createLowRiskAutoPassReceipt,
   createSemanticReviewReceipt,
   projectSemanticReviewReceipt,
   type SemanticReviewIdentity,
@@ -17,6 +18,7 @@ import {
   type DeliberationArtifactType,
   type StrategyProfile,
 } from "@/lib/deliberation/external-review-activation";
+import { validateFailureAnalysis, type FailureVerificationEvidence } from "./failure-analysis";
 
 export const SEMANTIC_CHANGE_REVIEW_MAX_REPAIR_ROUNDS = 2;
 
@@ -30,6 +32,8 @@ export interface SemanticChangeReviewOperationInput {
   title: string;
   artifact: string;
   verificationEvidence: string;
+  failureAnalysis?: unknown;
+  resolvedFailureEvidence?: FailureVerificationEvidence[];
   changedFiles: readonly string[];
   identity: Omit<SemanticReviewIdentity, "policyVersion" | "reviewerVersion"> &
     Partial<Pick<SemanticReviewIdentity, "policyVersion" | "reviewerVersion">>;
@@ -48,6 +52,8 @@ export interface SemanticChangeReviewDispatchContext {
 }
 
 export interface SemanticChangeReviewOperationDeps {
+  /** Persisted packet executor pins its original contract; never an MCP caller option. */
+  legacyContract?: boolean;
   dispatch(
     prompt: string,
     context: SemanticChangeReviewDispatchContext,
@@ -62,7 +68,7 @@ export interface SemanticChangeReviewOperationResult {
   reusedFreshReceipt: boolean;
   repairLimitReached: boolean;
   mayPublish: boolean;
-  nextAction: "publish" | "repair" | "retry-review" | "operator-review" | "shadow-observe";
+  nextAction: "publish" | "repair" | "retry-review" | "operator-review" | "shadow-observe" | "internal-review-recovery";
 }
 
 const DOC_ONLY_PATH = /^(?:docs\/|[^/]+\.md$)|\.(?:md|mdx|txt)$/i;
@@ -85,7 +91,8 @@ export function resolveSemanticReviewRisk(
   return "medium";
 }
 
-export function resolveSemanticReviewCoordination(input: SemanticChangeReviewOperationInput): {
+export function resolveSemanticReviewCoordination(input: SemanticChangeReviewOperationInput,
+  legacyContract = SEMANTIC_REVIEW_ARTIFACT_CONTRACT_VERSION === 1): {
   identity: SemanticReviewIdentity;
   risk: SemanticReviewRisk;
 } {
@@ -93,11 +100,16 @@ export function resolveSemanticReviewCoordination(input: SemanticChangeReviewOpe
     ...input.identity.specialistIds,
     ...selectSemanticReviewSpecialists(input.changedFiles),
   ])].sort();
+  if (input.identity.artifactType && input.identity.artifactType !== input.artifactType) {
+    throw new Error("Semantic review artifact type does not match its identity.");
+  }
   const identity: SemanticReviewIdentity = {
     ...input.identity,
-    policyVersion: input.identity.policyVersion ?? CHANGE_REVIEW_POLICY_VERSION,
-    reviewerVersion: input.identity.reviewerVersion ?? CHANGE_REVIEWER_VERSION,
+    artifactType: legacyContract ? undefined : input.artifactType,
+    policyVersion: CHANGE_REVIEW_POLICY_VERSION,
+    reviewerVersion: legacyContract ? (input.identity.reviewerVersion ?? LEGACY_CHANGE_REVIEWER_VERSION) : CHANGE_REVIEWER_VERSION,
     specialistIds,
+    failureAnalysisDigest: validateFailureAnalysis(input.failureAnalysis, input.identity, input.resolvedFailureEvidence ?? []).digest ?? undefined,
   };
   requireStableIdentity(identity);
   return { identity, risk: resolveSemanticReviewRisk(input) };
@@ -148,14 +160,19 @@ function resultForReceipt(args: {
   const failed = args.receipt.result.decision === "fail";
   const inconclusive = args.receipt.result.decision === "inconclusive";
   const repairLimitReached = failed && args.repairRound >= SEMANTIC_CHANGE_REVIEW_MAX_REPAIR_ROUNDS;
-  const mayPublish = args.mode === "shadow" || (!failed && !inconclusive);
-  const nextAction: SemanticChangeReviewOperationResult["nextAction"] = args.mode === "shadow" && (failed || inconclusive)
+  const mandatory = Boolean(args.receipt.failureAnalysisDigest);
+  const adequate = args.receipt.result.failureAnalysisReview?.adequate === true
+    && args.receipt.result.failureAnalysisReview.rationale.trim().length >= 20;
+  const mayPublish = mandatory ? !failed && !inconclusive && adequate : args.mode === "shadow" || (!failed && !inconclusive);
+  const nextAction: SemanticChangeReviewOperationResult["nextAction"] = mandatory && repairLimitReached
+    ? "internal-review-recovery"
+    : !mandatory && args.mode === "shadow" && (failed || inconclusive)
     ? "shadow-observe"
     : inconclusive
       ? "retry-review"
     : repairLimitReached
       ? "operator-review"
-      : failed
+      : failed || (mandatory && !adequate)
         ? "repair"
         : "publish";
   return {
@@ -174,7 +191,7 @@ export async function runSemanticChangeReview(
   input: SemanticChangeReviewOperationInput,
   deps: SemanticChangeReviewOperationDeps,
 ): Promise<SemanticChangeReviewOperationResult> {
-  const { identity, risk } = resolveSemanticReviewCoordination(input);
+  const { identity, risk } = resolveSemanticReviewCoordination(input, deps.legacyContract);
   const activation = decideExternalReviewActivation({
     artifactType: input.artifactType,
     authorSurface: input.authorSurface,
@@ -183,6 +200,15 @@ export async function runSemanticChangeReview(
   });
   const repairRound = Math.max(0, input.repairRound ?? 0);
   const mode = input.mode ?? "enforce";
+
+  const analysis = validateFailureAnalysis(input.failureAnalysis, identity, input.resolvedFailureEvidence ?? []);
+  if (!analysis.valid) {
+    const receipt = createSemanticReviewReceipt({ identity, disposition: "reviewed", risk,
+      result: { decision: "fail", summary: `Failure analysis requires repair: ${analysis.reasons.join(", ")}`,
+        issues: analysis.reasons.map(description => ({ severity: "critical" as const, description })) } });
+    return { ...resultForReceipt({ receipt, activation, repairRound, mode: "enforce" }),
+      mayPublish: false, nextAction: "repair" };
+  }
 
   if (input.priorReceipt) {
     const freshness = assessSemanticReviewReceiptFreshness(input.priorReceipt, identity);
@@ -205,11 +231,6 @@ export async function runSemanticChangeReview(
     });
   }
 
-  if (!activation.activate) {
-    const receipt = createLowRiskAutoPassReceipt({ identity, rationale: activation.reason });
-    return resultForReceipt({ receipt, activation, repairRound, mode });
-  }
-
   const receipt = await performReview({ input, identity, activation, risk, deps });
   return resultForReceipt({ receipt, activation, repairRound, mode });
 }
@@ -222,9 +243,11 @@ async function performReview(args: {
   deps: SemanticChangeReviewOperationDeps;
 }): Promise<SemanticReviewReceipt> {
   const prompt = buildSemanticChangeReviewPrompt({
+    artifactType: args.identity.artifactType,
+    requireFailureAnalysis: true,
     title: args.input.title,
     artifact: args.input.artifact,
-    verificationEvidence: args.input.verificationEvidence,
+    verificationEvidence: `${args.input.verificationEvidence}\n\nFAILURE ANALYSIS:\n${JSON.stringify(args.input.failureAnalysis)}\n\nRESOLVED EVIDENCE:\n${JSON.stringify(args.input.resolvedFailureEvidence)}\n\nChallenge omitted failure modes and real business/user effects, claimed eliminations, prevention, containment, detection, recovery, final-change evidence and accountable residual risk. Scale depth to consequences. Missing credible analysis is blocking. Do not accept empty checkboxes or exhaustive zero-risk claims. Routine technical review recovery belongs to internal engineering; do not ask the business owner to select reviewers or approve technical details.`,
   });
   const result = await args.deps.dispatch(prompt, {
     strategyProfile: args.activation.strategyProfile,
@@ -232,11 +255,15 @@ async function performReview(args: {
     specialistIds: args.identity.specialistIds,
     surface: args.input.surface,
   });
-  return createSemanticReviewReceipt({
+  if (result.decision === "pass" && (!result.failureAnalysisReview?.adequate || result.failureAnalysisReview.rationale.trim().length < 20)) {
+    result.decision = "fail";
+    result.issues = [...result.issues, { severity: "critical", description: "Independent failure-analysis challenge is missing or inadequate." }];
+  }
+  return { ...createSemanticReviewReceipt({
     identity: args.identity,
     disposition: "reviewed",
     risk: args.risk,
     result,
     rationale: args.activation.reason,
-  });
+  }), failureAnalysis: args.input.failureAnalysis };
 }

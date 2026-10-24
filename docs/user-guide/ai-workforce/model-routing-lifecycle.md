@@ -33,11 +33,48 @@ Pre-evaluated profiles are protected from being overwritten by dynamic discovery
 
 **Local models (automatic):** The local LLM provider (Docker Model Runner / Ollama) is checked on every page load of the AI Workforce providers page and during first-run bootstrap. If the provider is reachable, the platform calls its `/v1/models` endpoint, creates `DiscoveredModel` rows, and profiles them automatically using quality tier baselines from `FAMILY_TIERS`.
 
-**Cloud providers (manual):** Cloud provider models are discovered when an admin clicks "Discover Models" on the provider detail form. This calls the provider's model list API (e.g., Anthropic `/v1/models`), creates discovery records, then profiles each model. Models that don't match the provider's `modelRestrictions` allowlist are automatically retired with the reason "Model not accessible with provider credential type."
+**Cloud providers (automatic):** Connecting a provider prepares its model
+catalog. Active and degraded model providers are revalidated at startup and by
+the nightly discovery job. A model refusal also requests a bounded refresh.
+Use **Advanced diagnostics → Refresh model diagnostics** for troubleshooting;
+routine model maintenance does not require a weekly admin action.
 
-There is currently no scheduled automatic discovery for cloud providers that support normal model listing APIs. If a provider releases a new model family, it will not appear until an admin manually triggers discovery.
+Codex reads the connected sandbox CLI's account-specific model list. ChatGPT
+attempts its backend list and can fall back to that shared account's Codex list.
+Other providers use their serving model-list APIs. A desktop client or official
+documentation can show models unavailable to this execution channel; DPF does
+not insert those names as proof of access. Known catalogs remain bootstrap
+metadata for other providers, never a Codex or ChatGPT subscription fallback.
 
-Non-discoverable providers are handled differently. For providers such as Codex that cannot use `/v1/models`, the platform uses a curated known-model catalog plus a scheduled catalog reconciliation pass. The reconciler checks official provider documentation for candidate model IDs and deprecation signals, reseeds the runtime model catalog from the curated entries, and reports any new official candidates that are not yet approved for routing. Documentation makes a model a candidate; runtime probe and seeded metadata make it routable.
+Successful inventories profile the models returned by that run. Failed, empty
+or malformed subscription inventories retain the previous catalog. Two
+successful inventories that omit a cloud model retire its profile. Local-engine
+interruptions do not retire local models. Workload restrictions, learned auth
+eligibility and routing requirements still apply to listed models.
+
+### When the connections page takes longer to load
+
+After 15 seconds, the page shows **Still loading your connections**. This means
+the page request is still pending; elapsed time alone does not establish that a
+provider or local service failed. You can keep waiting or choose **Refresh page**
+to request the page again. The loading message does not change credentials,
+connection settings, model availability, or routing eligibility.
+
+## Where AI may run
+
+The **Where AI may run** control on [AI providers](connecting-providers.md)
+applies to DPF coding and coworker tasks. It does not enable coding or configure
+an external desktop coding app.
+
+- **Local and allowed cloud providers:** DPF may select enabled providers that
+  satisfy your other routing rules, permissions and task requirements.
+- **Local only:** Cloud providers are excluded. Work stops when no suitable
+  local model is available; DPF does not relax this restriction to finish a task.
+
+The selection changes after the server confirms the save. If saving fails,
+the previous setting remains selected. If DPF cannot read the policy after its
+short cache expires, the request stops instead of assuming cloud is allowed.
+Once the policy can be read again, later requests can proceed normally.
 
 ## Quality Tiers
 
@@ -139,6 +176,8 @@ Provider claims are not vendor-wide. A business agreement, BAA, DPA, no-training
 
 Open **Platform → AI Operations → Providers & Routing**, choose a provider, and review **Provider trust evidence**. Each claim shows whether its evidence is current, missing, expired, rejected, conflicting, or replaced, along with its age, expiry, and safest next action. Operator declarations expire after 90 days unless stronger reviewed evidence replaces them. Expiry removes the claim from restricted-work eligibility immediately; it does not unnecessarily block separately governed public work.
 
+A provider you have signed in to but whose account is not yet reviewed is cleared only for public work. Coworker conversations and Work Room turns are company (internal) work, so none of them can use it. Providers & Routing labels such a provider **Public work only** instead of **Routable**, and the AI readiness summary does not count it as model supply. To clear it for company work, record the account on its provider page as a business or enterprise account with no-training treatment. A personal subscription, such as an individual ChatGPT plan, should stay public-only.
+
 Every governed route may carry a privacy-safe suitability receipt. The receipt records policy and input versions, the selected provider and any router-selected underlying provider, the connection's channel/account posture, exclusions, obligations, and explanation codes. It deliberately excludes prompts, messages, credentials, vendor account identifiers, organization identifiers, evidence documents, and free-text explanations.
 
 For activity-governed work, the same suitability projection used during provider setup is bound into the live `RequestContract` before `routeEndpointV2` selects a model. Existing operator restrictions can only become narrower: provider allowlists intersect, denials accumulate, and the stricter residency rule wins. A preferred provider/model, cost tuning, model health, or fallback cannot restore a connection removed by this gate.
@@ -157,8 +196,9 @@ The rollout is cumulative and ordered: compiler shadow → admin preview → onb
 
 | Event | What Happens |
 |-------|-------------|
-| Admin connects a new provider | Provider goes `active`. Admin must click "Discover Models" to populate model profiles. |
-| Admin clicks "Discover Models" | Calls provider's model list API, creates discovery records, profiles using quality tiers. |
+| Admin connects a new provider | Activation discovers and profiles models automatically. |
+| Admin refreshes model diagnostics | Reads the serving inventory and profiles only returned models; the result separates discovered and new records. |
+| Nightly discovery or refusal-triggered refresh runs | Uses the same discovery lifecycle without requiring an admin to maintain model names. |
 | Model restricted by `modelRestrictions` | Profiling auto-retires it with reason "Model not accessible with provider credential type." |
 | New model pulled into Docker Model Runner | Discovered automatically on next providers page load. |
 | Model returns inference errors | Fallback chain tries the next model. After repeated failures, model status degrades to `retired` — unless the error looks like infrastructure/capacity (timeouts, connection failures, a busy engine) or a credential gap, or unless retiring would strand a sensitivity class (see below). |
@@ -171,6 +211,12 @@ The rollout is cumulative and ordered: compiler shadow → admin preview → onb
 | Provider evidence is replaced | The prior revision remains an audit record but no longer authorizes work. |
 | Provider posture drifts from its attestation | The owner receives an attention item; restricted routing stays blocked until the posture or evidence is reviewed. |
 | A workload cohort is small | Provider/model totals remain available, but workload-class detail stays hidden until the privacy threshold is met. |
+
+## Local requests while background work is running
+
+Local coworker requests and background builds share one inference queue. A running request finishes before the next starts. Interactive requests normally run ahead of waiting background work; older background requests eventually advance so they are not left waiting indefinitely.
+
+Waiting has its own deadline, separate from the model's generation deadline. If that wait expires, the request is removed from the queue and will not run later. Work already queued inside DPF waits its turn; a busy signal after admission means the host or model runner is occupied outside that queue. A completed response on an idle model does not prove the queue works correctly under background load.
 
 ## Provider-Specific Notes
 
@@ -195,6 +241,16 @@ Local models are automatically discovered and profiled. They are assigned the `b
 
 ## Troubleshooting
 
+**Reviewing supplied code on the local model:**
+- A complete answer about code included in your message can be short, including a JSON verdict. The coworker preserves that answer without asking for a live lookup or adding a tool-unavailable warning.
+- Include multi-line code in a closed code fence; an unfenced standalone function must fit on one line. Questions about the current provider, deployment, queue or test results still require live evidence, even when code is included. A request to save or record an assessment still requires its declared tool.
+
+**Independent review reports unknown or insufficient model capacity:**
+- Unknown completion/context capacity means routing lacks usable capacity evidence; it is an infrastructure admission problem, not a failed code review or an active inference.
+- For the default local Docker Model Runner provider, routing reads the exact selected model's configured context. Input and completion share that window, and any lower explicit output limit still applies. Another installed model's capacity or advertised catalog maximum cannot substitute for an unavailable runtime read. Routing inputs refresh within 30 seconds and on explicit cache invalidation.
+- A known insufficient limit means the immutable review input plus its completion allowance does not fit. Have the authorized platform operator inspect the selected model and its serving configuration. Do not seed the requested allowance as model capacity or reduce the review payload to manufacture admission.
+- After repairing capacity, use the saved review's supported recovery action. Preserve completed evidence and the request identity; do not start parallel reviews or reuse an expired verdict. Only a completed independent verdict supplies review evidence. A separate authorization refusal requires its named grant and is not repaired by waiting for capacity.
+
 **All coworker responses say "I wasn't able to help":**
 - Check portal logs: `docker logs dpf-portal-1 | grep quality-gate`
 - If you see `Response too short (0 chars)`, the selected model is returning empty responses
@@ -217,6 +273,14 @@ Local models are automatically discovered and profiled. They are assigned the `b
 - That message names cloud sign-in as the likely cause, but it is emitted whenever routing finds no eligible endpoint — for any reason. Check the router's own verdict before re-authenticating anything: `docker logs dpf-portal-1 | grep -A25 "no eligible endpoints"` prints the contract inputs and the rejection reason for every candidate.
 - Routing filters candidates on `retiredAt IS NULL`, **not** on `modelStatus`. A profile can therefore read `active` in the admin UI and still be invisible to routing. Compare the router's excluded-endpoint count against the profiles the manifest query would return — an endpoint missing from the rejection list never became a candidate at all.
 - Auto-retirement will not strand a class on its own (see the lifecycle table), but a row stranded before that guard existed is healed at boot.
+
+**One coworker conversation got slower and less capable, but others are fine:**
+- The conversation is being kept on a local model. Every message in a thread is re-read on each reply, so something written earlier keeps counting — even when it has nothing to do with what you are asking now. A single mention of a governed subject (payroll, an invoice, a customer's contact details) can hold a whole thread there.
+- The coworker panel says so directly, under its header: it names what kind of information is involved and whether the cause is earlier in the conversation or in what you just asked.
+- When the cause is earlier, the notice offers **Continue without the earlier messages**. This keeps the conversation and everything you can read in it; the coworker simply stops re-reading the earlier part, so it is no longer sent to a model and normal routing resumes. It applies to the summary and recall of those messages too, not only the messages themselves.
+- When the cause is what you are currently discussing, no such option appears — setting the past aside would not change anything while the same subject is live, and the notice says so rather than offering a control that would not work.
+- If the cause is the coworker's own setup (its instructions, tools, or connected data) rather than anything in the conversation, the notice says that too. Nothing you write will change it, and a new conversation carries the same setup over.
+- This is working as intended, not a fault: information that is sent to a model really does leave this machine, so DPF keeps that work local. The remedy narrows what is sent — it never relaxes the rule.
 
 **A provider is active but restricted work is blocked:**
 - Open the provider detail page and review **Provider trust evidence**.

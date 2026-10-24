@@ -16,6 +16,7 @@ import {
   validateRegionMergePair,
   type MergeValidationError,
 } from "@/lib/mdm/reference-data-merge";
+import { requestAddressGeocodeIfMissing } from "@/lib/geocoding/request.server";
 import { can } from "@/lib/permissions";
 import type { WorkforceActionResult } from "./workforce";
 
@@ -262,7 +263,7 @@ export async function linkWorkLocationAddress(
   const location = await prisma.workLocation.findUnique({ where: { id: locationId }, select: { id: true } });
   if (!location) return { ok: false, message: "Work location not found." };
 
-  await prisma.$transaction(async (tx) => {
+  const addressId = await prisma.$transaction(async (tx) => {
     const address = await tx.address.create({
       data: {
         label,
@@ -278,7 +279,11 @@ export async function linkWorkLocationAddress(
       where: { id: locationId },
       data: { addressId: address.id },
     });
+    return address.id;
   });
+
+  // Place the business location on the map (BI-C318C227 §2.1).
+  await requestAddressGeocodeIfMissing(addressId);
 
   revalidateAdminPaths();
   return refDataOk("Address linked to work location.");

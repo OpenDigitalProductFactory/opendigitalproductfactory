@@ -1,14 +1,12 @@
 // EP-ZERO-CONFIG-FEDERATION §5.6 — membership-proof pairing, runtime half.
 //
-// Membership material is what the organization join package left on disk:
-//   <state dir>/pki/root_ca.crt   — the organization root (pinned)
-//   <state dir>/pki/authority.crt — this installation's certificate, issued by
-//                                   the organization CA
-//   <state dir>/pki/authority.key — its private key
-// The portal reads them from the read-only /dpf-state mount (the same paths the
-// LDAPS listener already uses). With that material an installation can PROVE
-// membership to a peer at the message layer (membership-proof.ts) and ACCEPT a
-// peer's proof — no TLS overlay, no invitation token, no click.
+// Membership material is what importing the organization join file left on
+// disk — root_ca.crt (the pinned organization root), authority.crt (this
+// installation's certificate, issued by the organization CA) and
+// authority.key — in one of the two homes membership-material.ts reads. With
+// that material an installation can PROVE membership to a peer at the message
+// layer (membership-proof.ts) and ACCEPT a peer's proof — no TLS overlay, no
+// invitation token, no click.
 //
 // The authority installation is the one whose CA issued the join package; its
 // portal is reached at the CA host on the portal port (derived, never typed).
@@ -18,7 +16,6 @@
 // DB and filesystem are injected so the policy runs under unit test.
 
 import { randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
 
 import { prisma } from "@dpf/db";
 import type { FederationRole } from "@dpf/db/federation-link-types";
@@ -35,6 +32,13 @@ import { postToPeer, type PeerPostResult } from "./client";
 import { resolveFederationIdentity, type FederationIdentityDb } from "./demand-identity";
 import { createFederationLinkRow } from "./enrollment";
 import {
+  parseMembershipFacts,
+  readMembershipFacts,
+  readMembershipMaterial,
+  readPinnedRoot,
+  type MembershipMaterial,
+} from "./membership-material";
+import {
   checkMembershipStatement,
   parseMembershipStatement,
   signMembershipStatement,
@@ -46,59 +50,17 @@ import {
 } from "./membership-proof";
 import { generateLinkToken } from "./tokens";
 
+export { membershipPaths, readMembershipMaterial, readPinnedRoot, type MembershipMaterial } from "./membership-material";
+
 export const ORGANIZATION_ENROLL_PATH = "/api/v1/federation/enroll/organization";
+/** PlatformConfig key holding the join-file facts a portal-mediated import recorded. */
+export const FEDERATION_MEMBERSHIP_CONFIG_KEY = "federation.membership.v1";
 const SAME_ORG_ROLE: FederationRole = "same-org-peer";
 const SAME_ORG_PROJECTION = {
   includeSlices: ["demand"],
   excludeSlices: ["localBacklog", "workCapsule", "privatePlanning", "attachments", "customerContext"],
   retentionClass: "standard",
 };
-
-export interface MembershipMaterial {
-  rootPem: string;
-  rootFingerprint: string;
-  certPem: string;
-  keyPem: string;
-}
-
-export function membershipPaths(env: Record<string, string | undefined> = process.env): { root: string; cert: string; key: string } {
-  return {
-    root: env.DPF_PKI_ROOT_PATH?.trim() || "/dpf-state/pki/root_ca.crt",
-    cert: env.DPF_PKI_CERT_PATH?.trim() || "/dpf-state/pki/authority.crt",
-    key: env.DPF_PKI_KEY_PATH?.trim() || "/dpf-state/pki/authority.key",
-  };
-}
-
-/** Read the join-package material; null when this install has not joined an organization. */
-export async function readMembershipMaterial(
-  options: { env?: Record<string, string | undefined>; readText?: (path: string) => Promise<string> } = {},
-): Promise<MembershipMaterial | null> {
-  const paths = membershipPaths(options.env);
-  const read = options.readText ?? ((path: string) => readFile(path, "utf8"));
-  try {
-    const [rootPem, certPem, keyPem] = await Promise.all([read(paths.root), read(paths.cert), read(paths.key)]);
-    const self = verifyMembershipChain({ chainPems: [certPem], pinnedRootPem: rootPem, now: new Date() });
-    if (!self.verified || !self.presentedRootFingerprint) return null;
-    return { rootPem, rootFingerprint: self.presentedRootFingerprint, certPem, keyPem };
-  } catch {
-    return null;
-  }
-}
-
-/** Only the root: an authority that has not issued itself a member certificate can still ACCEPT proofs. */
-export async function readPinnedRoot(
-  options: { env?: Record<string, string | undefined>; readText?: (path: string) => Promise<string> } = {},
-): Promise<{ rootPem: string; rootFingerprint: string } | null> {
-  const paths = membershipPaths(options.env);
-  const read = options.readText ?? ((path: string) => readFile(path, "utf8"));
-  try {
-    const rootPem = await read(paths.root);
-    const self = verifyMembershipChain({ chainPems: [rootPem], pinnedRootPem: rootPem, now: new Date() });
-    return self.verified && self.presentedRootFingerprint ? { rootPem, rootFingerprint: self.presentedRootFingerprint } : null;
-  } catch {
-    return null;
-  }
-}
 
 export interface MembershipDb extends FederationIdentityDb {
   platformConfig: FederationIdentityDb["platformConfig"] & {
@@ -110,15 +72,29 @@ export interface MembershipDb extends FederationIdentityDb {
   remoteAction?: {
     findFirst(args: unknown): Promise<{ parameters: unknown } | null>;
   };
+  organization?: {
+    findFirst(args: unknown): Promise<{ name: string } | null>;
+  };
   $transaction<T>(fn: (tx: Parameters<typeof createFederationLinkRow>[0]) => Promise<T>): Promise<T>;
 }
 
-async function localOrganizationRef(db: MembershipDb, env?: Record<string, string | undefined>): Promise<string | null> {
+/** The estate name as declared (display form), or null when the installation is unnamed. */
+async function localEstateName(db: MembershipDb, env?: Record<string, string | undefined>): Promise<string | null> {
   const resolution = await loadEstateNameResolution(
-    { readConfig: async (key: string) => (await db.platformConfig.findUnique({ where: { key }, select: { value: true } }))?.value ?? null },
+    {
+      readConfig: async (key: string) => (await db.platformConfig.findUnique({ where: { key }, select: { value: true } }))?.value ?? null,
+      // The setup-time organization name is the lowest tier (BI-CA54ACC8): an
+      // authority that was named at install but never on the installation page
+      // still has an organization to compare.
+      readOrganizationName: async () => (await db.organization?.findFirst({ select: { name: true } }))?.name ?? null,
+    },
     env ? { env } : {},
   );
-  return normalizeOrganizationRef(resolution.estateName);
+  return resolution.estateName;
+}
+
+async function localOrganizationRef(db: MembershipDb, env?: Record<string, string | undefined>): Promise<string | null> {
+  return normalizeOrganizationRef(await localEstateName(db, env));
 }
 
 export interface MembershipProofEnvelope {
@@ -271,11 +247,21 @@ export async function acceptOrganizationEnrolment(
  * organization: the CA host (where the authority lives) and the hostname the
  * package was issued for (this installation's own reachable name). Expiry is
  * ignored on purpose — the package was consumed long ago; its facts still hold.
+ *
+ * Read order: the PlatformConfig row a portal-mediated import wrote, then the
+ * facts file beside the material (a fresh database re-reads it), then the
+ * completed `organization.join.import` host action a script-era member left.
  */
 export async function readJoinPackageFacts(
   db: MembershipDb,
   decrypt: (stored: string) => string | null = decryptSecret,
+  options: { env?: Record<string, string | undefined>; readText?: (path: string) => Promise<string> } = {},
 ): Promise<{ caUrl: string; intendedPeer: string; rootFingerprint: string } | null> {
+  const row = await db.platformConfig.findUnique({ where: { key: FEDERATION_MEMBERSHIP_CONFIG_KEY }, select: { value: true } });
+  const recorded = parseMembershipFacts(row?.value);
+  if (recorded) return { caUrl: recorded.caUrl, intendedPeer: recorded.intendedPeer, rootFingerprint: recorded.rootFingerprint };
+  const onDisk = await readMembershipFacts(options);
+  if (onDisk) return { caUrl: onDisk.caUrl, intendedPeer: onDisk.intendedPeer, rootFingerprint: onDisk.rootFingerprint };
   if (!db.remoteAction) return null;
   const record = await db.remoteAction.findFirst({
     where: { actionType: "organization.join.import", status: "completed" },
@@ -328,7 +314,19 @@ export async function enrolWithOrganizationAuthority(
 ): Promise<{ enrolled: true; linkId: string; authorityUrl: string } | { enrolled: false; reason: string }> {
   const callback = generateLinkToken();
   const post = input.post ?? postToPeer;
-  let last: PeerPostResult | null = null;
+  // The failure the operator sees is the most informative one across the
+  // derived URLs, not the last one tried (BI-39C06F70): an authority's answer
+  // beats a fallback URL's socket error, and a definitive refusal ends the loop
+  // because no other URL can change that verdict.
+  let last: (PeerPostResult & { authorityUrl: string }) | null = null;
+  const remember = (res: PeerPostResult, authorityUrl: string) => {
+    const informative = (r: PeerPostResult | null) => (r ? (r.status > 0 ? (r.body ? 2 : 1) : 0) : -1);
+    if (informative(res) >= informative(last)) last = { ...res, authorityUrl };
+  };
+  const refusalReason = (res: PeerPostResult): string | null => {
+    const details = (res.body as { details?: { reason?: unknown } } | undefined)?.details;
+    return res.status === 403 && typeof details?.reason === "string" ? details.reason : null;
+  };
   for (const authorityUrl of input.authorityUrls) {
     const built = await buildMembershipProof(db, {
       material: input.material,
@@ -342,10 +340,17 @@ export async function enrolWithOrganizationAuthority(
     });
     if ("error" in built) return { enrolled: false, reason: built.error };
     const res = await post({ peerAuthorityUrl: authorityUrl, linkToken: "dpflink_organization-proof", path: ORGANIZATION_ENROLL_PATH, cloudEvent: built, sameOrgLan: true });
-    last = res;
-    if (!res.ok) continue;
+    if (!res.ok) {
+      remember(res, authorityUrl);
+      const reason = refusalReason(res);
+      if (reason) {
+        console.warn(`[federation] the organization authority at ${authorityUrl} refused this installation's membership proof: ${reason}`);
+        return { enrolled: false, reason: `authority refused: ${reason} (${authorityUrl})` };
+      }
+      continue;
+    }
     const body = res.body as { linkId?: string; linkToken?: string; proof?: unknown } | undefined;
-    if (typeof body?.linkToken !== "string" || !body.linkToken.startsWith("dpflink_")) { last = { ok: false, status: res.status, error: "malformed-response" }; continue; }
+    if (typeof body?.linkToken !== "string" || !body.linkToken.startsWith("dpflink_")) { remember({ ok: false, status: res.status, body: res.body, error: "malformed-response" }, authorityUrl); continue; }
     // Verify the authority's own proof when it sent one.
     let peerStatement: MembershipStatement | null = null;
     let peerChain: ChainVerification | null = null;
@@ -385,7 +390,9 @@ export async function enrolWithOrganizationAuthority(
     });
     return { enrolled: true, linkId, authorityUrl };
   }
-  return { enrolled: false, reason: last ? `peer responded ${last.status}${last.error ? `: ${last.error}` : ""}` : "no-authority-url" };
+  // `last` is only assigned inside `remember`, which the narrowing above cannot see.
+  const failure = last as (PeerPostResult & { authorityUrl: string }) | null;
+  return { enrolled: false, reason: failure ? `peer responded ${failure.status}${failure.error ? `: ${failure.error}` : ""} (${failure.authorityUrl})` : "no-authority-url" };
 }
 
 /**
@@ -407,7 +414,7 @@ export async function reconcileOrganizationMembership(
     const env = deps.env ?? process.env;
     const material = await readMembershipMaterial({ env, readText: deps.readText });
     if (!material) return { outcome: "not-a-member" };
-    const facts = await readJoinPackageFacts(db);
+    const facts = await readJoinPackageFacts(db, decryptSecret, { env, readText: deps.readText });
     const caUrl = deps.caUrl ?? facts?.caUrl ?? env.DPF_ORGANIZATION_CA_URL ?? null;
     if (!caUrl) return { outcome: "no-authority", detail: "No organization CA URL is recorded on this installation." };
     const authorityUrls = deriveAuthorityPortalUrls(caUrl);
@@ -429,7 +436,9 @@ export async function reconcileOrganizationMembership(
     if (links.some((link) => { try { return hosts.has(new URL(link.peerAuthorityUrl).hostname.toLowerCase()); } catch { return false; } })) {
       return { outcome: "already-linked" };
     }
-    const displayName = (await localOrganizationRef(db, env)) ?? "Member installation";
+    // The name the authority shows for us is the declared estate name, not its
+    // normalised comparison form (the live pair listed the member as "<slug>(<slug>)").
+    const displayName = (await localEstateName(db, env)) ?? "Member installation";
     const result = await enrolWithOrganizationAuthority(db, {
       material, authorityUrls, localAuthorityUrl, displayName, now: deps.now, env, post: deps.post,
     });

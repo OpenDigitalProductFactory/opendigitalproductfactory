@@ -1,4 +1,4 @@
-import { prisma } from "@dpf/db";
+import { prisma, type Prisma } from "@dpf/db";
 
 export type AuthorityBindingPivot = "subject" | "coworker";
 
@@ -243,35 +243,41 @@ export async function listAuthorityBindings(options?: {
   };
 }
 
-export async function getAuthorityBinding(bindingId: string) {
-  return prisma.authorityBinding.findUnique({
-    where: { bindingId },
+const AUTHORITY_BINDING_DETAIL_INCLUDE = {
+  appliedAgent: {
     include: {
-      appliedAgent: {
+      governanceProfile: {
         include: {
-          governanceProfile: {
-            include: {
-              capabilityClass: {
-                select: { name: true },
-              },
-              directivePolicyClass: {
-                select: { name: true },
-              },
-            },
+          capabilityClass: {
+            select: { name: true },
           },
-          toolGrants: {
-            select: { grantKey: true },
-            orderBy: { grantKey: "asc" },
+          directivePolicyClass: {
+            select: { name: true },
           },
         },
       },
-      subjects: {
-        orderBy: [{ relation: "asc" }, { subjectType: "asc" }, { subjectRef: "asc" }],
-      },
-      grants: {
-        orderBy: [{ grantKey: "asc" }],
+      toolGrants: {
+        select: { grantKey: true },
+        orderBy: { grantKey: "asc" },
       },
     },
+  },
+  subjects: {
+    orderBy: [{ relation: "asc" }, { subjectType: "asc" }, { subjectRef: "asc" }],
+  },
+  grants: {
+    orderBy: [{ grantKey: "asc" }],
+  },
+} satisfies Prisma.AuthorityBindingInclude;
+
+type AuthorityBindingDetail = Prisma.AuthorityBindingGetPayload<{
+  include: typeof AUTHORITY_BINDING_DETAIL_INCLUDE;
+}>;
+
+export async function getAuthorityBinding(bindingId: string): Promise<AuthorityBindingDetail | null> {
+  return prisma.authorityBinding.findUnique({
+    where: { bindingId },
+    include: AUTHORITY_BINDING_DETAIL_INCLUDE,
   });
 }
 

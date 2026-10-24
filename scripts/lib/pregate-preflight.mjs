@@ -30,7 +30,9 @@
 // honest early warning, so a false local failure would erode trust faster
 // than a missed one.
 
-import { spawnSync } from "node:child_process";
+import { createObservedProcessRunner } from "./local-ci-process-observer.mjs";
+import { guardGitEnv } from "./git-hook-env.mjs";
+import { guardShellEnv } from "./guard-bash.mjs";
 
 import {
   POLICY_GUARD_PROFILES,
@@ -54,8 +56,14 @@ export const PREFLIGHT_SKIP_ENV = "DPF_SKIP_PREGATE_PREFLIGHT_REASON";
 // a full CI round trip on #4558, where Docs Impact failed in CI on an edge the
 // preflight had just declared clean.
 //
-// Two gates stay excluded, and these reasons do NOT expire:
-//   - seed-fit-gate reads the PR body, which does not exist before push;
+// seed-fit-gate joined this list on 2026-09-11 (BI-4F1E9249). Its exclusion
+// reason — "reads the PR body, which does not exist before push" — was removed
+// rather than waived: the gate now reads `git log <base>..HEAD` for its
+// decision, as its four sibling decision gates already did. It cost a full CI
+// round trip on #5291, where a kernel principle was pushed without a seed-fit
+// decision and the fix needed an amended commit plus a fresh local-CI gate.
+//
+// ONE gate stays excluded, and that reason does NOT expire:
 //   - decision-baseline MERGES origin/main into the branch — a tree mutation
 //     the preflight must never perform.
 export const LOCAL_SAFE_PR_GUARD_IDS = Object.freeze([
@@ -63,7 +71,12 @@ export const LOCAL_SAFE_PR_GUARD_IDS = Object.freeze([
   "design-grounding-gate",
   "docs-impact-gate",
   "data-impact-gate",
+  "convergence-impact-gate",
   "spec-plan-doc-gate",
+  "seed-fit-gate",
+  // Reads the commit range host-side; PR title/body are CI-only extras
+  // (BI-5D412E3C), so a local run still answers for the commit messages.
+  "hidden-unicode-commit-text-guard",
 ]);
 
 // Exit-output signatures that mean "this host cannot run the guard", not
@@ -145,22 +158,50 @@ export function buildPreflightPlan({ profiles = POLICY_GUARD_PROFILES, changeSco
   return planPreflight({ profiles, changeScope }).entries;
 }
 
-function defaultExecute(command, args) {
-  const invocation = resolvePolicyGuardInvocation(command, args);
-  const result = spawnSync(invocation.command, invocation.args, {
-    cwd: process.cwd(),
-    env: process.env,
-    encoding: "utf8",
-    shell: false,
-  });
-  const output = `${result.stdout ?? ""}${result.stderr ?? ""}${result.error?.message ?? ""}`;
-  if (result.status !== 0) process.stderr.write(output);
-  // A guard command the host refused to launch, killed by a signal, or the
-  // guard-loop runner's reserved runner-failure exit code — keyed on exit code,
-  // never on output text — so runPreflight never mislabels an evicted spawn as
-  // deterministic, nor downgrades a real violation that merely mentions one.
-  const runnerFailure = isRunnerFailureResult({ args, status: result.status, error: result.error });
-  return { exitCode: result.status ?? 1, output, runnerFailure };
+/**
+ * Builds the executor that runs one guard command. The environment handed to
+ * every guard is scrubbed of git's repository-locating variables
+ * (BI-062F5687): under `git push` from a linked worktree the hook inherits
+ * GIT_DIR, and a guard that builds a temp git fixture would otherwise commit
+ * to the REAL repository — which is how a 15,511-file deletion landed on a
+ * pushing branch. Guards resolve their repository from cwd, never from the
+ * hook's environment. Git's automatic maintenance is off for the same
+ * children, so a fixture's commits never race a background repack
+ * (BI-E0FEB8E9).
+ */
+// Full source guard loops have exceeded ten minutes on measured developer
+// hosts. Keep a finite budget without turning normal execution into a timeout.
+export const HOST_GUARD_MAX_DURATION_MS = 30 * 60_000;
+
+export function createDefaultExecute(env = process.env, { maxDurationMs = HOST_GUARD_MAX_DURATION_MS,
+  signal, progress = () => {}, terminationGraceMs = 10_000, closeGraceMs = 10_000 } = {}) {
+  if (!Number.isInteger(maxDurationMs) || maxDurationMs <= 0) throw new TypeError("host guard duration must be a positive finite budget");
+  let guardEnv;
+  return async function defaultExecute(command, args, observation = {}) {
+    try {
+      guardEnv ??= guardShellEnv(guardGitEnv(env));
+    } catch (error) {
+      return { exitCode: 1, output: `${error.name}: ${error.message}`, runnerFailure: false };
+    }
+    const invocation = resolvePolicyGuardInvocation(command, args, { env: guardEnv });
+    const run = createObservedProcessRunner({ maxDurationMs, terminationGraceMs, closeGraceMs,
+      sampleHost: () => null, stdout: { write() {} }, stderr: { write() {} }, onProgress: progress });
+    progress({ ...observation, phase: "started" });
+    const result = await run({ command: invocation.command, args: invocation.args,
+      cwd: process.cwd(), env: guardEnv, shell: false, signal, observation });
+    const output = `${result.outputTail ?? ""}${result.error?.message ?? ""}`;
+    const outcome = result.cancelled ? "cancelled" : result.deadlineExceeded ? "timed_out"
+      : result.closeTimedOut || result.error || result.status === null ? "runner_failed" : null;
+    const exitCode = outcome ? 88 : result.status ?? 1;
+    if (exitCode !== 0) process.stderr.write(output);
+    progress({ ...observation, phase: "completed", exitCode, outcome, deadlineAt: result.deadlineAt });
+    // A guard command the host refused to launch, killed by a signal, or the
+    // guard-loop runner's reserved runner-failure exit code — keyed on exit code,
+    // never on output text — so runPreflight never mislabels an evicted spawn as
+    // deterministic, nor downgrades a real violation that merely mentions one.
+    const runnerFailure = isRunnerFailureResult({ args, status: result.status, error: result.error });
+    return { exitCode, output, runnerFailure: Boolean(outcome) || runnerFailure, outcome };
+  };
 }
 
 /**
@@ -176,10 +217,11 @@ function defaultExecute(command, args) {
  */
 export async function runPreflight({
   plan = buildPreflightPlan(),
-  execute = defaultExecute,
   logger = () => {},
   now = () => Date.now(),
   env = process.env,
+  signal,
+  execute = createDefaultExecute(env, { signal }),
 } = {}) {
   const skipReason = env[PREFLIGHT_SKIP_ENV];
   if (skipReason) {
@@ -189,36 +231,38 @@ export async function runPreflight({
   const wrapped = new Map();
   const result = await runPolicyProfile({
     entries: plan,
-    execute: (command, args) => {
-      const { exitCode, output, runnerFailure } = execute(command, args);
+    execute: async (command, args, observation) => {
+      const { exitCode, output, runnerFailure, outcome } = await execute(command, args, observation);
       if (exitCode !== 0) {
         // Precedence: a stable missing-runtime signal (environment) wins over a
         // transient host-pressure signal (runner) wins over a real violation.
         // `runnerFailure` is keyed on exit code / spawn signals, not output
         // text, so a real violation is never downgraded to a warning.
-        const kind = isEnvironmentFailureOutput(output)
+        const kind = outcome || (isEnvironmentFailureOutput(output)
           ? "environment"
           : runnerFailure
             ? "runner"
-            : "violation";
+            : "violation");
         wrapped.set([command, ...args].join(" "), kind);
       }
       return exitCode;
     },
     logger,
     now,
+    shouldStop: () => Boolean(signal?.aborted),
   });
 
   const entries = result.entries.map((entry) => {
     if (entry.status !== "failed") return entry;
     const kind = wrapped.get(entry.failedCommand);
     if (kind === "environment") return { ...entry, status: "skipped_environment" };
-    if (kind === "runner") return { ...entry, status: "runner_failed" };
+    if (kind === "runner" || kind === "runner_failed") return { ...entry, status: "runner_failed" };
+    if (kind === "timed_out" || kind === "cancelled") return { ...entry, status: kind };
     return entry;
   });
 
   return {
-    ok: entries.every((entry) => entry.status !== "failed"),
+    ok: entries.every((entry) => !["failed", "timed_out", "cancelled"].includes(entry.status)),
     skipped: false,
     skipReason: null,
     entries,

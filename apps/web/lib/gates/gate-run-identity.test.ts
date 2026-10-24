@@ -152,6 +152,38 @@ describe("local-CI terminal evidence projection", () => {
       status: "reused",
       evidenceRecordId: "EXT-GATE",
       resultClass: "pass",
+      // BI-03E1139A: hand back the stamp this decision was made against. The
+      // caller records the verdict in its own state, and without the evidence's
+      // clock it reached for the lease's — minutes long — and stamped a PASS as
+      // already expired.
+      evidenceValidity: { issuedAt: null, expiresAt: "2026-08-25T12:01:00.000Z" },
+    });
+  });
+
+  it("carries the issue time through when the record has one", () => {
+    const projection = projectLocalCiTerminalEvidence({
+      claimKey: `gate:${gateKey}`,
+      evidence: {
+        id: "EXT-GATE",
+        operationType: "local_integration_ci",
+        details: {
+          gateKey,
+          status: "passed",
+          evidenceValidity: {
+            issuedAt: "2026-08-24T12:01:00.000Z",
+            expiresAt: "2026-08-25T12:01:00.000Z",
+          },
+        },
+      },
+      now: new Date("2026-08-25T12:00:00.000Z"),
+    });
+
+    expect(projection).toMatchObject({
+      status: "reused",
+      evidenceValidity: {
+        issuedAt: "2026-08-24T12:01:00.000Z",
+        expiresAt: "2026-08-25T12:01:00.000Z",
+      },
     });
   });
 

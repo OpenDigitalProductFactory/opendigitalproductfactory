@@ -61,6 +61,25 @@ describe("WorkroomProcessOverseer", () => {
     expect(html).toContain("<time");
   });
 
+  // GPP Phase 3c PR-3c-2: a graph room holding several stages lists every one as current.
+  it("lists every current stage of a room on parallel branches, and a single stage as before", () => {
+    const check = (over: Record<string, unknown>) => room({
+      shapeKey: "obligation-assurance-watch", shapeVersion: "1.0.0", collaborationShape: null,
+      processOverseerPrincipalRef: "PRN-COORD", processOverseerSource: "explicit",
+      currentStageKey: "sweep", nextPermittedStageKey: "sweep",
+      observed: { participantCount: 1, receiptKinds: [], proposedGrantCount: 0, budgetUsage: [], stopConditionHits: [], reviewDue: false },
+      deviations: [], disposition: "continue", interventionReason: null,
+      checkedAt: "2026-09-01T12:00:00.000Z", reconciliationKey: "work-room-conformance:par",
+      ...over,
+    } as WorkroomView["processOverseer"]);
+    const parallel = renderToStaticMarkup(<WorkroomProcessOverseer room={check({ currentStageKeys: ["sweep", "raise"] })} />);
+    expect(parallel).toContain("Current stages");
+    expect(parallel).toContain("Sweep, Raise");
+    const single = renderToStaticMarkup(<WorkroomProcessOverseer room={check({})} />);
+    expect(single).toContain("Current stage<");
+    expect(single).not.toContain("Current stages");
+  });
+
   it("labels derived coordination as compatibility-only and explains intervention", () => {
     const html = renderToStaticMarkup(<WorkroomProcessOverseer room={room({
       shapeKey: null,

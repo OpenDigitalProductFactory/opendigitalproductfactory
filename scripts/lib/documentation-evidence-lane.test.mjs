@@ -1,12 +1,73 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import { createServer } from "node:http";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { classifySlotRecord } from "./pregate-status.mjs";
+import { readLocalCiGateState } from "./local-ci-gate-state.mjs";
+import { collectToolchainFingerprint, defaultBuildStrategy } from "./local-integration-ci.mjs";
 import {
+  classifyMergeTreeResult,
   couldBeDocumentationFiles,
   createPreAdmissionGateIdentity,
+  preAdmissionDisposition,
   repositorySlugFromRemote,
+  resolveIntegrationTree,
+  runPreAdmissionDocumentationLane,
 } from "./documentation-evidence-lane.mjs";
 
+const TREE = "a".repeat(40);
+
+describe("merge-tree classification", () => {
+  it("keeps a clean written tree", () => {
+    assert.deepEqual(
+      classifyMergeTreeResult({ status: 0, stdout: `${TREE}\n` }),
+      { kind: "clean", tree: TREE },
+    );
+  });
+
+  it("names a merge conflict instead of an empty integration ref", () => {
+    const stderr = "Auto-merging scripts/gate-worktree.mjs\nCONFLICT (content): Merge conflict in scripts/gate-worktree.mjs\n";
+    assert.deepEqual(
+      classifyMergeTreeResult({ status: 1, stderr }),
+      { kind: "conflict", paths: ["scripts/gate-worktree.mjs"] },
+    );
+    assert.deepEqual(
+      resolveIntegrationTree({ sha: TREE, ancestorStatus: 1, mergeStatus: 1, mergeStderr: stderr }),
+      { kind: "conflict", paths: ["scripts/gate-worktree.mjs"] },
+    );
+  });
+
+  it("treats a non-conflict merge-tree failure as unavailable", () => {
+    assert.deepEqual(
+      classifyMergeTreeResult({ status: 128, stderr: "fatal: not a valid object name" }),
+      { kind: "unavailable" },
+    );
+  });
+
+  it("stops a resumed gate on conflict before source drift, and keeps a real identity loss as drift", () => {
+    const conflict = preAdmissionDisposition({
+      handled: false,
+      mergeConflict: { baseRef: "origin/main", paths: ["scripts/gate-worktree.mjs"] },
+    }, { resumed: true });
+    assert.equal(conflict.action, "conflict");
+    assert.equal(conflict.exitCode, 10);
+    const drift = preAdmissionDisposition({ handled: false }, { resumed: true });
+    assert.deepEqual(drift, { action: "source-drift", reasons: ["gate-identity-unavailable"] });
+    const fresh = preAdmissionDisposition({ handled: false, gateIdentity: { repository: "o/r" } }, { resumed: false });
+    assert.equal(fresh.action, "continue");
+  });
+});
+
 describe("couldBeDocumentationFiles", () => {
+  it("rejects an invalid worker profile before unavailable-planner fallback or admission", async () => {
+    await assert.rejects(runPreAdmissionDocumentationLane({
+      worktreePath: "missing-worktree", gitBin: "missing-git", plannerPath: "missing-planner",
+      env: { DPF_LOCAL_CI_TEST_WORKERS: "0" },
+    }), /DPF_LOCAL_CI_TEST_WORKERS/);
+  });
   it("admits documentation plus its generated index", () => {
     assert.equal(couldBeDocumentationFiles([
       "docs/operations/gates.md",
@@ -23,6 +84,146 @@ describe("couldBeDocumentationFiles", () => {
     ]) {
       assert.equal(couldBeDocumentationFiles(files), false, files.join(", "));
     }
+  });
+});
+
+async function documentationFixture(t, command = "console.log('checked');") {
+  const directory = mkdtempSync(join(tmpdir(), "dpf-doc-producer-"));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const worktreePath = join(directory, "source");
+  mkdirSync(join(worktreePath, "scripts"), { recursive: true });
+  mkdirSync(join(worktreePath, "docs"));
+  const git = (...args) => execFileSync("git", args, { cwd: worktreePath, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+  git("init", "-b", "main");
+  git("config", "user.name", "Document contract test");
+  git("config", "user.email", "document-test@localhost");
+  for (const name of ["gen-doc-index.mjs", "check-doc-links.mjs", "check-guards.mjs"]) {
+    writeFileSync(join(worktreePath, "scripts", name), name === "check-doc-links.mjs" ? command : "console.log('checked');");
+  }
+  const plannerPath = join(worktreePath, "scripts", "planner.mjs");
+  writeFileSync(plannerPath, `import {writeFileSync} from 'node:fs';
+import {execFileSync} from 'node:child_process';
+const arg = key => process.argv[process.argv.indexOf(key)+1];
+writeFileSync(arg('--output'), JSON.stringify({ executionLane:'documentation', fullSuite:false,
+headTreeSha:execFileSync('git',['rev-parse',arg('--head')+'^{tree}'],{encoding:'utf8'}).trim(),
+digest:'${"e".repeat(64)}', plannerVersion:1, policyVersion:1, globalGuards:[] }));`);
+  git("add", ".");
+  git("commit", "-m", "fixture baseline");
+  git("update-ref", "refs/remotes/origin/main", "HEAD");
+  git("remote", "add", "origin", "https://github.com/example/document-fixture.git");
+  git("switch", "-c", "fix/document-fixture");
+  writeFileSync(join(worktreePath, "docs", "example.md"), "# Exact document\n");
+  git("add", ".");
+  git("commit", "-m", "fixture document");
+  const requests = [];
+  let reply = { success: true, entityId: "EXT-DOCUMENT-TEST" };
+  let disconnected = false;
+  let onRequest = () => {};
+  const server = createServer(async (request, response) => {
+    let text = "";
+    for await (const chunk of request) text += chunk;
+    const body = JSON.parse(text);
+    requests.push(body.params);
+    onRequest();
+    if (disconnected) { response.destroy(); return; }
+    response.writeHead(200, { "Content-Type": "application/json" });
+    response.end(JSON.stringify({ jsonrpc: "2.0", id: body.id, result: { structuredContent: reply } }));
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const args = {
+    branch: "fix/document-fixture", sha: git("rev-parse", "HEAD"), worktreePath, gitBin: "git",
+    ownerProvider: "codex", ownerSessionId: "isolated-document-test",
+    mcpUrl: `http://127.0.0.1:${server.address().port}/api/mcp/v1`, bearerToken: "test-only",
+    stateFile: join(directory, "state.json"), planFile: join(directory, "plan.json"), plannerPath,
+  };
+  const metadataFile = join(directory, "metadata.json");
+  writeFileSync(metadataFile, JSON.stringify({ candidateSha: "b".repeat(40), execution: { failedCommand: "preserved previous code failure" } }));
+  const verdict = () => classifySlotRecord({
+    state: readLocalCiGateState(args.stateFile), metadata: JSON.parse(readFileSync(metadataFile, "utf8")),
+    headSha: git("rev-parse", "HEAD"), headBranch: args.branch,
+  });
+  return { args, git, requests, verdict, metadataFile,
+    setReply: (value) => { reply = value; }, disconnect: (value) => { disconnected = value; },
+    onRequest: (fn) => { onRequest = fn; } };
+}
+
+describe("documentation producer through the authoritative reader", () => {
+  it("binds a code gate's worker profile before admission", async (t) => {
+    const f = await documentationFixture(t);
+    writeFileSync(join(f.args.worktreePath, "scripts", "changed.mjs"), "export const changed = true;\n");
+    f.git("add", ".");
+    f.git("commit", "-m", "code candidate");
+    const env = { ...process.env, DPF_LOCAL_CI_TEST_WORKERS: "2" };
+    const result = await runPreAdmissionDocumentationLane({ ...f.args, sha: f.git("rev-parse", "HEAD"), env });
+    assert.equal(result.handled, false);
+    assert.deepEqual(f.requests, []);
+    const input = { buildStrategy: defaultBuildStrategy(process.platform, env), cwd: f.args.worktreePath };
+    assert.equal(result.gateIdentity.toolchainFingerprint, collectToolchainFingerprint({ ...input, env }).toolchainFingerprint);
+    assert.notEqual(result.gateIdentity.toolchainFingerprint, collectToolchainFingerprint({ ...input, env: {} }).toolchainFingerprint);
+  });
+  it("publishes its own immutable evidence without reserving capacity or overwriting old diagnostics", async (t) => {
+    const f = await documentationFixture(t);
+    const oldMetadata = readFileSync(f.metadataFile, "utf8");
+    f.onRequest(() => assert.notEqual(f.verdict().verdict, "PASS"));
+    const result = await runPreAdmissionDocumentationLane(f.args);
+    assert.equal(result.status, 0);
+    assert.equal(f.verdict().verdict, "PASS");
+    assert.equal(f.verdict().candidateSha, f.args.sha);
+    assert.equal(readFileSync(f.metadataFile, "utf8"), oldMetadata);
+    assert.deepEqual(f.requests.map((r) => r.name), ["record_local_integration_result"]);
+    assert.equal(f.requests[0].arguments.evidence.sha, f.args.sha);
+    assert.equal(f.requests[0].arguments.evidence.leaseId, null);
+  });
+
+  it("retains a failed documentation check as FAIL with its own diagnostic", async (t) => {
+    const f = await documentationFixture(t, "process.exit(2);");
+    assert.equal((await runPreAdmissionDocumentationLane(f.args)).status, 2);
+    const verdict = f.verdict();
+    assert.equal(verdict.verdict, "FAIL");
+    assert.match(verdict.reason, /check-doc-links/);
+    assert.doesNotMatch(verdict.reason, /previous code failure/);
+  });
+
+  it("recovers after unavailable or incomplete evidence publication without a false PASS", async (t) => {
+    const f = await documentationFixture(t);
+    for (const reply of [{ success: false, error: "unavailable" }, { success: true }]) {
+      f.setReply(reply);
+      await assert.rejects(runPreAdmissionDocumentationLane(f.args), /failed to record documentation evidence/);
+      assert.notEqual(f.verdict().verdict, "PASS");
+      assert.equal(readLocalCiGateState(f.args.stateFile).evidencePending, true);
+    }
+    f.setReply({ success: true, entityId: "EXT-RESTORED" });
+    assert.equal((await runPreAdmissionDocumentationLane(f.args)).status, 0);
+    assert.equal(f.verdict().verdict, "PASS");
+    assert.equal(f.verdict().evidenceId, "EXT-RESTORED");
+  });
+
+  it("a source edit during publication preserves evidence but cannot publish a current PASS", async (t) => {
+    const f = await documentationFixture(t);
+    f.onRequest(() => writeFileSync(join(f.args.worktreePath, "docs", "example.md"), "# Changed during publication\n"));
+    assert.equal((await runPreAdmissionDocumentationLane(f.args)).status, 1);
+    assert.notEqual(f.verdict().verdict, "PASS");
+    assert.equal(readLocalCiGateState(f.args.stateFile).evidenceRecordId, "EXT-DOCUMENT-TEST");
+  });
+
+  it("retains diagnostics through a dropped connection and resumes after network restoration", async (t) => {
+    const f = await documentationFixture(t);
+    f.disconnect(true);
+    await assert.rejects(runPreAdmissionDocumentationLane(f.args), /socket hang up|ECONNRESET/);
+    assert.notEqual(f.verdict().verdict, "PASS");
+    assert.match(readLocalCiGateState(f.args.stateFile).failureSummary.output, /checked/);
+    f.disconnect(false);
+    assert.equal((await runPreAdmissionDocumentationLane(f.args)).status, 0);
+    assert.equal(f.verdict().verdict, "PASS");
+  });
+
+  it("rejects source drift during checks before publishing evidence", async (t) => {
+    const f = await documentationFixture(t, "import {writeFileSync} from 'node:fs'; writeFileSync('docs/example.md', '# Changed during checks');");
+    assert.equal((await runPreAdmissionDocumentationLane(f.args)).status, 1);
+    assert.equal(f.requests.length, 0);
+    assert.equal(f.verdict().verdict, "INCONCLUSIVE");
+    assert.match(f.verdict().reason, /source changed/);
   });
 });
 

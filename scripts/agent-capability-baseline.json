@@ -2,19 +2,12 @@
   "owner": "platform-governance",
   "expiry": "2026-11-20",
   "note": "Known-outstanding unbacked backingSkillIds — services citing a skill that does not exist. SHRINK-ONLY. Do NOT clear an entry by deleting the citation: evaluateCoworkerServiceReadiness already renders it as \"Missing skill: X\", so deletion flips the service from honestly-not-ready to falsely-ready. Clear it by writing the skill or retiring the service. See BI-5C1978C7.",
-  "unbackedSkillIds": [
-    "build-sensitive-domain-requirements",
-    "customer-intake-triage",
-    "external-catalog-scout",
-    "marketing-collaboration-intake",
-    "prepare-counsel-packet",
-    "provider-cost-intake"
-  ],
+  "unbackedSkillIds": [],
   "consequentialGateFloor": {
     "note": "TAK §8.4.2 — consult-gate coverage is a governed metric. RISE-ONLY: this floor is reach to hold, not debt to burn down. It falls only by a tool losing its declared `consequence` or the composition root losing the resolver install, both of which leave a gate that still passes its own tests.",
-    "gateClassified": 56,
-    "sideEffectingTools": 178,
-    "coveragePct": 31,
+    "gateClassified": 60,
+    "sideEffectingTools": 187,
+    "coveragePct": 32,
     "resolverInstalled": true
   },
   "capabilityCompleteness": {
@@ -58,7 +51,6 @@
       "AGT-181",
       "AGT-182",
       "AGT-190",
-      "AGT-900",
       "AGT-901",
       "AGT-902",
       "AGT-904",
@@ -69,42 +61,27 @@
       "AGT-BUILD-QA",
       "AGT-BUILD-SE",
       "AGT-ORCH-000",
-      "AGT-ORCH-100",
-      "AGT-ORCH-200",
-      "AGT-ORCH-300",
-      "AGT-ORCH-400",
-      "AGT-ORCH-500",
-      "AGT-ORCH-600",
-      "AGT-ORCH-700",
-      "AGT-ORCH-800",
       "AGT-R2D-PB",
       "AGT-S2P-PFB",
       "AGT-S2P-POL",
-      "AGT-SOC-IR-LEAD",
       "AGT-WS-BUILD",
       "AGT-WS-CUSTOMER",
       "AGT-WS-FARM-RANCH",
-      "AGT-WS-FINANCE",
       "AGT-WS-INTEGRATION",
-      "AGT-WS-LEGAL",
       "AGT-WS-MARKET-RESEARCH",
-      "AGT-WS-MARKETING",
       "AGT-WS-ONBOARD",
-      "AGT-WS-PLATFORM",
       "AGT-WS-PORTFOLIO",
       "AGT-WS-REVIEW",
-      "AGT-WS-SCOUT",
-      "AGT-WS-SECURITY",
-      "AGT-WS-TIME-OFF"
+      "AGT-WS-SECURITY"
     ],
     "maxOpenGapsByPlane": {
-      "identity": 56,
+      "identity": 7,
       "corpus": 0,
       "governance": 0,
-      "shape": 57,
-      "cadence": 64,
-      "toolsAndSkills": 59,
-      "evidence": 49
+      "shape": 0,
+      "cadence": 7,
+      "toolsAndSkills": 0,
+      "evidence": 1
     }
   }
 }

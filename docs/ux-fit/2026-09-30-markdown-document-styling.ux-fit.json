@@ -1,0 +1,16 @@
+{
+  "version": "1",
+  "decidedOption": "shared-token-class-map",
+  "decisionInteractionId": "DI-BC9073D28667",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/workspace/documents/[documentId]/page.tsx",
+      "apps/web/components/build/BuildStudio.tsx",
+      "apps/web/components/shared/markdown-document-options.ts"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["shared-token-class-map", "per-surface-class-maps", "add-typography-plugin"]
+  }
+}

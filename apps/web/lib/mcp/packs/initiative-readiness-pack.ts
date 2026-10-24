@@ -1,5 +1,7 @@
 import type { InitiativeArtifactRef, InitiativeGateKey } from "@/lib/backlog/initiative-readiness";
+import { INITIATIVE_DISPOSITION_GUIDANCE, validateInitiativeDisposition, findingEvidenceMatchesRead, type InitiativeFindingEvidence } from "@/lib/backlog/initiative-readiness/disposition-contract";
 import { prisma } from "@dpf/db";
+import { parseInitiativeReviewBinding, type InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
 import {
   RESEARCH_DEFINITIONS,
   READINESS_PROFILES,
@@ -7,12 +9,15 @@ import {
   recordInitiativeObjectiveMappingProposal,
   recordInitiativeSpecApproval,
 } from "@/lib/backlog/initiative-readiness";
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import {
   INITIATIVE_READINESS_LANES as LANES,
   type InitiativeReadinessLane as Lane,
 } from "@/lib/tak/initiative-readiness-tool-grants";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
+import { verifyTerminalWriterCitation } from "@/lib/mcp-task-terminal-writer-context";
+import { createInitiativeReviewTerminalToolPolicy, IMMUTABLE_PAGE_READER_TOOLS } from "@/lib/tak/terminal-tool-policy";
+import { resolveAcceptanceStewardRunBinding } from "@/lib/backlog/acceptance-sweep/steward-objective-mapping-authority";
 
 const artifactRefSchema = {
   type: "object",
@@ -34,23 +39,56 @@ function inputSchemaFor(name: string, lane: Lane): ToolDefinition["inputSchema"]
     properties: {
       itemId: { type: "string", description: "Governed BacklogItem ID (BI-*)." },
       gate: { type: "string", enum: [...lane.gates] },
-      decision: { type: "string", enum: ["pass", "fail", "not-applicable"] },
+      decision: {
+        type: "string",
+        enum: ["pass", "fail", "not-applicable"],
+        description:
+          INITIATIVE_DISPOSITION_GUIDANCE,
+      },
       artifactRef: artifactRefSchema,
-      reason: { type: "string" },
+      reason: {
+        type: "string",
+        description: "Why the gate passed or failed, citing the artifact. Non-blocking observations go here on a pass.",
+      },
       findings: {
         type: "array",
+        description:
+          "Blocking defects, and ONLY on a failing receipt: a passing receipt with findings is refused as malformed-receipt. Pass an empty array on pass. Each finding gets a server-minted id; the caller never supplies one.",
         items: {
           type: "object",
           properties: {
             issue: { type: "string" },
             severity: { type: "string", enum: ["critical", "important"] },
+            evidence: {
+              type: "object",
+              description: "Required for bound review findings. Cite a successful immutable reader execution and an exact quote at these blob lines. Explain in issue why it proves the defect; withdraw or correct claims contradicted by the artifact.",
+              properties: {
+                blobId: { type: "string" },
+                startLine: { type: "integer", minimum: 1 }, endLine: { type: "integer", minimum: 1 }, quote: { type: "string" },
+              },
+              required: ["blobId", "startLine", "endLine", "quote"],
+            },
           },
           required: ["issue", "severity"],
         },
       },
-      resolvedFindingRefs: { type: "array", items: { type: "string" } },
-      profile: { type: "string", enum: ["doc-only", "fix", "feature", "cross-domain", "archetype"] },
-      artifactRole: { type: "string", enum: ["design-spec", "problem-statement", "documentation-scope"] },
+      resolvedFindingRefs: {
+        type: "array",
+        items: { type: "string" },
+        description:
+          "Only currently OPEN finding ids may be resolved; otherwise use []. An unknown id is refused as finding-resolution-invalid.",
+      },
+      profile: {
+        type: "string",
+        enum: ["doc-only", "fix", "feature", "cross-domain", "archetype"],
+        description:
+          "Required on a passing spec-approval. The item's own authoritative classification (the profile the readiness decision reports for the item, derived from its work type), NOT the reach of the design: a spec whose policy spans domains still names the item's profile. A mismatch is refused as CLASSIFICATION_REQUIRED.",
+      },
+      artifactRole: {
+        type: "string",
+        enum: ["design-spec", "problem-statement", "documentation-scope"],
+        description: "Required on a passing spec-approval: what the reviewed artifact is.",
+      },
       expectedCurrentBaselineId: { type: ["string", "null"] },
       supersessionDispositions: {
         type: "array",
@@ -153,21 +191,26 @@ const definitions: ToolDefinition[] = [
     ...definitionBase(LANES.record_initiative_domain_review),
   },
   {
+    name: "record_initiative_post_implementation_review",
+    inputSchema: inputSchemaFor("record_initiative_post_implementation_review", LANES.record_initiative_post_implementation_review),
+    ...definitionBase(LANES.record_initiative_post_implementation_review),
+  },
+  {
     name: "record_initiative_archetype_review",
     inputSchema: inputSchemaFor("record_initiative_archetype_review", LANES.record_initiative_archetype_review),
     ...definitionBase(LANES.record_initiative_archetype_review),
   },
 ];
 
-function parseFindings(value: unknown): Array<{ issue: string; severity: "critical" | "important" }> | null {
+function parseFindings(value: unknown): Array<{ issue: string; severity: "critical" | "important"; evidence?: InitiativeFindingEvidence }> | null {
   if (!Array.isArray(value)) return null;
-  const findings: Array<{ issue: string; severity: "critical" | "important" }> = [];
+  const findings: Array<{ issue: string; severity: "critical" | "important"; evidence?: InitiativeFindingEvidence }> = [];
   for (const entry of value) {
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) return null;
     const finding = entry as Record<string, unknown>;
     if (typeof finding.issue !== "string" || !finding.issue.trim()
       || (finding.severity !== "critical" && finding.severity !== "important")) return null;
-    findings.push({ issue: finding.issue, severity: finding.severity });
+    findings.push({ issue: finding.issue, severity: finding.severity, ...(finding.evidence ? { evidence: finding.evidence as InitiativeFindingEvidence } : {}) });
   }
   return findings;
 }
@@ -194,11 +237,15 @@ function parseObjectiveMappings(value: unknown): Array<{ objectiveId: string; ev
 async function resolveExternalInitiativeReviewBinding(
   actionKey: string,
   taskRunId: string | undefined,
+  executionFence: import("@/lib/shared/task-execution-fence").TaskExecutionFence | null | undefined,
 ): Promise<{
   itemId: string;
   gate: string;
   expectedCurrentBaselineId?: string | null;
+  eligibleEvidenceActivityIds?: string[];
   artifactRef: InitiativeArtifactRef;
+  workroomRef?: InitiativeReviewBinding["workroomRef"] | null;
+  boundReviewTask?: import("@/lib/backlog/initiative-readiness/bound-review-effect").BoundReviewTask;
 } | null> {
   if (!taskRunId) return null;
   const run = await prisma.taskRun.findUnique({
@@ -217,39 +264,97 @@ async function resolveExternalInitiativeReviewBinding(
   const gate = typeof binding["gate"] === "string" ? binding["gate"].trim() : "";
   const rawArtifact = binding["artifactRef"];
   const expectedCurrentBaselineId = binding["expectedCurrentBaselineId"];
+  const rawEligibleEvidenceActivityIds = binding["eligibleEvidenceActivityIds"];
+  const eligibleEvidenceActivityIds = Array.isArray(rawEligibleEvidenceActivityIds)
+    && rawEligibleEvidenceActivityIds.length > 0
+    && rawEligibleEvidenceActivityIds.length <= 500
+    && rawEligibleEvidenceActivityIds.every((id) => typeof id === "string" && id.trim())
+    && new Set(rawEligibleEvidenceActivityIds).size === rawEligibleEvidenceActivityIds.length
+    ? rawEligibleEvidenceActivityIds as string[]
+    : null;
   if (!itemId.startsWith("BI-") || !gate || !rawArtifact || typeof rawArtifact !== "object" || Array.isArray(rawArtifact)) {
     return null;
   }
   const artifact = rawArtifact as Record<string, unknown>;
+  // Reuse the issued-packet parser. Invalid context fails closed below; an
+  // absent legacy reference keeps the exact-artifact-head resolver unchanged.
+  const workroomRef = binding["workroomRef"] === undefined ? undefined
+    : parseInitiativeReviewBinding(binding)?.workroomRef ?? null;
+  const isRepoBlob = artifact["kind"] === "repo-blob-at-commit"
+    && typeof artifact["repositoryFullName"] === "string"
+    && typeof artifact["commitSha"] === "string"
+    && typeof artifact["path"] === "string"
+    && typeof artifact["providerBlobId"] === "string";
+  // BI-926A7E90: a Build Studio design revision binds by its immutable id; the
+  // receipt schema's artifactRef for this kind carries only the revision id.
+  const isRevision = artifact["kind"] === "feature-build-revision"
+    && typeof artifact["revisionId"] === "string" && artifact["revisionId"].trim().length > 0;
+  const isDocument = artifact["kind"] === "document-version"
+    && typeof artifact["versionId"] === "string" && artifact["versionId"].trim().length > 0;
   if (
-    artifact["kind"] !== "repo-blob-at-commit"
-    || typeof artifact["repositoryFullName"] !== "string"
-    || typeof artifact["commitSha"] !== "string"
-    || typeof artifact["path"] !== "string"
-    || typeof artifact["providerBlobId"] !== "string"
+    (!isRepoBlob && !isRevision && !isDocument)
     || (expectedCurrentBaselineId !== undefined
       && expectedCurrentBaselineId !== null
       && typeof expectedCurrentBaselineId !== "string")
+    || (rawEligibleEvidenceActivityIds !== undefined && !eligibleEvidenceActivityIds)
+    || (gate === "objective-mapping" && !eligibleEvidenceActivityIds)
   ) return null;
   return {
     itemId,
     gate,
+    boundReviewTask: { taskRunId, requestDigest: typeof record.requestDigest === "string" ? record.requestDigest : "", executionFence },
+    ...(workroomRef !== undefined ? { workroomRef } : {}),
     ...(expectedCurrentBaselineId !== undefined
       ? { expectedCurrentBaselineId: expectedCurrentBaselineId as string | null }
       : {}),
-    artifactRef: {
-      kind: "repo-blob-at-commit",
-      repositoryFullName: artifact["repositoryFullName"],
-      commitSha: artifact["commitSha"],
-      path: artifact["path"],
-      providerBlobId: artifact["providerBlobId"],
-    },
+    ...(eligibleEvidenceActivityIds ? { eligibleEvidenceActivityIds } : {}),
+    artifactRef: isDocument ? { kind: "document-version", versionId: (artifact["versionId"] as string).trim() }
+      : isRevision
+      ? { kind: "feature-build-revision", revisionId: (artifact["revisionId"] as string).trim() }
+      : {
+        kind: "repo-blob-at-commit",
+        repositoryFullName: artifact["repositoryFullName"] as string,
+        commitSha: artifact["commitSha"] as string,
+        path: artifact["path"] as string,
+        providerBlobId: artifact["providerBlobId"] as string,
+      },
   };
+}
+
+/**
+ * BI-099A0BA3: an acceptance steward room's scheduled run may write only the
+ * objective mapping the platform issued to that room, for its item, with the
+ * binding the server holds. Null for every other run, which is untouched.
+ */
+async function resolveStewardRoomBinding(
+  actionKey: string,
+  params: Record<string, unknown>,
+  taskRunId: string | undefined,
+): Promise<{ binding: Awaited<ReturnType<typeof resolveExternalInitiativeReviewBinding>> } | { refusal: ToolResult } | null> {
+  if (actionKey !== "record_initiative_evidence") return null;
+  const steward = await resolveAcceptanceStewardRunBinding(taskRunId);
+  if (!steward) return null;
+  if (params.operation !== "objective-mapping"
+    || (params.itemId !== undefined && params.itemId !== (steward.ok ? steward.data.itemId : params.itemId))) {
+    return { refusal: { success: false, error: "steward-room-objective-mapping-only", message: "An acceptance steward room records only the objective mapping the platform issued it, for its own item: call record_initiative_evidence with operation \"objective-mapping\"." } };
+  }
+  if (!steward.ok) {
+    return { refusal: { success: false, error: "objective-mapping-packet-unavailable", message: `This room holds no current platform-issued objective-mapping packet (${steward.reason}). Record what you verified with record_workroom_evidence; the next acceptance sweep issues a current packet.` } };
+  }
+  const { binding } = steward.data;
+  return { binding: { ...binding, artifactRef: binding.artifactRef as InitiativeArtifactRef } };
 }
 
 function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
   return async (params, userId, context): Promise<ToolResult> => {
-    const binding = await resolveExternalInitiativeReviewBinding(actionKey, context?.taskRunId);
+    let binding = await resolveExternalInitiativeReviewBinding(actionKey, context?.taskRunId, context?.taskExecutionFence);
+    if (binding?.workroomRef === null) return { success: false, error: "CANONICAL_DESIGN_AMBIGUOUS",
+      message: "The accepted review's workroom binding is malformed. Reconcile the server-issued packet before retrying." };
+    if (!binding) {
+      const steward = await resolveStewardRoomBinding(actionKey, params, context?.taskRunId);
+      if (steward && "refusal" in steward) return steward.refusal;
+      if (steward) binding = steward.binding;
+    }
     if (binding) {
       params = {
         ...params,
@@ -259,25 +364,23 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
         ...(Object.prototype.hasOwnProperty.call(binding, "expectedCurrentBaselineId")
           ? { expectedCurrentBaselineId: binding.expectedCurrentBaselineId }
           : {}),
-        ...(actionKey === "record_initiative_evidence" && binding.gate === "research"
-          ? {
-              findings: [],
-              resolvedFindingRefs: [],
-              reason: `Independent reviewer ${context?.agentId ?? "unknown"} recorded ${String(params.decision ?? "unknown")} for the immutable research artifact bound to TaskRun ${context?.taskRunId ?? "unknown"}.`,
-            }
-          : {}),
       };
     }
     const operation = params.operation ?? "gate-receipt";
     if (actionKey === "record_initiative_evidence" && operation === "objective-mapping") {
       const mappings = parseObjectiveMappings(params.objectiveMappings);
-      if (typeof params.baselineId !== "string" || !params.baselineId.trim() || !mappings) {
+      const baselineId = binding?.gate === "objective-mapping"
+        ? binding.expectedCurrentBaselineId
+        : params.baselineId;
+      if (typeof baselineId !== "string" || !baselineId.trim() || !mappings) {
         return { success: false, error: "malformed-receipt", message: "Objective mapping requires a current baselineId and non-empty objective/evidence mappings." };
       }
       const result = await recordInitiativeObjectiveMappingProposal({
+        taskRunId: context?.taskRunId ?? null,
         itemId: String(params.itemId ?? ""),
-        baselineId: params.baselineId,
+        baselineId,
         mappings,
+        eligibleEvidenceActivityIds: binding?.eligibleEvidenceActivityIds ?? [],
         reason: String(params.reason ?? ""),
         proposerUserId: userId,
         proposerAgentId: context?.agentId ?? null,
@@ -307,6 +410,40 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
     if (!findings || !resolvedFindingRefs) {
       return { success: false, error: "malformed-receipt", message: "findings and resolvedFindingRefs must match the governed receipt schema." };
     }
+    const dispositionError = validateInitiativeDisposition(decision, findings, resolvedFindingRefs);
+    if (dispositionError) return { success: false, error: "malformed-receipt", message: dispositionError };
+    if (binding && findings.length > 0 && binding.artifactRef.kind === "repo-blob-at-commit") {
+      const reads = await prisma.toolExecution.findMany({
+        where: { taskRunId: context?.taskRunId, toolName: { in: [...IMMUTABLE_PAGE_READER_TOOLS] }, success: true },
+        orderBy: { createdAt: "asc" },
+        select: { id: true, toolName: true, parameters: true, result: true, success: true, createdAt: true },
+      });
+      // Metrics-only auditing intentionally omits source bytes. Reuse recovery's
+      // exact-bound verification; never make journaling source a receipt prerequisite.
+      const contentFreeReads = reads.some((row) => row.result && typeof row.result === "object" && Object.keys(row.result).length === 0);
+      for (const finding of findings) {
+        const evidence = finding.evidence;
+        const artifact = binding.artifactRef;
+        let matchedRead = evidence && reads.some((row) => {
+          const page = (row.result as { data?: Record<string, unknown> } | null)?.data;
+          return page && page.version === artifact.commitSha && page.path === artifact.path
+            && page.repositoryFullName === artifact.repositoryFullName
+            && findingEvidenceMatchesRead(evidence, page, artifact.providerBlobId);
+        });
+        if (!matchedRead && evidence && contentFreeReads) {
+          const dispatch = context?.governedDispatch;
+          if (!dispatch) return { success: false, error: "source-verification-unavailable", message: "A governed source read is required to verify content-free audit evidence." };
+          const policy = createInitiativeReviewTerminalToolPolicy(actionKey, [actionKey, "read_source_at_version"], artifact)!;
+          const verified = await verifyTerminalWriterCitation({ policy, executions: reads, evidence,
+            readPage: (args) => dispatch("read_source_at_version", args) });
+          if (!verified.ok) return { success: false, error: verified.code, message: verified.error };
+          matchedRead = verified.data;
+        }
+        if (!matchedRead) {
+          return { success: false, error: "malformed-receipt", message: "A finding must cite an exact quote and lines from a successful read of this bound blob. Correct unsupported or contradicted findings using the immutable evidence; do not manufacture a pass." };
+        }
+      }
+    }
     const selectedProfile = params.profile;
     if (gate === "classification" && decision === "pass"
       && !(selectedProfile === "doc-only" || selectedProfile === "fix" || selectedProfile === "feature" || selectedProfile === "cross-domain" || selectedProfile === "archetype")) {
@@ -319,14 +456,13 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
         || !(artifactRole === "design-spec" || artifactRole === "problem-statement" || artifactRole === "documentation-scope")) {
         return { success: false, error: "malformed-receipt", message: "Passing spec approval requires profile and artifactRole." };
       }
-      if (findings.length > 0) {
-        return { success: false, error: "malformed-receipt", message: "A passing spec approval cannot introduce findings." };
-      }
       const approval = await recordInitiativeSpecApproval({
         itemId: String(params.itemId ?? ""),
         profile,
         artifactRole,
         artifactRef: params.artifactRef as InitiativeArtifactRef,
+        boundReviewTask: binding?.boundReviewTask,
+        workroomRef: binding?.workroomRef ?? undefined,
         expectedCurrentBaselineId: typeof params.expectedCurrentBaselineId === "string" ? params.expectedCurrentBaselineId : null,
         supersessionDispositions: Array.isArray(params.supersessionDispositions)
           ? params.supersessionDispositions.flatMap((value) => value && typeof value === "object" && !Array.isArray(value)
@@ -345,8 +481,13 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
         authorityDecisionId: context?.authorityDecisionId ?? null,
         tokenScope: context?.tokenScope ?? null,
       });
+      if (approval.ok && "deduplicated" in approval && approval.deduplicated) {
+        return { success: true, entityId: approval.baselineId ?? approval.receiptId,
+          message: `Existing spec-approval verdict retained for ${String(params.itemId)}.`,
+          data: { ...approval, decision: approval.receipt.decision, idempotentReplay: true } };
+      }
       return approval.ok
-        ? { success: true, entityId: approval.baselineId, message: `spec-approval receipt and canonical baseline recorded for ${String(params.itemId)}.`, data: approval }
+        ? { success: true, entityId: approval.baselineId ?? approval.receiptId, message: `spec-approval receipt and canonical baseline recorded for ${String(params.itemId)}.`, data: approval }
         : { success: false, error: approval.code, message: approval.error };
     }
     const result = await recordInitiativeGateReceipt({
@@ -358,6 +499,9 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
       gate: gate as InitiativeGateKey,
       decision,
       artifactRef: params.artifactRef as InitiativeArtifactRef,
+      boundReviewTask: lane.independent ? binding?.boundReviewTask : undefined,
+      workroomRef: binding?.workroomRef ?? undefined,
+      expectedCurrentBaselineId: binding?.expectedCurrentBaselineId,
       reason: String(params.reason ?? ""),
       findings,
       resolvedFindingRefs,
@@ -366,10 +510,13 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
       authorityDecisionId: context?.authorityDecisionId ?? null,
       tokenScope: context?.tokenScope ?? null,
       requiresIndependentReviewer: lane.independent,
+      authorizationParams: params,
       selectedProfile: gate === "classification" && decision === "pass" ? selectedProfile as never : undefined,
     });
     return result.ok
-      ? { success: true, entityId: result.receiptId, message: `${gate} receipt recorded for ${String(params.itemId)}.`, data: { receiptId: result.receiptId } }
+      ? { success: true, entityId: result.receiptId,
+          message: result.deduplicated ? `Existing ${gate} verdict retained for ${String(params.itemId)}.` : `${gate} receipt recorded for ${String(params.itemId)}.`,
+          data: { receiptId: result.receiptId, ...(result.deduplicated ? { decision: result.receipt.decision, idempotentReplay: true } : {}) } }
       : { success: false, error: result.code, message: result.error };
   };
 }

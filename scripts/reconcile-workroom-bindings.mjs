@@ -19,14 +19,14 @@
 //   node scripts/reconcile-workroom-bindings.mjs --apply    # bind the unbound
 //   node scripts/reconcile-workroom-bindings.mjs --json     # machine-readable
 
-import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { isClaimExemptBranch } from "../packages/dpf-skill-pack/hooks/lib/workroom-claim-lookup.mjs";
 import { bindWorktreeToWorkroom, resolveMcpAccess } from "./lib/workroom-bind.mjs";
+import { MCP_CREDENTIAL_HELP } from "./lib/mcp-credential.mjs";
+import { gitText } from "./lib/git.mjs";
 
-const DEFAULT_REPO = "OpenDigitalProductFactory/opendigitalproductfactory";
 
 // ── pure ─────────────────────────────────────────────────────────────────────
 
@@ -84,9 +84,7 @@ export function summarize({ claimable, exempt, bound, failed, applied }) {
 
 // ── effectful ────────────────────────────────────────────────────────────────
 
-function git(args, cwd = process.cwd()) {
-  return execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8", timeout: 15_000 }).trim();
-}
+const git = (args, cwd = process.cwd()) => gitText(["-C", cwd, ...args], { cwd: process.cwd(), timeout: 15_000 });
 
 function gitDirFor(worktreePath) {
   try {
@@ -100,10 +98,9 @@ async function main() {
   const args = process.argv.slice(2);
   const apply = args.includes("--apply");
   const asJson = args.includes("--json");
-  const repo = process.env.DPF_REPO_FULL_NAME || DEFAULT_REPO;
 
   if (apply && !resolveMcpAccess()) {
-    console.error("[reconcile-workrooms] --apply needs DPF_MCP_BEARER_TOKEN; MCP is the only authority on claims.");
+    console.error(`[reconcile-workrooms] ${MCP_CREDENTIAL_HELP}\nMCP is the only authority on claims.`);
     process.exit(1);
   }
 
@@ -118,8 +115,7 @@ async function main() {
       branch: w.branch,
       worktreePath: w.path,
       gitDir: gitDirFor(w.path),
-      repositoryFullName: repo,
-      headSha: (() => { try { return git(["rev-parse", "HEAD"], w.path); } catch { return null; } })(),
+      captureSourceIdentity: true,
     });
     results.push({ ...w, ...r });
     if (r.status === "bound") bound += 1; else failed += 1;

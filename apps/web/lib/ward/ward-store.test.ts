@@ -6,6 +6,7 @@ import {
   buildRelease,
   isInCare,
   loadWardBoard,
+  loadWardWorkspace,
   openStayHorizon,
   planSeedKennels,
 } from "./ward-store";
@@ -23,11 +24,10 @@ function client(over: Record<string, unknown> = {}) {
         { resourceId: "k1", demandRef: "a1", startsAt: new Date("2026-09-01T08:00:00Z"), releasedAt: null },
       ]),
     },
-    adoptableAnimal: {
+    animalProfile: {
       findMany: vi.fn(async (_args: unknown) => [
-        { animalRef: "a1", name: "Ranger", status: "hold" },
-        { animalRef: "a2", name: "Saffron", status: "hold" },
-        { animalRef: "a3", name: "Marbles", status: "adopted" },
+        { animalRef: "a1", name: "Ranger", lifecycleStatus: "in_care" },
+        { animalRef: "a2", name: "Saffron", lifecycleStatus: "placement_ready" },
       ]),
     },
     ...over,
@@ -41,7 +41,7 @@ describe("loadWardBoard", () => {
     expect(board?.totalUnits).toBe(2);
     expect(board?.occupied).toBe(1);
     expect(board?.free).toBe(1);
-    // Saffron is in care with no kennel; Marbles has been adopted and is neither.
+    // Saffron is in care with no kennel recorded.
     expect(board?.unplaced).toEqual([{ animalRef: "a2", name: "Saffron" }]);
   });
 
@@ -76,6 +76,24 @@ describe("loadWardBoard", () => {
 
     const noClient = await loadWardBoard({ organizationId: "org-1", db: {} });
     expect(noClient).toBeNull();
+  });
+
+  it("keeps the canonical in-care roster available when no housing is recorded", async () => {
+    const db = client({ resource: { findMany: vi.fn(async (_args: unknown) => []) } });
+
+    const workspace = await loadWardWorkspace({ organizationId: "org-1", db });
+
+    expect(workspace.board).toBeNull();
+    expect(workspace.animals).toEqual([
+      { animalRef: "a1", name: "Ranger" },
+      { animalRef: "a2", name: "Saffron" },
+    ]);
+    const [firstCall] = db.animalProfile.findMany.mock.calls;
+    const where = (firstCall?.[0] as { where: Record<string, unknown> } | undefined)?.where;
+    expect(where).toEqual({
+      organizationId: "org-1",
+      lifecycleStatus: { in: ["in_care", "placement_ready"] },
+    });
   });
 
   it("still draws the board when nothing has been placed yet", async () => {

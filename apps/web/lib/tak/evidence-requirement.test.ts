@@ -11,6 +11,59 @@ import {
 const OPS_DOMAIN_TOOLS = ["query_backlog", "create_backlog_item", "update_backlog_item"];
 
 describe("classifyEvidenceRequirement", () => {
+  const artifact = "diff --git a/build.mjs b/build.mjs\n--- a/build.mjs\n+++ b/build.mjs\n@@ -1 +1 @@\n-const workers = 11;\n+const workers = memory ? 2 : 1;";
+  it.each(["/build", "/ops", "/platform/ai", "/custom"])("keeps supplied source analysis on task on %s", (routeContext) => {
+    expect(classifyEvidenceRequirement({ routeContext, domainTools: OPS_DOMAIN_TOOLS,
+      message: `Read the attached immutable historical public source diff and reply in at most three sentences: what worker cap and admission reserve it implements, and one relevant limitation. Artifact follows:\n\n${artifact}`,
+    }).required).toBe(false);
+  });
+
+  it.each([
+    "Read the attached source diff and check the current build queue.",
+    "Summarize the patch and tell me whether it is deployed now.",
+    "Do not call tools. How many builds are running?",
+    "Review the diff and report whether the issues are resolved.",
+    "Review the attached diff. Did the latest build pass?",
+    "Read the diff. Does the build pass now?",
+    "Explain the patch. Which deployment failed?",
+    "Summarize the diff. Current build status please.",
+    "Review the attached diff. Any new failures?",
+    "Read the patch. Pending builds?",
+  ])("retains live evidence for mixed or tool-free wording: %s", (request) => {
+    expect(classifyEvidenceRequirement({ routeContext: "/build", domainTools: OPS_DOMAIN_TOOLS,
+      message: `${request}\n${artifact}`,
+    }).required).toBe(true);
+  });
+
+  it.each(["Is it deployed now?", "  Is it deployed now?", "+ Check the current queue."])("retains a live question after a unified diff: %s", (question) => {
+    expect(classifyEvidenceRequirement({ routeContext: "/build", domainTools: OPS_DOMAIN_TOOLS,
+      message: `Summarize the attached diff.\n${artifact}\n\n${question}`,
+    }).required).toBe(true);
+  });
+
+  it("does not mistake a question mark inside fenced source for a live question", () => {
+    expect(classifyEvidenceRequirement({ routeContext: "/build", domainTools: OPS_DOMAIN_TOOLS,
+      message: "Explain this code snippet.\n```js\nconst status = open ? 'pending' : 'closed';\n```",
+    }).required).toBe(false);
+  });
+
+  it("does not accept an artifact label without supplied source as evidence", () => {
+    expect(classifyEvidenceRequirement({ routeContext: "/build", domainTools: OPS_DOMAIN_TOOLS,
+      message: "Read the source diff. What is the current status?",
+    }).required).toBe(true);
+  });
+
+  it("keeps an unterminated repeated-fence tail available for live evidence matching", () => {
+    expect(classifyEvidenceRequirement({ routeContext: "/build", domainTools: OPS_DOMAIN_TOOLS,
+      message: `Review the attached diff.\n${artifact}\n\n\`\`\`js\n${"\`\`\` not a closing fence\n".repeat(10000)}Did the latest build pass?`,
+    }).required).toBe(true);
+  });
+
+  it("requires a matching closing fence before classifying source analysis", () => {
+    expect(classifyEvidenceRequirement({ routeContext: "/build", domainTools: OPS_DOMAIN_TOOLS,
+      message: "Explain this code snippet.\n````js\n```\nDid the latest build pass?",
+    }).required).toBe(true);
+  });
   it("flags the Scrum Master incident question as evidence-required (BI-B5C358B1)", () => {
     const r = classifyEvidenceRequirement({
       routeContext: "/ops/self-upgrade",

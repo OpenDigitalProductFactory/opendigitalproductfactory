@@ -1,5 +1,5 @@
 import { createRequire } from "node:module";
-import { dirname, basename, isAbsolute, join, posix, relative, resolve, win32 } from "node:path";
+import { isAbsolute, join, posix, relative, resolve, win32 } from "node:path";
 import { resolveWorktreeBase } from "./worktree-base.mjs";
 
 const require = createRequire(import.meta.url);

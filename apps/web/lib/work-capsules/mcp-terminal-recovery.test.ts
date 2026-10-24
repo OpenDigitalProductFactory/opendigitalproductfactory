@@ -6,7 +6,16 @@ const mocks = vi.hoisted(() => {
       super(result.code);
     }
   }
-  return { updateStatus: vi.fn(), resolveRecovery: vi.fn(), Denied };
+  class Refused extends Error {
+    readonly code: string;
+    readonly reason: string;
+    constructor(input: { code: string; reason: string }) {
+      super(input.reason);
+      this.code = input.code;
+      this.reason = input.reason;
+    }
+  }
+  return { updateStatus: vi.fn(), resolveRecovery: vi.fn(), Denied, Refused };
 });
 
 vi.mock("@dpf/db", () => ({ prisma: {} }));
@@ -18,6 +27,7 @@ vi.mock("./work-capsule-store", () => ({
   updateWorkCapsuleStatus: mocks.updateStatus,
   heartbeatWorkCapsule: vi.fn(),
   WorkCapsuleCompletionDeniedError: mocks.Denied,
+  WorkCapsulePublicationRefusedError: mocks.Refused,
   ScopeOverlapError: class ScopeOverlapError extends Error {},
   adoptWorktreeCapsule: vi.fn(),
   claimWorkCapsuleScope: vi.fn(),
@@ -63,5 +73,90 @@ describe("workroom terminal MCP recovery projection", () => {
       error: "initiative_not_ready",
       data: { readiness: decision, recovery: { reviewerRoutes: [{ gate: "objective-mapping" }] } },
     });
+  });
+
+  // BI-023EF164: a claim-created room has no immutable head yet. The publication
+  // boundary refuses ready-for-review; that refusal must reach the caller as a
+  // structured answer with the repair step, not as "tool_threw".
+  it("answers an incomplete source identity with the adopt_worktree repair step instead of throwing", async () => {
+    mocks.updateStatus.mockRejectedValue(new mocks.Refused({
+      code: "workroom_identity_incomplete",
+      reason: "Workroom source identity is missing: headSha not set. Re-sync the Workroom with adopt_worktree (repositoryFullName, headBranch, worktreePath, baseSha, headSha), then retry.",
+    }));
+
+    const result = await updateWorkCapsuleStatusTool(
+      { capsuleId: "WC-ONE", status: "ready-for-review", reason: "PR open." },
+      "USR-ONE",
+      { agentId: "AGT-ONE" },
+    );
+
+    expect(mocks.resolveRecovery).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      success: false,
+      error: "workroom_identity_incomplete",
+      message: expect.stringContaining("headSha not set"),
+      data: {
+        capsuleId: "WC-ONE",
+        requestedStatus: "ready-for-review",
+        nextAction: expect.stringContaining("adopt_worktree"),
+      },
+    });
+  });
+
+  it("answers a missing failure review with the reviewer step", async () => {
+    mocks.updateStatus.mockRejectedValue(new mocks.Refused({
+      code: "failure_review_required",
+      reason: "No failure-analysis review exists for this final change.",
+    }));
+
+    const result = await updateWorkCapsuleStatusTool(
+      { capsuleId: "WC-ONE", status: "ready-for-promotion", reason: "Reviewed." },
+      "USR-ONE",
+      { agentId: "AGT-ONE" },
+    );
+
+    expect(result).toMatchObject({
+      success: false,
+      error: "failure_review_required",
+      data: { nextAction: expect.stringContaining("review_semantic_change") },
+    });
+  });
+
+  // BI-C9912C22 AC-2: WC-BFDF763B's PR merged and its item was done, yet
+  // `complete` answered "request review_semantic_change", which needs a fresh
+  // gate on merged code. A delivered room's refusal names the governed close-out
+  // the reaper already uses for merged rooms, which re-gates nothing.
+  it("names the delivered close-out, not a re-review, when the room's PR merged and its item is done", async () => {
+    const refusal = Object.assign(new mocks.Refused({
+      code: "failure_review_required",
+      reason: "Failure-analysis evidence is missing, stale, or changed; refresh it and request internal review.",
+    }), { deliveredCloseout: { backlogItemId: "BI-3BF3CBDF", pullRequestNumber: 5896, status: "archived" } });
+    mocks.updateStatus.mockRejectedValue(refusal);
+
+    const result = await updateWorkCapsuleStatusTool(
+      { capsuleId: "WC-BFDF763B", status: "complete", reason: "Delivered." },
+      "USR-ONE",
+      { agentId: "AGT-ONE" },
+    );
+
+    expect(result).toMatchObject({
+      success: false,
+      error: "failure_review_required",
+      data: {
+        requestedStatus: "complete",
+        deliveredCloseout: { status: "archived", pullRequestNumber: 5896, backlogItemId: "BI-3BF3CBDF" },
+        nextAction: expect.stringMatching(/PR #5896[\s\S]*BI-3BF3CBDF[\s\S]*status "archived"/),
+      },
+    });
+    expect(String(result.data?.nextAction)).not.toContain("review_semantic_change");
+  });
+
+  it("still surfaces unknown failures as thrown errors", async () => {
+    mocks.updateStatus.mockRejectedValue(new Error("database gone"));
+    await expect(updateWorkCapsuleStatusTool(
+      { capsuleId: "WC-ONE", status: "working", reason: "x" },
+      "USR-ONE",
+      { agentId: "AGT-ONE" },
+    )).rejects.toThrow("database gone");
   });
 });

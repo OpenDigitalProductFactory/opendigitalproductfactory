@@ -729,10 +729,9 @@ describe("McpTokenManager — revoked hide + archive footer", () => {
   it("surfaces the archive footer when the server reports archivedCount > 0", async () => {
     render(<McpTokenManager baseUrl="http://localhost:3000" />);
     expect(await screen.findByText("Active token")).toBeTruthy();
-    // Footer mentions the count, the 90-day window, and the audit-replay path.
-    expect(screen.getByText(/auto-archived/)).toBeTruthy();
-    expect(screen.getByText(/3/)).toBeTruthy();
-    expect(screen.getByText(/platform\/ai\/authority/)).toBeTruthy();
+    expect(
+      screen.getByText((_, n) => n?.tagName === "P" && (n.textContent ?? "").includes("3 tokens auto-archived")).textContent,
+    ).toContain("/platform/ai/authority");
   });
 });
 

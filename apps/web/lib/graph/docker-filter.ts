@@ -7,7 +7,7 @@
 // itself can opt in via the toggle in TopologyGraph.
 //
 // Detection is purely pattern-based — Docker-origin metadata isn't
-// projected to Neo4j InfraCI properties yet, so we rely on the naming +
+// projected to graph-mirror InfraCI properties yet, so we rely on the naming +
 // ciType + entityKey conventions established by
 // `packages/db/src/discovery-collectors/docker.ts` and the edge-node
 // ARP collector:

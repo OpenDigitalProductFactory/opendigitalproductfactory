@@ -826,7 +826,115 @@ adapter_health = healthy
 - Build Studio dispatch is unchanged. Convergence happens only when Phase H has run and only as an explicit follow-up.
 - Receipts spec landing first lets §7 mint full provenance receipts. If receipts spec slips, §7 still mints `ToolExecution` rows and the receipt linkage is added in a follow-up patch.
 
-## 17. References
+## 17. Organization quota recovery (BI-EDF1BD54, 2026-09-27)
+
+The live Claude CLI returned a 149-character organization monthly spend-limit
+banner to three independent review branches. Their session records identify
+`isApiErrorMessage: true`, `error: rate_limit` and zero generated tokens.
+The adapter recognized personal weekly limits but missed this wording, returned
+it as content, and prevented the existing fallback chain from running.
+
+Extend the existing adapter boundary rather than changing reviewer prompts,
+quota settings or provider eligibility. Recognize the observed organization
+spend-limit banner and retain structured failed-result information. A failed
+CLI result must raise an existing `InferenceError`; quota maps to `rate_limit`,
+unknown failure to `provider_error`. Successful ordinary prose remains content.
+The fallback chain remains the owner of provider selection, screening, capacity,
+bounded retries and truthful exhaustion. Codex or local is used only when it is
+already an eligible candidate. No provider is newly enabled or granted access.
+
+This extends the simpler quota recovery in #4680. BI-18AF9BA0 fixes a distinct
+Codex stderr classification defect; its exclusion of echoed prompt text is a
+precedent for classifying only the CLI envelope and bounded quota banner here.
+No new table, dependency, public tool, credential or migration is required.
+
+Implementation and acceptance:
+
+- Reproduce the observed banner through the adapter before changing production
+  code. Include organization and personal quotas, successful content, and
+  structured failure envelopes with otherwise unfamiliar text.
+- Refactor quota/error classification into one adapter helper where needed;
+  keep parsing and error propagation separate so a parse catch cannot swallow
+  a provider failure.
+- Exercise the real adapter through the existing fallback chain with eligible
+  Codex and local candidates. Verify exhaustion remains an error, and failure
+  text is never returned as a completed review.
+- Run affected adapter/router tests, typecheck, deterministic guards and the
+  canonical merged-code gate; deliver through a DCO PR and merge queue, then
+  verify the review path on the canonical install.
+
+Operator direction in task `01a0c605-8f98-7ba1-bc3d-42836ccb11aa` explicitly
+authorizes this bounded process repair: "ok, this is an override situation then
+to fix that step in the process." It does not turn the existing inconclusive
+review into a pass or bypass protected publication, grants, independent review,
+scope ownership, build gates or runtime integrity. Any unavailable review stays
+inconclusive. This scope expires when this repair merges or is abandoned.
+
+### Availability follow-through (BI-EDF1BD54, 2026-10-12)
+
+On canonical `007eef1a3bc035a5f7906cf92cd2432819695534`, the stdout
+classifier raises `rate_limit` but never calls `recordCliRateLimit`. Only the
+stderr branch records exhaustion. The existing recorder writes provider
+capacity only for resets longer than its pool cooldown cap. Consequently a
+recognized stdout quota can leave both the dispatch pool and the next routing
+decision reporting availability.
+
+The artifact review's original and recovery windows on October 11 have eight
+`RouteOutcome` rate-limit failures across Opus and Sonnet on `anthropic-sub`.
+The provider's available snapshot remained dated October 8, with no Claude pool
+row. The preserved bounded banner is `You've hit your weekly limit · resets
+4pm (UTC)`. It supplies no date: do not invent an October 13 reset from it.
+This is separate from local context admission and model behavior conformance.
+
+Ordered atomic fix for Workroom `WC-C6E10155`:
+
+1. Reproduce the missing stdout observation and ordering through the real CLI
+   adapter/fallback harness. On the unchanged base, two tests fail because the
+   recorder is called zero times; six existing fallback tests pass. A separate
+   pool test fails because a time-only weekly banner produces no provider
+   capacity observation. This rules out banner recognition and fallback
+   classification as the remaining defect.
+2. Await the existing pool recorder after a classified stdout quota and before
+   exposing the error to fallback. Preserve the original inference error,
+   successful content, unknown-failure handling and authority checks.
+3. Have the recorder await both existing pool and provider capacity writes.
+   Preserve known long reset dates and shared-account scoping. For an unknown
+   reset date, record a bounded policy backoff with heuristic confidence;
+   distinguish it from a provider-authoritative reset. Do not infer a day from
+   a clock-only banner or use an unrelated weekly reset as an organization
+   spend-cap reset. Persistence errors remain non-fatal to error propagation.
+4. Verify persistence ordering, unavailable-peer exclusion, bounded expiry,
+   successful prose, explicit long resets and record-write failure. Run the
+   graph-linked CLI, pool, capacity-drain and weekly collector tests, web source
+   and test typechecks, applicable guards and the canonical exact-tree gate.
+5. Obtain independent review, publish a DCO-signed PR through the merge queue,
+   deploy canonically, and verify existing affected review recovery. Preserve
+   any failed behavior probe and unavailable verdict as such. Roll back through
+   a reviewed revert if availability or fallback behavior regresses.
+
+This is one atomic correction to the existing CLI quota observation contract;
+the adapter and recorder changes are not independently sufficient. No new
+schema, provider enablement, credentials, budgets, privacy policy, review
+identity or retry authority is introduced. Existing controls still decide
+which fallback is eligible; if none is eligible, the result remains a truthful
+infrastructure failure.
+
+### Dated Claude CLI weekly limit (BI-6C8E2561, 2026-10-21)
+
+The Claude CLI states a spent weekly limit as `resets Oct 20, 4pm (UTC)`:
+month, day, clock and IANA zone, but no year. The recorder only read Codex's
+`try again at <date>` form, so this banner took the 60-second default. On the
+live install the `anthropic-sub` pool read healthy from October 16 to October 20
+16:00 UTC, and the capacity drain, the agent-task dispatcher and the Workroom
+drive all counted it as capacity.
+
+The recorder now reads that form. The year is the occurrence nearest now, and
+the clock is converted through the named zone. The reset is recorded as
+`quota_resets_at` with exact confidence, so `getAllCliPoolStatuses` reports the
+pool exhausted until then. The clock-only banner above still names no day, and
+an unknown zone names no instant: both keep the bounded backoff.
+
+## 18. References
 
 - [Coworker Substrate Status Review](../audits/2026-04-29-cli-substrate-status-review.md) — the audit this spec promotes
 - [Codex JSONL probe evidence](../audits/evidence/2026-04-29-codex-cli-jsonl-probe.md) — empirical event taxonomy

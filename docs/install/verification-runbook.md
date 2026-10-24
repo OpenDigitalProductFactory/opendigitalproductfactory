@@ -7,9 +7,9 @@
 > those gaps.
 >
 > macOS Apple Silicon is **GA** — validated end-to-end on real
-> hardware. The Linux and cloud installers are code-complete and
-> statically CI-green and graduate to GA when the community sends us
-> verification reports from real hardware. Reports still widen the
+> hardware. Linux and cloud remain early access: source fixes and CI results
+> are preparation for customer validation, not a completed acceptance claim.
+> Use the [Linux guide](linux.md) to select a release containing the repairs. Reports still widen the
 > tested matrix on every platform, including additional Mac models /
 > macOS versions. If you have an Apple Silicon Mac, a non-Ubuntu Linux
 > box, a TAPPaaS environment, or a cloud VM you can spare for an hour,
@@ -27,6 +27,30 @@
 > We don't need every checkbox before reading your report —
 > partial reports are useful too.
 
+## Linux customer handoff
+
+Recommended first target: Ubuntu Server 24.04 LTS x86-64, a dedicated VM or
+server, native Docker Engine and Compose v2. Use the [hardware guide](hardware.md)
+for sizing. Before the pilot, record a published release containing the
+[startup repairs](linux.md#source-repairs-awaiting-native-acceptance).
+
+Record these fields with the report: distro/version, CPU architecture and cores,
+RAM, free disk, VM/physical/cloud, host UID, Docker and Compose versions,
+installer source tag/SHA, image tag/digest, selected capabilities, AI provider,
+and fresh install versus migration. Do not include credentials or private keys.
+
+For each [pilot acceptance check](linux.md#pilot-acceptance-checks), record
+**pass**, **fail** or **unrun**, the observation and a redacted evidence link.
+Include a non-UID-1000 user where practical to exercise private file ownership.
+Capture the first failure before retrying; HTTP health does not substitute for
+HTTPS/login, AI or reboot checks. Never attach raw CA initialization logs,
+`.env`, enrollment packages or state secrets. Review even a redacted doctor
+bundle before sharing. Run restore and destructive uninstall only against a
+declared disposable installation with the operator's explicit authorization.
+
+The customer's results are the native acceptance evidence. A source fix,
+mocked command test or green CI job cannot fill in an unrun checklist row.
+
 ## Verification matrix
 
 | Path | What CI proves | What this runbook covers | Status |
@@ -42,7 +66,7 @@
 | LLM provider — external | code review | Real `LLM_BASE_URL` (Anthropic / OpenAI / hosted Ollama) round-trips | 🙋 **reports wanted** |
 | TAPPaaS deployment | none — spec only | Pilot deploy into a real TAPPaaS environment | 🧪 **design partner wanted** |
 | DPF Edge Node enrollment (single-host) | none — spec only | First-draft enrollment ceremony executed end-to-end | 🙋 **reports wanted** |
-| DPF Edge Node — multi-host LAN (T2) | none — code-complete via T2.1-T2.4 | Authority on Host A, Edge Node on Host B over a real LAN with a switch; non-loopback IP attribution; ARP / nmap / SNMP collector output reaching Postgres + Neo4j | 🙋 **reports wanted** |
+| DPF Edge Node — multi-host LAN (T2) | none — code-complete via T2.1-T2.4 | Authority on Host A, Edge Node on Host B over a real LAN with a switch; non-loopback IP attribution; ARP / nmap / SNMP collector output reaching Postgres and its graph mirror | 🙋 **reports wanted** |
 | Cloud — Single VM substrate (AWS / GCP / Azure) | runbook + verify-wrapper ready ([cloud-single-vm.md](cloud-single-vm.md)) | First real-cloud pilot report on each major cloud | 🙋 **reports wanted** |
 | Cloud — Managed Container service / Managed k8s | none — spec only | Substrate pilot per packaging target | 🧪 **design partner wanted** |
 | Cloud — Cloudflare-fronted managed isolated cells | architecture + live decomposed backlog; no runtime implementation | Two synthetic cells, edge/origin failure drills, restore/exit proof, and full deployment-contract evidence | 🔬 **research — not yet a pilot offer** |
@@ -168,7 +192,7 @@ bash install-dpf.sh                 # interactive — say "Ready to go"
 - [ ] Docker Engine installs via apt-get / dnf and `systemctl enable --now docker` succeeds.
 - [ ] If user was added to `docker` group: installer exits 75 with a clear logout-or-newgrp instruction. Re-running succeeds.
 - [ ] `~/.dpf/install-state.json` exists with `"schemaVersion": 1`, `"platform": "linux"`.
-- [ ] `docker compose -p dpf ps` shows portal, postgres, neo4j, qdrant, redis, sandbox, promoter, inngest, adp, ollama all running.
+- [ ] `docker compose -p dpf ps` shows portal, postgres, redis, sandbox, promoter, inngest, adp, ollama all running.
 - [ ] `curl http://localhost:3000/api/health` returns 200.
 - [ ] Login at http://localhost:3000 with `admin@dpf.local` + the password printed at end of install (also in `.env`).
 - [ ] `systemctl --user status dpf.service` reports `active (exited)` (with `--no-autostart` skipped, this is enabled).

@@ -15,15 +15,6 @@ scrape_configs:
     static_configs:
       - targets: ["postgres-exporter:9187"]
 
-  # Neo4j Community Edition does not expose Prometheus metrics.
-  # Neo4j Enterprise users: uncomment and add NEO4J_server_metrics_prometheus_enabled
-  # to the neo4j service environment in docker-compose.yml.
-  # - job_name: "neo4j"
-  #   scrape_interval: 30s
-  #   static_configs:
-  #     - targets: ["neo4j:2004"]
-  #   metrics_path: /metrics
-
   # ─── Application ────────────────────────────────────────────
   - job_name: "portal"
     static_configs:
@@ -64,9 +55,11 @@ scrape_configs:
       - targets: ["redis-exporter:9121"]
 
   # ─── Services without a /metrics endpoint ───────────────────
-  # dpf-stt (whisper-server) ships without /metrics — STT visibility is
-  # via portal-side counters (dpf_voice_stt_*) exposed on the portal's
-  # /api/metrics. The Health tab surfaces it as a "Portal metrics" tile.
+  # Speech-to-text is provider-managed and runs no DPF-shipped container
+  # (BI-F7E9A541), so there is nothing local to scrape. STT visibility is via
+  # portal-side counters (dpf_voice_stt_*) exposed on the portal's
+  # /api/metrics, which cover hosted and self-hosted endpoints alike. The
+  # Health tab surfaces it as a "Portal metrics" tile.
 
   # ─── AI Inference ───────────────────────────────────────────
   # Docker Model Runner does not expose a Prometheus `/metrics` endpoint

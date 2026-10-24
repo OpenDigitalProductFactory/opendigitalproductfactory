@@ -108,7 +108,6 @@ export function deriveSourceKeyFromPath(filePath: string): string {
  * is not recognisable — the caller must supply `sourceType` explicitly.
  */
 export function deriveSourceTypeFromPath(filePath: string): RawSourceType | null {
-  const path = lazyPath();
   const segments = filePath.split(PATH_SEPARATOR).filter(Boolean);
   const parent = segments.at(-2);
   if (!parent) return null;
@@ -268,7 +267,7 @@ async function commitRawSourceAndAudit(
  * ingested twice produces one row and two audit events.
  *
  * Phase 2.1 stays narrow on purpose: it does not call any LLM, does not
- * touch any wiki page, does not write to Qdrant. The returned event row
+ * touch any wiki page, does not write to the vector store. The returned event row
  * carries `touchedPageIds: []` until Phase 2.2/2.3 wires the proposal
  * pipeline through.
  *

@@ -4,6 +4,8 @@ Captures the journey from "CodeQL caught 100+ alerts post-merge over 2 days"
 to "gates fire on every PR before review." Five PRs, one OSS pivot in the
 middle, ~half a day of work end-to-end.
 
+**Current procedure:** this page records the historical rollout. The [build gate runbook](../architecture/build-gate-runbook.md) owns current verification, including the public documentation build added after a post-merge Liquid rendering failure (BI-B97611BC).
+
 ## What motivated this
 
 A 2-day CodeQL burn-down absorbed 100+ alerts that landed on `main` BEFORE

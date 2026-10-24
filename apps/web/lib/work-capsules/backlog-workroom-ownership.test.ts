@@ -125,3 +125,16 @@ describe("backlog Workroom ownership", () => {
     expect(queryRaw.mock.calls[0]?.[1]).toBe("row-bi-one");
   });
 });
+
+describe("workShape on the ownership summary (BI-D03BE728)", () => {
+  it("names the room's delivery shape from its scopeClaims and null when none is declared", async () => {
+    const { loadBacklogWorkroomOwnership } = await import("./backlog-workroom-ownership");
+    const rows = [
+      { capsuleId: "WC-S", title: "t", status: "ready", backlogItemId: "BI-1", scopeClaims: [{ workShape: "delivery-medium@1.0.0", recordedAt: "x", source: "declared" }], leaseExpiresAt: new Date(Date.now() + 60_000), archivedAt: null },
+      { capsuleId: "WC-U", title: "t", status: "ready", backlogItemId: "BI-1", scopeClaims: [], leaseExpiresAt: new Date(Date.now() + 60_000), archivedAt: null },
+    ];
+    const db = { workroom: { findMany: async () => rows }, featureBuild: { findMany: async () => [] } };
+    const { workrooms } = await loadBacklogWorkroomOwnership(db as never, "BI-1");
+    expect(workrooms.map((room) => [room.capsuleId, room.workShape ?? null])).toEqual([["WC-S", "delivery-medium@1.0.0"], ["WC-U", null]]);
+  });
+});

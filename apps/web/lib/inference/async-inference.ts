@@ -15,6 +15,7 @@
  */
 
 import { prisma, type Prisma } from "@dpf/db";
+import { providerWorkspaceHeaders } from "./provider-workspace";
 import { agentEventBus } from "@/lib/agent-event-bus";
 import {
   getDecryptedCredential,
@@ -23,10 +24,12 @@ import {
 } from "@/lib/ai-provider-internals";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { resolveOpenAiCompatibleApiBase } from "@/lib/routing/openai-base";
+import { withGeminiInteractionsApiRevision } from "@/lib/routing/gemini-interactions-contract";
 import {
   parseAsyncInferenceOperationStatus,
   type AsyncInferenceOperationStatus,
 } from "./async-operation-contract";
+import { providerInferenceFetch } from "./provider-inference-transport";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -257,6 +260,7 @@ export interface AsyncProviderOperationPollResult {
 export async function pollAsyncProviderOperation(
   providerId: string,
   operationId: string,
+  fetchImpl: typeof fetch = providerInferenceFetch,
 ): Promise<AsyncProviderOperationPollResult> {
   const provider = await prisma.modelProvider.findUnique({ where: { providerId } });
   if (!provider?.baseUrl) throw new Error(`Provider ${providerId} not found or has no baseUrl`);
@@ -270,6 +274,7 @@ export async function pollAsyncProviderOperation(
   if (provider.authMethod === "api_key") {
     const cred = await getDecryptedCredential(providerId);
     if (cred?.secretRef && provider.authHeader) {
+      Object.assign(headers, providerWorkspaceHeaders(providerId, cred.providerWorkspaceId));
       headers[provider.authHeader] = provider.authHeader === "Authorization"
         ? `Bearer ${cred.secretRef}` : cred.secretRef;
     }
@@ -281,26 +286,27 @@ export async function pollAsyncProviderOperation(
   }
 
   if (providerId === "gemini") {
-    return pollGemini(provider.baseUrl, operationId, headers);
+    return pollGemini(provider.baseUrl, operationId, headers, fetchImpl);
   }
 
   // Generic: try GET {baseUrl}/operations/{operationId}
-  return pollGeneric(provider.baseUrl, operationId, headers);
+  return pollGeneric(provider.baseUrl, operationId, headers, fetchImpl);
 }
 
 async function pollGemini(
   baseUrl: string,
   operationId: string,
   headers: Record<string, string>,
+  fetchImpl: typeof fetch,
 ): Promise<AsyncProviderOperationPollResult> {
   // Interaction IDs are opaque provider-owned identities. Always poll beneath
   // the configured provider base so a stored value can never redirect auth
   // headers to an attacker-controlled host.
   const url = `${baseUrl.replace(/\/+$/, "")}/interactions/${encodeURIComponent(operationId)}`;
 
-  const res = await fetch(url, {
+  const res = await fetchImpl(url, {
     method: "GET",
-    headers,
+    headers: withGeminiInteractionsApiRevision(headers),
     signal: AbortSignal.timeout(POLL_TIMEOUT_MS),
   });
 
@@ -395,11 +401,12 @@ async function pollGeneric(
   baseUrl: string,
   operationId: string,
   headers: Record<string, string>,
+  fetchImpl: typeof fetch,
 ): Promise<AsyncProviderOperationPollResult> {
   const apiBase = resolveOpenAiCompatibleApiBase(baseUrl);
   const url = `${apiBase}/operations/${operationId}`;
 
-  const res = await fetch(url, {
+  const res = await fetchImpl(url, {
     method: "GET",
     headers,
     signal: AbortSignal.timeout(POLL_TIMEOUT_MS),

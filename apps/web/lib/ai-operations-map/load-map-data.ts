@@ -1,4 +1,6 @@
 import { prisma } from "@dpf/db";
+import { loadRoutingManagement } from "./routing-management-loader";
+import type { RoutingManagementData } from "./routing-management-types";
 import { getMapTemplate } from "./templates";
 import {
   projectAgentsToStations,
@@ -14,7 +16,7 @@ import { projectLoadedRoutingEvidence } from "./routing-evidence-loader-projecti
 import { resolveModelSelectionByPhase } from "@/lib/inference/phase-model-resolution";
 import { projectActivityRoutingFromLiveState } from "./activity-routing-live-state";
 import {
-  ACTIVITY_HARNESS_CONFIDENCE_OVERRIDE_ACTION,
+  loadApprovedActivityHarnessOverrides,
 } from "@/lib/routing/activity-harness-approval-source";
 import {
   projectA2aInteractions,
@@ -34,7 +36,7 @@ import {
   resolveEvidenceRange,
   resolveGateResult,
 } from "./load-map-support";
-import { OPERATIONS_RUN_SELECT } from "./operations-run-read-model";
+import { OPERATIONS_REVIEW_WHERE, OPERATIONS_RUN_SELECT } from "./operations-run-read-model";
 import type {
   OperationsMapRoutingTopology,
   OperationsMapAgent,
@@ -85,6 +87,7 @@ export type LoadOperationsMapDataOptions = {
 export const STALLED_TASK_RUN_LIMIT = 200;
 
 export type OperationsMapData = {
+  routingManagement: RoutingManagementData;
   template: OperationsMapTemplate;
   agents: StationedOperationsMapAgent[];
   projections: OperationsMapProjection[];
@@ -139,7 +142,7 @@ export async function loadOperationsMapData(
     phaseHandoffs,
     a2aTaskRuns,
     deliberationRuns,
-    activityHarnessApprovalProposals,
+    approvedActivityHarnessOverrides,
     phaseModelSelection,
     evidenceRange,
   ] = await Promise.all([
@@ -180,7 +183,10 @@ export async function loadOperationsMapData(
     prisma.taskRun.findMany({
       where: {
         archivedAt: null,
-        source: "proactive",
+        OR: [
+          { source: "proactive" },
+          OPERATIONS_REVIEW_WHERE,
+        ],
         ...startedAtWindow,
       },
       orderBy: { startedAt: "desc" },
@@ -197,7 +203,10 @@ export async function loadOperationsMapData(
     prisma.taskRun.findMany({
       where: {
         archivedAt: null,
-        status: "stalled",
+        OR: [
+          { status: "stalled" },
+          { status: "input-required", ...OPERATIONS_REVIEW_WHERE },
+        ],
       },
       orderBy: { startedAt: "desc" },
       take: STALLED_TASK_RUN_LIMIT,
@@ -313,6 +322,7 @@ export async function loadOperationsMapData(
         policyRulesApplied: true,
         fallbackChain: true,
         fallbacksUsed: true,
+        inferenceDataScreenReceipt: true,
         shadowMode: true,
         createdAt: true,
         selectedModelId: true,
@@ -394,6 +404,10 @@ export async function loadOperationsMapData(
         inputTokens: true,
         outputTokens: true,
         estimatedCostUsd: true,
+        quotaPoolConsumed: true,
+        userAccepted: true,
+        errorClass: true,
+        httpStatus: true,
         startedAt: true,
       },
     }),
@@ -524,22 +538,8 @@ export async function loadOperationsMapData(
         },
       },
     }),
-    prisma.agentActionProposal.findMany({
-      where: {
-        actionType: ACTIVITY_HARNESS_CONFIDENCE_OVERRIDE_ACTION,
-        status: { in: ["approve", "approved", "executed"] },
-      },
-      orderBy: { decidedAt: "desc" },
-      take: RECENT_TOOL_LIMIT,
-      select: {
-        proposalId: true,
-        actionType: true,
-        parameters: true,
-        status: true,
-        decidedById: true,
-        decidedAt: true,
-      },
-    }),
+    // Facts and legacy approved proposals (dual read, BI-C8EC05C9).
+    loadApprovedActivityHarnessOverrides(prisma, { take: RECENT_TOOL_LIMIT }),
     resolveModelSelectionByPhase(),
     // Global evidence bounds (window-independent): anchors the client
     // timeline's base range so windowed refetches can't shrink the scrubber,
@@ -655,8 +655,15 @@ export async function loadOperationsMapData(
     adapterRuns,
     outcomes: routeOutcomes,
     tokenUsage,
-    capacity: providerCapacity,
+    capacity: providerCapacity.flatMap(row => row.providerId ? [{ ...row, providerId: row.providerId }] : []),
     providers,
+  });
+  const routingManagement = await loadRoutingManagement({
+    decisions: routeDecisionRows,
+    attempts: adapterRuns,
+    outcomes: routeOutcomes,
+    usage: tokenUsage,
+    models: modelProfiles.map(m => ({ endpointId: m.id, providerId: m.providerId, modelId: m.modelId, label: m.friendlyName, status: m.modelStatus })),
   });
 
   // ── Compose coworker-to-coworker (A2A) interactions ──────────────────
@@ -755,6 +762,7 @@ export async function loadOperationsMapData(
   });
 
   return {
+    routingManagement,
     template,
     agents: stationedAgents,
     projections,
@@ -766,7 +774,7 @@ export async function loadOperationsMapData(
         routeDecisions: routeDecisionRows,
         tokenUsage,
         routeOutcomes,
-        activityHarnessApprovalProposals,
+        approvedConfidenceOverrides: approvedActivityHarnessOverrides,
         phaseModelSelection,
       }),
       coworkers: mergedCoworkers,

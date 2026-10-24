@@ -129,3 +129,59 @@ describe("GitHubForgeAdapter", () => {
     );
   });
 });
+
+describe("GitHubForgeAdapter.closeIssue", () => {
+  const repository = { forge: "github" as const, owner: "acme", repo: "portal" };
+  const issue = (state: string) => ({ number: 42, html_url: "https://github.com/acme/portal/issues/42", state });
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("comments, then closes with the given reason", async () => {
+    const calls: { url: string; method: string; body: unknown }[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init: RequestInit) => {
+      calls.push({ url, method: init.method ?? "GET", body: init.body ? JSON.parse(String(init.body)) : null });
+      if (init.method === "PATCH") return response(200, issue("closed"));
+      if (init.method === "POST") return response(201, { id: 1 });
+      return response(200, issue("open"));
+    }));
+    const adapter = new GitHubForgeAdapter({ token: "ghp_test" });
+    const result = await adapter.closeIssue({ repository, number: 42, comment: "Resolved.", reason: "not_planned", egressClass: "public-hive" });
+    expect(result.ok).toBe(true);
+    expect(result).toMatchObject({ outcome: "closed", remote: { number: 42 } });
+    expect(calls.map((c) => c.method)).toEqual(["GET", "POST", "PATCH"]);
+    expect(calls[1]).toMatchObject({ url: "https://api.github.com/repos/acme/portal/issues/42/comments", body: { body: "Resolved." } });
+    expect(calls[2].body).toEqual({ state: "closed", state_reason: "not_planned" });
+  });
+
+  it("is idempotent: an already-closed issue is neither commented on nor patched", async () => {
+    const fetchMock = vi.fn(async () => response(200, issue("closed")));
+    vi.stubGlobal("fetch", fetchMock);
+    const adapter = new GitHubForgeAdapter({ token: "ghp_test" });
+    const result = await adapter.closeIssue({ repository, number: 42, comment: "again", reason: "completed", egressClass: "public-hive" });
+    expect(result.ok).toBe(true);
+    expect(result).toMatchObject({ outcome: "already-closed" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("surfaces a 404 as not-found without patching", async () => {
+    const fetchMock = vi.fn(async () => response(404, { message: "Not Found" }));
+    vi.stubGlobal("fetch", fetchMock);
+    const adapter = new GitHubForgeAdapter({ token: "ghp_test" });
+    const result = await adapter.closeIssue({ repository, number: 42, comment: null, reason: "completed", egressClass: "public-hive" });
+    expect(result).toMatchObject({ ok: false, category: "not-found", status: 404 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("skips the comment call when no comment is given", async () => {
+    const methods: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_url: string, init: RequestInit) => {
+      methods.push(init.method ?? "GET");
+      return response(200, issue(init.method === "PATCH" ? "closed" : "open"));
+    }));
+    const adapter = new GitHubForgeAdapter({ token: "ghp_test" });
+    await adapter.closeIssue({ repository, number: 42, comment: null, reason: "completed", egressClass: "public-hive" });
+    expect(methods).toEqual(["GET", "PATCH"]);
+  });
+});

@@ -124,6 +124,8 @@ export async function evaluateBuildStudioPlanAdvancementGate(input: {
   plannedFilePaths?: readonly string[];
   /** Injectable for tests; defaults to the real consult composition. */
   acumenConsultRunner?: AcumenConsultRunner;
+  /** BI-7FFFBEE3 slice B: "shadow" when the caller will not act on the verdict. */
+  enforcement?: "shadow" | "enforce";
 }): Promise<BuildStudioDecisionGateResult> {
   const question = planAdvancementQuestion(input.build);
   const options = planAdvancementOptions();
@@ -143,6 +145,7 @@ export async function evaluateBuildStudioPlanAdvancementGate(input: {
     recentOverrideCount: input.recentOverrideCount,
     evaluator: input.evaluator,
     now: input.now,
+    ...(input.enforcement ? { enforcement: input.enforcement } : {}),
     onComplete: (interactionId) => {
       runVoiceSynthesisJob(interactionId).catch((err: unknown) => {
         console.info("[tool-trace] wwmd.voice.dispatch.failed", { interactionId, error: String(err) });

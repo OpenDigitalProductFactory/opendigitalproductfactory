@@ -1,11 +1,12 @@
 import { randomUUID } from "crypto";
+import { toRoomAuthorityContext, type RoomTurnAuthority } from "@/lib/work-management/room-turn-authority";
 import { prisma } from "@dpf/db";
 import type { Prisma } from "@dpf/db";
 import type { MessageOrigin } from "@/lib/inference/data-screening/types";
-import type { ChatMessage } from "@/lib/ai-inference";
+import type { ChatMessage } from "@/lib/routing/chat-message-types";
 import { resolveCoworkerReviewPattern } from "@/lib/golden-triangle/coworker-review";
 import { reviewCoworkerDraft } from "@/lib/tak/coworker-inline-review";
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { AgentEvent } from "@/lib/tak/agent-event-bus";
 import type { ResolvedDelegatedPosture } from "@/lib/proactivity/delegated-posture";
 import type { ProactivityPlan } from "@/lib/proactivity/proactivity-types";
@@ -71,6 +72,23 @@ export type AutonomousWorkRunInput = {
   metadata?: Record<string, unknown>;
   proactivity?: ProactivityPlan;
   delegatedPosture?: ResolvedDelegatedPosture;
+  /**
+   * Server-owned authorization recheck executed inside the same transaction as
+   * TaskRun creation. Never expose this callback through an MCP or browser
+   * payload; it exists for authority lanes that must serialize alternate keys.
+   */
+  admissionGuard?: (tx: Prisma.TransactionClient) => Promise<void>;
+  transactionIsolationLevel?: Prisma.TransactionIsolationLevel;
+  /**
+   * Closed deferred callers may commit their first user message in the same
+   * transaction as the submitted TaskRun. This prevents an outbox-recoverable
+   * row from existing without the immutable input needed by its worker.
+   */
+  deferredSubmission?: {
+    content: string;
+    metadata?: Record<string, unknown>;
+    progressPayload?: Prisma.InputJsonValue;
+  };
 };
 
 const TRIGGER_PREFIX: Record<AutonomousWorkTrigger, string> = {
@@ -102,6 +120,9 @@ function createPublicTaskRunId(trigger: AutonomousWorkTrigger): string {
 export async function createAutonomousWorkRun(
   input: AutonomousWorkRunInput,
 ): Promise<AutonomousWorkRunRef> {
+  if (input.deferredSubmission && input.trigger !== "external-mcp") {
+    throw new Error("Deferred submission is restricted to external MCP work.");
+  }
   const threadId = input.threadId ?? null;
   const a2aMetadata = {
     trigger: input.trigger,
@@ -114,26 +135,47 @@ export async function createAutonomousWorkRun(
   return prisma.$transaction(async (tx) => {
     const source = taskRunSourceForTrigger(input.trigger);
     await admitRuntimeGuardedWork(tx as never, `task-run:${source}`);
-    return tx.taskRun.create({
-    data: {
-      taskRunId: input.taskRunId ?? createPublicTaskRunId(input.trigger),
-      userId: input.userId,
-      threadId,
-      contextId: threadId,
-      initiatingAgentId: input.agentId,
-      currentAgentId: input.agentId,
-      parentTaskRunId: input.parentTaskRunId ?? null,
-      routeContext: input.routeContext,
-      title: input.title,
-      objective: input.objective.slice(0, 1000),
-      source,
-      status: initialStatusForTrigger(input.trigger),
-      authorityScope: input.authorityScope ?? [],
-      a2aMetadata,
-    },
-    select: { id: true, taskRunId: true, contextId: true },
+    await input.admissionGuard?.(tx);
+    const taskRun = await tx.taskRun.create({
+      data: {
+        taskRunId: input.taskRunId ?? createPublicTaskRunId(input.trigger),
+        userId: input.userId,
+        threadId,
+        contextId: threadId,
+        initiatingAgentId: input.agentId,
+        currentAgentId: input.agentId,
+        parentTaskRunId: input.parentTaskRunId ?? null,
+        routeContext: input.routeContext,
+        title: input.title,
+        objective: input.objective.slice(0, 1000),
+        source,
+        status: input.deferredSubmission ? "submitted" : initialStatusForTrigger(input.trigger),
+        authorityScope: input.authorityScope ?? [],
+        a2aMetadata,
+        ...(input.deferredSubmission?.progressPayload
+          ? { progressPayload: input.deferredSubmission.progressPayload }
+          : {}),
+      },
+      select: { id: true, taskRunId: true, contextId: true },
     });
-  }, { isolationLevel: "Serializable" });
+    if (input.deferredSubmission) {
+      await tx.taskMessage.create({
+        data: {
+          id: randomUUID(),
+          messageId: `tm_${randomUUID()}`,
+          taskRunId: taskRun.id,
+          contextId: taskRun.contextId,
+          role: "user",
+          parts: [{ type: "message", text: input.deferredSubmission.content }],
+          referenceTaskIds: [],
+          ...(input.deferredSubmission.metadata
+            ? { metadata: input.deferredSubmission.metadata as Prisma.InputJsonValue }
+            : {}),
+        },
+      });
+    }
+    return taskRun;
+  }, { isolationLevel: input.transactionIsolationLevel ?? "Serializable" });
 }
 
 export async function findCurrentAutonomousWorkRun(input: {
@@ -236,6 +278,7 @@ export async function resolveAutonomousWorkTools(input: {
     const {
       selectCoworkerToolBudget,
       deriveCoworkerToolCap,
+      REQUIRED_TOOL_PIN_CAPACITY,
       LOAD_TOOLS_TOOL,
       LOAD_TOOLS_TOOL_NAME,
     } =
@@ -282,8 +325,14 @@ export async function resolveAutonomousWorkTools(input: {
       pageActionNames: new Set([
         ...routeDomainToolNames,
         ...AUTHORIZED_SURFACE_TOOL_NAMES,
-        ...(input.requiredToolNames ?? []).slice(0, 4),
       ]),
+      // BI-EC82C48B: the run's required tools rank ABOVE the generic surface
+      // inside the cap. They used to share tier 0 with routeDomainToolNames and
+      // every AUTHORIZED_SURFACE_TOOL_NAME, so when that set alone exceeded the
+      // cap the writer competed with the surface on intent relevance and could
+      // lose — and narrowInitiativeReviewTools then filtered the attached set to
+      // required names only, handing the model zero tools.
+      requiredNames: new Set((input.requiredToolNames ?? []).slice(0, REQUIRED_TOOL_PIN_CAPACITY)),
       alwaysIncludeNames: new Set([LOAD_TOOLS_TOOL_NAME]),
       cap: effectiveCap,
       intentQuery: input.intentQuery,
@@ -331,6 +380,7 @@ export async function executeAutonomousAgenticLoop(input: {
   agentId: string;
   threadId: string;
   taskRunId?: string | null;
+  taskExecutionFence?: import("@/lib/shared/task-execution-fence").TaskExecutionFence | null;
   taskType?: string;
   /** EP-27FD96BC · P1 — unified per-turn effort warrant, forwarded to the loop. */
   effortWarrant?: import("@/lib/tak/effort-warrant").EffortWarrant;
@@ -339,9 +389,13 @@ export async function executeAutonomousAgenticLoop(input: {
   agentDisplayName?: string;
   buildPhase?: string | null;
   featureBuildId?: string | null;
+  /** The turn's coworker mode, forwarded so delegation tools never widen it (BI-FAD98137). */
+  coworkerMode?: "advise" | "act";
   modelRequirements?: Record<string, unknown>;
   apiTokenId?: string | null;
   tokenScope?: "read" | "write" | "admin";
+  /** Grant scopes of the submitting MCP token (BI-F8C661D0). */
+  tokenGrantScopes?: string[];
   /**
    * Governed Hermes learning Slice 1: when the user message invokes a specific
    * coworker skill (via the canonical `Use the <id> skill.` marker), the
@@ -376,6 +430,10 @@ export async function executeAutonomousAgenticLoop(input: {
   /** BI-80532D5C — divert side-effecting non-artifact tool calls to proposals
    *  (propose boundary). Forwarded verbatim to runAgenticLoop. */
   proposeSideEffects?: boolean;
+  /** EP-WORK-POSTURE 8.2 — what the Workroom resolved for this turn (see
+   *  agentic-loop.ts param doc). Unset for callers that predate the room
+   *  resolver so their authority is unchanged. */
+  roomTurn?: RoomTurnAuthority | null;
   onProgress?: (event: AgentEvent) => void;
 }) {
   const { runAgenticLoop } = await import("@/lib/tak/agentic-loop");
@@ -487,18 +545,29 @@ export async function executeAutonomousAgenticLoop(input: {
         agentId: input.agentId,
         threadId: input.threadId,
         taskRunId: input.taskRunId,
+        taskExecutionFence: input.taskExecutionFence,
         apiTokenId: input.apiTokenId,
         tokenScope: input.tokenScope,
+        tokenGrantScopes: input.tokenGrantScopes,
         taskType: input.taskType,
         effortWarrant: input.effortWarrant,
         terminalToolPolicy: input.terminalToolPolicy,
         agentDisplayName: input.agentDisplayName,
         buildPhase: input.buildPhase,
         featureBuildId: input.featureBuildId,
+        coworkerMode: input.coworkerMode,
         activeSkillId: input.activeSkillId ?? null,
         agentMessageId: input.agentMessageId ?? null,
         interactionMode: input.interactionMode,
         proposeSideEffects: input.proposeSideEffects ?? false,
+        ...(input.roomTurn
+          ? {
+              workroomId: input.roomTurn.workroomId,
+              roomAuthority: toRoomAuthorityContext(input.roomTurn),
+              externalAccessEnabled: input.roomTurn.externalAccess.enabled,
+              workroomPriority: input.roomTurn.priority,
+            }
+          : {}),
         allowToolFreeInference: surfaceGuidanceOnly,
         ...(input.modelRequirements ? { modelRequirements: input.modelRequirements } : {}),
         onProgress: input.onProgress,
@@ -634,6 +703,7 @@ export async function executeAutonomousWorkTool(input: {
   agentId: string;
   threadId: string;
   taskRunId: string;
+  taskExecutionFence?: import("@/lib/shared/task-execution-fence").TaskExecutionFence | null;
   apiTokenId?: string | null;
   tokenScope?: "read" | "write" | "admin";
   externalAccessEnabled?: boolean;
@@ -651,6 +721,7 @@ export async function executeAutonomousWorkTool(input: {
       agentId: input.agentId,
       threadId: input.threadId,
       taskRunId: input.taskRunId,
+      taskExecutionFence: input.taskExecutionFence,
       apiTokenId: input.apiTokenId ?? undefined,
       tokenScope: input.tokenScope,
       externalAccessEnabled: input.externalAccessEnabled,

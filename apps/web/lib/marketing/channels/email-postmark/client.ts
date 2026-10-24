@@ -119,6 +119,21 @@ export function verifyInboundSignature(input: {
 
 // ─── Inbound payload parsing ────────────────────────────────────────────────
 
+/**
+ * The header names the Mailroom's noise stage and the threading logic read —
+ * the same closed set the IMAP adapter lifts (MailHeaderSubset). Keeping the
+ * exposed map keyed from this literal tuple, rather than from whatever names a
+ * sender sends, is what keeps a remote value from ever naming a property.
+ */
+const READ_HEADERS = [
+  "auto-submitted",
+  "list-id",
+  "list-unsubscribe",
+  "precedence",
+  "x-auto-response-suppress",
+  "content-type",
+] as const;
+
 export type ParsedInboundEmail = {
   externalMessageId: string | null;
   externalThreadId: string;
@@ -129,6 +144,19 @@ export type ParsedInboundEmail = {
   textBody: string;
   htmlBody: string | null;
   receivedAt: Date;
+  /**
+   * The headers the platform reads, keyed lowercase (READ_HEADERS).
+   *
+   * BI-D2ED96B1 (found by live acceptance 2026-09-10): the Mailroom's noise
+   * stage judges `auto-submitted`, `list-id`, `list-unsubscribe` and
+   * `precedence` (RFC 3834 / RFC 2369). The inbound route used to hand intake
+   * an empty header map, so on the Postmark path that whole rules-first stage
+   * was dead and a `Precedence: bulk` newsletter was routed into a business
+   * queue with an acknowledge-by time. Parsing them ONCE here keeps the
+   * Postmark path at parity with the IMAP adapter, which reads exactly these
+   * names from the parsed message (MailHeaderSubset).
+   */
+  headers: Record<string, string>;
   metadata: Record<string, unknown>;
 };
 
@@ -156,8 +184,22 @@ export function parseInboundPayload(raw: unknown): ParsedInboundEmail | null {
 
   // Use the In-Reply-To / References header for thread continuity when
   // available; fall back to the message id itself for a new conversation.
-  const headers = Array.isArray(p.Headers) ? p.Headers : [];
-  const inReplyTo = headers.find((h) => h.Name === "In-Reply-To")?.Value ?? null;
+  // Fold the sender's headers into a Map first. A Map cannot be prototype-
+  // polluted, and nothing below ever uses a sender-controlled string as a
+  // property name — the exposed object is keyed only from READ_HEADERS.
+  const folded = new Map<string, string>();
+  for (const entry of Array.isArray(p.Headers) ? p.Headers : []) {
+    if (typeof entry?.Name !== "string" || typeof entry.Value !== "string") continue;
+    folded.set(entry.Name.trim().toLowerCase(), entry.Value);
+  }
+  const headers: Record<string, string> = {};
+  for (const name of READ_HEADERS) {
+    const value = folded.get(name);
+    if (value) headers[name] = value;
+  }
+  // Header names are case-insensitive (RFC 5322 §3.6.4), so read the folded map
+  // rather than matching the exact spelling a sender happened to use.
+  const inReplyTo = folded.get("in-reply-to") ?? null;
   const externalThreadId = inReplyTo ?? messageId;
 
   const textBody =
@@ -177,6 +219,7 @@ export function parseInboundPayload(raw: unknown): ParsedInboundEmail | null {
     textBody,
     htmlBody: typeof p.HtmlBody === "string" ? p.HtmlBody : null,
     receivedAt: p.Date ? new Date(p.Date) : new Date(),
+    headers,
     metadata: {
       messageStream: p.MessageStream ?? "inbound",
       headerCount: headers.length,

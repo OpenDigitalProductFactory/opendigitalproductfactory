@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   persistRouteDecision: vi.fn(),
   inferContract: vi.fn(),
   getLocalOnlyInference: vi.fn(),
+  getLocalOnlyInferenceFresh: vi.fn(),
   resolveDispatchPosture: vi.fn(),
   logTokenUsage: vi.fn(),
   admitDurableAsyncOperation: vi.fn(),
@@ -42,6 +43,7 @@ vi.mock("@/lib/routing/fallback", () => ({
 
 vi.mock("@/lib/inference/local-only", () => ({
   getLocalOnlyInference: mocks.getLocalOnlyInference,
+  getLocalOnlyInferenceFresh: mocks.getLocalOnlyInferenceFresh,
 }));
 
 vi.mock("@/lib/golden-triangle/dispatch", () => ({
@@ -59,9 +61,30 @@ vi.mock("@/lib/ai-inference", () => ({
 import { routeAndCall } from "./routed-inference";
 
 describe("routeAndCall background starts", () => {
+  it("never dispatches or queues work when the location policy cannot be read", async () => {
+    mocks.getLocalOnlyInference.mockRejectedValueOnce(new Error("policy unavailable"));
+    await expect(routeAndCall([{ role: "user", content: "Help with this code." }], "Coding task", "internal")).rejects.toThrow("policy unavailable");
+    expect(mocks.routeEndpointV2).not.toHaveBeenCalled();
+    expect(mocks.callWithFallbackChain).not.toHaveBeenCalled();
+    expect(mocks.admitDurableAsyncOperation).not.toHaveBeenCalled();
+  });
+  it("does not strip a required writer when every endpoint lacks tool support", async () => {
+    const baseContract = await mocks.inferContract("tool-action", []);
+    mocks.inferContract.mockResolvedValue({ ...baseContract, interactionMode: "sync", requiresTools: true });
+    const decision = await mocks.routeEndpointV2();
+    mocks.routeEndpointV2.mockClear();
+    mocks.routeEndpointV2.mockResolvedValue({ ...decision, selectedEndpoint: null, candidates: [{ excluded: true, excludedReason: "Missing required capability: toolUse" }], excludedCount: 1, excludedReasons: ["Missing required capability: toolUse"] });
+    await expect(routeAndCall([{ role: "user", content: "Record the review." }], "Independent review.", "internal", {
+      toolChoice: "required", terminalWriterToolName: "record_review",
+      tools: [{ type: "function", function: { name: "record_review", parameters: {} } }],
+    })).rejects.toThrow();
+    expect(mocks.routeEndpointV2).toHaveBeenCalledTimes(1);
+    expect(mocks.callWithFallbackChain).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getLocalOnlyInference.mockResolvedValue(false);
+    mocks.getLocalOnlyInferenceFresh.mockResolvedValue(false);
     mocks.resolveDispatchPosture.mockResolvedValue(null);
     mocks.loadPolicyRules.mockResolvedValue([]);
     mocks.loadOverrides.mockResolvedValue([]);
@@ -180,6 +203,7 @@ describe("routeAndCall background starts", () => {
         messages: [{ role: "user", content: "Research this topic." }],
         systemPrompt: "You research.",
         executionPlan: expect.objectContaining({ executionAdapter: "async" }),
+        dispatchScreen: expect.objectContaining({ schemaVersion: 1 }),
       }),
       request: durableAuthority.request,
       actor: durableAuthority.actor,
@@ -200,6 +224,25 @@ describe("routeAndCall background starts", () => {
       downgradeMessage: null,
       downgradeReason: null,
     });
+  });
+
+  it("refuses durable admission when the global local-only switch changes after routing", async () => {
+    mocks.getLocalOnlyInferenceFresh.mockResolvedValueOnce(true);
+
+    await expect(routeAndCall(
+      [{ role: "user", content: "Research this topic." }],
+      "You research.",
+      "internal",
+      {
+        taskType: "research",
+        interactionMode: "background",
+        persistDecision: false,
+        durableAsyncOperation: durableAuthority,
+      },
+    )).rejects.toThrow("ASYNC_OPERATION_DISPATCH_LOCAL_ONLY");
+
+    expect(mocks.admitDurableAsyncOperation).not.toHaveBeenCalled();
+    expect(mocks.callWithFallbackChain).not.toHaveBeenCalled();
   });
 
   it("persists the durable admission before audit settlement and waits before returning accepted", async () => {
@@ -353,5 +396,136 @@ describe("routeAndCall background starts", () => {
 
     expect(mocks.callWithFallbackChain).toHaveBeenCalledOnce();
     expect(mocks.admitDurableAsyncOperation).not.toHaveBeenCalled();
+  });
+
+  it("never lets a durable-authority request fall through to direct background dispatch", async () => {
+    const selected = await mocks.routeEndpointV2();
+    mocks.routeEndpointV2.mockResolvedValueOnce({
+      ...selected,
+      executionPlan: {
+        ...selected.executionPlan,
+        executionAdapter: "chat",
+      },
+    });
+
+    await expect(routeAndCall(
+      [{ role: "user", content: "Research this topic." }],
+      "You research.",
+      "internal",
+      {
+        taskType: "research",
+        interactionMode: "background",
+        persistDecision: false,
+        durableAsyncOperation: durableAuthority,
+      },
+    )).rejects.toThrow("ASYNC_OPERATION_EXECUTION_PLAN_REQUIRED");
+
+    expect(mocks.callWithFallbackChain).not.toHaveBeenCalled();
+    expect(mocks.admitDurableAsyncOperation).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["model", { modelId: "drifted-model" }],
+    ["token budget", { maxTokens: 8_192 }],
+    ["provider policy", { providerSettings: { unsafe: true } }],
+    ["tool policy", { toolPolicy: { toolChoice: "auto" } }],
+    ["response policy", { responsePolicy: { stream: true } }],
+  ])("refuses %s drift before durable admission", async (_label, drift) => {
+    const selected = await mocks.routeEndpointV2();
+    mocks.routeEndpointV2.mockResolvedValueOnce({
+      ...selected,
+      executionPlan: {
+        ...selected.executionPlan,
+        recipeId: "closed-recipe-1",
+        ...drift,
+      },
+    });
+
+    await expect(routeAndCall(
+      [{ role: "user", content: "Research this topic." }],
+      "You research.",
+      "internal",
+      {
+        taskType: "research",
+        interactionMode: "background",
+        persistDecision: false,
+        durableAsyncOperation: {
+          ...durableAuthority,
+          expectedExecution: {
+            providerId: "gemini",
+            contractFamily: "background.research",
+            executionAdapter: "async",
+            explorationMode: "champion",
+            plans: [{
+              recipeId: "closed-recipe-1",
+              modelId: "model-under-test",
+              maxTokens: 0,
+              providerSettings: {},
+              toolPolicy: {},
+              responsePolicy: {},
+            }],
+          },
+        },
+      },
+    )).rejects.toThrow("ASYNC_OPERATION_EXECUTION_PLAN_CONSTRAINT_MISMATCH");
+
+    expect(mocks.admitDurableAsyncOperation).not.toHaveBeenCalled();
+    expect(mocks.callWithFallbackChain).not.toHaveBeenCalled();
+  });
+
+  it("keeps an exact durable execution constraint inert to saved dispatch posture", async () => {
+    mocks.resolveDispatchPosture.mockResolvedValueOnce({
+      effort: "high",
+      routeContext: {
+        budgetClass: "minimize_cost",
+        minimumDimensions: { quality: 4 },
+      },
+    });
+    const selected = await mocks.routeEndpointV2();
+    mocks.routeEndpointV2.mockResolvedValueOnce({
+      ...selected,
+      explorationMode: "champion",
+      executionPlan: {
+        ...selected.executionPlan,
+        recipeId: "closed-recipe-1",
+      },
+    });
+
+    await expect(routeAndCall(
+      [{ role: "user", content: "Research this topic." }],
+      "You research.",
+      "internal",
+      {
+        taskType: "research",
+        interactionMode: "background",
+        persistDecision: false,
+        agentId: "AGT-WITH-SAVED-POSTURE",
+        durableAsyncOperation: {
+          ...durableAuthority,
+          expectedExecution: {
+            providerId: "gemini",
+            contractFamily: "background.research",
+            executionAdapter: "async",
+            explorationMode: "champion",
+            plans: [{
+              recipeId: "closed-recipe-1",
+              modelId: "model-under-test",
+              maxTokens: 0,
+              providerSettings: {},
+              toolPolicy: {},
+              responsePolicy: {},
+            }],
+          },
+        },
+      },
+    )).resolves.toMatchObject({ asyncOperationId: "async-op-row-1" });
+
+    expect(mocks.resolveDispatchPosture).not.toHaveBeenCalled();
+    expect(mocks.admitDurableAsyncOperation).toHaveBeenCalledOnce();
+    expect(mocks.admitDurableAsyncOperation).toHaveBeenCalledWith(expect.objectContaining({
+      screenedRequestContext: expect.objectContaining({
+        executionPlan: expect.objectContaining({ providerSettings: {} }),
+      }),
+    }));
   });
 });

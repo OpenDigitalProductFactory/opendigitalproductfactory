@@ -24,6 +24,8 @@ type Props = {
   className?: string;
   title?: string;
   ariaDescribedBy?: string;
+  /** Optional advice remains confirmed without becoming the surface's primary action. */
+  primaryAction?: boolean;
   confirmation?: {
     title: string;
     contextSummary: string;
@@ -43,6 +45,7 @@ export function AskCoworkerButton({
   title,
   ariaDescribedBy,
   confirmation,
+  primaryAction,
   children,
 }: Props) {
   const [confirmationOpen, setConfirmationOpen] = useState(false);
@@ -70,7 +73,7 @@ export function AskCoworkerButton({
       aria-describedby={ariaDescribedBy}
       aria-expanded={confirmation ? confirmationOpen : undefined}
       aria-controls={confirmation ? confirmationId : undefined}
-      data-dpf-primary-action={confirmation ? "true" : undefined}
+      data-dpf-primary-action={confirmation && primaryAction !== false ? "true" : undefined}
     >
       {children ?? label}
     </button>

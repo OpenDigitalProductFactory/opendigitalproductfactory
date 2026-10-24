@@ -164,8 +164,16 @@ export function suggestDisposition(inputs: SuggestionInputs): DispositionSuggest
  * when explicitly "shareable". Anything else (incl. the default "private" and
  * any unknown value) is blocked.
  */
-export function mayShareToPublicHive(disposition: string | null | undefined): boolean {
-  return disposition === "shareable";
+export function mayShareToPublicHive(
+  disposition: string | null | undefined,
+  context: { dispositionSource?: string | null; installationPurpose?: string | null } = {},
+): boolean {
+  if (disposition === "shareable") return true;
+  // Founder decision (2026-09-25): an installation whose declared purpose is
+  // developing the platform itself ("evolve-dpf") shares by default — its work
+  // IS the public project. A person's explicit "private" (source "operator")
+  // still wins, and private-path stripping still runs on the outbound diff.
+  return context.installationPurpose === "evolve-dpf" && context.dispositionSource !== "operator";
 }
 
 /** Plain-language refusal message when a private change is blocked at egress. */

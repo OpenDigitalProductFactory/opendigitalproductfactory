@@ -15,12 +15,14 @@
 // Studio injects prospective constraints at prompt-assembly time, before any
 // code exists (the plan's fileStructure is the intended diff).
 
-import { execFileSync } from "node:child_process";
+import { parseArgs as utilParseArgs } from "node:util";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-import { buildGateContext, formatGateContextMarkdown } from "./lib/gate-context.mjs";
+import { buildGateContext, buildTaskBrief, formatGateContextMarkdown } from "./lib/gate-context.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
+import { gitText } from "./lib/git.mjs";
+import { scriptArgv } from "./lib/script-argv.mjs";
 
 // Same conservative ref/path pinning as the gate checkers
 // (js/indirect-command-line-injection): execFile arg arrays, no shell, and a
@@ -35,9 +37,7 @@ function assertSafeRef(ref) {
   return ref;
 }
 
-function git(args, cwd) {
-  return execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
-}
+const git = (args, cwd) => gitText(args, { cwd: cwd ?? process.cwd(), trim: false });
 
 function safePath(path) {
   const normalized = String(path ?? "").trim().replace(/\\/g, "/");
@@ -96,9 +96,19 @@ export function parseStdinChanges(text) {
 }
 
 export async function main() {
-  const args = process.argv.slice(2);
-  const baseIndex = args.indexOf("--base");
-  const base = baseIndex >= 0 ? args[baseIndex + 1] : "origin/main";
+  const args = scriptArgv();
+  // strict: false keeps the old tolerance: flags this script does not read are ignored.
+  const { values } = utilParseArgs({ args, strict: false, allowPositionals: true, options: { base: { type: "string" }, situation: { type: "string" } } });
+  const base = values.base === undefined ? "origin/main" : typeof values.base === "string" ? values.base : undefined;
+
+  // Route before Git, registries or live coordination: recovery may need none of them.
+  if (values.situation !== undefined) {
+    const brief = buildTaskBrief(values.situation);
+    process.stdout.write(args.includes("--json")
+      ? `${JSON.stringify(brief, null, 2)}\n`
+      : `${brief.route}: ${brief.nextAction}\nRead: ${brief.reference}\nEvidence: ${brief.evidence}\nStop: ${brief.stopCondition}\n`);
+    return;
+  }
 
   let changedFiles;
   let addedLinesByFile = new Map();

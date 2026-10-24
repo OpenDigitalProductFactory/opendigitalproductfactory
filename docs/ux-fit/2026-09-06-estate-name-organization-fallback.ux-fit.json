@@ -1,0 +1,19 @@
+{
+  "version": "1",
+  "decidedOption": "empty-field-hint-names-fallback",
+  "decisionInteractionId": "DI-0B1E2E643EB3",
+  "scope": {
+    "files": [
+      "apps/web/components/workspace/EstateNameField.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "empty-field-hint-names-fallback",
+      "prefill-field-with-organization-name",
+      "silent-fallback-no-copy-change"
+    ],
+    "note": "BI-CA54ACC8 (EP-ZERO-CONFIG-FEDERATION). The estate name gains a lowest tier that falls back to the Organization row named at setup. On /ops/installation the Operator name field stays empty when that tier is in force and its hint reads 'Until you name it, the organization from setup applies: <name>.' so what the operator types stays a real declaration. The kernel scored this shape highest (composite 8.65, margin 3.11, confidence high) against pre-filling the field and against a silent fallback."
+  }
+}

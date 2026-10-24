@@ -47,7 +47,20 @@ describe("recordTriageDecision", () => {
     expect(data.routeContext).toBe(TRIAGE_LEDGER_ROUTE_CONTEXT);
     // The drain applies the decision, so it arbitrates rather than advises.
     expect(data.outcomeType).toBe("arbitrate");
+    expect(data.escalationRoute).toBe("decided");
+    expect(data.escalationReason).toBe("decided");
     expect(data.question).toContain("BI-XYZ");
+    // BI-01F8F06D: the item must be a COLUMN, not only prose in the question.
+    // It lived only in that prose and in the payload blob, so no outcome could
+    // ever be attributed back to the item the decision governed.
+    // The Prisma member, not the mapped DB value: a where/create clause takes
+    // `backlog_item` and Prisma writes `backlog-item` to Postgres.
+    expect(data.subjectKind).toBe("backlog_item");
+    expect(data.subjectRef).toBe("BI-XYZ");
+    // The drain is an hourly cron with nobody watching. Marking it keeps it out
+    // of any agreement denominator by construction rather than by a filter
+    // someone has to remember to apply.
+    expect(data.autonomous).toBe(true);
   });
 
   it("records the mutation it is about to authorise, so the row is auditable against the item", async () => {

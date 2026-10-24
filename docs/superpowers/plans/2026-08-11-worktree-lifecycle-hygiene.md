@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Worktree lifecycle hygiene — liveness-before-reap, root-clone freshness, abandoned-merge quarantine
 
 **Date:** 2026-08-11
@@ -116,3 +120,13 @@ All new behavior fails open. The heartbeat and root-freshness hooks have skip en
 to the reaper's default posture: it is still dry-run/observe unless
 `DPF_WORKTREE_JANITOR_AUTO_REAP=1`; this plan only makes auto-reap *safer* by adding
 the liveness gate and the abandoned-merge quarantine on top of it.
+
+## Addendum (2026-10-13): one marker, several sessions (BI-296C9E24)
+
+The marker assumed one session per worktree. It held a single record, the last session to beat overwrote it, and SessionEnd deleted it whoever wrote it. The SessionEnd reap in `worktree-session-hygiene.mjs` also hard-coded `hasLiveSession: false`, reasoning that the ending session's own liveness is irrelevant. On 2026-10-13, four short sessions ended in a desktop session's merged, clean worktree, and their overlapping reaps deleted 138 tracked files under the session that was still working. The removals were cut off, so the partial-reap restore never ran.
+
+Now:
+- The marker keeps one entry per session under `sessions`. Its top-level fields mirror the freshest entry, so the fleet janitor's readers are unchanged.
+- SessionEnd removes only its own entry.
+- The SessionEnd reap refuses while another session's entry is fresh (`liveOtherSessionIds`). An entry with no session id counts as another session.
+- The SessionEnd reap takes a single-flight `dpf-reap.lock` in the worktree's own git dir. A lock older than 10 minutes is treated as stale.

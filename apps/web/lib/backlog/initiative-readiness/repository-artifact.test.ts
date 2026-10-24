@@ -74,6 +74,78 @@ function providerFetch(signOff = "Signed-off-by: Author <author@example.com>") {
 }
 
 describe("resolveRepositoryArtifact", () => {
+  it.each(["subject", "locator", "digest", "unbound"])("refuses invalid canonical plan proof: %s", async (drift) => {
+    const headSha = "c".repeat(40);
+    const proof = { itemId: "BI-TEST", baselineId: "baseline-1", scopeOwnerItemId: "BI-PARENT", artifactRef: locator,
+      digest: `sha256:${createHash("sha256").update(bytes).digest("hex")}` };
+    if (drift === "subject") proof.itemId = "BI-FOREIGN";
+    if (drift === "locator") proof.artifactRef = { ...locator, path: "docs/superpowers/plans/foreign.md" };
+    if (drift === "digest") proof.digest = `sha256:${"d".repeat(64)}`;
+    const fetchImpl = providerFetch();
+    expect(await resolveRepositoryArtifact({ locator, subject: { kind: "backlog-item", id: "BI-TEST" },
+      workroomRef: drift === "unbound" ? undefined : { kind: "workroom-head", workroomId: "WC-TEST0001",
+        repositoryFullName: locator.repositoryFullName, branchName: "feat/test", headSha }, canonicalPlanProof: proof,
+      db: db({ capsules: [capsule({ headSha })] }) as never, fetchImpl: fetchImpl as typeof fetch,
+    })).toMatchObject({ ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS" });
+    if (drift !== "digest") expect(fetchImpl).not.toHaveBeenCalled();
+  });
+  it("retains the canonical coverage plan despite a different current file blob, without claiming byte equivalence", async () => {
+    const headSha = "c".repeat(40);
+    const fetchImpl = vi.fn(async (url: string | URL | Request) => String(url).includes(`?ref=${headSha}`)
+      ? new Response(JSON.stringify({ type: "file", sha: "d".repeat(40), encoding: "base64",
+        content: Buffer.from("---\nstatus: active\n---\n" + bytes).toString("base64") }), { status: 200 })
+      : providerFetch()(url));
+    const result = await resolveRepositoryArtifact({ locator, subject: { kind: "backlog-item", id: "BI-TEST" },
+      workroomRef: { kind: "workroom-head", workroomId: "WC-TEST0001", repositoryFullName: locator.repositoryFullName,
+        branchName: "feat/test", headSha },
+      canonicalPlanProof: { itemId: "BI-TEST", baselineId: "baseline-1", scopeOwnerItemId: "BI-PARENT", artifactRef: locator,
+        digest: `sha256:${createHash("sha256").update(bytes).digest("hex")}` },
+      db: db({ capsules: [capsule({ headSha })] }) as never, fetchImpl: fetchImpl as typeof fetch,
+    } as Parameters<typeof resolveRepositoryArtifact>[0]);
+    expect(result).toMatchObject({ ok: true, artifact: { bytes } });
+    expect(fetchImpl).not.toHaveBeenCalledWith(expect.stringContaining(`?ref=${headSha}`), expect.anything());
+    expect(fetchImpl).toHaveBeenCalledWith(expect.stringContaining(`?ref=${locator.commitSha}`), expect.anything());
+  });
+  it.each(["missing", "branch", "head", "repository", "duplicate", "author", "sign-off", "changed-blob"])("refuses a bound historical plan after %s drift", async (drift) => {
+    const headSha = "c".repeat(40);
+    const room = capsule({ headSha });
+    const rows = drift === "missing" ? [] : drift === "duplicate" ? [room, room] : [room];
+    const workroomRef = { kind: "workroom-head" as const, workroomId: room.capsuleId,
+      repositoryFullName: locator.repositoryFullName, branchName: "feat/test", headSha };
+    if (drift === "branch") workroomRef.branchName = "feat/foreign";
+    if (drift === "head") workroomRef.headSha = "d".repeat(40);
+    if (drift === "repository") workroomRef.repositoryFullName = "foreign/repo";
+    if (drift === "author") room.createdByPrincipalId = "foreign-author";
+    const store = db({ capsules: rows });
+    const fetchImpl = drift === "changed-blob" ? vi.fn(async () => new Response(JSON.stringify({
+      type: "file", sha: "d".repeat(40), encoding: "base64", content: bytes.toString("base64"),
+    }), { status: 200 })) : providerFetch(drift === "sign-off" ? "Unsigned" : undefined);
+    const result = await resolveRepositoryArtifact({ locator, subject: { kind: "backlog-item", id: "BI-TEST" },
+      workroomRef, db: store as never, fetchImpl: fetchImpl as typeof fetch });
+    expect(result).toMatchObject({ ok: false });
+    expect(store.workroom.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({
+      backlogItemId: "BI-TEST", repositoryFullName: locator.repositoryFullName, archivedAt: null,
+      status: { notIn: ["abandoned", "cancelled"] },
+    }) }));
+    if (["missing", "branch", "head", "repository", "duplicate"].includes(drift)) expect(fetchImpl).not.toHaveBeenCalled();
+  });
+  it("resolves the unchanged historical plan through its exact current server-bound workroom", async () => {
+    const headSha = "45eb029a53ffd593f08be48eb4a061488aaa735f";
+    const original = { ...locator, commitSha: "99986af2a1fb1ff8d041ca7d9080ea6d02a4f963" };
+    const store = db({ capsules: [capsule({ headSha })] });
+    const fetchImpl = providerFetch();
+    const result = await resolveRepositoryArtifact({
+      locator: original, subject: { kind: "backlog-item", id: "BI-7AA4EB6B" },
+      workroomRef: { kind: "workroom-head", workroomId: "WC-TEST0001",
+        repositoryFullName: locator.repositoryFullName, branchName: "feat/test", headSha },
+      db: store as never, fetchImpl: fetchImpl as typeof fetch,
+    } as Parameters<typeof resolveRepositoryArtifact>[0]);
+    expect(result).toMatchObject({ ok: true, artifact: { bytes, authorPrincipalId: "principal-author" } });
+    expect(fetchImpl).toHaveBeenCalledWith(expect.stringContaining(`/commits/${original.commitSha}`), expect.anything());
+    expect(fetchImpl).toHaveBeenCalledWith(expect.stringContaining(`?ref=${headSha}`), expect.anything());
+    expect(fetchImpl).toHaveBeenCalledWith(expect.stringContaining(`?ref=${original.commitSha}`), expect.anything());
+    expect(original.commitSha).toBe("99986af2a1fb1ff8d041ca7d9080ea6d02a4f963");
+  });
   it("uses and closes the isolated production transport for immutable blob reads", async () => {
     const frameworkFetch = vi.fn().mockRejectedValue(new Error("framework context unavailable"));
     vi.stubGlobal("fetch", frameworkFetch);
@@ -90,13 +162,26 @@ describe("resolveRepositoryArtifact", () => {
         transportFactory: () => ({ fetch: isolatedFetch as unknown as typeof fetch, close }),
       } as never);
 
-      expect(result).toEqual({ ok: true, data: bytes });
+      expect(result).toEqual({ ok: true, data: bytes, blobId: locator.providerBlobId });
       expect(isolatedFetch).toHaveBeenCalledTimes(1);
       expect(frameworkFetch).not.toHaveBeenCalled();
       expect(close).toHaveBeenCalledTimes(1);
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+
+  it("serves a commit+path locator without an expected blob id and reports the blob the provider returned", async () => {
+    const isolatedFetch = providerFetch();
+    const result = await readRepositoryProviderBlob({
+      repositoryFullName: locator.repositoryFullName,
+      commitSha: locator.commitSha,
+      path: locator.path,
+      expectedBlobId: null,
+      db: db() as never,
+      transportFactory: () => ({ fetch: isolatedFetch as unknown as typeof fetch, close: vi.fn().mockResolvedValue(undefined) }),
+    } as never);
+    expect(result).toEqual({ ok: true, data: bytes, blobId: locator.providerBlobId });
   });
 
   it("maps production transport construction failure to an immutable-source refusal", async () => {
@@ -167,8 +252,39 @@ describe("resolveRepositoryArtifact", () => {
       expectedBlobId: locator.providerBlobId,
       db: db() as never,
       fetchImpl: fetchImpl as typeof fetch,
-    })).resolves.toEqual({ ok: true, data: bytes });
+    })).resolves.toEqual({ ok: true, data: bytes, blobId: locator.providerBlobId });
     expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(["UND_ERR_CONNECT_TIMEOUT", "ENOTFOUND", "ECONNRESET"])("preserves safe nested transport code %s without exception text", async (code) => {
+    const fetchImpl = vi.fn().mockRejectedValue(new Error("private request details", {
+      cause: Object.assign(new Error("private endpoint and credentials"), { code }),
+    }));
+    const result = await readRepositoryProviderBlob({
+      repositoryFullName: locator.repositoryFullName,
+      commitSha: locator.commitSha,
+      path: locator.path,
+      expectedBlobId: locator.providerBlobId,
+      db: db() as never,
+      fetchImpl: fetchImpl as typeof fetch,
+    });
+    expect(result).toMatchObject({ ok: false, code: "IMMUTABLE_SOURCE_UNAVAILABLE" });
+    if (result.ok) throw new Error("expected provider refusal");
+    expect(result.error).toContain(code);
+    expect(result.error).toContain("2 attempts");
+    expect(result.error).not.toContain("private");
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not expose an arbitrary exception code", async () => {
+    const fetchImpl = vi.fn().mockRejectedValue({ code: "PRIVATE_SECRET_VALUE", cause: null });
+    const result = await readRepositoryProviderBlob({
+      repositoryFullName: locator.repositoryFullName, commitSha: locator.commitSha,
+      path: locator.path, expectedBlobId: locator.providerBlobId,
+      db: db() as never, fetchImpl: fetchImpl as typeof fetch,
+    });
+    expect(result).toMatchObject({ ok: false, code: "IMMUTABLE_SOURCE_UNAVAILABLE" });
+    expect(JSON.stringify(result)).not.toContain("PRIVATE_SECRET_VALUE");
   });
 
   it.each([408, 429, 500, 502, 503, 504])("retries retryable blob HTTP %i once", async (status) => {
@@ -188,7 +304,7 @@ describe("resolveRepositoryArtifact", () => {
       expectedBlobId: locator.providerBlobId,
       db: db() as never,
       fetchImpl: transient as typeof fetch,
-    })).resolves.toEqual({ ok: true, data: bytes });
+    })).resolves.toEqual({ ok: true, data: bytes, blobId: locator.providerBlobId });
     expect(transient).toHaveBeenCalledTimes(2);
     expect(cancel).toHaveBeenCalledTimes(1);
   });
@@ -241,7 +357,7 @@ describe("resolveRepositoryArtifact", () => {
       fetchImpl: fetchImpl as typeof fetch,
     });
 
-    expect(result).toEqual({ ok: true, data: bytes });
+    expect(result).toEqual({ ok: true, data: bytes, blobId: locator.providerBlobId });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     expect(fetchImpl).toHaveBeenCalledWith(
       expect.stringContaining(`/contents/docs/superpowers/plans/test.md?ref=${locator.commitSha}`),
@@ -493,6 +609,22 @@ describe("resolveRepositoryArtifact", () => {
     expect(result.error).toContain("c".repeat(40));
     expect(result.error).toContain("adopt_worktree");
     expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  // BI-77C600B2: the plain claim this used to advise is refused at the same
+  // research gate the receipt is meant to satisfy; a design-intent claim binds
+  // the workroom without owing research.
+  it("names the design-intent claim when no live workroom is bound at all", async () => {
+    const result = await resolveRepositoryArtifact({
+      locator,
+      subject: { kind: "backlog-item", id: "BI-TEST" },
+      db: db({ capsules: [] }) as never,
+      fetchImpl: vi.fn() as typeof fetch,
+    });
+
+    expect(result).toMatchObject({ ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS" });
+    if (!("error" in result)) throw new Error("expected an error result");
+    expect(result.error).toContain("workIntent \"design\"");
   });
 
   it("names the unset head when the capsule was claimed but never synced", async () => {

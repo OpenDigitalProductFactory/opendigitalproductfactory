@@ -20,6 +20,7 @@ export type AttentionSource =
   | "approval-outbound" // OutboundDraft pending-review (marketing)
   | "approval-bill" // Bill awaiting_approval (AP — carries a dueDate)
   | "approval-expense" // ExpenseClaim submitted
+  | "approval-leave" // LeaveRequest pending — the manager's own decision (BI-7BCC87BB)
   | "compliance-submission" // RegulatorySubmission draft (carries a dueDate)
   | "research-proposal" // ResearchProposal pending
   | "coworker-memory" // Newly distilled CoworkerMemoryNote rows for digest visibility
@@ -32,7 +33,12 @@ export type AttentionSource =
   | "business-journey" // PortfolioQualityIssue issueType=journey_failure — a critical business journey failed its watchdog run (BI-E105303D)
   | "compliance-source-freshness" // governed AI-provider compliance evidence lapsing or lapsed (BI-68D44727)
   | "coworker-envelope" // CoworkerActionEnvelope status=proposed, bound to the reading user (BI-7CB2CCDE)
-  | "skill-proposal"; // ImprovementProposal category=skill, status=proposed — a skill change awaiting review (BI-2F9EE2E9)
+  | "skill-proposal" // ImprovementProposal category=skill, status=proposed — a skill change awaiting review (BI-2F9EE2E9)
+  | "workroom-stall" // a Workroom whose drive has refused consecutive wakes — stalled, or unowned (BI-03E94B5B)
+  | "workroom-rebind" // a Workroom pinned to a superseded work-shape version (BI-CB5C0DCE)
+  | "orphaned-approval" // coworker approvals going to a delegate who is not using the portal (BI-61DE8177)
+  | "contribution-setup" // contribution with the DPF project is undecided, or chosen with no GitHub account connected (BI-D3342020)
+  | "mailroom-item"; // correspondence the Mailroom routed that nobody acknowledged inside its window, or that is immediate (BI-12B0AE91)
 
 /** Risk vocabulary aligned with the paused-work plan (a2aMetadata.riskClass). */
 export type AttentionRiskClass = "read" | "bounded-write" | "high-risk" | "unknown";
@@ -66,7 +72,10 @@ export type ResidueReason =
   | "needs-credential" // missing credential / authority, NOT judgment (TaskRun auth-required)
   | "policy-approval" // an agent action awaits approval (AgentActionProposal)
   | "new-memory-note" // a coworker's role-local memory gained a new distilled note
-  | "no-self-heal"; // a platform service is degraded and has no automated repair path (health_alert)
+  | "no-self-heal" // a platform service is degraded and has no automated repair path (health_alert)
+  | "room-stalled" // a Workroom's drive keeps refusing to advance — typically no accountable owner
+  | "awaiting-rebind" // a Workroom runs a superseded work-shape version; moving it is its owner's decision (BI-CB5C0DCE)
+  | "approver-absent"; // approvals route to one person, and that person is not using the portal
 
 /** How much the human must do. The human_cognitive_load cost axis. */
 export type DecideEffort = "one-tap" | "review" | "judgment";
@@ -185,12 +194,23 @@ export type AttentionEnvelopeApproval = {
   /** True only while the envelope is `proposed` AND unexpired at the projected
    *  moment. False hides every decision control. */
   actionable: boolean;
+  /** The window closed with nobody answering (BI-0012E6CA). The card offers
+   *  "Ask again" instead of decision controls. */
+  expiredUnanswered?: boolean;
   reviewBinding?: AttentionEnvelopeReviewBinding;
   /** Decision-first owner summary (BI-F95B0795). Always present; unknown shapes fail closed. */
   decision: EnvelopeDecisionSummary;
   /** The authenticated envelope state-machine routes (lib/coworker/envelope-routes). */
   approveHref: string;
   declineHref: string;
+  /** POST target that raises an expired, unanswered request again. */
+  reraiseHref?: string;
+  /**
+   * BI-7BCC87BB (AC-OVERRIDE): set only when an admin who is not the delegate
+   * opened this request's exact link. The card then offers "Decide on their
+   * behalf" with a required reason instead of Authorize / Decline.
+   */
+  onBehalf?: { ownerLabel: string };
 };
 
 export type AttentionItem = {
@@ -228,6 +248,10 @@ export type AttentionItem = {
   /** The governed coworker action awaiting this reader's decision. Set only by
    * the `coworker-envelope` source (BI-7CB2CCDE). */
   envelope?: AttentionEnvelopeApproval;
+  /** A legacy proposal whose approval the reference monitor refused: why it
+   * can no longer run as proposed. Set only by the `agent-proposal` source
+   * (convert-and-run, BI-04E5A511); the card then offers Decline only. */
+  noLongerRunnable?: string;
 };
 
 /**

@@ -7,10 +7,12 @@ import { revalidatePath } from "next/cache";
 import { sendEmail, composeApprovalEmail } from "@/lib/email";
 import { getOrgIdentity } from "@/lib/org-identity";
 import { resolveAppBaseUrl } from "@/lib/app-url";
+import { tokenLinkUrl } from "@/lib/routes";
 import { recordPayment } from "@/lib/actions/finance";
 import { postBillFinalized } from "@/lib/finance/ledger-service";
 import { getBillPoMatch } from "@/lib/finance/po-match-service";
 import { PAYMENT_METHODS } from "@/lib/finance/finance-validation";
+import { generatePaymentRef } from "@/lib/finance/invoice-payment-refs";
 import type { CreateSupplierInput, CreateBillInput, CreatePOInput, CreatePaymentRunInput } from "@/lib/ap-validation";
 
 // ─── Auth guard ───────────────────────────────────────────────────────────────
@@ -354,7 +356,7 @@ export async function submitBillForApproval(billId: string): Promise<void> {
       );
       continue;
     }
-    const approveUrl = `${baseUrl}/finance/ap/approvals/${token}`;
+    const approveUrl = tokenLinkUrl(baseUrl, "billApproval", token);
     const emailPayload = composeApprovalEmail({
       to: rule.approver.email,
       billRef: bill.billRef,
@@ -613,15 +615,6 @@ export async function convertPOToBill(poId: string) {
   revalidatePath("/finance/ap/bills");
 
   return bill;
-}
-
-// ─── Payment ref generator ────────────────────────────────────────────────────
-
-async function generatePaymentRef(): Promise<string> {
-  const year = new Date().getFullYear();
-  const count = await prisma.payment.count();
-  const seq = String(count + 1).padStart(4, "0");
-  return `PAY-${year}-${seq}`;
 }
 
 // ─── createPaymentRun ─────────────────────────────────────────────────────────

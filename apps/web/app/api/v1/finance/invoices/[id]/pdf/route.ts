@@ -5,7 +5,13 @@ import { authenticateRequest } from "@/lib/api/auth-middleware";
 import { ApiError, apiError } from "@/lib/api/error";
 import { getInvoice } from "@/lib/actions/finance";
 import { getOrgIdentity } from "@/lib/org-identity";
-import { generateInvoicePdf, getInvoicePdfFilename } from "@/lib/invoice-pdf";
+import {
+  generateInvoicePdf,
+  getInvoicePdfFilename,
+  InvoicePdfError,
+  invoicePdfFailureMessage,
+  invoicePdfFailureStatus,
+} from "@/lib/invoice-pdf";
 
 export async function GET(
   request: Request,
@@ -29,6 +35,10 @@ export async function GET(
     });
   } catch (e) {
     if (e instanceof ApiError) return e.toResponse();
+    if (e instanceof InvoicePdfError) {
+      console.error(`[invoice-pdf] ${e.message}`);
+      return apiError("INVOICE_PDF_FAILED", invoicePdfFailureMessage(e.reason), invoicePdfFailureStatus(e.reason)).toResponse();
+    }
     return NextResponse.json(
       { code: "INTERNAL_ERROR", message: "An unexpected error occurred" },
       { status: 500 },

@@ -28,10 +28,13 @@
 //
 // Env: OSV_BASE_URL (default https://api.osv.dev) — point at an offline mirror.
 
+import { parseArgs as utilParseArgs } from "node:util";
+import { scriptArgv } from "../lib/script-argv.mjs";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { generatePlatformSbom } from "./generate-platform-sbom.mjs";
+import { LOCKFILE_ROOTS } from "./lockfile-roots.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const OSV_BASE = process.env.OSV_BASE_URL ?? "https://api.osv.dev";
@@ -40,14 +43,25 @@ const BASELINE_PATH = join(ROOT, "sbom", "vuln-baseline.json");
 const SEV_RANK = { critical: 4, high: 3, moderate: 2, medium: 2, low: 1, unknown: 0 };
 
 function parseArgs(argv) {
-  const out = { failOn: "none", writeBaseline: false, requireOnline: false, out: join(ROOT, "sbom") };
-  for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === "--fail-on") out.failOn = (argv[++i] ?? "none").toLowerCase();
-    else if (argv[i] === "--write-baseline") out.writeBaseline = true;
-    else if (argv[i] === "--require-online") out.requireOnline = true;
-    else if (argv[i] === "--out") out.out = resolve(argv[++i]);
-  }
-  return out;
+  // strict: false keeps the old tolerance: unknown flags are ignored.
+  const { values } = utilParseArgs({
+    args: scriptArgv(argv),
+    strict: false,
+    allowPositionals: true,
+    options: {
+      "fail-on": { type: "string" },
+      "write-baseline": { type: "boolean" },
+      "require-online": { type: "boolean" },
+      out: { type: "string" },
+    },
+  });
+  const text = (value) => (typeof value === "string" ? value : undefined);
+  return {
+    failOn: (text(values["fail-on"]) ?? "none").toLowerCase(),
+    writeBaseline: values["write-baseline"] === true,
+    requireOnline: values["require-online"] === true,
+    out: text(values.out) === undefined ? join(ROOT, "sbom") : resolve(values.out),
+  };
 }
 
 async function postJson(url, body, { tries = 3, timeoutMs = 20000 } = {}) {
@@ -184,10 +198,20 @@ function renderMarkdown({ findings, counts, generatedAt, scanned, gitRef, accept
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const gitRef = process.env.GITHUB_SHA ?? process.env.GIT_COMMIT ?? "unknown";
-  const { cyclonedx } = generatePlatformSbom({ root: ROOT, gitRef, generatedAt: new Date(0) });
-  const components = cyclonedx.components
-    .filter((c) => typeof c.purl === "string" && c.purl.startsWith("pkg:npm/") && c.version)
-    .map((c) => ({ name: c.name, version: c.version }));
+  // Every lockfile root ships or builds code, so every one is scanned
+  // (scripts/sbom/lockfile-roots.mjs). One query per distinct name@version.
+  const seen = new Set();
+  const components = [];
+  for (const root of LOCKFILE_ROOTS) {
+    const { cyclonedx } = generatePlatformSbom({ root: join(ROOT, root.dir), gitRef, generatedAt: new Date(0) });
+    for (const c of cyclonedx.components) {
+      if (typeof c.purl !== "string" || !c.purl.startsWith("pkg:npm/") || !c.version) continue;
+      const key = `${c.name}@${c.version}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      components.push({ name: c.name, version: c.version });
+    }
+  }
 
   let results;
   try {

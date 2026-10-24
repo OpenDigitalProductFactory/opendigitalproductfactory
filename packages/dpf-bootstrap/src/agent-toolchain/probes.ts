@@ -16,6 +16,7 @@
 
 import { spawn } from "node:child_process";
 
+import { DELIVERY_WORKFLOW_TOOLS, deliveryReadinessFromDiscovery } from "./delivery-readiness-contract";
 import { interpretMcpReadinessResponse } from "./mcp-readiness-probe";
 import {
   interpretSmokeResponse,
@@ -31,7 +32,7 @@ const DEFAULT_MCP_TIMEOUT_MS = 5_000;
 const DEFAULT_SMOKE_TIMEOUT_MS = 60_000;
 
 /**
- * Run the read-only MCP `tools/list` probe.
+ * Run the complete read-only delivery authority discovery probe.
  *
  * Returns `{ ok: false, reason: "no_token", httpStatus: null }` when the
  * caller has no bearer; otherwise POSTs an MCP `tools/list` JSON-RPC envelope
@@ -70,7 +71,8 @@ export async function runMcpReadinessProbe(args: {
       body: JSON.stringify({
         jsonrpc: "2.0",
         id: 1,
-        method: "tools/list",
+        method: "tools/call",
+        params: { name: "load_tools", arguments: { names: DELIVERY_WORKFLOW_TOOLS } },
       }),
       signal: controller.signal,
     });
@@ -82,7 +84,11 @@ export async function runMcpReadinessProbe(args: {
       body = null;
     }
 
-    return interpretMcpReadinessResponse(response.status, body, observedAt);
+    if (response.status !== 200) return interpretMcpReadinessResponse(response.status, body, observedAt);
+    const delivery = deliveryReadinessFromDiscovery(body);
+    if (delivery.ready) return { ok: true, toolCount: DELIVERY_WORKFLOW_TOOLS.length, observedAt, delivery };
+    return { ok: false, reason: delivery.missingTokenTools.length ? "scope_insufficient"
+      : delivery.missingCoworkerTools.length ? "coworker_grants_insufficient" : "unexpected_shape", httpStatus: 200, delivery };
   } catch (err) {
     // AbortError or network failure means the portal endpoint itself is not
     // currently reachable. A reachable portal with a broken MCP route is

@@ -1,0 +1,157 @@
+import { describe, expect, it } from "vitest";
+import { projectRemoteTaskReplay } from "./mcp-task-replay-projection";
+import { nextTerminalWriterAttempt } from "./mcp-task-terminal-writer-recovery";
+
+const terminalWriterWait = {
+  schemaVersion: 1,
+  kind: "missing-terminal-writer",
+  writerToolName: "record_initiative_evidence",
+  resumeMode: "same-taskrun",
+  attempt: 2,
+  observedAt: "2026-09-05T01:00:00.000Z",
+  dispatchContract: "required-tool-call",
+} as const;
+
+function project(progressPayload: Record<string, unknown>) {
+  return projectRemoteTaskReplay({
+    existing: {
+      taskRunId: "TR-MCP-7ECDD7A53D18",
+      status: "input-required",
+      progressPayload,
+      a2aMetadata: { requestDigest: "immutable" },
+    },
+    requestMatches: true,
+  });
+}
+
+describe("projectRemoteTaskReplay required terminal writer dispatch", () => {
+  it("preserves the writer's actual rejection and same-task recovery on replay", () => {
+    const writerRejection = { schemaVersion: 1, error: "CLASSIFICATION_REQUIRED",
+      message: "Expected profile: feature.", observedAt: terminalWriterWait.observedAt };
+    expect(project({ terminalWriterWait: { ...terminalWriterWait, writerRejection } })).toMatchObject({
+      result: { requiresApproval: false, resumable: true, waitReason: "terminal-writer-rejected",
+        structuredContent: { error: "terminal_writer_rejected", writerToolName: terminalWriterWait.writerToolName,
+          writerRejection: { error: "CLASSIFICATION_REQUIRED", message: "Expected profile: feature." },
+          action: "fix-packet-and-resume" } },
+    });
+  });
+
+  it.each([null, {}, { schemaVersion: 1, error: "CLASSIFICATION_REQUIRED" }])(
+    "does not project an incomplete rejection as an actionable writer error", writerRejection => {
+      expect(project({ terminalWriterWait: { ...terminalWriterWait, writerRejection } })).toMatchObject({
+        result: { waitReason: "missing-terminal-writer" },
+      });
+    });
+
+  it.each(["failed", "canceled", "rejected", "archived"])("never projects stale capacity as resumable for %s", status => {
+    const result = projectRemoteTaskReplay({ requestMatches: true, existing: {
+      taskRunId: "task", status, a2aMetadata: {}, progressPayload: {
+        errorCode: "authorization_revoked", terminalWriterWait,
+        resourceWait: { schemaVersion: 1, kind: "provider-capacity", attempt: 1,
+          observedAt: "2026-09-27T23:32:00Z", nextAttemptAt: "2026-09-27T23:33:00Z", resumeMode: "same-taskrun", failureKind: "capacity" },
+      },
+    } });
+    expect(result.result.resumable).toBe(false);
+    expect(result.result.waitReason).toBeUndefined();
+  });
+  it("preserves the actionable adapter-enforceability cause on an identical replay", () => {
+    const progressPayload = {
+      terminalWriterWait,
+      terminalWriterDispatchFailure: {
+        schemaVersion: 1,
+        code: "required-terminal-writer-not-enforceable",
+        writerToolName: "record_initiative_evidence",
+        observedAt: "2026-09-05T01:00:00.000Z",
+      },
+    };
+
+    expect(project(progressPayload)).toEqual({
+      kind: "result",
+      result: expect.objectContaining({
+        taskRunId: "TR-MCP-7ECDD7A53D18",
+        status: "input-required",
+        idempotentReplay: true,
+        requiresApproval: false,
+        resumable: true,
+        waitReason: "required-terminal-writer-not-enforceable",
+        structuredContent: { error: "required-terminal-writer-not-enforceable" },
+        isError: true,
+        progressPayload,
+      }),
+    });
+  });
+
+  it("does not trust a dispatch failure whose writer differs from the bound wait", () => {
+    expect(project({
+      terminalWriterWait,
+      terminalWriterDispatchFailure: {
+        schemaVersion: 1,
+        code: "required-terminal-writer-not-enforceable",
+        writerToolName: "record_initiative_design_review",
+        observedAt: "2026-09-05T01:00:00.000Z",
+      },
+    })).toMatchObject({
+      kind: "result",
+      result: {
+        resumable: true,
+        waitReason: "missing-terminal-writer",
+      },
+    });
+  });
+
+  it("does not let a stale dispatch failure override a later writer wait", () => {
+    expect(project({
+      terminalWriterWait,
+      terminalWriterDispatchFailure: {
+        schemaVersion: 1,
+        code: "required-terminal-writer-not-enforceable",
+        writerToolName: "record_initiative_evidence",
+        observedAt: "2026-09-05T00:00:00.000Z",
+      },
+    })).toMatchObject({
+      kind: "result",
+      result: {
+        resumable: true,
+        waitReason: "missing-terminal-writer",
+      },
+    });
+  });
+});
+
+// BI-C35576A9: a wait recorded after a CLI dispatch carries the contract it was
+// actually held to. The parser must accept it and still reject an invented one.
+describe("projectRemoteTaskReplay dispatch contracts", () => {
+  // BI-50B0C471: a wait caused by a capacity deferral after banked reads
+  // replays as a capacity wait, so the caller waits instead of re-dispatching.
+  it("replays a capacity-deferred writer wait as provider-capacity", () => {
+    expect(project({ terminalWriterWait: { ...terminalWriterWait, capacityDeferred: "capacity" } })).toMatchObject({
+      kind: "result",
+      result: { resumable: true, waitReason: "provider-capacity" },
+    });
+    expect(project({ terminalWriterWait: { ...terminalWriterWait, capacityDeferred: "unknown" } })).not.toMatchObject({
+      result: { waitReason: "provider-capacity" },
+    });
+  });
+
+  it("accepts a receipt-verified wait", () => {
+    expect(project({ terminalWriterWait: { ...terminalWriterWait, dispatchContract: "receipt-verified" } })).toMatchObject({
+      kind: "result",
+      result: { resumable: true, waitReason: "missing-terminal-writer" },
+    });
+  });
+
+  it("does not accept an unknown dispatch contract", () => {
+    const projected = project({ terminalWriterWait: { ...terminalWriterWait, dispatchContract: "trust-me" } });
+    expect(JSON.stringify(projected)).not.toContain('"waitReason":"missing-terminal-writer"');
+  });
+});
+
+// BI-50B0C471: only a real writer no-show spends one of the bounded attempts.
+describe("nextTerminalWriterAttempt", () => {
+  it("advances after a writer no-show and holds after a capacity deferral", () => {
+    expect(nextTerminalWriterAttempt(null)).toBe(2);
+    expect(nextTerminalWriterAttempt({ ...terminalWriterWait, attempt: 2 })).toBe(3);
+    expect(nextTerminalWriterAttempt({ ...terminalWriterWait, attempt: 2, capacityDeferred: "capacity" })).toBe(2);
+    expect(nextTerminalWriterAttempt({ ...terminalWriterWait, attempt: 1, capacityDeferred: "busy" })).toBe(1);
+  });
+});

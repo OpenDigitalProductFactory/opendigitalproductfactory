@@ -1,5 +1,6 @@
 /**
- * Materialize the agentToolchain block written into ~/.dpf/install-state.json.
+ * Materialize the agent-toolchain block written to ~/.dpf/agent-toolchain-state.json
+ * (a sidecar, never a key inside install-state.json — BI-95DF1BFC).
  *
  * Composes planning + probe results into the canonical state object the
  * shell adapters persist.

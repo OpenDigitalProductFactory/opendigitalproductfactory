@@ -7,10 +7,8 @@ set -eu
 # surfaces-execution-alignment-design.md (§4.3 "Every shared singleton runtime
 # MUST be lease-gated — including :3001" and §7 decision #5 "fold :3001 into the
 # local-integration-ci lease"), the `dev-portal` container on :3001 is a single
-# shared, live-DB-writing singleton bind-mounted to ONE worktree at a time via
-# DPF_DEV_WORKTREE. Whoever runs `dev-portal-start` last silently re-points
-# :3001 at their own worktree, so every other thread's "preview" is now showing
-# someone else's code — and a coding mistake there mutates production data.
+# shared singleton using a sanitized disposable database. Its source mount and
+# commit must match its admitted Workroom before any runtime mutation.
 #
 # This script makes the claim explicit: it claims the SAME governed lease the
 # pre-PR CI gate uses (environmentKey="local-integration-ci") before :3001 is
@@ -33,17 +31,19 @@ set -eu
 
 MCP_URL="${DPF_MCP_URL:-http://127.0.0.1:3000/api/mcp/v1}"
 ENVIRONMENT_KEY="${DPF_DEV_PORTAL_ENVIRONMENT_KEY:-local-integration-ci}"
-OWNER_PROVIDER="${DPF_DEV_PORTAL_OWNER_PROVIDER:-claude}"
-OWNER_SESSION_ID="${DPF_DEV_PORTAL_OWNER_SESSION_ID:-}"
+OWNER_PROVIDER="${DPF_DEV_PORTAL_OWNER_PROVIDER:-}"
+OWNER_SESSION_ID="${DPF_DEV_PORTAL_OWNER_SESSION_ID:-${DPF_SESSION_REF:-${CODEX_THREAD_ID:-${CLAUDE_SESSION_ID:-${GROK_SESSION_ID:-}}}}}"
 EXPIRES_MINUTES="${DPF_DEV_PORTAL_EXPIRES_MINUTES:-120}"
-MAX_TERMINAL_CLAIM_ATTEMPTS="${DPF_DEV_PORTAL_MAX_TERMINAL_CLAIM_ATTEMPTS:-64}"
+RESUME_LEASE_ID="${DPF_DEV_PORTAL_RESUME_LEASE_ID:-}"
+TASK_RUN_ID="${DPF_DEV_PORTAL_TASK_RUN_ID:-}"
+CLAIM_KEY="${DPF_DEV_PORTAL_CLAIM_KEY:-}"
 URL="${DPF_DEV_PORTAL_URL:-http://localhost:3001}"
 PORTS="${DPF_DEV_PORTAL_PORTS:-3001}"
 WORKTREE_PATH="${DPF_DEV_WORKTREE:-}"
 BRANCH=""
+SOURCE_SHA=""
 LEASE_ID="${DPF_DEV_PORTAL_LEASE_ID:-}"
 GIT_BIN="${DPF_DEV_PORTAL_GIT_BIN:-git}"
-CURL_BIN="${DPF_DEV_PORTAL_CURL_BIN:-curl}"
 DOCKER_BIN="${DPF_DEV_PORTAL_DOCKER_BIN:-docker}"
 HEARTBEAT_SECONDS="${DPF_DEV_PORTAL_HEARTBEAT_SECONDS:-30}"
 HEARTBEAT_TTL_MINUTES="${DPF_DEV_PORTAL_HEARTBEAT_TTL_MINUTES:-2}"
@@ -55,7 +55,7 @@ Usage: scripts/dev-portal-lease.sh <claim|refresh|status|release> [options]
 
 Lease-gate the :3001 Contributor preview against the governed shared
 local-integration-ci lease so it stops being an unleased shared singleton that
-silently re-binds between worktrees and writes to the live DB.
+binds a verified worktree and uses a sanitized disposable database.
 
 Subcommands:
   claim     Claim the shared lease for :3001 before binding the preview.
@@ -68,18 +68,19 @@ Subcommands:
 
 Options:
   --worktree PATH         Worktree to bind (default: $DPF_DEV_WORKTREE).
-  --owner-provider NAME   build-studio|claude|codex|coworker (default: claude).
-  --owner-session-id ID   External session id (default: dev-portal-<pid>).
+  --owner-provider NAME   Client provider (detected by canonical identity helper).
+  --owner-session-id ID   Client thread (detected by canonical identity helper).
   --expires-minutes N     Lease expiry window (default: 120).
   --lease-id ID           Lease id to release (release only).
   --mcp-url URL           MCP endpoint (default: DPF_MCP_URL or local portal).
   --help                  Show this help.
 
 Environment:
-  DPF_MCP_BEARER_TOKEN    Required for claim/status/release (MCP auth).
+  MCP auth               Canonical bootstrap credential; no operator password entry.
   DPF_DEV_WORKTREE        Absolute worktree path (forward slashes).
-  DPF_DEV_PORTAL_MAX_TERMINAL_CLAIM_ATTEMPTS
-                          Bounded historical terminal-key scan (default: 64).
+  DPF_DEV_PORTAL_CLAIM_KEY Attempt identity; terminal attempts never auto-retry.
+  DPF_DEV_PORTAL_RESUME_LEASE_ID / DPF_DEV_PORTAL_TASK_RUN_ID
+                          Provided by the durable resume task, never a poll loop.
   DPF_DEV_PORTAL_HEARTBEAT_SECONDS
                           Active-lease renewal cadence (default: 30 seconds).
 EOF
@@ -101,15 +102,19 @@ json_array_numbers() {
 mcp_call() {
   tool_name="$1"
   arguments_json="$2"
-  request_json="$(node -e '
-const name = process.argv[1];
-const args = JSON.parse(process.argv[2]);
-process.stdout.write(JSON.stringify({jsonrpc:"2.0",id:1,method:"tools/call",params:{name,arguments:args}}));
-' "$tool_name" "$arguments_json")"
-  "$CURL_BIN" -sS -X POST "$MCP_URL" \
-    -H "Authorization: Bearer ${DPF_MCP_BEARER_TOKEN}" \
-    -H "Content-Type: application/json" \
-    --data "$request_json"
+  module_base="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/lib"
+  DPF_GATE_CURL_BIN="${DPF_DEV_PORTAL_CURL_BIN:-}" node --input-type=module -e '
+const { pathToFileURL } = await import("node:url");
+const [base, tool, serialized, mcpUrl] = process.argv.slice(1);
+const { mcpCall } = await import(pathToFileURL(`${base}/mcp-client.mjs`).href);
+const { resolveMcpCredential } = await import(pathToFileURL(`${base}/mcp-credential.mjs`).href);
+try {
+  const result = await mcpCall(tool, JSON.parse(serialized), {
+    mcpUrl, bearerToken: resolveMcpCredential({ mcpUrl }).bearer,
+  });
+  process.stdout.write(JSON.stringify({ result: { structuredContent: result } }));
+} catch { console.error("dev-portal-lease: canonical MCP credential or transport unavailable"); process.exitCode = 1; }
+' "$module_base" "$tool_name" "$arguments_json" "$MCP_URL"
 }
 
 extract_tool_result() {
@@ -217,18 +222,29 @@ while [ "$#" -gt 0 ]; do
 done
 
 [ -n "$COMMAND" ] || { usage; exit 2; }
-[ -n "${DPF_MCP_BEARER_TOKEN:-}" ] || die "DPF_MCP_BEARER_TOKEN is required to talk to the DPF MCP lease tools"
-case "$MAX_TERMINAL_CLAIM_ATTEMPTS" in
-  ''|*[!0-9]*) die "DPF_DEV_PORTAL_MAX_TERMINAL_CLAIM_ATTEMPTS must be a non-negative integer" ;;
-esac
 
-[ -n "$OWNER_SESSION_ID" ] || OWNER_SESSION_ID="dev-portal-$$"
+
+identity_module="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/lib/agent-identity.mjs"
+identity="$(node --input-type=module -e '
+const { pathToFileURL } = await import("node:url");
+const { resolveAgentIdentity } = await import(pathToFileURL(process.argv[1]).href);
+process.stdout.write(JSON.stringify(resolveAgentIdentity({ env: process.env,
+  providerOverride: process.argv[2], sessionOverride: process.argv[3], pid: process.pid })));
+' "$identity_module" "$OWNER_PROVIDER" "$OWNER_SESSION_ID")"
+OWNER_PROVIDER="$(printf '%s' "$identity" | field provider)"
+OWNER_SESSION_ID="$(printf '%s' "$identity" | field sessionId)"
+case "$COMMAND" in
+  claim|refresh) [ -n "$OWNER_PROVIDER" ] || die "canonical client provider could not be resolved" ;;
+esac
 
 release_lease() {
   lease_id_to_release="$1"
-  release_response="$(mcp_call release_nonprod_environment_lease "{\"leaseId\":$(json_escape "$lease_id_to_release")}" | extract_tool_result)"
+  release_response="$(mcp_call release_nonprod_environment_lease "{\"leaseId\":$(json_escape "$lease_id_to_release"),\"ownerSessionId\":$(json_escape "$OWNER_SESSION_ID")}" | extract_tool_result)"
   release_success="$(printf '%s' "$release_response" | field success)"
-  [ "$release_success" = "true" ] || return 1
+  if [ "$release_success" != "true" ]; then
+    printf '%s\n' "Release action: lease $lease_id_to_release, owner session $OWNER_SESSION_ID; $release_response" >&2
+    return 1
+  fi
   printf 'released %s\n' "$lease_id_to_release"
 }
 
@@ -239,11 +255,27 @@ claim_lease() {
       || die "could not resolve the branch for contributor-preview worktree $WORKTREE_PATH"
     [ -n "$BRANCH" ] || die "resolved an empty branch for contributor-preview worktree $WORKTREE_PATH"
   fi
+  SOURCE_SHA="$("$GIT_BIN" -C "$WORKTREE_PATH" rev-parse HEAD)" || die "could not resolve preview source SHA"
+  if [ -n "${DPF_DEV_PORTAL_EXPECTED_SOURCE_SHA:-}" ] && [ "$SOURCE_SHA" != "$DPF_DEV_PORTAL_EXPECTED_SOURCE_SHA" ]; then
+    printf '%s\n' 'preview_source_drift_before_claim' >&2
+    return 82
+  fi
+  if [ -n "${DPF_DEV_PORTAL_EXPECTED_BRANCH:-}" ] && [ "$BRANCH" != "$DPF_DEV_PORTAL_EXPECTED_BRANCH" ]; then
+    printf '%s\n' 'preview_branch_drift_before_claim' >&2
+    return 82
+  fi
+  if [ -n "${DPF_DEV_PORTAL_EXPECTED_SOURCE_SHA:-}" ]; then
+    dirty_source="$("$GIT_BIN" -C "$WORKTREE_PATH" status --porcelain)" || return 82
+    if [ -n "$dirty_source" ]; then
+      printf '%s\n' 'preview_dirty_source_before_claim' >&2
+      return 82
+    fi
+  fi
   expires_at="$(node -e 'process.stdout.write(new Date(Date.now() + Number(process.argv[1]) * 60000).toISOString())' "$EXPIRES_MINUTES")"
   # BI-D45898C0: the claim key identifies the RESOURCE, not the claimant.
   #
   # It used to be "dev-portal:${OWNER_SESSION_ID}:${BRANCH}", and
-  # OWNER_SESSION_ID defaults to dev-portal-$$ — the shell PID. Every
+  # OWNER_SESSION_ID formerly defaulted to a shell PID. Every
   # invocation therefore minted a DIFFERENT key for the same worktree and
   # branch, so the queue could never recognise a re-claim as the same claim. A
   # supervisor restarting this script enqueued an unbounded set of distinct
@@ -256,8 +288,7 @@ claim_lease() {
   # travels separately as ownerSessionId, which is where claimant identity
   # belongs.
   base_claim_key="dev-portal:${WORKTREE_PATH}:${BRANCH}"
-  claim_key="$base_claim_key"
-  terminal_claim_attempt_sequence=0
+  claim_key="${CLAIM_KEY:-$base_claim_key}"
   while :; do
     host_pressure_json="$(sample_host_pressure)" \
       || die "could not measure host pressure for governed preview admission"
@@ -267,7 +298,7 @@ const args = {
   ownerProvider: process.argv[2],
   ownerSessionId: process.argv[3],
   claimKey: process.argv[9],
-  purpose: `Contributor preview (:3001) bound to ${process.argv[4]} @ ${process.argv[5]}`,
+  purpose: `Contributor preview (:3001) bound to ${process.argv[4]} @ ${process.argv[5]} (${process.argv[13]})`,
   url: process.argv[6],
   ports: JSON.parse(process.argv[7]),
   expiresAt: process.argv[8],
@@ -275,9 +306,11 @@ const args = {
   branchName: process.argv[5],
   cleanupCommand: "docker compose -p dpf --profile dev rm -sf dev-portal",
   hostPressure: JSON.parse(process.argv[10]),
+  ...(process.argv[11] ? {resumeLeaseId: process.argv[11]} : {}),
+  ...(process.argv[12] ? {taskRunId: process.argv[12]} : {}),
 };
 process.stdout.write(JSON.stringify(args));
-' "$ENVIRONMENT_KEY" "$OWNER_PROVIDER" "$OWNER_SESSION_ID" "$WORKTREE_PATH" "$BRANCH" "$URL" "$(json_array_numbers "$PORTS")" "$expires_at" "$claim_key" "$host_pressure_json")"
+' "$ENVIRONMENT_KEY" "$OWNER_PROVIDER" "$OWNER_SESSION_ID" "$WORKTREE_PATH" "$BRANCH" "$URL" "$(json_array_numbers "$PORTS")" "$expires_at" "$claim_key" "$host_pressure_json" "$RESUME_LEASE_ID" "$TASK_RUN_ID" "$SOURCE_SHA")"
     claim_response="$(mcp_call claim_nonprod_environment_lease "$claim_args" | extract_tool_result)"
     claim_success="$(printf '%s' "$claim_response" | field success)"
     claim_error="$(printf '%s' "$claim_response" | field error)"
@@ -295,9 +328,20 @@ process.stdout.write(JSON.stringify(args));
         if [ -n "$capacity_reason" ]; then
           printf '%s\n' "Host-capacity admission reason: $capacity_reason." >&2
         fi
-        printf '%s\n' "Retry this same claim after the admitted holder releases; the stable claim key preserves FIFO position." >&2
-        return 3
+        task_run_id="$(printf '%s' "$claim_response" | field data.admission.taskRunId)"
+        if [ "$COMMAND" = "refresh" ] && [ "${DPF_DURABLE_RESUME:-}" != "1" ]; then
+          wait_deadline="$(printf '%s' "$claim_response" | field data.lease.expiresAt)"
+          node "$(dirname -- "$0")/dev-preview-queue-resume.mjs" \
+            --worktree "$WORKTREE_PATH" --branch "$BRANCH" --sha "$SOURCE_SHA" \
+            --owner-provider "$OWNER_PROVIDER" --owner-session-id "$OWNER_SESSION_ID" \
+            --resume-lease-id "$CLAIMED_LEASE_ID" --task-run-id "$task_run_id" \
+            --claim-key "$claim_key" --mcp-url "$MCP_URL" --wait-deadline "$wait_deadline"
+        fi
+        printf '%s\n' "Queued lease ${CLAIMED_LEASE_ID}; retain this same claim. No runtime has started." >&2
+        return 75
       fi
+      [ "$admission_status" = "admitted" ] || die "claim did not prove admitted ownership"
+      CLAIMED_EXPIRES_AT="$(printf '%s' "$claim_response" | field data.lease.expiresAt)"
       printf 'LEASE_ID=%s\n' "$CLAIMED_LEASE_ID"
       printf 'admitted %s for :3001 -> %s (%s)\n' "$ENVIRONMENT_KEY" "$WORKTREE_PATH" "$BRANCH"
       return 0
@@ -320,21 +364,8 @@ EOF
       printf '%s\n' "Coordinate explicitly: ask that holder to release, or take over only after they release their lease (scripts/dev-portal-lease.sh release --lease-id <id>)." >&2
       return 3
     fi
-    terminal_reason="$(printf '%s' "$claim_response" | field data.reason)"
-    [ -n "$terminal_reason" ] \
-      || terminal_reason="$(printf '%s' "$claim_response" | field data.lease.status)"
     if [ "$claim_error" = "lease_terminal" ]; then
-      case "$terminal_reason" in
-        released|cancelled|expired)
-          if [ "$terminal_claim_attempt_sequence" -ge "$MAX_TERMINAL_CLAIM_ATTEMPTS" ]; then
-            die "terminal claim retry budget exhausted after ${terminal_claim_attempt_sequence} replacement attempt(s); last claim was ${terminal_reason}"
-          fi
-          terminal_claim_attempt_sequence=$((terminal_claim_attempt_sequence + 1))
-          claim_key="${base_claim_key}:rerun-${terminal_claim_attempt_sequence}"
-          printf '%s\n' "previous contributor-preview claim was ${terminal_reason}; creating terminal attempt ${terminal_claim_attempt_sequence}..."
-          continue
-          ;;
-      esac
+      die "terminal lease claim; stop. A new explicitly wanted attempt requires a new claim key."
     fi
     die "failed to claim ${ENVIRONMENT_KEY} lease for :3001: $claim_response"
   done
@@ -385,60 +416,13 @@ case "$COMMAND" in
         || die "could not resolve the worktree to bind"
     fi
     claim_lease
-    heartbeat_pid=""
-    heartbeat_failure_file="$(mktemp "${TMPDIR:-/tmp}/dpf-dev-portal-heartbeat.XXXXXX")"
-    cleanup_refresh() {
-      refresh_status="$?"
-      trap - EXIT HUP INT TERM
-      "$DOCKER_BIN" compose -p dpf --profile dev stop dev-portal >/dev/null 2>&1 || true
-      if [ -n "$heartbeat_pid" ]; then
-        kill "$heartbeat_pid" >/dev/null 2>&1 || true
-        wait "$heartbeat_pid" >/dev/null 2>&1 || true
-      fi
-      if [ -n "${CLAIMED_LEASE_ID:-}" ]; then
-        release_lease "$CLAIMED_LEASE_ID" >/dev/null 2>&1 || true
-      fi
-      rm -f "$heartbeat_failure_file"
-      exit "$refresh_status"
-    }
-    trap cleanup_refresh EXIT HUP INT TERM
-    (
-      while :; do
-        sleep "$HEARTBEAT_SECONDS"
-        if ! renew_lease; then
-          printf '%s\n' "lease authority lost during Contributor preview" > "$heartbeat_failure_file"
-          exit 1
-        fi
-      done
-    ) &
-    heartbeat_pid="$!"
-    "$DOCKER_BIN" compose -p dpf --profile dev stop dev-portal
-    "$DOCKER_BIN" compose -p dpf --profile dev up -d dev-portal
-    if [ -s "$heartbeat_failure_file" ] || ! kill -0 "$heartbeat_pid" >/dev/null 2>&1; then
-      printf '%s\n' "dev-portal-lease: lease authority lost before Contributor preview became ready" >&2
-      exit 1
-    fi
-    printf '%s\n' "Contributor preview refreshed; lease heartbeat active as $CLAIMED_LEASE_ID."
-    printf '%s\n' "Keep this process running during verification; stopping it stops :3001 and releases the lease."
-    if [ "${NODE_ENV:-}" = "test" ] && [ "${DPF_DEV_PORTAL_TEST_EXIT_AFTER_READY:-}" = "1" ]; then
-      kill "$heartbeat_pid" >/dev/null 2>&1 || true
-      wait "$heartbeat_pid" >/dev/null 2>&1 || true
-      heartbeat_pid=""
-      release_lease "$CLAIMED_LEASE_ID" >/dev/null 2>&1 || true
-      CLAIMED_LEASE_ID=""
-      rm -f "$heartbeat_failure_file"
-      trap - EXIT HUP INT TERM
-      exit 0
-    fi
-    set +e
-    wait "$heartbeat_pid"
-    heartbeat_status="$?"
-    set -e
-    heartbeat_pid=""
-    if [ "$heartbeat_status" -ne 0 ]; then
-      printf '%s\n' "dev-portal-lease: $(cat "$heartbeat_failure_file")" >&2
-      exit 1
-    fi
-    exit 0
+    export DPF_DEV_WORKTREE="$WORKTREE_PATH"
+    export DPF_DEV_PORTAL_SOURCE_SHA="$SOURCE_SHA"
+    export DPF_DEV_PORTAL_OWNER_SESSION_ID="$OWNER_SESSION_ID"
+    export DPF_DEV_PORTAL_LEASE_ID="$CLAIMED_LEASE_ID"
+    export DPF_DEV_PORTAL_LEASE_EXPIRES_AT="$CLAIMED_EXPIRES_AT"
+    export DPF_MCP_URL="$MCP_URL"
+    node "$(dirname -- "$0")/lib/dev-preview-runtime.mjs"
+    exit "$?"
     ;;
 esac

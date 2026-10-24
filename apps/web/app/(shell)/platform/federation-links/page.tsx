@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { prisma } from "@dpf/db";
@@ -6,6 +7,13 @@ import { isFederationRelationshipPreset } from "@dpf/db/federation-link-types";
 import { resolveIncidentProjectionSpec } from "@dpf/db/projection-egress";
 
 import { auth } from "@/lib/auth";
+import { getT } from "@/lib/i18n/t.server";
+import { getLocaleContext } from "@/lib/i18n/locale-context.server";
+import { namespaceMessages } from "@dpf/i18n";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
+import { DeploymentCountrySharingPanel } from "@/components/platform/federation-links/DeploymentCountrySharingPanel";
+import { readDeploymentCountrySharing } from "@/lib/federation/deployment-declaration.server";
+import { countryName } from "@/lib/footprint/market-footprint";
 import { can } from "@/lib/permissions";
 import { listNearbyFederationCandidates } from "@/lib/federation/nearby-candidates";
 import { summarizeNearbyPairingProjection } from "@/lib/federation/nearby-pairing";
@@ -20,7 +28,6 @@ import {
   type PartnerBusinessRow,
 } from "@/components/platform/federation-links/PartnerBusinessPanel";
 import { OrganizationJoinPanel } from "@/components/platform/federation-links/OrganizationJoinPanel";
-import { getOrganizationJoinNodeSummariesAction } from "@/lib/actions/organization-join";
 import {
   deriveNearbyDiscoveryHealth,
   deriveEdgeNodeReadiness,
@@ -45,7 +52,8 @@ export default async function FederationLinksPage() {
     redirect("/403");
   }
 
-  const [links, edgeNodes, partnerAccounts, nearbyPairingSessions, organizationJoinNodes, introducedCandidates] = await Promise.all([
+  const [t, locale, sharing] = await Promise.all([getT("shell"), getLocaleContext(), readDeploymentCountrySharing()]);
+  const [links, edgeNodes, partnerAccounts, nearbyPairingSessions, introducedCandidates] = await Promise.all([
     prisma.federationLink.findMany({
       include: { principal: { select: { displayName: true } } },
       orderBy: { createdAt: "desc" },
@@ -79,7 +87,6 @@ export default async function FederationLinksPage() {
       orderBy: { requestedAt: "desc" },
       take: 20,
     }),
-    getOrganizationJoinNodeSummariesAction(),
     prisma.federationIntroductionCandidate.findMany({
       where: {
         expiresAt: { gt: new Date() }, withdrawnAt: null, dismissedAt: null,
@@ -195,6 +202,20 @@ export default async function FederationLinksPage() {
     })),
   ];
 
+  // Installations this authority may issue a join file for: the trusted
+  // same-organization peers it already knows by address (BI-1F69D3F8).
+  const joinCandidates = rows
+    .filter((row) => row.role === "same-org-peer" && row.linkState === "trusted")
+    .flatMap((row) => {
+      try {
+        const hostname = new URL(row.peerAuthorityUrl).hostname;
+        return hostname ? [{ hostname, displayName: row.displayName }] : [];
+      } catch {
+        return [];
+      }
+    })
+    .filter((candidate, index, all) => all.findIndex((other) => other.hostname === candidate.hostname) === index);
+
   return (
     <div className="space-y-6">
       <div>
@@ -203,8 +224,26 @@ export default async function FederationLinksPage() {
           Find nearby DPF installations or connect with an invitation. Nothing is shared until
           both sides approve; either side can pause or revoke the connection.
         </p>
+        {/* EP-2FB6C0CC (BI-DD763B93): the pages a connection feeds, linked from their home. */}
+        <p className="mt-1 text-sm text-[var(--dpf-muted)]">
+          {t("federation.fromPeers")}{" "}
+          <Link href="/platform/federation-proposals" className="text-[var(--dpf-accent)] hover:underline">{t("federation.proposals")}</Link>
+          {" · "}
+          <Link href="/platform/service-desk" className="text-[var(--dpf-accent)] hover:underline">{t("federation.serviceDesk")}</Link>
+        </p>
       </div>
-      <OrganizationJoinPanel nodes={organizationJoinNodes.ok ? organizationJoinNodes.nodes : []} />
+      <OrganizationJoinPanel candidates={joinCandidates} />
+      <MessagesProvider
+        locale={locale.language}
+        messages={{ deploymentSharing: namespaceMessages(locale.language, "deploymentSharing") }}
+      >
+        <DeploymentCountrySharingPanel
+          enabled={sharing.enabled}
+          countryCode={sharing.countryCode}
+          countryName={sharing.countryCode ? countryName(sharing.countryCode) : null}
+          recipients={sharing.recipients.map((recipient) => recipient.peerName)}
+        />
+      </MessagesProvider>
       <FederationLinksAdminClient
         rows={rows}
         nearbyCandidates={connectionCandidates}

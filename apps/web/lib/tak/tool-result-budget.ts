@@ -2,6 +2,16 @@ import {
   maskForContext,
   type ContextMaskAuthority,
 } from "@/lib/govern/data/mask-for-context";
+import {
+  invisibleRemovalNotice,
+  looksLikeSmuggling,
+  sanitizeUntrustedValue,
+} from "@dpf/validators";
+import { sanitizeForLog } from "@/lib/security/safe-log";
+import { untrustedResultLabel, type ToolResultProvenance } from "./tool-result-provenance";
+
+// The agentic loop resolves provenance where it already imports this module.
+export { resolveToolResultProvenance } from "./tool-result-provenance";
 
 /**
  * Tool-result token-budget guard.
@@ -73,10 +83,24 @@ export type ClampedToolResult = {
   originalChars: number;
   /** Opaque only; raw token maps never leave the controlled runtime. */
   rehydrationHandle?: string;
+  /** Hidden Unicode characters removed before the model saw the result. */
+  hiddenCharsRemoved: number;
+  /** The removed characters had the shape of a deliberate hidden payload. */
+  smugglingSuspected: boolean;
 };
 
 function buildFullText(result: ModelFacingToolResult): string {
   if (!result.success) {
+    const data = result.data as { page?: { version?: number; disposition?: string; readKind?: string }; recovery?: { toolName?: string }; log?: { nextAfterSequence?: number; incomplete?: boolean } } | undefined;
+    if (data?.page?.version === 1 && data.page.readKind === "workroom-activity" && data.recovery?.toolName === "get_workroom") {
+      return JSON.stringify({ success: false, error: result.error, message: result.message,
+        data: { page: data.page, log: data.log ? { nextAfterSequence: data.log.nextAfterSequence, incomplete: data.log.incomplete } : undefined,
+          recovery: data.recovery } });
+    }
+    if (data?.page?.version === 1 && data.page.disposition === "restart-required" && data.recovery?.toolName === "list_workrooms") {
+      return JSON.stringify({ success: false, error: result.error, message: result.message,
+        data: { page: data.page, recovery: data.recovery } });
+    }
     const err = result.error ?? result.message ?? "unknown error";
     return `Error: ${err}`;
   }
@@ -98,19 +122,57 @@ function buildFullText(result: ModelFacingToolResult): string {
  */
 export function clampToolResultForModel(
   result: ModelFacingToolResult,
-  opts?: { maxChars?: number; contextMask?: ContextMaskAuthority },
+  opts?: {
+    maxChars?: number; contextMask?: ContextMaskAuthority; toolName?: string;
+    /** Untrusted provenance prefixes a short label inside the same budget (BI-1045525F). */
+    provenance?: ToolResultProvenance | null;
+  },
 ): ClampedToolResult {
   const maxChars = Math.max(0, opts?.maxChars ?? DEFAULT_TOOL_RESULT_CHAR_CAP);
+  const label = untrustedResultLabel(opts?.provenance);
+  if (label) {
+    // Spotlighting by delimiting: the label is the first thing the model reads
+    // and counts against the budget, so labelled text never exceeds maxChars.
+    const prefix = `${label}\n`;
+    const inner = clampToolResultForModel(result, { ...opts, provenance: null, maxChars: Math.max(0, maxChars - prefix.length) });
+    if (prefix.length >= maxChars) return { ...inner, text: label.slice(0, maxChars), truncated: true };
+    return { ...inner, text: prefix + inner.text, originalChars: inner.originalChars + prefix.length };
+  }
   const masked = opts?.contextMask ? maskForContext(result, opts.contextMask) : null;
-  const full = buildFullText(masked?.value ?? result);
+  // Every tool result is untrusted text on its way into a model: web pages,
+  // files, mail, third-party MCP servers, peer-synced work, other agents'
+  // messages. Hidden Unicode is removed here, the one boundary all of them
+  // cross (BI-7AD0DA3D); a payload-shaped removal is announced to the model.
+  const sanitized = sanitizeUntrustedValue(masked?.value ?? result);
+  const smugglingSuspected = looksLikeSmuggling(sanitized);
+  if (smugglingSuspected) {
+    // An attack signal, not formatting noise. The payload never reaches the model.
+    console.warn("[tool-result] hidden-unicode payload removed tool=%s removed=%d", sanitizeForLog(opts?.toolName ?? "unknown"), sanitized.total);
+  }
+  const body = buildFullText(sanitized.value);
+  const full = smugglingSuspected ? `${invisibleRemovalNotice(sanitized)}\n${body}` : body;
   const handle = masked?.rehydrationHandle;
+  const hidden = { hiddenCharsRemoved: sanitized.total, smugglingSuspected };
   if (full.length <= maxChars) {
     return {
       text: full,
       truncated: false,
       originalChars: full.length,
+      ...hidden,
       ...(handle ? { rehydrationHandle: handle } : {}),
     };
+  }
+  // Typed Workroom pages must never become a successful-looking text prefix.
+  // A mask or an unusually small caller cap may enlarge/exceed the pre-sized
+  // page. Refuse that envelope explicitly; its cursor must not skip unseen rows.
+  const page = (result.data as { page?: { version?: number; observationId?: string; disposition?: string; readKind?: string } } | undefined)?.page;
+  if (page?.version === 1 && (typeof page.observationId === "string" || page.disposition === "restart-required" || page.readKind === "workroom-activity")) {
+    const recovery = page.readKind === "workroom-activity"
+      ? "Repeat get_workroom with activityMode:bounded, the unchanged sequence bounds and activityLimit:1, or select a narrower payloadPath. No cursor advancement is authorized."
+      : "Restart list_workrooms without cursor and with limit:1; preserve filters.";
+    const error = JSON.stringify({ success: false, error: "page_budget_too_small", recovery });
+    return { text: error.length <= maxChars ? error : maxChars >= 2 ? "{}" : "", truncated: true, originalChars: full.length,
+      ...hidden, ...(handle ? { rehydrationHandle: handle } : {}) };
   }
   const notice =
     `\n…[truncated ${full.length - maxChars} of ${full.length} chars — result exceeds the per-call ` +
@@ -120,6 +182,7 @@ export function clampToolResultForModel(
     text: full.slice(0, keep) + notice,
     truncated: true,
     originalChars: full.length,
+    ...hidden,
     ...(handle ? { rehydrationHandle: handle } : {}),
   };
 }

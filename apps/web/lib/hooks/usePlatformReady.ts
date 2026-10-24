@@ -25,7 +25,7 @@
  * is a UX enhancement, not a security boundary.
  */
 import { useEffect, useState } from "react";
-import { useSystemEvent } from "@/components/platform/SystemEventProvider";
+import { useSystemEvent } from "./system-events";
 
 export type PlatformReadyState = {
   ready: boolean;

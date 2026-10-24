@@ -1,3 +1,7 @@
+---
+status: binding
+---
+
 
 
 > **⇢ Coordination — Unified Work Graph.** This spec is a design input to the **Collaborative Work Management × Build Studio convergence**. Before starting work traced here, read the governing memo [`2026-07-11-collaborative-work-management-convergence-memo.md`](./2026-07-11-collaborative-work-management-convergence-memo.md) and backlog epic **EP-WORK-CONVERGENCE** (9 items, write-model-first). The target is one substrate — `WorkCapsule` / `WorkItem` → `WorkCase` projection → plain approve/revise — so efforts stay coordinated and don't diverge.
@@ -176,6 +180,56 @@ Scored via `principle_decide` against the `mark-dpf-platform` profile (20 comman
 3. **Layman front → the AI Coworker panel** (delivery status only; plumbing stays admin-only). *Kernel: high, margin 0.86; single-source-of-truth / agent-as-conduit.*
 4. **BS engine vs. process → engine-first.** Stabilize the embedded BS runtime engine now; the common process + MCP plane remain the contract all three surfaces share. *Kernel returned a sub-threshold tie (margin 0.027, low confidence) nominally tipping engine-first on single-source-of-truth + ship-real-functionality; **operator decided engine-first**.*
 5. **`:3001` disposition → fold into the `local-integration-ci` lease** (one lease-gated shared-runtime model; no standalone singleton, no silent re-bind). *Kernel: high, margin 0.63; single-source-of-truth.*
+
+## 9. Addendum (2026-08-25, BI-81780B4A): a gate refusal declares which kind of no it is
+
+**Operator directive.** The product behaviour is the workroom and its shape, with
+gates and actions. Every gate requirement and definition — now and for those
+built later — carries this as an implementation mechanic.
+
+**The shape.** A gate exists to make the right thing happen: proceed when the
+case is clear, escalate when it is ambiguous, refuse when it is wrong. A
+coworker may RESHAPE a decision and try again, bounded; where it holds several
+valid options, scoring them against each other is how it picks. Ceiling for both
+axes: **5** (operator's call).
+
+**What was wrong.** `evaluateWorkCasePolicy` is the single chokepoint every
+governed workroom action passes through, and it returned a binary allow/deny
+across twelve denial reasons. Every no read the same, so a coworker could not
+tell "attach the receipt policy and retry" from "this case is sealed forever"
+from "a person must approve this envelope". Both failure modes follow: stopping
+on something fixable in one move, or grinding against a stop that was never
+going to yield — the forever-loop wearing the costume of diligence.
+
+**The mechanic.**
+
+| Disposition | Meaning | Example |
+| --- | --- | --- |
+| `shape` | the caller holds the missing input and may retry, bounded | missing verification evidence, missing decision interaction |
+| `escalate` | nothing the caller controls will fix it; a person rules | an envelope awaiting approval |
+| `hard-no` | never yields | sealed case, unsupported transition, **tripped stop condition** |
+
+Four rules make it hold:
+
+1. **The classification is a closed `Record` keyed by the denial union**, in
+   `apps/web/lib/work-management/gate-shaping.ts`. Adding a reason without
+   deciding what kind of no it is **does not compile**. That is the
+   "and for those built in the future" clause — the next gate requirement
+   inherits the contract by construction, not by its author remembering.
+2. **A shapeable denial names what to change.** A hint-free "shape" is just a
+   retry, and a retry that changes nothing is refused upstream already.
+3. **Budget exhaustion converts to `escalate`, never to `hard-no`.** Running out
+   of attempts says nothing about whether the action is allowed — only that this
+   coworker could not shape it. The attempt history is the human's context.
+4. **A tripped stop stays a hard no** (§1 of AGENTS.md: an enforcement refusal
+   is a stop, not a workaround). Shaping against one *is* the workaround.
+
+**Still open, tracked on BI-81780B4A.** The no-progress trip: today the retry
+loop refuses only *identical* inputs, so a coworker can declare five different
+changes and thrash at the same margin. And option dedupe before scoring: margin
+is top-1 against the runner-up, so adding a near-clone of the leader collapses
+the margin and manufactures an escalation on a decision that was clear — five
+real options, not five variants.
 
 ## 8. Acceptance
 

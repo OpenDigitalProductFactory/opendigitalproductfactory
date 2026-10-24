@@ -124,6 +124,7 @@ model DocumentTag {
 
   @@id([documentId, tag])
   @@index([tag])
+  @@index([documentId])
 }
 
 model DocumentAccessGrant {
@@ -145,6 +146,8 @@ model DocumentAccessGrant {
   @@index([createdByPrincipalId])
 }
 
+/// Document state-transition audit trail. One year; the Document row carries the current state and cascades its events on delete.
+/// @dpf lifecycle=telemetry-bounded retention=365d categories=security-audit timeAxis=createdAt
 model DocumentLifecycleEvent {
   id               String         @id @default(cuid())
   documentId       String
@@ -165,16 +168,38 @@ model DocumentLifecycleEvent {
   @@index([createdAt]) // retention sweep cutoff scan, apps/web/lib/operate/retention/execute.ts:99
 }
 
+/// The closed set of derived renditions of a DocumentVersion (BI-9D43CBEF).
+/// Widening it is a migration plus the writers: pdf and plain_text come from
+/// apps/web/lib/documents/renditions.ts; docx and odt (and pdf for text
+/// documents) come from the export in apps/web/lib/documents/document-office-export.ts
+/// (BI-4865EB4D).
+enum DocumentRenditionKind {
+  pdf
+  plain_text
+  /// Page preview images. The blob is a manifest (lib/documents/preview-manifest.ts)
+  /// of one content-addressed PNG per page, in page order (BI-543819B1).
+  preview
+  docx
+  odt
+}
+
+/// A derived projection of a DocumentVersion's content (office file -> PDF and
+/// plain text; any document -> an exported .docx/.odt/.pdf), regenerable from
+/// the version's content. Written by the rendition job in
+/// apps/web/lib/documents/renditions.ts and the export in
+/// apps/web/lib/documents/document-office-export.ts; its text is full-text indexed
+/// through the unmodeled generated "searchVector" column (migration
+/// 20260925060000_document_rendition_kind_enum).
 model DocumentRendition {
-  id                String          @id @default(cuid())
+  id                String                @id @default(cuid())
   documentVersionId String
-  renditionKind     String
-  contentText       String?         @db.Text
+  renditionKind     DocumentRenditionKind
+  contentText       String?               @db.Text
   blobId            String?
   mimeType          String?
-  createdAt         DateTime        @default(now())
-  documentVersion   DocumentVersion @relation(fields: [documentVersionId], references: [id], onDelete: Cascade)
-  blob              DocumentBlob?   @relation(fields: [blobId], references: [id], onDelete: SetNull)
+  createdAt         DateTime              @default(now())
+  documentVersion   DocumentVersion       @relation(fields: [documentVersionId], references: [id], onDelete: Cascade)
+  blob              DocumentBlob?         @relation(fields: [blobId], references: [id], onDelete: SetNull)
 
   @@unique([documentVersionId, renditionKind])
   @@index([documentVersionId])
@@ -275,6 +300,7 @@ model KnowledgeArticleProduct {
 
   @@id([articleId, digitalProductId])
   @@index([digitalProductId]) // FK-leading (join table): product-side lookups; @@id only covers articleId
+  @@index([articleId])
 }
 
 model KnowledgeArticlePortfolio {
@@ -285,6 +311,7 @@ model KnowledgeArticlePortfolio {
 
   @@id([articleId, portfolioId])
   @@index([portfolioId]) // FK-leading (join table): portfolio-side lookups; @@id only covers articleId
+  @@index([articleId])
 }
 
 // ─── EP-WIKI-001: Platform Kernel Wiki + Per-Org Overlay ─────────────────────
@@ -476,6 +503,7 @@ model WikiPageLink {
 
   @@id([fromPageId, toPageId])
   @@index([toPageId])
+  @@index([fromPageId])
 }
 
 model WikiPageSource {
@@ -486,8 +514,11 @@ model WikiPageSource {
 
   @@id([pageId, sourceId])
   @@index([sourceId]) // FK-leading (join table): source-side lookups; @@id only covers pageId
+  @@index([pageId])
 }
 
+/// Knowledge-base ingest audit. Operational; 90 days.
+/// @dpf lifecycle=telemetry-bounded retention=90d categories=content,telemetry timeAxis=createdAt
 model WikiIngestEvent {
   id             String        @id @default(cuid())
   organizationId String?
@@ -557,6 +588,7 @@ model WorkbookShare {
   updatedAt  DateTime @updatedAt
 
   @@unique([workbookId, userId])
+  @@index([userId])
 }
 
 model WorkbookTable {
@@ -614,6 +646,7 @@ model WorkbookRow {
   updatedAt   DateTime           @updatedAt
 
   @@index([tableId, position])
+  @@index([createdById])
 }
 
 model WorkbookCell {
@@ -677,6 +710,7 @@ model WorkbookView {
   updatedAt   DateTime      @updatedAt
 
   @@index([tableId, createdById])
+  @@index([createdById])
 }
 
 /// BET-5 (BI-A1E864A5): pgvector-backed vector storage, replacing Qdrant. The `embedding`

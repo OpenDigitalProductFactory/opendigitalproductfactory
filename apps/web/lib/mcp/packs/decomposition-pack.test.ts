@@ -192,6 +192,36 @@ describe("decomposition pack — handler behavior (delegation preserved)", () =>
     );
   });
 
+  it("forwards a canonical fix design path to the server-authoritative coverage writer", async () => {
+    svc.recordPlanBacklogCoverage.mockResolvedValue({
+      ok: true,
+      receiptId: "receipt-fix",
+      decision: "atomic",
+      mappedItemIds: [],
+    });
+    const fixPath = "docs/superpowers/specs/fix-design.md";
+    const res = await decompositionPack.handlers.record_plan_backlog_coverage(
+      {
+        itemId: "BI-FIX",
+        planPath: fixPath,
+        planArtifactRef: {
+          kind: "repo-blob-at-commit",
+          repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+          commitSha: "a".repeat(40),
+          path: fixPath,
+          providerBlobId: "b".repeat(40),
+        },
+        decision: "atomic",
+        rationale: "This ordered repair is one indivisible compatibility boundary.",
+        deliverables: [],
+      },
+      "user-1",
+    );
+
+    expect(res).toMatchObject({ success: true, entityId: "receipt-fix" });
+    expect(svc.recordPlanBacklogCoverage).toHaveBeenCalledWith(expect.objectContaining({ planPath: fixPath }));
+  });
+
   it("check_plan_backlog_coverage revalidates a receipt without writing", async () => {
     svc.checkPlanBacklogCoverage.mockResolvedValue({
       ok: true,

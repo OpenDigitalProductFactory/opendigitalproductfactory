@@ -1,11 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   deriveAllowedRouteContexts,
   deriveCoworkerApprovalPolicy,
   deriveCoworkerAuthoritySubject,
+  resolveBoundInitiativeReviewBinding,
   resolveBoundInitiativeReviewItem,
   resolveInitiativeAuthorityContext,
+  resolveTrustedInitiativeItemId,
 } from "./resolve-coworker-tool-authority";
 
 describe("deriveAllowedRouteContexts", () => {
@@ -156,6 +158,57 @@ describe("resolveBoundInitiativeReviewItem", () => {
   it("accepts only the exact writer and exact persisted item/tool scope", () => {
     expect(resolveBoundInitiativeReviewItem(task, "record_initiative_evidence"))
       .toBe("BI-47ACE2C7");
+    expect(resolveBoundInitiativeReviewBinding(task, "record_initiative_evidence"))
+      .toMatchObject({ itemId: "BI-47ACE2C7", artifactRef });
+  });
+
+  // Observed 2026-09-06. summon_coworker persists the initiativeReviewBinding key
+  // unconditionally, so an ORDINARY dispatch that has no review binding at all
+  // arrives with the key present and JSON null. `=== undefined` slipped past it,
+  // the parse of null failed, and the authority gate rejected every governed tool
+  // with "verified authority context is unavailable". A compliance coworker asked
+  // to research a statutory rate loaded its tools and then had search_public_web
+  // refused twice — failing closed on the absence of something that was never
+  // required. mcp-task-capacity-resume.ts already treated null and undefined
+  // alike; this gate did not.
+  it("treats a persisted null binding as no binding, not as an invalid one", () => {
+    const ordinaryDispatch = {
+      ...task,
+      a2aMetadata: {
+        trigger: "external-mcp",
+        sourceRef: { kind: "mcp-token", id: "PAT-BI47" },
+        initiativeReviewBinding: null,
+      },
+    };
+    expect(resolveBoundInitiativeReviewItem(ordinaryDispatch, "search_public_web")).toBeNull();
+    expect(() => resolveBoundInitiativeReviewItem(ordinaryDispatch, "search_public_web")).not.toThrow();
+  });
+
+  it("still treats an absent binding key as no binding", () => {
+    const noKey = {
+      ...task,
+      a2aMetadata: {
+        trigger: "external-mcp",
+        sourceRef: { kind: "mcp-token", id: "PAT-BI47" },
+      },
+    };
+    expect(resolveBoundInitiativeReviewItem(noKey, "search_public_web")).toBeNull();
+  });
+
+  // The fix must not soften the real guard: a binding that is PRESENT and
+  // malformed is still a fail-closed error, because that is a review dispatch
+  // whose identity cannot be trusted.
+  it("still fails closed on a present but unparseable binding", () => {
+    const malformed = {
+      ...task,
+      a2aMetadata: {
+        trigger: "external-mcp",
+        sourceRef: { kind: "mcp-token", id: "PAT-BI47" },
+        initiativeReviewBinding: { writerToolName: "record_initiative_evidence" },
+      },
+    };
+    expect(() => resolveBoundInitiativeReviewItem(malformed, "record_initiative_evidence"))
+      .toThrow("invalid immutable initiative review binding");
   });
 
   it("fails closed when the executing writer differs from the immutable binding", () => {
@@ -200,27 +253,40 @@ describe("deriveCoworkerApprovalPolicy", () => {
     expect(deriveCoworkerApprovalPolicy(input)).toBe(expected);
   });
 
-  it("does not add a second human approval to an exact server-bound independent review", () => {
+  it("routes an exact server-bound initiative review through action-specific policy authority", () => {
     expect(deriveCoworkerApprovalPolicy({
       hitlTierDefault: 2,
       hitlPolicy: "side-effects",
-      serverBoundIndependentReview: true,
-    })).toBe("none");
+      serverBoundInitiativeReview: true,
+    })).toBe("side-effects");
+    expect(deriveCoworkerApprovalPolicy({
+      hitlTierDefault: 3,
+      hitlPolicy: "none",
+      serverBoundInitiativeReview: true,
+    })).toBe("side-effects");
   });
 
-  it("treats the exact server-bound review as the approval even for a tier-1 reviewer", () => {
+  it("does not let a tier-1 reviewer identity bypass the action-specific authority seam", () => {
     expect(deriveCoworkerApprovalPolicy({
       hitlTierDefault: 1,
       hitlPolicy: "side-effects",
-      serverBoundIndependentReview: true,
-    })).toBe("none");
+      serverBoundInitiativeReview: true,
+    })).toBe("all");
+  });
+
+  it("keeps a bound review subject to the reviewer's configured side-effect policy", () => {
+    expect(deriveCoworkerApprovalPolicy({
+      hitlTierDefault: 1,
+      hitlPolicy: "side-effects",
+      serverBoundInitiativeReview: true,
+    })).toBe("all");
   });
 
   it("keeps ordinary side effects behind the coworker's configured approval policy", () => {
     expect(deriveCoworkerApprovalPolicy({
       hitlTierDefault: 2,
       hitlPolicy: "side-effects",
-      serverBoundIndependentReview: false,
+      serverBoundInitiativeReview: false,
     })).toBe("side-effects");
   });
 
@@ -228,7 +294,53 @@ describe("deriveCoworkerApprovalPolicy", () => {
     expect(deriveCoworkerApprovalPolicy({
       hitlTierDefault: 1,
       hitlPolicy: "always",
-      serverBoundIndependentReview: true,
+      serverBoundInitiativeReview: true,
     })).toBe("all");
+  });
+});
+
+describe("resolveTrustedInitiativeItemId (BI-099A0BA3, security review L1)", () => {
+  const task = (taskRunId: string) => ({ taskRunId, parentTaskRunId: null, authorityScope: [], a2aMetadata: {} });
+
+  it("takes an external run's subject from its bound packet", async () => {
+    const loadStewardItemId = vi.fn();
+    await expect(resolveTrustedInitiativeItemId({
+      task: task("TR-MCP-1"), toolName: "record_initiative_evidence", boundItemId: "BI-BOUND", loadStewardItemId,
+    })).resolves.toBe("BI-BOUND");
+    expect(loadStewardItemId).not.toHaveBeenCalled();
+  });
+
+  it("takes a steward run's subject from the packet the platform issued its room, never from model arguments", async () => {
+    const loadStewardItemId = vi.fn(async () => "BI-ROUTED");
+    await expect(resolveTrustedInitiativeItemId({
+      task: task("TR-SCHED-ABCD1234"), toolName: "record_initiative_evidence", boundItemId: null, loadStewardItemId,
+    })).resolves.toBe("BI-ROUTED");
+    expect(loadStewardItemId).toHaveBeenCalledWith("TR-SCHED-ABCD1234");
+  });
+
+  it("asks nothing for another tool or a non-scheduled run", async () => {
+    const loadStewardItemId = vi.fn(async () => "BI-ROUTED");
+    await expect(resolveTrustedInitiativeItemId({ task: task("TR-SCHED-1"), toolName: "record_workroom_evidence", boundItemId: null, loadStewardItemId })).resolves.toBeNull();
+    await expect(resolveTrustedInitiativeItemId({ task: task("TR-CHAT-1"), toolName: "record_initiative_evidence", boundItemId: null, loadStewardItemId })).resolves.toBeNull();
+    await expect(resolveTrustedInitiativeItemId({ task: null, toolName: "record_initiative_evidence", boundItemId: null, loadStewardItemId })).resolves.toBeNull();
+    expect(loadStewardItemId).not.toHaveBeenCalled();
+  });
+});
+
+// Approval convergence A3 (BI-C8EC05C9, spec D2 S2): under a propose boundary
+// no policy projection may approve on a person's behalf. The flag is
+// server-only context; nothing a caller sends can set it.
+describe("proposeBoundaryAuthority", () => {
+  it("passes the boundary through and forbids policy projection under it", async () => {
+    const { proposeBoundaryAuthority } = await import("./resolve-coworker-tool-authority");
+    expect(proposeBoundaryAuthority({ proposeBoundary: true }, "side-effects")).toEqual({ proposeBoundary: true, policyProjectionAllowed: false });
+    expect(proposeBoundaryAuthority({ proposeBoundary: true }, "always")).toEqual({ proposeBoundary: true, policyProjectionAllowed: false });
+  });
+
+  it("changes nothing without it", async () => {
+    const { proposeBoundaryAuthority } = await import("./resolve-coworker-tool-authority");
+    expect(proposeBoundaryAuthority(undefined, "side-effects")).toEqual({ policyProjectionAllowed: true });
+    expect(proposeBoundaryAuthority({}, " Always ")).toEqual({ policyProjectionAllowed: false });
+    expect(proposeBoundaryAuthority({ proposeBoundary: false }, null)).toEqual({ policyProjectionAllowed: true });
   });
 });

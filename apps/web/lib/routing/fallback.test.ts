@@ -36,6 +36,9 @@ vi.mock("@/lib/ai-inference", () => {
   };
 });
 
+const { mockAutoDisableProvider } = vi.hoisted(() => ({ mockAutoDisableProvider: vi.fn().mockResolvedValue({ attempt: 0, nextRunAt: new Date() }) }));
+vi.mock("./provider-auto-disable", () => ({ autoDisableProvider: mockAutoDisableProvider }));
+
 vi.mock("./rate-tracker", () => ({
   recordRequest: vi.fn(),
   learnFromRateLimitResponse: vi.fn(),
@@ -275,34 +278,23 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
       );
     });
 
-    it("uses provider-specific execution plans for fallback endpoints", async () => {
+    it("routes a required writer past a non-enforcing adapter without declaring an outage", async () => {
       mockCallProvider
-        .mockRejectedValueOnce(new Error("primary unavailable"))
-        .mockResolvedValueOnce({
-          content: "fallback ok",
-          inputTokens: 10,
-          outputTokens: 5,
-          inferenceMs: 100,
-        });
+        .mockRejectedValueOnce(new InferenceError("required-terminal-writer-not-enforceable: codex-cli cannot require record_initiative_evidence", "required_terminal_writer_not_enforceable", "codex"))
+        .mockResolvedValueOnce({ content: "fallback ok", inputTokens: 10, outputTokens: 5, inferenceMs: 100 });
 
-      const tools = [
-        {
-          type: "function",
-          function: {
-            name: "read_project_file",
-            description: "Read a project file",
-            parameters: { type: "object", properties: {} },
-          },
-        },
-      ];
+      const tools = [{ type: "function", function: {
+        name: "record_initiative_evidence", description: "Persist the governed receipt",
+        parameters: { type: "object", properties: {} },
+      } }];
       const decision: RouteDecision = {
-        ...makeDecision("openai", "gpt-4.1"),
-        selectedEndpoint: "openai-ep",
-        selectedModelId: "gpt-4.1",
-        fallbackChain: ["codex-ep"],
+        ...makeDecision("codex", "gpt-5.4"),
+        selectedEndpoint: "codex-ep",
+        selectedModelId: "gpt-5.4",
+        fallbackChain: ["openai-ep"],
         candidates: [
-          makeCandidate("openai-ep", "openai", "gpt-4.1"),
           makeCandidate("codex-ep", "codex", "gpt-5.4"),
+          makeCandidate("openai-ep", "openai", "gpt-4.1"),
         ],
       };
 
@@ -311,22 +303,31 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
         [{ role: "user", content: "hi" }],
         "system",
         tools,
+        {
+          providerId: "codex", modelId: "gpt-5.4", recipeId: null,
+          contractFamily: "initiative-review", executionAdapter: "codex-cli",
+          maxTokens: 4096, providerSettings: {}, toolPolicy: { toolChoice: "required" },
+          responsePolicy: { terminalWriterToolName: "record_initiative_evidence" },
+        },
       );
       await vi.runAllTimersAsync();
-      await expect(pending).resolves.toMatchObject({
-        providerId: "codex",
-        modelId: "gpt-5.4",
-        content: "fallback ok",
-        downgraded: true,
+      const result = await pending;
+      expect(result).toMatchObject({
+        providerId: "openai", modelId: "gpt-4.1", content: "fallback ok",
+        downgraded: true, downgradeReason: "not-eligible",
       });
+      expect(result.downgradeMessage).toMatch(/cannot enforce.*required governed writer/i);
 
-      const fallbackPlan = mockCallProvider.mock.calls[1]?.[5];
-      expect(fallbackPlan).toMatchObject({
-        providerId: "codex",
-        modelId: "gpt-5.4",
-        executionAdapter: "codex-cli",
-        toolPolicy: { toolChoice: "auto" },
+      expect(mockCallProvider.mock.calls[1]?.[5]).toMatchObject({
+        providerId: "openai", modelId: "gpt-4.1", executionAdapter: "chat",
+        toolPolicy: { toolChoice: "required" },
+        responsePolicy: { terminalWriterToolName: "record_initiative_evidence" },
       });
+      expect(mockRecordRequest).toHaveBeenCalledTimes(1);
+      expect(mockRecordRequest).toHaveBeenCalledWith("openai", "gpt-4.1", 15);
+      expect(mockRecordRouteOutcome).toHaveBeenCalledTimes(1);
+      expect(mockMarkEndpointUnavailable).not.toHaveBeenCalled();
+      expect(mockPrisma.modelProfile.updateMany).not.toHaveBeenCalled();
     });
   });
 
@@ -366,6 +367,7 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
 
       // Provider NOT updated
       expect(mockPrisma.modelProvider.update).not.toHaveBeenCalled();
+      expect(mockAutoDisableProvider).not.toHaveBeenCalled();
     });
 
     // BI-OPT-ROUTING-CACHE: degrading a model changes what loadEndpointManifests
@@ -508,6 +510,7 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
       ).rejects.toThrow();
 
       expect(mockPrisma.modelProvider.update).not.toHaveBeenCalled();
+      expect(mockAutoDisableProvider).not.toHaveBeenCalled();
     });
 
     it("triggers provider reconciliation after retirement", async () => {
@@ -575,10 +578,7 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
         ),
       ).rejects.toThrow();
 
-      expect(mockPrisma.modelProvider.update).toHaveBeenCalledWith({
-        where: { providerId: "prov1" },
-        data: { status: "disabled" },
-      });
+      expect(mockAutoDisableProvider).toHaveBeenCalledWith(expect.objectContaining({ providerId: "prov1", cause: "auth" }));
     });
 
     it("does NOT change model status", async () => {
@@ -617,6 +617,7 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
       expect(mockRefreshOAuthToken).toHaveBeenCalledWith("prov1");
       expect(mockCallProvider).toHaveBeenCalledTimes(2);
       expect(mockPrisma.modelProvider.update).not.toHaveBeenCalled();
+      expect(mockAutoDisableProvider).not.toHaveBeenCalled();
       expect(result.content).toBe("hello");
     });
 
@@ -638,10 +639,7 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
       ).rejects.toThrow();
 
       expect(mockRefreshOAuthToken).toHaveBeenCalledWith("prov1");
-      expect(mockPrisma.modelProvider.update).toHaveBeenCalledWith({
-        where: { providerId: "prov1" },
-        data: { status: "disabled" },
-      });
+      expect(mockAutoDisableProvider).toHaveBeenCalledWith(expect.objectContaining({ providerId: "prov1", cause: "auth" }));
     });
 
     it("disables the OAuth provider if the retry still auth-fails (refresh once, then give up)", async () => {
@@ -663,10 +661,7 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
 
       expect(mockRefreshOAuthToken).toHaveBeenCalledTimes(1);
       expect(mockCallProvider).toHaveBeenCalledTimes(2);
-      expect(mockPrisma.modelProvider.update).toHaveBeenCalledWith({
-        where: { providerId: "prov1" },
-        data: { status: "disabled" },
-      });
+      expect(mockAutoDisableProvider).toHaveBeenCalledWith(expect.objectContaining({ providerId: "prov1", cause: "auth" }));
     });
 
     // ── BI-F4D3B9E9(a): a LOCAL serving engine has no credentials, so an
@@ -687,6 +682,7 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
       ).rejects.toThrow();
 
       expect(mockPrisma.modelProvider.update).not.toHaveBeenCalled();
+      expect(mockAutoDisableProvider).not.toHaveBeenCalled();
       expect(mockPrisma.modelProfile.updateMany).toHaveBeenCalledWith({
         where: { providerId: "local", modelId: "docker.io/ai/qwen3-coder:latest" },
         data: { modelStatus: "degraded" },
@@ -707,6 +703,7 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
       ).rejects.toThrow();
 
       expect(mockPrisma.modelProvider.update).not.toHaveBeenCalled();
+      expect(mockAutoDisableProvider).not.toHaveBeenCalled();
       expect(mockPrisma.modelProfile.updateMany).toHaveBeenCalledWith({
         where: { providerId: "local", modelId: "docker.io/ai/qwen3-coder:latest" },
         data: { modelStatus: "degraded" },
@@ -726,10 +723,7 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
         ),
       ).rejects.toThrow();
 
-      expect(mockPrisma.modelProvider.update).toHaveBeenCalledWith({
-        where: { providerId: "prov1" },
-        data: { status: "disabled" },
-      });
+      expect(mockAutoDisableProvider).toHaveBeenCalledWith(expect.objectContaining({ providerId: "prov1", cause: "billing" }));
     });
   });
 
@@ -757,6 +751,7 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
       });
       expect(mockAutoDiscoverAndProfile).toHaveBeenCalledWith("prov1");
       expect(mockPrisma.modelProvider.update).not.toHaveBeenCalled();
+      expect(mockAutoDisableProvider).not.toHaveBeenCalled();
     });
   });
 
@@ -801,6 +796,7 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
       });
       expect(mockScheduleRecovery).toHaveBeenCalledWith("prov1", "model1");
       expect(mockPrisma.modelProvider.update).not.toHaveBeenCalled();
+      expect(mockAutoDisableProvider).not.toHaveBeenCalled();
     });
 
     it("does not retry transient on a fallback endpoint", async () => {
@@ -867,10 +863,7 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
         ),
       ).rejects.toThrow();
 
-      expect(mockPrisma.modelProvider.update).toHaveBeenCalledWith({
-        where: { providerId: "prov1" },
-        data: { status: "disabled" },
-      });
+      expect(mockAutoDisableProvider).toHaveBeenCalledWith(expect.objectContaining({ providerId: "prov1", cause: "billing" }));
     });
 
     it("does not degrade the model", async () => {
@@ -947,6 +940,7 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
       });
       expect(mockScheduleRecovery).toHaveBeenCalledWith("prov1", "model1");
       expect(mockPrisma.modelProvider.update).not.toHaveBeenCalled();
+      expect(mockAutoDisableProvider).not.toHaveBeenCalled();
     });
 
     it("retries the pinned endpoint once after 15 s on overload then succeeds", async () => {

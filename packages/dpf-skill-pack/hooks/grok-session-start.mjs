@@ -7,7 +7,9 @@
 //      is on PATH) so process-spine can report exposed vs installed honestly;
 //   2. Runs process-spine-health-check --hook (injects additionalContext when
 //      replacements are missing or competitive plugins still win);
-//   3. Runs governance-freshness-check for branch drift of plane-1 wiring.
+//   3. Runs governance-freshness-check for branch drift of plane-1 wiring;
+//   4. Runs toolchain-freshness (BI-A67B65F4): installed copies vs the portal
+//      manifest. It always answers current, stale or unknown.
 //
 // Fail-open: any sub-step error exits 0 so SessionStart never wedges Grok.
 
@@ -18,16 +20,27 @@ import { fileURLToPath } from "node:url";
 const hooksDir = dirname(fileURLToPath(import.meta.url));
 const skillPackRoot = join(hooksDir, "..");
 
-function runNode(script, args, env) {
+function runNode(script, args, env, input) {
   try {
     return spawnSync(process.execPath, [script, ...args], {
       encoding: "utf8",
       env,
+      input,
       timeout: 25_000,
       windowsHide: true,
     });
   } catch {
     return { status: 1, stdout: "", stderr: "spawn failed" };
+  }
+}
+
+function contextOf(result) {
+  if (!result.stdout?.trim()) return null;
+  try {
+    const ctx = JSON.parse(result.stdout)?.hookSpecificOutput?.additionalContext;
+    return typeof ctx === "string" && ctx.trim() ? ctx.trim() : null;
+  } catch {
+    return null;
   }
 }
 
@@ -40,6 +53,11 @@ function main() {
   }
 
   const contexts = [];
+
+  // BI-84C1F526: refresh Grok's DPF credential when missing or near expiry
+  // (self-bounded to a few seconds; prints one plain repair line on failure).
+  const credential = runNode(join(hooksDir, "grok-credential-refresh.mjs"), [], env);
+  if (credential.stdout?.trim()) contexts.push(credential.stdout.trim());
 
   const spine = runNode(
     join(hooksDir, "process-spine-health-check.mjs"),
@@ -66,6 +84,13 @@ function main() {
       // ignore
     }
   }
+
+  // This entry never reads its own stdin (a held-open pipe would stall Grok's
+  // session start), so the advisory gets the session folder from the cwd.
+  const toolchain = contextOf(
+    runNode(join(hooksDir, "toolchain-freshness.mjs"), [], env, JSON.stringify({ cwd: process.cwd() })),
+  );
+  if (toolchain) contexts.push(toolchain);
 
   if (contexts.length > 0) {
     process.stdout.write(

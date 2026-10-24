@@ -24,7 +24,7 @@
 //
 // Design: docs/superpowers/specs/2026-08-23-zero-touch-organization-federation-design.md §5.11
 
-import { isFederationScopedEndpoint, type FederationCandidate } from "@dpf/validators";
+import { isFederationScopedEndpoint, type FederationCandidate } from "./lib/federation-contract";
 
 import { AuthorityHttpError, type AuthorityApiClient } from "./api-client";
 import { readArpCache, type ArpAdapter } from "./collectors/arp";
@@ -266,12 +266,24 @@ export async function runFederationScanLoop(opts: FederationScanOptions): Promis
       }
       if (targets.origins.length > 0) {
         const selfDiscoveryId = await resolveSelfDiscoveryId();
-        const candidates = await scanFederationCandidates({
-          origins: targets.origins,
-          probe,
-          selfDiscoveryId,
-        });
-        await submitCandidates({ api, state, candidates, observedAt: now(), log });
+        if (!selfDiscoveryId) {
+          // Fail CLOSED. Self-exclusion is a value comparison, so a null id makes
+          // the guard vanish and this install publishes ITSELF as a peer -- seen
+          // live on 2026-09-05, one flaky self-probe in ~80 passes submitting two
+          // candidates that were both this portal. Skipping a pass costs one
+          // observation; reporting yourself pollutes every operator's pairing list.
+          log(
+            "warn",
+            "Federation scan skipped this pass: could not read this install's own advertisement, so a peer cannot be told apart from self.",
+          );
+        } else {
+          const candidates = await scanFederationCandidates({
+            origins: targets.origins,
+            probe,
+            selfDiscoveryId,
+          });
+          await submitCandidates({ api, state, candidates, observedAt: now(), log });
+        }
       }
     } catch (err) {
       log("warn", `Federation scan pass failed: ${(err as Error).message}`);

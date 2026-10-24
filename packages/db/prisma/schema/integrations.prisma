@@ -27,26 +27,81 @@ model McpServer {
   @@index([integrationId]) // FK-leading (spine): integration-backed server listing, apps/web/lib/actions/connection-catalog.ts:96
 }
 
+/// DPF-owned authorization state for a dynamically discovered external MCP
+/// tool (BI-8B7B2FE9, spec 2026-08-30 §11). Discovery never decides authority:
+/// a new or materially changed tool is `quarantined` until an operator approves
+/// it (or the release's bundled policy covers it). `denied` is a deliberate no.
+enum McpToolPolicyStatus {
+  quarantined
+  approved
+  denied
+}
+
+/// What a discovered tool does to the world, as DPF classifies it. Remote MCP
+/// annotations (readOnlyHint, destructiveHint) are untrusted hints and never
+/// set this.
+enum McpToolEffect {
+  read_only      @map("read-only")
+  side_effecting @map("side-effecting")
+}
+
+/// Coworker execution modes a discovered tool may appear in. `advise` never
+/// admits a side-effecting tool.
+enum McpToolExecutionMode {
+  advise
+  act
+}
+
 model McpServerTool {
   id           String   @id @default(cuid())
   serverId     String
   toolName     String
+  /// Latest text the server reported. Model-visible text is the approved
+  /// snapshot below, never this column directly.
   description  String?
   inputSchema  Json
   isEnabled    Boolean  @default(true)
   discoveredAt DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  server McpServer @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  /// Policy projection (BI-8B7B2FE9). Fail closed: the default is quarantined.
+  policyStatus            McpToolPolicyStatus    @default(quarantined)
+  policyEffect            McpToolEffect?
+  policyExecutionModes    McpToolExecutionMode[] @default([])
+  /// A key from the closed agent-grant vocabulary (knownGrantKeys()).
+  policyGrantKey          String?
+  /// MCP_TOOL_POLICY_VERSION at approval; a stale version denies.
+  policyVersion           Int?
+  /// `<serverSlug>__<toolName>` the approval was granted for; a rename denies.
+  approvedToolIdentity    String?
+  /// sha256 of the sanitized description + inputSchema the operator approved.
+  approvedContentDigest   String?
+  approvedDescription     String?
+  approvedInputSchema     Json?
+  approvedByPrincipalId   String?
+  approvedAt              DateTime?
+  policyChangedAt         DateTime?
+  /// sha256 of the sanitized text most recently reported by the server.
+  discoveredContentDigest String?
+  /// Remote annotations as reported. Untrusted evidence; never read as policy.
+  discoveryHints          Json?
+
+  server              McpServer  @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  approvedByPrincipal Principal? @relation("McpServerToolApprover", fields: [approvedByPrincipalId], references: [id], onDelete: SetNull)
 
   @@unique([serverId, toolName])
   @@index([serverId])
+  @@index([policyStatus])
+  @@index([approvedByPrincipalId])
 }
 
 model CredentialEntry {
   id                 String                @id @default(cuid())
-  providerId         String                @unique
+  /// Legacy default lookup. Additional accounts are owned by their connection.
+  providerId         String?               @unique
   secretRef          String?
+  /// Non-secret upstream workspace binding, currently used by Anthropic API keys.
+  providerWorkspaceId String?
   status             String                @default("unconfigured")
   updatedAt          DateTime              @updatedAt
   clientId           String?
@@ -87,6 +142,7 @@ model IntegrationCredential {
 // event receipt; IntegrationImportStagedRecord remains read/import staging.
 // connectionId is the stable IntegrationCredential.integrationId value, never
 // the rotatable credential row id. credentialId is optional audit provenance.
+/// @dpf lifecycle=operational retention=projection sensitivity=internal categories=operational,configuration,security-audit owner=platform-owner steward=data-steward
 model ExternalChannelProjection {
   id                          String                              @id @default(cuid())
   externalChannelProjectionId String                              @unique
@@ -164,6 +220,8 @@ model BrowserSessionBinding {
 // Distinct from ComplianceAuditLog (entity-diff focused) and AgentActionProposal
 // (write-proposal focused). Reusable across ADP, QuickBooks, Plaid, Workday.
 // argsHash is sha256 of canonicalized args — raw args are never stored.
+/// Per-call connector telemetry (durations, error codes, arg hashes). Efficiency analysis uses recent windows; 6 months.
+/// @dpf lifecycle=telemetry-bounded retention=180d categories=telemetry timeAxis=calledAt
 model IntegrationToolCallLog {
   id           String   @id @default(cuid())
   calledAt     DateTime @default(now())
@@ -187,6 +245,8 @@ model IntegrationToolCallLog {
 // Idempotency and recovery state for at-least-once connector callbacks.
 // requestHash and acknowledgment are safe, adapter-redacted projections; raw
 // callback payloads, signatures, and credentials must never be stored here.
+/// Webhook/callback dedup receipts. Only needed within a provider's replay window; 90 days is generous.
+/// @dpf lifecycle=telemetry-bounded retention=90d categories=telemetry timeAxis=createdAt
 model IntegrationCallbackReceipt {
   id                     String    @id @default(cuid())
   connectorId            String
@@ -262,7 +322,10 @@ model OAuthPendingFlow {
   state        String   @unique
   codeVerifier String
   providerId   String
+  connectionId String?
+  connection   AiProviderConnection? @relation(fields: [connectionId], references: [connectionId], onDelete: Cascade)
   createdAt    DateTime @default(now())
+  @@index([connectionId])
 }
 
 // Transient store for OAuth Device Flow (RFC 8628) sessions in flight.
@@ -278,8 +341,20 @@ model DeviceCodeSession {
   createdAt  DateTime @default(now())
   createdBy  String
   consumed   Boolean  @default(false)
+  /// Which credential slot the released token is stored in (BI-985F4EC9).
+  /// Recorded at initiation so poll routes by the session, never by the caller.
+  /// NULL = a session minted before this column: hive contribution.
+  purpose    GitHubDeviceFlowPurpose?
 
   @@index([expiresAt])
+}
+
+/// Purpose of a GitHub device-flow login (BI-985F4EC9). Each value names one
+/// CredentialEntry slot: hive-contribution, or github-repository-controller for
+/// the install's managed repositories.
+enum GitHubDeviceFlowPurpose {
+  hive_contribution     @map("hive-contribution")
+  repository_controller @map("repository-controller")
 }
 
 model CommunicationChannelBinding {
@@ -336,6 +411,8 @@ model CommunicationChannelSession {
   @@index([workItemId])
 }
 
+/// Per-channel delivery attempt rows. Delivery troubleshooting value decays in days; 90 days.
+/// @dpf lifecycle=telemetry-bounded retention=90d categories=telemetry timeAxis=createdAt
 model CommunicationDeliveryAttempt {
   id                String                       @id @default(cuid())
   attemptId         String                       @unique @default(cuid())
@@ -411,6 +488,7 @@ model McpIntegration {
 // The vocabulary MATCHES IncumbentCoverageAssessment.verdict (spec 2026-07-23
 // §5.2) so the per-customer coverage stage-1 can default from this matrix.
 // Purely additive: a new empty table, no backfill, fleet-safe by construction.
+/// @dpf lifecycle=operational retention=reference sensitivity=public categories=configuration owner=platform-owner steward=data-steward
 model AbsorptionPosture {
   id                  String   @id @default(cuid())
   postureId           String   @unique
@@ -465,6 +543,7 @@ model AbsorptionPosture {
 // coveringBusinessCapabilityId / backlogItemId are soft references (plain columns,
 // not enforced FKs — same pattern as AbsorptionPosture) so an assessment can exist
 // before every referent is normalized. Additive, fleet-safe.
+/// @dpf lifecycle=operational retention=domain sensitivity=internal categories=operational,configuration owner=platform-owner steward=data-steward
 model IncumbentCoverageAssessment {
   id                           String    @id @default(cuid())
   assessmentId                 String    @unique
@@ -714,6 +793,7 @@ model GearInterface {
 /// `tools/list` can APPEND them to the lean core tier (never swap it) on the
 /// next fetch. Short-TTL and swept on expiry — discovery-only state, no
 /// authorization meaning (execution still gates on grants at tools/call).
+/// @dpf lifecycle=ephemeral retention=domain sensitivity=internal categories=configuration owner=platform-operator steward=data-steward
 model McpToolSession {
   tokenId         String   @id
   loadedToolNames String[] @default([])

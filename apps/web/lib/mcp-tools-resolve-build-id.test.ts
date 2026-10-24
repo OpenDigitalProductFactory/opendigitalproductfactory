@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { executeTool } from "./mcp-tools";
 
 // Verifies resolveActiveBuildId / extractBuildIdHint semantics through the
 // saveBuildEvidence handler — the lightest-weight handler that exercises the
@@ -6,7 +7,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // BI-E9CD1B92 (2026-05-13) bug where reviewBuildPlan({ buildId: "FB-1D69766D" })
 // returned a review of a different build.
 
-const mockPrisma = {
+// Hoist mock state so the tool graph loads during module collection, before
+// timed behavior cases run, without accessing uninitialized mock bindings.
+const mockPrisma = vi.hoisted(() => ({
   featureBuild: {
     findFirst: vi.fn(),
     findUnique: vi.fn(),
@@ -15,9 +18,9 @@ const mockPrisma = {
   buildActivity: {
     create: vi.fn(),
   },
-};
+}));
 
-const mockSaveBuildArtifactRevision = vi.fn(async (args: { buildId: string; field: string; value: unknown }) => {
+const mockSaveBuildArtifactRevision = vi.hoisted(() => vi.fn(async (args: { buildId: string; field: string; value: unknown }) => {
   await mockPrisma.featureBuild.update({
     where: { buildId: args.buildId },
     data: { [args.field]: args.value },
@@ -30,7 +33,7 @@ const mockSaveBuildArtifactRevision = vi.fn(async (args: { buildId: string; fiel
     errors: [],
     receiptIds: [],
   };
-});
+}));
 
 vi.mock("@dpf/db", () => ({
   prisma: mockPrisma,
@@ -104,7 +107,6 @@ describe("resolveActiveBuildId (via saveBuildEvidence)", () => {
     // be consulted when the hint resolves.
     mockPrisma.featureBuild.findFirst.mockResolvedValue({ buildId: mostRecentBuildId });
 
-    const { executeTool } = await import("./mcp-tools");
     const result = await executeTool(
       "saveBuildEvidence",
       {
@@ -132,7 +134,6 @@ describe("resolveActiveBuildId (via saveBuildEvidence)", () => {
       return Promise.resolve(null);
     });
 
-    const { executeTool } = await import("./mcp-tools");
     const result = await executeTool(
       "saveBuildEvidence",
       {
@@ -159,7 +160,7 @@ describe("resolveActiveBuildId (via saveBuildEvidence)", () => {
     );
   });
 
-  it("ignores hint when the user is not the build owner and falls back", async () => {
+  it("refuses a foreign explicit build without writing to a different owned build", async () => {
     const hintedBuildId = "FB-OTHEROWN";
     const ownedBuildId = "FB-OWNED001";
 
@@ -175,7 +176,6 @@ describe("resolveActiveBuildId (via saveBuildEvidence)", () => {
     });
     mockPrisma.featureBuild.findFirst.mockResolvedValue({ buildId: ownedBuildId });
 
-    const { executeTool } = await import("./mcp-tools");
     const result = await executeTool(
       "saveBuildEvidence",
       {
@@ -187,14 +187,13 @@ describe("resolveActiveBuildId (via saveBuildEvidence)", () => {
       { threadId: "thread-1", routeContext: "/build" },
     );
 
-    expect(result.success).toBe(true);
-    expect(mockPrisma.featureBuild.findFirst).toHaveBeenCalled();
-    expect(mockPrisma.featureBuild.update).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { buildId: ownedBuildId } }),
-    );
+    expect(result.success).toBe(false);
+    expect(mockPrisma.featureBuild.findFirst).not.toHaveBeenCalled();
+    expect(mockPrisma.featureBuild.update).not.toHaveBeenCalled();
+    expect(mockSaveBuildArtifactRevision).not.toHaveBeenCalled();
   });
 
-  it("ignores malformed hints (no FB- prefix) and falls back", async () => {
+  it("refuses malformed explicit hints without selecting another build", async () => {
     const ownedBuildId = "FB-OWNED002";
 
     mockPrisma.featureBuild.findFirst.mockResolvedValue({ buildId: ownedBuildId });
@@ -203,7 +202,6 @@ describe("resolveActiveBuildId (via saveBuildEvidence)", () => {
       return Promise.resolve(null);
     });
 
-    const { executeTool } = await import("./mcp-tools");
     const result = await executeTool(
       "saveBuildEvidence",
       {
@@ -215,13 +213,15 @@ describe("resolveActiveBuildId (via saveBuildEvidence)", () => {
       { threadId: "thread-1", routeContext: "/build" },
     );
 
-    expect(result.success).toBe(true);
+    expect(result.success).toBe(false);
     // Owner-check findUnique should NOT be invoked for a malformed hint.
     const ownerCheckCalls = mockPrisma.featureBuild.findUnique.mock.calls.filter(
       (call) => (call[0] as { select?: { createdById?: boolean } }).select?.createdById,
     );
     expect(ownerCheckCalls).toHaveLength(0);
-    expect(mockPrisma.featureBuild.findFirst).toHaveBeenCalled();
+    expect(mockPrisma.featureBuild.findFirst).not.toHaveBeenCalled();
+    expect(mockPrisma.featureBuild.update).not.toHaveBeenCalled();
+    expect(mockSaveBuildArtifactRevision).not.toHaveBeenCalled();
   });
 
   // Pin the select shape so the test fails loudly if someone narrows it
@@ -263,7 +263,6 @@ describe("start_scout_research build resolution (BI-7FEAFD9A regression)", () =>
       },
     );
 
-    const { executeTool } = await import("./mcp-tools");
     const result = await executeTool(
       "start_scout_research",
       {},

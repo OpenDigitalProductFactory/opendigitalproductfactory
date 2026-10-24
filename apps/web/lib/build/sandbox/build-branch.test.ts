@@ -20,7 +20,15 @@ import {
   resolveBuildWorkdir,
   getClientIdentity,
   wrapSandboxGitCommand,
+  buildSandboxRepoStateProbeCommand,
+  parseSandboxRepoState,
+  SANDBOX_GIT_LOCK_FILE,
+  buildSandboxStaleGitLockCleanupCommand,
 } from "./build-branch";
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { shouldPreserveBuildBranchWork } from "./sandbox-source-currency";
 
 describe("wrapSandboxGitCommand", () => {
@@ -49,19 +57,22 @@ describe("wrapSandboxGitCommand", () => {
     expect(command).toContain("node_modules");
   });
 
-  it("cleans up a stale workspace index lock before running git commands", () => {
-    expect(wrapSandboxGitCommand('git -C /workspace status --short')).toContain(
-      'rm -f "/workspace/.git/index.lock"',
-    );
-    expect(wrapSandboxGitCommand('git -C /workspace status --short')).toContain(
-      'pgrep -x git',
-    );
+  it("cleans up stale workspace git locks before running git commands", () => {
+    const wrapped = wrapSandboxGitCommand('git -C /workspace status --short');
+    expect(wrapped.indexOf("-name '*.lock'")).toBeGreaterThan(-1);
+    expect(wrapped.indexOf("-name '*.lock'")).toBeLessThan(wrapped.indexOf("git -C /workspace status --short"));
   });
 
   it("prefixes sandbox git commands with a safe.directory allowance for /workspace", () => {
     expect(wrapSandboxGitCommand('git -C /workspace status --short')).toContain(
       'git config --global --add safe.directory "/workspace"',
     );
+  });
+
+  it("also allows every worktree path with a guarded wildcard safe.directory (BI-518B5F69)", () => {
+    const wrapped = wrapSandboxGitCommand("git -C /workspace worktree add /workspace/.builds/FB-1 build/FB-1");
+    expect(wrapped).toContain("git config --global --add safe.directory '*'");
+    expect(wrapped).toMatch(/get-all safe\.directory .*grep -qx/);
   });
 
   it("preserves the original command after the safe.directory setup", () => {
@@ -138,6 +149,18 @@ describe("wrapSandboxGitCommand", () => {
     expect(command).toContain(":!**/.pnpm-store/**");
     expect(command).not.toContain(".next");
     expect(command).not.toContain("tsbuildinfo");
+  });
+
+  // FB-D671B016 (2026-09-25): worktrees share node_modules by SYMLINK; git sees
+  // a symlink as a file, so `**/node_modules/**` and a `node_modules/` ignore
+  // rule both missed it and the WIP commit tracked it. The entry itself must be
+  // excluded, and one an earlier commit captured must be untracked.
+  it("never stages a node_modules symlink and untracks one already committed", () => {
+    const command = buildSandboxGitAddCommand();
+
+    expect(command).toContain("':!**/node_modules'");
+    expect(command).toMatch(/^git ls-files -z -- ':\(glob\)\*\*\/node_modules' \| xargs -0 -r git rm -q --cached -- && git add -u/);
+    expect(buildSandboxGitCleanCommand()).toContain("':!**/node_modules'");
   });
 
   it("commits a build branch's in-flight work before the pre-checkout scrub (BI-98B723C0)", () => {
@@ -242,30 +265,39 @@ describe("per-build worktree primitives (BI-98B723C0 Phase 2)", () => {
     expect(buildWorktreePath("FB-ABCD1234", "/ws")).toBe("/ws/.builds/FB-ABCD1234");
   });
 
-  it("creates an isolated worktree on the build branch with shared node_modules symlinks", () => {
+  it("creates an isolated worktree on the build branch with its own offline node_modules install", () => {
     const cmd = buildSandboxWorktreeAddCommand("FB-ABCD1234", "build/FB-ABCD1234");
     // clears any stale worktree first, then prunes the registry
     expect(cmd).toContain(
-      "git worktree remove --force /workspace/.builds/FB-ABCD1234 2>/dev/null || true",
+      "git worktree remove --force --force /workspace/.builds/FB-ABCD1234 2>/dev/null || true",
     );
     expect(cmd).toContain("git worktree prune");
-    // attaches the build branch into the worktree
+    // BI-7FCF10FE: attaches the build branch LOCKED, so the portal's code-graph
+    // prune (the repo is mounted at a different path there) cannot drop it
     expect(cmd).toContain(
-      "git worktree add --force /workspace/.builds/FB-ABCD1234 build/FB-ABCD1234",
+      'git worktree add --force --lock --reason "Build Studio FB-ABCD1234" /workspace/.builds/FB-ABCD1234 build/FB-ABCD1234',
     );
-    // node_modules shared by symlink — NOT reinstalled (verified live in dpf-sandbox-1).
-    // -sfn so re-linking an already-provisioned worktree is a no-op, not an error.
+    // FB-D671B016 (2026-09-25): the worktree installs its own node_modules,
+    // offline from the sandbox store first, so its @dpf/* packages resolve to
+    // its own source and never into /workspace (BI-A900EA3F stale-root guard).
     expect(cmd).toContain(
-      "ln -sfn /workspace/node_modules /workspace/.builds/FB-ABCD1234/node_modules",
+      "{ [ -d /workspace/.builds/FB-ABCD1234/node_modules/.pnpm ] || (cd /workspace/.builds/FB-ABCD1234 && { CI=true pnpm install --offline --frozen-lockfile",
     );
-    expect(cmd).toContain(
-      "ln -sfn /workspace/apps/web/node_modules /workspace/.builds/FB-ABCD1234/apps/web/node_modules",
+    expect(cmd).toContain("|| CI=true pnpm install --frozen-lockfile");
+    // nothing is linked into the canonical install any more
+    expect(cmd).not.toContain("ln -s");
+  });
+
+  it("removes links left by the shared-install design, keeps a real install, and excludes node_modules repo-wide", () => {
+    const cmd = buildSandboxWorktreeAddCommand("FB-ABCD1234", "build/FB-ABCD1234");
+    const reuseBranch = cmd.slice(cmd.indexOf("; then "), cmd.indexOf("; else "));
+    // a link is removed (rm -f, never recursive); a real directory is left alone
+    expect(reuseBranch).toContain(
+      "{ [ ! -L /workspace/.builds/FB-ABCD1234/apps/web/node_modules ] || rm -f /workspace/.builds/FB-ABCD1234/apps/web/node_modules; }",
     );
-    expect(cmd).toContain(
-      "ln -sfn /workspace/packages/db/node_modules /workspace/.builds/FB-ABCD1234/packages/db/node_modules",
-    );
-    // never runs an install in the worktree — the symlinks are the whole point
-    expect(cmd).not.toContain("pnpm install");
+    // the install runs only when the worktree has none of its own
+    expect(reuseBranch).toContain("[ -d /workspace/.builds/FB-ABCD1234/node_modules/.pnpm ] ||");
+    expect(reuseBranch).toContain('grep -qx node_modules "$(git rev-parse --git-common-dir)/info/exclude"');
   });
 
   // BI-8C6AA60E (isolation-ON half): the destructive `worktree remove --force`
@@ -277,15 +309,35 @@ describe("per-build worktree primitives (BI-98B723C0 Phase 2)", () => {
     expect(cmd).toContain(
       '[ -d /workspace/.builds/FB-ABCD1234 ] && [ "$(git -C /workspace/.builds/FB-ABCD1234 rev-parse --abbrev-ref HEAD 2>/dev/null)" = "build/FB-ABCD1234" ]',
     );
-    // the reuse branch re-asserts symlinks only — it must not destroy the tree
+    // the reuse branch only re-asserts the worktree's own install — it must not destroy the tree
     const reuseBranch = cmd.slice(cmd.indexOf("; then "), cmd.indexOf("; else "));
-    expect(reuseBranch).toContain("ln -sfn");
+    expect(reuseBranch).toContain("pnpm install --offline --frozen-lockfile");
     expect(reuseBranch).not.toContain("worktree remove");
     expect(reuseBranch).not.toContain("worktree add");
     // and the destructive path is behind the else
     const recreateBranch = cmd.slice(cmd.indexOf("; else "));
     expect(recreateBranch).toContain("git worktree remove --force");
     expect(recreateBranch).toContain("git worktree add --force");
+  });
+
+  // A directory git no longer recognises (the .git/worktrees registry was lost)
+  // must be cleared before `worktree add`, or the recreate fails twice over:
+  // "is not a working tree" then "already exists". Only the recreate path may
+  // clear it, and only when git disowns it.
+  it("clears an orphaned build directory git does not recognise before recreating the worktree", () => {
+    const cmd = buildSandboxWorktreeAddCommand("FB-ABCD1234", "build/FB-ABCD1234");
+    const recreateBranch = cmd.slice(cmd.indexOf("; else "));
+    const clear = "git -C /workspace/.builds/FB-ABCD1234 rev-parse --git-dir >/dev/null 2>&1 || rm -rf /workspace/.builds/FB-ABCD1234";
+    expect(recreateBranch).toContain(`if [ -d /workspace/.builds/FB-ABCD1234 ]; then ${clear}; fi`);
+    expect(recreateBranch.indexOf("worktree remove --force")).toBeLessThan(recreateBranch.indexOf("rm -rf"));
+    expect(recreateBranch.indexOf("rm -rf")).toBeLessThan(recreateBranch.indexOf("git worktree add --force"));
+    const reuseBranch = cmd.slice(cmd.indexOf("; then "), cmd.indexOf("; else "));
+    // Reuse never removes anything recursively: the build's source tree and a
+    // real install are never touched; only stale node_modules links go.
+    expect(reuseBranch).not.toContain("rm -rf");
+    const removals = reuseBranch.match(/rm -f \S+/g) ?? [];
+    expect(removals.length).toBeGreaterThan(0);
+    for (const removal of removals) expect(removal).toMatch(/^rm -f \/workspace\/\.builds\/FB-ABCD1234\/(?:[\w-]+\/)*node_modules;?$/);
   });
 
   // BI-82CB5A7D — smoke check so a hooksPath-override regression is caught
@@ -315,8 +367,9 @@ describe("per-build worktree primitives (BI-98B723C0 Phase 2)", () => {
 
   it("tears down a build's worktree best-effort without touching the shared install", () => {
     const cmd = buildSandboxWorktreeRemoveCommand("FB-ABCD1234");
+    // double force: the worktree is locked against prune (BI-7FCF10FE)
     expect(cmd).toContain(
-      "git worktree remove --force /workspace/.builds/FB-ABCD1234 2>/dev/null || true",
+      "git worktree remove --force --force /workspace/.builds/FB-ABCD1234 2>/dev/null || true",
     );
     expect(cmd).toContain("git worktree prune");
     // teardown must not rm -rf anything — node_modules are symlinks, removal is git's job
@@ -396,5 +449,114 @@ describe("getClientIdentity upstream default", () => {
     expect(identity.upstreamRemoteUrl).toBe(
       "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory.git",
     );
+  });
+});
+
+// BI-3D7569C7 — live 2026-09-29: the baseline probe printed "true\nyes"
+// (rev-parse --is-inside-work-tree writes "true" to stdout), which never
+// equals "yes". Every build start then took the fresh-baseline path: a hard
+// reset of the shared /workspace to origin/main plus a "sandbox baseline"
+// commit (60 such resets in the sandbox's last 400 reflog entries), the
+// widest writes on the shared index that concurrent builds collide on.
+describe("sandbox repo-state probe", () => {
+  // The probe is a POSIX command for the Linux sandbox. Run `sh` in the fixture working directory; a
+  // relative path avoids Windows backslashes being read as shell escapes.
+  function probe(dir: string): string {
+    return execFileSync("sh", ["-c", buildSandboxRepoStateProbeCommand(".")], { cwd: dir, encoding: "utf8" });
+  }
+
+  function gitIn(dir: string, ...args: string[]): void {
+    execFileSync("git", ["-C", dir, "-c", "user.name=t", "-c", "user.email=t@t", ...args], { stdio: "ignore" });
+  }
+
+  it("reads a repo with commits as having commits", () => {
+    const dir = mkdtempSync(join(tmpdir(), "dpf-probe-"));
+    try {
+      gitIn(dir, "init", "-q");
+      writeFileSync(join(dir, "f"), "x");
+      gitIn(dir, "add", "f");
+      gitIn(dir, "commit", "-qm", "base");
+      expect(parseSandboxRepoState(probe(dir))).toBe("has-commits");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("reads an initialised repo with no commits as empty", () => {
+    const dir = mkdtempSync(join(tmpdir(), "dpf-probe-"));
+    try {
+      gitIn(dir, "init", "-q");
+      expect(parseSandboxRepoState(probe(dir))).toBe("empty-repo");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("reads a plain directory as no repo", () => {
+    const dir = mkdtempSync(join(tmpdir(), "dpf-probe-"));
+    try {
+      expect(parseSandboxRepoState(probe(dir))).toBe("no-repo");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses output it cannot classify instead of assuming a fresh repo", () => {
+    expect(() => parseSandboxRepoState("")).toThrow();
+    expect(() => parseSandboxRepoState("true\nyes")).toThrow();
+  });
+});
+
+// BI-3D7569C7 — concurrent builds ran git writes on the one shared /workspace
+// index unserialized; on the live sandbox image 9/10 concurrent root commits
+// failed on index.lock, 0/10 under flock.
+describe("wrapSandboxGitCommand serializes shared-root git", () => {
+  it("holds an exclusive lock on the sandbox git lock file around the command", () => {
+    const wrapped = wrapSandboxGitCommand("git -C /workspace status --short");
+    expect(wrapped).toContain(`9>${SANDBOX_GIT_LOCK_FILE}`);
+    expect(wrapped).toContain("flock -n 9");
+    const lockIdx = wrapped.indexOf("flock -n 9");
+    expect(wrapped.indexOf("git -C /workspace status --short")).toBeGreaterThan(lockIdx);
+  });
+
+  it("bounds the wait and fails with a named reason rather than hanging", () => {
+    const wrapped = wrapSandboxGitCommand("true");
+    expect(wrapped).toMatch(/exit 75/);
+    expect(wrapped).toContain("sandbox git lock busy");
+  });
+
+  it("keeps working on an image without flock", () => {
+    expect(wrapSandboxGitCommand("true")).toContain("command -v flock");
+  });
+});
+
+// BI-E4AD091E — a stale .git/shallow.lock (2026-09-25 13:53, nothing holding
+// it) failed every history fetch for four days. Locks are cleared by age: no
+// git operation holds one for 15 minutes.
+describe("stale sandbox git lock cleanup", () => {
+  it("removes lock files older than the bound and keeps fresh ones", () => {
+    const gitDir = mkdtempSync(join(tmpdir(), "dpf-locks-"));
+    try {
+      mkdirSync(join(gitDir, "worktrees", "FB-1"), { recursive: true });
+      const staleAt = new Date(Date.now() - 30 * 60 * 1000);
+      for (const f of ["shallow.lock", "index.lock", join("worktrees", "FB-1", "index.lock")]) {
+        writeFileSync(join(gitDir, f), "");
+        utimesSync(join(gitDir, f), staleAt, staleAt);
+      }
+      writeFileSync(join(gitDir, "packed-refs.lock"), "");
+      execFileSync("sh", ["-c", buildSandboxStaleGitLockCleanupCommand(".")], { cwd: gitDir });
+      expect(existsSync(join(gitDir, "packed-refs.lock"))).toBe(true);
+      for (const f of ["shallow.lock", "index.lock", join("worktrees", "FB-1", "index.lock")]) {
+        expect(existsSync(join(gitDir, f))).toBe(false);
+      }
+    } finally {
+      rmSync(gitDir, { recursive: true, force: true });
+    }
+  });
+
+  it("runs inside every wrapped sandbox git command, in place of the pgrep guard", () => {
+    const wrapped = wrapSandboxGitCommand("git -C /workspace status --short");
+    expect(wrapped).toContain(buildSandboxStaleGitLockCleanupCommand("/workspace/.git"));
+    expect(wrapped).not.toContain("pgrep -x git");
   });
 });

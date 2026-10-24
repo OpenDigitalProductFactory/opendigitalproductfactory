@@ -4,7 +4,7 @@
 // advisory decision gate that scores a set of options against the governance
 // principles in scope for the calling population and returns a recommendation
 // plus a per-principle contribution ledger. The handler lazy-imports the
-// Postgres commandment lookup and the Qdrant core/contextual principle search,
+// Postgres commandment lookup and the vector core/contextual principle search,
 // then runs the pure decide() math — reproducing the former switch case
 // verbatim, so behaviour is identical when the tool is invoked over MCP.
 //
@@ -12,15 +12,18 @@
 // mirror agent-grants.ts TOOL_TO_GRANTS, which stays the gating source.
 
 import { parseDecisionStakes } from "@/lib/decision/option-scoring";
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
+import {
+  createRetrievalBudget,
+  resolveRetrievalBudgetMs,
+  retrievePrincipleTiers,
+} from "@/lib/decision/retrieval-budget";
 import {
   DIMENSION_KEYS,
   buildFeaturesDescription,
-  validateOptionFeatures,
-  featureErrorRemedy,
-  type FeatureValidationError,
 } from "@/lib/decision/dimension-catalog";
+import { validateOptionInputs } from "@/lib/decision/option-input-contract";
 import {
   groundOptionsFromParams,
   buildScoredDecisionOptions,
@@ -48,8 +51,20 @@ const definitions: ToolDefinition[] = [
           items: {
             type: "object",
             properties: {
-              id: { type: "string", description: "Stable identifier for the option." },
-              description: { type: "string", description: "Short prose description." },
+              // Both are enforced at call time, not merely declared (BI-9889566B):
+              // an option with no id, or an id shared with another option,
+              // cannot be told apart in the scores, the recommendation or the
+              // evidence map, so the call is refused rather than scored.
+              id: {
+                type: "string",
+                description:
+                  "Stable identifier for the option. Required, non-empty, and DISTINCT across the option set — the scores, the recommendation and the `evidence` map are all keyed on it. A set with a missing or duplicated id is refused.",
+              },
+              description: {
+                type: "string",
+                description:
+                  "Short prose description. Required and non-empty — it is what the semantic path scores when an option carries no features.",
+              },
               features: {
                 type: "object",
                 description: buildFeaturesDescription(),
@@ -68,6 +83,7 @@ const definitions: ToolDefinition[] = [
         // Trust-envelope evidence grounding params (spec §2 Axis 1) — defined in
         // evidence-grounding.ts so this pack stays under the module-size ceiling.
         ...PRINCIPLE_DECIDE_EVIDENCE_SCHEMA,
+        decisionDomain: { type: "string", enum: ["org-business", "platform-development"], description: "Owning scope (BI-HDLEMP-01, BI-9C384562): org-business is answered by the organization WWWD profile, platform-development by the founder WWMD profile. Omitted, routing falls back to callingPopulation, which sends an in-platform coworker to the organization profile." },
         callingPopulation: {
           type: "string",
           enum: ["in_platform_coworker", "external_coding_agent", "human"],
@@ -75,7 +91,7 @@ const definitions: ToolDefinition[] = [
         },
         maxPrinciples: {
           type: "number",
-          description: "Cap on relevant core/contextual principles retrieved from Qdrant. Default 20.",
+          description: "Cap on relevant core/contextual principles retrieved from the vector store. Default 20.",
         },
         tieMargin: {
           type: "number",
@@ -136,11 +152,7 @@ export async function runPrincipleDecision(
 ): Promise<ToolResult> {
   // Pull in-scope commandments plus relevant core/contextual principles, run
   // the pure scoring math, and return its contribution ledger.
-  const validPopulations = new Set([
-    "in_platform_coworker",
-    "external_coding_agent",
-    "human",
-  ]);
+  const validPopulations = new Set(["in_platform_coworker", "external_coding_agent", "human"]);
   const callingPopulation = params["callingPopulation"];
   if (
     typeof callingPopulation !== "string" ||
@@ -162,36 +174,11 @@ export async function runPrincipleDecision(
     };
   }
 
-  // BI-E0151DB2. Validate option features against the closed dimension
-  // registry, the same way ringScope is validated below. An unknown key is NOT
-  // harmless: computeStructuredAlignment iterates the PRINCIPLE's dimensions
-  // and reads option.features[dim], so a key that is not a real dimension is
-  // never read and the axis the caller thought they scored silently counts as
-  // zero. Silent skip on bad input is the failure mode
-  // `make-silent-failures-observable` forbids.
-  const featureErrors: FeatureValidationError[] = [];
-  for (const raw of optionsParam) {
-    if (typeof raw !== "object" || raw === null) continue;
-    const o = raw as Record<string, unknown>;
-    const f = o["features"];
-    if (typeof f !== "object" || f === null || Array.isArray(f)) continue;
-    featureErrors.push(
-      ...validateOptionFeatures(
-        String(o["id"] ?? "(unnamed option)"),
-        f as Record<string, unknown>,
-      ),
-    );
-  }
-  if (featureErrors.length > 0) {
-    return {
-      success: false,
-      message:
-        `principle_decide rejected ${featureErrors.length} option feature(s): ` +
-        featureErrors.map((e) => `[${e.optionId}] ${e.detail}`).join(" ") +
-        ` ${featureErrorRemedy()}`,
-      error: "Invalid option features",
-    };
-  }
+  // Option-set input contract (BI-9889566B / BI-E0151DB2): identity then
+  // features, both fail-fast. See option-input-contract.ts for why a silently
+  // accepted id-less option produced an option-invariant ranking.
+  const optionInputRejection = validateOptionInputs(optionsParam);
+  if (optionInputRejection) return { success: false, ...optionInputRejection };
 
   const { listPrinciplesByTier, prisma, PRINCIPLE_DECIDE_DEFAULTS } =
     await import("@dpf/db");
@@ -208,7 +195,7 @@ export async function runPrincipleDecision(
     "@/lib/decision/consumer-context-attenuation"
   );
   // BI-3C1A6451: server-side embedding for the semantic-fallback path.
-  // Used both for principle direction text (Qdrant-sourced principles
+  // Used both for principle direction text (vector-sourced principles
   // have empty dimensionVector) and for option descriptions when the
   // caller passes empty features. Pre-fix, both produced alignment=0.
   const { generateEmbedding, isEmbeddingAvailable } = await import(
@@ -322,38 +309,24 @@ export async function runPrincipleDecision(
 
   const contextQuery = String(params["context"] ?? "");
 
-  // 2. Core from Qdrant — relevance-ranked.
-  let core: Array<Record<string, unknown>> = [];
-  try {
-    core = (await searchWikiPages({
-      query: contextQuery,
-      organizationId,
-      pageKind: "principle",
-      principleTier: "core",
-      principleAppliesTo: callingPopulation,
-      principleRingScope: ringScopeActive ? ringScope : undefined,
-      limit: 5,
-    })) as Array<Record<string, unknown>>;
-  } catch (err) {
-    console.warn("[principle_decide] core Qdrant lookup failed:", err);
-  }
+  // BI-D8D1371B: bound semantic retrieval so a stalling embedding provider
+  // degrades this call instead of hanging it. Reasoning: decision/retrieval-budget.ts.
+  const budgetMs = resolveRetrievalBudgetMs();
+  const retrievalBudget = createRetrievalBudget(budgetMs);
+  const withRetrievalBudget = <T,>(work: Promise<T>, whenLate: T) =>
+    retrievalBudget.run(work, whenLate);
 
-  // 3. Contextual from Qdrant — relevance-gated.
-  let contextual: Array<Record<string, unknown>> = [];
-  try {
-    contextual = (await searchWikiPages({
-      query: contextQuery,
-      organizationId,
-      pageKind: "principle",
-      principleTier: "contextual",
-      principleAppliesTo: callingPopulation,
-      principleRingScope: ringScopeActive ? ringScope : undefined,
-      limit: 5,
-      scoreThreshold: contextualThreshold,
-    })) as Array<Record<string, unknown>>;
-  } catch (err) {
-    console.warn("[principle_decide] contextual Qdrant lookup failed:", err);
-  }
+  // 2+3. Core and contextual tiers, both under the shared retrieval budget.
+  // eslint-disable-next-line prefer-const -- both are narrowed by the post-filter below.
+  let { core, contextual } = await retrievePrincipleTiers({
+    search: searchWikiPages as never,
+    budget: retrievalBudget,
+    query: contextQuery,
+    organizationId,
+    callingPopulation,
+    ringScope: ringScopeActive ? ringScope : undefined,
+    contextualThreshold,
+  });
 
   // Post-filter (cheap belt-and-suspenders). Mirrors the contract used
   // by recallPrincipleContext: empty principleRingScope passes
@@ -390,13 +363,13 @@ export async function runPrincipleDecision(
 
   // RC2/RC3 (BI-E1267C6D) — rehydrate the authoritative principle rows.
   //
-  // Qdrant is the relevance index, not the authoring store: its payload
+  // the vector store is the relevance index, not the authoring store: its payload
   // (embeddings.ts storeWikiPage) carries principleTier/AppliesTo/RingScope/
   // Dimensions/Public and deliberately NOT principleDimensionVector or
-  // principleWeight. So a Qdrant hit alone can never score structurally, and
+  // principleWeight. So a vector hit alone can never score structurally, and
   // the principleWeight override read below was reading a key that is never
   // written. Rather than duplicating the vector into the payload (which then
-  // goes stale on any principle edit that skips a re-embed), we let Qdrant
+  // goes stale on any principle edit that skips a re-embed), we let the vector store
   // rank relevance and then fetch the real rows from Postgres by pageId —
   // pageId is the WikiPage id (payload entityId), so this is one keyed
   // findMany with no backfill and no drift surface.
@@ -435,12 +408,12 @@ export async function runPrincipleDecision(
     }
   }
 
-  // BI-6ADB019D — drop phantom hits: Qdrant points whose WikiPage no longer
+  // BI-6ADB019D — drop phantom hits: vector points whose WikiPage no longer
   // exists. Postgres is the authoring store, so an id the index returned that
   // a SUCCESSFUL lookup could not find is a deleted page, not a slow one.
   //
   // Observed live: five hits titled "Live State Over Seed Data" when the DB
-  // holds exactly one — four Qdrant points referencing rows that are gone.
+  // holds exactly one — four vector points referencing rows that are gone.
   // Left in place they cost nothing in score (they contribute 0.000) but they
   // consume `maxPrinciples` slots, so real doctrine gets squeezed out of the
   // relevance set by principles that do not exist. That is the same starvation
@@ -513,13 +486,13 @@ export async function runPrincipleDecision(
   }
 
   // Build DecisionPrinciple[] from the merged set. Postgres rows carry
-  // the full dimensionVector for structured alignment; Qdrant hits only
+  // the full dimensionVector for structured alignment; vector hits only
   // carry dimension keys (no signed vector), so they fall back to
   // semantic alignment. For the semantic path to produce non-zero
   // signal, we must embed each candidate's direction text and let
   // decide()'s cosine math do the rest (BI-3C1A6451 — the dead-code
   // defect tracked at apps/web/lib/wiki/principle-decide.ts:117).
-  // PG rows carry direction at row.principleDirection; Qdrant hits
+  // PG rows carry direction at row.principleDirection; vector hits
   // carry it at hit.contentPreview.
   type CandidateRow = {
     id: string;
@@ -555,7 +528,7 @@ export async function runPrincipleDecision(
     }),
     ...relevanceHits.map((hit): CandidateRow => {
       // Prefer the rehydrated Postgres row (authoritative: signed vector,
-      // weight override, direction text). Fall back to the Qdrant payload
+      // weight override, direction text). Fall back to the vector payload
       // field-by-field so a rehydration miss degrades to the pre-fix
       // behaviour for that one principle rather than dropping it.
       const row = hydratedById.get(String(hit["pageId"] ?? ""));
@@ -569,7 +542,7 @@ export async function runPrincipleDecision(
         ),
         tier,
         // BI-A9E9ADCB (RC3): the override is read from the rehydrated row.
-        // It was previously read off the Qdrant hit, but storeWikiPage never
+        // It was previously read off the vector hit, but storeWikiPage never
         // writes principleWeight to the payload, so the override was still
         // always undefined and every core/contextual principle silently used
         // the tier default (0.4/0.1). resolveWeight still falls back to the
@@ -592,14 +565,14 @@ export async function runPrincipleDecision(
   // (empty dimensionVector), embed its direction text server-side.
   // Parallelized to amortize inference round-trips. Skipped for
   // structured-alignment rows since their embedding wouldn't be used.
-  const principleEmbeddings = await Promise.all(
+  const principleEmbeddings = await withRetrievalBudget(Promise.all(
     candidateRows.map(async (row): Promise<number[] | undefined> => {
       if (Object.keys(row.dimensionVector).length > 0) return undefined;
       if (!row.directionText) return undefined;
       const e = await generateEmbedding(row.directionText);
       return e ?? undefined;
     }),
-  );
+  ), candidateRows.map(() => undefined));
 
   type DecisionPrinciple = Parameters<typeof decide>[1][number];
   const principleList: DecisionPrinciple[] = candidateRows.map(
@@ -616,7 +589,7 @@ export async function runPrincipleDecision(
   // RC6 (BI-E1267C6D) — cap the relevance-retrieved set, not the merged list.
   //
   // maxPrinciples is documented (and named) as a cap on the core/contextual
-  // principles retrieved from Qdrant, but was applied as slice() over the
+  // principles retrieved from the vector index, but was applied as slice() over the
   // merged list, which is built commandments-first. Once the commandment
   // corpus outgrew the cap that arithmetic silently starved the tail: with 41
   // commandments against a default cap of 20, a live call retrieved 41
@@ -639,10 +612,10 @@ export async function runPrincipleDecision(
   // score to a cited source; when `requireEvidence` is set, drop features lacking
   // admissible evidence before scoring. Options are then embedded for the semantic
   // path (BI-3C1A6451). Both helpers live in evidence-grounding.ts (module-size).
-  const { groundedFeaturesById, ledgerArgs } = groundOptionsFromParams(params);
+  const { groundedFeaturesByIndex, ledgerArgs } = groundOptionsFromParams(params);
   const decisionOptions = await buildScoredDecisionOptions({
     optionsParam,
-    groundedFeaturesById,
+    groundedFeaturesByIndex,
     generateEmbedding,
   });
 
@@ -659,13 +632,13 @@ export async function runPrincipleDecision(
   // so agents/operators know which kernel weighed in. Additive — does not
   // change scoring yet; Gate-routed scoring + boundary enforcement is the
   // follow-on (C2b). callingPopulation was validated above.
-  const { resolveDecisionCallerContext } = await import(
-    "@/lib/decision/caller-context"
-  );
+  const { resolveDecisionCallerContext, resolveDecisionDomainParam } = await import("@/lib/decision/caller-context");
   const governingProfile = await resolveDecisionCallerContext({
     callingPopulation:
       callingPopulation as "in_platform_coworker" | "external_coding_agent" | "human",
     agentId: context?.agentId ?? null,
+    // BI-9C384562: a policy-projection consult is platform-development by construction.
+    decisionDomain: resolveDecisionDomainParam(params, Boolean(policyProjection)),
   });
 
   // BI-E0151DB2. The abstention must be impossible to mistake for a verdict.
@@ -690,6 +663,14 @@ export async function runPrincipleDecision(
   // coverage while core/contextual retrieval was structurally impossible.
   // `make-silent-failures-observable`, applied to the kernel's own recall.
   let retrievalDegraded = false;
+  if (retrievalBudget.exceeded()) {
+    // A ruling scored without core/contextual must not read as a healthy one.
+    retrievalDegraded = true;
+    console.error(
+      `[principle_decide] retrieval budget exceeded (${budgetMs}ms) — embedding `
+        + "provider slow; scored on the tiers that returned in time.",
+    );
+  }
   if (core.length === 0 && contextual.length === 0) {
     retrievalDegraded = !(await isEmbeddingAvailable());
     if (retrievalDegraded) {
@@ -738,6 +719,14 @@ export async function runPrincipleDecision(
     optionDescriptions: Object.fromEntries(
       decisionOptions.map((o) => [o.id, o.description]),
     ),
+    // BI-F302B80E: record the MENU, not only the pick. Without it the row can
+    // be counted but never learned from — the weight-inference adapter needs
+    // the scored features beside the recommendation and the later outcome.
+    scoredOptions: decisionOptions.map((o) => ({
+      id: o.id,
+      description: o.description,
+      features: o.features,
+    })),
     appliedPrincipleCount: cappedPrinciples.length,
     callingSurface,
     routeContext: context?.routeContext ?? null,

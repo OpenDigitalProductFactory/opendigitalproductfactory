@@ -42,7 +42,7 @@ export const OPERATING_INTENT_CONFIG_KEY = "installation.operating-intent.v1";
 export const BACKLOG_CAPTURE_CONFIG_KEY = "installation.backlog-capture.v1";
 
 /** Backlog statuses whose work is not yet finished, and so cannot be recreated. */
-const UNFINISHED_STATUSES = ["triaging", "open", "in-progress"] as const;
+const UNFINISHED_STATUSES = ["triaging", "open", "in-progress", "awaiting-acceptance"] as const;
 
 /**
  * A durable capture receipt written by the backlog exporter.
@@ -117,6 +117,8 @@ export function holdsIrreplaceableWork(input: {
 /** Minimal store shape so callers can pass Prisma without this module importing it. */
 export interface InstanceStanceStore {
   readConfig(key: string): Promise<unknown>;
+  /** The Organization row's name from setup — the lowest estate-name tier (BI-CA54ACC8). */
+  readOrganizationName?(): Promise<string | null>;
   countBacklogItemsByStatus(statuses: readonly string[]): Promise<number>;
   /**
    * Most recent create/update across items in those statuses, or null when
@@ -144,11 +146,14 @@ export interface InstanceStanceStore {
  * a different set of rows.
  */
 export function prismaInstanceStanceStore(
-  prisma: Pick<PrismaClient, "platformConfig" | "backlogItem" | "federationLink">,
+  prisma: Pick<PrismaClient, "platformConfig" | "backlogItem" | "federationLink" | "organization">,
 ): InstanceStanceStore {
   return {
     readConfig: async (key) =>
       (await prisma.platformConfig.findUnique({ where: { key } }))?.value ?? null,
+    // Lowest estate-name tier: the organization named at setup (BI-CA54ACC8).
+    readOrganizationName: async () =>
+      (await prisma.organization.findFirst({ select: { name: true } }))?.name ?? null,
     countBacklogItemsByStatus: (statuses) =>
       prisma.backlogItem.count({ where: { status: { in: [...statuses] } } }),
     latestBacklogChangeByStatus: async (statuses) => {

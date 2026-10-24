@@ -21,10 +21,12 @@ import { prisma } from "@dpf/db";
 import { prepareClientSecret } from "@/lib/auth/oauth-tokens";
 import { isRegisterableRedirectUri } from "@/lib/auth/oauth-clients";
 import { isPublicScope, PUBLIC_SCOPES, type PublicScope } from "@/lib/auth/oauth-scope-map";
+import { listClientPeople, revokeClientPersonGrants, type ClientPerson } from "@/lib/auth/oauth-client-people";
+import { eligibleOAuthCoworkers } from "@/lib/auth/oauth-identity-binding";
 
 const ADMIN_PATH = "/admin/platform-development";
 
-type Actor = { userId: string };
+type Actor = { userId: string; email: string };
 /** Deliberately NOT the ActionFailure shape: keeping the denial distinct means
  *  a caller cannot forget to convert it and accidentally return a bare object
  *  where an ActionResult is expected. */
@@ -45,7 +47,7 @@ async function requireOperator(): Promise<Actor | Denial> {
   ) {
     return { denied: "You do not have permission to manage MCP clients." };
   }
-  return { userId: session.user.id };
+  return { userId: session.user.id, email: session.user.email ?? session.user.id };
 }
 
 export type OAuthClientSummary = {
@@ -98,7 +100,18 @@ export type CreatedCredentialsClient = {
   clientId: string;
   clientSecret: string;
   scopes: PublicScope[];
+  assistant?: CredentialsAssistant | null;
 };
+
+export type CredentialsAssistant = { agentId: string; displayName: string };
+
+/** New credentials clients cannot inherit another client's delegation. */
+export async function listOAuthCredentialsAssistants(): Promise<ActionResult<CredentialsAssistant[]>> {
+  const actor = await requireOperator();
+  if (isDenied(actor)) return err(actor.denied);
+  const assistants = await eligibleOAuthCoworkers(actor.userId, null, null);
+  return ok(assistants.map(({ agentId, displayName }) => ({ agentId, displayName })));
+}
 
 /**
  * Create a `client_credentials` client — the headless replacement for a PAT.
@@ -125,6 +138,16 @@ export async function createOAuthCredentialsClient(input: {
     return err(`Grant at least one scope (${PUBLIC_SCOPES.join(", ")}).`);
   }
 
+  const selectedId = input.agentId?.trim() || null;
+  const assistants = await eligibleOAuthCoworkers(actor.userId, null, null, undefined, { agentId: selectedId ?? undefined });
+  // Every selection must match a server-owned choice, including account-only.
+  const choices: Array<{ selectionId: string | null; rowId: string | null; assistant: CredentialsAssistant | null }> = [
+    { selectionId: null, rowId: null, assistant: null },
+    ...assistants.map(({ id, agentId, displayName }) => ({ selectionId: agentId, rowId: id, assistant: { agentId, displayName } })),
+  ];
+  const binding = choices.find((choice) => choice.selectionId === selectedId);
+  if (!binding) return err("This assistant is no longer available. Choose an eligible assistant.");
+
   const secret = prepareClientSecret();
   const clientId = `dpfoc_${crypto.randomUUID().replace(/-/g, "")}`;
 
@@ -140,13 +163,13 @@ export async function createOAuthCredentialsClient(input: {
       // The human whose authority the client acts under. Their platformRole
       // still caps every call, so this cannot escalate.
       ownerUserId: actor.userId,
-      agentId: input.agentId?.trim() || null,
+      agentId: binding.rowId,
       allowedScopes: scopes,
     },
   });
 
   revalidatePath(ADMIN_PATH);
-  return ok({ clientId, clientSecret: secret.plaintext, scopes });
+  return ok({ clientId, clientSecret: secret.plaintext, scopes, assistant: binding.assistant });
 }
 
 /**
@@ -226,6 +249,29 @@ export async function revokeOAuthClient(input: {
 
   revalidatePath(ADMIN_PATH);
   return ok({ revokedTokens: tokens.count });
+}
+
+/** Who holds grants under one client, for the per-person control (BI-0A724798). */
+export async function listOAuthClientPeople(input: { clientId: string }): Promise<ActionResult<ClientPerson[]>> {
+  const actor = await requireOperator();
+  if (isDenied(actor)) return err(actor.denied);
+  return listClientPeople(prisma, { clientId: input.clientId, actor });
+}
+
+/**
+ * End one person's access under a shared client, leaving everyone else's.
+ * The whole-client revoke above stays the larger control.
+ */
+export async function revokeOAuthClientPersonGrants(input: {
+  clientId: string;
+  userId: string;
+  reason: string;
+}): Promise<ActionResult<{ revokedAccessTokens: number; revokedRefreshTokens: number }>> {
+  const actor = await requireOperator();
+  if (isDenied(actor)) return err(actor.denied);
+  const result = await revokeClientPersonGrants(prisma, { ...input, actor });
+  if (result.ok) revalidatePath(ADMIN_PATH);
+  return result;
 }
 
 /**

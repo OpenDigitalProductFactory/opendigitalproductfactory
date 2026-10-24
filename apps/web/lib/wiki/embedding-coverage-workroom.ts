@@ -18,6 +18,7 @@ import {
   EMBEDDING_COVERAGE_ACTIVITY_KIND,
 } from "./embedding-coverage-constants";
 import type { WikiEmbeddingReconciliationResult } from "./embedding-reconciliation";
+import type { WorkCapsuleSource } from "@/lib/work-capsules";
 
 /** Structural client — satisfied by PrismaClient and by test fakes. */
 export type CorpusHealthClient = {
@@ -104,13 +105,15 @@ export async function recordCoverageRun(input: {
   try {
     const room = await input.db.workroom.upsert({
       where: { capsuleId: CORPUS_HEALTH_WORKROOM_ID },
-      update: { status: "working" },
+      update: { status: "working", executorKind: "dpf-native", executorRef: EMBEDDING_COVERAGE_ACTIVITY_KIND },
       create: {
         capsuleId: CORPUS_HEALTH_WORKROOM_ID,
         title: CORPUS_HEALTH_WORKROOM_TITLE,
         objective: CORPUS_HEALTH_WORKROOM_OBJECTIVE,
         status: "working",
-        source: "platform-maintenance",
+        executorKind: "dpf-native",
+        executorRef: EMBEDDING_COVERAGE_ACTIVITY_KIND,
+        source: "platform-maintenance" satisfies WorkCapsuleSource,
         activityKind: EMBEDDING_COVERAGE_ACTIVITY_KIND,
       },
     });

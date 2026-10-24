@@ -1,5 +1,5 @@
 ---
-status: draft
+status: active
 ---
 
 # Customer and social Principal-gated sign-in implementation plan
@@ -8,9 +8,9 @@ status: draft
 
 **Epic:** EP-413F2602
 
-**Design:** `docs/superpowers/specs/2026-08-30-security-authentication-hardening-successors-design.md` §8
+**Design:** `docs/superpowers/specs/2026-09-04-customer-social-principal-gated-sign-in-design.md`
 
-**Workroom:** to be claimed by the implementation session
+**Workroom:** WC-1BB2A6D1 · `feat/principal-gated-customer-auth` · `/Users/markbodman/dpf-worktrees/principal-gated-customer-auth-recovery`
 
 > **For agentic workers:** execute this plan one independently reviewable backlog item at a time — one BI, one branch, one PR. Use `dpf-tdd` for red-green implementation, `dpf-local-merge-ci-before-push` plus the plan's completion gate before any success claim, and `dpf-pr-with-dco` for handoff.
 
@@ -18,7 +18,7 @@ status: draft
 
 Workforce password login verifies a credential and then calls `authorizePrincipalForSession`; customer password and Google/Apple flows in `apps/web/lib/govern/auth.ts` return a `CustomerContact`-rooted session without the same Principal decision. `syncCustomerPrincipal` and customer/partner alias resolution already exist in `apps/web/lib/identity/principal-linking.ts`, and `loadEffectiveAuthContext` already understands `customer_contact` and `partner_contact` aliases. The missing work is convergence at the session boundary, not a new identity model.
 
-The live production read on 2026-08-30 found five `CustomerContact` rows and zero `customer_contact` aliases. The historical `20260426150500_backfill_missing_principals` migration ran successfully before those contacts were created, proving that a one-time migration without complete write-path convergence is insufficient.
+The live production read on 2026-08-30 found five `CustomerContact` rows and zero `customer_contact` aliases. The historical `20260426150500_backfill_missing_principals` migration ran successfully before those contacts were created, proving that a one-time migration without complete write-path convergence is insufficient. The 2026-09-04 substrate reconciliation confirmed the bypass remains on `origin/main`: workforce password login calls `authorizePrincipalForSession`, while customer password and social sign-in still return a `CustomerContact`-rooted session directly; signup still treats `syncCustomerPrincipal` as best-effort after the account transaction.
 
 This plan is **atomic**. The shared authorization seam, transactional creation/deactivation paths, populated-data repair, and session callback integration form one security invariant: no session-capable customer credential exists outside the Principal authority decision. Releasing any subset preserves a bypass or creates split identity state.
 
@@ -26,7 +26,7 @@ This plan is **atomic**. The shared authorization seam, transactional creation/d
 
 **Deliverable:** failing tests describe one verified-credential-to-authorized-Principal seam for workforce, customer password, social sign-in, linking, onboarding, inactive account/contact, inactive Principal, and alias conflict.
 
-**Files:** `apps/web/lib/identity/authentication.test.ts`, `apps/web/lib/govern/auth*.test.ts`, `apps/web/lib/govern/social-auth.test.ts`, relevant customer-auth action tests.
+**Files:** `apps/web/lib/identity/authentication.test.ts`, `apps/web/lib/govern/auth*.test.ts`, `apps/web/lib/govern/social-auth.test.ts`, `apps/web/lib/actions/social-auth-actions.test.ts`, and focused customer-signup tests.
 
 **Requirements:** OBJ-PRI-001, OBJ-PRI-002, OBJ-PRI-003.
 
@@ -36,35 +36,39 @@ This plan is **atomic**. The shared authorization seam, transactional creation/d
 
 **Deliverable:** extend the existing identity authority module with a population-aware function that accepts an already verified workforce or customer credential/assertion, resolves the canonical alias, materializes only through the shared linker, enforces active/conflict/authority state, and returns a Principal-rooted session subject or stable refusal.
 
-**Files:** `apps/web/lib/identity/authentication.ts`, `principal-linking.ts`, `load-effective-auth-context.ts`, focused tests.
+**Files:** `apps/web/lib/identity/authentication.ts`, `apps/web/lib/identity/principal-linking.ts`, `apps/web/lib/identity/load-effective-auth-context.ts`, and focused tests.
 
 **Dependencies:** Phase 1.
 
 **Constraints:** `CustomerContact` remains the credential/profile and account-scope record; `Principal` remains authority; no second session identity cache; partner kind derives from live enrollment.
 
+**Refusal contract:** extend the existing authentication result with one closed, exported refusal-code set shared by workforce, customer, partner, and social callers. Callers branch only on that typed set; user-facing responses remain generic and never expose the internal code.
+
 **Verification:** table-driven tests prove identical refusal semantics across workforce, customer, and partner populations without merging their credential verification rules.
 
 ## Phase 3 — transactional lifecycle convergence and populated-data repair
 
-**Deliverable:** every session-capable customer creation/link/activation/deactivation path converges the `CustomerContact`, `Principal`, and aliases inside one transaction or refuses. Add a forward-only, idempotent populated-data migration for existing contacts and a repeatable invariant query so contacts created after migration cannot silently drift again.
+**Deliverable:** every session-capable customer creation/link/activation/deactivation path converges the `CustomerContact`, `Principal`, and aliases inside one transaction or refuses. Add a forward-only, idempotent populated-data migration for existing contacts and a repeatable bounded invariant query so contacts created after migration cannot silently drift again.
 
-**Files:** `apps/web/lib/actions/customer-auth.ts`, `social-auth-actions.ts`, storefront signup route, customer-contact API/actions that can create session-capable credentials, `packages/db/prisma/migrations/<timestamp>_customer_principal_auth_convergence/migration.sql`, invariant tests/check.
+**Files:** `apps/web/lib/actions/customer-auth.ts`, `apps/web/lib/actions/social-auth-actions.ts`, `apps/web/app/api/storefront/sign-up/route.ts`, session-capable customer-contact write paths, `packages/db/prisma/migrations/<timestamp>_customer_principal_auth_convergence/migration.sql`, and invariant tests/check.
 
 **Dependencies:** Phase 2.
 
-**Migration:** reuse the established `customer_contact` plus lowercase `email` alias grammar; preserve existing matching Principals; refuse ambiguous email convergence rather than choosing. The migration must apply against populated, partially converged, inactive, partner-enrolled, and merged-contact states.
+**Transaction boundary:** pass the active transaction client through the existing shared customer/partner linker. Contact creation, Principal materialization, canonical aliases, and any social identity link must commit together; no onboarding path may call a second, post-commit materializer.
+
+**Migration:** reuse the established `customer_contact` plus lowercase `email` alias grammar; preserve existing matching Principals; refuse ambiguous email convergence rather than choosing. The migration must apply against populated, partially converged, inactive, partner-enrolled, and merged-contact states. It performs set-based writes and the verification query reports counts/conflicts without loading an unbounded contact inventory.
 
 **Verification:** migration smoke on a populated fixture; zero active session-capable contacts without a canonical alias; rollback restores application code while the additive aliases remain safe.
 
 ## Phase 4 — gate every customer and social session issuance path
 
-**Deliverable:** customer password and Google/Apple callbacks call the shared authority seam after credential/assertion verification and before returning a session user or onboarding/link continuation token. JWT/session callbacks carry the canonical Principal identity needed by the effective-auth loader without duplicating authorization state.
+**Deliverable:** customer password and Google/Apple callbacks call the shared authority seam after credential/assertion verification and before returning a session user or onboarding/link continuation token. Social lookup uses provider plus provider-account id as identity; verified email may enter the guarded linking flow but cannot select an identity by itself. JWT/session callbacks carry the canonical Principal identity needed by the effective-auth loader without duplicating authorization state.
 
 **Files:** `apps/web/lib/govern/auth.ts`, `social-auth.ts`, temporary-token/linking actions, effective-auth loader, focused tests.
 
 **Dependencies:** Phases 2–3.
 
-**Verification:** inactive/unresolved/conflicted Principals receive no session or continuation token; active customers retain account/contact scope; Google/Apple link and onboarding flows cannot create a session-capable split state.
+**Verification:** inactive/unresolved/conflicted Principals receive no session or continuation token; active customers retain account/contact scope; Google/Apple link and onboarding flows cannot create a session-capable split state. A verified social email with no provider-subject link must not select an existing contact or mint a session, proving that email alone is never the identity key.
 
 ## Phase 5 — governed completion
 
@@ -78,6 +82,12 @@ Run focused authentication and identity tests, migration smoke against populated
 - **Dependencies:** existing Principal/PrincipalAlias, customer/partner linker, Auth.js providers, and populated-data migration substrate.
 - **Rationale:** listing, lifecycle, data repair, and session issuance are one authorization invariant; none is independently safe to ship.
 - **Governed receipt:** pending independent spec approval and immutable plan commit; record through `record_plan_backlog_coverage` before implementation.
+
+### Four-way traceability
+
+| Deliverable | Requirement refs | Contract refs | Flow refs | Verification refs |
+|---|---|---|---|---|
+| `customer-social-principal-gate` | OBJ-PRI-001, OBJ-PRI-002, OBJ-PRI-003 | Principal-gated customer and social sign-in | Phase 1 — red authority-contract tests; Phase 2 — one population-aware Principal authentication seam; Phase 3 — transactional lifecycle convergence and populated-data repair; Phase 4 — gate every customer and social session issuance path | AC-PRI-001, AC-PRI-002, AC-PRI-003, AC-PRI-004 |
 
 ## Risks and rollback
 

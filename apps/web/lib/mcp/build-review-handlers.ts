@@ -1,3 +1,4 @@
+import { readReviewHistory, assembleReviewPanel, finishReviewIteration } from "@/lib/build/review-history";
 // Build-review tool handlers — Simplify & Strengthen W9 (BI-0E7B0953).
 //
 // Two of the last three inline executeTool cases from the mcp-tools.ts legacy
@@ -14,7 +15,7 @@
 import { prisma } from "@dpf/db";
 import { ENTERPRISE_ARCHITECT_DISPLAY_NAME } from "@dpf/db/agent-identity";
 
-import type { ToolResult } from "@/lib/mcp-tools";
+import type { ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPackHandler } from "./tool-pack";
 import {
   logBuildActivity,
@@ -66,7 +67,13 @@ export async function saveBuildEvidence(params: Record<string, unknown>, userId:
 
       // Guide the agent when it saves the wrong field for the current phase
       const currentBuildForPhaseCheck = await prisma.featureBuild.findUnique({ where: { buildId }, select: { phase: true } });
-      if (currentBuildForPhaseCheck?.phase === "plan" && field === "designDoc") {
+      // BI-3E57890E: the design-fix loop revising a plan-phase design is exempt.
+      const { redirectsPlanPhaseDesignSave } = await import("@/lib/build/plan-phase-design-save");
+      if (redirectsPlanPhaseDesignSave({
+        phase: currentBuildForPhaseCheck?.phase,
+        field,
+        allowPlanPhaseDesignRevision: context?.allowPlanPhaseDesignRevision,
+      })) {
         return { success: true, message: 'Design doc updated. IMPORTANT: You are in the PLAN phase. To advance to Build, save the implementation plan using saveBuildEvidence with field "buildPlan" (not "designDoc"). The buildPlan must contain { fileStructure, tasks } arrays.', entityId: buildId };
       }
 
@@ -301,6 +308,7 @@ export async function saveBuildEvidence(params: Record<string, unknown>, userId:
             revisionId: savedRevision.revisionId,
             authorUserId: userId,
             authorAgentId: context?.agentId ?? null,
+            attribution: { threadId: context?.threadId, taskRunId: context?.taskRunId },
           });
         } catch {
           // A missing receipt leaves the build exactly where it already was.
@@ -342,7 +350,7 @@ export async function reviewBuildPlan(params: Record<string, unknown>, userId: s
       // BI-4396EFEC (D38) — also load the prior planReview so we can pass
       // its issues to the reviewer prompt for delta-awareness and compute
       // the iteration trajectory for the operator-facing chip.
-      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { buildPlan: true, planReview: true, kind: true } });
+      const build = await prisma.featureBuild.findUnique({ where: { buildId }, select: { buildPlan: true, planReview: true, kind: true, originatingBacklogItemId: true } });
       if (!build?.buildPlan) return { success: false, error: "No build plan saved yet.", message: "Save buildPlan first." };
       const priorPlanReview = (build.planReview ?? null) as
         | { issues?: Array<{ severity?: string; description?: string }>; iteration?: { round?: number } }
@@ -378,19 +386,14 @@ export async function reviewBuildPlan(params: Record<string, unknown>, userId: s
           data: { review, blocked: true, action: "revise_and_resubmit" },
         };
       }
-      const { buildPlanReviewPrompt, buildArchitectureReviewPrompt, finalizeArchitectureAdvisory, parseReviewResponse, mergeReviews, applyTestFirstLenienceForKind, relaxTestFirstAfterRounds, collectReviewerVerdicts } = await import("@/lib/build-reviewers");
+      const { buildPlanReviewPrompt, buildArchitectureReviewPrompt, finalizeArchitectureAdvisory, parseReviewResponse, applyTestFirstLenienceForKind, relaxTestFirstAfterRounds, collectReviewerVerdicts } = await import("@/lib/build-reviewers");
       // BI-4396EFEC (D38) — Compute the iteration context up front so we can
       // (a) feed prior issues into the reviewer prompt and (b) populate
       // ReviewResult.iteration on the output. Round is 1-based: first
-      // review = 1, every subsequent reviewBuildPlan call increments.
-      const priorRound = priorPlanReview?.iteration?.round ?? 0;
-      const priorIssues = Array.isArray(priorPlanReview?.issues)
-        ? priorPlanReview!.issues!
-            .filter((i): i is { severity: string; description: string } =>
-              typeof i?.severity === "string" && typeof i?.description === "string",
-            )
-            .map((i) => ({ severity: i.severity, description: i.description }))
-        : [];
+      // review = 1; only a completed panel increments the round.
+      const history = readReviewHistory(priorPlanReview);
+      const priorRound = history.round;
+      const priorIssues = history.issues;
       const currentRound = priorRound + 1;
       const priorContext = priorIssues.length > 0
         ? { round: priorRound, issues: priorIssues }
@@ -429,25 +432,23 @@ export async function reviewBuildPlan(params: Record<string, unknown>, userId: s
       const r1 = r1settled.status === "fulfilled" ? parseReviewResponse(r1settled.value.content) : null;
       const r2 = r2settled.status === "fulfilled" ? parseReviewResponse(r2settled.value.content) : null;
       const archReview = archSettled.status === "fulfilled" ? parseReviewResponse(archSettled.value.content) : null;
-      const architectureAdvisory = await finalizeArchitectureAdvisory(prisma, archReview, userId, context?.agentId, context?.threadId, "reviewPlanDoc");
+      const architectureAdvisory = await finalizeArchitectureAdvisory(prisma, archReview, userId, context?.agentId, context?.threadId, "reviewPlanDoc", {
+        // BI-22601A38: the plan exactly as stored, normalized or not.
+        buildId,
+        kind: "plan",
+        document: normalizedPlan.rewrites.length > 0 ? normalizedPlan.plan : build.buildPlan,
+        backlogItemId: build.originatingBacklogItemId ?? null,
+      });
       const archAdvisoryNote = architectureAdvisory && architectureAdvisory.issues.length > 0
         ? ` Architecture review (advisory): ${architectureAdvisory.summary} Fold actionable items into the plan before building — they do not block this gate.`
         : "";
-      const rawMergedReview = r1 && r2 ? mergeReviews(r1, r2) : r1 ?? r2 ?? {
-        decision: "fail" as const,
-        issues: [{ severity: "critical" as const, description: "Both review agents failed to respond" }],
-        summary: "Review could not be completed — retry.",
-        // BI-D33F968A: nobody read the work. `fail` is the safe default, not a
-        // verdict — mark it so a repair loop does not spend rounds "fixing"
-        // something no reviewer looked at.
-        reviewIncomplete: true,
-      };
+      const rawMergedReview = assembleReviewPanel(r1, r2);
       // Deterministic kind-aware lenience: a chore/fix/docs build must not be
       // blocked by a reviewer's missing-test-first complaint (test-first is a
       // feature-grade gate). Enforced in code so it does not depend on the
       // reviewer model honoring the rubric's prose exemption — the local model
       // in particular over-applies TDD to comment/chore tasks.
-      let mergedReview = applyTestFirstLenienceForKind(rawMergedReview, build.kind);
+      let mergedReview = rawMergedReview.reviewIncomplete ? rawMergedReview : applyTestFirstLenienceForKind(rawMergedReview, build.kind);
       // Round-aware test-first relaxation. The kind-lenience above excludes
       // feature builds by design, but a weak reviewer (notably the on-host local
       // model) over-applies test-first to feature plans and invents
@@ -461,7 +462,7 @@ export async function reviewBuildPlan(params: Record<string, unknown>, userId: s
       // Real blockers never match the matchers, so a genuinely-broken plan still
       // fails and escalates. Early rounds (1..2) are completely unaffected.
       const testFirstRelaxFloor = Number(process.env.FEATURE_TESTFIRST_RELAX_ROUND) || 3;
-      if (mergedReview.decision === "fail" && currentRound >= testFirstRelaxFloor) {
+      if (!mergedReview.reviewIncomplete && mergedReview.decision === "fail" && currentRound >= testFirstRelaxFloor) {
         const relaxed = relaxTestFirstAfterRounds(mergedReview, currentRound);
         if (relaxed.decision === "pass") {
           mergedReview = relaxed;
@@ -473,7 +474,7 @@ export async function reviewBuildPlan(params: Record<string, unknown>, userId: s
       // an independent fresh-context verifier must reproduce it; criticals it
       // cannot reproduce downgrade to advisory. Fail-closed: a verifier error
       // leaves the finding blocking. Inert unless DPF_BUILD_VERIFIED_FINDING_REVIEW=1.
-      if (mergedReview.decision === "fail") {
+      if (!mergedReview.reviewIncomplete && mergedReview.decision === "fail") {
         const { isVerifiedFindingReviewEnabled } = await import("@/lib/build/build-studio-config");
         if (isVerifiedFindingReviewEnabled()) {
           const { verifyReviewFindings } = await import("@/lib/build/verified-finding-review");
@@ -499,22 +500,7 @@ export async function reviewBuildPlan(params: Record<string, unknown>, userId: s
       // BI-4396EFEC (D38) — Compute the iteration delta against the prior
       // round and attach to the ReviewResult. computeReviewDelta + isOscillating
       // live in feature-build-types so they're independently unit-testable.
-      const { computeReviewDelta, isOscillating } = await import("@/lib/feature-build-types");
-      const reviewWithIteration = (() => {
-        const base = mergedReview;
-        if (priorIssues.length === 0) {
-          return { ...base, iteration: { round: currentRound } };
-        }
-        const delta = computeReviewDelta(priorIssues, base.issues);
-        return {
-          ...base,
-          iteration: {
-            round: currentRound,
-            prior: delta,
-            oscillating: isOscillating(delta, base.issues.length),
-          },
-        };
-      })();
+      const reviewWithIteration = finishReviewIteration(mergedReview, history);
       const review = architectureAdvisory
         ? { ...reviewWithIteration, architectureAdvisory }
         : reviewWithIteration;
@@ -553,6 +539,14 @@ export async function reviewBuildPlan(params: Record<string, unknown>, userId: s
           err instanceof Error ? JSON.stringify(err.message) : JSON.stringify(String(err)));
       }
 
+      if (review.reviewIncomplete) {
+        return {
+          success: true,
+          message: review.summary,
+          data: { review, blocked: true, action: "retry_review" },
+        };
+      }
+
       // Failed review → revise UNLESS the policy gate makes a passing plan
       // review optional for this kind/size. For doc + chore-small builds the
       // gate (build-process-matrix) is `buildPlan-present` only — it does NOT
@@ -582,7 +576,9 @@ export async function reviewBuildPlan(params: Record<string, unknown>, userId: s
               planReview: review, // the FAILED review — the gate decides if it matters
               happyPathState: nhpsFail(fgPlan.happyPathState),
             });
-            planReviewIsGating = !fgGate.allowed;
+            // BI-A87DE5E1: a plan naming no files is gating even where review is advisory.
+            const { planNamesNoFiles } = await import("@/lib/build/plan-review-advisory");
+            planReviewIsGating = !fgGate.allowed || planNamesNoFiles(fgBuild.buildPlan);
           }
         } catch {
           planReviewIsGating = true; // fail safe: keep the stricter loop on any gate-read error

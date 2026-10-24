@@ -10,10 +10,35 @@
 //
 // Spec: docs/superpowers/specs/2026-05-19-ai-cost-governance.md §4d
 
+import { excerptHeadAndTail } from "@/lib/shared/excerpt-head-and-tail";
 import { prisma } from "@dpf/db";
 import { parseUnifiedRateLimitHeaders, type WeeklyQuotaSnapshot } from "./weekly-quota";
+import { conservativeQuotaScope } from "./provider-capacity/scopes";
+import { loadProviderCapacitySnapshots } from "./provider-capacity/store";
+import type { CapacitySnapshot } from "./capacity-routing-exclude";
 
 export type CliAdapterType = "claude-cli" | "codex-cli";
+export type CliPoolIdentity = { providerId: string; providerConnectionId: string };
+
+export function indexCliPoolResetTimes(rows: readonly { adapterType: string | null; adapterKind?: string | null; resetAt: Date | null }[]): Map<CliAdapterType, number | null> {
+  const map = new Map<CliAdapterType, number | null>();
+  for (const row of rows) {
+    const adapter: CliAdapterType | null = row.adapterType === "codex-cli" || row.adapterType === "claude-cli" ? row.adapterType
+      : row.adapterKind === "codex" ? "codex-cli" : row.adapterKind === "claude_code" ? "claude-cli" : null;
+    if (!adapter) continue;
+    const reset = row.resetAt?.getTime() ?? null;
+    if (!map.has(adapter) || (reset ?? 0) > (map.get(adapter) ?? 0)) map.set(adapter, reset);
+  }
+  return map;
+}
+
+function poolWhere(adapterType: CliAdapterType, identity?: CliPoolIdentity) {
+  return identity ? { scopeKey: `cli:${adapterType}:${conservativeQuotaScope(identity.providerId)}` } : { adapterType };
+}
+
+function poolIdentityFields(adapterType: CliAdapterType, identity?: CliPoolIdentity) {
+  return identity ? { adapterType: null, adapterKind: adapterType === "codex-cli" ? "codex" as const : "claude_code" as const, ...poolWhere(adapterType, identity) } : { adapterType };
+}
 
 /**
  * Fallback backoff window (seconds) applied when a CLI reports a rate limit but
@@ -30,10 +55,8 @@ const DEFAULT_CLI_COOLDOWN_SECONDS =
   Number(process.env.DPF_CLI_RATELIMIT_DEFAULT_COOLDOWN_SECONDS) || 60;
 
 /**
- * Upper bound (seconds) on any parsed/derived cooldown, so a misparsed provider
- * message (or a genuinely multi-hour subscription reset) can never wedge a CLI
- * provider off the fallback chain for longer than this. We re-probe at the cap
- * and re-record if still limited. 1 hour.
+ * Upper bound for fallback cooldowns when no provider reset is known.
+ * Known provider resets remain authoritative, including weekly quota limits.
  */
 const MAX_CLI_COOLDOWN_SECONDS = 3_600;
 
@@ -82,7 +105,82 @@ function weeklyFields(row: {
  * Parse a Retry-After value (seconds or HTTP-date) from CLI stderr output.
  * Returns seconds as a number, or null if nothing parseable is found.
  */
+/**
+ * Absolute reset stated by the ChatGPT/Codex subscription cap, e.g.
+ * "try again at Sep 26th, 2026 8:57 AM". Ordinal suffixes are stripped before
+ * parsing. Returns the reset instant or null when no dated phrase is present.
+ * The CLI prints wall-clock time without a zone; it is read as UTC, which is
+ * the sandbox's clock and errs on the early side for western operators.
+ */
+export function parseAbsoluteResetAt(stderr: string, now: Date = new Date()): Date | null {
+  const match = /try again (?:at|on)\s+([A-Za-z]{3,9}\.?\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4}(?:,?\s+(?:at\s+)?\d{1,2}:\d{2}\s*(?:[AP]M)?)?)/i.exec(stderr);
+  if (!match) return parseClaudeDatedReset(stderr, now);
+  const cleaned = match[1]!.replace(/(\d{1,2})(?:st|nd|rd|th)/i, "$1").replace(/\./g, "").replace(/,/g, "");
+  const parsed = Date.parse(`${cleaned} UTC`);
+  return Number.isNaN(parsed) ? null : new Date(parsed);
+}
+
+const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+
+/** Offset (ms) of an IANA zone from UTC at the given instant; null for an unknown zone. */
+function zoneOffsetMs(timeZone: string, atMs: number): number | null {
+  try {
+    const parts = new Intl.DateTimeFormat(undefined, {
+      timeZone, numberingSystem: "latn", hourCycle: "h23", year: "numeric", month: "numeric", day: "numeric",
+      hour: "numeric", minute: "numeric", second: "numeric",
+    }).formatToParts(new Date(atMs));
+    const get = (type: string) => Number(parts.find((p) => p.type === type)?.value);
+    return Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute"), get("second")) - atMs;
+  } catch {
+    return null;
+  }
+}
+
+/** Wall-clock time in a zone → the UTC instant (two passes settle a DST edge). */
+function zonedWallClockToUtc(year: number, month: number, day: number, hour: number, minute: number, timeZone: string): number | null {
+  const wall = Date.UTC(year, month, day, hour, minute);
+  const first = zoneOffsetMs(timeZone, wall);
+  if (first == null) return null;
+  const second = zoneOffsetMs(timeZone, wall - first);
+  return second == null ? null : wall - second;
+}
+
+/**
+ * The Claude CLI's dated limit, e.g. "You've hit your weekly limit · resets
+ * Oct 20, 4pm (UTC)" (BI-0319EE11). The banner names month, day, clock and zone
+ * but no year. A clock-only banner
+ * ("resets 4pm (UTC)") names no day and stays unknown (BI-EDF1BD54: never invent
+ * a day); so does a zone this runtime cannot resolve.
+ */
+function parseClaudeDatedReset(text: string, now: Date): Date | null {
+  const match = /resets\s+([A-Za-z]{3,9})\.?\s+(\d{1,2}),?\s+(\d{1,2})(?::(\d{2}))?\s*([ap]m)\s*(?:\(([^)\s]+)\))?/i.exec(text);
+  if (!match) return null;
+  const month = MONTHS.indexOf(match[1]!.slice(0, 3).toLowerCase());
+  const day = Number(match[2]);
+  const hour12 = Number(match[3]);
+  const minute = match[4] ? Number(match[4]) : 0;
+  if (month < 0 || day < 1 || day > 31 || hour12 < 1 || hour12 > 12 || minute > 59) return null;
+  const hour = (hour12 % 12) + (match[5]!.toLowerCase() === "pm" ? 12 : 0);
+  const zone = match[6] ?? "UTC";
+  // A limit window is at most a week, so the stated day is the year's
+  // occurrence nearest now: Jan 3 read on Dec 30 is next year's, and a reset a
+  // minute past stays past (seconds 0) rather than becoming a year away.
+  const year = now.getUTCFullYear();
+  let nearest: number | null = null;
+  for (const candidate of [year - 1, year, year + 1]) {
+    const at = zonedWallClockToUtc(candidate, month, day, hour, minute, zone);
+    if (at == null) return null;
+    if (nearest == null || Math.abs(at - now.getTime()) < Math.abs(nearest - now.getTime())) nearest = at;
+  }
+  return nearest == null ? null : new Date(nearest);
+}
+
 export function parseRetryAfterSeconds(stderr: string): number | null {
+  // "try again at Sep 26th, 2026 8:57 AM" — a dated subscription cap. Checked
+  // first so the bare hour/minute patterns below cannot misread "8:57 AM".
+  const absolute = parseAbsoluteResetAt(stderr);
+  if (absolute) return Math.max(0, Math.ceil((absolute.getTime() - Date.now()) / 1000));
+
   // "Retry-After: 30" or "retry-after: 30"
   const secondsMatch = /retry-after:\s*(\d+)/i.exec(stderr);
   if (secondsMatch) {
@@ -124,38 +222,41 @@ export function parseRetryAfterSeconds(stderr: string): number | null {
 /**
  * Record a 429 / rate-limit event for the given CLI adapter.
  * Upserts the CliPoolStatus row (one row per adapterType).
- * Fire-and-forget from the adapter — errors are swallowed so they never
- * block the InferenceError from propagating to the caller.
+ * Await from the adapter before fallback. Persistence errors are swallowed so
+ * they never replace the InferenceError propagated to the caller.
  */
 export async function recordCliRateLimit(
   adapterType: CliAdapterType,
   providerId: string,
   errorText: string,
+  identity?: CliPoolIdentity,
 ): Promise<void> {
   try {
     const retryAfterSeconds = parseRetryAfterSeconds(errorText);
     const now = new Date();
-    // Always back off on a recorded rate limit: use the provider's Retry-After
-    // when it gave one, otherwise a bounded default window. Capping guards
-    // against a misparse (or a genuinely long subscription reset) pinning the
-    // provider off the fallback chain indefinitely. `retryAfterSeconds` still
-    // records only what was actually parsed (may be null) for observability;
-    // `resetAt` is what the dispatch gate reads.
-    const cooldownSeconds = Math.min(
-      retryAfterSeconds ?? DEFAULT_CLI_COOLDOWN_SECONDS,
-      MAX_CLI_COOLDOWN_SECONDS,
+    // Honor known provider reset windows. Only an unknown reset uses a bounded
+    // default; an hourly probe must not consume capacity known to reset in days.
+    const cooldownSeconds = retryAfterSeconds ?? Math.min(
+      DEFAULT_CLI_COOLDOWN_SECONDS, MAX_CLI_COOLDOWN_SECONDS,
     );
     const resetAt = new Date(now.getTime() + cooldownSeconds * 1_000);
+    // BI-38064739: a reset beyond the fallback cap is a subscription cap, not a
+    // throttle. Record it as the provider's capacity state so routing and the
+    // provider page honor the real date instead of retrying every tick.
+    const subscriptionCap = retryAfterSeconds !== null && retryAfterSeconds > MAX_CLI_COOLDOWN_SECONDS;
+    await recordCliCapacity(providerId,
+      subscriptionCap ? new Date(now.getTime() + retryAfterSeconds * 1_000) : resetAt,
+      subscriptionCap ? retryAfterSeconds : cooldownSeconds, errorText, subscriptionCap);
 
     await prisma.cliPoolStatus.upsert({
-      where: { adapterType },
+      where: poolWhere(adapterType, identity),
       create: {
-        adapterType,
+        ...poolIdentityFields(adapterType, identity),
         providerId,
         rateLimitedAt: now,
         resetAt,
         retryAfterSeconds,
-        errorSnippet: errorText.slice(0, 300),
+        errorSnippet: excerptHeadAndTail(errorText, 300),
         updatedAt: now,
       },
       update: {
@@ -163,7 +264,7 @@ export async function recordCliRateLimit(
         rateLimitedAt: now,
         resetAt,
         retryAfterSeconds,
-        errorSnippet: errorText.slice(0, 300),
+        errorSnippet: excerptHeadAndTail(errorText, 300),
         updatedAt: now,
       },
     });
@@ -173,30 +274,54 @@ export async function recordCliRateLimit(
   }
 }
 
+/** Reconcile pre-fix capped rows with the canonical provider quota projection. */
+function effectivePoolReset(row: { providerId: string; resetAt: Date | null }, capacity: Map<string, CapacitySnapshot>, now: number): Date | null {
+  const known = capacity.get(row.providerId);
+  const quotaReset = known?.state === "quota_resets_at" ? known.retryAtMs : null;
+  return quotaReset != null && quotaReset > now && quotaReset > (row.resetAt?.getTime() ?? 0)
+    ? new Date(quotaReset) : row.resetAt;
+}
+
+async function poolCapacitySnapshots(): Promise<Map<string, CapacitySnapshot>> {
+  try { return await loadProviderCapacitySnapshots(); }
+  catch (error) {
+    console.warn("[cli-pool-status] Failed to read provider quota; retaining pool observation", error);
+    return new Map();
+  }
+}
+
 /**
  * Fetch the current pool state for a given CLI adapter.
  * Returns null when there is no recorded rate-limit event for this adapter.
  */
 export async function getCliPoolStatus(
   adapterType: CliAdapterType,
+  identity?: CliPoolIdentity,
 ): Promise<CliPoolState | null> {
   try {
-    const row = await prisma.cliPoolStatus.findUnique({
-      where: { adapterType },
+    let row = await prisma.cliPoolStatus.findUnique({
+      where: poolWhere(adapterType, identity),
     });
+    // Legacy observations remain authoritative until their cooldown expires.
+    // Separate credentials do not prove separate upstream quota ownership.
+    if (identity) {
+      const legacy = await prisma.cliPoolStatus.findUnique({ where: { adapterType } });
+      if (legacy && (!row || (legacy.resetAt?.getTime() ?? 0) > (row.resetAt?.getTime() ?? 0))) row = legacy;
+    }
     if (!row) return null;
 
     const now = Date.now();
-    const resetMs = row.resetAt ? row.resetAt.getTime() : null;
+    const resetAt = effectivePoolReset(row, await poolCapacitySnapshots(), now);
+    const resetMs = resetAt?.getTime() ?? null;
     const isExhausted = resetMs != null && resetMs > now;
     const secondsUntilReset =
       isExhausted && resetMs != null ? Math.ceil((resetMs - now) / 1_000) : null;
 
     return {
-      adapterType: row.adapterType as CliAdapterType,
+      adapterType,
       providerId: row.providerId,
       rateLimitedAt: row.rateLimitedAt,
-      resetAt: row.resetAt,
+      resetAt,
       retryAfterSeconds: row.retryAfterSeconds,
       errorSnippet: row.errorSnippet,
       isExhausted,
@@ -219,20 +344,25 @@ export async function getAllCliPoolStatuses(): Promise<CliPoolState[]> {
       orderBy: { adapterType: "asc" },
     });
     const now = Date.now();
-    return rows.map((row) => {
-      const resetMs = row.resetAt ? row.resetAt.getTime() : null;
+    const capacity = rows.length ? await poolCapacitySnapshots() : new Map<string, CapacitySnapshot>();
+    return rows.flatMap((row): CliPoolState[] => {
+      const adapterType: CliAdapterType | null = row.adapterType === "codex-cli" || row.adapterType === "claude-cli" ? row.adapterType
+        : row.adapterKind === "codex" ? "codex-cli" : row.adapterKind === "claude_code" ? "claude-cli" : null;
+      if (!adapterType) return [];
+      const resetAt = effectivePoolReset(row, capacity, now);
+      const resetMs = resetAt?.getTime() ?? null;
       const isExhausted = resetMs != null && resetMs > now;
-      return {
-        adapterType: row.adapterType as CliAdapterType,
+      return [{
+        adapterType,
         providerId: row.providerId,
         rateLimitedAt: row.rateLimitedAt,
-        resetAt: row.resetAt,
+        resetAt,
         retryAfterSeconds: row.retryAfterSeconds,
         errorSnippet: row.errorSnippet,
         isExhausted,
         secondsUntilReset: isExhausted && resetMs != null ? Math.ceil((resetMs - now) / 1_000) : null,
         ...weeklyFields(row),
-      };
+      }];
     });
   } catch (err) {
     console.warn("[cli-pool-status] Failed to read all pool statuses:", err);
@@ -257,12 +387,13 @@ export async function recordCliWeeklyQuota(
   adapterType: CliAdapterType,
   providerId: string,
   snapshot: WeeklyQuotaSnapshot,
+  identity?: CliPoolIdentity,
 ): Promise<void> {
   try {
     await prisma.cliPoolStatus.upsert({
-      where: { adapterType },
+      where: poolWhere(adapterType, identity),
       create: {
-        adapterType,
+        ...poolIdentityFields(adapterType, identity),
         providerId,
         // Neutral create timestamp; resetAt stays null → not exhausted.
         rateLimitedAt: snapshot.observedAt,
@@ -295,17 +426,18 @@ export async function recordCliWeeklyQuota(
  * the drain policy depends on. When the row carries no weekly snapshot, we delete
  * it (original behaviour) so an idle adapter leaves no residual row.
  */
-export async function clearCliRateLimit(adapterType: CliAdapterType): Promise<void> {
+export async function clearCliRateLimit(adapterType: CliAdapterType, identity?: CliPoolIdentity): Promise<void> {
   try {
-    const row = await prisma.cliPoolStatus.findUnique({ where: { adapterType } });
+    const where = poolWhere(adapterType, identity);
+    const row = await prisma.cliPoolStatus.findUnique({ where });
     if (!row) return;
     if (row.weeklyUtilization == null) {
-      await prisma.cliPoolStatus.deleteMany({ where: { adapterType } });
+      await prisma.cliPoolStatus.deleteMany({ where });
       return;
     }
     // Preserve the weekly snapshot; clear only the exhaustion fields.
     await prisma.cliPoolStatus.update({
-      where: { adapterType },
+      where,
       data: { resetAt: null, retryAfterSeconds: null, errorSnippet: null, updatedAt: new Date() },
     });
   } catch (err) {
@@ -406,4 +538,43 @@ export async function collectCliWeeklyQuota(_adapterType: CliAdapterType): Promi
   // unverified subprocess path. The topology-free direct-SDK capture still feeds
   // the signal, and the policy falls back to the proxy without a fresh snapshot.
   return;
+}
+
+/**
+ * The ChatGPT subscription is one account behind two providers (codex CLI,
+ * chatgpt API): a cap on one is a cap on both.
+ */
+const SHARED_CHATGPT_ACCOUNT_PROVIDERS = new Set(["codex", "chatgpt"]);
+
+async function recordCliCapacity(
+  providerId: string,
+  retryAt: Date,
+  retryAfterSeconds: number,
+  errorText: string,
+  subscriptionCap: boolean,
+): Promise<void> {
+  try {
+    const { recordProviderCapacityStatus } = await import("./provider-capacity/store");
+    const targets = SHARED_CHATGPT_ACCOUNT_PROVIDERS.has(providerId)
+      ? [...SHARED_CHATGPT_ACCOUNT_PROVIDERS]
+      : [providerId];
+    await Promise.all(targets.map((target) => recordProviderCapacityStatus({
+      providerId: target,
+      source: "cli",
+      rawSnippet: errorText,
+      classification: {
+        state: subscriptionCap ? "quota_resets_at" : "rate_limited",
+        action: subscriptionCap ? "retry_at" : "retry_with_backoff",
+        retryAt,
+        retryAfterSeconds,
+        safeSummary: subscriptionCap
+          ? `The subscription's usage limit is reached; the provider says to try again at ${retryAt.toISOString()}.`
+          : `The CLI reported a usage or rate limit. DPF will back off until ${retryAt.toISOString()}; this is a bounded retry time, not a confirmed quota reset.`,
+        confidence: subscriptionCap ? "exact" : "heuristic",
+        isHumanActionRequired: false,
+      },
+    })));
+  } catch (err) {
+    console.warn("[cli-pool-status] Failed to record CLI capacity:", { providerId }, err);
+  }
 }

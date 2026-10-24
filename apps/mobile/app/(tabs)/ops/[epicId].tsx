@@ -12,7 +12,7 @@ import {
   Platform,
 } from "react-native";
 import { useLocalSearchParams } from "expo-router";
-import { colors, spacing, borderRadius } from "@/src/lib/theme";
+import { colors, spacing } from "@/src/lib/theme";
 import { StatusBadge } from "@/src/components/ui/StatusBadge";
 import type { BadgeStatus } from "@/src/components/ui/StatusBadge";
 import { Button } from "@/src/components/ui/Button";

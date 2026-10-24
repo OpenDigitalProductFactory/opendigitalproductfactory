@@ -43,6 +43,18 @@ Does NOT apply when: the data carries no sovereignty obligation and no regulated
 3. Capture the affected jurisdictions as data, not prose: an install's `operatesIn` / `sellsTo` / `employsIn` / `dataResidency` (and, for sovereign deployments, a target assurance level) drive which obligations apply. Use the EU/EEA member-state reference for "countries affected."
 4. Stop and flag the residual gap honestly: for the strictest tier, a foreign-domiciled software maintainer is a control concern even with open source — close it with an EU steward/support posture, reproducible builds, and a signed SBOM rather than overclaiming.
 
+## Continuity and replaceable inference
+
+Assess control across target files, derived analysis evidence, prompts, logs, embeddings, inference, model distribution, and updates. Local analysis alone does not establish a local data boundary when its results reach a hosted model. Confirm the selected deployment's behavior, including unavailable-provider and failure paths, before claiming compliance.
+
+Keep inference hardware replaceable through existing platform contracts. Qualify each model for the business workload's correctness, context, tool behavior, latency, concurrency, and operating cost. Generation speed does not establish competence; a remote silicon demonstration does not establish customer-controlled deployment availability.
+
+Provider acquisitions, service withdrawal, supply-chain interruption, and changing jurisdiction requirements warrant continuity assessment. Demonstrate export/restore, retained evidence after analysis-session loss, operator-controlled updates, and replacement by a qualified permitted route. If no permitted route exists for a local-only workload, stop visibly rather than silently using cloud inference.
+
+Apply jurisdiction requirements to the affected organization and workload through their owning scopes. Distinguish proposals from enacted obligations and operational controls from assessed assurance. Open source, hardware ownership, or REA absorption alone does not confer a sovereignty tier or certification.
+
+See the [hardware-neutral absorption strategy](../../../strategy/2026-10-11-rea-absorption-and-hardware-neutral-business-ai.md) for dated REA, CADA, and Taalas evidence and proposed verification.
+
 ## Reference Implementations
 
 - **Local-only inference** — `apps/web/lib/inference/local-only.ts` + `apps/web/lib/routing/pipeline-v2.ts` (the `residencyPolicy === "local_only"` hard-filter): keeps AI processing in-jurisdiction and fails loudly, the implementation of the "no AI-inference-data egress" sovereignty test.

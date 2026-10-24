@@ -1,13 +1,44 @@
 import { createHash } from "node:crypto";
 
 import type { PrincipalSensitivity } from "@dpf/db/principal-sensitivity";
+import type { ToolConsequence } from "@/lib/tool-consequence";
+import { effectiveApprovalExpiry } from "@/lib/coworker/approval-lifetime";
 
 import type { EffectiveAuthContext } from "@/lib/identity/effective-auth-context";
-
+import type { InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
 import {
   canAccessAuthoritySubject,
   type AuthoritySubject,
 } from "./authority-subject";
+import {
+  resolveEscalation,
+  type EscalationDecision,
+  type EscalationSteering,
+} from "./escalation-gate";
+
+/** Canonical author fact, not approval to start work or an independent verdict. */
+export type AuthorResearchPolicyBinding = {
+  itemId: string; buildId: string; revisionId: string;
+  valueDigest: string; contentDigest: string;
+  authorUserId: string; authorPrincipalId: string; authorAgentId: string | null;
+  workroomId: string; reason: string;
+  authorityVersion: string | null;
+  roomPolicyDigest: string;
+};
+
+/** Pure argument boundary; eligibility must not import the server evidence loader. */
+export function isExactAuthorResearchParams(params: Record<string, unknown>): boolean {
+  const ref = params.artifactRef;
+  return params.gate === "research" && params.decision === "pass"
+    && typeof params.itemId === "string" && typeof params.reason === "string"
+    && Array.isArray(params.findings) && params.findings.length === 0
+    && Array.isArray(params.resolvedFindingRefs) && params.resolvedFindingRefs.length === 0
+    && Object.keys(params).every((key) => ["itemId", "gate", "decision", "artifactRef", "reason", "findings", "resolvedFindingRefs"].includes(key))
+    && !!ref && typeof ref === "object" && !Array.isArray(ref)
+    && (ref as Record<string, unknown>).kind === "feature-build-revision"
+    && typeof (ref as Record<string, unknown>).revisionId === "string"
+    && Object.keys(ref).every((key) => ["kind", "revisionId"].includes(key));
+}
 
 export const COWORKER_AUTHORITY_OUTCOMES = [
   "allow",
@@ -28,6 +59,7 @@ export type CoworkerAuthorityReasonCode =
   | "agent-identity-missing"
   | "human-capability-denied"
   | "agent-grant-denied"
+  | "room-authority-denied"
   | "delegation-inactive"
   | "delegation-origin-mismatch"
   | "delegation-agent-mismatch"
@@ -48,6 +80,7 @@ export type CoworkerAuthorityReasonCode =
   | "approval-not-active";
 
 export type CoworkerApprovalBinding = {
+  authorResearchBinding?: AuthorResearchPolicyBinding;
   actingHumanUserId: string;
   actingAgentId: string;
   chainId: string | null;
@@ -68,14 +101,46 @@ export type CoworkerAuthorityInput = {
     toolName: string;
     requiredCapability: string | null;
     agentGrantAllowed: boolean;
+    /**
+     * False when the Workroom the call runs in declares an activity shape whose
+     * authorized surface does not carry this tool (BI-F114354D). Undefined or
+     * true when the turn is unroomed or the room does not narrow the surface.
+     * A room may only NARROW the coworker's grants; it never widens them.
+     */
+    roomAuthorityAllowed?: boolean;
     sideEffect: boolean;
     executionMode: "proposal" | "immediate";
     routeContext: string | null;
     allowedRouteContexts?: readonly string[];
     approvalPolicy: CoworkerApprovalPolicy;
+    /** False when an explicit operator policy forbids policy projection. */
+    policyProjectionAllowed?: boolean;
+    consequence?: ToolConsequence | null;
+    /** How this call's consequence was narrowed from the tool's declaration (BI-2D65BD1B). */
+    consequenceRefinement?: { declared: ToolConsequence; reason: string };
+    /** A Work Case may elevate an otherwise ordinary mutation to consequential. */
+    workCaseConsequential?: boolean;
     requiresDelegationChain?: boolean;
+    /**
+     * BI-C8EC05C9: server-set propose boundary. Escalation input only, never
+     * part of the approval binding, so no existing approval stops matching.
+     */
+    proposeBoundary?: boolean;
   };
+  /**
+   * BI-6B3DA9DD: what can decide this action without a person, server-resolved.
+   * Absent means `none` — nothing recorded can steer it. See escalation-gate.ts:
+   * a trust tier is a ceiling on what a coworker may attempt, never a reason to
+   * put a non-damaging, steered action in front of a human.
+   */
+  steering?: EscalationSteering;
   subject?: CoworkerAuthoritySubject | null;
+  /** The Workroom the call runs in, for the receipt; null when unroomed. */
+  room?: {
+    workroomId: string;
+    collaborationShape: string | null;
+    workShapeKey: string | null;
+  } | null;
   delegation?: {
     chainId: string;
     status: string;
@@ -97,7 +162,11 @@ export type CoworkerAuthorityInput = {
   task?: {
     taskRunId: string;
     parentTaskRunId?: string | null;
+    /** Immutable server-validated review scope; never sourced from tool args. */
+    initiativeReviewBinding?: InitiativeReviewBinding;
   } | null;
+  /** Separate server-owned author fact; never independent-review steering. */
+  authorResearchBinding?: AuthorResearchPolicyBinding | null;
   rawParams: Record<string, unknown>;
   approval?: {
     envelopeId?: string;
@@ -110,6 +179,17 @@ export type CoworkerAuthorityInput = {
       | "cancelled";
     expiresAt: Date;
     binding: CoworkerApprovalBinding;
+    /**
+     * When the approval was given. With it, the approval is honoured only
+     * while it is fresh for the call's CURRENT consequence — the staleness
+     * re-check at execution (approval-lifetime.ts, BI-0012E6CA).
+     */
+    approvedAt?: Date | null;
+    /**
+     * BI-C8EC05C9: the approved envelope was raised under a propose boundary.
+     * Its TaskRun was never paused, so the gate must not resume it.
+     */
+    proposeBoundary?: boolean;
   } | null;
   now?: Date;
   /**
@@ -129,6 +209,8 @@ type CoworkerAuthorityAllowDecision = {
   reasonCode: "authorized";
   explanation: string;
   nextAction: "execute";
+  /** Which escalation branch decided; recorded on the authority evidence. */
+  escalation?: EscalationDecision;
 };
 
 type CoworkerAuthorityDenyDecision = {
@@ -147,6 +229,8 @@ type CoworkerAuthorityApprovalDecision = {
   explanation: string;
   nextAction: "request-approval";
   approvalBinding: CoworkerApprovalBinding;
+  /** Which escalation branch decided; recorded on the authority evidence. */
+  escalation?: EscalationDecision;
 };
 
 export type CoworkerAuthorityDecision =
@@ -164,6 +248,8 @@ const EXPLANATIONS: Record<CoworkerAuthorityReasonCode, string> = {
     "You do not have authority for this action.",
   "agent-grant-denied":
     "This coworker is not assigned the tool authority required for this action.",
+  "room-authority-denied":
+    "This coworker's role in this Workroom does not authorize this action. The room's owner can widen the room's activity shape, or approve this action explicitly.",
   "delegation-inactive": "The delegated authority chain is no longer active.",
   "delegation-origin-mismatch":
     "The delegated action is not rooted in your authority.",
@@ -216,6 +302,12 @@ function fingerprint(value: unknown): string {
     .digest("hex");
 }
 
+/** The exact-call fingerprint an approval binds to (BI-12E5DD91: the
+ *  approved-request runner proves stored arguments are the approved ones). */
+export function fingerprintCoworkerInput(rawParams: Record<string, unknown>, authorResearchBinding?: AuthorResearchPolicyBinding | null): string {
+  return fingerprint(authorResearchBinding ? { params: rawParams, authorResearchBinding } : rawParams);
+}
+
 function normalize(value: string | null | undefined): string | null {
   return value?.trim() || null;
 }
@@ -232,6 +324,7 @@ export function buildCoworkerApprovalBinding(
   }
 
   return {
+    ...(input.authorResearchBinding ? { authorResearchBinding: input.authorResearchBinding } : {}),
     actingHumanUserId: humanId,
     actingAgentId: agentId,
     chainId: normalize(input.delegation?.chainId),
@@ -239,7 +332,7 @@ export function buildCoworkerApprovalBinding(
     toolName: input.action.toolName.trim(),
     subject: input.subject ?? null,
     routeContext: normalize(input.action.routeContext),
-    inputFingerprint: fingerprint(input.rawParams),
+    inputFingerprint: fingerprintCoworkerInput(input.rawParams, input.authorResearchBinding),
     sensitivity: input.dataPolicy.sensitivity,
     decisionVersionFingerprint: fingerprint(
       [...(input.dataPolicy.decisionVersionIds ?? [])].sort(),
@@ -259,11 +352,34 @@ function deny(
   };
 }
 
-function requiresApproval(input: CoworkerAuthorityInput): boolean {
-  if (input.action.executionMode === "proposal") return true;
-  if (!input.action.sideEffect) return false;
-  return input.action.approvalPolicy === "all"
-    || input.action.approvalPolicy === "side-effects";
+/**
+ * BI-6B3DA9DD — escalation is a property of the decision, not of the actor.
+ *
+ * This used to be `requiresApproval`, which asked only whether the acting
+ * coworker's HITL tier said "approve side effects" and minted a human envelope
+ * for any side effect if it did. That escalated the specialist reviewers' own
+ * governance receipts to a person, which is what the founder's ruling forbids.
+ *
+ * The operator's standing configuration is carried through unchanged as
+ * `operatorRequiresApproval`; the gate only decides, among the actions that
+ * configuration would have escalated, which ones genuinely need a person.
+ */
+function escalationFor(input: CoworkerAuthorityInput): EscalationDecision {
+  return resolveEscalation({
+    operatorRequiresApproval: input.action.approvalPolicy === "all"
+      || input.action.approvalPolicy === "side-effects",
+    action: {
+      sideEffect: input.action.sideEffect,
+      executionMode: input.action.executionMode,
+      consequence: input.action.consequence ?? null,
+      ...(input.action.workCaseConsequential !== undefined
+        ? { workCaseConsequential: input.action.workCaseConsequential }
+        : {}),
+    },
+    dataPolicy: { sensitivity: input.dataPolicy.sensitivity },
+    steering: input.steering ?? "none",
+    ...(input.action.proposeBoundary === true ? { proposeBoundary: true } : {}),
+  });
 }
 
 function sameBinding(
@@ -301,6 +417,12 @@ export function evaluateCoworkerAuthority(
 
   if (!input.action.agentGrantAllowed) {
     return deny("agent-grant-denied", "request-authority");
+  }
+  // EP-WORK-POSTURE §8.2: the room is a term in the TAK intersection. A chat
+  // message asking for the action is a request, not authority — only the room
+  // definition or an explicit approval can carry it.
+  if (input.action.roomAuthorityAllowed === false) {
+    return deny("room-authority-denied", "request-authority");
   }
 
   const delegation = input.delegation;
@@ -359,12 +481,14 @@ export function evaluateCoworkerAuthority(
     return deny("policy-version-stale");
   }
 
-  if (!requiresApproval(input)) {
+  const escalation = escalationFor(input);
+  if (escalation.verdict === "automated") {
     return {
       outcome: "allow",
       reasonCode: "authorized",
       explanation: EXPLANATIONS.authorized,
       nextAction: "execute",
+      escalation,
     };
   }
 
@@ -376,12 +500,18 @@ export function evaluateCoworkerAuthority(
       explanation: EXPLANATIONS["approval-required"],
       nextAction: "request-approval",
       approvalBinding: currentBinding,
+      escalation,
     };
   }
   if (input.approval.status !== "approved") {
     return deny("approval-not-active");
   }
-  if (input.approval.expiresAt.getTime() <= (input.now ?? new Date()).getTime()) {
+  const honouredUntil = effectiveApprovalExpiry({
+    expiresAt: input.approval.expiresAt,
+    approvedAt: input.approval.approvedAt ?? null,
+    consequence: input.action.consequence === undefined ? "unclassified" : input.action.consequence,
+  });
+  if (honouredUntil.getTime() <= (input.now ?? new Date()).getTime()) {
     return deny("approval-expired");
   }
   if (!sameBinding(input.approval.binding, currentBinding)) {
@@ -393,5 +523,6 @@ export function evaluateCoworkerAuthority(
     reasonCode: "authorized",
     explanation: EXPLANATIONS.authorized,
     nextAction: "execute",
+    escalation,
   };
 }

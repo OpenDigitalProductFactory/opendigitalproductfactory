@@ -1,3 +1,5 @@
+import { serviceReconcileFromEvidence } from "@/lib/self-upgrade/service-reconcile-outcome";
+
 type ReadinessSummary = {
   owner: string;
   mode: string;
@@ -28,10 +30,39 @@ export function summarizeReadiness(completionEvidence: unknown): ReadinessSummar
   };
 }
 
+/**
+ * BI-DB87D925: the portal swap landed, but a service this install requires could
+ * not be created (for example, its image tag is no longer published). Say so
+ * instead of leaving a plain green run.
+ */
+export function SelfUpgradeServiceReconcileNotice({ completionEvidence }: { completionEvidence: unknown }) {
+  const reconcile = serviceReconcileFromEvidence(completionEvidence);
+  if (reconcile?.outcome !== "degraded") return null;
+  const count = reconcile.failed.length;
+  return (
+    <div
+      className="mt-3 rounded-lg border border-[var(--dpf-warning)]/40 bg-[var(--dpf-warning)]/15 p-3 text-xs"
+      data-service-reconcile="degraded"
+    >
+      <div className="font-medium text-[var(--dpf-warning)]">
+        Degraded — {count} required service{count === 1 ? "" : "s"} could not be started
+      </div>
+      <div className="mt-1 text-[var(--dpf-muted)]">
+        The upgrade itself completed. Not running: {reconcile.failed.join(", ")}.
+        {reconcile.created.length > 0 && ` Started this time: ${reconcile.created.join(", ")}.`} The next upgrade
+        tries again.
+      </div>
+    </div>
+  );
+}
+
 export function SelfUpgradeReadiness({ completionEvidence }: { completionEvidence: unknown }) {
   const readiness = summarizeReadiness(completionEvidence);
-  if (!readiness) return null;
+  const notice = <SelfUpgradeServiceReconcileNotice completionEvidence={completionEvidence} />;
+  if (!readiness) return notice;
   return (
+    <>
+    {notice}
     <div
       className="mt-3 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3 text-xs"
       data-readiness-result={readiness.result}
@@ -54,5 +85,6 @@ export function SelfUpgradeReadiness({ completionEvidence }: { completionEvidenc
         </div>
       ))}
     </div>
+    </>
   );
 }

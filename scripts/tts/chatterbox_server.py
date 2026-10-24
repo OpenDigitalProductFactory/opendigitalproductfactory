@@ -13,7 +13,6 @@
 import io, os, shutil, struct, subprocess, tempfile, time, wave
 from typing import AsyncGenerator
 import numpy as np, torch
-import torchaudio as ta  # noqa: F401
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from chatterbox.tts import ChatterboxTTS
@@ -25,7 +24,7 @@ FFMPEG = shutil.which("ffmpeg") or "/opt/homebrew/bin/ffmpeg"
 
 def _envf(key, default):
     try: return float(os.environ.get(key, default))
-    except: return default
+    except ValueError: return default
 
 def _clamp(v, lo, hi): return max(lo, min(hi, v))
 
@@ -94,13 +93,17 @@ def _to_wav(wav_tensor, speed):
         src = tempfile.NamedTemporaryFile(suffix=".wav", delete=False).name
         dst = tempfile.NamedTemporaryFile(suffix=".wav", delete=False).name
         try:
-            open(src, "wb").write(data)
+            with open(src, "wb") as src_file:
+                src_file.write(data)
             subprocess.run([FFMPEG, "-v", "error", "-i", src, "-filter:a", f"atempo={speed}", dst, "-y"], check=True)
-            data = open(dst, "rb").read()
+            with open(dst, "rb") as dst_file:
+                data = dst_file.read()
         finally:
             for f in (src, dst):
                 try: os.unlink(f)
-                except: pass
+                except OSError:
+                    # A missing temp file is already gone. Leave the other cleanup to run.
+                    pass
     return data
 
 
@@ -143,7 +146,9 @@ async def speech(req: Request):
     finally:
         if cleanup:
             try: os.unlink(cleanup)
-            except: pass
+            except OSError:
+                # The reference file may already have been removed.
+                pass
     data = _to_wav(wav, spd)
     print(f"[chatterbox] gen={time.time()-t0:.1f}s ex={ex} cfg={cfg} temp={tmp} spd={spd} words={len(text.split())}", flush=True)
     return Response(content=data, media_type="audio/wav")
@@ -180,7 +185,9 @@ async def speech_stream(req: Request):
         finally:
             if ref_cleanup:
                 try: os.unlink(ref_cleanup)
-                except: pass
+                except OSError:
+                    # The reference file may already have been removed.
+                    pass
 
     return StreamingResponse(_gen(), media_type="application/octet-stream",
                              headers={"X-Sentence-Count": str(len(sentences))})

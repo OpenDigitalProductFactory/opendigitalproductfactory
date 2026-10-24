@@ -12,7 +12,7 @@ Use the Platform area to supervise AI operations, Edge Nodes, integrations, iden
 
 - `/platform/ai/*` for workforce operations, routing, assignments, history, and authority
 - `/platform/edge-nodes` for host-resident trust, discovery intake, and Edge Node freshness
-- `/platform/federation-links` for nearby-installation discovery and approved peer connections
+- `/platform/federation-links` for nearby-installation discovery, approved peer connections, and [sharing this installation's country](deployment-country-sharing.md)
 - `/platform/identity/*` for directory, principals, groups, and authorization posture
 - `/platform/audit/*` for operational audit flows and traceability
 - `/platform/tools/*`, `/platform/services/*`, and `/platform/integrations/*` for tool servers, discovery, and connector operations
@@ -38,7 +38,7 @@ Use the Platform area to supervise AI operations, Edge Nodes, integrations, iden
 
 Open **Platform > Connections** to find nearby DPF installations or connect by invitation. A nearby result is only a setup suggestion: it never creates trust or shares backlog data by itself. Both installations must approve a connection before any shared demand or disposition can cross it.
 
-The page reports whether the native Edge Node is listening for nearby installations. If discovery is not set up, paused, unhealthy, or blocked by an **Enrollment conflict**, use the Edge Nodes link to review its authority and network status. An enrollment conflict means that more than one installer-managed node claims this installation; DPF will not guess which node is authoritative. Invitation-based setup remains available when local-network discovery cannot be used.
+The page reports whether the native Edge Node is listening for nearby installations. If discovery is not set up, paused, unhealthy, or blocked by an **Enrollment conflict**, use the Edge Nodes link to review its authority and network status. An enrollment conflict means that more than one installer-managed node claims this installation; DPF will not guess which node is authoritative, but it does retire an enrollment that has been silent for a week once a live one has replaced it. Invitation-based setup remains available when local-network discovery cannot be used.
 
 For another installation owned by the same organization, choose **Set up this
 DPF**. Automatic setup is available only when both installations advertise a
@@ -52,21 +52,28 @@ one short-lived setup exchange; it is never a password or bearer credential.
 
 When the second installation does not yet trust the organization's private
 HTTPS authority, use **Connect your own installations** on the Connections
-page. On the organization installation, choose **Create join file**, enter the
-joining installation's reported host name, confirm it, and download the file
-when ready. Move the `.dpfjoin` file to the joining computer within its 5- to
-15-minute lifetime. On that installation, choose **Join this installation**,
-select the file, check the safe preview, and approve the join. No command line,
-certificate copying, CA password, or installer rerun is required.
+page. On the organization installation, choose **Create join file**, pick the
+joining installation from the connected installations it already knows (or
+name another one), confirm it, and the one-time file downloads at once. The
+organization installation creates the file itself; no Edge node or host
+script is involved. Move the `.dpfjoin` file to the joining computer within
+its 30-minute lifetime. On that installation, choose **Join this installation**,
+select the file, check the safe preview, and confirm. Choosing the file is the
+whole step: the joining installation checks the file, generates its own key,
+asks the organization installation to certify it, and keeps the result in its
+own state directory. No command line, certificate copying, CA password, Edge
+node, or installer rerun is required, and nothing is typed. Within a few
+minutes the connection appears on both Connections pages as trusted, with no
+approval to click. An automation agent can do the same through the
+`issue_organization_join_file` and `import_organization_join_file` tools.
 
 The file carries the public-root fingerprint and one-time enrollment authority;
 it never carries the organization's CA private key. It works only for the named
-installation and can be downloaded once. The native Edge host applies the trust
-settings, checks certificate trust, saved settings, portal health, and its secure
-heartbeat, and restores the prior settings if a check fails. The Connections
-page keeps showing progress after a refresh. This establishes machine trust
-only—it does not share backlog data. Demand sharing is a separate, explicit
-choice in Delivery Flow.
+installation, is honoured by the organization's certificate authority once, and
+can be downloaded once. The joining installation refuses a tampered or expired
+file, or one created for another installation, before contacting anyone. This
+establishes machine trust only—it does not share backlog data. Demand sharing
+is a separate, explicit choice in Delivery Flow.
 
 If the candidate uses HTTP, its certificate cannot be verified, or discovery is
 unavailable, use the invitation controls on the same page. Never bypass the TLS

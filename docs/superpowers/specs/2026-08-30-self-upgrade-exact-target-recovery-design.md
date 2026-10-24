@@ -59,3 +59,41 @@ or AI action. `SelfUpgradeRun`, quiescence, and job-engine health remain truth.
 
 The classifier, successor, worker CAS, and projection are one revert boundary;
 a subset could duplicate execution or leave failure without safe recovery.
+
+## Completed dispatched failures — BI-54284E21
+
+At source ref `d603f6dcbd6`, the manual trigger binds every failed run as a
+recovery predecessor. The store correctly rejects a predecessor with dispatch
+evidence. Together these rules strand Upgrade now after a watchdog-completed
+failure such as SUR-E18E0141. Three action tests reproduce this with an attempt,
+an acknowledgement, or a dispatch event; the other 56 action tests pass.
+The live refusal is `recovery-predecessor-ambiguous`, so the failure occurs
+before dispatch, rather than in release selection or the safety drain.
+
+**OBJ-SUA-007:** A completed failed upgrade must leave an executable next action
+without reusing a dispatched run's recovery identity.
+
+| Acceptance | Objectives | Statement |
+| --- | --- | --- |
+| AC-SUA-015 | OBJ-SUA-007, OBJ-SUA-004 | A completed dispatched failure admits a fresh run with no recoveryOfRunId and normal target, authority, single-flight and drain checks. |
+| AC-SUA-016 | OBJ-SUA-006, OBJ-SUA-004 | A fully evidenced never-dispatched failure still requires the rendered target binding and typed recovery; explicit ambiguous recovery remains refused. |
+
+### Ordered fix sequence
+
+1. Reproduce each dispatch-evidence case in the existing action test suite.
+2. Share recovery eligibility between the manual action and transactional store;
+   keep completed-state, dispatch, target and admission metadata checks explicit.
+3. Bind only eligible recovery predecessors. A failed row missing completion
+   remains refused; completed failures outside typed recovery use fresh admission.
+4. Run action, admission, run-store, target-binding and trigger UI regressions,
+   then typecheck and the repository's publication checks.
+5. Merge and publish the repair, deploy through the supported self-upgrade path,
+   verify CAN-TEST, then finish BI-31159978's original immutable reviewer journey.
+
+This is one atomic repair under BI-54284E21: changing either caller eligibility
+or store validation alone would leave their contract inconsistent. Existing
+SelfUpgradeRun storage and the Upgrade now control remain authoritative. No
+migration, new control, authority grant, drain override or status rewrite is
+introduced. Revert the single repair commit if regression occurs. Live acceptance
+must show fresh admission after a dispatched terminal failure and retain safe
+typed recovery for never-dispatched failures.

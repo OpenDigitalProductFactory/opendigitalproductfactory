@@ -10,6 +10,13 @@ vi.mock("@dpf/db", () => ({
 
 import { groupByEndpointTypeAndCategory } from "./ai-provider-data";
 import type { ProviderWithCredential } from "./ai-provider-types";
+import registry from "../../../../packages/db/data/providers-registry.json";
+
+it("keeps the ChatGPT routing provider visible in the canonical registry", () => {
+  expect(registry.find(p => p.providerId === "chatgpt")?.catalogVisibility).toBe("visible");
+  expect(registry.find(p => p.providerId === "zai-coding")?.catalogVisibility).toBe("visible");
+  expect(registry.find(p => p.providerId === "chatgpt")?.consoleUrl).toBe("https://chatgpt.com");
+});
 
 function provider(
   providerId: string,
@@ -37,7 +44,7 @@ describe("groupByEndpointTypeAndCategory", () => {
 
     expect(groups.map((group) => group.displayName)).toEqual([
       "Direct APIs",
-      "Subscription responses",
+      "Subscriptions",
       "Speech transcription",
     ]);
   });

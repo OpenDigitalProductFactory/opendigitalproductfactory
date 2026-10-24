@@ -9,6 +9,8 @@ import { agentEventBus } from "@/lib/agent-event-bus";
 import type { AgentFormAssistContext } from "@/lib/agent-form-assist";
 import type { QuestionPacket } from "@/lib/tak/question-packet";
 import { resolveAgentForRoute } from "@/lib/agent-routing";
+import { acceptUserMessage } from "@/lib/agent/accept-user-message";
+import { ApiError } from "@/lib/api/error";
 // Note: this route uses the sync version since it only needs agentId for message logging
 import { prisma } from "@dpf/db";
 
@@ -51,6 +53,7 @@ async function persistBackgroundFailureMessage(input: {
 }
 
 export async function POST(request: NextRequest): Promise<Response> {
+  const startedAt = performance.now();
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -61,8 +64,6 @@ export async function POST(request: NextRequest): Promise<Response> {
     content: string;
     routeContext: string;
     coworkerMode?: "advise" | "act";
-    externalAccessEnabled?: boolean;
-    elevatedFormFillEnabled?: boolean;
     formAssistContext?: AgentFormAssistContext;
     buildId?: string;
     attachmentId?: string;
@@ -78,6 +79,27 @@ export async function POST(request: NextRequest): Promise<Response> {
   if (!input.threadId || !input.content || !input.routeContext) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
   }
+  // EP-WORK-POSTURE 8.2 (BI-947780FE): hands-on and web access are resolved
+  // server-side from the Workroom; a body that still carries the retired
+  // per-conversation flags is stripped so a crafted POST cannot widen a turn.
+  delete (input as Record<string, unknown>).externalAccessEnabled;
+  delete (input as Record<string, unknown>).elevatedFormFillEnabled;
+
+  // BI-DEFA25EE: the panel shows the message as "sent" on a 200, so the user
+  // row is written before we answer. A refresh after this point cannot lose it.
+  let userMessageId: string;
+  try {
+    userMessageId = await acceptUserMessage({
+      userId: session.user.id,
+      threadId: input.threadId,
+      content: input.content,
+      routeContext: input.routeContext,
+      attachmentId: input.attachmentId,
+    });
+  } catch (err) {
+    if (err instanceof ApiError) return err.toResponse();
+    throw err;
+  }
 
   // Clear any stale cancellation for this thread
   agentEventBus.clearCancel(input.threadId);
@@ -86,12 +108,16 @@ export async function POST(request: NextRequest): Promise<Response> {
   agentEventBus.markActive(input.threadId);
 
   // Return immediately — agent execution runs in background
-  const response = NextResponse.json({ status: "processing" });
+  // BI-BD0B0DCC: the server's share of the message-ack journey (W3C Server-Timing).
+  const response = NextResponse.json(
+    { status: "processing", userMessageId },
+    { headers: { "Server-Timing": `app;dur=${(performance.now() - startedAt).toFixed(1)}` } },
+  );
 
   // Fire-and-forget: run sendMessage in background and emit enriched "done" on completion
   (async () => {
     try {
-      const result = await sendMessage(input);
+      const result = await sendMessage({ ...input, acceptedUserMessageId: userMessageId });
 
       agentEventBus.markIdle(input.threadId);
 

@@ -203,6 +203,8 @@ model WorkEngagement {
 
 // Append-only activity timeline for a WorkEngagement. `seq` is monotonic per
 // engagement for strict ordering under concurrency (timestamps alone are unsafe).
+/// Per-engagement activity rows (kind/summary/payload). Operational coordination trail; 6 months covers post-hoc investigation.
+/// @dpf lifecycle=telemetry-bounded retention=180d categories=telemetry timeAxis=recordedAt
 model WorkEngagementActivity {
   id                String   @id @default(cuid())
   workEngagementId  String
@@ -285,6 +287,11 @@ model Agent {
   // or a refresh token may act AS this coworker identity.
   oauthClients       OAuthClient[]
   oauthRefreshTokens OAuthRefreshToken[]
+  payrollTaxRulesProposed PayrollTaxRule[] @relation("PayrollTaxRuleProposedBy")
+  epicPortfoliosConfirmed EpicPortfolio[]  @relation("EpicPortfolioConfirmedByAgent")
+  portfolioBudgetsSet     PortfolioBudgetPeriod[] @relation("PortfolioBudgetSetByAgent")
+  budgetReservations      BudgetReservation[]     @relation("BudgetReservationActorAgent")
+  decisionInteractions    DecisionInteraction[]   @relation("DecisionInteractionAgent")
 
   @@index([portfolioId]) // FK-leading (spine): active-agents-per-portfolio groupBy, apps/web/lib/evaluate/portfolio-data.ts:72
 }
@@ -517,6 +524,41 @@ model AgentSurfaceReadiness {
   @@index([reportedAt(sort: Desc)])
 }
 
+// BI-54469E18 (design 2026-10-07-agent-toolchain-release-delivery §5.2b). What
+// the server SAW on an MCP connection: which credential connected and which
+// dpf-platform pack it declared it loaded. One row per credential and loaded
+// digest, so a host with one current project and one pinned project shows both.
+// Self-reported host state stays on AgentSurfaceReadiness; the verdict
+// (current / stale / below-floor / undeclared) is computed when read, never stored.
+/// Connection-observed agent toolchain copies, one row per credential and loaded digest. Operational drift telemetry; 30 days covers a release cycle.
+/// @dpf lifecycle=telemetry-bounded retention=30d categories=telemetry timeAxis=lastObservedAt
+model AgentToolchainObservation {
+  id                String                 @id @default(cuid())
+  // Server-derived credential identity: oauth:<OAuthClient.id> or token:<McpApiToken.id>.
+  credentialRef     String
+  // First 16 hex of the declared delivered digest, or "undeclared".
+  loadedDigest      String
+  // Declared client kind, else undeclared.
+  clientKind        String
+  // User-Agent hint for display only; never used for enforcement.
+  probableClient    String?
+  loadedPackVersion String?
+  authMode          AgentToolchainAuthMode
+  clientInfoName    String?
+  clientInfoVersion String?
+  firstObservedAt   DateTime               @default(now())
+  lastObservedAt    DateTime               @default(now())
+
+  @@unique([credentialRef, loadedDigest])
+  @@index([lastObservedAt(sort: Desc)])
+}
+
+enum AgentToolchainAuthMode {
+  oauth
+  bearer
+  session
+}
+
 model CoworkerSelfAssessment {
   id                String                   @id @default(cuid())
   assessmentId      String                   @unique
@@ -652,6 +694,18 @@ model AdapterCapabilityProfile {
 // quota pool, status, refusal/error class, tool-call validity, capability
 // usage, and schema-drift detection. Supports single/shadow/race execution
 // modes via raceCohortId grouping. Feeds nightly outcome scoring (§6.4).
+enum InvestmentWorkPurpose {
+  sharedPlatform
+  archetype
+}
+
+enum InvestmentWorkClass {
+  refactor
+  new
+}
+
+/// One immutable inference attempt, including its funding attribution at dispatch.
+/// @dpf lifecycle=telemetry-bounded retention=180d categories=telemetry timeAxis=startedAt
 model AdapterRunTelemetry {
   id             String  @id @default(cuid())
   traceId        String? // W3C Trace Context-compatible request correlation id
@@ -697,17 +751,35 @@ model AdapterRunTelemetry {
 
   rawEventDigest String? // sha256 of normalized event log, for cross-adapter equivalence checks
 
+  // Nullable for legacy/unassigned attempts; never reconstructed from today's owner.
+  investmentPrincipalId     String?
+  investmentOrganizationId  String?
+  investmentItemId          String?
+  investmentPurpose         InvestmentWorkPurpose?
+  investmentClass           InvestmentWorkClass?
+  investmentPolicyRef       String? // serialized policy revision/default and optional classification provenance references
+  investmentInstallationRef String? // canonical federation device id captured at dispatch
+  investmentCapturedAt      DateTime?
+  investmentPrincipal       Principal?    @relation("InvestmentAttemptPrincipal", fields: [investmentPrincipalId], references: [id], onDelete: Restrict)
+  investmentOrganization    Organization? @relation("InvestmentAttemptOrganization", fields: [investmentOrganizationId], references: [id], onDelete: Restrict)
+  investmentItem            BacklogItem?  @relation("InvestmentAttemptItem", fields: [investmentItemId], references: [id], onDelete: Restrict)
+
   @@index([adapterKind, startedAt])
   @@index([raceCohortId])
   @@index([threadId, startedAt])
   @@index([agentId, startedAt])
   @@index([startedAt])
   @@index([traceId])
+  @@index([investmentPrincipalId, investmentOrganizationId, investmentPurpose, startedAt], map: "AdapterRunTelemetry_investment_scope_startedAt_idx")
+  @@index([investmentOrganizationId])
+  @@index([investmentItemId])
 }
 
 // EP-COST Phase 2 prerequisite — one row per budget event so the
 // budget gate in callProvider can enforce per-agent and per-build spend limits.
 // Spec: docs/superpowers/specs/2026-05-19-ai-cost-governance.md §3 Phase 2
+/// Per-inference/tool-call cost rows (mirrors tokenUsage). Kept 6 months for cost reconciliation; aggregates live elsewhere.
+/// @dpf lifecycle=telemetry-bounded retention=180d categories=telemetry timeAxis=createdAt
 model AgentBudgetEvent {
   id          String   @id @default(cuid())
   agentId     String
@@ -733,6 +805,8 @@ model AgentBudgetEvent {
 // or (b) materially rewrote the raw transcript (Levenshtein ratio > 0.3).
 // Per spec §9, no-op cleanups are NOT logged to avoid bloating the table
 // — quality regression is detected from the rows we do write.
+/// Raw-vs-cleaned transcript records incl. injection-suspicion indicators. One-year security-audit window (holds raw text — purging is also data-minimization).
+/// @dpf lifecycle=telemetry-bounded retention=365d categories=security-audit,authorization timeAxis=createdAt
 model TranscriptCleanupAudit {
   id                  String   @id @default(cuid())
   threadId            String?
@@ -753,6 +827,8 @@ model TranscriptCleanupAudit {
   @@index([threadId, createdAt])
 }
 
+/// Coworker conversations with no activity for ~18 months, cascading their messages + attachments. Conservative default; regulated industries lengthen via floors. Selection by last activity so active threads are never swept.
+/// @dpf lifecycle=telemetry-bounded retention=545d sensitivity=confidential categories=content timeAxis=updatedAt
 model AgentThread {
   id          String                @id @default(cuid())
   userId      String
@@ -763,6 +839,14 @@ model AgentThread {
   attachments AgentAttachment[]
   messages    AgentMessage[]
   user        User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // BI-706530B2: dispatch boundary. Messages older than this are withheld from
+  // what is SENT to a model — not deleted, and still shown to the owner. Set
+  // when an owner clears a thread pinned to local-only by something in its
+  // history: the screen returns to normal because the governed text genuinely
+  // is no longer dispatched, never because evidence was aged out from under it.
+  // Null on every thread until an owner asks. See lib/tak/thread-history-withholding.ts.
+  historyWithheldBefore DateTime?
 
   // Coworker execution adapter substrate (Phase A3) — per-thread CLI session
   // pinning. Null means no active CLI session; CliSessionService writes these
@@ -986,6 +1070,8 @@ model ToolEvaluation {
   @@index([reEvaluateAfter])
 }
 
+/// Admin tool invocations (tiered, incl. blocked/denied). One-year security-audit baseline; regulated industries lengthen via floors.
+/// @dpf lifecycle=telemetry-bounded retention=365d categories=security-audit,authorization timeAxis=createdAt
 model AdminActivity {
   id         String   @id @default(cuid())
   userId     String
@@ -1002,6 +1088,8 @@ model AdminActivity {
   @@index([toolName])
 }
 
+/// Side-effecting / authority-trail invocations (the /platform/ai/authority audit trail) plus any row whose class was never set. One year of operational audit; regulated industries lengthen via floors.
+/// @dpf lifecycle=telemetry-bounded retention=365d categories=security-audit timeAxis=createdAt
 model ToolExecution {
   id                      String                   @id @default(cuid())
   threadId                String
@@ -1053,6 +1141,16 @@ model ToolExecution {
   // human→coworker calls (still traceable via userId). Joins ToolExecution to
   // getChainOfCustody(chainId) so every action traces back to a human (TAK §7.1).
   delegationChainId       String?
+  // GPP Phase 2 PR-C (BI-69415B68): the shadow permit verdict the reference
+  // monitor recorded for this outward/authority/irreversible call, and the
+  // permit it cited (GppPermit.gppPermitId). Audit only: neither column ever
+  // changes the outcome. Null for routine reads, ordinary writes and rows
+  // written before PR-C. `Ref`, not an FK: an audit row must never fail to
+  // write because of the permit it cites (AuthorizationDecisionLog.actorRef
+  // precedent).
+  gppPermitRef            String?
+  gppPermitVerdict        GppPermitVerdict?
+  gppPermitObservations   GppPermitObservation[]
 
   @@index([agentId, createdAt])
   @@index([userId, createdAt])
@@ -1099,6 +1197,7 @@ model CoworkerActionEnvelope {
   toolExecutions    ToolExecution[]
   taskRun           TaskRun?                  @relation(fields: [taskRunId], references: [taskRunId], onDelete: SetNull)
   authorityDecision AuthorizationDecisionLog? @relation(fields: [authorityDecisionId], references: [decisionId], onDelete: SetNull)
+  gppPermits        GppPermit[]
 
   @@index([threadId, createdAt(sort: Desc)])
   @@index([coworkerAgentId, createdAt(sort: Desc)])
@@ -1111,6 +1210,145 @@ model CoworkerActionEnvelope {
   @@index([expiresAt])
 }
 
+// ─── GPP Phase 2: gate-minted permits (BI-69415B68) ─────────────────────────
+// Spec: docs/superpowers/specs/2026-10-01-gpp-model-to-execution-design.md §5.2.
+// Plan: docs/superpowers/plans/2026-10-01-gpp-phase-2-permits-and-enforcement.md (PR-C).
+// Shadow only in PR-C: a permit is minted when an existing gate admits an
+// outward/authority/irreversible call, and the reference monitor records a
+// verdict for every such call. No verdict changes a call's outcome.
+
+// How a permit is applied. PR-C mints `shadow` only.
+// Canonical union: generated by Prisma, re-exported from packages/db/src/index.ts.
+enum GppPermitEnforcement {
+  shadow
+  enforced
+  environment
+}
+
+// One verdict per outward/authority/irreversible call. PR-D added the MAC,
+// parameter-hash and lineage verdicts (migration 20261001200000_gpp_permit_mac_verdicts):
+// mac_invalid (edited or invented row), param_mismatch (handle replayed with
+// other arguments), lineage_unsealed / lineage_missing (the admitting decision
+// is not sealed / cannot be found), unsigned (the install has no permit key).
+// Canonical union: generated by Prisma, re-exported from packages/db/src/index.ts.
+enum GppPermitVerdict {
+  ungoverned
+  valid
+  absent
+  expired
+  revoked
+  exhausted
+  tool_not_in_capabilities
+  unmediated
+  mac_invalid
+  param_mismatch
+  lineage_unsealed
+  lineage_missing
+  unsigned
+}
+
+// Where the verdict was recorded: inside the reference monitor, or on a direct
+// in-process call that bypassed it.
+// Canonical union: generated by Prisma, re-exported from packages/db/src/index.ts.
+enum GppObservationPath {
+  monitor
+  direct
+}
+
+/// Gate-minted permit (GPP §5.2). Phase 2: opaque DB-backed id (DI-2DE3951FBB28). Audit evidence of which gate admitted which call; one year like ToolExecution.
+/// @dpf lifecycle=telemetry-bounded retention=365d sensitivity=internal categories=security-audit timeAxis=createdAt
+model GppPermit {
+  id                   String                  @id @default(cuid())
+  /// "GPM-<uuid>": the opaque handle a caller may cite or replay (claim `permitId`).
+  gppPermitId          String                  @unique
+  /// The declared binding (apps/web/lib/gpp/bindings.ts `bindingId`) that minted it.
+  bindingKey           String
+  bindingVersion       Int
+  /// "shape@version" when a Workroom shape binds (Phase 3).
+  shapeRef             String?
+  stageKey             String?
+  gateKey              String
+  authority            DecisionScope
+  // Lineage and actor references are `Ref`, not FKs, on purpose: PR-D's
+  // verdict must be able to record a MISSING lineage (`lineage_missing`)
+  // rather than fail the insert, and audit evidence must outlive its referent
+  // (AuthorizationDecisionLog.actorRef precedent).
+  /// DecisionInteraction.interactionId of the admitting gate decision.
+  gateDecisionRef      String?
+  /// AuthorizationDecisionLog.decisionId of the coworker authority decision.
+  authorityDecisionRef String?
+  /// CoworkerActionEnvelope.id when a human checkpoint admitted the call.
+  envelopeId           String?
+  actorGaid            String?
+  /// User.id the call ran for (as on ToolExecution.userId).
+  actorUserRef         String
+  /// Agent.agentId when a coworker made the call (as on ToolExecution.agentId).
+  actorAgentRef        String?
+  /// The Workroom the call ran in, when roomed.
+  workroomRef          String?
+  subjectScope         String?
+  /// [{ tool, argConstraints? }]
+  capabilities         Json
+  /// SHA-256 (hex) over canonicalJson({ tool, params }) of the admitted call (apps/web/lib/gpp/param-hash.ts).
+  paramHash            String?
+  enforcement          GppPermitEnforcement    @default(shadow)
+  notBefore            DateTime                @default(now())
+  expiresAt            DateTime
+  maxUses              Int                     @default(1)
+  useCount             Int                     @default(0)
+  nonce                String
+  /// Attenuation parent (later phases); null in Phase 2.
+  parentPermitId       String?
+  revokedAt            DateTime?
+  /// Id of the DPF_GPP_PERMIT_SECRET key that signed the claims; null when minted unsigned (no key configured).
+  keyRef               String?
+  /// base64url HMAC-SHA256 over the canonical claims (apps/web/lib/gpp/permit-handle.ts); null when unsigned.
+  mac                  String?
+  createdAt            DateTime                @default(now())
+  envelope             CoworkerActionEnvelope? @relation(fields: [envelopeId], references: [id], onDelete: SetNull)
+  parentPermit         GppPermit?              @relation("GppPermitAttenuation", fields: [parentPermitId], references: [id], onDelete: SetNull)
+  childPermits         GppPermit[]             @relation("GppPermitAttenuation")
+  observations         GppPermitObservation[]
+
+  @@index([gateDecisionRef])
+  @@index([authorityDecisionRef])
+  @@index([envelopeId])
+  @@index([parentPermitId])
+  @@index([workroomRef, createdAt(sort: Desc)])
+  @@index([expiresAt])
+  @@index([createdAt])
+}
+
+/// One permit verdict per outward/authority/irreversible call, from the monitor or an unmediated direct call. Audit only; one year like ToolExecution.
+/// @dpf lifecycle=telemetry-bounded retention=365d sensitivity=internal categories=security-audit timeAxis=createdAt
+model GppPermitObservation {
+  id              String               @id @default(cuid())
+  permitRowId     String?
+  /// The declared binding that covered the call, when any.
+  bindingKey      String?
+  toolName        String
+  verdict         GppPermitVerdict
+  enforcement     GppPermitEnforcement @default(shadow)
+  path            GppObservationPath
+  /// The monitor's audit row (monitor path only).
+  toolExecutionId String?
+  /// Direct path: route, agent or source hint. Never parameters.
+  callerSite      String?
+  detail          Json                 @default("{}")
+  createdAt       DateTime             @default(now())
+  permit          GppPermit?           @relation(fields: [permitRowId], references: [id], onDelete: SetNull)
+  toolExecution   ToolExecution?       @relation(fields: [toolExecutionId], references: [id], onDelete: SetNull)
+
+  @@index([verdict, createdAt(sort: Desc)])
+  @@index([bindingKey, createdAt(sort: Desc)])
+  @@index([toolName, createdAt(sort: Desc)])
+  @@index([permitRowId])
+  @@index([toolExecutionId])
+  @@index([createdAt])
+}
+
+/// Verification receipts for tool executions. Matches the parent toolExecution window (365d); receipts also cascade when the parent purges.
+/// @dpf lifecycle=telemetry-bounded retention=365d categories=security-audit timeAxis=createdAt
 model ToolExecutionReceipt {
   id               String                 @id @default(cuid())
   toolExecutionId  String                 @unique
@@ -1172,7 +1410,13 @@ model ScheduledAgentTask {
   taskConfig        Json?
   lastRunAt         DateTime?
   nextRunAt         DateTime?
-  lastStatus        String? // ok | error
+  /// Closed set, enforced by "ScheduledAgentTask_lastStatus_closed_set"
+  /// (20260916140000) and single-sourced from SCHEDULED_AGENT_TASK_STATUSES in
+  /// apps/web/lib/tak/scheduled-agent-task-status.ts. Was documented as
+  /// "ok | error" while #5335 already wrote "proposed" — a run whose required
+  /// mutation was diverted into an approval has not failed (BI-4F64C5D3).
+  /// NULL means the task has not run yet, which is not the same as no result.
+  lastStatus        String?
   lastError         String?
   lastThreadId      String?
   // Autonomous coworker runtime Slice 1: latest TaskRun spawned by this schedule.
@@ -1207,6 +1451,14 @@ model AgentModelConfig {
   pinnedProviderId     String?
   pinnedModelId        String?
   budgetClass          String   @default("balanced") // "minimize_cost" | "balanced" | "quality_first"
+  // BI-8CFA1CA8: the agent-level data-residency policy, stated rather than
+  // inferred. It used to be read off `pinnedProviderId == "local"`, so clearing
+  // a routing preference in the portal silently relaxed a residency guarantee
+  // and setting one silently imposed it. Two decisions, one control.
+  // "local_only" | "approved_cloud" | "any_enabled"; null = "any_enabled".
+  // Composes with the per-task-type TaskRequirement.residencyPolicy — the
+  // stricter of the two wins (see RESIDENCY_RANK in ai-provider-route-context).
+  residencyPolicy      String?
   // EP-AGENT-CAP-002: Hard capability floor — model must satisfy ALL declared capabilities.
   // Null = system default { "toolUse": true }.
   // {} = passive agent (no capability floor — rare, must be explicit).
@@ -1318,6 +1570,7 @@ model SkillAssignment {
   @@index([agentId])
 }
 
+/// @dpf lifecycle=business-record retention=domain
 model SkillMetric {
   id              String   @id @default(cuid())
   skillId         String // Business id; see SkillAssignment.skillId comment
@@ -1337,6 +1590,8 @@ model SkillMetric {
   @@index([skillId])
 }
 
+/// Per skill invocation. Feeds the daily skill-metrics aggregator; raw rows disposable afterwards.
+/// @dpf lifecycle=telemetry-bounded retention=180d categories=telemetry timeAxis=createdAt
 model SkillUsageEvent {
   id              String   @id @default(cuid())
   eventId         String   @unique
@@ -1452,6 +1707,8 @@ model PromptRevision {
   @@index([templateId])
 }
 
+/// Per-turn latency/dispatch/tool counts. Quality telemetry; disposable past 6 months.
+/// @dpf lifecycle=telemetry-bounded retention=180d categories=telemetry timeAxis=createdAt
 model CoworkerTurnMetric {
   id                           String   @id @default(cuid())
   threadId                     String

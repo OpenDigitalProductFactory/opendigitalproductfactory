@@ -17,12 +17,6 @@
 import { prisma } from "@dpf/db";
 import { CANONICAL_AGENT_ID_TO_COWORKER_SLUG } from "@dpf/db/agent-identity";
 import type { ProactivityLevel } from "@/lib/proactivity/proactivity-types";
-import { isProactivityLevel } from "@/lib/proactivity/proactivity-types";
-import {
-  PROACTIVITY_FACT_CATEGORY,
-  PROACTIVITY_OVERRIDE_FACT_PREFIX,
-  persistProactivityFact,
-} from "@/lib/proactivity/proactivity-override-preferences";
 import { SCHEDULING_MAP } from "@/lib/operate/scheduled-jobs/scheduling-map";
 import { occupiedTicks, deconflictCron } from "@/lib/operate/scheduled-jobs/scheduling-allocator";
 import { computeNextCronRun } from "@/lib/operate/cron-next-run";
@@ -44,6 +38,8 @@ export type CoworkerSelfTask = {
     balanced: string;
     assertive: string;
   };
+  /** Side-effecting tools this cadence authorizes; see coworker-self-task-mandate.ts. */
+  mandatedTools?: readonly string[];
 };
 
 /**
@@ -77,24 +73,43 @@ export const COWORKER_SELF_TASKS: Record<string, CoworkerSelfTask> = {
   ...COWORKER_STANDING_SELF_TASKS,
 
   "marketing-specialist": {
-    title: "Refresh the acquisition campaign brief",
+    title: "Review the marketing plan and advance the current campaign",
+    // BI-DB179A8D. The scheduler treats every side-effect tool this prompt
+    // NAMES as a write the run must make (classifyScheduledRequiredTools). So
+    // the prompt names exactly one: save_marketing_review, the decision record
+    // every run owes. Creating a brief, adding asset tasks and drafting are
+    // conditional and are described by intent, not by tool name — naming them
+    // turned a correct "keep the current brief" run into a daily failure and
+    // piled up 16 duplicate draft briefs on the reference install.
     prompt: [
       "You are running as a scheduled, autonomous task — no human is watching this",
       "turn, so finish the work rather than asking questions.",
       "",
-      "Goal: keep a current acquisition campaign brief on the Campaigns page so the",
-      "marketing surface is never empty. Steps:",
-      "1. Review the saved acquisition assumptions / ICP / positioning available to you",
-      "   (org context, prior campaigns, product catalog).",
-      "2. If there is NO active or recent campaign brief, create one with",
-      "   create_marketing_campaign_brief: a focused brief for the most promising",
-      "   segment, with objective, audience, channels, core message, and 3–5 concrete",
-      "   next actions.",
-      "3. If a recent brief already exists, do NOT duplicate it — instead refresh it",
-      "   only if assumptions have changed, otherwise stop.",
-      "Keep it grounded in real saved context; do not invent customers or numbers.",
+      "Goal: keep one current, grounded campaign moving toward published work.",
+      "1. Review the saved strategy, target segments, campaigns, asset tasks and",
+      "   drafts (get_marketing_summary). If this business sells the platform,",
+      "   campaign ideas list its buyer archetypes — aim each brief at one buyer type.",
+      "2. Decide ONE of:",
+      "   a. No current brief: create one focused campaign brief for the most",
+      "      promising segment, with 3–5 asset tasks.",
+      "   b. A current brief exists: do not create another. Advance it — draft the",
+      "      next asset task that has no draft yet (LinkedIn post or email), for the",
+      "      human to review.",
+      "   c. The saved assumptions are wrong or stale: say what changed and what",
+      "      should replace them; do not create new work on a wrong premise.",
+      "3. Always record the decision with save_marketing_review: which of a/b/c, why,",
+      "   and the next action. Keeping the current brief is a valid decision.",
+      "Keep it grounded in real saved context; do not invent customers, proof or numbers.",
     ].join("\n"),
     routeContext: "/customer/marketing",
+    // Exactly the writes the steps above ask for (BI-6B3DA9DD, BI-DB179A8D).
+    // Drafts land as pending-review OutboundDrafts; publishing stays a human act.
+    mandatedTools: [
+      "save_marketing_review",
+      "create_marketing_campaign_brief",
+      "create_marketing_asset_task",
+      "draft_marketing_asset",
+    ],
     cadence: {
       // Weekly Monday and daily, both at 14:07 UTC — an off-peak minute the
       // allocator is unlikely to collide, and deconflictCron shifts it if it does.
@@ -172,6 +187,8 @@ export const COWORKER_SELF_TASKS: Record<string, CoworkerSelfTask> = {
       "Do not invent products, vendors, or numbers; cite only real discovered data.",
     ].join("\n"),
     routeContext: "/inventory",
+    // The write step 2 of the prompt asks for (BI-0073DE6A).
+    mandatedTools: ["create_knowledge_article"],
     cadence: {
       // Weekly (Tue) and twice-weekly (Tue+Fri) at 15:31 UTC. Knowledge does not
       // need a daily refresh, so even Assertive stays sub-daily — conservative by
@@ -256,6 +273,9 @@ export const COWORKER_SELF_TASKS: Record<string, CoworkerSelfTask> = {
       "Do not invent providers, models, costs, agents, disks, or alerts; cite only real data.",
     ].join("\n"),
     routeContext: "/platform",
+    // The article step 3 of the prompt asks for (BI-0073DE6A). Step 5's backlog
+    // filing is not declared here; it stays a person's call.
+    mandatedTools: ["create_knowledge_article"],
     cadence: {
       // Weekly (Thu) and twice-weekly (Thu+Sun) at 17:19 UTC. Platform posture
       // changes slowly, so even Assertive stays sub-daily (matches the estate /
@@ -453,8 +473,21 @@ async function hasRecentKnowledgeArticle(titlePrefix: string): Promise<boolean> 
  * zeros, never better than the truth.
  */
 export function coworkerSelfTaskRequiredTool(
-  agentId: string,
+  rawAgentId: string,
 ): CoworkerSelfTaskProceduralTool | null {
+  // The caller passes ScheduledAgentTask.agentId, which for a dual-seeded
+  // coworker is the CANONICAL id (AGT-WS-MARKETING) — the roster can only write
+  // that form. The branches below are keyed by registry SLUG, so without this
+  // resolution the lookup returns null and the required-tool guarantee never
+  // fires. That is the same alias gap BI-B05E5D30 closed in the sweep and in
+  // reconcileCoworkerSelfTask; this was the third lookup site and it was missed.
+  //
+  // Observed cost: the marketing self-task ran on 2026-08-31, made four READ
+  // calls, produced no artifact, ended with "I got stuck retrying the same step",
+  // and was still recorded lastStatus=ok. The fallback that exists precisely to
+  // catch that could not match the agent id it was handed.
+  const agentId = selfTaskRegistryKey(rawAgentId) ?? rawAgentId;
+
   if (agentId === "inventory-specialist") {
     return {
       name: "create_knowledge_article",
@@ -615,141 +648,3 @@ export async function reconcileCoworkerSelfTask(
 //   B. A self-task keeps running after its backing Proactivity fact disappeared
 //      (the Marketing Strategist's fact went missing while its daily task still
 //      ran) — the toggle silently lies about what the coworker is doing.
-// The periodic sweep below converges both directions from the UserFact, which is
-// the operator's expressed intent. It is additive and non-destructive: it creates
-// missing tasks, deactivates tasks a now-quiet toggle should stop, and — for an
-// orphaned task with no fact — RESTORES the toggle from the task's cadence rather
-// than silently stopping the coworker.
-
-const PROACTIVITY_AGENT_KEY_PREFIX = `${PROACTIVITY_OVERRIDE_FACT_PREFIX}:agent:`;
-
-/** Parse the persisted proactivity fact value → its level, or null if unreadable. */
-function readSelfTaskFactLevel(value: string | null | undefined): ProactivityLevel | null {
-  if (!value) return null;
-  try {
-    const parsed = JSON.parse(value) as { level?: unknown };
-    return isProactivityLevel(parsed.level) ? parsed.level : null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Best-effort level a self-task's cadence implies, for healing an orphaned task
- * (Direction B). A daily cron (day-of-week wildcard) is Assertive; anything
- * narrower is Balanced. Sub-daily Assertive cadences (e.g. twice-weekly) infer
- * Balanced — acceptable for a rare heal case; the operator can re-toggle.
- */
-export function inferLevelFromSelfTaskSchedule(schedule: string): ProactivityLevel {
-  const fields = schedule.trim().split(/\s+/);
-  return fields[4] === "*" ? "assertive" : "balanced";
-}
-
-/** Write (or refresh) the manual Proactivity fact for a coworker to `level`. */
-async function backfillProactivityFact(
-  userId: string,
-  agentId: string,
-  level: ProactivityLevel,
-): Promise<void> {
-  const now = new Date();
-  const value = JSON.stringify({
-    scope: "agent",
-    scopeKey: `agent:${agentId}`,
-    level,
-    source: "reconcile-backfill",
-    acknowledgedByUserId: userId,
-    acknowledgedAt: now.toISOString(),
-  });
-  await persistProactivityFact(userId, {
-    category: PROACTIVITY_FACT_CATEGORY,
-    key: `${PROACTIVITY_AGENT_KEY_PREFIX}${agentId}`,
-    value,
-    sourceRoute: "/platform/ai",
-    sourceAgentId: agentId,
-    lastValidatedAt: now,
-  });
-}
-
-export type ReconcileAllSelfTasksResult = {
-  /** Missing self-tasks created for an active non-quiet fact (Direction A). */
-  created: number;
-  /** Live self-tasks stood down because the toggle is now quiet (Direction A). */
-  deactivated: number;
-  /** Orphaned live self-tasks whose toggle was restored from cadence (Direction B). */
-  backfilledFacts: number;
-};
-
-/**
- * Converge every coworker self-task with its owner's current Proactivity toggle.
- * Safe to run on a cadence: it only creates missing tasks, deactivates tasks a
- * quiet toggle should stop, and restores a missing toggle from an orphaned task —
- * it never perturbs the schedule of a task that is already correctly active.
- */
-export async function reconcileAllCoworkerSelfTasks(): Promise<ReconcileAllSelfTasksResult> {
-  const result: ReconcileAllSelfTasksResult = { created: 0, deactivated: 0, backfilledFacts: 0 };
-
-  // Direction A — every active Proactivity fact for a REGISTERED coworker should
-  // have a matching self-task (create when missing; stand down when quiet).
-  const facts = await prisma.userFact.findMany({
-    where: {
-      category: PROACTIVITY_FACT_CATEGORY,
-      key: { startsWith: PROACTIVITY_AGENT_KEY_PREFIX },
-      supersededAt: null,
-    },
-    select: { userId: true, key: true, value: true },
-  });
-
-  // (taskId) that legitimately SHOULD be active — used to spot orphans below.
-  const desiredActive = new Set<string>();
-
-  for (const fact of facts) {
-    // The fact may be written under either id form — the roster reaches the
-    // operator with the canonical one for a dual-seeded coworker (BI-B05E5D30).
-    const agentId = selfTaskRegistryKey(fact.key.slice(PROACTIVITY_AGENT_KEY_PREFIX.length));
-    if (!agentId) continue;
-    const level = readSelfTaskFactLevel(fact.value);
-    if (!level) continue;
-
-    const taskId = coworkerSelfTaskId(agentId, fact.userId);
-    const existing = await prisma.scheduledAgentTask.findUnique({
-      where: { taskId },
-      select: { isActive: true },
-    });
-
-    if (level === "quiet") {
-      if (existing?.isActive) {
-        await reconcileCoworkerSelfTask(fact.userId, agentId, "quiet");
-        result.deactivated++;
-      }
-      continue;
-    }
-
-    desiredActive.add(taskId);
-    if (!existing?.isActive) {
-      // Missing or deactivated → (re)schedule it. Leave already-active tasks
-      // untouched so the sweep never churns their schedule / nextRunAt.
-      await reconcileCoworkerSelfTask(fact.userId, agentId, level);
-      result.created++;
-    }
-  }
-
-  // Direction B — an active self-task with no backing active fact is an orphan
-  // (the toggle desynced from the task). Restore the toggle from the task's
-  // cadence so the UI tells the truth, rather than stopping the coworker.
-  const liveSelfTasks = await prisma.scheduledAgentTask.findMany({
-    where: { isActive: true, taskId: { startsWith: "self-" } },
-    select: { taskId: true, agentId: true, ownerUserId: true, schedule: true },
-  });
-  for (const task of liveSelfTasks) {
-    if (desiredActive.has(task.taskId)) continue;
-    const level = inferLevelFromSelfTaskSchedule(task.schedule);
-    await backfillProactivityFact(task.ownerUserId, task.agentId, level);
-    result.backfilledFacts++;
-    console.info(
-      "[coworker-self-tasks] restored missing Proactivity toggle from orphaned self-task",
-      { taskId: task.taskId, agentId: task.agentId, level },
-    );
-  }
-
-  return result;
-}

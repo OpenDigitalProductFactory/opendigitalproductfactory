@@ -149,9 +149,30 @@ If saved material uses language from a different business type—for example,
 software-platform copy in a restaurant workspace—the platform flags it as
 imported/test content and blocks it from publishing.
 
+Your own product is never treated as a leak. If your storefront offers or value
+proposition name what you sell — including the platform itself, if you sell or
+resell it — copy about it can be approved and published.
+
 Do not edit only the headline to clear the symptom. Replace or reset the
 off-archetype campaign, its asset tasks, and any dependent draft so audience,
 offer, proof, and measurement all describe the actual business.
+
+## Marketing to Other Business Types
+
+If you sell the platform — as its vendor or as a partner reselling it — your
+buyers are other businesses, and each kind buys for a different reason. The
+Marketing Strategist plans one campaign per buyer type (for example HVAC
+contractors, dental practices, or IT partners), and drafts speak to that
+owner's own day and benefit, while staying inside what is available today.
+
+## Correcting a Plan That Started Wrong
+
+If the plan was bootstrapped on the wrong premise — the wrong buyer, or the
+wrong sales motion — tell the Marketing Strategist what is true. It can change
+how you reach buyers (for example to a partner channel) and retire the briefs
+and asset tasks built on the old premise. Retired work is archived with the
+reason, not deleted, and stops appearing on the strategy page, the calendar and
+the scheduler.
 
 ## Understand the Two Funnels
 
@@ -220,6 +241,34 @@ do exist and corrects itself rather than reporting an unexplained failure.
 
 Campaign detail is scoped to your organization. A campaign belonging to another
 organization is not readable, even by its exact identifier.
+
+## Ask for a Presentation
+
+The **Marketing Strategist** can produce a presentation for you: a board
+update, a campaign pitch, a volunteer briefing. Ask for it in plain words, for
+example "six slides for Thursday's board meeting on the spring adoption drive".
+
+1. The strategist reads the marketing workspace first (your playbook, the
+   campaign's plan and its measured results), so it asks you only what it
+   cannot find there: usually the audience, the decision you want, and how many
+   slides.
+2. It drafts the slides and produces a PowerPoint file, a PDF and a preview of
+   every slide, in your organization's brand: the colours, fonts, logo and name
+   from your brand settings.
+3. It replies with a link to the document. Review the slide previews there, and
+   use **Download original** for the `.pptx`.
+4. To change it, tell the strategist what to change ("make slide 3 a chart").
+   It regenerates the deck and saves it as the next version of the same
+   document, so the version history shows every revision.
+
+Figures on the slides come from your marketing workspace or from you. If a
+number is missing, the strategist says so rather than making one up. A deck is
+never sent or published by producing it; sharing it is your decision.
+
+For final polish, edit the downloaded `.pptx` in your own office suite and save
+it back to the document as a new version. If document conversion is not set up
+on this install, the strategist tells you it cannot produce the file and offers
+the slide text instead.
 
 ## What To Watch
 

@@ -1,0 +1,19 @@
+{
+  "version": "1",
+  "decidedOption": "portal-native-issue-with-trusted-peer-picker",
+  "decisionInteractionId": "DI-CDBDE152DB6E",
+  "scope": {
+    "files": [
+      "apps/web/components/platform/federation-links/OrganizationJoinPanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "portal-native-issue-with-trusted-peer-picker",
+      "keep-edge-node-issue-form",
+      "portal-native-issue-typed-hostname-and-expiry"
+    ],
+    "note": "EP-ZERO-CONFIG-FEDERATION, BI-AC7BCC58 and BI-1F69D3F8 (spec docs/superpowers/specs/2026-09-03-portal-mediated-organization-membership-design.md §5.3). 'Create join file' now opens a select of the trusted same-organization installations this authority already knows by address, with an 'Another installation…' fallback text field, one confirmation naming the chosen host, a fixed 30-minute expiry, and a one-time download. The typed expiry and the edge-node prerequisites are gone. The existing SelectField, TextField, CheckboxField, SubmitButton and FormStatus primitives are reused. The kernel scored this shape highest (composite 9.55, margin 3.31, confidence high) on cognitive load and operator effort against keeping the edge-node form or a portal path that still asks for a typed hostname and expiry."
+  }
+}

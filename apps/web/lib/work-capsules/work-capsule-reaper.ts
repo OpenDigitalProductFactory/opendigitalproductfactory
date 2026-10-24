@@ -10,7 +10,8 @@
 //
 // Governance (kernel: destructive-actions-require-explicit-go):
 //   - DRY-RUN IS THE DEFAULT. `reapStaleWorkCapsules` returns the candidate set
-//     and writes NOTHING unless the caller passes `dryRun: false`.
+//     and writes NOTHING unless the caller passes `dryRun: false`, or passes
+//     `closeDelivered` to archive MERGED rooms only (BI-ED6EA694).
 //   - The scheduled caller (taskrun-watchdog) gates live actuation behind
 //     DPF_WORKCAPSULE_REAPER_AUTO_REAP=1 (observe-only otherwise), mirroring the
 //     runtime-artifact / worktree janitors.
@@ -23,16 +24,23 @@
 
 import { WORK_CAPSULE_IDLE_STALE_MS } from "@/lib/work-capsules";
 import {
+  parseVerifiedPullRequestObservation,
+  selectLatestExactPullRequestObservation,
+} from "../contributor-change-lanes/pull-request-observation";
+import {
   classifyWorkCapsuleLiveness,
+  WORK_CAPSULE_OPEN_PR_FRESHNESS_MS,
   type CapsuleLivenessInput,
   type WorkCapsuleDisposition,
   type WorkCapsuleLiveness,
 } from "./liveness";
 import { isReachableFromTrunk, trunkRefExists } from "./git-scanner";
 import { updateWorkCapsuleStatus, type CapsuleDb, type WorkCapsuleActor } from "./work-capsule-store";
+import { authoredHeadSha } from "./authored-head";
 
 /** Capsule statuses the reaper will never touch — already closed out. */
 const TERMINAL_STATUSES = new Set(["complete", "abandoned", "archived"]);
+const TERMINAL_BUILD_PHASES = ["complete", "abandoned", "failed"] as const;
 
 export type TerminalBacklogReconciliationPlan = {
   changed: boolean;
@@ -121,14 +129,17 @@ export type ReapCandidate = {
 /** The linked-build snapshot the reaper joins onto build-studio capsules. */
 export type ReaperBuildSnapshot = { phase: string | null; lastActivityAt: Date | null };
 
-type ReaperCapsuleRow = CapsuleLivenessInput & {
+export type ReaperCapsuleRow = CapsuleLivenessInput & {
   capsuleId: string;
   title: string;
   source: string;
   headBranch: string | null;
   headSha: string | null;
+  /** Claim-time base; a headSha equal to it is not an authored head (BI-A7797C2C). */
+  baseSha?: string | null;
   worktreePath: string | null;
   featureBuildId: string | null;
+  repositoryFullName: string | null;
 };
 
 /**
@@ -179,11 +190,15 @@ type ReaperDb = CapsuleDb & {
   featureBuild?: { findMany(args: unknown): Promise<any[]> };
   backlogItem?: {
     findFirst(args: unknown): Promise<any>;
+    findMany?(args: unknown): Promise<any[]>;
     update(args: unknown): Promise<any>;
   };
   backlogItemActivity?: {
     count(args: unknown): Promise<number>;
     create(args: unknown): Promise<any>;
+  };
+  contributorInventorySyncRun?: {
+    findFirst(args: unknown): Promise<any>;
   };
 };
 
@@ -204,21 +219,23 @@ export async function reconcileTerminalCapsuleBacklogs(args: {
   });
   const buildIds = capsules.map((capsule: any) => capsule.featureBuildId).filter(Boolean);
   const phases = new Map<string, string | null>();
+  const semanticIds = new Map<string, string>();
   if (buildIds.length > 0 && args.db.featureBuild) {
     const rows = await args.db.featureBuild.findMany({
       where: { id: { in: [...new Set(buildIds)] } },
-      select: { id: true, phase: true },
+      select: { id: true, buildId: true, phase: true },
     });
-    for (const row of rows) phases.set(row.id, row.phase ?? null);
+    for (const row of rows) {
+      phases.set(row.id, row.phase ?? null);
+      if (row.buildId) semanticIds.set(row.id, row.buildId);
+    }
   }
   let reconciled = 0;
-  for (const capsule of capsules) {
-    const item = await args.db.backlogItem.findFirst({
-      where: { itemId: capsule.backlogItemId },
-      select: { id: true, itemId: true, status: true, activeBuildId: true },
-    });
-    if (!item) continue;
-    const evidenceCount = await args.db.backlogItemActivity.count({
+  const repair = async (
+    item: { id: string; status: string; activeBuildId: string | null },
+    source: { capsuleId: string | null; capsuleStatus: string | null; buildPhase: string | null },
+  ): Promise<void> => {
+    const evidenceCount = await args.db.backlogItemActivity!.count({
       where: {
         backlogItemId: item.id,
         kind: { in: ["completion_evidence", "execution_evidence", "runtime_verification"] },
@@ -227,12 +244,12 @@ export async function reconcileTerminalCapsuleBacklogs(args: {
     const plan = planTerminalBacklogReconciliation({
       backlogStatus: item.status,
       activeBuildId: item.activeBuildId,
-      buildPhase: capsule.featureBuildId ? phases.get(capsule.featureBuildId) ?? null : null,
-      capsuleStatus: capsule.status,
+      buildPhase: source.buildPhase,
+      capsuleStatus: source.capsuleStatus,
       hasCompletionEvidence: evidenceCount > 0,
     });
-    if (!plan.changed || args.dryRun !== false) continue;
-    await args.db.backlogItem.update({
+    if (!plan.changed || args.dryRun !== false) return;
+    await args.db.backlogItem!.update({
       where: { id: item.id },
       data: {
         ...(plan.clearActiveBuild ? { activeBuildId: null } : {}),
@@ -240,15 +257,15 @@ export async function reconcileTerminalCapsuleBacklogs(args: {
         ...(plan.releaseClaim ? { claimStatus: "released" } : {}),
       },
     });
-    await args.db.backlogItemActivity.create({
+    await args.db.backlogItemActivity!.create({
       data: {
         backlogItemId: item.id,
         kind: "execution_reconciled",
-        summary: `${capsule.capsuleId} terminal execution reconciled (${plan.outcome})`,
+        summary: `${source.capsuleId ?? item.activeBuildId} terminal execution reconciled (${plan.outcome})`,
         payload: {
-          capsuleId: capsule.capsuleId,
-          capsuleStatus: capsule.status,
-          buildPhase: capsule.featureBuildId ? phases.get(capsule.featureBuildId) ?? null : null,
+          capsuleId: source.capsuleId,
+          capsuleStatus: source.capsuleStatus,
+          buildPhase: source.buildPhase,
           fromStatus: item.status,
           targetStatus: plan.targetStatus,
           completionEvidenceRequired: plan.completionEvidenceRequired,
@@ -259,6 +276,54 @@ export async function reconcileTerminalCapsuleBacklogs(args: {
       },
     });
     reconciled += 1;
+  };
+  for (const capsule of capsules) {
+    // BI-62FB6505: Build Studio rooms store the item's row id, CLI rooms its itemId.
+    const item = await args.db.backlogItem.findFirst({
+      where: { OR: [{ itemId: capsule.backlogItemId }, { id: capsule.backlogItemId }] },
+      select: { id: true, itemId: true, status: true, activeBuildId: true },
+    });
+    if (!item) continue;
+    // BI-B940FE36: a terminal room speaks only for its own build. Clearing a pointer to a
+    // DIFFERENT, live build (BI-F73AE8D1 on 2026-09-24) let the daily tee-up
+    // create a duplicate; pointers at terminal builds are the item sweep below.
+    const ownRefs = capsule.featureBuildId
+      ? [capsule.featureBuildId, semanticIds.get(capsule.featureBuildId)]
+      : [];
+    if (item.activeBuildId && !ownRefs.includes(item.activeBuildId)) continue;
+    await repair(item, {
+      capsuleId: capsule.capsuleId,
+      capsuleStatus: capsule.status,
+      buildPhase: capsule.featureBuildId ? phases.get(capsule.featureBuildId) ?? null : null,
+    });
+  }
+
+  // BI-62FB6505: abandon_stalled_build and the 7-day ideate age-out abandon the
+  // BUILD without closing its room, so a room can still say "working" over a
+  // dead build. Sweep the item side too: any pointer at a terminal build.
+  if (args.db.backlogItem.findMany && args.db.featureBuild) {
+    const pinned: Array<{ id: string; status: string; activeBuildId: string | null }> =
+      await args.db.backlogItem.findMany({
+        where: { activeBuildId: { not: null } },
+        select: { id: true, itemId: true, status: true, activeBuildId: true },
+        take: 500,
+      });
+    const refs = [...new Set(pinned.map((item) => item.activeBuildId).filter((ref): ref is string => Boolean(ref)))];
+    if (refs.length > 0) {
+      const builds: Array<{ id: string; buildId: string; phase: string | null }> = await args.db.featureBuild.findMany({
+        where: { OR: [{ buildId: { in: refs } }, { id: { in: refs } }], phase: { in: [...TERMINAL_BUILD_PHASES] } },
+        select: { id: true, buildId: true, phase: true },
+      });
+      const phaseByRef = new Map<string, string | null>();
+      for (const build of builds) {
+        phaseByRef.set(build.buildId, build.phase);
+        phaseByRef.set(build.id, build.phase);
+      }
+      for (const item of pinned) {
+        if (!item.activeBuildId || !phaseByRef.has(item.activeBuildId)) continue;
+        await repair(item, { capsuleId: null, capsuleStatus: null, buildPhase: phaseByRef.get(item.activeBuildId) ?? null });
+      }
+    }
   }
   return { scanned: capsules.length, reconciled };
 }
@@ -300,17 +365,153 @@ export async function annotateDeliveredSignals(
   const hasTrunk = deps.hasTrunk ?? trunkRefExists;
   const reachable = deps.reachable ?? isReachableFromTrunk;
 
-  const withSha = rows.filter((r) => Boolean(r.headSha));
+  // The claim-time base is already on trunk, so its reachability proves
+  // nothing about the room (BI-A7797C2C): only an authored head is probed.
+  const withSha = rows.filter(
+    (row) =>
+      Boolean(authoredHeadSha(row)) &&
+      !row.deliveredSignal?.merged &&
+      !row.pullRequestObservation,
+  );
   if (withSha.length === 0) return;
   if (!(await hasTrunk(repoRoot))) return; // repo-less runtime → skip; null everywhere.
 
   for (const row of withSha) {
     try {
-      const merged = await reachable(repoRoot, row.headSha);
+      const merged = await reachable(repoRoot, authoredHeadSha(row));
       if (merged !== null) row.deliveredSignal = { merged };
     } catch {
       // Best-effort: a single git failure never aborts the sweep.
     }
+  }
+}
+
+/**
+ * Project verified provider observations onto Workroom rows. A merge is a
+ * durable monotonic fact. An open PR is only a bounded liveness observation;
+ * stale/closed/unknown payloads grant no liveness and no reaper authority.
+ */
+export async function annotateProviderDeliverySignals(
+  rows: ReaperCapsuleRow[],
+  payloads: readonly unknown[],
+  now: Date = new Date(),
+  confirmedAt: Date | null = null,
+): Promise<void> {
+  for (const row of rows) {
+    if (!row.repositoryFullName || !row.pullRequestNumber) continue;
+    const head = authoredHeadSha(row);
+    if (!head) {
+      // BI-ED6EA694: a room that never recorded its head is delivered only by its
+      // own PR merging from its own branch. An open PR proves nothing about it.
+      // A head still equal to the claim-time base counts as never recorded.
+      if (row.headBranch && headlessRoomMerged(payloads, row.repositoryFullName, row.pullRequestNumber, row.headBranch)) {
+        row.deliveredSignal = { merged: true };
+      }
+      continue;
+    }
+    const observation = selectLatestExactPullRequestObservation(payloads, {
+      repositoryFullName: row.repositoryFullName,
+      pullRequestNumber: row.pullRequestNumber,
+      headSha: head,
+    });
+    if (!observation) continue;
+    if (observation.state === "merged") {
+      row.deliveredSignal = { merged: true };
+      continue;
+    }
+    const observedAt = confirmedAt ?? new Date(observation.observedAt);
+    const age = now.getTime() - observedAt.getTime();
+    if (observation.state === "open" && age >= 0 && age <= WORK_CAPSULE_OPEN_PR_FRESHNESS_MS) {
+      row.pullRequestObservation = { state: "open", observedAt };
+    }
+  }
+}
+
+function headlessRoomMerged(
+  payloads: readonly unknown[],
+  repositoryFullName: string,
+  pullRequestNumber: number,
+  headBranch: string,
+): boolean {
+  return payloads.some((payload) => {
+    const row = parseVerifiedPullRequestObservation(payload);
+    return Boolean(
+      row &&
+        row.state === "merged" &&
+        row.number === pullRequestNumber &&
+        row.headBranch === headBranch &&
+        row.repositoryFullName.toLowerCase() === repositoryFullName.toLowerCase(),
+    );
+  });
+}
+
+type ProviderObservationBatch = {
+  payloads: unknown[];
+  confirmedAt: Date | null;
+};
+
+function githubInventoryWasUnchanged(perSourceResult: unknown): boolean {
+  if (!perSourceResult || typeof perSourceResult !== "object") return false;
+  const github = (perSourceResult as Record<string, unknown>)["github-pr"];
+  return Boolean(
+    github &&
+      typeof github === "object" &&
+      (github as Record<string, unknown>).unchanged === true,
+  );
+}
+
+async function loadLatestSuccessfulProviderPayloads(
+  db: ReaperDb,
+): Promise<ProviderObservationBatch> {
+  if (!db.contributorInventorySyncRun) return { payloads: [], confirmedAt: null };
+  try {
+    const row = await db.contributorInventorySyncRun.findFirst({
+      where: { perSourceResult: { path: ["github-pr", "ok"], equals: true } },
+      orderBy: { startedAt: "desc" },
+      select: {
+        startedAt: true,
+        completedAt: true,
+        perSourceResult: true,
+        snapshots: {
+          where: { source: "github-pr" },
+          select: { payload: true },
+        },
+      },
+    });
+    if (!row) return { payloads: [], confirmedAt: null };
+    if (Array.isArray(row.snapshots) && row.snapshots.length > 0) {
+      return {
+        payloads: row.snapshots.map((snapshot: { payload?: unknown }) => snapshot.payload),
+        confirmedAt: null,
+      };
+    }
+    if (!githubInventoryWasUnchanged(row.perSourceResult)) {
+      return { payloads: [], confirmedAt: null };
+    }
+    const prior = await db.contributorInventorySyncRun.findFirst({
+      where: {
+        AND: [
+          { perSourceResult: { path: ["github-pr", "ok"], equals: true } },
+          { snapshots: { some: { source: "github-pr" } } },
+        ],
+      },
+      orderBy: { startedAt: "desc" },
+      select: {
+        snapshots: {
+          where: { source: "github-pr" },
+          select: { payload: true },
+        },
+      },
+    });
+    return {
+      payloads: Array.isArray(prior?.snapshots)
+        ? prior.snapshots.map((snapshot: { payload?: unknown }) => snapshot.payload)
+        : [],
+      confirmedAt: row.completedAt ?? row.startedAt,
+    };
+  } catch {
+    // Provider unavailability is unknown, never evidence that a PR is closed.
+    return { payloads: [], confirmedAt: null };
   }
 }
 
@@ -326,6 +527,11 @@ export async function reapStaleWorkCapsules(args: {
   now?: Date;
   /** DEFAULT true. Pass false to actually transition dead capsules. */
   dryRun?: boolean;
+  /**
+   * Archive DELIVERED (merged) rooms even on a dry run (BI-ED6EA694). Dry-run
+   * guards abandoning unmerged work; closing merged work is DB-only and reversible.
+   */
+  closeDelivered?: boolean;
   idleMs?: number;
   actor?: WorkCapsuleActor;
 }): Promise<ReapResult> {
@@ -346,19 +552,29 @@ export async function reapStaleWorkCapsules(args: {
       updatedAt: true,
       pullRequestUrl: true,
       pullRequestNumber: true,
+      repositoryFullName: true,
       headBranch: true,
       headSha: true,
+      baseSha: true,
       worktreePath: true,
       featureBuildId: true,
     },
     take: 500,
   });
 
-  // DELIVERED detection — PROCEDURAL, LOCAL, no LLM, no GitHub API: a room whose
-  // branch head is reachable from the trunk has merged and is closed out as
-  // delivered (not abandoned). Reads git objects only (never a worktree), so it
-  // is junction-safe; degrades gracefully to null (→ lease/grace logic) wherever
-  // the local repo or the trunk ref is unavailable.
+  // Provider facts are the source-free/squash-safe path. Only verified exact
+  // repository/PR/authored-head observations can affect lifecycle; a previous
+  // successful inventory remains available while later provider syncs fail.
+  const providerObservations = await loadLatestSuccessfulProviderPayloads(args.db);
+  await annotateProviderDeliverySignals(
+    capsules,
+    providerObservations.payloads,
+    now,
+    providerObservations.confirmedAt,
+  );
+
+  // Positive local ancestry remains a fallback for source checkouts. It never
+  // overwrites an exact provider merge with a negative/indeterminate result.
   await annotateDeliveredSignals(capsules);
 
   // Batch-load the linked FeatureBuild snapshot for the build-studio capsules
@@ -381,13 +597,12 @@ export async function reapStaleWorkCapsules(args: {
 
   const candidates = selectReapCandidates(capsules, buildsById, now, idleMs);
 
-  if (dryRun) {
-    return { dryRun: true, scanned: capsules.length, candidates, reaped: 0 };
-  }
-
+  const toClose = dryRun
+    ? args.closeDelivered ? candidates.filter((candidate) => candidate.disposition === "delivered") : []
+    : candidates;
   let reaped = 0;
   const actor = args.actor ?? SYSTEM_ACTOR;
-  for (const candidate of candidates) {
+  for (const candidate of toClose) {
     // Disposition decides the closeout, NOT a single blanket "abandoned":
     //   - delivered (merged) → ARCHIVE as delivered. The worktree + the merged
     //     branch are safe to reap (their commits are on the trunk); worktree
@@ -420,9 +635,11 @@ export async function reapStaleWorkCapsules(args: {
       console.warn(`[work-capsule-reaper] failed to close out ${candidate.capsuleId}:`, err);
     }
   }
+  // BI-62FB6505: observe-only governs REAPING rooms. Clearing an item's pointer
+  // at a build that is already terminal reaps nothing, so it runs either way.
   const backlogRepair = await reconcileTerminalCapsuleBacklogs({ db: args.db, dryRun: false, now });
   return {
-    dryRun: false,
+    dryRun,
     scanned: capsules.length,
     candidates,
     reaped,

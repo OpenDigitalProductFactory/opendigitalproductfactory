@@ -2,8 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const root = resolve(new URL("..", import.meta.url).pathname.replace(/^\/(.:\/)/, "$1"));
+const root = resolve(fileURLToPath(new URL("..", import.meta.url)).replace(/^\/(.:\/)/, "$1"));
 
 test("readiness contract is non-mutating and reports every required dependency", async () => {
   const script = await readFile(resolve(root, "scripts/promote.sh"), "utf8");

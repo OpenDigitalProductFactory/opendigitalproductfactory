@@ -14,7 +14,7 @@
 // activity plane as a deferred increment behind the same shapes — this fills it.
 
 import type { WorkforceMember } from "@/lib/workforce/workforce-roster";
-import type { FeedEventData, TwinActor, TwinActorKind } from "@/components/twin";
+import type { FeedEventData, TwinActor, TwinActorKind } from "./kit-types";
 import { TASK_LIVE_STATES } from "@/lib/tak/task-states";
 
 /** One actively-running unit of coworker work (a working/active TaskRun). */

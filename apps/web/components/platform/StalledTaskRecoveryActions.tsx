@@ -1,8 +1,12 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { semanticReviewRecoveryBudget, SEMANTIC_REVIEW_MAX_ATTEMPTS, type SemanticReviewBudgetSnapshot } from "@/lib/change-review/semantic-review-recovery-policy";
+import { semanticReviewRecoveryPresentation, semanticReviewEligibilityLabels } from "@/lib/change-review/semantic-review-presentation";
+import { useSemanticReviewRecoveryBudget } from "./useSemanticReviewRecoveryBudget";
 import { useRouter } from "next/navigation";
 import { confirmDialog, promptDialog } from "@/components/ui/Dialog";
+import { Button } from "@/components/ui/Button";
 import {
   serverTaskrunRetry,
   serverTaskrunAbandon,
@@ -10,42 +14,55 @@ import {
 } from "@/lib/actions/taskrun-recovery-server-actions";
 
 /**
- * Recovery actions for a stalled TaskRun (BI-4ab6be39 Phase F).
- *
- * Renders three buttons — Retry / Abandon / Escalate — that call the
- * server actions in lib/actions/taskrun-recovery-server-actions.ts.
- *
- * Ship-phase Retry is gated behind a confirm dialog per spec §5.5 — the
- * caller passes `phase`; this component decides the disabled/confirm UX.
+ * Shared operator recovery. Native reviews resume the same bounded request;
+ * generic stalled tasks retain their existing actions. Authority stays server-side.
  */
 export function StalledTaskRecoveryActions({
   taskRunId,
   phase,
+  nativeReview = false,
+  reviewBudget,
 }: {
   taskRunId: string;
   phase: string | null;
+  nativeReview?: boolean;
+  reviewBudget?: SemanticReviewBudgetSnapshot;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [status, setStatus] = useState<{ kind: "idle" } | { kind: "error"; message: string } | { kind: "success"; message: string }>({ kind: "idle" });
 
   const isShipPhase = phase === "ship";
+  const { budgetState, refreshBudget } = useSemanticReviewRecoveryBudget(reviewBudget, nativeReview);
+  const { title: budgetTitle, nextAction } = semanticReviewRecoveryPresentation(budgetState, reviewBudget?.eligibilityBlocked);
+  const deadline = reviewBudget?.deadlineAt ? Date.parse(reviewBudget.deadlineAt) : NaN;
+  const recoveryAttempt = reviewBudget?.recoveryAttempt;
+  const eligibilityBlocked = nativeReview && reviewBudget?.eligibilityBlocked === true;
 
   const onRetry = async () => {
-    if (isShipPhase) {
+    if (eligibilityBlocked) return;
+    if (nativeReview && semanticReviewRecoveryBudget(reviewBudget?.deadlineAt, reviewBudget?.recoveryAttempt) !== "available") {
+      refreshBudget();
+      return;
+    }
+    if (isShipPhase || nativeReview) {
       const ok = await confirmDialog({
-        title: "Retry ship-phase task",
+        title: nativeReview ? "Resume review" : "Retry ship-phase task",
         message:
-          "Ship-phase Retry can double-publish (resend emails, re-deploy, etc.). Are you sure you want to retry?",
+          nativeReview ? "Reuse completed checks. Replace uncertain inference; another provider charge is possible. Resume?" : "Retry may double-publish. Continue?",
         tone: "danger",
         confirmLabel: "Retry",
       });
       if (!ok) return;
     }
+    if (nativeReview && semanticReviewRecoveryBudget(reviewBudget?.deadlineAt, reviewBudget?.recoveryAttempt) !== "available") {
+      refreshBudget();
+      return;
+    }
     startTransition(async () => {
-      const result = await serverTaskrunRetry(taskRunId, { force: isShipPhase });
+      const result = await serverTaskrunRetry(taskRunId, { force: isShipPhase || nativeReview });
       if (result.ok) {
-        setStatus({ kind: "success", message: `Retried as ${result.data.newTaskRunId}` });
+        setStatus({ kind: "success", message: nativeReview ? "Recovery requested" : `Retried as ${result.data.newTaskRunId}` });
         router.refresh();
       } else {
         setStatus({ kind: "error", message: result.error });
@@ -91,43 +108,47 @@ export function StalledTaskRecoveryActions({
 
   return (
     <div className="space-y-2">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--dpf-muted)]">
-        Stalled — operator recovery
+      <p aria-live={nativeReview ? "polite" : undefined} className="text-xs font-semibold text-[var(--dpf-muted)]">
+        {nativeReview ? budgetTitle : "Stalled — operator recovery"}
       </p>
+      {nativeReview && <div className="space-y-1 text-xs text-[var(--dpf-muted)]">
+        {Number.isFinite(deadline) && <p>Deadline: <time dateTime={new Date(deadline).toISOString()}>{new Date(deadline).toLocaleString()}</time></p>}
+        {typeof recoveryAttempt === "number" && Number.isSafeInteger(recoveryAttempt) && recoveryAttempt >= 0 && <p>Recovery attempts: {recoveryAttempt} / {SEMANTIC_REVIEW_MAX_ATTEMPTS}</p>}
+        <p>{nextAction}</p>
+        {reviewBudget?.routingEligibility?.length ? <ul className="list-disc ps-4">
+          {semanticReviewEligibilityLabels(reviewBudget.routingEligibility).map((label, index) => <li key={index}>{label}</li>)}
+        </ul> : null}
+      </div>}
       <div className="flex flex-wrap gap-2">
-        <button
+        <Button variant="secondary" size="sm" className="min-h-11"
           type="button"
           onClick={onRetry}
-          disabled={pending}
-          className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-1 text-xs font-medium text-[var(--dpf-text)] hover:bg-[var(--dpf-accent)] hover:text-white disabled:opacity-50"
-          title={isShipPhase ? "Ship-phase Retry requires confirm (double-publish risk)" : "Spawn a sibling TaskRun and re-dispatch"}
+          disabled={pending || eligibilityBlocked || (nativeReview && budgetState !== "available")}
         >
-          Retry{isShipPhase ? " (ship)" : ""}
-        </button>
-        <button
+          {nativeReview ? "Resume review" : "Retry"}
+        </Button>
+        {!nativeReview && <Button variant="secondary" size="sm" className="min-h-11"
           type="button"
           onClick={onAbandon}
           disabled={pending}
-          className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-1 text-xs font-medium text-[var(--dpf-text)] hover:bg-[var(--dpf-error)] hover:text-white disabled:opacity-50"
           title="Cancel this task and live children"
         >
           Abandon
-        </button>
-        <button
+        </Button>}
+        {!nativeReview && <Button variant="secondary" size="sm" className="min-h-11"
           type="button"
           onClick={onEscalate}
           disabled={pending}
-          className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-1 text-xs font-medium text-[var(--dpf-text)] hover:bg-[var(--dpf-warning)] hover:text-white disabled:opacity-50"
           title="Park for review; notifies the accountable owner"
         >
           Escalate
-        </button>
+        </Button>}
       </div>
       {status.kind === "success" && (
-        <p className="text-xs text-[var(--dpf-accent)]">{status.message}</p>
+        <p role="status" className="text-xs text-[var(--dpf-accent)]">{status.message}</p>
       )}
       {status.kind === "error" && (
-        <p className="text-xs text-[var(--dpf-error)]">{status.message}</p>
+        <p role="alert" className="text-xs text-[var(--dpf-error)]">{status.message}</p>
       )}
     </div>
   );

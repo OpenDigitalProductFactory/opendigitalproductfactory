@@ -1,0 +1,84 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { projectProviderRoutingControl } from "./provider-routing-control";
+import type { ProviderWithCredential } from "@/lib/ai-provider-types";
+const now = Date.parse("2026-10-12T12:00:00Z");
+function input() {
+  return { pw: { provider: { providerId: "chatgpt", status: "active", endpointType: "responses", category: "direct", authMethod: "oauth2_authorization_code", defaultConnectionStatus: "active", operatorPause: null }, credential: { hasUsableMaterial: true, tokenExpiresAt: null } } as unknown as ProviderWithCredential, modelCount: 8, now, localOnly: false };
+}
+describe("provider routing controls", () => {
+  beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(now); });
+  afterEach(() => { vi.useRealTimers(); });
+  it("shows simultaneous operator, quota and policy restrictions", () => {
+    const data = input();
+    data.pw.provider.defaultConnectionStatus = "paused";
+    data.pw.provider.operatorPause = { pausedAt: "2026-10-12T11:00:00Z", resumeAt: "2026-10-12T14:00:00Z" };
+    const result = projectProviderRoutingControl({ ...data, localOnly: true, capacity: { state: "quota_resets_at", retryAtMs: now + 3_600_000, safeSummary: "Usage limit reached." } });
+    expect(result.eligibility.eligible).toBe(false);
+    expect(result.eligibility.label).toBe("Paused");
+    expect(result.restrictions.map(r => r.key)).toEqual(["operator", "local-only", "capacity"]);
+    expect(result.restrictions[0].until).toBe("2026-10-12T14:00:00Z");
+  });
+  it("shows a public-only provider as public work only, not routable (BI-1BF425BF)", () => {
+    const data = input();
+    (data.pw.provider as { sensitivityClearance?: string[] }).sensitivityClearance = ["public"];
+    const result = projectProviderRoutingControl(data);
+    expect(result.eligibility.eligible).toBe(false);
+    expect(result.eligibility.state).toBe("public_only");
+    expect(result.eligibility.label).toBe("Public work only");
+    expect(result.restrictions.map(r => r.key)).toEqual(["clearance"]);
+  });
+  it("removing an operator pause leaves a current capacity restriction visible", () => {
+    const result = projectProviderRoutingControl({ ...input(), capacity: { state: "rate_limited", retryAtMs: now + 60_000, safeSummary: "Wait for the usage reset." } });
+    expect(result.eligibility.eligible).toBe(false);
+    expect(result.restrictions.map(r => r.key)).toEqual(["capacity"]);
+  });
+  it("keeps a host reservation visible after an operator pause ends", () => {
+    const result = projectProviderRoutingControl({ ...input(), hostRestriction: "Host reserved for verification." });
+    expect(result.eligibility.eligible).toBe(false);
+    expect(result.restrictions).toEqual([{ key: "host-capacity", summary: "Host reserved for verification.", until: null }]);
+  });
+  it("uses the automatic recovery reason instead of claiming an administrator disabled it", () => {
+    const data = input(); data.pw.provider.status = "disabled";
+    const result = projectProviderRoutingControl({ ...data, recovery: { summary: "Automatic recovery after an account error.", nextRunAt: null } });
+    expect(result.eligibility.reason).toBe("Automatic recovery after an account error.");
+    expect(result.restrictions.map(r => r.key)).toEqual(["recovery"]);
+  });
+  it("shows recent failures as observations without inventing an active routing hold", () => {
+    const result = projectProviderRoutingControl({ ...input(), health: { status: "degraded", remediationKind: "provider_settings", safeSummary: "Recent requests failed." } });
+    expect(result.eligibility.eligible).toBe(true);
+    expect(result.healthSummary).toBe("Recent requests failed.");
+    expect(result.restrictions).toEqual([]);
+  });
+  it("retains a current runtime cooldown", () => {
+    const result = projectProviderRoutingControl({ ...input(), health: { status: "cooling_down", remediationKind: "wait", safeSummary: "Retrying after a temporary error.", cooldownUntil: now + 60_000 } });
+    expect(result.eligibility.eligible).toBe(false);
+    expect(result.restrictions[0].until).toBe(new Date(now + 60_000).toISOString());
+  });
+  it.each(["service", "transcription"])("does not apply model-only inference policy to %s endpoints", endpointType => {
+    const data = input(); data.pw.provider.endpointType = endpointType;
+    const result = projectProviderRoutingControl({ ...data, localOnly: true });
+    expect(result.restrictions.some(r => r.key === "local-only")).toBe(false);
+  });
+  it("uses the canonical temporary-capacity expiry rules", () => {
+    const result = projectProviderRoutingControl({ ...input(), capacity: { state: "rate_limited", retryAtMs: now - 1, safeSummary: "Old limit." } });
+    expect(result.eligibility.eligible).toBe(true);
+    expect(result.restrictions).toEqual([]);
+  });
+  it("preserves canonical legacy activation in the routing display", () => {
+    const data = input(); data.pw.provider.defaultConnectionStatus = "unconfigured";
+    const result = projectProviderRoutingControl(data);
+    expect(result.eligibility.eligible).toBe(true);
+    expect(result.restrictions).toEqual([]);
+  });
+  it("retains a disabled connection even with a healthy provider lifecycle", () => {
+    const data = input(); data.pw.provider.defaultConnectionStatus = "disabled";
+    const result = projectProviderRoutingControl(data);
+    expect(result.eligibility.eligible).toBe(false);
+    expect(result.restrictions[0].key).toBe("connection");
+  });
+  it("shows the legacy quota recovery schedule rather than mislabeling it as a manual disable", () => {
+    const data = input(); data.pw.provider.status = "inactive";
+    const result = projectProviderRoutingControl({ ...data, quotaRecovery: { nextRunAt: "2026-10-12T13:00:00Z" } });
+    expect(result.restrictions.some(r => r.key === "quota-recovery" && r.until === "2026-10-12T13:00:00Z")).toBe(true);
+  });
+});

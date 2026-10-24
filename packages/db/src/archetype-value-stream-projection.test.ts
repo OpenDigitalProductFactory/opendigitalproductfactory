@@ -16,6 +16,7 @@ const OVSM: OperationalValueStream = {
   archetypeId: "hair-salon",
   archetypeName: "Hair Salon",
   category: "beauty-personal-care",
+  declaredBackboneOmissions: [],
   capacityUnit: "slot-hours",
   demandSignature: "weekly",
   trustGates: [],

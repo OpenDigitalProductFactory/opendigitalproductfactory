@@ -1,0 +1,20 @@
+{
+  "version": "1",
+  "decidedOption": "read-only-section-link-to-craft",
+  "decisionInteractionId": "DI-03B841150A42",
+  "scope": { "files": ["apps/web/app/(shell)/coworker-decisions/review/craft-consult-demand-list.tsx"] },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["read-only-section-link-to-craft", "inline-confirm-per-row", "separate-craft-demand-route"],
+    "fitDecision": "fits",
+    "owningArea": "Coworker Decision Engine",
+    "routeFamily": "/coworker-decisions",
+    "primaryPersona": "owner or operator keeping specialist judgement gate-live",
+    "navigationLayer": "section on the existing review page",
+    "reuseConvergence": "Same section shape and copy contract as the held-material and proposal-queue sections; one Link per row to the existing craft page, which already owns publish/promotion. No new action, route, or control.",
+    "sourceTruth": "DecisionInteraction rows with gateKey=profession that fell back (gateFallbackUsed) or went unanswered, aggregated per (professionKey, domainClass) over 30 days; professionKey from outcomePayload, label from docs/professions/registry.json.",
+    "aiBoundary": "Read-only demand signal. The platform never self-confirms craft material; the human publishes a page on the craft page and that publish is what promotes it into the requested decision class.",
+    "verification": "craft-consult-demand.test.ts (aggregation, window predicate, unbound handling) and profession-gate.test.ts (fallbackProfileId stamped) pass, 20 tests. Web typecheck run in the worktree. Live acceptance on the canonical install after deploy: the review page shows enterprise-architecture / architecture tradeoff with the 348-consult count.",
+    "decisionQuality": "High confidence, autonomy eligible, margin 3.761 on DI-03B841150A42; no flipping principles at epsilon 0.1."
+  }
+}

@@ -13,8 +13,15 @@
 //
 // A guard written against only Claude's envelope reads `undefined` on Grok and
 // emits a verdict Grok ignores → silent fail-open. This module normalizes the
-// INPUT (read either casing) and emits BOTH deny/context envelopes on OUTPUT, so
-// one guard body enforces identically on every surface. Fails OPEN on any error.
+// INPUT (read either casing), notes which surface sent it, and emits the deny
+// envelope that surface honours, so one guard body enforces identically on every
+// surface. Fails OPEN on any error.
+//
+// BI-E5C45F61: the deny used to carry both envelopes on the assumption that each
+// surface ignores the other's keys. Claude Code 2.1.295 (desktop 2.31226.1) does
+// not: it rejects a top-level `decision` other than approve|block and discards
+// the WHOLE output, so every deny guard failed open on Claude. A Claude/Codex
+// payload now gets hookSpecificOutput only (lib/claude-hook-contract.mjs).
 
 import { readFileSync, existsSync } from "node:fs";
 import { dirname, join, parse } from "node:path";
@@ -63,23 +70,124 @@ export function inDpfWorkspace(startDir) {
   return false;
 }
 
+// ── Scope by the action's target (BI-77BE1389, WWMD DI-F11C21173A30) ─────────
+// The harness sends the folder the SESSION opened in. On an install host that
+// is the installed runtime (no checkout), so a guard keyed on it switched off
+// for the whole session, even for a push from a worktree or an edit inside one.
+// A guard now sees the folder the action targets: the checkout root of an edited
+// file, or the folder a shell command moves into (`cd` / `pushd` / `git -C`).
+// With no target, it is the session folder, exactly as before.
+
+const FILE_EDIT_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit", "edit_file", "write_file", "create_file"]);
+
+/** Git Bash `/d/x` -> `D:/x`; backslashes -> slashes. */
+export function toNativePath(p) {
+  const s = String(p ?? "").replace(/\\/g, "/");
+  const drive = s.match(/^\/([a-zA-Z])(\/|$)(.*)$/);
+  return drive ? `${drive[1].toUpperCase()}:/${drive[3]}` : s;
+}
+
+const isAbsolutePath = (p) => /^[a-zA-Z]:\//.test(p) || p.startsWith("/");
+
+function resolveDir(base, target) {
+  const t = toNativePath(target);
+  if (isAbsolutePath(t)) return t.replace(/\/+$/, "") || t;
+  if (!base) return null;
+  return join(toNativePath(base), t).replace(/\\/g, "/");
+}
+
+const unquote = (s) => s.replace(/^(["'])(.*)\1$/, "$2");
+const DIR_ARG = String.raw`("[^"]+"|'[^']+'|[^\s;&|()]+)`;
+const DIR_CHANGE_RE = new RegExp(String.raw`(?:^|[;&|(]\s*|\bthen\s+|\bdo\s+)(?:cd|pushd)\s+${DIR_ARG}|\bgit\s+-C\s+${DIR_ARG}`, "g");
+
+/** The folder a shell command acts in: the last directory it moves into, relative moves chained. */
+export function shellTargetDir(command, sessionCwd) {
+  let dir = sessionCwd ?? null;
+  let moved = false;
+  for (const m of String(command ?? "").matchAll(DIR_CHANGE_RE)) {
+    const arg = unquote(m[1] ?? m[2] ?? "");
+    if (!arg || arg === "-" || arg.startsWith("~") || arg.startsWith("$")) continue;
+    const next = resolveDir(dir, arg);
+    if (next) {
+      dir = next;
+      moved = true;
+    }
+  }
+  return moved ? dir : sessionCwd;
+}
+
+/** The checkout root holding `file` (the folder with packages/dpf-skill-pack), else the file's folder. */
+export function checkoutRootOf(file) {
+  const start = dirname(toNativePath(file));
+  let dir = start;
+  for (let i = 0; i < 64; i++) {
+    if (existsSync(join(dir, "packages", "dpf-skill-pack"))) return dir.replace(/\\/g, "/");
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return start;
+}
+
+/** The folder a guard should judge this action by. */
+export function actionCwd(toolName, toolInput, sessionCwd) {
+  const input = toolInput && typeof toolInput === "object" ? toolInput : {};
+  if (FILE_EDIT_TOOLS.has(String(toolName))) {
+    const file = toNativePath(input.file_path ?? input.filePath ?? input.notebook_path ?? input.path ?? "");
+    if (file && isAbsolutePath(file)) return checkoutRootOf(file);
+    return sessionCwd;
+  }
+  if (isShellTool(toolName)) return shellTargetDir(shellCommandFromInput(input), sessionCwd);
+  return sessionCwd;
+}
+
 /**
- * Normalize a raw PreToolUse payload to a surface-agnostic shape.
+ * A DPF checkout OR a DPF install folder (BI-310949BC). Agent sessions on an
+ * install host start in the installed runtime, which carries the installer's
+ * `.install-mode` marker (install-dpf.ps1) but no packages/. Guards about agent
+ * BEHAVIOUR (asking the operator a platform decision) must enforce there too;
+ * guards about source checkouts keep using inDpfWorkspace.
+ * @param {string|undefined} startDir @returns {boolean}
+ */
+export function inDpfAgentHost(startDir) {
+  if (inDpfWorkspace(startDir)) return true;
+  let dir = startDir && typeof startDir === "string" ? startDir : process.cwd();
+  const root = parse(dir).root;
+  for (let i = 0; i < 64; i++) {
+    if (existsSync(join(dir, ".install-mode"))) return true;
+    const parent = dirname(dir);
+    if (parent === dir || dir === root) break;
+    dir = parent;
+  }
+  return false;
+}
+
+/**
+ * Normalize a raw PreToolUse payload to a surface-agnostic shape. `cwd` is the
+ * folder the action targets (see actionCwd); `sessionCwd` is what the harness sent.
  * @param {any} raw
- * @returns {{ toolName: string|undefined, toolInput: Record<string, any>, cwd: string|undefined }}
+ * @returns {{ toolName: string|undefined, toolInput: Record<string, any>, cwd: string|undefined, sessionCwd: string|undefined, surface: "claude"|"grok" }}
  */
 export function normalizePayload(raw) {
   const p = raw && typeof raw === "object" ? raw : {};
   const toolName = p.toolName ?? p.tool_name;
-  const toolInput = p.toolInput ?? p.tool_input ?? {};
+  const rawInput = p.toolInput ?? p.tool_input ?? {};
+  const toolInput = rawInput && typeof rawInput === "object" ? rawInput : {};
+  // Only Grok sends camelCase; Claude and Codex send snake_case.
+  const surface = p.toolName !== undefined && p.tool_name === undefined ? "grok" : "claude";
   // Both surfaces send the working dir at top level (Claude: cwd; Grok: cwd + workspaceRoot).
-  const cwd = p.cwd ?? p.workspaceRoot;
-  return {
-    toolName,
-    toolInput: toolInput && typeof toolInput === "object" ? toolInput : {},
-    cwd,
-  };
+  const sessionCwd = p.cwd ?? p.workspaceRoot;
+  let cwd = sessionCwd;
+  try {
+    cwd = actionCwd(toolName, toolInput, sessionCwd) ?? sessionCwd;
+  } catch {
+    // fail open to the session folder
+  }
+  return { toolName, toolInput, cwd, sessionCwd, surface };
 }
+
+// The surface of the payload this process read; emitDeny answers in its envelope.
+let payloadSurface = "claude";
 
 /**
  * Shell command text from a normalized or raw toolInput.
@@ -107,30 +215,31 @@ export function readHookPayload() {
   } catch {
     return null; // fail open
   }
-  return normalizePayload(raw);
+  const payload = normalizePayload(raw);
+  payloadSurface = payload.surface;
+  return payload;
 }
 
 /**
- * Serialize a deny verdict in BOTH the Claude and Grok envelopes. Claude reads
- * `hookSpecificOutput.permissionDecision`; Grok reads top-level `decision`. Each
- * ignores the other's extra keys, so one payload denies on every surface.
+ * Serialize a deny verdict for the surface that sent the payload. Claude and
+ * Codex read `hookSpecificOutput.permissionDecision`, and Claude discards the
+ * whole output if a top-level `decision` is not approve|block. Grok reads the
+ * top-level `decision`; it keeps the live-probed dual envelope (BI-883FC2FC).
  * @param {string} reason
+ * @param {"claude"|"grok"} [surface]
  */
-export function denyEnvelope(reason) {
-  return {
-    // Grok-native
-    decision: "deny",
-    reason,
-    // Claude/Codex-native
+export function denyEnvelope(reason, surface = payloadSurface) {
+  const claude = {
     hookSpecificOutput: {
       hookEventName: "PreToolUse",
       permissionDecision: "deny",
       permissionDecisionReason: reason,
     },
   };
+  return surface === "grok" ? { decision: "deny", reason, ...claude } : claude;
 }
 
-/** Write the dual-envelope deny to stdout and exit 0 (deny honored via stdout on both surfaces). */
+/** Write the deny for the payload's surface to stdout and exit 0 (both surfaces honour a stdout deny). */
 export function emitDeny(reason) {
   process.stdout.write(JSON.stringify(denyEnvelope(reason)));
   process.exit(0);

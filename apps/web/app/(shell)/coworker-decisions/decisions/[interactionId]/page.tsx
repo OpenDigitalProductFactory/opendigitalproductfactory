@@ -11,6 +11,7 @@ import { StatusBadge } from "@/components/ui/report-kit";
 import { LocalTime } from "@/components/ui/LocalTime";
 import { TIER_LABELS, tierForRow } from "@/lib/wiki/decision-audit";
 import { buildDecisionHelp } from "@/lib/wiki/decision-help";
+import { decisionInteractionRowToEvaluation } from "@/lib/decision-perspective/persistence";
 import { isWithdrawnHumanOutcome } from "@/lib/quality/decision-residue-staleness";
 import {
   buildDecisionOriginCopy,
@@ -92,6 +93,16 @@ export default async function DecisionRecordPage({ params }: { params: Params })
     prisma as unknown as ProposalClient,
     row.id,
   );
+  // The panel roster lives on the run, not on the proposal — read it there so
+  // the card can never claim a coworker the run did not actually seat.
+  const panelRoster = proposalRow?.deliberationRunId
+    ? (
+      await prisma.deliberationOutcome.findUnique({
+        where: { deliberationRunId: proposalRow.deliberationRunId },
+        select: { branchRoster: true },
+      })
+    )?.branchRoster ?? null
+    : null;
   const proposal = proposalRow
     ? presentProposal({
       proposalId: proposalRow.proposalId,
@@ -102,6 +113,7 @@ export default async function DecisionRecordPage({ params }: { params: Params })
       draftPayload: proposalRow.draftPayload,
       dissent: proposalRow.dissent,
       confidence: proposalRow.confidence,
+      panelRoster,
     })
     : null;
 
@@ -353,6 +365,11 @@ export default async function DecisionRecordPage({ params }: { params: Params })
           (() => {
             const help = buildDecisionHelp({
               outcomeType: row.outcomeType,
+              escalationRoute: row.escalationRoute,
+              escalationReason: row.escalationReason,
+              escalationFollowOn: row.escalationFollowOn,
+              permissionEvaluation: row.escalationRoute === "independent_review"
+                ? decisionInteractionRowToEvaluation(row) : undefined,
               tier,
               riskTier: row.riskTier,
               principleConflict: row.principleConflict,

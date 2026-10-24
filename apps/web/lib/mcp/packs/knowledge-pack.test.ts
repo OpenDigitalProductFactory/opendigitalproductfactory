@@ -84,12 +84,14 @@ describe("knowledge pack — handler behavior (delegation preserved)", () => {
     // clean duplicate check.
     semanticMemory.searchPlatformKnowledge.mockResolvedValue({
       status: "unavailable",
+      code: "search_unavailable",
       reason: "the embedding model did not return a vector for this query",
       results: [],
     });
     const res = await knowledgePack.handlers.search_knowledge({ query: "none" }, "u1");
 
     expect(res.success).toBe(false);
+    expect(res.error).toBe("search_unavailable");
     expect(res.message).toContain("unavailable");
     expect(res.message).toContain('NOT "no results"');
     expect(res.data).toMatchObject({ searchStatus: "unavailable" });

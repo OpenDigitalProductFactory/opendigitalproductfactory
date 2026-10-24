@@ -92,10 +92,16 @@ describe("self-upgrade recovery point", () => {
   });
 
   it("classifyRecoveryPointStatus blocks only on the required (postgres) target", () => {
+    // BET-5 retired neo4j + qdrant, so BackupTarget no longer names them — but a
+    // recovery point written before that upgrade can still carry their members,
+    // and the classifier must keep treating them as best-effort. The cast is the
+    // point of the test: it models persisted legacy rows, not a current target.
+    const legacyMember = (target: string, runId: string | null, status: "ok" | "failed" | "skipped") =>
+      ({ target, runId, status }) as unknown as SelfUpgradeRecoveryPointMember;
     const ok: SelfUpgradeRecoveryPointMember[] = [
       { target: "postgres", runId: "BR-PG", status: "ok" },
-      { target: "neo4j", runId: null, status: "skipped" },
-      { target: "qdrant", runId: null, status: "skipped" },
+      legacyMember("neo4j", null, "skipped"),
+      legacyMember("qdrant", null, "skipped"),
     ];
     expect(classifyRecoveryPointStatus(ok)).toBe("ok");
     // A required (postgres) failure blocks the upgrade.
@@ -110,7 +116,7 @@ describe("self-upgrade recovery point", () => {
     expect(
       classifyRecoveryPointStatus([
         ok[0],
-        { target: "neo4j", runId: "BR-N4J", status: "failed" },
+        legacyMember("neo4j", "BR-N4J", "failed"),
         ok[2],
       ]),
     ).toBe("degraded");

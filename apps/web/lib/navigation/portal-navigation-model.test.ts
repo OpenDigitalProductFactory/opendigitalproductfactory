@@ -4,10 +4,12 @@ import { PLATFORM_FAMILIES } from "@/components/platform/platform-nav";
 import { getShellNavSections } from "@/lib/govern/permissions";
 
 import {
+
   PORTAL_NAV_ROUTES,
   getPrimaryNavEntries,
   getRouteNavRecord,
   getSectionNavEntries,
+  getAreaSetupEntries,
 } from "./portal-navigation-model";
 
 const adminUser = { platformRole: "HR-000", isSuperuser: false };
@@ -92,7 +94,9 @@ describe("portal navigation model", () => {
       .map((item) => item.href);
 
     expect(shellHrefs).toContain("/platform");
-    expect(shellHrefs).toContain("/admin");
+    // EP-2FB6C0CC: Admin is reached from the Run the platform area's Setup view.
+    expect(shellHrefs).not.toContain("/admin");
+    expect(getAreaSetupEntries("platform").map((entry) => entry.path)).toContain("/admin");
 
     for (const href of shellHrefs) {
       expect(getRouteNavRecord(href), href).toBeDefined();
@@ -118,23 +122,97 @@ describe("portal navigation model", () => {
     }
   });
 
-  it("groups the Delivery home and Build Studio under a Delivery section (BI-ARCH-DELIVERY-IA)", () => {
-    const delivery = getRouteNavRecord("/delivery");
-    expect(delivery?.domain).toBe("delivery");
-    expect(delivery?.shellNav?.sectionKey).toBe("delivery");
+  it("groups requests, work in progress and Build Studio under Improve & deliver (EP-2FB6C0CC)", () => {
+    // The Delivery hub is superseded by the area home and kept as a redirect.
+    expect(getRouteNavRecord("/delivery")?.destinationKind).toBe("legacy-redirect");
 
     const sections = getShellNavSections(adminUser);
     const deliverySection = sections.find((section) => section.key === "delivery");
-    expect(deliverySection, "Delivery shell section should exist").toBeDefined();
+    expect(deliverySection?.label).toBe("Improve & deliver");
 
     const deliveryHrefs = deliverySection?.items.map((item) => item.href) ?? [];
-    expect(deliveryHrefs).toContain("/delivery");
-    expect(deliveryHrefs).toContain("/build");
+    expect(deliveryHrefs).toEqual(expect.arrayContaining(["/ops", "/ops/workrooms", "/build"]));
+    expect(deliveryHrefs).not.toContain("/delivery");
 
     // Build Studio's work surface moved out of the Platform rail section into
     // Delivery (its model/provider config stays under Platform at
     // /platform/ai/build-studio).
     const platformSection = sections.find((section) => section.key === "platform");
     expect(platformSection?.items.map((item) => item.href) ?? []).not.toContain("/build");
+  });
+
+  it("gives work activity one operator entry pointing at the canonical destination", () => {
+    const entries = PORTAL_NAV_ROUTES.filter((record) => record.path === "/ops/workrooms");
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      key: "work_activity",
+      label: "Work in progress",
+      audienceModes: ["operator"],
+    });
+  });
+
+  it("keeps the Workforce portfolio distinct from the coworker directory", () => {
+    const work = PORTAL_NAV_ROUTES.find((record) => record.key === "work_activity");
+    const directory = PORTAL_NAV_ROUTES.find((record) => record.key === "ai_coworkers");
+    expect(work?.path).toBe("/ops/workrooms");
+    expect(directory?.path).toBe("/workforce");
+    expect(work?.path).not.toBe(directory?.path);
+  });
+
+  it("does not introduce a second activity dashboard beside the canonical one", () => {
+    const activityish = PORTAL_NAV_ROUTES.filter(
+      (record) => record.label === "Work in progress" && record.destinationKind !== "legacy-redirect",
+    );
+    expect(activityish).toHaveLength(1);
+  });
+});
+
+describe("one name means one destination", () => {
+  // An operator reported being unable to remember the difference between two
+  // areas. The cause was literal: two entries carried the byte-identical label
+  // "AI Coworkers" for different destinations (/workforce and
+  // /platform/identity/agents), so the portal offered the same words twice and
+  // neither name said which was which. A duplicate label is not a style
+  // preference — it makes the navigation unusable by name.
+  it("gives no two nav entries the same label", () => {
+    const byLabel = new Map<string, string[]>();
+    for (const route of PORTAL_NAV_ROUTES) {
+      const paths = byLabel.get(route.label) ?? [];
+      paths.push(route.path);
+      byLabel.set(route.label, paths);
+    }
+    const collisions = [...byLabel.entries()]
+      .filter(([, paths]) => new Set(paths).size > 1)
+      .map(([label, paths]) => `${label} -> ${[...new Set(paths)].sort().join(" , ")}`);
+    expect(collisions).toEqual([]);
+  });
+
+  it("keeps the coworker directory and the identity surface distinctly named", () => {
+    const label = (path: string) =>
+      PORTAL_NAV_ROUTES.find((route) => route.path === path)?.label;
+    const directory = label("/workforce");
+    const identity = label("/platform/identity/agents");
+    expect(directory).toBeTruthy();
+    expect(identity).toBeTruthy();
+    expect(identity).not.toBe(directory);
+  });
+});
+
+describe("one answer to where work activity lives", () => {
+  // Registering the Work entry without a shellNav left /ops/workrooms reachable
+  // only through the ops tab strip — which was the gap the entry was added to
+  // close, so the consolidation was not actually delivered. The rail entry is
+  // the deliverable; this pins it.
+  it("offers Work in the shell navigation, not only in the model", () => {
+    const work = PORTAL_NAV_ROUTES.find((route) => route.path === "/ops/workrooms");
+    expect(work?.label).toBe("Work in progress");
+    expect(work?.shellNav?.sectionKey).toBe("delivery");
+  });
+
+  it("keeps exactly one shell entry pointing at the activity destination", () => {
+    const pointing = PORTAL_NAV_ROUTES.filter(
+      (route) => route.shellNav && route.path === "/ops/workrooms",
+    );
+    expect(pointing).toHaveLength(1);
   });
 });

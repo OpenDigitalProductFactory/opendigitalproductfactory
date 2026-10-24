@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { ok, type ActionSuccess } from "@/lib/shared/action-result";
 import type { ReadinessOwner, VerifiedReleaseIdentity } from "./promoter";
 import { signTransitionPayload } from "@/lib/platform-runtime/transition-protocol";
 import { verifyInstallStateMigrationEnvelope } from "../../../../scripts/lib/transition-signing.mjs";
@@ -16,9 +17,11 @@ type RecordReadiness = typeof import("./run-store").recordPromoterReadiness;
 type FailRun = typeof import("./run-store").failRun;
 type ReadinessFailure = { code: string; message: string; remediation?: string };
 
+type PrePullDoctools = typeof import("./doctools-release-image").prePullReleaseDoctoolsImage;
+
 export type CandidatePreflightResult =
   | { ok: true; resolvedPromoterDigest?: string; migrationHandoff?: InstallStateMigrationHandoff }
-  | { ok: false; reason: "promoter-readiness-failed" | "installer-state-repair-required" };
+  | { ok: false; reason: "promoter-readiness-failed" | "installer-state-repair-required" | "doctools-prepull-failed" };
 
 /**
  * Resolve the host path bound to /backups in the readiness container, mirroring
@@ -36,6 +39,42 @@ export function resolveReadinessBackupHostPath(
   if (explicit) return explicit;
   const root = canonicalInstallPath.replace(/\/$/, "");
   return root ? `${root}/backups` : undefined;
+}
+
+/**
+ * A customizable (source-built) install upgrades from source, so there is no
+ * release to name, but its target commit descends from one (BI-4E18BC28).
+ * Pull that release's dpf-doctools now, like the release path above. Unlike
+ * that path it never fails the run: a source install that cannot reach the
+ * registry builds the image itself after the swap.
+ */
+async function prePullSourceLineageDoctools(params: {
+  sourcePath: string;
+  targetSha: string;
+  prePullDoctools?: (release: { tag: string; ghcrOwner: string }) => Promise<Awaited<ReturnType<PrePullDoctools>>>;
+  sourceLineage?: () => Promise<{ imageTag: string; ghcrOwner: string } | null>;
+}): Promise<void> {
+  try {
+    const lineage = await (params.sourceLineage ?? (async () => {
+      const [{ describeSourceLineage }, { defaultGitRunner }] = await Promise.all([
+        import("./doctools-source-lineage"),
+        import("./prepare-source"),
+      ]);
+      return describeSourceLineage({
+        sourcePath: params.sourcePath, targetSha: params.targetSha,
+        ghcrOwner: process.env.GHCR_OWNER, runGit: defaultGitRunner,
+      });
+    }))();
+    if (!lineage) return;
+    const prePull = params.prePullDoctools
+      ?? (await import("./doctools-release-image")).prePullReleaseDoctoolsImage;
+    const pulled = await prePull({ tag: lineage.imageTag, ghcrOwner: lineage.ghcrOwner });
+    if (pulled.outcome === "failed") {
+      console.warn(`[self-upgrade] dpf-doctools for ${lineage.imageTag} was not pre-pulled; the new portal resolves or builds it after the swap: ${pulled.reason}`);
+    }
+  } catch (error) {
+    console.warn("[self-upgrade] dpf-doctools pre-pull for the source lineage skipped:", error);
+  }
 }
 
 export async function runCandidatePreflight(params: {
@@ -64,6 +103,10 @@ export async function runCandidatePreflight(params: {
   hostIdentity?: SelfUpgradeHostIdentity;
   runtimeTransitionSecret?: string;
   now?: () => Date;
+  /** Test seam; defaults to prePullReleaseDoctoolsImage. */
+  prePullDoctools?: (release: { tag: string; ghcrOwner: string }) => Promise<Awaited<ReturnType<PrePullDoctools>>>;
+  /** Test seam: the release a source upgrade's target descends from (BI-4E18BC28). */
+  sourceLineage?: () => Promise<{ imageTag: string; ghcrOwner: string } | null>;
 }): Promise<CandidatePreflightResult> {
   if (params.dryRun) return { ok: true };
   if (params.readinessMode === "legacy-bootstrap") {
@@ -79,8 +122,31 @@ export async function runCandidatePreflight(params: {
     return { ok: false, reason: "installer-state-repair-required" };
   }
 
-  const runtime = await params.runtime();
   const startedAt = new Date().toISOString();
+  // BI-698B7F9A: make the target release's dpf-doctools present BEFORE the
+  // swap, so the new portal has no image-missing window. It runs first: the
+  // signed handoff below expires 10 minutes after readiness, and a long pull
+  // must not sit between readiness and the drain.
+  if (params.release) {
+    const prePull = params.prePullDoctools
+      ?? (await import("./doctools-release-image")).prePullReleaseDoctoolsImage;
+    const pulled = await prePull(params.release);
+    if (pulled.outcome === "failed") {
+      await params.recordReadiness(params.runId, {
+        stage: "preflight", owner: "portal", mode: "enforced", result: "failed",
+        baselineSha: params.baselineSha ?? undefined, targetSha: params.targetSha,
+        startedAt, completedAt: new Date().toISOString(), quiescenceBegan: false,
+        failures: [{ code: "doctools_prepull_failed", message: pulled.reason }],
+      });
+      const reason = `doctools-prepull-failed: ${pulled.reason}`;
+      await params.failRun(params.runId, reason, reason);
+      await params.emitFailure(params.runId);
+      return { ok: false, reason: "doctools-prepull-failed" };
+    }
+  } else {
+    await prePullSourceLineageDoctools(params);
+  }
+  const runtime = await params.runtime();
   try {
     const image = params.candidatePromoterReference ?? await runtime.buildCandidatePromoterImage({
       sourcePath: params.sourcePath, targetSha: params.targetSha, promoterImage: params.promoterImage,
@@ -206,8 +272,11 @@ export async function loadInstallStateSigningContext(params: {
 
 /**
  * Re-verify the signed migration handoff against the CURRENT install-state hash
- * immediately before the swap (the state may have moved since preflight signed
- * it). On failure it records the run failed and returns a repair reason.
+ * before the quiescence drain begins (the state may have moved since preflight
+ * signed it). On failure it records the run failed and returns a repair reason.
+ *
+ * This runs BEFORE the drain, so it cannot see a write that lands during it —
+ * that window is closed by `refreshMigrationHandoffAfterDrain` below.
  */
 export async function verifyMigrationHandoff(params: {
   dryRun?: boolean;
@@ -236,4 +305,79 @@ export async function verifyMigrationHandoff(params: {
     await params.emitFailure(params.runId);
     return { ok: false, reason };
   }
+}
+
+/** Envelope refusals a fresh readiness projection legitimately repairs. Anything else is fail-closed. */
+const HANDOFF_REFRESHABLE_CODES = new Set(["install_state_envelope_state_changed", "install_state_envelope_expired"]);
+
+export type MigrationHandoffRefreshData = {
+  migrationHandoff?: InstallStateMigrationHandoff;
+  resolvedPromoterDigest?: string;
+  /** True when readiness was re-run and the handoff re-bound; `code` names why. */
+  refreshed: boolean;
+  code?: string;
+};
+export type MigrationHandoffRefresh = ActionSuccess<MigrationHandoffRefreshData> | { ok: false; reason: string };
+
+/**
+ * Re-bind the signed handoff to the install-state bytes the promoter will
+ * ACTUALLY migrate, immediately before it launches — after the quiescence
+ * drain and recovery point, which take minutes.
+ *
+ * `verifyMigrationHandoff` runs before the drain, so a host-side writer that
+ * touches /dpf-state/install-state.json during it reaches promote.sh with a
+ * stale envelope and the run dies at install-state-migrate with
+ * `install_state_envelope_state_changed` (SUR-4758058F: the agent-toolchain
+ * bootstrap rewrote the file 3 minutes into the drain, BI-95DF1BFC). The same
+ * shape hits a drain longer than the envelope TTL (`..._expired`).
+ *
+ * Neither is tampering — the signature still verifies — so instead of failing
+ * the run, re-run candidate readiness (non-mutating, seconds) and carry the
+ * fresh envelope into the promoter. Every OTHER refusal (tampered, wrong run,
+ * wrong digest, wrong identity) stays fail-closed: those are not repaired by
+ * re-projecting, they are the attack the envelope exists to detect.
+ */
+export async function refreshMigrationHandoffAfterDrain(params: {
+  dryRun?: boolean;
+  runId: string;
+  migrationHandoff?: InstallStateMigrationHandoff;
+  resolvedPromoterDigest?: string;
+  runtimeTransitionSecret?: string;
+  hostIdentity?: SelfUpgradeHostIdentity;
+  /** Re-runs candidate readiness with the run's ORIGINAL preflight parameters. */
+  rerunPreflight: () => Promise<CandidatePreflightResult>;
+  failRun: FailRun;
+  emitFailure: EmitFailure;
+}): Promise<MigrationHandoffRefresh> {
+  if (params.dryRun) return ok({ migrationHandoff: params.migrationHandoff, resolvedPromoterDigest: params.resolvedPromoterDigest, refreshed: false });
+  const verify = (handoff: InstallStateMigrationHandoff | undefined, digest: string | undefined, bytes: string) => {
+    if (!handoff || !digest || !params.runtimeTransitionSecret || !params.hostIdentity) throw new Error("install_state_migration_handoff_missing");
+    verifyInstallStateMigrationEnvelope(handoff.envelope, handoff.signature, params.runtimeTransitionSecret, {
+      runId: params.runId, promoterDigest: digest,
+      sourceHash: createHash("sha256").update(bytes).digest("hex"), hostIdentity: params.hostIdentity, now: Date.now(),
+    });
+  };
+  const fail = async (code: string) => {
+    const reason = `installer-state-repair-required: ${code}`;
+    await params.failRun(params.runId, reason);
+    await params.emitFailure(params.runId);
+    return { ok: false as const, reason };
+  };
+  let code: string;
+  try {
+    verify(params.migrationHandoff, params.resolvedPromoterDigest, await readFile("/dpf-state/install-state.json", "utf8"));
+    return ok({ migrationHandoff: params.migrationHandoff, resolvedPromoterDigest: params.resolvedPromoterDigest, refreshed: false });
+  } catch (error) {
+    code = error instanceof Error ? error.message : "install_state_migration_handoff_invalid";
+  }
+  if (!HANDOFF_REFRESHABLE_CODES.has(code)) return fail(code);
+  console.warn(`[self-upgrade] ${params.runId}: install-state handoff ${code} after the drain; re-running candidate readiness to re-bind it`);
+  const rerun = await params.rerunPreflight();
+  if (!rerun.ok) return { ok: false, reason: rerun.reason };
+  try {
+    verify(rerun.migrationHandoff, rerun.resolvedPromoterDigest, await readFile("/dpf-state/install-state.json", "utf8"));
+  } catch (error) {
+    return fail(error instanceof Error ? error.message : "install_state_migration_handoff_invalid");
+  }
+  return ok({ migrationHandoff: rerun.migrationHandoff, resolvedPromoterDigest: rerun.resolvedPromoterDigest, refreshed: true, code });
 }

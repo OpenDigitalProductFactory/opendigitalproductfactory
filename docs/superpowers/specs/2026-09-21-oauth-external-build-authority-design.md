@@ -1,0 +1,903 @@
+---
+status: draft
+---
+
+# OAuth identity and authorized external build orchestration
+
+Backlog: BI-B986A18B. Workroom: WC-F174CC4F.
+Decision: DI-3E8D81C1A2FB (consent-bound authorization).
+Source baseline: 2e226dd6584c3dbc51e67ab6787523de2099a0e0.
+
+## Outcome and boundary
+
+An external coding task may orchestrate the same authorized build operations as
+Build Studio on behalf of its authenticated human. OAuth setup must establish
+an approved acting coworker without a legacy token. Authentication alone does
+not grant build permission, coworker grants, task ownership or room admission.
+
+The implementation is incomplete until fresh setup, old-connection recovery,
+refresh, concurrent tasks and denied cross-user/room access pass on DEV.
+BI-3C0A2D88 and BI-2B634E68 remain separate blocked work.
+
+## Existing architecture and observed defects
+
+Extend the MCP self-authentication design (2026-08-26), authenticated work
+attribution design (2026-06-20), and unified delivery surfaces design (2026-06-05).
+AuthorityBinding, its subjects/grants, DelegationChain and
+AuthorizationDecisionLog already own delegation and audit. BI-E9018F3B and
+BI-F82F4E04 are the existing authority-intersection and custody foundations.
+
+The authorization code stores the human but no approved coworker. Token
+issuance instead reads OAuthClient.agentId; DCR supplies none. Refresh copies
+the missing value. A global client field cannot represent two humans' different
+authorizations. Live AGT-EXT-CODEX has only registry_read, work_room_read and
+work_room_write: repairing identity will not itself enable build execution.
+
+Portal backlog promotion uses view_platform; MCP promotion uses manage_backlog.
+Portal release actions call low-level executeTool after ownership checks;
+the MCP catalog's operation capability is not checked by that dispatcher.
+Current-user loading differs across portal, MCP and background loops. The
+checkpoint build pipeline supplies a system actor in one code-generation path.
+Explicit invalid build hints may fall back to another owned active build.
+These are source findings, not successful unauthorized live executions.
+
+The OAuth handoff adapter repair merged in #5481 at the baseline above. Reuse
+its admitted OAuth context and revalidation; verify its deployment independently.
+
+## Research & Benchmarking
+
+- [OAuth Security BCP, RFC 9700](https://www.rfc-editor.org/rfc/rfc9700.html):
+  preserve PKCE, audience restrictions and refresh replay protection. Implement
+  atomic rotation and family-wide revocation, including derived access tokens.
+- [Ory Hydra consent](https://www.ory.com/docs/oauth2-oidc/custom-login-consent/flow):
+  adopt the separation of login subject, client request and server-approved
+  consent data. Do not import a second authorization server or copy an example
+  that automatically accepts every requested permission.
+- [Keycloak role scope mappings](https://www.keycloak.org/docs/latest/server_admin/index.html#_role_scope_mappings):
+  adopt intersection of user roles and client scope. Reject full-scope defaults
+  for external assistants; DPF must also intersect coworker and room authority.
+
+## Identity contract (C1)
+
+| Association | Owner and lifetime |
+| --- | --- |
+| Human | Existing User/Principal; accountable origin, current permissions |
+| Client | OAuthClient registration; app metadata, not impersonation authority |
+| Connection | Human + client + resource + approved coworker AuthorityBinding; revocable consent lifetime |
+| Task | Existing work packet/task session/lease; exact build and room, bounded lifetime |
+
+The client name is untrusted display data. The server resolves eligible
+coworkers from approved delegation policy for this human and client/resource.
+An active coworker or work_room_write grant alone is not eligibility. A
+submitted agent identifier is revalidated on POST. The source-approved external
+development roles may be consented to by a human with current Build Studio
+access. Other coworkers require an administrator or an exact human/client/
+resource delegation. The displayed role is an assignment, not verified vendor
+identity: self-declared "Codex" or "Claude" supplies no authority.
+
+Reuse AuthorityBinding.appliedAgentId and human/client subjects. Each consent
+revision is a new binding record; do not mutate the identity/scope of issued
+authorizations. Codes, access tokens and refresh tokens gain nullable FK links
+to that immutable binding. Revocation changes status, not historical identity.
+Use typed discriminators for added closed-set states and indexed FK lookups.
+Existing null rows stay null: no name-based backfill and no global client edit.
+
+## Consent and recovery (F1, F2)
+
+GET shows the signed-in person, app (with self-asserted label where applicable),
+approved assistant role and understandable allowed actions. If one role is
+eligible, explain it without an unnecessary picker; otherwise show only
+eligible options. **Superseded 2026-09-23 by the one-click connection
+amendment below (BI-05E0EA33): the server resolves the assistant and
+shows a choice only when eligible coworkers differ in authority.** POST rechecks login, active user, current delegation policy,
+client, redirect, PKCE, resource and narrowed scopes before issuing a code.
+Persist binding, code and successful consent audit atomically.
+
+Missing identity returns a typed setup-required result at coworker-dependent
+tools with a same-install recovery destination. Copy: "This connection needs
+one more setup step before your assistant can work. Reconnect to approve its
+role." Do not reveal agentId, ask users to mint tokens, or imply room admission.
+Recovery starts a fresh client OAuth authorization; it does not put old tokens
+in browser URLs or change their authority. Revoke the superseded connection
+family when replacement is confirmed. Never revoke another user's connection.
+
+## Credential lifecycle (C2, F3)
+
+Code exchange derives human, coworker, resource and scopes from the consumed
+authorization binding, never from mutable client.agentId. Confidential
+client_credentials remains explicitly configured and independently tested.
+
+Exchange consumes the code and creates credentials transactionally. Refresh
+atomically consumes once and issues one successor; replay revokes the family
+and derived access credentials. Add an explicit indexed family relation/key
+on the existing credential records rather than walking an unbounded chain.
+Validate binding, client and human activity on resolution and refresh. Scope
+requests can narrow only. Revoked or missing bindings return invalid_grant for
+refresh with a reconnect explanation. Legacy unbound refresh cannot repair
+itself or gain identity. Preserve ordinary allowed read behavior where it does
+not require coworker identity; never pass unbound credentials to room actions.
+
+One OAuth approval covers transport reconnections and concurrent tasks. Normal
+refresh is silent. Task idempotency uses the server-issued credential family,
+not an access-token row. Queued execution may survive access-token expiry when
+a current access successor or an unconsumed, unrevoked, unexpired refresh token
+preserves the same family, human, client, consent, resource, coworker and scope
+envelope. Current consent and human eligibility still apply. This server-side
+continuity does not mint credentials or consume the client's refresh token.
+Expired bearer authentication remains refused.
+
+### Expiry-gap recovery amendment (BI-1E56D891, 2026-09-27)
+
+Live evidence `cmukgs2ak1x9f01qsyd0qk12e` reproduced a queued review failing
+17 seconds after bearer expiry despite a valid refresh family; the client
+refreshed normally three minutes later. `cmukgvb5l1xdg01qsl91fezey` showed
+exact replay returning the terminal failure with a misleading resumable flag.
+The lifetime clause above closes that client-timing dependency. It does not
+extend consent, task leases, permissions or room admission.
+
+An explicit identical request under current authority may recover that narrow
+historical failure once, preserving the same TaskRun and immutable digest.
+Require the same human/family, original access expiry before failure, current
+original-family authority, an initiative review with a capacity wait, and no
+recorded reviewer write or approval envelope. Refuse cancellation, completion,
+other failures, prior recovery, or an exhausted/parked terminal-writer attempt.
+Reserve by status and updatedAt compare-and-set before the queue event; retain
+the old failure timestamp and reason and increment the dispatch generation.
+Never reset capacity or inference counters. A failed queue send remains bounded
+by the existing outbox reconciler; it is not a completed review.
+
+Terminal replay must not project a stale capacity/writer wait as resumable.
+This amendment remains subject to source review and live acceptance; the
+WWMD consult DI-9D6C401C15A7 was inconclusive because retrieval was unavailable,
+not a passing architecture receipt. The implementation follows the operator's
+explicit consent-lifetime and retry requirements within the admitted fix scope.
+
+### Refresh reuse grace amendment (BI-25C6219E, 2026-10-02)
+
+This amends "Refresh atomically consumes once and issues one successor;
+replay revokes the family" above.
+
+**Evidence.** Several Claude Code sessions on one host share one stored
+refresh token per MCP server, so they routinely refresh within a second of
+each other. Live DB rows for client `dpfoc_a8b6990d…` show the 19:04 token
+consumed at 20:08:54Z and presented again by the same client row at
+20:08:55Z. Strict single use revoked all 25 tokens in the family, including
+the fresh successor, and every session lost its connection. The same pattern
+appeared 2026-09-30 19:13Z (23 tokens) and 2026-10-01 13:31Z (9 tokens).
+
+**Standard.** RFC 9700 §4.14.2 allows a refresh-rotation grace period, and
+Auth0 ("reuse interval") and Okta ("grace period for refresh token
+rotation") ship one. DPF adopts the bounded form.
+
+**Rule.** A re-presented, already-rotated refresh token is accepted as a race,
+not a replay, only when all of these hold:
+- the presenting OAuth client is the token's client;
+- the token was consumed less than `DPF_OAUTH_REFRESH_REUSE_GRACE_SECONDS` ago
+  (default 60, capped at 300, and 0 disables grace);
+- the token is itself unrevoked and unexpired;
+- its successor is in the same family, for the same client and user, and is
+  unconsumed, unrevoked and unexpired.
+
+Consent, human eligibility and scope narrowing are re-checked as on any
+refresh. The server then issues a sibling access and refresh pair in the same
+family. It cannot return the successor itself because only hashes are stored.
+The presented token's successor link is not overwritten. A rotation that loses
+the in-flight claim race is judged by the same rule against the committed
+state.
+
+**Still revoked.** Reuse after the window, reuse whose successor is revoked,
+consumed, expired or missing, and reuse of a spent token by any other client
+all revoke the whole family as `refresh_token_replayed`. Presenting a live
+token from another client is refused without revocation, as before, so that a
+stray token cannot be used to disconnect its owner.
+
+**Accepted residual risk.** A public client's `client_id` is not secret.
+Anyone who presents a stolen token inside the window of the legitimate
+rotation gets a sibling. The window bounds that exposure. Any later replay on
+either branch still revokes the family. The RFC 6819 §5.2.2.3 detection case,
+where the attacker rotates first and the victim presents afterwards, is
+unaffected when the victim presents after the window. Inside the window it
+yields a sibling for the victim, and the next replay revokes the family.
+Implementation: `isRefreshReuseWithinGrace` in `apps/web/lib/auth/oauth-tokens.ts`.
+
+## Operation authority and attribution (C3)
+
+Effective authority is the intersection of current human permission, token
+scope/grants, approved connection binding, coworker grants, task scope, room
+admission and existing policy/approval gates. No component may widen another.
+
+Create a single operation policy consumed by portal actions and MCP, delegating
+to the existing coworker authority decision. Preserve read/view permissions;
+promotion requires manage_backlog, execution requires the existing start_build
+capability, and release operations retain their existing stricter capability.
+No new blanket build-admin role. Test each operation's mapping explicitly.
+Consolidate current user resolution (all roles, active status); privileged
+actions and queue resumes must reload authority rather than trust login claims.
+Carry originUserId through background execution and delegate hops. System
+service identity cannot substitute for the initiating human's authority.
+
+Define external orchestration grants from the exact planned operations and
+existing registry vocabulary. Keep deployment/production promotion outside
+the default development role. Seed policy changes through source; existing
+install grant changes require the governed approval flow, not direct DB edits.
+
+## Task and workroom boundary (C4, F4)
+
+### Bound independent-review requests (C3 follow-up, BI-1E56D891)
+
+WWMD DI-4C12C9013D64 selects reuse of `initiative_evidence_write` for
+requesting an independent review through `request_coworker`. This capability
+does not authorize general delegation, `summon_coworker`, or any reviewer
+receipt. The existing `thread_write` lane retains its current contract.
+
+The new lane requires an active consent-bound OAuth connection, the current
+human capability, and action admission for both human and assistant to the
+exact packet Workroom. It accepts only the complete server-generated readiness
+packet: item, immutable repository/commit/blob, exact room/head, eligible
+independent reviewer, writer, reader scope, objective and idempotency key.
+Regenerate readiness on the server and compare the packet before dispatch;
+reject arbitrary objectives, stale heads, sibling rooms, self-review and packet
+changes. Never enter the portal-thread delegation branch through this lane.
+The existing task substrate owns bounded execution, refresh-stable idempotency,
+reviewer grants, author separation and the reviewer's receipt.
+
+Implementation order: first add failing disclosure and request-boundary tests;
+then compose the existing grant map, readiness projection, OAuth authority and
+exact-room resolver into one request guard; then exercise the existing external
+task adapter. About 20% of effort consolidates packet validation and reuse of
+authority helpers rather than adding a new grant or task store. No migration,
+live grant edit, new dependency or new UI control is required. Rollback removes
+the author request lane without affecting existing reviewer receipts or tasks.
+
+Acceptance: current author discovers the request tool; an exact eligible
+independent-review packet dispatches; retry across refresh returns the same
+task; missing/forged packet, changed objective/writer/reviewer/head, self-review,
+revoked human/binding/grant and non-admitted room are refused before dispatch.
+Portal thread identifiers cannot bypass the narrow guard. General delegation
+still requires `thread_write`. An actual independent reviewer must read the
+bound artifact and write its own receipt before end-to-end acceptance.
+
+The first bounded lane consumes canonical completion recovery, including
+post-implementation review. It does not authorize arbitrary design-phase
+delegation. Once a review passes and its readiness request disappears, the
+same consent family may retrieve that task's recorded writer outcome: current
+human, coworker, consent and room access still apply, the persisted task digest
+must match, and an actual writer receipt must exist. An old packet alone can
+never restart a finished or obsolete review.
+
+Use the existing work packet/session/lease flow (BI-D4C110BC). Bind task context
+to the authenticated connection, human and exact work item. A client thread
+label is correlation only; task isolation requires server-issued narrowed task
+credentials. Reject explicit missing/foreign build targets instead of falling
+back. Shared coworker identity cannot let another human/task inherit room
+admission. Recheck human, task and room authorization for reads and writes.
+
+## Audit, scale and rollback
+
+Correlate human, client, binding, coworker, task, build/room and delegation chain
+on allow/deny decisions. Never log bearer secrets. Consent audit persistence
+failure must not produce unaudited new authority. Retain existing lifecycle
+policies for credential/audit records; paginate connection lists (50 per page),
+index family/binding revocation, and avoid scanning all clients or rooms on an
+action. No new cross-install service or inventory sweep is required.
+
+Use additive nullable migrations first; exercise populated and clean databases.
+Do not backfill guessed identities. Rollback disables new issuance while
+retaining deny/revocation semantics and audit records; never restore a revoked
+family or fall back to legacy tokens. Existing confidential clients need a
+compatibility regression suite. UI uses existing theme primitives and consent
+rendering, with keyboard, light/dark and refusal/recovery verification.
+
+## Acceptance (V1-V9)
+
+**OBJ-1:** Establish a revocable, consent-bound external coworker identity.
+
+**OBJ-2:** Enforce the current human's authority across build surfaces and tasks.
+
+**OBJ-3:** Make setup, recovery and evidence understandable and auditable.
+
+| Acceptance | Objective | Statement |
+| --- | --- | --- |
+| AC-1 | OBJ-1 | V1 and V8 prove authorized fresh OAuth identity without client-name impersonation. |
+| AC-2 | OBJ-1 | V2 and V3 prove safe existing-connection recovery and atomic refresh without authority expansion. |
+| AC-3 | OBJ-2 | V4 and V5 prove task, user and room isolation. |
+| AC-4 | OBJ-2 | V6 and V7 prove current human permissions and surface parity, including queued execution. |
+| AC-5 | OBJ-3 | V9 proves actionable setup/refusals and complete secret-free audit correlation. |
+
+1. V1: fresh OAuth consent produces approved identity and permitted exact-task
+   build/evidence actions without granting room access automatically.
+2. V2: old identity-less connection recovers through consent; old credentials
+   never gain identity; changed consent does not affect another user.
+3. V3: refresh preserves binding and scope; concurrent rotation and replay have
+   one successor or safe family revocation; revoked access cannot be reused.
+4. V4: two concurrent tasks under one connection keep targets/evidence separate;
+   invalid explicit target fails; one expired lease cannot affect the other.
+5. V5: another user with the same client/coworker cannot borrow permission,
+   ownership, task credentials or room membership; read-only remains read-only.
+6. V6: user disablement, role/grant removal and room revocation take effect at
+   the next privileged action, including queued/resumed execution.
+7. V7: portal/MCP role-by-operation matrices agree on human authority, while
+   external delegation restrictions remain additive; server actions cannot
+   bypass release checks.
+8. V8: spoofed app names/agent identifiers fail; foreign resource, PKCE, client
+   and scope attacks remain denied; client_credentials remains compatible.
+9. V9: nontechnical setup/recovery and all refusal states work on DEV, and audit
+   traces the complete authority chain without secrets.
+
+## Review status
+
+## Ordered implementation and backlog coverage
+
+Implementation parent: BI-B986A18B. This fix design is its canonical ordered
+implementation artifact; the companion plan is explanatory only.
+
+1. BI-B986A18B: consent binding, code/access/refresh custody and safe recovery
+   implement C1/C2 and F1-F3; verify V1-V3/V8. These are atomic internal steps.
+2. BI-1E56D891: shared current-human operation policy, queue attribution and
+   the explicit external development grant profile implement C3; verify V6/V7.
+   This is independently shippable and is not a new authority substrate.
+3. BI-D4C110BC: narrowed task credentials and exact build/workroom association
+   implement C4/F4; verify V4/V5. Integrate after identity and operation policy.
+4. BI-D6D79AC4: human-owned connection management and recovery presentation
+   integrate F2 with the existing connection UI; verify V2/V9 after step 1.
+5. BI-B986A18B acceptance: exercise V1-V9 on the deployed candidate, reusing
+   BI-FB58767A's already-merged OAuth handoff repair. No phase grants room access
+   automatically. Formal live coverage receipt is pending.
+
+### Reproduction evidence
+
+On source ee44d214b7cbbefc9725121b7de0b562c0999282, the new isolated
+oauth-identity-binding.test.ts reproducer failed: createAuthorizationCode
+omits authorityBindingId from its persisted data. The existing oauth-security,
+oauth-authorize-request and oauth-scope-map suites passed 74 tests in the same
+worktree. Those runs distinguish binding loss from broken PKCE/request parsing
+or scope mapping. They do not establish a passing implementation or live proof.
+
+## Review state
+
+Implementation admitted under IRD-A8107E37E8CF and coverage receipt
+cmubxupm50wg301ru404n27ll. The initial committed identity lifecycle passed the
+canonical gate at afd62e4f095f1afb31a8a2bd492c468b05b746b1, evidence
+cmuc1na3g165e01mkk2eyj7jq. Subsequent human-authority and task-continuity changes
+landed in #5549 and deployed at 5c52f711c98c22a864867b40b6dd6229b7d285ad.
+Fresh consent, old unbound recovery, silent refresh, replay revocation and two
+concurrent tasks passed live. Positive room evidence remains unaccepted.
+
+### Supported data-access setup after live acceptance
+
+Decision DI-A8F0093A0CAF extends BI-B986A18B in WC-BDBAFFC7. Agent Principal
+clearance intentionally defaults to public; new workrooms default to internal.
+The live test confirmed both canonical and legacy external identities remain
+public. No existing source/UI path writes this coworker clearance.
+
+Extend the existing AI Coworker Identity surface with one on-demand editor.
+The signed-in human must currently hold manage_agents and may assign only
+levels in their recorded Principal clearance. Keep defaults and existing rows
+unchanged until explicit Save. Use the existing typed Principal field, a
+compare-and-set update and AuthorizationDecisionLog in one serializable
+transaction. Record human, assistant, before/after access and rationale.
+
+The setting affects the selected coworker across connections, visibly explained
+before Save. Current human permissions, scopes, coworker grants, room admission
+and action approval gates remain independent intersections. Existing tokens
+pick up grants and revocations on their next operation without new consent.
+Return a data-access recovery link for an insufficient-clearance refusal;
+retain the invitation explanation for an admission refusal. Do not automatically
+admit the coworker to existing rooms or override explicit public-only limits.
+
+### Existing-room recovery and author evidence
+
+DI-0F2E1820E309 extends the same repair in WC-BDBAFFC7. Add an on-demand
+assistant invitation in the selected room's Participants section. The signed-in
+owner chooses an assistant from their active, server-approved OAuth bindings.
+An active human, exact room ownership, current clearance and active assistant
+identity are checked server-side. Persist only that WorkroomParticipant row and
+an audit in one transaction; never write every room under its WorkItem.
+
+OAuth calls targeting a capsule resolve both principals against that exact
+room. Active participant roles distinguish content from action. An explicit
+inactive assignment denies access despite historical creator/holder references.
+Sibling-room holder references never supply admission. Existing case-wide
+policy remains an additional restriction, not an implicit invitation to every
+child room. Unanchored rooms use their declared boundary or the internal default
+and receive the same clearance checks; ownership is not a clearance bypass.
+
+The invitation grants no user capability, tool grant, OAuth scope or review
+authority. Saved access applies to the existing connection's next operation.
+External development author profiles gain only initiative_evidence_write under
+BI-1E56D891, preserving explicit grant revocations and independent reviewer
+grants. The existing author lane still checks manage_backlog for the current
+human. No production or administrative grant is added.
+
+Acceptance includes siblings sharing one WorkItem, foreign users sharing an
+assistant, removed participants, observer versus contributor, unanchored-room
+clearance, atomic audited invitation, and existing-token use without new consent.
+
+### Legacy room recovery routing (BI-061D7192, amendment 2026-10-01)
+
+The supported control above is the only recovery path. An assistant that is not
+already admitted cannot use `invite_room_participant` to invite itself or
+someone else: human approval of that exact call changes neither its room
+membership nor its clearance. The governed executor must therefore evaluate
+this deterministic room-membership precondition before any capability- or
+grant-based authority envelope is created. The same room-access check runs
+again at execution time, including when an approved call resumes, because room
+membership or connection authority may have changed while approval was pending.
+The invitation handler intentionally repeats its exact-room check as defence in
+depth at mutation time. A failed retry returns the same actionable owner route
+without another consent request unless the room or caller state has changed.
+
+Room resolution uses the canonical WorkItem anchor. A `work-capsule:WC-*` key
+resolves through `Workroom.workItemId`, while a `backlog-item:BI-*` key resolves
+by the WorkItem's source identity. Both addresses must reach the same access
+decision. The refusal names the selected room and tells the caller to use the
+owner's Participants control with an approved OAuth assistant. It never treats
+generic approval, a platform-manager role, a historical holder, or a shared
+assistant as room admission.
+
+Implementation reuses `resolveAgentRoomAccess` and the existing human-owner
+invitation transaction. It adds no identity lineage, migration, grant, policy,
+or second invitation writer. Regression proof covers capsule and backlog
+addresses, an admitted caller, a nonmember, and the governed consequence path
+creating no approval envelope for the deterministic refusal. Live acceptance
+uses the exact owner control, then retries the existing OAuth connection on the
+same room without a direct database mutation.
+
+The owner-facing invitation uses the same exact-room ownership predicate as
+assistant handover. Active human accountable/coordinator assignments supersede
+historical holder fields; an explicit observer, contributor, or inactive
+assignment cannot be upgraded through this control. A historical holder may
+act only while no other human owns the room. Keep case policy, active identity,
+OAuth consent and clearance checks independent. Inherited organizational
+accountability displayed on the page is not an admission grant. Legacy rooms
+without an eligible recorded owner still require governed owner assignment;
+this repair must not fabricate ownership from the display fallback.
+
+### Consent steers routine writes (BI-12E5DD91)
+
+WWMD DI-178749D7F5BD extends C3. External assistants seed at HITL tier 1, and
+the MCP route supplied no steering, so every non-damaging write reached the
+escalation gate's `unsteered-side-effect` branch. A human who had consented to
+the assistant then clicked through generic cards, while the same human on a PAT
+was never asked. The access-token resolver already revalidates the consent
+binding on every call. The route now passes that binding as
+`connection-delegation` steering, which the existing gate treats like any other
+recorded delegation. Damaging, restricted and proposal-shaped actions still
+reach a person, because gate branch 4 precedes steering. PAT, session and
+client-credentials tokens, unbound connections and a different acting coworker
+steer nothing. Independent review lanes are unchanged. Each decision log row
+records the escalation branch and the consent binding. Approval cards show the
+exact proposal, found by the envelope id on the pending execution, and state
+that authorizing is not review.
+
+**Amendment 2026-10-15 (BI-79D26E39, founder decision).** A client-credentials
+client that an operator bound to an approved assistant now steers like a
+consented connection. Grok's "DPF Grok connection" client is bound to
+AGT-EXT-GROK by setup (BI-8D152751). A credentials client has no consent
+screen. Its authority is granted once, when the operator creates it:
+`allowedScopes` is the grant, `ownerUserId` the cap, `agentId` the assistant.
+Without a binding, every routine write from a headless assistant parked on an
+approval card. At the client_credentials grant, the token endpoint now reuses
+the owner's active consent binding for (owner, client, resource, assistant)
+whose grants still verify, or creates one once through
+`createOAuthConsentBinding`, which applies the consent screen's eligibility
+rule (`apps/web/lib/auth/credentials-client-consent.ts`). The token carries the
+binding, and `resolveOAuthConsent` revalidates it on every call, so revoking
+the binding or the assistant's eligibility stops the steering. A client with no
+assistant, or one the rules reject, is issued an unbound token as before. Each
+new binding is logged as `oauth_client_credentials_consent`. Damaging,
+restricted and proposal-shaped actions still reach a person.
+
+First creation and lookup share a transaction that locks the existing OAuth
+client row. Concurrent grants therefore reuse the same binding. Lookup includes
+revoked consent and validates only the newest recorded binding; a revoked or
+ineligible binding cannot silently create a replacement or select an older one.
+A new operator decision is required to restore that consent. The token's scopes,
+current human permissions and assistant eligibility retain their existing caps.
+
+### Complete proposal disclosure correction (BI-12E5DD91, 2026-10-13)
+
+Current baseline `e4edd79cd6cfa83ac00df4dd64494090573b3e23` preserves the
+proposed parameters but its approval projection truncates values at 600 characters,
+shows at most 12 fields, and drops explicit null and empty strings. The card has
+no complete-content view. This leaves the exact-content acceptance below unmet.
+It also describes unclassified actions as reversible without evidence.
+
+WWMD `DI-A314C6DEDDF5` selects a bounded summary with complete disclosure over
+unbounded inline content. Advisory UX engagement: `CE-2357A290`. The interactive
+prototype retains the existing card hierarchy and puts a read-only complete-input
+disclosure before the decision buttons. Its buttons are demonstrative only.
+
+#### Acceptance retained from the canonical backlog
+
+- OAuth-bound assistant: record_workroom_evidence / record_runtime_verification / create_backlog_item run without an envelope; decision log records the escalation branch.
+- invite_room_participant / manage_coworker_tool_grant (authority consequence) still escalate; revoked binding, other user's room, sibling room still denied.
+- Every remaining card shows action, destination/target, proposed content, consequence, governing reason (escalation branch) and decision scope; unknown shapes say so explicitly and show the raw proposed arguments.
+- Approval of an external envelope tells the caller exactly how to resume; approve/deny/expiry status persisted and shown.
+- Live verification after governed release.
+
+#### Ordered correction and verification
+
+1. `complete-input-projection`: extend the existing decision projection with the
+   complete formatted proposed parameters, preserving keys, long values, fields
+   beyond the summary limit, null, empty and false. Reuse originalToolParameters
+   and its existing audit-key removal; do not create a second parameter source.
+   Keep the summary bounded. Missing classification states uncertainty without
+   claiming reversibility. Test `complete-input-values` before implementation.
+2. `complete-input-card`: compose one complete-content disclosure in the existing
+   CoworkerEnvelopeApproval card for exact, known receipt and handover summaries.
+   Reuse native details and domain styles; plain text rendering must never execute
+   proposed HTML. Keep decision controls visible outside disclosure. Test
+   `complete-input-accessibility`, unresolved content, and existing outcome states.
+3. `approval-regression`: run projection, card, attention-source, policy, replay,
+   outcome and isolation tests, package typechecks, style/UX gates, and the
+   governed exact-tree gate. Release via protected PR and self-upgrade. Verify
+   the served inbox's full value, keyboard access, mobile layout and persisted
+   outcomes. Source tests do not establish those live results.
+
+These steps form one atomic correction under BI-12E5DD91: the additional
+projection has no user benefit without its rendering, and rendering cannot
+recover data lost by the old projection. About 20% of the correction is focused
+consolidation: one full-content projection and one disclosure for all card kinds.
+No new approval engine, route, database model or delegation is introduced.
+Existing actor, exact-input, room, grant, expiry and independent-review checks
+remain authoritative. The separate decision race repair belongs to BI-872069BE.
+
+#### Backlog coverage
+
+Atomic coverage receipt `cmv684g361yco01o7s5e3dwhr` binds BI-12E5DD91 to this
+ordered fix design at commit `27f704ebf57381557cc3c780375c5955dcccb9eb`, blob
+`c8d696c1904c64a76c1c70723b47365c858d79e8`. The complete-proposal deliverable
+maps to BI-12E5DD91. There are no independent child deliverables or dependencies.
+BI-872069BE remains a coordinated separate race correction, not this patch.
+After the human-approved scope release executed, coverage was refreshed as
+`cmv69j8g302me01qpts7obtp5` against the same immutable design and the complete
+projection/card edit scope. The shared disclosure now renders complete literal
+input for routine, research and handover cards; decision buttons stay outside it.
+
+#### Design grounding and risk
+
+Reuse the recommendation/authorization design, existing envelope projection,
+ToolExecution.parameters and CoworkerEnvelopeApproval. The source of truth is
+the original stored call; audit-only keys remain outside the user proposal.
+Showing complete already-proposed content can increase response size and expose
+values previously hidden by truncation to the same authorized recipient; do not
+broaden recipients, fetch another user's call or introduce content into logs.
+Rollback reverts the additive projection/disclosure, not any authority control.
+Missing content remains explicitly unresolved.
+
+## One-click connection (BI-05E0EA33, amendment 2026-09-23)
+
+Backlog: BI-05E0EA33 (triaging; no implementation authorized by this text).
+Baseline read: origin/main 5d3757539 and the live install on 2026-09-23.
+Kernel grounding: [automation is measured by the human steps it removes](../../founder-kernel/wiki/principles/automation-is-measured-by-the-human-steps-it-removes.md),
+with [human in the loop at phase boundaries](../../founder-kernel/wiki/principles/human-in-the-loop-at-phase-boundaries.md) and
+[show the consequence before the confirm](../../founder-kernel/wiki/principles/show-the-consequence-before-the-confirm.md) setting the floor
+below which no step may be removed.
+
+This amendment supersedes one sentence of F1 above: *"If one role is
+eligible, explain it without an unnecessary picker; otherwise show only
+eligible options."* The picker was the fallback, and on every real install
+it is the only branch that runs (see "Why the picker always shows" below).
+Everything else in C1, C2, F1 to F3 and V1 to V9 stands unchanged; this
+section removes a decision from the consent screen and adds none.
+
+### Operator request
+
+On 2026-09-23 the founder connected Codex. The consent page already said
+"Codex wants to work in this operator install" and then required choosing "Codex
+(external CLI)" from a three-entry dropdown. Founder: "the need to select
+what's already on the screen is cognitive load and cost that's unnecessary
+... Something to be one-click." The request is to remove the decision, not
+to relabel it.
+
+### Measured as-is (the baseline the principle requires)
+
+The principle scores a delta, and a delta needs a counted current state.
+Counted on the live install from `OAuthClient`, `AuthorityBinding`,
+`AuthorizationDecisionLog` and the consent renderer on 2026-09-23.
+
+| Path | Human operations today | Decisions | Observed |
+|---|---|---|---|
+| Fresh connect, signed in | open dropdown, pick assistant, click Approve = **3** | **1** (three options) | 13:37 consent bound Codex to `AGT-EXT-CLAUDE`; redone at 14:17 as `AGT-EXT-CODEX`. The wrong pick cost a full second cycle: register, consent, exchange. |
+| Reconnect (new `codex mcp login`) | same **3** | **1** | Every login registers a **new** DCR client row (4 Codex rows, 10 Claude Code rows on this install). A consent binding is keyed on the client row, so no prior binding ever matches and the whole screen, picker included, comes back. |
+| Refresh inside the 30-day window | **0** | 0 | Silent rotation, binding revalidated. Already correct. |
+
+Two ledgers: this change touches only the customer-facing ledger. It adds
+no step to platform delivery.
+
+### Why the picker always shows
+
+Three findings from `apps/web/lib/auth/oauth-identity-binding.ts` and the
+live tables, not from the screen:
+
+1. **The eligible set is always three.** `eligibleOAuthCoworkers` offers
+   every source-approved external development role (`AGT-EXT-CLAUDE`,
+   `AGT-EXT-CODEX`, `AGT-EXT-GROK`) to any human with `view_platform`. The
+   single-eligible collapse in the renderer exists but cannot fire for a
+   builder, which is every human who connects a coding client.
+2. **The three roles are authority-identical.** Live: the same thirteen
+   tool grants each, zero revocations, clearance `{public}`, tier 2, HITL
+   tier 1, sensitivity `internal`. Choosing between them changes attribution
+   (which coworker name appears in a room) and nothing a token can do. The
+   dropdown asks the human to make a decision that decides nothing about
+   authority, which is exactly the click the principle says to remove.
+3. **The human is transcribing an untrusted name.** The heading shows the
+   self-asserted `client_name`; the dropdown asks the human to re-enter it
+   as a role. That transcription is where the mis-selection happened. The
+   server can do the same comparison deterministically, and unlike the
+   human it can also prove the candidates are authority-equivalent first.
+
+The delegation branch of the resolver (an active `delegation` binding for
+this human, client row and resource) is structurally dead for DCR clients
+for the same reason reconnects re-consent: the client row is new each time.
+
+### Candidate approaches
+
+| | A. Server-resolved default, one Connect action, optional Change | B. Portal-initiated "Connect Codex" intent bound to the OAuth request | C. Keep the picker, pre-select it |
+|---|---|---|---|
+| Operations on fresh connect | 1 click, 0 decisions | 1 portal click + the client's own login, then 1 consent click; 2 to 3 | 1 click, but a visible dropdown still asks to be read |
+| How the role is chosen | Server policy over the eligible set, authority-signature check, prior consent, then label match | Human picks in the portal first; the OAuth request must then be matched to that intent | Untrusted name pre-selects; human confirms |
+| Binding the choice to the request | Same request, same screen; nothing to correlate | The client controls the authorize request and carries no intent id; `resource` canonicalisation strips any query hint, so correlation falls back to session plus recency heuristics | Same as A |
+| Substrate added | One resolver function, one hidden default fingerprint, screen copy. No table, enum, grant or migration | Intent table, TTL policy, portal page with its purpose contract, correlation rule | None |
+| Handles genuine ambiguity | Yes: a specific choice is shown only when candidates differ in authority | Yes, by moving the choice earlier | No: still a generic picker |
+| `human_cognitive_load` (cost axis, higher is worse) | Low: one legible screen, one button | Medium: two surfaces, and the human must understand the intent expires | Medium: the dropdown is still on screen |
+| `operator_effort` | Low | Medium | Low |
+| `blast_radius` | Low: consent renderer and resolver only; POST contract unchanged | Medium: new pending-flow state the token path must honour | Low |
+| `legibility_of_consequence` | High: the recorded identity is named on the button and the line above it | High | Medium: identity hidden in a control |
+
+**Recommendation: A.** B moves the step rather than removing it, adds
+state, and its only advantage (a human-declared role when policy cannot
+decide) is covered by A's specific-choice fallback. C keeps the control the
+founder asked to remove.
+
+**Kernel decision recorded 2026-09-23: `DI-673B7C9162D9`.** `principle_decide` scored the three options above with `human_cognitive_load` supplied as the principle requires and recommends A (confidence high, verdict proceed); the outcome is recorded as followed, A having merged in PR #5572 as e3d778b. The hand-scored table stays as the audit trail of the inputs.
+
+### Design (approach A)
+
+**Resolution runs on the server, once, from facts the server owns.** A new
+`resolveDefaultOAuthCoworker(human, client, resource, eligible)` beside
+`eligibleOAuthCoworkers` in `apps/web/lib/auth/oauth-identity-binding.ts`
+returns one of three typed outcomes; the closed set is a TypeScript union
+now and becomes a Prisma enum only if it is ever persisted.
+
+1. `single`: exactly one eligible coworker. Unchanged behaviour.
+2. `resolved`: several eligible coworkers that all share one **authority
+   signature**, plus the coworker the policy chose and why.
+3. `choice`: eligible coworkers whose signatures differ, with the
+   least-authority candidate first and a one-line reason per candidate.
+
+**Authority signature** is derived, never stored: the coworker's effective
+tool grants (`AgentToolGrant` minus `AgentToolGrantRevocation`, through the
+existing helpers in `apps/web/lib/tak/agent-grants.ts`), its `Principal`
+`sensitivityClearance`, its `hitlTierDefault` and `sensitivity`. Two
+coworkers with equal signatures are interchangeable for everything the
+token can do; the consent then chooses a name, not a power.
+
+**Rule 1 runs before the signature check; rules 2 and 3 run only inside an
+equal-signature class.** A prior consent is a decision this human already
+recorded for this resource, name and redirect family, so reusing it is the
+human's own choice, not the name's; an administrator's eligible set spans
+every room-write coworker and never has one signature, so a rule that waited
+for equality could never fire for them (live finding, 2026-09-23). Each rule
+is a lookup over existing rows:
+
+1. The coworker on this human's most recent active `consent` binding for
+   this resource whose client has the same self-asserted name and the same
+   redirect family. For a loopback redirect the family is scheme, host and
+   first path segment: the port is ephemeral and some clients add a
+   per-session path nonce (Codex's `/callback/<nonce>` changed between
+   2026-09-23 and 2026-10-01 and defeated reuse on the live install). A
+   non-loopback redirect keeps port and full path. This is what makes a
+   reconnect land on the same assistant without a question. Each consent's
+   audit row records the resolution kind, the default offered and whether
+   the human changed it, so AC-OC-7 is measurable from the database.
+2. A coworker whose registry aliases (`agent_registry.json`, for example
+   `codex` for `AGT-EXT-CODEX`) match the client's self-asserted name,
+   case-insensitively, as a whole word.
+3. The alphabetically first eligible coworker, so the outcome is total and
+   deterministic.
+
+**Rule 1b, the external profile (amendment 2026-09-25).** When the
+eligible set is wider than the source-approved external development roles
+(`APPROVED_EXTERNAL_ROLES`: `AGT-EXT-CLAUDE`, `AGT-EXT-CODEX`,
+`AGT-EXT-GROK`), which only an administrator's set is, and those roles
+share one signature, the outcome is `resolved` on that class: rules 2 and 3
+run inside it, and the wider set stays under `Change`. An external AI
+client's connection is the external development profile every builder
+already gets; an administrator's extra reach (room coordinators such as the
+Mailroom) is theirs to opt into, not a question put to them on every
+connect. Live finding: an administrator connecting the Claude desktop app
+(a new name and a `claude://` redirect, so no prior consent matched) was
+shown a choice with the Mailroom coordinator preselected as least
+authority. `choice` still results when the external roles themselves
+differ, or when none is eligible.
+
+The consequence line names whichever assistant is selected under `Change`.
+The page has no script; the line holds one name per candidate and CSS
+`:has()` shows the one matching the selected option. Without `:has()` the
+line keeps the default, as before.
+
+A self-asserted name therefore picks a **label within a class the server
+has already proven authority-equivalent**. It can never select a coworker
+outside that class, never widen a scope, and never bypass eligibility,
+because the eligible set and the signature check run before the name is
+looked at. This is the same information the human was being asked to
+transcribe, applied after a check the human could not perform. Forged
+names are covered below.
+
+**The screen** keeps its shape and loses its controls.
+
+- Heading unchanged: "`<client_name>` wants to work in `<installation>`",
+  with the self-asserted warning for DCR clients exactly as today.
+- One consequence line, in the platform's words, before the button:
+  "It will work as **Codex (external CLI)** under your account. Change".
+  `Change` is a disclosure that reveals the existing eligible list; the
+  default flow never shows the list. For a `choice` outcome the disclosure
+  is open, the candidates are named with their difference in one line each,
+  and the least-authority candidate is pre-selected.
+- Permissions are a plain list in the default flow, drawn from the same
+  `PUBLIC_SCOPE_COPY`. "Adjust permissions" is a disclosure that reveals
+  today's pre-ticked checkboxes. The POST contract does not change: the
+  human can only remove authority, never add it.
+- One primary button, "Connect `<client_name>`" (escaped, truncated), and
+  Cancel. "Connecting to" and "Returns to" stay, because the consequence
+  must be visible before the confirm.
+- The revocation footer stays.
+
+**The POST trusts nothing the GET showed.** It already re-parses the
+request and re-runs eligibility. It additionally re-runs
+`resolveDefaultOAuthCoworker` and compares the result to a hidden
+`default_coworker` field the GET rendered. If the human made no change and
+the server's answer is the same, that coworker is bound. If the answer
+differs (eligibility or signatures changed between GET and POST), the POST
+re-renders the screen with the new answer instead of binding anything. If
+the human chose from the disclosure, the chosen id must be in the eligible
+set, as today. A client-supplied `acting_coworker` is still never echoed as
+a hidden identity.
+
+**Reconnect.** Rule 1 above removes the role question on every reconnect
+while the assistant, its signature and the scopes are unchanged. The
+consent click itself stays on every new DCR registration. That click costs
+one and exists to be seen: a public loopback client with a fresh
+`client_id` cannot prove it is the same program, so an auto-approval would
+let any local process that can reach `/register` and open the operator's
+browser obtain a token silently under a previous envelope. The principle's
+own example draws this line: an approval whose outcome the platform can
+already determine is removed; a step that exists to be seen stays. Whether
+an operator-pinned, pre-registered client may skip the click within the
+refresh window is an open decision below.
+
+**Refresh** is unchanged and already silent.
+
+**What this does not touch.** Eligibility, scope intersection, coworker
+grants, clearance, room admission, revocation, family rotation, the
+`AuthorizationDecisionLog` row, the resolver's use of `appliedAgentId`, the
+three external registry identities and every acceptance in V1 to V9.
+
+**What was considered and rejected.** Merging the three external roles
+into one identity with the vendor as a label would remove the class
+altogether. It is a substrate change with reach into room participants and
+the surface-claim skills, so it is not admissible as a UX fix; if the
+vendor split proves to be labelling only, that is its own item. Persisting
+a per-human "default assistant" preference is unnecessary once rule 1
+exists and would be a second source of truth for the same fact.
+
+### Security invariants
+
+- A forged `client_name` can at most change which of several
+  authority-identical labels is recorded, and the screen still marks it
+  self-asserted. It cannot reach a coworker outside the eligible set,
+  cannot escape the signature check, and cannot widen scopes.
+- The signature check is a strict equality over derived sets; an admin
+  delegation that adds one grant to one candidate turns the outcome into
+  `choice`, never into a silent default.
+- The POST re-derives the default and refuses on drift, so a screen
+  rendered before a policy change cannot bind the identity it showed.
+- Nothing is auto-approved for a DCR client. Revocation, room admission and
+  `OAUTH_SETUP_REQUIRED` recovery are unchanged.
+- A `choice` is made by the person (2026-09-24). The page pre-selects
+  nothing: the select is required and starts on an empty placeholder, and a
+  Connect without a pick binds nothing and shows the screen again. Before
+  this, the least-authority candidate was pre-selected, and a live
+  acceptance run bound it without anyone choosing.
+- Only an explicit Connect or Cancel click decides. The form's first submit
+  button is disabled, so pressing Enter submits nothing. A POST whose
+  `Sec-Fetch-Site` is present and not `same-origin` is refused, as a foreign
+  `Origin` already was. The decision log records `Sec-Fetch-Site` and
+  `Sec-Fetch-User`.
+
+### Acceptance criteria
+
+**OBJ-OC-1:** a signed-in human connects a supported client with one
+consent click and no role decision.
+
+**OBJ-OC-2:** the server, not the client name, decides authority; the name
+may only label.
+
+**OBJ-OC-3:** the removal is measured on live paths.
+
+| Acceptance | Objective | Required outcome |
+|---|---|---|
+| AC-OC-1 | OBJ-OC-1 | Fresh Codex connection by a human with build permission: one click on Connect, zero selections, zero command or file-edit instructions from DPF. The binding records `AGT-EXT-CODEX`. |
+| AC-OC-2 | OBJ-OC-1 | Reconnect after a new DCR registration with unchanged scopes lands on the same assistant with no role question; refresh stays silent. |
+| AC-OC-3 | OBJ-OC-1 | Default flow shows app, installation, acting human, assistant, permissions, resource and return address; no dropdown, no checkbox, no internal CLI taxonomy beyond the assistant's display name. |
+| AC-OC-4 | OBJ-OC-2 | With an admin delegation that gives one eligible coworker a different signature, the screen presents a specific choice with the least-authority candidate first; with equal signatures it presents none. |
+| AC-OC-5 | OBJ-OC-2 | A client registered as "Codex" by a human without build permission is refused as today; a client named "Claude Code" that is actually Codex is recorded under the Claude label with no change in what it can do; a hostile name is escaped and marked self-asserted. |
+| AC-OC-6 | OBJ-OC-2 | POST re-derivation: if eligibility changes between GET and POST, no code is issued and the screen re-renders. Tampered `default_coworker` or `acting_coworker` outside the eligible set is refused. |
+| AC-OC-7 | OBJ-OC-3 | Clicks, decisions and elapsed time recorded on a live first connect and a live reconnect for Codex and Claude Code, before and after, in the item's evidence. Target: 3 to 1 operations, 1 to 0 decisions on both paths. |
+
+### Open operator decisions
+
+1. **Pinned-client skip.** Should an operator pre-registered client with an
+   active consent for the same human, scopes and assistant skip the click
+   on reconnect within the refresh window? Recommended **no** by default,
+   because a loopback public client cannot prove identity even when pinned;
+   offered as an explicit per-client setting if wanted.
+2. **Display names.** The three external roles are labelled "`<vendor>`
+   (external CLI)". The default flow shows that once. If the parenthetical
+   is unwanted on the consent screen, the fix is the registry seed, which
+   also changes the label in rooms and reports; this amendment does not
+   change it.
+3. **Unused registrations.** Ten DCR rows on this install never reached
+   consent (two registrations per Codex login). Expiring never-consented
+   registrations was named in the 2026-08-26 design §7.3 and belongs to
+   BI-D6D79AC4, not here.
+
+### Ordered implementation and backlog coverage
+
+No implementation is authorized by this text; BI-05E0EA33 is in triage and
+this is the design extension it asked for. When admitted:
+
+1. Failing tests first in `oauth-identity-binding.test.ts` and
+   `oauth-consent-page.test.ts`: signature equality across the three
+   external roles, rule 1 reconnect match, alias match, deterministic
+   fallback, `choice` on a divergent delegation, POST drift refusal, no
+   echoed client identity.
+2. `resolveDefaultOAuthCoworker` and the signature derivation, reusing the
+   grant helpers; no schema change.
+3. Consent renderer: consequence line, disclosures, single button, hidden
+   `default_coworker`; POST re-derivation in the authorize route.
+4. Live measurement for AC-OC-7 on the canonical runtime, both clients,
+   recorded as evidence on the item.
+5. Docs: the MCP tool authorization runbook's setup paragraph and the
+   2026-08-26 design §4.6 pointer.
+
+Coverage: atomic under BI-05E0EA33. The parent decision id is pending the
+kernel recording named above.
+
+### Approval completes the call (BI-12E5DD91, follow-up)
+
+An approved direct MCP call used to wait for the client to send it again,
+and nothing told the client to. On approval, the platform now runs a direct
+call (no TaskRun) once, through the governed executor, as the same human and
+assistant. It runs only when three things hold. The stored arguments hash to
+the approved input fingerprint. The originating credential is live and still
+admits the tool. An OAuth credential's consent still names the same assistant.
+Otherwise the card states why it did not run. A call parked inside an external
+task (tasks/submit) resumes that task on approval (BI-9FD11E5E), from what the
+task stored at submission: the same person, requested coworker, route and
+submitting credential, held to the same checks. It is the client replay's own
+resume, reserving the waiting task with a compare-and-set, so a racing replay
+and the approval's resume cannot both run the writer, and a client that
+restarted no longer lets the approval lapse. Every approved run reserves its envelope with a
+compare-and-set, so a platform run and a client retry cannot both spend one
+approval. A retry after a successful approved run returns the recorded outcome
+instead of a second run or a second card. A decision made after the window
+closed settles the envelope as `expired`. Token-scope admission is one shared
+rule for the route and the runner (`lib/mcp/token-tool-scope.ts`).
+
+### Where WWMD, WWWD and WSID steer approvals
+
+Escalation reaches a person only when an action is damaging, or when nothing
+recorded can steer it (`escalation-gate.ts`). The three decision engines steer
+through the existing policy projector (`resolve-policy-action-authority.ts`).
+A sealed, autonomy-eligible `kernel-consult`, `build-studio` or `backlog-triage`
+judgment is WWMD authority. An `org-business` judgment is WWWD, and a
+`profession` judgment is WSID. The projector binds each to the exact action,
+subject and input fingerprint, and today it accepts only initiative-readiness
+receipt tools. Independent specialist reviewers steer as `independent-reviewer`.
+Room definitions steer as `room-authority`, and cadences as `scheduled-mandate`.
+A person's OAuth consent steers routine writes as `connection-delegation`.
+None of these can authorize a damaging action. Each decision log row records
+which one decided.

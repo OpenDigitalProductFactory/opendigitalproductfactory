@@ -21,16 +21,21 @@ const db = vi.hoisted(() => ({
     productVersion: {
       findMany: vi.fn(),
     },
+    buildArtifactRevision: {
+      findUnique: vi.fn(),
+    },
   },
 }));
 vi.mock("@dpf/db", () => db);
 
 import { versionHistoryPack } from "./version-history-pack";
+import { summarizeTerminalToolProgress, type TerminalToolRecord } from "@/lib/tak/terminal-tool-policy";
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 
 const EXPECTED_TOOLS = [
   "query_version_history",
   "read_source_at_version",
+  "read_build_artifact_revision",
   "search_source_at_version",
   "list_source_directory",
   "compare_versions",
@@ -48,7 +53,7 @@ beforeEach(() => {
 });
 
 describe("version-history pack — registration", () => {
-  it("exposes exactly the five version-history tools", () => {
+  it("exposes exactly the six version-history tools", () => {
     expect(versionHistoryPack.definitions.map((d) => d.name).sort()).toEqual([...EXPECTED_TOOLS].sort());
     expect(Object.keys(versionHistoryPack.handlers).sort()).toEqual([...EXPECTED_TOOLS].sort());
   });
@@ -71,11 +76,51 @@ describe("version-history pack — registration", () => {
       .filter((definition) => definition.retainAuditParameters)
       .map((definition) => definition.name);
 
-    expect(retained).toEqual(["read_source_at_version"]);
+    expect(retained).toEqual(["read_source_at_version", "read_build_artifact_revision"]);
   });
 });
 
 describe("version-history pack — handler behavior (delegation preserved)", () => {
+  it.each([
+    "first\n" + "x".repeat(25_000) + "\nlast\n",
+    "x".repeat(25_000),
+    "first\n" + "x".repeat(25_000),
+  ])("the terminal policy accepts the real reader's split-line cursor chain (%#)", async (content) => {
+    gitUtils.gitShow.mockResolvedValue({ content });
+    const binding = { repositoryFullName: "example/project", path: "docs/review.md", version: "v1", expectedBlobId: "blob-1" };
+    const policy = {
+      writerToolName: "record_initiative_evidence",
+      readerToolNames: ["read_source_at_version"],
+      minimumSuccessfulReaderCalls: 1,
+      maximumReaderCalls: 6,
+      immutableReaderArguments: binding,
+    };
+    const records: TerminalToolRecord[] = [];
+    let cursor: string | undefined;
+    let assembled = "";
+    do {
+      const args = { ...binding, ...(cursor ? { cursor } : {}) };
+      const result = await versionHistoryPack.handlers.read_source_at_version(args, "u1");
+      expect(result.success).toBe(true);
+      const page = result.data as { content: string; nextCursor: string | null };
+      assembled += page.content;
+      records.push({ name: "read_source_at_version", args, result });
+      cursor = page.nextCursor ?? undefined;
+      expect(records.length).toBeLessThanOrEqual(6);
+    } while (cursor);
+    expect(assembled).toBe(content);
+    expect(summarizeTerminalToolProgress(policy, records)).toMatchObject({ evidenceAvailable: true });
+    expect(summarizeTerminalToolProgress(policy, [records[0]!, records[2]!]))
+      .toMatchObject({ evidenceAvailable: false });
+    expect(summarizeTerminalToolProgress(policy, [records[0]!, records[1]!, records[1]!, records[2]!]))
+      .toMatchObject({ evidenceAvailable: false });
+    const repeatedCursor = { ...records[1]!, result: { ...records[1]!.result, data: {
+      ...records[1]!.result.data, nextCursor: records[0]!.result.data!.nextCursor,
+    } } };
+    expect(summarizeTerminalToolProgress(policy, [records[0]!, repeatedCursor, records[2]!]))
+      .toMatchObject({ evidenceAvailable: false });
+  });
+
   it("query_version_history summarizes product versions from prisma", async () => {
     db.prisma.productVersion.findMany.mockResolvedValue([
       {
@@ -162,6 +207,31 @@ describe("version-history pack — handler behavior (delegation preserved)", () 
     expect(gitUtils.gitShow).toHaveBeenCalledWith({ ref: "v1.0.0", path: "apps/web/x.ts" });
   });
 
+  it("read_source_at_version default page carries a 25 KB design spec in three reads or fewer (BI-8B8731EE)", async () => {
+    // A governed reviewer has six bounded reads before it must write its
+    // receipt. The old 40-line / 3,000-char default spent all six on a
+    // 25 KB spec and never reached the writer.
+    const line = "- gate row: requirement, evidence, reviewer, stop condition, budget.\n";
+    const content = line.repeat(Math.ceil(25_000 / line.length));
+    gitUtils.gitShow.mockResolvedValue({ content });
+    let cursor: string | undefined;
+    let reads = 0;
+    let assembled = "";
+    do {
+      const page = await versionHistoryPack.handlers.read_source_at_version(
+        { path: "docs/superpowers/specs/big.md", ...(cursor ? { cursor } : {}) },
+        "u1",
+      );
+      reads += 1;
+      const data = page.data as { content: string; hasMore: boolean; nextCursor: string | null };
+      assembled += data.content;
+      cursor = data.nextCursor ?? undefined;
+      if (!data.hasMore) break;
+    } while (reads < 10);
+    expect(assembled).toBe(content);
+    expect(reads).toBeLessThanOrEqual(3);
+  });
+
   it("read_source_at_version cursor makes progress through a line longer than maxChars", async () => {
     gitUtils.gitShow.mockResolvedValue({ content: "abcdefghij\nlast\n" });
     const first = await versionHistoryPack.handlers.read_source_at_version(
@@ -225,6 +295,7 @@ describe("version-history pack — handler behavior (delegation preserved)", () 
     repositoryArtifact.readRepositoryProviderBlob.mockResolvedValue({
       ok: true,
       data: Buffer.from("remote immutable bytes\n", "utf8"),
+      blobId: "b".repeat(40),
     });
     const res = await versionHistoryPack.handlers.read_source_at_version({
       repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
@@ -252,7 +323,36 @@ describe("version-history pack — handler behavior (delegation preserved)", () 
     expect(gitUtils.gitShow).not.toHaveBeenCalled();
   });
 
-  it("fails closed instead of falling back without a complete immutable provider identity", async () => {
+  it("reads a provider blob by commit and path when no blob id is supplied, and returns the provider's blob id", async () => {
+    // A reviewer dispatched over native MCP sees the reader's ordinary schema and
+    // knows the commit and path but not the blob id (the bound schema that
+    // carries it never reaches a native tools/list). Commit + path is already
+    // immutable, so the provider serves it and names the blob it returned.
+    gitUtils.gitBlobId.mockResolvedValue({ error: "unknown revision" });
+    repositoryArtifact.readRepositoryProviderBlob.mockResolvedValue({
+      ok: true,
+      data: Buffer.from("remote immutable bytes\n", "utf8"),
+      blobId: "c".repeat(40),
+    });
+    const res = await versionHistoryPack.handlers.read_source_at_version({
+      repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+      path: "docs/spec.md",
+      version: "a".repeat(40),
+    }, "u1");
+
+    expect(res).toMatchObject({
+      success: true,
+      data: { blobId: "c".repeat(40), content: "remote immutable bytes\n", version: "a".repeat(40) },
+    });
+    expect(repositoryArtifact.readRepositoryProviderBlob).toHaveBeenCalledWith({
+      repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+      commitSha: "a".repeat(40),
+      path: "docs/spec.md",
+      expectedBlobId: null,
+    });
+  });
+
+  it("fails closed without falling back when the repository is not named, and says what is missing", async () => {
     gitUtils.gitBlobId.mockResolvedValue({ error: "unknown revision" });
     const res = await versionHistoryPack.handlers.read_source_at_version({
       path: "docs/spec.md",
@@ -261,7 +361,34 @@ describe("version-history pack — handler behavior (delegation preserved)", () 
     }, "u1");
 
     expect(res).toMatchObject({ success: false, error: "unknown revision" });
+    expect(res.message).toContain("repositoryFullName");
+    expect(res.message).not.toMatch(/not available|unavailable/i);
     expect(repositoryArtifact.readRepositoryProviderBlob).not.toHaveBeenCalled();
+  });
+
+  it("fails closed without falling back when the version is not a commit sha, and says what is missing", async () => {
+    gitUtils.gitBlobId.mockResolvedValue({ error: "unknown revision" });
+    const res = await versionHistoryPack.handlers.read_source_at_version({
+      repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+      path: "docs/spec.md",
+      version: "main",
+    }, "u1");
+
+    expect(res).toMatchObject({ success: false });
+    expect(res.message).toMatch(/40-character commit/);
+    expect(repositoryArtifact.readRepositoryProviderBlob).not.toHaveBeenCalled();
+  });
+
+  it("names the missing provider inputs instead of claiming git is unavailable when there is no local git", async () => {
+    gitUtils.isGitAvailable.mockResolvedValue(false);
+    const res = await versionHistoryPack.handlers.read_source_at_version({
+      repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+      path: "docs/spec.md",
+      version: "main",
+    }, "u1");
+    expect(res.success).toBe(false);
+    expect(res.message).toMatch(/40-character commit/);
+    expect(res.message).not.toMatch(/Git history is not available/);
   });
 
   it("read_source_at_version surfaces a git error", async () => {
@@ -276,7 +403,8 @@ describe("version-history pack — handler behavior (delegation preserved)", () 
     for (const t of ["read_source_at_version", "search_source_at_version", "list_source_directory", "compare_versions"]) {
       const res = await versionHistoryPack.handlers[t]({ path: "x", query: "x", from: "a" }, "u1");
       expect(res.success, t).toBe(false);
-      expect(res.message, t).toBe("Git not available.");
+      if (t === "read_source_at_version") expect(res.message, t).toContain("repositoryFullName");
+      else expect(res.message, t).toBe("Git not available.");
     }
   });
 
@@ -342,5 +470,49 @@ describe("version-history pack — handler behavior (delegation preserved)", () 
     expect((res.data as { filesChanged: number }).filesChanged).toBe(2);
     expect(gitUtils.gitDiffStat).toHaveBeenCalledWith({ from: "v1", to: "v2" });
     expect(gitUtils.gitLog).toHaveBeenCalledWith({ from: "v1", to: "v2", maxCount: 20 });
+  });
+});
+
+
+describe("read_build_artifact_revision (BI-926A7E90)", () => {
+  const revision = {
+    id: "rev_1", buildId: "FB-1", field: "designDoc", revisionNumber: 3, status: "accepted",
+    valueDigest: "sha256:abc",
+    value: { problemStatement: "Route the owed reviews.", acceptanceCriteria: ["AC-1 routed"] },
+  };
+  it("serves the accepted revision as a page with the bound identity", async () => {
+    db.prisma.buildArtifactRevision.findUnique.mockResolvedValue(revision);
+    const result = await versionHistoryPack.handlers.read_build_artifact_revision({
+      repositoryFullName: "o/r", path: "build-artifact-revision/rev_1", version: "rev_1", expectedBlobId: "sha256:abc",
+    }, "u1");
+    expect(result.success).toBe(true);
+    expect(result.data).toMatchObject({
+      repositoryFullName: "o/r", path: "build-artifact-revision/rev_1", version: "rev_1", blobId: "sha256:abc",
+      startLine: 1, hasMore: false, nextCursor: null, buildId: "FB-1", field: "designDoc",
+    });
+    expect(String((result.data as { content: string }).content)).toContain("Route the owed reviews.");
+  });
+  it("accepts the prefixed form of the stored bare digest and echoes the bound form", async () => {
+    db.prisma.buildArtifactRevision.findUnique.mockResolvedValue({ ...revision, valueDigest: "abc" });
+    const result = await versionHistoryPack.handlers.read_build_artifact_revision({
+      path: "build-artifact-revision/rev_1", version: "rev_1", expectedBlobId: "sha256:abc",
+    }, "u1");
+    expect(result).toMatchObject({ success: true, data: { blobId: "sha256:abc" } });
+  });
+
+  it("fails closed on a digest mismatch and on an identity mismatch", async () => {
+    db.prisma.buildArtifactRevision.findUnique.mockResolvedValue(revision);
+    expect(await versionHistoryPack.handlers.read_build_artifact_revision({
+      path: "build-artifact-revision/rev_1", version: "rev_1", expectedBlobId: "sha256:other",
+    }, "u1")).toMatchObject({ success: false, error: "immutable_blob_mismatch" });
+    expect(await versionHistoryPack.handlers.read_build_artifact_revision({
+      path: "build-artifact-revision/rev_1", version: "rev_2", expectedBlobId: "sha256:abc",
+    }, "u1")).toMatchObject({ success: false, error: "invalid_revision_identity" });
+  });
+  it("reports an unknown revision as unavailable", async () => {
+    db.prisma.buildArtifactRevision.findUnique.mockResolvedValue(null);
+    expect(await versionHistoryPack.handlers.read_build_artifact_revision({
+      path: "build-artifact-revision/nope", version: "nope", expectedBlobId: "sha256:abc",
+    }, "u1")).toMatchObject({ success: false, error: "IMMUTABLE_SOURCE_UNAVAILABLE" });
   });
 });

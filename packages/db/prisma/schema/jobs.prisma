@@ -1,0 +1,130 @@
+// Owned durable-job engine (plan 2026-09-08 M3 phase 2, BI-85E6EF14).
+// Spec: docs/superpowers/specs/2026-09-25-postgres-durable-job-engine-design.md §5.2.
+//
+// Engine state only. Reporting stays on TaskRun; nothing reads these tables
+// except apps/web/lib/jobs/postgres. Retention is the engine's own: finished
+// runs and their orphaned events are pruned by the worker
+// (apps/web/lib/jobs/postgres/store.ts pruneFinished), which is why the
+// lifecycle is `domain`.
+
+/// Where a durable run is. `sleeping` waits for runAfter; `waiting` waits for an event.
+enum JobRunStatus {
+  queued
+  running
+  sleeping
+  waiting
+  completed
+  failed
+  cancelled
+}
+
+/// One event sent through the jobs facade. `id` is the sender's dedupe key
+/// (or a generated one): a second send with the same id starts nothing.
+/// The sender only records it; the worker, which holds the function registry,
+/// fans it out to runs, cancellations and waits, then sets `fannedOutAt`.
+/// @dpf lifecycle=operational retention=domain sensitivity=internal categories=operational owner=platform-owner steward=data-steward
+model JobEvent {
+  id          String    @id
+  name        String
+  data        Json      @default("{}")
+  ts          DateTime
+  receivedAt  DateTime  @default(now())
+  fannedOutAt DateTime?
+
+  runs JobRun[]
+
+  @@index([name, receivedAt])
+  @@index([receivedAt])
+  @@index([fannedOutAt, receivedAt])
+}
+
+/// One run of one function for one triggering event.
+/// @dpf lifecycle=operational retention=domain sensitivity=internal categories=operational owner=platform-owner steward=data-steward
+model JobRun {
+  id             String       @id @default(cuid())
+  functionKey     String
+  eventId        String
+  /// The triggering event exactly as the handler receives it.
+  event          Json
+  status         JobRunStatus @default(queued)
+  /// Failed attempts so far.
+  attempt        Int          @default(0)
+  maxAttempts    Int
+  runAfter       DateTime     @default(now())
+  leaseOwner     String?
+  leaseExpiresAt DateTime?
+  output         Json?
+  error          String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  finishedAt     DateTime?
+
+  trigger JobEvent @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  steps   JobStep[]
+  waits   JobWait[]
+  slots JobConcurrencySlot[]
+
+  @@unique([functionKey, eventId])
+  @@index([eventId])
+  @@index([status, runAfter])
+  @@index([status, leaseExpiresAt])
+  @@index([status, finishedAt])
+}
+
+/// A memoised step result. A replay returns `output` without re-running the step.
+/// @dpf lifecycle=operational retention=domain sensitivity=internal categories=operational owner=platform-owner steward=data-steward
+model JobStep {
+  runId       String
+  stepKey      String
+  output      Json?
+  completedAt DateTime @default(now())
+
+  run JobRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@id([runId, stepKey])
+}
+
+/// A run parked on step.waitForEvent.
+/// @dpf lifecycle=operational retention=domain sensitivity=internal categories=operational owner=platform-owner steward=data-steward
+model JobWait {
+  id        String   @id @default(cuid())
+  runId     String
+  stepKey    String
+  eventName String
+  /// The waitForEvent `if` expression, evaluated against the run's event and the awaited one.
+  matchExpr String?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  run JobRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, stepKey])
+  @@index([eventName])
+  @@index([expiresAt])
+}
+
+/// One held concurrency slot. A run holds one per lane while it is running;
+/// (laneKey, slot) is unique, so two claimers can never hold the same slot.
+/// @dpf lifecycle=operational retention=domain sensitivity=internal categories=operational owner=platform-owner steward=data-steward
+model JobConcurrencySlot {
+  laneKey    String
+  slot       Int
+  runId      String
+  acquiredAt DateTime @default(now())
+
+  run JobRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@id([laneKey, slot])
+  @@index([runId])
+}
+
+/// Next fire time of a cron function routed to the Postgres engine.
+/// @dpf lifecycle=operational retention=domain sensitivity=internal categories=operational owner=platform-owner steward=data-steward
+model JobCronState {
+  functionKey String   @id
+  cron       String
+  nextFireAt DateTime
+  updatedAt  DateTime @updatedAt
+
+  @@index([nextFireAt])
+}

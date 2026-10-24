@@ -3,12 +3,13 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { refresh, approveProposal, rejectProposal } = vi.hoisted(() => ({
+const { refresh, replace, approveProposal, rejectProposal } = vi.hoisted(() => ({
   refresh: vi.fn(),
+  replace: vi.fn(),
   approveProposal: vi.fn(),
   rejectProposal: vi.fn(),
 }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh, replace }) }));
 vi.mock("@/lib/actions/proposals", () => ({ approveProposal, rejectProposal }));
 
 import { CoworkerEnvelopeApproval } from "./CoworkerEnvelopeApproval";
@@ -61,6 +62,7 @@ let fetchMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   refresh.mockClear();
+  replace.mockClear();
   approveProposal.mockClear();
   rejectProposal.mockClear();
   fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }));
@@ -73,6 +75,21 @@ afterEach(() => {
 });
 
 describe("CoworkerEnvelopeApproval", () => {
+  it.each(["record_workroom_evidence", "record_initiative_evidence", "reassign_workroom_executor"])("offers complete literal content before authorizing %s", (toolName) => {
+    const params = { decision: "pass", capsuleId: "WC-1", toExecutorKind: "codex-desktop", body: "x".repeat(900) + "<script>unsafe()</script>", clear: null, empty: "", enabled: false };
+    const decision = summarizeCoworkerEnvelopeDecision({ toolName, proposedParameters: params, reviewBinding: { gate: "research", itemId: "BI-1" }, recommenderAgentId: "AGT-EXT-CODEX", authorizerUserId: "user-1" });
+    const { container } = render(<CoworkerEnvelopeApproval approval={approval({ decision })} />);
+    const summary = screen.getByText("Complete proposed content");
+    const details = summary.closest("details")!;
+    expect(details.open).toBe(false);
+    const content = details.querySelector("pre")!;
+    expect(JSON.parse(content.textContent!)).toEqual(params);
+    expect(content.tabIndex).toBe(0);
+    expect(details.querySelector("script")).toBeNull();
+    expect(screen.getByText("Authorize").closest("details")).toBeNull();
+    expect(container.querySelectorAll("pre")).toHaveLength(1);
+  });
+
   it("states the AI recommendation versus human authorization, not identity plumbing", () => {
     render(<CoworkerEnvelopeApproval approval={approval()} />);
 
@@ -143,7 +160,7 @@ describe("CoworkerEnvelopeApproval", () => {
     );
     expect(approveProposal).not.toHaveBeenCalled();
     expect(rejectProposal).not.toHaveBeenCalled();
-    await waitFor(() => expect(refresh).toHaveBeenCalled());
+    await waitFor(() => expect(replace).toHaveBeenCalledWith(expect.stringMatching(/^\/workspace\/inbox\?approval=.+#approval-result$/)));
   });
 
   it("declines through the envelope endpoint and never the proposal actions", async () => {
@@ -186,7 +203,7 @@ describe("CoworkerEnvelopeApproval", () => {
 
     await waitFor(() => expect(screen.getByRole("status")).toBeTruthy());
     expect(screen.queryByRole("alert")).toBeNull();
-    expect(refresh).toHaveBeenCalled();
+    expect(replace).toHaveBeenCalledWith(expect.stringMatching(/^\/workspace\/inbox\?approval=.+#approval-result$/));
   });
 
   it("surfaces the refusal when the envelope belongs to another user", async () => {
@@ -291,5 +308,242 @@ describe("OwnerDecisionCards routing", () => {
       screen.getByText("89e875eb49be0604ee8fa4156d0903b6a0932e62"),
     ).toBeTruthy();
     expect(screen.getByText("bddca7c5a0b109f9460f84b2b0d886f5d794cbb6")).toBeTruthy();
+  });
+});
+
+describe("CoworkerEnvelopeApproval — exact effect (BI-12E5DD91)", () => {
+  const evidence = () =>
+    approval({
+      coworkerAgentId: "AGT-EXT-CODEX",
+      manifestActionId: "record_workroom_evidence",
+      taskRunId: null,
+      reviewBinding: undefined,
+      decision: summarizeCoworkerEnvelopeDecision({
+        toolName: "record_workroom_evidence",
+        proposedParameters: { capsuleId: "WC-04ED087E", kind: "note", summary: "Acceptance A." },
+        recommenderAgentId: "AGT-EXT-CODEX",
+        authorizerUserId: "cmt6ejt2109n56mnw5kt1f8y0",
+        rationale: "Rule. It changes a record, and no recorded delegation, room decision, schedule or independent review covers it.",
+      }),
+    });
+
+  it("shows action, destination, proposed content, consequence, reason, scope and status", () => {
+    render(<CoworkerEnvelopeApproval approval={evidence()} />);
+    expect(screen.getByText("Add an evidence entry to a Workroom timeline")).toBeTruthy();
+    expect(screen.getAllByText("Workroom WC-04ED087E").length).toBeGreaterThan(0);
+    expect(screen.getByText("Proposed content")).toBeTruthy();
+    expect(screen.getByText("Acceptance A.")).toBeTruthy();
+    expect(screen.getByText(/None declared/)).toBeTruthy();
+    expect(screen.getByText(/no recorded delegation/)).toBeTruthy();
+    expect(screen.getByText(/does not review the content/)).toBeTruthy();
+    expect(screen.getByText("Waiting for your decision")).toBeTruthy();
+    expect(screen.queryByText("Findings")).toBeNull();
+  });
+
+  it("says what happened to the change after authorizing, never done when nothing ran", async () => {
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ ok: true, execution: { status: "executed", message: "ok" } }), { status: 200 }));
+    render(<CoworkerEnvelopeApproval approval={evidence()} />);
+    fireEvent.click(screen.getByText("Authorize"));
+    await waitFor(() => expect(screen.getByRole("status").textContent).toBe("Authorized and done."));
+    cleanup();
+
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ ok: true, execution: { status: "not-run", message: "The approval window closed before it could run." } }), { status: 200 }));
+    render(<CoworkerEnvelopeApproval approval={evidence()} />);
+    fireEvent.click(screen.getByText("Authorize"));
+    await waitFor(() => expect(screen.getByRole("status").textContent).toMatch(/Nothing has been written yet\. The approval window closed/));
+    cleanup();
+
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ ok: true, execution: { status: "failed", message: "room refused" } }), { status: 200 }));
+    render(<CoworkerEnvelopeApproval approval={evidence()} />);
+    fireEvent.click(screen.getByText("Authorize"));
+    await waitFor(() => expect(screen.getByRole("status").textContent).toMatch(/did not complete: room refused/));
+  });
+
+  it("marks an unloadable proposal as unresolved instead of offering a generic record", () => {
+    render(
+      <CoworkerEnvelopeApproval
+        approval={approval({
+          reviewBinding: undefined,
+          decision: summarizeCoworkerEnvelopeDecision({
+            toolName: "record_runtime_verification",
+            proposedParameters: undefined,
+            recommenderAgentId: "AGT-EXT-CODEX",
+            authorizerUserId: "cmt6ejt2109n56mnw5kt1f8y0",
+          }),
+        })}
+      />,
+    );
+    expect(screen.getByRole("note").textContent).toMatch(/could not be loaded/);
+    expect(screen.getByText(/decline unless you already know/)).toBeTruthy();
+  });
+
+  it("shows an expired window as closed with its persisted status", () => {
+    render(<CoworkerEnvelopeApproval approval={{ ...evidence(), actionable: false }} />);
+    expect(screen.getByText("Closed: the window expired")).toBeTruthy();
+    expect(screen.queryByText("Authorize")).toBeNull();
+  });
+});
+
+describe("CoworkerEnvelopeApproval — lapsed window (BI-12E5DD91)", () => {
+  it("says the request expired when the window closed before the decision reached the server", async () => {
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({
+      error: "This request's decision window closed before it was answered, so it has expired. Your coworker can ask again.",
+    }), { status: 409 }));
+    render(<CoworkerEnvelopeApproval approval={approval()} />);
+    fireEvent.click(screen.getByText("Authorize"));
+    await waitFor(() => expect(screen.getByRole("status").textContent).toMatch(/has expired/));
+  });
+});
+
+// BI-F4EB23C1 — a handover reads as a plain choice; plumbing stays one click away.
+describe("CoworkerEnvelopeApproval — room handover", () => {
+  const manifest = { nextAction: "Run the regression tests", openRisks: ["dirty tests"], evidenceDigest: "sha256:abc" };
+  const handover = () => approval({
+    coworkerAgentId: "AGT-EXT-CODEX",
+    manifestActionId: "reassign_workroom_executor",
+    taskRunId: null,
+    reviewBinding: undefined,
+    decision: summarizeCoworkerEnvelopeDecision({
+      toolName: "reassign_workroom_executor",
+      proposedParameters: { capsuleId: "WC-D72FAD2A", toExecutorKind: "codex-desktop", reason: "A new assistant is taking over this work.", handoffManifest: manifest },
+      recommenderAgentId: "AGT-EXT-CODEX",
+      authorizerUserId: "cmt6ejt2109n56mnw5kt1f8y0",
+      rationale: "It changes who may act in a room.",
+    }),
+  });
+
+  it("says who takes over which room, what changes, and what does not", () => {
+    render(<CoworkerEnvelopeApproval approval={handover()} />);
+    expect(screen.getByText("Let Codex take over Workroom WC-D72FAD2A?")).toBeTruthy();
+    expect(screen.getByText(/Codex can work in this one room as a contributor/)).toBeTruthy();
+    expect(screen.getByText(/history, branch, worktree and evidence stay as they are/)).toBeTruthy();
+    expect(screen.getByText(/no access to other rooms/)).toBeTruthy();
+    expect(screen.getByText(/Next step it was given: Run the regression tests/)).toBeTruthy();
+    expect(screen.getByText("If you authorize")).toBeTruthy();
+    expect(screen.getByText("If you decline")).toBeTruthy();
+  });
+
+  it("keeps the tool name, ids and handoff manifest in collapsed technical details", () => {
+    render(<CoworkerEnvelopeApproval approval={handover()} />);
+    const details = screen.getByText("Technical details").closest("details")!;
+    expect(details.open).toBe(false);
+    expect(details.textContent).toContain("reassign_workroom_executor");
+    expect(details.textContent).toContain(handover().envelopeId);
+    expect(details.textContent).toContain("sha256:abc");
+    // The primary block carries no JSON.
+    const primary = screen.getByText("Let Codex take over Workroom WC-D72FAD2A?").closest("section")!;
+    expect(primary.textContent).not.toContain("{");
+    expect(primary.textContent).not.toContain("reassign_workroom_executor");
+  });
+
+  it("falls back to the exact-content card when the handover arguments are not the known shape", () => {
+    const decision = summarizeCoworkerEnvelopeDecision({
+      toolName: "reassign_workroom_executor",
+      proposedParameters: { capsuleId: "WC-D72FAD2A" },
+      recommenderAgentId: "AGT-EXT-CODEX",
+      authorizerUserId: "u",
+    });
+    expect(decision.kind).toBe("exact");
+  });
+
+  it("keeps the exact-content card when the room would go to a different assistant than the one asking", () => {
+    const decision = (recommenderAgentId: string, toExecutorKind: string) => summarizeCoworkerEnvelopeDecision({
+      toolName: "reassign_workroom_executor",
+      proposedParameters: { capsuleId: "WC-D72FAD2A", toExecutorKind },
+      recommenderAgentId,
+      authorizerUserId: "u",
+    }).kind;
+    expect(decision("AGT-EXT-CLAUDE", "codex-desktop")).toBe("exact");
+    expect(decision("AGT-WS-PORTFOLIO", "codex-desktop")).toBe("exact");
+    expect(decision("AGT-EXT-CODEX", "human")).toBe("exact");
+    expect(decision("AGT-EXT-CODEX", "codex-desktop")).toBe("handover");
+  });
+});
+
+// BI-F4EB23C1 — a decision that never answers is bounded, reconciled, and never resubmitted.
+describe("CoworkerEnvelopeApproval — no response", () => {
+  const status = (state: string, label = state, nextAction = "next") =>
+    new Response(JSON.stringify({ outcome: { envelopeId: "cmt932fn301el01p7vfb2gas7", state, label, nextAction, inboxHref: "/workspace/inbox?approval=cmt932fn301el01p7vfb2gas7#approval-result" } }), { status: 200 });
+  const hang = () => fetchMock.mockImplementationOnce((_url: string, init?: RequestInit) => new Promise((_, reject) => {
+    init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+  }));
+
+  beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }));
+  afterEach(() => vi.useRealTimers());
+
+  it("shows progress at once, then reconciles: still waiting means nothing was saved and the buttons return", async () => {
+    hang();
+    fetchMock.mockResolvedValueOnce(status("waiting"));
+    render(<CoworkerEnvelopeApproval approval={approval()} />);
+    fireEvent.click(screen.getByText("Authorize"));
+    expect(screen.getByRole("status").textContent).toMatch(/Saving your decision/);
+    await vi.advanceTimersByTimeAsync(30_000);
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toMatch(/did not reach the platform\. Nothing was approved/));
+    expect(fetchMock).toHaveBeenLastCalledWith("/api/agent/envelope/cmt932fn301el01p7vfb2gas7", expect.objectContaining({ method: "GET" }));
+    expect((screen.getByText("Authorize").closest("button") as HTMLButtonElement).disabled).toBe(false);
+    // One POST only: nothing was resubmitted for the person.
+    expect(fetchMock.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === "POST")).toHaveLength(1);
+  });
+
+  it("shows the recorded outcome and no buttons when the decision was saved", async () => {
+    hang();
+    fetchMock.mockResolvedValueOnce(status("failed", "Approved, but it did not complete", "Your assistant must fix the cause before asking again."));
+    render(<CoworkerEnvelopeApproval approval={approval()} />);
+    fireEvent.click(screen.getByText("Authorize"));
+    await vi.advanceTimersByTimeAsync(30_000);
+    await waitFor(() => expect(screen.getByRole("status").textContent).toMatch(/Approved, but it did not complete\. Your assistant must fix the cause/));
+    expect(screen.queryByText("Authorize")).toBeNull();
+  });
+
+  it("says the result is unknown, not to approve again, and links to it when the status cannot be read", async () => {
+    hang();
+    fetchMock.mockRejectedValueOnce(new TypeError("network"));
+    render(<CoworkerEnvelopeApproval approval={approval()} />);
+    fireEvent.click(screen.getByText("Authorize"));
+    await vi.advanceTimersByTimeAsync(30_000);
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toMatch(/could not confirm.*Do not approve again/));
+    expect(screen.getByRole("link", { name: /See this request's result/ }).getAttribute("href")).toBe("/workspace/inbox?approval=cmt932fn301el01p7vfb2gas7#approval-result");
+    expect(screen.queryByText("Authorize")).toBeNull();
+  });
+});
+
+// BI-0012E6CA AC-REASK — an expired, unanswered request offers "Ask again" only.
+describe("CoworkerEnvelopeApproval — expired unanswered", () => {
+  const expired = () => approval({
+    status: "expired",
+    actionable: false,
+    expiredUnanswered: true,
+    reraiseHref: "/api/agent/envelope/cmt932fn301el01p7vfb2gas7/reraise",
+  });
+
+  it("says it expired unanswered and offers Ask again without Authorize or Decline", () => {
+    render(<CoworkerEnvelopeApproval approval={expired()} />);
+    expect(screen.queryByRole("button", { name: "Authorize" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Decline" })).toBeNull();
+    expect(screen.getAllByText(/Expired unanswered/).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Ask again" })).toBeTruthy();
+  });
+
+  it("posts to the re-raise route and moves to the new request's card", async () => {
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ envelope: { id: "env-new", status: "proposed" } }), { status: 200 }));
+    render(<CoworkerEnvelopeApproval approval={expired()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Ask again" }));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith(
+      "/workspace/inbox?approval=env-new#owner-decision-coworker-envelope-env-new",
+    ));
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/agent/envelope/cmt932fn301el01p7vfb2gas7/reraise",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(screen.getByText(/Asked again/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Ask again" })).toBeNull();
+  });
+
+  it("shows the refusal when the request cannot be raised again", async () => {
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ code: "CONFLICT", message: "Only a request that expired before anyone answered it can be asked again." }), { status: 409 }));
+    render(<CoworkerEnvelopeApproval approval={expired()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Ask again" }));
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("can be asked again"));
+    expect(replace).not.toHaveBeenCalled();
   });
 });

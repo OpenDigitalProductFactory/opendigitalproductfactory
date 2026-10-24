@@ -81,6 +81,31 @@ action may execute and record the result for audit.
 
 ## Change Access Deliberately
 
+For an assistant connected through OAuth, sign in and approve its role once.
+Reconnects, token refreshes and new tasks reuse that connection. Every operation
+still checks the signed-in person's current permissions.
+
+If an approved assistant cannot use internal work information, an administrator
+can open **AI Coworker Identity → Data access**, select that coworker, and expand
+**Change data access**. Choose only the information it needs, record the reason, and save.
+You cannot assign access above your own. The saved setting applies to that
+coworker across connections immediately; users do not sign in again. Reducing
+access takes effect on subsequent requests too.
+
+This setting does not grant tools, waive action approvals, or invite anyone
+into a workroom. A room owner must separately admit the people and assistants
+who will work there. Signing in again cannot fix a missing invitation.
+
+Open the selected workroom's **Participants → Assistant access** to admit an
+assistant from your approved connections. Choose **Read only** or **Contribute**
+and save. This changes that room alone; sibling rooms and other users stay
+separate. Existing connections use the saved access without another sign-in.
+If the room has a broader case restriction, its owner must resolve that too.
+
+The data-access selector includes older assistant identities still used by
+connections. Similar names show their identity IDs so an administrator can
+update the exact assistant without replacing the connection.
+
 1. Start with the principal you need to explain or change. Resolve duplicate or
    ambiguous aliases before changing access around them.
 2. Inspect role, group, and team membership. A group change can affect several
@@ -103,6 +128,29 @@ record scope, connection state, data sensitivity, and oversight policy. A denial
 returned as a plain-language explanation; an action that needs judgment pauses
 the originating task and creates one approval envelope. Approving that envelope
 does not approve a different task or changed action.
+
+Your OAuth sign-in is itself a recorded decision. When you approve an
+assistant's role, routine changes inside those permissions run without a
+further card: an evidence entry, a verification result, or a backlog item you
+asked for. You are still asked when a change reaches outside the platform,
+cannot be undone, changes who may do what, touches restricted data, or is
+defined as a proposal. A personal access token or an unbound connection does
+not count as this decision.
+
+Each approval card shows the action, where it lands, the exact proposed
+content, its consequence, why you are being asked, and what authorizing covers.
+Authorizing permits that one request. It does not review the content or confirm
+that any test it cites is correct. If the card cannot load the proposal, it
+says the effect is unresolved; decline unless you already know what it writes.
+When you authorize an assistant's request, the platform runs it once, straight
+away, with the same checks it would have run for the assistant. The card then
+says whether it finished. If the assistant sends the same request again, it
+gets that recorded outcome; the change is never made twice. The same holds
+when the request came from a task the assistant handed to a coworker: your
+approval resumes that task, even if the assistant has since restarted. A request is not
+run if its connection was revoked or narrowed, or if the stored request cannot
+be proven identical to what you saw. A card answered after its window closed
+marks the request expired instead.
 
 ## Recovery And Evidence
 

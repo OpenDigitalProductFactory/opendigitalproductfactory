@@ -1,0 +1,19 @@
+{
+  "version": "1",
+  "decidedOption": "portal-native-import-form",
+  "decisionInteractionId": "DI-81CDA477D08C",
+  "scope": {
+    "files": [
+      "apps/web/components/platform/federation-links/OrganizationJoinPanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "portal-native-import-form",
+      "keep-edge-node-import-form",
+      "dual-path-import-with-selector"
+    ],
+    "note": "EP-ZERO-CONFIG-FEDERATION, BI-4DD1E739 (spec docs/superpowers/specs/2026-09-03-portal-mediated-organization-membership-design.md §5.2). 'Join this installation' now opens the file chooser directly: no installation selector, no 'Enable secure setup' prerequisite, no member-role edge node. The existing FormField, CheckboxField, SubmitButton and FormStatus primitives are reused; the preview still never renders the enrollment tokens; the confirmation names the host the file was issued for; the server refuses a wrong-host, expired or tampered file before any network call and reports the refusal in the same status line. The kernel scored the portal-native form highest (composite 9.40, margin 4.38, confidence high) on cognitive load and operator effort against keeping the edge-node form or offering both behind a selector."
+  }
+}

@@ -6,6 +6,8 @@ import {
   parseDurableAsyncProviderContext,
 } from "./async-operation-provider";
 import { AsyncProviderStartError } from "./async-operation-worker";
+import { screenInferencePayload } from "./data-screening/screen-inference-payload";
+import { assertDurableDispatchScreen } from "./durable-dispatch-screen";
 
 const now = new Date("2026-09-04T12:00:00.000Z");
 
@@ -46,10 +48,20 @@ function operation(context: Record<string, unknown>): AsyncOperationRecord {
 }
 
 function context(overrides: Record<string, unknown> = {}) {
+  const messages = [{ role: "user" as const, content: "Research durable workflows" }];
+  const systemPrompt = "Use immutable evidence.";
+  const screenInput = {
+    messages,
+    systemPrompt,
+    tools: [] as Array<Record<string, unknown>>,
+    taskType: "research",
+    routeContext: { sensitivity: "internal" as const },
+  };
+  const receipt = screenInferencePayload(screenInput).receipt;
   return {
     version: 1,
-    messages: [{ role: "user", content: "Research durable workflows" }],
-    systemPrompt: "Use immutable evidence.",
+    messages,
+    systemPrompt,
     tools: [],
     executionPlan: {
       providerId: "gemini",
@@ -61,6 +73,18 @@ function context(overrides: Record<string, unknown> = {}) {
       providerSettings: {},
       toolPolicy: {},
       responsePolicy: {},
+    },
+    dispatchScreen: {
+      schemaVersion: 1,
+      decision: {
+        sensitivity: "internal",
+        policyRulesApplied: ["inference-dispatch"],
+        inferenceDataScreenReceipt: receipt,
+      },
+      context: {
+        taskType: screenInput.taskType,
+        routeContext: screenInput.routeContext,
+      },
     },
     attribution: { traceId: "trace-1", agentId: "agent-1" },
     ...overrides,
@@ -153,6 +177,100 @@ describe("durable async provider boundary", () => {
 
     await expect(dependencies.startProvider(operation(context())))
       .rejects.toMatchObject({ boundary: "ambiguous" } satisfies Partial<AsyncProviderStartError>);
+  });
+
+  it("performs authorization before provider POST and treats refusal as a definite rejection", async () => {
+    const dispatch = vi.fn();
+    const authorizeDispatch = vi.fn(() => {
+      throw new Error("stale screen");
+    });
+    const dependencies = createDurableAsyncProviderDependencies({
+      authorizeDispatch,
+      dispatch,
+      poll: vi.fn(),
+      reconcile: vi.fn(),
+    });
+
+    await expect(dependencies.startProvider(operation(context())))
+      .rejects.toMatchObject({ boundary: "definite-rejection" } satisfies Partial<AsyncProviderStartError>);
+    expect(authorizeDispatch).toHaveBeenCalledOnce();
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it("rejects stale, blocked, and live local-only screen evidence before dispatch", async () => {
+    const validContext = context();
+    const parsed = parseDurableAsyncProviderContext(operation(validContext));
+    const base = parsed.dispatchScreen;
+    const stale = structuredClone(base);
+    stale.decision.inferenceDataScreenReceipt.inputHash = "f".repeat(64);
+    expect(() => assertDurableDispatchScreen({
+      evidence: stale,
+      messages: parsed.messages,
+      systemPrompt: parsed.systemPrompt,
+      tools: parsed.tools,
+      providerId: "gemini",
+      localOnlyInference: false,
+    })).toThrow(/stale inference data screen receipt/i);
+
+    const blocked = structuredClone(base);
+    blocked.decision.inferenceDataScreenReceipt.routeEffect = "block";
+    expect(() => assertDurableDispatchScreen({
+      evidence: blocked,
+      messages: parsed.messages,
+      systemPrompt: parsed.systemPrompt,
+      tools: parsed.tools,
+      providerId: "gemini",
+      localOnlyInference: false,
+    })).toThrow(/blocked by inference data screen/i);
+
+    expect(() => assertDurableDispatchScreen({
+      evidence: base,
+      messages: parsed.messages,
+      systemPrompt: parsed.systemPrompt,
+      tools: parsed.tools,
+      providerId: "gemini",
+      localOnlyInference: true,
+    })).toThrow("ASYNC_OPERATION_DISPATCH_LOCAL_ONLY");
+  });
+
+  it.each([
+    ["stale", (evidence: ReturnType<typeof parseDurableAsyncProviderContext>["dispatchScreen"]) => {
+      evidence.decision.inferenceDataScreenReceipt.inputHash = "f".repeat(64);
+      return false;
+    }],
+    ["blocked", (evidence: ReturnType<typeof parseDurableAsyncProviderContext>["dispatchScreen"]) => {
+      evidence.decision.inferenceDataScreenReceipt.routeEffect = "block";
+      return false;
+    }],
+    ["local-only", (_evidence: ReturnType<typeof parseDurableAsyncProviderContext>["dispatchScreen"]) => true],
+  ])("sends zero provider POSTs when the fresh %s screen refuses dispatch", async (_name, arrange) => {
+    const persistedContext = context();
+    const parsed = parseDurableAsyncProviderContext(operation(persistedContext));
+    const evidence = structuredClone(parsed.dispatchScreen);
+    const localOnlyInference = arrange(evidence);
+    const dispatch = vi.fn();
+    const dependencies = createDurableAsyncProviderDependencies({
+      authorizeDispatch: ({ providerId, context: providerContext }) => assertDurableDispatchScreen({
+        evidence: providerContext.dispatchScreen,
+        messages: providerContext.messages,
+        systemPrompt: providerContext.systemPrompt,
+        tools: providerContext.tools,
+        providerId,
+        localOnlyInference,
+      }),
+      dispatch,
+      poll: vi.fn(),
+      reconcile: vi.fn(),
+    });
+
+    await expect(dependencies.startProvider(operation({
+      ...persistedContext,
+      dispatchScreen: evidence,
+    }))).rejects.toMatchObject({
+      boundary: "definite-rejection",
+      message: "ASYNC_OPERATION_DISPATCH_SCREEN_REJECTED",
+    } satisfies Partial<AsyncProviderStartError>);
+    expect(dispatch).not.toHaveBeenCalled();
   });
 
   it("never treats a server-side start failure as proof that POST did not cross", async () => {

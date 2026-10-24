@@ -1,0 +1,19 @@
+{
+  "version": "1",
+  "decidedOption": "status-bar-export-menu",
+  "decisionInteractionId": "DI-2284045715D0",
+  "scope": {
+    "files": [
+      "apps/web/components/ea/EaCanvas.tsx",
+      "apps/web/components/ea/EaViewControls.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "status-bar-export-menu",
+      "separate-export-page",
+      "coworker-only"
+    ]
+  }
+}

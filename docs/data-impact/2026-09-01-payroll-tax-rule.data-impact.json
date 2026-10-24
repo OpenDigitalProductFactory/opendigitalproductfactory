@@ -1,0 +1,71 @@
+{
+  "version": "1",
+  "accountableOwner": "developer-platform",
+  "affectedCopies": [
+    "Statutory readiness on the payroll and tax settings surfaces",
+    "MCP tool responses for list_statutory_rate_gaps and propose_statutory_rate",
+    "Prisma-to-EA current-state data-model mirror"
+  ],
+  "migration": {
+    "name": "20260901193037_add_payroll_tax_rule",
+    "backfill": "none, and deliberately so. The table ships EMPTY. A statutory figure is a fact about the world that must be read from the authority's own publication and confirmed by a person; seeding one would fabricate the exact evidence a filing depends on, and a wrong deposit carries a real penalty. No existing row is read, written or altered, so no historical payroll changes."
+  },
+  "tests": [
+    "apps/web/lib/finance/statutory-rules.test.ts",
+    "apps/web/lib/finance/statutory-readiness.test.ts",
+    "apps/web/lib/mcp/tool-registry.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:payroll-tax-rule#statutory-figure",
+      "prismaModel": "PayrollTaxRule",
+      "lifecycleDisposition": "Effective-dated and never edited in place. A ratified rule is superseded by a later one rather than overwritten, because a closed period must re-compute identically after a later tax year is loaded. Carries RecordLifecycle for withdrawal without deletion; a rejected proposal is KEPT so the same wrong figure is not proposed again.",
+      "fields": [
+        {
+          "fieldId": "data:payroll-tax-rule#status",
+          "resolution": "governed",
+          "reason": "The safety gate. Only a `ratified` rule is ever resolved for computation, so an agent's research cannot price money before a person has checked it (BI-8E1FD1BD).",
+          "provenance": "Set to `proposed` by the proposing coworker; only a human action on the finance surface can move it to `ratified` or `rejected`. Closed Prisma enum StatutoryRuleStatus.",
+          "flags": []
+        },
+        {
+          "fieldId": "data:payroll-tax-rule#value",
+          "resolution": "governed",
+          "reason": "The published figure that computes withholding, employer contribution, or a deposit obligation. Stored as a decimal fraction for a rate, never a percentage, so no caller has to guess the convention.",
+          "provenance": "Read by a coworker from the authority's own publication, or entered by an operator. Never inferred, averaged, or carried over from a prior year.",
+          "flags": ["financial"]
+        },
+        {
+          "fieldId": "data:payroll-tax-rule#sourceUrl",
+          "resolution": "governed",
+          "reason": "Without the authority's own URL the figure is unciteable and a ratifier has nothing to check against; the proposal is refused before it is written.",
+          "provenance": "Supplied by the proposer; required by checkStatutoryProposal and again by checkStatutoryRatification.",
+          "flags": []
+        },
+        {
+          "fieldId": "data:payroll-tax-rule#sourceExcerpt",
+          "resolution": "governed",
+          "reason": "Quotes what the source actually said, so a reviewer can check the proposer's reading without re-fetching a page that may since have changed.",
+          "provenance": "Quoted verbatim from the cited publication by the proposer.",
+          "flags": []
+        },
+        {
+          "fieldId": "data:payroll-tax-rule#proposedByAgentId",
+          "resolution": "governed",
+          "reason": "Attributes a proposal to the coworker that made it, so a pattern of bad readings is traceable to its source.",
+          "provenance": "The acting agent id from the MCP tool execution context; null when an operator entered the figure directly.",
+          "flags": []
+        },
+        {
+          "fieldId": "data:payroll-tax-rule#ratifiedByUserId",
+          "resolution": "governed",
+          "reason": "Records WHICH PERSON accepted responsibility for a figure that computes money. An agent can never appear here — checkStatutoryRatification refuses a non-human actor unconditionally.",
+          "provenance": "The signed-in user performing ratification on the finance surface.",
+          "flags": ["sensitive"],
+          "fieldPolicy": "An internal user identifier held for accountability on a financial control. Retained for the life of the rule because it is the audit answer to 'who approved this figure', and disposed with the rule. Never exposed to an external provider, never used to profile the user, and never writable by an agent."
+        }
+      ]
+    }
+  ]
+}

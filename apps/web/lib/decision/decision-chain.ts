@@ -149,6 +149,9 @@ export const SEALED_IMMUTABLE_FIELDS = [
   "recommendedOptionId",
   "sources",
   "evidenceBundle",
+  "escalationRoute",
+  "escalationReason",
+  "escalationFollowOn",
 ] as const;
 
 export type AppendOnlyViolation = { field: string; from: unknown; to: unknown };

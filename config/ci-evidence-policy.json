@@ -32,10 +32,12 @@
     ],
     "tests": [
       "(^|/)(__tests__)(/|$)",
-      "\\.(test|spec)\\.[cm]?[jt]sx?$"
+      "\\.(test|spec)\\.[cm]?[jt]sx?$",
+      "(^|/)(test_[^/]+|[^/]+_test)\\.py$"
     ],
     "production": [
       "^(apps|packages)/.*\\.[cm]?[jt]sx?$",
+      "^(apps|packages)/.*\\.py$",
       "^packages/db/prisma/schema\\.prisma$"
     ],
     "mobile": [

@@ -11,14 +11,14 @@ title: Implementation plan — verification-first workroom gates
 
 ---
 
-## 0. Blocking precondition
+## 0. Blocking precondition — CLEARED 2026-09-06
 
-This plan must not start until two things are true:
+Both queries ran against live state on 2026-09-06. Full results in the design's §10.
 
-1. **Epic-overlap check against live state.** The DPF MCP server was unreachable for the authoring session, so no live epic or backlog query ran. `EP-WORK-CONVERGENCE`, `EP-1C37C089` (gate binding), `EP-QUALITY-RIGHTSIZING` and `EP-COWORKER-LIFECYCLE` are plausible existing owners of parts of this work. If one already covers a phase, that phase becomes an extension of it rather than new work.
-2. **`BI-4BD81F3B` status confirmed.** Its existence is cited from a code comment in `build-process-matrix.ts`. Phase 4 depends on it being closed; if it is already closed, Phase 4 moves earlier.
+1. **Epic-overlap check — done.** The owner is **`EP-WORK-POSTURE`**, which the original list did not name. `BI-13ED1BE1` (Slice E) already owns making `verificationDepth` load-bearing and shipped on 2026-08-23 at the *policy-envelope* enforcement point — five days before this plan was written. Of the four names guessed here: `EP-QUALITY-RIGHTSIZING` does not exist; `EP-1C37C089` is **not** "gate binding" but the TAK consequential-tool-use gate; `EP-WORK-CONVERGENCE` and `EP-COWORKER-LIFECYCLE` exist but own neither. Phase 2 was therefore filed as a sibling slice under `EP-WORK-POSTURE` (`BI-30165EB4`), not as new work.
+2. **`BI-4BD81F3B` — does not exist.** It returns `not_found` in the live backlog; it is cited only from a code comment. **Phase 4 is gated on an item that was never filed.** Filing it, or identifying what actually tracks non-vacuous browser-use results, is now a Phase 4 precondition.
 
-Both are single queries once MCP is reachable. Neither is a design question.
+**Phase 2 is delivered.** Code landed in PR #4880 (`48a7492bd`, 2026-09-02) — before either query ran, so it too was built without live coverage. Its report and the step 2.4 decision are at [`2026-09-06-verification-depth-shadow-report.md`](../audits/2026-09-06-verification-depth-shadow-report.md).
 
 ## 1. Sequencing rationale
 
@@ -67,6 +67,29 @@ flowchart TD
 **Do not skip 2.3.** The back-compat invariant in `build-process-matrix.ts` is explicit that the default cell must stay byte-identical; shadow mode is how that is proven rather than asserted.
 
 **Gate:** unit tests + `pnpm --filter web build`. No runtime behaviour changes in this phase, which is the point.
+
+### 3.1 Outcome — 2026-09-06
+
+All four steps are complete. `BI-30165EB4`.
+
+- **2.1–2.3 delivered** in PR #4880. Back-compat is proven byte-identically rather than asserted, comparing `JSON.stringify` of the verdict across kind × processSize × depth for the absent/default cell. 156 tests pass across 9 files at `433d90325`.
+- **2.4 delivered** in the [shadow report](../audits/2026-09-06-verification-depth-shadow-report.md).
+
+**The report found one affected cell, and the block is a false positive.** `feature`/`medium`/`deep` at `ideate->plan`, blocking because `verificationOut.typecheckPassed` is absent — at a transition that runs *before any build*, so that evidence cannot exist. Filed as `BI-4FF872FB`.
+
+**Phase 3 must not start yet.** Preconditions, updated 2026-09-15 after the retrospective run (report §4.1):
+
+1. ~~`BI-4FF872FB`~~ — **addressed.** The depth check is phase-aware; decision `DI-A940A9467E9E`.
+2. **`BI-397F87A9`** — `verificationOut` has no canonical shape. `testsFailed` is absent from two of four producer schemas, so the check spuriously blocks 33% of the only post-build sample that exists. Phase 3 binds exactly this field.
+3. **`BI-E4E70B9A`** — `typecheckPassed` can read `true` beside `typecheck: "not_run"`. A build shipped on it. Phase 3's `shallow` tier rests on that flag, and unlike the rest of this plan **that gate is blocking today**.
+4. ~~**A real sample.**~~ **Delivered differently.** The pipeline is quiet, not slow — one activity row in 48 hours, and the auto-resume loop already capped by its own age-out guard, so waiting produces nothing. The blast radius did not need a sample: §4.2 enumerates the full cross-product (1,152 cells) with the real gate and the real depth check, and pins it in `verification-depth-blast-radius.test.ts`. **256 cells would newly block, all of them post-build, and 25% of those are false positives from `BI-397F87A9` alone.**
+
+Two structural answers Phase 3 now owes, both from §4.2:
+
+- **The requirement does not right-size.** It is insensitive to `kind` and `processSize`, so a `doc/small` build is held to the `feature/xlarge` bar. Adding it to a policy cell is all-or-nothing. For a matrix whose premise is right-sizing, that must be answered deliberately.
+- **The tightening lands at `review->ship`, not `build->review`.** `build->review` already requires `verification-typecheck-passed`; ship requires nothing. "Tests block at review" mis-states where the change bites.
+
+Phase 3 as written — "read `testsFailed` at `shallow` and above" — is **not** the conclusion this evidence supports.
 
 ### Phase 2 execution record — 2026-08-29
 
@@ -170,4 +193,8 @@ Stated so it can be falsified rather than defended:
 
 - **If Phase 2's shadow report is empty**, then no live work declares `shallow` or `deep`, the posture layer's depth derivation is not reaching real transitions, and the first fix is upstream in `work-posture/derive.ts` — not at the gate. The plan would restart from there.
 - **If the report is enormous**, the depth derivation is over-declaring and needs calibration before any binding. Either way, Phase 2 is the measurement that decides, which is why it cannot be skipped.
+
+**What actually happened (2026-09-06): neither branch, and the binary was too coarse.** The report is tiny — 3 decisions, 1 build, 1 cell — but *not* for the reason the "empty" branch predicts. Depth derivation **is** reaching real transitions, through the stakes path (`deliverableSensitivity: "high"` → `deep`). No upstream `derive.ts` fix is indicated. The ledger is small because the build pipeline is nearly dormant: 43 of 48 builds abandoned, and 3 phase-gate evaluations against 2,041 `ideate_dispatch` rows over the same window.
+
+The lesson for the next phase that writes a falsification clause: **volume was the wrong axis.** Counting the report would have read "3 blocks, small blast radius, safe to bind" and been exactly wrong — the single cell is a false positive that would deadlock every deep build. Reading it found that. A falsification test should ask whether the observations are *sound*, not only how many there are.
 - **If `BI-4BD81F3B` turns out to be unfixable** with the current browser-use approach, Phase 4 does not proceed by lowering the bar. The correct response is to replace the UX verification mechanism, and that is a different design.

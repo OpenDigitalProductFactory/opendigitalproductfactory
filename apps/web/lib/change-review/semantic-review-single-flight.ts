@@ -1,16 +1,10 @@
 import { createHash } from "node:crypto";
 import { markTaskRunWorking } from "@/lib/observability/heartbeat";
+import { TASK_IN_FLIGHT_STATES, type TaskState } from "@/lib/tak/task-states";
+import { parseSemanticReviewRequest, type SemanticReviewRequest } from "./semantic-review-request";
+import { semanticReviewRecoveryObservation } from "./semantic-review-recovery-policy";
 
-export type SemanticReviewRunStatus =
-  | "submitted"
-  | "working"
-  | "input-required"
-  | "auth-required"
-  | "completed"
-  | "failed"
-  | "canceled"
-  | "rejected"
-  | "archived";
+export type SemanticReviewRunStatus = TaskState;
 const WORKING_STATUS: SemanticReviewRunStatus = "working";
 
 export type SemanticReviewRunCreate = {
@@ -91,6 +85,7 @@ function mapTaskRun(row: TaskRunRecord): SemanticReviewRunRow {
 
 export function createPrismaSemanticReviewSingleFlightStore(
   db: SemanticReviewTaskRunDb,
+  durable?: { packet: SemanticReviewRequest; predecessorTaskRunId?: string; remediationVerificationId?: string },
 ): SemanticReviewSingleFlightStore {
   return {
     async list(repeatedPatternKey) {
@@ -130,6 +125,11 @@ export function createPrismaSemanticReviewSingleFlightStore(
       return row ? mapTaskRun(row) : null;
     },
     async create(input) {
+      const packet = durable ? parseSemanticReviewRequest(durable.packet) : null;
+      if (durable && (!packet || packet.actor.userId !== input.userId
+        || packet.input.identity.capsuleId !== input.capsuleId || packet.gateKey !== input.gateKey)) {
+        throw new Error("Semantic review packet binding mismatch");
+      }
       const row = await db.taskRun.create({
         data: {
           taskRunId: input.taskRunId,
@@ -148,6 +148,22 @@ export function createPrismaSemanticReviewSingleFlightStore(
             attempt: input.attempt,
           },
           lastHeartbeatAt: new Date(),
+          ...(packet ? {
+            artifacts: { create: {
+              id: `semantic-review-request:${input.taskRunId}`,
+              artifactId: `semantic-review-request:${input.taskRunId}`,
+              name: "Immutable semantic review request",
+              parts: [{ kind: "data", data: packet }],
+              metadata: { kind: "semantic-review-request", schemaVersion: 1 },
+              producerAgentId: packet.actor.agentId,
+            } },
+            progressPayload: { semanticReview: {
+              schemaVersion: 1, state: "pending", requestDigest: packet.digest,
+              deadlineAt: packet.deadlineAt, dispatchAttempt: 0,
+              ...(durable?.predecessorTaskRunId ? { predecessorTaskRunId: durable.predecessorTaskRunId, successorAttempt: 1,
+                remediationVerificationId: durable.remediationVerificationId } : {}),
+            } },
+          } : {}),
         },
         select: {
           taskRunId: true,
@@ -161,8 +177,8 @@ export function createPrismaSemanticReviewSingleFlightStore(
           createdAt: true,
         },
       });
-      await markTaskRunWorking(row.taskRunId);
-      return mapTaskRun({ ...row, status: WORKING_STATUS });
+      if (!durable) await markTaskRunWorking(row.taskRunId);
+      return mapTaskRun(durable ? row : { ...row, status: WORKING_STATUS });
     },
     async update(taskRunId, update) {
       const terminal = ["completed", "failed", "canceled", "rejected", "archived"]
@@ -194,7 +210,8 @@ export function createPrismaSemanticReviewSingleFlightStore(
 
 export type SemanticReviewSingleFlightClaim =
   | { disposition: "admitted"; taskRunId: string; gateKey: string; attempt: number }
-  | { disposition: "subscribed"; taskRunId: string; gateKey: string; attempt: number }
+  | { disposition: "subscribed"; taskRunId: string; gateKey: string; attempt: number;
+    recovery?: ReturnType<typeof semanticReviewRecoveryObservation> }
   | {
     disposition: "reused";
     taskRunId: string;
@@ -206,13 +223,16 @@ export type SemanticReviewSingleFlightClaim =
 
 const SHA256 = /^[0-9a-f]{64}$/;
 const NONTERMINAL = new Set<SemanticReviewRunStatus>([
-  "submitted",
-  "working",
-  "input-required",
-  "auth-required",
+  ...TASK_IN_FLIGHT_STATES,
+  // Parked attempts require explicit recovery. Repeating the review request
+  // must not bypass quiescence or replace an unresolved provider execution.
+  "stalled",
+  "quiescing",
+  "paused-for-upgrade",
+  "paused-for-upgrade-forced",
 ]);
 
-function deterministicTaskRunId(gateKey: string, attempt: number): string {
+export function deterministicTaskRunId(gateKey: string, attempt: number): string {
   const digest = createHash("sha256")
     .update(`semantic-review\0${gateKey}\0${attempt}`)
     .digest("hex")
@@ -236,12 +256,14 @@ async function projectExisting(
   gateKey: string,
   isReusableEvidence: (evidenceRecordId: string) => Promise<boolean>,
 ): Promise<SemanticReviewSingleFlightClaim | null> {
-  if (NONTERMINAL.has(row.status)) {
+  const native = metadata(metadata(row.progressPayload).semanticReview).schemaVersion === 1;
+  if (NONTERMINAL.has(row.status) || (native && row.status !== "completed")) {
     return {
       disposition: "subscribed",
       taskRunId: row.taskRunId,
       gateKey,
       attempt: row.attempt,
+      recovery: semanticReviewRecoveryObservation(row.status, row.progressPayload),
     };
   }
   if (row.status !== "completed") return null;
@@ -277,7 +299,9 @@ export async function claimSemanticReviewSingleFlight(
   const repeatedPatternKey = `gate:${gateKey}`;
   const existing = await store.list(repeatedPatternKey);
 
-  for (const row of existing) {
+  // A newer admission invalidates reuse of older receipts, even if it fails.
+  // Never walk backwards through history to find a conveniently passing verdict.
+  for (const row of existing.slice(0, 1)) {
     const projected = await projectExisting(row, gateKey, isReusableEvidence);
     if (projected) return projected;
   }

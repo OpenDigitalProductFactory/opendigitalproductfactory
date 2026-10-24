@@ -22,12 +22,9 @@ vi.mock("@dpf/db", () => ({
 import { prisma } from "@dpf/db";
 import {
   isFirstRun,
-  getSetupProgress,
   createSetupProgress,
   advanceStep,
   skipStep,
-  pauseSetup,
-  completeSetup,
   getSetupContext,
   updateSetupContext,
 } from "./setup-progress";
@@ -154,7 +151,7 @@ describe("setup-progress", () => {
       (prisma.storefrontConfig.findFirst as any).mockResolvedValue({ id: "sf-1" });
       (prisma.platformSetupProgress.update as any).mockResolvedValue({
         ...mockProgress,
-        currentStep: "platform-development",
+        currentStep: "mailroom",
       });
 
       await advanceStep("test-id");
@@ -165,7 +162,7 @@ describe("setup-progress", () => {
       });
       expect(prisma.platformSetupProgress.update).toHaveBeenCalledWith({
         where: { id: "test-id" },
-        data: expect.objectContaining({ currentStep: "platform-development" }),
+        data: expect.objectContaining({ currentStep: "mailroom" }),
       });
     });
   });

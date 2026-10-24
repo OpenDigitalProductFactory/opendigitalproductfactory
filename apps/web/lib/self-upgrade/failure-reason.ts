@@ -52,10 +52,23 @@ const EXPLANATIONS: Readonly<Record<string, FailureReasonExplanation>> = {
       "Changes made on this install overlap with the update, so it paused rather than overwrite your work. Someone needs to decide how to combine them.",
     retryable: false,
   },
+  // BI-75ECED42: Docker Desktop updating itself, or the host rebooting.
+  "engine-restarted": {
+    title: "The computer restarted Docker during the update",
+    detail:
+      "Docker restarted while the update was being installed, for example because Docker Desktop installed an update of its own. Nothing was installed and the platform came back on the version you already had. Turning off Docker Desktop's automatic updates prevents this.",
+    retryable: true,
+  },
   "promoter-readiness-failed": {
     title: "The updater wasn't ready",
     detail:
       "The component that installs updates couldn't start. Nothing was installed and the platform is untouched.",
+    retryable: true,
+  },
+  "doctools-prepull-failed": {
+    title: "The update's document reader didn't download",
+    detail:
+      "The update brings a new version of the tool that reads Word, Excel and PDF files, and it couldn't be downloaded before switching over. Nothing was installed and the platform kept running the version you already had. This is usually a temporary network problem.",
     retryable: true,
   },
   "dirty-tree": {
@@ -63,6 +76,36 @@ const EXPLANATIONS: Readonly<Record<string, FailureReasonExplanation>> = {
     detail:
       "There are unsaved local edits on this install, so the update stopped rather than risk losing them.",
     retryable: false,
+  },
+  "turbopack-nft-duplicate-asset": {
+    title: "The update's build produced conflicting files",
+    detail:
+      "While packaging the new version, the build wrote two different files to the same name and stopped. Nothing was installed and the platform kept running the version you already had. This usually clears on the next version, so retrying is worth a try.",
+    retryable: true,
+  },
+  "host-docker-hoist-divergence": {
+    title: "The update was missing one of its components",
+    detail:
+      "The build couldn't find a piece of software it needed, so it stopped before installing anything. This one needs a developer — retrying on its own is unlikely to help.",
+    retryable: false,
+  },
+  "bundle-boundary-static-import": {
+    title: "The update mixed up two parts of the platform",
+    detail:
+      "Code that is only meant to run behind the scenes got pulled into the part of the platform that serves pages, and the build stopped. Nothing was installed. A developer needs to separate them.",
+    retryable: false,
+  },
+  "database-unreachable": {
+    title: "The database couldn't be reached",
+    detail:
+      "The update couldn't contact the platform's database to apply its changes. This is usually temporary — the platform kept running the version you already had.",
+    retryable: true,
+  },
+  "promoter-timeout": {
+    title: "The update took too long and was stopped",
+    detail:
+      "The installer exceeded its time limit and was halted deliberately. Nothing was installed and the platform is untouched.",
+    retryable: true,
   },
   "no-target": {
     title: "No update could be identified",

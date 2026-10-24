@@ -41,18 +41,36 @@ export function classifyOwnerAttentionLane(
     // choice that is never batched into a digest (BI-3DA1DFDC).
     return decision("needs-you-now", "A guest is waiting on a reservation decision.", true, appliedLevel);
   }
+  if (item.source === "mailroom-item") {
+    // A message the platform accepted and nobody has acknowledged inside its
+    // window; immediate items surface at once (design 2026-09-09 §4.7).
+    return decision("needs-you-now", "A message is waiting for someone to acknowledge it.", true, appliedLevel);
+  }
   if (item.source === "storefront-inquiry") {
     // A customer is waiting on the owner's first reply — hard-floored like a
     // reservation so a waiting lead is never batched into a digest (BI-A36CF68D).
     return decision("needs-you-now", "A customer is waiting on a reply.", true, appliedLevel);
   }
+  if (item.source === "coworker-envelope" && item.envelope?.expiredUnanswered) {
+    // The window closed with nobody answering (BI-0012E6CA). Nothing is held on
+    // it any more — the coworker was told to carry on — so it waits in the
+    // low-urgency review with "Ask again" rather than inflating today's count.
+    // A deep link to it still opens it (the inbox pins the requested card).
+    return decision(
+      "weekly-digest",
+      "Nobody answered this request in time and nothing is waiting on it; ask again if it is still wanted.",
+      false,
+      appliedLevel,
+    );
+  }
   if (item.source === "coworker-envelope") {
-    // A governed coworker is HELD until this employee decides, and the approval
-    // window is minutes wide. Batching it into a digest guarantees it expires
+    // A governed coworker is HELD until this employee decides. An outward
+    // request's window is minutes wide and even a durable one closes in days
+    // (approval-lifetime.ts); batching it into a digest risks it expiring
     // unanswered, so it is hard-floored like a waiting guest (BI-7CB2CCDE).
     return decision(
       "needs-you-now",
-      "A coworker cannot act until you decide, and the window closes soon.",
+      "A coworker cannot act until you decide, and the request closes if nobody answers.",
       true,
       appliedLevel,
     );
@@ -62,6 +80,13 @@ export function classifyOwnerAttentionLane(
   }
   if (TECHNICAL_SOURCES.has(item.source)) {
     return decision("custodian", "The technical custodian owns platform recovery.", false, appliedLevel);
+  }
+  if (item.source === "workroom-stall" && item.triage.decideEffort !== "judgment") {
+    // A room whose coworker ran and left no result is recovery work: naming an
+    // owner cannot clear it, so asking the owner "who should own this?" is a
+    // question with no useful answer. On 2026-10-14 ~56 of 70 "Needs you" cards
+    // were exactly this (BI-72679FE0).
+    return decision("custodian", "Naming an owner cannot clear this; the technical custodian owns the recovery.", false, appliedLevel);
   }
   if (item.source === "research-proposal") {
     return appliedLevel === "quiet"

@@ -132,8 +132,8 @@ describe("data control operation service", () => {
       step: {
         stepId: "DCOS-1",
         operationId: "DCO-1",
-        targetKey: "qdrant",
-        idempotencyKey: "DCO-1:qdrant",
+        targetKey: "pgvector",
+        idempotencyKey: "DCO-1:pgvector",
       },
       effect: vi.fn(async () => ({ providerStatus: 200 })),
       verify: vi.fn(async () => ({ verified: false, evidence: { remaining: 1 } })),

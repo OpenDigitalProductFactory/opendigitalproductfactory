@@ -37,6 +37,10 @@ export interface RoutedHarnessPlan {
 
 export interface RoutedExecutionPlan {
   providerId: string;
+  providerConnectionId?: string;
+  providerConnectionVersion?: string;
+  accountAuthMethod?: string;
+  executionChannel?: string;
   modelId: string;
   recipeId: string | null;
   contractFamily: string;
@@ -57,6 +61,11 @@ export interface RoutedExecutionPlan {
    */
   capabilityRequirements?: AdapterCapabilityRequirement[];
   maxTokens: number;
+  /** Explicit total, including reasoning, bound by an admitted activity. */
+  completionAllowance?: number;
+  localThinkingBudgetEvidence?: import("./types").LocalThinkingBudgetEvidence;
+  /** Original proportional decision, recompiled when the activity total becomes known. */
+  localThinkingBudgetRequest?: number;
   temperature?: number;
   providerSettings: Record<string, unknown>;
   /** Typed, fail-closed OpenRouter wire policy. Present only for OpenRouter plans. */
@@ -74,6 +83,31 @@ export interface RoutedExecutionPlan {
     terminalWriterToolName?: string;
   };
   harness?: RoutedHarnessPlan;
+  /**
+   * BI-1F5DAABC: the sampling parameters this call resolved to, and where each
+   * one came from. `temperature` is duplicated at the top level because the
+   * adapters already read it there; this record is the full picture plus the
+   * provenance the operator-facing explanation needs ("temperature 0.6 —
+   * vendor: Qwen3 thinking" reads as a documented requirement, not a guess).
+   */
+  sampling?: {
+    values: Partial<Record<"temperature" | "topP" | "topK" | "minP" | "repeatPenalty", number>>;
+    provenance: Partial<
+      Record<
+        "temperature" | "topP" | "topK" | "minP" | "repeatPenalty",
+        "vendor" | "contract" | "recipe" | "operator"
+      >
+    >;
+    mode: "default" | "thinking";
+    /** Parameters dropped because this model rejects them. */
+    dropped?: string[];
+  };
+  /**
+   * BI-DBAFEC10: the contract asked for reasoning effort and this provider has
+   * no way to express it. Recorded so "we asked for deep reasoning and nothing
+   * carried it" is visible rather than silently lost in a generic fallback.
+   */
+  effortUnexpressed?: boolean;
 }
 
 // ── RecipeRow ────────────────────────────────────────────────────────────────

@@ -1,22 +1,21 @@
 "use server";
 
+import { getLinkedActivationOptions, testProviderAuthInternal } from "./provider-auth-test";
 import { lazyFs, lazyPath, lazyFsPromises } from "@/lib/shared/lazy-node";
 import { ensureDefaultProviderConnection, prisma, refreshDefaultProviderConnectionOwners } from "@dpf/db";
+import { toggleProviderStatus as toggleRoutingStatus } from "./provider-routing-status";
 import { requireCapability } from "@/lib/actions/shared/guards";
 import {
-  buildProviderCatalogEntry, computeNextRunAt, getTestUrl,
+  buildProviderCatalogEntry, computeNextRunAt,
   type RegistryProviderEntry,
 } from "@/lib/ai-provider-types";
 import { encryptSecret } from "@/lib/credential-crypto";
+import { normalizeProviderWorkspaceId } from "@/lib/inference/provider-workspace";
+import { configureDefaultProviderWorkspace } from "@/lib/inference/provider-account-management";
 import {
   autoDiscoverAndProfile,
-  discoverModelsInternal,
   profileModelsInternal,
   getDecryptedCredential,
-  getProviderExtraHeaders,
-  getProviderBearerToken,
-  isAnthropicProvider,
-  ANTHROPIC_OAUTH_BETA_HEADERS,
   backfillModelCards,
   seedAllRecipes,
 } from "@/lib/ai-provider-internals";
@@ -29,22 +28,6 @@ import { activateProvider } from "@/lib/govern/activate-provider";
 import { seedAiProviderFinanceBridge } from "@/lib/finance/ai-provider-finance";
 import { autoConfigureBuildStudio } from "@/lib/ai-provider-build-studio-config";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
-
-const OPENAI_OAUTH_LINKED_PROVIDERS = new Set(["codex", "chatgpt"]);
-const SHARED_ACCOUNT_LINKED_PROVIDERS = new Set(["zai"]);
-
-function getLinkedActivationOptions(
-  providerId: string,
-  authMethod: string | null | undefined,
-): { authMethod: string; activateLinked: true } | Record<string, never> {
-  if (authMethod === "oauth2_authorization_code" && OPENAI_OAUTH_LINKED_PROVIDERS.has(providerId)) {
-    return { authMethod, activateLinked: true };
-  }
-  if (authMethod === "api_key" && SHARED_ACCOUNT_LINKED_PROVIDERS.has(providerId)) {
-    return { authMethod, activateLinked: true };
-  }
-  return {};
-}
 
 // ─── Auth helpers ─────────────────────────────────────────────────────────────
 
@@ -184,6 +167,7 @@ export async function syncProviderRegistry(): Promise<{ added: number; updated: 
 // ─── Configure provider ───────────────────────────────────────────────────────
 
 export async function configureProvider(input: {
+  providerWorkspaceId?: string;
   providerId: string;
   enabledFamilies: string[];
   authMethod?: string;
@@ -198,6 +182,11 @@ export async function configureProvider(input: {
 }): Promise<{ error?: string }> {
   await requireManageProviders();
 
+  let providerWorkspaceId: string | null | undefined;
+  try { providerWorkspaceId = normalizeProviderWorkspaceId(input.providerId, input.providerWorkspaceId); }
+  catch (error) { return { error: error instanceof Error ? error.message : "Invalid workspace ID" }; }
+  if (providerWorkspaceId && input.authMethod && input.authMethod !== "api_key") return { error: "Workspace selection requires an Anthropic API key" };
+
   // Validate OAuth fields: if any OAuth field is provided, require the essential ones
   // (skip for oauth2_authorization_code — those fields are stored on the provider row, not credentials)
   if (input.authMethod !== "oauth2_authorization_code") {
@@ -207,6 +196,7 @@ export async function configureProvider(input: {
     }
   }
 
+  if (providerWorkspaceId !== undefined) await configureDefaultProviderWorkspace(input.providerId, providerWorkspaceId);
   // Clear credential fields from previous auth method when switching
   if (input.authMethod) {
     const clearFields: Record<string, null> = {};
@@ -313,245 +303,26 @@ export async function configureProvider(input: {
   return {};
 }
 
-function buildResponsesProbeUrl(providerId: string, baseUrl: string): string {
-  if (providerId === "chatgpt" || baseUrl.includes("chatgpt.com/backend-api")) {
-    return `${baseUrl}/codex/responses`;
-  }
-  return baseUrl.endsWith("/v1") ? `${baseUrl}/responses` : `${baseUrl}/v1/responses`;
-}
-
-async function resolveResponsesProbeBaseUrl(provider: {
-  providerId: string;
-  authMethod: string;
-  baseUrl: string | null;
-  endpoint: string | null;
-}): Promise<string> {
-  if (provider.providerId === "codex" && provider.authMethod === "oauth2_authorization_code") {
-    const chatgptProvider = await prisma.modelProvider.findUnique({
-      where: { providerId: "chatgpt" },
-      select: { baseUrl: true, endpoint: true },
-    });
-    return chatgptProvider?.baseUrl ?? chatgptProvider?.endpoint ?? "https://chatgpt.com/backend-api";
-  }
-  return provider.baseUrl ?? provider.endpoint ?? "";
-}
-
-function buildResponsesProbeBody(providerId: string): Record<string, unknown> {
-  return {
-    model: providerId === "chatgpt" ? "gpt-5.4" : "gpt-5.3-codex",
-    input: [{ role: "user", content: "ping" }],
-    store: false,
-  };
-}
-
-function formatResponsesScopeError(body: string): string | null {
-  if (!body.includes("api.responses.write")) return null;
-  return "OAuth token is missing Responses API scope (api.responses.write) — disconnect and sign in again";
-}
-
-export async function testProviderAuth(providerId: string): Promise<{ ok: boolean; message: string }> {
+export async function testProviderAuth(providerId: string, refreshCatalog = true, connectionId?: string): Promise<{ ok: boolean; message: string }> {
   await requireManageProviders();
-
-  const provider = await prisma.modelProvider.findUnique({ where: { providerId } });
-  if (!provider) return { ok: false, message: "Provider not found" };
-
-  // Grok can be connected two ways: an API key (for inference/chat) OR device-code
-  // OAuth (the Build Studio "grok" engine, whose ~/.grok/auth.json blob is stored in
-  // cachedToken). When only the OAuth dispatch credential is present, testing the
-  // inference API would misleadingly report "No API key configured" — so report the
-  // OAuth connection the provider actually has.
-  if (provider.cliEngine === "grok" && (provider.supportedAuthMethods as string[]).includes("oauth2_device")) {
-    const oauthCred = await getDecryptedCredential(providerId);
-    const hasOAuth = !!oauthCred?.cachedToken && oauthCred.cachedToken.trimStart().startsWith("{");
-    if (hasOAuth && !oauthCred?.secretRef) {
-      return {
-        ok: true,
-        message: "Connected via your xAI account (OAuth). The Grok build engine is ready — an API key is optional and only needed for chat/inference.",
-      };
-    }
-  }
-
-  const providerRow = {
-    ...provider,
-    families: provider.families as string[],
-    enabledFamilies: provider.enabledFamilies as string[],
-    supportedAuthMethods: provider.supportedAuthMethods as string[],
-  };
-
-  const testUrl = getTestUrl(providerRow);
-  if (!testUrl) return { ok: false, message: "No base URL or custom endpoint configured" };
-
-  const headers: Record<string, string> = {
-    ...getProviderExtraHeaders(providerId),
-  };
-
-  if (provider.authMethod === "api_key") {
-    const credential = await getDecryptedCredential(providerId);
-    if (!credential?.secretRef) return { ok: false, message: "No API key configured" };
-
-    if (provider.authHeader) {
-      headers[provider.authHeader] = provider.authHeader === "Authorization"
-        ? `Bearer ${credential.secretRef}`
-        : credential.secretRef;
-    }
-  } else if (provider.authMethod === "oauth2_client_credentials") {
-    const tokenResult = await getProviderBearerToken(providerId);
-    if ("error" in tokenResult) return { ok: false, message: tokenResult.error };
-    headers["Authorization"] = `Bearer ${tokenResult.token}`;
-  } else if (provider.authMethod === "oauth2_authorization_code") {
-    const tokenResult = await getProviderBearerToken(providerId);
-    if ("error" in tokenResult) return { ok: false, message: tokenResult.error };
-    headers["Authorization"] = `Bearer ${tokenResult.token}`;
-    if (isAnthropicProvider(providerId)) {
-      headers["anthropic-beta"] = ANTHROPIC_OAUTH_BETA_HEADERS;
-    }
-  }
-  // authMethod === "none" → no headers needed
-
-  try {
-    let res: Response;
-
-    // Agent providers (e.g. Codex) and ChatGPT subscription use the Responses
-    // API, so verify the actual execution path instead of /models.
-    if (provider.authMethod === "oauth2_authorization_code" &&
-        (provider.category === "agent" || providerId === "chatgpt")) {
-      const cred = await prisma.credentialEntry.findUnique({ where: { providerId } });
-      if (!cred?.status || !cred.cachedToken) {
-        return { ok: false, message: "OAuth token not found — sign in again" };
-      }
-
-      const baseUrl = await resolveResponsesProbeBaseUrl(provider);
-      const responsesUrl = buildResponsesProbeUrl(providerId, baseUrl);
-      headers["Content-Type"] = "application/json";
-      res = await fetch(responsesUrl, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(buildResponsesProbeBody(providerId)),
-        signal: AbortSignal.timeout(15_000),
-      });
-
-      if (res.ok || res.status === 400) {
-        await activateProvider(providerId, {
-          trigger: "test_auth",
-          ...getLinkedActivationOptions(providerId, provider.authMethod),
-        });
-        return { ok: true, message: "Connected via OAuth — Responses API verified" };
-      }
-
-      const body = await res.text().catch(() => "");
-      const scopeError = formatResponsesScopeError(body);
-      if (scopeError) {
-        return { ok: false, message: scopeError };
-      }
-      return { ok: false, message: `HTTP ${res.status} — ${body.slice(0, 200)}` };
-    }
-
-    // Anthropic subscription tokens (OAuth) can't access /models — test with a minimal /messages call instead
-    if (isAnthropicProvider(providerId) && provider.authMethod === "oauth2_authorization_code") {
-      const baseUrl = provider.baseUrl ?? provider.endpoint ?? "";
-      const messagesUrl = `${baseUrl}/messages`;
-      headers["Content-Type"] = "application/json";
-      res = await fetch(messagesUrl, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          model: "claude-haiku-4-5-20251001",
-          max_tokens: 1,
-          messages: [{ role: "user", content: "hi" }],
-        }),
-        signal: AbortSignal.timeout(15_000),
-      });
-      // A 200 or even a 400 "max_tokens too low" means auth worked
-      if (res.ok || res.status === 400) {
-        await activateProvider(providerId, { trigger: "test_auth" });
-        return { ok: true, message: `Connected via subscription token — auth verified` };
-      }
-      const body = await res.text().catch(() => "");
-      return { ok: false, message: `HTTP ${res.status} — ${body.slice(0, 200)}` };
-    }
-
-    res = await fetch(testUrl, { headers, signal: AbortSignal.timeout(8_000) });
-    if (res.ok) {
-      // Clearance is evidence-derived: local/non-egress can use all levels;
-      // hosted connections remain public-only until business terms are reviewed.
-      await activateProvider(providerId, {
-        trigger: "test_auth",
-        ...getLinkedActivationOptions(providerId, provider.authMethod),
-      });
-      return { ok: true, message: `Connected — HTTP ${res.status}` };
-    }
-    return { ok: false, message: `HTTP ${res.status} — ${res.statusText}` };
-  } catch (err) {
-    const detail = err instanceof Error ? err.message : "Network error";
-    return { ok: false, message: `${detail} — tried ${testUrl}` };
-  }
+  return testProviderAuthInternal(providerId, refreshCatalog, connectionId);
 }
 
 // ─── Enable / Disable provider ───────────────────────────────────────────────
 
-export async function toggleProviderStatus(
-  providerId: string,
-): Promise<{ status: string; warning: string | null }> {
-  await requireManageProviders();
-
-  const provider = await prisma.modelProvider.findUnique({
-    where: { providerId },
-    select: { status: true },
-  });
-  if (!provider) throw new Error("Provider not found");
-
-  const newStatus = provider.status === "active" ? "inactive" : "active";
-  await prisma.modelProvider.update({
-    where: { providerId },
-    data: { status: newStatus },
-  });
-
-  // EP-AGENT-CAP-002: Warn if activated provider has no models with active capabilities
-  let warning: string | null = null;
-  if (newStatus === "active") {
-    const activeModels = await prisma.modelProfile.findMany({
-      where: { providerId, modelStatus: { in: ["active", "degraded"] } },
-      select: { capabilities: true },
-    });
-
-    const hasActiveCapability = activeModels.some((m) => {
-      const caps = m.capabilities as Record<string, unknown> | null;
-      return (
-        caps?.toolUse === true ||
-        caps?.imageInput === true ||
-        caps?.pdfInput === true ||
-        caps?.codeExecution === true
-      );
-    });
-
-    if (!hasActiveCapability) {
-      warning =
-        "This provider's models have no active capabilities (toolUse, imageInput, pdfInput, codeExecution). " +
-        "It will not be eligible for routing to any registered coworker. " +
-        "It may still be used for passive chat workflows.";
-    }
-  }
-
-  return { status: newStatus, warning };
+export async function toggleProviderStatus(providerId: string): Promise<{ status: string; warning: string | null }> {
+  return toggleRoutingStatus(providerId);
 }
 
 // ─── Model discovery ─────────────────────────────────────────────────────────
 
 export async function discoverModels(
   providerId: string,
-): Promise<{ discovered: number; newCount: number; error?: string; warning?: string }> {
+): Promise<{ discovered: number; newCount: number; profiled: number; error?: string; warning?: string }> {
   await requireManageProviders();
-  if (KNOWN_PROVIDER_MODELS[providerId]) {
-    const signal = await collectProviderCatalogSignals(providerId);
-    const seeded = await autoDiscoverAndProfile(providerId);
-    return {
-      discovered: seeded.discovered,
-      newCount: seeded.discovered,
-      error: seeded.error,
-      warning: signal.warning,
-    };
-  }
-  return discoverModelsInternal(providerId);
+  const signal = KNOWN_PROVIDER_MODELS[providerId] ? await collectProviderCatalogSignals(providerId) : undefined;
+  const refreshed = await autoDiscoverAndProfile(providerId, false);
+  return { ...refreshed, newCount: refreshed.newCount ?? 0, warning: signal?.warning };
 }
 
 const PROVIDER_CATALOG_RECONCILIATION_JOB_ID = "provider-catalog-reconciliation";

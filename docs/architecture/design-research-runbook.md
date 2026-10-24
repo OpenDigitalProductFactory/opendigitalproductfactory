@@ -1,10 +1,18 @@
 # Design research runbook
 
-**Status:** procedure reference. The *rules* — research required in every spec, and the alignment checklist — live in [`AGENTS.md`](../../AGENTS.md) §10 and stay always-on. This file holds the checklist detail and worked examples. Relocated by BI-0020D511 Phase 1; no rule was dropped.
+**Status:** procedure reference. The *rules* — research required in every spec, and the alignment checklist — live in [`AGENTS.md`](../../AGENTS.md) §7 and stay always-on. This file holds the checklist detail and worked examples. Relocated by BI-0020D511 Phase 1; no rule was dropped.
 
 → [kernel principle](../founder-kernel/wiki/principles/design-research-required.md)
 
 Every new feature spec must include a "Research & Benchmarking" section before finalization. Compare 2–3 open-source leaders (read their data models, not just feature lists) and 2–3 commercial products. Document patterns adopted, patterns rejected, anti-patterns identified, and gaps the design fills. Reference specific projects, not abstract "best practices."
+
+**Named comparators, so "2–3 open-source leaders" is not left to whoever is writing (BI-F7E620C8).** The requirement is satisfied in form and not in substance when an author reaches for whatever they happen to know and the nearest peer goes uncompared. Where DPF has an obvious category leader, name it:
+
+| Spec category | Default comparator | Standing |
+| --- | --- | --- |
+| Delivery lifecycle, agentic process, gates, phase progression | **BMAD Method** (~53k stars, MIT, actively maintained) | Evaluated in full at [`docs/security/tool-evaluations/2026-09-15-bmad-method.md`](../security/tool-evaluations/2026-09-15-bmad-method.md) — **rejected as a dependency, adopted as a benchmark and idea source.** Citing it is not a step toward taking it on. |
+
+It is the leader in DPF's own category, and no DPF spec cited it before [`2026-09-15-third-state-is-typed-addendum-design.md`](../superpowers/specs/2026-09-15-third-state-is-typed-addendum-design.md) §3, which is that adoption's first use. Compare against it for delivery-lifecycle work unless there is a reason not to — and say what DPF adopts *and* what it rejects, which is the part the rule actually turns on.
 
 **Minimum Architectural Alignment Checklist (BI-IMP-25A07E52).** Before finalizing a feature spec (or rubber-stamping a PR that changes contracts), confirm:
 
@@ -19,3 +27,22 @@ Every new feature spec must include a "Research & Benchmarking" section before f
 2. **Checklist before shipping a global priority change** — (a) name the archetype(s) affected; (b) list which stream stages the change reorders or demotes; (c) confirm no **load-bearing** stage for those archetypes is pushed behind a non-load-bearing one without an explicit per-archetype policy override; (d) cite the section of the value-stream doc you checked.
 3. **Per-archetype overrides** — when one industry must differ from the global default, document the override in the design (and seed/config owner), do not hardcode a second ranking table in a random page helper.
 4. **Do not duplicate stage names** in AGENTS.md or feature specs — always point at the value-stream doc so stage vocabulary stays single-source.
+
+## Task-specific operating rules
+
+### Research receipt recovery
+
+Build Studio records research against the latest accepted design-document revision through the governed evidence writer. The attester reads the authoring person's current active membership and the selected actor's persisted grants; neither a coworker role label nor an old permission establishes current authority. Missing or revoked writer authority returns a held outcome before dispatch. The full governor still judges an allowed dispatch.
+
+The boot resumer retries the plan-to-build transition only after a receipt was actually recorded. An unchanged hold retains one attestation activity entry; later authority or outcome changes produce a new entry. Every wake rechecks current authority, so recovery needs no duplicate task or grant bypass. Actual caller thread/task attribution is preserved, with the recorded build thread as fallback; missing task identity remains absent.
+
+An exact internal author research receipt may reuse the existing action-specific WWMD policy projector. Its separate server-resolved author binding pins the current accepted revision, canonical value and rendered-byte digests, the authenticated creator and saver, the governed subject, and current Workroom admission and narrowing. It supplies no independent-review TaskRun or work-start approval. Unknown author-agent provenance remains null. Missing, changed, restricted or consequential context retains the existing refusal or approval path; grants and explicit approval policies remain authoritative.
+
+Before appending this receipt, the serialized subject transaction resolves the same author fact again and checks the exact published inputs, current membership and grants, current policy version and delegation, and expiry. A change between judgment and publication refuses the append. The canonical provenance writer owns revision hashing; policy and receipt paths reuse it.
+
+Read these when this domain is touched. These statements are relocated from AGENTS.md; its invariant core still applies.
+
+- **Absorb, don't adopt; the dependency surface only shrinks.** An added package, image, service or subscription must retire more than it adds. **Commandment tier.** → [kernel principle](../founder-kernel/wiki/principles/absorb-dont-adopt.md)
+- **Evaluate an external tool before adopting it** — security, architecture fit, compliance and integration — via the `tool-evaluation` skill. → [kernel principle](../professions/software-engineer/wiki/tool-evaluation-pipeline.md)
+- **Every new feature spec must include a "Research & Benchmarking" section before finalization** — compare 2–3 open-source leaders and state what DPF adopts or rejects. → [kernel principle](../founder-kernel/wiki/principles/design-research-required.md)
+- **Finalizing a spec runs the §1 check at spec altitude:** deployment contracts, canonical identity, no parallel utilities, no second home for a rule already stated here or in a kernel principle.

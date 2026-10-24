@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { ALL_ARCHETYPES, deriveTwinProfile } from "@dpf/storefront-templates";
 
-import { buildDemoTwinSnapshot } from "./demo-snapshot";
+import { buildDemoTwinSnapshot } from "@/lib/twin/demo-twin-snapshot";
 import { TwinView } from "./TwinView";
 import type { OperationalCommandResult } from "@/lib/twin/operations-command";
 

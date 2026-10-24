@@ -13,9 +13,9 @@
 // gates the claim/result routes — so it deploys inert and activates exactly when
 // the operator turns the dispatch channel on for verification.
 
-import { cron } from "inngest";
+import { cron } from "@/lib/jobs/triggers";
 
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 import {
   clearExpiredJoinPackageMaterial,
@@ -34,13 +34,13 @@ export async function runRemoteActionClaimTimeout(): Promise<{ timedOut: number;
   return { timedOut: timeouts.timedOut, joinPackagesCleared: packages.cleared };
 }
 
-export const remoteActionClaimTimeout = inngest.createFunction(
+export const remoteActionClaimTimeout = jobs.createFunction(
   { id: "ops/remote-action-claim-timeout", retries: 2, triggers: [cron("8,18,28,38,48,58 * * * *")] },
   async ({ step }) => {
     if (!envFlagEnabled(process.env, "DPF_REMOTE_ACTION_DISPATCH_ENABLED")) {
       return { skipped: true, reason: "flag-disabled" };
     }
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "ops/remote-action-claim-timeout");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
     return await step.run("timeout-stale-remote-action-claims", async () => runRemoteActionClaimTimeout());
   },

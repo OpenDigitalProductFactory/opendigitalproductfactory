@@ -9,6 +9,17 @@ export type WorkCaseCoworkerEnvelopeRequirement =
   | "when-supervised"
   | "always";
 
+/**
+ * How much reshaping this action's gate allows before the middle path
+ * (BI-81780B4A). Omit to take the platform default; an action may NARROW the
+ * budget and never widen it past the ceiling — an action that could grant
+ * itself unlimited attempts is an action that can loop forever by declaration.
+ */
+export interface WorkCaseActionShaping {
+  maxAttempts?: number;
+  maxOptions?: number;
+}
+
 export interface WorkCaseActionDescriptor {
   action: WorkCaseActionVerb;
   displayLabel: string;
@@ -19,6 +30,8 @@ export interface WorkCaseActionDescriptor {
   requiresCoworkerEnvelope: WorkCaseCoworkerEnvelopeRequirement;
   requiresReceipt: boolean;
   sanctionedMutators: readonly string[];
+  /** Optional narrowing of the default shaping budget. See gate-shaping.ts. */
+  shaping?: WorkCaseActionShaping;
 }
 
 export type WorkroomLifecycleOperation =

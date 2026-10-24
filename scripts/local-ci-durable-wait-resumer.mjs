@@ -1,0 +1,316 @@
+#!/usr/bin/env node
+import { parseArgs as utilParseArgs } from "node:util";
+import { ChildProcess, spawn } from "node:child_process";
+import { appendFileSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
+
+import {
+  DEFAULT_RESUME_DEADLINE_MS,
+  DEFAULT_RESUME_INTERVAL_MS,
+  RESUME_MARKER_ENV,
+} from "./lib/durable-wait-resumer.mjs";
+import { isEntryModule } from "./lib/entry-module.mjs";
+import { advanceGateReservationPin } from "./lib/gate-reservation-handoff.mjs";
+import {
+  EXIT_RUNNER_PREREQUISITE_UNAVAILABLE,
+  EXIT_CHILD_SIGNAL_DEATH,
+  EXIT_CONTROL_PLANE_STARVATION,
+  EXIT_SOURCE_DRIFT,
+  EXIT_WAIT_CANCELLED,
+} from "./lib/sandbox-freshness.mjs";
+import {
+  createGateObserverIdentity,
+  registerLocalQueueObserver,
+  releaseLocalQueueObserver,
+} from "./lib/local-queue-observer.mjs";
+
+// BI-D35B85BF. The consumer the durable wait never had. Spawned detached by a
+// gate that has just queued and is about to exit 75, this process does the one
+// thing the platform was assuming an AI session would do: keep re-claiming
+// until the lease is admitted, then let the gate run to completion.
+//
+// It writes no verdict of its own. The gate it re-invokes writes its own state
+// file exactly as it does on a first run, so `pregate:status` remains the
+// single source of the verdict and this file adds no second home for one.
+
+export const EXIT_QUEUED = 75;
+
+/**
+ * Exit codes that are NOT a verdict, so the resumer keeps waiting.
+ *
+ * AGENTS.md 4: "A gate that could not run is not a verdict. Infrastructure
+ * failure is recorded as inconclusive and re-runs on the same SHA. Never a FAIL
+ * against the diff. Fail closed on safety; fail open on infrastructure."
+ *
+ * The first build of this resumer returned on ANY code other than 75, so a
+ * control-plane starvation (exit 5) - a transient condition this host produces
+ * regularly under concurrent gate load - ended the wait as though the gate had
+ * answered. Observed live 2026-09-12: attempt 7 returned 5, the resumer wrote
+ * "finished", and the branch was left carrying a phantom FAIL with no recorded
+ * reason that exact-tree reuse then replayed (BI-ED53E13A).
+ *
+ * `classifyGateOutcome` in lib/sandbox-freshness.mjs is the single source of
+ * truth for what each code means; this set is the subset it classifies as
+ * blocked AND transient, and a test asserts the two never drift apart.
+ *
+ * Deliberately NOT here: EXIT_SANDBOX_DRIFT (3). It is equally "not a verdict",
+ * but re-running cannot converge a drifted sandbox, so retrying it would spin
+ * until the deadline instead of surfacing the real work.
+ */
+export const RETRYABLE_EXITS = Object.freeze([
+  EXIT_QUEUED,
+  EXIT_RUNNER_PREREQUISITE_UNAVAILABLE,
+  EXIT_CONTROL_PLANE_STARVATION,
+  EXIT_CHILD_SIGNAL_DEATH,
+  130, // 128 + SIGINT, stamped when the parent took the signal (BI-8392DA16)
+  143, // 128 + SIGTERM, likewise
+]);
+
+/** A host that just starved will starve again in 20s; back off before retrying. */
+export const INFRASTRUCTURE_BACKOFF_MS = 60_000;
+
+export function isRetryableExit(code) {
+  return RETRYABLE_EXITS.includes(code);
+}
+
+/**
+ * What the resumer's wait ended as, in the evidence vocabulary (AC-DW-06):
+ * `unrun` (nothing ran against the diff), `inconclusive` (infrastructure ended
+ * it), `failed` or `passed`. The gate's own state file stays the verdict; this
+ * only keeps the resumer's log from being a bare number.
+ */
+export function classifyResumeOutcome(code) {
+  if (code === null || code === undefined) return { evidence: "unrun", reason: "unlaunched" };
+  if (code === 0) return { evidence: "passed", reason: "passed" };
+  if (code === EXIT_WAIT_CANCELLED) return { evidence: "unrun", reason: "cancelled" };
+  if (code === EXIT_SOURCE_DRIFT) return { evidence: "unrun", reason: "source-drift" };
+  if (code === EXIT_QUEUED) return { evidence: "unrun", reason: "still-queued" };
+  if (isRetryableExit(code) || code === 3 || code === 4 || code === 6) {
+    return { evidence: "inconclusive", reason: "infrastructure" };
+  }
+  return { evidence: "failed", reason: "failed" };
+}
+
+// A detached process with stdio "ignore" that leaves no trace is undiagnosable:
+// when the first field build of this resumer died on its second re-claim there
+// was nothing at all to read. The log lives beside the observer record so the
+// same reap that clears one clears the other.
+function makeLogger(directory, token) {
+  if (!directory) return () => {};
+  const path = join(directory, `${token}.resumer.log`);
+  try {
+    mkdirSync(directory, { recursive: true });
+  } catch {
+    return () => {};
+  }
+  return (event, detail = {}) => {
+    try {
+      appendFileSync(path, `${JSON.stringify({ at: new Date().toISOString(), event, ...detail })}
+`);
+    } catch { /* logging must never take the resumer down */ }
+  };
+}
+
+export function parseResumerArgs(argv) {
+  const option = { type: "string" };
+  // strict: false keeps the old tolerance: unknown flags are ignored. Everything
+  // after the first `--` is the gate's own argv, passed through untouched.
+  const { values, tokens } = utilParseArgs({
+    args: argv,
+    strict: false,
+    allowPositionals: true,
+    tokens: true,
+    options: {
+      "interval-ms": option,
+      "deadline-ms": option,
+      "observer-dir": option,
+      branch: option,
+      sha: option,
+      "owner-session-id": option,
+      "gate-cwd": option,
+    },
+  });
+  const terminator = tokens.find((token) => token.kind === "option-terminator");
+  const text = (value) => (typeof value === "string" ? value : undefined);
+  const options = {
+    intervalMs: values["interval-ms"] === undefined ? DEFAULT_RESUME_INTERVAL_MS : Number(text(values["interval-ms"])),
+    deadlineMs: values["deadline-ms"] === undefined ? DEFAULT_RESUME_DEADLINE_MS : Number(text(values["deadline-ms"])),
+    observerDirectory: values["observer-dir"] === undefined ? "" : text(values["observer-dir"]),
+    branch: values.branch === undefined ? "" : text(values.branch),
+    sha: values.sha === undefined ? "" : text(values.sha),
+    ownerSessionId: values["owner-session-id"] === undefined ? "" : text(values["owner-session-id"]),
+    gateCwd: values["gate-cwd"] === undefined ? "" : text(values["gate-cwd"]),
+    gateArgv: terminator === undefined ? [] : argv.slice(terminator.index + 1),
+  };
+  if (!Number.isFinite(options.intervalMs) || options.intervalMs <= 0) {
+    options.intervalMs = DEFAULT_RESUME_INTERVAL_MS;
+  }
+  if (!Number.isFinite(options.deadlineMs) || options.deadlineMs <= 0) {
+    options.deadlineMs = DEFAULT_RESUME_DEADLINE_MS;
+  }
+  return options;
+}
+
+// NOT unref'd, deliberately. An unref'd timer does not hold the event loop
+// open, and between re-claims this process has nothing else referenced - the
+// gate child has exited and stdio is "ignore". The first field build unref'd
+// here and every resumer died silently mid-sleep with exit 0, after exactly one
+// re-claim, which looked identical to the defect it was written to fix.
+const sleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
+
+// windowsHide is load-bearing on Windows. This process is detached, so it owns
+// no console, and a console child started without the flag is given a new
+// VISIBLE one: every re-claim opened a terminal window that stole the
+// operator's focus (observed 2026-09-22, six resumers, a window every few
+// seconds). The gate's own children inherit the hidden console.
+function runGateOnce({ gateArgv, env, spawnFn, cwd, log }) {
+  return new Promise((resolve) => {
+    const child = spawnFn(process.execPath, gateArgv, {
+      // Explicit, so a resumed gate runs in the pinned worktree (BI-D35B85BF).
+      ...(cwd ? { cwd } : {}),
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
+      env: { ...env, [RESUME_MARKER_ENV]: "1" },
+    });
+    log("gate-start", { pid: child.pid ?? null });
+    let remaining = 65536;
+    const outputTails = { stdout: "", stderr: "" };
+    for (const stream of ["stdout", "stderr"]) child[stream]?.on("data", chunk => {
+      // Keep the final controller packet even when earlier output exhausted the log budget.
+      outputTails[stream] = (outputTails[stream] + String(chunk)).slice(-65536);
+      if (remaining <= 0) return;
+      const text = String(chunk).slice(0, remaining);
+      remaining -= text.length;
+      log("gate-output", { pid: child.pid ?? null, stream, text, truncated: remaining === 0 });
+    });
+    const finish = (code) => resolve({ code, outputTail: `${outputTails.stdout}\n${outputTails.stderr}` });
+    child.once("error", () => finish(null));
+    // Node's close follows stdio drain; exit alone can precede the last packet.
+    // Minimal injected process adapters retain their existing exit-only contract.
+    child.once(child instanceof ChildProcess ? "close" : "exit", finish);
+  });
+}
+
+/**
+ * Re-claim until the gate stops saying "queued".
+ *
+ * Returns the gate's final exit code, or 75 if the deadline passed while still
+ * queued. A spawn error resolves as `null` and is retried rather than treated
+ * as a verdict: `report-only-the-verdict-you-reached` — an infrastructure
+ * failure to launch is not a FAIL against the diff.
+ */
+export async function resumeUntilAdmitted({
+  gateArgv,
+  intervalMs,
+  deadlineMs,
+  env = process.env,
+  cwd = "",
+  now = () => Date.now(),
+  spawnFn = spawn,
+  sleepFn = sleep,
+  log = () => {},
+  random = Math.random,
+}) {
+  const giveUpAt = now() + deadlineMs;
+  let attempts = 0;
+  let blockedAttempts = 0;
+  let blockedStreak = 0;
+  let currentArgv = [...gateArgv];
+  for (;;) {
+    if (attempts > 0 && now() >= giveUpAt) {
+      return { code: EXIT_QUEUED, attempts, blockedAttempts, outcome: classifyResumeOutcome(EXIT_QUEUED) };
+    }
+    attempts += 1;
+    const { code, outputTail } = await runGateOnce({ gateArgv: currentArgv, env, spawnFn, cwd, log });
+    const blocked = code !== null && code !== EXIT_QUEUED && isRetryableExit(code);
+    if (blocked) blockedAttempts += 1;
+    blockedStreak = blocked ? blockedStreak + 1 : 0;
+    log("gate-attempt", { attempts, code, ...(blocked ? { blocked: true } : {}) });
+    if (code === EXIT_QUEUED) {
+      const handoff = advanceGateReservationPin(currentArgv, outputTail);
+      if (handoff.required && !handoff.valid) {
+        log("queue-handoff-unverified", { reason: handoff.reason });
+        return { code: EXIT_RUNNER_PREREQUISITE_UNAVAILABLE, attempts, blockedAttempts,
+          outcome: { evidence: "unrun", reason: "queue-handoff-unverified" } };
+      }
+      if (handoff.valid) {
+        currentArgv = handoff.argv;
+        log("queue-reservation-handoff", { priorLeaseId: handoff.priorLeaseId, leaseId: handoff.leaseId });
+      }
+    }
+    // A real verdict - the gate passed or the product failed - ends the wait.
+    // Anything the classifier calls blocked-and-transient does not.
+    // A cancellation or a moved source is final too: both stop the wait unrun.
+    if (code !== null && !isRetryableExit(code)) {
+      return { code, attempts, blockedAttempts, outcome: classifyResumeOutcome(code) };
+    }
+    if (now() >= giveUpAt) {
+      return { code: EXIT_QUEUED, attempts, blockedAttempts, outcome: classifyResumeOutcome(EXIT_QUEUED) };
+    }
+    // Bounded equal jitter avoids synchronized retry storms, while remaining
+    // below the 120s admitted lease TTL. Queue polling resets the outage streak.
+    const ceilingMs = Math.min(90_000, Math.max(intervalMs, INFRASTRUCTURE_BACKOFF_MS)
+      * 2 ** Math.min(Math.max(0, blockedStreak - 1), 4));
+    const delayMs = blocked ? Math.floor(ceilingMs * (0.5 + 0.5 * random())) : intervalMs;
+    await sleepFn(Math.min(delayMs, Math.max(0, giveUpAt - now())));
+  }
+}
+
+async function main() {
+  const options = parseResumerArgs(process.argv.slice(2));
+  if (options.gateArgv.length === 0) {
+    process.stderr.write("local-ci-durable-wait-resumer: no gate invocation supplied after --\n");
+    process.exit(64);
+  }
+
+  // Hold a registry record for the WHOLE wait. Between re-claims there is no
+  // gate process, and without this the queued row would look unbacked to the
+  // reconciler and be reaped mid-wait.
+  let observerPath = "";
+  const identity = createGateObserverIdentity();
+  if (options.observerDirectory) {
+    try {
+      observerPath = registerLocalQueueObserver({
+        directory: options.observerDirectory,
+        identity,
+        ownerSessionId: options.ownerSessionId || identity.ownerSessionId,
+        branch: options.branch,
+        sha: options.sha,
+      }).path;
+    } catch {
+      // An unwritable registry must not stop the resume; the claim is already
+      // queued and re-claiming still advances its heartbeat.
+      observerPath = "";
+    }
+  }
+
+  const log = makeLogger(options.observerDirectory, identity.token);
+  log("start", { pid: process.pid, gateArgv: options.gateArgv, intervalMs: options.intervalMs });
+  try {
+    const { code, attempts, blockedAttempts, outcome } = await resumeUntilAdmitted({
+      gateArgv: options.gateArgv,
+      intervalMs: options.intervalMs,
+      deadlineMs: options.deadlineMs,
+      cwd: options.gateCwd,
+      log,
+    });
+    log("finished", { code, attempts, blockedAttempts, outcome });
+    process.exitCode = code ?? EXIT_QUEUED;
+  } catch (error) {
+    log("crashed", { message: String(error?.message || error) });
+    throw error;
+  } finally {
+    if (observerPath) {
+      try {
+        releaseLocalQueueObserver({ path: observerPath, token: identity.token });
+      } catch { /* the TTL reap in local-queue-observer.mjs is the backstop */ }
+    }
+  }
+}
+
+if (isEntryModule(import.meta.url)) {
+  main().catch((error) => {
+    process.stderr.write(`local-ci-durable-wait-resumer: ${error?.stack || error}\n`);
+    process.exit(70);
+  });
+}

@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const recoveredWorker = vi.hoisted(() => vi.fn());
+vi.mock("./mcp-task-background-worker", () => ({ executePersistedRemoteTask: recoveredWorker }));
 const db = vi.hoisted(() => ({
+  persisted: {} as Record<string, unknown>,
   findFirst: vi.fn(),
   findUnique: vi.fn(),
   findModelConfig: vi.fn(),
@@ -12,6 +15,7 @@ const db = vi.hoisted(() => ({
   findTaskMessage: vi.fn(),
   findMcpToken: vi.fn(),
   findUser: vi.fn(),
+  findConsent: vi.fn(),
 }));
 const autonomous = vi.hoisted(() => ({
   create: vi.fn(),
@@ -22,20 +26,16 @@ const autonomous = vi.hoisted(() => ({
 }));
 const records = vi.hoisted(() => ({ create: vi.fn() }));
 
-vi.mock("@dpf/db", () => ({
+vi.mock("@dpf/db", async () => ({
   prisma: {
-    taskRun: {
-      findFirst: (...args: unknown[]) => db.findFirst(...args),
-      findUnique: (...args: unknown[]) => db.findUnique(...args),
-      update: (...args: unknown[]) => db.update(...args),
-      updateMany: (...args: unknown[]) => db.updateMany(...args),
-    },
+    authorityBinding: { findUnique: (...args: unknown[]) => db.findConsent(...args) },
+    taskRun: (await import("./test-support/task-run-state")).taskRunState(db),
     coworkerActionEnvelope: { findFirst: (...args: unknown[]) => db.findEnvelope(...args) },
     toolExecution: { findFirst: (...args: unknown[]) => db.findToolExecution(...args) },
     agentThread: { upsert: (...args: unknown[]) => db.upsertThread(...args) },
     agentModelConfig: { findUnique: (...args: unknown[]) => db.findModelConfig(...args) },
     taskMessage: { findFirst: (...args: unknown[]) => db.findTaskMessage(...args) },
-    mcpApiToken: { findUnique: (...args: unknown[]) => db.findMcpToken(...args) },
+    mcpApiToken: { findFirst: async () => null, findUnique: (...args: unknown[]) => db.findMcpToken(...args) },
     user: { findUnique: (...args: unknown[]) => db.findUser(...args) },
   },
 }));
@@ -76,6 +76,7 @@ function submit(tokenId: string, params: Record<string, unknown> = immutablePara
 
 beforeEach(() => {
   vi.clearAllMocks();
+  db.persisted = {};
   vi.stubEnv("DPF_EXTERNAL_MCP_TASK_ASYNC", "0");
   db.findFirst.mockResolvedValue(null);
   db.findUnique.mockResolvedValue({ status: "working" });
@@ -89,7 +90,7 @@ beforeEach(() => {
   });
   db.findTaskMessage.mockResolvedValue(null);
   db.findMcpToken.mockResolvedValue(null);
-  db.findUser.mockResolvedValue({ isSuperuser: false, groups: [] });
+  db.findUser.mockResolvedValue({ isActive: true, isSuperuser: false, groups: [] });
   db.upsertThread.mockResolvedValue({ id: "thread-external" });
   db.update.mockResolvedValue({});
   db.updateMany.mockResolvedValue({ count: 1 });
@@ -128,8 +129,8 @@ describe("submitRemoteCoworkerTask capacity recovery", () => {
         riskClass: "bounded-write",
       });
 
-      expect(db.update).toHaveBeenLastCalledWith({
-        where: { taskRunId: expect.stringMatching(/^TR-MCP-/) },
+      expect(db.updateMany).toHaveBeenLastCalledWith({
+        where: expect.objectContaining({ taskRunId: expect.stringMatching(/^TR-MCP-/), status: "working" }),
         data: {
           status: "submitted",
           completedAt: null,
@@ -144,6 +145,8 @@ describe("submitRemoteCoworkerTask capacity recovery", () => {
               resumeMode: "same-taskrun",
               attempt: 1,
               observedAt: expect.any(String),
+              // BI-D25F867D: the next attempt waits out a bounded backoff.
+              nextAttemptAt: expect.any(String),
             },
           },
         },
@@ -262,6 +265,7 @@ describe("submitRemoteCoworkerTask capacity recovery", () => {
     }).metadata;
 
     vi.clearAllMocks();
+    db.persisted = {};
     const waiting = {
       id: "task-internal",
       taskRunId: "TR-MCP-SAME-RUN",
@@ -303,7 +307,8 @@ describe("submitRemoteCoworkerTask capacity recovery", () => {
     });
   });
 
-  it("lets a trusted capacity event resume by TaskRun ID from server-owned immutable state", async () => {
+  it.each(["pat", "oauth", "oauth-revoked", "oauth-missing-client", "oauth-expired", "oauth-read", "oauth-missing-binding", "oauth-revoked-consent", "oauth-disabled-human"])("revalidates %s on a trusted capacity event", async scenario => {
+    const source = scenario === "pat" ? "pat" : "oauth";
     const params = {
       ...immutableParams,
       riskClass: "bounded-write",
@@ -319,7 +324,10 @@ describe("submitRemoteCoworkerTask capacity recovery", () => {
       executedTools: [],
       failure: { kind: "busy", message: "Provider busy." },
     });
-    await submit("PAT-EVENT", params);
+    db.findMcpToken.mockResolvedValue({ userId: "user-1", kind: "oauth_access", revokedAt: null,
+      expiresAt: null, authorityBindingId: null, oauthClientId: "client", resource: "https://dpf.example/api/mcp/v1",
+      publicScopes: ["dpf.work"], oauthClient: { registrationKind: "credentials", revokedAt: null } });
+    await submitRemoteCoworkerTask({ token: { tokenId: "PAT-EVENT", userId: "user-1", capability: "write", source }, userContext, params });
     const createInput = autonomous.create.mock.calls[0]?.[0] as {
       taskRunId: string;
       metadata: Record<string, unknown>;
@@ -360,11 +368,17 @@ describe("submitRemoteCoworkerTask capacity recovery", () => {
     });
     db.findMcpToken.mockResolvedValue({
       userId: "user-1",
-      capability: "write",
+      capability: scenario === "oauth-read" ? "read" : "write",
       revokedAt: null,
-      expiresAt: null,
+      expiresAt: scenario === "oauth-expired" ? new Date(0) : null,
+      kind: source === "oauth" ? "oauth_access" : "pat",
+      authorityBindingId: scenario === "oauth-revoked-consent" ? "binding" : null,
+      oauthClientId: "client", resource: "https://dpf.example/api/mcp/v1", publicScopes: ["dpf.work"],
+      oauthClient: source === "oauth" && scenario !== "oauth-missing-client"
+        ? { registrationKind: scenario === "oauth-missing-binding" ? "dcr" : "credentials", revokedAt: scenario === "oauth-revoked" ? new Date() : null } : null,
     });
-    db.findUser.mockResolvedValue({ isSuperuser: false, groups: [] });
+    db.findUser.mockResolvedValue({ isActive: scenario !== "oauth-disabled-human", isSuperuser: false, groups: [] });
+    db.findConsent.mockResolvedValue(null);
     db.updateMany.mockResolvedValue({ count: 1 });
     db.update.mockResolvedValue({});
     db.findModelConfig.mockResolvedValue({
@@ -384,6 +398,13 @@ describe("submitRemoteCoworkerTask capacity recovery", () => {
 
     const outcome = await resumeRemoteCoworkerTaskById(createInput.taskRunId);
 
+    if (scenario !== "pat" && scenario !== "oauth") {
+      expect(outcome).toMatchObject({ kind: "result", result: { isError: true } });
+      expect(autonomous.execute).not.toHaveBeenCalled();
+      expect(autonomous.create).not.toHaveBeenCalled();
+      return;
+    }
+
     expect(db.findUnique).toHaveBeenNthCalledWith(1, expect.objectContaining({
       where: { taskRunId: createInput.taskRunId },
     }));
@@ -394,6 +415,9 @@ describe("submitRemoteCoworkerTask capacity recovery", () => {
         capability: true,
         revokedAt: true,
         expiresAt: true,
+        kind: true,
+        agentId: true, authorityBindingId: true, oauthClientId: true, resource: true, publicScopes: true, oauthFamilyKey: true,
+        oauthClient: { select: { revokedAt: true, registrationKind: true } },
       },
     });
     expect(autonomous.execute).toHaveBeenCalledWith(expect.objectContaining({
@@ -448,8 +472,8 @@ describe("submitRemoteCoworkerTask capacity recovery", () => {
         riskClass: "bounded-write",
       });
 
-      expect(db.update).toHaveBeenLastCalledWith({
-        where: { taskRunId: expect.stringMatching(/^TR-MCP-/) },
+      expect(db.updateMany).toHaveBeenLastCalledWith({
+        where: expect.objectContaining({ taskRunId: expect.stringMatching(/^TR-MCP-/), status: "working" }),
         data: {
           status: "failed",
           completedAt: expect.any(Date),
@@ -473,4 +497,32 @@ describe("submitRemoteCoworkerTask capacity recovery", () => {
     },
   );
 
+});
+
+// BI-D25F867D — a capacity wait is bounded and paced.
+describe("resource wait pacing", () => {
+  it("backs off 1, 2, 4, 8 then 15 minutes and is due only after its time", async () => {
+    const { createResourceWaitProjection, resourceWaitBackoffMs, resourceWaitDue } = await import("./mcp-task-capacity-contract");
+    expect([1, 2, 3, 4, 5, 6].map(resourceWaitBackoffMs)).toEqual([1, 2, 4, 8, 15, 15].map((m) => m * 60_000));
+    const now = new Date("2026-09-24T12:00:00.000Z");
+    const wait = createResourceWaitProjection("busy", 3, now);
+    expect(wait.nextAttemptAt).toBe("2026-09-24T12:04:00.000Z");
+    expect(resourceWaitDue(wait, new Date("2026-09-24T12:03:59.000Z"))).toBe(false);
+    expect(resourceWaitDue(wait, new Date("2026-09-24T12:04:00.000Z"))).toBe(true);
+    // A wait written before pacing existed is due at once.
+    expect(resourceWaitDue({ ...wait, nextAttemptAt: undefined }, now)).toBe(true);
+  });
+});
+
+it("routes a transferred capacity wait through the canonical worker without reconstructing the expired origin", async () => {
+  const taskRunId = "TR-MCP-CAPACITY-TRANSFER";
+  db.findUnique.mockResolvedValue({ id: "row", taskRunId, userId: "user-1", status: "submitted",
+    progressPayload: { reviewExecutionAuthority: { tokenId: "current-token" }, resourceWait: { schemaVersion: 1,
+      kind: "provider-capacity", failureKind: "capacity", resumeMode: "same-taskrun", attempt: 1, observedAt: new Date().toISOString() } },
+    a2aMetadata: { apiTokenId: "expired-origin" },
+  });
+  recoveredWorker.mockResolvedValue({ taskRunId, status: "working", authority: "current" });
+  expect(await resumeRemoteCoworkerTaskById(taskRunId)).toMatchObject({ kind: "result", result: { taskRunId, status: "working", authority: "current" } });
+  expect(recoveredWorker).toHaveBeenCalledWith({ taskRunId });
+  expect(db.findMcpToken).not.toHaveBeenCalled(); expect(autonomous.execute).not.toHaveBeenCalled();
 });

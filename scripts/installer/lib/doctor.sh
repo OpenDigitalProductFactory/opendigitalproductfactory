@@ -148,9 +148,12 @@ dpf_doctor_collect() {
     fi
   } > "$bundle_dir/compose.txt"
 
-  # 4. install-state.json (redacted)
+  # 4. install-state.json (redacted) + the agent-toolchain sidecar
   if [ -f "$(dpf_state_path)" ]; then
     _dpf_doctor_redact < "$(dpf_state_path)" > "$bundle_dir/install-state.redacted.json"
+  fi
+  if [ -f "$(dpf_agent_toolchain_state_path)" ]; then
+    _dpf_doctor_redact < "$(dpf_agent_toolchain_state_path)" > "$bundle_dir/agent-toolchain-state.redacted.json"
   fi
 
   # 5. docker compose ps

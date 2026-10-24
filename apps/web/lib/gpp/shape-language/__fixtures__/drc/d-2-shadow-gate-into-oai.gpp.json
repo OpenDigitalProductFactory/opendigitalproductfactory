@@ -1,0 +1,71 @@
+{
+  "format": "gpp-shape/0.1",
+  "key": "drc-d2-shadow-gate-into-oai",
+  "version": "1.0.0",
+  "title": "DRC fixture drc-d2-shadow-gate-into-oai",
+  "description": "Seeded D-2: the only guard into a stage holding an authority tool is a shadow gate, whose verdict is only recorded.",
+  "triggers": [
+    "claim"
+  ],
+  "stages": [
+    {
+      "key": "a",
+      "title": "Stage a",
+      "accountablePrincipalRef": "role:shape-owner",
+      "advance": {
+        "kind": "governed-decision",
+        "condition": "The accountable owner decides stage a.",
+        "decisionScope": "drc-shadow-scope",
+        "gate": {
+          "authority": "wwmd",
+          "mode": "shadow",
+          "blocking": true,
+          "resolution": "accountable-human"
+        }
+      },
+      "evidence": [
+        "decision-record"
+      ]
+    },
+    {
+      "key": "b",
+      "title": "Stage b",
+      "accountablePrincipalRef": "role:shape-owner",
+      "advance": {
+        "kind": "status-change",
+        "condition": "Stage b recorded its evidence."
+      },
+      "evidence": [
+        "manual-check"
+      ],
+      "tools": [
+        "set_portfolio_owner"
+      ]
+    }
+  ],
+  "stopConditions": [
+    {
+      "kind": "success",
+      "condition": "Every stage recorded its evidence.",
+      "disposition": "proceed"
+    },
+    {
+      "kind": "failure",
+      "condition": "A stage cannot produce its evidence.",
+      "disposition": "refused"
+    },
+    {
+      "kind": "budget",
+      "condition": "The cycle budget is spent.",
+      "disposition": "inconclusive"
+    }
+  ],
+  "grants": [],
+  "measures": [],
+  "budgets": [],
+  "reviewPoint": {
+    "everyDays": 7,
+    "description": "Weekly review."
+  },
+  "collaborationShape": null
+}

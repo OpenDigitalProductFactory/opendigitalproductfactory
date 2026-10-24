@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { err, ok } from "@/lib/shared/action-result";
+import { createObjectiveMappingRequestKey } from "@/lib/mcp-task-objective-mapping-request-key";
+import { parseInitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
+import { createInitiativeReviewTerminalToolPolicy } from "@/lib/tak/terminal-tool-policy";
+import { resolveInitiativeReviewerRecovery } from "@/lib/tak/initiative-readiness-tool-grants";
+
 import { readinessRequirement } from "./readiness-guidance";
 import type { InitiativeReadinessDecision } from "./types";
 import { resolveTerminalInitiativeRecovery } from "./terminal-recovery";
@@ -7,6 +13,12 @@ import { resolveTerminalInitiativeRecovery } from "./terminal-recovery";
 const baseSha = "1".repeat(40);
 const headSha = "2".repeat(40);
 const baselineCommitSha = "5".repeat(40);
+const eligibleEvidenceActivityIds = [
+  "cmtnr924q-post-baseline",
+  "cmtnr926e-post-baseline",
+  "cmtnr927v-post-baseline",
+  "cmtnr9295-post-baseline",
+];
 const decision: InitiativeReadinessDecision = {
   decisionId: "IRD-TERMINAL",
   policyVersion: "initiative-readiness.v2",
@@ -39,15 +51,239 @@ function deps(rooms = [room], baselines: unknown[] = [{ baselineId: "baseline-cu
   return {
     loadLiveRooms: vi.fn().mockResolvedValue(rooms),
     loadBaselinePayloads: vi.fn().mockResolvedValue(baselines),
+    loadEligibleEvidenceActivityIds: vi.fn().mockResolvedValue(ok({
+      activityIds: eligibleEvidenceActivityIds,
+    })),
+    loadObjectiveMappingHistory: vi.fn().mockResolvedValue(ok({ history: [] })),
+    loadPlanArtifact: vi.fn().mockResolvedValue({ resolved: true, path: "docs/superpowers/plans/plan.md", commitSha: headSha, providerBlobId: "4".repeat(40) }),
+    verifyHistoricalArtifact: vi.fn().mockResolvedValue(ok(new Uint8Array([1]))),
     discoverArtifact: vi.fn().mockResolvedValue({
       resolved: true,
       artifact: { path: "docs/superpowers/specs/design.md", providerBlobId: "3".repeat(40) },
     }),
-    resolveRecovery: vi.fn().mockResolvedValue({ reviewerRoutes: [{ gate: "objective-mapping" }], escalations: [], unroutable: [] }),
+    resolveRecovery: vi.fn().mockImplementation(async (
+      input: Parameters<typeof resolveInitiativeReviewerRecovery>[0],
+    ) => {
+      const dispatch = input.dispatchContext;
+      const artifact = input.canonicalArtifact;
+      if (!dispatch || !artifact?.resolved || !input.eligibleEvidenceActivityIds) {
+        throw new Error("test expected a complete objective-mapping recovery input");
+      }
+      const objective = `For BI-TERMINAL in ${dispatch.workroomId} on ${dispatch.repositoryFullName}#${dispatch.branchName} at Workroom head ${dispatch.headSha}, address objective-mapping using record_initiative_evidence.`;
+      const questionPacketSummary = `objective-mapping for BI-TERMINAL at ${dispatch.headSha.slice(0, 12)}`;
+      const binding = {
+        writerToolName: "record_initiative_evidence",
+        itemId: "BI-TERMINAL",
+        gate: "objective-mapping" as const,
+        expectedCurrentBaselineId: input.expectedCurrentBaselineId,
+        eligibleEvidenceActivityIds: [...input.eligibleEvidenceActivityIds],
+        workroomRef: {
+          kind: "workroom-head" as const,
+          workroomId: dispatch.workroomId,
+          repositoryFullName: dispatch.repositoryFullName,
+          branchName: dispatch.branchName,
+          headSha: dispatch.headSha,
+        },
+        artifactRef: artifact.kind === "document-version" ? {
+          kind: "document-version" as const,
+          repositoryFullName: dispatch.repositoryFullName,
+          versionId: artifact.versionId,
+          valueDigest: artifact.valueDigest,
+        } : {
+          kind: "repo-blob-at-commit" as const,
+          repositoryFullName: dispatch.repositoryFullName,
+          commitSha: (artifact.kind !== "feature-build-revision" ? artifact.commitSha : undefined) ?? dispatch.headSha,
+          path: artifact.kind !== "feature-build-revision" ? artifact.path : `build-artifact-revision/${artifact.revisionId}`,
+          providerBlobId: artifact.kind !== "feature-build-revision" ? artifact.providerBlobId : artifact.valueDigest,
+        },
+      };
+      const requiredToolNames = ["record_initiative_evidence", "read_source_at_version"];
+      return {
+        reviewerRoutes: [{
+          gate: "objective-mapping",
+          requestCoworker: {
+            targetAgent: "AGT-WS-PORTFOLIO",
+            objective,
+            questionPacketSummary,
+            requestKey: createObjectiveMappingRequestKey({
+              targetAgent: "AGT-WS-PORTFOLIO",
+              objective,
+              questionPacketSummary,
+              requiredToolNames,
+              binding,
+            }),
+            requiredToolNames,
+            initiativeReviewBinding: binding,
+          },
+        }],
+        escalations: [],
+        unroutable: [],
+      };
+    }),
   };
 }
 
 describe("terminal initiative recovery", () => {
+  it.each(["docs/superpowers/specs/design.md", ".github/workflows/stuck-auto-merge-alarm.yml"])("routes break-fix PIR for %s at the authored head without an objective baseline", async (path) => {
+    const ports = deps([room], []);
+    ports.discoverArtifact.mockResolvedValue({ resolved: true, artifact: { path, providerBlobId: "3".repeat(40) } });
+    const reviewer = { agentId: "AGT-REVIEW", displayName: "Independent reviewer", status: "active", archived: false, lifecycleStage: "production" };
+    ports.resolveRecovery.mockImplementation((input) => resolveInitiativeReviewerRecovery({
+      ...input,
+      db: { agentToolGrant: { findMany: async () => [
+        { grantKey: "initiative_design_review", agent: reviewer },
+        { grantKey: "file_read", agent: reviewer },
+      ] } },
+    }));
+    const pirDecision: InitiativeReadinessDecision = {
+      ...decision,
+      unmet: [readinessRequirement({ code: "POST_IMPLEMENTATION_REVIEW_REQUIRED", state: "missing", accountableRole: "post-implementation-reviewer" })],
+    };
+    const result = await resolveTerminalInitiativeRecovery({ decision: pirDecision, currentAgentId: "AGT-AUTHOR", refusedWorkroomId: room.capsuleId, ports });
+    expect(result.escalations).toEqual([]);
+    expect(result.reviewerRoutes).toHaveLength(1);
+    const packet = result.reviewerRoutes[0]!.requestCoworker;
+    expect(packet.requiredToolNames).toEqual(["record_initiative_post_implementation_review", "read_source_at_version"]);
+    expect(packet.initiativeReviewBinding).toMatchObject({
+      gate: "post-implementation-review", expectedCurrentBaselineId: null,
+      workroomRef: { headSha, workroomId: room.capsuleId },
+      artifactRef: { path, commitSha: headSha, providerBlobId: "3".repeat(40) },
+    });
+    const binding = parseInitiativeReviewBinding(packet.initiativeReviewBinding)!;
+    expect(binding).not.toBeNull();
+    expect(createInitiativeReviewTerminalToolPolicy(binding.writerToolName, packet.requiredToolNames!, binding.artifactRef))
+      .toMatchObject({ writerToolName: "record_initiative_post_implementation_review", immutableReaderArguments: { version: headSha, expectedBlobId: "3".repeat(40) } });
+    expect(ports.discoverArtifact).toHaveBeenCalledWith({ repositoryFullName: room.repositoryFullName, baseSha, headSha, purpose: "post-implementation-review" });
+    expect(ports.loadBaselinePayloads).not.toHaveBeenCalled();
+    expect(ports.loadEligibleEvidenceActivityIds).not.toHaveBeenCalled();
+    expect(ports.loadObjectiveMappingHistory).not.toHaveBeenCalled();
+    ports.discoverArtifact.mockResolvedValue({ resolved: false, nextAction: "The source provider is unavailable." });
+    const unavailable = await resolveTerminalInitiativeRecovery({ decision: pirDecision, currentAgentId: "AGT-AUTHOR", refusedWorkroomId: room.capsuleId, ports });
+    expect(unavailable.reviewerRoutes).toEqual([]);
+    expect(unavailable.escalations).toEqual([expect.objectContaining({ reason: "no-canonical-artifact", nextAction: "The source provider is unavailable." })]);
+  });
+
+  it.each([false, true])("a covered pre-delivery plan routes independently of design changes (unchanged branch: %s)", async (unchanged) => {
+    const ports = deps([{ ...room, baseSha: unchanged ? headSha : baseSha }]);
+    if (unchanged) ports.discoverArtifact.mockResolvedValue({ resolved: false, nextAction: "No changed design on this branch." });
+    const reviewer = { agentId: "AGT-REVIEW", displayName: "Independent reviewer", status: "active", archived: false, lifecycleStage: "production" };
+    ports.resolveRecovery.mockImplementation((input) => resolveInitiativeReviewerRecovery({
+      ...input,
+      db: { agentToolGrant: { findMany: async () => [
+        { grantKey: "initiative_design_review", agent: reviewer },
+        { grantKey: "file_read", agent: reviewer },
+      ] } },
+    }));
+    // The live shape on BI-815D40C6: plan review owed, nothing delivered yet.
+    const preDelivery: InitiativeReadinessDecision = {
+      ...decision,
+      policyVersion: "initiative-readiness.v3",
+      unmet: [
+        readinessRequirement({ code: "PLAN_REVIEW_REQUIRED", state: "missing", accountableRole: "plan-reviewer" }),
+        readinessRequirement({ code: "DELIVERY_EVIDENCE_REQUIRED", state: "missing", accountableRole: "delivery-coordinator" }),
+        readinessRequirement({ code: "ACCEPTANCE_EVIDENCE_REQUIRED", state: "missing", accountableRole: "acceptance-reviewer" }),
+        readinessRequirement({ code: "OBJECTIVE_RECONCILIATION_REQUIRED", state: "missing", accountableRole: "acceptance-reviewer" }),
+      ],
+    };
+    const result = await resolveTerminalInitiativeRecovery({ decision: preDelivery, currentAgentId: "AGT-AUTHOR", refusedWorkroomId: room.capsuleId, ports });
+    expect(result.escalations).toEqual([]);
+    expect(result.reviewerRoutes).toHaveLength(1);
+    const packet = result.reviewerRoutes[0]!.requestCoworker;
+    expect(packet).toMatchObject({ targetAgent: "AGT-REVIEW", requiredToolNames: ["record_initiative_design_review", "read_source_at_version"] });
+    expect(packet.initiativeReviewBinding).toMatchObject({
+      gate: "plan-review", expectedCurrentBaselineId: "baseline-current",
+      workroomRef: { headSha, workroomId: room.capsuleId },
+      artifactRef: { path: "docs/superpowers/plans/plan.md", commitSha: headSha, providerBlobId: "4".repeat(40) },
+    });
+    expect(ports.loadPlanArtifact).toHaveBeenCalledWith({ itemId: "BI-TERMINAL", repositoryFullName: room.repositoryFullName });
+    expect(ports.loadEligibleEvidenceActivityIds).not.toHaveBeenCalled();
+    expect(ports.loadObjectiveMappingHistory).not.toHaveBeenCalled();
+    if (unchanged) expect(ports.discoverArtifact).not.toHaveBeenCalled();
+
+    // Without a baseline-valid plan the route stays unroutable with a named next step, never a guessed artifact.
+    ports.loadPlanArtifact.mockResolvedValue({ resolved: false, nextAction: "Record valid plan coverage." });
+    const noPlan = await resolveTerminalInitiativeRecovery({ decision: preDelivery, currentAgentId: "AGT-AUTHOR", refusedWorkroomId: room.capsuleId, ports });
+    expect(noPlan.reviewerRoutes).toEqual([]);
+  });
+
+  it("BI-1D8E53D9: a new item's design reviews route before a baseline exists, because spec approval mints it", async () => {
+    const ports = deps([room], []);
+    const reviewer = { agentId: "AGT-REVIEW", displayName: "Change Reviewer", status: "active", archived: false, lifecycleStage: "production" };
+    const architect = { agentId: "AGT-EA", displayName: "Enterprise Architect", status: "active", archived: false, lifecycleStage: "production" };
+    ports.resolveRecovery.mockImplementation((input) => resolveInitiativeReviewerRecovery({
+      ...input,
+      db: { agentToolGrant: { findMany: async () => [
+        { grantKey: "initiative_design_review", agent: reviewer },
+        { grantKey: "file_read", agent: reviewer },
+        { grantKey: "initiative_architecture_review", agent: architect },
+        { grantKey: "file_read", agent: architect },
+      ] } },
+    }));
+    // The live shape on BI-5F3D6A37 (2026-09-25): research passed, design reviews owed, no baseline yet.
+    const newFeature: InitiativeReadinessDecision = {
+      ...decision,
+      policyVersion: "initiative-readiness.v3",
+      profile: "feature",
+      unmet: [
+        readinessRequirement({ code: "CANONICAL_DESIGN_REQUIRED", state: "missing", accountableRole: "design-checklist-reviewer" }),
+        readinessRequirement({ code: "SPEC_APPROVAL_REQUIRED", state: "missing", accountableRole: "design-checklist-reviewer" }),
+        readinessRequirement({ code: "REVIEW_REQUIRED", state: "missing", accountableRole: "architecture-reviewer" }),
+        readinessRequirement({ code: "OBJECTIVE_BASELINE_REQUIRED", state: "missing", accountableRole: "design-checklist-reviewer" }),
+        readinessRequirement({ code: "DELIVERY_EVIDENCE_REQUIRED", state: "missing", accountableRole: "delivery-coordinator" }),
+        readinessRequirement({ code: "ACCEPTANCE_EVIDENCE_REQUIRED", state: "missing", accountableRole: "acceptance-reviewer" }),
+      ],
+    };
+    const result = await resolveTerminalInitiativeRecovery({ decision: newFeature, currentAgentId: "AGT-AUTHOR", refusedWorkroomId: room.capsuleId, ports });
+
+    expect(result.escalations).toEqual([]);
+    expect(result.reviewerRoutes.map((route) => [route.gate, route.targetAgentId]).sort()).toEqual([
+      ["architecture-review", "AGT-EA"],
+      ["design-spec", "AGT-REVIEW"],
+      ["spec-approval", "AGT-REVIEW"],
+    ]);
+    for (const route of result.reviewerRoutes) {
+      expect(route.requestCoworker.initiativeReviewBinding).toMatchObject({
+        expectedCurrentBaselineId: null,
+        workroomRef: { headSha, workroomId: room.capsuleId },
+        artifactRef: { path: "docs/superpowers/specs/design.md", providerBlobId: "3".repeat(40) },
+      });
+    }
+    expect(ports.discoverArtifact).toHaveBeenCalledWith({ repositoryFullName: room.repositoryFullName, baseSha, headSha });
+    expect(ports.loadEligibleEvidenceActivityIds).not.toHaveBeenCalled();
+
+    // With no design review owed, a missing baseline still fails closed on the acceptance chain.
+    const acceptanceOnly = await resolveTerminalInitiativeRecovery({ decision, currentAgentId: "AGT-AUTHOR", refusedWorkroomId: room.capsuleId, ports });
+    expect(acceptanceOnly.escalations).toEqual([expect.objectContaining({ reason: "baseline-not-found" })]);
+  });
+
+  it("BI-05F8860A: a small-shape acceptance lane escalates to record_execution_evidence, never to objective mapping", async () => {
+    const ports = deps();
+    const smallShapeDecision: InitiativeReadinessDecision = {
+      ...decision,
+      policyVersion: "initiative-readiness.v3",
+      unmet: [readinessRequirement({
+        code: "ACCEPTANCE_EVIDENCE_REQUIRED",
+        state: "missing",
+        accountableRole: "delivery-coordinator",
+      })],
+    };
+    const recovery = await resolveTerminalInitiativeRecovery({
+      decision: smallShapeDecision,
+      currentAgentId: null,
+      refusedWorkroomId: null,
+      ports,
+    });
+    expect(recovery.reviewerRoutes).toEqual([]);
+    expect(recovery.escalations).toEqual([expect.objectContaining({
+      reason: "acceptance-evidence-required",
+      accountableRole: "delivery-coordinator",
+      toolName: "record_execution_evidence",
+    })]);
+    expect(String(recovery.escalations[0]?.nextAction)).toContain("manual_check");
+    expect(ports.loadLiveRooms).not.toHaveBeenCalled();
+    expect(ports.loadBaselinePayloads).not.toHaveBeenCalled();
+  });
+
   it("binds the unique live room, current baseline, and provider-verified artifact", async () => {
     const ports = deps();
     const result = await resolveTerminalInitiativeRecovery({
@@ -73,8 +309,360 @@ describe("terminal initiative recovery", () => {
       },
       canonicalArtifact: { resolved: true, path: "docs/superpowers/specs/design.md", providerBlobId: "3".repeat(40) },
       expectedCurrentBaselineId: "baseline-current",
+      eligibleEvidenceActivityIds,
     }));
-    expect(result.reviewerRoutes).toEqual([{ gate: "objective-mapping" }]);
+    expect(ports.loadObjectiveMappingHistory).toHaveBeenCalledWith({
+      itemId: decision.subject.id,
+      headSha,
+    });
+    expect(result.reviewerRoutes).toMatchObject([{ gate: "objective-mapping" }]);
+  });
+
+  it("fails closed while historical objective-mapping approval authority is active", async () => {
+    const ports = deps();
+    const routePacket = {
+      targetAgent: "AGT-WS-PORTFOLIO",
+      objective: `For BI-TERMINAL in WC-TERMINAL on ${room.repositoryFullName}#${room.headBranch} at Workroom head ${headSha}, address objective-mapping using record_initiative_evidence.`,
+      questionPacketSummary: `objective-mapping for BI-TERMINAL at ${headSha.slice(0, 12)}`,
+      requestKey: "placeholder",
+      requiredToolNames: ["record_initiative_evidence", "read_source_at_version"],
+      initiativeReviewBinding: {
+        writerToolName: "record_initiative_evidence",
+        itemId: "BI-TERMINAL",
+        gate: "objective-mapping" as const,
+        expectedCurrentBaselineId: "baseline-current",
+        eligibleEvidenceActivityIds,
+        workroomRef: {
+          kind: "workroom-head" as const,
+          workroomId: room.capsuleId,
+          repositoryFullName: room.repositoryFullName,
+          branchName: room.headBranch,
+          headSha,
+        },
+        artifactRef: {
+          kind: "repo-blob-at-commit" as const,
+          repositoryFullName: room.repositoryFullName,
+          commitSha: headSha,
+          path: "docs/superpowers/specs/design.md",
+          providerBlobId: "3".repeat(40),
+        },
+      },
+    };
+    routePacket.requestKey = createObjectiveMappingRequestKey({
+      targetAgent: routePacket.targetAgent,
+      objective: routePacket.objective,
+      questionPacketSummary: routePacket.questionPacketSummary,
+      requiredToolNames: routePacket.requiredToolNames,
+      binding: routePacket.initiativeReviewBinding,
+    });
+    ports.resolveRecovery.mockResolvedValue({
+      reviewerRoutes: [{ gate: "objective-mapping", requestCoworker: routePacket }],
+      escalations: [],
+      unroutable: [],
+    });
+    ports.loadObjectiveMappingHistory.mockResolvedValue(ok({ history: [{
+      taskRunId: "TR-MCP-PRIOR",
+      status: "input-required",
+      targetAgent: routePacket.targetAgent,
+      objective: routePacket.objective,
+      questionPacketSummary: routePacket.questionPacketSummary,
+      idempotencyKey: `initiative-readiness:BI-TERMINAL:objective-mapping:${headSha}`,
+      requiredToolNames: routePacket.requiredToolNames,
+      binding: {
+        writerToolName: "record_initiative_evidence",
+        itemId: "BI-TERMINAL",
+        gate: "objective-mapping",
+        expectedCurrentBaselineId: "baseline-current",
+        artifactRef: routePacket.initiativeReviewBinding.artifactRef,
+      },
+      actionEnvelopeStatuses: ["approved"],
+      writerExecutions: [{ success: false, hasReceipt: false }],
+    }] }));
+
+    const result = await resolveTerminalInitiativeRecovery({
+      decision,
+      currentAgentId: "AGT-CALLER",
+      refusedWorkroomId: null,
+      ports,
+    });
+    expect(result.reviewerRoutes).toEqual([]);
+    expect(result.escalations).toMatchObject([{
+      reason: "objective-mapping-prior-authority-active",
+      nextAction: expect.stringContaining("TR-MCP-PRIOR"),
+    }]);
+  });
+
+  it("releases the exact Pet Rescue legacy identity only after an ancestor-bound provider blob mismatch", async () => {
+    const legacyBaseline = {
+      baselineId: "baseline-ancestor",
+      supersedesBaselineId: null,
+      artifactRef: {
+        kind: "repo-blob-at-commit" as const,
+        repositoryFullName: room.repositoryFullName,
+        commitSha: "6".repeat(40),
+        path: "docs/superpowers/specs/design.md",
+        providerBlobId: "7".repeat(40),
+      },
+    };
+    const current = {
+      baselineId: "baseline-current",
+      supersedesBaselineId: "baseline-ancestor",
+      artifactRef: {
+        kind: "repo-blob-at-commit" as const,
+        repositoryFullName: room.repositoryFullName,
+        commitSha: baselineCommitSha,
+        path: "docs/superpowers/specs/design.md",
+        providerBlobId: "3".repeat(40),
+      },
+    };
+    const ports = deps([room], [legacyBaseline, current]);
+    ports.loadObjectiveMappingHistory.mockResolvedValue(ok({ history: [{
+      taskRunId: "TR-MCP-PET-LEGACY",
+      status: "input-required",
+      targetAgent: "AGT-WS-PORTFOLIO",
+      objective: `For BI-TERMINAL in ${room.capsuleId} on ${room.repositoryFullName}#${room.headBranch} at Workroom head ${headSha}, address objective-mapping using record_initiative_evidence.`,
+      questionPacketSummary: `objective-mapping for BI-TERMINAL at ${headSha.slice(0, 12)}`,
+      idempotencyKey: `initiative-readiness:BI-TERMINAL:objective-mapping:${headSha}`,
+      requiredToolNames: ["record_initiative_evidence", "read_source_at_version"],
+      binding: {
+        writerToolName: "record_initiative_evidence",
+        itemId: "BI-TERMINAL",
+        gate: "objective-mapping",
+        expectedCurrentBaselineId: "baseline-ancestor",
+        artifactRef: {
+          ...legacyBaseline.artifactRef,
+          commitSha: headSha,
+        },
+      },
+      actionEnvelopeStatuses: [],
+      // The five live failures were immutable reader executions. They remain
+      // auditable but are not writer authority and must never be projected as
+      // record_initiative_evidence history.
+      writerExecutions: [],
+    }] }));
+    ports.verifyHistoricalArtifact.mockResolvedValue({
+      ok: false,
+      code: "IMMUTABLE_BLOB_MISMATCH",
+      error: "Repository provider blob identity does not match the requested locator.",
+    });
+
+    const result = await resolveTerminalInitiativeRecovery({
+      decision,
+      currentAgentId: "AGT-CALLER",
+      refusedWorkroomId: null,
+      ports,
+    });
+
+    expect(ports.verifyHistoricalArtifact).toHaveBeenCalledWith({
+      repositoryFullName: room.repositoryFullName,
+      commitSha: headSha,
+      path: legacyBaseline.artifactRef.path,
+      expectedBlobId: legacyBaseline.artifactRef.providerBlobId,
+    });
+    expect(result.reviewerRoutes).toMatchObject([{ gate: "objective-mapping" }]);
+  });
+
+  it.each([
+    ["provider unavailable", { ok: false, code: "IMMUTABLE_SOURCE_UNAVAILABLE", error: "provider timeout" }, "objective-mapping-history-unavailable"],
+    ["valid stale artifact", ok(new Uint8Array([1])), "objective-mapping-identity-conflict"],
+  ])("fails closed for a %s historical artifact", async (_label, verification, reason) => {
+    const legacyBaseline = {
+      baselineId: "baseline-ancestor",
+      supersedesBaselineId: null,
+      artifactRef: {
+        kind: "repo-blob-at-commit" as const,
+        repositoryFullName: room.repositoryFullName,
+        commitSha: "6".repeat(40),
+        path: "docs/superpowers/specs/design.md",
+        providerBlobId: "7".repeat(40),
+      },
+    };
+    const current = {
+      baselineId: "baseline-current",
+      supersedesBaselineId: "baseline-ancestor",
+      artifactRef: {
+        kind: "repo-blob-at-commit" as const,
+        repositoryFullName: room.repositoryFullName,
+        commitSha: baselineCommitSha,
+        path: "docs/superpowers/specs/design.md",
+        providerBlobId: "3".repeat(40),
+      },
+    };
+    const ports = deps([room], [legacyBaseline, current]);
+    ports.loadObjectiveMappingHistory.mockResolvedValue(ok({ history: [{
+      taskRunId: "TR-MCP-PET-LEGACY",
+      status: "input-required",
+      targetAgent: "AGT-WS-PORTFOLIO",
+      objective: `For BI-TERMINAL in ${room.capsuleId} on ${room.repositoryFullName}#${room.headBranch} at Workroom head ${headSha}, address objective-mapping using record_initiative_evidence.`,
+      questionPacketSummary: `objective-mapping for BI-TERMINAL at ${headSha.slice(0, 12)}`,
+      idempotencyKey: `initiative-readiness:BI-TERMINAL:objective-mapping:${headSha}`,
+      requiredToolNames: ["record_initiative_evidence", "read_source_at_version"],
+      binding: {
+        writerToolName: "record_initiative_evidence",
+        itemId: "BI-TERMINAL",
+        gate: "objective-mapping",
+        expectedCurrentBaselineId: "baseline-ancestor",
+        artifactRef: { ...legacyBaseline.artifactRef, commitSha: headSha },
+      },
+      actionEnvelopeStatuses: [],
+      writerExecutions: [],
+    }] }));
+    ports.verifyHistoricalArtifact.mockResolvedValue(verification);
+
+    const result = await resolveTerminalInitiativeRecovery({
+      decision,
+      currentAgentId: "AGT-CALLER",
+      refusedWorkroomId: null,
+      ports,
+    });
+
+    expect(result.reviewerRoutes).toEqual([]);
+    expect(result.escalations).toMatchObject([{ reason }]);
+  });
+
+  it("does not query or release an artifact whose claimed baseline is not a retained ancestor", async () => {
+    const current = {
+      baselineId: "baseline-current",
+      supersedesBaselineId: null,
+      artifactRef: {
+        kind: "repo-blob-at-commit" as const,
+        repositoryFullName: room.repositoryFullName,
+        commitSha: baselineCommitSha,
+        path: "docs/superpowers/specs/design.md",
+        providerBlobId: "3".repeat(40),
+      },
+    };
+    const ports = deps([room], [current]);
+    ports.loadObjectiveMappingHistory.mockResolvedValue(ok({ history: [{
+      taskRunId: "TR-MCP-UNRETAINED",
+      status: "input-required",
+      targetAgent: "AGT-WS-PORTFOLIO",
+      objective: `For BI-TERMINAL in ${room.capsuleId} on ${room.repositoryFullName}#${room.headBranch} at Workroom head ${headSha}, address objective-mapping using record_initiative_evidence.`,
+      questionPacketSummary: `objective-mapping for BI-TERMINAL at ${headSha.slice(0, 12)}`,
+      idempotencyKey: `initiative-readiness:BI-TERMINAL:objective-mapping:${headSha}`,
+      requiredToolNames: ["record_initiative_evidence", "read_source_at_version"],
+      binding: {
+        writerToolName: "record_initiative_evidence",
+        itemId: "BI-TERMINAL",
+        gate: "objective-mapping",
+        expectedCurrentBaselineId: "baseline-not-retained",
+        artifactRef: {
+          ...current.artifactRef,
+          commitSha: headSha,
+          providerBlobId: "7".repeat(40),
+        },
+      },
+      actionEnvelopeStatuses: [],
+      writerExecutions: [],
+    }] }));
+
+    const result = await resolveTerminalInitiativeRecovery({
+      decision,
+      currentAgentId: "AGT-CALLER",
+      refusedWorkroomId: null,
+      ports,
+    });
+
+    expect(ports.verifyHistoricalArtifact).not.toHaveBeenCalled();
+    expect(result.reviewerRoutes).toEqual([]);
+    expect(result.escalations).toMatchObject([{ reason: "objective-mapping-identity-conflict" }]);
+  });
+
+  // BI-7876699F: when the only unmet lane is RESEARCH_REQUIRED the packet used to
+  // fall through to the workroom/baseline chain and answer "baseline-not-found —
+  // complete independent spec approval". A delivery-small shape owes no
+  // OBJECTIVE_BASELINE_REQUIRED at all, so that route can never be taken: the
+  // item was unclosable by anyone. Research is author-satisfiable; say so.
+  it("routes an unmet research lane to the author's own writer, never to a baseline", async () => {
+    const ports = deps();
+    const researchOnly: InitiativeReadinessDecision = {
+      ...decision,
+      unmet: [readinessRequirement({
+        code: "RESEARCH_REQUIRED",
+        state: "missing",
+        accountableRole: "design-author",
+      })],
+    };
+
+    const result = await resolveTerminalInitiativeRecovery({
+      decision: researchOnly,
+      currentAgentId: "AGT-CALLER",
+      refusedWorkroomId: null,
+      ports,
+    });
+
+    expect(result.escalations).toMatchObject([{
+      reason: "research-evidence-required",
+      toolName: "record_initiative_evidence",
+      accountableRole: "design-author",
+    }]);
+    // It must not consult the baseline machinery at all for this lane.
+    expect(ports.loadBaselinePayloads).not.toHaveBeenCalled();
+    expect(ports.resolveRecovery).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when the current baseline has no eligible post-baseline passing evidence", async () => {
+    const ports = deps();
+    ports.loadEligibleEvidenceActivityIds.mockResolvedValue(ok({ activityIds: [] }));
+
+    const result = await resolveTerminalInitiativeRecovery({
+      decision,
+      currentAgentId: "AGT-CALLER",
+      refusedWorkroomId: null,
+      ports,
+    });
+
+    expect(result.reviewerRoutes).toEqual([]);
+    expect(result.escalations).toMatchObject([{ reason: "eligible-evidence-not-found" }]);
+    expect(ports.resolveRecovery).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when the post-baseline evidence inventory cannot be bounded", async () => {
+    const ports = deps();
+    ports.loadEligibleEvidenceActivityIds.mockResolvedValue(err("evidence-limit-exceeded"));
+
+    const result = await resolveTerminalInitiativeRecovery({
+      decision,
+      currentAgentId: "AGT-CALLER",
+      refusedWorkroomId: null,
+      ports,
+    });
+
+    expect(result.reviewerRoutes).toEqual([]);
+    expect(result.escalations).toMatchObject([{ reason: "eligible-evidence-unbounded" }]);
+    expect(ports.resolveRecovery).not.toHaveBeenCalled();
+  });
+
+  // The room moved past the commit that minted the baseline (a rebase or a docs
+  // commit); a pre-delivery reviewer reads, and the guard must accept, the head.
+  async function expectHeadBinding(unmet: InitiativeReadinessDecision["unmet"]) {
+    const ports = deps([room], [{ baselineId: "baseline-current", supersedesBaselineId: null, artifactRef: {
+      kind: "repo-blob-at-commit", repositoryFullName: room.repositoryFullName, commitSha: baselineCommitSha,
+      path: "docs/superpowers/specs/design.md", providerBlobId: "3".repeat(40) } }]);
+    ports.resolveRecovery.mockResolvedValue({ reviewerRoutes: [], escalations: [], unroutable: [] });
+    await resolveTerminalInitiativeRecovery({ decision: { ...decision, unmet }, currentAgentId: null, refusedWorkroomId: room.capsuleId, ports });
+    expect(ports.discoverArtifact).toHaveBeenCalledWith({ repositoryFullName: room.repositoryFullName, baseSha, headSha,
+      subjectItemId: decision.subject.id, headBranch: room.headBranch, backlogBody: undefined });
+    expect(ports.resolveRecovery).toHaveBeenCalledWith(expect.objectContaining({
+      // No pinned commit: the packet builder binds the room head, like the claim.
+      canonicalArtifact: { resolved: true, path: "docs/superpowers/specs/design.md", providerBlobId: "3".repeat(40) },
+      expectedCurrentBaselineId: "baseline-current",
+    }));
+  }
+
+  it("BI-D3E1F6D9: after the baseline exists, a design review binds the room head, as the refused claim's packet does", async () => {
+    await expectHeadBinding([readinessRequirement({ code: "REVIEW_REQUIRED", state: "missing", accountableRole: "architecture-reviewer" })]);
+  });
+
+  it("BI-D9DECD1B: a re-review after a failed specialist review binds the room head, as the claim's packet does", async () => {
+    await expectHeadBinding([readinessRequirement({ code: "REVIEW_FAILED", state: "fail", accountableRole: "data-reviewer" })]);
+  });
+
+  it("BI-D9DECD1B: an archetype review owed before implementation binds the room head, as the claim's packet does", async () => {
+    await expectHeadBinding([
+      readinessRequirement({ code: "ARCHETYPE_PROVISIONING_INCOMPLETE", state: "missing", accountableRole: "archetype-steward" }),
+      readinessRequirement({ code: "ARCHETYPE_COMPLETENESS_FAILED", state: "missing", accountableRole: "archetype-steward" }),
+    ]);
   });
 
   it("uses the provider-verified artifact already pinned by the current baseline", async () => {
@@ -126,5 +714,73 @@ describe("terminal initiative recovery", () => {
     expect(result.reviewerRoutes).toEqual([]);
     expect(result.escalations).toMatchObject([{ reason: "baseline-ambiguous" }]);
     expect(ports.discoverArtifact).not.toHaveBeenCalled();
+  });
+
+  // BI-0F8E39D5: a medium item's baseline is the criteria in its body, so
+  // "complete spec approval" was advice its shape can never follow.
+  it("names the unpersisted body baseline for a small or medium shape instead of sending it to spec approval", async () => {
+    for (const effective of ["small", "medium"] as const) {
+      const ports = deps([room], []);
+      const result = await resolveTerminalInitiativeRecovery({
+        decision: { ...decision, policyVersion: "initiative-readiness.v3", shapeDecision: { declared: effective, effective, sensitivity: null, raised: false } },
+        currentAgentId: null,
+        refusedWorkroomId: room.capsuleId,
+        ports,
+      });
+      expect(result.reviewerRoutes).toEqual([]);
+      expect(result.escalations).toMatchObject([{ reason: "body-baseline-unpersisted" }]);
+      expect(String(result.escalations[0]?.nextAction)).not.toMatch(/complete independent spec approval/i);
+    }
+  });
+
+  // DI-FDAB20135537: BI-FA769D87 was refused on OBJECTIVE_BASELINE_REQUIRED because
+  // its criteria sat under a bold line, not a heading. The escalation told the
+  // author the body "satisfies its baseline" and the item "cannot close"; adding
+  // a heading closed it. Missing criteria get their own, author-fixable step.
+  it("sends a small or medium item with no readable body criteria to edit its body, not to a dead end", async () => {
+    const ports = deps([room], []);
+    const result = await resolveTerminalInitiativeRecovery({
+      decision: {
+        ...decision,
+        policyVersion: "initiative-readiness.v3",
+        shapeDecision: { declared: "small", effective: "medium", sensitivity: "high", raised: true },
+        unmet: [readinessRequirement({ code: "OBJECTIVE_BASELINE_REQUIRED", state: "missing", accountableRole: "product-owner" })],
+      },
+      currentAgentId: null,
+      refusedWorkroomId: room.capsuleId,
+      ports,
+    });
+    expect(result.escalations).toMatchObject([{
+      reason: "acceptance-criteria-missing",
+      accountableRole: "product-owner",
+      toolName: "update_backlog_item",
+    }]);
+    const next = String(result.escalations[0]?.nextAction);
+    expect(next).toMatch(/Acceptance/);
+    expect(next).not.toMatch(/cannot close|satisfies its baseline/i);
+  });
+
+  it("names authorized body-version capture without offering a product-linked item the platform shortcut", async () => {
+    const ports = deps([room], []);
+    const result = await resolveTerminalInitiativeRecovery({
+      decision: { ...decision, policyVersion: "initiative-readiness.v3", shapeDecision: { declared: "medium", effective: "medium", sensitivity: null, raised: false } },
+      currentAgentId: null,
+      refusedWorkroomId: room.capsuleId,
+      ports,
+    });
+    expect(result.escalations).toMatchObject([{ reason: "body-baseline-unpersisted", toolName: "update_backlog_item_status" }]);
+    expect(String(result.escalations[0]?.nextAction)).toMatch(/Product-linked work still requires independent acceptance/);
+    expect(String(result.escalations[0]?.nextAction)).toMatch(/one current Workroom/);
+  });
+
+  it("still asks a large shape with no baseline for spec approval", async () => {
+    const ports = deps([room], []);
+    const result = await resolveTerminalInitiativeRecovery({
+      decision: { ...decision, policyVersion: "initiative-readiness.v3", shapeDecision: { declared: "large", effective: "large", sensitivity: null, raised: false } },
+      currentAgentId: null,
+      refusedWorkroomId: room.capsuleId,
+      ports,
+    });
+    expect(result.escalations).toMatchObject([{ reason: "baseline-not-found" }]);
   });
 });

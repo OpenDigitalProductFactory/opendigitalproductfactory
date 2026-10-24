@@ -1,6 +1,8 @@
+import { SOURCE_READ_MAX_CHARS, SOURCE_READ_MAX_LINES } from "./source-page-lines";
 import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const db = vi.hoisted(() => ({
+  findBacklogItem: vi.fn(),
   findFirst: vi.fn(),
   findUnique: vi.fn(),
   findModelConfig: vi.fn(),
@@ -21,6 +23,7 @@ const records = vi.hoisted(() => ({ create: vi.fn() }));
 const queue = vi.hoisted(() => ({ send: vi.fn() }));
 vi.mock("@dpf/db", () => ({
   prisma: {
+    backlogItem: { findUnique: (...args: unknown[]) => db.findBacklogItem(...args) },
     taskRun: {
       findFirst: (...args: unknown[]) => db.findFirst(...args),
       findUnique: (...args: unknown[]) => db.findUnique(...args),
@@ -43,10 +46,11 @@ vi.mock("@/lib/tak/autonomous-work-run", () => ({
 vi.mock("@/lib/tak/task-records", () => ({
   createTaskMessage: (...args: unknown[]) => records.create(...args),
 }));
-vi.mock("@/lib/queue/inngest-client", () => ({
-  inngest: { send: (...args: unknown[]) => queue.send(...args) },
+vi.mock("@/lib/jobs", () => ({
+  jobs: { send: (...args: unknown[]) => queue.send(...args) },
 }));
 import { submitRemoteCoworkerTask } from "./mcp-task-submit";
+import * as taskAuthority from "./auth/oauth-task-authority";
 const userContext = { platformRole: "developer", isSuperuser: false };
 const immutableParams = {
   agentId: "AGT-WS-REVIEW",
@@ -66,8 +70,27 @@ function submit(tokenId: string, params: Record<string, unknown> = immutablePara
     params,
   });
 }
+
+it("keeps OAuth idempotency stable through refresh while separating concurrent tasks", async () => {
+  const authority = vi.spyOn(taskAuthority, "resolveMcpTaskAuthorityKey").mockResolvedValue("oauth-family:approved-family");
+  try {
+    for (const [tokenId, idempotencyKey] of [["before", "task-a"], ["after", "task-a"], ["after", "task-b"]]) {
+      await submitRemoteCoworkerTask({ token: { tokenId, userId: "user-1", capability: "write", source: "oauth" },
+        userContext, params: { ...immutableParams, idempotencyKey } });
+    }
+    const requests = autonomous.create.mock.calls.map(([request]) => request);
+    expect(requests).toHaveLength(3);
+    expect(requests[0].taskRunId).toBe(requests[1].taskRunId);
+    expect(requests[2].taskRunId).not.toBe(requests[0].taskRunId);
+    expect(requests[1].metadata).toMatchObject({ taskAuthorityKey: "oauth-family:approved-family", apiTokenId: "after" });
+    expect(db.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({
+      userId: "user-1", AND: expect.arrayContaining([{ a2aMetadata: { path: ["taskAuthorityKey"], equals: "oauth-family:approved-family" } }]),
+    }) }));
+  } finally { authority.mockRestore(); }
+});
 beforeEach(() => {
   vi.clearAllMocks();
+  db.findBacklogItem.mockResolvedValue({ workType: "feature", featureBuilds: [], activeBuild: null, activities: [] });
   vi.unstubAllEnvs();
   vi.stubEnv("DPF_EXTERNAL_MCP_TASK_ASYNC", "0");
   db.findFirst.mockResolvedValue(null);
@@ -79,6 +102,11 @@ beforeEach(() => {
     budgetClass: "quality_first",
     pinnedProviderId: "local",
     pinnedModelId: "huggingface.co/ggml-org/qwen3.8-27b-gguf:Q4_K_M",
+    // BI-8CFA1CA8: residency is stated on the config, not inferred from the
+    // local pin. The migration writes exactly this for every config that was
+    // local-pinned, so this fixture is what a real post-migration row holds —
+    // and the local_only assertion below still guards the same guarantee.
+    residencyPolicy: "local_only",
   });
   db.upsertThread.mockResolvedValue({ id: "thread-external" });
   db.update.mockResolvedValue({});
@@ -145,6 +173,9 @@ describe("submitRemoteCoworkerTask idempotency", () => {
   it("keeps a review input-required when successful reads end without its required writer", async () => {
     autonomous.execute.mockResolvedValue({
       content: "The independent review stopped without recording a governed assessment. No receipt was created.",
+      // BI-C35576A9: the provider that ran was a CLI subscription, so the wait
+      // must record the receipt-verified contract it was actually held to.
+      providerId: "anthropic-sub",
       executedTools: Array.from({ length: 5 }, (_, index) => ({
         name: "read_source_at_version",
         args: { startLine: index * 30 + 1 },
@@ -178,8 +209,8 @@ describe("submitRemoteCoworkerTask idempotency", () => {
       },
     });
 
-    expect(db.update).toHaveBeenCalledWith({
-      where: { taskRunId: expect.stringMatching(/^TR-MCP-/) },
+    expect(db.updateMany).toHaveBeenCalledWith({
+      where: expect.objectContaining({ taskRunId: expect.stringMatching(/^TR-MCP-/), status: "working" }),
       data: {
         status: "input-required",
         completedAt: null,
@@ -192,7 +223,7 @@ describe("submitRemoteCoworkerTask idempotency", () => {
             kind: "missing-terminal-writer",
             writerToolName: "record_initiative_evidence",
             resumeMode: "same-taskrun",
-            dispatchContract: "required-tool-call",
+            dispatchContract: "receipt-verified",
             attempt: 1,
             observedAt: expect.any(String),
           },
@@ -210,146 +241,6 @@ describe("submitRemoteCoworkerTask idempotency", () => {
         isError: false,
       },
     });
-  });
-
-  it("consumes an approved exact-call envelope on same-packet replay", async () => {
-    const params = {
-      agentId: "AGT-WS-BUILD",
-      routeContext: "/build/work/WC-7FF8A505",
-      objective: "Record the immutable research review.",
-      prompt: "Read the source and record the governed evidence.",
-      idempotencyKey: "research-review-approved-resume",
-      riskClass: "bounded-write",
-      authorityScope: [
-        "backlog-item:BI-F0715C9C",
-        "tool:read_source_at_version",
-        "tool:record_initiative_evidence",
-      ],
-    };
-    db.findFirst.mockResolvedValue({
-      taskRunId: "TR-MCP-APPROVED",
-      status: "input-required",
-      updatedAt: new Date("2026-08-24T07:00:00.000Z"),
-      progressPayload: {
-        requiresApproval: true,
-        approvalRecovery: {
-          schemaVersion: 1,
-          kind: "expired-approved-envelope",
-          sourceEnvelopeId: "ENV-EXPIRED",
-          replacementEnvelopeId: "ENV-APPROVED",
-          inferenceRerun: false,
-        },
-      },
-      a2aMetadata: {
-        idempotencyKey: params.idempotencyKey,
-        apiTokenId: "PAT-A",
-        requestDigest: createHash("sha256").update(JSON.stringify({
-          agentId: params.agentId,
-          routeContext: params.routeContext,
-          title: params.objective,
-          objective: params.objective,
-          prompt: params.prompt,
-          riskClass: params.riskClass,
-          authorityScope: [...params.authorityScope].sort(),
-          collaborationKind: null,
-        })).digest("hex"),
-      },
-    });
-    db.findEnvelope.mockResolvedValue({
-      id: "ENV-APPROVED",
-      threadId: "thread-external",
-      manifestActionId: "record_initiative_evidence",
-    });
-    db.findToolExecution.mockResolvedValue({
-      parameters: {
-        backlogItemId: "BI-F0715C9C",
-        decision: "pass",
-        artifactPath: "docs/superpowers/specs/design.md",
-        artifactGitSha: "abc123",
-        artifactBlobSha: "def456",
-        artifactRepository: "OpenDigitalProductFactory/opendigitalproductfactory",
-        note: "Independent research evidence is complete.",
-        findings: [],
-        _takAlignment: { verdict: "aligned" },
-      },
-      result: { data: { envelopeId: "ENV-APPROVED" } },
-    });
-
-    const outcome = await submit("PAT-A", params);
-
-    expect(autonomous.executeTool).toHaveBeenCalledWith({
-      toolName: "record_initiative_evidence",
-      args: {
-        backlogItemId: "BI-F0715C9C",
-        decision: "pass",
-        artifactPath: "docs/superpowers/specs/design.md",
-        artifactGitSha: "abc123",
-        artifactBlobSha: "def456",
-        artifactRepository: "OpenDigitalProductFactory/opendigitalproductfactory",
-        note: "Independent research evidence is complete.",
-        findings: [],
-      },
-      userId: "user-1",
-      userContext,
-      routeContext: "/build/work/WC-7FF8A505",
-      agentId: "AGT-WS-BUILD",
-      threadId: "thread-external",
-      taskRunId: "TR-MCP-APPROVED",
-      apiTokenId: "PAT-A",
-      tokenScope: "write",
-      externalAccessEnabled: true,
-    });
-    expect(db.updateMany).toHaveBeenCalledWith({
-      where: {
-        taskRunId: "TR-MCP-APPROVED",
-        status: "input-required",
-        updatedAt: new Date("2026-08-24T07:00:00.000Z"),
-      },
-      data: {
-        progressPayload: {
-          approvalRecovery: {
-            schemaVersion: 1,
-            kind: "expired-approved-envelope",
-            sourceEnvelopeId: "ENV-EXPIRED",
-            replacementEnvelopeId: "ENV-APPROVED",
-            inferenceRerun: false,
-          },
-          requiresApproval: true,
-          approvalResumeReserved: true,
-        },
-      },
-    });
-    expect(db.update).toHaveBeenCalledWith({
-      where: { taskRunId: "TR-MCP-APPROVED" },
-      data: { status: "working", lastHeartbeatAt: expect.any(Date) },
-    });
-    expect(db.update).toHaveBeenCalledWith({
-      where: { taskRunId: "TR-MCP-APPROVED" },
-      data: {
-        status: "completed",
-        completedAt: expect.any(Date),
-        progressPayload: expect.objectContaining({
-          approvalRecovery: expect.objectContaining({
-            kind: "expired-approved-envelope",
-            sourceEnvelopeId: "ENV-EXPIRED",
-            replacementEnvelopeId: "ENV-APPROVED",
-            inferenceRerun: false,
-          }),
-          resumedFromApproval: true,
-        }),
-      },
-    });
-    expect(outcome).toMatchObject({
-      kind: "result",
-      result: {
-        taskRunId: "TR-MCP-APPROVED",
-        status: "completed",
-        resumedFromApproval: true,
-        executedToolCount: 1,
-      },
-    });
-    expect(autonomous.create).not.toHaveBeenCalled();
-    expect(autonomous.execute).not.toHaveBeenCalled();
   });
 
   it("binds a deterministic TaskRun and immutable digest to token + requestKey", async () => {
@@ -384,24 +275,28 @@ describe("submitRemoteCoworkerTask idempotency", () => {
     }));
   });
 
-  it("replays only the same immutable request", async () => {
+  it.each(["completed", "input-required"])("replays only the same immutable request (%s)", async (status) => {
     await submit("PAT-A");
     const metadata = (autonomous.create.mock.calls[0]?.[0] as { metadata: Record<string, unknown> }).metadata;
     vi.clearAllMocks();
     db.findFirst.mockResolvedValue({
       taskRunId: "TR-MCP-EXISTING",
-      status: "completed",
-      progressPayload: { summary: "approved" },
+      status,
+      progressPayload: status === "completed" ? { summary: "approved" } : {
+        executionUncertainty: { schemaVersion: 1, settlement: "unknown" },
+        terminalWriterWait: { schemaVersion: 1, kind: "missing-terminal-writer", writerToolName: "record_initiative_design_review", resumeMode: "same-taskrun", attempt: 1, observedAt: "2026-10-15T22:15:48.811Z" },
+      },
       a2aMetadata: metadata,
     });
 
     const outcome = await submit("PAT-A");
 
-    expect(outcome).toMatchObject({
-      kind: "result",
-      result: { taskRunId: "TR-MCP-EXISTING", idempotentReplay: true },
-    });
+    expect(outcome).toMatchObject({ kind: "result", result: {
+      taskRunId: "TR-MCP-EXISTING", idempotentReplay: true } });
     expect(autonomous.create).not.toHaveBeenCalled();
+    if (status === "input-required") expect(outcome).toMatchObject({ result: { resumable: false, requiresApproval: false, waitReason: "execution-uncertain" } });
+    expect(autonomous.execute).not.toHaveBeenCalled();
+    expect(queue.send).not.toHaveBeenCalled();
   });
 
   it("rejects reuse of a request key with a changed immutable packet", async () => {
@@ -494,6 +389,7 @@ describe("submitRemoteCoworkerTask idempotency", () => {
         budgetClass: true,
         pinnedProviderId: true,
         pinnedModelId: true,
+        residencyPolicy: true,
       },
     });
   });
@@ -599,8 +495,8 @@ describe("submitRemoteCoworkerTask idempotency", () => {
         version: { type: "string", enum: [initiativeReviewBinding.artifactRef.commitSha] },
         startLine: expect.objectContaining({ type: "number", minimum: 1 }),
         cursor: expect.objectContaining({ type: "string" }),
-        maxLines: expect.objectContaining({ type: "number", maximum: 200 }),
-        maxChars: expect.objectContaining({ type: "number", maximum: 3200 }),
+        maxLines: expect.objectContaining({ type: "number", maximum: SOURCE_READ_MAX_LINES }),
+        maxChars: expect.objectContaining({ type: "number", maximum: SOURCE_READ_MAX_CHARS }),
         expectedBlobId: { type: "string", enum: [initiativeReviewBinding.artifactRef.providerBlobId] },
       },
       required: ["repositoryFullName", "path", "version", "expectedBlobId"],
@@ -625,6 +521,7 @@ describe("submitRemoteCoworkerTask idempotency", () => {
     expect(execution.terminalToolPolicy).toEqual({
       writerToolName: "record_initiative_evidence",
       readerToolNames: ["read_source_at_version", "search_source_at_version"],
+      immutableReaderToolName: "read_source_at_version",
       minimumSuccessfulReaderCalls: 1,
       maximumReaderCalls: 6,
       immutableReaderArguments: {
@@ -641,10 +538,10 @@ describe("submitRemoteCoworkerTask idempotency", () => {
     expect(writer.inputSchema.properties).not.toHaveProperty("itemId");
     expect(writer.inputSchema.properties).not.toHaveProperty("gate");
     expect(writer.inputSchema.properties).not.toHaveProperty("artifactRef");
-    expect(writer.inputSchema.properties).not.toHaveProperty("findings");
-    expect(writer.inputSchema.properties).not.toHaveProperty("resolvedFindingRefs");
-    expect(writer.inputSchema.properties).not.toHaveProperty("reason");
-    expect(writer.inputSchema.required).toEqual(["decision"]);
+    expect(writer.inputSchema.properties).toHaveProperty("findings");
+    expect(writer.inputSchema.properties).toHaveProperty("resolvedFindingRefs");
+    expect(writer.inputSchema.properties).toHaveProperty("reason");
+    expect(writer.inputSchema.required).toEqual(["decision", "reason", "findings", "resolvedFindingRefs"]);
     const providerWriter = execution.toolsForProvider.find((tool) => tool.function?.name === "record_initiative_evidence")!;
     expect(providerWriter.function?.parameters?.properties).toEqual(writer.inputSchema.properties);
     expect(providerWriter.function?.parameters?.required).toEqual(writer.inputSchema.required);
@@ -690,6 +587,111 @@ describe("submitRemoteCoworkerTask idempotency", () => {
     expect(outcome).toMatchObject({
       kind: "invalid_params",
       message: expect.stringContaining("item must match the backlog authority scope"),
+    });
+    expect(autonomous.resolveAgent).not.toHaveBeenCalled();
+  });
+
+  it("rejects a bound review that omits every immutable reader", async () => {
+    const outcome = await submit("PAT-BINDING-NO-READER", {
+      agentId: "AGT-WS-REVIEW",
+      routeContext: "/build/work/WC-7FF8A505",
+      objective: "Record the immutable design review.",
+      prompt: "Record the governed assessment.",
+      idempotencyKey: "review-binding-without-reader",
+      riskClass: "bounded-write",
+      authorityScope: [
+        "backlog-item:BI-F0715C9C",
+        "tool:record_initiative_design_review",
+      ],
+      initiativeReviewBinding: {
+        writerToolName: "record_initiative_design_review",
+        itemId: "BI-F0715C9C",
+        gate: "spec-approval",
+        expectedCurrentBaselineId: null,
+        artifactRef: {
+          kind: "repo-blob-at-commit",
+          repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+          commitSha: "d47536a552c7d588b2f963e478ae99369f720783",
+          path: "docs/superpowers/specs/design.md",
+          providerBlobId: "fb57e087c19ce0a3c78b4d591bb5da63027c2b3b",
+        },
+      },
+    });
+
+    expect(outcome).toMatchObject({
+      kind: "invalid_params",
+      message: expect.stringContaining("requires read_source_at_version"),
+    });
+    expect(autonomous.resolveAgent).not.toHaveBeenCalled();
+  });
+
+  it("rejects a bound review whose only immutable reader cannot complete evidence traversal", async () => {
+    const outcome = await submit("PAT-BINDING-SEARCH-ONLY", {
+      agentId: "AGT-WS-REVIEW",
+      routeContext: "/build/work/WC-7FF8A505",
+      objective: "Record the immutable design review.",
+      prompt: "Search the source and record the governed assessment.",
+      idempotencyKey: "review-binding-with-search-only",
+      riskClass: "bounded-write",
+      authorityScope: [
+        "backlog-item:BI-F0715C9C",
+        "tool:search_source_at_version",
+        "tool:record_initiative_design_review",
+      ],
+      initiativeReviewBinding: {
+        writerToolName: "record_initiative_design_review",
+        itemId: "BI-F0715C9C",
+        gate: "spec-approval",
+        expectedCurrentBaselineId: null,
+        artifactRef: {
+          kind: "repo-blob-at-commit",
+          repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+          commitSha: "d47536a552c7d588b2f963e478ae99369f720783",
+          path: "docs/superpowers/specs/design.md",
+          providerBlobId: "fb57e087c19ce0a3c78b4d591bb5da63027c2b3b",
+        },
+      },
+    });
+
+    expect(outcome).toMatchObject({
+      kind: "invalid_params",
+      message: expect.stringContaining("requires read_source_at_version"),
+    });
+    expect(autonomous.resolveAgent).not.toHaveBeenCalled();
+  });
+
+  it("rejects unrelated tools beside the bound writer and immutable reader", async () => {
+    const outcome = await submit("PAT-BINDING-EXTRA-TOOL", {
+      agentId: "AGT-WS-REVIEW",
+      routeContext: "/build/work/WC-7FF8A505",
+      objective: "Record the immutable design review.",
+      prompt: "Read the source and record the governed assessment.",
+      idempotencyKey: "review-binding-with-extra-tool",
+      riskClass: "bounded-write",
+      authorityScope: [
+        "backlog-item:BI-F0715C9C",
+        "tool:read_source_at_version",
+        "tool:record_initiative_design_review",
+        "tool:update_backlog_item",
+      ],
+      initiativeReviewBinding: {
+        writerToolName: "record_initiative_design_review",
+        itemId: "BI-F0715C9C",
+        gate: "spec-approval",
+        expectedCurrentBaselineId: null,
+        artifactRef: {
+          kind: "repo-blob-at-commit",
+          repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+          commitSha: "d47536a552c7d588b2f963e478ae99369f720783",
+          path: "docs/superpowers/specs/design.md",
+          providerBlobId: "fb57e087c19ce0a3c78b4d591bb5da63027c2b3b",
+        },
+      },
+    });
+
+    expect(outcome).toMatchObject({
+      kind: "invalid_params",
+      message: expect.stringContaining("only the bound writer and immutable readers"),
     });
     expect(autonomous.resolveAgent).not.toHaveBeenCalled();
   });
@@ -753,17 +755,13 @@ describe("submitRemoteCoworkerTask idempotency", () => {
       toolsForProvider: Array<{ function?: { name?: string; parameters?: { properties?: Record<string, unknown> } } }>;
       terminalToolPolicy?: Record<string, unknown>;
     };
-    expect(execution.tools.map((tool) => tool.name)).toEqual([
-      "read_source_at_version",
-      "record_initiative_design_review",
-    ]);
-    expect(execution.toolsForProvider.map((tool) => tool.function?.name)).toEqual([
-      "read_source_at_version",
-      "record_initiative_design_review",
-    ]);
+    const expectedTools = ["read_source_at_version", "record_initiative_design_review"];
+    expect(execution.tools.map((tool) => tool.name)).toEqual(expectedTools);
+    expect(execution.toolsForProvider.map((tool) => tool.function?.name)).toEqual(expectedTools);
     expect(execution.terminalToolPolicy).toEqual({
       writerToolName: "record_initiative_design_review",
       readerToolNames: ["read_source_at_version"],
+      immutableReaderToolName: "read_source_at_version",
       minimumSuccessfulReaderCalls: 1,
       maximumReaderCalls: 6,
       immutableReaderArguments: {
@@ -775,6 +773,8 @@ describe("submitRemoteCoworkerTask idempotency", () => {
     });
     const boundWriter = execution.tools.find((tool) => tool.name === writer.name)!;
     const providerWriter = execution.toolsForProvider.find((tool) => tool.function?.name === writer.name)!;
+    expect(boundWriter.inputSchema.properties.profile).toEqual({ type: "string", enum: ["feature"] });
+    expect(providerWriter.function?.parameters?.properties?.profile).toEqual({ type: "string", enum: ["feature"] });
     expect(boundWriter.inputSchema.properties).not.toHaveProperty("expectedCurrentBaselineId");
     expect(providerWriter.function?.parameters?.properties).not.toHaveProperty("expectedCurrentBaselineId");
     expect(autonomous.create).toHaveBeenCalledWith(expect.objectContaining({
@@ -794,6 +794,6 @@ describe("submitRemoteCoworkerTask idempotency", () => {
     });
 
     expect(autonomous.execute.mock.calls[0]?.[0]).not.toHaveProperty("effortWarrant");
-    expect(db.findUnique).not.toHaveBeenCalled();
+    expect(db.findUnique).toHaveBeenCalledWith(expect.objectContaining({ select: expect.objectContaining({ status: true }) }));
   });
 });

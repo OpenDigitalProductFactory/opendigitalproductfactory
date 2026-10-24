@@ -1,6 +1,10 @@
+import { execFile } from "node:child_process";
 import { tmpdir } from "node:os";
+import { promisify } from "node:util";
 
 import { describe, expect, it } from "vitest";
+
+const execFileAsync = promisify(execFile);
 
 import {
   isReachableFromTrunk,
@@ -9,7 +13,9 @@ import {
   parsePrUrlFromText,
   parseWorktreeList,
   shouldSurfaceAdoptableBranch,
+  trunkHasMergedPullRequest,
   trunkRefExists,
+  trustedGitArgs,
 } from "./git-scanner";
 
 describe("git scanner parsing", () => {
@@ -94,5 +100,40 @@ describe("delivered-signal git helpers (procedural, local)", () => {
     expect(await isReachableFromTrunk(repoRoot, "origin/main")).toBe(true);
     // A well-formed but nonexistent sha is indeterminate → null, never a false merged.
     expect(await isReachableFromTrunk(repoRoot, "0000000000000000000000000000000000000000")).toBeNull();
+  });
+});
+
+describe("trunkHasMergedPullRequest (BI-AFE8BB73)", () => {
+  it("is null for an invalid number or a non-repo path, never a false merged", async () => {
+    expect(await trunkHasMergedPullRequest(process.cwd(), null)).toBeNull();
+    expect(await trunkHasMergedPullRequest(process.cwd(), 0)).toBeNull();
+    expect(await trunkHasMergedPullRequest(tmpdir(), 5119)).toBeNull();
+  });
+
+  it("finds a merged PR's squash commit on a present local trunk and not a never-merged number", async () => {
+    const repoRoot = process.cwd();
+    if (!(await trunkRefExists(repoRoot))) return; // no local trunk here → skip
+    // Use whatever squash-merge commit the local trunk tip carries, so the
+    // assertion does not depend on how much history the checkout fetched or
+    // on a fixed PR number that a shallow or partial trunk cannot see.
+    const { stdout } = await execFileAsync(
+      "git",
+      ["-C", repoRoot, "log", "origin/main", "-20", "--format=%s"],
+      { timeout: 5000, windowsHide: true },
+    );
+    const merged = stdout.split("\n").map((line) => line.match(/\(#(\d+)\)\s*$/)?.[1]).find(Boolean);
+    if (!merged) return; // a trunk with no squash-merge subject in reach → nothing to assert
+    expect(await trunkHasMergedPullRequest(repoRoot, Number(merged))).toBe(true);
+    expect(await trunkHasMergedPullRequest(repoRoot, 99999999)).toBe(false);
+  });
+});
+
+// BI-DC2758DE: the trust exception names exactly the probed root, never `*`.
+describe("trustedGitArgs", () => {
+  it("scopes safe.directory to the one repository it runs in", () => {
+    expect(trustedGitArgs("/sandbox-workspace", ["rev-parse", "HEAD"])).toEqual([
+      "-c", "safe.directory=/sandbox-workspace", "-C", "/sandbox-workspace", "rev-parse", "HEAD",
+    ]);
+    expect(trustedGitArgs("/a", ["log"]).join(" ")).not.toContain("safe.directory=*");
   });
 });

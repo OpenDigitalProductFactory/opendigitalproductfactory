@@ -456,11 +456,11 @@ function main() {
   const approxTokens = Math.round(currentTotal / 4);
   const extractedTotal = extracted.reduce((a, g) => a + g.bytes, 0);
   const extractedNote = extracted.length
-    ? ` + ${extractedTotal} bytes harness-injected across ${extracted.reduce((a, g) => a + g.items.length, 0)} skill frontmatters`
+    ? `; includes ${extractedTotal} bytes of skill metadata across ${extracted.reduce((a, g) => a + g.items.length, 0)} skill frontmatters`
     : "";
   console.log(
-    `Instruction-plane OK — ${currentTotal} bytes across ${manifest.alwaysOn.length} always-on files${extractedNote} ` +
-      `(baseline ${baselineTotal}; ~${approxTokens} tokens advisory).` +
+    `Instruction-plane OK — ${currentTotal} total source bytes (${manifest.alwaysOn.length} always-on files${extractedNote}) ` +
+      `(baseline ${baselineTotal}; ~${approxTokens} tokens by bytes/4 only; attached/cached/billed tokens unmeasured).` +
       ` Contingency markers: ${markers.runtime} ⟦runtime⟧ / ${markers.model} ⟦model⟧ / ${markers.situational} ⟦situational⟧.` +
       (warnings.length ? ` ${warnings.length} advisory structural note(s).` : ""),
   );

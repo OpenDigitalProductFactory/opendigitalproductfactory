@@ -10,18 +10,18 @@
     "./agent-toolchain": "./src/agent-toolchain/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "typecheck": "node ../../scripts/run-tsc.mjs --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
     "@dpf/integration-shared": "workspace:*",
-    "smol-toml": "^1.8.0"
+    "smol-toml": "^1.9.1"
   },
   "devDependencies": {
-    "@types/node": "^26.2.0",
-    "tsx": "^4.23.12",
-    "typescript": "^6.0.3",
-    "vitest": "^4.1.10"
+    "@types/node": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

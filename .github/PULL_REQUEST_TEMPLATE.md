@@ -11,6 +11,12 @@
 
 ## Test plan
 
+### Failure analysis and recovery
+
+<!-- Link the design-stage analysis and the final structured analysis recorded with the shared review. Describe concrete business/user effects, eliminated opportunities, and prevention, containment, detection and recovery for each remaining scenario. Tie claims to executed evidence for this final change. Name residual risks and their accountable disposition. Scale depth to consequences; empty checkboxes and unsupported assurances are not evidence. -->
+
+<!-- Include the independent omission challenge and the persisted review/evidence reference. Technical review outages require internal recovery; a business owner's name is not technical approval or a risk-acceptance receipt. -->
+
 <!--
   Thread worktrees are source-control isolation, not runtime isolation.
   Source-only checks can run in the worktree; runtime-bound checks should

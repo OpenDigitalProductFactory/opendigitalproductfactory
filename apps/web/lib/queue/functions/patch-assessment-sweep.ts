@@ -11,8 +11,8 @@
 // Inngest harness) + a thin wrapper with the quiescence gate. KEV/OSV are best-effort —
 // an unreachable feed degrades coverage, it does not fail the job or fabricate findings.
 
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 import { runEstatePatchAssessment, type PatchStoreDb } from "@/lib/patch/patch-assessment-store";
 import {
@@ -24,6 +24,8 @@ import { fetchOsvVulns } from "@/lib/patch/osv-client";
 import { fetchKevCves } from "@/lib/patch/kev-client";
 import { fetchNvdCveAdvisories } from "@/lib/patch/nvd-client";
 import type { PatchAssessmentSummary } from "@dpf/db/patch";
+import { recordMonitorSourceReachability } from "@/lib/observability/monitor-source-reachability";
+import type { MonitorIssueDb } from "@/lib/observability/monitor-issue-writer";
 
 /**
  * Run one estate patch assessment. Exported so tests can drive it directly. The DB and
@@ -33,11 +35,35 @@ export async function runPatchAssessmentSweep(): Promise<PatchAssessmentSummary>
   const { prisma } = await import("@dpf/db");
 
   let kevCves: Set<string>;
+  let kevReached = true;
   try {
     kevCves = await fetchKevCves();
   } catch (err) {
+    // Degrading to an empty KEV set is correct — better a patch assessment
+    // without exploited-in-the-wild enrichment than none. Reporting that
+    // degradation as a normal run is NOT (BI-ADB574AB): the sweep silently
+    // stops knowing which CVEs are actively exploited, and the estate looks
+    // calmer than it is. File the blindness; it clears on the next reachable run.
     console.error("[patch-assessment-sweep] CISA KEV unreachable; proceeding without KEV", err);
     kevCves = new Set();
+    kevReached = false;
+    await recordMonitorSourceReachability(prisma as unknown as MonitorIssueDb, {
+      monitorId: "ops/patch-assessment-sweep",
+      sourceId: "cisa-kev",
+      reached: false,
+      severity: "error",
+      blindTo:
+        "this estate patch assessment cannot tell which CVEs are actively exploited in the wild — KEV severity escalation is absent from its findings",
+      error: err,
+    });
+  }
+  if (kevReached) {
+    await recordMonitorSourceReachability(prisma as unknown as MonitorIssueDb, {
+      monitorId: "ops/patch-assessment-sweep",
+      sourceId: "cisa-kev",
+      reached: true,
+      blindTo: "",
+    });
   }
 
   const osvProvider = createOsvPatchIntelProvider({ fetchVulns: fetchOsvVulns, kevCves });
@@ -49,10 +75,10 @@ export async function runPatchAssessmentSweep(): Promise<PatchAssessmentSummary>
   return runEstatePatchAssessment(prisma as unknown as PatchStoreDb, provider, { now: new Date() });
 }
 
-export const patchAssessmentSweep = inngest.createFunction(
+export const patchAssessmentSweep = jobs.createFunction(
   { id: "ops/patch-assessment-sweep", retries: 2, triggers: [cron("0 5 * * *")] },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, "ops/patch-assessment-sweep");
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     return await step.run("patch-assessment", runPatchAssessmentSweep);

@@ -11,7 +11,7 @@
 // planned here still land in the approval queue at pending-review, per
 // docs/superpowers/specs/2026-05-26-marketing-execution-loop-design.md.
 
-import type { ToolResult } from "@/lib/mcp-tools";
+import type { ToolResult } from "@/lib/mcp-tool-types";
 
 export type MarketingToolContext = {
   agentId?: string | null;

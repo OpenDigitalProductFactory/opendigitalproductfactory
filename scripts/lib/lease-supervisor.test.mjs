@@ -2,8 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  createRetryableRelease,
+  admittedLeaseTtlMs,
   authoritySafetyMarginMs,
   heartbeatIntervalMs,
+  isAuthoritativeRefusal,
   superviseLeaseRun,
   uncertainRetryDelayMs,
 } from "./lease-supervisor.mjs";
@@ -377,4 +380,117 @@ test("the backoff is capped at the heartbeat interval and never zero", () => {
       assert.ok(delay <= intervalMs, `ttl ${ttlMs} attempt ${attempt} exceeded the interval`);
     }
   }
+});
+
+// 2026-09-24: a passed gate lost its verdict. A quiescing portal or a server
+// that threw is "not now", not "the lease is gone", and a failed release must
+// not take the run's evidence with it.
+test("only a refusal that says the lease is gone is authoritative", () => {
+  assert.equal(isAuthoritativeRefusal({ success: false, error: "lease_lost" }), true);
+  assert.equal(isAuthoritativeRefusal({ success: false, error: "nonprod_lease_not_owner" }), true);
+  assert.equal(isAuthoritativeRefusal({ success: false, error: "portal_quiescing" }), false);
+  assert.equal(isAuthoritativeRefusal({ success: false, error: "tool_threw" }), false);
+  assert.equal(isAuthoritativeRefusal({ success: false, error: "x", data: { retryable: true } }), false);
+  assert.equal(isAuthoritativeRefusal({ jsonrpc: "2.0", error: { code: -32000 } }), false);
+  assert.equal(isAuthoritativeRefusal({ success: true }), false);
+});
+
+test("a quiescing portal is retried inside the budget, not fenced", async () => {
+  const child = deferred();
+  const retries = [];
+  let heartbeatCallback;
+  const resultPromise = superviseLeaseRun({
+    ttlMs: 120_000,
+    expiresAt: new Date(120_000).toISOString(),
+    now: () => 0,
+    run: () => child.promise,
+    renew: async () => ({ success: false, error: "portal_quiescing" }),
+    terminate: async () => { throw new Error("must not terminate"); },
+    release: async () => {},
+    schedule: (callback) => { heartbeatCallback = callback; return "heartbeat"; },
+    cancelSchedule: () => {},
+    scheduleDeadline: () => "deadline",
+    cancelDeadline: () => {},
+    scheduleRetry: (callback, delayMs) => { retries.push({ callback, delayMs }); return "retry"; },
+    cancelRetry: () => {},
+    onEvent: () => {},
+  });
+  await heartbeatCallback();
+  assert.equal(retries.length, 1);
+  child.resolve({ status: 0 });
+  const result = await resultPromise;
+  assert.equal(result.status, "completed");
+});
+
+test("a failed release is recorded and does not throw away the run's result", async () => {
+  const events = [];
+  const result = await superviseLeaseRun({
+    ttlMs: 120_000,
+    expiresAt: new Date(120_000).toISOString(),
+    now: () => 0,
+    run: async () => ({ status: 0, verdict: "passed" }),
+    renew: async () => ({ success: true }),
+    terminate: async () => {},
+    release: async () => { throw new Error("release refused"); },
+    schedule: () => "heartbeat",
+    cancelSchedule: () => {},
+    scheduleDeadline: () => "deadline",
+    cancelDeadline: () => {},
+    onEvent: (event) => events.push(event),
+  });
+  assert.equal(result.status, "completed");
+  assert.deepEqual(result.result, { status: 0, verdict: "passed" });
+  assert.ok(events.some((event) => event.type === "release-failed" && event.reason === "release refused"));
+});
+
+
+test("the cadence TTL is the authority the server granted, not the one requested (BI-E226C954)", () => {
+  const now = Date.parse("2026-10-01T14:34:00.000Z");
+  const granted = new Date(now + 120_000).toISOString();
+  assert.equal(admittedLeaseTtlMs(granted, 10 * 60_000, now), 120_000);
+  assert.equal(admittedLeaseTtlMs(undefined, 10 * 60_000, now), 10 * 60_000);
+  assert.equal(admittedLeaseTtlMs("not-a-date", 10 * 60_000, now), 10 * 60_000);
+  assert.equal(admittedLeaseTtlMs(new Date(now - 1_000).toISOString(), 10 * 60_000, now), 1);
+});
+
+test("a 2-minute grant heartbeats before its own authority deadline (BI-E226C954)", async () => {
+  const now = Date.parse("2026-10-01T14:34:00.000Z");
+  const expiresAt = new Date(now + 120_000).toISOString();
+  let intervalMs;
+  let deadlineMs;
+  const result = await superviseLeaseRun({
+    ttlMs: admittedLeaseTtlMs(expiresAt, 10 * 60_000, now),
+    expiresAt,
+    now: () => now,
+    run: async () => 0,
+    renew: async () => ({ success: true }),
+    terminate: async () => {},
+    release: async () => {},
+    schedule: (_callback, ms) => { intervalMs = ms; return "timer"; },
+    cancelSchedule: () => {},
+    scheduleDeadline: (_callback, ms) => { deadlineMs = ms; return "deadline"; },
+    cancelDeadline: () => {},
+  });
+  assert.equal(result.status, "completed");
+  assert.ok(intervalMs < deadlineMs, `heartbeat every ${intervalMs} ms must land before the ${deadlineMs} ms deadline`);
+});
+
+
+test("failed release can retry while concurrent and completed calls are idempotent", async () => {
+  let calls = 0;
+  const pending = deferred();
+  const release = createRetryableRelease(async () => {
+    calls += 1;
+    if (calls === 1) throw new Error("network unavailable");
+    await pending.promise;
+  });
+  await assert.rejects(release(), /network unavailable/);
+  const first = release();
+  const second = release();
+  await Promise.resolve();
+  assert.equal(calls, 2);
+  pending.resolve();
+  await Promise.all([first, second]);
+  await release();
+  assert.equal(calls, 2);
 });

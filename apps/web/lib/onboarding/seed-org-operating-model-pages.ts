@@ -74,7 +74,7 @@ export type SeedOperatingModelPagesInput = {
   organizationId: string;
   /** Defaults to the shared prisma client. */
   db?: SeedOperatingModelPagesClient;
-  /** Qdrant index step; injectable for tests. Defaults to storeWikiPage. */
+  /** vector index step; injectable for tests. Defaults to storeWikiPage. */
   embed?: (input: StoreWikiPageInput) => Promise<boolean>;
 };
 

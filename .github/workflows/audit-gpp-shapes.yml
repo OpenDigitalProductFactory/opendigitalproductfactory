@@ -1,0 +1,72 @@
+name: GPP Shape Freshness
+
+# CodeQL actions/missing-workflow-permissions: least-privilege default.
+# Read-only freshness check; needs no write surface.
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      # Shape documents, the compiler, and everything it reads or emits.
+      - "apps/web/lib/gpp/shape-language/**"
+      - "apps/web/lib/gpp/generated/**"
+      - "apps/web/lib/work-management/**"
+      # The generator, its shared write/compare helper and its tsconfig.
+      - "apps/web/scripts/build-gpp-shapes.ts"
+      - "apps/web/scripts/registry-generator-support.ts"
+      - "apps/web/scripts/tsconfig.gpp-map.json"
+      - "apps/web/package.json"
+      - ".github/workflows/audit-gpp-shapes.yml"
+  push:
+    branches: [main]
+  merge_group:
+    types: [checks_requested]
+
+concurrency:
+  group: audit-gpp-shapes-${{ github.ref }}
+  cancel-in-progress: true
+
+# What this guard does
+# --------------------
+# Recompiles every GPP shape document (apps/web/lib/work-management/shape-documents/)
+# in memory, with the published schema, the generated index and the gate
+# ratification report, and fails if any committed generated file differs from
+# the fresh compile, or if a generated shape module has no source document.
+# Hand edits to generated files are design↔implementation drift: the emitted
+# WorkShapeDefinition would no longer be what the reviewed document says.
+# AC-EMIT-INTEGRITY of BI-6DA17863; design
+# docs/superpowers/specs/2026-10-02-gpp-shape-notation-and-compiler-design.md
+# §7.1 step 7 and §7.5; plan
+# docs/superpowers/plans/2026-10-02-gpp-shape-notation-compiler-phase-3.md
+# (PR-3b-5). Modelled on audit-route-manifest.yml.
+#
+# It needs a full install: the generator imports Zod and workspace packages,
+# so it is deliberately NOT in scripts/lib/derived-artifacts-registry.mjs
+# (the lightweight Policy Guards (source) job installs only the guard runtime).
+# The vitest twins (generated-integrity, determinism) also run in every web
+# test shard, so the fast local gate catches a hand edit before CI does.
+#
+# To fix a STALE failure: pnpm --filter web build:gpp-shapes && commit the result.
+
+jobs:
+  freshness:
+    name: GPP Shape Freshness
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup pnpm with cache
+        uses: ./.github/actions/setup-pnpm
+
+      - name: Generate Prisma client
+        run: pnpm --filter @dpf/db exec prisma generate
+
+      - name: Check generated GPP shape files are up to date
+        run: pnpm --filter web check:gpp-shapes
+
+      - name: Run the integrity and determinism twins
+        run: pnpm --filter web exec vitest run lib/gpp/shape-language/generated-integrity.test.ts lib/gpp/shape-language/determinism.test.ts

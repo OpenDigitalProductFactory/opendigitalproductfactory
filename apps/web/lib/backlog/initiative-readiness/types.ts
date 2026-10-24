@@ -4,6 +4,25 @@ export type ReadinessTarget = (typeof READINESS_TARGETS)[number];
 export const READINESS_PROFILES = ["doc-only", "fix", "feature", "cross-domain", "archetype"] as const;
 export type ReadinessProfile = (typeof READINESS_PROFILES)[number];
 
+/**
+ * Delivery shape — the fifth Workroom shape axis (design 2026-09-02 §3.0), the
+ * key of the v3 requirement tables. `null`/absent means a pre-taxonomy item:
+ * the v2 profile tables apply unchanged (kernel ruling 5).
+ */
+export const READINESS_SHAPES = ["break-fix", "small", "medium", "large", "xlarge"] as const;
+export type ReadinessShape = (typeof READINESS_SHAPES)[number];
+
+/** Risk axis (design §3.2). Raises the shape; never lowers it. */
+export const READINESS_SENSITIVITIES = ["low", "elevated", "high"] as const;
+export type ReadinessSensitivity = (typeof READINESS_SENSITIVITIES)[number];
+
+/** What raised a delivery shape, and where it was read (BI-243BC956). */
+export type SensitivityTrigger = {
+  signal: string;
+  source: "declared-scope" | "build-plan-paths" | "item-body-paths";
+  evidence: string;
+};
+
 export type ReadinessVerdict = "allowed" | "input-required" | "denied";
 
 /**
@@ -47,6 +66,8 @@ export const READINESS_CODES = [
   "ARCHETYPE_COMPLETENESS_FAILED",
   "READINESS_PROJECTION_FAILED",
   "STALE_EVIDENCE",
+  "POST_IMPLEMENTATION_REVIEW_REQUIRED",
+  "DECOMPOSITION_REQUIRED",
 ] as const;
 
 export type ReadinessCode = (typeof READINESS_CODES)[number];
@@ -85,6 +106,13 @@ export type InitiativeReadinessFacts = {
   subject: InitiativeSubject;
   transitionObject: InitiativeTransitionObject;
   profile: ReadinessProfile;
+  /** Declared or derived delivery shape; absent for pre-taxonomy items. */
+  shape?: ReadinessShape | null;
+  sensitivity?: ReadinessSensitivity | null;
+  /** What produced `sensitivity`, and where it was read (BI-243BC956). */
+  sensitivityTrigger?: SensitivityTrigger | null;
+  /** The item's work type: a `refactor` takes the fix raise ceiling (BI-243BC956). */
+  workType?: string | null;
   evaluatedAt: string;
   classification: ReadinessEvidenceState;
   canonicalDesign: ReadinessEvidenceState;
@@ -95,6 +123,8 @@ export type InitiativeReadinessFacts = {
   plan: ReadinessEvidenceState;
   planReview: ReadinessEvidenceState;
   planCoverage: ReadinessEvidenceState;
+  /** xlarge completion only: current decomposed coverage and distinct real children. */
+  decomposition?: ReadinessEvidenceState;
   traceability?: ReadinessEvidenceState;
   dependencies: ReadinessEvidenceState;
   authorization: ReadinessEvidenceState;
@@ -103,10 +133,14 @@ export type InitiativeReadinessFacts = {
   deliveryEvidence: ReadinessEvidenceState;
   acceptanceEvidence: ReadinessEvidenceState;
   objectiveBaseline: ReadinessEvidenceState;
+  /** Retained independently approved repository scope keeps its amendment writer. */
+  objectiveBaselineRequiresReview?: boolean;
   objectiveBaselineConflict?: boolean;
   objectiveReconciliation: ReadinessEvidenceState;
   archetypeProvisioning: ArchetypeProvisioningFacts;
   archetypeCompleteness: ReadinessEvidenceState;
+  /** break-fix only: the post-implementation review receipt (design §4, ruling 1). */
+  postImplementationReview?: ReadinessEvidenceState;
   blockingFindingsOpen?: boolean;
   projectionError?: boolean;
   evidenceRefs?: Partial<Record<ReadinessCode, string[]>>;
@@ -146,6 +180,34 @@ export type InitiativeReadinessDecision = {
   subject: InitiativeSubject;
   transitionObject: InitiativeTransitionObject;
   profile: ReadinessProfile;
+  /**
+   * Which shape actually gated this evaluation, and why (BI-BD60DC91).
+   *
+   * `declared` is the shape bound on the item's live Workroom; `effective` is
+   * what `effectiveShape` gated on after sensitivity was applied. They differ
+   * whenever sensitivity raised the item, and until now nothing in the refusal
+   * said so: an author saw a small fix owing a medium item's independent
+   * baseline with no way to tell that a word in the body had raised it.
+   * Absent for an unshaped item, which is still gated by the v2 profile.
+   */
+  shapeDecision?: {
+    declared: ReadinessShape;
+    effective: ReadinessShape;
+    sensitivity: ReadinessSensitivity | null;
+    raised: boolean;
+    /**
+     * The signal that set `sensitivity` and where it was read (BI-243BC956):
+     * a changed path from the declared scope or the body, or — only when no
+     * change fact exists — a keyword in the prose. Null when nothing matched;
+     * absent on decisions persisted before BI-243BC956.
+     */
+    trigger?: SensitivityTrigger | null;
+    /**
+     * The shape sensitivity asked for but the profile cannot satisfy — refused
+     * on the record rather than owed. Present only when the raise was capped.
+     */
+    refusedRaise?: { shape: ReadinessShape; reason: string };
+  } | null;
   target: ReadinessTarget;
   verdict: ReadinessVerdict;
   satisfied: ReadinessRequirementResult[];

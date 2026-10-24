@@ -5,6 +5,7 @@ import { reconcileCapabilityNeedBacklog } from "@/lib/coworker-self-assessment/c
 import { runEscalationHygiene } from "@/lib/quality/escalation-hygiene-runner";
 import { OpsClient } from "@/components/ops/OpsClient";
 import { OpsTabNav } from "@/components/ops/OpsTabNav";
+import { loadAgedAcceptanceItems } from "@/lib/backlog/acceptance-sweep/aged-acceptance-loader";
 import { auth } from "@/lib/auth";
 import { prisma } from "@dpf/db";
 import {
@@ -86,11 +87,17 @@ export default async function OpsPage({ searchParams }: Props) {
   // Current operator — resolves the "mine" scope in the Needs-you-next band
   // (BI-01CC2356). Optional: the band degrades to an urgency-only split when absent.
   const currentUserId = session?.user?.id ?? undefined;
+  // Aged share of awaiting-acceptance work for the epic status mix, so
+  // merged-but-unproven work never reads as done (BI-CEC60185). One bounded
+  // activity read; a failure shows the awaiting count without the aged share.
+  const agedAcceptance = listData
+    ? await loadAgedAcceptanceItems(prisma, items, new Date()).catch(emptyReadResult)
+    : [];
 
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-[var(--dpf-text)]">Operations</h1>
+        <h1 className="text-xl font-bold text-[var(--dpf-text)]">Requests</h1>
         <p className="text-sm text-[var(--dpf-muted)] mt-0.5">
           {epicCount} epic{epicCount !== 1 ? "s" : ""} · {itemCount} item{itemCount !== 1 ? "s" : ""}
         </p>
@@ -114,6 +121,7 @@ export default async function OpsPage({ searchParams }: Props) {
           focusedItemId={sp?.itemId}
           initialOrigin={sp?.origin}
           currentUserId={currentUserId}
+          agedAcceptance={agedAcceptance}
         />
       ) : null}
     </div>

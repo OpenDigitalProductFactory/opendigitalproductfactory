@@ -11,10 +11,20 @@ import {
 } from "./local-ci-pool-policy";
 import { readLocalCiInstallationProfile } from "./local-ci-capacity-profile";
 import {
+  loadLocalCiBuilderMemoryCalibration,
+  measuredBuilderReserve,
+  type MeasuredBuilderReserve,
+} from "./local-ci-builder-memory-calibration";
+import localCiSlotResources from "./local-ci-slot-resources.json" with {
+  type: "json",
+};
+import {
   resolveHostResourceAdmission,
   type ActiveHeavyReservation,
   type HeavyResourceClass,
+  type HostResourceAdmission,
 } from "./host-resource-policy";
+import type { OutcomeDisposition } from "@/lib/shared/outcome-disposition";
 
 type PlatformConfigReader = Parameters<
   typeof loadLocalCiPoolConfig
@@ -46,7 +56,49 @@ export interface ResolvedHostResourcePoolPolicy {
   slotKeys: ["slot-0"] | [];
   rollbackReason: string | null;
   config: null;
+  /**
+   * BI-C77D920A. The admission's own kind, carried through instead of collapsed.
+   *
+   * `hostSafeCapacity`/`effectiveCapacity`/`slotKeys` are genuinely boolean —
+   * there is one slot or none — but `admitted ? … : …` made "wait, capacity will
+   * free" and "this will never be admitted" indistinguishable to the caller, and
+   * the durable-wait behaviour the resilient-concurrent-development process
+   * depends on needs to tell them apart.
+   */
+  admissionStatus: HostResourceAdmission["status"];
+  /**
+   * The same fact in the canonical vocabulary (§10 rule 5: a boundary may narrow
+   * a disposition, never collapse it).
+   *
+   * NOTE on `queued` → `awaiting-person`: the §10 table places it there, and the
+   * routing property is what matters rather than the name — RETRY_POSTURE is
+   * "never", meaning REPORT the wait rather than spin on it, which is exactly how
+   * the durable wait works (pregate exits 75 and a detached resumer holds the
+   * claim; the caller does not re-ask). That the label says "person" when the
+   * thing being waited on is capacity is a naming tension owned by BI-2B96E1B9,
+   * which reconciles the two vocabularies; it is recorded here rather than
+   * silently resolved.
+   */
+  disposition: OutcomeDisposition;
 }
+
+/**
+ * What kind of answer each host admission is — total over the union, so a new
+ * admission status cannot be added without deciding what it MEANS (§10 rule 6).
+ */
+/** Pause before re-reading a server probe that failed, so a builder mid-transition can settle. */
+const SERVER_PROBE_RETRY_MS = 750;
+
+const HOST_ADMISSION_DISPOSITION: Record<HostResourceAdmission["status"], OutcomeDisposition> = {
+  // Not heavyweight, so the gate does not apply and the work proceeds.
+  bypass: "proceed",
+  admitted: "proceed",
+  // Capacity is full now and frees later. The claim is not in question.
+  queued: "awaiting-person",
+  // Settled no: an unmeasurable host or an unknown resource class never admits
+  // this request, however long the caller waits.
+  blocked: "refused",
+};
 
 /** Adapter from the typed host policy to the durable lease pool shape. */
 export function resolveHostResourcePoolPolicy(input: {
@@ -75,6 +127,8 @@ export function resolveHostResourcePoolPolicy(input: {
     slotKeys: admitted ? ["slot-0"] : [],
     rollbackReason: admitted ? null : admission.reason,
     config: null,
+    admissionStatus: admission.status,
+    disposition: HOST_ADMISSION_DISPOSITION[admission.status],
   };
 }
 
@@ -85,6 +139,8 @@ export async function resolveNonprodPoolPolicy(input: {
   capacityBroker?: LocalCiCapacityBroker;
   manifestSlotCount: number;
   reserveAdmissionHeadroom?: boolean;
+  /** BI-3A14308C: false when the gate delegates its production build. */
+  reserveBuilderHeadroom?: boolean;
   now: Date;
 }): Promise<ResolvedLocalCiPoolPolicy> {
   if (input.environmentKey !== "local-integration-ci") {
@@ -111,15 +167,30 @@ export async function resolveNonprodPoolPolicy(input: {
       platformConfig: input.platformConfig,
     }).catch(() => null)
     : null;
+  // BI-903FB5F9: the builder reserve follows measured gate peaks. An
+  // unreadable row is the same as no measurement: the checked-in calibration.
+  const builderReserve: MeasuredBuilderReserve | undefined = input.platformConfig
+    ? measuredBuilderReserve({
+      ceilingBytes: localCiSlotResources.builderPolicy.memoryBytes,
+      checkedInReserveBytes: localCiSlotResources.builderPolicy.admissionReserveBytes,
+      safetyMarginBytes:
+        localCiSlotResources.builderPolicy.admissionCalibration.safetyMarginBytes,
+      calibration: await loadLocalCiBuilderMemoryCalibration({
+        platformConfig: input.platformConfig,
+      }).catch(() => null),
+    })
+    : undefined;
   const clientPressure = input.hostPressure ?? {};
   const preliminary = resolveLocalCiPoolPolicy({
     configValue,
     host: clientPressure,
     manifestSlotCount: input.manifestSlotCount,
     reserveAdmissionHeadroom: input.reserveAdmissionHeadroom,
+    reserveBuilderHeadroom: input.reserveBuilderHeadroom,
     env: process.env,
     now: input.now,
     installation,
+    builderReserveBytes: builderReserve?.bytes,
   });
   // A missing/malformed config keeps the compatibility singleton and has no
   // broker contract to enforce. A valid configured singleton still requires
@@ -127,30 +198,48 @@ export async function resolveNonprodPoolPolicy(input: {
   // unsafe host.
   if (preliminary.config === null) return preliminary;
 
-  let serverPressure: LocalCiHostPressure;
-  try {
-    serverPressure = await (
-      input.capacityBroker ?? observeLocalCiServerPressure
-    )();
-  } catch {
-    serverPressure = {
-      observedAt: input.now.toISOString(),
-      dockerHealthy: false,
-      convergenceActive: true,
-      fencesHealthy: false,
-      evidenceIsolationHealthy: false,
-    };
+  const sampleServer = async (): Promise<LocalCiHostPressure> => {
+    try {
+      return await (input.capacityBroker ?? observeLocalCiServerPressure)();
+    } catch {
+      return {
+        observedAt: input.now.toISOString(),
+        dockerHealthy: false,
+        convergenceActive: true,
+        fencesHealthy: false,
+        evidenceIsolationHealthy: false,
+        probeFailures: ["broker"],
+      };
+    }
+  };
+  let serverPressure = await sampleServer();
+  // A probe caught mid-transition (a builder starting or stopping) is read once
+  // more before the pool is closed on it for this claim.
+  if (serverPressure.probeFailures?.length) {
+    await new Promise((resolve) => setTimeout(resolve, SERVER_PROBE_RETRY_MS));
+    serverPressure = await sampleServer();
   }
-  return resolveLocalCiPoolPolicy({
-    configValue,
-    host: mergeLocalCiHostPressure({
-      client: clientPressure,
-      server: serverPressure,
-    }),
-    manifestSlotCount: input.manifestSlotCount,
-    reserveAdmissionHeadroom: input.reserveAdmissionHeadroom,
-    env: process.env,
-    now: input.now,
-    installation,
+  const decidedHostPressure = mergeLocalCiHostPressure({
+    client: clientPressure,
+    server: serverPressure,
   });
+  // Hand the decided observation back with the decision (BI-48F42581). The
+  // caller only has its own client sample; recording that next to a
+  // server-derived rollbackReason produced gate records that contradicted
+  // themselves and sent operators looking for a bug in the wrong place.
+  return {
+    ...resolveLocalCiPoolPolicy({
+      configValue,
+      host: decidedHostPressure,
+      manifestSlotCount: input.manifestSlotCount,
+      reserveAdmissionHeadroom: input.reserveAdmissionHeadroom,
+      reserveBuilderHeadroom: input.reserveBuilderHeadroom,
+      env: process.env,
+      now: input.now,
+      installation,
+      builderReserveBytes: builderReserve?.bytes,
+    }),
+    ...(builderReserve ? { builderReserve } : {}),
+    decidedHostPressure,
+  };
 }

@@ -71,6 +71,44 @@ export const DERIVED_ARTIFACTS = [
     check: ["node", "scripts/gen-doc-index.mjs", "--check"],
   },
   {
+    // BI-545943EE: the operating contract the process-spine SessionStart hook
+    // carries inline when a client cannot prove the DPF skills are loaded.
+    id: "operating-contract",
+    description: "Inline operating contract for an unproven process spine (kernel principleDirection + AGENTS.md doctrine-store rule)",
+    sourceGlobs: [
+      "docs/founder-kernel/wiki/principles/decisions-belong-to-their-scope.md",
+      "docs/founder-kernel/wiki/principles/escalation-is-a-gate-not-a-trust-tier.md",
+      "docs/founder-kernel/wiki/principles/consult-scopes-before-asking.md",
+      "AGENTS.md",
+      "packages/dpf-skill-pack/scripts/generate-operating-contract.mjs",
+    ],
+    artifactPaths: ["packages/dpf-skill-pack/hooks/operating-contract.generated.mjs"],
+    generate: ["node", "packages/dpf-skill-pack/scripts/generate-operating-contract.mjs"],
+    check: ["node", "packages/dpf-skill-pack/scripts/generate-operating-contract.mjs", "--check"],
+  },
+  {
+    // BI-64795FD0: every statement of a client capability derives from one
+    // profile. The credential policy's data copy, its test fixture and the
+    // rendered matrix in the parity tracker are regenerated from it.
+    id: "client-capabilities",
+    description: "Client capability profile -> credential-policy data, policy fixture and parity matrix",
+    sourceGlobs: [
+      "packages/dpf-skill-pack/client-capabilities.json",
+      "packages/dpf-skill-pack/scripts/gen-client-capabilities.mjs",
+      "packages/dpf-skill-pack/hooks/pretooluse-guard-selftest.mjs",
+      "packages/dpf-skill-pack/scripts/toolchain_convergence.py",
+      "packages/integration-shared/src/client-capability-rules.cjs",
+      "docs/architecture/agent-client-capability-parity.md",
+    ],
+    artifactPaths: [
+      "packages/integration-shared/src/client-capability-profile.generated.ts",
+      "packages/dpf-skill-pack/scripts/mcp-credential-policy-cases.json",
+      "docs/architecture/agent-client-capability-parity.md",
+    ],
+    generate: ["node", "packages/dpf-skill-pack/scripts/gen-client-capabilities.mjs"],
+    check: ["node", "packages/dpf-skill-pack/scripts/gen-client-capabilities.mjs", "--check"],
+  },
+  {
     id: "doc-impact",
     description: "Doc-impact manifest (route/code -> user-guide page edges)",
     sourceGlobs: [
@@ -105,13 +143,16 @@ export const DERIVED_ARTIFACTS = [
     id: "doc-diagrams",
     description: "Rendered Mermaid diagram SVGs + manifest",
     sourceGlobs: ["docs/user-guide/**/*.md", "docs/architecture/**/*.md"],
-    artifactPaths: ["docs/user-guide/assets/diagrams/**"],
+    artifactPaths: [
+      "docs/user-guide/assets/diagrams/**",
+      "apps/web/lib/docs/diagram-versions.generated.mjs",
+    ],
     generate: ["node", "scripts/render-doc-diagrams.mjs"],
     check: ["node", "scripts/render-doc-diagrams.mjs", "--check"],
-    // Rendering shells out to mmdc (@mermaid-js/mermaid-cli), which is only
-    // installed in a compile-ready environment, not every source-only
-    // worktree. Pre-commit skips (loudly) rather than blocking when it's
-    // absent; CI (a compile-ready runner) is the backstop via --check.
+    // Rendering needs a Mermaid renderer (scripts/lib/mermaid-renderer.mjs:
+    // a local mermaid-cli, or the pinned tool image through Docker). Where
+    // neither exists pre-commit skips (loudly) rather than blocking; CI is the
+    // backstop via --check. "mmdc" is the renderer's probe name in the gate.
     requiresBinary: "mmdc",
   },
   {
@@ -127,6 +168,15 @@ export const DERIVED_ARTIFACTS = [
     artifactPaths: ["docs/architecture/architecture-counts.generated.md"],
     generate: ["node", "scripts/gen-architecture-counts.mjs"],
     check: ["node", "scripts/gen-architecture-counts.mjs", "--check"],
+    // Derived from REPO-WIDE counts (migrations above all). Two PRs that each
+    // add a migration produce a merged tree neither could have generated, so
+    // whichever enters the merge queue second is stale through no fault of
+    // its author — and cannot push a regeneration into the queue. PR #5175
+    // was ejected six times over twelve hours this way with zero code
+    // failures. PR-head CI still checks this strictly against the author's
+    // own base; only merge-order drift is tolerated, in the queue only, and
+    // the next source-touching PR regenerates it via pre-commit.
+    mergeQueueRaceTolerant: true,
   },
   // ─── Route-derived registry chain (BI-34D69270) ────────────────────────────
   //
@@ -278,7 +328,7 @@ export const DERIVED_ARTIFACTS = [
   {
     id: "sbom-baseline",
     description: "SBOM dependency-shape drift baseline (first-party version splits)",
-    sourceGlobs: ["pnpm-lock.yaml", "pnpm-workspace.yaml"],
+    sourceGlobs: ["pnpm-lock.yaml", "pnpm-workspace.yaml", "apps/mobile/pnpm-lock.yaml", "apps/mobile/pnpm-workspace.yaml"],
     artifactPaths: ["sbom/baseline.json"],
     generate: ["node", "scripts/sbom/check-sbom-drift.mjs", "--update-baseline"],
     check: ["node", "scripts/sbom/check-sbom-drift.mjs"],

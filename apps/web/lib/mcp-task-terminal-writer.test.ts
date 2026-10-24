@@ -1,6 +1,9 @@
+import { SOURCE_READ_DEFAULT_MAX_CHARS, SOURCE_READ_DEFAULT_MAX_LINES } from "./source-page-lines";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { readerBootstrapHistory, readerBootstrapTask } from "./test-support/terminal-reader-bootstrap";
 
 const db = vi.hoisted(() => ({
+  persisted: {} as Record<string, unknown>,
   findFirst: vi.fn(),
   findUnique: vi.fn(),
   findModelConfig: vi.fn(),
@@ -19,14 +22,9 @@ const autonomous = vi.hoisted(() => ({
   resolveTools: vi.fn(),
 }));
 
-vi.mock("@dpf/db", () => ({
+vi.mock("@dpf/db", async () => ({
   prisma: {
-    taskRun: {
-      findFirst: (...args: unknown[]) => db.findFirst(...args),
-      findUnique: (...args: unknown[]) => db.findUnique(...args),
-      update: (...args: unknown[]) => db.update(...args),
-      updateMany: (...args: unknown[]) => db.updateMany(...args),
-    },
+    taskRun: (await import("./test-support/task-run-state")).taskRunState(db),
     coworkerActionEnvelope: { findFirst: (...args: unknown[]) => db.findEnvelope(...args) },
     toolExecution: {
       findFirst: (...args: unknown[]) => db.findToolExecution(...args),
@@ -44,8 +42,13 @@ vi.mock("@/lib/tak/autonomous-work-run", () => ({
   resolveAutonomousWorkTools: (...args: unknown[]) => autonomous.resolveTools(...args),
 }));
 vi.mock("@/lib/tak/task-records", () => ({ createTaskMessage: vi.fn() }));
+vi.mock("./mcp-task-review-outcome", () => ({
+  loadTaskInitiativeReviewOutcome: vi.fn().mockResolvedValue(null),
+  loadInitiativeReviewOutcome: vi.fn().mockResolvedValue({ receiptId: "receipt-1", summary: "Receipt persisted; readiness still requires plan coverage." }),
+}));
 
 import { submitRemoteCoworkerTask } from "./mcp-task-submit";
+import { terminalTruncationMessage } from "./tak/terminal-response-truncation";
 
 const userContext = { platformRole: "developer", isSuperuser: false };
 const params = {
@@ -102,6 +105,7 @@ function submit(tokenId: string, request = params) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  db.persisted = {};
   db.findFirst.mockResolvedValue(null);
   db.findUnique.mockResolvedValue({ status: "working" });
   db.findEnvelope.mockResolvedValue(null);
@@ -128,7 +132,7 @@ beforeEach(() => {
     sensitivity: "internal",
   });
   autonomous.resolveTools.mockResolvedValue({ tools: [], toolsForProvider: [], deferredTools: [] });
-  autonomous.execute.mockResolvedValue({ content: "Done.", executedTools: [] });
+  autonomous.execute.mockResolvedValue({ content: "Done.", providerId: "local", executedTools: [] });
   autonomous.executeTool.mockResolvedValue({
     success: true,
     message: "Read design.md lines 1-3 of 3.",
@@ -153,7 +157,7 @@ async function persistedMetadata(tokenId: string, request = params) {
 }
 
 describe("terminal writer resumption", () => {
-  it("recovers the same completed review once when persisted evidence proves the route-exit defect", async () => {
+  it("does not reserve inference for a legacy completed review without execution settlement proof", async () => {
     const metadata = await persistedMetadata("PAT-WRITER-ROUTE-EXIT");
     vi.clearAllMocks();
     const updatedAt = new Date("2026-08-28T09:27:00.000Z");
@@ -193,38 +197,14 @@ describe("terminal writer resumption", () => {
     autonomous.resolveTools.mockResolvedValue({ tools: [], toolsForProvider: [], deferredTools: [] });
     autonomous.execute.mockResolvedValue({
       content: "Receipt recorded.",
-      executedTools: [{ name: "record_initiative_evidence", result: { success: true } }],
+      executedTools: [{ name: "record_initiative_evidence", result: { success: true, data: { receiptId: "receipt-1" } } }],
     });
 
     const outcome = await submit("PAT-WRITER-ROUTE-EXIT");
 
-    expect(db.updateMany).toHaveBeenCalledWith({
-      where: { taskRunId: "TR-MCP-ROUTE-EXIT", status: "completed", updatedAt },
-      data: {
-        status: "working",
-        lastHeartbeatAt: expect.any(Date),
-        completedAt: null,
-        progressPayload: expect.objectContaining({
-          terminalWriterWait: expect.objectContaining({ attempt: 2 }),
-          recoveredFromCompletedRouteExit: true,
-          resumeReservedAt: expect.any(String),
-        }),
-      },
-    });
-    expect(autonomous.execute).toHaveBeenCalledWith(expect.objectContaining({
-      taskRunId: "TR-MCP-ROUTE-EXIT",
-      threadId: "thread-external",
-    }));
-    expect(autonomous.create).not.toHaveBeenCalled();
-    expect(outcome).toMatchObject({
-      kind: "result",
-      result: {
-        taskRunId: "TR-MCP-ROUTE-EXIT",
-        status: "completed",
-        idempotentReplay: true,
-        resumedFromTerminalWriterWait: true,
-      },
-    });
+    expect(db.updateMany).not.toHaveBeenCalled();
+    expect(autonomous.execute).not.toHaveBeenCalled();
+    expect(outcome).toMatchObject({ kind: "result", result: { taskRunId: "TR-MCP-ROUTE-EXIT", idempotentReplay: true } });
   });
 
   it("does not reopen a completed review without persisted successful reader evidence", async () => {
@@ -274,7 +254,7 @@ describe("terminal writer resumption", () => {
           schemaVersion: 1,
           kind: "missing-terminal-writer",
           writerToolName: "record_initiative_evidence",
-          resumeMode: "same-taskrun",
+          resumeMode: "same-taskrun", dispatchContract: "required-tool-call",
           attempt: 1,
           observedAt: "2026-08-28T07:19:00.000Z",
         },
@@ -304,7 +284,7 @@ describe("terminal writer resumption", () => {
     autonomous.resolveTools.mockResolvedValue({ tools: [], toolsForProvider: [], deferredTools: [] });
     autonomous.execute.mockResolvedValue({
       content: "Receipt recorded.",
-      executedTools: [{ name: "record_initiative_evidence", result: { success: true } }],
+      executedTools: [{ name: "record_initiative_evidence", result: { success: true, data: { receiptId: "receipt-1" } } }],
     });
 
     const outcome = await submit("PAT-WRITER-RESUME");
@@ -321,10 +301,10 @@ describe("terminal writer resumption", () => {
         }),
       },
     });
-    expect(db.update).toHaveBeenCalledWith({
-      where: { taskRunId: "TR-MCP-SAME-WRITER-RUN" },
-      data: { status: "working", lastHeartbeatAt: expect.any(Date) },
-    });
+    expect(db.updateMany).toHaveBeenCalledWith(expect.objectContaining({ // guarded working transition (BI-D208E70C)
+      where: expect.objectContaining({ taskRunId: "TR-MCP-SAME-WRITER-RUN" }),
+      data: expect.objectContaining({ status: "working", lastHeartbeatAt: expect.any(Date) }),
+    }));
     expect(autonomous.execute).toHaveBeenCalledWith(expect.objectContaining({
       taskRunId: "TR-MCP-SAME-WRITER-RUN",
       threadId: "thread-external",
@@ -342,44 +322,44 @@ describe("terminal writer resumption", () => {
     });
   });
 
-  it("bootstraps persisted immutable reader evidence when the resumable TaskRun has no reader rows", async () => {
+  it.each([
+    "none", "invalid-cursors", "denied", "other-failure", "conflicting-binding",
+    "unauthorized-tool", "malformed-result", "conflicting-result", "duplicate-id",
+    "reversed-order", "continuation", "success-conflict", "malformed-data-array",
+    "malformed-data-primitive", "malformed-data-null",
+  ])("resumes only safe initial-reader failures (%s)", async (historyKind) => {
     const metadata = await persistedMetadata("PAT-WRITER-ZERO-READER");
     vi.clearAllMocks();
     const updatedAt = new Date("2026-08-31T03:00:00.000Z");
-    db.findFirst.mockResolvedValue({
-      id: "task-internal",
-      taskRunId: "TR-MCP-ZERO-READER",
-      threadId: "thread-external",
-      contextId: "thread-external",
-      status: "input-required",
-      updatedAt,
-      progressPayload: {
-        summary: "The required governed writer could not be dispatched.",
-        terminalWriterWait: {
-          schemaVersion: 1,
-          kind: "missing-terminal-writer",
-          writerToolName: "record_initiative_evidence",
-          resumeMode: "same-taskrun",
-          attempt: 1,
-          observedAt: "2026-08-31T02:59:00.000Z",
-        },
-      },
-      a2aMetadata: metadata,
-    });
+    db.findFirst.mockResolvedValue(readerBootstrapTask(metadata, updatedAt));
     db.findEnvelope.mockResolvedValue(null);
+    const rejectedReaders = readerBootstrapHistory(historyKind, persistedReaderExecution);
     db.findToolExecutions
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([persistedReaderExecution]);
+      .mockReset()
+      .mockResolvedValueOnce(rejectedReaders)
+      .mockResolvedValueOnce([...rejectedReaders, persistedReaderExecution]);
     db.findToolExecution.mockResolvedValue(null);
     db.updateMany.mockResolvedValue({ count: 1 });
     db.update.mockResolvedValue({});
     db.findUnique.mockResolvedValue({ status: "working" });
     autonomous.execute.mockResolvedValue({
       content: "Receipt recorded.",
-      executedTools: [{ name: "record_initiative_evidence", result: { success: true } }],
+      executedTools: [{ name: "record_initiative_evidence", result: { success: true, data: { receiptId: "receipt-1" } } }],
     });
 
     const outcome = await submit("PAT-WRITER-ZERO-READER");
+
+    if (historyKind !== "none" && historyKind !== "invalid-cursors") {
+      expect(autonomous.executeTool).not.toHaveBeenCalled();
+      expect(autonomous.execute).not.toHaveBeenCalled();
+      expect(autonomous.create).not.toHaveBeenCalled();
+      expect(db.findToolExecutions).toHaveBeenCalledTimes(1);
+      expect(outcome).toMatchObject({ kind: "result", result: {
+        taskRunId: "TR-MCP-ZERO-READER", status: "input-required",
+        waitReason: "terminal-writer-context-unavailable", isError: true,
+      } });
+      return;
+    }
 
     expect(db.updateMany).toHaveBeenCalledWith(expect.objectContaining({
       where: { taskRunId: "TR-MCP-ZERO-READER", status: "input-required", updatedAt },
@@ -394,8 +374,8 @@ describe("terminal writer resumption", () => {
         version: "d47536a552c7d588b2f963e478ae99369f720783",
         expectedBlobId: "fb57e087c19ce0a3c78b4d591bb5da63027c2b3b",
         startLine: 1,
-        maxLines: 200,
-        maxChars: 3_200,
+        maxLines: SOURCE_READ_DEFAULT_MAX_LINES,
+        maxChars: SOURCE_READ_DEFAULT_MAX_CHARS,
       },
     }));
     expect(db.findToolExecutions).toHaveBeenCalledTimes(2);
@@ -430,7 +410,7 @@ describe("terminal writer resumption", () => {
           schemaVersion: 1,
           kind: "missing-terminal-writer",
           writerToolName: "record_initiative_evidence",
-          resumeMode: "same-taskrun",
+          resumeMode: "same-taskrun", dispatchContract: "required-tool-call",
           attempt: 1,
           observedAt: "2026-08-31T03:04:00.000Z",
         },
@@ -453,8 +433,8 @@ describe("terminal writer resumption", () => {
     expect(autonomous.executeTool).toHaveBeenCalledTimes(1);
     expect(db.findToolExecutions).toHaveBeenCalledTimes(1);
     expect(autonomous.execute).not.toHaveBeenCalled();
-    expect(db.update).toHaveBeenCalledWith({
-      where: { taskRunId: "TR-MCP-ZERO-READER-FAIL" },
+    expect(db.updateMany).toHaveBeenCalledWith({
+      where: expect.objectContaining({ taskRunId: "TR-MCP-ZERO-READER-FAIL", status: "working" }),
       data: expect.objectContaining({
         status: "input-required",
         completedAt: null,
@@ -479,7 +459,10 @@ describe("terminal writer resumption", () => {
     });
   });
 
-  it("stops replaying and returns a governed escalation after the third missing-writer attempt", async () => {
+  it.each([false, true])("stops after the third missing-writer attempt (truncated=%s)", async (truncated) => {
+    const failureMessage = truncated ? terminalTruncationMessage({ writerToolName: "record_initiative_evidence",
+      readerToolNames: ["read_source_at_version"], minimumSuccessfulReaderCalls: 1, maximumReaderCalls: 3 }, [], true)
+      : "The provider did not honor the required writer tool-call contract. No receipt was created.";
     const exhaustedParams = { ...params, idempotencyKey: "missing-writer-resume-exhausted" };
     const metadata = await persistedMetadata("PAT-WRITER-EXHAUSTED", exhaustedParams);
     vi.clearAllMocks();
@@ -495,7 +478,7 @@ describe("terminal writer resumption", () => {
           schemaVersion: 1,
           kind: "missing-terminal-writer",
           writerToolName: "record_initiative_evidence",
-          resumeMode: "same-taskrun",
+          resumeMode: "same-taskrun", dispatchContract: "required-tool-call",
           attempt: 2,
           observedAt: "2026-08-28T07:24:00.000Z",
         },
@@ -512,19 +495,8 @@ describe("terminal writer resumption", () => {
     });
     db.findToolExecutions.mockResolvedValue([
       {
+        ...persistedReaderExecution,
         id: "cmtd3z0ye00gz01rtjr503slt",
-        toolName: "read_source_at_version",
-        parameters: {
-          repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
-          path: "docs/superpowers/specs/design.md",
-          version: "d47536a552c7d588b2f963e478ae99369f720783",
-          expectedBlobId: "fb57e087c19ce0a3c78b4d591bb5da63027c2b3b",
-          startLine: 1,
-          maxChars: 3_200,
-        },
-        result: {},
-        success: true,
-        createdAt: new Date("2026-08-28T15:30:31.190Z"),
       },
       {
         id: "cmtd3zymp00hh01rtpf9ukk8z",
@@ -564,11 +536,14 @@ describe("terminal writer resumption", () => {
       };
     });
     autonomous.execute.mockResolvedValue({
-      content: "The provider did not honor the required writer tool-call contract. No receipt was created.",
+      content: failureMessage,
+      // BI-C35576A9: the provider that ran is a CLI subscription; the recorded
+      // contract must say receipt-verified, not the old hard-coded claim.
+      providerId: "codex",
       executedTools: [],
       failure: {
         kind: "terminal-writer-missing",
-        message: "The provider did not honor the required writer tool-call contract. No receipt was created.",
+        message: failureMessage,
       },
     });
 
@@ -612,15 +587,15 @@ describe("terminal writer resumption", () => {
         },
       },
     });
-    expect(db.update).toHaveBeenCalledWith({
-      where: { taskRunId: "TR-MCP-WRITER-EXHAUSTED" },
+    expect(db.updateMany).toHaveBeenCalledWith({
+      where: expect.objectContaining({ taskRunId: "TR-MCP-WRITER-EXHAUSTED", status: "working" }),
       data: expect.objectContaining({
         status: "input-required",
         progressPayload: expect.objectContaining({
           terminalWriterWait: expect.objectContaining({
             attempt: 3,
-            dispatchContract: "required-tool-call",
-            noncompliance: "prose-without-required-writer",
+            dispatchContract: "receipt-verified",
+            ...(truncated ? {} : { noncompliance: "prose-without-required-writer" }),
           }),
           terminalWriterEscalation: expect.objectContaining({
             schemaVersion: 1,
@@ -632,6 +607,11 @@ describe("terminal writer resumption", () => {
         }),
       }),
     });
+    if (truncated) {
+      const projection = db.updateMany.mock.calls.map(([call]) => call.data.progressPayload)
+        .find(progress => progress?.summary === failureMessage);
+      expect(projection.terminalWriterWait).not.toHaveProperty("noncompliance");
+    }
   });
 
   it("replays an exhausted terminal-writer escalation without starting another attempt", async () => {
@@ -645,7 +625,7 @@ describe("terminal writer resumption", () => {
       progressPayload: {
         terminalWriterWait: {
           schemaVersion: 1, kind: "missing-terminal-writer",
-          writerToolName: "record_initiative_evidence", resumeMode: "same-taskrun", attempt: 3,
+          writerToolName: "record_initiative_evidence", resumeMode: "same-taskrun", dispatchContract: "required-tool-call", attempt: 3,
           observedAt: "2026-09-01T02:22:19.237Z",
         },
         terminalWriterEscalation: {
@@ -693,7 +673,7 @@ describe("terminal writer resumption", () => {
       progressPayload: {
         terminalWriterWait: {
           schemaVersion: 1, kind: "missing-terminal-writer",
-          writerToolName: "record_initiative_evidence", resumeMode: "same-taskrun", attempt: 2,
+          writerToolName: "record_initiative_evidence", resumeMode: "same-taskrun", dispatchContract: "required-tool-call", attempt: 2,
           observedAt: "2026-09-01T01:18:33.353Z",
         },
         terminalWriterContextFailure: {
@@ -745,7 +725,7 @@ describe("terminal writer resumption", () => {
           schemaVersion: 1,
           kind: "missing-terminal-writer",
           writerToolName: "record_initiative_evidence",
-          resumeMode: "same-taskrun",
+          resumeMode: "same-taskrun", dispatchContract: "required-tool-call",
           attempt: 2,
           observedAt: "2026-08-28T07:24:00.000Z",
         },

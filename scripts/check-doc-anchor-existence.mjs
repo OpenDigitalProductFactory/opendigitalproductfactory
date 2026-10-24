@@ -43,6 +43,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { formatTxtBudgetHeader, parseTxtBudgetHeader } from "./lib/baseline-budget.mjs";
 import { listChangedFiles, runGit } from "./lib/git-changed-files.mjs";
+import { mcpPost } from "./lib/mcp-client.mjs";
 
 export { listChangedFiles, runGit };
 
@@ -127,7 +128,6 @@ export function interpretToolResponse(kind, id, body) {
   return "unknown";
 }
 
-/** POST one MCP tools/call. Returns the raw response text, or null on failure. */
 /**
  * True when a catalog response admits it did not return everything. The tool
  * reports `total`/`fetched`/`truncated`; any of those signalling a short read
@@ -141,38 +141,34 @@ export function isTruncatedListing(body) {
     return true; // unparseable is not proof of completeness
   }
   const text = JSON.stringify(parsed?.result ?? parsed ?? null);
-  if (/"truncated"\s*:\s*true/.test(text)) return true;
+  // Two truncation shapes: the tool's own `truncated: true` page marker, and
+  // the MCP server's per-call context budget, which replaces a large result
+  // with `structuredContent._truncated: true` plus a `_preview` holding only
+  // the first few rows. A 222-epic catalog came back as a 6 KB preview naming
+  // four epics, and every other correctly cited epic read as "missing".
+  if (/"_?truncated"\s*:\s*true/.test(text)) return true;
   const total = text.match(/"total"\s*:\s*(\d+)/);
   const fetched = text.match(/"fetched"\s*:\s*(\d+)/);
   if (total && fetched && Number(fetched[1]) < Number(total[1])) return true;
   return false;
 }
 
+/**
+ * POST one MCP tools/call through the shared client. Returns the raw response
+ * text, or null on any failure (non-2xx, transport, timeout, refused endpoint):
+ * this gate degrades to warn-and-skip, never to "missing".
+ */
 export async function callTool(endpoint, token, name, args) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
-    const res = await fetch(endpoint, {
-      method: "POST",
-      signal: controller.signal,
-      headers: {
-        "content-type": "application/json",
-        accept: "application/json, text/event-stream",
-        authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        id: 1,
-        method: "tools/call",
-        params: { name, arguments: args },
-      }),
+    const reply = await mcpPost("tools/call", { name, arguments: args }, {
+      mcpUrl: endpoint,
+      bearerToken: token,
+      timeoutMs: FETCH_TIMEOUT_MS,
+      accept: "application/json, text/event-stream",
     });
-    if (!res.ok) return null;
-    return await res.text();
+    return reply.status >= 200 && reply.status < 300 ? reply.text : null;
   } catch {
     return null;
-  } finally {
-    clearTimeout(timer);
   }
 }
 

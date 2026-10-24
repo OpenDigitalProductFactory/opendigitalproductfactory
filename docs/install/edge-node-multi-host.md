@@ -25,7 +25,7 @@
 ## What you'll have at the end
 
 - **Host A** runs the full DPF Authority Core (portal, postgres,
-  neo4j, etc.) from a normal `bash install-dpf.sh` install.
+  inngest, etc.) from a normal `bash install-dpf.sh` install.
 - **Host B** runs a single Edge Node container against Host A. The
   container reports its hostname, NICs, ARP table, and (in later T
   threads) ARP / nmap / SNMP collector output back to Host A.
@@ -267,9 +267,16 @@ Output files (under `~/.dpf/tls` by default):
 
 ### B — Start the TLS sidecar (Host A)
 
+The sidecar publishes 80, 443 and 8443 through `DPF_HOST_BIND_ADDRESS`, like
+every other host port. A fresh install defaults to `127.0.0.1` (this machine
+only); installs upgraded from before that setting existed keep `0.0.0.0`. For
+multi-host, set `DPF_HOST_BIND_ADDRESS=0.0.0.0` in Host A's `.env` so the
+Edge Node can reach it.
+
 ```bash
 # Same shell where you ran issue-authority-tls-cert.sh:
 export DPF_TLS_DIR="$HOME/.dpf/tls"
+export DPF_HOST_BIND_ADDRESS=0.0.0.0   # or set it in .env
 docker compose -f docker-compose.yml -f docker-compose.tls.yml up -d
 
 # Verify from the LAN:

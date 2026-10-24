@@ -1,0 +1,179 @@
+import { parseResourceWaitProjection } from "./mcp-task-capacity-contract";
+import { hasExecutionUncertainty, EXECUTION_UNCERTAIN_MESSAGE } from "./shared/execution-uncertainty";
+import type { Prisma } from "@dpf/db";
+import {
+  recoverTerminalWriterEscalation,
+  terminalWriterEscalationMessage,
+  terminalWriterEscalationStructuredContent,
+  terminalWriterEscalationWaitReason,
+  TERMINAL_WRITER_REJECTED_WAIT_REASON,
+  terminalWriterRejectionMessage,
+  terminalWriterRejectionStructuredContent,
+  type TerminalWriterRejection,
+} from "./mcp-task-terminal-writer-escalation";
+
+export type TerminalWriterWait = {
+  schemaVersion: 1;
+  kind: "missing-terminal-writer";
+  writerToolName: string;
+  resumeMode: "same-taskrun";
+  attempt: number;
+  observedAt: string;
+  dispatchContract?: "required-tool-call" | "receipt-verified";
+  noncompliance?: "prose-without-required-writer";
+  validationFailure?: { error: string; message: string; proposal?: Prisma.JsonValue };
+  /** BI-50B0C471: the wait was caused by a capacity deferral after banked reads,
+   * not by the writer; resuming it does not spend a writer attempt. */
+  capacityDeferred?: "capacity" | "busy";
+  writerRejection?: TerminalWriterRejection;
+};
+
+type TerminalWriterDispatchFailure = {
+  schemaVersion: 1;
+  code: "required-terminal-writer-not-enforceable";
+  writerToolName: string;
+  observedAt: string;
+};
+
+function optionalString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function remoteTaskContent(text: string) {
+  return [{ type: "text", text }];
+}
+
+export function parseTerminalWriterWait(value: unknown): TerminalWriterWait | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const candidate = (value as Record<string, unknown>)["terminalWriterWait"];
+  if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return null;
+  const wait = candidate as Record<string, unknown>;
+  if (
+    wait["schemaVersion"] !== 1
+    || wait["kind"] !== "missing-terminal-writer"
+    || !optionalString(wait["writerToolName"])
+    || wait["resumeMode"] !== "same-taskrun"
+    || !Number.isInteger(wait["attempt"])
+    || Number(wait["attempt"]) < 1
+    || !optionalString(wait["observedAt"])
+    || (wait["dispatchContract"] !== undefined
+      && wait["dispatchContract"] !== "required-tool-call"
+      && wait["dispatchContract"] !== "receipt-verified")
+    || (wait["noncompliance"] !== undefined && wait["noncompliance"] !== "prose-without-required-writer")
+    || (wait["capacityDeferred"] !== undefined && wait["capacityDeferred"] !== "capacity" && wait["capacityDeferred"] !== "busy")
+  ) return null;
+  return wait as TerminalWriterWait;
+}
+
+function parseTerminalWriterDispatchFailure(
+  value: unknown,
+  wait: TerminalWriterWait | null,
+): TerminalWriterDispatchFailure | null {
+  if (!wait || !value || typeof value !== "object" || Array.isArray(value)) return null;
+  const candidate = (value as Record<string, unknown>)["terminalWriterDispatchFailure"];
+  if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return null;
+  const failure = candidate as Record<string, unknown>;
+  if (
+    failure["schemaVersion"] !== 1
+    || failure["code"] !== "required-terminal-writer-not-enforceable"
+    || optionalString(failure["writerToolName"]) !== wait.writerToolName
+    || optionalString(failure["observedAt"]) !== wait.observedAt
+  ) return null;
+  return failure as TerminalWriterDispatchFailure;
+}
+
+export function projectRemoteTaskReplay(input: {
+  existing: {
+    taskRunId: string;
+    status: string;
+    progressPayload: unknown;
+    a2aMetadata: unknown;
+  };
+  requestMatches: boolean;
+}): { kind: "result"; result: Record<string, unknown> } {
+  if (!input.requestMatches) {
+    return {
+      kind: "result",
+      result: {
+        content: remoteTaskContent(
+          "This requestKey is already bound to a different external coworker request. Retry with the original immutable packet or use a new requestKey.",
+        ),
+        structuredContent: {
+          error: "idempotency_conflict",
+          action: "Retry with the original immutable packet or use a new requestKey.",
+          taskRunId: input.existing.taskRunId,
+        },
+        isError: true,
+      },
+    };
+  }
+  // Historical wait details remain audit evidence, not permission to revive a
+  // terminal task. Explicit recovery must reserve a new dispatch first.
+  if (["failed", "canceled", "rejected", "archived"].includes(input.existing.status)) {
+    return { kind: "result", result: {
+      taskRunId: input.existing.taskRunId, status: input.existing.status,
+      idempotentReplay: true, requiresApproval: false, resumable: false,
+      progressPayload: input.existing.progressPayload, a2aMetadata: input.existing.a2aMetadata,
+    } };
+  }
+  if (hasExecutionUncertainty(input.existing.progressPayload)) {
+    return { kind: "result", result: {
+      taskRunId: input.existing.taskRunId, status: input.existing.status,
+      idempotentReplay: true, requiresApproval: false, resumable: false,
+      waitReason: "execution-uncertain", content: remoteTaskContent(EXECUTION_UNCERTAIN_MESSAGE),
+      progressPayload: input.existing.progressPayload, a2aMetadata: input.existing.a2aMetadata,
+      isError: false,
+    } };
+  }
+  const terminalWriterEscalation = recoverTerminalWriterEscalation(input.existing.progressPayload);
+  const terminalWriterWait = parseTerminalWriterWait(input.existing.progressPayload);
+  const recordedRejection = terminalWriterWait?.writerRejection;
+  const writerRejection = recordedRejection?.schemaVersion === 1
+    && optionalString(recordedRejection.error) && optionalString(recordedRejection.message)
+    && optionalString(recordedRejection.observedAt) ? recordedRejection : null;
+  const terminalWriterDispatchFailure = parseTerminalWriterDispatchFailure(
+    input.existing.progressPayload,
+    terminalWriterWait,
+  );
+  const resourceWait = parseResourceWaitProjection(input.existing.progressPayload);
+  const progress = input.existing.progressPayload && typeof input.existing.progressPayload === "object"
+    ? input.existing.progressPayload as Record<string, unknown> : {};
+  return {
+    kind: "result",
+    result: {
+      taskRunId: input.existing.taskRunId,
+      status: input.existing.status,
+      idempotentReplay: true,
+      requiresApproval: input.existing.status === "input-required" && !terminalWriterWait && !terminalWriterEscalation
+        && typeof progress.approvalEnvelopeId === "string" && progress.approvalEnvelopeId.length > 0,
+      ...(terminalWriterEscalation ? {
+        resumable: false,
+        waitReason: terminalWriterEscalationWaitReason(terminalWriterEscalation),
+        content: remoteTaskContent(terminalWriterEscalationMessage(terminalWriterEscalation)),
+        structuredContent: terminalWriterEscalationStructuredContent(terminalWriterEscalation),
+        isError: false,
+      } : terminalWriterDispatchFailure ? {
+        resumable: true,
+        waitReason: terminalWriterDispatchFailure.code,
+        structuredContent: { error: terminalWriterDispatchFailure.code },
+        isError: true,
+      } : terminalWriterWait && writerRejection ? {
+        resumable: true,
+        waitReason: TERMINAL_WRITER_REJECTED_WAIT_REASON,
+        content: remoteTaskContent(terminalWriterRejectionMessage(terminalWriterWait.writerToolName, writerRejection)),
+        structuredContent: terminalWriterRejectionStructuredContent(
+          terminalWriterWait.writerToolName, terminalWriterWait.attempt, writerRejection),
+        isError: false,
+      } : terminalWriterWait ? {
+        resumable: true,
+        // BI-50B0C471: a wait the writer never caused replays as the capacity wait it is.
+        waitReason: terminalWriterWait.capacityDeferred ? "provider-capacity" : terminalWriterWait.kind,
+      } : resourceWait ? {
+        resumable: true,
+        waitReason: "provider-capacity",
+      } : {}),
+      progressPayload: input.existing.progressPayload,
+      a2aMetadata: input.existing.a2aMetadata,
+    },
+  };
+}

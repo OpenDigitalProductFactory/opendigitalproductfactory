@@ -1,35 +1,35 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  resolveScheduledOwnerUserId,
-  type ScheduledOwnerClient,
-} from "./scheduled-owner";
+const resolveWorkOwner = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/portfolio/accountable-owner", () => ({ resolveWorkOwner }));
 
-function clientReturning(owner: { id: string } | null): ScheduledOwnerClient {
-  return { user: { findFirst: vi.fn(async () => owner) } };
-}
+import { resolveScheduledOwnerUserId } from "./scheduled-owner";
 
+const db = {} as never;
+
+beforeEach(() => {
+  resolveWorkOwner.mockReset();
+});
+
+// BI-67B27832: scheduled work used to go to the oldest superuser, which is the
+// seeded bootstrap account nobody signs in with. It now follows the portfolio.
 describe("resolveScheduledOwnerUserId", () => {
-  it("returns the resolved superuser id", async () => {
-    const db = clientReturning({ id: "usr_admin" });
-    await expect(resolveScheduledOwnerUserId(db)).resolves.toBe("usr_admin");
+  it("returns the portfolio-aligned owner for platform work (Foundational by default)", async () => {
+    resolveWorkOwner.mockResolvedValue({ userId: "u-mark", source: "foundational" });
+    await expect(resolveScheduledOwnerUserId(db)).resolves.toBe("u-mark");
+    expect(resolveWorkOwner).toHaveBeenCalledWith(db, {});
   });
 
-  it("resolves the oldest ACTIVE superuser (deterministic install owner)", async () => {
-    const findFirst = vi.fn(async () => ({ id: "usr_admin" }));
-    await resolveScheduledOwnerUserId({ user: { findFirst } });
-    expect(findFirst).toHaveBeenCalledWith({
-      where: { isSuperuser: true, isActive: true },
-      orderBy: { createdAt: "asc" },
-      select: { id: true },
+  it("passes the work's portfolio through so its owner answers for it", async () => {
+    resolveWorkOwner.mockResolvedValue({ userId: "u-owner", source: "portfolio" });
+    await expect(resolveScheduledOwnerUserId(db, { portfolioId: "pf-1" })).resolves.toBe("u-owner");
+    expect(resolveWorkOwner).toHaveBeenCalledWith(db, { portfolioId: "pf-1" });
+  });
+
+  it("fails loudly rather than resolve to a non-existent owner", async () => {
+    resolveWorkOwner.mockImplementation(async () => {
+      throw new Error("No accountable owner");
     });
-  });
-
-  it("throws rather than fall back to a sentinel when no owner exists", async () => {
-    // Guards the regression this helper was built for: a hardcoded
-    // userId:"system" silently violated TaskRun_userId_fkey. A missing owner
-    // must fail loudly, never resolve to a non-existent principal.
-    const db = clientReturning(null);
-    await expect(resolveScheduledOwnerUserId(db)).rejects.toThrow(/superuser/i);
+    await expect(resolveScheduledOwnerUserId(db)).rejects.toThrow(/owner/i);
   });
 });

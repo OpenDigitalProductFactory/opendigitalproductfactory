@@ -14,6 +14,7 @@ import {
   resolveDedupDecision,
 } from "@/lib/mdm/dedup-gate";
 import { recordAttributeChanges } from "@/lib/mdm/history";
+import { syncCustomerPrincipal } from "@/lib/identity/principal-linking";
 
 function contactInclude() {
   return {
@@ -136,15 +137,21 @@ export async function PATCH(
       },
     });
 
-    const updated = await prisma.customerContact.update({
-      where: { id },
-      data: {
-        ...(firstName !== undefined && { firstName: firstName.trim() || null }),
-        ...(lastName !== undefined && { lastName: lastName.trim() || null }),
-        ...nameUpdate,
-        ...rest,
-      },
-      include: contactInclude(),
+    const updated = await prisma.$transaction(async (tx) => {
+      const row = await tx.customerContact.update({
+        where: { id },
+        data: {
+          ...(firstName !== undefined && { firstName: firstName.trim() || null }),
+          ...(lastName !== undefined && { lastName: lastName.trim() || null }),
+          ...nameUpdate,
+          ...rest,
+        },
+        include: contactInclude(),
+      });
+      // isActive and account/partner derivation are projected into Principal
+      // in the same transaction as any credential-holder state change.
+      await syncCustomerPrincipal(id, tx as never);
+      return row;
     });
 
     // Attribute history (BI-130EF887): the "Ian changed roles" temporal record.

@@ -1,3 +1,5 @@
+import { UNTRUSTED_CONTENT_RULE } from "./tool-result-provenance";
+
 export const COWORKER_INTERACTION_CONTRACT_HEADING = "COWORKER INTERACTION CONTRACT";
 
 export const COWORKER_INTERACTION_CONTRACT_PROMPT = `${COWORKER_INTERACTION_CONTRACT_HEADING}
@@ -27,7 +29,9 @@ Rules:
 - Keep it to at most a handful of concrete, mutually-exclusive options. Each "label" is the button text; add "value" only when the reply text should differ from the label. Optional "kind" is one of approve, reject, request-changes, answer, dismiss, snooze for styling.
 - Free-text always remains available to the human, so never force a genuinely open-ended question into buttons — omit the block when there is no small discrete option set.
 - Do NOT emit a decision block when a goal, autopilot directive, or prior instruction already authorized you to proceed without asking — in that case just proceed.
-- Emit at most one decision block, always as the final line.`;
+- Emit at most one decision block, always as the final line.
+
+${UNTRUSTED_CONTENT_RULE}`;
 
 export type CoworkerOperationalCloseout = {
   status: string;

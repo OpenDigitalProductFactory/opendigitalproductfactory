@@ -1,0 +1,138 @@
+// A stage advances on recorded evidence, not on a claim of completion
+// (BI-76B35820, after the refusal of PR #5168).
+//
+// #5168 proposed earning the completing receipt from `TaskRun.status ===
+// "completed"`. That was correctly refused: a completed TaskRun is the
+// executor's claim about ITSELF. On this install all 337 such claims were false
+// — `executedToolCount: 0`, `scheduledSummary: null` — so earning receipts from
+// them would have converted 337 fabrications into stage advancement and undone
+// the fail-closed pause added by #5166. A visible loop is strictly better than
+// silent false progress.
+//
+// The kernel already says this: governance approves evidence, not provenance;
+// structural verification is not functional verification.
+//
+// So the receipt is earned from a governed WRITE the worker had to make through
+// MCP — `record_workroom_evidence`, a sanctioned mutator requiring
+// `work_capsule_write` — carrying the stage it belongs to and an evidence kind
+// the stage declared. The drive still owns the advance; the worker cannot
+// advance itself, it can only leave evidence the drive then reads.
+//
+// Pure resolution over supplied rows.
+
+import {
+  appendCompletingWorkroomDriveReceipt,
+  isCompletingWorkroomDriveReceipt,
+  isCompletingWorkroomDriveReceiptAt,
+  receiptInRun,
+} from "./workroom-drive-receipts";
+
+export type RecordedEvidence = {
+  /** Stage the evidence was recorded against. Evidence with no stage cannot
+   *  advance one — it is a note on the room, not a stage outcome. */
+  stageKey: string | null;
+  kind: string | null;
+  /** What the worker says happened: `completed` or `blocked`. Only `completed`
+   *  can advance a stage; a blocker is recorded through the same governed write
+   *  (the brief asks for it) and must never be read as the work being done. */
+  outcome: string | null;
+  recordedAt: Date;
+  /**
+   * The stage decision's choice (`payload.result.choice`: accept, patch,
+   * defer), when the evidence is a recorded decision. Read by the Phase 3c
+   * graph path from PR-3c-3 (gate verdicts); nothing reads it before then.
+   */
+  choice?: string | null;
+};
+
+/** Stage-evidence outcomes the evidence tool accepts. */
+export const STAGE_EVIDENCE_OUTCOMES = ["completed", "blocked"] as const;
+export type StageEvidenceOutcome = (typeof STAGE_EVIDENCE_OUTCOMES)[number];
+
+export type StageEvidenceInput = {
+  stageKey: string | null;
+  /** Kinds the stage declared it would leave behind. Empty means the stage
+   *  declared none, and any stage-scoped evidence counts. */
+  declaredKinds: readonly string[];
+  evidence: readonly RecordedEvidence[];
+  /** When the stage was most recently dispatched. Evidence older than the
+   *  dispatch belongs to a previous attempt and must not satisfy this one. */
+  dispatchedAt: Date | null;
+  /**
+   * Graph shapes only (Phase 3c, BI-8875C9DF): the stage's current iteration.
+   * When given, an existing receipt short-circuits only at this iteration, the
+   * earned receipt carries it, and `dispatchedAt` must be THIS iteration's own
+   * dispatch or attention time (the per-stage loader supplies it). Omitted,
+   * the function behaves exactly as before.
+   */
+  iteration?: number;
+  /**
+   * The run the receipt belongs to: a graph room's marking run (BI-086DC167)
+   * or a sequential room's run (BI-853120EE). When given, an existing receipt
+   * short-circuits only within this run, and the earned receipt carries it,
+   * so the next run never replays it. Omitted, the function behaves exactly
+   * as before.
+   */
+  runKey?: string;
+};
+
+/**
+ * Whether the current stage has evidence good enough to advance on.
+ *
+ * Deliberately strict, because the failure this replaces was permissive:
+ *
+ * - Evidence must name THIS stage. Room-level notes do not advance a stage.
+ * - It must be of a kind the stage declared, when the stage declared any.
+ * - It must state outcome `completed`. A recorded blocker, or evidence that
+ *   states no outcome, advances nothing (fail closed). Without this, the first
+ *   live advance on 2026-09-24 was a coworker's own "blocked: no tool
+ *   available" record carrying the declared kind.
+ * - It must post-date the dispatch, so a previous attempt's evidence cannot
+ *   satisfy a fresh one.
+ *
+ * Anything short of that returns false and the stage is dispatched again, which
+ * is the correct, visible, non-fabricating outcome.
+ */
+export function stageHasCompletingEvidence(input: StageEvidenceInput): boolean {
+  if (!input.stageKey || !input.dispatchedAt || !Number.isFinite(input.dispatchedAt.getTime())) return false;
+  const declared = new Set(input.declaredKinds.filter((kind) => kind.trim().length > 0));
+  return input.evidence.some((row) => {
+    if (row.stageKey !== input.stageKey) return false;
+    if (row.outcome !== "completed") return false;
+    if (declared.size > 0 && (row.kind === null || !declared.has(row.kind))) return false;
+    if (input.dispatchedAt && row.recordedAt < input.dispatchedAt) return false;
+    return true;
+  });
+}
+
+/** Receipt kind recorded when a stage's governed evidence is present. Distinct
+ *  from #5166's `blocked`, which records a dispatch that produced no writeback. */
+export const STAGE_EVIDENCE_RECEIPT_KIND = "stage-evidence-recorded";
+
+export type StageReceipt = { stageKey: string; kind: string; iteration?: number; runKey?: string };
+
+/**
+ * The room's receipts after reading its recorded evidence.
+ *
+ * Idempotent, and returns the SAME array reference when nothing was earned so a
+ * caller can cheaply skip the write.
+ */
+export function earnEvidenceReceipts(input: StageEvidenceInput & {
+  existing: readonly StageReceipt[];
+}): readonly StageReceipt[] {
+  if (!input.stageKey) return input.existing;
+  const iteration = input.iteration;
+  const runKey = input.runKey;
+  const done = iteration === undefined
+    ? input.existing.some((receipt) => isCompletingWorkroomDriveReceipt(receipt, input.stageKey!) && receiptInRun(receipt, runKey))
+    : input.existing.some((receipt) => isCompletingWorkroomDriveReceiptAt(receipt, input.stageKey!, iteration, runKey));
+  if (done) return input.existing;
+  if (!stageHasCompletingEvidence(input)) return input.existing;
+  const result = appendCompletingWorkroomDriveReceipt(input.existing, {
+    stageKey: input.stageKey,
+    kind: STAGE_EVIDENCE_RECEIPT_KIND,
+    ...(iteration !== undefined ? { iteration } : {}),
+    ...(runKey !== undefined ? { runKey } : {}),
+  });
+  return result.ok ? result.data : input.existing;
+}

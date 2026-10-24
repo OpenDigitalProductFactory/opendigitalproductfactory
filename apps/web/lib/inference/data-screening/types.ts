@@ -1,4 +1,4 @@
-import type { ChatMessage } from "@/lib/inference/ai-inference";
+import type { ChatMessage } from "@/lib/routing/chat-message-types";
 import type { DataEffect, DestinationClass } from "@/lib/govern/data/taxonomy";
 import type { RequestContract } from "@/lib/routing/request-contract";
 import type { DataPolicyDecision } from "@/lib/govern/data/policy-decision";
@@ -112,6 +112,14 @@ export type InferenceDataScreenReceipt = {
    * a floor. Absent on pre-drift v1 receipts.
    */
   measuredSensitivity?: InferencePayloadSensitivity;
+  /**
+   * Payload index where the exchange under way begins — the last user-role
+   * message. Lets a consumer separate "your current question is governed" from
+   * "something earlier in this thread is", which imply different remedies
+   * (BI-706530B2). An index, never content. Absent on receipts written before
+   * this existed, and -1 when the payload carried no user message.
+   */
+  currentTurnStartIndex?: number;
   /**
    * What the ROUTE declared, independent of the payload — the static
    * `sensitivity` on its route-context entry. Absent when the caller supplied

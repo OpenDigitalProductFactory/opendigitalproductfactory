@@ -12,6 +12,50 @@ you a cross-cutting view of what is happening now without requiring you to open
 every business area. It also hosts managed documents when an operator needs the
 maintained copy of a guide, note, policy, or imported source.
 
+Open a Workroom to inspect its process and supporting evidence, including rooms
+that have no separate work item. Reviewer failures can require attention even
+when the room's recorded status has not changed. Missing or incomplete evidence
+is labeled rather than treated as verified completion. See [Workrooms](work-rooms.md)
+for access, process inspection and boundary details.
+
+Opening a room by its ID retains that selection within its parent case. Process,
+room evidence and workforce use the same room; shared messages are labelled as
+case context. A missing or mismatched room selection does not substitute another room.
+
+Process pauses appear in the room's attention summary. Observed execution
+separates activity events from receipts, and the header shows the same recorded
+or inherited human accountability as the workforce panel.
+
+## Checking an approval result
+
+After you approve or decline a coworker's request, the Inbox keeps its result.
+The request's link opens that result directly, including after a refresh. Open
+**Recent approval results** to review recent decisions separately from work that
+still needs you. Completed decisions do not increase the attention count.
+
+The Inbox displays a bounded list. Its approval summary shows how many requests
+are waiting in total and how many are shown. Use **Older requests** to continue
+through the queue and **Latest requests** to return to the newest requests.
+After a decision, another request may fill the cleared place; the pending total
+shows your progress. The displayed-item count also includes other notices and
+is not the full approval total. If the queue cannot be read, it says unavailable.
+
+An approval and a completed action are separate facts. The result says whether
+the action completed, failed, could not run, or expired, and explains the next
+step. Older decisions without a recorded result say the outcome is unknown.
+Do not approve again just because the original card disappeared; your assistant
+can check the result and the affected work first. You can only read your own
+approval results.
+
+Your assistant can also check the stored action evidence for an approved
+provider-account test without running the test again. It reports the saved test
+outcome separately from the approval status. Missing, conflicting or unsupported
+evidence stays explicit. A saved test success alone does not prove a completed
+Responses verification or a quota update. Private test output is not returned.
+
+How long a coworker's request waits for you, and what happens if nobody
+answers, is explained in [the attention inbox guide](attention-inbox.md#how-long-a-coworkers-request-waits).
+
 ## Operations and Performance
 
 The main rail separates two different decisions:
@@ -91,6 +135,12 @@ shelter asks all day: where an animal is, and how much room is left.
   **not** counted as free.
 - If the shelter is holding animals with no kennel recorded, the board names
   them and says the free count covers only the animals it can place.
+- Each occupied place shows the animal's **photograph**, so you recognise who is
+  in the run without reading every label. A unit shows the name alone when no
+  photograph is on file.
+- Where someone has applied, the place says so. **"Dana is coming for them"**
+  means an approved adopter, a home check, or a meet-and-greet. **"Someone has
+  applied"** means an enquiry nobody has answered yet.
 - **Place or move** records the animal in an open kennel or foster home. Moving
   closes the prior stay and keeps it in history.
 - **Release a current stay** closes housing without deleting the record.
@@ -120,6 +170,90 @@ animal journey as a whole. The workspace follows three connected value streams:
    the funding used for care.
 
 Use **Animals**, **Intake**, **Housing**, **Daily care**, **Adoptions**, and
+## When the ward is full
+
+### Admitting an animal
+
+**Intake** admits an animal in one step: identity, the intake source (stray,
+owner relinquished, transfer, born in care, return, or seizure), an optional
+legal or policy hold, and the housing it goes into. The admission either houses
+the animal or refuses with the reason, so custody without a place, or a place
+without custody, cannot exist.
+
+Each animal in intake shows its checklist: identity and microchip check, intake
+examination, weight, vaccination, parasite treatment, sterilization, behaviour
+assessment, and housing. Every item is satisfied by a dated record with the
+person or provider who did the work. A note that an animal "is spayed" does not
+count; the sterilization record does, and it holds the animal back until its
+recovery date has passed.
+
+The page explains, in words, why an animal is not yet placement-ready. A hold is
+released by a person with a reason. **Verify placement readiness** appears only
+when every reason is gone, and it re-checks the same facts before the animal
+moves on to Adoptions.
+
+### Daily care rounds
+
+**Daily care** is the list a volunteer opens in the morning. A routine (feed,
+water, medication, walk, clean, weigh, welfare check) is set up once per animal
+with a time of day, every day or on chosen weekdays, for a fixed course or
+ongoing. The platform turns it into dated rounds two weeks ahead, so the list
+exists whether or not anyone remembered.
+
+Each round is recorded with what happened. Done or partly done closes it. Did
+not eat, refused, or a concern needs a short observation and raises a welfare
+follow-up that a person must take on and resolve with a note. A medication
+round that is still open two hours after it was due can be escalated the same
+way; the page shows how many are waiting. Nothing here decides treatment. It
+makes sure a person sees it.
+
+### Veterinary visits
+
+Below the care rounds, **Veterinary visits** books an animal at a partner
+practice. A practice is registered once with its contact and arrangement (a
+charity rate, a monthly account, a credit limit) and becomes both a place a
+visit can be booked at and a supplier that bills can be recorded against.
+
+Each kind of visit carries a recovery period: a spay or neuter surgery holds
+the animal for a week, a dental for a day, a check-up not at all. Until
+recovery ends the animal cannot be placed, and the intake checklist says so.
+Closing a done surgery records the vet who performed it straight onto the
+checklist, so nobody re-types it. A missed or cancelled visit needs a reason
+and lifts the recovery hold.
+
+### Adoptions
+
+**Adoptions** turns an enquiry into a decision. An application records the
+applicant and the screening answers a rescue actually decides on: housing,
+other pets, children, landlord permission, and experience. It moves through
+screening, a meet-and-greet and a home check (each a dated visit on the
+animal's work list), and then approval.
+
+Approval reserves the animal for that one applicant. Nobody else can be
+promised the same animal, and an animal that is not placement-ready, or is on a
+hold, cannot be reserved. Completing the adoption records the adopter, closes
+custody, withdraws the public listing, frees the kennel, and records the fee
+as a donation toward that animal's care. It is never a price.
+
+A returned animal always comes back. Recording the return keeps the placement
+and its reason in history, reopens custody as a return, and puts the animal
+back through the intake checklist before it can be placed again.
+
+If every place is taken, the board adds a review. It is the only time it appears.
+
+The review lists the animals that have waited longest with nobody waiting for
+them, and prints the reason for each one. It also lists everybody it refused to
+consider and why — an animal under a legal hold, one with an approved adopter or
+an unanswered applicant, one still being assessed, or one that has already left
+your care. Those are never on the list, however long they have waited.
+
+**Nothing on the review acts.** There is no button. It exists so that the
+reasoning is assembled and written down for you, not so the decision is made for
+you. You decide, and you can disagree with it.
+
+If every animal is protected, the review says so and asks you to find room
+another way, rather than offering somebody up to fill the list.
+
 **Stewardship** to move between those perspectives. Housing opens the existing
 Ward board; it is not a second capacity record.
 
@@ -185,8 +319,8 @@ Re-run the installer with `--environment-class` to change the value in force.
 - **Activity Feed** — A chronological stream of recent actions across the platform, filtered to things you're involved in or watching.
 - **Calendar** — Upcoming dates pulled from your backlog items, leave requests, deadlines, and any scheduled events in the areas you have access to.
 - **Managed Documents** — Maintained documents with lifecycle state, versions, references, and publication status.
-- **"Needs you" inbox** — The one place for business decisions that need you now. Routine technical recovery stays with your digital team, while money leaving the business and public actions always come to you.
-- **Workrooms** — Active, access-controlled places where people and AI coworkers coordinate toward a named outcome. A Workroom is the friendly Workspace view over a governed Work Case.
+- **"Needs you" inbox** — The one place for business decisions that need you now. Routine technical recovery stays with your digital team, while money leaving the business and public actions always come to you. Administrators also see when AI coworker approvals keep going to an account nobody is using.
+- **Workrooms** — Active, access-controlled places where people and AI coworkers coordinate toward a named outcome. A case can contain several rooms. Select one to see its process and owners. Links by room ID retain that selection within the canonical case, including the operation and filter context.
 
 ## What You Can Do
 
@@ -195,7 +329,10 @@ Re-run the installer with `--environment-class` to change the value in force.
 - Review recent activity from colleagues and digital coworkers without leaving your workspace
 - Access your calendar for today's events and upcoming deadlines
 - Open [Managed Documents](documents.md) to review document state, versions, and references
+- Check [which file formats](supported-file-formats.md) coworker attachments, onboarding uploads, and Workbook imports can read
 - Open [My Work and Workrooms](work-rooms.md) to see the outcome, accountable participants, current attention, activity, and next action for active company work. Room access is checked before internal context loads; participant details explain each person or AI coworker's role, current work, authority, and sponsorship. Connected communication channels link back to the same canonical room and cannot treat message delivery as completed work. Each room also states the pace it works at — how persistently the coworker follows up, whether it asks before acting, and why — which quietens outside your operating hours without ever changing what the coworker is allowed to do.
+- Each room also names the human accountable for it and says where that answer came from, alongside the workers in the room and any subagents they delegated — see [who is accountable, and who is working](work-rooms.md#who-is-accountable-and-who-is-working)
+- A Workroom that is not attached to a work item opens as [its own case](work-rooms.md#opening-a-workroom-that-has-no-work-item) instead of reporting that the page could not be found
 - Use your digital coworker to get a personalized briefing on what needs your attention
 - Select the installation badge beside the logo to open [what this installation is](../operations/index.md#what-this-installation-is) and correct it
 - Open the ["Needs you" inbox](attention-inbox.md) to review plain-language decision cards, weekly batches, and the full technical record when needed

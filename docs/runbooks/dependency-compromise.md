@@ -64,7 +64,9 @@ If the compromised package could have read the environment or filesystem, assume
 exfiltration and rotate what it could reach. In a DPF install that includes:
 `INNGEST_SIGNING_KEY` / `INNGEST_EVENT_KEY`, `CREDENTIAL_ENCRYPTION_KEY`,
 `AUTH_SECRET`, database credentials, and any provider API tokens. Re-encrypt
-stored credentials if the credential-encryption key rotates. **Entering/rotating
+stored credentials if the credential-encryption key rotates. The two Inngest keys
+are shared by the portal and the `inngest` service: recreate both together after
+rotating either, or background jobs stop. **Entering/rotating
 secrets is an operator action — Claude does not handle secret values; surface the
 list, the operator rotates.**
 

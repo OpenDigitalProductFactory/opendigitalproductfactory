@@ -15,6 +15,7 @@ import {
 import {
   admitDurableAsyncOperation,
   type AdmitDurableAsyncOperationInput,
+  type AsyncOperationRecord,
 } from "./async-operation-lifecycle";
 import {
   createDurableAsyncProviderDependencies,
@@ -45,9 +46,32 @@ import {
   publishAsyncOperationTransitionEvent,
 } from "@/lib/execution/adapters/async-operation-events";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { DURABLE_INFERENCE_TASK_CONTRACT_FAMILY } from "@/lib/mcp-task-durable-inference-contract";
+import { assertDurableDispatchScreen } from "./durable-dispatch-screen";
+import { getLocalOnlyInferenceFresh } from "./local-only";
+import { admitPrismaWorkroomBoundDurableTaskOperation } from "./async-operation-workroom-runtime";
 
 function createStore(): PrismaAsyncOperationStore {
   return new PrismaAsyncOperationStore(prisma as unknown as AsyncOperationDatabase);
+}
+
+function jsonObject(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+export function durableMcpTaskWakeDisposition(input: {
+  operationId: string;
+  progressPayload: unknown;
+}): "ready" | "cancel" | "wait" {
+  const durable = jsonObject(jsonObject(input.progressPayload)?.["durableInference"]);
+  if (typeof durable?.["cancellationRequestedAt"] === "string") return "cancel";
+  if (durable?.["state"] !== "admitted") return "wait";
+  if (durable["asyncOperationId"] !== input.operationId) {
+    throw new Error("DURABLE_INFERENCE_OPERATION_ID_MISMATCH");
+  }
+  return "ready";
 }
 
 function pollFailureIsRetryable(error: unknown): boolean {
@@ -83,6 +107,16 @@ export function normalizeDurableAsyncProviderPoll(
 }
 
 const productionProviderIo: DurableAsyncProviderIo = {
+  async authorizeDispatch({ providerId, context }) {
+    assertDurableDispatchScreen({
+      evidence: context.dispatchScreen,
+      messages: context.messages,
+      systemPrompt: context.systemPrompt,
+      tools: context.tools,
+      providerId,
+      localOnlyInference: await getLocalOnlyInferenceFresh(),
+    });
+  },
   dispatch: ({ providerId, modelId, context }) => callProvider(
     providerId,
     modelId,
@@ -123,17 +157,14 @@ async function enqueueWake(wake: AsyncOperationWake): Promise<void> {
 type DurableAsyncOperationAuthority = {
   request: AsyncOperationAuthorityRequest;
   actor: AsyncOperationAuthorityActor;
+  deferInitialWake?: boolean;
 };
 
 function authorityDatabase(): AsyncOperationAuthorityDatabase {
   return prisma as unknown as AsyncOperationAuthorityDatabase;
 }
 
-/**
- * Persist the exact TaskRun/Workroom-bound identity before advisory dispatch.
- * This is the only production admission boundary for identity-version 1 rows.
- */
-export async function admitPrismaDurableAsyncOperation(
+async function admitPrismaDurableAsyncOperationDirect(
   input: AdmitDurableAsyncOperationInput & DurableAsyncOperationAuthority,
 ): Promise<{ operationId: string; replayed: boolean }> {
   const store = createStore();
@@ -144,8 +175,37 @@ export async function admitPrismaDurableAsyncOperation(
       db: authorityDatabase(),
     }),
     store,
-    enqueue: (operationId) => enqueueWake({ operationId, notBefore: new Date() }),
+    enqueue: input.deferInitialWake
+      ? async () => undefined
+      : (operationId) => enqueueWake({ operationId, notBefore: new Date() }),
   });
+}
+
+/**
+ * Persist the exact TaskRun/Workroom-bound identity before advisory dispatch.
+ * This is the only production admission boundary for identity-version 1 rows.
+ */
+export async function admitPrismaDurableAsyncOperation(
+  input: AdmitDurableAsyncOperationInput & DurableAsyncOperationAuthority,
+): Promise<{ operationId: string; replayed: boolean; taskRunId?: string }> {
+  if (
+    input.contractFamily === DURABLE_INFERENCE_TASK_CONTRACT_FAMILY
+    && input.request.kind === "workroom"
+  ) {
+    return admitPrismaWorkroomBoundDurableTaskOperation({
+      ...input,
+      request: input.request,
+    }, {
+      admitTaskRunOperation: admitPrismaDurableAsyncOperationDirect,
+      enqueue: enqueuePrismaAsyncOperationWake,
+    });
+  }
+  return admitPrismaDurableAsyncOperationDirect(input);
+}
+
+/** Enqueue a previously admitted operation after its owning TaskRun projection is durable. */
+export async function enqueuePrismaAsyncOperationWake(operationId: string): Promise<void> {
+  await enqueueWake({ operationId, notBefore: new Date() });
 }
 
 /** List durable handles for one authorized semantic TaskRun/Workroom scope. */
@@ -198,17 +258,83 @@ export async function runPrismaAsyncOperationWake(input: {
   workerId: string;
 }) {
   const store = createStore();
+  const operation = await store.loadForWorker(input.operationId);
+  const binding = operation ? await resolveDurableTaskDispatchBinding(operation) : null;
+  // An unsatisfiable binding is NOT refused here. Throwing before the claim
+  // never leases or transitions the row, so bounded recovery re-enqueues it
+  // every tick forever; the fenced worker settles it as `failed` instead.
+  if (operation && binding?.kind === "bound") {
+    const disposition = durableMcpTaskWakeDisposition({
+      operationId: operation.id,
+      progressPayload: binding.progressPayload,
+    });
+    if (disposition === "wait") {
+      return { status: operation.status, disposition: "busy" as const, nextWakeAt: null };
+    }
+    if (disposition === "cancel") {
+      await store.requestAuthorizedCancellation({
+        authorityScopeKey: operation.authorityScopeKey,
+        requestKey: operation.requestKey,
+        now: new Date(),
+      });
+    }
+  }
   const provider = createDurableAsyncProviderDependencies(productionProviderIo);
   return runAsyncOperationWake(input, {
     runWorker: (workerInput) => runDurableAsyncOperationWorker(workerInput, {
       store,
       now: () => new Date(),
       ...provider,
+      resolveDispatchBinding: async (candidate) => {
+        const resolved = await resolveDurableTaskDispatchBinding(candidate);
+        return resolved.kind === "unsatisfiable" ? resolved : { kind: "bound" };
+      },
     }),
     loadForWorker: (operationId) => store.loadForWorker(operationId),
     enqueue: enqueueWake,
     now: () => new Date(),
   });
+}
+
+export const DURABLE_INFERENCE_TASKRUN_BINDING_MISSING = "DURABLE_INFERENCE_TASKRUN_BINDING_MISSING";
+
+export type DurableTaskDispatchBinding =
+  | { kind: "not-durable-task" }
+  | { kind: "bound"; progressPayload: unknown }
+  | { kind: "unsatisfiable"; error: typeof DURABLE_INFERENCE_TASKRUN_BINDING_MISSING };
+
+interface DurableTaskBindingDatabase {
+  taskRun: {
+    findUnique(args: {
+      where: { id: string };
+      select: { progressPayload: true };
+    }): Promise<{ progressPayload: unknown } | null>;
+  };
+}
+
+/**
+ * Resolve the server-owned TaskRun a durable MCP inference operation dispatches
+ * under. The binding is written before the wake is enqueued (#5065), so a
+ * missing id or a vanished row cannot heal by waiting: it is unsatisfiable.
+ */
+export async function resolveDurableTaskDispatchBinding(
+  operation: Pick<AsyncOperationRecord, "contractFamily" | "taskRunId">,
+  db: DurableTaskBindingDatabase = prisma as unknown as DurableTaskBindingDatabase,
+): Promise<DurableTaskDispatchBinding> {
+  if (operation.contractFamily !== DURABLE_INFERENCE_TASK_CONTRACT_FAMILY) {
+    return { kind: "not-durable-task" };
+  }
+  if (!operation.taskRunId) {
+    return { kind: "unsatisfiable", error: DURABLE_INFERENCE_TASKRUN_BINDING_MISSING };
+  }
+  const taskRun = await db.taskRun.findUnique({
+    where: { id: operation.taskRunId },
+    select: { progressPayload: true },
+  });
+  if (!taskRun) {
+    return { kind: "unsatisfiable", error: DURABLE_INFERENCE_TASKRUN_BINDING_MISSING };
+  }
+  return { kind: "bound", progressPayload: taskRun.progressPayload };
 }
 
 export async function reconcilePrismaAsyncOperationWakes(input: { limit?: number }) {

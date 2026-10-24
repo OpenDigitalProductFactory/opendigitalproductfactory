@@ -7,7 +7,7 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { loadContributorChangeLaneReadModel } from "./read-model";
+import { loadContributorChangeLaneReadModel, loadContributorInventorySource } from "./read-model";
 
 const NOW = new Date("2026-05-26T22:00:00.000Z");
 const RECENT = new Date("2026-05-26T21:58:00.000Z"); // 2 min ago — fresh
@@ -379,5 +379,85 @@ describe("loadContributorChangeLaneReadModel — Phase 3", () => {
 
     const worktree = result.freshness.find((f) => f.source === "git-worktree");
     expect(worktree?.state).toBe("stale");
+  });
+});
+
+// ─── BI-BFFB9211: unchanged runs point at the run holding the rows ───────────
+
+describe("loadContributorChangeLaneReadModel — snapshotRunId pointer (BI-BFFB9211)", () => {
+  it("follows perSourceResult.snapshotRunId to the run that holds the rows when the latest successful run wrote none", async () => {
+    const db = makeDb();
+    const now = new Date("2026-05-26T20:00:00.000Z");
+    const prPayload = {
+      number: 42,
+      url: "https://github.com/o/r/pull/42",
+      title: "feat: a",
+      headBranch: "feat/a",
+      state: "open",
+      isDraft: false,
+      mergeStateStatus: "CLEAN",
+    };
+    db.contributorInventorySyncRun.findFirst.mockImplementation(async ({ where }) => {
+      if (where.syncRunId === "civs-holder") {
+        return { snapshots: [{ payload: prPayload }] };
+      }
+      const path = (where.perSourceResult?.path as string[] | undefined)?.[0];
+      if (path === "github-pr") {
+        return {
+          ...syncRunRow({ syncRunId: "civs-unchanged", completedAt: now, snapshots: [] }),
+          perSourceResult: { "github-pr": { ok: true, count: 1, error: null, unchanged: true, snapshotRunId: "civs-holder" } },
+        };
+      }
+      return syncRunRow({ syncRunId: `civs-${path}`, completedAt: now, snapshots: [] });
+    });
+    db.credentialEntry.findFirst.mockResolvedValue({ id: "cred-1" });
+
+    const result = await loadContributorChangeLaneReadModel({ db: db as never, now });
+
+    const gh = result.freshness.find((f) => f.source === "github-pr");
+    expect(gh?.state).toBe("ok");
+    expect(gh?.count).toBe(1);
+    const holderCall = db.contributorInventorySyncRun.findFirst.mock.calls.find(
+      (c) => (c[0] as { where: { syncRunId?: string } }).where.syncRunId === "civs-holder",
+    );
+    expect(holderCall).toBeDefined();
+  });
+});
+
+describe("loadContributorInventorySource — one snapshot source for read tools", () => {
+  it("returns the latest successful rows for one source, with that source's freshness, without the lane projection", async () => {
+    const db = makeDb();
+    const branch = { name: "feat/a", headSha: "abc", remote: "origin", isMerged: false, lastCommitAt: "2026-05-26T21:00:00.000Z" };
+    db.contributorInventorySyncRun.findFirst.mockResolvedValue(
+      syncRunRow({ syncRunId: "civs-1", completedAt: RECENT, snapshots: [{ payload: branch }] }),
+    );
+
+    const result = await loadContributorInventorySource("git-branch", { db: db as never, now: NOW });
+
+    expect(result.rows).toEqual([branch]);
+    expect(result.freshness).toMatchObject({ source: "git-branch", state: "ok", count: 1 });
+    expect(db.workroom.findMany).not.toHaveBeenCalled();
+    expect(db.credentialEntry.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("reports github-pr as not-configured, with no rows, when no GitHub credential is bound", async () => {
+    const db = makeDb();
+    db.credentialEntry.findFirst.mockResolvedValue(null);
+
+    const result = await loadContributorInventorySource("github-pr", { db: db as never, now: NOW });
+
+    expect(result.rows).toEqual([]);
+    expect(result.freshness.state).toBe("not-configured");
+    expect(db.contributorInventorySyncRun.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("reports warming-up when no run has succeeded for the source", async () => {
+    const db = makeDb();
+    db.contributorInventorySyncRun.findFirst.mockResolvedValue(null);
+
+    const result = await loadContributorInventorySource("git-worktree", { db: db as never, now: NOW });
+
+    expect(result.rows).toEqual([]);
+    expect(result.freshness.state).toBe("warming-up");
   });
 });

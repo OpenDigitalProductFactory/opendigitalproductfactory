@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { presentProposal } from "./proposal-presentation";
+import { panelNoteFrom, presentProposal } from "./proposal-presentation";
 
 const BASE = {
   proposalId: "DRP-i-row-1",
@@ -70,5 +70,27 @@ describe("presentProposal", () => {
     expect(presentProposal({ ...BASE, confidence: 0.2 })!.confidence).toContain("not confident");
     expect(presentProposal({ ...BASE, confidence: 0.5 })!.confidence).toContain("moderately");
     expect(presentProposal({ ...BASE, confidence: null })!.confidence).toBeNull();
+  });
+});
+
+describe("panelNoteFrom", () => {
+  it("names the specialists who weighed in, not the machinery around them", () => {
+    const note = panelNoteFrom([
+      { branchNodeId: "b1", role: "domain-specialist:finance", status: "completed" },
+      { branchNodeId: "b2", role: "skeptic", status: "completed" },
+      { branchNodeId: "b3", role: "resolution-adjudicator", status: "completed" },
+    ]);
+    expect(note).toBe("Weighed in: domain-specialist:finance.");
+  });
+
+  it("says plainly when no specialist applied", () => {
+    expect(panelNoteFrom([{ role: "skeptic" }, { role: "resolution-adjudicator" }])).toContain(
+      "general platform judgement",
+    );
+  });
+
+  it("says nothing at all when no panel produced this", () => {
+    expect(panelNoteFrom(null)).toBeNull();
+    expect(panelNoteFrom("a panel, honest")).toBeNull();
   });
 });

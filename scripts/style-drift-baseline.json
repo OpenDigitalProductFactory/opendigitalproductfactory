@@ -142,7 +142,6 @@
     "apps/web/lib/graph/device-icons.ts": 18,
     "apps/web/lib/build/sandbox/sandbox.ts": 4,
     "apps/web/lib/build/specialist-prompts.ts": 4,
-    "apps/web/lib/invoice-pdf.tsx": 5,
     "apps/web/lib/release/branding-presets.ts": 23,
     "apps/web/lib/shared/email.ts": 41,
     "apps/web/lib/workforce/calendar-data.ts": 25,

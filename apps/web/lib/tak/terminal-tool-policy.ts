@@ -1,12 +1,42 @@
+import { INITIATIVE_CORRECTABLE_ERRORS, INITIATIVE_DISPOSITION_GUIDANCE, INITIATIVE_WRITER_CORRECTION_LIMIT } from "../backlog/initiative-readiness/disposition-contract";
+import {
+  SOURCE_READ_MAX_CHARS,
+  SOURCE_READ_MAX_LINES,
+  sourcePageEndLine,
+  sourcePageNextLine,
+} from "../source-page-lines";
+
 export type TerminalToolPolicy = {
   writerToolName: string;
   readerToolNames: readonly string[];
+  /** The page reader bound to this artifact kind; defaults to the repository blob reader. */
+  immutableReaderToolName?: string;
   minimumSuccessfulReaderCalls: number;
   maximumReaderCalls: number;
   immutableReaderArguments?: ImmutableReaderArguments;
   terminalPhase?: "writer-only";
   persistedEvidenceAvailable?: boolean;
 };
+
+type TerminalProviderRoute = {
+  deniedProviders?: string[];
+  preferredProviderId?: string;
+};
+
+/** Route a bounded required-writer retry away from the provider that returned prose. */
+export function rotateTerminalWriterProvider(
+  options: TerminalProviderRoute,
+  providerId: string,
+): void {
+  const noncompliantProvider = providerId.trim();
+  if (!noncompliantProvider || noncompliantProvider === "unknown") return;
+  options.deniedProviders = [
+    ...new Set([...(options.deniedProviders ?? []), noncompliantProvider]),
+  ];
+  if (options.preferredProviderId === noncompliantProvider) {
+    delete options.preferredProviderId;
+  }
+}
 
 export type ImmutableReaderArguments = {
   repositoryFullName: string;
@@ -15,20 +45,87 @@ export type ImmutableReaderArguments = {
   expectedBlobId: string;
 };
 
-type ImmutableReaderArtifactRef = {
-  repositoryFullName: string;
-  path: string;
-  commitSha: string;
-  providerBlobId: string;
-};
+/**
+ * The immutable artifact a review binds to. A repository blob is read with
+ * `read_source_at_version`; a Build Studio design revision (BI-926A7E90) is read
+ * with `read_build_artifact_revision`. Both readers serve the same page shape
+ * and the same four identity keys, so the policy below is reader-agnostic: for
+ * a revision, `path` is the virtual `build-artifact-revision/<revisionId>`,
+ * `version` is the revision id and `expectedBlobId` is its value digest.
+ */
+export type ImmutableReaderArtifactRef =
+  | { kind: "document-version"; repositoryFullName: string; versionId: string; valueDigest: string }
+  | {
+    kind?: "repo-blob-at-commit";
+    repositoryFullName: string;
+    path: string;
+    commitSha: string;
+    providerBlobId: string;
+  }
+  | {
+    kind: "feature-build-revision";
+    repositoryFullName: string;
+    revisionId: string;
+    valueDigest: string;
+  };
+
+export const REPOSITORY_BLOB_READER_TOOL = "read_source_at_version";
+export const BUILD_ARTIFACT_REVISION_READER_TOOL = "read_build_artifact_revision";
+export const BUILD_ARTIFACT_REVISION_PATH_PREFIX = "build-artifact-revision/";
+/** Page readers: each serves one bounded page of the bound artifact. */
+export const IMMUTABLE_PAGE_READER_TOOLS = [REPOSITORY_BLOB_READER_TOOL, BUILD_ARTIFACT_REVISION_READER_TOOL] as const;
+
+export function isImmutablePageReader(toolName: string): boolean {
+  return (IMMUTABLE_PAGE_READER_TOOLS as readonly string[]).includes(toolName);
+}
+
+export function immutablePageReaderForArtifact(artifactRef: ImmutableReaderArtifactRef): string {
+  if (artifactRef.kind === "document-version") return REPOSITORY_BLOB_READER_TOOL;
+  return artifactRef.kind === "feature-build-revision" ? BUILD_ARTIFACT_REVISION_READER_TOOL : REPOSITORY_BLOB_READER_TOOL;
+}
+
+export function immutableReaderArgumentsFor(artifactRef: ImmutableReaderArtifactRef): ImmutableReaderArguments {
+  if (artifactRef.kind === "document-version") return {
+    repositoryFullName: artifactRef.repositoryFullName, path: `initiative-body-version/${artifactRef.versionId}`,
+    version: artifactRef.versionId, expectedBlobId: artifactRef.valueDigest,
+  };
+  if (artifactRef.kind === "feature-build-revision") {
+    return {
+      repositoryFullName: artifactRef.repositoryFullName,
+      path: `${BUILD_ARTIFACT_REVISION_PATH_PREFIX}${artifactRef.revisionId}`,
+      version: artifactRef.revisionId,
+      expectedBlobId: artifactRef.valueDigest,
+    };
+  }
+  return {
+    repositoryFullName: artifactRef.repositoryFullName,
+    path: artifactRef.path,
+    version: artifactRef.commitSha,
+    expectedBlobId: artifactRef.providerBlobId,
+  };
+}
+
+function pageReaderOf(policy: TerminalToolPolicy): string {
+  return policy.immutableReaderToolName ?? REPOSITORY_BLOB_READER_TOOL;
+}
 
 export type TerminalToolRecord = {
   name: string;
-  result: { success: boolean };
+  /** The reader ran, but a model-facing cap withheld part of its evidence. */
+  modelEvidenceTruncated?: boolean;
+  /**
+   * A call the CLI ran natively whose ToolExecution row persists no result
+   * (metrics_only readers). It is audit truth, not evidence: it neither proves
+   * a traversal nor spends the reader budget (BI-2E479619).
+   */
+  nativeResultWithheld?: boolean;
+  args?: Record<string, unknown>;
+  result: { success: boolean; error?: string; message?: string; data?: Record<string, unknown> };
 };
 
 const INITIATIVE_REVIEW_READER_NAMES = [
   "read_source_at_version",
+  "read_build_artifact_revision",
   "search_source_at_version",
 ] as const;
 
@@ -43,14 +140,10 @@ export function createInitiativeReviewTerminalToolPolicy(
     ? {
         writerToolName,
         readerToolNames,
+        immutableReaderToolName: immutablePageReaderForArtifact(artifactRef),
         minimumSuccessfulReaderCalls: 1,
         maximumReaderCalls: 6,
-        immutableReaderArguments: {
-          repositoryFullName: artifactRef.repositoryFullName,
-          path: artifactRef.path,
-          version: artifactRef.commitSha,
-          expectedBlobId: artifactRef.providerBlobId,
-        },
+        immutableReaderArguments: immutableReaderArgumentsFor(artifactRef),
       }
     : null;
 }
@@ -89,12 +182,39 @@ function boundedInteger(value: unknown, minimum: number, maximum: number): value
  * source identity. Provider arguments may select only a bounded page within
  * that artifact; they cannot replace or broaden the bound artifact itself.
  */
+/**
+ * BI-E8237EAE: the largest reader page a model sees whole through a tool-result
+ * cap of `modelVisibleChars`. The page travels inside a JSON envelope (message,
+ * identity, cursor) and JSON escaping grows the content, so the page is the cap
+ * less a fixed envelope allowance, less an escaping margin.
+ */
+export function readerPageCharsForModelView(modelVisibleChars: number): number {
+  return Math.min(SOURCE_READ_MAX_CHARS, Math.max(500, Math.floor((modelVisibleChars - 1_200) * 0.8)));
+}
+
+// A fixed floor, then one read per page of the bound artifact plus two for a
+// restart, never more than this ceiling (BI-E8237EAE).
+const MAX_SCALED_READER_CALLS = 24;
+
+function effectiveReaderBudget(policy: TerminalToolPolicy, readerRecords: readonly TerminalToolRecord[]): number {
+  for (const record of readerRecords) {
+    const data = record.result.success ? record.result.data : undefined;
+    const totalChars = data?.["totalChars"];
+    const content = data?.["content"];
+    if (data?.["hasMore"] !== true || typeof totalChars !== "number" || typeof content !== "string" || content.length === 0) continue;
+    const pages = Math.ceil(totalChars / content.length);
+    return Math.min(MAX_SCALED_READER_CALLS, Math.max(policy.maximumReaderCalls, pages + 2));
+  }
+  return policy.maximumReaderCalls;
+}
+
 export function normalizeTerminalToolArguments(
   policy: TerminalToolPolicy,
   toolName: string,
   providerArguments: Record<string, unknown>,
+  modelVisibleChars?: number,
 ): TerminalToolArgumentDisposition {
-  if (toolName !== "read_source_at_version" || !policy.readerToolNames.includes(toolName)) {
+  if (!isImmutablePageReader(toolName) || !policy.readerToolNames.includes(toolName)) {
     return { kind: "allow", arguments: providerArguments };
   }
 
@@ -141,8 +261,8 @@ export function normalizeTerminalToolArguments(
 
   const boundedControls = [
     ["startLine", 1, Number.MAX_SAFE_INTEGER],
-    ["maxLines", 1, 200],
-    ["maxChars", 1, 3_200],
+    ["maxLines", 1, SOURCE_READ_MAX_LINES],
+    ["maxChars", 1, SOURCE_READ_MAX_CHARS],
   ] as const;
   for (const [name, minimum, maximum] of boundedControls) {
     const value = providerArguments[name];
@@ -159,6 +279,13 @@ export function normalizeTerminalToolArguments(
     }
     normalized[name] = value;
   }
+  // BI-E8237EAE: a page the model cannot see whole is ruled invalid evidence and
+  // forces a restart, so never request one larger than the model's view.
+  if (modelVisibleChars !== undefined) {
+    const visiblePage = readerPageCharsForModelView(modelVisibleChars);
+    const requested = typeof normalized["maxChars"] === "number" ? normalized["maxChars"] as number : Number.POSITIVE_INFINITY;
+    normalized["maxChars"] = Math.min(requested, visiblePage);
+  }
 
   return { kind: "allow", arguments: normalized };
 }
@@ -167,6 +294,9 @@ export type TerminalToolProgress = {
   readerAttempts: number;
   successfulReaderCalls: number;
   evidenceAvailable: boolean;
+  partialEvidence: boolean;
+  continuationCursor: string | null;
+  paginationInvalid: boolean;
   writerAttempted: boolean;
   readerBudgetExhausted: boolean;
 };
@@ -193,20 +323,120 @@ export function summarizeTerminalToolProgress(
   records: readonly TerminalToolRecord[],
 ): TerminalToolProgress {
   const readers = new Set(policy.readerToolNames);
-  const readerRecords = records.filter((record) => readers.has(record.name));
-  const persistedReaderCalls = policy.persistedEvidenceAvailable
-    ? policy.minimumSuccessfulReaderCalls
-    : 0;
-  const successfulReaderCalls = Math.max(
-    persistedReaderCalls,
-    readerRecords.filter((record) => record.result.success).length,
-  );
+  const readerRecords = records.filter((record) => readers.has(record.name) && !record.nativeResultWithheld);
+  if (policy.persistedEvidenceAvailable) {
+    return {
+      readerAttempts: readerRecords.length,
+      successfulReaderCalls: Math.max(
+        policy.minimumSuccessfulReaderCalls,
+        readerRecords.filter((record) => record.result.success).length,
+      ),
+      evidenceAvailable: true,
+      partialEvidence: false,
+      continuationCursor: null,
+      paginationInvalid: false,
+      writerAttempted: records.some((record) => record.name === policy.writerToolName),
+      readerBudgetExhausted: readerRecords.length >= effectiveReaderBudget(policy, readerRecords),
+    };
+  }
+  const successfulReaderCalls = readerRecords.filter((record) => record.result.success).length;
+  const binding = policy.immutableReaderArguments;
+  let attemptActive = false;
+  let expectedCursor: string | null = null;
+  let expectedStartLine: number | null = null;
+  let expectedTotalLines: number | null = null;
+  let evidenceComplete = false;
+  let paginationInvalid = false;
+  const seenCursors = new Set<string>();
+
+  for (const record of readerRecords) {
+    if (!isImmutablePageReader(record.name) || !record.result.success) continue;
+    const data = record.result.data;
+    const validIdentity = binding && data
+      && data["repositoryFullName"] === binding.repositoryFullName
+      && data["path"] === binding.path
+      && data["version"] === binding.version
+      && data["blobId"] === binding.expectedBlobId;
+    const startLine = data?.["startLine"];
+    const endLine = data?.["endLine"];
+    const totalLines = data?.["totalLines"];
+    const hasMore = data?.["hasMore"];
+    const nextCursor = data?.["nextCursor"];
+    const content = data?.["content"];
+    const hasContent = typeof content === "string";
+    const validPage = validIdentity && record.modelEvidenceTruncated !== true
+      && boundedInteger(startLine, 1, Number.MAX_SAFE_INTEGER)
+      && boundedInteger(endLine, 1, Number.MAX_SAFE_INTEGER)
+      && boundedInteger(totalLines, 1, Number.MAX_SAFE_INTEGER)
+      && endLine >= startLine
+      && endLine <= totalLines
+      && typeof hasMore === "boolean"
+      && (hasMore ? (endLine < totalLines || (hasContent && !content.endsWith("\n"))) : endLine === totalLines)
+      && (!hasContent || (content.length > 0
+        && sourcePageEndLine(startLine, content) === endLine))
+      && (hasMore ? typeof nextCursor === "string" && nextCursor.length > 0 : nextCursor === null);
+    if (!validPage) {
+      attemptActive = false;
+      expectedCursor = null;
+      expectedStartLine = null;
+      expectedTotalLines = null;
+      evidenceComplete = false;
+      paginationInvalid = true;
+      continue;
+    }
+
+    const suppliedCursor = record.args?.["cursor"];
+    const suppliedStartLine = record.args?.["startLine"];
+    const startsAtBeginning = startLine === 1
+      && suppliedCursor === undefined
+      && (suppliedStartLine === undefined || suppliedStartLine === 1);
+    if (startsAtBeginning) {
+      attemptActive = true;
+      expectedTotalLines = totalLines;
+      paginationInvalid = false;
+      seenCursors.clear();
+    } else if (!attemptActive
+      || typeof suppliedCursor !== "string"
+      || suppliedCursor !== expectedCursor
+      || startLine !== expectedStartLine
+      || totalLines !== expectedTotalLines) {
+      attemptActive = false;
+      expectedCursor = null;
+      expectedStartLine = null;
+      expectedTotalLines = null;
+      evidenceComplete = false;
+      paginationInvalid = true;
+      continue;
+    }
+
+    if (hasMore) {
+      if (seenCursors.has(nextCursor as string)) {
+        attemptActive = false;
+        expectedCursor = null;
+        evidenceComplete = false;
+        paginationInvalid = true;
+        continue;
+      }
+      seenCursors.add(nextCursor as string);
+      expectedCursor = nextCursor as string;
+      expectedStartLine = hasContent ? sourcePageNextLine(endLine, content) : endLine + 1;
+      evidenceComplete = false;
+    } else {
+      expectedCursor = null;
+      expectedStartLine = null;
+      evidenceComplete = attemptActive;
+      attemptActive = false;
+    }
+  }
   return {
     readerAttempts: readerRecords.length,
     successfulReaderCalls,
-    evidenceAvailable: successfulReaderCalls >= policy.minimumSuccessfulReaderCalls,
+    evidenceAvailable: evidenceComplete,
+    partialEvidence: attemptActive && expectedCursor !== null,
+    continuationCursor: attemptActive ? expectedCursor : null,
+    paginationInvalid,
     writerAttempted: records.some((record) => record.name === policy.writerToolName),
-    readerBudgetExhausted: readerRecords.length >= policy.maximumReaderCalls,
+    readerBudgetExhausted: readerRecords.length >= effectiveReaderBudget(policy, readerRecords),
   };
 }
 
@@ -216,13 +446,36 @@ export function resolveTerminalToolCall(
   toolName: string,
 ): TerminalToolCallDisposition {
   const progress = summarizeTerminalToolProgress(policy, records);
+  if (toolName === policy.writerToolName && progress.writerAttempted && !canCorrectTerminalWriter(policy, records)) {
+    return {
+      kind: "refuse",
+      result: {
+        success: false,
+        error: "terminal_writer_already_attempted",
+        message: "The sole governed writer has already been attempted in this turn. No second writer call is allowed.",
+      },
+    };
+  }
   if (policy.terminalPhase === "writer-only" && policy.readerToolNames.includes(toolName)) {
+    // BI-69BBC446 follow-up. This refusal used to read "Immutable evidence is
+    // already persisted. Call <writer> now." A reviewer took six refusals in a
+    // row and reported to a human: "BLOCKED - immutable evidence unavailable;
+    // all six evidence-reader attempts failed" - the exact inverse of what the
+    // refusal said. It then wrote prose instead of its verdict, and the run
+    // ended with no receipt. A success condition phrased as an error is read as
+    // an error, so this states the state first, the consequence second, and
+    // never uses a word the model can hear as "missing".
     return {
       kind: "refuse",
       result: {
         success: false,
         error: "terminal_writer_phase_reader_refused",
-        message: `Immutable evidence is already persisted. Call ${policy.writerToolName} now.`,
+        message:
+          `SUCCESS, NOT A FAILURE: you already read the bound artifact in full and it is persisted for this `
+          + `turn. Nothing is missing and there is nothing left to retrieve. Re-reading is declined only `
+          + `because it would be redundant. You have everything you need to judge. `
+          + `Call ${policy.writerToolName} now with your assessment - a pass and a fail are equally valid. `
+          + `If you answer with prose instead, this run ends with NO receipt recorded and your review is lost.`,
       },
     };
   }
@@ -231,8 +484,22 @@ export function resolveTerminalToolCall(
       kind: "refuse",
       result: {
         success: false,
-        error: "terminal_writer_requires_evidence",
-        message: "Read the bound immutable evidence before recording the governed assessment.",
+        error: progress.partialEvidence
+          ? "terminal_writer_requires_complete_evidence"
+          : "terminal_writer_requires_evidence",
+        message: progress.partialEvidence
+          ? `Continue the bound immutable read with cursor ${progress.continuationCursor} before recording the governed assessment.`
+          : "Read the bound immutable evidence from the beginning before recording the governed assessment.",
+      },
+    };
+  }
+  if (policy.readerToolNames.includes(toolName) && progress.evidenceAvailable) {
+    return {
+      kind: "refuse",
+      result: {
+        success: false,
+        error: "terminal_evidence_complete",
+        message: `The complete bound artifact has been read. Call ${policy.writerToolName} now.`,
       },
     };
   }
@@ -242,7 +509,7 @@ export function resolveTerminalToolCall(
       result: {
         success: false,
         error: "terminal_reader_budget_exhausted",
-        message: `The bounded evidence budget is complete. Call ${policy.writerToolName} now.`,
+        message: "The bounded evidence budget ended before complete traversal. No governed disposition can be recorded.",
       },
     };
   }
@@ -254,6 +521,43 @@ function providerToolName(tool: Record<string, unknown>): string | null {
   return fn && typeof fn === "object" && !Array.isArray(fn)
     ? String((fn as Record<string, unknown>)["name"] ?? "") || null
     : null;
+}
+
+function writerReachedTerminalBoundary(
+  policy: TerminalToolPolicy,
+  records: readonly TerminalToolRecord[],
+): boolean {
+  return records.some((record) => record.name === policy.writerToolName && (
+    record.result.success
+    || (
+      record.result.error === "approval_required"
+      && typeof record.result.data?.["envelopeId"] === "string"
+      && record.result.data["envelopeId"].trim().length > 0
+    )
+  ));
+}
+
+function canCorrectTerminalWriter(policy: TerminalToolPolicy, records: readonly TerminalToolRecord[]): boolean {
+  const attempts = records.filter((record) => record.name === policy.writerToolName);
+  const last = attempts.at(-1);
+  return attempts.length > 0 && attempts.length <= INITIATIVE_WRITER_CORRECTION_LIMIT
+    && !writerReachedTerminalBoundary(policy, records)
+    && last?.result.success === false
+    && INITIATIVE_CORRECTABLE_ERRORS.has(last.result.error ?? "");
+}
+
+function correctionReminder(policy: TerminalToolPolicy, records: readonly TerminalToolRecord[]): string {
+  const last = records.filter((record) => record.name === policy.writerToolName).at(-1)!;
+  return `The canonical writer rejected the assessment: ${last.result.error}: ${last.result.message ?? "Receipt validation failed."} `
+    + `Use the already-read immutable evidence to independently correct the proposal and call ${policy.writerToolName}. `
+    + INITIATIVE_DISPOSITION_GUIDANCE;
+}
+
+export function terminalWriterFailureMessage(policy: TerminalToolPolicy, records: readonly TerminalToolRecord[]): string {
+  const last = records.filter((record) => record.name === policy.writerToolName).at(-1);
+  return last
+    ? `${policy.writerToolName} did not persist a valid receipt. Last result: ${last.result.error ?? "unverified-writer-result"}: ${last.result.message ?? "No verifiable receipt returned."} Automatic correction for this attempt has stopped. Resolve this error before resuming the same TaskRun; do not advance its gate.`
+    : `The provider did not invoke required writer ${policy.writerToolName}. Resume the same TaskRun with a provider that supports the required tool call; no receipt was created.`;
 }
 
 export function selectTerminalToolSurface(
@@ -272,13 +576,19 @@ export function applyTerminalToolSurface(
   records: readonly TerminalToolRecord[],
   providerTools: readonly Record<string, unknown>[],
 ): Array<Record<string, unknown>> {
+  const progress = summarizeTerminalToolProgress(policy, records);
+  if (progress.writerAttempted) return canCorrectTerminalWriter(policy, records)
+    ? selectTerminalToolSurface(providerTools, [policy.writerToolName]) : [];
   if (policy.terminalPhase === "writer-only") {
     return selectTerminalToolSurface(providerTools, [policy.writerToolName]);
   }
-  const progress = summarizeTerminalToolProgress(policy, records);
-  return progress.readerBudgetExhausted && !progress.writerAttempted
-    ? selectTerminalToolSurface(providerTools, [policy.writerToolName])
-    : [...providerTools];
+  if (progress.evidenceAvailable) return selectTerminalToolSurface(providerTools, [policy.writerToolName]);
+  if (progress.readerBudgetExhausted) return [];
+  if (records.some((record) => record.modelEvidenceTruncated)) {
+    return selectTerminalToolSurface(providerTools, policy.readerToolNames);
+  }
+  if (progress.partialEvidence) return selectTerminalToolSurface(providerTools, [pageReaderOf(policy)]);
+  return [...providerTools];
 }
 
 export function buildTerminalToolReminder(
@@ -286,11 +596,20 @@ export function buildTerminalToolReminder(
   records: readonly TerminalToolRecord[],
 ): string {
   const progress = summarizeTerminalToolProgress(policy, records);
+  if (progress.writerAttempted) {
+    if (canCorrectTerminalWriter(policy, records)) return correctionReminder(policy, records);
+    return terminalWriterFailureMessage(policy, records);
+  }
   if (policy.terminalPhase === "writer-only") {
     return `Immutable evidence is already persisted. Call ${policy.writerToolName} now; do not read again or respond with prose first.`;
   }
-  if (progress.readerBudgetExhausted) return `Call ${policy.writerToolName} now; the bounded evidence budget is complete.`;
-  const remaining = policy.maximumReaderCalls - progress.readerAttempts;
+  if (progress.evidenceAvailable) return `Call ${policy.writerToolName} now; complete immutable evidence is available.`;
+  if (progress.readerBudgetExhausted) return "Immutable traversal is incomplete and the bounded reader budget is exhausted; do not record a disposition.";
+  if (records.some((record) => record.modelEvidenceTruncated)) {
+    return "Part of the source was withheld by the model context budget. Restart the same immutable traversal with smaller maxChars pages; do not record a disposition until every page is visible.";
+  }
+  if (progress.partialEvidence) return `Continue ${pageReaderOf(policy)} with cursor ${progress.continuationCursor}; the writer remains unavailable until traversal completes.`;
+  const remaining = effectiveReaderBudget(policy, records.filter((record) => policy.readerToolNames.includes(record.name) && !record.nativeResultWithheld)) - progress.readerAttempts;
   return `Use the immutable evidence readers before ${policy.writerToolName}. ${remaining} bounded evidence calls remain; reserve the terminal step for the governed writer.`;
 }
 
@@ -300,7 +619,26 @@ export function resolveTerminalTextExit(
   nudgesUsed: number,
 ): TerminalTextExitDisposition {
   const progress = summarizeTerminalToolProgress(policy, records);
-  if (progress.writerAttempted) return { kind: "complete" };
+  if (writerReachedTerminalBoundary(policy, records)) return { kind: "complete" };
+  if (progress.writerAttempted) {
+    if (canCorrectTerminalWriter(policy, records) && nudgesUsed < INITIATIVE_WRITER_CORRECTION_LIMIT) return {
+      kind: "nudge", allowedToolNames: [policy.writerToolName], message: correctionReminder(policy, records),
+    };
+    return {
+      kind: "input-required",
+      reason: "missing-terminal-writer",
+      writerToolName: policy.writerToolName,
+      message: terminalWriterFailureMessage(policy, records),
+    };
+  }
+  if (progress.readerBudgetExhausted && !progress.evidenceAvailable) {
+    return {
+      kind: "input-required",
+      reason: "missing-terminal-writer",
+      writerToolName: policy.writerToolName,
+      message: "Immutable evidence traversal is incomplete and its bounded read budget is exhausted. No receipt was created.",
+    };
+  }
   if (nudgesUsed > 0) {
     return {
       kind: "input-required",
@@ -310,15 +648,22 @@ export function resolveTerminalTextExit(
     };
   }
   if (!progress.evidenceAvailable) {
+    const partial = progress.partialEvidence;
     return {
       kind: "nudge",
-      allowedToolNames: [...policy.readerToolNames],
-      message: "Read the bound immutable evidence now. Do not finish from prompt context alone.",
+      allowedToolNames: partial ? [pageReaderOf(policy)] : [...policy.readerToolNames],
+      message: partial
+        ? `Continue ${pageReaderOf(policy)} with cursor ${progress.continuationCursor}. Do not assess the artifact before the terminal page returns hasMore=false.`
+        : "Read the bound immutable evidence from the beginning now. Do not finish from prompt context alone.",
     };
   }
   return {
     kind: "nudge",
     allowedToolNames: [policy.writerToolName],
-    message: `Evidence retrieval is complete. Call ${policy.writerToolName} now with your independent assessment; do not respond with prose first.`,
+    message:
+      `Evidence retrieval is complete and succeeded - nothing is missing and you have everything you need to `
+      + `judge. Call ${policy.writerToolName} now with your independent assessment; a pass and a fail are `
+      + `equally valid outcomes. Answering with prose instead of the tool call ends this run with NO receipt `
+      + `recorded.`,
   };
 }

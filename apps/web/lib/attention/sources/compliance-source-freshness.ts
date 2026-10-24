@@ -54,7 +54,10 @@ function describe(source: ComplianceSourceFreshness): { title: string; context: 
 }
 
 /** Pure projection of one at-risk source into an attention item. */
-export function complianceSourceToAttentionItem(source: ComplianceSourceFreshness): AttentionItem {
+export function complianceSourceToAttentionItem(
+  source: ComplianceSourceFreshness,
+  now: Date = new Date(),
+): AttentionItem {
   const lapsed = source.daysUntilStale < 0;
   const { title, context } = describe(source);
 
@@ -77,7 +80,7 @@ export function complianceSourceToAttentionItem(source: ComplianceSourceFreshnes
       decideEffort: "judgment",
       irreversible: false,
     },
-    createdAtIso: new Date().toISOString(),
+    createdAtIso: now.toISOString(),
     actions: [
       { kind: "open-in-context", label: "Review AI provider compliance", href: "/platform/ai/providers" },
     ],
@@ -88,11 +91,18 @@ export function complianceSourceToAttentionItem(source: ComplianceSourceFreshnes
 
 /** Project every source that is lapsed or inside the warning window.
  *
- *  `now` is injectable purely so tests need not touch the real clock — a module
- *  about expiry dates must never depend on today's date to pass. */
+ *  `now` is injectable so tests need not touch the real clock — a module about
+ *  expiry dates must never depend on today's date to pass — and so the UX route
+ *  sweep can pin it (BI-99909E53): the copy here is calendar arithmetic over a
+ *  code-defined registry, so a frozen word-count baseline moved with the date.
+ *  The production caller passes `measurementNow()`, which is the real clock
+ *  outside measurement runtime. */
 export function loadComplianceSourceFreshnessItems(
   options: { now?: Date } = {},
 ): AttentionItem[] {
-  const summary = summarizeComplianceSourceFreshness({ now: options.now });
-  return [...summary.stale, ...summary.expiringSoon].map(complianceSourceToAttentionItem);
+  const now = options.now ?? new Date();
+  const summary = summarizeComplianceSourceFreshness({ now });
+  return [...summary.stale, ...summary.expiringSoon].map((source) =>
+    complianceSourceToAttentionItem(source, now),
+  );
 }

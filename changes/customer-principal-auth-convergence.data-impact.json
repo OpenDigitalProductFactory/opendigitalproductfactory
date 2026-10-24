@@ -1,0 +1,67 @@
+{
+  "version": "1",
+  "accountableOwner": "Mark Bodman (markdbodman@gmail.com)",
+  "summary": "BI-E22C3D75. Migration 20260923054500_customer_principal_auth_convergence projects every existing CustomerContact into the canonical Principal and PrincipalAlias spine before customer and social sessions begin enforcing Principal authorization. It creates no new source data: contact ids, lower-case emails, status, merge state, account status, and partner enrollment are re-used from existing customer-domain records. The migration is forward-only, set-based, and idempotent; it refuses case-folded duplicate emails or split alias ownership before any write. Runtime signup, linking, contact update, and merge paths maintain the same projection transactionally. A singleton aggregate view reports four invariant counts without exposing contact rows.",
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "Principal",
+      "lifecycleDisposition": "retain-for-party-lifetime",
+      "fields": [
+        {
+          "name": "displayName",
+          "resolution": "inherited",
+          "reason": "The existing CustomerContact email is reused as the Principal display label. The migration collects no new value and does not make Principal the source of the email.",
+          "provenance": "CustomerContact.email on the same install-local customer party.",
+          "flags": ["subject"],
+          "fieldPolicy": {
+            "basis": "contract-and-account-administration",
+            "access": "Available only through existing Principal and customer-account authorization surfaces; not added to any public projection by this change.",
+            "retention": "Retained with the customer party and its canonical identity aliases under the existing domain lifecycle.",
+            "obligations": "Use only to identify and administer the existing customer relationship. The email remains governed by CustomerContact and is not an authorization grant."
+          }
+        },
+        {
+          "name": "kind",
+          "resolution": "not-applicable",
+          "reason": "Derived discriminator: partner for a live partner enrollment, otherwise customer. It describes the platform identity population rather than adding subject data.",
+          "provenance": "PartnerProgramEnrollment.status and endedAt on the contact's CustomerAccount.",
+          "flags": []
+        },
+        {
+          "name": "status",
+          "resolution": "governed",
+          "reason": "Derived authority state. A contact is active only when the contact is active, not merged, and its account is session-capable; every other state projects inactive.",
+          "provenance": "CustomerContact.isActive and mergedIntoId plus CustomerAccount.status.",
+          "flags": []
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "PrincipalAlias",
+      "lifecycleDisposition": "retain-for-party-lifetime",
+      "fields": [
+        {
+          "name": "aliasValue",
+          "resolution": "inherited",
+          "reason": "Typed aliases join the Principal to the existing customer or partner contact id and lower-case email. They are identifiers for the same party, not a second profile or a new collection.",
+          "provenance": "CustomerContact.id and lower(CustomerContact.email); partner_contact is added only for a live PartnerProgramEnrollment.",
+          "flags": ["subject"],
+          "fieldPolicy": {
+            "basis": "contract-and-account-administration",
+            "access": "Resolved inside the identity and authorization services under existing Principal access controls; aliases are not public directory entries.",
+            "retention": "Retained with the canonical Principal so historical identity links remain attributable; superseded contacts project an inactive Principal.",
+            "obligations": "Email is a convergence signal only after conflict preflight. Provider plus provider subject remains the social identity key, and ambiguous alias ownership must refuse."
+          }
+        }
+      ]
+    },
+    {
+      "kind": "projection",
+      "derivedContractId": "CustomerPrincipalAuthInvariant",
+      "cleanupTest": "The migration fixture drops its isolated PostgreSQL database after applying and reapplying the migration; the view owns no independent rows.",
+      "reconciliationTest": "packages/db/src/customer-principal-auth-convergence-migration.test.ts asserts the migration's conflict preflight and bounded four-count invariant view contract; populated migration smoke verified all counts at zero after repeat application."
+    }
+  ]
+}

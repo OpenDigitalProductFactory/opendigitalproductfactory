@@ -1,3 +1,4 @@
+/// @dpf lifecycle=operational retention=reference sensitivity=public
 model TaxonomyNode {
   id                            String                         @id @default(cuid())
   nodeId                        String                         @unique
@@ -103,9 +104,132 @@ model TaxJurisdictionReference {
 
   registrations    TaxRegistration[]
   mileageRatePlans MileageRatePlan[] @relation("MileageRatePlanJurisdiction")
+  payrollTaxRules PayrollTaxRule[]
 
   @@index([countryCode, stateProvinceCode])
   @@index([authorityType])
+}
+
+/// Where a statutory figure is in its journey from "researched" to "usable".
+///
+/// A coworker can research and PROPOSE. Only a human can ratify. Nothing
+/// computes money before ratification, which is what makes it safe to let an
+/// agent go and read the authority's tables (BI-8E1FD1BD).
+enum StatutoryRuleStatus {
+  /// Researched and cited, awaiting a human. NEVER used to compute.
+  proposed
+  /// A human confirmed the figure against its cited source. Usable.
+  ratified
+  /// A human rejected it. Kept, so the same wrong figure is not re-proposed.
+  rejected
+  /// Was ratified, then superseded by a later effective-dated rule.
+  superseded
+}
+
+/// Which payroll tax a statutory figure belongs to.
+///
+/// Closed on purpose (AGENTS.md §8): these mirror the PayrollTaxType union the
+/// emitter already computes against, so the figure and the computation cannot
+/// drift apart on a typo. A new payroll tax is a migration, not a string
+/// literal. Deliberately narrower than the tax spine's free-form
+/// TaxRegistration.taxType, which must also carry sales families.
+enum PayrollTaxKind {
+  federal_withholding
+  social_security
+  medicare
+  additional_medicare
+  futa
+  state_withholding
+  suta
+  local_withholding
+}
+
+/// What kind of statutory figure a rule carries.
+enum StatutoryRuleKind {
+  /// A percentage applied to a wage base, e.g. Social Security employee share.
+  rate
+  /// A ceiling on the wages a rate applies to, e.g. the SS wage base.
+  wage_base
+  /// A floor above which a rule starts to apply, e.g. Additional Medicare.
+  threshold
+  /// A published amount, e.g. a standard deduction or a deposit threshold.
+  amount
+}
+
+/// One published statutory figure, effective-dated and cited.
+///
+/// This is the home BI-4EB27955 item 3 specified and that never existed, so a
+/// researched rate had nowhere to land: the tax spine could compute, but only
+/// against figures nobody could cite. Every row carries the authority's own URL
+/// and the date it was read, because a figure that cannot be cited must never
+/// drive a filing — the penalty for a wrong deposit is real money.
+///
+/// Effective-dated rather than mutable: a closed period must re-compute
+/// identically after a later tax year is loaded.
+/// @dpf lifecycle=regulated-record retention=reference sensitivity=internal categories=financial,configuration,authorization owner=business-operator steward=data-steward
+model PayrollTaxRule {
+  id                 String              @id @default(cuid())
+  payrollTaxRuleId   String              @unique
+  jurisdictionRefId  String
+  /// Closed axis shared with the payroll emitter.
+  taxType            PayrollTaxKind
+  ruleKind           StatutoryRuleKind
+  /// Which side owes it — employee_withheld or employer_contribution. Null for
+  /// a figure that is not side-specific, such as a deposit threshold.
+  side               String?
+  /// Tax year the authority published this under. Distinct from effectiveFrom:
+  /// a mid-year correction shares the tax year but opens a new window.
+  taxYear            Int
+  /// The figure. A rate is stored as a decimal fraction (0.062), never a
+  /// percentage, so no caller has to guess which convention applies.
+  value              Decimal             @db.Decimal(18, 8)
+  currency           String?
+  /// Bracket bounds, filing status, and any other qualifiers the authority
+  /// publishes alongside the figure. Shapeless on purpose: the authorities do
+  /// not agree on a shape, and forcing one would lose detail.
+  qualifiers         Json                @default("{}")
+  effectiveFrom      DateTime
+  effectiveTo        DateTime?
+
+  status             StatutoryRuleStatus @default(proposed)
+  /// The authority's own publication. Required to ratify; without it the figure
+  /// is unciteable and must not be usable.
+  sourceUrl          String?
+  /// What the source actually said, quoted, so a ratifier can check the reading
+  /// without re-fetching a page that may have changed.
+  sourceExcerpt      String?
+  retrievedAt        DateTime?
+  /// Which coworker proposed it, or null when an operator entered it directly.
+  proposedByAgentId  String?
+  proposedAt         DateTime            @default(now())
+  /// The human who ratified. Never an agent — that is the whole point.
+  ratifiedByUserId   String?
+  ratifiedAt         DateTime?
+  rejectedReason     String?
+  notes              String?
+
+  lifecycle          RecordLifecycle     @default(active)
+  lifecycleAt        DateTime?
+  lifecycleReason    String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  jurisdictionReference TaxJurisdictionReference @relation(fields: [jurisdictionRefId], references: [id], onDelete: Restrict)
+  /// SetNull, not Restrict: a retired coworker or a departed employee must not
+  /// pin a statutory figure in place. The attribution is audit context, not
+  /// ownership — losing it is preferable to blocking the deletion of a person.
+  proposedByAgent       Agent?                   @relation("PayrollTaxRuleProposedBy", fields: [proposedByAgentId], references: [id], onDelete: SetNull)
+  ratifiedByUser        User?                    @relation("PayrollTaxRuleRatifiedBy", fields: [ratifiedByUserId], references: [id], onDelete: SetNull)
+
+  /// One rule per jurisdiction, tax type, kind, side and start date.
+  @@unique([jurisdictionRefId, taxType, ruleKind, side, effectiveFrom])
+  // FK-leading (jurisdictionRefId): resolve the figures in force on a pay date.
+  @@index([jurisdictionRefId, taxType, status, effectiveFrom, effectiveTo])
+  // Drives the review queue: what is waiting on a human, oldest first.
+  @@index([status, proposedAt])
+  // FK-leading: attribution lookups, and required by the FK-index ratchet.
+  @@index([proposedByAgentId])
+  @@index([ratifiedByUserId])
 }
 
 model TaxRegistration {
@@ -166,6 +290,7 @@ enum TaxDepositCadence {
 /// The threshold and lookback are RECORDED here rather than printed into source
 /// for the same reason the rates are: the authority sets them, they change, and
 /// an uncited figure must never drive a filing (BI-4EB27955).
+/// @dpf lifecycle=regulated-record retention=domain sensitivity=internal categories=financial,operational owner=business-operator steward=data-steward
 model TaxDepositSchedule {
   id                   String            @id @default(cuid())
   taxDepositScheduleId String            @unique
@@ -198,6 +323,7 @@ model TaxDepositSchedule {
   @@index([registrationId, lifecycle])
 }
 
+/// @dpf lifecycle=regulated-record retention=retained basis=Tax_record_retention minYears=7
 model TaxDecisionSnapshot {
   id                       String   @id @default(cuid())
   snapshotId               String   @unique
@@ -227,6 +353,7 @@ model TaxDecisionSnapshot {
   @@index([sourceType, sourceId])
 }
 
+/// @dpf lifecycle=regulated-record retention=retained basis=Tax_record_retention minYears=7
 model TaxLiabilityEntry {
   id                       String   @id @default(cuid())
   entryId                  String   @unique
@@ -255,6 +382,7 @@ model TaxLiabilityEntry {
   @@index([registrationId, periodId])
   @@index([sourceType, sourceId])
   @@index([decisionSnapshotId])
+  @@index([periodId])
 }
 
 /// What a period total MEANS for the family of tax that produced it.
@@ -282,6 +410,7 @@ enum TaxPeriodComponentKind {
 /// sit on TaxObligationPeriod. Those were the only home for a component total,
 /// and adding payroll's two would have made four, with every family's columns
 /// dead weight on every other family's rows.
+/// @dpf lifecycle=regulated-record retention=domain sensitivity=internal categories=financial,operational owner=business-operator steward=data-steward
 model TaxObligationPeriodComponent {
   id                             String                 @id @default(cuid())
   taxObligationPeriodComponentId String                 @unique
@@ -334,6 +463,7 @@ model TaxObligationPeriod {
   @@index([status, dueDate])
 }
 
+/// @dpf lifecycle=regulated-record retention=retained basis=Tax_filing_retention minYears=7
 model TaxFilingArtifact {
   id               String   @id @default(cuid())
   periodId         String
@@ -405,6 +535,7 @@ model TaxAuthorityCredential {
   @@index([registrationId, status])
 }
 
+/// @dpf lifecycle=regulated-record retention=retained basis=Tax_record_retention minYears=7
 model TaxRemittanceRun {
   id               String    @id @default(cuid())
   runId            String    @unique
@@ -434,6 +565,7 @@ model TaxRemittanceRun {
 }
 
 // ─── Finance: Invoicing & Payments ─────────────────────────────────
+/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential basis=Financial_record_retention_(IRS_/_SOX-style_statutory) minYears=7
 model Invoice {
   id                String    @id @default(cuid())
   invoiceRef        String    @unique
@@ -500,6 +632,7 @@ model Invoice {
 /// A row is WRITE-ONCE. Reissuing an invoice appends revision N+1; it never
 /// mutates N, because the whole point is that what the customer received stays
 /// recoverable exactly as they received it.
+/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential categories=operational,financial owner=business-operator steward=data-steward basis=Financial_record_retention_(evidence_of_what_was_billed) minYears=7
 model InvoiceDocument {
   id                String   @id @default(cuid())
   invoiceId         String
@@ -523,6 +656,7 @@ model InvoiceDocument {
   @@index([createdAt])
 }
 
+/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential basis=Financial_record_retention minYears=7
 model InvoiceLineItem {
   id              String   @id @default(cuid())
   invoiceId       String
@@ -542,6 +676,7 @@ model InvoiceLineItem {
   @@index([invoiceId])
 }
 
+/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential basis=Financial_record_retention minYears=7
 model Payment {
   id                 String    @id @default(cuid())
   paymentRef         String    @unique
@@ -575,6 +710,7 @@ model Payment {
   @@index([counterpartyId, counterpartyType])
 }
 
+/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential basis=Financial_record_retention minYears=7
 model PaymentAllocation {
   id        String   @id @default(cuid())
   paymentId String
@@ -737,6 +873,7 @@ model FinanceWorkItem {
   @@index([status, severity])
 }
 
+/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential basis=Financial_record_retention minYears=7
 model Bill {
   id                 String   @id @default(cuid())
   billRef            String   @unique
@@ -774,6 +911,7 @@ model Bill {
   @@index([purchaseOrderId]) // FK-leading (spine): bills-for-PO lookup, apps/web/lib/actions/ap.ts:569
 }
 
+/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential basis=Financial_record_retention minYears=7
 model BillLineItem {
   id          String   @id @default(cuid())
   billId      String
@@ -792,6 +930,7 @@ model BillLineItem {
   @@index([billId])
 }
 
+/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential basis=Financial_record_retention minYears=7
 model PurchaseOrder {
   id           String    @id @default(cuid())
   poNumber     String    @unique
@@ -818,6 +957,7 @@ model PurchaseOrder {
   @@index([status])
 }
 
+/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential basis=Financial_record_retention minYears=7
 model PurchaseOrderLineItem {
   id              String   @id @default(cuid())
   purchaseOrderId String
@@ -848,6 +988,7 @@ model ApprovalRule {
   approver User @relation("ApprovalRuleApprover", fields: [approverId], references: [id])
 }
 
+/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential basis=Financial_controls_audit_(SOX) minYears=7
 model BillApproval {
   id          String    @id @default(cuid())
   billId      String
@@ -1008,6 +1149,7 @@ model DunningStep {
   @@index([sequenceId])
 }
 
+/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential basis=Collections_/_financial_audit minYears=7
 model DunningLog {
   id        String   @id @default(cuid())
   invoiceId String
@@ -1024,6 +1166,7 @@ model DunningLog {
 }
 
 // ─── Finance: Expense Management ───────────────────────────────────
+/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential basis=Financial_record_retention minYears=7
 model ExpenseClaim {
   id             String    @id @default(cuid())
   claimId        String    @unique
@@ -1050,6 +1193,7 @@ model ExpenseClaim {
   @@index([status])
 }
 
+/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential basis=Financial_record_retention minYears=7
 model ExpenseItem {
   id             String   @id @default(cuid())
   claimId        String
@@ -1072,6 +1216,7 @@ model ExpenseItem {
 }
 
 // ─── Finance: Asset Management ─────────────────────────────────────
+/// @dpf lifecycle=regulated-record retention=retained sensitivity=confidential basis=Depreciation_/_financial_record_retention minYears=7
 model FixedAsset {
   id                      String    @id @default(cuid())
   assetId                 String    @unique
@@ -1101,6 +1246,7 @@ model FixedAsset {
 }
 
 // ─── Finance: Multi-Currency ───────────────────────────────────────
+/// @dpf lifecycle=regulated-record retention=retained sensitivity=internal basis=Financial_record_reproducibility minYears=7
 model ExchangeRate {
   id             String   @id @default(cuid())
   baseCurrency   String
@@ -1192,6 +1338,7 @@ enum FinancialFundRestriction {
 
 /// Donor restriction and purpose dimension. The journal remains the monetary
 /// authority; this model gives posted lines and donations a durable fund key.
+/// @dpf lifecycle=regulated-record retention=domain sensitivity=internal categories=financial,configuration owner=business-operator steward=data-steward
 model FinancialFund {
   id             String                   @id @default(cuid())
   fundRef        String                   @unique
@@ -1262,6 +1409,7 @@ enum MileageRatePurposeKind {
   charitable
 }
 
+/// @dpf lifecycle=business-record retention=reference sensitivity=internal categories=financial,configuration owner=business-operator steward=data-steward
 model MileageRatePlan {
   id                String          @id @default(cuid())
   mileageRatePlanId String          @unique
@@ -1285,6 +1433,7 @@ model MileageRatePlan {
   @@index([jurisdictionRefId])
 }
 
+/// @dpf lifecycle=business-record retention=reference sensitivity=internal categories=financial,configuration owner=business-operator steward=data-steward
 model MileageRate {
   id            String                 @id @default(cuid())
   mileageRateId String                 @unique

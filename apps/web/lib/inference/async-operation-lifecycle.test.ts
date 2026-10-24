@@ -7,6 +7,7 @@ import {
   type AsyncOperationAdmissionStore,
   type AsyncOperationRecord,
 } from "./async-operation-lifecycle";
+import { screenInferencePayload } from "./data-screening/screen-inference-payload";
 
 const binding: AsyncOperationBinding = {
   kind: "task-run",
@@ -58,6 +59,14 @@ function store(result: { operation: AsyncOperationRecord; replayed: boolean }): 
   };
 }
 
+const screenedMessages = [{ role: "user" as const, content: "research" }];
+const screenedSystemPrompt = "Use immutable evidence.";
+const screenedInput = {
+  messages: screenedMessages,
+  systemPrompt: screenedSystemPrompt,
+  taskType: "research",
+  routeContext: { sensitivity: "internal" as const },
+};
 const input = {
   providerId: "gemini",
   modelId: "deep-research",
@@ -65,8 +74,8 @@ const input = {
   screenedRequestDigest: "d".repeat(64),
   screenedRequestContext: {
     version: 1,
-    messages: [{ role: "user", content: "research" }],
-    systemPrompt: "Use immutable evidence.",
+    messages: screenedMessages,
+    systemPrompt: screenedSystemPrompt,
     executionPlan: {
       providerId: "gemini",
       modelId: "deep-research",
@@ -77,6 +86,18 @@ const input = {
       providerSettings: {},
       toolPolicy: {},
       responsePolicy: {},
+    },
+    dispatchScreen: {
+      schemaVersion: 1,
+      decision: {
+        sensitivity: "internal",
+        policyRulesApplied: ["inference-dispatch"],
+        inferenceDataScreenReceipt: screenInferencePayload(screenedInput).receipt,
+      },
+      context: {
+        taskType: screenedInput.taskType,
+        routeContext: screenedInput.routeContext,
+      },
     },
   },
   expiresAt: new Date("2026-09-04T12:00:00.000Z"), // clock-bomb-guard: allow fixed admission fixture; no wall-clock branch

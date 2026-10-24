@@ -12,7 +12,7 @@
 // and a deadline. These models are new and their governance is known, so
 // baselining them would be filing fresh debt against a ratchet built to retire it.
 
-import type { DataAssetDefinition } from "./assets";
+import type { DataAssetDefinition } from "./asset-types";
 import type { DataCategory, DataFieldId } from "./taxonomy";
 
 const CLASSIFICATION = {

@@ -1,3 +1,6 @@
+---
+status: active
+---
 # Topology Graph Views: Context-Driven Layout Engine
 
 | Field | Value |
@@ -137,7 +140,7 @@ function useGraphLayout(
 **Implementation strategy:**
 
 - **Force** -- Keep the existing canvas-based simulation (already works). Improve with d3-force proper for better separation and link distance tuning.
-- **Hierarchical** -- Use dagre (30KB). Compute positions, then render statically on canvas. No simulation needed.
+- **Hierarchical** -- Use dagre (30KB). Compute positions, then render statically on canvas. No simulation needed. *(Superseded 2026-09-26, plan 2026-09-08 S10: dagre was retired; hierarchical now uses ELK `layered` through `apps/web/lib/graph/elk-runner.ts`, async like swimlane.)*
 - **Radial** -- Compute positions using a BFS from the root node, placing each depth ring at increasing radius. No external library needed for this -- it's a simple polar coordinate transform of a BFS tree.
 - **Swimlane** -- Use ELK.js (400KB, async). Assign `elk.partitioning.partition` per node based on `osiLayer`. ELK computes positions respecting the partition constraints.
 

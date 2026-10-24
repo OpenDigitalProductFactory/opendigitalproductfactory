@@ -1,14 +1,12 @@
 import { readFileSync } from "node:fs";
+
+import { getTableSensitivity } from "./table-classification";
 import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 import { readCanonicalPrismaSchema } from "./schema-source";
 
 const schema = readCanonicalPrismaSchema();
-const tableClassification = readFileSync(
-  resolve(import.meta.dirname, "table-classification.ts"),
-  "utf8",
-);
 const migration = readFileSync(
   resolve(
     import.meta.dirname,
@@ -115,7 +113,8 @@ describe("Catalog Builder schema", () => {
       "CatalogPromotionItem",
       "CatalogChannelEligibility",
     ]) {
-      expect(tableClassification).toContain(`${name}: "internal"`);
+      // Sensitivity is declared on the model (/// @dpf) or, for untagged models, in the registry; assert the resolved answer.
+      expect(getTableSensitivity(name)).toBe("internal");
     }
   });
 

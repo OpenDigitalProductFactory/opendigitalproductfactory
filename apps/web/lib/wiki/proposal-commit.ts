@@ -20,7 +20,7 @@
 //      - Confidence threshold (default 0.5) on claims — low-confidence
 //        rows are skipped so the reviewer's signal-to-noise stays high.
 //
-// Qdrant write is intentionally out of scope here — that's a thin
+// The vector store write is intentionally out of scope here — that's a thin
 // concern wired by the production adapter in Phase 2.3b. This module
 // owns Postgres state only and is exercised under test with mocked
 // Prisma clients.

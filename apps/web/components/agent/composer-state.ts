@@ -67,3 +67,18 @@ export function deriveComposerState(input: {
   if (input.isBusy) return "busy";
   return "ready";
 }
+
+/**
+ * Clearing a conversation is destructive and irreversible, so the control is
+ * disabled unless there is actually a loaded thread with something in it and
+ * nothing in flight. Lives here beside the other composer-affordance rules
+ * rather than in the panel, so the panel stays a layout.
+ */
+export function isClearDisabled(
+  messages: readonly unknown[],
+  busy: boolean,
+  isClearing: boolean,
+  threadId?: string | null,
+) {
+  return !threadId || messages.length === 0 || busy || isClearing;
+}

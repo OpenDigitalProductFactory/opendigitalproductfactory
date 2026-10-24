@@ -8,6 +8,8 @@ import {
   type WorkspaceCommandCenterSummary,
 } from "@/lib/workspace-home/command-center";
 
+import { loadAcceptanceBacklogShare, withAcceptanceBacklogTile } from "./acceptance-backlog-tile";
+
 import type { WorkspaceHomeStorefrontConfigRef } from "./types";
 
 export type PlatformWorkspaceHomeUser = UserContext & {
@@ -37,7 +39,16 @@ export async function loadPlatformWorkspaceHomeData({
     isSuperuser: user.isSuperuser,
   });
 
-  const workspaceCommandCenter = await loadWorkspaceCommandCenter(prismaClient);
+  // The Backlog tile shows awaiting acceptance and its aged share beside Done
+  // (BI-CEC60185); command-center.ts is at its module-size ceiling.
+  const [commandCenter, acceptanceShare] = await Promise.all([
+    loadWorkspaceCommandCenter(prismaClient),
+    loadAcceptanceBacklogShare(prismaClient, now),
+  ]);
+  const workspaceCommandCenter: WorkspaceCommandCenterSummary = {
+    ...commandCenter,
+    tileStatus: withAcceptanceBacklogTile(commandCenter.tileStatus, acceptanceShare),
+  };
 
   const calRangeStart = new Date(now.getFullYear(), now.getMonth(), -7);
   const calRangeEnd = new Date(now.getFullYear(), now.getMonth() + 1, 7);

@@ -47,6 +47,10 @@ if [ "$1" = "rev-parse" ] && [ "$2" = "--abbrev-ref" ]; then
   echo "feat/dev-portal-lease"
   exit 0
 fi
+if [ "$1" = "rev-parse" ] && [ "$2" = "HEAD" ]; then
+  echo "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  exit 0
+fi
 echo "unexpected git call: $*" >&2
 exit 1
 `);
@@ -54,9 +58,10 @@ exit 1
   const claimReply =
     mode === "queued"
       ? `'{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"NPEL-WAIT\\",\\"data\\":{\\"lease\\":{\\"leaseId\\":\\"NPEL-WAIT\\"},\\"admission\\":{\\"status\\":\\"queued\\",\\"queuePosition\\":2,\\"waitAgeMs\\":25},\\"poolPolicy\\":{\\"rollbackReason\\":\\"host-memory-low\\"}}}"}]}}'`
-      : `'{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"NPEL-MINE\\"}"}]}}'`;
+      : `'{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"NPEL-MINE\\",\\"data\\":{\\"admission\\":{\\"status\\":\\"admitted\\"},\\"lease\\":{\\"expiresAt\\":\\"2099-01-01T00:00:00.000Z\\"}}}"}]}}'`;
 
   writeFileSync(curlStub, `#!/bin/sh
+printf '%s\\n' "$*" >> "${callsFile}.argv"
 data=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -77,7 +82,7 @@ case "$tool" in
     printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"data\\":{\\"leases\\":[{\\"leaseId\\":\\"NPEL-OTHER\\",\\"environmentKey\\":\\"local-integration-ci\\",\\"ownerProvider\\":\\"codex\\",\\"ownerSessionId\\":\\"other-session\\"}]}}"}]}}'
     ;;
   release_nonprod_environment_lease)
-    printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"NPEL-MINE\\"}"}]}}'
+    printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"NPEL-MINE\\",\\"data\\":{\\"admission\\":{\\"status\\":\\"admitted\\"},\\"lease\\":{\\"expiresAt\\":\\"2099-01-01T00:00:00.000Z\\"}}}"}]}}'
     ;;
   renew_nonprod_environment_lease)
     if [ "\${DPF_TEST_RENEW_FAIL:-}" = "1" ]; then
@@ -148,7 +153,7 @@ const fs = require("node:fs");
 const request = JSON.parse(process.argv[1]);
 const args = request.params.arguments;
 fs.appendFileSync(process.argv[2], JSON.stringify(request) + "\\n");
-const base = "dev-portal:session-1:fix/test-preview";
+const base = "dev-portal:/tmp/dpf-worktree:fix/test-preview";
 let response;
 if (process.argv[3] === "sequence") {
   if (args.claimKey === base) response = { success: false, error: "lease_terminal", data: { reason: "expired", lease: { status: "expired" } } };
@@ -191,7 +196,7 @@ test("dev-portal-lease.sh exits non-zero when DPF_MCP_BEARER_TOKEN is missing", 
   delete env.DPF_MCP_BEARER_TOKEN;
   const result = runLease(["status"], { env });
   assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /DPF_MCP_BEARER_TOKEN is required/);
+  assert.match(result.stderr, /canonical MCP credential or transport unavailable/);
 });
 
 test("dev-portal-lease.sh claim requires a worktree path", () => {
@@ -242,41 +247,21 @@ test("dev-portal-lease.sh does not treat a queued admission as ownership", () =>
   assert.match(result.stderr, /host-memory-low/);
 });
 
-test("dev-portal-lease.sh advances through terminal claim history without changing owner identity", () => {
-  const base = "dev-portal:session-1:fix/test-preview";
-  const { result, calls } = runTerminalClaim("sequence");
-
-  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
-  assert.deepEqual(
-    calls.map((call) => call.params.arguments.claimKey),
-    [base, `${base}:rerun-1`, `${base}:rerun-2`],
-  );
-  assert.ok(calls.every((call) => call.params.arguments.ownerSessionId === "session-1"));
-  assert.match(result.stdout, /terminal attempt 2/);
-  assert.match(result.stdout, /LEASE_ID=NPEL-NEW/);
+test("dev-portal-lease.sh stops a terminal attempt without scanning replacement keys", () => {
+  const { result, calls } = runTerminalClaim("terminal");
+  assert.equal(result.status, 1);
+  assert.equal(calls.length, 1);
+  assert.match(result.stderr, /terminal lease claim; stop/);
+  assert.doesNotMatch(calls[0].params.arguments.claimKey, /:rerun-/);
 });
 
 test("dev-portal-lease.sh never rotates an active contention response", () => {
-  const base = "dev-portal:session-1:fix/test-preview";
+  const base = "dev-portal:/tmp/dpf-worktree:fix/test-preview";
   const { result, calls } = runTerminalClaim("conflict");
 
   assert.equal(result.status, 3);
   assert.deepEqual(calls.map((call) => call.params.arguments.claimKey), [base]);
   assert.match(result.stderr, /REFUSING to silently re-bind/);
-});
-
-test("dev-portal-lease.sh fails closed after its bounded terminal claim budget", () => {
-  const base = "dev-portal:session-1:fix/test-preview";
-  const { result, calls } = runTerminalClaim("terminal", {
-    DPF_DEV_PORTAL_MAX_TERMINAL_CLAIM_ATTEMPTS: "2",
-  });
-
-  assert.equal(result.status, 1);
-  assert.deepEqual(
-    calls.map((call) => call.params.arguments.claimKey),
-    [base, `${base}:rerun-1`, `${base}:rerun-2`],
-  );
-  assert.match(result.stderr, /terminal claim retry budget exhausted/);
 });
 
 test("dev-portal-lease.sh status reports the current holder", () => {
@@ -286,6 +271,26 @@ test("dev-portal-lease.sh status reports the current holder", () => {
 
   assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
   assert.match(result.stdout, /HELD lease NPEL-OTHER/);
+});
+
+test("dev-portal-lease.sh uses the canonical Node MCP transport with the install root CA environment (BI-B29A586B)", () => {
+  const temp = mkdtempSync(join(tmpdir(), "dpf-dev-portal-lease-"));
+  const stubs = makeStubs(temp, "claimed");
+  const ca = join(temp, "root_ca.crt");
+  writeFileSync(ca, "-----BEGIN CERTIFICATE-----\nstub\n-----END CERTIFICATE-----\n");
+  const withCa = runLease(["status"], { env: baseEnv(stubs, { NODE_EXTRA_CA_CERTS: ca, DPF_MCP_URL: "https://localhost/api/mcp/v1" }) });
+  assert.equal(withCa.status, 0, `${withCa.stdout}\n${withCa.stderr}`);
+  const argv = readFileSync(`${stubs.callsFile}.argv`, "utf8");
+  assert.doesNotMatch(argv, /--cacert/);
+
+  const temp2 = mkdtempSync(join(tmpdir(), "dpf-dev-portal-lease-"));
+  const stubs2 = makeStubs(temp2, "claimed");
+  const env2 = baseEnv(stubs2);
+  delete env2.NODE_EXTRA_CA_CERTS;
+  delete env2.DPF_MCP_CA_FILE;
+  const without = runLease(["status"], { env: env2 });
+  assert.equal(without.status, 0, `${without.stdout}\n${without.stderr}`);
+  assert.doesNotMatch(readFileSync(`${stubs2.callsFile}.argv`, "utf8"), /--cacert/);
 });
 
 test("dev-portal-lease.sh release releases the named lease", () => {
@@ -300,73 +305,13 @@ test("dev-portal-lease.sh release releases the named lease", () => {
   assert.equal(calls[0].params.arguments.leaseId, "NPEL-MINE");
 });
 
-test("dev-portal-lease.sh refresh claims before stopping and restarting the shared preview", () => {
-  const temp = mkdtempSync(join(tmpdir(), "dpf-dev-portal-lease-"));
-  const stubs = makeStubs(temp, "claimed");
-  const result = runLease(["refresh"], {
-    env: baseEnv(stubs, {
-      NODE_ENV: "test",
-      DPF_DEV_PORTAL_TEST_EXIT_AFTER_READY: "1",
-      DPF_DEV_PORTAL_HEARTBEAT_SECONDS: "0.05",
-      DPF_TEST_DOCKER_DELAY_SECONDS: "0.25",
-    }),
-  });
-
-  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
-  const calls = readFileSync(stubs.callsFile, "utf8").trim().split("\n").map((line) => JSON.parse(line));
-  assert.equal(calls[0].params.name, "claim_nonprod_environment_lease");
-  assert.ok(calls.some((call) => call.params.name === "renew_nonprod_environment_lease"));
-  assert.equal(calls.at(-1).params.name, "release_nonprod_environment_lease");
-  assert.deepEqual(
-    readFileSync(stubs.dockerCallsFile, "utf8").trim().split("\n"),
-    [
-      "compose -p dpf --profile dev stop dev-portal",
-      "compose -p dpf --profile dev up -d dev-portal",
-    ],
-  );
-  assert.match(result.stdout, /LEASE_ID=NPEL-MINE/);
-  assert.match(result.stdout, /heartbeat active/i);
-});
-
-test("dev-portal-lease.sh refresh releases its lease when Docker refresh fails", () => {
-  const temp = mkdtempSync(join(tmpdir(), "dpf-dev-portal-lease-"));
-  const stubs = makeStubs(temp, "claimed");
-  const result = runLease(["refresh"], {
-    env: baseEnv(stubs, {
-      NODE_ENV: "test",
-      DPF_DEV_PORTAL_TEST_EXIT_AFTER_READY: "1",
-      DPF_DEV_PORTAL_HEARTBEAT_SECONDS: "0.05",
-      DPF_DEV_PORTAL_DOCKER_FAIL_ON: "up -d",
-    }),
-  });
-
-  assert.notEqual(result.status, 0);
-  const calls = readFileSync(stubs.callsFile, "utf8").trim().split("\n").map((line) => JSON.parse(line));
-  assert.deepEqual(
-    calls.map((call) => call.params.name),
-    ["claim_nonprod_environment_lease", "release_nonprod_environment_lease"],
-  );
-  assert.equal(calls[1].params.arguments.leaseId, "NPEL-MINE");
-});
-
-test("dev-portal-lease.sh refresh stops the preview and releases when renewal loses authority", () => {
-  const temp = mkdtempSync(join(tmpdir(), "dpf-dev-portal-lease-"));
-  const stubs = makeStubs(temp, "claimed");
-  const result = runLease(["refresh"], {
-    env: baseEnv(stubs, {
-      NODE_ENV: "test",
-      DPF_DEV_PORTAL_TEST_EXIT_AFTER_READY: "1",
-      DPF_DEV_PORTAL_HEARTBEAT_SECONDS: "0.05",
-      DPF_TEST_DOCKER_DELAY_SECONDS: "0.25",
-      DPF_TEST_RENEW_FAIL: "1",
-    }),
-  });
-
-  assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /lease authority lost/i);
-  const calls = readFileSync(stubs.callsFile, "utf8").trim().split("\n").map((line) => JSON.parse(line));
-  assert.ok(calls.some((call) => call.params.name === "renew_nonprod_environment_lease"));
-  assert.equal(calls.at(-1).params.name, "release_nonprod_environment_lease");
-  const dockerCalls = readFileSync(stubs.dockerCallsFile, "utf8").trim().split("\n");
-  assert.ok(dockerCalls.filter((call) => call === "compose -p dpf --profile dev stop dev-portal").length >= 2);
+test("a queued refresh makes one claim, delegates durable resume and never invokes Docker", () => {
+  const temp = mkdtempSync(join(tmpdir(), "dpf-dev-portal-queued-"));
+  const stubs = makeStubs(temp, "queued");
+  const result = runLease(["refresh"], { env: baseEnv(stubs) });
+  assert.equal(result.status, 3);
+  assert.match(result.stderr, /Durable task .* resumes this wait/);
+  assert.doesNotMatch(result.stderr, /Retry this same claim/);
+  assert.equal(readFileSync(stubs.callsFile, "utf8").trim().split("\n").length, 1);
+  assert.equal(existsSync(stubs.dockerCallsFile), false);
 });

@@ -16,6 +16,9 @@ param(
     # production install from a disposable one. Recorded in installer state as the
     # canonical local host fact; an undeclared install is treated as production.
     [ValidateSet("production", "development", "test")][string]$EnvironmentClass,
+    # Answers the installer monitoring question (Prometheus + Grafana). Without it an
+    # interactive install asks; -Headless leaves monitoring off and undecided.
+    [ValidateSet("On", "Off")][string]$Monitoring,
     [ValidateNotNullOrEmpty()][string]$OrganizationJoinPackage,
     [switch]$Help
 )
@@ -51,6 +54,12 @@ Flags:
                 agents may do -- teardown, credential handling, and writes to a
                 paired installation. An undeclared install is treated as
                 production.
+  -Monitoring <On|Off>
+                Answer the monitoring question without a prompt. Monitoring
+                (Prometheus + Grafana) watches this platform and its host;
+                change it later in Settings > Monitoring. -Headless without
+                this flag leaves monitoring off and undecided. A choice already
+                recorded on this install is kept and never re-asked.
   -OrganizationJoinPackage <file.dpfjoin>
                 Join an existing organization trust domain during install. The
                 private package is validated, consumed, and deleted on success;
@@ -516,6 +525,37 @@ function Export-DPFConsumerReleaseAssets {
     }
 }
 
+function Invoke-DPFDoctoolsPrePull {
+    # The document converter (dpf-doctools, BI-698B7F9A). It is not a compose
+    # service (AC-ODC-003), so compose pull never fetches it; pull it with the
+    # other release images so the portal reads Word, Excel and PDF files at
+    # first boot. Only an immutable release tag names one converter (the portal
+    # refuses a moving tag), so "latest" pulls nothing. It never fails the
+    # install: a release with no converter is simply converter-less, and any
+    # other failure is retried by the portal's own reconciler once it starts.
+    param(
+        [Parameter(Mandatory)][string]$Version,
+        [string]$Owner = "opendigitalproductfactory"
+    )
+    if ($Version -cnotmatch '^v\d+\.\d+\.\d+([-+][A-Za-z0-9.-]+)?$') { return "not-release" }
+    $image = "ghcr.io/$($Owner.ToLowerInvariant())/dpf-doctools:$Version"
+    $oldEAP = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    $output = (docker pull $image 2>&1 | ForEach-Object { "$_" }) -join "`n"
+    $pullExit = $LASTEXITCODE
+    $ErrorActionPreference = $oldEAP
+    if ($pullExit -eq 0) {
+        Write-OK "Document converter image ready ($image)"
+        return "pulled"
+    }
+    if ($output -match 'not found|manifest unknown|name unknown') {
+        Write-Host "  This release ships no document converter; Office files will not be converted." -ForegroundColor Gray
+        return "not-published"
+    }
+    Write-Warn "Could not download the document converter image; the platform retries after it starts."
+    return "failed"
+}
+
 function Set-DPFReleaseEnvIdentityAtomic {
     param(
         [Parameter(Mandatory)][string]$Path,
@@ -630,6 +670,19 @@ param(
 
 Set-Location $DPF_DIR
 
+# Host GPU snapshot for local-model admission. Non-fatal when the publisher
+# is absent; a missing snapshot does not disable the local model.
+$gpuPublisher = Join-Path $DPF_DIR "scripts\publish-host-gpu.ps1"
+if (Test-Path -LiteralPath $gpuPublisher) {
+    try {
+        Start-Process -FilePath "powershell.exe" -WindowStyle Hidden -ArgumentList @(
+            "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $gpuPublisher
+        ) | Out-Null
+    } catch {
+        Write-Host "[!] Host GPU publisher did not start (non-fatal)." -ForegroundColor Yellow
+    }
+}
+
 # The generated entrypoint consumes the same checked-in adapter and state
 # helper as install/setup; it never snapshots service/profile logic.
 if ($WithEdge) { $env:DPF_INCLUDE_EDGE = '1' }
@@ -734,7 +787,11 @@ function Set-DPFEnvFileValue {
 }
 
 function Invoke-DPFEdgeNodeConvergence {
-    param([Parameter(Mandatory)][string]$InstallDir)
+    param(
+        [Parameter(Mandatory)][string]$InstallDir,
+        # host-upkeep: heartbeat and the action channel only (BI-28EFE18A).
+        [ValidateSet("full", "host-upkeep")][string]$Role = "full"
+    )
 
     $edgeModule = Resolve-DPFNativeEdgeModulePath -InstallDir $InstallDir
     . $edgeModule
@@ -792,13 +849,102 @@ function Invoke-DPFEdgeNodeConvergence {
     } else {
         Write-OK "Existing Edge enrollment found; preserving its machine identity"
     }
-    if (Install-DPFNativeEdgeNode -InstallDir $InstallDir -BootstrapToken $edgeToken -Version $Version) {
-        . (Resolve-DPFComposeChainModule -InstallDir $InstallDir)
-        $legacyComposeArgs = Get-DPFComposeArgs -InstallDir $InstallDir -IncludeEdge:$true
-        docker compose @legacyComposeArgs stop edge-node 2>&1 | Out-Null
+    if (Install-DPFNativeEdgeNode -InstallDir $InstallDir -BootstrapToken $edgeToken -Version $Version -Role $Role) {
+        if ($Role -eq "full") {
+            . (Resolve-DPFComposeChainModule -InstallDir $InstallDir)
+            $legacyComposeArgs = Get-DPFComposeArgs -InstallDir $InstallDir -IncludeEdge:$true
+            docker compose @legacyComposeArgs stop edge-node 2>&1 | Out-Null
+        }
         return $true
     }
     return $false
+}
+
+# Insert each desired key into its .wslconfig section when the key is absent
+# from the whole file. Operator-authored values are never replaced or
+# duplicated, in either section. WSL reads memory/processors/maxCrashDumpCount
+# only under [wsl2] and autoMemoryReclaim only under [experimental]; a key in
+# the wrong section is silently ignored (BI-7371D444).
+function Add-WslConfigKeysIfMissing {
+    param(
+        [string]$Path,
+        [System.Collections.Specialized.OrderedDictionary]$Desired,
+        [string]$Section = "wsl2"
+    )
+    $changed = $false
+    $added = New-Object System.Collections.Generic.List[string]
+    if (Test-Path -LiteralPath $Path) {
+        $lines = @(Get-Content -LiteralPath $Path)
+    } else {
+        $lines = @()
+    }
+    $header = "[$Section]"
+    $headerPattern = "^\s*\[" + [regex]::Escape($Section) + "\]\s*$"
+
+    foreach ($key in $Desired.Keys) {
+        # NOTE: "-notmatch" against an array filters elements; use Count on -match.
+        if (@($lines -match ("^\s*" + [regex]::Escape($key) + "\s*=")).Count -gt 0) {
+            continue
+        }
+        $entry = "$key=$($Desired[$key])"
+        if (@($lines -match $headerPattern).Count -gt 0) {
+            $newLines = New-Object System.Collections.Generic.List[string]
+            $inserted = $false
+            foreach ($line in $lines) {
+                $newLines.Add($line)
+                if (-not $inserted -and $line -match $headerPattern) {
+                    $newLines.Add($entry)
+                    $inserted = $true
+                }
+            }
+            $lines = @($newLines)
+        } elseif ($lines.Count -eq 0) {
+            $lines = @($header, $entry)
+        } else {
+            $lines = @($lines) + @("", $header, $entry)
+        }
+        $added.Add($entry)
+        $changed = $true
+    }
+
+    if ($changed) {
+        Set-Content -LiteralPath $Path -Value $lines
+    }
+    return @{ Changed = $changed; Added = $added }
+}
+
+# Installers before BI-7371D444 wrote autoMemoryReclaim under [wsl2], where WSL
+# ignores it. Move such a key into [experimental], keeping its value, unless
+# [experimental] already declares it. Re-running the installer thereby repairs
+# an existing install; the change applies at the next 'wsl --shutdown'.
+function Move-WslConfigKeyToSection {
+    param(
+        [string]$Path,
+        [string]$Key,
+        [string]$FromSection,
+        [string]$ToSection
+    )
+    if (-not (Test-Path -LiteralPath $Path)) { return @{ Moved = $false } }
+    $lines = @(Get-Content -LiteralPath $Path)
+    $keyPattern = "^\s*" + [regex]::Escape($Key) + "\s*="
+    $section = $null
+    $fromIndex = -1
+    $inTarget = $false
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($lines[$i] -match "^\s*\[([^\]]+)\]\s*$") { $section = $Matches[1]; continue }
+        if ($lines[$i] -match $keyPattern) {
+            if ($section -eq $ToSection) { $inTarget = $true }
+            elseif ($section -eq $FromSection -and $fromIndex -lt 0) { $fromIndex = $i }
+        }
+    }
+    if ($inTarget -or $fromIndex -lt 0) { return @{ Moved = $false } }
+    $entry = $lines[$fromIndex].Trim()
+    $remaining = New-Object System.Collections.Generic.List[string]
+    for ($i = 0; $i -lt $lines.Count; $i++) { if ($i -ne $fromIndex) { $remaining.Add($lines[$i]) } }
+    Set-Content -LiteralPath $Path -Value @($remaining)
+    $value = ($entry -split "=", 2)[1].Trim()
+    $result = Add-WslConfigKeysIfMissing -Path $Path -Desired ([ordered]@{ $Key = $value }) -Section $ToSection
+    return @{ Moved = $result.Changed; Entry = $entry }
 }
 
 if ($LibraryOnly -or $env:DPF_INSTALLER_LIBRARY_ONLY -eq "1") {
@@ -982,57 +1128,21 @@ $wslDesiredKeys = [ordered]@{
     "maxCrashDumpCount" = "$crashDumpCap"
     "memory"            = "${wslMemoryGb}GB"
     "processors"        = "$wslProcessors"
+}
+# gradual: WWMD DI-BC3B38A641C7 (measured on the DEV host since 2026-09-06).
+$wslExperimentalKeys = [ordered]@{
     "autoMemoryReclaim" = $wslAutoMemoryReclaim
 }
 
-function Add-WslConfigKeysIfMissing {
-    param(
-        [string]$Path,
-        [System.Collections.Specialized.OrderedDictionary]$Desired
-    )
-    $changed = $false
-    $added = New-Object System.Collections.Generic.List[string]
-    if (Test-Path -LiteralPath $Path) {
-        $lines = @(Get-Content -LiteralPath $Path)
-    } else {
-        $lines = @()
-    }
-
-    foreach ($key in $Desired.Keys) {
-        # NOTE: "-notmatch" against an array filters elements; use Count on -match.
-        if (@($lines -match ("^\s*" + [regex]::Escape($key) + "\s*=")).Count -gt 0) {
-            continue
-        }
-        $entry = "$key=$($Desired[$key])"
-        if (@($lines -match "^\s*\[wsl2\]\s*$").Count -gt 0) {
-            $newLines = New-Object System.Collections.Generic.List[string]
-            $inserted = $false
-            foreach ($line in $lines) {
-                $newLines.Add($line)
-                if (-not $inserted -and $line -match "^\s*\[wsl2\]\s*$") {
-                    $newLines.Add($entry)
-                    $inserted = $true
-                }
-            }
-            $lines = @($newLines)
-        } elseif ($lines.Count -eq 0) {
-            $lines = @("[wsl2]", $entry)
-        } else {
-            $lines = @($lines) + @("", "[wsl2]", $entry)
-        }
-        $added.Add($entry)
-        $changed = $true
-    }
-
-    if ($changed) {
-        Set-Content -LiteralPath $Path -Value $lines
-    }
-    return @{ Changed = $changed; Added = $added }
+$wslResult = Add-WslConfigKeysIfMissing -Path $wslConfigPath -Desired $wslDesiredKeys -Section "wsl2"
+$wslReclaimMove = Move-WslConfigKeyToSection -Path $wslConfigPath -Key "autoMemoryReclaim" -FromSection "wsl2" -ToSection "experimental"
+if ($wslReclaimMove.Moved) {
+    Write-OK ("Moved {0} from [wsl2], where WSL ignores it, to [experimental]" -f $wslReclaimMove.Entry)
 }
-
-$wslResult = Add-WslConfigKeysIfMissing -Path $wslConfigPath -Desired $wslDesiredKeys
-if ($wslResult.Changed) {
-    Write-OK ("Born-bounded WSL ceilings written to .wslconfig (host {0}GB RAM / {1} CPUs): {2}" -f $hostRamGb, $hostCpus, ($wslResult.Added -join ", "))
+$wslExperimentalResult = Add-WslConfigKeysIfMissing -Path $wslConfigPath -Desired $wslExperimentalKeys -Section "experimental"
+if ($wslResult.Changed -or $wslExperimentalResult.Changed) {
+    $wslAdded = @($wslResult.Added) + @($wslExperimentalResult.Added)
+    Write-OK ("Born-bounded WSL ceilings written to .wslconfig (host {0}GB RAM / {1} CPUs): {2}" -f $hostRamGb, $hostCpus, ($wslAdded -join ", "))
     Write-Host "  Note: .wslconfig is inert until the next 'wsl --shutdown' (stops containers)." -ForegroundColor Yellow
     Write-Host "  Sweep in-flight pregate/local-CI work before cycling WSL (BI-4F3AB6B3)." -ForegroundColor Yellow
 }
@@ -1366,10 +1476,8 @@ if ($InstallMode -eq "customizer" -and -not (Test-StepDone "dev_setup")) {
         Write-Warn "Node.js v20+ required. Current: $(node -v)"
         exit 1
     }
-    if (-not (Get-Command pnpm -ErrorAction SilentlyContinue)) {
-        Write-Action "Installing pnpm..."
-        npm install -g pnpm
-    }
+    . (Join-Path $DPF_DIR "scripts/installer/lib/pnpm.ps1")
+    Initialize-DpfPnpm -InstallDir $DPF_DIR
 
     # Hoisted layout avoids symlink permission issues on Windows (no Developer Mode needed)
     if (-not (Test-Path "$DPF_DIR\.npmrc")) {
@@ -1574,6 +1682,64 @@ $hostArch = switch ($rawHostArch) { "x64" { "amd64" }; "amd64" { "amd64" }; "arm
 Set-DPFEnvFileValue -Path "$DPF_DIR\.env" -Key "DPF_HOST_PLATFORM" -Value "win32"
 Set-DPFEnvFileValue -Path "$DPF_DIR\.env" -Key "DPF_HOST_ARCH" -Value $hostArch
 
+# Signing secret for GitHub update deliveries (BI-C26D5DC5). The portal refuses
+# every delivery in production without it. Added when missing or still an
+# example placeholder; never rotated once set, because the operator pastes it
+# into the repository webhook. The value is never printed.
+$gitWebhookEnv = Get-Content -Path "$DPF_DIR\.env" -Raw -ErrorAction SilentlyContinue
+if ($null -eq $gitWebhookEnv) { $gitWebhookEnv = "" }
+$gitWebhookMatch = [System.Text.RegularExpressions.Regex]::Match($gitWebhookEnv, '(?m)^DPF_GIT_WEBHOOK_SECRET=(.*)$')
+$gitWebhookValue = if ($gitWebhookMatch.Success) { $gitWebhookMatch.Groups[1].Value.Trim().Trim('"', "'") } else { "" }
+if ($gitWebhookValue.Length -eq 0 -or $gitWebhookValue.StartsWith("<")) {
+    Set-DPFEnvFileValue -Path "$DPF_DIR\.env" -Key "DPF_GIT_WEBHOOK_SECRET" -Value (New-RandomPassword 32)
+    Write-Host "  Generated DPF_GIT_WEBHOOK_SECRET in .env (read it there to configure the GitHub webhook)"
+}
+
+# Signing key for GPP permits (BI-8541D491). Same rules as the webhook secret:
+# added when missing or still an example placeholder, never rotated once set,
+# never printed. Nothing outside the portal needs it.
+$gppPermitEnv = Get-Content -Path "$DPF_DIR\.env" -Raw -ErrorAction SilentlyContinue
+if ($null -eq $gppPermitEnv) { $gppPermitEnv = "" }
+$gppPermitMatch = [System.Text.RegularExpressions.Regex]::Match($gppPermitEnv, '(?m)^DPF_GPP_PERMIT_SECRET=(.*)$')
+$gppPermitValue = if ($gppPermitMatch.Success) { $gppPermitMatch.Groups[1].Value.Trim().Trim('"', "'") } else { "" }
+if ($gppPermitValue.Length -eq 0 -or $gppPermitValue.StartsWith("<")) {
+    Set-DPFEnvFileValue -Path "$DPF_DIR\.env" -Key "DPF_GPP_PERMIT_SECRET" -Value (New-RandomPassword 32)
+    Write-Host "  Generated DPF_GPP_PERMIT_SECRET in .env"
+}
+
+# Signing keys for attention reach links and coworker delegation receipts
+# (BI-F6929F50), self-upgrade target bindings and delivery task hub cursors
+# (BI-231A4BC7), so AUTH_SECRET no longer signs them. Same rules as the permit
+# key: added when missing or still a placeholder, never rotated, never printed.
+foreach ($signingKeyName in @("DPF_ATTENTION_REACH_SECRET", "DPF_DELEGATION_RECEIPT_SECRET", "DPF_SELF_UPGRADE_TARGET_BINDING_SECRET", "DPF_DELIVERY_TASK_CURSOR_SECRET")) {
+    $signingKeyEnv = Get-Content -Path "$DPF_DIR\.env" -Raw -ErrorAction SilentlyContinue
+    if ($null -eq $signingKeyEnv) { $signingKeyEnv = "" }
+    $signingKeyMatch = [System.Text.RegularExpressions.Regex]::Match($signingKeyEnv, "(?m)^$signingKeyName=(.*)$")
+    $signingKeyValue = if ($signingKeyMatch.Success) { $signingKeyMatch.Groups[1].Value.Trim().Trim('"', "'") } else { "" }
+    if ($signingKeyValue.Length -eq 0 -or $signingKeyValue.StartsWith("<")) {
+        Set-DPFEnvFileValue -Path "$DPF_DIR\.env" -Key $signingKeyName -Value (New-RandomPassword 32)
+        Write-Host "  Generated $signingKeyName in .env"
+    }
+}
+
+# Inngest signing and event keys (BI-3267763F). The portal and the inngest
+# service verify each other with them; compose no longer supplies a default,
+# because the old one was published in the repository and let anyone who could
+# reach /api/inngest forge signed invocations. Generated the same way as
+# AUTH_SECRET when missing, a placeholder, or that old public default; a real
+# value is never rotated. Values are never printed.
+$inngestPublicDefaults = @("abcdef0123456789", "deadbeefcafebabe")
+foreach ($inngestKey in @("INNGEST_SIGNING_KEY", "INNGEST_EVENT_KEY")) {
+    $inngestEnv = Get-Content -Path "$DPF_DIR\.env" -Raw -ErrorAction SilentlyContinue
+    if ($null -eq $inngestEnv) { $inngestEnv = "" }
+    $inngestMatches = [System.Text.RegularExpressions.Regex]::Matches($inngestEnv, "(?m)^$inngestKey=(.*)$")
+    $inngestValue = if ($inngestMatches.Count -gt 0) { $inngestMatches[$inngestMatches.Count - 1].Groups[1].Value.Trim().Trim('"', "'") } else { "" }
+    if ($inngestValue.Length -eq 0 -or $inngestValue.StartsWith("<") -or $inngestPublicDefaults -contains $inngestValue) {
+        Set-DPFEnvFileValue -Path "$DPF_DIR\.env" -Key $inngestKey -Value (New-RandomPassword 32)
+        Write-Host "  Generated $inngestKey in .env"
+    }
+}
+
 if ($InstallMode -eq "consumer") {
     Set-DPFConsumerReleaseIdentity -InstallDir $DPF_DIR -Version $Version
 }
@@ -1700,15 +1866,74 @@ Write-Action "Open a new terminal for the PATH change to take effect in other wi
 
 # --- Step 6: Start Platform ---------------------------------------------------
 
+. (Resolve-DPFComposeChainModule -InstallDir $DPF_DIR)
+$runtimeComposeArgs = Get-DPFComposeArgs -InstallDir $DPF_DIR -IncludeEdge:$false -IncludeRelease:($InstallMode -eq "consumer")
+Push-Location $DPF_DIR
+try {
+    & node (Join-Path $DPF_DIR "scripts/installer/prepare-runtime-state.mjs") @runtimeComposeArgs
+    if ($LASTEXITCODE -ne 0) { throw "runtime_state_preparation_failed" }
+} finally { Pop-Location }
+
+# Every install is https at one canonical origin (BI-6DC1CD5B, design section
+# 12): Claude refuses OAuth over plain http, and one origin keeps OAuth token
+# audiences, cookies and the MCP address whole. A member install gets its
+# certificate from the organization join; a standalone install is its own CA.
+$script:DpfPortalUrl = "http://localhost:3000"
+$bootstrap = Join-Path $DPF_DIR "scripts\bootstrap-organization-pki.ps1"
+if (-not (Test-Path -LiteralPath $bootstrap)) { $bootstrap = Join-Path $PSScriptRoot "scripts\bootstrap-organization-pki.ps1" }
 if ($OrganizationJoinPackagePath) {
     Write-Host ""
     Write-Host "  Configuring organization trust..." -ForegroundColor Cyan
-    $bootstrap = Join-Path $DPF_DIR "scripts\bootstrap-organization-pki.ps1"
-    if (-not (Test-Path -LiteralPath $bootstrap)) { $bootstrap = Join-Path $PSScriptRoot "scripts\bootstrap-organization-pki.ps1" }
     if (-not (Test-Path -LiteralPath $bootstrap)) { throw "organization_pki_bootstrap_missing" }
     & $bootstrap -Mode join -JoinPackage $OrganizationJoinPackagePath -NoStartTls
     $env:DPF_ORGANIZATION_TRUST_ENABLED = "1"
     Write-OK "Organization HTTPS trust configured; the one-time package was consumed"
+} else {
+    Write-Host ""
+    Write-Host "  Configuring HTTPS for this installation..." -ForegroundColor Cyan
+    $libDir = Join-Path $DPF_DIR "scripts\installer\lib"
+    if (-not (Test-Path -LiteralPath (Join-Path $libDir "canonical-origin.ps1"))) { $libDir = Join-Path $PSScriptRoot "scripts\installer\lib" }
+    . (Join-Path $libDir "canonical-origin.ps1")
+    . (Join-Path $libDir "machine-trust.ps1")
+    try {
+        if (-not (Test-Path -LiteralPath $bootstrap)) { throw "organization_pki_bootstrap_missing" }
+        $canonical = Resolve-DpfCanonicalOrigin -InstallDir $DPF_DIR
+        & $bootstrap -Mode authority -Hostname $canonical.Host -San $canonical.CertificateSans -NoStartTls
+        Set-DpfEnvValue -InstallDir $DPF_DIR -Name "PUBLIC_URL" -Value $canonical.PublicUrl
+        $env:DPF_ORGANIZATION_TRUST_ENABLED = "1"
+        $script:DpfPortalUrl = $canonical.PublicUrl
+        $rootCertificate = Join-Path $HOME ".dpf\pki\root_ca.crt"
+        # One operating-system confirmation: the installer is not elevated, so
+        # Windows asks before adding a root to the user's trusted store.
+        $trust = Install-DpfRootTrust -RootCertificatePath $rootCertificate
+        Write-OK "HTTPS configured at $($canonical.PublicUrl)"
+        if ($trust -eq "declined") {
+            Write-Host "  Your browser will warn about this address until you trust $rootCertificate." -ForegroundColor Yellow
+        }
+        if ($canonical.Source -eq "no-network-name") {
+            Write-Host "  AI agents on other computers need a DNS name for this machine to connect." -ForegroundColor Yellow
+        }
+    } catch {
+        Write-Host "  [!] HTTPS could not be configured: $_" -ForegroundColor Yellow
+        Write-Host "      The portal stays at http://localhost:3000. AI clients that require https" -ForegroundColor Yellow
+        Write-Host "      cannot sign in until the installer is run again." -ForegroundColor Yellow
+    }
+}
+
+# This machine's AI clients find the install at its canonical origin and trust
+# its CA (BI-2D545A0C): DPF_MCP_URL and NODE_EXTRA_CA_CERTS are persisted in the
+# installing user's environment on every run, in both install modes, so a
+# re-run or an origin change converges without the agent-toolchain bootstrap.
+$clientEnvLib = Join-Path $DPF_DIR "scripts\installer\lib\mcp-client-env.ps1"
+if (-not (Test-Path -LiteralPath $clientEnvLib)) { $clientEnvLib = Join-Path $PSScriptRoot "scripts\installer\lib\mcp-client-env.ps1" }
+try {
+    . $clientEnvLib
+    $clientEnv = Resolve-DpfMcpClientEnv -InstallDir $DPF_DIR
+    if ((Set-DpfMcpClientEnv -ClientEnv $clientEnv) -ne "not-https") {
+        Write-OK "AI clients on this machine will connect to $($clientEnv.McpUrl)"
+    }
+} catch {
+    Write-Host "  [!] The AI client address could not be saved: $_" -ForegroundColor Yellow
 }
 
 Write-Step 7 10 "Starting the platform..."
@@ -1738,6 +1963,34 @@ if (-not (Test-StepDone "started")) {
     } else {
         Write-Host "  No environment class declared; this install is treated as production until one is set." -ForegroundColor Yellow
     }
+    # Monitoring question (BI-31F11C37). Recorded BEFORE the capability profiles
+    # resolve, so the first compose up starts monitoring when it was chosen. A
+    # recorded enabled/disabled decision is never re-asked.
+    if (Test-DpfMonitoringPromptNeeded -InstallDir $DPF_DIR) {
+        if ($Monitoring) {
+            $monitoringChoice = $Monitoring.ToLowerInvariant()
+            $monitoringSource = "installer-flag"
+        } elseif ($Headless) {
+            $monitoringChoice = "none"
+            $monitoringSource = "headless-default"
+        } else {
+            $monitoringCost = Get-DpfMonitoringCost -InstallDir $DPF_DIR
+            Write-Host ""
+            Write-Host "  Monitoring (Prometheus + Grafana) watches this platform and its host." -ForegroundColor Cyan
+            Write-Host "  It uses $monitoringCost when on. You can change this later in Settings > Monitoring." -ForegroundColor White
+            $monitoringAnswer = Read-DPFInstallerInput "  Turn monitoring on? [y/N]"
+            $monitoringChoice = if ("$monitoringAnswer".Trim() -match '^(?i)y(es)?$') { "on" } else { "off" }
+            $monitoringSource = "installer-prompt"
+        }
+        Set-DpfMonitoringChoice -InstallDir $DPF_DIR -Choice $monitoringChoice -Source $monitoringSource
+        switch ($monitoringChoice) {
+            "on" { Write-OK "Monitoring: on" }
+            "off" { Write-OK "Monitoring: off (turn it on later in Settings > Monitoring)" }
+            default { Write-Host "  Monitoring: off and undecided; the portal will offer the choice." -ForegroundColor Yellow }
+        }
+    } elseif ($Monitoring) {
+        Write-Host "  Monitoring was already chosen on this install; -Monitoring $Monitoring is ignored. Change it in Settings > Monitoring." -ForegroundColor Yellow
+    }
     $capabilityProjection = Resolve-DpfCapabilityComposeProfiles -InstallDir $DPF_DIR
     $env:COMPOSE_PROFILES = (@($capabilityProjection.composeProfiles) -join ',')
     . (Resolve-DPFComposeChainModule -InstallDir $DPF_DIR)
@@ -1763,6 +2016,7 @@ if (-not (Test-StepDone "started")) {
             Write-Warn "You can retry after fixing connectivity by running dpf-start."
             exit 1
         }
+        Invoke-DPFDoctoolsPrePull -Version $Version | Out-Null
     } else {
         # --- Docker VM memory preflight (customizer source-build only) --------
         # The Next.js production build needs ~4 GB of Node.js heap
@@ -1835,25 +2089,12 @@ if (-not (Test-StepDone "started")) {
     Write-Action "Starting database and portal..."
     $oldEAP = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
-    # Non-critical sidecars (e.g. dpf-stt voice STT) pull from third-party
-    # registries whose mutable tags get pruned upstream: hwdsl2/whisper-server
-    # re-pushes :latest and prunes the prior index digest, so a pinned digest
-    # eventually 404s ("manifest unknown"). A single such failure would otherwise
-    # abort the WHOLE compose up, taking the portal/db/redis down with it (#1767).
-    # Pre-pull them with failure tolerated and, if one is unavailable, scale it to
-    # 0 so the core platform still comes up -- voice degrades, the install does
-    # not. Nothing depends_on these sidecars, so scaling to 0 is safe.
-    $scaleArgs = @()
-    if (@($capabilityProjection.requiredServices) -contains "dpf-stt") {
-        $svc = "dpf-stt"
-        docker compose @coreComposeArgs pull $svc 2>&1 | Out-Null
-        if ($LASTEXITCODE -ne 0) {
-            Write-Warn "Optional sidecar '$svc' image is unavailable upstream; bringing up the platform without it."
-            Write-Action "  Voice features needing '$svc' stay inactive until its image returns; re-run the installer to retry."
-            $scaleArgs += @("--scale", "$svc=0")
-        }
-    }
-    docker compose @coreComposeArgs up -d @scaleArgs
+    # Speech-to-text is provider-managed (BI-F7E9A541): DPF ships no speech
+    # image, so there is no third-party sidecar whose pruned digest can abort
+    # the whole compose up and take the portal down with it (#1767). The
+    # defensive pre-pull and scale-to-0 dance that guarded against that is gone
+    # with it.
+    docker compose @coreComposeArgs up -d
     $ErrorActionPreference = $oldEAP
 
     # Voice / TTS sidecar. Spoken output uses the bundled dpf-tts container, but
@@ -2009,14 +2250,18 @@ if ($WithEdge) { $env:DPF_INCLUDE_EDGE = '1' }
 elseif ($NoEdge) { $env:DPF_INCLUDE_EDGE = '0' }
 $dpfEdgeOptIn = Resolve-DpfEdgeEnabled -InstallDir $DPF_DIR
 Set-DpfStateValue -Key "edge" -Value @{ enabled = $dpfEdgeOptIn; mode = $(if ($dpfEdgeOptIn) { "local" } else { $null }) }
-if ($dpfEdgeOptIn) {
-    if (Invoke-DPFEdgeNodeConvergence -InstallDir $DPF_DIR) {
-        Save-Progress "edge_bootstrap"
-    } else {
-        Write-Warn "Bundled Edge Node convergence did not complete. The portal remains usable."
+# BI-28EFE18A (WWMD DI-93310A596E88): every install runs the native Edge Node
+# on the host as its host-upkeep agent (the operator-approved Docker VM restart
+# must run outside the VM). -WithEdge adds the edge features (network sweep,
+# discovery); without it the node runs the host-upkeep role only.
+$dpfEdgeRole = if ($dpfEdgeOptIn) { "full" } else { "host-upkeep" }
+if (Invoke-DPFEdgeNodeConvergence -InstallDir $DPF_DIR -Role $dpfEdgeRole) {
+    if ($dpfEdgeOptIn) { Save-Progress "edge_bootstrap" }
+    if (-not $dpfEdgeOptIn) {
+        Write-OK "Host-upkeep agent running on this host. Re-run with -WithEdge to add network discovery."
     }
-} elseif (-not $dpfEdgeOptIn) {
-    Write-OK "Edge Node not bundled (opt-in). Re-run with -WithEdge to add a local node, or add a node on another machine from Admin > Platform Development > Edge Nodes."
+} else {
+    Write-Warn "Native Edge Node convergence did not complete. The portal remains usable; the next install run retries."
 }
 
 # --- Step 7: Wait for AI Model -------------------------------------------------
@@ -2193,13 +2438,17 @@ Write-Step 10 10 "Opening your portal!"
 # Read admin password from .env
 $adminPass = (Get-Content "$DPF_DIR\.env" | Where-Object { $_ -match "^ADMIN_PASSWORD=" }) -replace "^ADMIN_PASSWORD=", ""
 
-Start-Process "http://localhost:3000"
+if (-not $script:DpfPortalUrl) {
+    $publicUrlLine = Get-Content "$DPF_DIR\.env" | Where-Object { $_ -match "^PUBLIC_URL=https://" } | Select-Object -Last 1
+    $script:DpfPortalUrl = if ($publicUrlLine) { ($publicUrlLine -replace "^PUBLIC_URL=", "").Trim('"') } else { "http://localhost:3000" }
+}
+Start-Process $script:DpfPortalUrl
 
 Write-Host ""
 Write-Host "  ========================================================" -ForegroundColor Green
 Write-Host "  |  Your Digital Product Factory is ready!              |" -ForegroundColor Green
 Write-Host "  |                                                      |" -ForegroundColor Green
-Write-Host "  |  URL:      http://localhost:3000                     |" -ForegroundColor Green
+Write-Host "  |  URL:      $($script:DpfPortalUrl.PadRight(42))|" -ForegroundColor Green
 Write-Host "  |  Email:    admin@dpf.local                           |" -ForegroundColor Green
 Write-Host "  |  Password: $($adminPass.PadRight(40))|" -ForegroundColor Green
 Write-Host "  |                                                      |" -ForegroundColor Green
@@ -2221,7 +2470,7 @@ Write-Host "  ========================================================" -Foregro
 @"
 Digital Product Factory -- Admin Credentials
 ============================================
-URL:      http://localhost:3000
+URL:      $($script:DpfPortalUrl)
 Email:    admin@dpf.local
 Password: $adminPass
 

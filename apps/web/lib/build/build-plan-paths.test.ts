@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { normalizeBuildPlanPaths } from "./build-plan-paths";
 import type { BuildPlanDoc } from "@/lib/explore/feature-build-types";
 
@@ -11,6 +11,24 @@ function makePlan(overrides: Partial<BuildPlanDoc> = {}): BuildPlanDoc {
 }
 
 describe("normalizeBuildPlanPaths", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  // BI-8FFC45DA: the resolver checked the runtime image (/app, cwd) and a stale
+  // /workspace copy, never PROJECT_ROOT — the Build Studio workspace the build
+  // actually modifies. A plan editing docs/platform-usability-standards.md was
+  // refused three times as "missing" and the build abandoned (FB-9E4AA7F8).
+  it("grounds a modify target that exists under PROJECT_ROOT", () => {
+    vi.stubEnv("PROJECT_ROOT", "/sandbox-workspace");
+    const plan = makePlan({
+      fileStructure: [{ path: "docs/platform-usability-standards.md", action: "modify", purpose: "Add the layout standard" }],
+      tasks: [{ title: "Document", testFirst: "", implement: "Edit the doc", verify: "" }],
+    });
+    const normalized = normalizeBuildPlanPaths(plan, {
+      exists: (absolutePath) => absolutePath.replace(/\\/g, "/").endsWith("/sandbox-workspace/docs/platform-usability-standards.md"),
+    });
+    expect(normalized.unresolvedModifyPaths).toEqual([]);
+  });
+
   it("rewrites legacy Build Studio component paths to the current build directory", () => {
     const plan = makePlan({
       fileStructure: [
@@ -125,5 +143,26 @@ describe("normalizeBuildPlanPaths", () => {
     expect(normalized.plan.fileStructure[0]?.path).toBe("apps/web/components/build/SomeNewPanel.tsx");
     expect(normalized.plan.tasks[0]?.implement).toContain("apps/web/components/build/SomeNewPanel.tsx");
     expect(normalized.plan.tasks[0]?.implement).not.toContain("components/build-studio");
+  });
+});
+
+describe("nearestExistingDirectory + unresolvedModifyPathHints (FB-2684020A)", () => {
+  it("walks up to the first directory that exists and reports it as a hint", async () => {
+    const { nearestExistingDirectory, normalizeBuildPlanPaths } = await import("./build-plan-paths");
+    const exists = (absolutePath: string) =>
+      /\/apps\/web\/app\/\(shell\)\/admin\/?$/.test(absolutePath.replaceAll("\\", "/"));
+    expect(nearestExistingDirectory("apps/web/app/(shell)/admin/platform/page.tsx", exists)).toBe("apps/web/app/(shell)/admin");
+    expect(nearestExistingDirectory("nowhere.ts", exists)).toBeNull();
+    const result = normalizeBuildPlanPaths(
+      {
+        fileStructure: [{ path: "apps/web/app/(shell)/admin/platform/page.tsx", action: "modify", purpose: "x" }],
+        tasks: [{ title: "t", testFirst: "", implement: "", verify: "" }],
+      } as never,
+      { exists },
+    );
+    expect(result.unresolvedModifyPaths).toEqual(["apps/web/app/(shell)/admin/platform/page.tsx"]);
+    expect(result.unresolvedModifyPathHints).toEqual([
+      { path: "apps/web/app/(shell)/admin/platform/page.tsx", nearestExistingDirectory: "apps/web/app/(shell)/admin" },
+    ]);
   });
 });

@@ -223,3 +223,58 @@ describe("prepareUpgradeSource — upstream mode (isolated workspace, BI-4043A64
     expect(git.calls.some((c) => c.join(" ").includes("merge --no-ff"))).toBe(false);
   });
 });
+
+// BI-574098A3: the upstream URL was read from the shared root clone, whose
+// .git/config every contributor session rewrites. One unreadable read failed
+// SUR-CB33D5F5 in 4 s and started a 30-minute cooldown.
+describe("prepareUpgradeSource — upstream URL read (BI-574098A3)", () => {
+  const workspace = { ...baseUpstream, workspacePath: "/host-dpf/.upgrade-workspace", remoteReadRetryDelayMs: 0 };
+  const URL = "https://github.com/x/y.git";
+
+  /** fakeGit, but the host-clone origin read answers from a queue first. */
+  function gitWithHostReads(hostReads: GitResult[], workspaceUpstream: GitResult) {
+    const git = fakeGit([
+      ["rev-parse --git-dir", ok()],
+      ["config --get remote.upgrade-upstream.url", workspaceUpstream],
+      ["rev-parse upgrade-upstream/main", ok(`${UPSTREAM}\n`)],
+      ["diff --quiet", fail("local content delta", 1)],
+      ["rev-parse HEAD", ok(`${MERGE}\n`)],
+      ["status --porcelain", ok("")],
+    ]);
+    const hostReadCalls: string[][] = [];
+    const runner = (async (args: string[]) => {
+      if (args.join(" ") === "-C /host-dpf config --get remote.origin.url") {
+        hostReadCalls.push(args);
+        return hostReads.shift() ?? fail("", 1);
+      }
+      return git(args);
+    }) as GitRunner;
+    return { runner, git, hostReadCalls };
+  }
+
+  it("retries a transient missing-remote read instead of failing the run", async () => {
+    const { runner, hostReadCalls } = gitWithHostReads([fail("", 1), ok(`${URL}\n`)], ok(""));
+    const r = await prepareUpgradeSource(workspace, runner);
+    expect(r).toMatchObject({ ok: true, stamp: MERGE });
+    expect(hostReadCalls).toHaveLength(2);
+  });
+
+  it("falls back to the upstream URL the workspace recorded on its last run when the root clone stays unreadable", async () => {
+    const { runner, git } = gitWithHostReads([], ok(`${URL}\n`));
+    const r = await prepareUpgradeSource(workspace, runner);
+    expect(r).toMatchObject({ ok: true, stamp: MERGE });
+    // The recorded remote is reused as-is, never rewritten from nothing.
+    expect(git.calls.some((c) => c.includes("set-url") || (c.includes("remote") && c.includes("add")))).toBe(false);
+  });
+
+  it("still fails, naming both sources, when neither the root clone nor the workspace has an upstream URL", async () => {
+    const { runner, hostReadCalls } = gitWithHostReads([], fail("", 1));
+    const r = await prepareUpgradeSource(workspace, runner);
+    expect(r).toMatchObject({ ok: false, reason: "prep-error" });
+    if (r.ok) return;
+    expect(r.message).toMatch(/no 'origin' remote/);
+    expect(r.message).toMatch(/workspace/);
+    expect(hostReadCalls.length).toBeGreaterThan(1);
+  });
+});
+

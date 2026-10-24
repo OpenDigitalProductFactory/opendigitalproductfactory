@@ -31,6 +31,9 @@ install, and that observation is the acceptance criterion.
 
 Deliverable: a room can be given an owner, and the live room advances.
 
+**Merged 2026-09-06** as `3201bf879` (PR #5099). Deploy to the live install is held by the
+release batch valve (3 of 10 accumulated), so the on-install observable is not yet claimed.
+
 Files:
 - `apps/web/lib/mcp/packs/room-messaging-pack.ts` (the appointment tool)
 - `apps/web/lib/work-management/room-participant-assignment.server.ts` (existing writer — its
@@ -66,6 +69,11 @@ Steps:
 **Observable:** the standing rooms on this install report owners without anyone appointing them,
 and any that cannot are named.
 
+**Delivered 2026-09-06.** Measured against the twelve live stalled rooms: the shape rung
+resolves 12/12 drivers, each distinct from that room's own approver. The ladder is joined to
+the Phase C stall item, which now names who should be appointed rather than only reporting
+that nobody is — a diagnosis becomes a one-step instruction.
+
 ## Phase C — the bottleneck signal
 
 Deliverable: a stalled room reaches a human.
@@ -85,7 +93,21 @@ Steps:
 
 **Observable:** the paused room appears in the owner's attention surface.
 
+**Delivered 2026-09-06** (`workroom-stall` source). Verified against the live database, not
+only in tests: the query returns all twelve standing rooms as stalled — `WC-A69BCABB` at 331
+consecutive refusals and the other eleven at 207-209, every one on
+`missing_explicit_coordinator`. The seam check earned its keep: the raw SQL used the Prisma
+model name `WorkroomActivity` rather than the physical `WorkCapsuleActivity`, which compiles,
+type-checks and passes every unit test while returning nothing at runtime.
+
 ## Phase D — relation-derived hierarchy
+
+**Blocked on data, then unblocked 2026-09-06.** The relation table held ZERO rows on this
+install: `deriveStandingRooms` had no consumer, so the declared tree was never materialized
+and the five parent rooms floated unlinked (`BI-AEAA90A9`). An escalation projection written
+first would have passed every test and observed nothing. The drive tick now reconciles
+containment before driving — 13 relations across the 18 standing rooms — so the escalation
+walk below finally has a tree to walk.
 
 Deliverable: nesting means delegation and escalation, not just containment.
 
@@ -100,6 +122,56 @@ Steps:
 2. Implement as projection over the existing relation rows.
 
 **Observable:** a stalled sub-room escalates to its parent's owner and then to a named human.
+
+### 2026-10-12 implementation continuation — BI-06AE6833 / WC-1D447592
+
+The case workforce panel now projects the recorded delegation and recovery route from
+the existing `contains` / `spawned-from` responsibility edges, active coordinators,
+agent `escalatesTo` registry fields and active human role holders. It shares the bounded
+ancestor walk and responsibility-parent resolver with workforce and human accountability.
+Every ancestor must pass the requesting human or coworker's existing content access
+check before its participants are read. Missing ownership, inaccessible ancestors,
+conflicting parents or role holders, and cycles show setup guidance rather than an
+invented owner. Dependency edges do not transfer responsibility or authority.
+
+The inline disclosure was selected by owning-scope decision DI-C5920F911E59 over an
+always-visible chain and another hierarchy route. It keeps the case and stage context;
+the activity timeline remains the evidence of actual notifications and decisions.
+Existing explanatory prose and setup detail move behind the same disclosure, keeping
+the recovery summary visible without adding a wall of text to the case. Copy uses the
+existing `workrooms` message catalog and request-bound locale; indentation is logical
+so the list follows the viewer's text direction.
+The display projection does not send an escalation, grant access, approve work or close
+a room. The existing stall notifier now resolves its recipient through that same route
+under the drive's internal authority, binds the terminal person to one active user,
+rechecks any named role, and uses the existing throwing attention notifier. Missing
+recipient admission or clearance also keeps private child-room details unsent; the
+recipient passes the same human content-access check as a browser read. No invitation
+or permission is added by escalation. Missing
+bindings and failed writes keep the drive's notice unsent for retry; the stable stuck-spell
+identity and unread-notice deduplication are retained. This does not start another agent
+or alter the parent's stage. Actual stalled-child dispatch, named-human delivery and nested closure remain live
+acceptance obligations; this source slice does not declare Phase D complete.
+
+### 2026-10-22 implementation continuation — BI-8C04456A / WC-3F2EE718
+
+The nested walk no longer requires the stalled child itself to have a coordinator.
+An unowned child continues to the first recorded parent owner, then registry
+`escalatesTo`, then exactly one `HR-*` human. Conflicting coordinators, cycles and
+orchestrator loops still refuse. A fully unowned lineage stays setup-required.
+Derived ladder owners are not stall recipients. Phase H appointment is unchanged.
+Live named-human delivery, nested closure proof, and independent acceptance remain
+owed after merge and canonical-runtime deploy.
+
+Focused projection, access, workforce and UI tests have passed, including a first-failing
+stale-role membership regression. Both web TypeScript programs and the theme/style guard
+passed. The exact-source publication gates remain pending.
+Both the current MCP getter and its compatibility alias forward the authenticated
+actor context, ignoring caller-supplied identity for access checks. The pack path was
+claimed normally after the installation returned to normal; no force override was used. Native UX
+engagement CE-90C620F0 is requested; no completed specialist critique or served UI
+acceptance is claimed. The working sample prototype is retained in the execution
+visibility evidence directory and is not runtime evidence.
 
 ## Phase E — the COO surface
 

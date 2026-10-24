@@ -2,8 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@dpf/db", () => {
   const create = vi.fn();
+  const createMessage = vi.fn();
   const findFirst = vi.fn();
-  const prisma = { taskRun: { create, findFirst } };
+  const prisma = { taskRun: { create, findFirst }, taskMessage: { create: createMessage } };
   return {
     prisma: { ...prisma, $transaction: vi.fn(async (callback) => callback(prisma)) },
   };
@@ -78,8 +79,7 @@ describe("resolveAutonomousWorkTools — attachment budget (BI-CAP-F2D39F8F)", (
       intentQuery: "Review today's storefront orders and propose restocking.",
     });
 
-    // 24,576-token cliff-prone local window → 15-tool cap TOTAL, load_tools
-    // included — the same threshold as the routing layer's local-fallback gate.
+    // The 24,576-token window caps attachment at 15 tools, including load_tools.
     expect(result.tools.length).toBeLessThanOrEqual(15);
     expect(result.tools.some((t) => t.name === "load_tools")).toBe(true);
     expect(result.deferredTools.length).toBe(115 - (result.tools.length - 1));
@@ -87,11 +87,8 @@ describe("resolveAutonomousWorkTools — attachment budget (BI-CAP-F2D39F8F)", (
   });
 
   it("keeps the cliff cap when the local probe could not read a window (BI-A8BFEFCE)", async () => {
-    // The reported incident, at the level it actually happened: AGT-WS-REVIEW
-    // budgeted `authorized=86 attached=48 cap=48` because the DMR probe failed
-    // and the null window read as a cloud-only turn. 48 is precisely the surface
-    // callWithFallbackChain refuses to run locally, so with codex rate-limited
-    // the review turn executed zero tools and produced no approval evidence.
+    // The failed local probe previously attached 48 tools and prevented review
+    // execution when Codex was rate-limited (BI-A8BFEFCE).
     const ctx = await import("@/lib/inference/local-model-context-reconcile");
     vi.mocked(ctx.resolveLocalServingPosture).mockResolvedValueOnce({
       servedContextTokens: null,
@@ -289,6 +286,42 @@ describe("createAutonomousWorkRun", () => {
       taskRunId: "TR-MCP-A1B2C3D4E5F6",
       initiatingAgentId: "AGT-WS-REVIEW",
     });
+  });
+
+  it("commits a deferred external submission and its first message atomically", async () => {
+    const { prisma } = await import("@dpf/db");
+    vi.mocked(prisma.taskRun.create).mockResolvedValue({
+      id: "tr_internal_deferred", taskRunId: "TR-MCP-DEFERRED", contextId: "thread-deferred",
+    } as never);
+    const { createAutonomousWorkRun } = await import("./autonomous-work-run");
+
+    await createAutonomousWorkRun({
+      trigger: "external-mcp",
+      taskRunId: "TR-MCP-DEFERRED",
+      userId: "user-1",
+      agentId: "AGT-WS-REVIEW",
+      routeContext: "/research",
+      title: "Deferred inference",
+      objective: "Produce one durable answer.",
+      prompt: "Produce one durable answer.",
+      threadId: "thread-deferred",
+      deferredSubmission: {
+        content: "Produce one durable answer.",
+        metadata: { source: "mcp.tasks/submit" },
+      },
+    });
+
+    expect(prisma.taskRun.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: "submitted" }),
+    }));
+    expect(prisma.taskMessage.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        taskRunId: "tr_internal_deferred",
+        contextId: "thread-deferred",
+        role: "user",
+        parts: [{ type: "message", text: "Produce one durable answer." }],
+      }),
+    }));
   });
 
   it("creates capacity-continuity TaskRuns with capacity metadata and no tool execution", async () => {
@@ -542,6 +575,7 @@ describe("createAutonomousWorkRun", () => {
   });
 
   it("forwards TaskRun identity into the agentic loop", async () => {
+    const taskExecutionFence = { schemaVersion: 1 as const, reservation: "original", dispatchClaim: "dispatch", authorityDigest: null, requestDigest: "9".repeat(64) };
     const agentic = await import("@/lib/tak/agentic-loop");
     vi.mocked(agentic.runAgenticLoop).mockResolvedValue({ content: "Done.", executedTools: [] } as never);
 
@@ -558,11 +592,13 @@ describe("createAutonomousWorkRun", () => {
       agentId: "inventory-specialist",
       threadId: "thread-1",
       taskRunId: "TR-SCHED-ABCDEF12",
+      taskExecutionFence,
     });
 
     expect(agentic.runAgenticLoop).toHaveBeenCalledWith(
       expect.objectContaining({
         taskRunId: "TR-SCHED-ABCDEF12",
+        taskExecutionFence,
         agentId: "inventory-specialist",
         threadId: "thread-1",
       }),
@@ -716,14 +752,14 @@ describe("createAutonomousWorkRun", () => {
       threadId: "thread-1",
       taskRunId: "TR-MCP-ABCDEF12",
       apiTokenId: "tok_remote",
-      tokenScope: "write",
+      tokenScope: "write", tokenGrantScopes: ["file_read"],
     });
 
     expect(agentic.runAgenticLoop).toHaveBeenCalledWith(
       expect.objectContaining({
         taskRunId: "TR-MCP-ABCDEF12",
         apiTokenId: "tok_remote",
-        tokenScope: "write",
+        tokenScope: "write", tokenGrantScopes: ["file_read"], // BI-F8C661D0
       }),
     );
   });

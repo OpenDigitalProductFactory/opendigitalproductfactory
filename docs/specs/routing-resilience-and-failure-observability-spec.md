@@ -47,6 +47,15 @@ This proves the user-visible delay is not a single slow model call. It is a chai
 
 ### 1.2 Current Repo Truth
 
+Account-aware routing adds an explicit credential owner to eligible candidates
+and attempts. Authentication, billing and model-access failures stay with that
+account; provider-wide failures and quota of uncertain ownership remain shared.
+Current health is a revision-fenced mutable projection, while usage and outcome
+`recordedProviderConnectionRef` values are immutable attribution snapshots that
+outlive account deletion. Native execution with uncertain side effects stops
+fallback and redispatch. The [capacity refactor plan](../superpowers/plans/2026-10-14-provider-account-capacity-refactor.md)
+records source qualification and served acceptance separately.
+
 The material repo anchors are:
 
 - `apps/web/lib/routing/fallback.ts`
@@ -55,6 +64,7 @@ The material repo anchors are:
   - The `rate_limit` branch waits up to 60 seconds for the selected endpoint before falling through.
   - Error outcomes are recorded as `RouteOutcome.latencyMs = 0`, so the route outcome row captures the failed attempt but not the wait that preceded the next attempt.
   - A typed local-CI capacity deferral skips a local endpoint without degrading it and preserves an eligible cloud fallback. The policy uses lease ownership; it does not infer RAM consumption from Docker's displayed model residency or conflate GPU VRAM, WSL/shared memory, and Windows physical-memory telemetry.
+  - If a cloud call fails and a local fallback is capacity-deferred, the aggregate failure keeps the failed-attempt details and the typed local deferral as its `cause`. Local-only deferral remains a direct typed error. Semantic reviews rely on this provider boundary instead of vetoing eligible cloud routes before dispatch.
 - `apps/web/lib/routing/pipeline-v2.ts`
   - `getExclusionReasonV2()` allows both `active` and `degraded` endpoints through the hard filter.
   - Cost-per-success ranking then applies the normal endpoint scoring path.

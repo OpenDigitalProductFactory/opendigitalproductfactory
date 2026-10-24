@@ -4,7 +4,6 @@ import type { PrismaClient } from "../generated/client/client";
  * Schedule + identifier constants for the platform-managed backups.
  *
  * Spec: docs/superpowers/specs/2026-05-17-postgres-daily-backup-design.md
- * Spec: docs/superpowers/specs/2026-05-18-postgres-backup-slice-3-neo4j-qdrant.md
  *
  * The ScheduledJob rows are live heartbeats surfaced in /admin/backups.
  * The same identifiers are duplicated (intentionally — packages/db cannot
@@ -16,6 +15,9 @@ export const POSTGRES_BACKUP_JOB_NAME =
   "Postgres daily backup (platform-managed)";
 export const POSTGRES_BACKUP_SCHEDULE = "daily";
 
+// Retired by BET-5 (BI-A1E864A5). Kept ONLY so the seed can deactivate the
+// ScheduledJob rows an install created before the retirement; apps/web no
+// longer knows these ids (BI-B1977CEE deleted the engines).
 export const NEO4J_BACKUP_JOB_ID = "neo4j-daily-backup";
 export const QDRANT_BACKUP_JOB_ID = "qdrant-daily-backup";
 

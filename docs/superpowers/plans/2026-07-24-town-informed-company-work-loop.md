@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Town-Informed Company Work Loop Implementation Plan
 
 > **For agentic workers:** execute this plan one independently reviewable backlog item at a time — one BI, one branch, one PR. Use `dpf-tdd` for red-green implementation, `dpf-local-merge-ci-before-push` plus the plan's completion gate before any success claim, and `dpf-pr-with-dco` for handoff. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -15,13 +19,15 @@
 >
 > - Tracked by `BI-3B01B725` (recovered tail designs). Read it before acting on this document.
 > - Preserved implementation: `doc/town-company-work-loop` @ `d903bac20cad8297e68ae5e54f010805c68719d5`, pinned at `refs/salvage/2026-08-15/doc/town-company-work-loop` and listed in `~/dpf-deleted-remote-branch-tips-2026-08-15.txt`. Restore with `git push origin d903bac20cad8297e68ae5e54f010805c68719d5:refs/heads/doc/town-company-work-loop`.
-> - Backlog ids cited below that do **not** resolve in this install: `BI-F309BB95`. Treat them as labels, not links.
+> - Backlog labels cited below that do **not** resolve in this install: `historic-F309BB95`. Treat them as historic labels, not links.
+> - Live implementation item for the current branch: `BI-0EA09322` (Project coworker service engagements into Work Case company work).
+> - Current exercise evidence: `docs/superpowers/evidence/2026-09-06-town-informed-company-work-loop-exercise.md`.
 > - No coverage receipt is recorded and none should be until a thread actually starts — a receipt bound to unstarted work would be fiction. This document is deliberately outside the plan-backlog-coverage gate (it carries no bolded backlog-item metadata line).
 
 ## File Structure
 
 - Create: `docs/superpowers/evidence/2026-07-24-town-informed-company-work-loop-exercise.md`
-  - Responsibility: one human-readable exercise record for BI-F309BB95, including coworker packets, Needs You decision, evidence, "none found" entries, and proven gaps.
+  - Responsibility: one human-readable exercise record for the historic-F309BB95 exercise label, including coworker packets, Needs You decision, evidence, "none found" entries, and proven gaps.
 - Modify: `apps/web/lib/work-management/source-registry.ts`
   - Responsibility: register `coworker-engagement` as a Work Case source only if Chunk 1 proves the source is needed.
 - Modify: `apps/web/lib/work-management/source-registry.test.ts`
@@ -82,7 +88,7 @@ Use this exact section structure:
 | Date | 2026-07-24 |
 | Governing spec | docs/superpowers/specs/2026-07-24-town-informed-company-work-loop-design.md |
 | Governing epic | EP-2984B02B |
-| Primary backlog item | BI-F309BB95 |
+| Primary backlog item | BI-0EA09322 |
 | Exercise mode | source-grounded dry run |
 | Runtime limitation | Live runtime was not used; findings are valid only for source/schema/read-model/UI planning. |
 
@@ -1113,7 +1119,7 @@ Call `mcp__dpf__record_external_development_evidence` after final verification a
   "provider": "codex",
   "externalSessionId": "town-company-work-loop-implementation",
   "routeContext": "/build",
-  "backlogItemId": "BI-F309BB95",
+  "backlogItemId": "BI-0EA09322",
   "branchName": "doc/town-company-work-loop",
   "worktreePath": "D:/DPF-worktrees/town-company-work-loop",
   "summary": "Town-informed company Work Case loop implementation and verification handoff.",

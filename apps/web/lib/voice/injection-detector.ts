@@ -18,6 +18,8 @@
  * "adversarial speech reaches the LLM cleanup pass".
  */
 
+import { looksLikeSmuggling, sanitizeUntrustedText } from "@dpf/validators";
+
 export interface InjectionDetectionResult {
   suspected: boolean;
   indicators: string[];
@@ -91,9 +93,13 @@ export function detectInjectionShape(text: string): InjectionDetectionResult {
   if (!text || text.length < 5) {
     return { suspected: false, indicators: [] };
   }
-  const indicators: string[] = [];
+  // Match on the text a model would read, not on its hidden-Unicode disguise:
+  // "ig\u200Bnore previous instructions" must still trip the pattern, and a
+  // Tags-block payload is itself an indicator (BI-7AD0DA3D).
+  const sanitized = sanitizeUntrustedText(text);
+  const indicators: string[] = looksLikeSmuggling(sanitized) ? ["hidden-unicode-payload"] : [];
   for (const { name, regex } of PATTERNS) {
-    if (regex.test(text)) {
+    if (regex.test(sanitized.text)) {
       indicators.push(name);
     }
   }

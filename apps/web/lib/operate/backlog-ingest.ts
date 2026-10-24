@@ -29,10 +29,31 @@ import {
   type DemandStage,
 } from "@/lib/explore/backlog";
 import {
+  FILING_DUPLICATE_LIMIT,
+  FILING_DUPLICATE_THRESHOLD,
+  findDuplicateCandidates,
+  type FilingDuplicateCandidate,
+} from "@/lib/demand/dedup";
+import {
   findImplementationCandidates,
   type ImplementationCandidate,
 } from "@/lib/operate/implementation-scan";
 import { listRepoSourceFiles } from "@/lib/operate/repo-file-inventory";
+import {
+  backlogOriginMarker,
+  reconcileOrigin,
+  sourceSnapshot,
+  type BacklogIngestOutcome,
+  type OriginReconciliation,
+} from "@/lib/operate/backlog-origin-reconciliation";
+
+export {
+  backlogOriginMarker,
+  parseGithubIssueUrl,
+  qualifiedIssueOriginId,
+  type BacklogIngestOutcome,
+  type OriginReconciliation,
+} from "@/lib/operate/backlog-origin-reconciliation";
 
 const defaultListRepoFiles = listRepoSourceFiles;
 
@@ -76,6 +97,12 @@ export interface BacklogIngestInput {
   archetypeIds?: string[];
   scopeRationale?: string | null;
   lifecycleTags?: string[];
+  /**
+   * Opt-in origin reconciliation for sources that re-deliver the same record
+   * on every poll (BI-952F08BA, spec §6.1). Absent → existing recurrence
+   * semantics (non-terminal dedupe + occurrence bump) are unchanged.
+   */
+  reconcile?: OriginReconciliation;
 }
 
 export interface BacklogIngestResult {
@@ -83,8 +110,12 @@ export interface BacklogIngestResult {
   itemId: string;
   /** Internal cuid (BacklogItem.id) — useful for FK writes by callers. */
   id: string;
-  /** false = matched an existing non-terminal item (deduped, occurrence bumped). */
+  /** false = matched an existing item (or, for needs-review, created nothing). */
   created: boolean;
+  /** Optional for the same reason as `implementationCandidates`. */
+  outcome?: BacklogIngestOutcome;
+  /** For `needs-review`: the item ids that claim this origin ambiguously. */
+  reviewCandidates?: string[];
   /**
    * Files that may ALREADY implement what this item proposes to build
    * (BI-1A1EC5EC). Advisory — the item is still created. Empty when the item is
@@ -101,20 +132,50 @@ export interface BacklogIngestResult {
    * about the filing, not part of the filing contract.
    */
   implementationCandidates?: ImplementationCandidate[];
+
+  /**
+   * Items already on the backlog that look like this one (BI-3722E9A1).
+   *
+   * Optional for the same reason as `implementationCandidates`: it is
+   * metadata about the filing, not part of the filing contract, and the
+   * many injected ingest fakes legitimately return only identity fields.
+   */
+  duplicateCandidates?: FilingDuplicateCandidate[];
+
+  /**
+   * Set when meaning-based matching could not run (embeddings deferred or
+   * failed). The advisory says so rather than letting an empty list read as
+   * "nothing similar exists" (BI-3722E9A1).
+   */
+  duplicateSemanticUnavailable?: string | null;
 }
 
 /**
  * Minimal structural view of the stores the front door touches. Lets tests
  * inject a fake without standing up a Prisma client.
  */
+/**
+ * Statuses worth warning about (BI-3722E9A1). Open work first, but a
+ * recently-done item matters too: filing the same thing again usually means
+ * a regression, and the closed item carries the evidence that found it.
+ */
+const DUPLICATE_POOL_STATUSES = ["triaging", "open", "in-progress", "done"] as const;
+
+/** Bounds the scan's cost on a backlog that is thousands of rows deep. */
+const DUPLICATE_POOL_LIMIT = 500;
+
 export interface IngestBacklogStore {
   backlogItem: {
     findFirst(args: unknown): Promise<{ id: string; itemId: string } | null>;
     update(args: unknown): Promise<unknown>;
     create(args: unknown): Promise<{ id: string; itemId: string }>;
+    /** Candidate pool for the duplicate advisory (BI-3722E9A1). */
+    findMany?(args: unknown): Promise<Array<{ id?: string; itemId: string; title: string; body: string | null; status: string }>>;
   };
   backlogItemActivity: {
     create(args: unknown): Promise<unknown>;
+    /** Origin history for reconciliation (BI-952F08BA). Required when `reconcile` is set. */
+    findMany?(args: unknown): Promise<Array<{ payload: unknown }>>;
   };
   epic: {
     findFirst(args: unknown): Promise<{ id: string } | null>;
@@ -131,14 +192,19 @@ export interface BacklogIngestDeps {
    * returns nothing rather than failing to file.
    */
   listRepoFiles?: () => Promise<string[]>;
+  /**
+   * Meaning-based duplicate search (BI-3722E9A1). Injectable so tests need
+   * no vector store and no embedding model, and so an install without them files
+   * normally with a lexical-only advisory.
+   */
+  searchSimilarItems?: (query: string) => Promise<{
+    status: string;
+    reason?: string;
+    results: Array<{ entityId: string; title: string; score: number }>;
+  }>;
 }
 
 // ─── Pure helpers ─────────────────────────────────────────────────────────────
-
-/** Stable, queryable, human-readable provenance marker embedded in the body. */
-export function backlogOriginMarker(kind: string, id: string): string {
-  return `[origin:${kind}:${id}]`;
-}
 
 export function generateBacklogItemId(prefix?: string): string {
   const suffix = randomUUID().slice(0, 8).toUpperCase();
@@ -255,6 +321,20 @@ function cleanStringArray(values: string[] | undefined): string[] {
 
 // ─── Default knowledge indexing (fire-and-forget) ─────────────────────────────
 
+async function defaultSearchSimilarItems(query: string) {
+  const { searchPlatformKnowledge } = await import("@/lib/semantic-memory");
+  const found = await searchPlatformKnowledge({ query, entityType: "backlog", limit: 8 });
+  return {
+    status: found.status,
+    reason: "reason" in found ? found.reason : undefined,
+    results: found.results.map((r) => ({
+      entityId: r.entityId,
+      title: r.title,
+      score: r.score,
+    })),
+  };
+}
+
 function defaultIndexKnowledge(args: { entityId: string; title: string; content: string }): void {
   import("@/lib/semantic-memory")
     .then(({ storePlatformKnowledge }) =>
@@ -282,6 +362,11 @@ function defaultIndexKnowledge(args: { entityId: string; title: string; content:
  * Dedup: when `origin` is supplied and a non-terminal item already carries its
  * marker, the existing item's occurrenceCount is bumped, an intake_origin
  * activity row is appended, and no duplicate is created.
+ *
+ * Reconciled origins (`reconcile` set — a source that re-delivers the same
+ * record on every poll) instead match their one canonical item in ANY status,
+ * never bump counts or change status, and append an intake_origin event only
+ * when the source itself changed. See `reconcileOrigin` (BI-952F08BA).
  */
 export async function ingestBacklogItem(
   input: BacklogIngestInput,
@@ -323,15 +408,30 @@ export async function ingestBacklogItem(
         summary: created
           ? `Filed from ${input.origin.kind} ${input.origin.id}`
           : `Recurrence from ${input.origin.kind} ${input.origin.id}`,
-        payload: { origin: input.origin, created, createdBy: "backlog-ingest" },
+        payload: {
+          origin: input.origin,
+          created,
+          createdBy: "backlog-ingest",
+          ...(input.reconcile ? { source: sourceSnapshot(input.reconcile) } : {}),
+        },
         ...(input.submittedById ? { recordedById: input.submittedById } : {}),
         ...(input.agentId ? { recordedByAgentId: input.agentId } : {}),
       },
     });
   };
 
+  // Reconciled origins (opt-in, spec §6.1): match across EVERY status, never
+  // bump counts, never reopen, record only real source changes.
+  if (input.origin && input.reconcile) {
+    const reconciled = await reconcileOrigin(store, input.origin, input.reconcile, {
+      submittedById: input.submittedById ?? null,
+      agentId: input.agentId ?? null,
+    });
+    if (reconciled) return reconciled;
+  }
+
   // Dedup by origin marker against non-terminal items.
-  if (marker) {
+  if (marker && !input.reconcile) {
     const existing = await store.backlogItem.findFirst({
       where: { body: { contains: marker }, status: { notIn: ["done", "deferred", "retired"] } },
       select: { id: true, itemId: true },
@@ -349,6 +449,7 @@ export async function ingestBacklogItem(
         itemId: existing.itemId,
         id: existing.id,
         created: false,
+        outcome: "recurred",
         implementationCandidates: [],
       };
     }
@@ -454,5 +555,89 @@ export async function ingestBacklogItem(
     implementationCandidates = [];
   }
 
-  return { itemId: item.itemId, id: item.id, created: true, implementationCandidates };
+  // BI-3722E9A1. `findDuplicateCandidates` existed as an opt-in tool that
+  // nothing called, and this tool's own description asked the filer to
+  // remember to sweep first. That is the shape this install has twice paid
+  // to remove: the queued-claim resumer (13 of 41 sessions remembered) and
+  // the WWMD ratification no surface offered. Measured cost on 2026-09-12:
+  // one subsystem took six items in a day from two sessions, including a
+  // full duplicate diagnosis of a defect already measured in an open PR.
+  //
+  // Advisory, never blocking. A similarity score cannot tell the same
+  // defect from an adjacent one, so it must not decide whether work exists.
+  // Errors swallow to empty: a filing must never fail because the pool
+  // could not be read.
+  let duplicateCandidates: FilingDuplicateCandidate[] = [];
+  let duplicateSemanticUnavailable: string | null = null;
+  try {
+    const pool = store.backlogItem.findMany
+      ? await store.backlogItem.findMany({
+        where: { status: { in: DUPLICATE_POOL_STATUSES } },
+        select: { itemId: true, title: true, body: true, status: true },
+        orderBy: { createdAt: "desc" },
+        take: DUPLICATE_POOL_LIMIT,
+      })
+      : [];
+    const statusById = new Map(pool.map((p) => [p.itemId, p.status]));
+    const lexical = findDuplicateCandidates(
+      { itemId: item.itemId, title: input.title, body: input.body ?? null },
+      pool,
+      FILING_DUPLICATE_THRESHOLD,
+    ).map((c) => ({
+      ...c,
+      status: statusById.get(c.itemId) ?? "unknown",
+      matchedBy: "lexical" as const,
+    }));
+
+    // The lexical score compares words. The pair that motivated this
+    // feature does not share enough of them: one item is written about
+    // memory fencing a running gate, the other about load average not
+    // being CPU, and they are the same subsystem. Meaning-based search is
+    // what closes that gap, over the index THIS front door already writes.
+    const semantic = deps.searchSimilarItems ?? defaultSearchSimilarItems;
+    const found = await semantic(`${input.title}\n\n${input.body ?? ""}`);
+    if (found.status !== "ok") {
+      duplicateSemanticUnavailable = found.reason ?? found.status;
+    }
+    const semanticHits = found.results
+      .filter((r) => r.entityId && r.entityId !== item.itemId)
+      .map((r) => ({
+        itemId: r.entityId,
+        title: r.title,
+        similarity: Math.round(r.score * 1000) / 1000,
+        status: statusById.get(r.entityId) ?? "unknown",
+        matchedBy: "semantic" as const,
+      }));
+
+    const byId = new Map<string, FilingDuplicateCandidate>();
+    for (const c of [...lexical, ...semanticHits]) {
+      const seen = byId.get(c.itemId);
+      if (!seen) {
+        byId.set(c.itemId, c);
+        continue;
+      }
+      // Found by both signals: keep the stronger score and say so, because
+      // agreement between two independent signals is worth the filer's eye.
+      byId.set(c.itemId, {
+        ...seen,
+        similarity: Math.max(seen.similarity, c.similarity),
+        matchedBy: "both",
+      });
+    }
+    duplicateCandidates = [...byId.values()]
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, FILING_DUPLICATE_LIMIT);
+  } catch {
+    duplicateCandidates = [];
+  }
+
+  return {
+    itemId: item.itemId,
+    id: item.id,
+    created: true,
+    outcome: "created",
+    implementationCandidates,
+    duplicateCandidates,
+    duplicateSemanticUnavailable,
+  };
 }

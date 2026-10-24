@@ -57,6 +57,9 @@ export type ProviderRow = {
   families: string[];
   enabledFamilies: string[];
   status: string;
+  /** Derived operator controls; persisted authority remains on the default connection/job. */
+  defaultConnectionStatus?: string | null;
+  operatorPause?: { resumeAt: string | null; pausedAt: string } | null;
   costModel: string;
   category: string;
   baseUrl: string | null;
@@ -93,6 +96,7 @@ export type ProviderRow = {
 
 /** Client-safe credential info — secrets are never sent to the browser. */
 export type CredentialRow = {
+  providerWorkspaceId?: string | null;
   providerId: string;
   secretHint: string | null;
   clientId: string | null;

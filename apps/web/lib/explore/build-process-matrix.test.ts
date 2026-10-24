@@ -3,6 +3,7 @@ import {
   BUILD_PROCESS_TYPE_VALUES,
   BUILD_PROCESS_SIZES,
   GATE_REQUIREMENTS,
+  checkPhaseGate,
   checkRequirement,
   DELIVERABLE_SENSITIVITIES,
   deriveBuildProcessSize,
@@ -18,7 +19,7 @@ import {
   type BuildProcessType,
 } from "./build-process-matrix";
 import { evaluateVerificationDepthShadow } from "./verification-depth-shadow";
-import { checkPhaseGate, normalizeHappyPathState, type FixContext } from "./feature-build-types";
+import { normalizeHappyPathState, type FixContext } from "./feature-build-types";
 
 // The right-sizing matrix maps (type, size) -> a LifecyclePolicy. These tests
 // pin three contracts the spec calls out:
@@ -121,6 +122,13 @@ describe("deriveBuildProcessSize", () => {
   it("defaults to medium for null / unknown", () => {
     expect(deriveBuildProcessSize({ effortSize: null })).toBe("medium");
     expect(deriveBuildProcessSize({ effortSize: "huge" })).toBe("medium");
+  });
+
+  it("lets a bound delivery shape win over the triage size (BI-D03BE728)", () => {
+    expect(deriveBuildProcessSize({ effortSize: "large", workShape: "delivery-small@1.0.0" })).toBe("small");
+    expect(deriveBuildProcessSize({ effortSize: null, workShape: "delivery-break-fix@1.0.0" })).toBe("small");
+    expect(deriveBuildProcessSize({ effortSize: "small", workShape: "delivery-xlarge@1.0.0" })).toBe("xlarge");
+    expect(deriveBuildProcessSize({ effortSize: "large", workShape: "dependency-advisory-watch@1.0.0" })).toBe("large");
   });
 });
 
@@ -515,6 +523,24 @@ describe("deriveDeliverableSensitivity", () => {
     expect(deriveDeliverableSensitivity({ text: "OAuth token" }, "conservative")).toBe("high");
     expect(deriveDeliverableSensitivity({ text: "spacing tweak" }, "balanced")).toBe("low");
     expect(deriveDeliverableSensitivity({ text: "spacing tweak" }, "progressive")).toBe("low");
+  });
+
+  // BI-BD60DC91: the bare word "token" belonged to the HIGH list, so an item about
+  // LLM tokens was gated as if it were about auth tokens. BI-CCF1ACBB ("Per-thread
+  // cumulative token/cost ledger", a two-site attribution fix) was raised small→large
+  // on that word alone and could neither be claimed nor closed through its gate.
+  it("does not treat LLM \"token\" prose as a credential (BI-BD60DC91)", () => {
+    expect(deriveDeliverableSensitivity({
+      text: "Per-thread cumulative token/cost ledger\nanthropic-sub reports avg 17 input tokens per run; fold cache tokens into inputTokens",
+    })).toBe("low");
+    expect(deriveDeliverableSensitivity({ text: "token budget for the coworker context window" })).toBe("low");
+  });
+
+  it("still treats credential tokens as high", () => {
+    expect(deriveDeliverableSensitivity({ text: "Rotate the bearer token on refresh" })).toBe("high");
+    expect(deriveDeliverableSensitivity({ text: "Issue an API token from the admin page" })).toBe("high");
+    expect(deriveDeliverableSensitivity({ text: "session tokens expire after 5 minutes" })).toBe("high");
+    expect(deriveDeliverableSensitivity({ text: "OAuth access-token exchange" })).toBe("high");
   });
 });
 

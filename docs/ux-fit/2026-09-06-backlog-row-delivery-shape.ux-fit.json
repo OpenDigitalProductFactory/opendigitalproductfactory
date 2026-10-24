@@ -1,0 +1,31 @@
+{
+  "version": "1",
+  "decidedOption": "show the bound delivery shape as a one-word badge beside the effort size on the existing backlog row, only when a live Workroom carries one, instead of a new column, filter or detail panel",
+  "scope": {
+    "files": [
+      "apps/web/components/ops/BacklogItemRow.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "sweep-measurement",
+    "baselineComparison": "new-route",
+    "measured": {
+      "/ops#backlog-item-row": {
+        "defaultVisibleWords": 34,
+        "leadBandWords": 0,
+        "primaryActions": 0,
+        "visibleFields": 0,
+        "maxChoicesPerControl": 0,
+        "subLegibleControls": 3,
+        "buriedPrimaryAction": 0,
+        "axeViolations": 0
+      }
+    }
+  },
+  "notes": {
+    "routeMeasurement": "route-budget-baseline.json adjudicates /ops as a whole, never a single row, so the numbers come from rendering BacklogItemRow with the fixture in apps/web/components/ops/BacklogItemRow.uxbudget.test.tsx (an in-progress item whose live Workroom is bound to delivery-break-fix@1.0.0, the heaviest badge) and measuring with lib/ux-budget's measureUxBudget plus axe-core. The same test renders the unshaped row as the comparison: 33 visible words, 3 sub-legible controls, reading grade 2.7. The badge adds one word (BF), no control, and no sub-legible control; the three sub-legible controls are the row's pre-existing icon buttons.",
+    "fit": "Design 2026-09-02 §3.3: the shape a Workroom declared at the claim is visible where the work is. The row already carries effort size and Workroom ownership as compact chips; the shape joins them as one more chip on the type scale (text-dpf-caption), titled with its shape name, and is absent when no live room carries a shape. No new navigation, form, control, or primary action.",
+    "failureState": "An item with no live shaped Workroom renders exactly as before; a room bound to a non-delivery shape shows nothing extra.",
+    "theme": "No new styles; the existing chip treatment with the semantic tone tokens (--dpf-error/success/info/warning) is reused."
+  }
+}

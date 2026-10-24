@@ -5,7 +5,6 @@
 
 "use client";
 
-import Link from "next/link";
 
 import { LocalTime } from "@/components/ui/LocalTime";
 import {
@@ -35,17 +34,16 @@ export function MyExpensesTable({
   rows: MyExpenseRow[];
   currencySymbol: string;
 }) {
+  // Claim id and title are text, not links. There is no claimant detail page
+  // (/finance/my-expenses/[id] does not exist), and the manager view hands the
+  // approval token to any viewer (BI-D43F1516). A row that cannot open is not
+  // offered as a link (BI-235E9F00).
   const columns: Column<MyExpenseRow>[] = [
     {
       key: "claimId",
       header: "Claim ID",
       cell: (c) => (
-        <Link
-          href={`/finance/my-expenses/${c.id}`}
-          className="text-[9px] font-mono text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] transition-colors"
-        >
-          {c.claimId}
-        </Link>
+        <span className="text-[9px] font-mono text-[var(--dpf-muted)]">{c.claimId}</span>
       ),
       sortAccessor: (c) => c.claimId,
     },
@@ -53,12 +51,7 @@ export function MyExpensesTable({
       key: "title",
       header: "Title",
       cell: (c) => (
-        <Link
-          href={`/finance/my-expenses/${c.id}`}
-          className="text-[var(--dpf-text)] hover:underline"
-        >
-          {c.title}
-        </Link>
+        <span className="text-[var(--dpf-text)]">{c.title}</span>
       ),
       sortAccessor: (c) => c.title,
     },

@@ -31,7 +31,7 @@ function ConnectionList({ items, emptyMessage }: { items: ProviderRecommendation
   );
 }
 
-export function ProviderSuitabilityGuide({ recommendation, telemetry }: { recommendation: ProviderOnboardingRecommendation; telemetry?: ProviderRoutingTelemetryRollup }) {
+export function ProviderSuitabilityGuide({ recommendation, telemetry, primaryAction }: { recommendation: ProviderOnboardingRecommendation; telemetry?: ProviderRoutingTelemetryRollup; primaryAction?: boolean }) {
   const statusLabel = recommendation.status === "ready" ? "Ready with guardrails" : recommendation.status === "review-needed" ? "Review needed" : "Setup needed";
   const specialistObjective = formatProviderReviewObjective(recommendation.reviewPacket);
   const primaryItem = recommendation.useNow[0] ?? recommendation.useAfterReview[0] ?? recommendation.notForThisWork[0] ?? null;
@@ -46,6 +46,7 @@ export function ProviderSuitabilityGuide({ recommendation, telemetry }: { recomm
         </div>
         <div className="max-w-xs">
           <AskCoworkerButton
+            primaryAction={primaryAction}
             prompt={`Act as my COO. Consult AGT-902 through the governed coworker interface using this validated, minimized objective; do not reconstruct the request from display copy. Return a short owner-facing answer in three bullets: direct answer, safe interim behavior, and one next action. Do not broaden provider activation, routing eligibility, or workload allowance.\n\n${specialistObjective}`}
             // /workspace is the canonical route owned by the COO persona. The
             // prompt carries the provider-page facts while the COO delegates

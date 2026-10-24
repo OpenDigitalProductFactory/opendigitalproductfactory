@@ -194,7 +194,7 @@ Accordingly:
 | `work-sample assessment` | A representative task performed end-to-end through the subject's real production execution path, judged afterwards against declared assessment criteria |
 | `assessment criterion` | A single independently checkable assertion about a recorded work sample, stated as the competency being assured |
 | `governed execution record` | The authoritative retained log of operations an agent actually performed, independent of any one execution transport's instrumentation |
-| `authorization envelope` | The set of operations a subject's grants and permitted consequence classes allow, as distinct from any narrower surface an assessment harness presents |
+| `authorization envelope` | The operations permitted at the time of execution by the intersection of principal authority, agent grants, route/workflow/GPP restrictions, permitted consequence classes and the applicable qualification, data, regulatory and oversight ceilings; a non-authoritative discovery list is not this envelope |
 | `surveillance` | Ongoing monitoring used to determine whether a qualification remains valid between formal reassessments |
 | `material change` | A change capable of altering job performance, risk, data handling, authority, or the validity of prior evidence |
 | `proactivity` | The requested degree of initiative an agent may take before involving a human |
@@ -385,6 +385,44 @@ The qualification scope `MUST` name the supported Workroom shapes, work/activity
 risk, tools, data classes, and allowed oversight posture. A material change to the shape registry,
 conformance logic, coordinator instructions, tools, model/provider, or authority binding triggers
 the Section 13 impact and revalidation rules.
+
+**Informative application of Sections 8.2, 8.3, 11.5 and 13.** The
+[cross-workroom review profile](../superpowers/specs/2026-09-06-cross-workroom-learning-review-design.md)
+records effective source/shape and archetype-profile versions, tool/skill/instruction versions,
+evidence scope and missing attribution alongside a proposed learning. Its analyst and assessor
+need competence in selecting comparable denominators, separating retries from independent
+occurrences, interpreting valid refusals, reporting uncertainty and reconstructing safe recovery.
+Qualification to execute a business activity does not itself establish competence to assess
+improvements across that activity's workrooms.
+
+For this proposed application, the assessor precommits the eligible population, critical failures,
+minimum opportunity window and decision rule before observing the candidate. The change author
+does not certify its benefit. Common-to-domain and domain-to-common transfer use the target-profile
+evidence or equivalence process in Section 8.2; changes to the reviewer, evaluator, method or
+effective profile receive the applicable Section 13 impact analysis. Insufficient observations
+remain inconclusive. This note explains application of existing requirements; it does not confer
+qualification, widen authority or adopt additional conformance requirements.
+
+### 8.4 Qualification of Principle-Directed Work
+
+**Working-draft amendment, EP-B932453F / BI-A484D58F.** `JSI-PD-001`: a scheme
+assessing principle-directed work `MUST` evaluate the subject's ability to select
+the owning scope, distinguish constraints from preferences, recognize insufficient
+evidence, and seek the correct resolver without fabricating authority. The scheme
+`MUST` bind those results to the assessed corpus/axis versions, work shape, model
+routing, tool/data boundaries and oversight configuration.
+
+`JSI-PD-002`: transfer to another harness or operating profile `MUST` retain the
+original evidence scope and require target-profile assessment or an attributable,
+scheme-defined equivalence decision. Unsupported enforcement capabilities `MUST`
+be reported as limitations rather than inferred from successfully imported prose
+or skills. A portable definition can remain `TAK-JSI-Defined` without being
+`TAK-JSI-Assessed` or `TAK-JSI-Qualified`.
+
+These clauses refine §§8.1, 8.2 and 13. TAK owns live authorization and the
+[principle-directed control contract](trusted-ai-kernel.md#713-principle-directed-decision-contract).
+Independent review remains pending; no existing qualification is upgraded by this
+draft amendment.
 
 ## 9. Model and Provider Suitability
 
@@ -608,18 +646,24 @@ Schemes `SHOULD` therefore:
 #### 11.4.3 Authorization-envelope rule
 
 Where a criterion tests whether the subject stayed within bounds, the bound `MUST` be the
-subject's **authorization envelope** — what its grants and the operation's consequence class
-permit — and `MUST NOT` be whatever narrower list the assessment harness happened to present.
+subject's **authorization envelope** at the time of each operation, applying TAK §7.2 and the
+ceilings in §14. Grants and consequence class are necessary inputs, not the whole intersection.
+The criterion `MUST NOT` ignore a principal, route, workflow, Workroom/GPP, qualification, data,
+regulatory or oversight restriction merely because the agent holds the tool's grant.
 
-The two differ routinely and legitimately. A harness may attach a curated subset for a focused
-task while the subject's runtime exposes its full authorized read surface; an operation drawn from
-the wider surface is authorized, audited, and correct, yet a naive membership test scores it as a
-scope violation. Penalizing it teaches the wrong lesson and masks real violations in noise.
+A harness may curate a discovery list for focus without making that list an authority control.
+An operation outside such a list is not a scope violation solely because it was omitted, provided
+the full authorization intersection permits it. The assessment `MUST` declare whether its list is
+non-authoritative discovery curation or an enforced scope restriction. An actual task, route,
+workflow or GPP restriction remains binding even when another transport exposes more tools.
 
-An operation is inside the envelope when it is authorized by the subject's grants **and** its
-consequence class is permitted for the assessment. Operations that are unauthorized,
-consequential when consequence was withheld, or absent from the capability registry are outside
-it, and the criterion `SHOULD` report which of those three applies.
+For each executed operation, retained evidence `MUST` identify the applicable authority and
+scope decision sufficiently to distinguish an authorized operation from a real boundary violation.
+An executed operation outside that intersection, consequential when consequence was withheld,
+or absent from the capability registry is outside the envelope. The criterion `SHOULD` report
+which restriction applied. A denied request is not an executed operation; other declared criteria
+may still assess whether making that request was appropriate. Missing authority evidence is
+inconclusive under §11.4.4, never evidence that the operation was authorized.
 
 #### 11.4.4 Inconclusive results
 

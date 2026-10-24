@@ -1,14 +1,14 @@
 ---
-status: draft
+status: active
 ---
 
 # Work shapes — one taxonomy, gates proportional to size and risk
 
 - **Epic:** EP-129D11FD (Initiative Readiness and Governed Completion Enforcement)
 - **Backlog item:** BI-B5C8FEFC
-- **Profile:** cross-domain (policy spans backlog, Workroom, Build Studio, readiness)
+- **Profile:** feature (the item's authoritative classification, workType `feature`; the policy spans backlog, Workroom, Build Studio and readiness, but a review receipt must name the item's own profile, not the reach of the policy)
 - **Authored:** 2026-09-02
-- **Status:** draft — 4 of 5 decisions ruled by the kernel (§5); founder input open on who may declare `break-fix`; execution readiness in §5.1
+- **Status:** active — 4 of 5 decisions ruled by the kernel (§5); decision 2 taken at its conservative default (human-only) and marked founder-revisable; execution sequence in §5.1
 - **Provenance:** BI-B3AB7FC9 (PR #4999) was a one-afternoon diagnosis-to-merge fix that could not be closed because the completion gate demanded a research receipt, a plan-coverage record, an independently approved spec baseline, acceptance evidence, and objective reconciliation. BI-28E8CB88, BI-F0715C9C and BI-3AE38A1F record the same wall from three other fixes.
 
 ## 1. Problem
@@ -32,6 +32,26 @@ Consequences measured on the live install (2026-08-28 to 2026-09-02):
 - `Workroom` has no shape of its own (`work-coordination.prisma:340`) and inherits the bound item's profile, so a Workroom for an emergency repair is governed exactly like one for a feature.
 
 The pressure this creates is documented in BI-28E8CB88: the path of least resistance is to author research docs and plans *after the fact* to satisfy the projector. That converts a reporting defect into falsified governance history.
+
+## 1.1 Objectives and acceptance
+
+Objective statements and acceptance criteria are marked so a spec-approval receipt can mint the scope baseline from this document (`baseline-manifest.ts`). Each acceptance row names the objectives it proves.
+
+- **OBJ-SHAPE-TAXONOMY:** One delivery-shape taxonomy (break-fix, small, medium, large, xlarge) is the fifth Workroom shape axis, declared or derived at claim time, and every governance gate is keyed by (shape, sensitivity, target).
+- **OBJ-PROPORTIONAL-GATES:** No shape owes an artifact the work does not naturally produce: small and medium mint their objective baseline from the item body, large from an approved spec, xlarge from a decomposition hypothesis; completion requirements are conditional on shape.
+- **OBJ-DELIVERY-TRUNK:** A merged SHA reachable from main with green required checks satisfies delivery evidence for every shape, read from the Workroom head or the linked PR, without a manifest or a bound Workroom.
+- **OBJ-EXPEDITE-AUDITED:** A break-fix lane skips pre-authorisation, owes a post-implementation review receipt within 48 hours, is limited to one open per installation, and is surfaced as a share on Right Now.
+- **OBJ-SEALED-RULINGS:** Kernel rulings that shape this policy are sealed in the decision ledger with a decision id, so a shaped claim binds to a recorded verdict rather than advice.
+
+| Acceptance | Objectives | Statement |
+|---|---|---|
+| AC-SMALL-CLOSES-ON-MERGE | OBJ-SHAPE-TAXONOMY, OBJ-PROPORTIONAL-GATES, OBJ-DELIVERY-TRUNK | A small fix claimed with a declared shape closes on merge with a runtime check and no spec, plan, or reconciliation receipt. |
+| AC-CLAIM-ASKS-FOR-SHAPE | OBJ-SHAPE-TAXONOMY | A claim whose shape is not declared and not confidently derivable is refused with the five-shape pick list, and an unattended caller stops with attention routed to the owner. |
+| AC-LARGE-KEEPS-GATES | OBJ-PROPORTIONAL-GATES | A large item still owes an approved spec, a plan with coverage, architecture review, and acceptance evidence against its baseline. |
+| AC-HIGH-SENSITIVITY-RAISES | OBJ-PROPORTIONAL-GATES | A small item at high sensitivity owes the large gates; lowering a shape is a recorded override visible on the item. |
+| AC-BREAK-FIX-PIR | OBJ-EXPEDITE-AUDITED | A break-fix declared by a human closes on its PIR receipt; a second declaration while one is open is refused; a missed PIR flips the item to input-required. |
+| AC-PRE-TAXONOMY-UNTOUCHED | OBJ-PROPORTIONAL-GATES | An item with no shape keeps today's profile behaviour and a done item is never re-blocked. |
+| AC-LEDGER-RECORDS | OBJ-SEALED-RULINGS | principle_decide on the live install returns a decision id with ledger.recorded true. |
 
 ## 2. Research & Benchmarking
 
@@ -68,6 +88,21 @@ One axis of **delivery shape** (size and lifecycle), one orthogonal axis of **ri
 Every stage whose advance merges, deploys or changes authority is a `governed-decision` advance, exactly as the standing shapes already declare.
 
 ### 3.1 Shapes
+
+**Recovery composition amendment (2026-09-05):** delivery size/risk and recovery
+behavior are independent. The single Workroom activity-shape reference must not
+be overwritten with a PR watch to obtain retries at the cost of losing delivery
+gates. Compose the shared recovery stages inside each applicable delivery shape;
+keep its evidence obligations, budget and collaboration requirements. The
+[throughput design sections 8.1–8.3](2026-09-03-local-first-agentic-delivery-throughput-design.md#81-reviewer-recovery-and-receipt-settlement)
+own the recovery contract, version migration, BPMN/SysML projection, and runtime
+binding prerequisites. Those sections distinguish existing v1 observation from
+the proposed v2 recovery behavior; no undeployed key is a valid runtime binding.
+
+Coverage failures must return their specific prerequisite even when a doc-only
+implementation projection otherwise passes. Do not up-classify documentation to
+manufacture a reviewer route. Diagram nodes and UI status derive from receipts
+and the current version, never from TaskRun completion or the existence of a claim.
 
 | Shape | What it is | Appetite | Carrier | Examples |
 |---|---|---|---|---|
@@ -111,7 +146,7 @@ Derived at triage from signals already on the item; overridable with a recorded 
 2. Work type `doc|chore` → `small` unless effortSize says otherwise.
 3. `effortSize` drives `small|medium|large|xlarge` for everything else.
 4. Any of: new Prisma model or enum value, new MCP tool, new route, new agent role, new archetype → at least `large` (this is the `verify-substrate-before-proposing-new` principle turned into a classifier).
-5. Sensitivity keyword regex plus org risk posture → sensitivity floor (exists today).
+5. Sensitivity keyword regex plus org risk posture → sensitivity floor (exists today). *Superseded for the readiness gate by `2026-09-25-shape-raise-reads-the-change-design.md` (BI-243BC956): sensitivity is read from the change; the keyword regex is a labelled fallback only.*
 6. **Unclassified → `large` + `high`.** Never `small`. A shape must be an explicit act.
 7. `xlarge` cannot enter implementation. The only legal transition is decomposition.
 
@@ -134,6 +169,12 @@ Derived at triage from signals already on the item; overridable with a recorded 
 
 Principles encoded in the table:
 
+Implementation correction BI-DA407BD9 restores the xlarge completion row: valid
+decomposition coverage and completed children supply aggregate delivery, while
+the parent's actual outcome reconciliation supplies acceptance. The parent
+still cannot enter implementation, and its own PR merge or deployment cannot
+stand in for unfinished children or unverified outcomes.
+
 - **Delivery evidence is the trunk, not a manifest.** For every shape, "merged SHA reachable from `main` with green required checks" satisfies `DELIVERY_EVIDENCE_REQUIRED`. The current merge-through-gates hatch becomes the primary path and must not require a Workroom: it takes the PR's merge SHA from the item's linked PR when no Workroom exists.
 - **The objective baseline scales with the shape.** Today only a spec approval can mint one, so anything without a spec cannot reconcile. `small` and `medium` mint their baseline from the item's acceptance criteria at triage. `OBJECTIVE_RECONCILIATION_REQUIRED` applies to `large` and `xlarge` only; smaller shapes reconcile through acceptance.
 - **The expedite lane is real, narrow and audited.** `break-fix` skips pre-authorisation and owes a post-implementation review receipt within 48 hours. A missed PIR flips the item to `input-required` and blocks the author's next `break-fix` declaration. The share of `break-fix` among merged work is a Right Now / governance signal; above 20% in a rolling week it is a finding, not a number.
@@ -152,7 +193,13 @@ Per founder direction, the five open questions were put to the kernel (`principl
 | 4 | How far does high sensitivity raise a `small`? | **To `large` gates** (overrides the author's one-step) | high · 0.73 | Destructive actions require explicit go; Never wipe the DB to fix code |
 | 5 | The 33 pre-taxonomy `done` items? | **Leave them; null shape = pre-taxonomy** | high · 1.70 | Propose, Acknowledge, Reassign; Human-in-the-Loop at Phase Boundaries |
 
-Consequences folded into §4: the `medium` row's independent review is an eligible independent reviewer's acceptance receipt (a coworker qualifies; this is not a board), and the `small` + `high` sensitivity cell carries `large` gates. Decision 2 is the only founder input still required; the spec proceeds with the narrower option (human-only) as the default until ruled, since the kernel's tie broke that way and it is the safer floor.
+Consequences folded into §4: the `medium` row's independent review is an eligible independent reviewer's acceptance receipt (a coworker qualifies; this is not a board), and the `small` + `high` sensitivity cell carries `large` gates. **Decision 2 is taken at its conservative default: only a human operator with `view_platform` may declare `break-fix`.** The kernel's tie broke that way and it is the safer floor. The founder may widen it to the operations coworker (when an incident record exists) by a one-line amendment to this section; nothing in the plan depends on which way that goes.
+
+Human consent may be executed through a coworker after the operator approves the exact declaration in the existing action inbox (BI-E6E2E704). The governing executor must reserve the matching, unexpired action envelope before the handler runs. The declaration retains the approving person's user identity, the acting coworker and the envelope reference; this does not give the coworker independent declaring authority. Policy-derived approvals and client-supplied envelope references are insufficient. WIP-1, overdue PIR and independent review requirements still apply. A claim's shape marker is not a declaration receipt.
+
+The existing bound-authority envelope stores its binding and human-decision metadata in `argsJson`; execution recovers tool parameters from the recorded pending call and verifies the input fingerprint. Only envelopes with an `approvalBindingFingerprint` and stored binding receive that metadata. Screen-action envelopes instead store executable arguments in `argsJson`, which approval leaves unchanged. The overdue-PIR rule remains per author as specified in §4 and in the preexisting declaration query; this repair does not change that policy.
+
+This repair adds human-decision metadata to the existing action envelope, with no schema migration or grant changes. Existing envelopes without that metadata require a fresh human decision; do not backfill consent. Fresh and upgraded installations use the same execution path. Regression coverage includes exact-call execution, expired/replayed/mismatched and forged approvals, preserved input binding, shape-only claims, WIP-1 and overdue PIR refusals. Canonical-runtime acceptance must repeat an inbox-approved declaration and confirm both identities in its audit receipt before this repair is reported as live-verified.
 
 **Gap surfaced by the ratification itself (BI-218EC195):** every call returned `ledger.recorded: false, reason: profile-not-provisioned` for `dpf-organizational-principles`. The kernel can rule but cannot seal a decision record on this install, so its rulings are advisory until that is fixed. That is a precondition for "WWMD automates approvals", not a nice-to-have: an approval nothing can cite is advice.
 
@@ -164,11 +211,11 @@ Related, adjacent items this spec now binds to: BI-C8C4031C (document the shape 
 |---|---|---|
 | Design ratified | 4 of 5 decisions ruled by the kernel; 1 founder input open (who declares break-fix) | table above; BI-B5C8FEFC activity cmtkut5xx09or01pgks0ni72l |
 | Substrate exists | `workShape` registry, scope-claim persistence, claim handler, Workroom header all present | §3.0; `apps/web/lib/work-management/work-shapes.ts`; `governed-work-claim.ts:249-360` |
-| Decision ledger seals verdicts | **No** — `profile-not-provisioned` on this install | BI-218EC195 |
+| Decision ledger seals verdicts | **Yes** since 2026-09-06 — the fallback profile carries a version (PR #5083); `principle_decide` recorded DI-C0989B8514AF on this install | BI-218EC195 (shipped) |
 | Reviewer capacity for `large` gates | Fragile — reviewers exist (AGT-WS-PORTFOLIO, ea-architect) but bounded-budget reviewers have stopped before their terminal receipt write | BI-8B8731EE, BI-28E8CB88 activity cmtf85p3403dy01phlttlc1z6 |
 | Plan with backlog coverage | Not yet written | §6 is the outline; the plan is the next artifact |
 
-Verdict: **ready to plan, not yet ready to build.** The plan can be written now. Building should start with BI-218EC195 so the first delivery-shape claim can bind to a sealed kernel verdict rather than an advisory one.
+Verdict: **the design is final and the plan may proceed.** Implementation is sequenced in `docs/superpowers/plans/2026-09-05-work-shape-taxonomy-implementation.md` and started with BI-218EC195 (shipped) so the first delivery-shape claim binds to a sealed kernel verdict rather than an advisory one; the row marked Fragile above is a plan phase, not a reason to hold the design.
 
 ## 6. Implementation outline (for the plan that follows this spec)
 
@@ -182,6 +229,10 @@ Verdict: **ready to plan, not yet ready to build.** The plan can be written now.
 8. **Tests:** policy table tests per (shape, sensitivity, target); classifier fixtures for every rule in §3.3 including unclassified-defaults-strict; expedite abuse fixtures (missed PIR, WIP > 1, self-PIR).
 
 Estimated size of this work: `large` (schema + policy + three consumers), decomposed into 4–6 `medium` children under EP-129D11FD.
+
+## 6.1 Plan and backlog coverage
+
+Implementation plan: `docs/superpowers/plans/2026-09-05-work-shape-taxonomy-implementation.md` (Workroom `WC-FFEB51C2`, branch `doc/work-shape-plan`). Seven children under `EP-129D11FD`, dependency-ordered: `BI-218EC195` (ledger seals rulings) → `BI-B90F7CBB` (registry) → `BI-02470C7E` (claim asks) → `BI-B269FC72` (readiness v3) → `BI-AFE8BB73` (delivery from trunk) and `BI-F2FEC1EB` (expedite lane) → `BI-D03BE728` (visibility, matrix, docs). The parent `BI-B5C8FEFC` closes against the §4 gate table as its objective baseline and the plan's completion gate as its acceptance.
 
 ## 7. What this does not change
 

@@ -73,7 +73,13 @@ if (flags.has("help") || flags.has("h")) {
   process.exit(0);
 }
 
+if (values["auth-mode"] && !["oauth", "legacy"].includes(values["auth-mode"])) {
+  process.stderr.write("compute-plan: --auth-mode must be oauth or legacy\n");
+  process.exit(64);
+}
+
 const options: ComputeAgentToolchainPlanOptions = {
+  authMode: values["auth-mode"] === "legacy" ? "legacy" : "oauth",
   repoRoot: requireArg(values, "repo-root"),
   codexConfigPath: requireArg(values, "codex-config"),
   claudePluginsPath: requireArg(values, "claude-plugins"),

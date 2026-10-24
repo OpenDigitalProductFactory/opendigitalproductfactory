@@ -11,138 +11,30 @@
 // Definitions moved verbatim out of the inline PLATFORM_TOOLS array; grants
 // mirror agent-grants.ts TOOL_TO_GRANTS, which stays the gating source.
 
-import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
-import { createHash } from "node:crypto";
+import { pageSource, boundedInteger } from "@/lib/source-page";
+import {
+  SOURCE_READ_DEFAULT_MAX_CHARS,
+  SOURCE_READ_DEFAULT_MAX_LINES,
+  SOURCE_READ_MAX_CHARS,
+  SOURCE_READ_MAX_LINES,
+} from "@/lib/source-page-lines";
 
-const DEFAULT_READ_MAX_LINES = 40;
-const MAX_READ_LINES = 200;
-const DEFAULT_READ_MAX_CHARS = 3_000;
-const MAX_READ_CHARS = 3_200;
+// BI-8B8731EE: a governed reviewer gets a bounded number of immutable reads
+// (terminal-tool-policy maximumReaderCalls = 6) before it must write its
+// receipt. At 40 lines / 3,000 chars a page that is ~19 KB of artifact, and a
+// 25 KB design spec ran every reviewer out of budget four times in one night
+// without a verdict. A default page now carries a whole medium document, and
+// the cap allows a long one in two or three reads. Pages stay bounded: this
+// is still a paged reader, not a whole-file dump.
+const DEFAULT_READ_MAX_LINES = SOURCE_READ_DEFAULT_MAX_LINES;
+const MAX_READ_LINES = SOURCE_READ_MAX_LINES;
+const DEFAULT_READ_MAX_CHARS = SOURCE_READ_DEFAULT_MAX_CHARS;
+const MAX_READ_CHARS = SOURCE_READ_MAX_CHARS;
 const DEFAULT_SEARCH_RESULTS = 20;
 const MAX_SEARCH_RESULTS = 50;
 const MAX_SEARCH_OFFSET = 2_000;
-
-type ReadCursor = { v: 1; offset: number; binding: string };
-type SourcePage = {
-  path: string;
-  version: string;
-  blobId: string;
-  content: string;
-  startLine: number;
-  endLine: number;
-  totalLines: number;
-  hasMore: boolean;
-  nextCursor: string | null;
-};
-
-function boundedInteger(value: unknown, fallback: number, min: number, max: number): number {
-  if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
-  return Math.min(max, Math.max(min, Math.floor(value)));
-}
-
-function blobBinding(ref: string, path: string, blobId: string): string {
-  return createHash("sha256").update(`${ref}\0${path}\0${blobId}`).digest("hex");
-}
-
-function encodeReadCursor(cursor: ReadCursor): string {
-  return Buffer.from(JSON.stringify(cursor), "utf8").toString("base64url");
-}
-
-function decodeReadCursor(value: unknown, binding: string): ReadCursor | null {
-  if (typeof value !== "string" || value.length === 0 || value.length > 512) return null;
-  try {
-    const parsed = JSON.parse(Buffer.from(value, "base64url").toString("utf8")) as Partial<ReadCursor>;
-    return parsed.v === 1
-      && Number.isSafeInteger(parsed.offset)
-      && (parsed.offset ?? -1) >= 0
-      && parsed.binding === binding
-      ? parsed as ReadCursor
-      : null;
-  } catch {
-    return null;
-  }
-}
-
-function countSourceLines(content: string): number {
-  if (content.length === 0) return 0;
-  const newlines = content.match(/\n/g)?.length ?? 0;
-  return newlines + (content.endsWith("\n") ? 0 : 1);
-}
-
-function offsetForLine(content: string, line: number): number | null {
-  if (line <= 1) return 0;
-  let current = 1;
-  for (let index = 0; index < content.length; index++) {
-    if (content[index] !== "\n") continue;
-    current++;
-    if (current === line) return index + 1;
-  }
-  return null;
-}
-
-function lineAtOffset(content: string, offset: number): number {
-  let line = 1;
-  for (let index = 0; index < Math.min(offset, content.length); index++) {
-    if (content[index] === "\n") line++;
-  }
-  return line;
-}
-
-function endOffsetForLines(content: string, offset: number, maxLines: number): number {
-  let lines = 0;
-  for (let index = offset; index < content.length; index++) {
-    if (content[index] !== "\n") continue;
-    lines++;
-    if (lines === maxLines) return index + 1;
-  }
-  return content.length;
-}
-
-function pageSource(input: {
-  content: string;
-  ref: string;
-  path: string;
-  blobId: string;
-  cursor?: unknown;
-  startLine?: unknown;
-  maxLines?: unknown;
-  maxChars?: unknown;
-}): { error: string } | SourcePage {
-  const binding = blobBinding(input.ref, input.path, input.blobId);
-  const decoded = input.cursor === undefined ? null : decodeReadCursor(input.cursor, binding);
-  if (input.cursor !== undefined && !decoded) return { error: "invalid_cursor" };
-  const requestedLine = boundedInteger(input.startLine, 1, 1, Number.MAX_SAFE_INTEGER);
-  const startOffset = decoded?.offset ?? offsetForLine(input.content, requestedLine);
-  if (startOffset === null || startOffset > input.content.length) return { error: "invalid_source_range" };
-  const maxLines = boundedInteger(input.maxLines, DEFAULT_READ_MAX_LINES, 1, MAX_READ_LINES);
-  const maxChars = boundedInteger(input.maxChars, DEFAULT_READ_MAX_CHARS, 1, MAX_READ_CHARS);
-  const endOffset = Math.min(
-    input.content.length,
-    startOffset + maxChars,
-    endOffsetForLines(input.content, startOffset, maxLines),
-  );
-  const content = input.content.slice(startOffset, endOffset);
-  const startLine = lineAtOffset(input.content, startOffset);
-  const newlineCount = content.match(/\n/g)?.length ?? 0;
-  const endLine = content.length === 0
-    ? Math.max(0, startLine - 1)
-    : startLine + newlineCount - (content.endsWith("\n") ? 1 : 0);
-  const hasMore = endOffset < input.content.length;
-  return {
-    path: input.path,
-    version: input.ref,
-    blobId: input.blobId,
-    content,
-    startLine,
-    endLine,
-    totalLines: countSourceLines(input.content),
-    hasMore,
-    nextCursor: hasMore
-      ? encodeReadCursor({ v: 1, offset: endOffset, binding })
-      : null,
-  };
-}
 
 const definitions: ToolDefinition[] = [
   {
@@ -161,7 +53,7 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "read_source_at_version",
-    description: "Read a bounded page of a file at an immutable version. Continue with nextCursor or jump with startLine. Uses git history and works without a source checkout.",
+    description: "Read a bounded page at an immutable version. Continue with nextCursor or jump with startLine. Git history works without a source checkout. An initiative-body-version path reads retained criteria only for its exact authorized acceptance TaskRun.",
     inputSchema: {
       type: "object",
       properties: {
@@ -172,9 +64,35 @@ const definitions: ToolDefinition[] = [
         cursor: { type: "string", description: "Opaque nextCursor from the prior page; overrides startLine" },
         maxLines: { type: "number", description: `Maximum lines in one page (default ${DEFAULT_READ_MAX_LINES}, max ${MAX_READ_LINES})` },
         maxChars: { type: "number", description: `Maximum source characters in one page (default ${DEFAULT_READ_MAX_CHARS}, max ${MAX_READ_CHARS})` },
-        expectedBlobId: { type: "string", description: "Expected immutable git blob id; mismatch fails closed" },
+        expectedBlobId: { type: "string", description: "Expected immutable git blob id or bound criteria digest; mismatch fails closed" },
       },
       required: ["path"],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+    retainAuditParameters: true,
+  },
+  {
+    // BI-926A7E90: a Build Studio design is an accepted BuildArtifactRevision,
+    // not a repository blob. This reader serves it with the same page shape and
+    // the same four identity keys as read_source_at_version, so the governed
+    // reviewer's terminal policy binds and verifies it the same way.
+    name: "read_build_artifact_revision",
+    description: "Read a bounded page of an accepted Build Studio artifact revision at its immutable identity. path is build-artifact-revision/<revisionId>, version is the revision id, expectedBlobId is its value digest. Continue with nextCursor or jump with startLine.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        repositoryFullName: { type: "string", description: "Canonical repository owner/name the Workroom is bound to" },
+        path: { type: "string", description: "build-artifact-revision/<revisionId>" },
+        version: { type: "string", description: "The BuildArtifactRevision id" },
+        startLine: { type: "number", description: "1-based line to start at (default 1)" },
+        cursor: { type: "string", description: "Opaque nextCursor from the prior page; overrides startLine" },
+        maxLines: { type: "number", description: `Maximum lines in one page (default ${DEFAULT_READ_MAX_LINES}, max ${MAX_READ_LINES})` },
+        maxChars: { type: "number", description: `Maximum source characters in one page (default ${DEFAULT_READ_MAX_CHARS}, max ${MAX_READ_CHARS})` },
+        expectedBlobId: { type: "string", description: "Expected value digest of the revision; mismatch fails closed" },
+      },
+      required: ["path", "version", "expectedBlobId"],
     },
     requiredCapability: "view_platform",
     executionMode: "immediate",
@@ -278,10 +196,22 @@ async function readSourceAtVersionHandler(params: Record<string, unknown>): Prom
   const path = String(params.path ?? "");
   const repositoryFullName = typeof params.repositoryFullName === "string" ? params.repositoryFullName : null;
   const expectedBlobId = typeof params.expectedBlobId === "string" ? params.expectedBlobId : null;
+  // The provider fallback needs the canonical repository and an immutable
+  // commit. The blob id is verification when the caller has one (a bound review
+  // packet), not a precondition: a caller that knows only commit + path — a
+  // reviewer reached over native MCP, which never sees the bound schema — is
+  // still asking for an immutable artifact.
+  const isSha = (value: string) => /^[a-f0-9]{40}$/i.test(value);
   const providerBound = repositoryFullName !== null
-    && expectedBlobId !== null
-    && /^[a-f0-9]{40}$/i.test(ref)
-    && /^[a-f0-9]{40}$/i.test(expectedBlobId);
+    && isSha(ref)
+    && (expectedBlobId === null || isSha(expectedBlobId));
+  const providerInputsMissing = (): string => {
+    const missing: string[] = [];
+    if (repositoryFullName === null) missing.push("repositoryFullName (the canonical repository owner/name)");
+    if (!isSha(ref)) missing.push("version as the 40-character commit sha");
+    if (expectedBlobId !== null && !isSha(expectedBlobId)) missing.push("expectedBlobId as a 40-character blob sha, or omit it");
+    return `This deployment's git volume does not hold ${ref}:${path}. The repository provider serves any commit + path; pass ${missing.join(" and ")} to read it.`;
+  };
 
   let content: string | null = null;
   let blobId: string | null = null;
@@ -310,11 +240,7 @@ async function readSourceAtVersionHandler(params: Record<string, unknown>): Prom
 
   if (content === null || blobId === null) {
     if (!providerBound) {
-      return {
-        success: false,
-        error: localError,
-        message: localError === gitUnavailable ? "Git not available." : localError,
-      };
+      return { success: false, error: localError, message: providerInputsMissing() };
     }
     const { readRepositoryProviderBlob } = await import("@/lib/backlog/initiative-readiness/repository-artifact");
     const providerBlob = await readRepositoryProviderBlob({
@@ -324,12 +250,12 @@ async function readSourceAtVersionHandler(params: Record<string, unknown>): Prom
       expectedBlobId,
     });
     if (!providerBlob.ok) return { success: false, error: providerBlob.code, message: providerBlob.error };
+    blobId = providerBlob.blobId;
     try {
       content = new TextDecoder("utf-8", { fatal: true }).decode(providerBlob.data);
     } catch {
       return { success: false, error: "IMMUTABLE_SOURCE_NOT_UTF8", message: "Repository artifact is not valid UTF-8 source text." };
     }
-    blobId = expectedBlobId;
   }
   const page = pageSource({
     content,
@@ -348,6 +274,76 @@ async function readSourceAtVersionHandler(params: Record<string, unknown>): Prom
     success: true,
     message: `Read ${path} lines ${startLine}-${endLine} of ${totalLines} at ${ref}${more}.`,
     data: { ...page, ...(repositoryFullName ? { repositoryFullName } : {}) },
+  };
+}
+
+const BUILD_ARTIFACT_REVISION_PATH_PREFIX = "build-artifact-revision/";
+
+async function readBuildArtifactRevisionHandler(params: Record<string, unknown>): Promise<ToolResult> {
+  const path = String(params.path ?? "");
+  const version = typeof params.version === "string" ? params.version.trim() : "";
+  const expectedBlobId = typeof params.expectedBlobId === "string" ? params.expectedBlobId.trim() : "";
+  const repositoryFullName = typeof params.repositoryFullName === "string" ? params.repositoryFullName : null;
+  const revisionId = path.startsWith(BUILD_ARTIFACT_REVISION_PATH_PREFIX) ? path.slice(BUILD_ARTIFACT_REVISION_PATH_PREFIX.length) : "";
+  if (!revisionId || revisionId !== version) {
+    return {
+      success: false,
+      error: "invalid_revision_identity",
+      message: `path must be ${BUILD_ARTIFACT_REVISION_PATH_PREFIX}<revisionId> and version must be that same revision id.`,
+    };
+  }
+  if (!expectedBlobId) {
+    return { success: false, error: "expected_blob_required", message: "expectedBlobId (the revision's value digest) is required." };
+  }
+  const { prisma } = await import("@dpf/db");
+  const revision = await prisma.buildArtifactRevision.findUnique({
+    where: { id: revisionId },
+    select: { id: true, buildId: true, field: true, revisionNumber: true, status: true, valueDigest: true, value: true },
+  });
+  if (!revision) {
+    return { success: false, error: "IMMUTABLE_SOURCE_UNAVAILABLE", message: `No Build Studio artifact revision ${revisionId} exists.` };
+  }
+  // The install stores the digest as bare hex while receipts carry it as
+  // `sha256:<hex>`; a binding may arrive in either form. Compare the hex and
+  // echo the BOUND form, since the terminal policy checks the page's blobId
+  // against the binding it issued.
+  const bareHex = (value: string) => value.replace(/^sha256:/i, "").toLowerCase();
+  if (bareHex(revision.valueDigest) !== bareHex(expectedBlobId)) {
+    return {
+      success: false,
+      error: "immutable_blob_mismatch",
+      message: `Expected value digest ${expectedBlobId}, but revision ${revisionId} carries ${revision.valueDigest}.`,
+    };
+  }
+  const { initiativeTextFromBuildValue } = await import("@/lib/backlog/initiative-readiness/artifact-resolver");
+  const content = initiativeTextFromBuildValue(revision.value);
+  if (content === null) {
+    return { success: false, error: "IMMUTABLE_SOURCE_NOT_TEXT", message: "The revision value does not render as reviewable text." };
+  }
+  const page = pageSource({
+    content,
+    ref: version,
+    path,
+    blobId: expectedBlobId,
+    cursor: params.cursor,
+    startLine: params.startLine,
+    maxLines: params.maxLines,
+    maxChars: params.maxChars,
+  });
+  if ("error" in page) return { success: false, error: page.error, message: page.error };
+  const { startLine, endLine, totalLines } = page;
+  const more = page.hasMore ? " (more available)" : "";
+  return {
+    success: true,
+    message: `Read ${revision.field} revision ${revision.revisionNumber} of ${revision.buildId} (${revision.status}) lines ${startLine}-${endLine} of ${totalLines}${more}.`,
+    data: {
+      ...page,
+      ...(repositoryFullName ? { repositoryFullName } : {}),
+      buildId: revision.buildId,
+      field: revision.field,
+      revisionNumber: revision.revisionNumber,
+      status: revision.status,
+    },
   };
 }
 
@@ -420,7 +416,10 @@ async function compareVersionsHandler(params: Record<string, unknown>): Promise<
 
 const handlers: Record<string, ToolPackHandler> = {
   query_version_history: (params) => queryVersionHistoryHandler(params),
-  read_source_at_version: (params) => readSourceAtVersionHandler(params),
+  read_source_at_version: (params, userId, context) => String(params.path ?? "").startsWith("initiative-body-version/")
+    ? import("@/lib/backlog/initiative-readiness/body-baseline-reader").then(({ readInitiativeBodyVersion }) => readInitiativeBodyVersion(params, userId, context))
+    : readSourceAtVersionHandler(params),
+  read_build_artifact_revision: (params) => readBuildArtifactRevisionHandler(params),
   search_source_at_version: (params) => searchSourceAtVersionHandler(params),
   list_source_directory: (params) => listSourceDirectoryHandler(params),
   compare_versions: (params) => compareVersionsHandler(params),
@@ -433,6 +432,7 @@ export const versionHistoryPack: ToolPack = {
   grants: {
     query_version_history: ["file_read"],
     read_source_at_version: ["file_read"],
+    read_build_artifact_revision: ["file_read"],
     search_source_at_version: ["file_read"],
     list_source_directory: ["file_read"],
     compare_versions: ["file_read"],

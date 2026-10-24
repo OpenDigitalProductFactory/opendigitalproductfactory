@@ -176,7 +176,6 @@ function Write-EnvFile([string]$Path, [string]$InstallPath, $Ports) {
 POSTGRES_USER=dpf
 POSTGRES_PASSWORD=dpf_dev
 DATABASE_URL=postgresql://dpf:dpf_dev@postgres:5432/dpf
-NEO4J_AUTH=neo4j/dpf_dev_password
 AUTH_SECRET=$authSecret
 CREDENTIAL_ENCRYPTION_KEY=$credentialKey
 ADMIN_PASSWORD=changeme123

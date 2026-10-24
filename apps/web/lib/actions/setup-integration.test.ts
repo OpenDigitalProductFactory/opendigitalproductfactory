@@ -47,7 +47,7 @@ import {
 } from "./setup-progress";
 import { SETUP_STEPS } from "./setup-constants";
 
-// SETUP_STEPS has 11 entries:
+// SETUP_STEPS has 12 entries:
 //   0: account-bootstrap
 //   1: business-context
 //   2: ai-providers
@@ -55,10 +55,11 @@ import { SETUP_STEPS } from "./setup-constants";
 //   4: how-you-decide
 //   5: operating-hours
 //   6: storefront
-//   7: platform-development
-//   8: build-studio
-//   9: meet-your-coo
-//   10: workspace
+//   7: mailroom
+//   8: platform-development
+//   9: build-studio
+//   10: meet-your-coo
+//   11: workspace
 
 describe("setup flow integration", () => {
   it("walks through the full step sequence", async () => {
@@ -92,7 +93,12 @@ describe("setup flow integration", () => {
     expect(step5.currentStep).toBe("storefront");
 
     const step6 = await advanceStep(progress.id);
-    expect(step6.currentStep).toBe("platform-development");
+    expect(step6.currentStep).toBe("mailroom");
+
+    // Skip the Mailroom step — no mailbox to connect yet is a valid answer
+    // (design 2026-09-09 §4.9); the page keeps offering the connect flow.
+    const step6b = await skipStep(progress.id);
+    expect(step6b.currentStep).toBe("platform-development");
 
     const step7 = await advanceStep(progress.id);
     expect(step7.currentStep).toBe("build-studio");

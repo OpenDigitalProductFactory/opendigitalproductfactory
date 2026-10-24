@@ -1,6 +1,10 @@
 "use client";
 
 import { ExternalPublicationControl } from "./ExternalPublicationControl";
+import {
+  INTEGRATIONS_INDEX_HREF,
+  integrationSettingsHrefForChannel,
+} from "@/lib/tools/integration-settings-href";
 
 type Props = {
   draftId: string;
@@ -26,7 +30,7 @@ export function PublishLinkedInButton({
     <ExternalPublicationControl
       draftId={draftId}
       channelConnected={channelConnected}
-      connectHref={`/platform/tools/integrations/${channelId}`}
+      connectHref={integrationSettingsHrefForChannel(channelId) ?? INTEGRATIONS_INDEX_HREF}
       fitBlocked={fitBlocked}
       artifactTitle={artifactTitle}
       audience={audience}

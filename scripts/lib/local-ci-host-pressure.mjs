@@ -1,7 +1,9 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { statfs } from "node:fs/promises";
-import { cpus, freemem } from "node:os";
+import { cpus } from "node:os";
+
+import { availableMemoryBytes as readAvailableMemoryBytes } from "./host-available-memory.mjs";
 
 import { reconcileDeadLocalSandboxFence } from "./local-sandbox-fence.mjs";
 import { reconcileStaleLocalConvergenceLock } from "./local-convergence-lock.mjs";
@@ -109,7 +111,10 @@ export async function sampleLocalCiHostPressure({
   deps = {},
 }) {
   const now = deps.now ?? (() => new Date());
-  const freeMemoryBytes = deps.freeMemoryBytes ?? freemem;
+  // Reclaimable-inclusive, not the free page pool: on Darwin `os.freemem()`
+  // omits inactive/speculative/purgeable pages, so a sanctioned build drove
+  // this under the 4 GiB fence floor and killed itself (BI-EB6DBAF0).
+  const freeMemoryBytes = deps.freeMemoryBytes ?? readAvailableMemoryBytes;
   const cpuTimes = deps.cpuTimes ?? defaultCpuTimes;
   const delay = deps.delay ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
   const diskFreeBytes = deps.diskFreeBytes ?? defaultDiskFreeBytes;

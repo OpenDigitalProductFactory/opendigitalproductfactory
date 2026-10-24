@@ -77,4 +77,43 @@ describe("Work Case read model", () => {
       "evidence",
     ]);
   });
+
+  it("projects coworker engagements without requiring a WorkItem anchor", () => {
+    const detail = buildWorkCaseDetail({
+      source: { sourceType: "coworker-engagement", sourceId: "CE-1", status: "needs-approval" },
+      coworkerEngagement: {
+        engagementId: "CE-1",
+        requestedOutcome: "Prepare the municipal launch readiness packet.",
+        status: "needs-approval",
+        priority: "high",
+        providerDisplayName: "Launch Readiness Coworker",
+      },
+      evidence: [{
+        evidenceId: "coworker-engagement:CE-1:approval-context",
+        kind: "approval-context",
+        summary: "Paid provider approval is required before work begins.",
+      }],
+    });
+
+    expect(detail.summary).toMatchObject({
+      caseId: "coworker-engagement:CE-1",
+      title: "Prepare the municipal launch readiness packet.",
+      sourceLabel: "Coworker engagement",
+      state: "awaiting-decision",
+      nextAction: "Resolve pending decision",
+      attention: {
+        required: true,
+        reason: expect.stringContaining("approval"),
+      },
+    });
+    expect(detail.summary.sourceRefs).toContainEqual({
+      kind: "coworker-engagement",
+      id: "CE-1",
+      status: "needs-approval",
+    });
+    expect(detail.timeline.map((event) => event.sourceRef.kind)).toEqual([
+      "coworker-engagement",
+      "evidence",
+    ]);
+  });
 });

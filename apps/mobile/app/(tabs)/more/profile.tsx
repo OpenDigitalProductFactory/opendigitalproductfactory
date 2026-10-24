@@ -1,7 +1,7 @@
 import React from "react";
 import { View, Text, StyleSheet, Alert } from "react-native";
 import { useRouter } from "expo-router";
-import { colors, spacing, borderRadius } from "@/src/lib/theme";
+import { colors, spacing } from "@/src/lib/theme";
 import { Card } from "@/src/components/ui/Card";
 import { Button } from "@/src/components/ui/Button";
 import { useAuthStore } from "@/src/features/auth/auth.store";

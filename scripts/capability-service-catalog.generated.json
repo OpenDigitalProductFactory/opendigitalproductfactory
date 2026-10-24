@@ -25,7 +25,7 @@
             "windows"
           ],
           "ports": [
-            "8600:8600"
+            "${DPF_HOST_BIND_ADDRESS:-127.0.0.1}:8600:8600"
           ],
           "profiles": [
             "integrations-adp"
@@ -62,7 +62,7 @@
             "windows"
           ],
           "ports": [
-            "8500:8500"
+            "${DPF_HOST_BIND_ADDRESS:-127.0.0.1}:8500:8500"
           ],
           "profiles": [
             "runtime-browser-automation"
@@ -104,7 +104,7 @@
             "windows"
           ],
           "ports": [
-            "3035:3000"
+            "${DPF_HOST_BIND_ADDRESS:-127.0.0.1}:3035:3000"
           ],
           "profiles": [
             "runtime-build"
@@ -179,6 +179,32 @@
       "externalRuntimes": [],
       "services": [
         {
+          "backupPolicy": "excluded-rebuildable",
+          "boundaryReason": "Universal log shipper feeding loki; promoted with it (BI-F8024A9D) because a capture layer nobody enabled is a capture layer that does not exist.",
+          "canonicalDataOwner": "none",
+          "capability": "runtime:core",
+          "class": "universal-core",
+          "defaultRequired": true,
+          "dependsOn": [
+            "loki"
+          ],
+          "healthSemantics": "consumer-observed",
+          "hostPlatforms": [
+            "linux",
+            "macos",
+            "windows"
+          ],
+          "ports": [],
+          "profiles": [],
+          "service": "alloy",
+          "targetClassification": "universal-core",
+          "volumes": [
+            "./monitoring/alloy/config.alloy:/etc/alloy/config.alloy:ro",
+            "/var/run/docker.sock:/var/run/docker.sock:ro",
+            "alloy_data:/var/lib/alloy/data"
+          ]
+        },
+        {
           "backupPolicy": "separate-required",
           "boundaryReason": "Universal durable execution endpoint required by the portal's unconditional INNGEST_BASE_URL contract.",
           "canonicalDataOwner": "postgres-and-redis",
@@ -196,13 +222,39 @@
             "windows"
           ],
           "ports": [
-            "8288:8288",
-            "8289:8289"
+            "${DPF_HOST_BIND_ADDRESS:-127.0.0.1}:8288:8288",
+            "${DPF_HOST_BIND_ADDRESS:-127.0.0.1}:8289:8289"
           ],
           "profiles": [],
           "service": "inngest",
           "targetClassification": "universal-core",
           "volumes": []
+        },
+        {
+          "backupPolicy": "separate-required",
+          "boundaryReason": "Universal log store: container log capture is a platform guarantee, not an opt-in capability (BI-F8024A9D). Reads logs via the Docker socket with no host-path bind mount, so it runs on every supported host.",
+          "canonicalDataOwner": "loki",
+          "capability": "runtime:core",
+          "class": "universal-core",
+          "defaultRequired": true,
+          "dependsOn": [],
+          "healthSemantics": "consumer-observed",
+          "hostPlatforms": [
+            "linux",
+            "macos",
+            "windows"
+          ],
+          "ports": [
+            "127.0.0.1:3100:3100"
+          ],
+          "profiles": [],
+          "service": "loki",
+          "targetClassification": "universal-core",
+          "volumes": [
+            "./monitoring/loki/loki-config.yml:/etc/loki/local-config.yaml:ro",
+            "./monitoring/loki/rules/dpf-log-alerts.yml:/loki/rules-config/fake/dpf-log-alerts.yml:ro",
+            "loki_data:/loki"
+          ]
         },
         {
           "backupPolicy": "included",
@@ -221,9 +273,9 @@
             "windows"
           ],
           "ports": [
-            "${DPF_LDAP_BIND_ADDRESS:-127.0.0.1}:${DPF_LDAP_PORT:-636}:${DPF_LDAP_PORT:-636}",
-            "1455:3000",
-            "3000:3000"
+            "${DPF_HOST_BIND_ADDRESS:-127.0.0.1}:1455:3000",
+            "${DPF_HOST_BIND_ADDRESS:-127.0.0.1}:3000:3000",
+            "${DPF_LDAP_BIND_ADDRESS:-${DPF_HOST_BIND_ADDRESS:-127.0.0.1}}:${DPF_LDAP_PORT:-636}:${DPF_LDAP_PORT:-636}"
           ],
           "profiles": [],
           "service": "portal",
@@ -237,6 +289,7 @@
             "/var/run/docker.sock:/var/run/docker.sock",
             "browser_evidence:/evidence:ro",
             "dpf-source-code:/workspace",
+            "map_data:/var/lib/dpf/maps",
             "sandbox_workspace:/sandbox-workspace"
           ]
         },
@@ -261,6 +314,7 @@
           "service": "portal-init",
           "targetClassification": "ephemeral-lifecycle",
           "volumes": [
+            "${DPF_STATE_DIR:-${HOME}/.dpf}:/dpf-state:ro",
             "dpf-source-code:/workspace"
           ]
         },
@@ -329,7 +383,7 @@
             "windows"
           ],
           "ports": [
-            "6379:6379"
+            "${DPF_HOST_BIND_ADDRESS:-127.0.0.1}:6379:6379"
           ],
           "profiles": [],
           "service": "redis",
@@ -350,35 +404,6 @@
       "externalRuntimes": [],
       "services": [
         {
-          "backupPolicy": "excluded-rebuildable",
-          "boundaryReason": "Separate alloy runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-          "canonicalDataOwner": "none",
-          "capability": "runtime:deep-observability",
-          "class": "capability-activated",
-          "defaultRequired": false,
-          "dependsOn": [
-            "loki"
-          ],
-          "healthSemantics": "consumer-observed",
-          "hostPlatforms": [
-            "linux",
-            "macos",
-            "windows"
-          ],
-          "ports": [],
-          "profiles": [
-            "observability-ui",
-            "runtime-deep-observability"
-          ],
-          "service": "alloy",
-          "targetClassification": "capability-activated",
-          "volumes": [
-            "./monitoring/alloy/config.alloy:/etc/alloy/config.alloy:ro",
-            "/var/run/docker.sock:/var/run/docker.sock:ro",
-            "alloy_data:/var/lib/alloy/data"
-          ]
-        },
-        {
           "backupPolicy": "excluded-stateless",
           "boundaryReason": "Separate cadvisor runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
           "canonicalDataOwner": "none",
@@ -391,7 +416,7 @@
             "linux"
           ],
           "ports": [
-            "8080:8080"
+            "${DPF_HOST_BIND_ADDRESS:-127.0.0.1}:8080:8080"
           ],
           "profiles": [
             "linux-monitoring"
@@ -421,7 +446,7 @@
             "windows"
           ],
           "ports": [
-            "3002:3000"
+            "${DPF_HOST_BIND_ADDRESS:-127.0.0.1}:3002:3000"
           ],
           "profiles": [
             "observability-ui",
@@ -433,35 +458,6 @@
             "./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro",
             "./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro",
             "grafana_data:/var/lib/grafana"
-          ]
-        },
-        {
-          "backupPolicy": "separate-required",
-          "boundaryReason": "Separate loki runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-          "canonicalDataOwner": "loki",
-          "capability": "runtime:deep-observability",
-          "class": "capability-activated",
-          "defaultRequired": false,
-          "dependsOn": [],
-          "healthSemantics": "consumer-observed",
-          "hostPlatforms": [
-            "linux",
-            "macos",
-            "windows"
-          ],
-          "ports": [
-            "127.0.0.1:3100:3100"
-          ],
-          "profiles": [
-            "observability-ui",
-            "runtime-deep-observability"
-          ],
-          "service": "loki",
-          "targetClassification": "capability-activated",
-          "volumes": [
-            "./monitoring/loki/loki-config.yml:/etc/loki/local-config.yaml:ro",
-            "./monitoring/loki/rules/dpf-log-alerts.yml:/loki/rules-config/fake/dpf-log-alerts.yml:ro",
-            "loki_data:/loki"
           ]
         },
         {
@@ -477,7 +473,7 @@
             "linux"
           ],
           "ports": [
-            "9100:9100"
+            "${DPF_HOST_BIND_ADDRESS:-127.0.0.1}:9100:9100"
           ],
           "profiles": [
             "linux-monitoring"
@@ -507,7 +503,7 @@
             "windows"
           ],
           "ports": [
-            "9187:9187"
+            "${DPF_HOST_BIND_ADDRESS:-127.0.0.1}:9187:9187"
           ],
           "profiles": [
             "observability-ui",
@@ -534,7 +530,7 @@
             "windows"
           ],
           "ports": [
-            "9090:9090"
+            "${DPF_HOST_BIND_ADDRESS:-127.0.0.1}:9090:9090"
           ],
           "profiles": [
             "observability-ui",
@@ -617,7 +613,7 @@
             "windows"
           ],
           "ports": [
-            "3001:3000"
+            "${DPF_HOST_BIND_ADDRESS:-127.0.0.1}:3001:3000"
           ],
           "profiles": [
             "dev"
@@ -657,7 +653,7 @@
             "windows"
           ],
           "ports": [
-            "5433:5432"
+            "${DPF_HOST_BIND_ADDRESS:-127.0.0.1}:5433:5432"
           ],
           "profiles": [
             "dev"
@@ -683,7 +679,7 @@
             "windows"
           ],
           "ports": [
-            "8700:8700"
+            "${DPF_HOST_BIND_ADDRESS:-127.0.0.1}:8700:8700"
           ],
           "profiles": [
             "integration-test"
@@ -1081,7 +1077,7 @@
             "linux"
           ],
           "ports": [
-            "11434:11434"
+            "127.0.0.1:11434:11434"
           ],
           "profiles": [
             "runtime-external-ai"
@@ -1109,35 +1105,8 @@
       "externalRuntimes": [],
       "services": [
         {
-          "backupPolicy": "excluded-rebuildable",
-          "boundaryReason": "Separate dpf-stt runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
-          "canonicalDataOwner": "none",
-          "capability": "runtime:local-speech",
-          "class": "capability-activated",
-          "defaultRequired": false,
-          "dependsOn": [],
-          "healthSemantics": "compose-healthcheck",
-          "hostPlatforms": [
-            "linux",
-            "macos",
-            "windows"
-          ],
-          "ports": [
-            "127.0.0.1:8765:9000"
-          ],
-          "profiles": [
-            "runtime-local-speech",
-            "tts"
-          ],
-          "service": "dpf-stt",
-          "targetClassification": "capability-activated",
-          "volumes": [
-            "dpf_stt_models:/app/models"
-          ]
-        },
-        {
           "backupPolicy": "separate-required",
-          "boundaryReason": "Separate dpf-tts runtime retained for its current lifecycle, isolation, protocol, hardware, distribution, or development boundary.",
+          "boundaryReason": "Docker speech runtime for Windows/Linux; macOS uses the host-native Chatterbox service declared by its platform overlay.",
           "canonicalDataOwner": "tts-voices",
           "capability": "runtime:local-speech",
           "class": "capability-activated",
@@ -1146,7 +1115,6 @@
           "healthSemantics": "compose-healthcheck",
           "hostPlatforms": [
             "linux",
-            "macos",
             "windows"
           ],
           "ports": [
@@ -1168,7 +1136,7 @@
       ]
     }
   ],
-  "catalogHash": "fb667ab5b744b7ce7c0c59ff674be592d1df36cb441faee4692b4689e0b83144",
+  "catalogHash": "c41a8c22e60fb47c03a82468f29c700d90bfd511980c8b3d0aaf7a3801762120",
   "catalogVersion": 1,
   "substrateManifestVersion": 2
 }

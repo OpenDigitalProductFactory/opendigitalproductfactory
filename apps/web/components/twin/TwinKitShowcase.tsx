@@ -12,7 +12,7 @@ import { useState } from "react";
 import type { TwinProfile } from "@dpf/storefront-templates";
 
 import { TwinView } from "./TwinView";
-import type { TwinSnapshot } from "./snapshot";
+import type { TwinSnapshot } from "@/lib/twin/twin-snapshot";
 
 export interface TwinExample {
   id: string;

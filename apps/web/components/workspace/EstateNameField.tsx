@@ -18,10 +18,17 @@ import { declareEstateName } from "@/lib/actions/installation-estate-name";
 export function EstateNameField({
   estateName,
   badgePreview,
+  organizationFallback = null,
 }: {
   estateName: string | null;
   /** The role word the badge will pair the name with, e.g. `DEV`. Null on production. */
   badgePreview: string | null;
+  /**
+   * The setup-time organization name in force because nobody named the
+   * operator here (BI-CA54ACC8). The field stays empty so what the operator
+   * types is a real declaration, and the hint says what applies meanwhile.
+   */
+  organizationFallback?: string | null;
 }) {
   const router = useRouter();
   const [value, setValue] = useState(estateName ?? "");
@@ -75,7 +82,11 @@ export function EstateNameField({
           }}
           optional
           autoComplete="off"
-          hint="Leave it empty if you would rather not name it yet."
+          hint={
+            organizationFallback
+              ? `Until you name it, the organization from setup applies: ${organizationFallback}.`
+              : "Leave it empty if you would rather not name it yet."
+          }
           disabled={isPending}
         />
         <div className="text-xs text-[var(--dpf-muted)]">

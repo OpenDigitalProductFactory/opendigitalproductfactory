@@ -43,22 +43,25 @@ function makePattern(
   };
 }
 
+/**
+ * Install the default registry mock. Shared so every describe block states its
+ * own setup instead of inheriting whatever the previous block happened to leave
+ * behind — mocks are not reset between describes, and relying on that leakage
+ * makes a test pass for the wrong reason.
+ */
+const KNOWN_PATTERNS = ["review", "debate", "multi-pass"] as const;
+
+function installRegistryMock() {
+  mockGetPattern.mockReset();
+  mockListPatterns.mockReset();
+  mockGetPattern.mockImplementation(async (slug: string) =>
+    (KNOWN_PATTERNS as readonly string[]).includes(slug) ? makePattern(slug) : null,
+  );
+  mockListPatterns.mockResolvedValue(KNOWN_PATTERNS.map((slug) => makePattern(slug)));
+}
+
 describe("deliberation activation.resolve", () => {
-  beforeEach(() => {
-    mockGetPattern.mockReset();
-    mockListPatterns.mockReset();
-    // Default: both core patterns are known to the registry.
-    mockGetPattern.mockImplementation(async (slug: string) => {
-      if (slug === "review" || slug === "debate") {
-        return makePattern(slug);
-      }
-      return null;
-    });
-    mockListPatterns.mockResolvedValue([
-      makePattern("review"),
-      makePattern("debate"),
-    ]);
-  });
+  beforeEach(installRegistryMock);
 
   describe("explicit invocation", () => {
     it("uses the explicitly requested pattern when risk/stage do not force a stronger one", async () => {
@@ -287,5 +290,199 @@ describe("deliberation activation.resolve", () => {
         .filter((s) => s.trim().length > 0);
       expect(sentences.length).toBeLessThanOrEqual(1);
     });
+  });
+});
+
+// BI-1A5204A0 — routing confidence as an activation axis.
+//
+// The regression this guards is the observed 2026-09-18 incident: a route that
+// resolved with one candidate and a relaxed floor ran below the bar and nothing
+// happened, because qualityFloorRelaxed was concatenated into a sentence that
+// nothing read.
+describe("resolve — routing confidence", () => {
+  beforeEach(installRegistryMock);
+
+  it("activates a review when the floor was relaxed on otherwise low-risk work", async () => {
+    const run = await resolve({
+      riskLevel: "low",
+      artifactType: "code-change",
+      routingConfidence: { qualityFloorRelaxed: true, candidateCount: 1 },
+    });
+    expect(run?.patternSlug).toBe("review");
+    expect(run?.routingConfidenceEscalated).toBe(true);
+    expect(run?.reason).toContain("quality bar");
+  });
+
+  it("escalates to debate when the winner is well short of the floor on work that is not already low-risk", async () => {
+    // From medium: the one-rung bound (BI-2A67FAE2) permits medium -> high, and
+    // high means debate. From low the same signal is capped at review, which is
+    // the bound doing its job rather than the signal being ignored.
+    const run = await resolve({
+      riskLevel: "medium",
+      artifactType: "code-change",
+      routingConfidence: { qualityFloorRelaxed: true, floorShortfall: 40 },
+    });
+    expect(run?.patternSlug).toBe("debate");
+    expect(run?.reason).toContain("well short");
+  });
+
+  it("activates on a single ranked candidate — no choice was made, only an outcome", async () => {
+    const run = await resolve({
+      riskLevel: "low",
+      artifactType: "code-change",
+      routingConfidence: { candidateCount: 1 },
+    });
+    expect(run?.patternSlug).toBe("review");
+    expect(run?.reason).toContain("only one model");
+  });
+
+  it("changes nothing when routing was confident — the byte-identical guard", async () => {
+    const withSignal = await resolve({
+      riskLevel: "low",
+      artifactType: "code-change",
+      routingConfidence: { candidateCount: 9, qualityFloorRelaxed: false },
+    });
+    const without = await resolve({ riskLevel: "low", artifactType: "code-change" });
+    expect(withSignal).toEqual(without);
+  });
+
+  it("never weakens what declared risk already requires", async () => {
+    const run = await resolve({
+      riskLevel: "critical",
+      artifactType: "code-change",
+      routingConfidence: { candidateCount: 12 },
+    });
+    expect(run?.patternSlug).toBe("debate");
+    expect(run?.activatedRiskLevel).toBe("critical");
+    expect(run?.routingConfidenceEscalated).toBeUndefined();
+  });
+
+  it("does not claim an escalation it did not cause", async () => {
+    // Risk already demands debate; confidence would only have asked for review.
+    const run = await resolve({
+      riskLevel: "high",
+      artifactType: "code-change",
+      routingConfidence: { qualityFloorRelaxed: true },
+    });
+    expect(run?.patternSlug).toBe("debate");
+    expect(run?.routingConfidenceEscalated).toBeUndefined();
+    expect(run?.reason).not.toContain("Raised because");
+  });
+});
+
+// BI-2A67FAE2 — the cost bound, through the resolver.
+describe("resolve — escalation cost bound", () => {
+  beforeEach(installRegistryMock);
+
+  it("caps a confidence escalation at one step on low-risk work", async () => {
+    const run = await resolve({
+      riskLevel: "low",
+      artifactType: "code-change",
+      // Well short of the floor infers "high", which would mean debate.
+      routingConfidence: { qualityFloorRelaxed: true, floorShortfall: 40 },
+      costPosture: "balanced",
+    });
+    expect(run?.patternSlug).toBe("review");
+  });
+
+  it("does not escalate at all under an economy posture", async () => {
+    const run = await resolve({
+      riskLevel: "low",
+      artifactType: "code-change",
+      routingConfidence: { qualityFloorRelaxed: true, floorShortfall: 40 },
+      costPosture: "economy",
+    });
+    expect(run).toBeNull();
+  });
+
+  it("economy still honours a stage default — it is a cost choice, not a policy dodge", async () => {
+    const run = await resolve({
+      stage: "review",
+      riskLevel: "low",
+      artifactType: "code-change",
+      routingConfidence: { qualityFloorRelaxed: true },
+      costPosture: "economy",
+    });
+    expect(run?.patternSlug).toBe("review");
+  });
+});
+
+// BI-0FC71985 — the resolved run states what its review is worth.
+describe("resolve — reviewer independence", () => {
+  beforeEach(installRegistryMock);
+
+  it("grades every activated run, so independence is never assumed", async () => {
+    const run = await resolve({
+      stage: "review",
+      riskLevel: "low",
+      artifactType: "code-change",
+      reviewerPool: { providerCount: 3, modelCount: 8 },
+    });
+    expect(run?.independence?.mode).toBeTruthy();
+    expect(run?.independence?.note).toBeTruthy();
+  });
+
+  it("reports the weakest grade on a single-model install rather than claiming more", async () => {
+    const run = await resolve({
+      stage: "review",
+      riskLevel: "low",
+      artifactType: "code-change",
+      reviewerPool: { providerCount: 1, modelCount: 1 },
+    });
+    expect(run?.independence?.mode).toBe("single-model-multi-persona");
+    expect(run?.diversityMode).toBe("single-model-multi-persona");
+    expect(run?.independence?.note).toContain("not systematic bias");
+  });
+
+  it("marks the grade unverified when no pool was reported", async () => {
+    const run = await resolve({ stage: "review", riskLevel: "low", artifactType: "code-change" });
+    expect(run?.independence?.verified).toBe(false);
+    expect(run?.independence?.note).toContain("Not verified");
+  });
+});
+
+// BI-A8EAC294 — multi-pass is registered, and is the weakest instrument.
+describe("resolve — multi-pass ordering", () => {
+  beforeEach(installRegistryMock);
+
+  it("is available as an explicit pattern", async () => {
+    const run = await resolve({
+      riskLevel: "low",
+      artifactType: "code-change",
+      explicitPatternSlug: "multi-pass",
+    });
+    expect(run?.patternSlug).toBe("multi-pass");
+    expect(run?.triggerSource).toBe("explicit");
+  });
+
+  it("never displaces a review that risk already requires", async () => {
+    // A caller explicitly asking for the cheap instrument cannot weaken policy.
+    const run = await resolve({
+      riskLevel: "medium",
+      artifactType: "code-change",
+      explicitPatternSlug: "multi-pass",
+    });
+    expect(run?.patternSlug).toBe("review");
+    expect(run?.triggerSource).toBe("combined");
+  });
+
+  it("never displaces a debate", async () => {
+    const run = await resolve({
+      riskLevel: "critical",
+      artifactType: "code-change",
+      explicitPatternSlug: "multi-pass",
+    });
+    expect(run?.patternSlug).toBe("debate");
+  });
+
+  it("declares the honest diversity mode for a same-model check", async () => {
+    const run = await resolve({
+      riskLevel: "low",
+      artifactType: "code-change",
+      explicitPatternSlug: "multi-pass",
+      reviewerPool: { providerCount: 1, modelCount: 1 },
+    });
+    expect(run?.independence?.mode).toBe("single-model-multi-persona");
+    expect(run?.independence?.verified).toBe(true);
   });
 });

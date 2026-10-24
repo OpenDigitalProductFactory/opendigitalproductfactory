@@ -13,10 +13,14 @@ import {
 } from "./coworker-review";
 import type { GoldenTrianglePersistenceClient } from "./persistence";
 
-function client(perAgent: Record<string, GoldenTrianglePreference>): GoldenTrianglePersistenceClient {
+// BI-7ADEBDC1: the per-agent map is inert; the review pattern follows the
+// posture the coworker INHERITS (org → platform), so the fake client stores it
+// as the platform default.
+function client(platform: Record<string, GoldenTrianglePreference>): GoldenTrianglePersistenceClient {
+  const preference = platform.a ?? null;
   return {
     decisionPerspectiveProfile: {
-      findFirst: async () => ({ autonomyPolicy: { goldenTrianglePerAgent: perAgent } }),
+      findFirst: async () => ({ autonomyPolicy: preference ? { goldenTriangle: preference } : {} }),
       updateMany: async () => ({ count: 0 }),
     },
   };

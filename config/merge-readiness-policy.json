@@ -5,7 +5,8 @@
   "requiredContexts": [
     "Merge Readiness",
     "UX Route Budget Sweep",
-    "DCO"
+    "DCO",
+    "Failure Readiness"
   ],
   "workflows": {
     "ci": ".github/workflows/ci.yml",

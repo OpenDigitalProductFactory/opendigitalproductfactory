@@ -2,7 +2,6 @@
  * Restore impact preview — target-aware.
  *
  * Spec: docs/superpowers/specs/2026-05-17-postgres-daily-backup-design.md §4.6 step 2.
- * Spec: docs/superpowers/specs/2026-05-18-postgres-backup-slice-3-neo4j-qdrant.md (Slice 4)
  *
  * Computes the impact preview the wizard renders before the operator types
  * RESTORE. Reads the BackupRun row, resolves the dump filename by target,
@@ -23,16 +22,10 @@ const DEFAULT_BACKUPS_ROOT = "/backups";
 /** Maps BackupTarget to the artifact filename produced by the backup script. */
 const DUMP_FILENAME: Record<string, string> = {
   postgres: "dpf.dump",
-  neo4j: "neo4j.dump",
-  qdrant: "qdrant.snapshot",
 };
 
 const SERVICE_WARNINGS: Record<string, string | null> = {
   postgres: null,
-  neo4j:
-    "Restoring Neo4j stops the graph database container for ~15–30 s while the dump loads. Wiki search, routing, and EA topology will be briefly unavailable.",
-  qdrant:
-    "Restoring Qdrant replaces all vector collections with the snapshot state. Semantic search and brand context will briefly reflect the snapshot until reindexing completes.",
 };
 
 export interface PreviewArgs {
@@ -69,8 +62,6 @@ function describeAge(ageMinutes: number): string {
 function serviceLabel(target: string): string {
   const labels: Record<string, string> = {
     postgres: "Postgres database",
-    neo4j: "Neo4j graph database",
-    qdrant: "Qdrant vector store",
   };
   return labels[target] ?? target;
 }

@@ -17,6 +17,7 @@ foreach ($image in @(
     "dpf-portal",
     "dpf-sandbox",
     "dpf-promoter",
+    "dpf-doctools",
     "dpf-browser-use",
     "dpf-adp",
     "dpf-edge-node"

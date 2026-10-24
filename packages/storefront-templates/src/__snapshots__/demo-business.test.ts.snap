@@ -1710,7 +1710,7 @@ exports[`deriveDemoBusiness > matches the golden digest across all archetypes 1`
     "demand": {
       "byStage": {
         "intake-capacity-decision": 13,
-        "placement-custody-transfer": 2,
+        "settle": 2,
       },
       "inFlight": 8,
       "primaryQueue": "lapsing",

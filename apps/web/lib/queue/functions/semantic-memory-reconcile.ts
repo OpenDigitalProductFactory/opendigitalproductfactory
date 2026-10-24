@@ -7,9 +7,9 @@
 // contracts": "reconciliation proves no orphan remains"). Idempotent, quiescence-
 // gated, and concurrency-limited to one in-flight run.
 
-import { cron } from "inngest";
-import { prisma, scrollPoints, QDRANT_COLLECTIONS } from "@dpf/db";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { prisma, scrollPoints, VECTOR_COLLECTIONS } from "@dpf/db";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 import {
   reconcileOrphanConversationVectors,
@@ -36,7 +36,7 @@ export async function runSemanticMemoryReconcile(): Promise<
   CleanupEvidence & { orphanMessageIds: string[] }
 > {
   const points = await scrollPoints(
-    QDRANT_COLLECTIONS.AGENT_MEMORY,
+    VECTOR_COLLECTIONS.AGENT_MEMORY,
     {},
     SEMANTIC_MEMORY_SCAN_LIMIT,
   );
@@ -61,7 +61,7 @@ export async function runSemanticMemoryReconcile(): Promise<
   });
 }
 
-export const semanticMemoryReconcileScheduled = inngest.createFunction(
+export const semanticMemoryReconcileScheduled = jobs.createFunction(
   {
     id: SEMANTIC_MEMORY_RECONCILE_SCHEDULED_INNGEST_ID,
     retries: 1,
@@ -69,14 +69,14 @@ export const semanticMemoryReconcileScheduled = inngest.createFunction(
     triggers: [cron(SEMANTIC_MEMORY_RECONCILE_CRON)],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, SEMANTIC_MEMORY_RECONCILE_SCHEDULED_INNGEST_ID);
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
     return step.run("semantic-memory-reconcile", async () => runSemanticMemoryReconcile());
   },
 );
 
 // Operator "run now" trigger (same reconciliation, on demand).
-export const semanticMemoryReconcileRequested = inngest.createFunction(
+export const semanticMemoryReconcileRequested = jobs.createFunction(
   {
     id: SEMANTIC_MEMORY_RECONCILE_REQUESTED_INNGEST_ID,
     retries: 1,

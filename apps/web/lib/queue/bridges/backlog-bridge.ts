@@ -1,5 +1,5 @@
 import { prisma } from "@dpf/db";
-import { inngest } from "@/lib/queue/inngest-client";
+import { jobs } from "@/lib/jobs";
 import { recordQueueTransition } from "@/lib/queue/queue-telemetry";
 import type { WorkItemUrgency } from "@/lib/queue/queue-types";
 
@@ -26,6 +26,7 @@ const BACKLOG_STATUS_TO_WORK_ITEM_STATUS: Record<string, string> = {
   triaging: "queued",
   open: "queued",
   "in-progress": "in-progress",
+  "awaiting-acceptance": "awaiting-approval",
   done: "completed",
   deferred: "deferred",
   retired: "cancelled",
@@ -112,7 +113,7 @@ export async function bridgeBacklogItemToWorkItem(
     },
   });
 
-  await inngest.send({
+  await jobs.send({
     name: "cwq/item.created",
     data: { workItemId: workItem.itemId, sourceType: "backlog-item", urgency },
   });

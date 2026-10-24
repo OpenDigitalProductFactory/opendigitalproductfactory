@@ -11,11 +11,24 @@ const txUpdateMock = vi.fn();
 const txActivityCreateMock = vi.fn();
 const platformDevConfigFindUniqueMock = vi.fn();
 const autoResolveDecomposeMock = vi.fn();
+const buildActivityFindManyMock = vi.fn();
+const backlogItemActivityFindFirstMock = vi.fn();
+const buildActivityCreateMock = vi.fn();
+const decideRegenerationMock = vi.fn();
+vi.mock("@/lib/build/plan-traceability-regeneration", () => ({
+  PLAN_TRACEABILITY_REGENERATION_TOOL: "plan-coverage:regenerated",
+  decidePlanTraceabilityRegeneration: (...args: unknown[]) => decideRegenerationMock(...args),
+}));
 
 vi.mock("@dpf/db", () => ({
   prisma: {
     featureBuild: { findUnique: (...args: unknown[]) => findUniqueMock(...args) },
     platformDevConfig: { findUnique: (...args: unknown[]) => platformDevConfigFindUniqueMock(...args) },
+    buildActivity: {
+      findMany: (...args: unknown[]) => buildActivityFindManyMock(...args),
+      create: (...args: unknown[]) => buildActivityCreateMock(...args),
+    },
+    backlogItemActivity: { findFirst: (...args: unknown[]) => backlogItemActivityFindFirstMock(...args) },
     // abandonStrandedPreBuild wraps its work in a $transaction; run the callback
     // immediately with a tx exposing the row re-check + mutation methods.
     $transaction: (fn: (tx: unknown) => unknown) =>
@@ -45,8 +58,20 @@ vi.mock("@/lib/mcp-tools", () => ({
   executeTool: (...args: unknown[]) => executeToolMock(...args),
 }));
 const performPlanToBuildTransitionMock = vi.fn();
+const enforceReadinessMock = vi.fn();
+const healShapeMock = vi.fn();
+vi.mock("@/lib/build/heal-build-workroom-shape", () => ({
+  healBuildWorkroomShape: (...args: unknown[]) => healShapeMock(...args),
+}));
+vi.mock("@/lib/build/build-entry-gate", () => ({
+  enforceBuildInitiativeReadiness: (...args: unknown[]) => enforceReadinessMock(...args),
+}));
 vi.mock("@/lib/build/plan-to-build-transition", () => ({
   performPlanToBuildTransition: (...args: unknown[]) => performPlanToBuildTransitionMock(...args),
+}));
+const attestIdeateResearchMock = vi.fn();
+vi.mock("@/lib/build/record-ideate-research-receipt", () => ({
+  attestIdeateResearch: (...args: unknown[]) => attestIdeateResearchMock(...args),
 }));
 
 import {
@@ -54,13 +79,67 @@ import {
   isStrandedPreBuildAbandonable,
   abandonStrandedPreBuild,
   STRANDED_ABANDON_MS,
+  reviewIncompleteBackoff,
+  countReviewIncompleteStreak,
+  countPlanReviewIncompleteStreak,
+  REVIEW_INCOMPLETE_BACKOFF_BASE_MS,
+  REVIEW_INCOMPLETE_BACKOFF_MAX_MS,
+  countUnchangedRefusalStreak,
+  unchangedRefusalBackoff,
+  UNCHANGED_REFUSAL_BACKOFF_BASE_MS,
+  UNCHANGED_REFUSAL_BACKOFF_MAX_MS,
 } from "./resume-pre-build-phase";
 
 describe("resumePreBuildPhase (BI-9257CF19)", () => {
+  // BI-8925E227: an incomplete plan review is a reviewer outage, not a verdict.
+  // Keep the plan, back off, then re-run the review — never skip it forever.
+  const incompletePlan = {
+    designDoc: { x: 1 },
+    buildPlan: { tasks: [{ title: "Implement callback" }] },
+    planReview: { decision: "fail", reviewIncomplete: true, issues: [] },
+  };
+  const incompleteRow = (minutesAgo: number) => ({
+    summary: "Plan review: fail. Review incomplete: 0 of 2 reviewers returned a usable verdict. Retry the review; do not revise the document for a reviewer outage.",
+    createdAt: new Date(Date.now() - minutesAgo * 60_000),
+  });
+
+  it("backs off after an incomplete plan review, preserving the plan", async () => {
+    findUniqueMock.mockResolvedValue(incompletePlan);
+    buildActivityFindManyMock.mockResolvedValue([incompleteRow(5)]);
+    const result = await resumePreBuildPhase({ buildId: "FB-INCOMPLETE", phase: "plan", userId: "u" });
+    expect(result).toMatchObject({ kind: "skipped" });
+    expect((result as { reason: string }).reason).toMatch(/could not be completed 1x.*next retry/);
+    expect(dispatchPlanMock).not.toHaveBeenCalled();
+    expect(performPlanToBuildTransitionMock).not.toHaveBeenCalled();
+    expect(executeToolMock).not.toHaveBeenCalled();
+  });
+
+  it("re-runs the review of the saved plan once the backoff is due, without regenerating it", async () => {
+    findUniqueMock.mockResolvedValue(incompletePlan);
+    buildActivityFindManyMock.mockResolvedValue([incompleteRow(31)]);
+    const result = await resumePreBuildPhase({ buildId: "FB-INCOMPLETE", phase: "plan", userId: "u" });
+    expect(executeToolMock).toHaveBeenCalledWith("reviewBuildPlan", { buildId: "FB-INCOMPLETE" }, "u", { featureBuildId: "FB-INCOMPLETE" });
+    expect(dispatchPlanMock).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ kind: "resumed", via: "executeTool:reviewBuildPlan" });
+  });
+
+  it("counts only consecutive incomplete plan reviews", () => {
+    const now = new Date();
+    expect(countPlanReviewIncompleteStreak([
+      { summary: incompleteRow(0).summary, createdAt: now },
+      { summary: incompleteRow(0).summary, createdAt: new Date(now.getTime() - 1) },
+      { summary: "Plan review: pass. ok", createdAt: new Date(now.getTime() - 2) },
+      { summary: incompleteRow(0).summary, createdAt: new Date(now.getTime() - 3) },
+    ])).toEqual({ streak: 2, lastAt: now });
+    expect(countPlanReviewIncompleteStreak([])).toEqual({ streak: 0, lastAt: null });
+  });
+
   beforeEach(() => {
     findUniqueMock.mockReset();
     queueBuildReviewVerificationMock.mockReset().mockResolvedValue(undefined);
     dispatchIdeateMock.mockReset().mockResolvedValue({ kind: "dispatched-success" });
+    healShapeMock.mockReset().mockResolvedValue({ healed: false, detail: "delivery shape already bound" });
+    enforceReadinessMock.mockReset().mockResolvedValue({ allowed: true, message: "plan readiness allowed." });
     dispatchDesignFixMock.mockReset().mockResolvedValue({ kind: "repaired", rounds: 1 });
     dispatchPlanMock.mockReset().mockResolvedValue({ kind: "dispatched-success" });
     executeToolMock.mockReset().mockResolvedValue({ success: true, message: "Plan review: pass." });
@@ -69,6 +148,91 @@ describe("resumePreBuildPhase (BI-9257CF19)", () => {
     platformDevConfigFindUniqueMock.mockReset().mockResolvedValue({ governedBacklogEnabled: false });
     autoResolveDecomposeMock.mockReset().mockResolvedValue({ action: "park" });
     performPlanToBuildTransitionMock.mockReset().mockResolvedValue({ kind: "advanced" });
+    attestIdeateResearchMock.mockReset().mockResolvedValue({ recorded: true, reason: "research receipt recorded" });
+    buildActivityFindManyMock.mockReset().mockResolvedValue([]);
+    buildActivityCreateMock.mockReset().mockResolvedValue({});
+    decideRegenerationMock.mockReset().mockResolvedValue({ due: false, reason: "plan-lanes-not-owed" });
+  });
+
+  // BI-6F2872FC: a legacy plan names no acceptance ids, so it can never be
+  // covered. When only the plan lanes refuse, it is regenerated once.
+  it("regenerates an untraceable plan once when only the plan lanes refuse the build", async () => {
+    findUniqueMock.mockResolvedValue({
+      designDoc: { x: 1 }, buildPlan: { tasks: [{ title: "t" }] }, planReview: { decision: "pass" },
+      originatingBacklogItemId: "item-row",
+    });
+    performPlanToBuildTransitionMock.mockResolvedValue({ kind: "gate-blocked", reason: "plan lanes" });
+    decideRegenerationMock.mockResolvedValue({ due: true });
+    const out = await resumePreBuildPhase({ buildId: "FB-TRACE", phase: "plan", userId: "uT" });
+    expect(decideRegenerationMock).toHaveBeenCalledWith({ buildId: "FB-TRACE", originatorRowId: "item-row", buildPlan: { tasks: [{ title: "t" }] } });
+    expect(buildActivityCreateMock).toHaveBeenCalledWith({ data: expect.objectContaining({ buildId: "FB-TRACE", tool: "plan-coverage:regenerated" }) });
+    expect(dispatchPlanMock).toHaveBeenCalledWith({ buildId: "FB-TRACE", userId: "uT", forceRegenerate: true });
+    expect(out).toMatchObject({ kind: "resumed", via: "dispatchPlanForApprovedBuild:traceability" });
+  });
+
+  it("keeps the plan when regeneration cannot move the build", async () => {
+    findUniqueMock.mockResolvedValue({ designDoc: { x: 1 }, buildPlan: { tasks: [{ title: "t" }] }, planReview: { decision: "pass" } });
+    performPlanToBuildTransitionMock.mockResolvedValue({ kind: "gate-blocked", reason: "design lanes" });
+    const out = await resumePreBuildPhase({ buildId: "FB-KEEP", phase: "plan", userId: "uK" });
+    expect(dispatchPlanMock).not.toHaveBeenCalled();
+    expect(out).toMatchObject({ kind: "skipped" });
+  });
+
+  // BI-00588B51: builds reviewed while the room refused the research receipt
+  // carry a reviewed design and no receipt. The resume re-attests from that
+  // design and retries once; any other gate block is still a skip.
+  it("re-attests the research receipt from the reviewed design when that is the only plan→build block, then advances", async () => {
+    findUniqueMock.mockResolvedValue({
+      designDoc: { problemStatement: "p", reusabilityAnalysis: "r" },
+      buildPlan: { tasks: [{ title: "t" }] },
+      planReview: { decision: "pass" },
+    });
+    performPlanToBuildTransitionMock
+      .mockResolvedValueOnce({ kind: "gate-blocked", reason: "This cannot move into build yet because the research behind this design has not been recorded (the design author)." })
+      .mockResolvedValueOnce({ kind: "advanced" });
+    const out = await resumePreBuildPhase({ buildId: "FB-RR", phase: "plan", userId: "uRR" });
+    expect(attestIdeateResearchMock).toHaveBeenCalledWith("FB-RR", { problemStatement: "p", reusabilityAnalysis: "r" }, "uRR", null);
+    expect(performPlanToBuildTransitionMock).toHaveBeenCalledTimes(2);
+    expect(out).toMatchObject({ kind: "resumed", via: "performPlanToBuildTransition" });
+    expect((out as { detail: string }).detail).toContain("re-attested");
+  });
+
+  it("does not re-attest for a gate block that is not about the research receipt", async () => {
+    findUniqueMock.mockResolvedValue({
+      designDoc: { x: 1 },
+      buildPlan: { tasks: [{ title: "t" }] },
+      planReview: { decision: "pass" },
+    });
+    performPlanToBuildTransitionMock.mockResolvedValue({ kind: "gate-blocked", reason: "Waiting on: Thread Backbone Truck." });
+    const out = await resumePreBuildPhase({ buildId: "FB-DEP", phase: "plan", userId: "uDEP" });
+    expect(attestIdeateResearchMock).not.toHaveBeenCalled();
+    expect(performPlanToBuildTransitionMock).toHaveBeenCalledOnce();
+    expect(out.kind).toBe("skipped");
+  });
+
+  it("holds a denied research writer without claiming re-attestation or retrying the transition", async () => {
+    findUniqueMock.mockResolvedValue({ designDoc: { x: 1 }, buildPlan: { tasks: [{ title: "t" }] }, planReview: { decision: "pass" } });
+    performPlanToBuildTransitionMock.mockResolvedValue({ kind: "gate-blocked", reason: "RESEARCH_REQUIRED" });
+    attestIdeateResearchMock.mockResolvedValue({ recorded: false, disposition: "held", reason: "authority_denied: writer grant revoked" });
+    const out = await resumePreBuildPhase({ buildId: "FB-DENIED", phase: "plan", userId: "u1" });
+    expect(performPlanToBuildTransitionMock).toHaveBeenCalledOnce();
+    expect(out).toMatchObject({ kind: "skipped" });
+    expect((out as { reason: string }).reason).toContain("authority_denied");
+    expect((out as { reason: string }).reason).not.toContain("after re-attesting");
+  });
+
+  it("skips honestly when the receipt still does not satisfy the gate after re-attesting", async () => {
+    findUniqueMock.mockResolvedValue({
+      designDoc: { x: 1 },
+      buildPlan: { tasks: [{ title: "t" }] },
+      planReview: { decision: "pass" },
+    });
+    performPlanToBuildTransitionMock.mockResolvedValue({ kind: "gate-blocked", reason: "RESEARCH_REQUIRED (design-author)" });
+    const out = await resumePreBuildPhase({ buildId: "FB-RR2", phase: "plan", userId: "uRR2" });
+    expect(attestIdeateResearchMock).toHaveBeenCalledOnce();
+    expect(performPlanToBuildTransitionMock).toHaveBeenCalledTimes(2);
+    expect(out.kind).toBe("skipped");
+    expect((out as { reason: string }).reason).toContain("after re-attesting");
   });
 
   it("re-queues review verification for a stranded review-phase build", async () => {
@@ -375,6 +539,118 @@ describe("resumePreBuildPhase (BI-9257CF19)", () => {
   });
 
 
+  it("backs off a review-INCOMPLETE strand instead of re-entering the fix loop every tick (BI-96885B6B)", async () => {
+    const now = Date.now();
+    findUniqueMock.mockResolvedValue({
+      designDoc: { problemStatement: "p" },
+      buildPlan: null,
+      designReview: {
+        decision: "fail",
+        reviewIncomplete: true,
+        issues: [{ severity: "critical", description: "Both review agents failed to respond" }],
+      },
+    });
+    // Three consecutive incomplete outcomes, the latest 20 minutes ago: the
+    // streak-3 delay is 2h, so this tick must NOT spend inference.
+    buildActivityFindManyMock.mockResolvedValue([
+      { summary: "No reviewer could complete a design review, so nothing is known about this design. Leaving the build recoverable; the design is kept and untouched.", createdAt: new Date(now - 20 * 60_000) },
+      { summary: "Design review could not be completed — re-reviewing (attempt 2/2); the design is not at fault.", createdAt: new Date(now - 21 * 60_000) },
+      { summary: "Design review could not be completed — re-reviewing (attempt 1/2); the design is not at fault.", createdAt: new Date(now - 22 * 60_000) },
+      { summary: "No reviewer could complete a design review, so nothing is known about this design. Leaving the build recoverable; the design is kept and untouched.", createdAt: new Date(now - 50 * 60_000) },
+      { summary: "No reviewer could complete a design review, so nothing is known about this design. Leaving the build recoverable; the design is kept and untouched.", createdAt: new Date(now - 80 * 60_000) },
+    ]);
+    const out = await resumePreBuildPhase({ buildId: "FB-FCAC756D", phase: "ideate", userId: "u5" });
+    expect(dispatchDesignFixMock).not.toHaveBeenCalled();
+    expect(executeToolMock).not.toHaveBeenCalled();
+    expect(out.kind).toBe("skipped");
+    expect((out as { reason: string }).reason).toMatch(/could not be completed 3x in a row/);
+    expect((out as { reason: string }).reason).toMatch(/Backing off: next retry in 1h 40m/);
+    expect(buildActivityFindManyMock).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { buildId: "FB-FCAC756D", tool: "design_fix_loop" } }),
+    );
+  });
+
+  it("re-enters the fix loop for a review-INCOMPLETE strand once its backoff window has elapsed", async () => {
+    findUniqueMock.mockResolvedValue({
+      designDoc: { problemStatement: "p" },
+      buildPlan: null,
+      designReview: { decision: "fail", reviewIncomplete: true, issues: [] },
+    });
+    // One incomplete outcome, 31 minutes ago: base delay is 30m, so it is due.
+    buildActivityFindManyMock.mockResolvedValue([
+      { summary: "No reviewer could complete a design review, so nothing is known about this design.", createdAt: new Date(Date.now() - 31 * 60_000) },
+    ]);
+    const out = await resumePreBuildPhase({ buildId: "FB-5G", phase: "ideate", userId: "u5" });
+    expect(dispatchDesignFixMock).toHaveBeenCalledWith({ buildId: "FB-5G", userId: "u5" });
+    expect(out).toMatchObject({ kind: "resumed", via: "dispatchDesignReviewFixLoop" });
+  });
+
+  it("does not back off a REAL failed review — the fix loop regenerates as before", async () => {
+    findUniqueMock.mockResolvedValue({
+      designDoc: { problemStatement: "p" },
+      buildPlan: null,
+      designReview: { decision: "fail", issues: [{ severity: "critical", description: "fails to address security" }] },
+    });
+    buildActivityFindManyMock.mockResolvedValue([
+      { summary: "No reviewer could complete a design review, so nothing is known about this design.", createdAt: new Date() },
+    ]);
+    const out = await resumePreBuildPhase({ buildId: "FB-5H", phase: "ideate", userId: "u5" });
+    expect(buildActivityFindManyMock).not.toHaveBeenCalled();
+    expect(dispatchDesignFixMock).toHaveBeenCalled();
+    expect(out.kind).toBe("resumed");
+  });
+
+  // BI-9B2E7154: a design that already PASSED, blocked only by phase readiness,
+  // was re-reviewed on every resume (every ~30 min). The reviewers were fed the
+  // prior round's issues each time and drifted to "fail" on a document nobody
+  // was asked to change; the fix loop then escalated and the build was
+  // abandoned (FB-650326BC). Re-reviewing cannot clear a readiness refusal.
+  it("parks a passed design that phase readiness still refuses instead of re-reviewing it", async () => {
+    findUniqueMock.mockResolvedValue({
+      designDoc: { problemStatement: "p" },
+      buildPlan: null,
+      designReview: { decision: "pass", sizeAssessment: { decision: "ok" } },
+      plan: null,
+    });
+    enforceReadinessMock.mockResolvedValue({ allowed: false, message: "This cannot move into plan yet because the research behind this design has not been recorded." });
+    const out = await resumePreBuildPhase({ buildId: "FB-READY", phase: "ideate", userId: "uR" });
+    expect(enforceReadinessMock).toHaveBeenCalledWith(expect.objectContaining({ buildId: "FB-READY", target: "plan", expectedPhase: "ideate" }));
+    expect(executeToolMock).not.toHaveBeenCalled();
+    expect(dispatchDesignFixMock).not.toHaveBeenCalled();
+    expect(out.kind).toBe("skipped");
+    expect((out as { reason: string }).reason).toContain("research behind this design");
+  });
+
+  // BI-454451F1: the shape heal sat after the ideate branch, which returns on
+  // every path, so an ideate build's room was never shaped and its passed design
+  // was gated as unshaped work.
+  it("binds an ideate build's missing delivery shape before gating it", async () => {
+    findUniqueMock.mockResolvedValue({
+      designDoc: { problemStatement: "p" },
+      buildPlan: null,
+      designReview: { decision: "pass", sizeAssessment: { decision: "ok" } },
+      plan: null,
+      originatingBacklogItemId: "bi-row",
+    });
+    healShapeMock.mockResolvedValue({ healed: true, detail: "bound delivery shape delivery-small@1.0.0 on WC-1" });
+    const out = await resumePreBuildPhase({ buildId: "FB-HEAL", phase: "ideate", userId: "uH" });
+    expect(healShapeMock).toHaveBeenCalledWith({ buildId: "FB-HEAL", userId: "uH" });
+    expect(enforceReadinessMock).not.toHaveBeenCalled();
+    expect(out).toMatchObject({ kind: "resumed", via: "healBuildWorkroomShape" });
+  });
+
+  it("re-runs the review of a passed design once readiness allows plan, so it advances", async () => {
+    findUniqueMock.mockResolvedValue({
+      designDoc: { problemStatement: "p" },
+      buildPlan: null,
+      designReview: { decision: "pass", sizeAssessment: { decision: "ok" } },
+      plan: null,
+    });
+    const out = await resumePreBuildPhase({ buildId: "FB-OPEN", phase: "ideate", userId: "uO" });
+    expect(executeToolMock).toHaveBeenCalledWith("reviewDesignDoc", { buildId: "FB-OPEN" }, "uO", { featureBuildId: "FB-OPEN" });
+    expect(out).toMatchObject({ kind: "resumed", via: "executeTool:reviewDesignDoc" });
+  });
+
   it("parks when design PASSed but persisted happyPath intake is still incomplete (BI-E212CAE2)", async () => {
     findUniqueMock.mockResolvedValue({
       designDoc: { problemStatement: "p" },
@@ -416,6 +692,67 @@ describe("resumePreBuildPhase (BI-9257CF19)", () => {
 });
 
 // ── Age-out cap (BI-A009313E) ───────────────────────────────────────────────
+describe("reviewIncompleteBackoff (BI-96885B6B)", () => {
+  const T0 = Date.UTC(2026, 8, 5, 12, 0, 0);
+  const min = (n: number) => n * 60_000;
+
+  it("is due when there is no streak", () => {
+    expect(reviewIncompleteBackoff({ streak: 0, lastAt: null, now: new Date(T0) })).toEqual({ due: true });
+    expect(reviewIncompleteBackoff({ streak: 3, lastAt: null, now: new Date(T0) })).toEqual({ due: true });
+  });
+
+  it("doubles per consecutive incomplete outcome: 30m, 1h, 2h, 4h", () => {
+    for (const [streak, expectedMin] of [[1, 30], [2, 60], [3, 120], [4, 240]] as const) {
+      const r = reviewIncompleteBackoff({ streak, lastAt: new Date(T0), now: new Date(T0 + min(1)) });
+      expect(r.due).toBe(false);
+      if (!r.due) expect(r.nextAt.getTime()).toBe(T0 + min(expectedMin));
+    }
+  });
+
+  it("caps at 6 hours so a long outage is still probed a few times a day", () => {
+    const r = reviewIncompleteBackoff({ streak: 12, lastAt: new Date(T0), now: new Date(T0 + min(1)) });
+    expect(r.due).toBe(false);
+    if (!r.due) expect(r.nextAt.getTime()).toBe(T0 + REVIEW_INCOMPLETE_BACKOFF_MAX_MS);
+    expect(REVIEW_INCOMPLETE_BACKOFF_BASE_MS).toBe(min(30));
+  });
+
+  it("is due once the window has elapsed", () => {
+    expect(reviewIncompleteBackoff({ streak: 2, lastAt: new Date(T0), now: new Date(T0 + min(60)) })).toEqual({ due: true });
+    expect(reviewIncompleteBackoff({ streak: 2, lastAt: new Date(T0), now: new Date(T0 + min(59)) }).due).toBe(false);
+  });
+});
+
+describe("countReviewIncompleteStreak (BI-96885B6B)", () => {
+  const INCOMPLETE = "No reviewer could complete a design review, so nothing is known about this design.";
+  const RETRY = "Design review could not be completed — re-reviewing (attempt 1/2); the design is not at fault.";
+  const at = (minsAgo: number) => new Date(Date.UTC(2026, 8, 5, 12, 0, 0) - minsAgo * 60_000);
+
+  it("counts consecutive incomplete outcomes, ignoring the intermediate retry lines", () => {
+    const r = countReviewIncompleteStreak([
+      { summary: INCOMPLETE, createdAt: at(1) },
+      { summary: RETRY, createdAt: at(2) },
+      { summary: INCOMPLETE, createdAt: at(31) },
+      { summary: INCOMPLETE, createdAt: at(61) },
+    ]);
+    expect(r).toEqual({ streak: 3, lastAt: at(1) });
+  });
+
+  it("stops at the first real fix-loop outcome (a regeneration, pass, or escalation)", () => {
+    const r = countReviewIncompleteStreak([
+      { summary: INCOMPLETE, createdAt: at(1) },
+      { summary: "Design review failed — regenerating (round 1/2) against 3 issue(s)", createdAt: at(40) },
+      { summary: INCOMPLETE, createdAt: at(70) },
+    ]);
+    expect(r).toEqual({ streak: 1, lastAt: at(1) });
+  });
+
+  it("is zero when the newest line is not an incomplete outcome", () => {
+    expect(countReviewIncompleteStreak([{ summary: "Design review passed after 1 fix round(s).", createdAt: at(1) }]))
+      .toEqual({ streak: 0, lastAt: null });
+    expect(countReviewIncompleteStreak([])).toEqual({ streak: 0, lastAt: null });
+  });
+});
+
 describe("isStrandedPreBuildAbandonable", () => {
   const now = new Date("2026-07-17T12:00:00Z");
   const old = new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000); // 10 days
@@ -507,5 +844,71 @@ describe("abandonStrandedPreBuild", () => {
     txFindUniqueMock.mockResolvedValue(null);
     const ok = await abandonStrandedPreBuild({ buildId: "FB-GONE", phase: "ideate", ageMs: 20 * 86_400_000 });
     expect(ok).toBe(false);
+  });
+});
+
+// BI-6F2872FC: an identical plan→build refusal with no new readiness input backs off quietly.
+describe("unchanged plan→build refusal backoff", () => {
+  const at = (iso: string) => new Date(iso);
+  const refused = (summary: string, iso: string) => ({ summary, createdAt: at(iso) });
+
+  it("counts only the newest run of identical refusals", () => {
+    expect(countUnchangedRefusalStreak([
+      refused("PLAN_REQUIRED", "2026-10-13T12:20:00Z"),
+      refused("PLAN_REQUIRED", "2026-10-13T12:10:00Z"),
+      refused("CANONICAL_DESIGN_REQUIRED", "2026-10-13T12:00:00Z"),
+      refused("PLAN_REQUIRED", "2026-10-13T11:50:00Z"),
+    ])).toEqual({ streak: 2, lastAt: at("2026-10-13T12:20:00Z") });
+    expect(countUnchangedRefusalStreak([])).toEqual({ streak: 0, lastAt: null });
+  });
+
+  it("doubles from 10 minutes to a 6-hour cap", () => {
+    const lastAt = at("2026-10-13T12:00:00Z");
+    const wait = (streak: number) => {
+      const out = unchangedRefusalBackoff({ streak, lastAt, inputsChangedAt: null, now: lastAt });
+      return out.due ? 0 : out.waitMs;
+    };
+    expect(wait(1)).toBe(UNCHANGED_REFUSAL_BACKOFF_BASE_MS);
+    expect(wait(2)).toBe(2 * UNCHANGED_REFUSAL_BACKOFF_BASE_MS);
+    expect(wait(20)).toBe(UNCHANGED_REFUSAL_BACKOFF_MAX_MS);
+  });
+
+  it("is due at once when an input landed after the last refusal, or with no refusal", () => {
+    const lastAt = at("2026-10-13T12:00:00Z");
+    expect(unchangedRefusalBackoff({ streak: 9, lastAt, inputsChangedAt: at("2026-10-13T12:05:00Z"), now: at("2026-10-13T12:06:00Z") }).due).toBe(true);
+    expect(unchangedRefusalBackoff({ streak: 0, lastAt: null, inputsChangedAt: null, now: lastAt }).due).toBe(true);
+  });
+
+  it("holds a plan-reviewed build quietly without re-running the transition", async () => {
+    findUniqueMock.mockResolvedValue({
+      designDoc: { x: 1 }, buildPlan: { tasks: [{ title: "t" }] }, planReview: { decision: "pass" },
+      originatingBacklogItemId: "row-1",
+    });
+    // Newer than this process's start, so only the backoff can hold it.
+    const recent = new Date();
+    buildActivityFindManyMock.mockImplementation(async (args: { where?: { tool?: string } }) =>
+      args.where?.tool === "phase:gate-blocked"
+        ? [{ summary: "PLAN_REQUIRED", createdAt: recent }, { summary: "PLAN_REQUIRED", createdAt: new Date(recent.getTime() - 600_000) }]
+        : []);
+    backlogItemActivityFindFirstMock.mockResolvedValue({ recordedAt: new Date(Date.now() - 86_400_000) });
+    performPlanToBuildTransitionMock.mockReset();
+    const out = await resumePreBuildPhase({ buildId: "FB-HOLD", phase: "plan", userId: "u" });
+    expect(out, JSON.stringify(out)).toMatchObject({ kind: "skipped", quiet: true });
+    expect(performPlanToBuildTransitionMock).not.toHaveBeenCalled();
+  });
+
+  it("re-runs the transition once a readiness input lands after the last refusal", async () => {
+    findUniqueMock.mockResolvedValue({
+      designDoc: { x: 1 }, buildPlan: { tasks: [{ title: "t" }] }, planReview: { decision: "pass" },
+      originatingBacklogItemId: "row-1",
+    });
+    const refusedAt = new Date();
+    buildActivityFindManyMock.mockImplementation(async (args: { where?: { tool?: string } }) =>
+      args.where?.tool === "phase:gate-blocked" ? [{ summary: "PLAN_REQUIRED", createdAt: refusedAt }] : []);
+    backlogItemActivityFindFirstMock.mockResolvedValue({ recordedAt: new Date(refusedAt.getTime() + 1) });
+    performPlanToBuildTransitionMock.mockReset().mockResolvedValue({ kind: "advanced" });
+    const out = await resumePreBuildPhase({ buildId: "FB-NEW", phase: "plan", userId: "u" });
+    expect(performPlanToBuildTransitionMock).toHaveBeenCalledOnce();
+    expect(out).toMatchObject({ kind: "resumed" });
   });
 });

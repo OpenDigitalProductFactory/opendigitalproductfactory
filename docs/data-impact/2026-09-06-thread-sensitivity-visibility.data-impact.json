@@ -1,0 +1,41 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-governance",
+  "affectedCopies": [
+    "RouteDecisionLog readers that interpret inferenceDataScreenReceipt (admin route-decision log view, coworker panel notice)"
+  ],
+  "migration": {
+    "name": "20260906070000_index_route_decision_by_agent_message",
+    "backfill": "None. Adds CREATE INDEX IF NOT EXISTS on RouteDecisionLog (agentMessageId, createdAt) so the coworker panel can resolve a thread's latest screen receipt without scanning the table. No column added, no row read, written or deleted; applies cleanly against any existing data state and is a no-op where the index already exists."
+  },
+  "tests": [
+    "apps/web/lib/inference/thread-sensitivity-receipt.test.ts",
+    "apps/web/lib/inference/thread-sensitivity-notice.test.ts",
+    "apps/web/lib/inference/thread-sensitivity-pinning.test.ts",
+    "apps/web/lib/inference/data-screening/screen-receipt-provenance.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:route-decision-log",
+      "prismaModel": "RouteDecisionLog",
+      "lifecycleDisposition": "Routing audit record, retained on the existing RouteDecisionLog cadence. This change adds an index and one integer inside the existing inferenceDataScreenReceipt JSON payload; it creates no new retention obligation.",
+      "fields": [
+        {
+          "fieldId": "data:route-decision-log#inferenceDataScreenReceipt.currentTurnStartIndex",
+          "resolution": "inherited",
+          "reason": "A payload index (the position of the last user-role message), not conversation content. It carries no personal or governed value and cannot be inverted into one — it says where the current turn begins, never what any message said. rawPayloadStored stays false, which is the invariant the receipt exists to hold.",
+          "provenance": "BI-706530B2; apps/web/lib/inference/data-screening/screen-inference-payload.ts",
+          "flags": []
+        },
+        {
+          "fieldId": "data:route-decision-log#agentMessageId",
+          "resolution": "inherited",
+          "reason": "Existing column; indexed only. No shape, meaning or population change.",
+          "provenance": "BI-706530B2; packages/db/prisma/schema/ai-providers.prisma",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

@@ -1,10 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { SOURCE_READ_MAX_CHARS, SOURCE_READ_MAX_LINES } from "../source-page-lines";
+import { DEFAULT_TOOL_RESULT_CHAR_CAP } from "./tool-result-budget";
 import {
   applyTerminalToolSurface,
   buildTerminalToolReminder,
   createInitiativeReviewTerminalToolPolicy,
   enterTerminalWriterPhase,
   normalizeTerminalToolArguments,
+  readerPageCharsForModelView,
   resolveTerminalTextExit,
   resolveTerminalToolCall,
   summarizeTerminalToolProgress,
@@ -21,12 +24,12 @@ vi.mock("@dpf/db", () => ({
     coworkerTurnMetric: { upsert: vi.fn() },
   },
 }));
-vi.mock("@/lib/routed-inference", () => ({ routeAndCall: vi.fn() }));
+vi.mock("@/lib/routed-inference", () => ({ routeAndCall: vi.fn(), previewRoute: vi.fn() }));
 vi.mock("@/lib/mcp-tools", () => ({ PLATFORM_TOOLS: [], toolsToOpenAIFormat: vi.fn(() => []) }));
 vi.mock("@/lib/mcp-governed-execute", () => ({ governedExecuteTool: vi.fn() }));
 
 import { prisma } from "@dpf/db";
-import { routeAndCall } from "@/lib/routed-inference";
+import { routeAndCall, previewRoute } from "@/lib/routed-inference";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { runAgenticLoop } from "./agentic-loop";
 
@@ -43,9 +46,29 @@ const policy: TerminalToolPolicy = {
   },
 };
 
-const read = (success = true): TerminalToolRecord => ({
+const completePage = {
+  repositoryFullName: policy.immutableReaderArguments!.repositoryFullName,
+  path: policy.immutableReaderArguments!.path,
+  version: policy.immutableReaderArguments!.version,
+  blobId: policy.immutableReaderArguments!.expectedBlobId,
+  startLine: 1,
+  endLine: 20,
+  totalLines: 20,
+  hasMore: false,
+  nextCursor: null,
+};
+
+const partialPage = {
+  ...completePage,
+  totalLines: 40,
+  hasMore: true,
+  nextCursor: "page-2",
+};
+
+const read = (success = true, data: Record<string, unknown> | undefined = completePage, args: Record<string, unknown> = {}): TerminalToolRecord => ({
   name: "read_source_at_version",
-  result: { success },
+  args,
+  result: { success, ...(data ? { data } : {}) },
 });
 
 const search = (success = true): TerminalToolRecord => ({
@@ -59,6 +82,35 @@ const writer = (success = true): TerminalToolRecord => ({
 });
 
 describe("terminal tool policy", () => {
+  it("does not authorize a receipt when transport withheld part of a complete source page", () => {
+    const withheld = { ...read(), modelEvidenceTruncated: true };
+    expect(summarizeTerminalToolProgress(policy, [withheld]).evidenceAvailable).toBe(false);
+    expect(resolveTerminalToolCall(policy, [withheld], policy.writerToolName).kind).toBe("refuse");
+    // A later complete bounded traversal can recover without changing identity.
+    expect(summarizeTerminalToolProgress(policy, [withheld, read()]).evidenceAvailable).toBe(true);
+  });
+  it("bounds malformed correction and never retries success, approval, or authority failure", () => {
+    const malformed = { name: policy.writerToolName, result: { success: false, error: "malformed-receipt" } };
+    expect(resolveTerminalToolCall(policy, [read(), malformed, malformed, malformed], policy.writerToolName).kind).toBe("refuse");
+    for (const result of [
+      { success: true },
+      { success: false, error: "approval_required", data: { envelopeId: "envelope" } },
+      { success: false, error: "AUTHORIZATION_DENIED" },
+    ]) {
+      expect(resolveTerminalToolCall(policy, [read(), malformed, { name: policy.writerToolName, result }], policy.writerToolName).kind).toBe("refuse");
+    }
+  });
+  it("BI-31159978 retains the writer for bounded correction of a malformed receipt", () => {
+    const records: TerminalToolRecord[] = [read(), {
+      name: policy.writerToolName,
+      result: { success: false, error: "malformed-receipt" },
+    }];
+    expect(resolveTerminalToolCall(policy, records, policy.writerToolName)).toEqual({ kind: "allow" });
+    expect(applyTerminalToolSurface(policy, records, [
+      { type: "function", function: { name: policy.writerToolName } },
+    ])).toHaveLength(1);
+  });
+
   it("activates only when the bound reader and writer tools are both required", () => {
     expect(createInitiativeReviewTerminalToolPolicy(policy.writerToolName, [
       "read_source_at_version",
@@ -68,7 +120,7 @@ describe("terminal tool policy", () => {
       path: policy.immutableReaderArguments!.path,
       commitSha: policy.immutableReaderArguments!.version,
       providerBlobId: policy.immutableReaderArguments!.expectedBlobId,
-    })).toEqual({ ...policy, readerToolNames: ["read_source_at_version"] });
+    })).toEqual({ ...policy, readerToolNames: ["read_source_at_version"], immutableReaderToolName: "read_source_at_version" });
     expect(createInitiativeReviewTerminalToolPolicy(
       policy.writerToolName,
       [policy.writerToolName],
@@ -105,9 +157,37 @@ describe("terminal tool policy", () => {
         maxChars: 3200,
       },
     });
-    expect(normalizeTerminalToolArguments(policy, "read_source_at_version", { maxLines: 201 })).toMatchObject({
+    expect(normalizeTerminalToolArguments(policy, "read_source_at_version", {
+      maxLines: SOURCE_READ_MAX_LINES + 1,
+    })).toMatchObject({
       kind: "refuse",
       result: { error: "terminal_reader_pagination_invalid" },
+    });
+    expect(normalizeTerminalToolArguments(policy, "read_source_at_version", {
+      maxChars: SOURCE_READ_MAX_CHARS + 1,
+    })).toMatchObject({
+      kind: "refuse",
+      result: { error: "terminal_reader_pagination_invalid" },
+    });
+  });
+
+  // BI-E8237EAE. #5079 raised the reader's own page to 12,000 chars by default
+  // and 16,000 at most, but this guard still refused anything above 3,200 chars
+  // or 200 lines. A reviewer that asked for a page size was held to the old
+  // 3,200-char page, and six reads (the whole budget) covered 19,200 chars: a
+  // 14.5k design spent every read before the writer on 2026-09-22. The guard
+  // must accept exactly what the reader serves — one source of truth.
+  it("accepts every page size the immutable reader itself serves", () => {
+    expect(normalizeTerminalToolArguments(policy, "read_source_at_version", {
+      maxLines: SOURCE_READ_MAX_LINES,
+      maxChars: SOURCE_READ_MAX_CHARS,
+    })).toEqual({
+      kind: "allow",
+      arguments: {
+        ...policy.immutableReaderArguments,
+        maxLines: SOURCE_READ_MAX_LINES,
+        maxChars: SOURCE_READ_MAX_CHARS,
+      },
     });
   });
 
@@ -146,21 +226,76 @@ describe("terminal tool policy", () => {
       kind: "refuse",
       result: { success: false, error: "terminal_writer_requires_evidence" },
     });
+    expect(resolveTerminalToolCall(policy, [read(true, partialPage)], policy.writerToolName)).toMatchObject({
+      kind: "refuse",
+      result: { error: "terminal_writer_requires_complete_evidence" },
+    });
     expect(resolveTerminalToolCall(policy, [read(true)], policy.writerToolName)).toEqual({ kind: "allow" });
   });
 
-  it("counts every reader attempt but only successful readers as evidence", () => {
+  it("counts searches as reader activity but never as complete artifact evidence", () => {
     expect(summarizeTerminalToolProgress(policy, [read(false), search(true)])).toEqual({
       readerAttempts: 2,
       successfulReaderCalls: 1,
-      evidenceAvailable: true,
+      evidenceAvailable: false,
+      partialEvidence: false,
+      continuationCursor: null,
+      paginationInvalid: false,
       writerAttempted: false,
       readerBudgetExhausted: false,
     });
   });
 
-  it("closes readers at six attempts and exposes only the writer", () => {
-    const attempts = [read(), search(), read(), search(), read(), search()];
+  it("requires an ordered first-to-final immutable page sequence", () => {
+    const first = read(true, { ...completePage, endLine: 40, totalLines: 80, hasMore: true, nextCursor: "page-2" });
+    const final = read(true, { ...completePage, startLine: 41, endLine: 80, totalLines: 80 }, { cursor: "page-2" });
+    expect(summarizeTerminalToolProgress(policy, [first])).toMatchObject({
+      evidenceAvailable: false,
+      partialEvidence: true,
+      continuationCursor: "page-2",
+    });
+    expect(summarizeTerminalToolProgress(policy, [first, final])).toMatchObject({
+      evidenceAvailable: true,
+      partialEvidence: false,
+      continuationCursor: null,
+      paginationInvalid: false,
+    });
+  });
+
+  it("does not bridge cursor gaps, duplicate pages, or conflicting result identity", () => {
+    const first = read(true, { ...completePage, endLine: 40, totalLines: 80, hasMore: true, nextCursor: "page-2" });
+    const gap = read(true, { ...completePage, startLine: 41, endLine: 80, totalLines: 80 }, { cursor: "wrong" });
+    const lineGap = read(true, { ...completePage, startLine: 42, endLine: 80, totalLines: 80 }, { cursor: "page-2" });
+    const prematureFinal = read(true, { ...completePage, startLine: 41, endLine: 70, totalLines: 80 }, { cursor: "page-2" });
+    const conflict = read(true, { ...completePage, path: "other.md" });
+    expect(summarizeTerminalToolProgress(policy, [first, gap])).toMatchObject({
+      evidenceAvailable: false,
+      paginationInvalid: true,
+    });
+    expect(summarizeTerminalToolProgress(policy, [first, lineGap])).toMatchObject({
+      evidenceAvailable: false,
+      paginationInvalid: true,
+    });
+    expect(summarizeTerminalToolProgress(policy, [first, prematureFinal])).toMatchObject({
+      evidenceAvailable: false,
+      paginationInvalid: true,
+    });
+    expect(summarizeTerminalToolProgress(policy, [conflict])).toMatchObject({
+      evidenceAvailable: false,
+      paginationInvalid: true,
+    });
+  });
+
+  it("closes incomplete traversal at six attempts without exposing the writer", () => {
+    const partial = (index: number) => read(true, {
+      ...completePage,
+      startLine: index * 10 + 1,
+      endLine: index * 10 + 10,
+      totalLines: 70,
+      hasMore: true,
+      nextCursor: `page-${index + 2}`,
+    }, index === 0 ? {} : { cursor: `page-${index + 1}` });
+    const attempts = Array.from({ length: 6 }, (_, index) => partial(index));
     expect(resolveTerminalToolCall(policy, attempts, "read_source_at_version")).toMatchObject({
       kind: "refuse",
       result: { success: false, error: "terminal_reader_budget_exhausted" },
@@ -171,18 +306,25 @@ describe("terminal tool policy", () => {
       { type: "function", function: { name: "search_source_at_version" } },
       { type: "function", function: { name: "record_initiative_evidence" } },
     ];
-    expect(applyTerminalToolSurface(policy, attempts, providerTools)).toEqual([
-      { type: "function", function: { name: "record_initiative_evidence" } },
-    ]);
+    expect(applyTerminalToolSurface(policy, attempts, providerTools)).toEqual([]);
+    expect(resolveTerminalTextExit(policy, attempts, 0)).toMatchObject({
+      kind: "input-required",
+      message: expect.stringContaining("incomplete"),
+    });
   });
 
   it("refuses excess readers within the same model tool-call batch", () => {
-    const completed: TerminalToolRecord[] = [read(), search(), read(), search(), read()];
-    expect(resolveTerminalToolCall(policy, completed, "search_source_at_version")).toEqual({ kind: "allow" });
-    completed.push(search());
-    expect(resolveTerminalToolCall(policy, completed, "read_source_at_version")).toMatchObject({
+    const completed: TerminalToolRecord[] = [read()];
+    expect(resolveTerminalToolCall(policy, completed, "search_source_at_version")).toMatchObject({
       kind: "refuse",
-      result: { error: "terminal_reader_budget_exhausted" },
+      result: { error: "terminal_evidence_complete" },
+    });
+  });
+
+  it("refuses a second writer from the same provider tool-call batch", () => {
+    expect(resolveTerminalToolCall(policy, [read(), writer(false)], policy.writerToolName)).toMatchObject({
+      kind: "refuse",
+      result: { error: "terminal_writer_already_attempted" },
     });
   });
 
@@ -199,6 +341,24 @@ describe("terminal tool policy", () => {
     });
   });
 
+  it("withholds the writer and names the continuation cursor while evidence is partial", () => {
+    const partial = read(true, partialPage);
+    const providerTools = [
+      { type: "function", function: { name: "read_source_at_version" } },
+      { type: "function", function: { name: "search_source_at_version" } },
+      { type: "function", function: { name: policy.writerToolName } },
+    ];
+    expect(applyTerminalToolSurface(policy, [partial], providerTools).map((tool) => (
+      tool.function as { name: string }
+    ).name))
+      .toEqual(["read_source_at_version"]);
+    expect(resolveTerminalTextExit(policy, [partial], 0)).toMatchObject({
+      kind: "nudge",
+      allowedToolNames: ["read_source_at_version"],
+      message: expect.stringContaining("page-2"),
+    });
+  });
+
   it("asks for evidence first when a text-only response precedes every read", () => {
     expect(resolveTerminalTextExit(policy, [], 0)).toMatchObject({
       kind: "nudge",
@@ -208,18 +368,34 @@ describe("terminal tool policy", () => {
   });
 
   it("renders a compaction-safe reminder with the remaining reader budget", () => {
-    expect(buildTerminalToolReminder(policy, [read(), search()])).toContain(
+    expect(buildTerminalToolReminder(policy, [read(false), search()])).toContain(
       "4 bounded evidence calls remain",
     );
-    expect(buildTerminalToolReminder(policy, [read(), search(), read(), search(), read(), search()]))
-      .toContain(`Call ${policy.writerToolName} now`);
+    expect(buildTerminalToolReminder(policy, [read()])).toContain(`Call ${policy.writerToolName} now`);
   });
 
-  it("treats any governed writer attempt as terminal without declaring it valid", () => {
-    expect(resolveTerminalTextExit(policy, [read(), writer(false)], 0)).toEqual({ kind: "complete" });
+  it("does not treat a rejected governed writer as a completed receipt", () => {
+    expect(resolveTerminalTextExit(policy, [read(), writer(false)], 0)).toMatchObject({
+      kind: "input-required",
+      reason: "missing-terminal-writer",
+      message: expect.stringContaining("did not persist a valid receipt"),
+    });
     expect(summarizeTerminalToolProgress(policy, [read(), writer(false)])).toMatchObject({
       writerAttempted: true,
     });
+  });
+
+  it("accepts only a successful writer or a persisted approval envelope as terminal", () => {
+    const approval = {
+      name: policy.writerToolName,
+      result: {
+        success: false,
+        error: "approval_required",
+        data: { envelopeId: "ENV-1" },
+      },
+    } satisfies TerminalToolRecord;
+    expect(resolveTerminalTextExit(policy, [read(), writer(true)], 0)).toEqual({ kind: "complete" });
+    expect(resolveTerminalTextExit(policy, [read(), approval], 0)).toEqual({ kind: "complete" });
   });
 
   it("enters a writer-only terminal phase from persisted immutable evidence", () => {
@@ -237,10 +413,51 @@ describe("terminal tool policy", () => {
     expect(applyTerminalToolSurface(resumed, [], providerTools)).toEqual([
       { type: "function", function: { name: policy.writerToolName } },
     ]);
+    expect(applyTerminalToolSurface(resumed, [writer(false)], providerTools)).toEqual([]);
     expect(resolveTerminalToolCall(resumed, [], "read_source_at_version")).toMatchObject({
       kind: "refuse",
       result: { error: "terminal_writer_phase_reader_refused" },
     });
+  });
+
+  // Observed on BI-8E1FD1BD spec-approval, 2026-09-06. The reviewer had already
+  // read the artifact successfully. It then hit this refusal six times and told
+  // a human "BLOCKED - immutable evidence unavailable; all six evidence-reader
+  // attempts failed" - the exact inverse of what the refusal says - and answered
+  // with prose instead of its verdict, so the run ended with no receipt. The
+  // refusal is a SUCCESS condition wearing an error's clothes, so its wording is
+  // load-bearing: it must not contain anything a model can hear as "missing",
+  // and it must say what happens if the writer is not called.
+  it("phrases the writer-phase reader refusal so it cannot be read as missing evidence", () => {
+    const resumed = enterTerminalWriterPhase(policy);
+    const refusal = resolveTerminalToolCall(resumed, [], "read_source_at_version");
+    expect(refusal.kind).toBe("refuse");
+    const message = refusal.kind === "refuse" ? refusal.result.message : "";
+
+    // States the true state before the instruction.
+    expect(message).toMatch(/SUCCESS, NOT A FAILURE/);
+    expect(message).toMatch(/persisted/);
+    expect(message).toMatch(/[Nn]othing is missing/);
+    // Names the consequence of answering with prose.
+    expect(message).toMatch(new RegExp(policy.writerToolName));
+    expect(message).toMatch(/NO receipt/);
+    // Both verdicts are legitimate, so a reviewer does not read the nudge as
+    // pressure to pass.
+    expect(message).toMatch(/fail/i);
+    // The words that caused the inversion must not appear.
+    expect(message).not.toMatch(/\bunavailable\b/i);
+    expect(message).not.toMatch(/\bblocked\b/i);
+  });
+
+  it("phrases the evidence-complete nudge the same way", () => {
+    const resumed = enterTerminalWriterPhase(policy);
+    const nudge = resolveTerminalTextExit(resumed, [], 0);
+    expect(nudge.kind).toBe("nudge");
+    const message = nudge.kind === "nudge" ? nudge.message : "";
+    expect(message).toMatch(/succeeded|complete/);
+    expect(message).toMatch(/[Nn]othing is missing/);
+    expect(message).toMatch(/NO receipt/);
+    expect(message).not.toMatch(/\bunavailable\b/i);
   });
 });
 
@@ -266,35 +483,93 @@ describe("agent loop terminal writer integration", () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.mocked(previewRoute).mockResolvedValue({ decision: { selectedEndpoint: "eligible-alternative" } } as never);
     vi.mocked(prisma.agentModelConfig.findUnique).mockResolvedValue(null as never);
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       isSuperuser: true,
       groups: [{ platformRole: { roleId: "ceo" } }],
     } as never);
-    vi.mocked(governedExecuteTool).mockImplementation(async ({ toolName }: { toolName: string }) => ({
-      success: toolName !== policy.writerToolName,
-      message: toolName === policy.writerToolName ? "Receipt rejected." : "Immutable evidence page.",
-    }));
+    vi.mocked(governedExecuteTool).mockImplementation(async ({ toolName }: { toolName: string }) => toolName === policy.writerToolName
+      ? { success: false, message: "Receipt rejected." }
+      : {
+          success: true,
+          message: "Immutable evidence page.",
+          ...(toolName === "read_source_at_version" ? { data: completePage } : {}),
+        });
   });
 
-  it("removes readers after their budget and treats the writer attempt as terminal", async () => {
-    const readers = Array.from({ length: 7 }, (_, index) => ({
-      id: `read-${index}`,
-      name: index % 2 ? "search_source_at_version" : "read_source_at_version",
-      arguments: { cursor: String(index) },
+  it("retains the bounded immutable design in the writer's actual input", async () => {
+    const content = ("Research context. ".repeat(30) + "\n").repeat(19)
+      + "DESIGN: bounded server-side snapshots; no client-side enumeration.\n";
+    vi.mocked(governedExecuteTool).mockResolvedValue({ success: true, message: "Complete immutable page",
+      data: { ...completePage, content },
+    });
+    vi.mocked(routeAndCall).mockResolvedValueOnce({
+      ...response("", [{ id: "read", name: "read_source_at_version", arguments: {} }]),
+      resolvedMaxContextTokens: 1_048_576,
+    } as never).mockRejectedValueOnce(new Error("End test after observing writer input"));
+    await runAgenticLoop(params);
+    const evidence = vi.mocked(routeAndCall).mock.calls[1]![0].find((message) => message.role === "tool");
+    expect(evidence?.content).toContain("DESIGN: bounded server-side snapshots; no client-side enumeration.");
+    expect(evidence?.content).not.toContain("[truncated");
+  });
+
+  it("refuses a provider's writer call after the model-facing budget truncated its read", async () => {
+    vi.mocked(governedExecuteTool).mockResolvedValue({ success: true,
+      message: "Complete immutable page", data: { ...completePage, content: ("x".repeat(500) + "\n").repeat(20) },
+    });
+    vi.mocked(routeAndCall)
+      .mockResolvedValueOnce(response("", [{ id: "read", name: "read_source_at_version", arguments: {} }]) as never)
+      .mockResolvedValueOnce(response("", [{ id: "write", name: policy.writerToolName, arguments: {} }]) as never)
+      .mockResolvedValue(response("Cannot assess the unseen source.") as never);
+    const result = await runAgenticLoop(params);
+    expect(result.executedTools[0]).toMatchObject({ modelEvidenceTruncated: true, result: { success: true } });
+    expect(vi.mocked(governedExecuteTool).mock.calls.some(([call]) => call.toolName === policy.writerToolName)).toBe(false);
+    const nextTools = (vi.mocked(routeAndCall).mock.calls[1]![3] as { tools: typeof providerTools }).tools;
+    expect(nextTools.some((tool) => tool.function.name === policy.writerToolName)).toBe(false);
+  });
+
+  it("traverses six contiguous pages before exposing exactly the writer", async () => {
+    vi.mocked(governedExecuteTool).mockImplementation(async ({ toolName, rawParams }: { toolName: string; rawParams: Record<string, unknown> }) => {
+      if (toolName === policy.writerToolName) return { success: false, message: "Receipt rejected." };
+      const pageNumber = typeof rawParams.cursor === "string" ? Number(rawParams.cursor.replace("page-", "")) : 1;
+      return {
+        success: true,
+        message: "Immutable evidence page.",
+        data: {
+          ...completePage,
+          startLine: (pageNumber - 1) * 50 + 1,
+          endLine: pageNumber * 50,
+          totalLines: 300,
+          hasMore: pageNumber < 6,
+          nextCursor: pageNumber < 6 ? `page-${pageNumber + 1}` : null,
+        },
+      };
+    });
+    const readers = Array.from({ length: 6 }, (_, index) => ({
+      id: `read-${index + 1}`,
+      name: "read_source_at_version",
+      arguments: index === 0 ? {} : { cursor: `page-${index + 1}` },
     }));
     vi.mocked(routeAndCall)
-      .mockResolvedValueOnce(response("", readers) as never)
-      .mockResolvedValueOnce(response("I have enough evidence to assess this change.") as never)
+      .mockResolvedValueOnce(response("", [readers[0]!]) as never)
+      .mockResolvedValueOnce(response("", [readers[1]!]) as never)
+      .mockResolvedValueOnce(response("", [readers[2]!]) as never)
+      .mockResolvedValueOnce(response("", [readers[3]!]) as never)
+      .mockResolvedValueOnce(response("", [readers[4]!]) as never)
+      .mockResolvedValueOnce(response("", [readers[5]!]) as never)
       .mockResolvedValueOnce(response("", [{ id: "writer", name: policy.writerToolName, arguments: {} }]) as never)
       .mockResolvedValueOnce(response("The governed writer rejected the assessment, so no receipt exists.") as never);
     const result = await runAgenticLoop(params);
 
     const secondTools = (vi.mocked(routeAndCall).mock.calls[1]![3] as { tools: typeof providerTools }).tools;
-    expect(secondTools.map((tool) => tool.function.name)).toEqual([policy.writerToolName]);
-    expect(vi.mocked(governedExecuteTool).mock.calls.filter(([call]) => call.toolName !== policy.writerToolName)).toHaveLength(6);
+    const seventhTools = (vi.mocked(routeAndCall).mock.calls[6]![3] as { tools: typeof providerTools }).tools;
+    expect(secondTools.map((tool) => tool.function.name)).toEqual(["read_source_at_version"]);
+    expect(seventhTools.map((tool) => tool.function.name)).toEqual([policy.writerToolName]);
+    expect(vi.mocked(governedExecuteTool).mock.calls.filter(([call]) => call.toolName === "read_source_at_version")).toHaveLength(6);
     expect(result.executedTools.at(-1)).toMatchObject({ name: policy.writerToolName, result: { success: false } });
-    expect(vi.mocked(routeAndCall)).toHaveBeenCalledTimes(4);
+    expect(result.failure).toMatchObject({ kind: "terminal-writer-missing" });
+    expect(vi.mocked(routeAndCall)).toHaveBeenCalledTimes(8);
   });
 
   it("re-exposes the writer immediately after a reader-only recovery succeeds", async () => {
@@ -310,6 +585,23 @@ describe("agent loop terminal writer integration", () => {
     const thirdTools = (vi.mocked(routeAndCall).mock.calls[2]![3] as { tools: typeof providerTools }).tools;
     expect(secondTools.map((tool) => tool.function.name)).toEqual(policy.readerToolNames);
     expect(thirdTools.map((tool) => tool.function.name)).toContain(policy.writerToolName);
+    expect(vi.mocked(routeAndCall).mock.calls[1]![3]?.deniedProviders).toBeUndefined();
+  });
+
+  it("executes only the first writer when a provider emits duplicates in one batch", async () => {
+    vi.mocked(routeAndCall)
+      .mockResolvedValueOnce(response("", [
+        { id: "writer-1", name: policy.writerToolName, arguments: { decision: "pass" } },
+        { id: "writer-2", name: policy.writerToolName, arguments: { decision: "fail" } },
+      ]) as never)
+      .mockResolvedValueOnce(response("The sole governed writer attempt was rejected.") as never);
+
+    const result = await runAgenticLoop({ ...params, terminalToolPolicy: enterTerminalWriterPhase(policy) });
+
+    expect(vi.mocked(governedExecuteTool).mock.calls.filter(([call]) => call.toolName === policy.writerToolName))
+      .toHaveLength(1);
+    expect(result.executedTools.filter((tool) => tool.name === policy.writerToolName)).toHaveLength(1);
+    expect(result.failure).toMatchObject({ kind: "terminal-writer-missing" });
   });
 
   it("returns a missing-writer failure after successful reads and two prose exits", async () => {
@@ -326,6 +618,53 @@ describe("agent loop terminal writer integration", () => {
       message: expect.stringContaining("No receipt was created"),
     });
     expect(vi.mocked(routeAndCall)).toHaveBeenCalledTimes(3);
+  });
+
+  it("routes the terminal-writer retry away from a provider that returned prose", async () => {
+    vi.mocked(routeAndCall)
+      .mockResolvedValueOnce(response("", [{ id: "read", name: "read_source_at_version", arguments: {} }]) as never)
+      .mockResolvedValueOnce(response("The evidence is sufficient for a judgment.") as never)
+      .mockResolvedValueOnce({ ...response("", [{ id: "writer", name: policy.writerToolName, arguments: {} }]), providerId: "gemini" } as never)
+      .mockResolvedValueOnce(response("The governed writer rejected the assessment, so no receipt exists.") as never);
+
+    await runAgenticLoop(params);
+
+    const retryOptions = vi.mocked(routeAndCall).mock.calls[2]![3] as {
+      deniedProviders?: string[];
+      preferredProviderId?: string;
+    };
+    expect(retryOptions.deniedProviders).toEqual(["local"]);
+    expect(retryOptions.preferredProviderId).toBeUndefined();
+  });
+
+  it("uses one bounded retry on the sole eligible provider and records the writer only once", async () => {
+    vi.mocked(previewRoute).mockResolvedValue({ decision: { selectedEndpoint: null } } as never);
+    vi.mocked(governedExecuteTool).mockResolvedValue({ success: true, message: "Receipt recorded." } as never);
+    vi.mocked(routeAndCall)
+      .mockResolvedValueOnce({ ...response("I have assessed the evidence."), providerId: "gemini" } as never)
+      .mockResolvedValueOnce({ ...response("", [{ id: "writer", name: policy.writerToolName, arguments: {} }]), providerId: "gemini" } as never)
+      .mockResolvedValueOnce({ ...response("Receipt recorded."), providerId: "gemini" } as never);
+    const result = await runAgenticLoop({ ...params, terminalToolPolicy: enterTerminalWriterPhase(policy) });
+    expect(result.failure).toBeUndefined();
+    expect(governedExecuteTool).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(routeAndCall).mock.calls[1]![3]?.deniedProviders).toBeUndefined();
+    expect(result.executedTools).toHaveLength(1);
+  });
+
+  it("preserves the native signed call while executing and recording server-bound arguments", async () => {
+    const nativeCall = { id: "native-read", name: "read_source_at_version", arguments: {}, gemini: { modelId: "gemini-3", thoughtSignature: "opaque" } };
+    vi.mocked(routeAndCall)
+      .mockResolvedValueOnce(response("", [nativeCall]) as never)
+      .mockResolvedValueOnce(response("", [{ id: "writer", name: policy.writerToolName, arguments: {} }]) as never)
+      .mockResolvedValueOnce(response("Writer rejected.") as never);
+    const result = await runAgenticLoop(params);
+    // BI-E8237EAE: the server-bound read also carries the page the model can see whole.
+    const boundRead = { ...policy.immutableReaderArguments, maxChars: readerPageCharsForModelView(DEFAULT_TOOL_RESULT_CHAR_CAP) };
+    expect(result.executedTools[0]?.args).toEqual(boundRead);
+    expect(vi.mocked(governedExecuteTool).mock.calls[0]![0].rawParams).toEqual(boundRead);
+    const nextHistory = vi.mocked(routeAndCall).mock.calls[1]![0];
+    expect(nextHistory.find((message) => message.role === "assistant")?.toolCalls?.[0]).toEqual(nativeCall);
+    expect(nextHistory.find((message) => message.role === "tool")?.content).toContain(policy.immutableReaderArguments!.version);
   });
 
   it("returns a missing-writer failure when the review budget expires after a successful read", async () => {
@@ -363,10 +702,28 @@ describe("agent loop terminal writer integration", () => {
       name: "read_source_at_version",
       result: { success: true },
     });
+    // BI-50B0C471: still the banked writer wait, but it names the busy model
+    // that stopped it instead of reporting that the writer failed.
     expect(result.failure).toEqual({
       kind: "terminal-writer-missing",
       message: expect.stringContaining("No receipt was created"),
+      deferredBy: "busy",
     });
+    expect(result.failure?.message).not.toContain("could not be dispatched");
+  });
+
+  it("names a local-CI capacity reservation after a banked read (BI-50B0C471)", async () => {
+    const deferral = new Error("Local provider dispatch deferred: local-ci-active-capacity-reservation");
+    deferral.name = "LocalProviderCapacityDeferredError";
+    vi.mocked(routeAndCall)
+      .mockResolvedValueOnce(response("", [{ id: "read", name: "read_source_at_version", arguments: {} }]) as never)
+      .mockRejectedValueOnce(deferral);
+
+    const result = await runAgenticLoop(params);
+
+    expect(result.failure).toMatchObject({ kind: "terminal-writer-missing", deferredBy: "capacity" });
+    expect(result.content).toContain("banked");
+    expect(result.content).not.toContain("could not be dispatched");
   });
 
   it("starts a resumed terminal-writer turn with only the governed writer", async () => {

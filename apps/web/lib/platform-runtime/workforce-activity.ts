@@ -75,8 +75,19 @@ export type WorkforceActivity = {
     quietOverThresholdCount: number;
     /** Coworkers with no human-in-the-loop owner assigned — a governance gap. */
     coworkersWithoutOwnerCount: number;
+    /**
+     * Break-fix share of work done in the rolling week (BI-F2FEC1EB, design §4):
+     * items closed in the last 7 days that were declared break-fix, over all
+     * items closed. Above 20% it is a finding, not a number — the expedite lane
+     * is being used as the normal lane.
+     */
+    doneWeekCount: number;
+    breakFixDoneWeekCount: number;
+    breakFixShareWeek: number;
   };
 };
+
+export { BREAK_FIX_SHARE_FINDING_THRESHOLD } from "./break-fix-share";
 
 // Minimal structural view of the Prisma client this loader touches — lets a
 // test inject a double without dragging the full generated client type in.
@@ -87,7 +98,11 @@ type WorkforcePrisma = {
   tokenUsage: { groupBy: (args: unknown) => Promise<GroupRow[]> };
   delegationChain: { groupBy: (args: unknown) => Promise<ActorCountRow[]> };
   phaseHandoff: { groupBy: (args: unknown) => Promise<ActorCountRow[]> };
-  backlogItemActivity: { groupBy: (args: unknown) => Promise<ActorCountRow[]> };
+  backlogItemActivity: {
+    groupBy: (args: unknown) => Promise<ActorCountRow[]>;
+    findMany: (args: unknown) => Promise<{ backlogItemId: string }[]>;
+  };
+  backlogItem: { findMany: (args: unknown) => Promise<{ id: string }[]> };
 };
 /** A groupBy row keyed on the ACTING coworker for a non-tool source. */
 type ActorCountRow = {
@@ -130,9 +145,10 @@ export async function loadWorkforceActivity(
   const startOfDay = new Date(nowMs);
   startOfDay.setUTCHours(0, 0, 0, 0);
   const lookbackFloor = new Date(nowMs - LAST_ACTED_LOOKBACK_DAYS * 86_400_000);
+  const weekFloor = new Date(nowMs - 7 * 86_400_000);
 
   const [
-    agents,
+    coworkers,
     liveRuns,
     toolByAgentTool,
     lastActedByAgent,
@@ -140,6 +156,7 @@ export async function loadWorkforceActivity(
     delegatedRows,
     handoffRows,
     evidenceRows,
+    doneWeek,
   ] = await Promise.all([
     prisma.agent.findMany({
       where: { archived: false, type: "coworker" },
@@ -210,8 +227,50 @@ export async function loadWorkforceActivity(
       where: { kind: "evidence", recordedAt: { gte: startOfDay } },
       _count: { _all: true },
     }),
+    prisma.backlogItem.findMany({
+      where: { status: "done", completedAt: { gte: weekFloor } },
+      select: { id: true },
+    }),
   ]);
+  const doneWeekIds = doneWeek.map((row) => row.id);
+  const breakFixDone = doneWeekIds.length === 0
+    ? []
+    : await prisma.backlogItemActivity.findMany({
+      where: { kind: "break_fix_declared", backlogItemId: { in: doneWeekIds } },
+      select: { backlogItemId: true },
+    });
+  const breakFixDoneWeekCount = new Set(breakFixDone.map((row) => row.backlogItemId)).size;
+  const breakFixShareWeek = doneWeekIds.length === 0 ? 0 : breakFixDoneWeekCount / doneWeekIds.length;
 
+  // The coworker is the unit, but a specialist, orchestrator or cross-cutting
+  // agent that is working RIGHT NOW is working — it joins the roster for as long
+  // as it has a live run, under its own name. Idle non-coworkers stay off, so the
+  // roster does not fill with 88 dormant specialists (BI-F0B07F2B; kernel
+  // DI-A0A06D869B28). Before this a live specialist run read as "platform work"
+  // and "Working now" said 0.
+  const coworkerIds = new Set(coworkers.map((a) => a.agentId));
+  const activeOtherIds = [
+    ...new Set(
+      liveRuns
+        .filter((run) => isLiveStatus(run.status) && run.currentAgentId && !coworkerIds.has(run.currentAgentId))
+        .map((run) => run.currentAgentId as string),
+    ),
+  ];
+  const activeOthers = activeOtherIds.length === 0
+    ? []
+    : await prisma.agent.findMany({
+      where: { archived: false, agentId: { in: activeOtherIds } },
+      select: {
+        agentId: true,
+        name: true,
+        displayName: true,
+        valueStream: true,
+        humanSupervisorId: true,
+        hitlTierDefault: true,
+      },
+      orderBy: [{ tier: "asc" }, { name: "asc" }],
+    });
+  const agents = [...coworkers, ...activeOthers];
   const rosterIds = new Set(agents.map((a) => a.agentId));
 
   // First live task per agent (rows are newest-first). Live runs that no
@@ -352,6 +411,9 @@ export async function loadWorkforceActivity(
       platformWorkCount: platformWork.length,
       quietOverThresholdCount: quietOverThreshold,
       coworkersWithoutOwnerCount: withoutOwner,
+      doneWeekCount: doneWeekIds.length,
+      breakFixDoneWeekCount,
+      breakFixShareWeek,
     },
   };
 }

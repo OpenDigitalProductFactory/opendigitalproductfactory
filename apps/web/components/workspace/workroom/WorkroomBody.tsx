@@ -23,10 +23,13 @@ import {
   roomLabel,
 } from "./presentation";
 import { WorkroomCycles } from "./WorkroomCycles";
+import { WorkroomReviewRequirements } from "./WorkroomReviewRequirements";
 import { WorkroomShapeSection } from "./WorkroomShapeSection";
 import { WorkroomParticipants } from "./WorkroomParticipants";
 import { WorkroomPosture } from "./WorkroomPosture";
+import type { WorkroomFlowMapModel } from "@/lib/work-management/workroom-flow-map";
 import { WorkroomProcessOverseer } from "./WorkroomProcessOverseer";
+import { WorkroomBoundaryControl } from "./WorkroomBoundaryControl";
 import {
   useWorkroomViewMode,
   type WorkroomViewMode,
@@ -35,6 +38,8 @@ import {
 type Props = {
   detail: WorkspaceWorkCaseDetailView;
   room: WorkroomView;
+  /** EP-B70E718D F3: the room's flow map, when its shape resolves. */
+  flowMap?: WorkroomFlowMapModel | null;
 };
 
 const BOUNDARY_GAP_LABEL: Record<WorkroomBoundaryGap, string> = {
@@ -77,32 +82,65 @@ function ActivityEvent({ event }: { event: WorkroomActivityView }) {
   );
 }
 
+/**
+ * The room's boundary editor, wherever it is needed.
+ *
+ * Rendered only when the room is actually editable: a case with no anchoring
+ * capsule is not a room anyone can bound, and an inert button would restate the
+ * very defect this control was added to remove.
+ */
+function BoundaryEditor({ room }: { room: WorkroomView }) {
+  const editable = room.posture?.editable ?? null;
+  if (!editable) return null;
+
+  return (
+    <WorkroomBoundaryControl
+      caseKey={editable.caseKey}
+      roomRowId={editable.roomRowId}
+      current={{
+        outcome: room.boundary.outcome,
+        accountablePrincipalRef: room.boundary.accountablePrincipalRef,
+        scopeIncluded: room.boundary.scopeIncluded,
+        scopeExcluded: room.boundary.scopeExcluded,
+        authoritySummary: room.boundary.authoritySummary,
+        sensitivityCeiling: room.boundary.sensitivityCeiling,
+        measures: room.boundary.measures,
+        closureRuleSummary: room.boundary.closureRuleSummary,
+      }}
+    />
+  );
+}
+
 function BoundaryNotice({ room }: { room: WorkroomView }) {
   if (!room.projection.incompleteBoundary) return null;
 
   const gaps = room.boundary.gaps.map((gap) => BOUNDARY_GAP_LABEL[gap]);
   const repair = room.boundary.gaps.includes("outcome") && room.boundary.gaps.includes("accountable")
     ? "Define the intended outcome and accountable owner before consequential work continues."
-    : `Complete the room boundary before consequential work continues: ${gaps.join(", ")}.`;
+    : "Complete the room boundary before consequential work continues.";
 
+  // The repair belongs HERE, next to the sentence that names what is missing —
+  // not on a settings page the notice does not mention (spec 2026-07-26 §7.2:
+  // offer ONE authorized repair action where the gap is reported).
   return (
     <Notice variant="warn" title="This room needs a clearer boundary">
       <p>{repair}</p>
       <ul className="mt-2 list-disc space-y-1 pl-5">
         {gaps.map((gap) => <li key={gap}>{gap}</li>)}
       </ul>
+      <BoundaryEditor room={room} />
     </Notice>
   );
 }
 
-function ContextPanels({ room }: { room: WorkroomView }) {
+function ContextPanels({ room, workroomId }: { room: WorkroomView; workroomId?: string | null }) {
   const decisions = room.activity.filter((event) =>
     event.kind === "decision-proposed" || event.kind === "decision-resolved",
   );
 
   return (
     <div className="space-y-3">
-      <WorkroomParticipants room={room} />
+      <WorkroomParticipants room={room} workroomId={workroomId} />
 
       <WorkroomProcessOverseer room={room} />
 
@@ -116,12 +154,29 @@ function ContextPanels({ room }: { room: WorkroomView }) {
               <p className="text-xs text-[var(--dpf-muted)]">Next action</p>
               <p className="mt-1 font-medium text-[var(--dpf-text)]">{room.work.nextAction}</p>
             </div>
+            <div>
+              <p className="text-xs text-[var(--dpf-muted)]">Outcome</p>
+              <p className="mt-1 text-[var(--dpf-text)]">
+                {room.boundary.outcome ?? "Not defined yet."}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-[var(--dpf-muted)]">Accountable</p>
+              <p className="mt-1 text-[var(--dpf-text)]">
+                {room.boundary.accountablePrincipalRef ?? "Nobody yet."}
+              </p>
+            </div>
             {room.boundary.scopeIncluded.length > 0 ? (
               <div>
                 <p className="text-xs text-[var(--dpf-muted)]">In scope</p>
                 <p className="mt-1 text-[var(--dpf-text)]">{room.boundary.scopeIncluded.join(", ")}</p>
               </div>
             ) : null}
+            {/* A boundary must stay correctable after it is declared. The notice
+                above disappears the moment the gaps close, so without this the
+                editor would vanish with it and a wrong owner could never be
+                fixed — the same dead end, one save later. */}
+            <BoundaryEditor room={room} />
           </div>
         </details>
       </section>
@@ -221,6 +276,7 @@ function WorkroomDetailsContent({ detail, room }: Props) {
   return (
     <>
       <WorkroomCycles room={room} />
+      <WorkroomReviewRequirements profile={room.reviewProfile} />
 
       <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.65fr)_minmax(18rem,0.75fr)]">
         <section
@@ -259,13 +315,15 @@ function WorkroomDetailsContent({ detail, room }: Props) {
             </details>
           ) : null}
 
-          <div className="border-t border-[var(--dpf-border)] p-4">
-            <WorkItemCommentBox workItemId={detail.workItemId} caseKey={room.roomKey} />
-          </div>
+          {detail.workItemId ? (
+            <div className="border-t border-[var(--dpf-border)] p-4">
+              <WorkItemCommentBox workItemId={detail.workItemId} caseKey={room.roomKey} />
+            </div>
+          ) : null}
         </section>
 
         <aside aria-label="Work Room context" className="space-y-3">
-          <ContextPanels room={room} />
+      <ContextPanels room={room} workroomId={detail.workroomRowId} />
         </aside>
       </div>
 
@@ -287,6 +345,7 @@ function WorkroomDetailsContent({ detail, room }: Props) {
 export function WorkroomBodyContent({
   detail,
   room,
+  flowMap,
   mode,
   onModeChange,
 }: Props & {
@@ -300,6 +359,7 @@ export function WorkroomBodyContent({
       <WorkroomShapeSection
         graph={projectRoomShape(room)}
         room={room}
+        flowMap={flowMap ?? null}
         mode={mode}
         onModeChange={onModeChange}
       />
@@ -311,12 +371,13 @@ export function WorkroomBodyContent({
   );
 }
 
-export function WorkroomBody({ detail, room }: Props) {
+export function WorkroomBody({ detail, room, flowMap }: Props) {
   const [mode, setMode] = useWorkroomViewMode();
   return (
     <WorkroomBodyContent
       detail={detail}
       room={room}
+      flowMap={flowMap}
       mode={mode}
       onModeChange={setMode}
     />

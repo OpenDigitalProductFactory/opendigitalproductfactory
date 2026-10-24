@@ -10,6 +10,7 @@ describe("CLI quota banner is recognised", () => {
   const observed = [
     "You've hit your weekly limit · resets 4pm (UTC)",
     "You've hit your weekly limit · resets Aug 18, 4pm (UTC)",
+    "You've hit your org's monthly spend limit · ask your admin to raise it at claude.ai/admin-settings/usage · your weekly limit resets Sep 29, 4pm (UTC)",
   ];
 
   it.each(observed)("matches the shape actually observed: %s", (text) => {

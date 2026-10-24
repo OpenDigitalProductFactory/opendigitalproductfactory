@@ -1,5 +1,11 @@
 # Pre-PR test gate
 
+`pnpm run pregate` applies existing saved host trust even when its desktop parent
+predates the environment setting. A verified TLS probe runs before host guards;
+an unavailable transport exits 88 without a test verdict. See
+[saved host trust](../install/platform-support-watchlist.md#saved-host-ca-trust-and-stale-clients)
+for explicit overrides and certificate diagnostics.
+
 Every pull request against `main` runs the full DPF unit-test suite as a binding
 merge gate. **Tests run before merge — if they fail, fix in place, don't
 push-and-pray.**
@@ -14,8 +20,83 @@ wins and this doc is the bug — fix it.
 
 ## The contract (read this first)
 
+Automatic worktree adoption observes the actual repository, branch, worktree,
+fetched base branch, merge-base SHA and head SHA through the existing binder.
+Local Git observation has one ten-second elapsed budget. Missing ancestry is
+unavailable identity, never a substitute base equal to HEAD. The creation hook,
+CLI and reconciliation validate authoritative readback and recheck source
+identity after adoption before caching a binding. Conflicting, incomplete or
+changed identity leaves the recorded room for inspection and writes no success
+marker. Legacy direct adoption remains a compatibility path; a saved claim is
+not by itself proof that current source identity or review readiness is valid.
+
+Host policy commands use the existing observed-process runner with a 30-minute
+command budget, bounded diagnostic tails and graceful/forced tree termination.
+The parent preflight has a 60-minute outer budget. Full source guard loops have
+exceeded ten minutes on developer hosts, so that shorter budget is unsuitable.
+Cancellation and deadline
+expiry are unrun outcomes (exit 88), including a late zero child exit. Guard
+violations, environment limitations and interrupted execution remain distinct.
+Environment-limited host checks may continue to canonical CI, but are reported
+inconclusive and cannot produce reusable passing host receipts.
+
+Progress and results live in the existing per-worktree Git directory's
+`dpf-host-guard-receipts` slot. Interrupted exceptions settle inconclusive; an
+externally killed process retains its running receipt and PID for reconciliation.
+Only complete successful results with unchanged source, policy, dependency and
+environment identity are reused. Inspect the receipt before retrying an
+interrupted command. A queued sibling cannot hide admitted progress for the
+same branch and SHA; neither queued nor admitted is a verification pass.
+
+Host resource admission shares the existing lease-call allowance: 60 seconds
+by default, tunable through `DPF_GATE_MCP_TIMEOUT_MS`, while ordinary MCP probes
+retain their 10-second default. The transport bounds the complete response,
+including a stream that continues to send bytes. A timed-out host claim gets
+one bounded lease reconciliation and at most one same-key replacement inside
+a finite elapsed deadline; an empty listing does not prove no admission exists.
+Uncertain admission returns unrun88 with the same source-bound resume pin.
+Authoritative refusal, foreign identity and active authority owned by another
+process stop recovery. A wrapped executable that cannot spawn is also unrun88;
+an executed child's nonzero exit remains a code result. Windows package-manager
+shims use the existing command resolver, which launches the installed
+pnpm/Corepack JavaScript entrypoint through Node with literal argv. Native
+pnpm executables run directly; an unsupported shim fails without a shell
+fallback. The observed process runner disables shell parsing on Windows too.
+Local-CI pinning generates a JavaScript forwarding entrypoint so selecting the
+repository version preserves argument boundaries throughout the launch chain.
+Cleanup refusal or uncertainty is reported separately with the original
+lease/session recovery action; it cannot be presented as a verified release
+or change an executed child's nonzero result to success.
+
+Begin [failure analysis](../architecture/failure-analysis-and-recovery.md) in design, refine it during implementation, and give the independent reviewer executed evidence for the final change. Local integration reports now bind their output to the owning Workroom, source tree and diff. An empty checklist, stale report or skipped run cannot satisfy that requirement. Technical review outages follow internal recovery; they are not business-owner approval requests.
+
 Cross-session drift happens when each session reconstructs the workflow from
-prose. Don't. Before you open a PR, in order:
+prose. Don't — and the mechanical form of the list below is one command:
+
+```bash
+pnpm land --message-file msg.txt --title "type(scope): ..." --body-file body.md
+```
+
+`pnpm land` runs steps 1-5 in order and stops at the first refusal with the one
+next action: branch and readiness preconditions, `gate:context` (so required
+attestations and stale derived artifacts arrive rather than being looked up),
+regeneration using the command the derived-artifacts registry carries,
+`gate:local` against the working tree with the planned commit message,
+DCO-signed commit, `gate:wait` (queue and infrastructure classification already
+written down), push, PR, auto-merge with the enable VERIFIED. `--dry-run` prints
+the plan. Pass the flags directly — a `--` separator before them is swallowed
+by pnpm, which is how a present attestation gets reported as missing.
+
+It overrides nothing and invents nothing: a refusal stops the sequence, and a
+PR-body attestation it was not given is reported by name rather than written for
+you. It gates before it pushes, which is what "PR creation means ready to merge"
+requires.
+
+Read the list below when you need to know WHY a step exists, or when you are
+doing something the orchestrator does not cover. Running the steps by hand is
+how the prose drifts.
+
+Before you open a PR, in order:
 
 1. **Branch guard.** You are on a topic branch in a worktree, not on `main` and
    not in detached HEAD. (AGENTS.md §4.)
@@ -39,6 +120,12 @@ naming the substrate it ran on (AGENTS.md §15).
 ---
 
 ## Which gate runs where
+
+`pnpm pr:readiness` selects policy guards using the same changed-file
+classification as CI and host pregate. For documentation-only changes, it
+omits only guards explicitly declared code-only. Documentation guards and
+guards without input declarations still run. Mixed and unknown changes retain
+all guards; scope selection never substitutes for required publication proof.
 
 This is the single biggest source of drift, so it gets the decision table. A
 worktree is **source-control isolation, not a second DPF install**
@@ -65,6 +152,8 @@ and capture that as the evidence. See AGENTS.md §5 "Where each gate runs".
 ---
 
 ## What runs in CI
+
+Public-site changes also run the [documentation publication build](../architecture/build-gate-runbook.md), including rendered-example and malformed-Liquid checks. Its result feeds Merge Readiness; publication itself remains a separate Pages deployment.
 
 The root `pnpm test` script is:
 
@@ -103,6 +192,34 @@ The profiles reflect execution substrate, not separate policy inventories:
 
 #### Re-evaluating a trailer or label without pushing
 
+### A scoped seed-fit answer names its mechanism
+
+`Seed-Fit-Decision: archetype-scoped` and `vertical-scoped` claim the content is
+limited to some installs. Since BI-B507DBD1 the claim must also say **how** that
+limit is enforced, and the named rule must appear in the diff:
+
+```
+Seed-Fit-Decision: archetype-scoped mechanism=seed-gate  symbol=referenceModelAppliesToInstall
+Seed-Fit-Decision: vertical-scoped  mechanism=read-scope symbol=regulationApplies
+```
+
+Two mechanisms exist, both correct, and the choice is yours:
+
+- **`seed-gate`** — do not put the content on installs it does not serve. The
+  seeder consults an applicability rule before writing.
+- **`read-scope`** — ship it everywhere on purpose and filter at consumption.
+  Each row declares applicability and the read path evaluates it.
+
+`global-default` claims no limit and owes no mechanism. A label can still carry
+the decision, but a scoped one needs the mechanism in the body, because a label
+cannot carry the evidence.
+
+This exists because in BI-C44EAEE6 a banking reference model was scoped at seed
+time and never on read, so a pet rescue advertised it as active. One half
+shipped, the other did not, and nothing looked at the pair. The gate now checks
+that the rule you name is actually referenced by a file you changed, so an
+unimplemented claim fails rather than reads well.
+
 Several `pull-request` guards — Seed Contribution Fit, UX Fit, Design Grounding,
 Docs Impact — tell you to add a trailer such as `Seed-Fit-Decision:` to the PR
 body, or to apply a label. **Editing the body alone used to do nothing.**
@@ -116,6 +233,14 @@ closes that (BI-6868891B). It runs the same `pull-request` profile on
 `edited` / `labeled` / `unlabeled` only, and posts **`Policy Guards (recheck)`** —
 a separate, advisory check. Add your trailer, wait for the recheck, and you know
 whether the fix is accepted before spending a push.
+
+The `pull-request` profile also reads the PR **title** (`PR_TITLE`, beside
+`PR_BODY`). The Hidden Unicode Commit Text Guard (BI-5D412E3C) refuses a commit
+message, PR title or PR body that carries a character a reviewer cannot see:
+zero-width, bidi override, Tags-block. This repo squash-merges with the
+branch's commit messages, so a hidden character in any commit lands in `main`.
+Fix the commit message itself (reword and re-push); editing the PR body only
+clears the body and title findings.
 
 It is deliberately **not** the binding check, and `ci.yml` is deliberately
 unchanged. Check runs are keyed per commit SHA and the latest result for a name
@@ -173,7 +298,7 @@ touched:
 ```bash
 pnpm --filter web test        # touched apps/web?
 pnpm --filter @dpf/db test    # touched packages/db?  (needs Postgres)
-pnpm --filter mobile test     # touched apps/mobile?
+(cd apps/mobile && pnpm install && pnpm test)  # touched apps/mobile? (its own workspace)
 ```
 
 To reproduce the full CI aggregate, run `pnpm test` against the **canonical
@@ -204,7 +329,7 @@ worktree path: doing so can point cleanup at a different sibling and is rejected
 before host state is mutated.
 Slot 0 preserves the singleton portal on `http://localhost:3010` and uses its
 dedicated PostgreSQL endpoint on port `15432`; it may still consume shared,
-read-only or concurrency-safe development services such as Qdrant and Neo4j.
+read-only or concurrency-safe development services.
 Slot 1 is declared and testable, but automatic admission remains fixed at one
 until BI-A4427AB8 runs the separately governed capacity pilot.
 
@@ -218,8 +343,8 @@ pnpm run pregate            # → node scripts/pregate.mjs
 `local-integration-ci` lease, `pregate.mjs` runs the deterministic CI policy
 guards host-natively — the same check commands CI's Policy Guards jobs run
 (module size, style drift, derived-artifact staleness, doc links, SBOM, plus
-the workspace-dependent prose ratchet, and the commit-range-driven UX-Fit and
-Design Grounding trailer gates), with guard self-tests stripped and
+the workspace-dependent prose ratchet, and the commit-range-driven UX-Fit,
+Design Grounding and Convergence-Impact trailer gates), with guard self-tests stripped and
 PR-body-dependent gates (Seed-Fit, Decision Baseline) left to CI.
 
 **Not every `node --test` is a self-test (BI-7B249AFE).** Some files in the
@@ -312,7 +437,11 @@ writes the latest gate result to Git-local state
 pass on one slot retires any non-passing sibling-slot record for the same
 branch and SHA as `superseded`, and every reader of that state (`pregate:status`,
 the pre-push hook, `pr:health`, the PreToolUse publish guard) consults all
-slots, so an earlier attempt on another slot cannot shadow a real pass. It
+slots, so an earlier attempt on another slot cannot shadow a real pass.
+`pregate:status` re-reads the winner a superseded record names. If that record
+no longer passed the same branch and SHA (a late lease loss can rewrite it
+after the fact), it names the winner's actual status and says no slot holds a
+pass, instead of repeating "passed" (BI-A9031FF3). It
 overwrites stale state with `admitted` and then `running` as soon as it owns the
 sandbox, before the expensive command mutates the runtime. If the child wrapper
 exits before a terminal record is written, `pregate` reads that running state,
@@ -325,6 +454,37 @@ records the failure and retries only inside its last known authority window. A
 separate deadline terminates the child tree before that window expires if no
 successful renewal advances it. MCP requests have their own bounded transport
 deadline, so a hung heartbeat cannot outlive the lease silently.
+
+**Prerequisite failures remain retryable.** A runner prerequisite failure
+(exit 8, including a required base fetch that cannot reach the network) is
+infrastructure evidence. The durable resumer retries the same pinned request,
+with exponential backoff and equal jitter capped at 90 seconds. It stops starting
+attempts at the wait deadline; an already-running attempt remains governed by its
+own execution and lease-authority bounds. A product failure or cancellation stops
+resumption. This does not establish host-worker single execution or outage fairness.
+
+**Cleanup and legacy process identity.** Concurrent release callers share one
+request. Only confirmed success completes cleanup; a failed call stays retryable.
+Legacy admission checks the invoked Node script or Docker build context and follows
+its descendants. Merely naming a runner in a shell payload or an unrelated command
+argument does not establish a live mutator. POSIX process-list text can lose argument
+boundaries; exact argv, when available, takes precedence.
+
+**The heartbeat is protected from the gate's own work.** A renewal timer only
+helps if the process is free to run it, and for a period it was not: the
+in-run descendant scan used a synchronous `ps` on a fixed interval, so on a
+host where that scan cost more than its interval the event loop saturated and
+no timer fired at all — the lease expired unrenewed and the deadline then
+fenced a run that was progressing normally. The signature was unmistakable:
+no heartbeat events for the length of the build, then every starved timer
+firing at once the moment the scan stopped, and the renewal that finally ran
+succeeding. The scan is now asynchronous and self-rescheduling — the next
+scan is scheduled only once the previous has returned — so it cannot queue
+behind itself or block the renewal. One synchronous observation remains,
+immediately before a fence kills the tree, because a descendant reparents to
+init the moment its parent dies and could otherwise escape the reap. If a
+long run is ever fenced for lease authority again, this is the first thing to
+re-measure (BI-04AECD8A).
 
 **Equivalent gate requests are single-flight.** Before admission, the gate
 builds the exact merge-tree evidence plan and fingerprints the host toolchain.
@@ -391,6 +551,20 @@ displayed model size is ordinary RAM, conflate GPU VRAM with physical memory,
 or infer the Docker/WSL/shared-memory mechanism. It also does not terminate a
 model that was already resident before admission.
 
+**The fence measures available memory, not free memory (BI-EB6DBAF0).** The
+execution-pressure fence revokes an admitted lease when the host observation
+reports less than 4 GiB. That observation is reclaimable-inclusive: `vm_stat`
+free + inactive + speculative + purgeable on Darwin, `/proc/meminfo`
+`MemAvailable` on Linux, with `os.freemem()` kept only as a last resort so a
+wedged probe cannot wedge the gate. `os.freemem()` alone reports the free page
+pool, which excludes memory the kernel returns on demand — on a 128 GiB macOS
+host it read 17.5 GiB against 47.5 GiB genuinely available. Measuring the free
+pool made the gate fence its own work: `next build`, running under the 16 GiB
+heap the gate had just granted, drove the free pool under the floor while tens
+of GiB stayed reclaimable, and the run was killed as `host-memory-low` after
+its tests had already passed. A reading that matched only the free bucket is
+refused rather than reported as available.
+
 **Fail-fast command order (BI-7BCCDE3D).** Inside an admitted runtime-code
 gate, freshness, Prisma generation, migrations, and the cheap doc/repository
 guards run first. Web typecheck then runs before exhaustive Vitest, followed by
@@ -438,6 +612,19 @@ push` is a correct composition. Add `--json` for machine use. It never claims a
 lease and never runs a gate, so it is safe to call at any time, including while
 someone else's gate is mid-run.
 
+**Queued and broken read differently (BI-277ECBDB).** A queued claim reads
+`queued behind N other claims`: it is waiting on other work, and its waiter runs
+it. Before claiming, the gate probes every slot's PostgreSQL container
+(`dpf-local-ci-postgres-<N>`) and starts a stopped one itself. When no slot's
+container can run, it claims nothing, exits **9**, and `pregate:status` reads
+`BLOCKED — slot substrate unavailable: <container> is <state>`. That status
+carries Docker's refusal and the remedy instead of `pnpm run pregate`, because
+gating again changes nothing until the container runs. The slot containers carry
+`--restart unless-stopped`, so a host or Docker restart no longer removes them.
+A pool that keeps admitting gates that never record a result raises the
+`local-ci:pool-admissions-without-results` condition through the substrate
+reconciler, so the stall is surfaced instead of inferred by each session.
+
 Everything else about a pregate run lies in a documented direction, which is why
 the reader exists (BI-B1065D41):
 
@@ -452,7 +639,12 @@ anchor *for that run* — it is what the closing summary block ends with. It is
 just not the thing to build automation on.
 
 **How to invoke it.** Run `pregate` in the **foreground**, unpiped, as the sole
-command. On timeout the harness migrates a foreground run to the background and
+command. A captured run whose stdout is not a terminal stops immediately with
+exit 11 and does not take a pool slot, unless `DPF_PREGATE_ALLOW_CAPTURE=1`,
+`CI=true`, or `GITHUB_ACTIONS=true` is set, or the arguments are `--help` or
+`--dry-run` (BI-4BCD269B). `pnpm gate:wait` sets that allowance and, on Windows,
+launches `pnpm.cmd` so the spawn is not recorded as a failed gate (BI-2FFDBE62).
+On timeout the harness migrates a foreground run to the background and
 it **continues** — that is the working path, and it is the opposite of the
 intuitive choice. Do not background it (`&` or `run_in_background`: the harness
 caps and kills it mid-install), do not chain another command after it with `;`
@@ -513,7 +705,17 @@ ref and evidence is labeled `offline-accepted`. `--fetch-base` and
 `DPF_LOCAL_CI_FETCH_BASE=1` remain compatibility aliases for the default
 required online refresh. `DPF_LOCAL_CI_COMMAND` remains an explicit override. The
 old Phase 1 stub is only reachable via `DPF_ALLOW_LOCAL_CI_STUB=1` for contract
-tests and must never be used as release evidence.
+tests and must never be used as release evidence. It still walks the whole pass
+path and records `status: "passed"`, so every record it writes and the evidence
+it sends carry `testStub: true` (BI-53B189C8). No push reader accepts a marked
+record: `pregate:status` reports it as INCONCLUSIVE and names the stub, and the
+pre-push hook, the agent publish guard and `pr:health` all refuse it. The portal
+refuses a marked payload outright with `test_stub_evidence_refused` (BI-F5344F65):
+it records no evidence row a PR could cite, changes no pool policy and adds no
+builder calibration, so a stub run against a real portal fails closed. Tests that
+spawn `scripts/gate-worktree.mjs` must pass a temp repository as `--worktree`,
+never the checkout running the suite; `gate-worktree-lease.test.mjs` ends with a
+test that fails if any of its gates wrote into the caller's git dir.
 
 The command plan carries required process environment as `env NAME=value ...`
 prefixes, and the Node runner interprets those prefixes directly instead of
@@ -567,11 +769,86 @@ consume this host reservation.
 
 Every queued observation persists its queue position, wait age, resolved pool
 policy (including `rollbackReason` and effective slot capacity), and paired
-host-pressure sample in the candidate's SHA-bound gate state. Later recovery or
-terminal writes retain the latest admission record. Diagnose a timeout from
+host-pressure sample in the candidate's SHA-bound gate state. That sample is
+the observation the decision was actually taken on — the client's own reading
+merged with the canonical runtime's, which is what the policy weighed. It was
+previously the caller's sample alone, so a record could name a server-derived
+`rollbackReason` beside client numbers that did not support it (a
+`host-cpu-high` refusal printed next to 19.9% CPU against an 85 ceiling). A
+reason and the numbers beside it now come from one observation, because a
+record that disagrees with itself is not evidence (BI-48F42581). Later recovery
+or terminal writes retain the latest admission record. Diagnose a timeout from
 that durable record; do not infer the refusal from process residency, cancel
 and recreate a healthy FIFO claim, or conflate Docker model residency and GPU
 VRAM with Windows physical-memory telemetry.
+
+**A queue and a closed pool are two different waits, and the gate says which.**
+When the host rollback contracts the pool to `effectiveCapacity: 0`
+(`host-stage-headroom-low`, `host-memory-low`, `host-observation-stale`, ...),
+no slot can admit anyone, yet the claim is still parked with
+`admission.status: "queued"`. The waiting line then reads
+`local-CI pool is CLOSED (<rollbackReason>)` instead of `queued at position N`,
+the queued lease event and the durable-wait record carry `poolClosedReason`,
+and `pnpm run pregate:status` names host pressure rather than "the gate did not
+run". Behind a queue you wait your turn. Behind a closed pool you wait for host
+memory to free up, and your place in line does not matter (BI-D908DA0A). A
+headroom closure (`host-build-headroom-low`, `host-stage-headroom-low`) also
+prints the arithmetic it was decided on: available memory, the safety floor,
+the per-slot reserve and the shortfall (`poolPolicy.headroom`). No session
+action changes those numbers. Page cache already counts as available, so do
+not drop caches, and never run `sync` in the Docker VM, because it wedges the VM
+(BI-903FB5F9). The builder reserve is the measured peak of the gate's own
+production build plus a margin, not the builder's 16 GiB ceiling. Every gate
+record carries the measured peak as `evidence.builderMemory` (BI-D3BF53A9).
+
+**The production build is delegated to the merge queue (BI-3A14308C).** The
+local gate runs guards, typecheck and affected vitest, then stops. The merge
+queue's required `pnpm --filter web build` job is the binding production build
+(AGENTS.md §4), so a local gate reserves no builder memory in the Docker VM:
+admission needs only the host-stage reserve. The gate record says
+`productionBuild: delegated`, never that a local build passed. To build locally
+anyway, for example to reproduce a failure only the Docker image build shows,
+run the gate with `DPF_LOCAL_CI_BUILD_STRATEGY=local`. That run reserves the
+builder memory as before and records the builder's measured peak.
+
+The reserve keeps itself current (BI-903FB5F9):
+
+- Each leased gate result folds its measured peak into the
+  `local_ci.builder_memory_calibration` PlatformConfig row, a window of the 20
+  newest peaks.
+- With 5 or more peaks, admission reserves the window's highest peak plus the
+  checked-in margin.
+- With fewer peaks, it keeps the checked-in calibration.
+- After any OOM kill in the window, it reserves the full ceiling.
+- The admission decision reports which one applied as `builderReserve`.
+- A guard (`scripts/check-no-manual-vm-cache-drop.mjs`) refuses a manual
+  page-cache drop recipe in any tracked file.
+
+A fenced run likewise records *which* fence fired
+(`fence reason: lease-authority-deadline`, ...) in its gate record, so a
+self-fence never reads as a reasonless failure of the diff (BI-ECAE03F7).
+
+**`gate_client_upgrade_required` means rebase, not retry.** The gate client and
+its durable-wait resumer run from the branch being gated, so a client defect
+fixed on `main` keeps running in every branch cut before the fix. Every claim
+therefore reports `gateClientRevision`, and the admission server refuses a
+claim below its floor with `gate_client_upgrade_required`. Today the floor is
+revision 1, on Windows hosts only: older clients opened a focus-stealing
+terminal window on every re-claim (BI-69178E02). The refusal is not a verdict on
+the diff. Re-running the same branch is refused again, and a stale resumer stops
+after the first refusal. Rebase onto `origin/main` and run `pregate` again.
+
+**A queued gate's waiter outlives the session that started it.** On Windows a
+process that node spawns stays inside its caller's job object, and the Claude
+Code client runs its whole tree in one job, so every durable-wait resumer died
+when its session closed (BI-27A37D27). The resumer is now started through WMI,
+outside that job. If WMI is unavailable, the queued payload says
+`resumerSurvivesSession: false` and the wait ends with the session. For a queued
+claim whose every waiter has ended, `pregate:status` says "no waiter is alive"
+instead of "queued". That is not a verdict on the diff: re-run `pregate`. While
+a live waiter already holds the same branch and SHA, another pregate does not
+spawn a second resumer; it exits 75 and names `detached-resumer` (BI-F63D8202).
+A branch cut before this fix keeps the old resumer until it is rebased.
 
 Typecheck writes a separate `web-typecheck` receipt before `next typegen &&
 tsc --noEmit` starts, heartbeats the compiler descendant tree, memory, and a
@@ -608,6 +885,18 @@ the wrapper reads that exact path. This prevents the two linked worktrees'
 different gitdirs from turning a green preflight into `freshness: unknown`, and
 prevents a stale prior report from classifying a new run.
 
+The integration plan's first step merges the candidate onto the accepted base.
+If that merge stops on conflicts, the runner reads the unmerged paths from git's
+index, aborts the merge, writes them to `execution.mergeConflict` in the run
+metadata, and exits 10 (`EXIT_CANDIDATE_MERGE_CONFLICT`). The wrapper records
+the existing `conflict` status. A run that stopped at its merge graded nothing,
+so the wrapper owes no completion checkpoint and does not rewrite the result as
+infrastructure. `pregate:status` reports FAIL and names the remedy: merge
+`origin/main` into the branch and resolve the listed paths (BI-FCC1DCB2). The
+same exit 10 is written before admission when `git merge-tree` reports a
+conflict, including a resumed gate, instead of labelling that resume
+`gate-identity-unavailable` (BI-45553400, BI-1F11D17A).
+
 The sandbox-freshness step checks the load-bearing runtime and gate packages,
 including the Vitest runner used by the next step. Vitest is checked for both
 locked version and runnable entrypoint imports, so an incomplete package cannot
@@ -632,12 +921,30 @@ runs `.githooks/pre-push-gate` through
 the same no-network Git wrapper and proves the same unexpired SHA-bound record
 is sufficient for later publication.
 
-**Quiescence-aware evidence recovery.** `pnpm run pregate` now preflights
-`get_quiescence_status` once before the expensive gate. If the portal is actively
-draining or swapping, the gate records `blocked_quiescence`, emits
-`local_ci_quiescence_wait`, and parks with exit 75 before claiming the lease or
-running the full local-CI command. It does not poll: rerun pregate after the
-server-owned quiescence coordinator completes. If the expensive gate already passed but
+The contract runs on Windows hosts with Git Bash as well as in CI (BI-1B4910B4).
+The injected curl transport quotes its arguments for MSYS `sh`, which would
+otherwise collapse `\\` in a JSON body that carries a Windows path. A test's
+`DPF_LOCAL_CI_COMMAND` must work under `cmd.exe` too, because the gate runs it
+through the platform shell. The three `local-ci-runner.mjs` unshallow tests
+skip on Windows: they stub git with a POSIX script on `PATH`, and Windows only
+ever resolves `git.exe`.
+
+**Quiescence-aware evidence recovery.** After checking for a reusable PASS,
+`pnpm run pregate` reads `get_quiescence_status` before running host preflight.
+Confirmed draining or swapping emits `local_ci_quiescence_wait` and exits 75
+without executing guards, claiming a lease, spawning a waiter or changing gate
+and pending-evidence files. The early probe bounds each credential exchange and
+status request to 2.5 seconds. An unavailable, refused or malformed read is
+inconclusive, not PASS or FAIL, and continues the existing preflight/admission
+path. Record-exempt invocations and an audited preflight skip do not run this
+early probe. The standalone `pregate:preflight` remains a source-only check.
+
+The gate still rechecks quiescence immediately before admission: the early read
+does not reserve capacity or authorize a later claim. That late check records
+`blocked_quiescence` for an ordinary run and parks with the same exit 75, while
+preserving existing evidence on `--finalize-evidence`. Neither check polls:
+resume after the server-owned quiescence coordinator completes.
+If the expensive gate already passed but
 `record_local_integration_result` is refused with `portal_quiescing`, the gate
 writes `.git/dpf-local-ci-pending-evidence.json`, attempts
 `release_nonprod_environment_lease`, and records
@@ -658,7 +965,11 @@ the state branch, SHA, metadata candidate SHA, and evidence record ID all agree;
 an expired 24-hour window still requires a new pregate.
 
 The pre-push gate blocks `evidencePending=true` records until finalization
-succeeds. Failure evidence also carries `failureSummary`, a bounded list of
+succeeds. `evidencePending` qualifies a PASS; it never establishes one. A run
+blocked by control-plane starvation also preserves its local evidence and sets
+the flag while `gatePassed` stays `false`, so `pregate:status` reports that
+record as `INCONCLUSIVE` and the fix is to re-run pregate on the SHA —
+`--finalize-evidence` has no published PASS to finalize and refuses (PR #5295). Failure evidence also carries `failureSummary`, a bounded list of
 failed tests/checks and omitted counts, plus an explicit pointer to
 BI-A4EC0EA6 for code-graph impacted-test recommendations. The complete output
 from the most recent run is retained outside the working tree at the git-private
@@ -750,8 +1061,9 @@ Allowlisted codes (see `LOCAL_CI_OVERRIDE_REASON_CODES` in
 | `docs-adjacent` | Prose/config that `isDocsOnlyFileSet` missed |
 | `delete-or-tag-only` | Delete/tag publication (also hook-exempt) |
 | `operator-emergency` | Named human consciously waived the gate |
-| `external-contribution-no-install` | No local DPF install / cannot run pregate |
+| `external-contribution-no-install` | No local DPF install / cannot run pregate. Recorded automatically for a cloud agent session (`CLAUDE_CODE_REMOTE=true`) whose push has no passing record and is not docs-only; the PreToolUse guard below allows its publish on the same basis |
 | `install-bootstrap-recovery` | Sandbox/install is the patient under repair |
+| `gate-infrastructure-unavailable` | Push-time only; the hook itself re-attempts the lease claim and records the failure (401, refused connection, 5xx) — refused when the claim succeeds; reads as gate-**unrun** |
 
 Push-time `DPF_SKIP_PREPUSH_GATE_REASON` must use the same code format or
 `pr:health` treats the recorded skip as a **blocker**, not a pass. The normal
@@ -764,8 +1076,12 @@ Claude / Codex / Grok PreToolUse runs
 **denies** `git push` and `gh pr create` when the worktree has no unexpired
 SHA-bound `dpf-local-ci-gate.json` for HEAD (or an allowlisted skip). This is
 the mechanical stop that prevents a surface from “finishing too fast” with only
-worktree vitest. Emergency: `DPF_ALLOW_UNGATED_PUSH=1` (still subject to
-`pr:health` / merge-readiness).
+worktree vitest. When the worktree carries `scripts/pregate-status.mjs`, that
+reader's verdict is final for gate records; the guard's own per-slot scan may
+add only a recorded override on top of it. Without the reader, the scan refuses
+a record bound to another branch and any `testStub` record (BI-53B189C8).
+Emergency: `DPF_ALLOW_UNGATED_PUSH=1` (still subject to `pr:health` /
+merge-readiness).
 
 ### Keep internal identifiers out of the PR body
 
@@ -836,6 +1152,27 @@ It does **not** run vitest/jest — that's CI's job. The hook path is auto-wired
 `postinstall` (`scripts/set-hooks-path.mjs` sets `core.hooksPath`). Emergency
 bypasses exist for verified false positives only: `DPF_SKIP_SECRET_SCAN=1` and
 `DPF_SKIP_TYPECHECK=1`. CI still gates the PR regardless of local bypass.
+
+Every package `typecheck` script goes through `scripts/run-tsc.mjs`, which
+checks with TypeScript 7, the native compiler (BI-2B8D67A9). The web production
+program takes seconds instead of minutes. TypeScript 6 remains the workspace's
+`typescript` library. `DPF_TSC=6` runs it as the checker instead, for comparing
+verdicts. The non-blocking CI job "Typecheck (TS6 reference, advisory)" does
+the same on every pull request.
+
+Updating TypeScript 7 is one PR that bumps the root `typescript7` alias
+(`pnpm add -w -D typescript7@npm:typescript@<version>`). Every surface follows
+the lockfile from there:
+- worktrees reinstall;
+- the local-CI sandbox's freshness step refuses to grade until its installed
+  `typescript7` matches the lock;
+- GitHub CI installs fresh;
+- Build Studio type-checks through `run-tsc.mjs` (BI-D2FE6931).
+
+Dependabot is not relied on to notice new releases of an `npm:`-aliased
+dependency. The weekly "TypeScript Checker Currency" workflow
+(`scripts/audit-typescript-checker-currency.mjs`) compares the pin with npm's
+latest release and keeps one tracking issue open while the pin is behind.
 
 The local feedback loop is therefore:
 
@@ -1017,6 +1354,43 @@ composite widget rather than one control (a radio-group heading), add a
 `label-association-allow` comment on the same line stating why. Tracked debt
 is the checked-in baseline itself; file a live BI before proposing a separate
 paydown campaign.
+
+### Room Addressing Guard
+
+`scripts/check-no-unreachable-room-links.mjs` fails a PR that makes a room
+unopenable. An operator reported that no **Open room** button on the attention
+inbox worked; it was four defects across four surfaces, each a different wrong
+answer to "how do I address a room", and none caught by a test.
+
+Two rules:
+
+- **Rule 1 — no hand-built work-case path.** `/workspace/cases/${x}` must come
+  from `encodeWorkCaseKey`. A key without its source-type prefix does not decode,
+  so the link 404s. No baseline: this is always wrong.
+- **Rule 2 — no provably-unreachable link.** An interpolated link whose route
+  prefix names an App Router directory with no dynamic child can never resolve.
+  Baselined (`scripts/room-addressing-baseline.json`, owned and expiring) so the
+  class cannot grow while a pre-existing entry is judged on its own. The
+  baseline shipped with four entries and is now **empty** (BI-235E9F00):
+  judging them found that two claimant links had no page at all, three
+  integration links spelled a slug the filesystem did not have, and — once the
+  first four were gone — a fifth (`/build/<id>`) that had been hiding behind
+  them. Retightening a baseline is how you find the next instance; leaving it
+  is how you keep it. Integration pages are now addressed only through
+  `apps/web/lib/tools/integration-settings-href.ts`, which reads routability
+  from the generated route manifest rather than a catalog that drifts.
+
+Only link contexts are considered. `revalidatePath`, `fetch` and cache keys take
+the same shape but cannot 404 at a person; folding them in would make the guard
+noisy enough to be ignored.
+
+```bash
+node scripts/check-no-unreachable-room-links.mjs            # check (what CI runs)
+node scripts/check-no-unreachable-room-links.mjs --update   # retighten after fixing a link
+```
+
+The reasoning lives in the kernel principle
+[A Room Is Reachable by Construction](../founder-kernel/wiki/principles/a-room-is-reachable-by-construction.md).
 
 ## What this gate is NOT
 

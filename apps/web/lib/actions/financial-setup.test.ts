@@ -89,21 +89,23 @@ describe("applyFinancialProfile", () => {
     );
   });
 
-  it("creates OrgSettings when none exist and uses profile default currency", async () => {
+  // The profile's defaultCurrency is a template default (GBP in most profiles),
+  // not the operator's; with no explicit choice the org keeps its own (BI-6030131C).
+  it("creates OrgSettings when none exist in USD, not the profile's template currency", async () => {
     mockPrisma.orgSettings.findFirst.mockResolvedValue(null);
-    mockPrisma.orgSettings.create.mockResolvedValue(makeSettings({ baseCurrency: "GBP" }));
+    mockPrisma.orgSettings.create.mockResolvedValue(makeSettings({ baseCurrency: "USD" }));
 
     const result = await applyFinancialProfile("healthcare_wellness");
 
     expect(result.applied).toBe(true);
     expect(result.profileName).toBe("Healthcare & Wellness");
     expect(mockPrisma.orgSettings.create).toHaveBeenCalledWith({
-      data: { baseCurrency: "GBP", autoFetchRates: true, appliedProfileSlug: "healthcare_wellness" },
+      data: { baseCurrency: "USD", autoFetchRates: true, appliedProfileSlug: "healthcare_wellness" },
     });
   });
 
-  it("updates existing OrgSettings", async () => {
-    const existing = makeSettings({ id: "existing-1" });
+  it("updates existing OrgSettings and keeps the currency the org's country set", async () => {
+    const existing = { ...makeSettings({ id: "existing-1", baseCurrency: "MXN" }), countryCode: "MX" };
     mockPrisma.orgSettings.findFirst.mockResolvedValue(existing);
     mockPrisma.orgSettings.update.mockResolvedValue(existing);
 
@@ -111,7 +113,7 @@ describe("applyFinancialProfile", () => {
 
     expect(mockPrisma.orgSettings.update).toHaveBeenCalledWith({
       where: { id: "existing-1" },
-      data: { baseCurrency: "GBP", autoFetchRates: true, appliedProfileSlug: "professional_services" },
+      data: { baseCurrency: "MXN", autoFetchRates: true, appliedProfileSlug: "professional_services" },
     });
     expect(mockPrisma.orgSettings.create).not.toHaveBeenCalled();
   });

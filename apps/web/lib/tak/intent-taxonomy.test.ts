@@ -22,6 +22,18 @@ describe("classifyTaskClass", () => {
     expect(classifyTaskClass({ routeContext: "/ops", message: "thanks, that helps" })).toBeNull();
   });
 
+  it("does not turn supplied source analysis into a provider-status task", () => {
+    expect(classifyTaskClass({ routeContext: "/platform/ai", message:
+      "Explain this code snippet.\n```ts\nconst provider = available ? model : null;\n```",
+    })).toBeNull();
+  });
+
+  it("retains the provider-status task for a live question after fenced code", () => {
+    expect(classifyTaskClass({ routeContext: "/platform/ai", message:
+      "Explain this code snippet.\n```ts\nconst provider = model;\n```\nIs the provider online now?",
+    })?.taskClass).toBe("provider-health");
+  });
+
   it("returns null for a route no class covers", () => {
     expect(classifyTaskClass({ routeContext: "/workspace/notes", message: "what is open?" })).toBeNull();
   });

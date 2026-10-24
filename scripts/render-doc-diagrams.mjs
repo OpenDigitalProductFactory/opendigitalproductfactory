@@ -14,19 +14,18 @@
 //   node scripts/render-doc-diagrams.mjs           # render/refresh SVGs
 //   node scripts/render-doc-diagrams.mjs --check    # fail if any SVG is stale/missing/orphaned
 //
-// Requires @mermaid-js/mermaid-cli AND its puppeteer browser — runs in the
-// convergence sandbox or a compile-ready environment, NOT a source-only
-// worktree. The mermaid-cli JS entry is resolved and run through the current
-// Node, which is portable across platforms; override with
-// MMDC=/path/to/mermaid-cli/src/cli.js.
+// Rendering goes through scripts/lib/mermaid-renderer.mjs: a local mermaid-cli
+// if one is installed (MMDC=... overrides), otherwise the pinned
+// minlag/mermaid-cli tool image through Docker. mermaid-cli is no longer a
+// workspace dependency (BI-DBDB8C6D). `--check` stays pure Node.
 
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
-import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { diagramSlug, DIAGRAMS_DIR } from "../apps/web/lib/docs/diagram-assets.mjs";
+import { availableMermaidRenderer, renderMermaid, MERMAID_RENDERER_HINT } from "./lib/mermaid-renderer.mjs";
 import {
   hasIntrinsicDocDiagramSize,
   normalizeDocDiagramSvg,
@@ -43,25 +42,6 @@ const SOURCE_DIRS = [
 const DIAGRAMS_ABS = path.join(REPO_ROOT, DIAGRAMS_DIR);
 const MANIFEST = path.join(DIAGRAMS_ABS, "manifest.json");
 const PORTAL_VERSIONS = path.join(REPO_ROOT, "apps", "web", "lib", "docs", "diagram-versions.generated.mjs");
-// Resolve mermaid-cli's JS ENTRY by default, not the `.bin` shim.
-//
-// `node_modules/.bin/mmdc` is a POSIX `sh` script; on Windows the runnable
-// sibling is `mmdc.CMD`, and Node's execFileSync refuses to spawn either
-// without a shell. The failure surfaces as an execFileSync object dump with
-// `pid: 0` and no stderr, which reads as an unexplained crash rather than
-// "wrong file for this platform" (BI-334CB7DE).
-//
-// Running the JS entry through the CURRENT Node interpreter is portable on
-// every platform and needs no shell, so it is the default. The `.bin` shim
-// stays as the fallback for a layout where the entry is missing, and MMDC
-// still overrides both.
-function resolveMmdc() {
-  if (process.env.MMDC) return process.env.MMDC;
-  const jsEntry = path.join(REPO_ROOT, "node_modules", "@mermaid-js", "mermaid-cli", "src", "cli.js");
-  if (fs.existsSync(jsEntry)) return jsEntry;
-  return path.join(REPO_ROOT, "node_modules", ".bin", "mmdc");
-}
-const MMDC = resolveMmdc();
 
 /**
  * Extract every ```mermaid fence body from one markdown document, in order.
@@ -124,33 +104,14 @@ const assetRel = (slug, index) => `${DIAGRAMS_DIR}/${slug}/${index}.svg`;
 // Regex-based HTML sanitization is intentionally NOT used (it is provably
 // incomplete; the architectural control above is the real boundary).
 
-function renderOne(content, outAbs, tmpDir, puppeteerCfg) {
+function renderOne(content, outAbs, tmpDir, renderer) {
   const tmp = path.join(tmpDir, `d-${sha(content)}.mmd`);
-  fs.writeFileSync(tmp, `${content}\n`);
-  fs.mkdirSync(path.dirname(outAbs), { recursive: true });
-  const mmdcArgs = ["-i", tmp, "-o", outAbs, "-b", "transparent", "--puppeteerConfigFile", puppeteerCfg];
-  // MMDC may point at mermaid-cli's JS entry (e.g. .../mermaid-cli/src/cli.js):
-  // on Windows the .bin shim is a .cmd, which Node refuses to spawn without a
-  // shell, so running the JS entry through the current Node is the portable path.
-  const [cmd, args] = /\.[cm]?js$/i.test(MMDC)
-    ? [process.execPath, [MMDC, ...mmdcArgs]]
-    : [MMDC, mmdcArgs];
+  fs.writeFileSync(tmp, `${content}
+`);
   try {
-    execFileSync(cmd, args, {
-      stdio: ["ignore", "ignore", "inherit"],
-    });
+    renderMermaid({ input: tmp, output: outAbs, background: "transparent", renderer });
   } catch (err) {
-    // mermaid-cli drives headless Chrome through puppeteer. A worktree that
-    // installed dependencies without the browser download fails here, and the
-    // raw execFileSync error is an object dump that names neither cause nor
-    // remedy. Say both (BI-334CB7DE).
-    const hint =
-      "\n  Rendering a Mermaid fence needs mermaid-cli AND its puppeteer browser." +
-      "\n  If the error above mentions chrome-headless-shell or a browser download," +
-      "\n  install it once:  npx puppeteer browsers install chrome-headless-shell" +
-      `\n  Binary in use: ${MMDC}` +
-      "\n  Override with MMDC=/path/to/mermaid-cli/src/cli.js if it lives elsewhere.";
-    throw new Error(`render-doc-diagrams: failed to render ${path.relative(REPO_ROOT, outAbs)}${hint}`, {
+    throw new Error(`render-doc-diagrams: failed to render ${path.relative(REPO_ROOT, outAbs)}${MERMAID_RENDERER_HINT}`, {
       cause: err,
     });
   }
@@ -195,14 +156,13 @@ function main() {
   // Render mode. Prune orphans, render/refresh, rewrite manifest.
   fs.mkdirSync(DIAGRAMS_ABS, { recursive: true });
   // Unique, unpredictable per-run temp dir (mkdtemp) for the intermediate .mmd
-  // and puppeteer config — avoids the predictable-temp-path race/symlink class.
+  // — avoids the predictable-temp-path race/symlink class.
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "dpf-diagrams-"));
-  const puppeteerCfg = path.join(tmpDir, "puppeteer.json");
-  const cfg = { args: ["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage"] };
-  // On Alpine/musl (the convergence sandbox), point at the system chromium —
-  // Google's glibc Chrome cannot run there. Set PUPPETEER_EXECUTABLE_PATH.
-  if (process.env.PUPPETEER_EXECUTABLE_PATH) cfg.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
-  fs.writeFileSync(puppeteerCfg, JSON.stringify(cfg));
+  const renderer = availableMermaidRenderer();
+  if (!renderer) {
+    console.error(`render-doc-diagrams: no Mermaid renderer available.${MERMAID_RENDERER_HINT}`);
+    process.exit(1);
+  }
 
   try {
     for (const key of Object.keys(manifest)) {
@@ -217,14 +177,14 @@ function main() {
       const abs = path.join(REPO_ROOT, assetRel(f.slug, f.index));
       const hash = sha(f.content);
       if (manifest[key] !== hash || !normalizeDocDiagramSvgFile(abs)) {
-        renderOne(f.content, abs, tmpDir, puppeteerCfg);
+        renderOne(f.content, abs, tmpDir, renderer);
         rendered++;
       }
       next[key] = hash;
     }
     fs.writeFileSync(MANIFEST, `${JSON.stringify({ generatedBy: "scripts/render-doc-diagrams.mjs", diagrams: next }, null, 2)}\n`);
     fs.writeFileSync(PORTAL_VERSIONS, portalVersionsSource(next));
-    console.log(`Rendered ${rendered} diagram(s); ${wanted.size} total in manifest.`);
+    console.log(`Rendered ${rendered} diagram(s) via ${renderer.kind}; ${wanted.size} total in manifest.`);
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }

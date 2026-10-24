@@ -1,17 +1,6 @@
-// ImprovementSignal writer for the governed Hermes-style learning loop.
-//
-// `2026-04-05-continuous-improvement-flywheel-design.md` owns the full
-// signal-routing and prioritization (top-N ranking) pipeline. This module
-// preserves the (sourceType, sourceId) dedupe contract so a re-fired reflection
-// over the same source increments recurrenceCount instead of producing
-// duplicate rows.
-//
-// EP-INTAKE-UNIFY / BI-B716B387: it also closes the signal→backlog gap. A
-// signal that becomes PERSISTENT (recurs to SIGNAL_BACKLOG_THRESHOLD) is filed
-// once through the shared backlog front door and back-linked via
-// ImprovementSignal.backlogItemId. One-off signals stay evidence-only, so the
-// backlog stays low-noise without a scheduled evaluation. The backlog's own
-// triage does prioritization — this is intake, not ranking.
+// Shared improvement-signal intake. Immutable issue reports are replay-safe;
+// recurring observers retain their existing persistence-to-backlog contract.
+// See docs/architecture/improvement-signal-intake.md for the scope boundary.
 
 import { randomUUID } from "crypto";
 
@@ -19,15 +8,18 @@ import type { Prisma } from "@dpf/db";
 import { prisma } from "@dpf/db";
 
 import { ingestBacklogItem } from "@/lib/operate/backlog-ingest";
+import { toolDefectOrigin } from "@/lib/operate/tool-defect-origin";
 import type { BacklogWorkType } from "@/lib/explore/backlog";
 
-/**
- * A signal that has recurred this many times is worth a BacklogItem. Recurrence
- * is the only persistence signal the schema carries (there is no severity), so
- * it is the gate. Tunable; the flywheel design may later replace this with a
- * ranked top-N evaluation.
- */
 export const SIGNAL_BACKLOG_THRESHOLD = 3;
+
+export function signalSourceTypeToWorkType(sourceType: string): BacklogWorkType {
+  const source = sourceType.toLowerCase();
+  if (source.includes("skill") || source.includes("curation")) return "skill";
+  if (source.includes("tool")) return "tool";
+  if (source.includes("doc")) return "doc";
+  return "bug";
+}
 
 export type CreateOrTouchImprovementSignalInput = {
   /** Source vocabulary (e.g. "platform_issue_report", "user_correction"). */
@@ -53,8 +45,6 @@ export type CreateOrTouchImprovementSignalResult = {
   backlogItemId?: string;
 };
 
-/** Files a persistent signal into the backlog. Returns the item id, or null when
- *  projection failed (non-fatal — the signal is still recorded). */
 export type FileSignalBacklogItemFn = (input: {
   signalId: string;
   sourceType: string;
@@ -66,120 +56,58 @@ export type FileSignalBacklogItemFn = (input: {
   recurrenceCount: number;
   routeContext?: string | null;
   agentId?: string | null;
+  evidence?: unknown;
 }) => Promise<{ itemId: string } | null>;
 
-export type ImprovementSignalDeps = {
-  fileBacklogItem?: FileSignalBacklogItemFn;
+export type ImprovementSignalDeps = { fileBacklogItem?: FileSignalBacklogItemFn };
+
+const filePersistentSignal: FileSignalBacklogItemFn = async (signal) => {
+  try {
+    const result = await ingestBacklogItem({
+      title: signal.title,
+      body: [
+        signal.description,
+        signal.suspectedRootCause ? `Suspected root cause: ${signal.suspectedRootCause}` : null,
+        signal.objectiveImpactHypothesis ? `Impact hypothesis: ${signal.objectiveImpactHypothesis}` : null,
+        `Signal ${signal.signalId} (${signal.sourceType}:${signal.sourceId})`,
+        `Recurrence: ${signal.recurrenceCount}`,
+      ].filter(Boolean).join("\n"),
+      workType: signalSourceTypeToWorkType(signal.sourceType),
+      source: "automated-detection",
+      itemIdPrefix: "SIG",
+      agentId: signal.agentId ?? null,
+      // A repeated tool failure files under its tool, not this per-agent+route
+      // signal, so every coworker's observation lands on one item (BI-891E4E11).
+      origin: toolDefectOrigin(signal.evidence) ?? { kind: "improvement-signal", id: signal.signalId },
+    });
+    return { itemId: result.itemId };
+  } catch (error) {
+    console.error("[improvement-flywheel] signal backlog projection failed", error);
+    return null;
+  }
 };
 
-function makeSignalId(): string {
-  return `IS-${randomUUID().slice(0, 8).toUpperCase()}`;
-}
-
-/** Map a signal source vocabulary to a backlog workType (advisory for triage). */
-export function signalSourceTypeToWorkType(sourceType: string): BacklogWorkType {
-  const s = sourceType.toLowerCase();
-  if (s.includes("skill") || s.includes("curation")) return "skill";
-  if (s.includes("tool")) return "tool";
-  if (s.includes("doc")) return "doc";
-  // Reflection / issue-report / correction friction is defect-class by default.
-  return "bug";
-}
-
-function defaultFileSignalBacklogItem(): FileSignalBacklogItemFn {
-  return async (s) => {
-    try {
-      const res = await ingestBacklogItem({
-        title: s.title,
-        body: [
-          s.description ?? null,
-          s.suspectedRootCause ? `Suspected root cause: ${s.suspectedRootCause}` : null,
-          s.objectiveImpactHypothesis ? `Impact hypothesis: ${s.objectiveImpactHypothesis}` : null,
-          `Signal ${s.signalId} (${s.sourceType}:${s.sourceId})`,
-          `Recurrence: ${s.recurrenceCount}`,
-        ]
-          .filter(Boolean)
-          .join("\n"),
-        workType: signalSourceTypeToWorkType(s.sourceType),
-        source: "automated-detection",
-        itemIdPrefix: "SIG",
-        agentId: s.agentId ?? null,
-        origin: { kind: "improvement-signal", id: s.signalId },
-      });
-      return { itemId: res.itemId };
-    } catch (err) {
-      // Non-fatal: the signal is still recorded even if the projection fails.
-      console.error("[improvement-flywheel] signal backlog projection failed", err);
-      return null;
-    }
-  };
-}
-
 /**
- * Insert a fresh ImprovementSignal row for `(sourceType, sourceId)` or, if one
- * already exists, bump its `recurrenceCount` and refresh `lastSeenAt` without
- * overwriting the original evidence. When the (post-increment) recurrence count
- * reaches SIGNAL_BACKLOG_THRESHOLD and the signal has not already been filed, it
- * is projected once into the backlog and back-linked.
- *
- * Dedupe lives on the schema's `@@unique([sourceType, sourceId])`. Callers MUST
- * supply a stable, source-derived `sourceId` — otherwise dedupe degrades to
- * per-row inserts.
+ * One platform_issue_report id names one report, so repeat delivery only touches
+ * it. Other sources keep the existing observer persistence contract until an
+ * occurrence-aware replacement is qualified. Their counts are not proof of
+ * independent occurrences or measured improvement benefit.
  */
 export async function createOrTouchImprovementSignal(
   input: CreateOrTouchImprovementSignalInput,
   deps?: ImprovementSignalDeps,
 ): Promise<CreateOrTouchImprovementSignalResult> {
-  const fileBacklogItem = deps?.fileBacklogItem ?? defaultFileSignalBacklogItem();
-  const where = {
-    sourceType_sourceId: { sourceType: input.sourceType, sourceId: input.sourceId },
+  const signalId = `IS-${randomUUID().slice(0, 8).toUpperCase()}`;
+  const immutableSource = input.sourceType === "platform_issue_report";
+  const where = { sourceType_sourceId: { sourceType: input.sourceType, sourceId: input.sourceId } };
+  const update = {
+    lastSeenAt: new Date(),
+    ...(immutableSource ? {} : { recurrenceCount: { increment: 1 } }),
   };
-
-  const existing = await prisma.improvementSignal.findUnique({
+  const select = { signalId: true, backlogItemId: true, recurrenceCount: true } as const;
+  const row = await prisma.improvementSignal.upsert({
     where,
-    select: { signalId: true },
-  });
-
-  if (existing) {
-    const updated = await prisma.improvementSignal.update({
-      where,
-      data: {
-        recurrenceCount: { increment: 1 },
-        lastSeenAt: new Date(),
-      },
-      select: { recurrenceCount: true, backlogItemId: true },
-    });
-
-    let backlogItemId = updated.backlogItemId ?? undefined;
-    if (!backlogItemId && updated.recurrenceCount >= SIGNAL_BACKLOG_THRESHOLD) {
-      const filed = await fileBacklogItem({
-        signalId: existing.signalId,
-        sourceType: input.sourceType,
-        sourceId: input.sourceId,
-        title: input.title,
-        description: input.description ?? null,
-        suspectedRootCause: input.suspectedRootCause ?? null,
-        objectiveImpactHypothesis: input.objectiveImpactHypothesis ?? null,
-        recurrenceCount: updated.recurrenceCount,
-        routeContext: input.routeContext ?? null,
-        agentId: input.agentId ?? null,
-      });
-      if (filed?.itemId) {
-        backlogItemId = filed.itemId;
-        await prisma.improvementSignal.update({ where, data: { backlogItemId: filed.itemId } });
-      }
-    }
-
-    return {
-      signalId: existing.signalId,
-      isNew: false,
-      ...(backlogItemId ? { backlogItemId } : {}),
-    };
-  }
-
-  const signalId = makeSignalId();
-  await prisma.improvementSignal.create({
-    data: {
+    create: {
       signalId,
       sourceType: input.sourceType,
       sourceId: input.sourceId,
@@ -194,7 +122,33 @@ export async function createOrTouchImprovementSignal(
       suspectedRootCause: input.suspectedRootCause ?? null,
       objectiveImpactHypothesis: input.objectiveImpactHypothesis ?? null,
     },
+    update,
+    select,
+  }).catch(async (error: unknown) => {
+    if (!error || typeof error !== "object" || !("code" in error) || error.code !== "P2002") throw error;
+    // Some Prisma adapters emulate upsert. The unique source key may race on
+    // insert; update that exact winner once, never an unrelated signalId row.
+    // If no source winner exists, propagate the failure instead of claiming success.
+    return prisma.improvementSignal.update({ where, data: update, select });
   });
-  // A brand-new signal (recurrenceCount=1) is below threshold — evidence only.
-  return { signalId, isNew: true };
+  let backlogItemId = row.backlogItemId ?? undefined;
+  if (!immutableSource && !backlogItemId && row.recurrenceCount >= SIGNAL_BACKLOG_THRESHOLD) {
+    // Concurrent touches can all read a null backlink here (BI-13C8F888). A
+    // per-signal lock makes filing one critical section: whoever holds it
+    // re-reads the link and files only when it is still empty.
+    backlogItemId = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`improvement-signal:${row.signalId}`}, 0))`;
+      const current = await tx.improvementSignal.findUnique({ where, select: { backlogItemId: true } });
+      if (current?.backlogItemId) return current.backlogItemId;
+      const filed = await (deps?.fileBacklogItem ?? filePersistentSignal)({ ...input, signalId: row.signalId, recurrenceCount: row.recurrenceCount });
+      if (!filed?.itemId) return undefined;
+      await tx.improvementSignal.update({ where, data: { backlogItemId: filed.itemId } });
+      return filed.itemId;
+    }, { timeout: 30_000 });
+  }
+  return {
+    signalId: row.signalId,
+    isNew: row.signalId === signalId,
+    ...(backlogItemId ? { backlogItemId } : {}),
+  };
 }

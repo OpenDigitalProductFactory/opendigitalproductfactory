@@ -31,6 +31,8 @@
 !scripts/rotate-runtime-transition-secret.mjs
 !scripts/lib/transition-signing.mjs
 !scripts/promoter-migration-envelope.mjs
+!scripts/promoter-epoch-evidence.mjs
+!scripts/lib/maintenance-epoch-receipt.mjs
 !scripts/installer/validate-install-state.mjs
 !scripts/installer/migrate-install-state.mjs
 !scripts/installer/resolve-host-identity.mjs
@@ -43,5 +45,12 @@
 !scripts/installer/install-state.v2.schema.json
 !scripts/lib/resolve-capability-compose-profiles.mjs
 !scripts/lib/govern-capability-compose-args.mjs
+!scripts/lib/script-argv.mjs
+!scripts/lib/git.mjs
 !scripts/lib/capability-state-hash.mjs
 !scripts/capability-service-catalog.generated.json
+!scripts/installer/runtime-apply-lock.mjs
+!scripts/installer/recovery-filesystem.mjs
+!scripts/lib/canonical-json.mjs
+!scripts/lib/local-sandbox-fence.mjs
+!scripts/lib/entry-module.mjs

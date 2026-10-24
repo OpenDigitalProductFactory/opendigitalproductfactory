@@ -2,7 +2,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
-vi.mock("@/lib/ai-inference", () => {
+vi.mock("@/lib/routing/inference-error", () => {
   class InferenceError extends Error {
     name = "InferenceError";
     constructor(
@@ -35,7 +35,7 @@ vi.mock("@/lib/ai-inference", () => {
 import type { AdapterRequest } from "./adapter-types";
 import type { RoutedExecutionPlan } from "./recipe-types";
 import { imageGenAdapter } from "./image-gen-adapter";
-import { InferenceError } from "@/lib/ai-inference";
+import { InferenceError } from "@/lib/routing/inference-error";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -63,6 +63,7 @@ function makeRequest(overrides: Partial<AdapterRequest> = {}): AdapterRequest {
       baseUrl: "https://api.openai.com/v1",
       headers: { Authorization: "Bearer sk-test" },
     },
+    fetchImpl: globalThis.fetch,
     messages: [{ role: "user", content: "A cat wearing a top hat" }],
     systemPrompt: "",
     ...overrides,

@@ -4,6 +4,8 @@ status: active
 
 # Install Public Reachability — one contract, pluggable providers
 
+**Program reference (2026-10-19):** [Company connectivity, customer registry and relationship-governed support](2026-10-19-company-connectivity-registry-support-design.md), EP-58240092, reconciles this delivery stream with mobile, registry, MSP exclusivity, provider signup and growth stages. This document still owns the reachability contract. Its historical implementation observations and backlog status are not runtime acceptance; recover retained branches/PRs before replacing work. Refresh the September tool evaluation for the newly documented Cloudflare Tunnels for Platforms offering before a managed-fleet signup.
+
 **Date:** 2026-09-02 · **Epic:** EP-1FABA22D
 **Backlog:** BI-E2E8BD27
 
@@ -238,3 +240,7 @@ open question below, not a decision this document makes silently.
   to avoid.
 - BI-E4DFDCB0 — MCP OAuth, independent.
 - BI-26091014 — hub-mediated cross-NAT pairing, downstream of reachability.
+- [`2026-09-29-cloudflare-tunnel.md`](../../security/tool-evaluations/2026-09-29-cloudflare-tunnel.md)
+  — the prerequisite Cloudflare Tunnel evaluation: conditional approval as an
+  opt-in provider, with four DPF defects (P1–P4) that block public reachability
+  by any provider.

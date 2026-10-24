@@ -55,8 +55,16 @@ LIB_DIR="$REPO_ROOT/scripts/installer/lib"
 . "$LIB_DIR/doctor.sh"
 # shellcheck source=scripts/installer/lib/docker.sh
 . "$LIB_DIR/docker.sh"
+# shellcheck source=scripts/installer/lib/pnpm.sh
+. "$LIB_DIR/pnpm.sh"
 # shellcheck source=scripts/installer/lib/autostart.sh
 . "$LIB_DIR/autostart.sh"
+# shellcheck source=scripts/installer/lib/canonical-origin.sh
+. "$LIB_DIR/canonical-origin.sh"
+# shellcheck source=scripts/installer/lib/machine-trust.sh
+. "$LIB_DIR/machine-trust.sh"
+# shellcheck source=scripts/installer/lib/mcp-client-env.sh
+. "$LIB_DIR/mcp-client-env.sh"
 # shellcheck source=scripts/installer/lib/github-cli.sh
 . "$LIB_DIR/github-cli.sh"
 # shellcheck source=scripts/installer/native-edge-host.sh
@@ -108,6 +116,9 @@ Flags:
   --headless    Non-interactive (no prompts). Defaults are used (install
                 mode defaults to "customer"); required for CI / unattended
                 installs.
+  --allow-docker-restart
+                Permit macOS Docker memory setup to interrupt existing Docker
+                workloads. Headless mode alone does not grant this permission.
   --customer    Ready-to-go install: run the pre-built release images and
                 skip contributor tooling. Skips the interactive mode prompt.
   --contributor Customizable install: build the full stack from local source,
@@ -147,6 +158,12 @@ Flags:
                 (docker-compose.edge-standalone.yml).
   --no-edge     Force-skip the local Edge Node even if a prior install
                 enabled it (Edge is already off by default).
+  --monitoring <on|off>
+                Answer the monitoring question without a prompt. Monitoring
+                (Prometheus + Grafana) watches this platform and its host;
+                change it later in Settings → Monitoring. --headless without
+                this flag leaves monitoring off and undecided. A choice
+                already recorded on this install is kept and never re-asked.
   --organization-join-package <file.dpfjoin>
                 Join an existing organization trust domain during install.
                 The private package is validated, consumed, and deleted on
@@ -164,6 +181,7 @@ EOF
 }
 
 DPF_DRY_RUN=0
+DPF_ALLOW_DOCKER_RESTART=0
 DPF_MODE="dev"          # dev | release — compose chain. Derived from the
                         # install mode below unless set explicitly via a flag.
 DPF_MODE_EXPLICIT=0     # 1 once --dev/--release is passed, so the install-mode
@@ -176,12 +194,14 @@ DPF_INCLUDE_EDGE="${DPF_INCLUDE_EDGE:-}"    # opt-in; resolved after state init 
 # behavior). Future phases will turn this into a hard install/dev separation.
 DPF_DEV_WORKSPACE_PATH_ARG=""
 DPF_ORGANIZATION_JOIN_PACKAGE=""
+DPF_MONITORING=""       # on | off — answers the monitoring question (BI-31F11C37).
 DPF_INSTALL_CALLER_DIR="$PWD"
 SUBCOMMAND=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run)              DPF_DRY_RUN=1 ;;
+    --allow-docker-restart)  DPF_ALLOW_DOCKER_RESTART=1 ;;
     --headless)             DPF_HEADLESS=1; export DPF_HEADLESS ;;
     --release)              DPF_MODE="release"; DPF_MODE_EXPLICIT=1 ;;
     --dev)                  DPF_MODE="dev"; DPF_MODE_EXPLICIT=1 ;;
@@ -194,6 +214,8 @@ while [ $# -gt 0 ]; do
     --no-autostart)         DPF_AUTOSTART=0 ;;
     --with-edge)            DPF_INCLUDE_EDGE=1 ;;
     --no-edge)              DPF_INCLUDE_EDGE=0 ;;
+    --monitoring)           shift; DPF_MONITORING="${1:-}" ;;
+    --monitoring=*)         DPF_MONITORING="${1#*=}" ;;
     --organization-join-package)
                             shift
                             [ -n "${1:-}" ] || { echo "--organization-join-package requires a file" >&2; exit 64; }
@@ -211,6 +233,14 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
+
+case "$DPF_MONITORING" in
+  ""|on|off) ;;
+  *)
+    echo "install-dpf.sh: --monitoring must be 'on' or 'off' (got '$DPF_MONITORING')" >&2
+    exit 64
+    ;;
+esac
 
 if [ -n "$DPF_ORGANIZATION_JOIN_PACKAGE" ]; then
   case "$DPF_ORGANIZATION_JOIN_PACKAGE" in
@@ -364,6 +394,52 @@ else
   warn "No environment class declared; this install is treated as production until one is set."
 fi
 
+# Monitoring question (BI-31F11C37; design 2026-10-13 §5). Recorded BEFORE the
+# compose chain resolves capability profiles (dpf_compose_files ->
+# dpf_compose_profiles), so the first compose up starts monitoring when chosen.
+# A recorded enabled/disabled decision is never re-asked.
+step "Monitoring"
+monitoring_rc=0
+dpf_monitoring_prompt_needed "$REPO_ROOT" || monitoring_rc=$?
+if [ "$monitoring_rc" -eq 0 ]; then
+  if [ -n "$DPF_MONITORING" ]; then
+    monitoring_choice="$DPF_MONITORING"; monitoring_source="installer-flag"
+  elif [ "${DPF_HEADLESS:-0}" = "1" ] || [ "$DPF_DRY_RUN" = "1" ]; then
+    monitoring_choice="none"; monitoring_source="headless-default"
+  else
+    monitoring_cost="$(dpf_monitoring_cost_text "$REPO_ROOT")" || fail "Could not read the monitoring cost from config/install-resource-budgets.json"
+    echo ""
+    echo "  Monitoring (Prometheus + Grafana) watches this platform and its host."
+    echo "  It uses $monitoring_cost when on. You can change this later in Settings → Monitoring."
+    printf "  Turn monitoring on? [y/N]: "
+    read -r monitoring_answer || monitoring_answer=""
+    case "$monitoring_answer" in
+      y|Y|yes|YES|Yes) monitoring_choice="on" ;;
+      *) monitoring_choice="off" ;;
+    esac
+    monitoring_source="installer-prompt"
+  fi
+  if [ "$DPF_DRY_RUN" = "1" ]; then
+    info "Dry-run: would record monitoring choice '$monitoring_choice' ($monitoring_source)"
+  else
+    dpf_monitoring_choice_apply "$REPO_ROOT" "$monitoring_choice" "$monitoring_source" \
+      || fail "Could not record the monitoring choice in $(dpf_state_path) (see message above)"
+    case "$monitoring_choice" in
+      on)  ok "Monitoring: on" ;;
+      off) ok "Monitoring: off (turn it on later in Settings → Monitoring)" ;;
+      *)   warn "Monitoring: off and undecided; the portal will offer the choice." ;;
+    esac
+  fi
+elif [ "$monitoring_rc" -eq 1 ]; then
+  if [ -n "$DPF_MONITORING" ]; then
+    warn "Monitoring was already chosen on this install; --monitoring $DPF_MONITORING is ignored. Change it in Settings → Monitoring."
+  else
+    ok "Monitoring: keeping the choice already recorded on this install"
+  fi
+else
+  fail "Could not read the monitoring decision from $(dpf_state_path) (see message above)"
+fi
+
 # Edge Node deploy gate (opt-in; BI-72CFF89D / edge-topology design §5).
 # Resolve whether to bundle the local Edge Node BEFORE assembling the chain:
 # explicit --with-edge/--no-edge wins, else the recorded choice in
@@ -383,6 +459,10 @@ if [ "$DPF_DRY_RUN" = "1" ]; then
   echo ""
   step "Dry-run plan"
   echo "  Would run:"
+  if [ "$(uname -s)" = "Darwin" ]; then
+    echo "    Size local Docker Desktop memory to a quarter of host RAM (8-32 GiB);"
+    echo "    preserve a valid smaller allocation and request restart consent for active workloads."
+  fi
   echo "    docker compose ${DPF_COMPOSE_FILES[*]} up -d"
   echo ""
   echo "  Install state file: $(dpf_state_path)"
@@ -395,7 +475,11 @@ fi
 # 5. Ensure Docker is installed (Linux: distro pkg manager; macOS: see
 #    Phase 7b for the .dmg flow — until then, manual install).
 step "Docker Engine"
-dpf_docker_ensure_installed; rc=$?
+if dpf_docker_ensure_installed; then
+  rc=0
+else
+  rc=$?
+fi
 case "$rc" in
   0) ok "Docker present and reachable"
      dpf_state_write dockerEndpoint "$(dpf_docker_endpoint)" 2>/dev/null || true
@@ -406,7 +490,7 @@ case "$rc" in
      else
        dpf_state_write_json edge '{"enabled":false,"mode":null}' 2>/dev/null || true
      fi
-     dpf_preflight_docker_memory ;;
+     ;;
   75) # Docker was just installed; operator must log out / newgrp
       echo ""
       warn "Re-run install-dpf.sh after logging out and back in (or 'newgrp docker')."
@@ -438,10 +522,14 @@ if [ "$NODE_MAJOR" -lt 20 ] 2>/dev/null; then
 fi
 ok "Node.js $(node -v)"
 
-if ! command -v pnpm >/dev/null 2>&1; then
-  info "pnpm not found; installing via npm..."
-  npm install -g pnpm
-fi
+# Size Desktop before dependency/image work. A running VM must agree with
+# its saved allocation; restart alone does not correct the persisted limit.
+. "$REPO_ROOT/scripts/installer/lib/macos-memory.sh"
+step "Docker memory"
+dpf_converge_macos_memory
+dpf_preflight_docker_memory
+
+dpf_ensure_pnpm "$REPO_ROOT" || fail "The pinned pnpm prerequisite is not ready."
 ok "pnpm $(pnpm -v)"
 
 # 7. Install workspace dependencies (so scripts/detect-hardware-host.ts
@@ -740,6 +828,60 @@ else
   fi
 fi
 
+# Signing secret for GitHub update deliveries (BI-C26D5DC5). The portal refuses
+# every delivery in production without it. A fresh .env carries the example
+# placeholder and is filled here; an existing .env that predates the key gets
+# one; a value already there is never rotated, because the operator pasted it
+# into the repository webhook. Never printed.
+_git_webhook_secret="$(dpf_env_ensure_secret_hex DPF_GIT_WEBHOOK_SECRET .env 32 \
+  '# Signing secret for GitHub update deliveries (BI-C26D5DC5). Paste into the repository webhook Secret field.')"
+if [ "$_git_webhook_secret" != "kept" ]; then
+  info "Generated DPF_GIT_WEBHOOK_SECRET in .env (read it there to configure the GitHub webhook)"
+fi
+
+# Signing key for GPP permits (BI-8541D491). Same rules as the webhook secret:
+# filled when missing or a placeholder, never rotated, never printed. Nothing
+# outside the portal needs it.
+if [ "$(dpf_env_ensure_secret_hex DPF_GPP_PERMIT_SECRET .env 32 \
+  '# Signing key for GPP permits (BI-8541D491). Distinct from every other secret; never rotated by the installer.')" != "kept" ]; then
+  info "Generated DPF_GPP_PERMIT_SECRET in .env"
+fi
+
+# Signing keys for attention reach links and coworker delegation receipts
+# (BI-F6929F50), so AUTH_SECRET no longer signs them. Same rules as the permit
+# key: filled when missing or a placeholder, never rotated, never printed.
+if [ "$(dpf_env_ensure_secret_hex DPF_ATTENTION_REACH_SECRET .env 32 \
+  '# Signing key for attention reach links (BI-F6929F50). Distinct from every other secret; never rotated by the installer.')" != "kept" ]; then
+  info "Generated DPF_ATTENTION_REACH_SECRET in .env"
+fi
+if [ "$(dpf_env_ensure_secret_hex DPF_DELEGATION_RECEIPT_SECRET .env 32 \
+  '# Signing key for coworker delegation receipts (BI-F6929F50). Distinct from every other secret; never rotated by the installer.')" != "kept" ]; then
+  info "Generated DPF_DELEGATION_RECEIPT_SECRET in .env"
+fi
+
+# Signing keys for self-upgrade target bindings and delivery task hub cursors
+# (BI-231A4BC7), so AUTH_SECRET no longer signs them. Same rules as above.
+if [ "$(dpf_env_ensure_secret_hex DPF_SELF_UPGRADE_TARGET_BINDING_SECRET .env 32 \
+  '# Signing key for self-upgrade target bindings (BI-231A4BC7). Distinct from every other secret; never rotated by the installer.')" != "kept" ]; then
+  info "Generated DPF_SELF_UPGRADE_TARGET_BINDING_SECRET in .env"
+fi
+if [ "$(dpf_env_ensure_secret_hex DPF_DELIVERY_TASK_CURSOR_SECRET .env 32 \
+  '# Signing key for delivery task hub cursors (BI-231A4BC7). Distinct from every other secret; never rotated by the installer.')" != "kept" ]; then
+  info "Generated DPF_DELIVERY_TASK_CURSOR_SECRET in .env"
+fi
+
+# Inngest signing and event keys (BI-3267763F). The portal and the inngest
+# service verify each other with them, so a value published in the repository
+# lets anyone who can reach /api/inngest forge signed invocations. Filled when
+# missing, a placeholder, or the old public compose default; a real value is
+# kept. Never printed.
+for _inngest_key in INNGEST_SIGNING_KEY INNGEST_EVENT_KEY; do
+  if [ "$(dpf_env_ensure_secret_hex "$_inngest_key" .env 32 \
+    "# Inngest ${_inngest_key} (BI-3267763F). Portal and inngest must share it.")" != "kept" ]; then
+    info "Generated ${_inngest_key} in .env"
+  fi
+done
+
 # Persist the same canonical host identity written to install-state.json. These
 # installer-owned values are the portal/promoter authority; container OS is not.
 dpf_platform
@@ -904,6 +1046,28 @@ export PATH="$SAFETY_BIN:$PATH"
 ok "Shell guard installed at $SAFETY_BIN"
 info "  Open a new terminal for the PATH change to take effect in other shells."
 
+# 9b. The document converter (dpf-doctools, BI-698B7F9A). It is not a compose
+#     service (AC-ODC-003), so compose never pulls it; pull it here with the
+#     other release images so the portal reads Word, Excel and PDF files at
+#     first boot. Only an immutable release tag names one converter (the portal
+#     refuses a moving tag), so `latest` pulls nothing. It never fails the
+#     install: a release with no converter is simply converter-less, and any
+#     other failure is retried by the portal's own reconciler once it starts.
+dpf_prepull_doctools() {
+  local tag="${1:-}" owner="${2:-}" image out
+  printf '%s' "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+([-+][A-Za-z0-9.-]+)?$' || return 0
+  owner="$(printf '%s' "${owner:-opendigitalproductfactory}" | tr '[:upper:]' '[:lower:]')"
+  image="ghcr.io/${owner}/dpf-doctools:${tag}"
+  if out="$(docker pull "$image" 2>&1)"; then
+    ok "Document converter image ready ($image)"
+  elif printf '%s' "$out" | grep -Eqi 'not found|manifest unknown|name unknown'; then
+    info "This release ships no document converter; Office files will not be converted."
+  else
+    warn "Could not download the document converter image; the platform retries after it starts."
+  fi
+  return 0
+}
+
 # 9c. Customer mode pulls pre-built GHCR images (parity with the Windows
 #     consumer path). During early access those images may require a (free)
 #     GitHub login. Probe once and point the operator at `docker login`
@@ -920,6 +1084,7 @@ if [ "$DPF_INSTALL_MODE" = "customer" ]; then
     info "    docker login ghcr.io"
     info "  Then re-run install-dpf.sh. (Contributor mode builds from source instead.)"
   fi
+  dpf_prepull_doctools "$(_dpf_env_value DPF_IMAGE_TAG)" "$(_dpf_env_value GHCR_OWNER)"
 fi
 
 # 10. Bring up the platform-aware compose stack. Per the doctrine's
@@ -927,6 +1092,14 @@ fi
 #     happen inside portal-init using whatever DPF_LLM_PROVIDER
 #     resolves to (Docker Model Runner on Docker Desktop; Ollama on
 #     Linux native Docker via docker-compose.linux.yml).
+# Every install is https at one canonical origin (BI-6DC1CD5B, design section
+# 12): Claude refuses OAuth over plain http, and one origin keeps OAuth token
+# audiences, cookies and the MCP address whole. A member install gets its
+# certificate from the organization join; a standalone install is its own CA.
+step "Private runtime state"
+node "$REPO_ROOT/scripts/installer/prepare-runtime-state.mjs" "${DPF_COMPOSE_FILES[@]}"
+
+DPF_PORTAL_URL="http://localhost:3000"
 if [ -n "$DPF_ORGANIZATION_JOIN_PACKAGE" ]; then
   step "Organization trust"
   bash "$REPO_ROOT/scripts/bootstrap-organization-pki.sh" \
@@ -934,6 +1107,44 @@ if [ -n "$DPF_ORGANIZATION_JOIN_PACKAGE" ]; then
   export DPF_ORGANIZATION_TRUST_ENABLED=1
   dpf_compose_files "$DPF_MODE"
   ok "Organization HTTPS trust configured; the one-time package was consumed"
+else
+  step "HTTPS for this installation"
+  canonical_san_args=()
+  if dpf_resolve_canonical_origin "$REPO_ROOT"; then
+    old_ifs="$IFS"; IFS=','
+    for canonical_san in $DPF_CANONICAL_CERT_SANS; do canonical_san_args+=(--san "$canonical_san"); done
+    IFS="$old_ifs"
+  fi
+  if [ -n "${DPF_CANONICAL_HOST:-}" ] && \
+     bash "$REPO_ROOT/scripts/bootstrap-organization-pki.sh" \
+       --mode authority --hostname "$DPF_CANONICAL_HOST" "${canonical_san_args[@]}" --no-start-tls; then
+    dpf_set_env_value "$REPO_ROOT" PUBLIC_URL "$DPF_CANONICAL_PUBLIC_URL"
+    export DPF_ORGANIZATION_TRUST_ENABLED=1
+    dpf_compose_files "$DPF_MODE"
+    DPF_PORTAL_URL="$DPF_CANONICAL_PUBLIC_URL"
+    # One operating-system prompt: the installer is not root, so macOS asks for
+    # the keychain password and Linux asks sudo before trusting the root.
+    trust="$(dpf_install_root_trust "$HOME/.dpf/pki/root_ca.crt" || echo declined)"
+    ok "HTTPS configured at $DPF_CANONICAL_PUBLIC_URL"
+    if [ "$trust" = "declined" ]; then
+      warn "Your browser will warn about this address until you trust $HOME/.dpf/pki/root_ca.crt."
+    fi
+    if [ "$DPF_CANONICAL_SOURCE" = "no-network-name" ]; then
+      warn "AI agents on other computers need a DNS name for this machine to connect."
+    fi
+  else
+    warn "HTTPS could not be configured. The portal stays at http://localhost:3000;"
+    warn "AI clients that require https cannot sign in until the installer is run again."
+  fi
+fi
+
+# This machine's AI clients find the install at its canonical origin and trust
+# its CA (BI-2D545A0C): DPF_MCP_URL and NODE_EXTRA_CA_CERTS are persisted for
+# the installing user on every run, in both install modes, so a re-run or an
+# origin change converges without the agent-toolchain bootstrap.
+dpf_resolve_mcp_client_env "$REPO_ROOT"
+if dpf_persist_mcp_client_env; then
+  ok "AI clients on this machine will connect to $DPF_MCP_CLIENT_URL"
 fi
 
 step "Bringing up the platform"
@@ -962,28 +1173,11 @@ if [ "$DPF_INSTALL_MODE" = "contributor" ] && [ -d .git ]; then
     ok "Stamping local build with DPF_PLATFORM_VERSION=$DPF_PLATFORM_VERSION"
   fi
 fi
-# Non-critical sidecars (e.g. dpf-stt voice STT) pull from third-party
-# registries whose mutable tags get pruned upstream: hwdsl2/whisper-server
-# re-pushes :latest and prunes the prior index digest, so a pinned digest
-# eventually 404s ("manifest unknown"). A single such failure would otherwise
-# abort the WHOLE `docker compose up`, taking the portal/db/redis down with it
-# (#1767). Pre-pull them with failure tolerated and, if one is unavailable,
-# scale it to 0 so the core platform still comes up — voice degrades, the
-# install does not. Nothing depends_on these sidecars, so scaling to 0 is safe.
-_noncritical_sidecars="dpf-stt"
-_scale_args=()
-for _svc in $_noncritical_sidecars; do
-  if dpf_capability_service_required "$_svc" && ! docker compose "${DPF_COMPOSE_FILES[@]}" pull "$_svc" >/dev/null 2>&1; then
-    warn "Optional sidecar '$_svc' image is unavailable upstream; bringing up the platform without it."
-    info "  Voice features needing '$_svc' stay inactive until its image returns; re-run install-dpf.sh to retry."
-    _scale_args+=(--scale "$_svc=0")
-  fi
-done
-if [ "${#_scale_args[@]}" -gt 0 ]; then
-  docker compose "${DPF_COMPOSE_FILES[@]}" up -d "${_scale_args[@]}"
-else
-  docker compose "${DPF_COMPOSE_FILES[@]}" up -d
-fi
+# Speech-to-text is provider-managed (BI-F7E9A541): DPF ships no speech image,
+# so there is no third-party sidecar whose pruned digest can abort the whole
+# `docker compose up` and take the portal down with it (#1767). The defensive
+# pre-pull and scale-to-0 dance that guarded against that is gone with it.
+docker compose "${DPF_COMPOSE_FILES[@]}" up -d
 ok "docker compose up returned"
 
 # 10b. Voice / TTS sidecar (Linux hosts with an NVIDIA GPU).
@@ -1158,6 +1352,39 @@ else
   info "Edge Node not bundled (opt-in; pass --with-edge to add a local node). Map a network from another machine via Admin > Platform Development > Edge Nodes (docker-compose.edge-standalone.yml)."
 fi
 
+# Host-upkeep agent (BI-28EFE18A; WWMD DI-93310A596E88). Every install runs the
+# native Edge Node on the host, outside the Docker VM, so the platform can
+# carry host upkeep such as the operator-approved Docker VM restart. With edge
+# features off it runs DPF_EDGE_ROLE=host-upkeep: heartbeat and the action
+# channel only, no network sweep, no discovery. On macOS with edge on, the
+# block above already installed this node in its full role. Linux keeps its
+# edge container for opted-in edge features, and this node (with its own
+# one-time token, so the two never share one) carries host upkeep.
+if [ "$(uname -s 2>/dev/null || true)" = "Darwin" ] && [ "$DPF_INCLUDE_EDGE" = "1" ]; then
+  :
+else
+  step "Host-upkeep agent"
+  HOST_UPKEEP_STATE="${DPF_STATE_DIR:-$HOME/.dpf}/edge-node/state.json"
+  HOST_UPKEEP_TOKEN=""
+  if [ ! -f "$HOST_UPKEEP_STATE" ]; then
+    HOST_UPKEEP_TOKEN_LOG="${TMPDIR:-/tmp}/dpf-host-upkeep-token-$$.log"
+    HOST_UPKEEP_TOKEN="$(docker compose "${DPF_COMPOSE_FILES[@]}" run --rm --no-deps \
+         --entrypoint "" portal-init \
+         sh -c 'cd /workspace/apps/web && /workspace/node_modules/.pnpm/node_modules/.bin/tsx scripts/issue-edge-bootstrap-token.ts --ttl-minutes 30 --auto-approve' \
+         2>"$HOST_UPKEEP_TOKEN_LOG" | grep -E '^dpfboot_' | tail -1)" || HOST_UPKEEP_TOKEN=""
+  fi
+  if [ -f "$HOST_UPKEEP_STATE" ] || [[ "$HOST_UPKEEP_TOKEN" == dpfboot_* ]]; then
+    if dpf_native_edge_install "$REPO_ROOT" "$HOST_UPKEEP_TOKEN" "${HOSTNAME:-$(hostname -s 2>/dev/null || echo dpf-host)}" host-upkeep; then
+      ok "Host-upkeep agent running on this host"
+      rm -f "${HOST_UPKEEP_TOKEN_LOG:-}" 2>/dev/null || true
+    else
+      warn "Host-upkeep agent did not start; the portal remains usable, and the next install run retries."
+    fi
+  else
+    warn "Host-upkeep agent: bootstrap-token issuance failed (stderr at ${HOST_UPKEEP_TOKEN_LOG:-unknown}); the next install run retries."
+  fi
+fi
+
 # 13. Voice / TTS sidecar (Apple Silicon only).
 #     Spoken output (text-to-speech) needs hardware-accelerated synthesis, but
 #     Docker Desktop on macOS can't reach the Apple Neural Engine — so on Apple
@@ -1219,11 +1446,18 @@ else
   info "Skipping autostart install (--no-autostart)."
 fi
 
+# ── Worktree hygiene (BI-5F4F0146) ────────────────────────────────────────────
+# Schedule the reaper + keep the worktree base out of the OS file indexer, for both
+# customer and contributor installs. Shared helper; best-effort (never fails the
+# install). Runs only on a real install — dry-run has already exited above.
+step "Worktree hygiene"
+bash "$REPO_ROOT/scripts/setup-worktree-hygiene.sh" "$REPO_ROOT" || true
+
 # ── Done ──────────────────────────────────────────────────────────────────────
 echo ""
 printf '%b  Install complete!%b\n' "${DPF_GREEN:-}" "${DPF_NC:-}"
 echo ""
-echo "  Portal:        $HEALTH_URL"
+echo "  Portal:        $DPF_PORTAL_URL"
 echo "  Login:         admin@dpf.local"
 echo "  Password:      see ADMIN_PASSWORD in .env"
 echo ""

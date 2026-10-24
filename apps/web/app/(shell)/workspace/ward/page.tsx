@@ -12,10 +12,24 @@ import {
   type WardOperationAnimal,
   type WardOperationResource,
 } from "@/components/ward/WardOperations";
-import { loadWardBoard, type WardStoreClient } from "@/lib/ward/ward-store";
-import { summarizeKennelCapacity, type WardUnit } from "@/lib/ward/ward-occupancy";
+import { describeInterest, type AdoptionInterest } from "@/lib/ward/adoption-interest";
+import {
+  loadWardCareContext,
+  type CareContextClient,
+  type WardCareContext,
+} from "@/lib/ward/care-context";
+import { CapacityReview } from "@/components/ward/CapacityReview";
+import { loadWardWorkspace, type WardStoreClient } from "@/lib/ward/ward-store";
+import { summarizeKennelCapacity, type WardBoard, type WardUnit } from "@/lib/ward/ward-occupancy";
 
 type Props = { searchParams: Promise<{ view?: string }> };
+
+/** A board with no care context still draws — it simply shows no faces. */
+const EMPTY_CARE: WardCareContext = {
+  photos: new Map(),
+  interest: new Map(),
+  review: { underPressure: false, candidates: [], excluded: [], ask: "" },
+};
 
 /**
  * The ward board. A shelter's operators asked two questions all day that the
@@ -34,13 +48,23 @@ export default async function WardPage({ searchParams }: Props) {
   const config = await prisma.storefrontConfig.findFirst({
     select: { organizationId: true },
   });
-  const board = config
-    ? await loadWardBoard({
+  const workspace = config
+    ? await loadWardWorkspace({
         organizationId: config.organizationId,
         db: prisma as unknown as WardStoreClient,
       })
-    : null;
+    : { board: null, animals: [] };
+  const { board } = workspace;
   const capacity = summarizeKennelCapacity(board);
+  // Loaded after the board because the review only exists once we know whether
+  // the shelter has run out of room.
+  const care = config
+    ? await loadWardCareContext({
+        organizationId: config.organizationId,
+        db: prisma as unknown as CareContextClient,
+        freeUnits: capacity?.free ?? 1,
+      })
+    : null;
 
   return (
     <div className="space-y-6">
@@ -86,7 +110,14 @@ export default async function WardPage({ searchParams }: Props) {
             </p>
           </Surface>
           <Surface padding="lg">
-            <WardOperations animals={[]} resources={[]} />
+            <WardOperations
+              animals={workspace.animals.map((animal) => ({
+                ...animal,
+                allocationId: null,
+                resourceId: null,
+              }))}
+              resources={[]}
+            />
           </Surface>
         </>
       ) : (
@@ -106,7 +137,13 @@ export default async function WardPage({ searchParams }: Props) {
             </Surface>
           ) : null}
 
-          {asList ? <WardList rows={wardListRows(board)} /> : <WardMap board={board} />}
+          {care ? <CapacityReview review={care.review} /> : null}
+
+          {asList ? (
+            <WardList rows={wardListRows(board)} />
+          ) : (
+            <WardMap board={board} care={care ?? EMPTY_CARE} />
+          )}
           <Surface padding="lg">
             <WardOperations {...wardOperationData(board)} />
           </Surface>
@@ -116,9 +153,10 @@ export default async function WardPage({ searchParams }: Props) {
   );
 }
 
-function wardOperationData(
-  board: NonNullable<Awaited<ReturnType<typeof loadWardBoard>>>,
-): { animals: WardOperationAnimal[]; resources: WardOperationResource[] } {
+function wardOperationData(board: WardBoard): {
+  animals: WardOperationAnimal[];
+  resources: WardOperationResource[];
+} {
   const resources: WardOperationResource[] = board.zones.flatMap((zone) =>
     zone.units.map((unit) => ({
       id: unit.kennelId,
@@ -175,7 +213,13 @@ function isDrawnAsCard(state: WardUnit["state"]): boolean {
   return state !== "free";
 }
 
-function WardMap({ board }: { board: NonNullable<Awaited<ReturnType<typeof loadWardBoard>>> }) {
+function WardMap({
+  board,
+  care,
+}: {
+  board: WardBoard;
+  care: WardCareContext;
+}) {
   return (
     <div className="space-y-4">
       {board.zones.map((zone) => (
@@ -189,7 +233,12 @@ function WardMap({ board }: { board: NonNullable<Awaited<ReturnType<typeof loadW
           </div>
           <ul className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2">
             {zone.units.map((unit) => (
-              <UnitCell key={unit.kennelId} unit={unit} />
+              <UnitCell
+                key={unit.kennelId}
+                unit={unit}
+                photo={unit.animalRef ? (care.photos.get(unit.animalRef) ?? null) : null}
+                interest={unit.animalRef ? care.interest.get(unit.animalRef) : undefined}
+              />
             ))}
           </ul>
         </Surface>
@@ -198,7 +247,16 @@ function WardMap({ board }: { board: NonNullable<Awaited<ReturnType<typeof loadW
   );
 }
 
-function UnitCell({ unit }: { unit: WardUnit }) {
+function UnitCell({
+  unit,
+  photo,
+  interest,
+}: {
+  unit: WardUnit;
+  photo: string | null;
+  interest: AdoptionInterest | undefined;
+}) {
+  const coming = describeInterest(interest);
   const body = (
     <>
       <div className="flex items-start justify-between gap-2">
@@ -208,9 +266,35 @@ function UnitCell({ unit }: { unit: WardUnit }) {
         ) : null}
       </div>
       {unit.animalName ? (
-        <p className="mt-1.5 text-sm font-medium leading-tight text-[var(--dpf-text)]">
-          {unit.animalName}
-        </p>
+        <div className="mt-1.5 flex items-start gap-2">
+          {/* A photograph, not an icon. A worker recognises the animal in the run
+              by its face; a paw glyph on every tile tells them nothing apart. */}
+          {photo ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={photo}
+              alt={unit.animalName}
+              loading="lazy"
+              className="h-10 w-10 shrink-0 rounded-md object-cover"
+            />
+          ) : null}
+          <div className="min-w-0">
+            <p className="text-sm font-medium leading-tight text-[var(--dpf-text)]">
+              {unit.animalName}
+            </p>
+            {coming ? (
+              <p
+                className={`mt-0.5 text-xs leading-tight ${
+                  interest?.level === "scheduled"
+                    ? "font-medium text-[var(--dpf-accent)]"
+                    : "text-[var(--dpf-muted)]"
+                }`}
+              >
+                {coming}
+              </p>
+            ) : null}
+          </div>
+        </div>
       ) : (
         <p className="mt-1.5 text-xs text-[var(--dpf-muted)]">{unit.blockedReason ?? "Free"}</p>
       )}
@@ -238,9 +322,7 @@ function UnitCell({ unit }: { unit: WardUnit }) {
   );
 }
 
-function wardListRows(
-  board: NonNullable<Awaited<ReturnType<typeof loadWardBoard>>>,
-): WardListRow[] {
+function wardListRows(board: WardBoard): WardListRow[] {
   return board.zones.flatMap((zone) =>
     zone.units.map((unit) => ({
       kennelId: unit.kennelId,

@@ -1,7 +1,6 @@
 "use server";
 
 import { requireUserId } from "@/lib/actions/shared/guards";
-import { can } from "@/lib/permissions";
 import { prisma, type Prisma } from "@dpf/db";
 import { revalidatePath } from "next/cache";
 import {

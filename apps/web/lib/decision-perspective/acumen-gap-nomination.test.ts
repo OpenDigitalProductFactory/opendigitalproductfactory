@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { capabilityNeedOriginId } from "@/lib/coworker-self-assessment/assessment-service";
 import {
   ACUMEN_GAP_CONFIDENCE_THRESHOLD,
+  acumenGapNeedText,
   nominateAcumenCorpusGap,
   shouldNominateAcumenGap,
   type AcumenGapConsultOutcome,
@@ -188,5 +189,66 @@ describe("nominateAcumenCorpusGap", () => {
     expect(result).toEqual({ nominated: false, reason: "error" });
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("acumen.gap.nomination-failed"));
     warn.mockRestore();
+  });
+});
+
+// BI-F6FD946F: every profession-gate caller nominates, not only Build Studio.
+describe("nominateAcumenCorpusGap for coworker-identity consults", () => {
+  it("files against the asking coworker when the profession has no registered acumen", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    const submit = vi.fn().mockResolvedValue({ assessmentId: "a", needIds: ["CWN-EA"], backlogItemIds: [] });
+    const result = await nominateAcumenCorpusGap(
+      consult({
+        professionKey: "enterprise-architecture",
+        domainClass: "architecture-tradeoff",
+        fallbackAgentId: "AGT-WS-EA",
+        routeContext: "reviewDesignDoc",
+      }),
+      { submitAssessment: submit as never, listNeeds: vi.fn().mockResolvedValue([]) as never },
+    );
+    expect(result).toEqual({ nominated: true, needId: "CWN-EA" });
+    const payload = submit.mock.calls[0]![0] as {
+      agentId: string;
+      trigger: string;
+      routeContext: string;
+      needs: Array<{ need: string }>;
+    };
+    expect(payload.agentId).toBe("AGT-WS-EA");
+    expect(payload.trigger).toBe("profession-gate-consult");
+    expect(payload.routeContext).toBe("reviewDesignDoc");
+    expect(payload.needs[0]!.need).toContain("enterprise-architecture / architecture-tradeoff");
+    info.mockRestore();
+  });
+
+  it("prefers the acumen's resident coworker over the asking identity", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    const submit = vi.fn().mockResolvedValue({ assessmentId: "a", needIds: ["CWN-1"], backlogItemIds: [] });
+    await nominateAcumenCorpusGap(consult({ fallbackAgentId: "someone-else" }), {
+      submitAssessment: submit as never,
+      listNeeds: vi.fn().mockResolvedValue([]) as never,
+    });
+    expect((submit.mock.calls[0]![0] as { agentId: string }).agentId).toBe("data-architect");
+    info.mockRestore();
+  });
+
+  it("recognises an open need filed under the pre-BI-F6FD946F wording as the same gap", async () => {
+    const submit = vi.fn();
+    const legacy =
+      "Craft corpus gap: the data-architect profession has no decision material "
+      + "strong enough to answer professional-practice consults from Build Studio phase gates";
+    const result = await nominateAcumenCorpusGap(consult(), {
+      submitAssessment: submit as never,
+      listNeeds: vi.fn().mockResolvedValue([
+        { needId: "CWN-LEGACY", status: "backlog-filed", need: legacy },
+      ]) as never,
+    });
+    expect(result).toEqual({ nominated: false, reason: "duplicate-open-need", needId: "CWN-LEGACY" });
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it("keeps the domain class inside the fingerprint even for a long profession key", () => {
+    const a = capabilityNeedOriginId("x", "convention", acumenGapNeedText("enterprise-architecture", "architecture-tradeoff"));
+    const b = capabilityNeedOriginId("x", "convention", acumenGapNeedText("enterprise-architecture", "professional-practice"));
+    expect(a).not.toBe(b);
   });
 });

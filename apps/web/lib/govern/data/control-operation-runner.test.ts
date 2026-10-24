@@ -19,9 +19,9 @@ function operation(
       {
         stepId: "DCOS-1",
         operationId: "DCO-1",
-        targetKey: "qdrant",
-        targetType: "qdrant",
-        idempotencyKey: "DCO-1:qdrant",
+        targetKey: "pgvector",
+        targetType: "pgvector",
+        idempotencyKey: "DCO-1:pgvector",
         status: "executing",
         compensable: true,
         targetReceipt: null,
@@ -83,7 +83,7 @@ describe("data control operation recovery", () => {
       operationId: "DCO-1",
       workerId: "worker-1",
       store: db,
-      adapters: { qdrant: { effect, verify } },
+      adapters: { pgvector: { effect, verify } },
       now: new Date("2026-07-27T00:00:00Z"),
     });
 
@@ -106,12 +106,12 @@ describe("data control operation recovery", () => {
       operationId: "DCO-1",
       workerId: "worker-1",
       store: db,
-      adapters: { qdrant: { effect, verify } },
+      adapters: { pgvector: { effect, verify } },
       now: new Date("2026-07-27T00:00:00Z"),
     });
 
     expect(effect).toHaveBeenCalledWith(expect.objectContaining({
-      idempotencyKey: "DCO-1:qdrant",
+      idempotencyKey: "DCO-1:pgvector",
     }));
     expect(db.markApplied).toHaveBeenCalledWith("DCOS-1", { accepted: true });
   });
@@ -129,7 +129,7 @@ describe("data control operation recovery", () => {
         {
           ...operation().steps[0]!,
           stepId: "DCOS-2",
-          targetKey: "qdrant",
+          targetKey: "pgvector",
           status: "verified",
         },
       ],
@@ -169,7 +169,7 @@ describe("data control operation recovery", () => {
       workerId: "worker-1",
       store: db,
       adapters: {
-        qdrant: {
+        pgvector: {
           effect,
           verify: vi.fn(),
           compensate,
@@ -208,7 +208,7 @@ describe("data control operation recovery", () => {
 
     expect(result).toEqual({
       status: "compensating",
-      blockedTargets: ["qdrant"],
+      blockedTargets: ["pgvector"],
     });
     expect(db.transitionOperation).not.toHaveBeenCalled();
     expect(db.ensureGovernedCase).not.toHaveBeenCalled();
@@ -221,7 +221,7 @@ describe("data control operation recovery", () => {
       workerId: "worker-1",
       store: db,
       adapters: {
-        qdrant: {
+        pgvector: {
           effect: vi.fn(async () => {
             throw new Error("target unavailable");
           }),

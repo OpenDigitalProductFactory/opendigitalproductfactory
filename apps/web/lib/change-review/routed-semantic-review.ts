@@ -1,9 +1,14 @@
 import { routeAndCall } from "@/lib/inference/routed-inference";
-import { inspectLocalProviderCapacity } from "@/lib/routing/local-provider-capacity";
 import { CHANGE_REVIEWER_ROUTE_AGENT } from "@/lib/tak/change-reviewer-route";
 import { parseSemanticReviewResponse, type SemanticReviewResult } from "./semantic-change-review";
-import { semanticReviewMinimumContextTokens } from "./semantic-review-context-floor";
+import { semanticReviewMinimumContextTokens, SEMANTIC_REVIEW_RESPONSE_RESERVE_TOKENS } from "./semantic-review-context-floor";
 import type { SemanticChangeReviewDispatchContext } from "./semantic-change-review-operation";
+import {
+  describeSpecialistCraftContexts,
+  layerCraftOntoSpecialistPrompt,
+  resolveSpecialistCraftContexts,
+  type SpecialistCraftClient,
+} from "./specialist-craft-context";
 
 const SPECIALIST_SYSTEM_PROMPTS: Record<string, string> = {
   "AGT-903": "You are the UX Accessibility specialist. Review only accessibility and interaction risks grounded in the supplied committed diff.",
@@ -16,45 +21,23 @@ function mergeReviewResults(results: SemanticReviewResult[]): SemanticReviewResu
   const issues = results.flatMap((result) => result.issues);
   const criticals = issues.filter((issue) => issue.severity === "critical").length;
   const inconclusive = results.filter((result) => result.decision === "inconclusive");
+  const parseDiagnostics = results.flatMap((result) => result.parseDiagnostics ?? []);
+  const routingEligibility = results.flatMap(result => result.routingEligibility ?? []).slice(0, 5);
   return {
     decision: inconclusive.length > 0 ? "inconclusive" : criticals > 0 ? "fail" : "pass",
     issues,
+    ...(routingEligibility.length ? { routingEligibility } : {}),
+    ...(results[0]?.failureAnalysisReview ? { failureAnalysisReview: results[0].failureAnalysisReview } : {}),
     summary: inconclusive.length > 0
-      ? `${inconclusive.length} required semantic review branch${inconclusive.length === 1 ? " was" : "es were"} infrastructure-inconclusive; retry without treating capacity as a semantic finding.`
+      ? `${inconclusive.length} required semantic review branch${inconclusive.length === 1 ? " was" : "es were"} inconclusive: ${inconclusive.map(result => result.summary.slice(0, 1_000)).join("; ")}`
       : results.length === 1
       ? results[0]!.summary
       : `${results.length} independent review branches completed; ${criticals} blocking finding${criticals === 1 ? "" : "s"}.`,
     ...(results.some((result) => result.parseError) ? { parseError: true as const } : {}),
+    ...(parseDiagnostics.length > 0 ? { parseDiagnostics } : {}),
     ...(inconclusive.length > 0
       ? { inconclusiveReason: inconclusive.map((result) => result.inconclusiveReason ?? "review-branch-incomplete").join(",") }
       : {}),
-  };
-}
-
-async function localCiCapacityGuard(): Promise<SemanticReviewResult | null> {
-  const capacity = await inspectLocalProviderCapacity();
-  if (capacity.available) return null;
-  if (capacity.reason === "local-ci-active-capacity-reservation") {
-    return {
-      decision: "inconclusive",
-      issues: [],
-      summary: "Semantic review deferred while governed local CI owns host capacity.",
-      inconclusiveReason: "local-ci-active-capacity-reservation",
-    };
-  }
-  if (capacity.reason === "local-ci-queued-capacity-reservation") {
-    return {
-      decision: "inconclusive",
-      issues: [],
-      summary: "Semantic review deferred so the established local-CI queue can claim the next safe host window.",
-      inconclusiveReason: "local-ci-queued-capacity-reservation",
-    };
-  }
-  return {
-    decision: "inconclusive",
-    issues: [],
-    summary: "Semantic review deferred because host-capacity ownership could not be verified.",
-    inconclusiveReason: "local-ci-capacity-reservation-unavailable",
   };
 }
 
@@ -62,15 +45,33 @@ async function localCiCapacityGuard(): Promise<SemanticReviewResult | null> {
 export async function dispatchRoutedSemanticReview(
   prompt: string,
   context: SemanticChangeReviewDispatchContext,
+  runBranch: (agentId: string, execute: () => Promise<SemanticReviewResult>) => Promise<SemanticReviewResult>
+    = (_agentId, execute) => execute(),
+  // BI-39C7D449: injectable so tests need no Prisma. Defaults to the live
+  // client inside the function, not here, so importing this module does not
+  // pull in the database client.
+  craftDb?: SpecialistCraftClient,
 ): Promise<SemanticReviewResult> {
-  // Local-CI admission already accounts for a model that is resident before
-  // the lease is bound. Protect the opposite ordering too: once local CI owns
-  // the host, no semantic-review route may begin because a remote route can
-  // still fall back to the bundled 32k-context model after dispatch. Returning
-  // an infrastructure-inconclusive result keeps the immutable review identity
-  // retryable without misclassifying capacity as a code finding.
-  const capacityGuard = await localCiCapacityGuard();
-  if (capacityGuard) return capacityGuard;
+  if (context.specialistIds.some((id) => !Object.hasOwn(SPECIALIST_SYSTEM_PROMPTS, id))) {
+    return { decision: "inconclusive", issues: [],
+      summary: "A required specialist has no supported dispatch definition.",
+      inconclusiveReason: "unsupported-required-specialist" };
+  }
+  // Capacity belongs to the actual provider dispatch, including every fallback
+  // through callProvider. A local reservation must not veto an eligible remote
+  // review before routing has selected its provider.
+  // BI-39C7D449: each specialist reasons from its OWN craft corpus. The
+  // persona still sets the branch's scope; the corpus supplies the doctrine
+  // that scope is judged against. Fail-open — an unmapped agent or an empty
+  // corpus runs the persona alone, exactly as before.
+  const craft = await resolveSpecialistCraftContexts({
+    db: craftDb ?? (await loadCraftClient()),
+    agentIds: context.specialistIds,
+    query: prompt,
+  }).catch(() => ({ promptBlocks: new Map<string, string>(), contexts: [] }));
+  if (craft.contexts.length > 0) {
+    console.info(`[semantic-review] specialist craft: ${describeSpecialistCraftContexts(craft.contexts)}`);
+  }
 
   const branches = [
     {
@@ -78,17 +79,28 @@ export async function dispatchRoutedSemanticReview(
       displayName: "Change Reviewer",
       systemPrompt: CHANGE_REVIEWER_ROUTE_AGENT.systemPrompt,
     },
-    ...context.specialistIds.flatMap((agentId) => {
+    ...[...new Set(context.specialistIds)].flatMap((agentId) => {
       const systemPrompt = SPECIALIST_SYSTEM_PROMPTS[agentId];
-      return systemPrompt ? [{ agentId, displayName: agentId, systemPrompt }] : [];
+      return systemPrompt
+        ? [{
+            agentId,
+            displayName: agentId,
+            systemPrompt: layerCraftOntoSpecialistPrompt(systemPrompt, craft.promptBlocks.get(agentId)),
+          }]
+        : [];
     }),
   ];
 
-  const settled = await Promise.allSettled(branches.map(async (branch) => {
+  const settled = await Promise.allSettled(branches.map((branch) => runBranch(branch.agentId, async () => {
+    const minimumContext = semanticReviewMinimumContextTokens({
+      systemPrompt: branch.systemPrompt, userPrompt: prompt,
+    });
     const response = await routeAndCall(
       [{ role: "user", content: prompt }],
       branch.systemPrompt,
-      "confidential",
+      // This context has no authoritative source classification. Ordinary
+      // private code may contain no sensitive patterns, so retain the floor.
+      "internal",
       {
         taskType: "build-review",
         budgetClass: context.strategyProfile === "economy" ? "balanced" : "quality_first",
@@ -100,21 +112,60 @@ export async function dispatchRoutedSemanticReview(
         // tool-bearing review is unaffected. The context floor is likewise
         // derived from the request actually sent rather than an unrelated flat
         // 32,000, which excluded the local 24,576-token reviewer.
-        agentMinimumContextTokens: semanticReviewMinimumContextTokens({
-          systemPrompt: branch.systemPrompt,
-          userPrompt: prompt,
-        }),
+        agentMinimumContextTokens: minimumContext,
+        activityContract: {
+          activityId: `semantic-review:${branch.agentId}`,
+          parentRef: {},
+          activityClass: "critique",
+          title: "Review committed change",
+          distributionShape: "edge",
+          riskClass: "high",
+          successShape: "json",
+          contextPolicy: "work-case-packet",
+          tokenEnvelope: {
+            maxInputTokens: minimumContext - SEMANTIC_REVIEW_RESPONSE_RESERVE_TOKENS,
+            maxOutputTokens: SEMANTIC_REVIEW_RESPONSE_RESERVE_TOKENS,
+            compression: "none",
+          },
+          evaluationPolicy: { evaluator: "review", minimumSignal: "review-passed" },
+          requestContractHints: { taskType: "build-review" },
+        },
         agentId: branch.agentId,
         agentDisplayName: branch.displayName,
         effort: context.strategyProfile === "document-authority" ? "max" : "high",
         interactionMode: "sync",
+        // Review parses a completed response; token streaming is not required.
+        requiresStreaming: false,
       },
     );
-    return parseSemanticReviewResponse(response.content);
-  }));
+    if (response.truncated) return {
+      decision: "inconclusive" as const, issues: [],
+      summary: "The provider stopped before the review response was complete.",
+      inconclusiveReason: "review-response-truncated",
+    };
+    const result = parseSemanticReviewResponse(response.content);
+    return {
+      ...result,
+      ...(result.parseDiagnostics ? { parseDiagnostics: result.parseDiagnostics.map(
+        diagnostic => ({ ...diagnostic, agentId: branch.agentId }),
+      ) } : {}),
+    };
+  })));
 
-  const completed = settled.flatMap((branch) => branch.status === "fulfilled" ? [branch.value] : []);
+  const completed = settled.flatMap((branch, index) => branch.status === "fulfilled"
+    ? [{ ...branch.value, ...(branch.value.decision === "inconclusive"
+      ? { summary: `${branches[index]!.agentId}: ${branch.value.summary}` } : {}) }]
+    : []);
   const rejected = settled.filter((branch) => branch.status === "rejected").length;
+  // A rejected branch used to vanish without a trace: FB-D671B016 reported
+  // "capacity" for a day while every branch was refused routing because the
+  // captured diff was 1.6 MB of unrelated changes. Name each failure.
+  settled.forEach((branch, index) => {
+    if (branch.status === "rejected") {
+      const reason = branch.reason instanceof Error ? branch.reason.message : String(branch.reason);
+      console.warn(`[semantic-review] branch ${branches[index]?.agentId ?? index} did not complete: ${reason.slice(0, 300)}`);
+    }
+  });
   if (rejected > 0) {
     completed.push({
       decision: "inconclusive",
@@ -124,4 +175,13 @@ export async function dispatchRoutedSemanticReview(
     });
   }
   return mergeReviewResults(completed);
+}
+
+/**
+ * The live client, imported lazily so this module stays importable (and
+ * testable) without the database client being constructed.
+ */
+async function loadCraftClient(): Promise<SpecialistCraftClient> {
+  const { prisma } = await import("@dpf/db");
+  return prisma as unknown as SpecialistCraftClient;
 }

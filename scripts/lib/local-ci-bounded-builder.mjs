@@ -1,3 +1,5 @@
+import { EXIT_BUILDER_RESOURCE_EXHAUSTED } from "./sandbox-freshness.mjs";
+
 function gibibytes(bytes) {
   const gib = bytes / (1024 ** 3);
   if (!Number.isInteger(gib) || gib <= 0) {
@@ -85,15 +87,45 @@ export function postgresContainerProbeArgs({ container, environment }) {
   ];
 }
 
+/**
+ * How many parallel workers the build reported spawning, when it said so.
+ *
+ * Next prints this line before the phase that gets killed, and it is the number
+ * that has to fit the builder's memory cap. Recording it turns "out of memory"
+ * into an arithmetic problem somebody can act on (BI-5A1FBCA6).
+ */
+export function observedBuildWorkers(output) {
+  const match = /using (\d+) workers/i.exec(output || "");
+  return match ? Number(match[1]) : null;
+}
+
+/** The build step the host killed, when the output names one. */
+export function killedBuildStep(output) {
+  const line = String(output || "")
+    .split(/\r?\n/)
+    .find((entry) => /killed with SIGKILL/i.test(entry));
+  if (!line) return null;
+  const named = line.slice(line.lastIndexOf(":") + 1).trim();
+  return named || null;
+}
+
 export function classifyBoundedBuildExit({ exitCode, output }) {
   if (
     exitCode !== 0
     && /ResourceExhausted|cannot allocate memory|SIGKILL.*next build/i.test(output || "")
   ) {
+    // BI-5A1FBCA6: the BUILDER hit its own memory cap. The status stays the
+    // shared one so an already-deployed portal keeps accepting the evidence
+    // write, but the exit code and the recorded detail now say which of the
+    // three failures wearing that name actually happened. `failures` has always
+    // carried `builder:resource-exhausted`; nothing downstream read it, and the
+    // summary an operator sees named the control plane instead.
     return {
       status: "blocked_control_plane_starvation",
-      exitCode: 5,
+      exitCode: EXIT_BUILDER_RESOURCE_EXHAUSTED,
       failures: ["builder:resource-exhausted"],
+      observedWorkers: observedBuildWorkers(output),
+      killedStep: killedBuildStep(output),
     };
   }
   return {

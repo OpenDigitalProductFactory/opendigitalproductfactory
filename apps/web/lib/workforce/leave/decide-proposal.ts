@@ -1,8 +1,8 @@
-// Durable propose-only envelope for time-off recommendations (BI-4D030159).
+// Durable propose-only record of a time-off recommendation (BI-4D030159).
 // The AI may prepare this record; only D1's governed human approve/reject
 // actions may mutate LeaveRequest.status.
 
-import { Prisma, prisma } from "@dpf/db";
+import { prisma } from "@dpf/db";
 
 import type { LeaveDecisionRuntimeResult } from "./leave-decision-runtime";
 import {
@@ -51,25 +51,36 @@ export function prepareLeaveDecisionProposal(
   };
 }
 
-type ProposalResult = { proposalId: string; status: string };
+/** The recommendation's audit key (stable per request and interaction) and its state. */
+type RecommendationResult =
+  | { recommendationId: string; status: "proposed" }
+  | { recommendationId: string; status: "refused"; reason: string };
 
-export type LeaveDecisionProposalPersistence = {
-  findExisting(proposalId: string): Promise<ProposalResult | null>;
+/**
+ * BI-7BCC87BB (approval convergence PR-B, spec D2 S5): a time-off decision is
+ * the manager's own act under HR approval authority, and the coworker only
+ * recommends. So the recommendation is no longer an AgentActionProposal and
+ * never an envelope: it is the leave thread's assistant message plus the
+ * request's link to its DecisionInteraction, which the leave surface reads
+ * (lib/workforce/leave-data.ts) and the manager's decision resolves
+ * (lib/actions/leave.ts).
+ */
+export type LeaveDecisionRecommendationPersistence = {
   ensureThread(input: { userId: string; threadId?: string | null }): Promise<{ id: string }>;
-  createProposalBundle(input: {
-    proposalId: string;
+  /** This request's same recommendation already written to the thread, for idempotency. */
+  findExistingMessage(input: { threadId: string; content: string }): Promise<{ id: string } | null>;
+  /** Link the request to its DecisionInteraction when it is not linked to it yet. */
+  linkDecisionInteraction(input: { requestId: string; decisionInteractionId: string }): Promise<void>;
+  writeRecommendation(input: {
     threadId: string;
     taskRunId?: string | null;
     agentId: string;
-    actionType: typeof LEAVE_DECISION_ACTION;
-    parameters: LeaveDecisionProposalDraft["parameters"];
     messageContent: string;
-    status: "proposed";
     leaveRequestUpdate: {
       requestId: string;
       decisionInteractionId: string | null;
     };
-  }): Promise<ProposalResult>;
+  }): Promise<{ messageId: string }>;
 };
 
 export async function proposeLeaveDecision(input: {
@@ -78,39 +89,51 @@ export async function proposeLeaveDecision(input: {
   agentId?: string | null;
   threadId?: string | null;
   taskRunId?: string | null;
-  persistence?: LeaveDecisionProposalPersistence;
-}): Promise<ProposalResult & { existing?: true }> {
+  persistence?: LeaveDecisionRecommendationPersistence;
+}): Promise<RecommendationResult & { existing?: true }> {
+  // BI-5CA6AB34: a decision reaches the manager only with its kernel record. A
+  // fired rail now carries one too (leave-decision-coworker.ts), so a missing
+  // record means it could not be made; the request stays in the approver's
+  // leave queue, and no human authority is lost by not writing advice.
+  const decisionInteractionId = input.decision.interactionId;
+  if (!decisionInteractionId) {
+    return {
+      recommendationId: `leave-decision:${input.decision.request.requestId}:unrecorded`,
+      status: "refused",
+      reason: "No kernel decision record backs this recommendation, so it was not written. The request is still pending with its approver.",
+    };
+  }
   const draft = prepareLeaveDecisionProposal(input.decision);
-  const auditKey = input.decision.interactionId ?? `guard-${input.decision.action}`;
-  const proposalId = `leave-decision:${input.decision.request.requestId}:${auditKey}`;
-  const persistence = input.persistence ?? prismaLeaveDecisionProposalPersistence();
-  const existing = await persistence.findExisting(proposalId);
-  if (existing) return { ...existing, existing: true };
+  const recommendationId = `leave-decision:${input.decision.request.requestId}:${decisionInteractionId}`;
+  const persistence = input.persistence ?? prismaLeaveDecisionRecommendationPersistence();
+  // The message names its request, so idempotency is per request: two requests
+  // with the same recommendation prose each get their own message and link.
+  const messageContent = `Time-off recommendation for ${draft.parameters.requestId}: ${draft.parameters.recommendation}. ${draft.parameters.rationale}`;
 
   const thread = await persistence.ensureThread({ userId: input.userId, threadId: input.threadId });
-  return persistence.createProposalBundle({
-    proposalId,
+  const existing = await persistence.findExistingMessage({ threadId: thread.id, content: messageContent });
+  if (existing) {
+    await persistence.linkDecisionInteraction({ requestId: input.decision.request.requestId, decisionInteractionId });
+    return { recommendationId, status: "proposed", existing: true };
+  }
+
+  await persistence.writeRecommendation({
     threadId: thread.id,
     taskRunId: input.taskRunId,
     agentId: input.agentId ?? DEFAULT_AGENT_ID,
-    actionType: draft.actionType,
-    parameters: draft.parameters,
-    messageContent: `Time-off recommendation: ${draft.parameters.recommendation}. ${draft.parameters.rationale}`,
-    status: "proposed",
+    messageContent,
     leaveRequestUpdate: {
       requestId: input.decision.request.requestId,
-      decisionInteractionId: input.decision.interactionId,
+      decisionInteractionId,
     },
   });
+  return { recommendationId, status: "proposed" };
 }
 
-export function prismaLeaveDecisionProposalPersistence(): LeaveDecisionProposalPersistence {
+const LEAVE_RECOMMENDATION_TASK_TYPE = "leave-decision-recommendation";
+
+export function prismaLeaveDecisionRecommendationPersistence(): LeaveDecisionRecommendationPersistence {
   return {
-    findExisting: (proposalId) =>
-      prisma.agentActionProposal.findUnique({
-        where: { proposalId },
-        select: { proposalId: true, status: true },
-      }),
     ensureThread: async ({ userId, threadId }) => {
       if (threadId) return { id: threadId };
       return prisma.agentThread.upsert({
@@ -120,7 +143,18 @@ export function prismaLeaveDecisionProposalPersistence(): LeaveDecisionProposalP
         select: { id: true },
       });
     },
-    createProposalBundle: (input) =>
+    findExistingMessage: ({ threadId, content }) =>
+      prisma.agentMessage.findFirst({
+        where: { threadId, role: "assistant", taskType: LEAVE_RECOMMENDATION_TASK_TYPE, content },
+        select: { id: true },
+      }),
+    linkDecisionInteraction: async ({ requestId, decisionInteractionId }) => {
+      await prisma.leaveRequest.updateMany({
+        where: { requestId, OR: [{ decisionInteractionId: null }, { decisionInteractionId: { not: decisionInteractionId } }] },
+        data: { decisionInteractionId },
+      });
+    },
+    writeRecommendation: (input) =>
       prisma.$transaction(async (tx) => {
         const message = await tx.agentMessage.create({
           data: {
@@ -129,23 +163,10 @@ export function prismaLeaveDecisionProposalPersistence(): LeaveDecisionProposalP
             content: input.messageContent,
             agentId: input.agentId,
             routeContext: LEAVE_DECISION_ROUTE,
-            taskType: "leave-decision-recommendation",
+            taskType: LEAVE_RECOMMENDATION_TASK_TYPE,
             ...(input.taskRunId ? { taskRunId: input.taskRunId } : {}),
           },
           select: { id: true },
-        });
-        const proposal = await tx.agentActionProposal.create({
-          data: {
-            proposalId: input.proposalId,
-            threadId: input.threadId,
-            messageId: message.id,
-            agentId: input.agentId,
-            actionType: input.actionType,
-            parameters: input.parameters as unknown as Prisma.InputJsonValue,
-            status: input.status,
-            ...(input.taskRunId ? { taskRunId: input.taskRunId } : {}),
-          },
-          select: { proposalId: true, status: true },
         });
         if (input.leaveRequestUpdate.decisionInteractionId) {
           await tx.leaveRequest.update({
@@ -153,7 +174,7 @@ export function prismaLeaveDecisionProposalPersistence(): LeaveDecisionProposalP
             data: { decisionInteractionId: input.leaveRequestUpdate.decisionInteractionId },
           });
         }
-        return proposal;
+        return { messageId: message.id };
       }),
   };
 }

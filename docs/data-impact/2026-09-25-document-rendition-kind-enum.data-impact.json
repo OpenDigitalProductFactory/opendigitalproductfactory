@@ -1,0 +1,49 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [
+    "DocumentRendition rows written by the rendition job (apps/web/lib/documents/renditions.ts)",
+    "PDF and oversized-text rendition bytes stored as content-addressed DocumentBlob rows (apps/web/lib/documents/blob-storage.ts storeDocumentBlob)",
+    "Full-text projection: DocumentRendition.searchVector (generated tsvector, GIN index)",
+    "Semantic projection: the document's vector in the DOCUMENTS collection (apps/web/lib/documents/embeddings.ts storeDocumentVector)"
+  ],
+  "privacyAssessment": {
+    "personalData": false,
+    "sensitivity": "same as the source document",
+    "dataSubjectRights": "not-applicable: a rendition is a derived copy of a document the organization already stores. It adds no new personal data; any personal data a document contains was already held in its original blob, under the same Document access scope.",
+    "reviewDisposition": "Renditions cascade-delete with their DocumentVersion and inherit the document's access. Erasing or archiving a document removes or hides its renditions through the existing relations; no new retention path is introduced."
+  },
+  "migration": {
+    "name": "20260925060000_document_rendition_kind_enum",
+    "backfill": "In-migration: the two legacy spellings from the 2026-05-12 spec map to the new members ('preview-pdf' -> pdf, 'extracted-text' -> plain_text) unless the version already has the canonical row; values with no member ('thumbnail', 'html-preview', anything else) are deleted before the USING cast. Nothing in the portal wrote a DocumentRendition before this PR, so the table is empty on every known install. Rendition CONTENT is backfilled at runtime, not in the migration: a bounded sweep (at most 100 current office versions per pass) runs when the doctools dependency probe first reports the converter available, and is idempotent on (documentVersionId, renditionKind).",
+    "rollback": "Forward-only. Reverting the code leaves the enum column and generated searchVector in place, which older code tolerates because it never read or wrote DocumentRendition. The removed rows are derived projections that the rendition job regenerates from each version's blob."
+  },
+  "tests": [
+    "packages/db/src/document-rendition-kind-migration.test.ts",
+    "apps/web/lib/documents/renditions.test.ts",
+    "apps/web/lib/documents/renditions.docker.test.ts",
+    "apps/web/lib/documents/document-store.renditions.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:documentrendition",
+      "prismaModel": "DocumentRendition",
+      "lifecycleDisposition": "Derived projection of a DocumentVersion, regenerable from its content blob; cascades with the version. This PR gives the table its first writer.",
+      "fields": [
+        {
+          "fieldId": "data:documentrendition#renditionKind",
+          "resolution": "governed",
+          "reason": "Closed set typed as the DocumentRenditionKind enum (pdf, plain_text) per AGENTS.md section 8, replacing a free-form String. Values that cannot map are removed before the cast; see migration.backfill.",
+          "provenance": "BI-9D43CBEF; docs/superpowers/plans/2026-09-22-office-document-conversion-plan.md S4"
+        },
+        {
+          "fieldId": "data:documentrendition#searchVector",
+          "resolution": "governed",
+          "reason": "New generated tsvector over contentText with a GIN index, so doc_search full-text mode matches office-file body text. Not modeled in Prisma, the same as DocumentVersion.searchVector; Postgres keeps it current.",
+          "provenance": "BI-9D43CBEF; AC-ODC-006"
+        }
+      ]
+    }
+  ]
+}

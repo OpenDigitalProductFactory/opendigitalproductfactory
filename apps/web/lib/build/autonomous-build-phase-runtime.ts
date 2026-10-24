@@ -14,6 +14,7 @@ import {
   deriveDeliverableSensitivity,
   getModelTier,
   type DeliverableSensitivity,
+  mapBuildDeliverableToRoutingSensitivity,
 } from "@/lib/explore/build-process-matrix";
 import { normalizeVerificationOutput } from "@/lib/build/verification-output";
 import type { WorkPatternBindingRecord } from "@/lib/tak/work-pattern-binding-reader";
@@ -51,7 +52,7 @@ export type AutonomousBuildPhaseRuntimeDeps = {
   getMode(): "off" | "shadow" | "enforce";
   getSelection(input: {
     modelTier: "local" | "robust";
-    sensitivity: "internal" | "confidential";
+    sensitivity: ReturnType<typeof mapBuildDeliverableToRoutingSensitivity>;
   }): Promise<RuntimeSelection | null>;
   getRegulatory(): Promise<{
     ceiling: AutonomyLevel;
@@ -296,7 +297,7 @@ export async function resolveAutonomousBuildPhaseEligibility(
   const [selection, regulatory, sandboxState] = await Promise.all([
     runtime.getSelection({
       modelTier,
-      sensitivity: sensitivity === "high" ? "confidential" : "internal",
+      sensitivity: mapBuildDeliverableToRoutingSensitivity(sensitivity),
     }),
     runtime.getRegulatory(),
     runtime.getSandboxState(build),

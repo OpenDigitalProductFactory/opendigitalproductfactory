@@ -233,7 +233,7 @@ The operator's experience is: point the client at the URL, a browser tab opens, 
 
 `grant_types_supported` is `["authorization_code", "refresh_token", "client_credentials"]` — the third is the headless path (§2.1), not a separate system.
 
-`scopes_supported` advertises **`dpf.read` only**, per `:344-347` ("the minimal set of scopes necessary for basic functionality"). Everything above read arrives through step-up (§5.4). See §4.3.1 for why the vocabulary is six strings rather than the 75 internal grant names.
+`scopes_supported` advertises **`dpf.read dpf.work dpf.build`** — the development floor — per `:344-347` ("the minimal set of scopes necessary for basic functionality"). See §4.3.1 for why the vocabulary is six strings rather than the 75 internal grant names, and **§4.3.2 for why the floor is no longer read alone**. `dpf.business`, `dpf.operate` and `dpf.admin` remain above the floor and arrive through an explicit request.
 
 ### 4.3 Mapping onto the existing authorization model
 
@@ -266,7 +266,17 @@ This is the load-bearing decision and it is a projection, not a new model.
 
 Properties this has to satisfy:
 
-- **`scopes_supported` advertises `dpf.read` only.** Per `authorization.mdx:344-347` that field is "the minimal set of scopes necessary for basic functionality." Everything above read arrives through step-up (§5.4), which is what makes the default-request behaviour in point 2 above *safe* rather than dangerous — a client that requests everything advertised gets read access, and each escalation is a separate, named, human-approved decision.
+- **`scopes_supported` advertises the development floor: `dpf.read dpf.work dpf.build`.** Per `authorization.mdx:344-347` that field is "the minimal set of scopes necessary for basic functionality," and for this resource basic functionality is development work. **Superseded 2026-09-19 — this bullet previously read "`dpf.read` only"; see §4.3.2.**
+
+### 4.3.2 Why the read-only floor was superseded (2026-09-19, BI-CE5F8C0A)
+
+The read-only floor was safe **only if** escalation was reachable. Measurement says it is not, so the floor was not least privilege — it was no privilege.
+
+1. **The step-up cannot fire.** The 403 `insufficient_scope` challenge is emitted solely on `tools/call` of a tool the grant does not cover (`apps/web/app/api/mcp/v1/route.ts`). But `load_tools` filters by grant first and answers `not-granted` as a plain HTTP 200 (`apps/web/lib/mcp/load-tools.ts`), so a read client never sees the write tool, never calls it, and is never told a scope is missing. On a production install every OAuth client landed read-only and no step-up ever fired.
+2. **A per-client pin does not generalise.** Claude Code can pin `oauth.scopes` in `.mcp.json`. Grok cannot: it derives its request from the challenge (`"WWW-Authenticate challenge contains scope:"` in its binary) and exposes no scope setting in `grok mcp add` or `config.toml`. Pinning therefore fixes one of the four peer delivery surfaces (`AGENTS.md` §12) and strands the others.
+3. **Read is not a reduced product here.** This MCP server exists to claim workrooms, record evidence and move backlog items. A grant that can do none of those is not a smaller promise; it is a client that cannot perform the task it connected to perform.
+
+What did **not** change: `dpf.business`, `dpf.operate` and `dpf.admin` stay off the floor, because running the organization and administering the platform are not this resource's basic functionality. Widening the floor does not cap the ceiling — a client may still request them, and the consent screen continues to list every requested scope as its own checkbox for human approval.
 - **The coarse tier is derived, not separately requested.** The granted scope set implies `read`/`write`/`admin`; there is no independent tier parameter for a client to get wrong.
 - **The mapping is a code artifact with a completeness guard.** A single `apps/web/lib/mcp/oauth-scope-map.ts` owns it, and a test asserts every one of the 86 grants maps to exactly one public scope. **Adding a new grant without mapping it fails CI.** This is the drift guard, and without it the two vocabularies separate within a quarter — the failure this whole item exists to correct is a pointer that nobody re-checked.
 - **Grants stay refactorable.** Internal names can be split, merged or renamed freely as long as the map stays total. The public contract is six strings.
@@ -298,6 +308,8 @@ It names, in the platform's own vocabulary rather than OAuth's:
 
 Approvals are recorded as `AuthorizationDecisionLog` rows and listed in Admin > Platform Development > MCP beside PATs, each individually revocable.
 
+**Amended 2026-09-23 (BI-05E0EA33).** The assistant role is resolved server-side and the default flow has one Connect action; see the one-click connection section of [the OAuth external build authority design](2026-09-21-oauth-external-build-authority-design.md).
+
 ---
 
 ## 5. Slices
@@ -319,6 +331,8 @@ AS metadata; `authorize` + `token`; authorization-code with mandatory PKCE-S256;
 The grant that closes the second door without keeping a second system (§2.1). A headless client — CI, cron, a container, a scheduled agent task — authenticates with its own client credentials against the same AS, receives an access token carrying the same public scopes, and is resolved by the same code path. Operator-issued from Admin > Platform Development, listed and revocable beside browser-authorized clients.
 
 This is what makes the PAT deprecable rather than permanent, so it is not optional and it is not "later" — a deprecation horizon (§9) cannot start until it ships.
+
+**Delivery note (2026-09-18, BI-EDB67A2B).** The grant, the token route and the server actions shipped earlier; the operator surface did not, so no install could actually issue a headless client and the gate's own remedy text (BI-78B653D5) pointed at a page with nothing on it. The surface now exists as the "MCP OAuth clients" section of Admin > Platform Development, directly beneath the PAT manager: list, create (one-time secret with the credentials-file command and the environment-variable alternative) and revoke. The file path and env names it prints are the same ones `scripts/lib/mcp-credential.mjs` resolves.
 
 ### Slice 3 — Registration (medium)
 
@@ -450,3 +464,293 @@ Not hidden assumptions. Each changes behaviour and none should be settled by an 
 - Making DPF an MCP **client** with OAuth (outbound to third-party servers) — related, separately owned, out of scope here.
 - Building a general-purpose OAuth provider for non-MCP surfaces. The AS is scoped to the MCP resource; broadening it is `EP-24741BBF`'s directory work, not this item.
 - Re-specifying the consumer bootstrap (`BI-ED1BBC9E`). Sequenced ahead of this, designed elsewhere, amended on its own item.
+
+## 11. OAuth setup convergence — BI-A5307F9E
+
+This amendment implements the remaining setup portion of Slice 5. The operator
+requested OAuth as the default for future installs on 2026-09-20. Fresh-server
+reinstall acceptance is reserved for the operator's planned reinstall; it is not
+a prerequisite to publishing the source fix and must not be reported as passed.
+
+**OBJ-OAUTH-SETUP:** A supported interactive client receives OAuth configuration
+on a fresh install and retains it after every bootstrap or updater run.
+
+**OBJ-OAUTH-COMPAT:** An explicitly selected compatibility credential remains
+usable without revoking existing credentials or silently replacing browser consent.
+
+| Acceptance | Objectives | Required outcome |
+| --- | --- | --- |
+| AC-OAUTH-DEFAULT | OBJ-OAUTH-SETUP | Fresh Codex configuration uses the MCP URL without a bearer override, including HTTP loopback verified in this task. |
+| AC-OAUTH-RERUN | OBJ-OAUTH-SETUP | Bootstrap and updater reruns preserve OAuth and do not mint a PAT merely because authorization is pending. |
+| AC-OAUTH-CLIENTS | OBJ-OAUTH-SETUP, OBJ-OAUTH-COMPAT | Every shipped client writer uses an explicit credential policy; an unsupported client receives a truthful compatibility requirement instead of an unusable OAuth success claim. |
+| AC-OAUTH-LEGACY | OBJ-OAUTH-COMPAT | Explicit compatibility mode preserves credential references; migration removes only the managed DPF override and never revokes a credential. |
+| AC-OAUTH-STATE | OBJ-OAUTH-SETUP | Setup distinguishes configuration written, authorization pending, and a verified authenticated connection. |
+| AC-OAUTH-REINSTALL | OBJ-OAUTH-SETUP | Fresh server install, browser consent, restart, refresh and governed read/write calls are verified during the planned reinstall, with pending evidence retained until then. |
+
+### Evidence and design choice
+
+On this install, removing Codex's `bearer_token_env_var` and completing
+`codex mcp login dpf` succeeded against `http://127.0.0.1:3000/api/mcp/v1`.
+After restart, governed reads and ordinary writes succeeded. That refutes the
+shared policy's blanket assertion that every MCP client requires a PAT on HTTP.
+It does not establish the behavior of every other client. Preserve that distinction
+in the policy and its tests rather than replacing one unsupported generalization
+with another. Sections 3 and 7.5 remain the standards and comparison basis.
+
+Keep `packages/integration-shared/src/mcp-client-credential-policy.ts` as the
+policy owner. Extend its inputs to represent the supported client and explicit
+compatibility choice. Its Python consumer must have matching fixture coverage.
+Codex uses OAuth on HTTPS and loopback HTTP; non-loopback HTTP must never be
+presented as a secure OAuth configuration. Other client adapters must follow
+verified host capability, with a named compatibility state when needed.
+
+Rejected alternatives: a one-time edit to the operator's config is undone by
+bootstrap; removing headers indiscriminately can strand clients; minting a PAT
+when consent is pending silently defeats the requested OAuth default. Reuse the
+existing authorization server, scope mapping and client-owned token storage.
+This amendment adds no identity store, grant, scope, or database migration.
+
+### Ordered implementation and verification
+
+The following are internal stages of one configuration-convergence deliverable,
+owned by BI-A5307F9E. They are not separately shippable: an unchanged updater or
+bootstrap would restore the old configuration and invalidate the default.
+
+1. Add failing fresh/rerun/explicit-compatibility cases to the shared policy and
+   Codex configuration tests. Cover HTTPS, IPv4/IPv6 loopback, remote HTTP and
+   malformed URLs. Check that unrelated user settings survive convergence.
+2. Refactor the existing configuration writers and Python updater to consume the
+   policy. Reserve roughly 20% of implementation effort for removing duplicated
+   credential decisions and testing agreement across adapters.
+3. Update both bootstrap entry points and shipped descriptors so OAuth setup
+   avoids PAT minting and reports pending authorization honestly. Preserve the
+   explicit compatibility and headless client-credentials paths.
+4. Update setup guidance and the authorization runbook in the same change. Run
+   affected TypeScript and Python tests, source guards, type checking and required
+   semantic review. Exercise generation in a temporary user home; never use the
+   operator's real config as an automated-test fixture.
+5. Publish through the protected PR flow. Verify the delivered client configuration
+   and existing live OAuth read/write path. Keep AC-OAUTH-REINSTALL pending until
+   the planned server reinstall; capture backlog before any eventual teardown.
+
+Rollback restores the prior generators through a source revert. Existing tokens
+and consent records remain intact throughout. Governed author receipts and
+PAT-only reviewer handoff are separate runtime authorization defects tracked with
+BI-3B323B6A; setup must not report those workflows verified merely because login
+or a read succeeded.
+
+### Backlog coverage
+
+Implementation owner: BI-A5307F9E. Coverage is pending the independent approval
+of this immutable amendment and its scope baseline. No implementation permission
+or passing coverage receipt is claimed by this text.
+
+## 12. Canonical install address: one origin, one connector, every client
+
+Amendment 2026-09-25. Backlog: BI-6DC1CD5B (S1), BI-2D545A0C (S2),
+BI-5201141C (S3), BI-8A562681 (S4), BI-60A85892 (S5), BI-5BCDB07C (S6).
+Baseline read: origin/main b763bddeeb0 and the live DEV install
+(DESKTOP-A290QNG) on 2026-09-25. Kernel decision for the connector shape:
+DI-D2EA5BE3E7D9. Plan: [canonical install address](../plans/2026-09-25-canonical-install-address.md).
+
+### 12.1 Operator requirement
+
+Founder, 2026-09-25: OAuth must work at installation, whatever the install;
+every client must be supported; prefer the most common approach; the process
+must be smooth, without clicks that add human cognitive load; an AI agent on a
+separate machine on the network must also work.
+
+### 12.2 Measured as-is
+
+- **Two connectors per Claude session.** The dpf-platform plugin ships
+  `claude.mcp.json` (`${DPF_MCP_URL:-http://127.0.0.1:3000/api/mcp/v1?tier=full}`
+  plus a `Bearer ${DPF_MCP_BEARER_TOKEN}` header). The portal writes a second,
+  project `.mcp.json` (`apps/web/lib/auth/mcp-host-writer.ts:11-28`) on every
+  PAT issue, pointing at the request origin (`https://localhost/...`) with the
+  OAuth scope pin. Claude Code matches a plugin server against configured
+  servers by endpoint, not by name (Claude Code MCP documentation, "scope
+  hierarchy and precedence"), so different URLs load both. The plugin copy then
+  authenticates with the PAT, which lacks `dpf.work` grants such as
+  `initiative_evidence_write`, and the desktop app cannot sign it in
+  ("points at a different server URL"). Grok and Antigravity likewise receive
+  one connector from the plugin descriptor and one from a home-directory
+  config; the source repo tracks a third `.mcp.json`, enabled by
+  `.claude/settings.json:15-18`.
+- **No https by default.** `install-dpf.ps1:1716-1726` and `install-dpf.sh:941-948`
+  run the PKI bootstrap only for a join package; a standalone install's OAuth
+  issuer stays `http://127.0.0.1:3000` (BI-6DC1CD5B).
+- **Claude refuses OAuth over http, loopback included.** Measured on PROD
+  2026-09-16/17 (BI-46B636B0): "must be https". Codex accepts loopback http
+  (section 11). The same read found no OAuth client in the Grok setup DPF
+  ships. That client fact was re-measured on 2026-10-10 (12.2.1).
+- **The origin setting exists but is never written.** `PUBLIC_URL` and
+  `PUBLIC_URL_ALIASES` already drive the OAuth issuer and resource
+  (`oauth-metadata.ts:71-84`), cookies (`govern/auth.ts:116-137`) and the
+  canonical-host redirect (`canonical-host.ts:139-177`). No installer sets them.
+- **Tokens and consent bind one exact origin.** `resourceMatches`
+  (`oauth-metadata.ts:100-121`) and `AuthorityBinding.resourceRef` compare
+  scheme, host and port exactly; `localhost` and `127.0.0.1` are different
+  audiences.
+- **`.local` is not a dependable default on Windows.** On DEV,
+  `DESKTOP-A290QNG.local` resolves only to link-local IPv6 and the network
+  profile is Public, where Windows does not answer mDNS from peers. Docker
+  Desktop also blocks container mDNS (watchlist D11).
+- **Consent is already one click.** BI-05E0EA33 (PRs #5572, #5583) resolves
+  the assistant server-side and reuses prior consent; reconnect and refresh
+  need no click.
+
+### 12.2.1 Grok re-measured 2026-10-10
+
+The September sentence described the setup DPF ships. The Grok application on
+the operator Mac can open a browser OAuth flow. Slice S6 still uses
+`client_credentials` (12.4.7). BI-5BCDB07C's acceptance is unchanged.
+
+- Grok's user guide (MCP OAuth) opens a browser authorization flow and stores
+  the grant in `~/.grok/mcp_credentials.json`. Its config schema includes
+  `oauth`, `oauth_client_id`, `oauth_client_secret_env_var`, and
+  `oauth_scopes` (a string array). That field is separate from Claude's
+  `oauth.scopes`. DPF's scope pin still returns a value only for Claude
+  (`mcpClientOAuthScopePin` in
+  `packages/integration-shared/src/mcp-client-credential-policy.ts`).
+- The only stored `dpf` grant on that Mac is
+  `dpf:http://127.0.0.1:3000/api/mcp/v1?tier=full`, received
+  2026-09-18T23:57:57Z from issuer `http://127.0.0.1:3000`, scope `dpf.read`,
+  with a refresh token. No stored grant exists for `https://localhost`.
+- The working connector in `~/.grok/config.toml` is
+  `https://localhost/api/mcp/v1?tier=full` with `bearer_token_env_var`.
+  The checked-in `packages/dpf-skill-pack/grok.mcp.json` is still the
+  loopback http URL plus that same variable.
+  `mcpClientBearerHeaderRequired` returns true for `client === "grok"`, and
+  `planGrokConfig` writes the variable because OAuth support was unverified.
+- The same guide says `bearer_token_file` is re-read on every request, is
+  replaced atomically, and skips OAuth discovery. It does not say
+  `bearer_token_env_var` is re-read. The working connector presents a bearer
+  from the environment. The https origin has no stored browser grant.
+
+### 12.3 Research and benchmarking
+
+| System | Canonical address | Client trust | DPF adopts or rejects |
+|---|---|---|---|
+| Gitea / Forgejo `ROOT_URL` | One configured origin; every link and OAuth redirect derives from it | Operator's certificate | Adopt: one origin, set once, everything derives. `PUBLIC_URL` is this; the gap is that setup never writes it. |
+| Home Assistant `internal_url` and `homeassistant.local` | Configured URL, mDNS name as a convenience | Self-signed or user certificate | Adopt the internal-URL pattern. Reject mDNS as the default on Windows (12.2). |
+| smallstep `step ca bootstrap --ca-url --fingerprint` | CA URL plus root fingerprint | Fetch the root, verify the fingerprint, install into trust stores | Adopt for remote agent machines (S5): the standard trust-on-first-use-with-pin pattern. |
+| Hosted MCP connectors (Linear, Notion, Sentry, GitHub) | URL-only connector entry | Public WebPKI | Adopt the connector shape: URL only, OAuth by RFC 9728 discovery, no token in config. |
+| Kubernetes / k3s join (`--token`, CA hash) | Server URL plus CA hash | Pinned CA hash | Confirms URL plus fingerprint as the common join contract. |
+| Grok `bearer_token_file` | A helper writes a short-lived token file; the client re-reads it on each request | The helper's own client credential | Adopt for the S6 refresher (12.4.7). Reject rotating `bearer_token_env_var`, which is the process environment. Reject the browser `oauth_scopes` path for this slice (12.2.1). |
+
+Standards: RFC 9728 (protected resource metadata), RFC 8707 (resource
+indicators), RFC 8252 sections 7.3 and 8.3 (loopback redirects; prefer IP
+literals over `localhost` for redirect listeners), OAuth 2.1 (PKCE; https
+except loopback). S6 follows RFC 6749 section 4.4 (`client_credentials`).
+
+### 12.4 Decisions
+
+1. **One canonical https origin per install, written at setup (S1).**
+   `PUBLIC_URL` is chosen without operator input in this order: an explicit
+   operator DNS name; the machine's DNS name when the network resolves it to
+   one of the machine's own addresses (forward lookup verified at setup);
+   otherwise `https://localhost`. The portal certificate's SANs are the
+   canonical host plus the loopback spellings (`localhost`, `127.0.0.1`), and
+   a changed name set reissues the certificate. `PUBLIC_URL_ALIASES` stays
+   empty: an alias is served rather than redirected, which would give the
+   browser and its cookies a second origin; every other host is redirected to
+   the canonical one (corrected 2026-09-25 during S1).
+2. **https always.** Every install runs the organization CA and `portal-tls`
+   in authority mode by default. Claude refuses OAuth over http
+   (BI-46B636B0), and one origin cannot be http for one client and https for
+   another without splitting token audiences.
+3. **The machine trusts its own CA and knows its address (S2).** Setup adds
+   the root to the installing user's trust store and persists `DPF_MCP_URL`
+   and `NODE_EXTRA_CA_CERTS` for that user. The installers do not run
+   elevated, so the operating system asks once: the Windows certificate
+   confirmation, the macOS keychain password, or a Linux `sudo` password.
+   That prompt is the operating system's own floor; a declined prompt leaves
+   the install working over https with a browser warning, reported by setup
+   (corrected 2026-09-25 during S1; the root install ships with S1 because a
+   canonical https redirect without trust would show a warning).
+4. **One connector per client, owned by the plugin (S3).** Every plugin
+   descriptor is URL-only, `${DPF_MCP_URL:-<loopback https default>}`, with
+   no bearer header on https; Claude keeps the scope pin. Writers of a second
+   connector (the portal host writer in OAuth mode, the bootstrap repo
+   `.mcp.json`, the worktree seed and sync scripts, the tracked repo
+   `.mcp.json`) stop writing one; explicit legacy mode keeps its snippets as a
+   compatibility output. Kernel decision DI-D2EA5BE3E7D9 chose a single
+   source over "match the URLs" and "warn only". The single source is the
+   plugin rather than the project file because a fresh OAuth install and 56
+   of 138 source worktrees have no project file.
+5. **The authorization server accepts the canonical origin (S4).** Dynamic
+   client registration is allowed on loopback and on the configured canonical
+   origin; any other host is still refused. Consent stays required for every
+   new client. Scripted MCP callers derive their allowed endpoint from
+   `PUBLIC_URL` or `DPF_MCP_URL` and pass the CA bundle.
+6. **Remote agent machines join by URL plus fingerprint (S5).** The portal
+   shows one copyable command carrying the canonical URL and the root
+   fingerprint. It fetches and pins the root, trusts it, persists
+   `DPF_MCP_URL` and installs the plugin. The first client call opens one
+   Connect click.
+7. **Grok gets its credential without a paste (S6).** Setup creates a
+   `client_credentials` client (RFC 6749 section 4.4) inside the portal
+   container for the installing operator, with scopes `dpf.read`, `dpf.work`
+   and `dpf.build`, and no UI step. A refresher exchanges that grant and
+   rewrites the credential before expiry. No personal access token is minted.
+   The rewrite target is Grok's `bearer_token_file`: the client re-reads that
+   file on each request, and the writer replaces it by writing a temporary
+   file in the same directory and renaming it. Rotating
+   `bearer_token_env_var` is rejected because that value is the running
+   process environment. The browser `oauth_scopes` path is rejected for this
+   slice (12.2.1). Revoking the client in Admin stops the refresher, and the
+   next request is refused. Writers are exercised in a temporary home, never
+   in the operator's real Grok config.
+8. **Consent keeps its one click.** Pre-authorising clients to skip consent
+   entirely is rejected. The kernel floor ("human in the loop at phase
+   boundaries", "show the consequence before the confirm") is one explicit
+   Connect action, which BI-05E0EA33 already delivers; prior consent removes
+   it on reconnect and refresh.
+
+### 12.5 Open operator decision
+
+**A name for remote agents on a network without DNS.** When neither an
+operator DNS name nor a network-resolved machine name exists, the canonical
+origin falls back to `https://localhost`, which only the install's own machine
+can use. Options: (a) the operator adds a DNS name (router DHCP reservation
+plus local DNS) before S5 applies; (b) canonicalise on the machine's LAN IPv4
+with an IP SAN, reissued on address change, where tokens break whenever DHCP
+moves the address; (c) run a host-side mDNS responder for `<install>.local`,
+which Docker Desktop cannot do and would need a host service per OS.
+Recommendation: (a), with a portal check that names the gap, until evidence
+justifies (c).
+
+### 12.6 Slices and order
+
+| Slice | BI | Depends on | Delivers |
+|---|---|---|---|
+| S1 | BI-6DC1CD5B | none | Canonical https origin and certificate at install and upgrade; two Windows PKI-script defects; `portal-tls` honours `DPF_HOST_BIND_ADDRESS`. |
+| S2 | BI-2D545A0C | S1 | Machine trust, plus `DPF_MCP_URL` and `NODE_EXTRA_CA_CERTS` persisted at setup. |
+| S3 | BI-5201141C | S2 | One plugin-owned URL-only connector per client; second writers retired; runbook corrected. |
+| S4 | BI-8A562681 | S1 | DCR on the canonical origin; scripted callers and health hooks follow `DPF_MCP_URL` with the CA bundle. |
+| S5 | BI-60A85892 | S1, S2, S4 | Remote agent join command. |
+| S6 | BI-5BCDB07C | S1 | Grok credential without a paste. |
+
+### 12.7 Acceptance for the whole
+
+- **AC-CANON-1:** on a fresh install (Windows, macOS, Linux), Claude Code,
+  Codex, VS Code and Antigravity each show exactly one `dpf` connector,
+  authenticated by OAuth after one Connect click, with no command, file edit
+  or pasted token.
+- **AC-CANON-2:** Grok connects with no pasted token.
+- **AC-CANON-3:** an existing install upgrades to the same state; each client
+  re-consents once, because the token audience changes.
+- **AC-CANON-4:** an agent machine on the network connects with one command
+  and one Connect click, subject to 12.5.
+- **AC-CANON-5:** the access token refreshes silently, and revocation in Admin
+  refuses the client and prompts it to reconnect.
+
+### 12.8 Security
+
+- The canonical origin widens DCR from loopback to one named origin only;
+  registration still yields no authority without consent.
+- Installing the root into the machine trust store makes every browser on that
+  machine trust certificates the install CA issues. The CA's provisioner policy
+  must restrict issuance to the install's own names; verify this in S1.
+- Remote join pins the root by fingerprint; a mismatch trusts nothing.
+- Revocation, resource binding and one-family refresh rotation are unchanged.

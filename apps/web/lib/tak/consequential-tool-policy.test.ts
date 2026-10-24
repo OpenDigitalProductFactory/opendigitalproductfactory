@@ -37,6 +37,42 @@ describe("consequential tool policy", () => {
       .toBe(collaborationShape);
   });
 
+  // BI-63B14D4B: an outward effect that is platform development (a PR, a hive
+  // contribution) is governed by the founder kernel, not the customer's
+  // business stance. It stays consequential and outward-reviewed, but the
+  // WWWD alignment consult -- which produced empty "create portal pr:" cards
+  // for the business owner -- is not charged.
+  it("does not WWWD-align a platform-scoped outward tool, but keeps it consequential", () => {
+    expect(classifyConsequentialTool({
+      toolName: "create_portal_pr",
+      tool: { sideEffect: true, consequence: "outward", consequenceScope: "platform" },
+    })).toMatchObject({
+      class: "consequential-mutation",
+      consequential: true,
+      alignmentRequired: false,
+      collaborationShape: "outward-review",
+      reason: "declared-outward",
+    });
+  });
+
+  it("still WWWD-aligns a business-scoped outward tool (explicit or default scope)", () => {
+    expect(classifyConsequentialTool({
+      toolName: "send_marketing_email",
+      tool: { sideEffect: true, consequence: "outward", consequenceScope: "business" },
+    }).alignmentRequired).toBe(true);
+    expect(classifyConsequentialTool({
+      toolName: "send_marketing_email",
+      tool: { sideEffect: true, consequence: "outward" },
+    }).alignmentRequired).toBe(true);
+  });
+
+  it("keeps the explicit legacy alignment list gated regardless of scope", () => {
+    expect(classifyConsequentialTool({
+      toolName: "create_digital_product",
+      tool: { sideEffect: true, consequenceScope: "platform" },
+    }).alignmentRequired).toBe(true);
+  });
+
   it("keeps the precondition-gated HR transition on its change shape", () => {
     expect(classifyConsequentialTool({
       toolName: "transition_employee_status", tool: { sideEffect: true },

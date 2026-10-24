@@ -219,6 +219,13 @@ export interface WorkroomOutcomeView {
 }
 
 export interface WorkroomView {
+  /** Source requirements are read through the room's existing access boundary.
+   * They do not establish organization applicability or qualification. */
+  reviewProfile?: {
+    source: ReturnType<typeof import("./room-review-profile").composeRoomReviewProfile>;
+    applicability: "unknown";
+    assessment: "not-exercised";
+  };
   roomKey: string;
   caseRef: WorkCaseRef;
   identity: WorkroomIdentityView;
@@ -229,12 +236,16 @@ export interface WorkroomView {
   outcome: WorkroomOutcomeView;
   boundary: WorkroomBoundaryView;
   currentCycle: WorkroomCycleView | null;
+  /** Why the cycle could not be projected, when it could not. Distinguishes a
+   *  room that is genuinely idle from one whose cycle failed (BI-97B24FB5). */
+  cycleProjectionError: string | null;
   completedCycles: WorkroomCycleView[];
   participants: WorkroomParticipantView[];
   activity: WorkroomActivityView[];
   work: WorkroomWorkView;
   context: WorkroomContextView;
   receipts: ReceiptEnvelope[];
+  reviewerRuns?: import("./semantic-review-room-projection").ReviewerExecutionObservation[];
   sourceRefs: WorkCaseSourceRef[];
   /**
    * The value stream + lifecycle the room's SUBJECT sits in — the structure the

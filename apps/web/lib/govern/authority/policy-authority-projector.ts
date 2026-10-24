@@ -5,6 +5,7 @@ import {
   type CoworkerApprovalBinding,
   type CoworkerAuthoritySubject,
 } from "./coworker-authority-decision";
+import { APPROVAL_DECISION_WINDOW_MS } from "@/lib/coworker/approval-lifetime";
 
 export const POLICY_AUTHORITY_PROJECTOR_VERSION = "policy-authority-projector.v1";
 
@@ -111,6 +112,7 @@ export type PolicyAuthorityProjection =
       artifactFingerprint: string;
       approvalBindingFingerprint: string;
       auditEvidenceDigest: string;
+      contributionLedger: unknown[];
       issuedAt: Date;
       expiresAt: Date;
       maxUses: 1;
@@ -304,7 +306,7 @@ export function projectPolicyAuthority(
     }
   }
 
-  const requestedExpiry = new Date(now.getTime() + (input.ttlMs ?? 15 * 60 * 1000));
+  const requestedExpiry = new Date(now.getTime() + (input.ttlMs ?? APPROVAL_DECISION_WINDOW_MS));
   const expiresAt = input.delegation && input.delegation.expiresAt < requestedExpiry
     ? input.delegation.expiresAt
     : requestedExpiry;
@@ -345,6 +347,7 @@ export function projectPolicyAuthority(
     artifactFingerprint: binding.artifactFingerprint,
     approvalBindingFingerprint,
     auditEvidenceDigest,
+    contributionLedger: judgment.contributionLedger,
     issuedAt: now,
     expiresAt,
     maxUses: 1,
@@ -380,7 +383,8 @@ export async function persistPolicyAuthorityProjection(input: {
         status: "approved",
         expiresAt: { lte: input.projection.issuedAt },
       },
-      data: { status: "cancelled", resolvedAt: input.projection.issuedAt },
+      // A lapsed, unused authorization expired; nobody cancelled it (BI-0012E6CA).
+      data: { status: "expired", resolvedAt: input.projection.issuedAt },
     });
     const existing = await tx.coworkerActionEnvelope.findFirst({
       where: {
@@ -428,9 +432,12 @@ export async function persistPolicyAuthorityProjection(input: {
           artifactFingerprint: input.projection.artifactFingerprint,
           approvalBindingFingerprint: input.projection.approvalBindingFingerprint,
           auditEvidenceDigest: input.projection.auditEvidenceDigest,
+          contributionLedger: input.projection.contributionLedger,
           issuedAt: input.projection.issuedAt.toISOString(),
           expiresAt: input.projection.expiresAt.toISOString(),
           maxUses: input.projection.maxUses,
+          ...(input.approvalBinding.authorResearchBinding
+            ? { authorResearchBinding: input.approvalBinding.authorResearchBinding } : {}),
         },
         endpointUsed: "policy-authority-projector",
         mode: "immediate",
@@ -451,6 +458,7 @@ export async function persistPolicyAuthorityProjection(input: {
             interactionId: input.projection.interactionId,
             profileVersionId: input.projection.profileVersionId,
             auditEvidenceDigest: input.projection.auditEvidenceDigest,
+            contributionLedger: input.projection.contributionLedger,
             maxUses: input.projection.maxUses,
           },
         },

@@ -15,13 +15,13 @@
 // it can be ingested too. The remaining .tsx navs (ea/ops/customer-marketing/employee/
 // storefront) follow the same lift-then-register pattern.
 
-import { FINANCE_FAMILIES } from "@/components/finance/finance-nav";
-import { ADMIN_FAMILIES } from "@/components/admin/admin-nav";
-import { COMPLIANCE_FAMILIES } from "@/components/compliance/compliance-nav";
-import { EA_TABS } from "@/components/ea/ea-nav";
-import { OPS_NAV_GROUPS } from "@/components/ops/ops-nav";
-import { MARKETING_TABS } from "@/components/customer-marketing/marketing-nav";
-import { STOREFRONT_ROUTES, STOREFRONT_SETTINGS_TABS } from "@/components/storefront-admin/storefront-nav";
+import { FINANCE_FAMILIES } from "@/lib/navigation/finance-nav";
+import { ADMIN_FAMILIES } from "@/lib/navigation/admin-nav";
+import { COMPLIANCE_FAMILIES } from "@/lib/navigation/compliance-nav";
+import { EA_TABS } from "@/lib/navigation/ea-nav";
+import { OPS_NAV_GROUPS } from "@/lib/navigation/ops-nav";
+import { MARKETING_TABS } from "@/lib/navigation/marketing-nav";
+import { STOREFRONT_ROUTES, STOREFRONT_SETTINGS_TABS } from "@/lib/navigation/storefront-nav";
 import { PORTAL_NAV_ROUTES } from "@/lib/navigation/portal-navigation-model";
 import {
   toNavEntries,

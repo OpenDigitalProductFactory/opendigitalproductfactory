@@ -1,0 +1,13 @@
+{
+  "version": "1",
+  "accountableOwner": "Mark Bodman (markdbodman@gmail.com)",
+  "summary": "Re-points an existing foreign key; no field is added, removed, retyped or repurposed, so the field resolution below is empty by construction and no data subject, provenance or policy vector changes. BI-6C33AF7C. demand-digest.ts walks FederatedRecordMirror by federationLinkId for the CURRENT link only, so anything still owed on a link later revoked is never visited by any digest cycle again -- unreachable rather than dead. Re-enrolling a peer orphaned its in-flight backlog, and the dead-letter reheal path could never fire for those rows (rehealCount was 0 across the whole estate). This change adopts such mirrors onto the live link at enrolment time, and once over history. IDENTITY: matched on peerInstallationId, never peerAuthorityUrl -- the URL is an address, not an identity. On this install three revoked links shared one address but carried two different installation ids plus a null, because the peer was reinstalled; matching by address would hand records addressed to one installation to another. DATA EFFECT: adopting a mirror resumes delivery of records that had stopped moving, which is a real change in who receives data -- the enrolment path logs it rather than doing it silently, and only ever adopts from a link whose peerInstallationId is identical to the live link's. Rows on links with a different or unrecorded installation id are deliberately NOT touched. SCOPE ON THIS INSTALL: 47 rows, verified inside a rolled-back transaction (UPDATE 47, no constraint violation). Most orphaned rows are stale rather than lost -- the record was re-mirrored on the new link at re-enrolment, so 827 of 874 already had a live mirror; a NOT EXISTS guard skips those because FederatedRecordMirror is unique on (federationLinkId, recordType, localRecordRef). Superseded copies are left in place; deleting history is a separate deliberate decision. Only pending, dead-letter and conflict move -- synced and withdrawn are finished. Idempotent, creates and deletes nothing, adds no column or constraint, and applies cleanly against any data state including one with no federation links.",
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "FederatedRecordMirror",
+      "lifecycleDisposition": "domain-lifecycle-managed",
+      "fields": []
+    }
+  ]
+}

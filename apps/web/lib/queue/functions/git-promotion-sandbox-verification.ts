@@ -1,4 +1,4 @@
-import { inngest } from "../inngest-client";
+import { jobs } from "@/lib/jobs";
 
 function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\"'\"'`)}'`;
@@ -24,7 +24,7 @@ export function buildGitPromotionVerificationScript(input: {
   ].join("\n");
 }
 
-export const gitPromotionSandboxVerification = inngest.createFunction(
+export const gitPromotionSandboxVerification = jobs.createFunction(
   {
     id: "build/git-promotion-sandbox-verification",
     retries: 0,
@@ -50,7 +50,10 @@ export const gitPromotionSandboxVerification = inngest.createFunction(
     });
 
     if (!candidate) return { skipped: true, reason: "candidate not found" };
-    if (candidate.status !== "queued") {
+    // The intake writes the row as `emit-pending`, sends this event, then
+    // settles it to `queued`. The event can arrive before the settle lands, so
+    // both mean "not yet picked up" (BI-C26D5DC5).
+    if (candidate.status !== "queued" && candidate.status !== "emit-pending") {
       return { skipped: true, reason: `candidate status is ${candidate.status}` };
     }
     if (!candidate.repositoryCloneUrl || !candidate.afterSha) {

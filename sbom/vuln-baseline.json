@@ -2,34 +2,44 @@
   "note": "Accepted vulnerability advisories for scripts/sbom/scan-dependencies.mjs (the local Dependabot-equivalent). Each entry needs a real `reason`; `expires` (YYYY-MM-DD) forces re-review — past expiry the finding re-surfaces and the gate can fail again. This is the local mirror of Dependabot/CodeQL dismiss-with-justification. See docs/architecture/dependency-reduction-routine.md.",
   "accepted": [
     {
+      "id": "GHSA-vfj7-8cjw-p6xm",
+      "aliases": ["CVE-2026-93687"],
+      "package": "braces@3.0.3",
+      "severity": "high",
+      "reason": "Trusted-pattern-only mobile build tooling (BI-0AE77798). The platform lockfile contains no braces. In apps/mobile/pnpm-lock.yaml the only direct consumers are micromatch@4.0.8 and chokidar@3.6.0, reached through Metro file-map and Tailwind/fast-glob build-time file discovery. apps/mobile/tailwind.config.ts supplies three repository-controlled globs; metro.config.js uses Expo defaults and a fixed ./global.css NativeWind input. No mobile app/src/dynamic source imports braces, micromatch, chokidar or fast-glob. The advisory requires an attacker-controlled deeply nested brace PATTERN; matching a filename against these fixed patterns does not grant pattern control. No patched release is listed by the GitHub advisory as of 2026-10-03. Re-evaluate on a patch release, a Metro/Tailwind upgrade, or before accepting external glob patterns or exposing the development server to untrusted callers.",
+      "expires": "2026-11-02"
+    },
+    {
       "id": "GHSA-h67p-54hq-rp68",
       "aliases": [
         "CVE-2026-53550"
       ],
-      "package": "js-yaml@3.14.2",
+      "package": "js-yaml@3.15.2",
       "severity": "moderate",
-      "reason": "Trusted-input-only. js-yaml 3.14.2 is a transitive dep of gray-matter, used for build-time frontmatter parsing of our own repo-controlled .md files — never attacker-supplied YAML, so the quadratic-complexity DoS is not reachable. The fix is in js-yaml 4.x, a breaking major gray-matter does not support (consistent with the prior tolerable_risk dismissal, Dependabot #74). Re-evaluate if gray-matter adopts js-yaml 4 or a 3.x patch ships.",
+      "reason": "Trusted-input-only on the remaining copy. Platform gray-matter was removed in BI-99D7C104, so the platform lockfile no longer parses docs with js-yaml 3. apps/mobile still resolves js-yaml 3.15.2 through @istanbuljs/load-nyc-config 1.1.0, which loads coverage config and is already the latest release. It does not parse request input. The unused js-yaml 3 CLI edge to argparse, and with it sprintf-js, was removed in BI-5454A9E6; this acceptance is the js-yaml 3 parser only. js-yaml 4 fixes the quadratic-complexity DoS, and this loader does not support that major. Re-evaluate when a patched 3.x ships or the coverage loader moves to js-yaml 4.",
       "expires": "2026-12-31"
     },
     {
-      "id": "GHSA-5p2g-fcmc-qvqq",
+      "id": "GHSA-86w9-cpqp-85rv",
       "aliases": [
-        "CVE-2025-71329"
+        "CVE-2026-85393",
+        "GHSA-ppp5-5v6c-4jwp",
+        "CVE-2026-33894"
       ],
-      "package": "image-size@1.2.1",
+      "package": "node-forge@1.4.0",
       "severity": "high",
-      "reason": "Vulnerable code path NOT PRESENT at our resolved version. GHSA-5p2g-fcmc-qvqq is the JXL/HEIF zero-size-box infinite loop, which lives in utils.js findBox(). Upstream already fixed findBox in 1.2.1 (\"fix potential Denial of Service via specially crafted payloads\", #436, 2025-04-02) — it advances the offset by at least 8 when box.size is 0. VERIFIED EMPIRICALLY 2026-08-15: findBox() over a zero-size box terminates cleanly; only the advisory RANGE (<= 2.0.2) sweeps 1.2.1 in, not the defect. Separately, image-size is transitive via metro@0.84.4 under apps/mobile only (never the apps/web production runtime) and parses our own repo-committed build assets, not attacker-supplied input. Re-evaluate if metro moves to a 2.x line where this parser changed.",
-      "expires": "2027-02-15"
+      "reason": "Not reachable. node-forge 1.4.0 enters only apps/mobile/pnpm-lock.yaml, as a dependency of @expo/cli and @expo/code-signing-certificates (Expo's command-line build tooling); it is not bundled into the shipped app and never runs on a server. The flaw is RSA PKCS#1 v1.5 signature-verification forgery with low-exponent keys, used by Expo only for expo-updates code signing, which DPF's mobile app does not use (no expo-updates dependency and no codeSigning config in app.json, eas.json or package.json, checked 2026-10-02). No fixed version exists (affected through 1.4.0). Re-evaluate when node-forge publishes a fix, when Expo drops or patches it, or before enabling expo-updates code signing.",
+      "expires": "2026-12-31"
     },
     {
-      "id": "GHSA-w3rx-r6r6-pgpr",
+      "id": "GHSA-vfj7-8cjw-p6xm",
       "aliases": [
-        "CVE-2025-71330"
+        "CVE-2026-93687"
       ],
-      "package": "image-size@1.2.1",
+      "package": "braces@3.0.3",
       "severity": "high",
-      "reason": "PATCHED LOCALLY — we own this fix. GHSA-w3rx-r6r6-pgpr is the ICNS zero-length-entry infinite loop, and unlike its JXL/HEIF sibling it IS live in 1.2.1 (reproduced 2026-08-15: the event loop hangs). image-size is ARCHIVED upstream on both GitHub (2026-06-03) and Codeberg with no patched release, and metro closed its own Dependabot issue as \"not planned\" (react/metro#1607, #1762 still open), so there is no upstream fix to wait for. We therefore patch it ourselves: patches/image-size@1.2.1.patch guards the entry-walk loop, mirroring the guard upstream already applied to findBox(). Regression test scripts/sbom/image-size-icns-loop.test.mjs runs in CI and fails if the patch stops applying. This entry stays ACCEPTED only because OSV matches on the version string (1.2.1), which a pnpm patch does not change — the defect itself is fixed. NOTE: we deliberately did NOT adopt the image-size-next fork (published 2026-08-10, 0 downloads, no provenance attestation, promoted by its own author via templated issues on react-native/next.js/metro; metro rejected those PRs).",
-      "expires": "2027-02-15"
+      "reason": "Not reachable from a shipped runtime. braces 3.0.3 is only in apps/mobile/pnpm-lock.yaml. tailwindcss 3.4.19 (a mobile devDependency) pulls it through chokidar and micromatch, and Metro's Node bundler pulls it through metro-file-map and micromatch. The mobile app source does not import braces, micromatch, or chokidar. The flaw is a stack overflow when a caller supplies a deeply nested brace pattern. Those callers expand this repo's own Tailwind and Metro globs, not request input. No patched npm release exists (3.0.3 is the latest; micromatch/braces#72 is unreleased). Re-evaluate when braces publishes a depth guard, or when Expo or Tailwind stop depending on 3.0.3. Checked 2026-10-03.",
+      "expires": "2026-12-31"
     }
   ]
 }

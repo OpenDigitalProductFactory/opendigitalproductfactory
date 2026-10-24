@@ -14,11 +14,31 @@
 // entry point remains a compatibility wrapper and can be forced only for
 // focused debugging. This keeps lease/fence safety in one implementation.
 
+import { parseArgs as utilParseArgs } from "node:util";
+import { scriptArgv } from "./lib/script-argv.mjs";
 import { spawnSync } from "node:child_process";
+import { createObservedProcessRunner } from "./lib/local-ci-process-observer.mjs";
+import { gitTextOrNull } from "./lib/git.mjs";
+import { sandboxDecisionForHead } from "./derived-artifacts-gate.mjs";
+import { readFileSync } from "node:fs";
 import { dirname, join, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mcpCall } from "./lib/mcp-client.mjs";
+import { resolveMcpCredential } from "./lib/mcp-credential.mjs";
+import { readEarlyQuiescenceStatus, quiescenceBlocksWrites, quiescenceWait } from "./lib/gate-quiescence.mjs";
+
+// BI-78B653D5: the interrupted-gate recovery path releases a lease with
+// whatever credential the gate itself would use; none configured is "cannot
+// release", never a crash.
+function resolveMcpCredentialOrNull({ mcpUrl, env = process.env }) {
+  try {
+    return resolveMcpCredential({ mcpUrl, env }).bearer;
+  } catch {
+    return null;
+  }
+}
 import { checkHostDiskSpace } from "./lib/disk-space-preflight.mjs";
+import { GATE_EXIT } from "./lib/gate-exit-classification.mjs";
 import {
   createLocalCiSlotManifest,
   LOCAL_CI_SLOT_KEYS,
@@ -40,6 +60,7 @@ import {
 import { collectSlotVerdicts, resolveWorktreeContext } from "./pregate-status.mjs";
 import { reconcileSlots } from "./lib/pregate-status.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
+import { runWithHostMcpTrust } from "./lib/mcp-host-trust.mjs";
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = dirname(THIS_FILE);
@@ -65,6 +86,55 @@ export function isRecordExemptInvocation(args) {
   );
 }
 
+/** The flag that forces a re-gate of a HEAD that already passed (BI-1669E08A). */
+export const FORCE_RERUN_FLAG = "--force-rerun";
+
+/**
+ * BI-1669E08A. Should this invocation reuse the PASS already recorded for HEAD
+ * instead of starting a second run?
+ *
+ * A second run of an identical tree cannot add information — its verdict is
+ * either the same or wrong — but it can destroy some, because a run takes the
+ * record the moment it starts. Both observed erasures on this install ran that
+ * way: 2026-09-10 a waiting loop re-invoked pregate and a 0xC0000142 launch
+ * failure ate the PASS; 2026-09-12 nothing re-invoked anything at all — the
+ * durable-wait detached resumer gated to a PASS and the original queued claim
+ * was then also admitted, wrote `running` over it, and died on starvation.
+ *
+ * Deliberately keyed on the SAME reconciled verdict the exit-honesty rule uses,
+ * so "already passed" cannot mean one thing to the wrapper's entry and another
+ * to its exit. Anything but PASS runs the gate, and an unreadable record runs it
+ * too: corroboration that cannot be read is not corroboration (BI-A9CF0D69).
+ *
+ * @returns {{ reuse: boolean, reason: string }}
+ */
+export function shouldReuseExistingPass({ args = [], verdictAtHead = "" } = {}) {
+  if (isRecordExemptInvocation(args)) {
+    return { reuse: false, reason: "record-exempt invocation — it acts on the record rather than reading it" };
+  }
+  if (args.includes(FORCE_RERUN_FLAG)) {
+    return { reuse: false, reason: `${FORCE_RERUN_FLAG} was passed — re-gating a HEAD that already has a verdict` };
+  }
+  if (verdictAtHead !== "PASS") {
+    return {
+      reuse: false,
+      reason: verdictAtHead
+        ? `verdict at HEAD is ${verdictAtHead}, not PASS`
+        : "verdict at HEAD is unreadable",
+    };
+  }
+  return { reuse: true, reason: "a passing local-CI gate record already covers this HEAD" };
+}
+
+/**
+ * Drop the wrapper-only force flag before the gate sees it — gate-worktree.mjs
+ * dies on an unknown option, so forwarding it would turn a deliberate re-gate
+ * into a crash (BI-1669E08A).
+ */
+export function stripForceRerunFlag(args = []) {
+  return args.filter((arg) => arg !== FORCE_RERUN_FLAG);
+}
+
 // Pure exit-code policy so the honesty rules are unit-testable without a gate:
 // timedOut (admission window elapsed, nothing gated) and status-0-without-a-
 // corroborating-PASS both map to ABANDONED_OR_UNRECORDED_EXIT_CODE; a genuine
@@ -75,6 +145,57 @@ export function resolveWrapperExitCode({ status, timedOut, recordExempt, verdict
   if (recordExempt) return 0;
   return verdictAtHead === "PASS" ? 0 : ABANDONED_OR_UNRECORDED_EXIT_CODE;
 }
+// A gate is single-tenant per worktree: run, resume and --finalize-evidence all
+// claim the same fence. Taking it while one is mid-flight kills the running
+// gate — observed 2026-09-05, where a --finalize-evidence issued on a stale
+// pregate:status line (that line had read an OLDER slot's record) killed a gate
+// that was exporting its image. The record became blocked_wrapper_exited and
+// the lease release failed as nonprod_lease_not_owner.
+//
+// pregate:status text is not scoped to the slot currently running, so it cannot
+// be the thing a caller checks. The build record can: its own metadata says
+// whether THIS worktree has a gate in flight. Refuse on that, not on prose.
+export function shouldRefuseWhileGateRunning({ args = [], buildRecord = null } = {}) {
+  if (args.includes("--help") || args.includes("-h")) return { refuse: false };
+  if (buildRecord?.status !== "running") return { refuse: false };
+  const slot = buildRecord.slot ? ` in ${buildRecord.slot}` : "";
+  const sha = buildRecord.sha ? ` @ ${String(buildRecord.sha).slice(0, 12)}` : "";
+  return {
+    refuse: true,
+    reason:
+      `a gate is already running in this worktree${slot}${sha}. Every pregate entry point — run, `
+      + "resume and --finalize-evidence — claims the same fence, so this invocation would kill it. "
+      + "While a gate runs here the only safe commands are read-only: git, ls, and reading "
+      + "dpf-local-ci-output*.log / dpf-local-ci-gate*.json under .git/worktrees/<name>/. "
+      + "Use --finalize-evidence only after the running gate prints its own "
+      + "\"rerun --finalize-evidence after quiescence clears\" line.",
+  };
+}
+
+// The gate record is keyed to the SHA captured when the LEASE is claimed, not to
+// the code the build actually compiled. Start a gate on a dirty tree and the
+// record keys to the base commit while the build gates your uncommitted code;
+// the pre-push hook then compares HEAD against that stale key and refuses, so a
+// full lease plus Docker build is burned on a record nothing will accept.
+// Confirmed 2026-07-29. The hook is right; the fix is to commit first.
+export function shouldRefuseDirtyTree({ args = [], porcelain = "" } = {}) {
+  if (isRecordExemptInvocation(args)) return { refuse: false };
+  const dirty = String(porcelain)
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (dirty.length === 0) return { refuse: false };
+  return {
+    refuse: true,
+    reason:
+      `the working tree has ${dirty.length} uncommitted change(s). The gate record is keyed to the `
+      + "SHA at lease claim, so a gate started now records the BASE commit and the pre-push hook "
+      + "will refuse the push even though the build gated your code. Commit first, then run pregate "
+      + "— a second run is a full lease and Docker build, and a contended slot can queue for 20 "
+      + "minutes. Do not reach for the push override; the hook is correct.",
+  };
+}
+
 const DEFAULT_LEASE_WAIT_SECONDS = 7200;
 
 // Host-side guard parity preflight (BI-D35433FB): run the deterministic CI
@@ -83,7 +204,7 @@ const DEFAULT_LEASE_WAIT_SECONDS = 7200;
 // evidence replays (--finalize-evidence) change nothing about the tree and
 // skip it; DPF_SKIP_PREGATE_PREFLIGHT_REASON is the recorded emergency skip.
 export function shouldRunPreflight(args, env = process.env) {
-  if (args.includes("--dry-run") || args.includes("--finalize-evidence")) return false;
+  if (isRecordExemptInvocation(args)) return false;
   if (env.DPF_SKIP_PREGATE_PREFLIGHT_REASON) return false;
   return true;
 }
@@ -107,9 +228,15 @@ export function shouldUseShell({ env = process.env, cwd = process.cwd(), spawnSy
 }
 
 function argValue(args, flag) {
-  const index = args.indexOf(flag);
-  if (index < 0) return "";
-  return args[index + 1] || "";
+  // strict: false keeps the old tolerance: flags pregate does not read are ignored.
+  const { values } = utilParseArgs({
+    args: scriptArgv(args),
+    strict: false,
+    allowPositionals: true,
+    options: Object.fromEntries(["lease-wait-seconds", "worktree", "branch", "sha"].map((name) => [name, { type: "string" }])),
+  });
+  const value = values[flag.replace(/^--/, "")];
+  return typeof value === "string" ? value : "";
 }
 
 function leaseWaitSeconds(args, env) {
@@ -218,7 +345,7 @@ export async function recoverInterruptedGateState({
   childStatus = null,
   childSignal = "",
   mcpUrl = process.env.DPF_MCP_URL || "http://127.0.0.1:3000/api/mcp/v1",
-  bearerToken = process.env.DPF_MCP_BEARER_TOKEN,
+  bearerToken = resolveMcpCredentialOrNull({ mcpUrl }),
   mcpCallImpl = mcpCall,
   releaseLocalQueueObserverImpl = releaseLocalQueueObserver,
   releaseDeadLocalQueueObserversForGateImpl = releaseDeadLocalQueueObserversForGate,
@@ -233,7 +360,7 @@ export async function recoverInterruptedGateState({
   let releaseSucceeded = false;
   let releaseError = "";
   if (!bearerToken) {
-    releaseError = "missing DPF_MCP_BEARER_TOKEN";
+    releaseError = "no MCP credential configured (client_credentials client or DPF_MCP_BEARER_TOKEN)";
   } else {
     try {
       const response = await mcpCallImpl(
@@ -569,7 +696,7 @@ export async function recoverInterruptedGate({
       childStatus: result?.status ?? null,
       childSignal: result?.signal || "",
       mcpUrl: env.DPF_MCP_URL || "http://127.0.0.1:3000/api/mcp/v1",
-      bearerToken: env.DPF_MCP_BEARER_TOKEN,
+      bearerToken: resolveMcpCredentialOrNull({ mcpUrl: env.DPF_MCP_URL || "http://127.0.0.1:3000/api/mcp/v1", env }),
       mcpCallImpl,
       queueObserverFallbackDirectory: env.DPF_LOCAL_QUEUE_OBSERVER_DIR
         || resolvePath(context.gitCommonDir, "dpf-local-ci-queue-observers"),
@@ -578,8 +705,14 @@ export async function recoverInterruptedGate({
       const releaseText = recovered.releaseSucceeded
         ? "released the lease"
         : `could not release the lease (${recovered.releaseError || "unknown error"})`;
+      // BI-FFCFCCE0: the record this path writes is `blocked_wrapper_exited`,
+      // which BI-D088D06D introduced precisely so an interrupted wrapper stops
+      // reading as a grade on the diff. This line kept the pre-BI-D088D06D
+      // wording and said "failed" anyway — the record told the truth while the
+      // one sentence an operator actually reads did not.
       stderr.write(
-        `pregate: recovered interrupted local-CI gate for ${context.branch} @ ${context.sha}; ${releaseText}; marked the local gate state failed.\n`,
+        `pregate: recovered interrupted local-CI gate for ${context.branch} @ ${context.sha}; ${releaseText}; `
+          + "recorded blocked_wrapper_exited: the run was interrupted before it could grade the diff, so this is NOT a verdict on your changes. Re-run pregate on the same SHA.\n",
       );
       return recovered;
     }
@@ -643,12 +776,54 @@ export async function runGateWithQueuedRevival({
   }
 }
 
+// Thin, failure-tolerant readers for the two safety guards above. Both fail
+// OPEN by returning a shape the guard treats as "nothing to refuse on": a guard
+// that cannot measure must not block a legitimate gate. The guards themselves
+// stay pure so the policy is unit-testable without a git tree.
+function readWorktreeBuildRecord() {
+  try {
+    const path = gitText(["rev-parse", "--git-path", ".build.json"]);
+    if (!path) return null;
+    return JSON.parse(readFileSync(resolvePath(process.cwd(), path), "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function readWorkingTreePorcelain() {
+  return gitTextOrNull(["status", "--porcelain"], { cwd: process.cwd(), trim: false }) ?? "";
+}
+
+/**
+ * BI-4BCD269B. A pregate that is not the sole foreground command used to run
+ * until image-export and then die, leaving status running and no reason.
+ * `pnpm run` on Windows often has no TTY, and gate:wait is the sanctioned
+ * wrapper, so a bare !isTTY check is not the signal. Help and dry-run do not
+ * occupy the pool.
+ */
+export function wrappedForegroundReason({ stdoutIsTTY, env = process.env, args = [] } = {}) {
+  if (args.includes("--help") || args.includes("-h") || args.includes("--dry-run")) return null;
+  if (stdoutIsTTY) return null;
+  if (env.DPF_PREGATE_ALLOW_CAPTURE === "1") return null;
+  if (env.CI === "true" || env.GITHUB_ACTIONS === "true") return null;
+  return "pregate is not the sole foreground command: stdout is not a terminal, so this run would be captured or wrapped and can die with no recorded reason. Run `pnpm run pregate` in the foreground, or use `pnpm gate:wait`.";
+}
+
 async function main() {
   // BI-B1065D41: `pnpm run pregate | head -5` must survive head exiting. Both
   // this wrapper and the gate it spawns need the tolerance — the gate inherits
   // these very file descriptors.
   installBrokenPipeTolerance();
   const args = process.argv.slice(2);
+  const wrapped = wrappedForegroundReason({
+    stdoutIsTTY: Boolean(process.stdout.isTTY),
+    env: process.env,
+    args,
+  });
+  if (wrapped) {
+    process.stderr.write(`pregate: ${wrapped}\n`);
+    process.exit(GATE_EXIT.WRAPPED_INVOCATION);
+  }
 
   const diskCheck = checkHostDiskSpace();
   if (!diskCheck.ok) {
@@ -656,46 +831,53 @@ async function main() {
     process.exit(1);
   }
 
-  if (shouldRunPreflight(args)) {
-    // BI-B1065D41: the guard-parity preflight is loud and, on a passing run,
-    // uninteresting — including a TOLERATED GuardRuntimeEnvironmentError that
-    // prints `Error:` and a red cross on runs that PASS, which is exactly the
-    // text a log-tail reader mistakes for a failure. Capture it and replay it
-    // only when it actually fails.
-    const verbose = isVerboseGateConsole();
-    const preflight = spawnSync(
-      process.execPath,
-      [join(SCRIPT_DIR, "pregate-preflight.mjs")],
-      verbose ? { stdio: "inherit" } : { encoding: "utf8" },
+  const fenceSafety = shouldRefuseWhileGateRunning({
+    args,
+    buildRecord: readWorktreeBuildRecord(),
+  });
+  if (fenceSafety.refuse) {
+    process.stderr.write(`pregate: ${fenceSafety.reason}
+`);
+    process.exit(1);
+  }
+
+  const treeSafety = shouldRefuseDirtyTree({ args, porcelain: readWorkingTreePorcelain() });
+  if (treeSafety.refuse) {
+    process.stderr.write(`pregate: ${treeSafety.reason}
+`);
+    process.exit(1);
+  }
+
+  // BI-1669E08A: check BEFORE the preflight. A tree that already has a passing
+  // record for this exact HEAD needs neither the three-minute guard parity run
+  // nor a lease; starting either can only cost time and risk the record.
+  const reuse = shouldReuseExistingPass({ args, verdictAtHead: readReconciledVerdictAtHead() });
+  if (reuse.reuse) {
+    process.stdout.write(
+      `pregate: ${reuse.reason} — not starting a second run.\n`
+        + `pregate: a second run of an identical tree can only repeat or contradict that verdict, and it takes the record the moment it starts.\n`
+        + `pregate: read it with  pnpm run pregate:status  — re-gate anyway with  pnpm run pregate -- ${FORCE_RERUN_FLAG}\n`,
     );
-    if (preflight.error || (preflight.status ?? 1) !== 0) {
-      if (!verbose) {
-        process.stderr.write(String(preflight.stdout || ""));
-        process.stderr.write(String(preflight.stderr || ""));
+    process.exit(0); // exit-0: a PASS record bound to current HEAD already exists; this run reused it and gated nothing
+  }
+
+  const preflightStatus = await runHostPreflight({ args });
+  if (preflightStatus !== 0) process.exit(preflightStatus);
+
+  // BI-A254A94C: the pre-push gate already exempts a docs-only diff. Do not
+  // spend the single sandbox slot on that diff. A mixed code file is named.
+  if (!args.includes(FORCE_RERUN_FLAG) && !isRecordExemptInvocation(args)) {
+    const sandbox = sandboxDecisionForHead();
+    if (sandbox) {
+      process.stdout.write(`pregate: ${sandbox.message}\n`);
+      if (!sandbox.claim) {
+        process.exit(0); // exit-0: docs-only diff; same predicate as pre-push; no lease claimed
       }
-      // BI-AA2EE621: the preflight process itself being killed or failing to
-      // spawn (taskkill /T during an eviction leaves status === null) is a
-      // runner failure, not a deterministic guard violation — say so, or the
-      // reader audits an innocent guard the loop never even reported on.
-      const preflightKilled = Boolean(preflight.error) || preflight.status === null;
-      process.stderr.write(
-        preflightKilled
-          ? "pregate: guard parity preflight could not RUN on this host (killed or failed to spawn — host under pressure, not a guard violation) — retry on a quieter host (no lease was claimed).\n"
-          : "pregate: guard parity preflight failed — fix the deterministic guard failures above before the sandbox gate runs (no lease was claimed).\n",
-      );
-      process.exit(preflight.status ?? 1);
     }
-    if (!verbose) {
-      process.stdout.write("pregate: guard parity preflight passed.\n");
-    }
-  } else if (process.env.DPF_SKIP_PREGATE_PREFLIGHT_REASON) {
-    process.stderr.write(
-      `pregate: guard parity preflight SKIPPED — DPF_SKIP_PREGATE_PREFLIGHT_REASON=${process.env.DPF_SKIP_PREGATE_PREFLIGHT_REASON}\n`,
-    );
   }
 
   const useShell = shouldUseShell();
-  const { result, timedOut } = await runGateWithQueuedRevival({ args, useShell });
+  const { result, timedOut } = await runGateWithQueuedRevival({ args: stripForceRerunFlag(args), useShell });
   if (result?.error) {
     process.stderr.write(`pregate: failed to launch gate: ${result.error.message}\n`);
     process.exit(1);
@@ -717,6 +899,87 @@ async function main() {
     );
   }
   process.exit(exitCode);
+}
+
+export async function runHostPreflight({
+  args = [], env = process.env, spawnSyncImpl = null,
+  runObservedImpl = null,
+  readStatusImpl = readEarlyQuiescenceStatus,
+  stdout = (text) => process.stdout.write(text),
+  stderr = (text) => process.stderr.write(text),
+} = {}) {
+  if (shouldRunPreflight(args, env)) {
+    const quiescence = await readStatusImpl({ args, env, warn: stderr, strictConnection: true });
+    if (quiescenceBlocksWrites(quiescence)) {
+      // No gate record, lease, observer or pending-evidence mutation on this path.
+      stderr(JSON.stringify(quiescenceWait(quiescence)) + "\n");
+      return EXIT_DURABLE_QUEUE_WAIT;
+    }
+    // BI-B1065D41: the guard-parity preflight is loud and, on a passing run,
+    // uninteresting — including a TOLERATED GuardRuntimeEnvironmentError that
+    // prints `Error:` and a red cross on runs that PASS, which is exactly the
+    // text a log-tail reader mistakes for a failure. Capture it and replay it
+    // only when it actually fails.
+    const verbose = isVerboseGateConsole();
+    const preflightArgs = [join(SCRIPT_DIR, "pregate-preflight.mjs")];
+    let preflight;
+    if (spawnSyncImpl) {
+      // Compatibility for injected test executors; normal execution is observed.
+      preflight = await spawnSyncImpl(process.execPath, preflightArgs,
+        { env, encoding: "utf8", timeout: 60 * 60_000, maxBuffer: 64 * 1024 });
+    } else {
+      const controller = new AbortController();
+      const cancel = () => controller.abort();
+      process.once("SIGINT", cancel);
+      process.once("SIGTERM", cancel);
+      const run = runObservedImpl ?? createObservedProcessRunner({ maxDurationMs: 60 * 60_000,
+        sampleHost: () => null, stdout: { write(chunk) {
+          for (const line of String(chunk).split(/\r?\n/)) {
+            if (verbose || line.startsWith("[pregate-preflight]")) stdout(line + "\n");
+          }
+        } }, stderr: { write(chunk) { if (verbose) stderr(String(chunk)); } } });
+      try {
+        const observed = await run({ command: process.execPath, args: preflightArgs,
+          env, cwd: process.cwd(), shell: false, signal: controller.signal });
+        preflight = { ...observed, stdout: observed.outputTail, stderr: "" };
+      } finally {
+        process.removeListener("SIGINT", cancel);
+        process.removeListener("SIGTERM", cancel);
+      }
+    }
+    const unavailable = preflight.error || preflight.deadlineExceeded || preflight.cancelled || preflight.closeTimedOut;
+    if (unavailable) preflight = { ...preflight, status: 88 };
+    if (preflight.error || (preflight.status ?? 1) !== 0) {
+      if (!verbose) {
+        stderr(String(preflight.stdout || ""));
+        stderr(String(preflight.stderr || ""));
+      }
+      // BI-AA2EE621: the preflight process itself being killed or failing to
+      // spawn (taskkill /T during an eviction leaves status === null) is a
+      // runner failure, not a deterministic guard violation — say so, or the
+      // reader audits an innocent guard the loop never even reported on.
+      const preflightKilled = Boolean(preflight.error) || preflight.status === null || preflight.status === 88;
+      stderr(
+        preflightKilled
+          ? "pregate: guard parity preflight could not RUN on this host (killed or failed to spawn — host under pressure, not a guard violation) — retry on a quieter host (no lease was claimed).\n"
+          : "pregate: guard parity preflight failed — fix the deterministic guard failures above before the sandbox gate runs (no lease was claimed).\n",
+      );
+      return preflight.status ?? 1;
+    }
+    if (!verbose) {
+      let status;
+      const line = String(preflight.stdout ?? "").split(/\r?\n/).findLast(line => line.startsWith("DPF_HOST_PREFLIGHT_RESULT="));
+      try { status = JSON.parse(line?.slice("DPF_HOST_PREFLIGHT_RESULT=".length)).status; } catch { /* Missing summary is unproven, never passed. */ }
+      stdout(status === "passed" ? "pregate: guard parity preflight passed.\n"
+        : "pregate: host preflight inconclusive or partially verified; canonical CI still enforces all applicable checks.\n");
+    }
+  } else if (env.DPF_SKIP_PREGATE_PREFLIGHT_REASON) {
+    stderr(
+      `pregate: guard parity preflight SKIPPED — DPF_SKIP_PREGATE_PREFLIGHT_REASON=${env.DPF_SKIP_PREGATE_PREFLIGHT_REASON}\n`,
+    );
+  }
+
+  return 0;
 }
 
 // Read the same SHA-bound slot records pregate:status reads, reduced to the
@@ -743,8 +1006,8 @@ export function readReconciledVerdictAtHead({
 // comparison must survive symlinked invocation spellings (macOS /var tmpdir),
 // or the guard silently skips main() and exits 0 (BI-745658D7).
 if (isEntryModule(import.meta.url)) {
-  main().catch((error) => {
-    process.stderr.write(`pregate: ${error?.stack || String(error)}\n`);
-    process.exit(1);
+  runWithHostMcpTrust(main).then(code => { if (typeof code === "number") process.exit(code); }).catch((error) => {
+    process.stderr.write(`pregate: ${error?.code ? error.message : error?.stack || String(error)}\n`);
+    process.exit(error?.hostTrustPrerequisite ? GATE_EXIT.HOST_CONNECTION_UNAVAILABLE : 1);
   });
 }

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const db = vi.hoisted(() => ({
+  persisted: {} as Record<string, unknown>,
   findFirst: vi.fn(),
   findUnique: vi.fn(),
   findModelConfig: vi.fn(),
@@ -17,14 +18,9 @@ const autonomous = vi.hoisted(() => ({
   resolveTools: vi.fn(),
 }));
 
-vi.mock("@dpf/db", () => ({
+vi.mock("@dpf/db", async () => ({
   prisma: {
-    taskRun: {
-      findFirst: (...args: unknown[]) => db.findFirst(...args),
-      findUnique: (...args: unknown[]) => db.findUnique(...args),
-      update: (...args: unknown[]) => db.update(...args),
-      updateMany: (...args: unknown[]) => db.updateMany(...args),
-    },
+    taskRun: (await import("./test-support/task-run-state")).taskRunState(db),
     coworkerActionEnvelope: {
       findFirst: (...args: unknown[]) => db.findEnvelope(...args),
     },
@@ -125,7 +121,9 @@ function existingRun(
     progressPayload: { terminalWriterWait },
     a2aMetadata: {
       requestDigest: remoteTaskRequestDigest(params),
+      requestDigestVersion: 2,
       idempotencyKey: params.idempotencyKey,
+      requestedThreadId: null,
       initiativeReviewBinding: params.initiativeReviewBinding,
     },
     ...overrides,
@@ -135,6 +133,7 @@ function existingRun(
 describe("reaper-stalled terminal writer resumption", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  db.persisted = {};
     db.findFirst.mockResolvedValue(existingRun("stalled"));
     db.findEnvelope.mockResolvedValue(null);
     db.findToolExecution.mockResolvedValue(null);
@@ -226,6 +225,23 @@ describe("reaper-stalled terminal writer resumption", () => {
         resumedFromTerminalWriterWait: true,
       },
     });
+  });
+
+  it("admits only one provider loop for duplicate exact-bound recovery deliveries", async () => {
+    let claimed = false;
+    db.updateMany.mockImplementation(async (args: { where: { status: string } }) => {
+      if (args.where.status === "working") return { count: 1 };
+      if (claimed) return { count: 0 };
+      claimed = true;
+      return { count: 1 };
+    });
+    const request = {
+      token: { tokenId: "token-research", userId: "user-1", capability: "write" as const, source: "pat" as const },
+      userContext: { platformRole: "developer", isSuperuser: false },
+      params,
+    };
+    await Promise.all([submitRemoteCoworkerTask(request), submitRemoteCoworkerTask(request)]);
+    expect(autonomous.execute).toHaveBeenCalledTimes(1);
   });
 
   it("resumes a failed exact-bound wait after a rejected non-proposal writer", async () => {

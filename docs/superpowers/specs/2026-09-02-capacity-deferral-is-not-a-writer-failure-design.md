@@ -8,7 +8,7 @@ title: A capacity deferral is not a writer failure — letting the governed revi
 - **Date:** 2026-09-02
 - **Scope:** platform — agentic loop route-failure classification, remote task execution wait projection
 - **Backlog item:** `BI-8B8731EE`
-- **Status:** Design — implemented in this branch.
+- **Status:** Active — capacity classification is shipped; terminal-writer adapter enforcement is the current extension.
 
 > The governed reviewer route computed the true reason it stopped, then overwrote it
 > with a false one. Everything downstream acted on the false one.
@@ -29,7 +29,34 @@ Verified against `origin/main` at `0acfd06c58` and against the live install, not
 | 6 | **The real cause was in the log the whole time.** Every stranded run: `routeAndCall threw: Local provider dispatch deferred: local-ci-queued-capacity-reservation`. | `dpf-portal-1` logs |
 | 7 | **That condition clears itself.** The routing layer attaches `expectedFreeAt`; a real gate holds the host ~195s on average. | `local-provider-capacity.ts` |
 
-### 1.1 What the substitution cost
+### 1.1 A second cause must not be reported as a writer no-show
+
+TaskRun `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-7ECDD7A53D18` is the exact
+counterexample to the earlier CLI exception. Its immutable packet required
+`record_initiative_evidence`; five exact-bound reads succeeded; the session token
+had write capability and the writer grant; and two writer-only turns still
+returned prose with zero writer calls. No approval envelope or receipt exists.
+
+The reason is structural, not probabilistic. `ai-inference.ts` currently allows
+`claude-code-cli` and `codex-cli` through a `toolChoice: "required"` plan when the
+caller exposes one bound terminal writer. Neither adapter has a server-verifiable
+required-tool mechanism:
+
+- Claude CLI receives an MCP server and a list of allowed tools, but no native
+  force-this-tool choice. The model may finish with prose, as `...7ECDD7A53D18`
+  proved twice.
+- Codex CLI receives text-described tool schemas and parses text-shaped tool
+  calls after inference. A prompt cannot prove that the call will happen.
+
+The outer terminal policy correctly refuses to infer a receipt, but it can only
+detect the breach after spending an inference and it reports the symptom as
+`missing-terminal-writer`. A writer-only request must instead avoid an adapter
+that cannot enforce the contract and continue through the existing fallback
+chain to an adapter with native required-tool choice. If no such adapter is
+eligible, the original TaskRun returns a typed
+`required-terminal-writer-not-enforceable` refusal before inference.
+
+### 1.2 What the substitution cost
 
 `missing-terminal-writer` describes an *outcome* — no receipt yet — and says nothing true about the
 cause. Callers act on the cause. Reading it as a writer-contract failure sends you auditing grants,
@@ -75,6 +102,22 @@ precedence fix.
 
 No new state, no new field, no new tool. Two conditions, both narrowing an over-broad branch.
 
+For a required terminal-writer turn, **adapter enforceability is also a hard
+dispatch capability**. An allow-list, an MCP attachment, a prompt reminder, or a
+post-response check is not enforcement. The shared provider boundary refuses
+known non-enforcing CLI adapters before model invocation with the typed code
+`required-terminal-writer-not-enforceable`. The fallback chain treats that as a
+route-candidate capability miss, not a provider outage, and tries only subsequent
+adapters that pass the same enforcement check. It must not cool down, degrade, or
+disable a healthy provider for a plan/adapter mismatch.
+
+If every eligible adapter lacks the capability, remote task execution preserves
+the same TaskRun, request digest, immutable binding, successful reads, grants,
+approval/idempotency state, and returns the typed refusal. It never synthesizes
+writer arguments or a receipt. The rule is writer-name agnostic and therefore
+covers both `record_initiative_evidence` and
+`record_initiative_design_review`.
+
 ---
 
 ## 4. What was built
@@ -109,14 +152,30 @@ Both halves were confirmed by removing the fix and watching the tests go red:
 
 ---
 
-## 5. Acceptance criteria (BI-8B8731EE)
+## 5. Objectives and acceptance criteria (BI-8B8731EE)
 
-| criterion | status |
-| --- | --- |
-| Packet reaches its writer, or returns a typed denial identifying the unavailable provider capability | **Met** — a deferral now reports `provider-capacity` with its `failureKind` |
-| Retrying a resumable route continues the original TaskRun | **Already held** — verified live: `idempotentReplay: true`, `resumedFromTerminalWriterWait: true` |
-| Tests reproduce and prevent `missing-terminal-writer` after a valid immutable binding | **Met** — §4.3 |
-| The implementation path can obtain real receipts without a bypass | **Improved, not proven** — see §6 |
+**OBJ-BI8B-001:** A governed initiative review reaches its exact bound receipt
+writer or refuses before inference with the provider/adapter capability that is
+missing.
+
+**OBJ-BI8B-002:** A capability refusal preserves the original TaskRun and every
+immutable authority, evidence, approval, and idempotency binding without
+manufacturing writer arguments or a receipt.
+
+**OBJ-BI8B-003:** Adapter incompatibility uses the existing route fallback path
+without degrading a healthy provider, and no inference is sent through an
+adapter that cannot prove required-tool enforcement.
+
+**OBJ-BI8B-004:** Evidence and design-review writers obey the same generic sole
+terminal-writer contract.
+
+| Acceptance criterion | Objective links | Observable result |
+| --- | --- | --- |
+| AC-BI8B-001 | OBJ-BI8B-001, OBJ-BI8B-003 | A writer-only plan refuses Claude CLI and Codex CLI before their adapter `execute` method or model transport runs, with `required-terminal-writer-not-enforceable`. |
+| AC-BI8B-002 | OBJ-BI8B-001, OBJ-BI8B-003 | The fallback chain skips that candidate without provider health mutation and may complete through a later HTTP adapter that preserves `toolChoice: "required"` and the exact writer name. |
+| AC-BI8B-003 | OBJ-BI8B-002 | When no enforceable adapter is eligible, the response is typed, actionable, resumable on the same TaskRun, and receipt-free; digest, binding, reads, grants, and approval state are unchanged. |
+| AC-BI8B-004 | OBJ-BI8B-004 | Parameterized tests cover `record_initiative_evidence` and `record_initiative_design_review`, including the exact prose/zero-tool native-MCP failure shape. |
+| AC-BI8B-005 | OBJ-BI8B-002, OBJ-BI8B-004 | No branch constructs decision arguments, invokes a writer itself, approves an envelope, or infers a receipt. |
 
 ---
 
@@ -130,3 +189,156 @@ local CI share one host — and that is not this change.
 It also does not touch `hitlTierDefault`. Both reviewers are Tier 1 ("Approve each action"), which
 looked like the cause and is not; whether an independent reviewer *should* be Tier 1 is an operator
 decision about risk posture, not a defect.
+
+The adapter-enforcement extension does not promise that an enforceable provider
+is available. Capacity, credentials, data clearance, model floors, and approval
+remain independent gates. It only ensures that an adapter incapable of the
+required call is never asked to improvise compliance, and that its absence is
+reported truthfully instead of consuming another prose-only writer turn.
+
+
+## 7. Supersession (2026-09-09) — receipt-verified dispatch for non-forcing adapters
+
+**Backlog item:** BI-C35576A9 · **Kernel:** DI-48BC3C1F11A8 · **Operator-ratified** 2026-09-09.
+
+§3 above made adapter enforceability a hard eligibility fence for a bound
+terminal writer: "a post-response check is not enforcement." This section
+supersedes that sentence for CLI adapters, on evidence.
+
+### What happened
+
+On the production install every cloud provider is an OAuth CLI subscription
+(`anthropic-sub` via claude-code-cli, `codex`/`chatgpt` via codex-cli) and the
+API-key providers are unconfigured. Under §3 every reviewer turn that had to call
+`record_initiative_evidence` or `record_initiative_design_review` excluded all of
+them — **276 `required-terminal-writer-not-enforceable` exclusions on reviewer
+coworkers in 24 hours; 103 of 584 reviewer turns in seven days forced onto the
+single local 27B model** — and the reviewer chain could not complete. Three
+handoffs in one session ended with *"my usual AI was unavailable, so I worked
+through a backup that wasn't able to keep up"*, which blamed the model for a
+routing rule. The kernel struck the status quo (5.57 vs ≈11.3).
+
+### What is true that §3 under-weighted
+
+The executor already verifies the outcome, not the prose:
+`terminalWriterSucceeded = receiptExpected ? persistedOutcome !== null : …`, and
+`loadInitiativeReviewOutcome` reads the canonical `initiative_gate_receipt` bound
+to the artifact — *"never infer one from model prose or tool success."* A missing
+receipt already parks the same TaskRun as `missing-terminal-writer`, resumable,
+rotates the noncompliant provider out of the next in-turn route (§4 of the
+2026-09-06 plan, #5186), and escalates after bounded attempts. **That check is the
+server-verifiable mechanism.** Pre-dispatch adapter exclusion was belt-and-braces
+that, on subscription-only installs, removed the belt.
+
+### Decision
+
+A bound terminal writer is held to one of two dispatch contracts:
+
+| contract | adapters | how the write is guaranteed |
+|---|---|---|
+| `required-tool-call` | HTTP adapters | forced natively before the model can answer otherwise (unchanged) |
+| `receipt-verified` | claude-code-cli, codex-cli | writer is the sole tool, best-effort tool choice, **server verifies the receipt after the turn**; missing → resumable failure, rotation, bounded escalation |
+
+- `getExclusionReasonV2` no longer excludes a non-forcing adapter when
+  `terminalWriterToolName` is bound. A **plain** `toolChoice: "required"` with no
+  bound writer has no post-dispatch check and stays excluded.
+- `callProvider` dispatches the receipt-verified case with `toolChoice: "auto"`
+  **only when a governed MCP session is supplied** — the writer is an MCP tool the
+  CLI reaches through that session; without it no receipt could ever exist and
+  dispatch would only burn a turn, so it still refuses.
+- `terminalWriterWait.dispatchContract` records the contract the provider that
+  actually ran was held to (`terminalWriterDispatchContractForProvider`), and is
+  omitted when nothing ran. A re-dispatch carries the prior value forward rather
+  than asserting one.
+
+### What this does not do
+
+It does not prefer a forcing adapter over a CLI one when both are eligible;
+ranking is unchanged. It does not weaken any receipt, approval, baseline or grant
+check. It does not touch the plain-required path.
+
+### Acceptance
+
+- AC-C355-001 A bound writer on a CLI-only install is dispatched to a capable
+  cloud model and, when the receipt is written, the TaskRun completes.
+- AC-C355-002 A CLI turn that returns prose without the writer is recorded as
+  `missing-terminal-writer` with `dispatchContract: "receipt-verified"`, resumable,
+  and the provider is rotated — never a pass, never blamed on the model.
+- AC-C355-003 A plain required tool call on a CLI adapter still fails closed.
+- AC-C355-004 A bound writer without a governed MCP session still refuses
+  before inference.
+
+## 8. Amendment (2026-09-11) — a third cause: the loop never asked
+
+### What happened
+
+Driving the `objective-mapping` gate for a delivered initiative on a fully-local
+install, the same bound writer failed five times across one resumable TaskRun.
+Every attempt recorded `missing-terminal-writer`, twice with
+`noncompliance: "prose-without-required-writer"`, and the platform eventually
+escalated `terminal_writer_retry_exhausted` with
+`action: "select-different-reviewer-provider"`.
+
+The turn log said what actually happened:
+
+```
+[agentic-loop] iter=0 provider=local model=...qwen3.8-27b...:Q4_K_M
+  toolCalls=0 contentLen=15091 nudges=0 executedTools=0
+[agentic-loop] iter=1 ... toolCalls=0 contentLen=16445 nudges=0 executedTools=0
+```
+
+`nudges=0`, every attempt. The model spent each turn on 15k+ characters of
+correct, on-topic reasoning about the gate and was never once told to convert it
+into the call.
+
+### Cause
+
+`agentic-loop.ts` short-circuits the corrective nudge when the provider is
+`local` at iteration 0 with no tools executed, returning a diagnostic instead
+(FB-71FB3A53 — the guard that stopped 200-iteration hangs on `/build` threads
+when routing fell back to local). Its premise is that the diagnostic is an
+acceptable answer.
+
+On a `requireTools` turn that premise is false: the caller has declared that text
+cannot satisfy the contract at all. `shouldNudge` already draws exactly this
+distinction (`permitsTextCompletion = !requireToolExecution`) and had returned
+true. The guard was discarding that decision.
+
+This is §1.1's rule at a third cause. §1.1 said a capacity deferral must not be
+reported as a writer no-show. §7 said a non-forcing adapter must not be. Here the
+loop's own decision not to ask is reported as one — and on a local-only install,
+where `local` is the normal path and not a degraded fallback, the effect is that
+a governed reviewer gate is reachable only if the model happens to call a reader
+before it starts reasoning. It was: the one attempt of the five that called
+`read_source_at_version` first bypassed the guard and ran on, failing later for
+an unrelated capacity reason.
+
+### Decision
+
+Exempt `requireTools` turns from the iteration-0 local diagnostic exit. The guard
+is extracted as `shouldExitWithLocalToolCallDiagnostic` so the condition is
+testable rather than inline, and every other term of it is unchanged.
+
+The hang FB-71FB3A53 addressed stays bounded: `maxNudges` is 1, so such a turn
+gets exactly one reminder and then takes the same exit.
+
+The turn log also gains `requiredToolsMet=<bool>` on `requireTools` turns.
+`toolAccuracy` measures whether the calls a turn MADE succeeded, so a turn that
+made none and failed its contract logged a clean `1.00` and read as healthy; the
+contract outcome now appears next to it.
+
+### What this does not do
+
+It does not weaken any receipt, approval, baseline or grant check, and it does not
+change what counts as a valid receipt. It does not alter routing or provider
+ranking. It does not raise `maxNudges` for any turn.
+
+### Acceptance
+
+- AC-C355-005 A `requireTools` turn on the local provider that returns text-only
+  at iteration 0 receives its one corrective nudge instead of exiting with the
+  diagnostic.
+- AC-C355-006 Every other condition of the local diagnostic exit is unchanged: a
+  non-`requireTools` local text-only iteration-0 turn still exits with it.
+- AC-C355-007 A `requireTools` turn's log line states whether the required tools
+  were met, independently of `toolAccuracy`.

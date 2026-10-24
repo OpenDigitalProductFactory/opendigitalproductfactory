@@ -3,9 +3,10 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { readPromoterBuildContextSources } from "./lib/promoter-build-context-sources.mjs";
 
-const root = resolve(new URL("..", import.meta.url).pathname.replace(/^\/(.:\/)/, "$1"));
+const root = resolve(fileURLToPath(new URL("..", import.meta.url)).replace(/^\/(.:\/)/, "$1"));
 
 test("schema-v1 manifest declares the complete pre-drain contract", async () => {
   const schema = JSON.parse(await readFile(resolve(root, "promoter-contract.schema.json"), "utf8"));

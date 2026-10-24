@@ -10,6 +10,18 @@ const autonomous = vi.hoisted(() => ({
   resolveAgent: vi.fn(),
   resolveTools: vi.fn(),
 }));
+const pirContext = vi.hoisted(() => vi.fn(async () => ""));
+const sensitivity = vi.hoisted(() => vi.fn(async (_parsed: unknown, _token: unknown, fallback: string) => fallback));
+vi.mock("./mcp-task-review-sensitivity", () => ({ remoteReviewSensitivity: sensitivity }));
+vi.mock("./pir-evidence-context", () => ({ loadPirEvidenceContext: pirContext }));
+vi.mock("./mcp-task-review-outcome", async (importOriginal) => ({
+  ...await importOriginal<typeof import("./mcp-task-review-outcome")>(),
+  // BI-2E479619: the executor consults the TaskRun's persisted receipt before classifying a missing writer.
+  loadTaskInitiativeReviewOutcome: vi.fn(async () => null),
+  loadInitiativeReviewOutcome: vi.fn(async (_binding: unknown, receiptId: string) => ({
+    receiptId, summary: `Receipt ${receiptId} persisted. Implementation readiness: input-required; plan coverage remains missing.`,
+  })),
+}));
 
 vi.mock("@dpf/db", () => ({
   prisma: {
@@ -17,6 +29,7 @@ vi.mock("@dpf/db", () => ({
     taskRun: {
       findUnique: (...args: unknown[]) => db.findTaskRun(...args),
       update: (...args: unknown[]) => db.updateTaskRun(...args),
+      updateMany: (...args: unknown[]) => db.updateTaskRun(...args),
     },
   },
 }));
@@ -30,7 +43,8 @@ vi.mock("./mcp/external-approval-location-lookup", () => ({
   withTaskRunApprovalLocation: vi.fn(async (value: unknown) => value),
 }));
 
-import { executeRemoteTaskAttempt, remoteTaskConversation } from "./mcp-task-execution";
+import { executeRemoteTaskAttempt } from "./mcp-task-execution";
+import { projectRemoteTaskReplay } from "./mcp-task-replay-projection";
 
 const writerToolName = "record_initiative_evidence";
 const parsed = {
@@ -62,11 +76,64 @@ const parsed = {
 };
 
 describe("remote task terminal-writer postcondition", () => {
+  it.each([undefined, "capacity"] as const)("revalidates activity classification without replacing the task on %s", async (resumeKind) => {
+    sensitivity.mockResolvedValueOnce("development");
+    autonomous.execute.mockResolvedValue({ content: "Still reviewing", executedTools: [] });
+    const token = { tokenId: "oauth", userId: "human", capability: "write" as const, source: "oauth" as const };
+    await executeRemoteTaskAttempt({ run: { id: "original", taskRunId: "TR-ORIGINAL", contextId: "thread-1" }, threadId: "thread-1",
+      token, userContext: {} as never, parsed, idempotentReplay: Boolean(resumeKind), resumeKind, capacityAttempt: 2 });
+    expect(sensitivity).toHaveBeenCalledWith(parsed, token, expect.any(String));
+    expect(autonomous.execute).toHaveBeenCalledWith(expect.objectContaining({ sensitivity: "development", taskRunId: "TR-ORIGINAL" }));
+  });
+  it.each([undefined, "terminal-writer"] as const)("supplies current PIR observations on initial execution and same-task recovery (%s)", async (resumeKind) => {
+    pirContext.mockResolvedValueOnce("Runtime observation RV-LIVE: deployed repair verified.");
+    autonomous.execute.mockResolvedValue({ content: "Need review.", executedTools: [] });
+    const review = { ...parsed, initiativeReviewBinding: { ...parsed.initiativeReviewBinding,
+      gate: "post-implementation-review" as const, writerToolName: "record_initiative_post_implementation_review" },
+      authorityScope: ["tool:read_source_at_version", "tool:record_initiative_post_implementation_review", "backlog-item:BI-FFBDDD96"] };
+    await executeRemoteTaskAttempt({ run: { id: "run", taskRunId: "TR-PIR", contextId: "thread-1" }, threadId: "thread-1",
+      token: { tokenId: "PAT", userId: "user-1", capability: "write", source: "pat" }, userContext: {} as never,
+      parsed: review, idempotentReplay: Boolean(resumeKind), resumeKind, terminalWriterContext: "1 | earlier design", capacityAttempt: 1 });
+    expect(pirContext).toHaveBeenCalledWith(expect.anything(), review.initiativeReviewBinding);
+    expect(autonomous.execute).toHaveBeenCalledWith(expect.objectContaining({ systemPrompt: expect.stringContaining("RV-LIVE") }));
+    if (resumeKind) expect(autonomous.execute).toHaveBeenCalledWith(expect.objectContaining({ systemPrompt: expect.stringContaining("1 | earlier design") }));
+  });
+  it("refuses completion from writer success without a receipt ID", async () => {
+    autonomous.execute.mockResolvedValue({ content: "Approved, start implementation.", executedTools: [{ name: writerToolName, result: { success: true } }] });
+    const outcome = await executeRemoteTaskAttempt({
+      run: { id: "run", taskRunId: "TR-NO-RECEIPT", contextId: "thread-1" }, threadId: "thread-1",
+      token: { tokenId: "PAT", userId: "user-1", capability: "write", source: "pat" },
+      userContext: { platformRole: "developer", isSuperuser: false }, parsed, idempotentReplay: false, capacityAttempt: 1,
+    });
+    expect(outcome).toMatchObject({ kind: "result", result: { status: "input-required" } });
+    expect(JSON.stringify(outcome)).toContain("without a receipt ID");
+    expect(JSON.stringify(outcome)).not.toContain("start implementation");
+  });
+  it("BI-31159978 does not invent approval after a successful writer with stale input-required state", async () => {
+    db.findTaskRun.mockResolvedValue({ status: "input-required", progressPayload: {} });
+    autonomous.execute.mockResolvedValue({
+      content: "Blocked: no receipt exists; request human approval.",
+      executedTools: [{ name: writerToolName, result: {
+        success: true, entityId: "initiative-persisted-receipt",
+        data: { receiptId: "initiative-persisted-receipt" },
+      } }],
+    });
+    const outcome = await executeRemoteTaskAttempt({
+      run: { id: "run-internal", taskRunId: "TR-MCP-STATUS-REPRO", contextId: "thread-1" },
+      threadId: "thread-1",
+      token: { tokenId: "PAT-WRITER-DURATION", userId: "user-1", capability: "write", source: "pat" },
+      userContext: { platformRole: "developer", isSuperuser: false },
+      parsed, idempotentReplay: true, capacityAttempt: 1,
+    });
+    expect(outcome).toMatchObject({ kind: "result", result: { requiresApproval: false } });
+    expect(JSON.stringify(outcome)).not.toContain("no receipt exists");
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     db.findModelConfig.mockResolvedValue(null);
     db.findTaskRun.mockResolvedValue({ status: "working" });
-    db.updateTaskRun.mockResolvedValue({});
+    db.updateTaskRun.mockResolvedValue({ count: 1 });
     autonomous.resolveAgent.mockResolvedValue({
       agentId: "AGT-WS-PORTFOLIO",
       displayName: "Portfolio Advisor",
@@ -74,6 +141,112 @@ describe("remote task terminal-writer postcondition", () => {
       sensitivity: "internal",
     });
     autonomous.resolveTools.mockResolvedValue({ tools: [], toolsForProvider: [], deferredTools: [] });
+  });
+
+  it("keeps the requested reviewer alias model assignment while using canonical grants", async () => {
+    const aliasParsed = { ...parsed, agentId: "change-reviewer" };
+    autonomous.resolveAgent.mockResolvedValue({
+      agentId: "AGT-WS-REVIEW",
+      displayName: "Change Reviewer",
+      systemPrompt: "Review independently.",
+      sensitivity: "internal",
+    });
+    db.findModelConfig.mockImplementation(async ({ where }: { where: { agentId: string } }) =>
+      where.agentId === "change-reviewer"
+        ? {
+            minimumTier: "strong",
+            budgetClass: "quality_first",
+            pinnedProviderId: "alternate-provider",
+            pinnedModelId: "alternate-model",
+          }
+        : null,
+    );
+    autonomous.execute.mockResolvedValue({
+      content: "Approved.",
+      executedTools: [{
+        name: writerToolName,
+        result: {
+          success: true,
+          entityId: "receipt-alias-review",
+          data: { receiptId: "receipt-alias-review" },
+        },
+      }],
+    });
+
+    await executeRemoteTaskAttempt({
+      run: { id: "run-alias", taskRunId: "TR-MCP-ALIAS-ROUTING", contextId: "thread-1" },
+      threadId: "thread-1",
+      token: { tokenId: "PAT-ALIAS", userId: "user-1", capability: "write", source: "pat" },
+      userContext: { platformRole: "developer", isSuperuser: false },
+      parsed: aliasParsed,
+      idempotentReplay: false,
+      capacityAttempt: 1,
+    });
+
+    expect(db.findModelConfig).toHaveBeenCalledWith(expect.objectContaining({
+      where: { agentId: "change-reviewer" },
+    }));
+    expect(autonomous.resolveTools).toHaveBeenCalledWith(expect.objectContaining({
+      agentId: "AGT-WS-REVIEW",
+    }));
+    expect(autonomous.execute).toHaveBeenCalledWith(expect.objectContaining({
+      agentId: "AGT-WS-REVIEW",
+      modelRequirements: expect.objectContaining({
+        preferredProviderId: "alternate-provider",
+        preferredModelId: "alternate-model",
+      }),
+    }));
+  });
+
+  it("falls back to the canonical model assignment when the requested alias has none", async () => {
+    const aliasParsed = { ...parsed, agentId: "change-reviewer" };
+    autonomous.resolveAgent.mockResolvedValue({
+      agentId: "AGT-WS-REVIEW",
+      displayName: "Change Reviewer",
+      systemPrompt: "Review independently.",
+      sensitivity: "internal",
+    });
+    db.findModelConfig.mockImplementation(async ({ where }: { where: { agentId: string } }) =>
+      where.agentId === "AGT-WS-REVIEW"
+        ? {
+            minimumTier: "strong",
+            budgetClass: "quality_first",
+            pinnedProviderId: "canonical-provider",
+            pinnedModelId: null,
+          }
+        : null,
+    );
+    autonomous.execute.mockResolvedValue({
+      content: "Approved.",
+      executedTools: [{
+        name: writerToolName,
+        result: {
+          success: true,
+          entityId: "receipt-canonical-review",
+          data: { receiptId: "receipt-canonical-review" },
+        },
+      }],
+    });
+
+    await executeRemoteTaskAttempt({
+      run: { id: "run-canonical", taskRunId: "TR-MCP-CANONICAL-ROUTING", contextId: "thread-1" },
+      threadId: "thread-1",
+      token: { tokenId: "PAT-CANONICAL", userId: "user-1", capability: "write", source: "pat" },
+      userContext: { platformRole: "developer", isSuperuser: false },
+      parsed: aliasParsed,
+      idempotentReplay: false,
+      capacityAttempt: 1,
+    });
+
+    expect(db.findModelConfig).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      where: { agentId: "change-reviewer" },
+    }));
+    expect(db.findModelConfig).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      where: { agentId: "AGT-WS-REVIEW" },
+    }));
+    expect(autonomous.execute).toHaveBeenCalledWith(expect.objectContaining({
+      modelRequirements: expect.objectContaining({ preferredProviderId: "canonical-provider" }),
+    }));
   });
 
   it("parks a duration exit after a failed read retry when the required writer is absent", async () => {
@@ -96,7 +269,7 @@ describe("remote task terminal-writer postcondition", () => {
     });
 
     expect(db.updateTaskRun).toHaveBeenCalledWith({
-      where: { taskRunId: "TR-MCP-7991D9CAE467" },
+      where: expect.objectContaining({ taskRunId: "TR-MCP-7991D9CAE467", status: "working" }),
       data: expect.objectContaining({
         status: "input-required",
         completedAt: null,
@@ -122,11 +295,22 @@ describe("remote task terminal-writer postcondition", () => {
     });
     expect(autonomous.execute).toHaveBeenCalledWith(expect.objectContaining({
       apiTokenId: "PAT-WRITER-DURATION",
-      tokenScope: "write",
+      tokenScope: "write", tokenGrantScopes: parsed.authorityScope, // BI-F8C661D0: bounds nested reads
     }));
   });
 
   it("parks an approval-required terminal writer even when the tool did not project TaskRun state", async () => {
+    db.findTaskRun.mockResolvedValueOnce({ status: "working", progressPayload: {} }).mockResolvedValue({
+      status: "input-required",
+      progressPayload: {
+        auditMarker: "preserve-me",
+        terminalWriterWait: { kind: "missing-terminal-writer", observedAt: "2026-09-06T02:00:00.000Z" },
+        terminalWriterDispatchFailure: { code: "required-terminal-writer-not-enforceable", observedAt: "2026-09-06T02:00:00.000Z" },
+        terminalWriterEscalation: { kind: "manual-recovery-required" },
+        terminalWriterContextFailure: { code: "terminal_writer_context_unavailable" },
+        resourceWait: { kind: "provider-capacity" },
+      },
+    });
     autonomous.execute.mockResolvedValue({
       content: "The objective mapping is ready for exact approval.",
       executedTools: [{
@@ -154,7 +338,7 @@ describe("remote task terminal-writer postcondition", () => {
     });
 
     expect(db.updateTaskRun).toHaveBeenCalledWith({
-      where: { taskRunId: "TR-MCP-APPROVAL-PROJECTION" },
+      where: expect.objectContaining({ taskRunId: "TR-MCP-APPROVAL-PROJECTION", status: "input-required" }),
       data: expect.objectContaining({
         status: "input-required",
         completedAt: null,
@@ -177,6 +361,220 @@ describe("remote task terminal-writer postcondition", () => {
     expect(db.updateTaskRun).not.toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ status: "completed" }),
     }));
+    const progressPayload = db.updateTaskRun.mock.calls.at(-1)?.[0]?.data?.progressPayload;
+    expect(progressPayload).toMatchObject({
+      auditMarker: "preserve-me",
+      requiresApproval: true,
+      approvalEnvelopeId: "ENV-OBJECTIVE-MAPPING",
+    });
+    expect(progressPayload).not.toHaveProperty("terminalWriterWait");
+    expect(progressPayload).not.toHaveProperty("terminalWriterDispatchFailure");
+    expect(progressPayload).not.toHaveProperty("terminalWriterEscalation");
+    expect(progressPayload).not.toHaveProperty("terminalWriterContextFailure");
+    expect(progressPayload).not.toHaveProperty("resourceWait");
+    expect(projectRemoteTaskReplay({
+      existing: {
+        taskRunId: "TR-MCP-APPROVAL-PROJECTION",
+        status: "input-required",
+        progressPayload,
+        a2aMetadata: {},
+      },
+      requestMatches: true,
+    })).toMatchObject({
+      result: { requiresApproval: true },
+    });
+  });
+
+  it("does not complete when the governed writer ran but produced neither receipt nor approval", async () => {
+    autonomous.execute.mockResolvedValue({
+      content: "The governed writer rejected the assessment.",
+      executedTools: [{
+        name: writerToolName,
+        args: { decision: "pass" },
+        result: {
+          success: false,
+          error: "CANONICAL_DESIGN_REQUIRED",
+          message: "No canonical receipt was created.",
+        },
+      }],
+    });
+
+    const outcome = await executeRemoteTaskAttempt({
+      run: { id: "run-internal", taskRunId: "TR-MCP-WRITER-REJECTED", contextId: "thread-1" },
+      threadId: "thread-1",
+      token: { tokenId: "PAT-WRITER-REJECTED", userId: "user-1", capability: "write", source: "pat" },
+      userContext: { platformRole: "developer", isSuperuser: false },
+      parsed,
+      idempotentReplay: true,
+      resumeKind: "terminal-writer",
+      capacityAttempt: 1,
+      terminalWriterAttempt: 2,
+    });
+
+    // BI-A57B6185: the writer ran and refused. That is a packet problem, and
+    // the caller must see the writer's own error, not "missing writer".
+    expect(outcome).toMatchObject({
+      kind: "result",
+      result: {
+        status: "input-required",
+        idempotentReplay: true,
+        resumable: true,
+        waitReason: "terminal-writer-rejected",
+        structuredContent: {
+          error: "terminal_writer_rejected",
+          writerToolName,
+          attempt: 2,
+          writerRejection: { error: "CANONICAL_DESIGN_REQUIRED", message: "No canonical receipt was created." },
+          action: "fix-packet-and-resume",
+        },
+      },
+    });
+    expect(JSON.stringify((outcome as unknown as { result: { content: unknown } }).result.content)).toContain("CANONICAL_DESIGN_REQUIRED: No canonical receipt was created.");
+    expect(db.updateTaskRun).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        progressPayload: expect.objectContaining({
+          terminalWriterWait: expect.objectContaining({
+            writerRejection: expect.objectContaining({ error: "CANONICAL_DESIGN_REQUIRED" }),
+          }),
+        }),
+      }),
+    }));
+    expect(db.updateTaskRun).not.toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: "completed" }),
+    }));
+  });
+
+  it("BI-A57B6185 never escalates a rejected writer to select-different-reviewer, even on attempt 3", async () => {
+    autonomous.execute.mockResolvedValue({
+      content: "The governed writer rejected the packet.",
+      executedTools: [{
+        name: writerToolName,
+        args: { decision: "pass" },
+        result: {
+          success: false,
+          error: "CANONICAL_DESIGN_AMBIGUOUS",
+          message: "No live workroom for this subject records head abc123. Sync the branch head with adopt_worktree then retry.",
+        },
+      }],
+      failure: { kind: "terminal-writer-missing", message: "generic loop text that must not win" },
+    });
+
+    const outcome = await executeRemoteTaskAttempt({
+      run: { id: "run-internal", taskRunId: "TR-MCP-WRITER-REJECTED-3", contextId: "thread-1" },
+      threadId: "thread-1",
+      token: { tokenId: "PAT-WRITER-REJECTED", userId: "user-1", capability: "write", source: "pat" },
+      userContext: { platformRole: "developer", isSuperuser: false },
+      parsed,
+      idempotentReplay: true,
+      resumeKind: "terminal-writer",
+      capacityAttempt: 1,
+      terminalWriterAttempt: 3,
+    });
+
+    expect(outcome).toMatchObject({
+      kind: "result",
+      result: {
+        status: "input-required",
+        resumable: true,
+        waitReason: "terminal-writer-rejected",
+        structuredContent: { error: "terminal_writer_rejected", attempt: 3 },
+      },
+    });
+    const content = JSON.stringify((outcome as unknown as { result: { content: unknown } }).result.content);
+    expect(content).toContain("adopt_worktree");
+    expect(content).not.toContain("omitted");
+    expect(db.updateTaskRun).not.toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        progressPayload: expect.objectContaining({ terminalWriterEscalation: expect.anything() }),
+      }),
+    }));
+  });
+
+  it.each([
+    ["record_initiative_evidence", 2, true, "required-terminal-writer-not-enforceable"],
+    ["record_initiative_design_review", 2, true, "required-terminal-writer-not-enforceable"],
+    ["record_initiative_evidence", 3, false, "terminal-writer-retry-exhausted"],
+  ])("parks %s before inference when no routed adapter can force the writer (attempt %i)", async (
+    requiredWriter,
+    writerAttempt,
+    resumable,
+    waitReason,
+  ) => {
+    autonomous.execute.mockResolvedValue({
+      content: "No eligible adapter can enforce the required terminal writer.",
+      executedTools: [],
+      failure: {
+        kind: "required-terminal-writer-not-enforceable",
+        message: "required-terminal-writer-not-enforceable: no eligible adapter can force the sole writer",
+      },
+    });
+    const bound = {
+      ...parsed,
+      authorityScope: parsed.authorityScope
+        .filter((scope) => !scope.startsWith("tool:record_initiative_"))
+        .concat(`tool:${requiredWriter}`),
+      initiativeReviewBinding: {
+        ...parsed.initiativeReviewBinding,
+        writerToolName: requiredWriter,
+      },
+    };
+
+    const outcome = await executeRemoteTaskAttempt({
+      run: { id: "run-internal", taskRunId: "TR-MCP-7ECDD7A53D18", contextId: "thread-1" },
+      threadId: "thread-1",
+      token: { tokenId: "PAT-WRITER-BOUND", userId: "user-1", capability: "write", source: "pat" },
+      userContext: { platformRole: "developer", isSuperuser: false },
+      parsed: bound,
+      idempotentReplay: true,
+      resumeKind: "terminal-writer",
+      capacityAttempt: 1,
+      terminalWriterAttempt: writerAttempt,
+    });
+
+    expect(db.updateTaskRun).toHaveBeenCalledWith({
+      where: expect.objectContaining({ taskRunId: "TR-MCP-7ECDD7A53D18", status: "working" }),
+      data: expect.objectContaining({
+        status: "input-required",
+        completedAt: null,
+        progressPayload: expect.objectContaining({
+          executedToolCount: 0,
+          terminalWriterWait: expect.objectContaining({
+            kind: "missing-terminal-writer",
+            writerToolName: requiredWriter,
+            resumeMode: "same-taskrun",
+            attempt: writerAttempt,
+          }),
+          terminalWriterDispatchFailure: expect.objectContaining({
+            code: "required-terminal-writer-not-enforceable",
+            writerToolName: requiredWriter,
+          }),
+          ...(resumable ? {} : {
+            terminalWriterEscalation: expect.objectContaining({
+              code: "terminal_writer_retry_exhausted",
+              writerToolName: requiredWriter,
+              attempt: writerAttempt,
+            }),
+          }),
+        }),
+      }),
+    });
+    expect(outcome).toMatchObject({
+      kind: "result",
+      result: {
+        taskRunId: "TR-MCP-7ECDD7A53D18",
+        status: "input-required",
+        idempotentReplay: true,
+        resumedFromTerminalWriterWait: true,
+        requiresApproval: false,
+        resumable,
+        waitReason,
+        structuredContent: resumable
+          ? { error: "required-terminal-writer-not-enforceable" }
+          : expect.objectContaining({ error: "terminal_writer_retry_exhausted" }),
+        executedToolCount: 0,
+        isError: true,
+      },
+    });
   });
 });
 
@@ -199,7 +597,7 @@ describe("a resource wait is not a missing terminal writer (BI-8B8731EE)", () =>
     vi.clearAllMocks();
     db.findModelConfig.mockResolvedValue(null);
     db.findTaskRun.mockResolvedValue({ status: "working" });
-    db.updateTaskRun.mockResolvedValue({});
+    db.updateTaskRun.mockResolvedValue({ count: 1 });
     autonomous.resolveAgent.mockResolvedValue({
       agentId: "AGT-WS-PORTFOLIO",
       displayName: "Portfolio Advisor",
@@ -209,7 +607,7 @@ describe("a resource wait is not a missing terminal writer (BI-8B8731EE)", () =>
     autonomous.resolveTools.mockResolvedValue({ tools: [], toolsForProvider: [], deferredTools: [] });
   });
 
-  const attempt = () => executeRemoteTaskAttempt({
+  const attempt = (overrides: Partial<Parameters<typeof executeRemoteTaskAttempt>[0]> = {}) => executeRemoteTaskAttempt({
     run: { id: "run-internal", taskRunId: "TR-MCP-CAPACITY-DEFERRAL", contextId: "thread-1" },
     threadId: "thread-1",
     token: { tokenId: "PAT-WRITER-CAPACITY", userId: "user-1", capability: "write", source: "pat" },
@@ -217,6 +615,7 @@ describe("a resource wait is not a missing terminal writer (BI-8B8731EE)", () =>
     parsed,
     idempotentReplay: false,
     capacityAttempt: 1,
+    ...overrides,
   });
 
   it.each(["capacity", "busy"] as const)(
@@ -252,6 +651,16 @@ describe("a resource wait is not a missing terminal writer (BI-8B8731EE)", () =>
     },
   );
 
+  it("stops waiting after the last attempt and fails honestly as busy (BI-D25F867D)", async () => {
+    const busy = "Every AI provider is busy right now.";
+    autonomous.execute.mockResolvedValue({ content: busy, executedTools: [], failure: { kind: "busy", message: busy } });
+    const outcome = await attempt({ idempotentReplay: true, capacityAttempt: 5, resumeKind: "capacity" });
+    expect(outcome).toMatchObject({ kind: "result", result: { status: "failed", resumable: false } });
+    const payload = db.updateTaskRun.mock.calls.at(-1)?.[0]?.data?.progressPayload;
+    expect(payload).toEqual(expect.objectContaining({ failureKind: "busy" }));
+    expect(payload).not.toHaveProperty("resourceWait");
+  });
+
   it("still parks a genuine writer no-show, where the model ran and did not write", async () => {
     // The optimisation this fix must not undo: a reviewer that reached a model,
     // read the artifact and then answered in prose is a real writer-contract
@@ -265,8 +674,31 @@ describe("a resource wait is not a missing terminal writer (BI-8B8731EE)", () =>
 
     expect(outcome).toMatchObject({
       kind: "result",
-      result: { status: "input-required", resumable: true, waitReason: "missing-terminal-writer" },
+      result: {
+        status: "input-required",
+        resumable: true,
+        waitReason: "missing-terminal-writer",
+        content: [{
+          type: "text",
+          text: expect.stringContaining("did not invoke required writer"),
+        }],
+      },
     });
+    expect(JSON.stringify(outcome)).not.toContain("In my assessment the design is sound.");
+  });
+
+  // BI-50B0C471: a deferral after banked reads keeps the writer wait but reports capacity, never escalates.
+  it.each([1, 3])("reports a capacity deferral after banked reads as provider-capacity (attempt %i)", async (terminalWriterAttempt) => {
+    const message = "Inference capacity was deferred after 1 bound read. The reads are banked on this TaskRun.";
+    autonomous.execute.mockResolvedValue({ content: message, executedTools: [{ name: "read_source_at_version", result: { success: true } }],
+      failure: { kind: "terminal-writer-missing", message, deferredBy: "capacity" } });
+    const outcome = await executeRemoteTaskAttempt({ run: { id: "run-internal", taskRunId: "TR-MCP-CAPACITY-AFTER-READ", contextId: "thread-1" },
+      threadId: "thread-1", token: { tokenId: "PAT-WRITER-CAPACITY", userId: "user-1", capability: "write", source: "pat" },
+      userContext: { platformRole: "developer", isSuperuser: false }, parsed, idempotentReplay: false, capacityAttempt: 1, terminalWriterAttempt });
+    expect(outcome).toMatchObject({ kind: "result", result: { status: "input-required", resumable: true, waitReason: "provider-capacity" } });
+    const payload = db.updateTaskRun.mock.calls.at(-1)?.[0]?.data?.progressPayload;
+    expect(payload?.terminalWriterWait).toMatchObject({ kind: "missing-terminal-writer", capacityDeferred: "capacity" });
+    expect(payload).not.toHaveProperty("terminalWriterEscalation");
   });
 
   it("does not divert a capacity failure that arrived AFTER real tool work", async () => {
@@ -285,30 +717,70 @@ describe("a resource wait is not a missing terminal writer (BI-8B8731EE)", () =>
   });
 });
 
-describe("remoteTaskConversation", () => {
-  it("merges hydrated terminal-writer context into the sole system prompt", () => {
-    expect(remoteTaskConversation({
+// BI-8CFA1CA8 — residency is a stated policy, not a side effect of a routing
+// preference. Before this, `pinnedProviderId === "local"` also set
+// residencyPolicy "local_only", so an operator clearing a provider preference
+// in the portal silently relaxed a data guarantee, and one choosing "local"
+// from a routing dropdown silently imposed one. Kernel: no-provider-pinning.
+describe("agent residency policy is read, never inferred from a pin", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    db.findTaskRun.mockResolvedValue({ status: "working" });
+    db.updateTaskRun.mockResolvedValue({ count: 1 });
+    autonomous.resolveAgent.mockResolvedValue({
+      agentId: "AGT-WS-PORTFOLIO",
+      displayName: "Portfolio Advisor",
       systemPrompt: "Review independently.",
-      prompt: "Record the exact governed receipt.",
-      resumeKind: "terminal-writer",
-      terminalWriterContext: "Immutable artifact evidence",
-    })).toEqual({
-      systemPrompt: "Review independently.\n\nImmutable artifact evidence",
-      chatHistory: [
-        { role: "user", content: "Record the exact governed receipt." },
-      ],
+      sensitivity: "internal",
     });
+    autonomous.resolveTools.mockResolvedValue({ tools: [], toolsForProvider: [], deferredTools: [] });
+    autonomous.execute.mockResolvedValue({ content: "done", executedTools: [] });
   });
 
-  it("keeps an ordinary task system prompt and user history unchanged", () => {
-    expect(remoteTaskConversation({
-      systemPrompt: "Review independently.",
-      prompt: "Inspect the artifact.",
-    })).toEqual({
-      systemPrompt: "Review independently.",
-      chatHistory: [
-        { role: "user", content: "Inspect the artifact." },
-      ],
+  async function dispatchWithConfig(config: Record<string, unknown> | null) {
+    db.findModelConfig.mockResolvedValue(config);
+    await executeRemoteTaskAttempt({
+      run: { id: "run-internal", taskRunId: "TR-MCP-RESIDENCY0001", contextId: "thread-1" },
+      threadId: "thread-1",
+      token: { tokenId: "PAT-WRITER-DURATION", userId: "user-1", capability: "write", source: "pat" },
+      userContext: { platformRole: "developer", isSuperuser: false },
+      parsed,
+      idempotentReplay: false,
+      capacityAttempt: 1,
     });
+    const call = autonomous.execute.mock.calls.at(-1)?.[0] as
+      | { modelRequirements?: Record<string, unknown> }
+      | undefined;
+    return call?.modelRequirements ?? null;
+  }
+
+  const base = { minimumTier: "adequate", budgetClass: "balanced", pinnedModelId: null };
+
+  it("carries a local_only policy that the config states", async () => {
+    const requirements = await dispatchWithConfig({
+      ...base, pinnedProviderId: null, residencyPolicy: "local_only",
+    });
+    expect(requirements).toMatchObject({ residencyPolicy: "local_only" });
+  });
+
+  it("does not impose local_only just because the provider preference is local", async () => {
+    const requirements = await dispatchWithConfig({
+      ...base, pinnedProviderId: "local", residencyPolicy: null,
+    });
+    expect(requirements).toMatchObject({ preferredProviderId: "local" });
+    expect(requirements).not.toHaveProperty("residencyPolicy");
+  });
+
+  it("keeps local_only when the provider preference is cleared", async () => {
+    const pinned = await dispatchWithConfig({
+      ...base, pinnedProviderId: "local", residencyPolicy: "local_only",
+    });
+    const cleared = await dispatchWithConfig({
+      ...base, pinnedProviderId: null, residencyPolicy: "local_only",
+    });
+    expect(pinned).toMatchObject({ residencyPolicy: "local_only" });
+    // The guarantee survives the preference being cleared — that is the point.
+    expect(cleared).toMatchObject({ residencyPolicy: "local_only" });
+    expect(cleared).not.toHaveProperty("preferredProviderId");
   });
 });

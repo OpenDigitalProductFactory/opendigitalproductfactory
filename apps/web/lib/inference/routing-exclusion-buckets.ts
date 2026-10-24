@@ -16,26 +16,8 @@
 // getExclusionReasonV2 (apps/web/lib/routing/pipeline-v2.ts) and arrive prefixed
 // with the endpoint id, e.g. "cmq5kq…: Sensitivity clearance missing for 'restricted'".
 
-/** Coarse cause families, each with a distinct owner-facing remedy. */
-export type RoutingExclusionBucket =
-  /** The connected account cannot use this specific model on this transport. */
-  | "account-model-eligibility"
-  /** Provider allow/deny list — on this platform, almost always a connection that is switched off. */
-  | "connection-excluded"
-  /** The endpoint is not cleared for this data class. */
-  | "sensitivity-clearance"
-  /** Scored dimensions below the task's tier floor. */
-  | "quality-floor"
-  /** A hard agent capability requirement (EP-AGENT-CAP-002), e.g. tool use. */
-  | "capability-floor"
-  /** Context window smaller than the request needs. */
-  | "context-window"
-  /** Endpoint status is not active/degraded. */
-  | "endpoint-status"
-  /** Model class mismatch (e.g. an embedding model for a chat task). */
-  | "model-class"
-  /** Anything the buckets above do not recognise. */
-  | "other";
+import type { RoutingExclusionBucket, RoutingEligibility } from "../routing/inference-error";
+export type { RoutingExclusionBucket, RoutingEligibility } from "../routing/inference-error";
 
 export interface BucketedExclusions {
   bucket: RoutingExclusionBucket;
@@ -75,8 +57,10 @@ export function bucketExclusionReason(reason: string): RoutingExclusionBucket {
   }
   if (text.includes("sensitivity clearance missing")) return "sensitivity-clearance";
   if (text.includes("minimum quality dimensions not met")) return "quality-floor";
-  if (text.includes("requires capability")) return "capability-floor";
+  if (text.includes("requires capability") || text.includes("missing required capability")) return "capability-floor";
   if (text.includes("context window too small")) return "context-window";
+  if (text.includes("activity completion allowance")) return "output-capacity";
+  if (text.includes("residency policy")) return "residency";
   if (text.startsWith("status is")) return "endpoint-status";
   if (text.includes("modelclass")) return "model-class";
   return "other";
@@ -97,6 +81,8 @@ const TIE_BREAK_ORDER: RoutingExclusionBucket[] = [
   "capability-floor",
   "quality-floor",
   "context-window",
+  "output-capacity",
+  "residency",
   "endpoint-status",
   "model-class",
   "other",
@@ -159,7 +145,7 @@ export function explainExclusion(
           `${bucketed.count} of ${bucketed.total} endpoints use a model that the connected ChatGPT account cannot run through Codex.`,
         remediation:
           "Select a ChatGPT-subscription-supported Codex model such as gpt-5.4, or use an API-key Codex connection for models that require API access.",
-        href: "/platform/ai/model-assignment",
+        href: "/platform/ai/assignments",
       };
     case "connection-excluded":
       return {
@@ -183,7 +169,7 @@ export function explainExclusion(
           `${bucketed.count} of ${bucketed.total} endpoints lack a capability this coworker requires (for example tool use).`,
         remediation:
           "Connect a provider whose models support the required capability, or lower the coworker's capability requirement if it does not genuinely need it.",
-        href: "/platform/ai/model-assignment",
+        href: "/platform/ai/assignments",
       };
     case "quality-floor":
       return {
@@ -199,7 +185,7 @@ export function explainExclusion(
           `${bucketed.count} of ${bucketed.total} endpoints have a context window smaller than this work needs.`,
         remediation:
           "Connect a model with a larger context window, or reduce the coworker's minimum context requirement.",
-        href: "/platform/ai/model-assignment",
+        href: "/platform/ai/assignments",
       };
     case "endpoint-status":
       return {
@@ -207,6 +193,12 @@ export function explainExclusion(
         remediation: "Review provider status and re-test the connection.",
         href: "/platform/ai/providers",
       };
+    case "output-capacity":
+      return { message: `${bucketed.count} of ${bucketed.total} endpoints cannot fit the required review response.`,
+        remediation: "Verify a model with sufficient output capacity for the complete review.", href: "/platform/ai/providers" };
+    case "residency":
+      return { message: `${bucketed.count} of ${bucketed.total} endpoints do not meet the residency requirement.`,
+        remediation: "Verify an eligible model within the required data boundary.", href: "/platform/ai/providers" };
     case "model-class":
       return {
         message:
@@ -224,4 +216,31 @@ export function explainExclusion(
         href: "/platform/ai/runtime-health",
       };
   }
+}
+
+const SENSITIVITIES = ["development", "public", "internal", "confidential", "restricted"];
+const RESIDENCIES = ["local_only", "approved_cloud", "any_enabled", "unknown"];
+export function routingEligibilitySummary(sensitivity: string, residencyPolicy: string | undefined,
+  excludedCount: number, reasons: readonly string[]): RoutingEligibility {
+  return { sensitivity: SENSITIVITIES.includes(sensitivity) ? sensitivity : "internal",
+    residencyPolicy: RESIDENCIES.includes(residencyPolicy ?? "") ? residencyPolicy! : "unknown",
+    excludedCount: Number.isSafeInteger(excludedCount) && excludedCount >= 0 ? excludedCount : 0,
+    exclusions: dominantExclusion(reasons)?.breakdown ?? [] };
+}
+/** Validate persisted diagnostics again at every public projection boundary. */
+export function readRoutingEligibility(value: unknown): RoutingEligibility | null {
+  if (!value || typeof value !== "object") return null;
+  const row = value as Record<string, unknown>;
+  if (typeof row.sensitivity !== "string" || !SENSITIVITIES.includes(row.sensitivity)
+    || typeof row.residencyPolicy !== "string" || !RESIDENCIES.includes(row.residencyPolicy)
+    || !Number.isSafeInteger(row.excludedCount) || (row.excludedCount as number) < 0
+    || !Array.isArray(row.exclusions) || row.exclusions.length > TIE_BREAK_ORDER.length) return null;
+  const exclusions: RoutingEligibility["exclusions"] = [];
+  for (const item of row.exclusions) {
+    if (!item || typeof item !== "object" || !TIE_BREAK_ORDER.includes(item.bucket)
+      || !Number.isSafeInteger(item.count) || item.count < 1) return null;
+    exclusions.push({ bucket: item.bucket, count: item.count });
+  }
+  return { sensitivity: row.sensitivity, residencyPolicy: row.residencyPolicy,
+    excludedCount: row.excludedCount as number, exclusions };
 }

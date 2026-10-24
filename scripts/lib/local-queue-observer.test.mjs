@@ -8,6 +8,7 @@ import {
   OBSERVER_RECORD_TTL_MS,
   createGateObserverIdentity,
   findDeadLocalQueueObservers,
+  findQueueWaiter,
   readProcessStartTimes,
   registerLocalQueueObserver,
   releaseDeadLocalQueueObserversForGate,
@@ -610,4 +611,49 @@ test("a verifiably-running gate outranks the TTL, however long it has run", () =
 
   assert.deepEqual(released, []);
   assert.equal(existsSync(registered.path), true);
+});
+
+// BI-27A37D27: pregate:status needs to know whether ANY waiter is alive for the
+// claim at this branch+sha, or it reports a dead wait as "queued" for hours.
+test("findQueueWaiter reports a live waiter for this branch and sha", () => {
+  const directory = mkdtempSync(join(tmpdir(), "dpf-waiter-"));
+  const identity = createGateObserverIdentity({ pid: 4101, token: "a1b2c3d4-0000-4000-8000-000000000001" });
+  registerLocalQueueObserver({ directory, identity, branch: "fix/x", sha: "abc", startedAt: undefined });
+  const live = findQueueWaiter({ directory, branch: "fix/x", sha: "abc", observerAlive: () => ({ alive: true }) });
+  assert.deepEqual(live, { checked: true, alive: true, pids: [4101] });
+  const dead = findQueueWaiter({ directory, branch: "fix/x", sha: "abc", observerAlive: () => ({ alive: false }) });
+  assert.deepEqual(dead, { checked: true, alive: false, pids: [4101] });
+});
+
+test("findQueueWaiter ignores waiters for other claims and reports none", () => {
+  const directory = mkdtempSync(join(tmpdir(), "dpf-waiter-"));
+  const identity = createGateObserverIdentity({ pid: 4102, token: "a1b2c3d4-0000-4000-8000-000000000002" });
+  registerLocalQueueObserver({ directory, identity, branch: "fix/other", sha: "zzz", startedAt: undefined });
+  assert.deepEqual(
+    findQueueWaiter({ directory, branch: "fix/x", sha: "abc", observerAlive: () => ({ alive: true }) }),
+    { checked: true, alive: false, pids: [] },
+  );
+});
+
+// BI-F63D8202: the gate's own observer is still registered when it decides
+// whether to spawn. Excluding that pid is what lets the first claim spawn.
+test("findQueueWaiter excludePids ignores the caller and still sees another live waiter", () => {
+  const directory = mkdtempSync(join(tmpdir(), "dpf-waiter-"));
+  const self = createGateObserverIdentity({ pid: 4242, token: "a1b2c3d4-0000-4000-8000-000000000042" });
+  const other = createGateObserverIdentity({ pid: 4343, token: "a1b2c3d4-0000-4000-8000-000000000043" });
+  registerLocalQueueObserver({ directory, identity: self, branch: "fix/x", sha: "abc", startedAt: undefined });
+  const onlySelf = findQueueWaiter({
+    directory, branch: "fix/x", sha: "abc",
+    observerAlive: () => ({ alive: true }),
+    excludePids: [4242],
+  });
+  assert.deepEqual(onlySelf, { checked: true, alive: false, pids: [] });
+  registerLocalQueueObserver({ directory, identity: other, branch: "fix/x", sha: "abc", startedAt: undefined });
+  const otherAlive = findQueueWaiter({
+    directory, branch: "fix/x", sha: "abc",
+    observerAlive: () => ({ alive: true }),
+    excludePids: [4242],
+  });
+  assert.equal(otherAlive.alive, true);
+  assert.deepEqual(otherAlive.pids, [4343]);
 });

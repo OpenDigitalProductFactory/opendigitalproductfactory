@@ -2,10 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import {
   FEATURE_BUILD_KIND_VALUES,
   isFixContextComplete,
-  checkPhaseGate,
   deriveFixUxTestCases,
   type FixContext,
 } from "./feature-build-types";
+import { checkPhaseGate } from "./build-process-matrix";
 import { getBuildPhasePrompt } from "@/lib/build/build-agent-prompts";
 
 vi.mock("@/lib/tak/prompt-loader", () => ({

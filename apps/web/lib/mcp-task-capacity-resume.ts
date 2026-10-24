@@ -1,14 +1,13 @@
+import { isRecord } from "./shared/coerce";
 import { prisma } from "@dpf/db";
-import { resolveWorkforcePlatformRole } from "@/lib/govern/auth-utils";
-import type { UserContext } from "@/lib/permissions";
+import { isCurrentOAuthExecutionAuthority, OAUTH_EXECUTION_AUTHORITY_SELECT } from "@/lib/auth/oauth-tokens";
+import { currentUserContext } from "@/lib/govern/current-user-context";
+import type { ExistingRemoteTask, RemoteTaskSubmitAuth, RemoteTaskSubmitOutcome } from "./mcp-task-submit-types";
+import type { RemoteRiskClass } from "./mcp-task-submit-params";
 import {
   parseInitiativeReviewBinding,
   parseRemoteTaskSubmitParams,
   resumeWaitingRemoteTask,
-  type ExistingRemoteTask,
-  type RemoteRiskClass,
-  type RemoteTaskSubmitAuth,
-  type RemoteTaskSubmitOutcome,
 } from "./mcp-task-submit";
 import {
   deterministicExternalTaskRunId,
@@ -87,6 +86,12 @@ export async function resumeRemoteCoworkerTaskById(
     return refusal(taskRunId, "The original waiting TaskRun is missing or no longer resumable.");
   }
 
+  if (isRecord(existing.progressPayload) && existing.progressPayload.reviewExecutionAuthority !== undefined) {
+    // One reconstruction owner for transferred work; never revive origin on a capacity event.
+    const { executePersistedRemoteTask } = await import("./mcp-task-background-worker");
+    return { kind: "result", result: await executePersistedRemoteTask({ taskRunId }) };
+  }
+
   const metadata = existing.a2aMetadata && typeof existing.a2aMetadata === "object"
     && !Array.isArray(existing.a2aMetadata)
     ? existing.a2aMetadata as Record<string, unknown>
@@ -119,8 +124,9 @@ export async function resumeRemoteCoworkerTaskById(
     !tokenId
     // Event recovery cannot revalidate a five-minute session JWT because the
     // bearer is intentionally not persisted. A fresh authenticated caller can
-    // still perform an exact replay; the event seam remains PAT-only.
-    || tokenSource !== "pat"
+    // still perform an exact replay. Persisted OAuth access tokens, like PATs,
+    // can be revalidated from their original row and client below.
+    || (tokenSource !== "pat" && tokenSource !== "oauth")
     || (tokenCapability !== "read" && tokenCapability !== "write")
     || !requestedAgentId
     || !existing.routeContext
@@ -156,34 +162,27 @@ export async function resumeRemoteCoworkerTaskById(
   if (typeof parsed === "string" || remoteTaskRequestDigest(parsed) !== requestDigest) {
     return refusal(taskRunId, "Stored request state does not match its immutable digest.");
   }
-  if (deterministicExternalTaskRunId(tokenId, idempotencyKey) !== existing.taskRunId) {
+  if (deterministicExternalTaskRunId(optionalString(metadata?.["taskAuthorityKey"]) ?? tokenId, idempotencyKey) !== existing.taskRunId) {
     return refusal(taskRunId, "Stored TaskRun identity does not match its token-scoped request key.");
   }
 
   const storedToken = await prisma.mcpApiToken.findUnique({
     where: { id: tokenId },
-    select: { userId: true, capability: true, revokedAt: true, expiresAt: true },
+    select: { capability: true, ...OAUTH_EXECUTION_AUTHORITY_SELECT },
   });
   if (
     !storedToken
     || storedToken.userId !== existing.userId
     || storedToken.capability !== tokenCapability
     || storedToken.revokedAt !== null
-    || (storedToken.expiresAt !== null && storedToken.expiresAt <= new Date())
+    || (tokenSource === "oauth" && !await isCurrentOAuthExecutionAuthority(storedToken))
+    || (tokenSource !== "oauth" && storedToken.expiresAt !== null && storedToken.expiresAt <= new Date())
   ) {
     return refusal(taskRunId, "The original MCP token authority is no longer valid.");
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: existing.userId },
-    select: { isSuperuser: true, groups: { include: { platformRole: true } } },
-  });
-  if (!user) return refusal(taskRunId, "The original submitting user no longer exists.");
-  const userContext: UserContext = {
-    userId: existing.userId,
-    platformRole: resolveWorkforcePlatformRole(user.groups),
-    isSuperuser: user.isSuperuser,
-  };
+  const userContext = await currentUserContext(existing.userId);
+  if (!userContext) return refusal(taskRunId, "The original submitting user is no longer active.");
   const token: RemoteTaskSubmitAuth = {
     tokenId,
     userId: existing.userId,

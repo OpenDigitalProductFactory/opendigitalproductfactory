@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "progressive-disclosure",
+  "decisionInteractionId": "DI-C474E1BD0F07",
+  "scope": {
+    "files": [
+      "apps/web/components/platform/ProviderClearanceOverridePanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "progressive-disclosure",
+      "always-expanded",
+      "separate-route"
+    ]
+  }
+}

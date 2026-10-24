@@ -29,15 +29,15 @@ vi.mock("@/lib/tak/autonomous-work-run", () => ({
 vi.mock("@/lib/tak/task-records", () => ({
   createTaskMessage: vi.fn(),
 }));
-vi.mock("@/lib/queue/inngest-client", () => ({
-  inngest: { send: vi.fn().mockResolvedValue({ ids: ["event-1"] }) },
+vi.mock("@/lib/jobs", () => ({
+  jobs: { send: vi.fn().mockResolvedValue({ ids: ["event-1"] }) },
 }));
 
 vi.mock("@dpf/db", () => ({
   prisma: {
     user: { findUnique: vi.fn() },
     agent: { findFirst: vi.fn() },
-    taskRun: { findFirst: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
+    taskRun: { findFirst: vi.fn(), findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
     agentThread: { upsert: vi.fn() },
     taskMessage: { create: vi.fn() },
     mcpToolSession: { findUnique: vi.fn(), deleteMany: vi.fn(), upsert: vi.fn() },
@@ -132,7 +132,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   getQuiescenceConfigMock.mockResolvedValue({ level: "normal", runId: null, enteredAt: null });
   userMock.mockResolvedValue({
-    isSuperuser: true,
+    isSuperuser: true, isActive: true,
     groups: [{ platformRole: { roleId: "HR-000" } }],
   } as never);
   taskRunFindFirstMock.mockResolvedValue(null);
@@ -1136,7 +1136,7 @@ describe("POST — tools/call", () => {
     expect(govMock).not.toHaveBeenCalled();
   });
 
-  it("returns requiredScope=write for read tokens that try create_workroom", async () => {
+  it.each(["create_workroom", "create_work_capsule"])("returns requiredScope=write for read tokens that try %s", async (name) => {
     resolveMock.mockResolvedValue({
       tokenId: "tok_x",
       userId: "u1",
@@ -1154,7 +1154,7 @@ describe("POST — tools/call", () => {
           id: 71,
           method: "tools/call",
           params: {
-            name: "create_workroom",
+            name,
             arguments: {
               title: "Token scope test",
               objective: "Verify write-token requirement",

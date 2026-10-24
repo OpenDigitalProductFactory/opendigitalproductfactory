@@ -11,7 +11,13 @@ import {
   type InitiativeGateKey,
 } from "./receipt-schema";
 import type { ReadinessProfile } from "./types";
+import type { InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
 import { resolveReviewerIdentity } from "./reviewer-identity";
+import { fingerprintCoworkerInput } from "@/lib/govern/authority/coworker-authority-decision";
+import { canonicalPlanMatchesArtifact, loadCanonicalPlanSource, sameCanonicalPlanSource } from "./canonical-plan-source";
+import { boundReviewReceiptId, checkBoundReviewWriteExecution, findBoundReviewWinner, lockBoundReviewEffect, publishBoundReviewEffect,
+  type BoundReviewTask } from "./bound-review-effect";
+import { ok, type ActionSuccess } from "@/lib/shared/action-result";
 
 type ReceiptHistoryRow = { payload: unknown };
 
@@ -32,7 +38,7 @@ function currentOpenFindings(rows: ReceiptHistoryRow[], artifactDigest: string):
 }
 
 export type RecordInitiativeGateReceiptResult =
-  | { ok: true; receiptId: string; receipt: Record<string, unknown> }
+  | (ActionSuccess & { receiptId: string; receipt: Record<string, unknown>; deduplicated?: true })
   | { ok: false; code: string; error: string };
 
 export async function recordInitiativeGateReceipt(args: {
@@ -44,6 +50,10 @@ export async function recordInitiativeGateReceipt(args: {
   gate: InitiativeGateKey;
   decision: "pass" | "fail" | "not-applicable";
   artifactRef: InitiativeArtifactRef;
+  /** Trusted TaskRun context passed only by the governed tool handler. */
+  workroomRef?: InitiativeReviewBinding["workroomRef"];
+  boundReviewTask?: BoundReviewTask;
+  expectedCurrentBaselineId?: string | null;
   reason: string;
   findings: Array<{ issue: string; severity: "critical" | "important" }>;
   resolvedFindingRefs: string[];
@@ -53,6 +63,8 @@ export async function recordInitiativeGateReceipt(args: {
   tokenScope: string | null;
   requiresIndependentReviewer?: boolean;
   selectedProfile?: ReadinessProfile;
+  /** Exact dispatched tool inputs, supplied by the governed pack, not a policy claim. */
+  authorizationParams?: Record<string, unknown>;
 }): Promise<RecordInitiativeGateReceiptResult> {
   if (args.gate === "spec-approval" && args.decision === "pass") {
     return {
@@ -85,7 +97,9 @@ export async function recordInitiativeGateReceipt(args: {
 
   const authority = await prisma.authorizationDecisionLog.findUnique({
     where: { decisionId: args.authorityDecisionId },
-    select: { decisionId: true, decision: true, actionKey: true, policyVersion: true, organizationId: true },
+    select: { decisionId: true, decision: true, actionKey: true, policyVersion: true, organizationId: true,
+      rationale: true, humanContextRef: true, agentContextRef: true, objectRef: true, routeContext: true,
+      delegationGrantId: true },
   });
   if (!authority || authority.decision !== "allow" || authority.actionKey !== args.actionKey) {
     return { ok: false, code: "AUTHORIZATION_DENIED", error: "The current tool call has no matching allow decision." };
@@ -108,12 +122,32 @@ export async function recordInitiativeGateReceipt(args: {
     };
   }
   const reviewerPrincipalId = reviewer.principalId;
+  const rationale = authority.rationale && typeof authority.rationale === "object" && !Array.isArray(authority.rationale)
+    ? authority.rationale as Record<string, unknown> : {};
+  const authorPolicy = rationale.authorResearchBinding != null;
+  const boundPlanReview = args.gate === "plan-review" && args.workroomRef && args.artifactRef.kind === "repo-blob-at-commit";
+  const canonicalPlanProof = boundPlanReview ? await loadCanonicalPlanSource({
+    itemId: item.itemId, repositoryFullName: args.workroomRef!.repositoryFullName,
+  }) : null;
+  if (boundPlanReview && (!canonicalPlanProof || canonicalPlanProof.baselineId !== args.expectedCurrentBaselineId
+    || !canonicalPlanMatchesArtifact(canonicalPlanProof, args.artifactRef))) {
+    return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS",
+      error: "The accepted plan review no longer matches the current canonical baseline and coverage. Reconcile the server-issued packet; do not substitute a different artifact under the original request key." };
+  }
   const artifact = await resolveInitiativeArtifact({
     locator: args.artifactRef,
+    workroomRef: args.workroomRef,
+    canonicalPlanProof: canonicalPlanProof ?? undefined,
     subject: { kind: "backlog-item", id: item.itemId },
     organizationId: authority.organizationId ?? item.organizationId,
+    allowHumanResearchAuthor: authorPolicy && args.gate === "research" && args.requiresIndependentReviewer === false,
+    // BI-6F2872FC: a Build Studio plan review binds the build's plan revision.
+    acceptBuildPlan: args.gate === "plan-review",
   });
   if (!artifact.ok) return artifact;
+  if (canonicalPlanProof && artifact.artifact.digest !== canonicalPlanProof.digest) {
+    return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS", error: "The verified plan bytes no longer match the canonical coverage digest." };
+  }
 
   const gateKey = args.gate.replaceAll("-", "_") as never;
   const findingRefs = args.findings.map((finding) => buildStableInitiativeFindingId({
@@ -124,7 +158,9 @@ export async function recordInitiativeGateReceipt(args: {
   if (findingRefs.length !== new Set(findingRefs).size || args.findings.some((finding) => !finding.issue.trim())) {
     return { ok: false, code: "malformed-receipt", error: "Findings require unique non-empty issues." };
   }
-  return prisma.$transaction(async (tx) => {
+  return publishBoundReviewEffect<RecordInitiativeGateReceiptResult>(Boolean(args.boundReviewTask), (winnerOnly) => prisma.$transaction(async (tx) => {
+    const taskLock = await lockBoundReviewEffect(tx, args, item.organizationId);
+    if (taskLock.refusal) return taskLock.refusal;
     // Every receipt writer for a subject serializes on the subject row. Without
     // this seam, a concurrent fail could introduce a blocker after a pass had
     // read history but before either append committed.
@@ -132,6 +168,7 @@ export async function recordInitiativeGateReceipt(args: {
     const lockedItem = await tx.backlogItem.findUnique({
       where: { id: item.id },
       select: {
+        organizationId: true,
         type: true,
         source: true,
         workType: true,
@@ -143,6 +180,85 @@ export async function recordInitiativeGateReceipt(args: {
       },
     });
     if (!lockedItem) return { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: "The governed initiative no longer exists." };
+    if ((lockedItem.organizationId ?? null) !== (item.organizationId ?? null)) {
+      return { ok: false, code: "AUTHORIZATION_DENIED", error: "The initiative authority scope changed before publication." };
+    }
+    if (canonicalPlanProof) {
+      // Coverage/baseline writers serialize on their scope owner's item row.
+      // The reviewed child is already locked; pin its parent before re-reading.
+      if (canonicalPlanProof.scopeOwnerItemId !== item.itemId) {
+        await tx.$queryRaw`SELECT "id" FROM "BacklogItem" WHERE "itemId" = ${canonicalPlanProof.scopeOwnerItemId} FOR SHARE`;
+      }
+      const currentPlan = await loadCanonicalPlanSource({ itemId: item.itemId,
+        repositoryFullName: canonicalPlanProof.artifactRef.repositoryFullName, db: tx });
+      if (!currentPlan || !sameCanonicalPlanSource(canonicalPlanProof, currentPlan)) {
+        return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS", error: "The canonical plan baseline or coverage changed before receipt publication." };
+      }
+    }
+    if (args.workroomRef && args.artifactRef.kind === "repo-blob-at-commit") {
+      const ref = args.workroomRef;
+      // Provider verification happens outside the transaction. Lock the exact
+      // room before append so ownership/head cannot change underneath its proof.
+      await tx.$queryRaw`SELECT "id" FROM "WorkCapsule" WHERE "capsuleId" = ${ref.workroomId} FOR SHARE`;
+      const room = await tx.workroom.findUnique({ where: { capsuleId: ref.workroomId }, select: {
+        backlogItemId: true, repositoryFullName: true, headBranch: true, headSha: true,
+        archivedAt: true, status: true, createdByPrincipalId: true,
+      } });
+      if (!room || room.archivedAt || ["abandoned", "cancelled"].includes(room.status)
+        || room.backlogItemId !== item.itemId || room.repositoryFullName !== ref.repositoryFullName
+        || room.headBranch !== ref.branchName || room.headSha?.toLowerCase() !== ref.headSha.toLowerCase()
+        || room.createdByPrincipalId !== artifact.artifact.authorPrincipalId) {
+        return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS",
+          error: "The accepted review's workroom or accountable owner changed before receipt publication. Reconcile the actual workroom and review packet." };
+      }
+    }
+    if (authorPolicy) {
+      if ((lockedItem.organizationId ?? null) !== (authority.organizationId ?? null)) {
+        return { ok: false, code: "AUTHORIZATION_DENIED", error: "The initiative authority scope changed before publication." };
+      }
+      const current = args.authorizationParams && args.gate === "research" && args.requiresIndependentReviewer === false
+        && fingerprintCoworkerInput(args.authorizationParams) === fingerprintCoworkerInput({
+          itemId: args.itemId, gate: args.gate, decision: args.decision, artifactRef: args.artifactRef,
+          reason: args.reason, findings: args.findings, resolvedFindingRefs: args.resolvedFindingRefs,
+        })
+        && authority.humanContextRef === args.reviewerUserId && authority.agentContextRef === args.reviewerAgentId
+        && authority.objectRef === `backlog-item:${item.itemId}`
+        ? await (await import("@/lib/build/author-research-policy-binding")).resolveAuthorResearchPolicyBinding({ toolName: args.actionKey, params: args.authorizationParams,
+            userId: args.reviewerUserId, agentId: args.reviewerAgentId!, itemId: item.itemId,
+            routeContext: authority.routeContext }, tx)
+        : null;
+      const expiry = typeof rationale.expiresAt === "string" ? Date.parse(rationale.expiresAt) : NaN;
+      const judgment = typeof rationale.interactionId === "string"
+        ? await tx.decisionInteraction.findUnique({ where: { interactionId: rationale.interactionId },
+            select: { profileVersion: { select: { versionId: true } }, profile: { select: { currentVersionId: true } } } })
+        : null;
+      const delegation = authority.delegationGrantId
+        ? await tx.delegationGrant.findFirst({ where: { OR: [{ id: authority.delegationGrantId }, { grantId: authority.delegationGrantId }] },
+            select: { status: true, validFrom: true, expiresAt: true, grantorUserId: true,
+              workflowKey: true, objectRef: true, maxUses: true, useCount: true,
+              granteeAgent: { select: { agentId: true } } } }) : null;
+      if (!current || !Number.isFinite(expiry) || expiry <= Date.now()
+        || (rationale.interactionId && (!judgment || judgment.profileVersion.versionId !== authority.policyVersion
+          || judgment.profile.currentVersionId !== authority.policyVersion))
+        || (authority.delegationGrantId && (!delegation || delegation.status !== "active"
+          || delegation.validFrom.getTime() > Date.now() || delegation.expiresAt.getTime() <= Date.now()
+          || (delegation.workflowKey && delegation.workflowKey !== args.actionKey)
+          || (delegation.objectRef && delegation.objectRef !== authority.objectRef)
+          || (delegation.maxUses !== null && delegation.useCount >= delegation.maxUses)
+          || delegation.grantorUserId !== args.reviewerUserId || delegation.granteeAgent.agentId !== args.reviewerAgentId))
+        || fingerprintCoworkerInput(args.authorizationParams!, current) !== rationale.artifactFingerprint
+        || current.valueDigest !== artifact.artifact.digest) {
+        return { ok: false, code: "AUTHORIZATION_DENIED", error: "Author research evidence or current authority changed before publication." };
+      }
+    }
+    const winner = await findBoundReviewWinner(tx, args, artifact.artifact, item.id, item.organizationId, reviewerPrincipalId);
+    if (!winner.ok) return winner;
+    if (winner.receipt) return { ...ok(), receiptId: winner.receipt.receiptId,
+      receipt: winner.receipt as unknown as Record<string, unknown>, deduplicated: true };
+    if (winnerOnly) return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS",
+      error: "Concurrent publication did not leave a qualified canonical winner. No write was retried." };
+    const executionRefusal = checkBoundReviewWriteExecution(args, taskLock.execution);
+    if (executionRefusal) return executionRefusal;
     const history = await tx.backlogItemActivity.findMany({
       where: { backlogItemId: item.id, kind: "initiative_gate_receipt", gateKey },
       orderBy: [{ recordedAt: "asc" }, { id: "asc" }],
@@ -174,7 +290,7 @@ export async function recordInitiativeGateReceipt(args: {
         ],
       })
       : null;
-    const receiptId = `initiative-${randomUUID()}`;
+    const receiptId = boundReviewReceiptId(args, artifact.artifact.digest) ?? `initiative-${randomUUID()}`;
     const validated = validateInitiativeGateReceiptDraft({
       gate: args.gate,
       decision: args.decision,
@@ -212,6 +328,10 @@ export async function recordInitiativeGateReceipt(args: {
     });
     if (!validated.ok) return { ok: false, code: validated.code, error: validated.error };
 
+    if (authorPolicy && Date.parse(String(rationale.expiresAt)) <= Date.now()) {
+      return { ok: false, code: "AUTHORIZATION_DENIED", error: "Author research authority expired before append." };
+    }
+
     await tx.backlogItemActivity.create({
       data: {
         id: receiptId,
@@ -225,5 +345,5 @@ export async function recordInitiativeGateReceipt(args: {
       },
     });
     return { ok: true, receiptId, receipt: validated.receipt as unknown as Record<string, unknown> };
-  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
 }

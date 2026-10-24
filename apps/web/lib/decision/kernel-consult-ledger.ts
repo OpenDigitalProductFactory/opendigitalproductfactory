@@ -19,6 +19,7 @@ import {
   type DecisionVerdictCause,
 } from "@/lib/decision/option-scoring";
 import type { DecisionCallerContext } from "@/lib/decision/caller-context";
+import { withDecisionEscalation } from "@/lib/decision-perspective/decision-escalation";
 import {
   persistDecisionInteraction,
 } from "@/lib/decision-perspective/persistence";
@@ -26,9 +27,15 @@ import type {
   DecisionOutcomeType,
   DecisionPerspectiveEvaluationResult,
   DecisionRiskTier,
+  DecisionScoredOption,
 } from "@/lib/decision-perspective/types";
 import { sealDecision, type SealablePayload } from "@/lib/decision/decision-chain";
 import { citationsToSources, type AdmissibleCitation } from "@/lib/decision/evidence-grounding";
+import {
+  resolveDecisionAgentId,
+  type DecisionAgentLookupDb,
+  type ShadowLedgerSyncOutcome,
+} from "@/lib/decision/decision-shadow-ledger-bridge";
 
 type ProfileResolverDb = {
   decisionPerspectiveProfile: {
@@ -57,7 +64,7 @@ type ProfileResolverDb = {
       select: { chainEntryHash: true };
     }): Promise<{ chainEntryHash: string | null } | null>;
   };
-} & Parameters<typeof persistDecisionInteraction>[0]["db"];
+} & DecisionAgentLookupDb & Parameters<typeof persistDecisionInteraction>[0]["db"];
 
 /** Look up the current head hash of a chain, defensively (fail-open to null). */
 async function resolveChainHead(db: ProfileResolverDb, chainId: string): Promise<string | null> {
@@ -81,6 +88,11 @@ export type KernelConsultLedgerOutcome = {
   profileId?: string;
   /** Why the write was skipped, when it was. */
   reason?: string;
+  /**
+   * BI-6082C235: the decision's shadow-ledger row. Null when the consult named
+   * no coworker an Agent row carries, so there was nobody to attribute it to.
+   */
+  shadowLedger?: ShadowLedgerSyncOutcome | null;
 };
 
 /**
@@ -181,6 +193,19 @@ export async function recordKernelConsultInteraction(input: {
   optionIds: string[];
   /** Full option descriptions, kept in the payload for the audit drill-in. */
   optionDescriptions: Record<string, string>;
+  /**
+   * The scored option set (id, description, per-dimension features) exactly as
+   * decide() received it. BI-F302B80E: the ledger recorded the kernel's PICK
+   * but never the menu it picked from, so `scoredOptions` stayed NULL on every
+   * kernel row — and weight-inference-adapter requires all three of
+   * scoredOptions, recommendedOptionId and chosenOptionId before a row teaches
+   * it anything. A decision whose menu is unrecoverable can be counted but
+   * never learned from.
+   *
+   * `scoredOptions` is a SEALED field, so this can only ever be right at
+   * creation time; rows written before this shipped keep a null menu for good.
+   */
+  scoredOptions?: DecisionScoredOption[];
   appliedPrincipleCount: number;
   callingSurface?: string | null;
   routeContext?: string | null;
@@ -297,6 +322,13 @@ export async function recordKernelConsultInteraction(input: {
 
     const evaluation: DecisionPerspectiveEvaluationResult = {
       outcomeType,
+      // BI-F302B80E: the kernel's pick belongs in its own indexed column, not
+      // only in outcomePayload. It was being written to the JSON blob and the
+      // seal payload while this column stayed NULL, so 152 recorded
+      // recommendations were unqueryable — and agreement cannot be measured
+      // against a value nothing can select. `coverageGap` below already tracks
+      // the absence of a recommendation, so null here means "none was made".
+      recommendedOptionId: input.result.recommendation?.optionId ?? null,
       selectedProfileId: profile.profileId,
       fallbackProfileId: null,
       profileVersionId: version.versionId,
@@ -312,6 +344,7 @@ export async function recordKernelConsultInteraction(input: {
       riskTier,
       question: input.question,
       options: input.optionIds,
+      scoredOptions: input.scoredOptions,
       rationale: input.result.reasoning,
       materialScores: [],
       sources,
@@ -340,16 +373,27 @@ export async function recordKernelConsultInteraction(input: {
       }
     }
 
-    const { interactionId } = await persistDecisionInteraction({
+    // BI-6082C235: the asking coworker gets its own column (a real foreign key)
+    // instead of living only in outcomePayload.caller. An id no Agent row
+    // carries is recorded as no agent; the declaration stays in the payload.
+    const agentId = await resolveDecisionAgentId(input.db, input.caller?.agentId);
+
+    const { interactionId, shadowLedger } = await persistDecisionInteraction({
       db: input.db,
       build: null,
-      evaluation,
+      evaluation: withDecisionEscalation(evaluation),
+      agentId,
       taskRunId: input.taskRunId ?? null,
       triggeredByUserId: input.triggeredByUserId ?? null,
       routeContext: input.routeContext ?? input.callingSurface ?? "mcp:principle_decide",
       // BI-FD7CBA06: name the door so WWMD audit can filter external MCP consults
       // separately from build-studio / backlog-triage (was always null before).
       gateKey: "kernel-consult",
+      // BI-01F8F06D: a consult is attended when a human triggered it and
+      // unattended when an agent did. Derived from the caller the request
+      // already declares rather than assumed, so the agreement denominator
+      // never silently absorbs a decision nobody reviewed.
+      autonomous: !input.triggeredByUserId,
       phaseFrom: null,
       phaseTo: null,
       chain,
@@ -405,7 +449,7 @@ export async function recordKernelConsultInteraction(input: {
       },
     });
 
-    return { recorded: true, interactionId, profileId: profile.profileId };
+    return { recorded: true, interactionId, profileId: profile.profileId, shadowLedger };
   } catch (err) {
     console.warn("[kernel-consult-ledger] write failed (fail-open):", err);
     return { recorded: false, reason: "write-failed" };

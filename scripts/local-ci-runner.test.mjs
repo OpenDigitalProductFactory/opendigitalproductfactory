@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { test } from "node:test";
@@ -10,6 +10,9 @@ import {
   LOCAL_CI_MISSING_DATABASE_URL,
   createLocalIntegrationChildInvocation,
   planPostgresOwnership,
+  SLOT_POSTGRES_RESTART_POLICY,
+  slotPostgresProvisionArgs,
+  slotPostgresReuseCommands,
   preparePinnedPnpmEnvironment,
   executableOnPath,
   resolveLocalCiPnpmInvocation,
@@ -103,10 +106,11 @@ test("child local-integration invocation uses only the runner-owned test databas
   const withOwnedDb = createLocalIntegrationChildInvocation({
     ...base,
     testDatabaseUrl: "postgresql://dpf:dpf_dev@127.0.0.1:15432/dpf_local_ci_slot_0",
-    env: { DATABASE_URL: "postgresql://dpf:dpf_dev@127.0.0.1:5432/root" },
+    env: { DATABASE_URL: "postgresql://dpf:dpf_dev@127.0.0.1:5432/root", DPF_LOCAL_CI_TEST_WORKERS: "2" },
   });
 
   assert.ok(withOwnedDb.args.includes("--migrate-deploy"));
+  assert.equal(withOwnedDb.env.DPF_LOCAL_CI_TEST_WORKERS, "2");
   assert.equal(
     withOwnedDb.env.DATABASE_URL,
     "postgresql://dpf:dpf_dev@127.0.0.1:15432/dpf_local_ci_slot_0",
@@ -141,6 +145,27 @@ test("a foreign listener never satisfies manifest Postgres ownership", () => {
     }),
     "reuse",
   );
+});
+
+test("a provisioned slot Postgres survives a host or Docker restart (BI-277ECBDB)", () => {
+  const args = slotPostgresProvisionArgs({
+    container: "dpf-local-ci-postgres-0",
+    hostPort: 55432,
+    volume: "dpf-local-ci-postgres-0",
+    database: "dpf_local_ci_0",
+  });
+  const at = args.indexOf("--restart");
+  assert.notEqual(at, -1, "docker run must set a restart policy");
+  assert.equal(args[at + 1], SLOT_POSTGRES_RESTART_POLICY);
+  assert.equal(SLOT_POSTGRES_RESTART_POLICY, "unless-stopped");
+  assert.equal(args.at(-1), "pgvector/pgvector:pg16");
+});
+
+test("a reused slot Postgres is brought up to the restart policy before it is started", () => {
+  assert.deepEqual(slotPostgresReuseCommands("dpf-local-ci-postgres-1"), [
+    ["update", "--restart", "unless-stopped", "dpf-local-ci-postgres-1"],
+    ["start", "dpf-local-ci-postgres-1"],
+  ]);
 });
 
 test("an admitted runner resets only its manifest-owned disposable slot database", () => {
@@ -184,14 +209,78 @@ test("slot database reset fails closed when drop or create fails", () => {
   );
 });
 
-test("local CI shadows pnpm 11 with the repository-pinned version", () => {
+// BI-785B3253. These fixtures used to let preparePinnedPnpmEnvironment run the
+// REAL spawnSync against a `#!/bin/sh` fake pnpm. They already passed `platform`
+// to make the branch under test deterministic, but not `spawnSyncImpl`, so the
+// EXECUTION still depended on the host having a POSIX shell. On Windows the
+// spawn fails, the guard reports `local CI could not inspect host pnpm: unknown
+// error` (a failed spawn leaves stdout and stderr empty), and both tests are red
+// on every Windows host while staying green in CI — the same green-in-CI,
+// red-on-Windows shape as BI-5CC4159D. Windows is a GA target.
+//
+// The version probe is now stubbed, so what these assert is the pinning
+// DECISION on every host. The one thing that genuinely needs a POSIX shell —
+// executing the generated shim — is its own test below, skipped with a reason
+// rather than silently.
+const PNPM_HOST_VERSION = "11.19.0";
+const PNPM_PINNED_VERSION = "10.33.2";
+
+/**
+ * Stands in for the fake pnpm the fixture puts on PATH, without a shell.
+ * Mirrors that script's contract: a bare `--version` reports the host version,
+ * and `with <pinned> --version` reports the pinned one. Matches on the joined
+ * argv so it answers both the POSIX shape (pnpm ...) and the Windows shape
+ * (node pnpm.cjs ...).
+ */
+function fakePnpmSpawn({ hostVersion = PNPM_HOST_VERSION, pinnedVersion = PNPM_PINNED_VERSION } = {}) {
+  return (command, args = []) => {
+    const line = [command, ...args].join(" ");
+    if (!line.includes("--version")) return { status: 9, stdout: "", stderr: "" };
+    const version = line.includes(`with ${pinnedVersion}`) ? pinnedVersion : hostVersion;
+    return { status: 0, stdout: `${version}\n`, stderr: "" };
+  };
+}
+
+function pinnedShimFixture() {
   const fixture = mkdtempSync(join(tmpdir(), "dpf-local-ci-pnpm-"));
   const hostBin = join(fixture, "host-bin");
   const toolchainDir = join(fixture, "toolchain");
   const hostPnpm = join(hostBin, "pnpm");
   mkdirSync(hostBin, { recursive: true });
-  writeFileSync(hostPnpm, `#!/bin/sh\nif [ "$1" = "--version" ]; then echo 11.19.0; exit 0; fi\nif [ "$1" = "with" ] && [ "$2" = "10.33.2" ]; then shift 2; if [ "$1" = "--version" ]; then echo 10.33.2; exit 0; fi; fi\nexit 9\n`);
+  // The file must exist for executableOnPath to resolve it; only its EXECUTION
+  // is stubbed, and the POSIX-shell test below runs this same script for real.
+  writeFileSync(hostPnpm, `#!/bin/sh\nif [ "$1" = "--version" ]; then echo ${PNPM_HOST_VERSION}; exit 0; fi\nif [ "$1" = "with" ] && [ "$2" = "${PNPM_PINNED_VERSION}" ]; then shift 2; if [ "$1" = "--version" ]; then echo ${PNPM_PINNED_VERSION}; exit 0; fi; fi\nexit 9\n`);
   chmodSync(hostPnpm, 0o755);
+  return { fixture, hostBin, toolchainDir, hostPnpm };
+}
+
+test("local CI shadows pnpm 11 with the repository-pinned version", () => {
+  const { hostBin, toolchainDir } = pinnedShimFixture();
+
+  const prepared = preparePinnedPnpmEnvironment({
+    packageManager: "pnpm@10.33.2+sha512.fixture",
+    toolchainDir,
+    env: { PATH: `${hostBin}${delimiter}/usr/bin:/bin` },
+    platform: "darwin",
+    spawnSyncImpl: fakePnpmSpawn(),
+  });
+
+  assert.equal(prepared.mode, "pinned-shim");
+  assert.equal(prepared.expectedVersion, "10.33.2");
+  assert.equal(prepared.actualVersion, "11.19.0");
+  assert.equal(prepared.env.PATH.split(delimiter)[0], toolchainDir);
+  assert.match(readFileSync(join(toolchainDir, "pnpm"), "utf8"), /with.*10\.33\.2/);
+});
+
+// The shim is a `#!/bin/sh` script, so only a POSIX host can prove it runs.
+// Named and skipped explicitly: a silently-absent assertion is how a platform
+// gap survives.
+test("the generated POSIX shim executes and reports the pinned version", {
+  skip: process.platform === "win32"
+    ? "needs a POSIX shell to execute a #!/bin/sh shim"
+    : false,
+}, () => {
+  const { hostBin, toolchainDir } = pinnedShimFixture();
 
   const prepared = preparePinnedPnpmEnvironment({
     packageManager: "pnpm@10.33.2+sha512.fixture",
@@ -200,14 +289,49 @@ test("local CI shadows pnpm 11 with the repository-pinned version", () => {
     platform: "darwin",
   });
 
-  assert.equal(prepared.mode, "pinned-shim");
-  assert.equal(prepared.expectedVersion, "10.33.2");
-  assert.equal(prepared.actualVersion, "11.19.0");
-  assert.equal(prepared.env.PATH.split(delimiter)[0], toolchainDir);
   const pinned = spawnSync("pnpm", ["--version"], { encoding: "utf8", env: prepared.env });
   assert.equal(pinned.status, 0, pinned.stderr);
   assert.equal(pinned.stdout.trim(), "10.33.2");
-  assert.match(readFileSync(join(toolchainDir, "pnpm"), "utf8"), /with.*10\.33\.2/);
+});
+
+// The branch a Windows host actually takes had no coverage at all, which is how
+// the POSIX-only fixtures went unnoticed: every pinning test exercised the
+// other side.
+test("on Windows the pinned JS shim forwards to the exact host pnpm without a shell", () => {
+  const fixture = mkdtempSync(join(tmpdir(), "dpf-local-ci-pnpm-win-"));
+  const hostBin = join(fixture, "host-bin");
+  const toolchainDir = join(fixture, "toolchain");
+  mkdirSync(hostBin, { recursive: true });
+  const hostPnpm = join(hostBin, "pnpm.CMD");
+  writeFileSync(hostPnpm, "@echo off\r\n");
+  mkdirSync(join(hostBin, "node_modules/pnpm/bin"), { recursive: true });
+  writeFileSync(join(hostBin, "node_modules/pnpm/bin/pnpm.cjs"), "console.log(JSON.stringify(process.argv.slice(2)));\n");
+
+  const prepared = preparePinnedPnpmEnvironment({
+    packageManager: "pnpm@10.33.2+sha512.fixture",
+    toolchainDir,
+    env: { Path: hostBin, PATHEXT: ".CMD", ComSpec: "C:\\Windows\\System32\\cmd.exe" },
+    platform: "win32",
+    spawnSyncImpl: fakePnpmSpawn(),
+  });
+
+  assert.equal(prepared.mode, "pinned-shim");
+  assert.equal(prepared.actualVersion, "11.19.0");
+  assert.equal(prepared.hostPnpm, hostPnpm);
+  // No `pnpm` extensionless shim on Windows — cmd.exe would not run it.
+  assert.equal(existsSync(join(toolchainDir, "pnpm")), false);
+  const cmdShim = readFileSync(join(toolchainDir, "pnpm.cmd"), "utf8");
+  assert.ok(cmdShim.includes("pnpm.cjs"));
+  const jsShim = readFileSync(join(toolchainDir, "pnpm.cjs"), "utf8");
+  assert.match(jsShim, /"with","10\.33\.2"/);
+  assert.ok(jsShim.includes(JSON.stringify(join(hostBin, "node_modules/pnpm/bin/pnpm.cjs"))));
+  assert.match(jsShim, /shell: false/);
+  const literals = ["space here", "%PATH%", "!NAME!", "a&b", '\"|echo injected', ""];
+  const invocation = resolveLocalCiPnpmInvocation(join(toolchainDir, "pnpm.cmd"), literals, { platform: "win32" });
+  const forwarded = spawnSync(invocation.command, invocation.args, { encoding: "utf8", shell: false });
+  assert.equal(forwarded.status, 0, forwarded.stderr);
+  assert.deepEqual(JSON.parse(forwarded.stdout), ["with", "10.33.2", ...literals]);
+
 });
 
 test("Windows executable lookup accepts the canonical Path environment key", () => {
@@ -224,21 +348,16 @@ test("Windows executable lookup accepts the canonical Path environment key", () 
   );
 });
 
-test("Windows pnpm execution uses ComSpec without reparsing a spaced profile path", () => {
-  assert.deepEqual(
-    resolveLocalCiPnpmInvocation(
-      "C:\\Users\\Mark Bodman\\AppData\\Roaming\\npm\\pnpm.CMD",
-      ["--version"],
-      {
-        platform: "win32",
-        env: { ComSpec: "C:\\Windows\\System32\\cmd.exe" },
-      },
-    ),
-    {
-      command: "C:\\Windows\\System32\\cmd.exe",
-      args: ["/d", "/s", "/c", "pnpm --version"],
-    },
-  );
+test("Windows pnpm execution honors the selected spaced installation path", () => {
+  const fixture = mkdtempSync(join(tmpdir(), "dpf pnpm spaced-"));
+  const script = join(fixture, "pnpm.cjs");
+  writeFileSync(script, "");
+  writeFileSync(join(fixture, "pnpm.cmd"), "");
+  try {
+    assert.deepEqual(resolveLocalCiPnpmInvocation(join(fixture, "pnpm.cmd"), ["--version", "%PATH%"], {
+      platform: "win32", env: {},
+    }), { command: process.execPath, args: [script, "--version", "%PATH%"] });
+  } finally { rmSync(fixture, { recursive: true, force: true }); }
 });
 
 test("local CI keeps an already-matching pnpm without a shim", () => {
@@ -246,19 +365,24 @@ test("local CI keeps an already-matching pnpm without a shim", () => {
   const hostBin = join(fixture, "host-bin");
   mkdirSync(hostBin, { recursive: true });
   const hostPnpm = join(hostBin, "pnpm");
-  writeFileSync(hostPnpm, "#!/bin/sh\necho 10.33.2\n");
+  writeFileSync(hostPnpm, `#!/bin/sh\necho ${PNPM_PINNED_VERSION}\n`);
   chmodSync(hostPnpm, 0o755);
   const originalPath = `${hostBin}${delimiter}/usr/bin:/bin`;
+  const toolchainDir = join(fixture, "toolchain");
 
   const prepared = preparePinnedPnpmEnvironment({
     packageManager: "pnpm@10.33.2",
-    toolchainDir: join(fixture, "toolchain"),
+    toolchainDir,
     env: { PATH: originalPath },
     platform: "darwin",
+    // A host already at the pinned version: the probe answers it directly.
+    spawnSyncImpl: fakePnpmSpawn({ hostVersion: PNPM_PINNED_VERSION }),
   });
 
   assert.equal(prepared.mode, "host-match");
   assert.equal(prepared.env.PATH, originalPath);
+  // host-match must not provision a toolchain at all.
+  assert.equal(existsSync(toolchainDir), false);
 });
 
 // BI-F22B4EEE. `result.status ?? 1` was the defect: a signal death reports
@@ -329,5 +453,25 @@ test("clearStaleStageReceipts actually deletes on disk", () => {
   assert.equal(existsSync(meta), false, "metadata record must not survive into the next run (BI-F22B4EEE)");
   for (const suffix of [".vitest.json", ".typecheck.json", ".build.json"]) {
     assert.equal(existsSync(`${meta}${suffix}`), false, `${suffix} must not survive into the next run`);
+  }
+});
+
+test("a prerequisite the runner could not set up exits as infrastructure, not 1", () => {
+  // Observed 2026-10-02: "required origin/main refresh failed: ... Could not
+  // resolve host" exited 1 and was recorded as a reasonless `failed`.
+  // classifyGateOutcome maps EXIT_RUNNER_PREREQUISITE_UNAVAILABLE to a
+  // blocked_* status; this keeps each network/Docker/disk setup failure on it.
+  const source = readFileSync(cli, "utf8");
+  assert.match(source, /function dieUnavailable\(message\) \{\s*die\(message, EXIT_RUNNER_PREREQUISITE_UNAVAILABLE\);/);
+  for (const prerequisite of [
+    "could not provision ${manifest.postgres.container}",
+    "could not start ${manifest.postgres.container}",
+    "slot PostgreSQL ${manifest.postgres.container} never became ready",
+    "could not create scratch workspace",
+    "required origin/main refresh failed",
+  ]) {
+    const at = source.indexOf(prerequisite);
+    assert.ok(at > 0, `expected the runner to name: ${prerequisite}`);
+    assert.match(source.slice(Math.max(0, at - 40), at), /dieUnavailable\(`$/, `${prerequisite} must exit as infrastructure`);
   }
 });

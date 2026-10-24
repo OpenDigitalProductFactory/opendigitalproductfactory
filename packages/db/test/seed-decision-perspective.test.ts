@@ -24,9 +24,13 @@ describe("buildDecisionPerspectiveSeed", () => {
 });
 
 describe("seedDecisionPerspective", () => {
-  it("upserts the profile, version snapshot, and material rows idempotently", async () => {
+  it.each([
+    null,
+    { autonomyPolicy: { workroomPostureDefault: { actionBoundary: "preauthorized" } } },
+  ])("upserts seed rows while preserving existing operator policy: %j", async (existing) => {
     const db = {
       decisionPerspectiveProfile: {
+        findUnique: vi.fn().mockResolvedValue(existing),
         upsert: vi.fn().mockResolvedValue({}),
         update: vi.fn().mockResolvedValue({}),
       },
@@ -42,9 +46,19 @@ describe("seedDecisionPerspective", () => {
 
     expect(result.profileId).toBe(MARK_DPF_PLATFORM_PROFILE_ID);
     expect(result.materialCount).toBeGreaterThanOrEqual(5);
+    expect(db.decisionPerspectiveProfile.findUnique).toHaveBeenCalledWith({
+      where: { profileId: MARK_DPF_PLATFORM_PROFILE_ID },
+      select: { autonomyPolicy: true },
+    });
     expect(db.decisionPerspectiveProfile.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { profileId: MARK_DPF_PLATFORM_PROFILE_ID },
+        update: expect.objectContaining({
+          autonomyPolicy: {
+            ...buildDecisionPerspectiveSeed().profile.autonomyPolicy,
+            ...existing?.autonomyPolicy,
+          },
+        }),
       }),
     );
     expect(db.decisionPerspectiveProfileVersion.upsert).toHaveBeenCalledWith(

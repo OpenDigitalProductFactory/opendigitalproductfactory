@@ -32,9 +32,11 @@ describe("AdminTabNav", () => {
 
     expect(html).toContain('href="/admin"');
     expect(html).toContain(">Access<");
-    expect(html).toContain(">Organization<");
-    expect(html).toContain(">Configuration<");
-    expect(html).toContain(">Advanced<");
+    expect(html).toContain(">Organization &amp; settings<");
+    expect(html).toContain(">Contributing &amp; GitHub<");
+    expect(html).toContain(">Health &amp; recovery<");
+    // EP-2FB6C0CC (BI-3ED24FA2): the "Advanced" holding tab is retired.
+    expect(html).not.toContain(">Advanced<");
     expect(html).not.toContain(">Portal<");
     expect(html).not.toContain(">Reference Data<");
     expect(html).not.toContain(">Prompts<");
@@ -47,7 +49,7 @@ describe("AdminTabNav", () => {
     pathname = "/admin/operating-hours";
     const html = renderToStaticMarkup(<AdminTabNav />);
 
-    expect(html).toContain(">Organization<");
+    expect(html).toContain(">Organization &amp; settings<");
     expect(html).toContain('href="/admin/settings"');
     expect(html).toContain('href="/admin/reference-data"');
     expect(html).toContain('href="/admin/business-models"');
@@ -57,13 +59,13 @@ describe("AdminTabNav", () => {
     expect(html).not.toContain('href="/admin/prompts"');
   });
 
-  it("shows only advanced sub-navigation for prompt administration routes", () => {
+  it("keeps legacy prompt administration routes inside the contributing family", () => {
     pathname = "/admin/prompts";
     const html = renderToStaticMarkup(<AdminTabNav />);
 
     expect(html).toContain('href="/admin/platform-development"');
-    expect(html).toContain('href="/admin/issue-reports"');
-    expect(html).toContain('href="/admin/diagnostics"');
+    expect(html).toContain('href="/admin/hive"');
+    expect(html).not.toContain('href="/admin/issue-reports"');
     expect(html).not.toContain('href="/admin/prompts"');
     expect(html).not.toContain('href="/admin/skills"');
     expect(html).not.toContain(">Prompts<");

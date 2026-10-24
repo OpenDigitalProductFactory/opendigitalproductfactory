@@ -15,8 +15,9 @@ import {
   DATA_MODEL_MIRROR_TASK_ID,
   DATA_MODEL_MIRROR_TASK_TITLE,
 } from "./data-model-mirror-config";
+import { findTaskOwnerUserId } from "./install-work-owner";
 
-type ScheduledTaskSeedClient = Pick<PrismaClient, "user" | "scheduledAgentTask" | "scheduledJob">;
+type ScheduledTaskSeedClient = Pick<PrismaClient, "user" | "portfolio" | "organization" | "principalAlias" | "scheduledAgentTask" | "scheduledJob">;
 
 function computeNextCronRun(cronExpr: string, from: Date): Date {
   const parts = cronExpr.trim().split(/\s+/);
@@ -40,12 +41,8 @@ export async function ensureDataModelMirrorScheduledTask(
   prisma: ScheduledTaskSeedClient,
   now: Date = new Date(),
 ): Promise<{ created: boolean }> {
-  const owner = await prisma.user.findFirst({
-    where: { isSuperuser: true },
-    orderBy: { createdAt: "asc" },
-    select: { id: true },
-  });
-  if (!owner) {
+  const ownerId = await findTaskOwnerUserId(prisma);
+  if (!ownerId) {
     throw new Error("seed: no superuser found - cannot seed data-model mirror scheduled task");
   }
 
@@ -57,6 +54,7 @@ export async function ensureDataModelMirrorScheduledTask(
     select: { taskId: true, nextRunAt: true },
   });
 
+  // An existing task keeps its owner: an account handover must survive re-seeding (BI-ED055D45).
   if (existing) {
     await prisma.scheduledAgentTask.update({
       where: { taskId: DATA_MODEL_MIRROR_TASK_ID },
@@ -67,7 +65,6 @@ export async function ensureDataModelMirrorScheduledTask(
         routeContext: DATA_MODEL_MIRROR_ROUTE_CONTEXT,
         schedule: DATA_MODEL_MIRROR_SCHEDULE,
         timezone,
-        ownerUserId: owner.id,
         isActive: true,
         nextRunAt: existing.nextRunAt ?? nextRunAt,
       },
@@ -82,7 +79,7 @@ export async function ensureDataModelMirrorScheduledTask(
         routeContext: DATA_MODEL_MIRROR_ROUTE_CONTEXT,
         schedule: DATA_MODEL_MIRROR_SCHEDULE,
         timezone,
-        ownerUserId: owner.id,
+        ownerUserId: ownerId,
         nextRunAt,
       },
     });

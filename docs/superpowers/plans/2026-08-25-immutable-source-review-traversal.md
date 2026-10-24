@@ -174,6 +174,17 @@ This phase extends BI-DE58CFE8 on Workroom `WC-14EA9122` after WordPress complet
 7. Deliver one DCO-signed protected PR, one canonical release, and one governed live upgrade. Require exact served SHA and CAN-TEST.
 8. Resume only the preserved WordPress TaskRun on a server-authorized identical-key path. Accept only genuine immutable reads plus governed `record_initiative_evidence` execution and objective-mapping receipt, then close BI-A45D744A and WC-04941646 through their normal server gates.
 
+### Phase 12 correction — require adapter enforcement (2026-09-06)
+
+Live TaskRun `...7ECDD7A53D18` disproved step 4's assumption: a governed MCP
+session and exact sole-writer surface still allowed two prose-only Claude CLI
+turns. The corrected plan is canonical in
+`docs/superpowers/plans/2026-09-06-required-terminal-writer-enforcement.md`.
+Known non-enforcing CLI adapters must now refuse before inference with
+`required-terminal-writer-not-enforceable`; only a fallback adapter with a
+server-verifiable required-call mechanism may execute the turn. The outer policy
+remains a receipt integrity backstop, not the adapter's enforcement mechanism.
+
 ## Phase 13 — Bootstrap a resumable TaskRun that has no reader rows
 
 This phase extends BI-DE58CFE8 on Workroom `WC-14EA9122` after Portfolio Advisor TaskRun `TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-634F7FF63BF8` persisted an explicit missing-terminal-writer wait before any reader or writer tool execution. WWMD decision `DI-6A51BE456F49` keeps the exact TaskRun and request digest authoritative.
@@ -252,3 +263,37 @@ This phase extends BI-DE58CFE8 after BI-FFBDDD96 research TaskRun `TR-MCP-Y210Nm
 | Deliverable | Requirement refs | Flow refs | Contract refs | Verification refs |
 | --- | --- | --- | --- | --- |
 | Same-identity terminal-writer resumability | OBJ-DE-001, OBJ-DE-002, OBJ-DE-003, OBJ-DE-004, OBJ-DE-005 | Phases 8-15 | BI-DE58CFE8 objective and acceptance contract; initiative-review terminal tool policy; persisted reader-history extension; failed reader-attempt isolation extension; CLI terminal-writer dispatch extension; zero-reader same-TaskRun recovery extension; expired proposal same-TaskRun recovery extension; executor postcondition | AC-DE-001, AC-DE-002, AC-DE-003, AC-DE-004, AC-DE-005, AC-DE-006, AC-DE-007; phase RED/GREEN suites; protected PR and merge-group checks; canonical release; served-SHA CAN-TEST; genuine same-TaskRun research writer receipt |
+
+## Phase 16 — Require complete immutable traversal before disposition
+
+This phase implements the accepted `2026-09-04-initiative-review-complete-pagination-amendment.md` after BI-7111AF0C reproduced a reviewer treating page 1 of 6 as complete evidence.
+
+Traceability for the atomic deliverable:
+
+- Requirement: `OBJ-REVIEW-COMPLETE`
+- Contracts: `terminal-progress-metadata`, `terminal-writer-admission`
+- Flow: `complete-immutable-traversal`
+- Verification: `AC-PARTIAL`, `AC-COMPLETE`, `AC-FAIL-CLOSED`, `AC-COMPAT`
+
+1. Add RED policy tests for partial `hasMore=true` reads, cursor continuation, a contiguous terminal page, a premature writer, gaps, identity conflicts, and exhausted pagination.
+2. Carry only bounded pagination/identity metadata from successful immutable-reader results into terminal progress; do not expose source bytes or weaken persisted audit redaction.
+3. Keep the bound reader available and withhold/refuse the writer until an ordered attempt begins at the artifact start and reaches `hasMore=false`.
+4. Preserve search as exploration only; it cannot establish complete-artifact review for initiative gates.
+5. Add an agent-loop fixture proving a six-page artifact reaches the last page before exactly the writer is exposed, while incomplete traversal creates no receipt.
+6. Run the focused terminal-policy/loop/submission suites, typecheck, preflight, fresh semantic review, exact-tree local CI, and the normal DCO/protected-merge path.
+
+## Phase 17 — Recover rejected initial cursor attempts
+
+BI-CAP-EF2B04BB / WC-AB6CDAB6 extends AC-DE-003/006 for the original routing
+plan TaskRun ending `2C1344595816`. Its five exact-bound reads failed
+`invalid_cursor`; no successful reader or native plan receipt exists.
+
+1. Reproduce the five rejected cursors before implementation; retain their audit rows.
+2. Reuse hydration's historical authority validation to classify bootstrap eligibility. Accept only rejected initial cursors with no successful evidence; preserve denial, mismatch, malformed result, identity/order and continuation refusals.
+3. Reuse the existing reservation, governed line-one read, persisted-row requery and coherent hydration. Failed history never substitutes for a new successful task-owned read.
+4. Verify failed-only hydration, completed exits, successful writers, live proposals, request binding, attempt limits and fresh approval remain closed. Refactor under the passing regression and run graph-linked plus adjacent submission/context/policy tests and types.
+5. Run source/style/docs guards, exact-tree shared CI and independent assessment; publish one DCO-signed protected PR and merge through the queue. Preserve native review infrastructure failures as inconclusive.
+6. Use the coordinated canonical advance and exact served readiness before one supported same-identity replay. Require actual grounded writer, current approval and native receipt before routing implementation admission.
+
+Rollback reverts bootstrap eligibility and its tests together; failed audit rows
+and original review identity are retained. No schema or grant changes are needed.

@@ -1,0 +1,154 @@
+import { prisma, type Prisma } from "@dpf/db";
+import { hasExecutionUncertainty } from "./shared/execution-uncertainty";
+import { reserveTaskRunGenerationWorking } from "./observability/heartbeat";
+import { INITIATIVE_CORRECTABLE_ERRORS } from "./backlog/initiative-readiness/disposition-contract";
+import { remoteTaskRequestMatches } from "./mcp-task-capacity-contract";
+import type { ExistingRemoteTask } from "./mcp-task-submit-types";
+import type { RemoteTaskSubmitParams } from "./mcp-task-submit-params";
+import { IMMUTABLE_PAGE_READER_TOOLS, type createInitiativeReviewTerminalToolPolicy } from "./tak/terminal-tool-policy";
+import { needsTerminalReaderBootstrap, type PersistedTerminalReaderExecution } from "./mcp-task-terminal-writer-context";
+import { recoverTerminalWriterEscalation } from "./mcp-task-terminal-writer-escalation";
+import { parseTerminalWriterWait, type TerminalWriterWait } from "./mcp-task-replay-projection";
+function optionalString(value: unknown): string | null { return typeof value === "string" && value.trim() ? value.trim() : null; }
+
+/**
+ * The attempt a resumed terminal-writer wait runs as. BI-50B0C471: a wait the
+ * writer never caused (a capacity deferral after banked reads) resumes at the
+ * same attempt; only a real writer no-show spends one of the bounded attempts.
+ */
+export function nextTerminalWriterAttempt(existingWait: TerminalWriterWait | null): number {
+  if (!existingWait) return 2;
+  return existingWait.attempt + (existingWait.capacityDeferred ? 0 : 1);
+}
+
+export async function persistedTerminalReaderExecutions(
+  taskRunId: string,
+): Promise<PersistedTerminalReaderExecution[]> {
+  return prisma.toolExecution.findMany({
+    where: {
+      taskRunId,
+      toolName: { in: [...IMMUTABLE_PAGE_READER_TOOLS] },
+    },
+    orderBy: { createdAt: "asc" },
+    select: {
+      id: true,
+      toolName: true,
+      parameters: true,
+      result: true,
+      success: true,
+      createdAt: true,
+    },
+  }) as Promise<PersistedTerminalReaderExecution[]>;
+}
+function approvalEnvelopeIdFromWriterAttempt(result: unknown): string | null {
+  if (!result || typeof result !== "object" || Array.isArray(result)) return null;
+  const row = result as Record<string, unknown>;
+  if (row["success"] !== false || row["error"] !== "approval_required") return null;
+  const data = row["data"];
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+  return optionalString((data as Record<string, unknown>)["envelopeId"]);
+}
+
+export async function reserveTerminalWriterReplay(input: {
+  existing: ExistingRemoteTask;
+  parsed: RemoteTaskSubmitParams;
+  terminalToolPolicy: NonNullable<ReturnType<typeof createInitiativeReviewTerminalToolPolicy>>;
+}): Promise<{
+  wait: TerminalWriterWait;
+  readerExecutions: PersistedTerminalReaderExecution[];
+  bootstrapReaderEvidence: boolean;
+} | null> {
+  if (!remoteTaskRequestMatches(input.existing.a2aMetadata, input.parsed)) return null;
+  if (hasExecutionUncertainty(input.existing.progressPayload)) return null;
+  if (recoverTerminalWriterEscalation(input.existing.progressPayload)) return null;
+
+  const existingWait = parseTerminalWriterWait(input.existing.progressPayload);
+  const isProjectedWait = existingWait !== null
+    && ["input-required", "stalled", "failed"].includes(input.existing.status);
+  // A legacy completed row with no receipt/exit evidence cannot prove that a
+  // second execution is safe. Verified existing receipts settle before this lane.
+  if (!isProjectedWait) return null;
+  if (existingWait && existingWait.writerToolName !== input.terminalToolPolicy.writerToolName) return null;
+
+  const [readerExecutions, successfulWriter, writerAttempt] = await Promise.all([
+    persistedTerminalReaderExecutions(input.existing.taskRunId),
+    prisma.toolExecution.findFirst({
+      where: {
+        taskRunId: input.existing.taskRunId,
+        toolName: input.terminalToolPolicy.writerToolName,
+        success: true,
+      },
+      select: { id: true },
+    }),
+    prisma.toolExecution.findFirst({
+      where: {
+        taskRunId: input.existing.taskRunId,
+        toolName: input.terminalToolPolicy.writerToolName,
+      },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, success: true, result: true, parameters: true },
+    }),
+  ]);
+  if (successfulWriter) return null;
+  const bootstrapReaderEvidence = needsTerminalReaderBootstrap(input.terminalToolPolicy, readerExecutions);
+
+  if (writerAttempt) {
+    const proposalEnvelopeId = writerAttempt.success === false
+      ? approvalEnvelopeIdFromWriterAttempt(writerAttempt.result)
+      : null;
+    if (proposalEnvelopeId) {
+      const declinedProposalEnvelope = await prisma.coworkerActionEnvelope.findFirst({
+        where: {
+          id: proposalEnvelopeId,
+          taskRunId: input.existing.taskRunId,
+          manifestActionId: input.terminalToolPolicy.writerToolName,
+          status: "declined",
+        },
+        select: { id: true },
+      });
+      if (declinedProposalEnvelope?.id !== proposalEnvelopeId) return null;
+    } else if (
+      writerAttempt.success !== false
+      || !existingWait
+      || !["input-required", "stalled", "failed"].includes(input.existing.status)
+    ) return null;
+  }
+
+  const progress = input.existing.progressPayload && typeof input.existing.progressPayload === "object"
+    && !Array.isArray(input.existing.progressPayload)
+    ? input.existing.progressPayload as Record<string, unknown>
+    : {};
+  const now = new Date().toISOString();
+  const wait: TerminalWriterWait = {
+    schemaVersion: 1,
+    kind: "missing-terminal-writer",
+    writerToolName: input.terminalToolPolicy.writerToolName,
+    resumeMode: "same-taskrun",
+    attempt: nextTerminalWriterAttempt(existingWait),
+    observedAt: now,
+    // BI-C35576A9: a re-dispatch has not run yet, so it cannot claim a contract;
+    // carry forward what the last real dispatch recorded, if anything.
+    ...(existingWait?.dispatchContract ? { dispatchContract: existingWait.dispatchContract } : {}),
+    ...(writerAttempt?.success === false && writerAttempt.result && typeof writerAttempt.result === "object"
+      && !Array.isArray(writerAttempt.result)
+      && INITIATIVE_CORRECTABLE_ERRORS.has(String((writerAttempt.result as Record<string, unknown>).error ?? ""))
+      ? { validationFailure: {
+          error: String((writerAttempt.result as Record<string, unknown>).error),
+          message: String((writerAttempt.result as Record<string, unknown>).message ?? "Receipt validation failed."),
+          ...(writerAttempt.parameters ? { proposal: writerAttempt.parameters } : {}),
+        } } : {}),
+  };
+  const reserved = await reserveTaskRunGenerationWorking({
+    taskRunId: input.existing.taskRunId,
+    expectedStatus: input.existing.status,
+    updatedAt: input.existing.updatedAt,
+    progressPayload: {
+      ...progress,
+      terminalWriterWait: wait,
+      resumeReservedAt: now,
+    } as Prisma.InputJsonValue,
+  });
+  return reserved
+    ? { wait, readerExecutions, bootstrapReaderEvidence }
+    : null;
+}

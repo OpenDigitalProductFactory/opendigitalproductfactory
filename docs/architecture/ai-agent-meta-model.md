@@ -113,6 +113,23 @@ Three layers, each with a distinct job:
    Authorization resolves on the `Principal`; the alias kind tells the platform which surface authenticated. (AGENTS.md §11; `apps/web/lib/identity/principal-linking.ts` → `syncAgentPrincipal`.)
 3. **GAID + AIDoc** — **GAID** (*Global AI Agent Identification and Governance Framework*) is the normative naming/identity/traceability standard: `docs/architecture/GAID.md`. GAID format is `gaid:<scope>:<issuer-prefix>:<agent-local-id>` (e.g. `gaid:priv:dpf.internal:coo-orchestrator`). DPF currently implements the **private** profile (`GAID-Private`); the AIDoc's `exposure_state` is always `"private"` today. The **AIDoc** (Agent Identity Document) is the projected, portable summary of an agent — see §4.
 
+The same Principal spine governs human sessions. A workforce `User` or customer
+`CustomerContact` remains the credential/profile holder, but a verified password
+or social-provider assertion cannot issue a session until its canonical active
+`Principal` authorizes it. `PrincipalAlias` carries the typed `user`,
+`customer_contact`, `partner_contact`, and lower-case `email` joins; conflicts
+fail closed instead of selecting one identity. Request authorization reloads the
+Principal and current customer/account state, so deactivation or merge state
+invalidates an existing session without treating JWT claims as authority.
+
+Where a record names a responsible person by relational `Principal.id` — the
+organization's accountable owner (`Organization.topAccountablePrincipalId`,
+set at first-install setup and changed under Admin › Settings) or a Workroom
+owner — a `User` resolves through `resolveActiveHumanPrincipalRecordIdForUser`
+in `apps/web/lib/identity/principal-linking.ts`. It answers only with an
+active `kind="human"` principal, so an agent or deactivated identity sharing
+the alias can never become the accountable person.
+
 GAID is deliberately complementary to **TAK** (Trusted AI Kernel): *GAID says who an agent is and what claims can be made about it; TAK says how a trustworthy runtime must govern it.* See `docs/architecture/trusted-ai-kernel.md` and `docs/architecture/agent-standards-dpf-conformance.md`.
 
 ```mermaid
@@ -167,7 +184,7 @@ In the registry this is the `config_profile.model_binding` block (`model_id`, `p
 - **MCP servers** are first-class records: **`McpServer`** (`serverId`, `transport`, `category`, `status`, `healthStatus`, …) with discovered **`McpServerTool`** rows (`toolName`, `inputSchema`, `isEnabled`). The local DPF server (`serverId="dpf"`) exposes the platform tool catalog over JSON-RPC 2.0 at `apps/web/app/api/mcp/v1/route.ts`.
 - **Tool grants** — an agent's *permitted* surface is `AgentToolGrant` rows (`grantKey`, e.g. `registry_read`, `backlog_write`). Grants are coarse keys, not raw tool names.
 - **Attachment** — `getAvailableTools()` (`apps/web/lib/mcp-tools.ts`) intersects **user role capability ∩ agent grants**, applies `TOOL_TO_GRANTS` + `GRANT_IMPLICATIONS` (`apps/web/lib/agent-grants.ts`), adds the `COWORKER_READ_BASELINE_GRANTS` every coworker gets, then unions in MCP server tools under the same gating. Default-deny: an unmapped tool is refused.
-- **Execution-time authority** — every coworker call passes through `governedExecuteTool()`, which evaluates the current `EffectiveAuthContext`, coworker grant, `DelegationChain` attenuation, route/record scope, external-connection state, sensitivity clearance, masking obligations, policy version, and HITL policy. Prompt text, model routing fallback, and provider cost are deliberately not authority inputs. The outcome is `allow`, `deny`, or `require-approval`; every outcome writes a privacy-safe `AuthorizationDecisionLog` before execution. A missing authority context or failed decision-log write fails closed.
+- **Execution-time authority** — every coworker call passes through `governedExecuteTool()`, which evaluates the current `EffectiveAuthContext`, coworker grant, `DelegationChain` attenuation, route/record scope, external-connection state, sensitivity clearance, masking obligations, policy version, and HITL policy. Prompt text, model routing fallback, and provider cost are deliberately not authority inputs. The outcome is `allow`, `deny`, or `require-approval`; every outcome writes a privacy-safe `AuthorizationDecisionLog` before execution. A missing authority context or failed decision-log write fails closed. For an outward, authority or irreversible call, the monitor also verifies the permit a gate minted (GPP Phase 2). It refuses with `permit_required` (an `awaiting-input` hold naming the gate to pass) only under a binding promoted in the checked-in `GPP_BINDING_ENFORCEMENT` table (`apps/web/lib/gpp/binding-enforcement.ts`). No binding is promoted yet, so today the permit verdict is recorded and never changes the outcome.
 - **External Task delivery** — an ordinary MCP task submission persists its `TaskRun` and immutable request/authentication binding, enqueues deterministic background execution, and returns the durable task handle without holding the HTTP request open. The same authenticated Streamable HTTP endpoint supports GET/SSE and publishes `notifications/tasks/status` from committed task state. Notifications are latency hints, not authority or truth: reconnecting and notification-blind clients recover through `tasks/get` / `tasks/list`, and a scheduled reconciler re-enqueues durable pending work after process or transport loss.
 
 In the registry this is `config_profile.tool_grants` and `execution_runtime`.
@@ -344,3 +361,24 @@ The DPF-specific conformance position is in `docs/architecture/agent-standards-d
 - **Prompt-context generation** — `AgentPromptContext.{perspective,heuristics,interpretiveModel}` are hand-seeded; there is no auto-sync to capability changes.
 - **Agent versioning** — no formal major/minor versioning, deprecation, or staged-rollout policy beyond `lifecycleStage`.
 - **Dynamic MCP binding** — tool grants are static at seed time; runtime discovery/binding of new MCP servers to an agent is not yet modelled.
+
+Progressive discovery does not change those grants. `load_tools` classifies an
+empty result as an unknown name, known-but-ungranted tool, intent miss, or
+reviewer-route requirement. Reviewer-only initiative writers remain separate
+principals and are entered through the server-issued route returned by
+`get_backlog_item`; discovery never delegates their authority to the author.
+
+
+Explicit original-review recovery preserves immutable task identity and records
+current execution authority separately. Governed tool preflight rechecks that
+authority before each recovered review call; approved calls recheck at execution
+so refusal closes the approval correctly. Discovery supplies the exact locator,
+never an authority grant. See the [original-review recovery procedure](mcp-tool-authorization-runbook.md#recovering-an-original-initiative-review-after-a-connection-change)
+for eligibility, refusal and receipt requirements.
+
+Original-review evidence collection is a separate read path. `tasks/result` and
+the issuer's reconciliation refusal project existing writer receipts and native
+observations under current original-owner read scopes and Workroom content
+access. The bounded result retains request, attempt and checkpoint provenance;
+missing child-closure or late-effect proof stays unknown. Reading a result does
+not heal task state, create a verdict or authorize replay.

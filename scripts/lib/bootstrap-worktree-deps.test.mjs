@@ -2,9 +2,11 @@
 // Node built-in test runner (no node_modules needed): node --test
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { execFileSync } from "node:child_process";
+import { scrubGitRepoLocationEnv } from "./git-hook-env.mjs";
 import {
   classifyReadiness,
   readinessReason,
@@ -18,6 +20,8 @@ import {
   classifyIgnoredBuilds,
   policyDeniedBuilds,
   dependencyPolicyReviewKey,
+  installPredatesLockfile,
+  nodeModulesIsLinked,
 } from "./bootstrap-worktree-deps.mjs";
 
 test("pnpm 11 delegates to the repository pin instead of overriding it", () => {
@@ -51,10 +55,12 @@ test("ignored-build readiness fails closed when pnpm reports an unclassified scr
   assert.deepEqual(classifyIgnoredBuilds("Automatically ignored builds during installation: None"), {
     ok: true,
     packages: [],
+    indeterminate: false,
   });
   assert.deepEqual(classifyIgnoredBuilds("Automatically ignored builds during installation:\n  sharp@1.2.3"), {
     ok: false,
     packages: ["sharp@1.2.3"],
+    indeterminate: false,
   });
 });
 
@@ -70,7 +76,7 @@ test("ignored-build parser ignores the Explicitly-ignored section and hint lines
     "Explicitly ignored package builds (via pnpm.ignoredBuiltDependencies):",
     "  @scarf/scarf",
   ].join("\n");
-  assert.deepEqual(classifyIgnoredBuilds(classified), { ok: true, packages: [] });
+  assert.deepEqual(classifyIgnoredBuilds(classified), { ok: true, packages: [], indeterminate: false });
 
   // Before classification: the build sits under "Automatically ignored" and pnpm
   // appends advisory "hint:" lines. Flag the package, never the hints.
@@ -80,7 +86,7 @@ test("ignored-build parser ignores the Explicitly-ignored section and hint lines
     "hint: To allow the execution of build scripts, add its name to \"pnpm.onlyBuiltDependencies\".",
     "hint: If you don't want to build a package, add it to the \"pnpm.ignoredBuiltDependencies\" list.",
   ].join("\n");
-  assert.deepEqual(classifyIgnoredBuilds(unclassified), { ok: false, packages: ["@scarf/scarf"] });
+  assert.deepEqual(classifyIgnoredBuilds(unclassified), { ok: false, packages: ["@scarf/scarf"], indeterminate: false });
 });
 
 test("a build denied by allowBuilds policy is classified, not unclassified (BI-6945BEEF)", () => {
@@ -100,16 +106,17 @@ test("a build denied by allowBuilds policy is classified, not unclassified (BI-6
   assert.deepEqual(classifyIgnoredBuilds(stdout), {
     ok: false,
     packages: ["puppeteer", "unrs-resolver", "protobufjs"],
+    indeterminate: false,
   });
 
   const denied = new Set(["puppeteer", "unrs-resolver", "protobufjs"]);
-  assert.deepEqual(classifyIgnoredBuilds(stdout, denied), { ok: true, packages: [] });
+  assert.deepEqual(classifyIgnoredBuilds(stdout, denied), { ok: true, packages: [], indeterminate: false });
 
   // A package with no recorded decision is still flagged even when siblings are
   // decided — the gate must not go blanket-permissive.
   assert.deepEqual(
     classifyIgnoredBuilds(`${stdout}\n  brand-new-dep`, denied),
-    { ok: false, packages: ["brand-new-dep"] },
+    { ok: false, packages: ["brand-new-dep"], indeterminate: false },
   );
 });
 
@@ -246,6 +253,9 @@ test("the banner names the tree, the gaps, and forbids claiming an unrun gate", 
       missing: [{ label: "root node_modules", state: "absent", forbids: "any pnpm script" }],
     },
     "D:/DPF-worktrees/topic",
+    // BI-5DF74F0D: the warning is now a function of the shape on disk, so this
+    // case states the shape it was written about — a junctioned worktree.
+    { lstat: () => ({ isSymbolicLink: () => true }) },
   );
   assert.match(lines[0], /SOURCE-ONLY/);
   assert.ok(lines.some((l) => l.includes("D:/DPF-worktrees/topic")));
@@ -391,6 +401,74 @@ test("--force reinstalls even when the probe already reports compile-ready", () 
   assert.ok(calls.some((c) => c.includes("install")), "force must always attempt the install");
 });
 
+// ── BI-7DD16424: a STALE non-pnpm node_modules must not abort the install ────
+//
+// Observed 2026-10-01 on a reused worktree whose node_modules came from an
+// ad-hoc install on another store (@axe-core, @playwright, docx, tsx only).
+// pnpm saw an incompatible modules dir, wanted to purge it, asked for
+// confirmation, and — with no TTY under pregate's auto-heal — aborted with
+// ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY. The bootstrap reported
+// managed_install_failed and the tree stayed source-only. The purge is the
+// remedy when node_modules is this worktree's own directory; it is the
+// 2026-06-19 wipe when node_modules is a link into another tree.
+
+const PURGE_WITHOUT_PROMPT = "--config.confirm-modules-purge=false";
+
+function installCall(calls) {
+  return calls.find((c) => / install /.test(` ${c} `));
+}
+
+test("a stale node_modules DIRECTORY is purged without a TTY prompt (BI-7DD16424)", () => {
+  const sandbox = mkdtempSync(join(tmpdir(), "dpf-stale-wt-"));
+  try {
+    for (const pkg of ["@axe-core/playwright", "@playwright/test", "docx", "tsx"]) {
+      mkdirSync(join(sandbox, "node_modules", pkg), { recursive: true });
+    }
+    writeFileSync(join(sandbox, "node_modules", ".modules.yaml"), "storeDir: /elsewhere/store/v10\n");
+    const calls = [];
+    bootstrapWorktreeDeps(sandbox, { execute: recordingExecute(calls) });
+    const install = installCall(calls);
+    assert.ok(install, `the install must run; commands were: ${JSON.stringify(calls)}`);
+    assert.ok(
+      install.includes(PURGE_WITHOUT_PROMPT),
+      `a non-interactive install must not stop at pnpm's purge prompt; ran: ${install}`,
+    );
+  } finally {
+    rmSync(sandbox, { recursive: true, force: true });
+  }
+});
+
+test("an ABSENT node_modules installs with the purge prompt disabled too (nothing to purge)", () => {
+  const sandbox = mkdtempSync(join(tmpdir(), "dpf-empty-wt-"));
+  try {
+    const calls = [];
+    bootstrapWorktreeDeps(sandbox, { execute: recordingExecute(calls) });
+    assert.ok(installCall(calls)?.includes(PURGE_WITHOUT_PROMPT));
+  } finally {
+    rmSync(sandbox, { recursive: true, force: true });
+  }
+});
+
+test("a node_modules that is a LINK is named and not installed through, so the link target survives (BI-7DD16424, BI-C61C8ADD)", () => {
+  const sandbox = mkdtempSync(join(tmpdir(), "dpf-linked-wt-"));
+  try {
+    const rootClone = join(sandbox, "root-clone");
+    const worktree = join(sandbox, "worktree");
+    mkdirSync(join(rootClone, "node_modules", "keep-me"), { recursive: true });
+    mkdirSync(worktree);
+    // "junction" is honoured on Windows and ignored elsewhere — the real shape on both.
+    symlinkSync(join(rootClone, "node_modules"), join(worktree, "node_modules"), "junction");
+    const calls = [];
+    const result = bootstrapWorktreeDeps(worktree, { execute: recordingExecute(calls) });
+    assert.equal(installCall(calls), undefined, `a junctioned node_modules must not run pnpm install; commands were: ${JSON.stringify(calls)}`);
+    assert.equal(result.status, "source-only");
+    assert.equal(result.reason, "node_modules_junction");
+    assert.ok(existsSync(join(rootClone, "node_modules", "keep-me")));
+  } finally {
+    rmSync(sandbox, { recursive: true, force: true });
+  }
+});
+
 test("the install decision is driven by measured readiness, not by existsSync", () => {
   // The regression asserted at the source: gating on the bare existence of
   // node_modules is what made a partial tree permanently unbootstrappable.
@@ -401,4 +479,266 @@ test("the install decision is driven by measured readiness, not by existsSync", 
     .filter((line) => !line.trimStart().startsWith("//") && !line.trimStart().startsWith("*"))
     .filter((line) => /if\s*\(\s*!exists\s*\(/.test(line));
   assert.deepEqual(offending, [], "bootstrapWorktreeDeps must gate its install on probeWorktreeReadiness, not existsSync");
+});
+
+test("pnpm saying it cannot answer is not a package nobody classified (BI-5318366C)", () => {
+  // pnpm prints this INSTEAD of a list when node_modules/.modules.yaml carries no
+  // `ignoredBuilds` key, which is what an install that links nothing new leaves
+  // behind. Read as a package name it invented a dependency called "Cannot
+  // identify as no node_modules found" and took every worktree sharing that
+  // node_modules to SOURCE-ONLY at once, with the fabricated name as the only clue.
+  const stdout = [
+    "Automatically ignored builds during installation:",
+    "  Cannot identify as no node_modules found",
+    "",
+    "Explicitly ignored package builds (via pnpm.ignoredBuiltDependencies):",
+    "  @scarf/scarf",
+    "  protobufjs",
+  ].join(String.fromCharCode(10));
+
+  const result = classifyIgnoredBuilds(stdout);
+
+  // Nothing to classify, and nobody to name.
+  assert.deepEqual(result.packages, []);
+  // Still fails closed: an unreadable record does not prove the tree is clean.
+  assert.equal(result.ok, false);
+  // But the caller can now say WHICH of the two it hit.
+  assert.equal(result.indeterminate, true);
+});
+
+test("an unreadable build record still flags a real unclassified build beside it", () => {
+  // Fail-closed must not become fail-blind: if pnpm manages to name a package,
+  // that package is still unclassified whatever else the section says.
+  const result = classifyIgnoredBuilds([
+    "Automatically ignored builds during installation:",
+    "  Cannot identify as no node_modules found",
+    "  brand-new-dep",
+  ].join(String.fromCharCode(10)));
+
+  assert.deepEqual(result.packages, ["brand-new-dep"]);
+  assert.equal(result.ok, false);
+  assert.equal(result.indeterminate, true);
+});
+
+test("readiness names an unreadable build record and its remedy, not a phantom package (BI-5318366C)", () => {
+  const sentinel = [
+    "Automatically ignored builds during installation:",
+    "  Cannot identify as no node_modules found",
+  ].join(String.fromCharCode(10));
+
+  const result = probeWorktreeReadiness("/wt", {
+    artifactDeps: { exists: () => true, readdir: () => ["something"] },
+    linkCheckDeps: { readdir: () => [], realpath: () => null },
+    execute: (cmd, args) => {
+      const arg = args?.[0] ?? "";
+      if (arg === "ignored-builds") return { ok: true, status: 0, stdout: sentinel, stderr: "" };
+      if (cmd === "git") return { ok: true, status: 0, stdout: "a".repeat(40), stderr: "" };
+      return { ok: true, status: 0, stdout: "10.33.2", stderr: "" };
+    },
+  });
+
+  // Fails closed, as it must: nothing here proves the tree is clean.
+  assert.equal(result.status, "source-only");
+  // But it names the state and the way out, instead of a dependency that does
+  // not exist. Reading the diagnostic as a package took a whole host to
+  // SOURCE-ONLY with a fabricated name as the only clue.
+  assert.match(result.reason, /^build_record_unreadable:/);
+  assert.match(result.reason, /install again/);
+  assert.deepEqual(result.checks.ignoredBuilds, []);
+  // And no dependency-policy review is raised for a decision nobody owes.
+  assert.deepEqual(result.checks.dependencyPolicyReviewKeys, []);
+});
+
+// BI-5DF74F0D: a node_modules that satisfies `pnpm ls` but predates the lockfile
+// reported compile-ready and then failed to typecheck on a dependency it had
+// never installed. The install it needed was skipped precisely because the probe
+// said it was not needed.
+test("an install older than the lockfile is not compile-ready, so the install is not skipped", () => {
+  const stat = (path) => {
+    if (path.endsWith("/pnpm-lock.yaml")) return { mtimeMs: 2_000 };
+    if (path.endsWith("/node_modules/.modules.yaml")) return { mtimeMs: 1_000 };
+    throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+  };
+  assert.equal(installPredatesLockfile("/wt", { stat }), true);
+
+  // Reason text names the state and the one-step remedy.
+  const reason = readinessReason({
+    hasNodeModules: true, depProbeOk: true, gateOk: false, staleWorkspaceLinks: [], installStale: true,
+  });
+  assert.match(reason, /^install_predates_lockfile:/);
+  assert.match(reason, /one managed install reconciles it/);
+});
+
+test("an install newer than the lockfile, or either file absent, is not reported stale", () => {
+  const fresh = (path) => ({ mtimeMs: path.endsWith("/pnpm-lock.yaml") ? 1_000 : 2_000 });
+  assert.equal(installPredatesLockfile("/wt", { stat: fresh }), false);
+
+  // Equal mtimes: the install is not OWED, so not stale.
+  assert.equal(installPredatesLockfile("/wt", { stat: () => ({ mtimeMs: 5 }) }), false);
+
+  // Absent .modules.yaml is the separate build_record state, not staleness —
+  // reporting it here would mask that reason with a misleading one.
+  const noRecord = (path) => {
+    if (path.endsWith("/pnpm-lock.yaml")) return { mtimeMs: 2_000 };
+    throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+  };
+  assert.equal(installPredatesLockfile("/wt", { stat: noRecord }), false);
+  assert.equal(
+    readinessReason({ hasNodeModules: true, depProbeOk: true, gateOk: true, staleWorkspaceLinks: [] }),
+    "managed_bootstrap_ok",
+  );
+});
+
+// BI-5DF74F0D: `--force` ran the install and then failed its own post-install
+// probe on build_record_unreadable, because an install that links nothing new
+// never reaches pnpm's build phase. The documented recovery could not recover.
+test("a missing build record without retained proof is forgiven only after this call installs", () => {
+  const withNoBuildRecord = (buildRecordOptional) => {
+    const sizes = { "ignored-builds": "Automatically ignored builds during installation:\n  Cannot identify as no node_modules found\n" };
+    return probeWorktreeReadiness("/wt", {
+      buildRecordOptional,
+      artifactDeps: { exists: () => true, readdir: () => ["pkg"] },
+      linkCheckDeps: { readdir: () => [], exists: () => true },
+      staleDeps: { stat: () => ({ mtimeMs: 1 }) },
+      execute: (cmd, args) => args?.[0] === "ignored-builds"
+        ? { ok: true, stdout: sizes["ignored-builds"] }
+        : { ok: true, stdout: args?.[0] === "rev-parse" ? "abc123" : "" },
+    });
+  };
+
+  // Strict by default: an untouched tree with no build record stays source-only.
+  assert.match(withNoBuildRecord(undefined).reason, /^build_record_unreadable:/);
+  // Forgiving right after a successful install, which is the only caller that
+  // sets the flag — otherwise --force can never reach compile-ready.
+  assert.doesNotMatch(withNoBuildRecord(true).reason, /^build_record_unreadable:/);
+});
+
+for (const buildRecord of ["None", "Cannot identify as no node_modules found"]) {
+  test(`unsupported proof inputs retain successful one-call readiness: ${buildRecord}`, () => {
+    const sandbox = mkdtempSync(join(tmpdir(), "dpf-bootstrap-hook-"));
+    try {
+      execFileSync("git", ["init", "--quiet", sandbox], { env: scrubGitRepoLocationEnv() });
+      writeFileSync(join(sandbox, "package.json"), '{"packageManager":"pnpm@10.33.2"}');
+      writeFileSync(join(sandbox, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
+      writeFileSync(join(sandbox, "pnpm-workspace.yaml"), "packages: []\n");
+      writeFileSync(join(sandbox, ".pnpmfile.cjs"), "module.exports = {};\n");
+      for (const path of ["node_modules", "apps/web/node_modules", "packages/db/generated"]) {
+        mkdirSync(join(sandbox, path), { recursive: true });
+        writeFileSync(join(sandbox, path, "fixture.txt"), "present");
+      }
+      writeFileSync(join(sandbox, "node_modules/.modules.yaml"), "nodeLinker: hoisted\n");
+      const execute = (cmd, args) => ({ ok: true, status: 0, stderr: "", stdout: args?.[0] === "ignored-builds"
+        ? `Automatically ignored builds during installation:\n  ${buildRecord}\n` : cmd === "git" ? "a".repeat(40) : "10.33.2" });
+      assert.equal(bootstrapWorktreeDeps(sandbox, { execute, force: true }).status, "compile-ready");
+      const next = probeWorktreeReadiness(sandbox, { execute });
+      assert.equal(next.status, buildRecord === "None" ? "compile-ready" : "source-only");
+      assert.equal(next.checks.managedInstallProof, false, "unsupported inputs never acquire reusable proof");
+    } finally {
+      assert.ok(sandbox.startsWith(join(tmpdir(), "dpf-bootstrap-hook-")));
+      rmSync(sandbox, { recursive: true, force: true });
+    }
+  });
+}
+
+test("a successful managed install remains ready on unchanged subsequent probes", () => {
+  const sandbox = mkdtempSync(join(tmpdir(), "dpf-bootstrap-continuity-"));
+  try {
+    execFileSync("git", ["init", "--quiet", sandbox], { env: scrubGitRepoLocationEnv() });
+    writeFileSync(join(sandbox, "package.json"), JSON.stringify({ packageManager: "pnpm@10.33.2" }));
+    writeFileSync(join(sandbox, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
+    writeFileSync(join(sandbox, "pnpm-workspace.yaml"), "packages:\n  - 'apps/*'\nallowBuilds:\n  esbuild: true\n");
+    for (const path of ["node_modules", "apps/web/node_modules", "packages/db/generated"]) {
+      mkdirSync(join(sandbox, path), { recursive: true });
+      writeFileSync(join(sandbox, path, "fixture.txt"), "present");
+    }
+    writeFileSync(join(sandbox, "node_modules/.modules.yaml"), "nodeLinker: hoisted\n");
+    const manifest = join(sandbox, "apps/web/package.json");
+    writeFileSync(manifest, '{"name":"web","dependencies":{}}');
+    let installs = 0;
+    let failInstall = false;
+    let unclassified = false;
+    const execute = (cmd, args) => {
+      if (args?.includes("install")) {
+        installs += 1;
+        if (failInstall) return { ok: false, status: 1, stdout: "", stderr: "install failed" };
+      }
+      return { ok: true, status: 0, stderr: "", stdout: args?.[0] === "ignored-builds"
+        ? `Automatically ignored builds during installation:\n  Cannot identify as no node_modules found\n${unclassified ? "  new-undecided-package\n" : ""}`
+        : cmd === "git" ? "a".repeat(40) : "10.33.2" };
+    };
+    assert.equal(bootstrapWorktreeDeps(sandbox, { execute }).status, "compile-ready");
+    assert.equal(installs, 1);
+    assert.equal(probeWorktreeReadiness(sandbox, { execute }).status, "compile-ready",
+      "the next unchanged probe must retain the successful managed install's qualified evidence");
+    assert.equal(bootstrapWorktreeDeps(sandbox, { execute }).status, "compile-ready");
+    assert.equal(installs, 1, "an unchanged install must not run again");
+    writeFileSync(manifest, '{"name":"web","dependencies":{"new-uninstalled-package":"1.0.0"}}');
+    assert.equal(probeWorktreeReadiness(sandbox, { execute }).status, "source-only", "a workspace dependency change invalidates retained proof");
+    failInstall = true;
+    assert.equal(bootstrapWorktreeDeps(sandbox, { execute }).status, "source-only", "the frozen install's manifest/lock mismatch must not be skipped");
+    failInstall = false;
+    writeFileSync(manifest, '{"name":"web","dependencies":{}}');
+    assert.equal(bootstrapWorktreeDeps(sandbox, { execute }).status, "compile-ready");
+    unclassified = true;
+    assert.equal(probeWorktreeReadiness(sandbox, { execute }).status, "source-only", "retained proof cannot classify an undecided build");
+    unclassified = false;
+    const artifact = join(sandbox, "packages/db/generated/fixture.txt");
+    rmSync(artifact);
+    assert.equal(probeWorktreeReadiness(sandbox, { execute }).status, "source-only", "missing artifacts still fail");
+    writeFileSync(artifact, "present");
+    assert.equal(probeWorktreeReadiness(sandbox, { execute, linkCheckDeps: {
+      readdir: () => ["db"], realpath: () => "/another-worktree/packages/db",
+    } }).status, "source-only", "stale links still fail");
+    failInstall = true;
+    assert.equal(bootstrapWorktreeDeps(sandbox, { execute, force: true }).status, "source-only");
+    assert.equal(probeWorktreeReadiness(sandbox, { execute }).status, "source-only", "a failed forced install cannot reuse old success");
+  } finally {
+    assert.ok(sandbox.startsWith(join(tmpdir(), "dpf-bootstrap-continuity-")));
+    rmSync(sandbox, { recursive: true, force: true });
+  }
+});
+
+// BI-5DF74F0D: the banner told every agent node_modules is "a junction to the
+// root clone" unconditionally. On a worktree whose node_modules is its own
+// directory that is false, and it withdrew the only remedy that works.
+test("the banner's removal warning follows the shape on disk, not the platform it was written for", () => {
+  const readiness = { status: "source-only", reason: "build_record_unreadable:x", missing: [] };
+  const asLink = { lstat: () => ({ isSymbolicLink: () => true }) };
+  const asDirectory = { lstat: () => ({ isSymbolicLink: () => false }) };
+
+  assert.equal(nodeModulesIsLinked("/wt", asLink), true);
+  assert.equal(nodeModulesIsLinked("/wt", asDirectory), false);
+
+  const linked = formatReadinessBanner(readiness, "/wt", asLink).join("\n");
+  assert.match(linked, /never `rm -rf` node_modules/);
+  assert.match(linked, /junction\/symlink into\s+another tree/);
+
+  const owned = formatReadinessBanner(readiness, "/wt", asDirectory).join("\n");
+  assert.doesNotMatch(owned, /never `rm -rf` node_modules/);
+  assert.match(owned, /safe to do/);
+  // Both shapes keep the bare-install prohibition, which is shape-independent.
+  for (const banner of [linked, owned]) assert.match(banner, /Never `pnpm install` bare/);
+
+  // Unknown shape reads as a link: the warning is the safe default.
+  assert.equal(nodeModulesIsLinked("/wt", { lstat: () => { throw new Error("EPERM"); } }), true);
+});
+
+// BI-5DF74F0D: when a tree is BOTH stale and missing a build record, the reason
+// must name the cheaper remedy — one managed install, which the bootstrap now
+// runs on its own — not remove-and-reinstall. Observed on a four-day-stale tree.
+test("a stale install outranks an unreadable build record in the reported reason", () => {
+  const probe = probeWorktreeReadiness("/wt", {
+    artifactDeps: { exists: () => true, readdir: () => ["pkg"] },
+    linkCheckDeps: { readdir: () => [], exists: () => true },
+    // Lockfile newer than the install AND no build record: both conditions.
+    staleDeps: { stat: (p) => ({ mtimeMs: p.endsWith("/pnpm-lock.yaml") ? 2_000 : 1_000 }) },
+    execute: (cmd, args) => args?.[0] === "ignored-builds"
+      ? { ok: true, stdout: "Automatically ignored builds during installation:\n  Cannot identify as no node_modules found\n" }
+      : { ok: true, stdout: args?.[0] === "rev-parse" ? "abc123" : "" },
+  });
+
+  assert.equal(probe.status, "source-only");
+  assert.equal(probe.checks.installStale, true);
+  assert.match(probe.reason, /^install_predates_lockfile:/);
+  assert.doesNotMatch(probe.reason, /^build_record_unreadable:/);
 });

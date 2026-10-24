@@ -15,7 +15,7 @@
 // pregate exit code never was.
 
 import { readFileSync } from "node:fs";
-import { spawnSync } from "node:child_process";
+import { gitTextOrNull } from "./lib/git.mjs";
 import { dirname, resolve as resolvePath } from "node:path";
 
 import {
@@ -30,12 +30,11 @@ import {
   reconcileSlots,
 } from "./lib/pregate-status.mjs";
 import { installBrokenPipeTolerance } from "./lib/pregate-console.mjs";
+import { findQueueWaiter } from "./lib/local-queue-observer.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
 
 function gitText(args, cwd) {
-  const result = spawnSync("git", args, { cwd, encoding: "utf8" });
-  if (result.error || result.status !== 0) return "";
-  return String(result.stdout || "").trim();
+  return gitTextOrNull(args, { cwd: cwd ?? process.cwd() }) ?? "";
 }
 
 function readJson(path) {
@@ -80,15 +79,34 @@ export function resolveWorktreeContext(cwd = process.cwd()) {
 }
 
 /** Read and classify every slot's records for this worktree. */
-export function collectSlotVerdicts(context, { now = Date.now(), readJsonImpl = readJson } = {}) {
-  return LOCAL_CI_SLOT_KEYS.map((slotKey) => {
-    const manifest = createLocalCiSlotManifest({
-      slotKey,
-      rootClone: context.rootClone,
-      gitCommonDir: context.gitCommonDir,
-      candidateGitDir: context.candidateGitDir,
+export function collectSlotVerdicts(context, { now = Date.now(), readJsonImpl = readJson, findWaiterImpl = findQueueWaiter } = {}) {
+  // BI-27A37D27: whether any waiter is alive for this claim, read from the same
+  // observer registry the gate and its resumer register in.
+  let queuedWaiter = null;
+  try {
+    queuedWaiter = findWaiterImpl({
+      directory: process.env.DPF_LOCAL_QUEUE_OBSERVER_DIR
+        || resolvePath(context.gitCommonDir, "dpf-local-ci-queue-observers"),
+      branch: context.headBranch,
+      sha: context.headSha,
     });
-    const state = readJsonImpl(manifest.evidence.state);
+  } catch {
+    queuedWaiter = null;
+  }
+  const manifests = new Map(LOCAL_CI_SLOT_KEYS.map((slotKey) => [slotKey, createLocalCiSlotManifest({
+    slotKey,
+    rootClone: context.rootClone,
+    gitCommonDir: context.gitCommonDir,
+    candidateGitDir: context.candidateGitDir,
+  })]));
+  const states = new Map([...manifests].map(([slotKey, manifest]) => [slotKey, readJsonImpl(manifest.evidence.state)]));
+  return LOCAL_CI_SLOT_KEYS.map((slotKey) => {
+    const manifest = manifests.get(slotKey);
+    const state = states.get(slotKey);
+    // BI-A9031FF3: re-read the winner a superseded record names, so a pass that
+    // was later rewritten (late lease loss) is not reported as a pass.
+    const winnerKey = state?.supersededBy?.slotKey;
+    const supersedingWinner = winnerKey && states.has(winnerKey) ? (states.get(winnerKey) ?? null) : undefined;
     // No state at all means this slot never ran here — it is absent, not failing.
     // Only slots with a record participate, so an unused slot cannot drag the
     // reconciled verdict down to NO-RECORD while the other slot holds a PASS.
@@ -102,9 +120,31 @@ export function collectSlotVerdicts(context, { now = Date.now(), readJsonImpl = 
         headSha: context.headSha,
         headBranch: context.headBranch,
         now,
+        queuedWaiter,
+        supersedingWinner,
       }),
     };
   }).filter(Boolean);
+}
+
+export function projectGateStatus(result, context) {
+  return {
+      verdict: result.verdict,
+      reason: result.reason,
+      headBranch: context.headBranch,
+      headSha: context.headSha,
+      boundSha: result.boundSha ?? "",
+      boundBranch: result.boundBranch ?? "",
+      candidateSha: result.candidateSha ?? "",
+      staleness: result.staleness ?? "",
+      gateStatus: result.gateStatus ?? "",
+      testStub: result.testStub === true,
+      evidenceId: result.evidenceId ?? "",
+      recordedAt: result.recordedAt ?? "",
+      slot: result.slot,
+      logFile: result.logFile ?? "",
+      worktreePath: context.worktreePath,
+  };
 }
 
 function main() {
@@ -127,21 +167,7 @@ function main() {
     };
 
   if (asJson) {
-    process.stdout.write(`${JSON.stringify({
-      verdict: result.verdict,
-      reason: result.reason,
-      headBranch: context.headBranch,
-      headSha: context.headSha,
-      boundSha: result.boundSha ?? "",
-      boundBranch: result.boundBranch ?? "",
-      candidateSha: result.candidateSha ?? "",
-      staleness: result.staleness ?? "",
-      evidenceId: result.evidenceId ?? "",
-      recordedAt: result.recordedAt ?? "",
-      slot: result.slot,
-      logFile: result.logFile ?? "",
-      worktreePath: context.worktreePath,
-    }, null, 2)}\n`);
+    process.stdout.write(`${JSON.stringify(projectGateStatus(result, context), null, 2)}\n`);
   } else {
     process.stdout.write(`${formatStatusReport(result, {
       headBranch: context.headBranch,

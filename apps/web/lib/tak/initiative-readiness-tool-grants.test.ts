@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { InitiativeReadinessDecision } from "@/lib/backlog/initiative-readiness";
 
 import { parseInitiativeReviewBinding } from "@/lib/mcp-task-submit";
+import { validateObjectiveMappingRequestKey } from "@/lib/mcp-task-objective-mapping-request-key";
 
 import { resolveInitiativeReviewerRecovery } from "./initiative-readiness-tool-grants";
 import { readinessRequirement } from "@/lib/backlog/initiative-readiness/readiness-guidance";
@@ -42,6 +43,13 @@ const canonicalArtifact = {
   providerBlobId: "9f2c1d4e6b8a0c2e4f6a8b0c2d4e6f8a0b2c4d6e",
 };
 
+const eligibleEvidenceActivityIds = [
+  "cmtnr924q-post-baseline",
+  "cmtnr926e-post-baseline",
+  "cmtnr927v-post-baseline",
+  "cmtnr9295-post-baseline",
+];
+
 function grantRow(grantKey: string, agentId: string, displayName: string) {
   return {
     grantKey,
@@ -55,7 +63,154 @@ function grantRow(grantKey: string, agentId: string, displayName: string) {
   };
 }
 
+function boundGrantRows(grantKey: string, agentId: string, displayName: string) {
+  return [
+    grantRow(grantKey, agentId, displayName),
+    grantRow("file_read", agentId, displayName),
+  ];
+}
+
+function inactiveGrantRow(grantKey: string, agentId: string, displayName: string) {
+  const row = grantRow(grantKey, agentId, displayName);
+  return { ...row, agent: { ...row.agent, status: "inactive" } };
+}
+
 describe("initiative readiness recovery routing", () => {
+  it("binds plan review to the coverage plan while other reviews keep the design", async () => {
+    const planArtifact = {
+      resolved: true as const,
+      path: "docs/superpowers/plans/admission.md",
+      providerBlobId: "a".repeat(40),
+      commitSha: "b".repeat(40),
+    };
+    const recovery = await resolveInitiativeReviewerRecovery({
+      decision: { ...decision, unmet: [
+        readinessRequirement({ code: "PLAN_REVIEW_REQUIRED", state: "missing", accountableRole: "plan-reviewer" }),
+        readinessRequirement({ code: "SPEC_APPROVAL_REQUIRED", state: "missing", accountableRole: "design-checklist-reviewer" }),
+      ] },
+      currentAgentId: "AGT-AUTHOR",
+      db: { agentToolGrant: { findMany: vi.fn().mockResolvedValue(boundGrantRows("initiative_design_review", "AGT-REVIEW", "Reviewer")) } },
+      dispatchContext, canonicalArtifact, planArtifact,
+    });
+    const plan = recovery.reviewerRoutes.find((route) => route.gate === "plan-review")!.requestCoworker;
+    expect(plan.initiativeReviewBinding?.artifactRef).toMatchObject({
+      path: planArtifact.path, providerBlobId: planArtifact.providerBlobId, commitSha: planArtifact.commitSha,
+    });
+    expect(plan.objective).toContain(planArtifact.path);
+    // A native-MCP reviewer never sees the bound schema, so the objective must carry the blob id itself.
+    expect(plan.objective).toContain(planArtifact.providerBlobId);
+    expect(plan.requestKey).toMatch(/:plan:[a-f0-9]{64}$/);
+    expect(recovery.reviewerRoutes.find((route) => route.gate === "spec-approval")?.requestCoworker.initiativeReviewBinding?.artifactRef).toMatchObject({ path: canonicalArtifact.path });
+  });
+
+  it("never substitutes the design when the plan artifact is unavailable", async () => {
+    const recovery = await resolveInitiativeReviewerRecovery({
+      decision: { ...decision, unmet: [readinessRequirement({ code: "PLAN_REVIEW_REQUIRED", state: "missing", accountableRole: "plan-reviewer" })] },
+      currentAgentId: "AGT-AUTHOR",
+      db: { agentToolGrant: { findMany: vi.fn().mockResolvedValue(boundGrantRows("initiative_design_review", "AGT-REVIEW", "Reviewer")) } },
+      dispatchContext, canonicalArtifact,
+    });
+    expect(recovery.reviewerRoutes).toEqual([]);
+    expect(recovery.escalations[0]?.nextAction).toContain("plan coverage");
+  });
+
+  it("reuses an exact plan request but separates changed paths and baselines", async () => {
+    const packet = async (path: string, baseline: string) => {
+      const recovery = await resolveInitiativeReviewerRecovery({
+        decision: { ...decision, unmet: [readinessRequirement({ code: "PLAN_REVIEW_REQUIRED", state: "missing", accountableRole: "plan-reviewer" })] },
+        currentAgentId: "AGT-AUTHOR",
+        db: { agentToolGrant: { findMany: vi.fn().mockResolvedValue(boundGrantRows("initiative_design_review", "AGT-REVIEW", "Reviewer")) } },
+        dispatchContext, canonicalArtifact, expectedCurrentBaselineId: baseline,
+        planArtifact: { resolved: true, path, commitSha: "b".repeat(40), providerBlobId: "a".repeat(40) },
+      });
+      return recovery.reviewerRoutes[0]!.requestCoworker.requestKey;
+    };
+    const original = await packet("docs/superpowers/plans/one.md", "BASE-1");
+    expect(await packet("docs/superpowers/plans/one.md", "BASE-1")).toBe(original);
+    expect(await packet("docs/superpowers/plans/two.md", "BASE-1")).not.toBe(original);
+    expect(await packet("docs/superpowers/plans/one.md", "BASE-2")).not.toBe(original);
+  });
+
+  it("requires the bound writer and file_read on the same production agent", async () => {
+    const researchOnlyDecision: InitiativeReadinessDecision = {
+      ...decision,
+      unmet: [
+        readinessRequirement({ code: "RESEARCH_REQUIRED", state: "missing", accountableRole: "design-author" }),
+      ],
+    };
+    const ineligibleRosters = [
+      [
+        grantRow("initiative_evidence_write", "AGT-WRITER", "Writer Only"),
+      ],
+      [
+        grantRow("initiative_evidence_write", "AGT-SPEC", "Spec Reader"),
+        grantRow("spec_plan_read", "AGT-SPEC", "Spec Reader"),
+      ],
+      [
+        grantRow("initiative_evidence_write", "AGT-WRITER", "Writer Only"),
+        grantRow("file_read", "AGT-READER", "Reader Only"),
+      ],
+      [
+        grantRow("initiative_evidence_write", "AGT-INACTIVE-READER", "Inactive Reader"),
+        inactiveGrantRow("file_read", "AGT-INACTIVE-READER", "Inactive Reader"),
+      ],
+    ];
+
+    for (const roster of ineligibleRosters) {
+      const recovery = await resolveInitiativeReviewerRecovery({
+        decision: researchOnlyDecision,
+        currentAgentId: "AGT-AUTHOR",
+        db: { agentToolGrant: { findMany: vi.fn().mockResolvedValue(roster) } },
+        dispatchContext,
+        canonicalArtifact,
+        expectedCurrentBaselineId: "baseline-current",
+      });
+
+      expect(recovery.reviewerRoutes).toEqual([]);
+      expect(recovery.escalations).toMatchObject([{
+        toolName: "record_initiative_evidence",
+        reason: "no-eligible-reviewer",
+        nextAction: expect.stringMatching(/initiative_evidence_write.*file_read/u),
+      }]);
+    }
+  });
+
+  it("deterministically selects the first agent that holds both bound-route grants", async () => {
+    const researchOnlyDecision: InitiativeReadinessDecision = {
+      ...decision,
+      unmet: [
+        readinessRequirement({ code: "RESEARCH_REQUIRED", state: "missing", accountableRole: "design-author" }),
+      ],
+    };
+    const findMany = vi.fn().mockResolvedValue([
+      grantRow("file_read", "AGT-ZULU", "Zulu Reviewer"),
+      grantRow("initiative_evidence_write", "AGT-BRAVO", "Bravo Reviewer"),
+      grantRow("file_read", "AGT-BRAVO", "Bravo Reviewer"),
+      grantRow("initiative_evidence_write", "AGT-ZULU", "Zulu Reviewer"),
+      grantRow("file_read", "AGT-ALPHA", "Reader Only"),
+    ]);
+
+    const recovery = await resolveInitiativeReviewerRecovery({
+      decision: researchOnlyDecision,
+      currentAgentId: "AGT-AUTHOR",
+      db: { agentToolGrant: { findMany } },
+      dispatchContext,
+      canonicalArtifact,
+      expectedCurrentBaselineId: "baseline-current",
+    });
+
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        grantKey: { in: ["initiative_evidence_write", "file_read"] },
+      }),
+    }));
+    expect(recovery.escalations).toEqual([]);
+    expect(recovery.reviewerRoutes).toMatchObject([{
+      targetAgentId: "AGT-BRAVO",
+      targetDisplayName: "Bravo Reviewer",
+    }]);
+  });
+
   it("routes acceptance reconciliation through an exact objective-mapping evidence packet", async () => {
     const acceptanceDecision: InitiativeReadinessDecision = {
       ...decision,
@@ -73,11 +228,12 @@ describe("initiative readiness recovery routing", () => {
       decision: acceptanceDecision,
       currentAgentId: "AGT-AUTHOR",
       db: { agentToolGrant: { findMany: vi.fn().mockResolvedValue([
-        grantRow("initiative_evidence_write", "AGT-WS-ACCEPT", "Acceptance Reviewer"),
+        ...boundGrantRows("initiative_evidence_write", "AGT-WS-ACCEPT", "Acceptance Reviewer"),
       ]) } },
       dispatchContext,
       canonicalArtifact,
       expectedCurrentBaselineId: "baseline-current",
+      eligibleEvidenceActivityIds,
     });
 
     expect(recovery.escalations).toEqual([]);
@@ -87,6 +243,7 @@ describe("initiative readiness recovery routing", () => {
       toolName: "record_initiative_evidence",
       grant: "initiative_evidence_write",
       gate: "objective-mapping",
+      independent: true,
       targetAgentId: "AGT-WS-ACCEPT",
       requestCoworker: {
         requiredToolNames: ["record_initiative_evidence", "read_source_at_version"],
@@ -95,20 +252,72 @@ describe("initiative readiness recovery routing", () => {
           itemId: "BI-A45D744A",
           gate: "objective-mapping",
           expectedCurrentBaselineId: "baseline-current",
+          eligibleEvidenceActivityIds,
         },
       },
     }]);
     expect(recovery.reviewerRoutes[0]?.requestCoworker.objective)
       .toContain("Map every current OBJ-* and AC-* statement to post-baseline evidence");
+    expect(recovery.reviewerRoutes[0]?.requestCoworker.objective)
+      .toContain(eligibleEvidenceActivityIds.join(", "));
+    const packet = recovery.reviewerRoutes[0]!.requestCoworker;
+    expect(packet.initiativeReviewBinding).toMatchObject({
+      workroomRef: {
+        kind: "workroom-head",
+        workroomId: dispatchContext.workroomId,
+        repositoryFullName: dispatchContext.repositoryFullName,
+        branchName: dispatchContext.branchName,
+        headSha: dispatchContext.headSha,
+      },
+    });
+    expect(packet.requestKey).toMatch(/:packet-v3:[a-f0-9]{64}$/u);
+    expect(validateObjectiveMappingRequestKey({
+      targetAgent: packet.targetAgent,
+      objective: packet.objective,
+      questionPacketSummary: packet.questionPacketSummary,
+      requiredToolNames: packet.requiredToolNames!,
+      binding: packet.initiativeReviewBinding as Parameters<typeof validateObjectiveMappingRequestKey>[0]["binding"],
+      requestKey: packet.requestKey,
+    })).toBe(true);
+  });
+
+  it("fails closed instead of issuing an open-ended mapping packet when no eligible evidence exists", async () => {
+    const acceptanceDecision: InitiativeReadinessDecision = {
+      ...decision,
+      target: "completion",
+      verdict: "denied",
+      unmet: [readinessRequirement({
+        code: "OBJECTIVE_RECONCILIATION_REQUIRED",
+        state: "missing",
+        accountableRole: "acceptance-reviewer",
+      })],
+    };
+    const recovery = await resolveInitiativeReviewerRecovery({
+      decision: acceptanceDecision,
+      currentAgentId: "AGT-AUTHOR",
+      db: { agentToolGrant: { findMany: vi.fn().mockResolvedValue([
+        ...boundGrantRows("initiative_evidence_write", "AGT-WS-ACCEPT", "Acceptance Reviewer"),
+      ]) } },
+      dispatchContext,
+      canonicalArtifact,
+      expectedCurrentBaselineId: "baseline-current",
+      eligibleEvidenceActivityIds: [],
+    });
+
+    expect(recovery.reviewerRoutes).toEqual([]);
+    expect(recovery.escalations).toMatchObject([{
+      accountableRole: "acceptance-reviewer",
+      reason: "no-eligible-evidence",
+    }]);
   });
 
   it("sequences independent spec approval before plan coverage when no baseline exists", async () => {
     const findMany = vi.fn().mockResolvedValue([
-      grantRow("initiative_evidence_write", "AGT-WS-PORTFOLIO", "Portfolio Management"),
+      ...boundGrantRows("initiative_evidence_write", "AGT-WS-PORTFOLIO", "Portfolio Management"),
       grantRow("backlog_write", "AGT-WS-PORTFOLIO", "Portfolio Management"),
-      grantRow("initiative_evidence_write", "AGT-WS-BUILD", "Build Specialist"),
+      ...boundGrantRows("initiative_evidence_write", "AGT-WS-BUILD", "Build Specialist"),
       grantRow("backlog_write", "AGT-WS-BUILD", "Build Specialist"),
-      grantRow("initiative_design_review", "AGT-WS-REVIEW", "Independent Reviewer"),
+      ...boundGrantRows("initiative_design_review", "AGT-WS-REVIEW", "Independent Reviewer"),
     ]);
 
     const recovery = await resolveInitiativeReviewerRecovery({
@@ -188,7 +397,7 @@ describe("initiative readiness recovery routing", () => {
       decision,
       currentAgentId: "AGT-AUTHOR",
       db: { agentToolGrant: { findMany: vi.fn().mockResolvedValue([
-        grantRow("initiative_evidence_write", "AGT-WS-BUILD", "Build Specialist"),
+        ...boundGrantRows("initiative_evidence_write", "AGT-WS-BUILD", "Build Specialist"),
       ]) } },
       dispatchContext,
       canonicalArtifact,
@@ -205,7 +414,7 @@ describe("initiative readiness recovery routing", () => {
       decision,
       currentAgentId: "AGT-AUTHOR",
       db: { agentToolGrant: { findMany: vi.fn().mockResolvedValue([
-        grantRow("initiative_evidence_write", "AGT-WS-BUILD", "Build Specialist"),
+        ...boundGrantRows("initiative_evidence_write", "AGT-WS-BUILD", "Build Specialist"),
       ]) } },
       dispatchContext,
       canonicalArtifact: { ...canonicalArtifact, commitSha: artifactCommitSha },
@@ -226,9 +435,9 @@ describe("initiative readiness recovery routing", () => {
       decision,
       currentAgentId: "AGT-AUTHOR",
       db: { agentToolGrant: { findMany: vi.fn().mockResolvedValue([
-        grantRow("initiative_evidence_write", "AGT-WS-BUILD", "Build Specialist"),
+        ...boundGrantRows("initiative_evidence_write", "AGT-WS-BUILD", "Build Specialist"),
         grantRow("backlog_write", "AGT-WS-BUILD", "Build Specialist"),
-        grantRow("initiative_design_review", "AGT-WS-REVIEW", "Independent Reviewer"),
+        ...boundGrantRows("initiative_design_review", "AGT-WS-REVIEW", "Independent Reviewer"),
       ]) } },
       dispatchContext,
       canonicalArtifact: { resolved: false, nextAction: "Commit the canonical design under docs/superpowers/specs/, push it, then retry." },
@@ -251,6 +460,51 @@ describe("initiative readiness recovery routing", () => {
     ]);
   });
 
+  it("routes a small shape's research to its author instead of demanding a spec (BI-3B323B6A)", async () => {
+    const smallDecision = {
+      ...decision,
+      shapeDecision: { declared: "small" as const, effective: "small" as const, sensitivity: "low" as const, raised: false },
+      unmet: [readinessRequirement({ code: "RESEARCH_REQUIRED", state: "missing", accountableRole: "design-author" })],
+    };
+    const recovery = await resolveInitiativeReviewerRecovery({
+      decision: smallDecision,
+      currentAgentId: "AGT-AUTHOR",
+      db: { agentToolGrant: { findMany: vi.fn().mockResolvedValue(
+        boundGrantRows("initiative_evidence_write", "AGT-WS-BUILD", "Build Specialist"),
+      ) } },
+      dispatchContext,
+      canonicalArtifact: { resolved: false, nextAction: "No design document under docs/superpowers/specs/ changed between a71ddc26 and d2f70ae5." },
+    });
+
+    expect(recovery.reviewerRoutes).toEqual([]);
+    expect(recovery.escalations).toMatchObject([{
+      accountableRole: "design-author",
+      toolName: "record_initiative_evidence",
+      grant: "initiative_evidence_write",
+      reason: "research-evidence-required",
+    }]);
+    expect(recovery.escalations[0]?.nextAction).toContain("No canonical design is required");
+    expect(recovery.escalations[0]?.nextAction).not.toContain("docs/superpowers/specs/ changed");
+  });
+
+  it("keeps the spec-bound research route for a large shape and for an unshaped item", async () => {
+    for (const shapeDecision of [
+      { declared: "large" as const, effective: "large" as const, sensitivity: "low" as const, raised: false },
+      null,
+    ]) {
+      const recovery = await resolveInitiativeReviewerRecovery({
+        decision: { ...decision, shapeDecision, unmet: [readinessRequirement({ code: "RESEARCH_REQUIRED", state: "missing", accountableRole: "design-author" })] },
+        currentAgentId: "AGT-AUTHOR",
+        db: { agentToolGrant: { findMany: vi.fn().mockResolvedValue(
+          boundGrantRows("initiative_evidence_write", "AGT-WS-BUILD", "Build Specialist"),
+        ) } },
+        dispatchContext,
+        canonicalArtifact: { resolved: false, nextAction: "Commit the canonical design under docs/superpowers/specs/, push it, then retry." },
+      });
+      expect(recovery.escalations).toMatchObject([{ accountableRole: "design-author", reason: "no-canonical-artifact" }]);
+    }
+  });
+
   it("surfaces an unmet requirement whose accountable role owns no writer lane", async () => {
     const recovery = await resolveInitiativeReviewerRecovery({
       decision: {
@@ -267,13 +521,14 @@ describe("initiative readiness recovery routing", () => {
 
     expect(recovery.reviewerRoutes).toEqual([]);
     expect(recovery.escalations).toEqual([]);
-    expect(recovery.unroutable).toMatchObject([
-      {
-        accountableRole: "artifact-resolver",
-        code: "ARTIFACT_AUTHOR_REQUIRED",
-        nextAction: expect.stringContaining("git commit -s"),
-      },
-    ]);
+    expect(recovery.unroutable).toHaveLength(1);
+    expect(recovery.unroutable[0]).toMatchObject({
+      accountableRole: "artifact-resolver",
+      code: "ARTIFACT_AUTHOR_REQUIRED",
+    });
+    expect(recovery.unroutable[0]?.nextAction).toContain(
+      "if it is already valid, preserve its bytes and sha",
+    );
   });
 
   it("returns both exact next-action mappings when immutable dispatch identity is unavailable", async () => {
@@ -281,9 +536,9 @@ describe("initiative readiness recovery routing", () => {
       decision,
       currentAgentId: "AGT-AUTHOR",
       db: { agentToolGrant: { findMany: vi.fn().mockResolvedValue([
-        grantRow("initiative_evidence_write", "AGT-WS-BUILD", "Build Specialist"),
+        ...boundGrantRows("initiative_evidence_write", "AGT-WS-BUILD", "Build Specialist"),
         grantRow("backlog_write", "AGT-WS-BUILD", "Build Specialist"),
-        grantRow("initiative_design_review", "AGT-WS-REVIEW", "Independent Reviewer"),
+        ...boundGrantRows("initiative_design_review", "AGT-WS-REVIEW", "Independent Reviewer"),
       ]) } },
       dispatchContext: null,
       canonicalArtifact,
@@ -313,6 +568,9 @@ describe("initiative readiness recovery routing", () => {
   });
 
   it("exposes generic plan coverage only after a baseline exists", async () => {
+    const findMany = vi.fn().mockResolvedValue([
+      grantRow("backlog_write", "AGT-WS-BUILD", "Build Specialist"),
+    ]);
     const recovery = await resolveInitiativeReviewerRecovery({
       decision: {
         ...decision,
@@ -321,9 +579,7 @@ describe("initiative readiness recovery routing", () => {
         ],
       },
       currentAgentId: "AGT-AUTHOR",
-      db: { agentToolGrant: { findMany: vi.fn().mockResolvedValue([
-        grantRow("backlog_write", "AGT-WS-BUILD", "Build Specialist"),
-      ]) } },
+      db: { agentToolGrant: { findMany } },
       dispatchContext,
       canonicalArtifact,
       expectedCurrentBaselineId: "IBL-CANONICAL",
@@ -341,6 +597,11 @@ describe("initiative readiness recovery routing", () => {
       .not.toHaveProperty("initiativeReviewBinding");
     expect(recovery.reviewerRoutes[0]?.requestCoworker)
       .not.toHaveProperty("requiredToolNames");
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        grantKey: { in: ["backlog_write"] },
+      }),
+    }));
   });
 
   it("turns a plan-only missing-baseline state into one executable spec-approval route", async () => {
@@ -353,7 +614,7 @@ describe("initiative readiness recovery routing", () => {
       },
       currentAgentId: "AGT-AUTHOR",
       db: { agentToolGrant: { findMany: vi.fn().mockResolvedValue([
-        grantRow("initiative_design_review", "AGT-WS-REVIEW", "Independent Reviewer"),
+        ...boundGrantRows("initiative_design_review", "AGT-WS-REVIEW", "Independent Reviewer"),
         grantRow("backlog_write", "AGT-WS-BUILD", "Build Specialist"),
       ]) } },
       dispatchContext,
@@ -400,7 +661,7 @@ describe("initiative readiness recovery routing", () => {
 
   it("keeps the two blocked states distinguishable from each other", async () => {
     const roster = [
-      grantRow("initiative_evidence_write", "AGT-WS-BUILD", "Build Specialist"),
+      ...boundGrantRows("initiative_evidence_write", "AGT-WS-BUILD", "Build Specialist"),
       grantRow("backlog_write", "AGT-WS-BUILD", "Build Specialist"),
     ];
     const withoutDispatch = await resolveInitiativeReviewerRecovery({
@@ -443,7 +704,7 @@ describe("recovery packets are executable by the real consumer", () => {
       decision,
       currentAgentId: "AGT-AUTHOR",
       db: { agentToolGrant: { findMany: vi.fn().mockResolvedValue([
-        grantRow("initiative_evidence_write", "AGT-WS-BUILD", "Build Specialist"),
+        ...boundGrantRows("initiative_evidence_write", "AGT-WS-BUILD", "Build Specialist"),
         grantRow("backlog_write", "AGT-WS-BUILD", "Build Specialist"),
       ]) } },
       dispatchContext,
@@ -462,6 +723,13 @@ describe("recovery packets are executable by the real consumer", () => {
         parseInitiativeReviewBinding(route.requestCoworker.initiativeReviewBinding),
         `parseInitiativeReviewBinding rejected the packet for ${route.toolName}`,
       ).not.toBeNull();
+      expect(route.requestCoworker.initiativeReviewBinding.workroomRef).toEqual({
+        kind: "workroom-head",
+        workroomId: dispatchContext.workroomId,
+        repositoryFullName: dispatchContext.repositoryFullName,
+        branchName: dispatchContext.branchName,
+        headSha: dispatchContext.headSha,
+      });
     }
   });
 
@@ -470,7 +738,7 @@ describe("recovery packets are executable by the real consumer", () => {
       decision,
       currentAgentId: "AGT-AUTHOR",
       db: { agentToolGrant: { findMany: vi.fn().mockResolvedValue([
-        grantRow("initiative_evidence_write", "AGT-WS-BUILD", "Build Specialist"),
+        ...boundGrantRows("initiative_evidence_write", "AGT-WS-BUILD", "Build Specialist"),
         grantRow("backlog_write", "AGT-WS-BUILD", "Build Specialist"),
       ]) } },
       dispatchContext,
@@ -500,7 +768,7 @@ describe("recovery packets are executable by the real consumer", () => {
       decision,
       currentAgentId: "AGT-AUTHOR",
       db: { agentToolGrant: { findMany: vi.fn().mockResolvedValue([
-        grantRow("initiative_evidence_write", "AGT-WS-BUILD", "Build Specialist"),
+        ...boundGrantRows("initiative_evidence_write", "AGT-WS-BUILD", "Build Specialist"),
       ]) } },
       dispatchContext,
       canonicalArtifact,

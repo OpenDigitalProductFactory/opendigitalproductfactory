@@ -133,7 +133,7 @@ export async function getFullGraphData(): Promise<GraphData> {
     }
   }
 
-  // Enrich with Neo4j infrastructure topology
+  // Enrich with the graph-mirror infrastructure topology
   try {
     // Add all InfraCI nodes
     const infraCIs = await getInfraCIs();
@@ -171,7 +171,7 @@ export async function getFullGraphData(): Promise<GraphData> {
       }
     }
   } catch {
-    // Neo4j may not be available — fall back to Postgres-only graph
+    // The graph mirror may not be available — fall back to Postgres-only graph
   }
 
   return {

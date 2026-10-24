@@ -21,7 +21,10 @@ vi.mock("@/lib/actions/built-in-tools", () => ({
   getBuiltInToolsOverview: vi.fn(),
 }));
 
-vi.mock("@/lib/tak/agent-grants", () => ({
+// Keep the REAL grant predicate + expansion (BI-378D3659): readiness must agree
+// with the runtime, so only the two data seams are stubbed.
+vi.mock("@/lib/tak/agent-grants", async (importActual) => ({
+  ...(await importActual<typeof import("@/lib/tak/agent-grants")>()),
   getAgentToolGrantsAsync: vi.fn(),
   getToolGrantMapping: vi.fn(),
 }));
@@ -186,5 +189,46 @@ describe("getToolMarketplaceReadiness", () => {
       }),
     ]);
     expect(result.summary).toMatchObject({ total: 1, blocked: 1 });
+  });
+
+  // BI-378D3659: a tool's required grants are ALTERNATIVES at runtime (any one,
+  // after GRANT_IMPLICATIONS expansion). Readiness demanded every one and never
+  // expanded, so it reported "needs grant" for tools the coworker could call.
+  describe("grant readiness matches the runtime predicate", () => {
+    const builtIn = (capability: string) => ({
+      id: capability, name: capability, description: capability, model: "built-in",
+      configKey: null, configured: true, capability,
+    });
+    async function readinessFor(required: string[], held: string[]) {
+      vi.mocked(getAgentToolGrantsAsync).mockResolvedValue(held);
+      vi.mocked(getToolGrantMapping).mockReturnValue({ probe_tool: required });
+      vi.mocked(getBuiltInToolsOverview).mockResolvedValue({
+        tools: [builtIn("probe_tool")],
+      } as never);
+      const result = await getToolMarketplaceReadiness({ agentId: "coo", includeKinds: ["built_in"] });
+      return result.entries[0];
+    }
+
+    it("is ready when the coworker holds either alternative", async () => {
+      expect(await readinessFor(["web_search", "registry_read"], ["registry_read"]))
+        .toMatchObject({ readiness: "ready", missingGrants: [] });
+      expect(await readinessFor(["web_search", "registry_read"], ["web_search"]))
+        .toMatchObject({ readiness: "ready", missingGrants: [] });
+    });
+
+    it("is ready when the coworker holds both alternatives", async () => {
+      expect(await readinessFor(["web_search", "registry_read"], ["web_search", "registry_read"]))
+        .toMatchObject({ readiness: "ready", missingGrants: [] });
+    });
+
+    it("names every alternative when the coworker holds neither", async () => {
+      expect(await readinessFor(["web_search", "registry_read"], ["file_read"]))
+        .toMatchObject({ readiness: "needs_grant", missingGrants: ["web_search", "registry_read"] });
+    });
+
+    it("honours a grant implied through expansion", async () => {
+      expect(await readinessFor(["build_evidence"], ["backlog_write"]))
+        .toMatchObject({ readiness: "ready", missingGrants: [] });
+    });
   });
 });

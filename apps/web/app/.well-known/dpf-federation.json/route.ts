@@ -26,7 +26,7 @@ import {
   federationAdvertisingEnabled,
 } from "@/lib/federation/discovery-advertisement";
 import { resolveFederationIdentity } from "@/lib/federation/demand-identity";
-import { loadEstateNameResolution } from "@/lib/install/estate-identity";
+import { loadEstateNameResolution, prismaEstateIdentityStore } from "@/lib/install/estate-identity";
 
 export const dynamic = "force-dynamic";
 
@@ -45,11 +45,7 @@ export async function GET(): Promise<NextResponse> {
   try {
     const [identity, estate] = await Promise.all([
       resolveFederationIdentity(prisma),
-      loadEstateNameResolution({
-        readConfig: async (key: string) =>
-          (await prisma.platformConfig.findUnique({ where: { key }, select: { value: true } }))
-            ?.value ?? null,
-      }),
+      loadEstateNameResolution(prismaEstateIdentityStore(prisma)),
     ]);
     advertisement = buildFederationAdvertisement({
       projectionSecret: identity.projectionSecret,

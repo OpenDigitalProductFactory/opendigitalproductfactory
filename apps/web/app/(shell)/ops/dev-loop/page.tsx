@@ -2,7 +2,7 @@
 // Shows the live state so operators can see who is doing what and whether
 // stale entries have been cleaned up by the runtimeTargetJanitor function.
 
-import { OpsTabNav } from "@/components/ops/OpsTabNav";
+import { PlatformTabNav } from "@/components/platform/PlatformTabNav";
 import { prisma } from "@dpf/db";
 import { LocalTime } from "@/components/ui/LocalTime";
 
@@ -118,7 +118,7 @@ export default async function DevLoopPage() {
         </p>
       </div>
 
-      <OpsTabNav />
+      <PlatformTabNav />
 
       {/* Active leases */}
       <section className="mt-6">

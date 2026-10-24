@@ -16,6 +16,7 @@ import type {
   UnresolvedEntityRow,
 } from "@dpf/db";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { isJobEnabled } from "@/lib/operate/scheduled-jobs/core";
 import {
   IDENTITY_INFERENCE_JOB_ID,
   IDENTITY_INFERENCE_JOB_NAME,
@@ -142,10 +143,13 @@ export async function runIdentityInferenceFallbackJob(
       nextRunAt: computeNextRunAt("weekly", new Date()),
     },
     update: {},
-    select: { enabled: true, schedule: true },
+    select: { schedule: true },
   });
 
-  if (job.enabled === false) {
+  // Operator kill switch — the one shared implementation (BI-7E49FA15). Kept
+  // here as well as in gateAtEntry because the run-now event path reaches this
+  // runner without passing through the cron entry gate.
+  if (!(await isJobEnabled(IDENTITY_INFERENCE_JOB_ID))) {
     return { skipped: true, reason: "disabled" };
   }
 

@@ -39,18 +39,39 @@ export type GateStepRunner = {
   run(name: string, fn: () => Promise<unknown>): Promise<unknown>;
 };
 
+/** Skip reason returned when an operator has set ScheduledJob.enabled=false. */
+export const DISABLED_BY_OPERATOR_REASON = "disabled-by-operator";
+
 /**
  * Call at the top of every cron function (except self-upgrade callers).
  *
- * Returns { proceed: false, skipped: true, reason } when level ≥ draining;
- * caller should return early with the same shape so Inngest run history
- * records the skip with a recognizable label.
+ * Two checks, in order, each its own checkpointed `step.run` (Inngest
+ * re-running the function after a worker restart replays the gate result
+ * deterministically rather than re-querying state):
  *
- * Wrapped in `step.run` so the level check is itself a checkpointed step
- * (Inngest re-running the function after a worker restart will replay
- * the gate result deterministically rather than re-querying state).
+ *   1. Quiescence — returns `quiescing(<level>)` when level ≥ draining.
+ *   2. Per-job kill switch (BI-7E49FA15) — resolves `inngestId` through the
+ *      scheduled-job catalog and returns `disabled-by-operator` when the
+ *      catalogued job's ScheduledJob.enabled is false. Only entries that
+ *      declare `honorsEnabledGate: true` are enforced; an entry carrying an
+ *      `ungatedReason` (the quiescence callers) and an id with no catalog
+ *      entry (event-driven run-now functions) proceed. A failed read also
+ *      proceeds — see isJobEnabled().
+ *
+ * `inngestId` is REQUIRED so the compiler, not review attention, enforces
+ * that every gated cron declares which job it is. Pass the same value as the
+ * enclosing createFunction's `id`; the source-scan test in
+ * quiescence-gates.test.ts fails the build on a mismatch.
+ *
+ * Callers return early with the same shape so Inngest run history records
+ * the skip with a recognizable label — a skip, never a failure, which is why
+ * this lives in the entry gate rather than client middleware (design doc
+ * 2026-08-28-scheduled-job-kill-switch-design.md).
  */
-export async function gateAtEntry(step: GateStepRunner): Promise<GateAtEntryResult> {
+export async function gateAtEntry(
+  step: GateStepRunner,
+  inngestId: string,
+): Promise<GateAtEntryResult> {
   const level = (await step.run("quiescence-gate-at-entry", async () => {
     // Dynamic import to avoid loading prisma into every Inngest function's
     // module graph at definition time.
@@ -59,6 +80,18 @@ export async function gateAtEntry(step: GateStepRunner): Promise<GateAtEntryResu
   })) as string;
   if (level !== "normal") {
     return { proceed: false, skipped: true, reason: `quiescing(${level})` };
+  }
+  const enabled = (await step.run("kill-switch-gate-at-entry", async () => {
+    const { getCatalogEntryByInngestId } = await import(
+      "@/lib/operate/scheduled-jobs/catalog"
+    );
+    const entry = getCatalogEntryByInngestId(inngestId);
+    if (!entry || entry.honorsEnabledGate !== true) return true;
+    const { isJobEnabled } = await import("@/lib/operate/scheduled-jobs/core");
+    return isJobEnabled(entry.jobId);
+  })) as boolean;
+  if (!enabled) {
+    return { proceed: false, skipped: true, reason: DISABLED_BY_OPERATOR_REASON };
   }
   return { proceed: true };
 }
@@ -97,13 +130,25 @@ export async function gateBetweenSteps(
     return { resumedAfterWait: false };
   }
   // Wait for terminal transition event. The coordinator guarantees this
-  // fires on every terminal state (spec §5.2 invariant).
-  const cleared = await step.waitForEvent(`await-quiescence-cleared-${stepLabel}`, {
-    event: "platform.quiescence-cleared",
-    timeout: "30m",
-  });
-  if (!cleared) {
-    return { resumedAfterWait: false, reason: "timed-out-waiting-for-cleared" };
+  // fires on every terminal state (spec §5.2 invariant). BI-F9EE05E5 slice B:
+  // a drain now waits up to its budget (60 min by default) and can then pause
+  // for the operator, so one 30-minute wait let work start mid-drain. Re-check
+  // after each wait and keep waiting while the drain holds, bounded so a stuck
+  // coordinator cannot hold a function forever.
+  for (let round = 0; round < GATE_BETWEEN_STEPS_MAX_WAITS; round++) {
+    const cleared = await step.waitForEvent(
+      round === 0 ? `await-quiescence-cleared-${stepLabel}` : `await-quiescence-cleared-${stepLabel}-${round}`,
+      { event: "platform.quiescence-cleared", timeout: "30m" },
+    );
+    if (cleared) return { resumedAfterWait: true };
+    const still = (await step.run(`quiescence-gate-${stepLabel}-recheck-${round}`, async () => {
+      const { getQuiescenceLevel } = await import("@/lib/self-upgrade/quiescence");
+      return getQuiescenceLevel();
+    })) as string;
+    if (still === "normal") return { resumedAfterWait: true };
   }
-  return { resumedAfterWait: true };
+  return { resumedAfterWait: false, reason: "timed-out-waiting-for-cleared" };
 }
+
+/** 30-minute waits before gateBetweenSteps gives up: 6 hours. */
+export const GATE_BETWEEN_STEPS_MAX_WAITS = 12;

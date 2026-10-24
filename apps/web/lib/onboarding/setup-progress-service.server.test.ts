@@ -64,7 +64,7 @@ describe("completeSetupStepFromEvidence", () => {
     mocks.findFirst.mockResolvedValue({
       id: "progress-1",
       organizationId: "org-1",
-      currentStep: "platform-development",
+      currentStep: "mailroom",
       completedAt: null,
       steps: {
         ...pendingSteps(),

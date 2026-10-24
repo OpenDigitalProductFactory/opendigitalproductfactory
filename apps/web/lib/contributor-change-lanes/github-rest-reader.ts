@@ -14,8 +14,12 @@
 // Spec: docs/superpowers/specs/2026-05-26-contributor-inventory-sync-design.md
 //   §"Per-source work" item 3, §"Etag persistence".
 
-import { Agent, fetch as undiciFetch } from "undici";
+import { createOffThreadpoolFetchTransport } from "@/lib/network/off-threadpool-fetch";
 
+import {
+  createPullRequestObservation,
+  parseVerifiedPullRequestObservation,
+} from "./pull-request-observation";
 import type { PullRequestSnapshot } from "./types";
 
 const GITHUB_PR_CREDENTIAL_PROVIDER_ID = "github-pr-sync";
@@ -47,6 +51,8 @@ export type GithubReaderResult =
 export type GithubReaderDeps = {
   /** Injection point so tests don't fetch real URLs. */
   fetchImpl?: typeof fetch;
+  /** One operation timestamp, injected so every page in a sync is comparable. */
+  now?: () => Date;
 };
 
 /** Resolved repo coordinates `{owner}/{repo}`. */
@@ -63,18 +69,7 @@ export type GithubReadTransport = Readonly<{
  * boundary; callers still inject a plain Fetch implementation in tests.
  */
 export function createGithubReadTransport(): GithubReadTransport {
-  const dispatcher = new Agent();
-  const isolatedFetch = ((input: Parameters<typeof fetch>[0], init?: RequestInit) =>
-    undiciFetch(
-      input as Parameters<typeof undiciFetch>[0],
-      { ...init, dispatcher } as Parameters<typeof undiciFetch>[1],
-    ) as unknown as Promise<Response>) as typeof fetch;
-  return {
-    fetch: isolatedFetch,
-    close: async () => {
-      await dispatcher.close();
-    },
-  };
+  return createOffThreadpoolFetchTransport();
 }
 
 /** Release an unconsumed provider response before retrying or closing its dispatcher. */
@@ -87,7 +82,7 @@ export async function cancelGithubResponseBody(response: Response): Promise<void
 }
 
 /**
- * Production GitHub PR reader. Returns the rows for the open-PR list,
+ * Production GitHub PR reader. Returns the rows for the open and terminal PR list,
  * tagged with sourceKey = PR number as string. The pure runner in
  * contributor-inventory-sync.ts wraps this into a SyncSourceResult.
  */
@@ -96,6 +91,7 @@ export async function readGithubPullRequests(
 ): Promise<GithubReaderResult> {
   const { prisma } = await import("@dpf/db");
   const fetchImpl = deps.fetchImpl ?? fetch;
+  const observedAt = (deps.now ?? (() => new Date()))().toISOString();
 
   const token = await resolveGithubToken(prisma);
   if (!token) {
@@ -111,7 +107,7 @@ export async function readGithubPullRequests(
   const previousEtag = await loadEtag(prisma);
 
   try {
-    const result = await fetchOpenPullRequests(fetchImpl, repo, token, previousEtag);
+    const result = await fetchPullRequests(fetchImpl, repo, token, previousEtag, observedAt);
     if (result.kind === "not-modified") {
       return {
         ok: true,
@@ -205,10 +201,33 @@ async function readCredential(prisma: PrismaLike, providerId: string): Promise<s
   }
 }
 
+/**
+ * The managed-repository login (BI-985F4EC9), written by the device flow with
+ * the "repository-controller" purpose and checked against the managed
+ * repository itself. Duplicated as a literal (not imported from
+ * lib/forge/managed-repository-access) to keep this reader's import graph flat.
+ */
+const REPOSITORY_CONTROLLER_PROVIDER_ID = "github-repository-controller";
+
+export type ResolveGithubTokenOptions = {
+  /**
+   * Try the managed-repository login first, then the existing chain. Issue
+   * intake sets it: the controller credential is the one the operator logged
+   * in for that repository. Installs that predate it keep the old chain.
+   */
+  preferRepositoryController?: boolean;
+};
+
 // Exported for reuse by release-health (BI-3630773C); callers that can read
 // public repos treat a null return as "proceed unauthenticated", not an error.
-export async function resolveGithubToken(prisma: PrismaLike): Promise<string | null> {
-  for (const providerId of GITHUB_READ_CREDENTIAL_PROVIDER_IDS) {
+export async function resolveGithubToken(
+  prisma: PrismaLike,
+  options: ResolveGithubTokenOptions = {},
+): Promise<string | null> {
+  const chain = options.preferRepositoryController
+    ? [REPOSITORY_CONTROLLER_PROVIDER_ID, ...GITHUB_READ_CREDENTIAL_PROVIDER_IDS]
+    : GITHUB_READ_CREDENTIAL_PROVIDER_IDS;
+  for (const providerId of chain) {
     const token = await readCredential(prisma, providerId);
     if (token) return token;
   }
@@ -265,11 +284,12 @@ type FetchOutcome =
   | { kind: "not-modified"; rateLimitRemaining?: number; rateLimitResetAt?: Date | null }
   | { kind: "error"; error: string };
 
-async function fetchOpenPullRequests(
+async function fetchPullRequests(
   fetchImpl: typeof fetch,
   repo: RepoIdentity,
   token: string,
   ifNoneMatch: string | null,
+  observedAt: string,
 ): Promise<FetchOutcome> {
   const rows: SnapshotRowPayload[] = [];
   let etag: string | null = null;
@@ -277,7 +297,7 @@ async function fetchOpenPullRequests(
   let rateLimitResetAt: Date | null | undefined;
 
   for (let page = 1; page <= DEFAULT_MAX_PAGES; page++) {
-    const url = `https://api.github.com/repos/${repo.owner}/${repo.name}/pulls?state=open&per_page=${DEFAULT_PER_PAGE}&page=${page}`;
+    const url = `https://api.github.com/repos/${repo.owner}/${repo.name}/pulls?state=all&sort=updated&direction=desc&per_page=${DEFAULT_PER_PAGE}&page=${page}`;
     const headers: Record<string, string> = {
       Authorization: `Bearer ${token}`,
       Accept: "application/vnd.github+json",
@@ -323,7 +343,7 @@ async function fetchOpenPullRequests(
 
     const json = (await res.json()) as RawPullRequest[];
     for (const pr of json) {
-      const parsed = parsePullRequest(pr);
+      const parsed = parsePullRequest(pr, repo, observedAt);
       if (parsed) {
         rows.push({ sourceKey: String(parsed.number), payload: parsed });
       }
@@ -359,27 +379,52 @@ type RawPullRequest = {
   url?: string;
   html_url?: string;
   title?: string;
-  head?: { ref?: string };
+  head?: { ref?: string; sha?: string };
   state?: string;
   draft?: boolean;
   mergeable_state?: string;
+  merge_commit_sha?: string | null;
+  merged_at?: string | null;
+  updated_at?: string;
 };
 
-function parsePullRequest(pr: RawPullRequest): PullRequestSnapshot | null {
-  if (typeof pr.number !== "number" || !pr.head?.ref || !pr.html_url) return null;
-  return {
+function parsePullRequest(
+  pr: RawPullRequest,
+  repo: RepoIdentity,
+  observedAt: string,
+): PullRequestSnapshot | null {
+  if (
+    typeof pr.number !== "number" ||
+    !pr.head?.ref ||
+    !pr.head.sha ||
+    !pr.html_url ||
+    !pr.updated_at
+  ) {
+    return null;
+  }
+  const state = normalizeState(pr);
+  if (!state) return null;
+  const observation = createPullRequestObservation({
+    repositoryFullName: `${repo.owner}/${repo.name}`,
     number: pr.number,
     url: pr.html_url,
     title: pr.title ?? "",
     headBranch: pr.head.ref,
-    state: normalizeState(pr.state),
+    headSha: pr.head.sha,
+    state,
     isDraft: pr.draft === true,
     mergeStateStatus: pr.mergeable_state ?? null,
-  };
+    mergeCommitSha: state === "merged" ? pr.merge_commit_sha ?? null : null,
+    mergedAt: state === "merged" ? pr.merged_at ?? null : null,
+    providerUpdatedAt: pr.updated_at,
+    observedAt,
+  });
+  return parseVerifiedPullRequestObservation(observation);
 }
 
-function normalizeState(s: string | undefined): PullRequestSnapshot["state"] {
-  if (s === "open") return "open";
-  if (s === "closed") return "closed";
-  return "open";
+function normalizeState(pr: RawPullRequest): PullRequestSnapshot["state"] | null {
+  if (pr.merged_at) return "merged";
+  if (pr.state === "open") return "open";
+  if (pr.state === "closed") return "closed";
+  return null;
 }

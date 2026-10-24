@@ -34,10 +34,12 @@ export type ReachMessage = {
 const OUTCOME_CLASS: Record<AttentionSource, string> = {
   "approval-bill": "A bill needs your approval",
   "approval-expense": "An expense claim needs your approval",
+  "approval-leave": "A time-off request needs your decision",
   "approval-outbound": "A message to a customer needs your approval",
   "compliance-submission": "A filing needs your approval",
   "reservation-exception": "A booking needs your decision",
   "storefront-inquiry": "A customer is waiting for a reply",
+  "mailroom-item": "A message is waiting to be acknowledged",
   "hospitality-capacity": "A table or kitchen station needs your decision",
   "business-journey": "Something your customers rely on has stopped working",
   "ai-decision": "A business decision needs you",
@@ -55,7 +57,11 @@ const OUTCOME_CLASS: Record<AttentionSource, string> = {
   "ai-readiness-blocker": "Your AI setup is not finished",
   "platform-health": "A platform service is having trouble",
   "provider-credential": "A connection needs reconnecting",
+  "contribution-setup": "GitHub not connected",
   "compliance-source-freshness": "Compliance evidence is going out of date",
+  "workroom-stall": "A room full of work has stopped moving",
+  "workroom-rebind": "A room is waiting for you to approve a newer version of its work",
+  "orphaned-approval": "AI coworker approvals are going to an account nobody uses",
 };
 
 const URGENCY_LINE: Record<ReachDecision["urgency"], string> = {

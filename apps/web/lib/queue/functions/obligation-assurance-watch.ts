@@ -12,8 +12,8 @@
 // Mirrors business-journey-watchdog.ts: pure exported job + thin Inngest
 // wrappers (cron + run-now event) behind the quiescence gate.
 
-import { cron } from "inngest";
-import { inngest } from "../inngest-client";
+import { cron } from "@/lib/jobs/triggers";
+import { jobs } from "@/lib/jobs";
 import { gateAtEntry } from "../quiescence-gates";
 import {
   OBLIGATION_WATCH_CRON,
@@ -47,7 +47,7 @@ export async function runObligationAssuranceWatchJob(
   };
 }
 
-export const obligationAssuranceWatchScheduled = inngest.createFunction(
+export const obligationAssuranceWatchScheduled = jobs.createFunction(
   {
     id: OBLIGATION_WATCH_INNGEST_ID,
     retries: 1,
@@ -57,13 +57,13 @@ export const obligationAssuranceWatchScheduled = inngest.createFunction(
     triggers: [cron(OBLIGATION_WATCH_CRON)],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, OBLIGATION_WATCH_INNGEST_ID);
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
     return step.run("obligation-assurance-watch", () => runObligationAssuranceWatchJob());
   },
 );
 
-export const obligationAssuranceWatchRunNow = inngest.createFunction(
+export const obligationAssuranceWatchRunNow = jobs.createFunction(
   {
     id: OBLIGATION_WATCH_RUN_NOW_INNGEST_ID,
     retries: 0,
@@ -71,7 +71,7 @@ export const obligationAssuranceWatchRunNow = inngest.createFunction(
     triggers: [{ event: OBLIGATION_WATCH_REQUESTED_EVENT }],
   },
   async ({ step }) => {
-    const gate = await gateAtEntry(step);
+    const gate = await gateAtEntry(step, OBLIGATION_WATCH_RUN_NOW_INNGEST_ID);
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
     return step.run("obligation-assurance-watch", () => runObligationAssuranceWatchJob());
   },

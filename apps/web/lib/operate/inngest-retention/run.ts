@@ -9,6 +9,8 @@
 
 import { type Prisma } from "@dpf/db";
 
+import { isJobEnabled } from "@/lib/operate/scheduled-jobs/core";
+
 import {
   runInngestRetentionSweep,
   type InngestRetentionSweepReport,
@@ -92,14 +94,9 @@ export async function executeScheduledInngestRetentionSweep(opts: {
   const { prisma } = await import("@dpf/db");
 
   // Operator kill switch. A maintenance sweep MUST be disableable without code.
-  const job = await prisma.scheduledJob
-    .findUnique({
-      where: { jobId: INNGEST_RETENTION_JOB_ID },
-      select: { enabled: true, metadata: true },
-    })
-    .catch(() => null);
-
-  if (job && job.enabled === false) {
+  // Shared implementation (BI-7E49FA15); kept here as well as in gateAtEntry
+  // because the run-now event path reaches this runner without the entry gate.
+  if (!(await isJobEnabled(INNGEST_RETENTION_JOB_ID))) {
     return emptyReport(now, dryRun, "disabled-by-operator");
   }
 
@@ -131,6 +128,12 @@ export async function executeScheduledInngestRetentionSweep(opts: {
   }
 
   if (!dryRun) {
+    const job = await prisma.scheduledJob
+      .findUnique({
+        where: { jobId: INNGEST_RETENTION_JOB_ID },
+        select: { metadata: true },
+      })
+      .catch(() => null);
     const prior = (job?.metadata ?? {}) as { recentRuns?: unknown[] };
     const recentRuns = Array.isArray(prior.recentRuns) ? prior.recentRuns : [];
     const nextRecent = [summarizeForMetadata(report), ...recentRuns].slice(
