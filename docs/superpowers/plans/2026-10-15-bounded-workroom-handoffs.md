@@ -39,7 +39,7 @@ Design: [same-mandate handoffs](../specs/2026-10-15-bounded-workroom-handoffs-de
 
 - Decision: atomic
 - Parent: BI-5366EF78
-- Receipt: pending against the corrected plan artifact. Native spec approval on October 23 established baseline `baseline-645f3eb8-d279-4064-82d1-cc85d3f17d28`; the October 16 missing-baseline refusal below is historical.
+- Receipt: `cmvlm3zdc081x01qhdy4jpu0d`
 - Rationale: Shared canonical authority repair, payload-bound request/acknowledgement, dependency fencing and transfer must ship together; partial approval removal would weaken the authority boundary.
 - Dependencies: none external to this atomic delivery; independent canonical spec approval, baseline and plan review/coverage are required gates.
 
@@ -50,9 +50,14 @@ AC-1, AC-2, AC-3, AC-4, AC-5 through `handoff-concurrency-regressions`. The phas
 approval without receiver acceptance, concurrency checks and the shared writer
 predicate would weaken the existing authority contract.
 
-The following mapping uses the approved baseline IDs. The coverage writer must
-accept this exact committed plan; this text does not claim that receipt or an
-independent plan-review pass.
+Coverage was recorded on October 23 against plan commit
+`3051f10794173e462054348f682f854ccd28ba57`, blob
+`3818c90fa16437830ee27942d146225c4d4ab9ae`, under approved scope baseline
+`baseline-645f3eb8-d279-4064-82d1-cc85d3f17d28`. The native plan-review PASS
+binds that same immutable plan artifact. The native coverage check revalidated
+the stored receipt and current baseline on October 24. This copy adds status
+metadata and records those outcomes; the original coverage and review evidence
+remain bound to the recorded artifact.
 
 | Requirement | Planned behavior | Acceptance verification |
 | --- | --- | --- |
@@ -60,16 +65,17 @@ independent plan-review pass.
 | OBJ-2 | Canonical room authority, immutable request bindings and shared dependency locks preserve every protected boundary. | AC-1, AC-2, AC-3 and AC-5: denial and stale-state cases, real receipt replay, PostgreSQL races and protected-boundary verification. |
 | OBJ-3 | Existing timeline and readback expose pending, acknowledged, completed and refused states with at-most-once transfer. | AC-3, AC-4 and AC-5: concurrent/duplicate acknowledgements, rollback outcomes and state presentation tests. |
 
-### October 16 normal coverage attempt and remaining design work
+### Historical October 16 coverage attempt and design work
 
 The normal coverage writer was called against published plan commit
 `79ebe36deb8c155a208c9ded35e158cb764aeabd`, blob
 `c2478ed0db55dfcee74909fe73dfab437ef5e539`. It refused
 `traceability-incomplete`: **no initiative scope baseline exists for
-BI-5366EF78**. The table above remains planning content; no canonical coverage
-was recorded. The normal remedy is an eligible independent spec approval that
-mints the baseline, followed by coverage against the resulting exact artifact.
-The three uncertain original reviews cannot be replayed to obtain it.
+BI-5366EF78**. At that time no canonical coverage was recorded. The October 23
+native spec approval established the baseline above, followed by accepted
+coverage against the recorded plan artifact. Those outcomes resolved the
+missing-baseline condition; the three uncertain original reviews remain
+unsettled and were not replayed to obtain this coverage.
 
 The October 16 receipt-adapter clarification in the existing design is material:
 current receipt replay checks type/target but not payload and happens before
