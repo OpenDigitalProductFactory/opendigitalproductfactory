@@ -15,11 +15,11 @@ describe("bounded handoff tool adapter",()=>{
   it.each([{}, {phase:"unknown"}, {...params,extraAuthority:true}])("retains authority for legacy or malformed input",async input=>{expect(await boundedHandoffConsequenceForCall({...call,params:input})).toMatchObject({consequence:"authority"});expect(m.assess).not.toHaveBeenCalled();});
   it("retains authority for missing authenticated assistant context",async()=>{expect(await boundedHandoffConsequenceForCall({...call,context:undefined})).toMatchObject({consequence:"authority"});});
   it("retains authority for a failed or changed boundary",async()=>{m.assess.mockRejectedValue(new Error("changed"));expect(await boundedHandoffConsequenceForCall(call)).toMatchObject({consequence:"authority"});});
-  it("normalizes and binds before receipt replay with a server-owned lock prefix",()=>{const a=prepareBoundedHandoff(params);const b=prepareBoundedHandoff({...params,reason:"Different next step"});expect(a).toMatchObject({params,payloadBinding:{version:1},beforeRoomLock:m.lock});expect(a&&"payloadBinding" in a&&a.payloadBinding.digest).not.toBe(b&&"payloadBinding" in b&&b.payloadBinding.digest);});
+  it("normalizes and binds before receipt replay with a server-owned lock prefix",()=>{const a=prepareBoundedHandoff(params);const b=prepareBoundedHandoff({...params,reason:"Different next step"});expect(a).toMatchObject({params,payloadBinding:{version:1},beforeRoomLock:m.lock});expect(a && ("payloadBinding" in a) && a.payloadBinding.digest).not.toBe(b && ("payloadBinding" in b) && b.payloadBinding.digest);});
   it("publishes the confirmed receipt through the existing feed and invalidates this room",async()=>{
     const prepared=prepareBoundedHandoff(params);
-    expect(prepared&&"afterCommit" in prepared&&prepared.afterCommit).toBeTypeOf("function");
-    if(prepared&&"afterCommit" in prepared) await prepared.afterCommit?.({workCapsuleId:"room-row",id:"receipt-row"},{success:true,message:"Requested"});
+    expect(prepared && ("afterCommit" in prepared) && prepared.afterCommit).toBeTypeOf("function");
+    if (prepared && ("afterCommit" in prepared)) await prepared.afterCommit?.({workCapsuleId:"room-row",id:"receipt-row"},{success:true,message:"Requested"});
     expect(m.publish).toHaveBeenCalledWith("room-row","receipt-row");
     expect(m.invalidate).toHaveBeenCalledWith("WC-room");
   });
