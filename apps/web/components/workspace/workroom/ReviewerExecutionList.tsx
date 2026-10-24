@@ -29,7 +29,7 @@ function ReviewerExecutionItem({ run }: { run: ReviewerExecutionObservation }) {
   return <li>
       <details className="rounded border border-[var(--dpf-border)] p-3">
         <summary className="min-h-11 cursor-pointer break-words py-2">{gate ? <>{gate} · </> : null}{run.taskRunId} · {run.status} · {identity}</summary>
-        <dl className="grid gap-3 break-words sm:grid-cols-2">
+        <dl className="grid grid-cols-1 gap-3 break-words sm:grid-cols-2">
           <div><dt className="font-medium">Where are we?</dt><dd>Recorded {run.status}. Heartbeat {run.heartbeat}: {run.lastHeartbeatAt ?? "unknown"}. Read at {run.readAt}.</dd></div>
           <div><dt className="font-medium">Why are we here?</dt><dd>{reason}</dd></div>
           <div><dt className="font-medium">What can happen next?</dt><dd aria-live="polite" aria-atomic="true">{next}</dd></div>
