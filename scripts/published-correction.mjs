@@ -155,7 +155,12 @@ export function inspectCorrectionRecord(cwd = process.cwd(), { contextReader = r
     || !stageIdentityMatches(contextIdentity(expected), contextIdentity({ pullRequest: proof.pullRequest, protection: proof.protection }))) return { ok: false, reason: "Published PR or protection changed; correction proof is not current." };
   const identity = identify({ cwd, plan: proof.commands });
   const rebound = identity ? { ...identity, base: git(["merge-base", "HEAD", "origin/main"]), policy: CORRECTION_POLICY, branch: proof.branch, plan: proof.planDigest } : null;
-  if (!stageIdentityMatches(proof.identity, rebound)) return { ok: false, reason: "Source, toolchain, environment or expected plan changed; correction proof cannot be reused." };
+  if (!stageIdentityMatches(proof.identity, rebound)) return {
+    ok: false, reason: "Source, toolchain, environment or expected plan changed; correction proof cannot be reused.",
+    // Only same-source, current, rederived-plan/context-validated inputs reach
+    // this boundary. Keep the mapping for a fresh run, never the old result.
+    reverificationInputs: { relatedTestsBySource: proof.relatedTestsBySource ?? {} },
+  };
   return { ...verdict, state };
   } catch (error) { return { ok: false, reason: `Correction inspection unavailable: ${error.message}` }; }
 }
@@ -239,10 +244,14 @@ export async function verifyPublishedCorrection({ cwd = process.cwd(), relatedTe
   if (pr.state !== "OPEN" || pr.isDraft || pr.headRefName !== branch || pr.baseRefName !== "main"
     || !context.protection.mergeQueue || !context.protection.requiredChecks.length) throw new Error("Matching published PR and active protected checks/merge queue are required.");
   const prior = inspectCorrectionRecord(cwd, { contextReader: () => context, identify, now: now() });
-  if (prior.ok) return prior.state;
-  const anchor = chooseInitialAnchor({ records: recordsReader(cwd), previous: readCorrectionRecord(cwd), pullRequest: pr,
+  if (prior.ok && Object.keys(relatedTestsBySource).length === 0) return prior.state;
+  const retainedMapping = prior.ok ? prior.proof.relatedTestsBySource : prior.reverificationInputs?.relatedTestsBySource;
+  relatedTestsBySource = { ...retainedMapping, ...relatedTestsBySource };
+  const anchor = prior.ok ? prior.proof.anchor : chooseInitialAnchor({ records: recordsReader(cwd), previous: readCorrectionRecord(cwd), pullRequest: pr,
     treeAt: sha => git(["rev-parse", `${sha}^{tree}`]), now: now() });
   const { commands, changedFiles, classification, plan } = describeCorrection({ cwd, anchor, head, tree, relatedTestsBySource });
+  if (prior.ok && correctionPlanDigest(commands) === prior.proof.planDigest
+    && classification === prior.proof.classification && stageIdentityMatches(changedFiles, prior.proof.changedFiles)) return prior.state;
   const identityNow = () => {
     const value = identify({ cwd, plan: commands });
     // The queue owns integration with the moving main tip. Local affected proof

@@ -561,3 +561,88 @@ test("the real Git hook executes correction verification once, reuses proof and 
     assert.equal(readFileSync(oldSlot, "utf8"), oldBytes);
   } finally { fixture.remove(); }
 });
+
+
+function mappedCorrectionFixture() {
+  const fixture = gitFixture();
+  const source = "scripts/registry.mjs", target = "scripts/contract.test.mjs";
+  writeFileSync(join(fixture.cwd, source), "export const value = 2;\n");
+  writeFileSync(join(fixture.cwd, target), `import assert from 'node:assert/strict';
+    import {value} from './registry.mjs';
+    assert.equal(value, 2); assert.notEqual(process.env.DPF_CORRECTION_TEST_CONTEXT, 'fail');
+`);
+  fixture.git("add", "."); fixture.git("commit", "--quiet", "-m", "mapped source correction");
+  return { ...fixture, source, target, mapping: { [source]: [target] } };
+}
+
+test("a wrapper identity miss retains only validated mapping and executes real current checks", async () => {
+  const fixture = mappedCorrectionFixture();
+  let environment = "direct", executions = 0;
+  const identify = () => ({ ...fixture.identify(), environment });
+  const run = (command, args, options) => {
+    executions++;
+    return execute(command, args, { ...options, env: { ...process.env, DPF_CORRECTION_TEST_CONTEXT: environment } });
+  };
+  const options = { ...fixture.options, persist: true, identify, run };
+  try {
+    const first = await verifyPublishedCorrection({ ...options, relatedTestsBySource: fixture.mapping });
+    assert.equal(executions, 1);
+    environment = "git-hook";
+    const missed = inspectCorrectionRecord(fixture.cwd, { identify, contextReader: fixture.contextReader });
+    assert.equal(missed.ok, false, "changed environment must not reuse PASS");
+    const next = await verifyPublishedCorrection(options);
+    assert.equal(executions, 2, "the mapped command must actually execute again");
+    assert.deepEqual(next.publicationCorrection.relatedTestsBySource, fixture.mapping);
+    assert.equal(next.publicationCorrection.identity.environment, "git-hook");
+    assert.deepEqual(next.publicationCorrection.commands, first.publicationCorrection.commands);
+    assert.equal(next.gatePassed, false);
+    environment = "fail";
+    await assert.rejects(verifyPublishedCorrection(options), /Affected check failed/);
+    assert.equal(executions, 3, "real current command failure cannot borrow prior PASS");
+    assert.equal(inspectCorrectionRecord(fixture.cwd, { identify, contextReader: fixture.contextReader }).ok, false);
+    assert.equal(JSON.parse(readFileSync(correctionReceiptPath(fixture.cwd), "utf8")).status, "inconclusive");
+  } finally { fixture.remove(); }
+});
+
+test("explicit current mapping takes precedence over retained retry input", async () => {
+  const fixture = mappedCorrectionFixture();
+  let environment = "direct";
+  const identify = () => ({ ...fixture.identify(), environment });
+  const options = { ...fixture.options, persist: true, identify };
+  try {
+    await verifyPublishedCorrection({ ...options, relatedTestsBySource: fixture.mapping });
+    const priorBytes = readFileSync(correctionReceiptPath(fixture.cwd), "utf8");
+    await assert.rejects(verifyPublishedCorrection({ ...options, relatedTestsBySource: { [fixture.source]: [] } }), /Affected mapping unresolved/);
+    assert.equal(readFileSync(correctionReceiptPath(fixture.cwd), "utf8"), priorBytes);
+    const replacement = { [fixture.source]: [fixture.target, "scripts/example.test.mjs"] };
+    const result = await verifyPublishedCorrection({ ...options, relatedTestsBySource: replacement });
+    assert.deepEqual(result.publicationCorrection.relatedTestsBySource, replacement);
+    assert.ok(result.publicationCorrection.commands[0].args.includes("scripts/example.test.mjs"));
+  } finally { fixture.remove(); }
+});
+
+test("stale source, modified plan and changed protection cannot supply retry mapping", async t => {
+  for (const mutation of ["source", "plan", "foreign", "protection"]) await t.test(mutation, async () => {
+    const fixture = mappedCorrectionFixture();
+    let environment = "direct";
+    const identify = () => ({ ...fixture.identify(), environment });
+    let contextReader = fixture.contextReader;
+    try {
+      await verifyPublishedCorrection({ ...fixture.options, persist: true, identify, relatedTestsBySource: fixture.mapping });
+      environment = "git-hook";
+      if (mutation === "source") {
+        writeFileSync(join(fixture.cwd, fixture.source), "export const value = 3;\n");
+        fixture.git("add", "."); fixture.git("commit", "--quiet", "-m", "different source");
+      } else if (mutation === "plan" || mutation === "foreign") {
+        const path = correctionReceiptPath(fixture.cwd), receipt = JSON.parse(readFileSync(path, "utf8"));
+        if (mutation === "plan") receipt.result.publicationCorrection.relatedTestsBySource[fixture.source] = [];
+        else receipt.result.publicationCorrection.repositoryFullName = "foreign/repository";
+        writeFileSync(path, JSON.stringify(receipt));
+      } else contextReader = () => { const value = fixture.contextReader(); value.protection.requiredChecks = ["Changed required CI"]; return value; };
+      const inspected = inspectCorrectionRecord(fixture.cwd, { identify, contextReader });
+      assert.equal(inspected.ok, false); assert.equal(inspected.reverificationInputs, undefined);
+      await assert.rejects(verifyPublishedCorrection({ ...fixture.options, persist: true, identify, contextReader,
+        run: () => assert.fail("an unvalidated retained map must never launch checks") }), /Affected mapping unresolved/);
+    } finally { fixture.remove(); }
+  });
+});
