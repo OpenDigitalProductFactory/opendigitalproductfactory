@@ -240,6 +240,46 @@ room's work is what the Workroom drive dispatches, so the hold lives there:
 - Usage-limit auto-resume (release a hold at the provider's reset time) is a
   follow-up; the hold records the failure kind it needs.
 
+
+**P6b corrective continuation (2026-10-25, BI-9CD95438).** A known provider
+hold must not consume a sequential dispatch slot. At source `22f02871`,
+the drive applied its per-tick admission counter before `applyDrivePlan`
+read the room's hold. The observed tick admitted four held rooms, skipped
+all four, and left eligible work waiting for agent capacity. This demonstrates
+wasted admission on that tick, not indefinite starvation or provider recovery.
+
+One atomic correction, in this order:
+
+1. Add a failing drive-tick regression with four held rooms followed by
+   eligible rooms and a finite cap. Assert that held rooms remain
+   `provider_held`, acquire no lease and enqueue no task, while only eligible
+   dispatches consume the cap. Cover a hold encountered after capacity is
+   exhausted, malformed hold data, explicit removal of a hold, and unchanged
+   ordering of eligible rooms.
+2. Reuse `readWorkroomQueueHold` before the sequential admission counter.
+   Keep the existing later hold check and its persisted blocked explanation.
+   Do not duplicate hold parsing, change the pool-derived cap, refund failed
+   dispatches, reorder eligible rooms, or change graph-token admission.
+3. Run the graph-linked drive tests plus queue-hold and dispatch-cap tests,
+   both web TypeScript programs, style guard and documentation freshness.
+   Complete the canonical exact-tree gate, attributed semantic review and
+   protected PR flow before publication is considered delivered.
+4. After a qualified containing release, observe a bounded canonical tick:
+   already-held rooms remain held, consume no sequential admission, and
+   eligible work can use the available capacity. Do not resume any provider
+   queue or manufacture work for this observation. Missing eligible work or
+   unrelated admission constraints leave the corresponding runtime case unrun.
+
+This restores P6b's room-local pause contract. The repair and regression tests
+are not independent deliverables, and do not complete the broader P6 recovery
+classes or parent initiative acceptance. Existing hold records, resume
+commands, authority checks and task identities remain unchanged. No schema,
+provider setting, grant, worker, new status surface or dependency is added.
+Refactoring reuses the canonical hold reader and existing admission counter.
+Rollback is one source revert; it preserves stored holds and restores the
+previous capacity-waste behavior. The original failed observations remain
+part of the evidence.
+
 ### 4.7 Agent CLIs as supervised runtimes (`BI-05715F4C`)
 
 **Delivered 2026-10-14** (`apps/web/lib/workroom-runtime/`): the adapter
