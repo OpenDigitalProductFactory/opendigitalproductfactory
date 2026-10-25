@@ -1,5 +1,5 @@
 ---
-status: active
+status: draft
 ---
 
 # Bounded Workroom handoffs implementation plan
@@ -21,7 +21,9 @@ Design: [same-mandate handoffs](../specs/2026-10-15-bounded-workroom-handoffs-de
    Extract the shared same-mandate snapshot/predicate for classification and the
    writer. Extend the existing receipt adapter with the design's optional
    versioned payload binding and compare it before cached replay, including
-   rejected results. Reuse its transaction client without a nested transaction.
+   rejected results. Prove the exact active bound callback client, preserve the
+   existing lease writer's nested transaction/savepoint capability, and do not
+   open a separate outer transaction in the handoff handler.
    Preserve the legacy controlled writer. This is internal sequencing of
    one atomic deliverable, not independently shippable work.
 4. Project pending/completed/failed on the existing timeline and MCP readback.
@@ -58,6 +60,13 @@ binds that same immutable plan artifact. The native coverage check revalidated
 the stored receipt and current baseline on October 24. This copy adds status
 metadata and records those outcomes; the original coverage and review evidence
 remain bound to the recorded artifact.
+
+The current draft makes a substantive transaction-proof and verification
+correction after the served October 24 refusal. The historical coverage and
+plan-review receipts above do not approve this new plan revision. Obtain current
+native scope approval and coverage through their normal writers before
+implementation; this text does not mint or advance a receipt or settle an old
+review execution.
 
 | Requirement | Planned behavior | Acceptance verification |
 | --- | --- | --- |
@@ -223,6 +232,49 @@ new grant, fixture-lease reassignment or hidden evidence invalidation. Run the
 same schedule through the real receipt adapter, including rejection publication,
 not only extracted pure predicates. Caller-outcome and lease-renewal tests from
 the earlier advisory remain required. Source audit is not execution evidence.
+
+**October 25 transaction-proof correction (unimplemented).** The design now
+requires exact identity with the active bound receipt client instead of rejecting
+a client because it exposes `$transaction`. Keep the production amendment bounded
+to the existing receipt-proof helper and bounded handler; no new recovery API,
+authority branch or transaction lifecycle is part of this repair.
+
+After ordinary approval and implementation admission:
+
+1. Add the joined-wrapper PostgreSQL request regression first. Run it against
+   the unchanged guard with the real Prisma callback, retaining its nested
+   transaction capability. Record the actual transaction-required RED; do not
+   mock the identity helper.
+2. Apply the two production changes and prove exact-bound-client acceptance,
+   no-context rejection, active-but-unbound exact-client rejection, and root or
+   foreign-client rejection. Reuse the actual unprepared receipt wrapper for the
+   unbound case; do not export or directly populate its private context. The
+   identity check must not start a transaction.
+3. Through the real prepared receipt wrapper in the isolated PostgreSQL fixture,
+   retain a known pre-effect refusal, prove its old key stays refused, then
+   execute a legitimate fresh command through the corrected wrapper. It must
+   create one pending request with unchanged executor/lease and transfer once on
+   the exact receiver's acknowledgement. The fixture refusal is not historical
+   live no-effect proof and does not replace the pre-fix RED run.
+4. Exercise the existing lease writer's real nested transaction/savepoint. Make
+   outer completion/publication fail afterward; assert the executor, human lease
+   holder, expiry, transfer count, activity and accepted receipt roll back
+   together. Preserve the existing durable post-rollback rejection protocol.
+5. After protected delivery, canonical deployment and CAN-TEST, establish the
+   original typed guard refusal and protected-boundary no-effect evidence.
+   Recheck current authority, exact receiver, active business need and lease
+   before any legitimate fresh command. Preserve the old key/envelope and
+   rejection; do not request another human approval merely for a phase change.
+   An unknown effect or actual new authority requirement retains its native
+   remedy. Do not resurrect a completed room just to test a handoff.
+
+The PostgreSQL fixture proves transaction, receipt and lease behavior with its
+fixed admitted roster; it does not prove OAuth or live room-policy admission.
+Served checks must use the authorized real client identities. The prior F969
+review and its budgets remain unchanged and unknown. This technical amendment
+does not authorize its replay or a replacement request: only the normal issuer's
+actual decision on the current artifact may route a review. The production patch
+and every changed-source test above remain unapplied and unrun at authoring.
 
 ## Impact, risk and rollback
 
