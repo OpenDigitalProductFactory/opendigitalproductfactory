@@ -1,4 +1,5 @@
 import { prisma } from "@dpf/db";
+import { isLandedSwapFalseFailureReason } from "./landed-swap-identity";
 import { transitionState, setQuiescenceLevel, broadcastQuiescenceCleared } from "./quiescence";
 
 /** A failed caller cannot finish the swap handshake. Do not infer failure from
@@ -13,9 +14,12 @@ export async function recoverOrphanedUpgradeDrains(now = new Date()): Promise<nu
   for (const row of candidates) {
     if (!row.triggerRefId) continue;
     const parent = await prisma.selfUpgradeRun.findUnique({
-      where: { runId: row.triggerRefId }, select: { status: true, completedAt: true },
+      where: { runId: row.triggerRefId }, select: { status: true, completedAt: true, reason: true },
     });
     if (parent?.status !== "failed" || !parent.completedAt || parent.completedAt >= cutoff) continue;
+    // A known replay failure may be corrected from independent deployment proof.
+    // It is not authoritative failure, even before its parent has been healed.
+    if (isLandedSwapFalseFailureReason(parent.reason)) continue;
     try {
       await transitionState(row.runId, "failed", {
         outcome: "failed", completionSource: "watchdog", completedAt: now,
