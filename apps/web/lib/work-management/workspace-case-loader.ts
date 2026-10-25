@@ -701,6 +701,7 @@ export async function loadWorkspaceWorkCaseDetail({
   const boundaryClaim = readWorkroomBoundaryClaim(anchoredCapsule?.scopeClaims);
 
   const room = buildWorkroomView({
+    deliveryState: anchoredCapsule?.workspaceState,
     executionAttentionReason: execution.attentionReason,
     caseKey: resolvedCaseKey,
     sourceHealth: execution.partial ? "partial" : undefined,

@@ -11,6 +11,7 @@ import type { WorkroomShapeRebindView } from "@/lib/work-management/workroom-sha
 import { AccountabilityStatement } from "./RoomWorkforcePanel";
 import { WorkroomStageDecision } from "./WorkroomStageDecision";
 import { WorkroomShapeRebind } from "./WorkroomShapeRebind";
+import { WorkroomDeliveryAgreement } from "./WorkroomDeliveryAgreement";
 
 import {
   roomLabel,
@@ -36,7 +37,7 @@ function participantSummary(room: WorkroomView): string {
   if (count === 0) return "No participants listed";
   const names = room.participants.slice(0, 2).map((participant) => participant.displayName);
   const remainder = count - names.length;
-  return `${count} ${count === 1 ? "participant" : "participants"} · ${names.join(", ")}${remainder > 0 ? ` +${remainder}` : ""}`;
+  return `${count} ${count === 1 ? "participant" : "participants"} Ã‚Â· ${names.join(", ")}${remainder > 0 ? ` +${remainder}` : ""}`;
 }
 
 export function WorkroomHeader({ room, summary, workforce, stageDecision, shapeRebind }: Props) {
@@ -126,8 +127,9 @@ export function WorkroomHeader({ room, summary, workforce, stageDecision, shapeR
             ) : null}
           </div>
           <p className="mt-2 text-base font-semibold leading-6 text-[var(--dpf-text)]">
-            {room.outcome.statement ?? "Outcome not defined"}
+            {room.delivery?.originalObjective ?? room.outcome.statement ?? "Outcome not defined"}
           </p>
+          {room.delivery ? <WorkroomDeliveryAgreement view={room.delivery} /> : null}
         </section>
 
         <WorkroomStructurePanel structure={room.structure} />

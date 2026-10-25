@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+const monitoringDecision = vi.hoisted(() => vi.fn(async () => null as "enabled" | "disabled" | "undecided" | null));
+vi.mock("@/lib/platform-runtime/monitoring-switch-loader", () => ({
+  loadMonitoringCapabilityDecision: monitoringDecision,
+}));
+
 vi.mock("@dpf/db", () => ({
   prisma: {
     platformSetupProgress: {
@@ -26,6 +31,7 @@ import {
   advanceStep,
   skipStep,
   getSetupContext,
+  reconcileMonitoringSetupStep,
   updateSetupContext,
 } from "./setup-progress";
 import { SETUP_STEPS } from "./setup-constants";
@@ -33,6 +39,7 @@ import { SETUP_STEPS } from "./setup-constants";
 describe("setup-progress", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    monitoringDecision.mockResolvedValue(null);
   });
 
   describe("isFirstRun", () => {
@@ -228,6 +235,54 @@ describe("setup-progress", () => {
       };
 
       expect((await getSetupContext())?.cloudProviderReadiness).toBeUndefined();
+    });
+
+    it("threads the live monitoring decision and ignores a stored copy", async () => {
+      (prisma.platformSetupProgress.findFirst as any).mockResolvedValue({
+        context: { orgName: "Acme Ltd", monitoringCapabilityDecision: "undecided" },
+      });
+      monitoringDecision.mockResolvedValue("enabled");
+      expect((await getSetupContext())?.monitoringCapabilityDecision).toBe("enabled");
+
+      monitoringDecision.mockResolvedValue(null);
+      expect((await getSetupContext())?.monitoringCapabilityDecision).toBeUndefined();
+    });
+  });
+
+  describe("reconcileMonitoringSetupStep", () => {
+    it("completes monitoring when a decision is recorded and leaves an undecided step pending", async () => {
+      const steps = Object.fromEntries(
+        SETUP_STEPS.map((step) => [
+          step,
+          SETUP_STEPS.indexOf(step) <= SETUP_STEPS.indexOf("platform-development") ? "completed" : "pending",
+        ]),
+      );
+      (prisma.platformSetupProgress.update as any).mockResolvedValue({ organizationId: null });
+
+      monitoringDecision.mockResolvedValue("undecided");
+      const open = await reconcileMonitoringSetupStep({
+        id: "test-id",
+        currentStep: "monitoring",
+        steps,
+      });
+      expect(open.progress?.currentStep).toBe("monitoring");
+      expect(prisma.platformSetupProgress.update).not.toHaveBeenCalled();
+
+      monitoringDecision.mockResolvedValue("disabled");
+      const decided = await reconcileMonitoringSetupStep({
+        id: "test-id",
+        currentStep: "monitoring",
+        steps,
+      });
+      expect(decided.monitoringCapabilityDecision).toBe("disabled");
+      expect(decided.progress?.currentStep).toBe("build-studio");
+      expect(prisma.platformSetupProgress.update).toHaveBeenCalledWith({
+        where: { id: "test-id" },
+        data: expect.objectContaining({
+          currentStep: "build-studio",
+          steps: expect.objectContaining({ monitoring: "completed" }),
+        }),
+      });
     });
   });
 

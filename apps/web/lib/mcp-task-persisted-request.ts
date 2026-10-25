@@ -8,6 +8,8 @@ import { remoteTaskRequestMatches } from "./mcp-task-capacity-contract";
 import { parseDurableInferenceTaskMetadata } from "./mcp-task-durable-inference-contract";
 import { parseInitiativeReviewBinding } from "./mcp-task-review-contract";
 import type { RemoteTaskSubmitAuth } from "./mcp-task-submit-types";
+import { parseEngagementTaskBinding } from "./coworker-service-catalog/engagement-task-binding";
+import { parseRemoteTaskSubmitParams } from "./mcp-task-submit-params";
 import type { RemoteTaskSubmitParams } from "./mcp-task-submit-params";
 
 export type PersistedRemoteTask = {
@@ -149,6 +151,9 @@ export function reconstructPersistedRemoteTask(
     };
   }
 
+  const rawEngagementBinding = metadata?.["engagementBinding"];
+  const engagementBinding = rawEngagementBinding == null ? undefined : parseEngagementTaskBinding(rawEngagementBinding);
+  if (rawEngagementBinding != null && !engagementBinding) return { ok: false, code: "persisted_request_invalid", message: "Persisted engagement binding is invalid." };
   const rawReviewBinding = metadata?.["initiativeReviewBinding"];
   const initiativeReviewBinding = rawReviewBinding === null || rawReviewBinding === undefined
     ? undefined
@@ -195,9 +200,13 @@ export function reconstructPersistedRemoteTask(
     authorityScope,
     ...(collaborationKind ? { collaborationKind } : {}),
     ...(initiativeReviewBinding ? { initiativeReviewBinding } : {}),
+    ...(engagementBinding ? { engagementBinding } : {}),
     ...(durableInference ? { recipeId: durableInference.recipeId } : {}),
   };
 
+  if (engagementBinding && typeof parseRemoteTaskSubmitParams({ ...parsed }) === "string") {
+    return { ok: false, code: "persisted_request_invalid", message: "Persisted engagement task is outside its closed submission contract." };
+  }
   if (!remoteTaskRequestMatches(metadata, parsed)) {
     return {
       ok: false,
@@ -208,7 +217,7 @@ export function reconstructPersistedRemoteTask(
 
   const hasRecoveryAuthority = isRecord(row.progressPayload) && row.progressPayload["reviewExecutionAuthority"] !== undefined;
   const recoveryAuthority = hasRecoveryAuthority ? parseReviewExecutionAuthority(row.progressPayload, metadata, row.userId) : null;
-  if (hasRecoveryAuthority && (!recoveryAuthority || !initiativeReviewBinding?.workroomRef || durableInference)) {
+  if (hasRecoveryAuthority && (!recoveryAuthority || !initiativeReviewBinding?.workroomRef || durableInference || engagementBinding)) {
     return { ok: false, code: "persisted_request_invalid", message: "Persisted review execution authority is invalid." };
   }
   return ok({

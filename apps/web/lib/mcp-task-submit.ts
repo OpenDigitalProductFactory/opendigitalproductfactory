@@ -7,7 +7,7 @@ import { resolveMcpTaskAuthorityKey } from "@/lib/auth/oauth-task-authority";
 import { recoverExpiredOAuthReview } from "./mcp-task-oauth-recovery";
 import { SOURCE_READ_DEFAULT_MAX_CHARS, SOURCE_READ_DEFAULT_MAX_LINES } from "./source-page-lines";
 import { persistedTerminalReaderExecutions, reserveTerminalWriterReplay } from "./mcp-task-terminal-writer-recovery";
-import { prisma, type Prisma } from "@dpf/db";
+import { prisma, Prisma } from "@dpf/db";
 import { loadTaskInitiativeReviewOutcome, reconcilePersistedReviewStatus } from "./mcp-task-review-outcome";
 import { INITIATIVE_DISPOSITION_GUIDANCE } from "./backlog/initiative-readiness/disposition-contract";
 import { withTaskRunApprovalLocation } from "./mcp/external-approval-location-lookup";
@@ -61,6 +61,7 @@ import {
 } from "./mcp-task-replay-projection";
 import { durableInferenceTaskMetadata } from "./mcp-task-durable-inference-contract";
 import { prepareRemoteObjectiveMappingAdmission, remoteObjectiveMappingAdmissionErrorResult, revalidateRemoteObjectiveMappingReplay } from "./mcp-task-objective-mapping-admission";
+import { validateEngagementTask, admitEngagementTask } from "./coworker-service-catalog/engagement-fulfillment";
 export {
   parseInitiativeReviewBinding,
   validateInitiativeReviewAuthorityScope,
@@ -218,7 +219,14 @@ export async function submitRemoteCoworkerTask(input: {
   if (recovery && !recovery.ok) return { kind: "result", result: recovery.result };
   const taskRunId = recovery?.ok ? recovery.data.existing.taskRunId
     : deterministicExternalTaskRunId(taskAuthorityKey, parsed.idempotencyKey);
-  const durableInitialDispatch = parsed.recipeId
+  if (parsed.engagementBinding) {
+    try {
+      await validateEngagementTask({ binding: parsed.engagementBinding, token, taskRunId, authorityScope: parsed.authorityScope ?? [], request: parsed });
+    } catch (error) {
+      return { kind: "result", result: { isError: true, content: remoteTaskContent(error instanceof Error ? error.message : "Engagement authority unavailable"), structuredContent: { error: "engagement_admission_refused" } } };
+    }
+  }
+  const durableInitialDispatch = parsed.recipeId || parsed.engagementBinding
     ? initialRemoteTaskDispatchProjection(taskRunId, new Date())
     : null;
   const existingQuery: Prisma.TaskRunFindFirstArgs = {
@@ -540,9 +548,10 @@ export async function submitRemoteCoworkerTask(input: {
         requestedAgentId: parsed.agentId,
         requestedThreadId: parsed.threadId ?? null,
         initiativeReviewBinding: parsed.initiativeReviewBinding ?? null,
+        ...(parsed.engagementBinding ? { engagementBinding: parsed.engagementBinding } : {}),
         ...(parsed.recipeId ? { durableInference: durableInferenceTaskMetadata(parsed.recipeId) } : {}),
       },
-      ...(parsed.recipeId && durableInitialDispatch ? {
+      ...((parsed.recipeId || parsed.engagementBinding) && durableInitialDispatch ? {
         deferredSubmission: {
           content: parsed.prompt,
           metadata: {
@@ -556,6 +565,10 @@ export async function submitRemoteCoworkerTask(input: {
         },
       } : {}),
       ...(objectiveMappingAdmission.data.admission ?? {}),
+      ...(parsed.engagementBinding ? {
+        transactionIsolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        admissionGuard: (db: Prisma.TransactionClient) => admitEngagementTask({ binding: parsed.engagementBinding!, token, taskRunId, authorityScope: parsed.authorityScope ?? [], request: parsed, db }),
+      } : {}),
     });
   } catch (error) {
     const admissionRefusal = remoteObjectiveMappingAdmissionErrorResult(error);
@@ -567,7 +580,7 @@ export async function submitRemoteCoworkerTask(input: {
     throw error;
   }
 
-  if (!parsed.recipeId) {
+  if (!parsed.recipeId && !parsed.engagementBinding) {
     await createTaskMessage({
       taskRunId: run.taskRunId,
       taskRunRecordId: run.id,
@@ -610,11 +623,11 @@ export async function submitRemoteCoworkerTask(input: {
     };
   }
 
-  if (parsed.recipeId || externalMcpTaskAsyncEnabled()) {
+  if (parsed.recipeId || parsed.engagementBinding || externalMcpTaskAsyncEnabled()) {
     return {
       kind: "result",
       result: await enqueuePersistedRemoteTaskSubmission(run.taskRunId, {
-        projectionAlreadyPersisted: Boolean(parsed.recipeId),
+        projectionAlreadyPersisted: Boolean(parsed.recipeId || parsed.engagementBinding),
       }),
     };
   }

@@ -505,6 +505,9 @@
     "apps/web/components/workspace/workroom/WorkroomCycles.tsx": [
       "docs/user-guide/workspace/work-rooms.md"
     ],
+    "apps/web/components/workspace/workroom/WorkroomDeliveryAgreement.tsx": [
+      "docs/user-guide/workspace/finite-delivery-agreements.md"
+    ],
     "apps/web/components/workspace/workroom/WorkroomFlowMap.tsx": [
       "docs/user-guide/workspace/work-rooms.md"
     ],
@@ -1581,7 +1584,8 @@
       "docs/user-guide/ai-workforce/how-governed-work-runs.md"
     ],
     "apps/web/lib/work-management/room-types.ts": [
-      "docs/architecture/work-shapes-and-the-decision-gate.md"
+      "docs/architecture/work-shapes-and-the-decision-gate.md",
+      "docs/user-guide/workspace/finite-delivery-agreements.md"
     ],
     "apps/web/lib/work-management/stage-tool-parity.test.ts": [
       "docs/architecture/gated-permissions-process.md"
@@ -1607,6 +1611,7 @@
       "docs/architecture/gated-permissions-process.md"
     ],
     "apps/web/lib/work-management/workspace-case-loader.ts": [
+      "docs/user-guide/workspace/finite-delivery-agreements.md",
       "docs/user-guide/workspace/work-rooms.md"
     ],
     "apps/web/lib/work-management/workspace-room-access.ts": [
@@ -4120,6 +4125,11 @@
       "apps/web/components/attention/AttentionInbox.tsx",
       "apps/web/components/attention/OwnerDecisionCards.tsx",
       "apps/web/lib/attention/owner-projection.ts"
+    ],
+    "docs/user-guide/workspace/finite-delivery-agreements.md": [
+      "apps/web/components/workspace/workroom/WorkroomDeliveryAgreement.tsx",
+      "apps/web/lib/work-management/room-types.ts",
+      "apps/web/lib/work-management/workspace-case-loader.ts"
     ],
     "docs/user-guide/workspace/supported-file-formats.md": [
       "apps/web/lib/shared/file-parsers.ts",
