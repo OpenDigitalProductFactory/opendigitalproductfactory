@@ -19,6 +19,7 @@ export type GitHubPullRequestEvent = {
   pullRequestUrl: string;
   draft: boolean;
   merged: boolean;
+  mergedAt?: string | null;
   state: string;
   title: string;
   body: string;
@@ -104,6 +105,7 @@ export function parseGitHubPullRequestEvent(payload: unknown): GitHubPullRequest
     pullRequestUrl: url,
     draft: pullRequest.draft === true,
     merged: pullRequest.merged === true,
+    mergedAt: typeof pullRequest.merged_at === "string" ? pullRequest.merged_at : null,
     state: typeof pullRequest.state === "string" ? pullRequest.state : "",
     title: typeof pullRequest.title === "string" ? pullRequest.title : "",
     body: typeof pullRequest.body === "string" ? pullRequest.body : "",
@@ -170,6 +172,7 @@ async function transitionItem(args: {
   reason: string;
   pullRequestNumber: number;
   pullRequestUrl: string;
+  delivery?: { kind: "merged"; mergedAt: string | null } | { kind: "workroom" };
 }): Promise<boolean> {
   if (args.from === args.to) return false;
   if (!isBacklogStatus(args.from) || !isLegalTransition(args.from, args.to)) return false;
@@ -187,6 +190,7 @@ async function transitionItem(args: {
       });
       let priorAdvanceAt: number | null = null;
       let explicitResumeAt: number | null = null;
+      let explicitReopenAt: number | null = null;
       for (const row of history) {
         const payload = row.payload;
         if (!payload || typeof payload !== "object" || Array.isArray(payload)) continue;
@@ -199,11 +203,22 @@ async function transitionItem(args: {
           }
         } else if (typeof payload.to === "string" && isCodingPoolStatus(payload.to)) {
           explicitResumeAt = Math.max(explicitResumeAt ?? at, at);
+          if (payload.from === "awaiting-acceptance" || payload.from === "done") {
+            explicitReopenAt = Math.max(explicitReopenAt ?? at, at);
+          }
         }
       }
       // Equal timestamps cannot establish that the PR superseded the reopen.
       // Preserve the explicit decision, including when old events were replayed.
       if (priorAdvanceAt !== null && explicitResumeAt !== null && explicitResumeAt >= priorAdvanceAt) return false;
+      // A merged PR can predate a reopen without ever having advanced this
+      // item locally. Use the provider's merge time, not observation time.
+      // A sparse Workroom association supplies no newer delivery evidence.
+      if (explicitReopenAt !== null && args.delivery) {
+        if (args.delivery.kind === "workroom") return false;
+        const mergedAt = args.delivery.mergedAt === null ? NaN : Date.parse(args.delivery.mergedAt);
+        if (!Number.isFinite(mergedAt) || mergedAt <= explicitReopenAt) return false;
+      }
     }
     await tx.backlogItem.update({
       where: { id: args.id, status: args.from },
@@ -269,6 +284,7 @@ export async function applyGitHubPullRequestToBacklog(payload: unknown): Promise
         : `PR #${event.pullRequestNumber} withdrawn without merge`,
       pullRequestNumber: event.pullRequestNumber,
       pullRequestUrl: event.pullRequestUrl,
+      ...(event.merged ? { delivery: { kind: "merged" as const, mergedAt: event.mergedAt ?? null } } : {}),
     });
     if (did) moved.push(item.itemId);
     else skipped += 1;
@@ -318,6 +334,7 @@ export async function sweepPrSubmittedBacklogItems(args?: { limit?: number }): P
       reason: `Reconcile existing PR #${prNumber}`,
       pullRequestNumber: prNumber,
       pullRequestUrl: prUrl,
+      delivery: { kind: "workroom" },
     });
     if (did) moved.push(item.itemId);
     else skipped += 1;
@@ -334,6 +351,7 @@ export async function applyObservedPullRequestsToBacklog(
     headBranch: string;
     state: "open" | "merged" | "closed";
     isDraft: boolean;
+    mergedAt?: string | null;
   }[],
 ): Promise<PrSubmitActuatorResult> {
   const moved: string[] = [];
@@ -347,6 +365,7 @@ export async function applyObservedPullRequestsToBacklog(
         html_url: observation.url,
         draft: observation.isDraft,
         merged: observation.state === "merged",
+        merged_at: observation.mergedAt ?? null,
         state: observation.state === "open" ? "open" : "closed",
         title: observation.title ?? "",
         body: "",
