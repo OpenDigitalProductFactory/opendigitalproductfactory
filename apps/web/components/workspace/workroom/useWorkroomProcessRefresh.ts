@@ -8,7 +8,7 @@ class ReadFailure extends Error { constructor(readonly issue: ProcessRefreshIssu
 type Flight = { controller: AbortController; key: string; timer?: ReturnType<typeof setTimeout> };
 function observationTime(snapshot: WorkroomProcessSnapshot) {
   const value = Date.parse(snapshot.graph.process?.readAt ?? "");
-  return Number.isFinite(value) && value <= Date.now() ? value : -Infinity;
+  return Number.isFinite(value) ? value : -Infinity;
 }
 /** One manual read owns the complete companion snapshot; no events dispatch reads. */
 export function useWorkroomProcessRefresh(initial: WorkroomProcessSnapshot, target?: WorkroomRefreshTarget) {
@@ -37,10 +37,12 @@ export function useWorkroomProcessRefresh(initial: WorkroomProcessSnapshot, targ
     setState(previous => ({ key, snapshot: previous.key === key ? previous.snapshot : initial, pending: true, issue: null }));
     try {
       const identity = processTargetIdentity(target);
-      const query = new URLSearchParams({ workroomRowId: identity.workroomRowId });
+      const query = new URLSearchParams();
+      if (identity.workroomRowId !== null) query.set("workroomRowId", identity.workroomRowId);
       if (identity.workroom) query.set("workroom", identity.workroom);
+      const suffix = query.toString();
       const read = async () => {
-        const response = await fetch(`/api/workspace/cases/${identity.caseKey}/projection?${query}`, { credentials: "same-origin", cache: "no-store", redirect: "manual", headers: { Accept: "application/json" }, signal: active.controller.signal });
+        const response = await fetch(`/api/workspace/cases/${identity.caseKey}/projection${suffix ? `?${suffix}` : ""}`, { credentials: "same-origin", cache: "no-store", redirect: "manual", headers: { Accept: "application/json" }, signal: active.controller.signal });
         if (response.status === 401 || (response.status >= 300 && response.status < 400) || response.redirected || response.type === "opaqueredirect") throw new ReadFailure("sessionRequired");
         if (response.status === 404) throw new ReadFailure("unavailable");
         if (response.status === 409) throw new ReadFailure("changed");

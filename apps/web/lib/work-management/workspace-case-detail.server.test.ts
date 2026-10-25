@@ -27,6 +27,24 @@ function setup(item = baseItem) {
 beforeEach(() => { vi.clearAllMocks(); for (const key of Object.keys(state.db)) delete state.db[key];
   state.effective.mockResolvedValue(effective()); state.flow.mockResolvedValue(null); });
 describe("shared authorized case and process loader", () => {
+  it("retains manual process reads for an authorized case without an execution capsule", async () => {
+    const db = setup(); db.workroom.findMany = vi.fn(async () => []);
+    const result = await loadAuthorizedWorkroomProcess({ caseKey: "booking:BK-1", workroomRowId: null, user });
+    expect(result).toMatchObject({ status: "ok", snapshot: { identity: { caseKey: "booking%3ABK-1", workroomRowId: null, workroom: null }, flowMap: null } });
+    expect(state.flow).not.toHaveBeenCalled();
+  });
+  it("conflicts when a case-only snapshot acquires a capsule", async () => {
+    setup();
+    expect(await loadAuthorizedWorkroomProcess({ caseKey: "booking:BK-1", workroomRowId: null, user })).toEqual({ status: "changed" });
+    expect(state.flow).not.toHaveBeenCalled();
+  });
+  it.each(["BK-100%", "BK-100%20"])("preserves a raw canonical source ID %s", async sourceId => {
+    setup({ ...baseItem, sourceId });
+    const caseKey = encodeURIComponent(`booking:${sourceId}`);
+    expect(await loadAuthorizedWorkspaceCase({ caseKey, user })).toMatchObject({ canonicalCaseKey: caseKey });
+    expect(await loadAuthorizedWorkspaceCase({ caseKey: `booking:${sourceId}`, user })).toMatchObject({ canonicalCaseKey: caseKey });
+  });
+
   it("normalizes encoded and decoded keys and preserves explicit room selection", async () => {
     const db = setup();
     const result = await loadAuthorizedWorkspaceCase({ caseKey: "booking:BK-1", selectedWorkroomId: "WC-SELECTED", user });

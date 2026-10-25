@@ -114,6 +114,28 @@ function deferred<T>() { let resolve!: (value: T) => void; let reject!: (error: 
   const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; }
 
 describe("manual process read ownership", () => {
+  it("keeps an explicit manual refresh for a case-only projection without inventing a row", async () => {
+    const caseOnly = { ...target, workroomRowId: null };
+    const fresh = newerSnapshot(); fresh.identity.workroomRowId = null; fresh.flowMap = null; fresh.flowHealth = "not-applicable";
+    const fetcher = vi.fn().mockResolvedValue(json(fresh)); vi.stubGlobal("fetch", fetcher);
+    const { result } = renderHook(() => useWorkroomProcessRefresh(createWorkroomProcessSnapshot(caseOnly, graph, saved().context, null), caseOnly));
+    await act(async () => { await result.current.refresh(); });
+    expect(fetcher).toHaveBeenCalledWith("/api/workspace/cases/task%3ATR-REFRESH/projection", expect.any(Object));
+    expect(result.current.snapshot.identity.workroomRowId).toBeNull();
+    expect(result.current.snapshot.context.definition?.label).toBe("Fresh definition");
+  });
+
+  it("orders future server timestamps while the browser clock is behind", async () => {
+    vi.useFakeTimers(); vi.setSystemTime(new Date("2026-10-22T00:00:00Z"));
+    const waiting = deferred<Response>(); vi.stubGlobal("fetch", vi.fn().mockReturnValue(waiting.promise));
+    const { result, rerender } = renderHook(({ snapshot }) => useWorkroomProcessRefresh(snapshot, target), { initialProps: { snapshot: saved() } });
+    let request!: Promise<void>; act(() => { request = result.current.refresh(); });
+    const latest = newerSnapshot(); latest.graph.process!.readAt = "2026-10-25T10:00:00Z";
+    latest.graph.process!.title = "Latest server observation"; rerender({ snapshot: latest });
+    await act(async () => { waiting.resolve(json(newerSnapshot())); await request; });
+    expect(result.current.snapshot.graph.process?.title).toBe("Latest server observation");
+  });
+
   it("does not replace a newer server observation with an older in-flight response", async () => {
     const waiting = deferred<Response>(); vi.stubGlobal("fetch", vi.fn().mockReturnValue(waiting.promise));
     const { result, rerender } = renderHook(({ snapshot }) => useWorkroomProcessRefresh(snapshot, target), { initialProps: { snapshot: saved() } });

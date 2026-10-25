@@ -124,7 +124,7 @@ export function WorkroomShape({ graph, refresh }: { graph: ShapeGraph; refresh?:
     </p>
     {stage ? <aside id={`${titleId}-inspection`} aria-label={`${stage.label} inspection`} className="rounded-lg border border-[var(--dpf-border)] p-4">
       <h3 className="mb-3 text-base font-semibold">{stage.label}</h3>
-      <dl className="grid gap-4 sm:grid-cols-2">
+      <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2 [&>div]:min-w-0 [&_dd]:[overflow-wrap:anywhere]">
         <div><dt className="font-medium">Where are we?</dt><dd>{inspection?.position ?? `${stage.label}: ${STATE_LABEL[stage.state]}`}</dd></div>
         <div><dt className="font-medium">Why are we here?</dt><dd>{inspection?.reason ?? "No reason recorded."}</dd></div>
         <div><dt className="font-medium">What can happen next?</dt><dd>{inspection?.next ?? "Permitted transitions are unknown."}</dd></div>

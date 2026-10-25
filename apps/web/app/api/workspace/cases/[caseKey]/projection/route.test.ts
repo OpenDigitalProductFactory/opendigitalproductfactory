@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { loadEffectiveAuthContext } from "@/lib/identity/load-effective-auth-context";
 import { GET } from "./route";
 const state = vi.hoisted(() => ({ auth: vi.fn(), load: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ auth: state.auth }));
@@ -9,12 +10,31 @@ function read(query = "workroomRowId=selected-row", key = "task%3ATR-1") {
 }
 beforeEach(() => { vi.clearAllMocks(); state.auth.mockResolvedValue({ user }); state.load.mockResolvedValue({ status: "ok", snapshot: { version: 1 } }); });
 describe("manual Workroom projection HTTP boundary", () => {
+  it("accepts explicit case-only expectation when the row parameter is omitted", async () => {
+    expect((await read("")).status).toBe(200);
+    expect(state.load).toHaveBeenCalledWith(expect.objectContaining({ workroomRowId: null }));
+  });
+  it.each(["missing", "inactive", "customer"])("returns session-required when actual identity loading refuses %s", async refusal => {
+    const principal = refusal === "missing" ? null : { principalId: "PRN-1", status: refusal === "inactive" ? "inactive" : "active",
+      kind: "human", sensitivityClearance: ["internal"], aliases: [] };
+    const db = { principal: { findUnique: vi.fn(async () => principal) }, principalAlias: { findFirst: vi.fn() },
+      employeeProfile: { findMany: vi.fn(async () => []) }, teamMembership: { findMany: vi.fn(async () => []) },
+      delegationGrant: { findMany: vi.fn(async () => []) }, customerContact: { findUnique: vi.fn(async () => null) } };
+    state.load.mockImplementationOnce(async () => {
+      await loadEffectiveAuthContext({ user: { id: "u", principalId: "PRN-1", email: "test@example.test", type: refusal === "customer" ? "customer" : "admin",
+        platformRole: null, isSuperuser: false, accountId: "ACC-1", accountName: null, contactId: null }, grantedCapabilities: [], authentication: { source: "session" } }, db);
+      throw new Error("Expected identity refusal");
+    });
+    const response = await read(); expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ error: "session-required" });
+  });
+
   it("returns 401 JSON rather than a login document redirect", async () => {
     state.auth.mockResolvedValue(null); const response = await read(); expect(response.status).toBe(401);
     expect(response.headers.get("location")).toBeNull(); expect(state.load).not.toHaveBeenCalled();
     expect(response.headers.get("cache-control")).toBe("private, no-store");
   });
-  it.each(["", "workroomRowId=", "workroomRowId=a&workroomRowId=b", "workroomRowId=a&workroom=", "workroomRowId=a&workroom=x&workroom=y"])("rejects ambiguous/empty target query %s", async query => {
+  it.each(["workroomRowId=", "workroomRowId=a&workroomRowId=b", "workroomRowId=a&workroom=", "workroomRowId=a&workroom=x&workroom=y"])("rejects ambiguous/empty target query %s", async query => {
     expect((await read(query)).status).toBe(400); expect(state.load).not.toHaveBeenCalled();
   });
   it("rejects malformed percent identity", async () => { expect((await read("workroomRowId=a", "%")).status).toBe(400); expect(state.load).not.toHaveBeenCalled(); });

@@ -35,21 +35,21 @@ export async function loadAuthorizedWorkspaceCase(input: AuthorizedCaseInput, de
     }) : null);
   if (!detail) return null;
   // Canonical identity is disclosed only after the addressed case passed content authorization.
-  const canonicalCaseKey = normalizeProcessCaseKey(detail.summary.caseId);
+  const canonicalCaseKey = normalizeProcessCaseKey(encodeURIComponent(detail.summary.caseId));
   if (!canonicalCaseKey) return null;
   return { detail, caseKey, canonicalCaseKey };
 }
 
 /** The expected row is a consistency check, never an independent lookup authority. */
-export async function loadAuthorizedWorkroomProcess(input: AuthorizedCaseInput & { workroomRowId: string }) {
+export async function loadAuthorizedWorkroomProcess(input: AuthorizedCaseInput & { workroomRowId: string | null }) {
   const resolved = await loadAuthorizedWorkspaceCase(input);
   if (!resolved) return { status: "not-found" as const };
   const { detail, caseKey, canonicalCaseKey } = resolved;
-  if (canonicalCaseKey !== caseKey || !detail.room || detail.workroomRowId !== input.workroomRowId)
+  if (canonicalCaseKey !== caseKey || !detail.room || (detail.workroomRowId ?? null) !== input.workroomRowId)
     return { status: "changed" as const };
   let failed = false;
-  const map = await loadWorkroomFlowMap(prisma as never, { roomRowId: detail.workroomRowId }).catch(() => { failed = true; return null; });
-  const target: WorkroomRefreshTarget = { caseKey, workroomRowId: detail.workroomRowId, workroom: input.selectedWorkroomId ?? null };
+  const map = detail.workroomRowId ? await loadWorkroomFlowMap(prisma as never, { roomRowId: detail.workroomRowId }).catch(() => { failed = true; return null; }) : null;
+  const target: WorkroomRefreshTarget = { caseKey, workroomRowId: detail.workroomRowId ?? null, workroom: input.selectedWorkroomId ?? null };
   return { status: "ok" as const, snapshot: createWorkroomProcessSnapshot(target, projectRoomShape(detail.room),
     { definition: detail.room.identity.definition, mode: detail.room.mode, activeCycle: Boolean(detail.room.currentCycle) }, map, failed) };
 }

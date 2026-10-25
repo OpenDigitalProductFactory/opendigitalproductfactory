@@ -75,8 +75,8 @@ export default async function WorkspaceCaseDetailPage({ params, searchParams }: 
     ? await loadWorkroomFlowMap(prisma as never, { roomRowId: detailOrRoom.workroomRowId }).catch(() => { flowReadFailed = true; return null; })
     : null;
   const locale = await getLocaleContext();
-  const refreshTarget = detailOrRoom.workroomRowId && detailOrRoom.room
-    ? { caseKey: resolved.caseKey, workroomRowId: detailOrRoom.workroomRowId, workroom: selectedWorkroomId ?? null } : undefined;
+  const refreshTarget = detailOrRoom.room
+    ? { caseKey: resolved.caseKey, workroomRowId: detailOrRoom.workroomRowId ?? null, workroom: selectedWorkroomId ?? null } : undefined;
   const processSnapshot = refreshTarget && detailOrRoom.room ? createWorkroomProcessSnapshot(refreshTarget,
     projectRoomShape(detailOrRoom.room), { definition: detailOrRoom.room.identity.definition, mode: detailOrRoom.room.mode,
       activeCycle: Boolean(detailOrRoom.room.currentCycle) }, flowMap, flowReadFailed) : undefined;

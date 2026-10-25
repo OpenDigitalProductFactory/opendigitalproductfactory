@@ -6,11 +6,11 @@ import { readRoutingEligibility } from "@/lib/inference/routing-exclusion-bucket
 import type { WorkroomView } from "./room-types";
 import type { WorkroomFlowMapModel } from "./workroom-flow-map";
 
-export type WorkroomRefreshTarget = { caseKey: string; workroomRowId: string; workroom?: string | null };
+export type WorkroomRefreshTarget = { caseKey: string; workroomRowId: string | null; workroom?: string | null };
 export type WorkroomProcessContext = { definition: WorkroomView["identity"]["definition"]; mode: WorkroomView["mode"]; activeCycle: boolean };
 export type WorkroomProcessSnapshot = {
   version: 1;
-  identity: { caseKey: string; workroomRowId: string; workroom: string | null };
+  identity: { caseKey: string; workroomRowId: string | null; workroom: string | null };
   graph: ShapeGraph;
   context: WorkroomProcessContext;
   flowMap: WorkroomFlowMapModel | null;
@@ -20,7 +20,10 @@ export const PROCESS_READ_TIMEOUT_MS = 15_000;
 export const PROCESS_RESPONSE_MAX_CHARS = 1_000_000;
 
 export function normalizeProcessCaseKey(value: string): string | null {
-  try { const ref = decodeWorkCaseKey(value); return ref ? encodeWorkCaseKey(ref) : null; }
+  try {
+    // Fully encoded keys contain no literal delimiter. Next route params may
+    // already be decoded; preserve a literal percent in their source identity.
+    const ref = decodeWorkCaseKey(value.includes(":") ? encodeURIComponent(value) : value); return ref ? encodeWorkCaseKey(ref) : null; }
   catch { return null; }
 }
 export function processTargetIdentity(target: WorkroomRefreshTarget) {
@@ -57,7 +60,7 @@ const flowMap: z.ZodType<WorkroomFlowMapModel> = z.object({
   ends: z.object({ success: z.boolean(), failure: z.boolean(), budget: z.boolean() }), finished: z.boolean(), graphFlow: z.boolean(), aggregate: z.object({ roomsInFlow: z.number() }).optional(),
 });
 const snapshotSchema: z.ZodType<WorkroomProcessSnapshot> = z.object({
-  version: z.literal(1), identity: z.object({ caseKey: text, workroomRowId: text, workroom: text.nullable() }), graph,
+  version: z.literal(1), identity: z.object({ caseKey: text, workroomRowId: text.nullable(), workroom: text.nullable() }), graph,
   context: z.object({ definition: z.object({ definitionId: text, version: z.number(), sourceKey: text, label: text, mode: z.enum(["finite", "standing"]), decisionScope: z.enum(["wwmd", "wwwd", "wsid"]) }).nullable(), mode: z.enum(["finite", "standing"]), activeCycle: z.boolean() }),
   flowMap: flowMap.nullable(), flowHealth: z.enum(["ok", "unavailable", "not-applicable"]),
 });
