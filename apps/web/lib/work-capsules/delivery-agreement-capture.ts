@@ -1,3 +1,5 @@
+import { resolveRoomProjectionMode } from "@/lib/work-management/room-cycle";
+import { readDeclaredWorkShapeKey } from "@/lib/work-management/work-shapes";
 import { createHash } from "node:crypto";
 import { parseOperatingIntent } from "@dpf/db/installation-operating-intent";
 import { resolveInstallationPairing } from "@dpf/db/installation-peer-pairing";
@@ -15,7 +17,7 @@ export type DeliveryAgreementCaptureDb = {
 };
 type CaptureInput = {
   objective: string; source: string; backlogItemId?: string | null; acceptanceBody?: string | null;
-  workspaceState?: unknown; activityKind?: string | null; now?: Date;
+  workspaceState?: unknown; activityKind?: string | null; scope?: { workShape?: unknown } | null; now?: Date;
 };
 
 async function inspectDeliveryContext(db: DeliveryAgreementCaptureDb, now: Date, input: CaptureInput,
@@ -79,7 +81,9 @@ export async function captureFiniteDeliveryState(db: DeliveryAgreementCaptureDb,
     if (!original) throw new Error("The stored delivery agreement requires repair.");
     return retainDeliveryAgreement(state, original);
   }
-  if (!["external-adoption", "build-studio", "backlog"].includes(input.source) && input.activityKind !== "delivery") return { ...state };
+  const shapeKey = readDeclaredWorkShapeKey([{ workShape: input.scope?.workShape }]);
+  const sourceKey = input.source === "scheduled-steward" ? "scheduled" : "work-capsule";
+  if (resolveRoomProjectionMode(sourceKey, shapeKey) === "standing") return { ...state };
   const now = input.now ?? new Date();
   const acceptanceBody = input.acceptanceBody ?? (input.backlogItemId && db.backlogItem
     ? (await db.backlogItem.findFirst({ where: { itemId: input.backlogItemId }, select: { body: true } }))?.body : null);

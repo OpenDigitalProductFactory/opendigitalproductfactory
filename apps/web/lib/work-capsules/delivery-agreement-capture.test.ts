@@ -64,3 +64,8 @@ describe("delivery agreement capture", () => {
     expect(first?.acceptance?.digest).toBe(next?.acceptance?.digest);
   });
 });
+
+it("captures an ordinary finite manual room and respects an adopted standing shape", async () => {
+  expect(readDeliveryAgreement(await captureFiniteDeliveryState({}, { ...input, source: "manual" }))).not.toBeNull();
+  expect(await captureFiniteDeliveryState({}, { ...input, scope: { workShape: "dependency-advisory-watch@1.0.0" } })).toEqual({});
+});
