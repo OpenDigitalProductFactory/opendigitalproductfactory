@@ -1,6 +1,6 @@
 ---
 title: CI evidence efficiency — faster feedback without weaker coverage
-status: draft-for-implementation
+status: draft
 date: 2026-07-26
 owner: platform
 related:
