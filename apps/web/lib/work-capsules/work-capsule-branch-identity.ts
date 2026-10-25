@@ -20,6 +20,8 @@ export function invalidSourceCommitField(input: { baseSha?: unknown; headSha?: u
 export type CapsuleAdoptionInput = {
   title: string;
   objective: string;
+  /** Server-read acceptance source; never supplied by an MCP caller. */
+  acceptanceBody?: string | null;
   repositoryFullName: string;
   headBranch: string;
   worktreePath: string;

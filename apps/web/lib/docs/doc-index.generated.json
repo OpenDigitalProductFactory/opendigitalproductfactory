@@ -2798,7 +2798,8 @@
         "a-stage-names-the-tools-it-needs",
         "a-new-shape-version-reaches-a-live-room-only-by-rebind-bi-cb5c0dce",
         "related-references",
-        "a-shape-must-outlive-the-room-that-decided-it-bi-82dcd601"
+        "a-shape-must-outlive-the-room-that-decided-it-bi-82dcd601",
+        "finite-delivery-identity"
       ]
     },
     "docs/architecture/workos-iam-equivalence-scorecard.md": {
@@ -13365,6 +13366,13 @@
         "ai-coworker-support",
         "what-to-watch"
       ]
+    },
+    "docs/user-guide/workspace/finite-delivery-agreements.md": {
+      "publicHref": "/user-guide/workspace/finite-delivery-agreements/",
+      "portalHref": "/docs/workspace/finite-delivery-agreements",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": []
     },
     "docs/user-guide/workspace/index.md": {
       "publicHref": "/user-guide/workspace/",

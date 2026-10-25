@@ -88,3 +88,35 @@ adds the fixed agreement/context/finish contract without replacing those owners.
 V-BOUND: red-green contract tests, boundary/store/replay regressions, room and MCP
 projection/component tests, package typecheck, canonical integration and served
 finite-delivery verification. Unknown or unrun evidence is reported explicitly.
+
+## Implemented source and completion boundaries
+
+The context inspection reuses the canonical installation environment and trusted
+pairing resolver. Where this deliverable has a synced, peer-owned backlog mirror,
+it reads the existing scoped snapshot and records its mirror version, sync time,
+peer record, body digest and applicable BI. This is a read of that dated snapshot,
+not a claim that the peer was contacted now or that all Customer 0 guidance was
+retrieved. Missing readers, unresolved/mismatched pairing and absent scoped mirrors
+remain explicit unavailable conditions with a delivery-owner next action. Peer
+content is evidence; local requirements and permissions retain authority.
+
+Acceptance identity reuses bodyCriteriaVersion and its statement digests. Harmless
+line-anchor shifts do not alter the agreed requirements. A later item-body baseline
+with different criterion statements cannot silently satisfy the original agreement, even
+when a prior item completion decision would otherwise be reusable. The existing
+objective-reconciliation requirement reports the mismatch; no approval policy is
+added. Separately linked follow-on BIs leave the recorded delivery intact. The
+handoff is appended to the same successful terminal transaction and audit event.
+
+## UX fit review
+
+Decision: fits-with-guardrails. Workspace owns the existing finite Workroom detail;
+the primary persona is the owner deciding whether the agreed delivery is finished.
+Only local disclosure changes. WorkroomHeader retains the agreed outcome while
+WorkroomDeliveryAgreement composes report-kit status/notice and LocalTime. Existing
+Attention, Next action and Accountable sections retain blocker/owner authority.
+Missing context and missing handoff remain explicit. Historical rooms receive no
+invented agreement. Prototype: docs/ux-fit/2026-10-25-bounded-deliverable-outcomes.prototype.html.
+Recorded comparison: DI-ACB148AAC38E, existing-outcome-disclosure versus
+separate-delivery-dashboard. Advisory UX coworker engagement CE-72C5B31C was
+requested; a requested critique is not a received review or a build gate.

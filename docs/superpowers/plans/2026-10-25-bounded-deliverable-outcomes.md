@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Bounded deliverable outcomes implementation
 
 Backlog: BI-A798975C. Workroom: WC-5D6B124A.
@@ -34,8 +38,8 @@ These references resolve to the companion design; they grant no authority.
 1. Claim exact edit paths and consume changeImpactContract. Test first with
    dpf-tdd. Add a pure typed agreement/context/handoff parser and projection;
    prove original identity survives repeated claims and later objective changes.
-2. Integrate initial capture with existing Workroom creation/claim and boundary
-   writes. Resolve paired context through current installation/link evidence,
+2. Integrate initial capture with existing Workroom creation/claim; boundary
+   edits retain the original snapshot. Resolve paired context through current installation/link evidence,
    with unavailable guidance distinct from a successful read. Record no secrets.
    Preserve standing rooms, historical records and optimistic concurrency.
 3. Feed the shared projection to MCP and room detail; add one concise disclosure
