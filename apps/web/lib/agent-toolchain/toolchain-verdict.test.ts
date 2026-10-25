@@ -126,6 +126,22 @@ describe("formatToolchainNotice", () => {
     expect(notice).not.toMatch(/`|\bpython\b|update_agent_toolchain|claude plugin/);
   });
 
+  it.each(["stale", "below-floor", "undeclared"] as const)("reuses authority and diagnoses installed drift for a %s connection", (verdict) => {
+    const notice = formatToolchainNotice({
+      ...base,
+      declaration: verdict === "undeclared" ? null : declared("codex", "0.2.8", "0".repeat(16)),
+      probableClient: "codex",
+      result: { verdict, reasons: ["fixture drift"] },
+    })!;
+    expect(notice).toContain("signed updater's dry-run");
+    expect(notice).toContain("If the installed copy is current");
+    expect(notice).toContain("continue other authorized work");
+    expect(notice).toContain("existing scoped authorization");
+    expect(notice).toContain("ask only for missing authority or expanded scope");
+    expect(notice).toContain("Honor host and tool refusals");
+    expect(notice).toContain("never route a refused apply through another path");
+    expect(notice).not.toContain("for approval to update");
+  });
   it("names the full installation id the updater must expect, when known", () => {
     const declaration = declared("codex", "0.2.8", "0".repeat(16));
     const result = resolveToolchainVerdict({ declaration, credential: { authSource: "oauth" }, mcpEndpoint: HTTPS, published: RELEASE, now: AFTER_GRACE });

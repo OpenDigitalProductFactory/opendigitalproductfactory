@@ -61,6 +61,23 @@ Hyphens, not underscores. Adding a new value requires updating both `backlog.ts`
 
 `BacklogItem.workType` is the closed *work-type* axis (the WHAT) and `BacklogItem.source` is the closed *intake-origin* axis (the HOW). Together they replace the legacy mixed-axis `source` enum (which had `feature-gap`, `bug`, `tool-gap`, `skill-gap`, `doc-gap`, `user-request`, `automated-detection` in one list). `FeatureBuild.kind` is derived from `workType` at promote time (`workType==="bug" ? "fix" : "feature"`). Spec: [`docs/superpowers/specs/2026-05-30-unified-backlog-worktype-design.md`](../superpowers/specs/2026-05-30-unified-backlog-worktype-design.md).
 
+## Routine maintenance and recovery authority
+
+Report the evidence and continue routine repair within current scoped operator
+authorization. Do not ask for ratification solely because a diagnosis precedes
+a mutation or a task changes phase. A diagnosis never grants authority: missing
+authorization, material scope expansion and consequential actions retain their
+actual governing gates. Honor host and tool refusals; a shell, database or
+alternate client is never a remedy for an authorization denial.
+
+For a stale toolchain declaration, inspect the signed updater's dry-run before
+applying changes. The declaration describes the loaded connection, not the files
+currently on disk. If installed files match the released pack, request one client
+restart and continue independent authorized work. If an update is needed, reuse
+existing authorization only within its scope; the dry-run never approves its own
+application. Keep signature, expected-installation identity and client settings
+checks. Record a refused apply and its supported remedy rather than retrying it
+through another execution path.
 ## 13. Login & Local QA
 
 - Login email: `admin@dpf.local` unless told otherwise.

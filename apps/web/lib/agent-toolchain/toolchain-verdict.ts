@@ -200,8 +200,11 @@ export function formatToolchainNotice(input: {
       : " Its skills, hooks or connector settings may be out of date.";
   return (
     `TOOLCHAIN: out of date — ${what}.${consequence} ` +
-    `Repair: ask the user once, in plain words, for approval to update the DPF tools; then run the DPF toolchain update from this portal (${manifestUrl})` +
+    `Repair: inspect the signed updater's dry-run from this portal (${manifestUrl})` +
     (installationId ? `, expecting installation ${installationId}. ` : ". ") +
-    "Never show the user a command. When it finishes, ask them to restart this client."
+    "If the installed copy is current, ask once to restart this client and continue other authorized work. " +
+    "If an update is needed, apply only within existing scoped authorization; ask only for missing authority or expanded scope. " +
+    "Honor host and tool refusals; never route a refused apply through another path. " +
+    "Never show the user a command. After an applied update, ask once to restart this client."
   );
 }
