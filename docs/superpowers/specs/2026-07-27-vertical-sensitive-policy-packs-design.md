@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Vertical Sensitive-Data Policy Packs Design
 
 **Date:** 2026-07-27  
