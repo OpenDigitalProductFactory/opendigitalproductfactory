@@ -21,7 +21,7 @@ import type { BacklogItemWithRelations } from "./backlog";
 import { deliveryShapeSize } from "@/lib/work-management/delivery-shapes";
 import { BACKLOG_EFFORT_SIZES } from "./backlog";
 import type { BuildPhase, FeatureBuildKind } from "./feature-build-types";
-import { checkVerificationDepthRequirement } from "./verification-depth-requirement";
+import { checkTypecheckPassed, checkVerificationDepthRequirement } from "./verification-depth-requirement";
 import {
   FEATURE_BUILD_KIND_VALUES,
 } from "./feature-build-types";
@@ -642,25 +642,6 @@ function missingHappyPathAnchorsFromState(state: ReturnType<typeof normalizeHapp
   return missing;
 }
 
-/** Status tokens that mean the typecheck was not executed. A pass or a real failure is not in this set. */
-const TYPECHECK_DID_NOT_RUN = new Set([
-  "not_run",
-  "not_executed",
-  "did_not_run",
-  "skipped",
-  "skip",
-  "pending",
-  "unrun",
-  "not_started",
-  "blocked",
-]);
-
-function typecheckDidNotRun(status: unknown): boolean {
-  if (typeof status !== "string") return false;
-  const normalized = status.trim().toLowerCase().replace(/[\s-]+/g, "_");
-  return TYPECHECK_DID_NOT_RUN.has(normalized);
-}
-
 /**
  * Pure check for one named requirement. The wiring matches today's
  * checkPhaseGate body line-for-line so the default policy preserves behavior.
@@ -719,20 +700,8 @@ export function checkRequirement(req: GateRequirement, evidence: GateEvidence): 
       }
       return { allowed: true };
     }
-    case "verification-typecheck-passed": {
-      const verification = evidence.verificationOut as {
-        testsFailed?: number;
-        typecheckPassed?: boolean;
-        typecheck?: unknown;
-      } | null | undefined;
-      if (!verification) return { allowed: false, reason: "A verification run (tests + typecheck) is required before review." };
-      // BI-E4E70B9A: FB-041879CD stored typecheckPassed true beside typecheck "not_run".
-      if (typecheckDidNotRun(verification.typecheck)) {
-        return { allowed: false, reason: "Typecheck did not run, so the boolean is not a pass." };
-      }
-      if (!verification.typecheckPassed) return { allowed: false, reason: "Typecheck must pass before review." };
-      return { allowed: true };
-    }
+    case "verification-typecheck-passed":
+      return checkTypecheckPassed(evidence);
     case "verification-depth-satisfied":
       return checkVerificationDepthRequirement(evidence);
     case "acceptance-evaluated": {
