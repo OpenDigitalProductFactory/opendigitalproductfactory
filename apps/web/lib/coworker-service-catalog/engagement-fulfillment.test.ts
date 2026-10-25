@@ -213,10 +213,12 @@ describe("bounded advisory engagement fulfillment", () => {
     state.room.headSha = "c".repeat(40);
     const original = { ...binding, roomHeadSha: state.room.headSha, inputDigest: engagementInputDigest(state.engagement.requestedOutcome, state.engagement.inputPayload) };
     expect(() => assertEngagementSnapshot(original, state)).not.toThrow();
+    expect(() => assertEngagementSnapshot({ ...original, artifactRef: { ...artifactRef, path: "docs/other.md" } }, state)).toThrow(/original_artifact/);
     expect(() => assertEngagementSnapshot({ ...original, artifactRef: { ...artifactRef, commitSha: state.room.headSha } }, state)).toThrow(/original_revision_required/);
   });
   it("validates an immutable bound request", () => {
     expect(parseEngagementTaskBinding(binding)).toEqual(binding);
+    expect(() => assertEngagementSnapshot({ ...binding, artifactRef: { ...artifactRef, providerBlobId: "c".repeat(40) } }, snapshot())).toThrow(/original_artifact/);
     expect(() => assertEngagementSnapshot(binding, snapshot())).not.toThrow();
   });
   it.each([
@@ -266,4 +268,22 @@ it("does not treat an uncalibrated UX search as calibration evidence", () => {
     { id: "critique-1", toolName: "search_ux_critique_corpus", success: true, parameters: { calibratedOnly: false }, result: { data: { total: 1, grounding: "grounded" } } },
   ];
   expect(validateEngagementContribution(binding, contribution, executions, "ux-design")).toBeNull();
+});
+
+it("rolls back completion when the Workroom return fails, then safely retries once", async () => {
+  const task = { status: "completed", progressPayload: { summary: JSON.stringify({ summary: "Critique", criteria: ["Hierarchy"], corpusRefs: ["professions/ux-design/hierarchy"], findings: [] }) }, a2aMetadata: { engagementBinding: binding, engagementReadEvidence: readEvidence() }, completedAt: new Date() };
+  let engagement = { ...snapshot().engagement, id: "row-1", status: "accepted", updatedAt: new Date(), metadata: { fulfillment: { taskRunId: "TR-ORIGINAL", binding } } };
+  let returnWrites = 0; let failReturn = true;
+  const tx = { $queryRaw: async () => [], taskRun: { findUnique: async () => task }, agent: { findUnique: async () => ({ agentId: "ux-design-critic", name: "ux-design-critic", slugId: "ux-design-critic" }) },
+    coworkerEngagement: { findUnique: async () => engagement, updateMany: async ({ data }: { data: object }) => { engagement = { ...engagement, ...data }; return { count: 1 }; } },
+    workroom: { findUnique: async () => ({ id: "room-1" }) }, workroomActivity: { create: async () => { if (failReturn) throw new Error("return unavailable"); returnWrites++; return { id: "return-1" }; } },
+    toolExecution: { findMany: async () => readEvidence().map(row => ({ id: row.executionId, success: true, toolName: row.kind === "source" ? "read_source_at_version" : row.kind === "corpus" ? "wiki_query" : "search_ux_critique_corpus", parameters: {}, result: {} })) } };
+  const database = { $transaction: async (work: (db: typeof tx) => Promise<void>) => { const prior = engagement; try { return await work(tx); } catch (error) { engagement = prior; throw error; } } };
+  await expect(reconcileEngagementTaskResult("TR-ORIGINAL", database as never)).rejects.toThrow("return unavailable");
+  expect(engagement.status).toBe("accepted");
+  failReturn = false;
+  await reconcileEngagementTaskResult("TR-ORIGINAL", database as never);
+  await reconcileEngagementTaskResult("TR-ORIGINAL", database as never);
+  expect(engagement.status).toBe("completed");
+  expect(returnWrites).toBe(1);
 });

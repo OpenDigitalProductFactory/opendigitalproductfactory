@@ -30,10 +30,16 @@ export function assertEngagementSnapshot(binding: EngagementTaskBinding, state: 
     || room.capsuleId !== binding.workroomId || room.archivedAt !== null
     || room.repositoryFullName !== binding.artifactRef.repositoryFullName || room.headSha !== (binding.roomHeadSha ?? binding.artifactRef.commitSha)
     || record(record(room.workspaceState).workroomDrive).stageKey !== binding.stageKey) reject();
-  const scope = record(engagement.inputPayload);
-  const encoded = typeof scope["surface-or-prototype"] === "string" ? scope["surface-or-prototype"].match(/@([a-f0-9]{40})(?:\s|$)/)?.[1] : null;
-  const structured = record(scope.artifactRef).commitSha;
-  if ((encoded && encoded !== binding.artifactRef.commitSha) || (typeof structured === "string" && structured !== binding.artifactRef.commitSha)) throw new Error("engagement_original_revision_required: fulfill the original revision; newer revision review needs an explicit separate association");
+  const scope = record(engagement.inputPayload), original = record(scope.artifactRef);
+  if (Object.keys(original).length && ["kind", "repositoryFullName", "commitSha", "path", "providerBlobId"].some(key => original[key] !== binding.artifactRef[key as keyof typeof binding.artifactRef])) throw new Error("engagement_original_artifact_required: preserve the complete original repository, revision, path and blob identity");
+  const sourceText = typeof scope["surface-or-prototype"] === "string" ? scope["surface-or-prototype"] : "";
+  const encoded = sourceText.match(/@([a-f0-9]{40})\s+([^;\s]+)/);
+  if (sourceText.match(/@[a-f0-9]{40}/) && !encoded) throw new Error("engagement_original_artifact_unresolved: original free-text scope needs an exact artifact association");
+  if (encoded) {
+    const repository = sourceText.match(/^([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)(?:\s|@)/)?.[1];
+    if (encoded[1] !== binding.artifactRef.commitSha) throw new Error("engagement_original_revision_required: a newer review needs an explicit separate association");
+    if (!repository || repository !== binding.artifactRef.repositoryFullName || encoded[2] !== binding.artifactRef.path) throw new Error("engagement_original_artifact_required: original free-text repository and path must match; artifact substitution is refused");
+  }
   const fulfillment = record(engagement.metadata).fulfillment;
   if (fulfillment !== undefined && (!taskRunId || record(fulfillment).taskRunId !== taskRunId
     || canonicalJson(record(fulfillment).binding) !== canonicalJson(binding))) reject();
@@ -137,7 +143,10 @@ export function validateEngagementContribution(binding: EngagementTaskBinding, c
 
 /** Observation repairs projection only. The terminal task and successful audits are canonical. */
 export async function reconcileEngagementTaskResult(taskRunId: string, db?: Prisma.TransactionClient): Promise<void> {
-  if (!db) { const { prisma } = await import("@dpf/db"); return prisma.$transaction(tx => reconcileEngagementTaskResult(taskRunId, tx)); }
+  if (!db || typeof (db as unknown as { $transaction?: unknown }).$transaction === "function") {
+    const client = db ?? (await import("@dpf/db")).prisma;
+    return (client as unknown as { $transaction(work: (tx: Prisma.TransactionClient) => Promise<void>): Promise<void> }).$transaction(tx => reconcileEngagementTaskResult(taskRunId, tx));
+  }
   await db.$queryRaw`SELECT "id" FROM "TaskRun" WHERE "taskRunId" = ${taskRunId} FOR UPDATE`;
   const { hasExecutionUncertainty } = await import("@/lib/shared/execution-uncertainty");
   const task = await db.taskRun.findUnique({ where: { taskRunId }, select: { status: true, progressPayload: true, a2aMetadata: true, completedAt: true } });
@@ -187,7 +196,7 @@ export async function admitEngagementTask(input: Parameters<typeof validateEngag
     if (!task || canonicalJson(record(task.a2aMetadata).engagementBinding) !== canonicalJson(input.binding)) throw new Error("engagement_association_without_original_task");
     return;
   }
-  const association = { version: 1, binding: input.binding, taskRunId: input.taskRunId, state: "accepted" };
+  const association = { version: 1, binding: input.binding, originalScope: { inputDigest: input.binding.inputDigest, artifactRef: input.binding.artifactRef }, taskRunId: input.taskRunId, state: "accepted" };
   const written = await input.db.coworkerEngagement.updateMany({
     where: { id: engagement.id, updatedAt: engagement.updatedAt, status: engagement.status },
     data: { status: "accepted", acceptedAt: new Date(), workCapsuleId: room.capsuleId,

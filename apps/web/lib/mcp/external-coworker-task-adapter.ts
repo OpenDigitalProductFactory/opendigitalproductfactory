@@ -241,7 +241,7 @@ export async function fulfillCoworkerEngagement(engagementId: string, locator: u
       if (access.decision.level !== "content") throw new Error("engagement_read_access_refused");
     }
     const taskRunId = record(record(engagement.metadata).fulfillment).taskRunId;
-    if (text(taskRunId)) await reconcileEngagementTaskResult(taskRunId, prisma);
+    if (text(taskRunId)) await reconcileEngagementTaskResult(taskRunId, db);
     const latest = await prisma.coworkerEngagement.findUnique({ where: { engagementId } });
     return { success: true, entityId: engagementId, message: "Persisted engagement state; no execution was requested.", data: { engagementId, status: latest?.status ?? engagement.status, fulfillment: record(latest?.metadata ?? engagement.metadata).fulfillment ?? null, result: record(latest?.metadata ?? engagement.metadata).result ?? null } };
   }
