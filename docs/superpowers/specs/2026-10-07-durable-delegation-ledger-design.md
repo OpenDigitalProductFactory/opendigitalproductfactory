@@ -280,6 +280,23 @@ Rollback is one source revert; it preserves stored holds and restores the
 previous capacity-waste behavior. The original failed observations remain
 part of the evidence.
 
+
+The existing BI-9CD95438 acceptance criteria remain the baseline:
+
+- A provider failure on a room's stage holds the room; the next drive tick dispatches nothing and concludes `provider_held`.
+- An empty model reply or an ordinary error does not hold the room.
+- `resume_workroom_queue` releases the hold and the held stage runs on the next dispatch; with no hold it is a no-op.
+
+Corrective traceability: `runWorkroomDriveJob` applies the existing
+`readWorkroomQueueHold` result before `createDispatchAdmission` for known held
+sequential rooms. The flow is provider hold to no sequential admission to
+existing held snapshot; eligible rooms retain capacity-bounded scheduling.
+Verification uses `apps/web/lib/queue/functions/workroom-drive-writeback-run.test.ts`,
+`apps/web/lib/queue/functions/workroom-drive.test.ts`,
+`apps/web/lib/work-management/drive-dispatch-cap.test.ts` and
+`apps/web/lib/work-capsules/workroom-queue-hold.test.ts`, followed by the bounded
+installed canonical tick after qualified containing deployment described above.
+
 ### 4.7 Agent CLIs as supervised runtimes (`BI-05715F4C`)
 
 **Delivered 2026-10-14** (`apps/web/lib/workroom-runtime/`): the adapter
