@@ -35,8 +35,8 @@
   },
   "failure": {
     "handoff-transaction-required": {
-      "reason": "The handoff stopped before transfer. Its required transfer procedure was not used.",
-      "next": "Your assistant must check the handoff requirement in the original room. This result does not authorize another attempt."
+      "reason": "The handoff stopped before transfer. The platform's required transfer check did not pass.",
+      "next": "Your assistant must inspect the transfer check in the original room. This result does not authorize another attempt."
     },
     "unproven": {
       "reason": "The failure reason could not be confirmed from the saved execution.",
