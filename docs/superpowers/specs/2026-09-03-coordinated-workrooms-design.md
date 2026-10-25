@@ -158,7 +158,7 @@ Two consequences worth carrying into how this platform makes decisions at all:
 ## 5. The COO layer
 
 The COO is a coworker (`AGT-ORCH-000`, already defined) plus a surface it reads and acts through.
-Its needs, per §3, are status-shaped rather than execution-shaped.
+Its cross-room needs are status and recovery coordination. The October 25 amendment below supersedes the earlier report-only interpretation; specialists retain execution authority.
 
 | COO need | Substrate today | Gap |
 | --- | --- | --- |
@@ -169,9 +169,7 @@ Its needs, per §3, are status-shaped rather than execution-shaped.
 | Broadcast an ask | `post_room_message` (one room) | fan-out down the `contains` tree with tracked acknowledgement |
 | Escalate upward | `escalates_to` in the registry, dormant | wire the chain so a stalled room reaches its orchestrator and then a human |
 
-**The load-bearing property:** the COO surface is *read-and-ask*, not a second execution path.
-It never dispatches a stage, never overrides a room's authority, and never becomes a way to skip
-the governed decision the shape declares. It reports, it asks, and it escalates.
+**The authority boundary:** the COO owns recovery follow-through through existing Workroom and task facilities. It does not become a second execution path or override a room's authority. The room drive dispatches stages and the declared independent reviewer decides gates. A report, ask or handoff is not completion: the COO follows the resulting obligation until verified resolution, a declared durable wait or a necessary human decision. See the October 25 amendment for the current delivery and acceptance contract.
 
 **A stalled room must page someone.** Finding 2 is the proof this is not decoration: a correct,
 safe, well-designed refusal ran unnoticed 26 times. The bottleneck signal is the difference
@@ -287,3 +285,216 @@ archetype half. H is configuration.
 - [Workroom vocabulary boundary](../../architecture/workroom-vocabulary-boundary.md) — sub-rooms and the five relations
 - [Work shapes and the decision gate](../../architecture/work-shapes-and-the-decision-gate.md) — the Process Overseer requirement this satisfies
 - [DPF-PAAW](../../architecture/four-portfolio-archetype-ai-workforce-operating-standard.md) §6, §9.5
+
+
+## October 25 amendment: COO operational follow-through
+
+**Backlog:** BI-4B48E7FE. Delivery slices: BI-756C899D (truthful progress) and
+BI-C43FD3E5 (owned recovery supervision). **Status:** approved founder direction;
+independent design review, implementation and served-runtime acceptance are pending.
+This section supersedes the report-only interpretation in section 5 and the COO
+persona's fixed Advisor/Phase 2 maturity switch. It does not assert deployment.
+
+The founder approved making the COO responsible for seeing that platform,
+business and cross-area work advances, including internal coworkers and external
+execution surfaces. Workrooms were introduced after the original COO approach.
+A role prompt that forbids background work and a weekly report that ends by
+asking the owner to decide cannot implement that responsibility.
+
+### Evidence and existing owners
+
+The October 25 investigation in WC-32CD2D80 read the live development install.
+WC-03D88204 retained a provider hold from October 19 and repeated
+provider-held/capacity-wait observations while its conclusion said in motion.
+The deployed drive calculated conclusion and hold before learning that dispatch
+was held, then changed only the reason. Its stall clock recognized pause and
+escalate, so other no-progress observations cleared the clock. These are confirmed
+projection defects, not proof that every waiting room is broken.
+
+BI-12A083B4 is delivered history for the conclusive-stop invariant; this repair
+extends its existing owners. BI-IMP-9DA35549 owns learning and execution continuity;
+BI-BF20F828 owns resumable review evidence. BI-CB690D61 established common
+recoverability doctrine and does not claim fault injection of every adapter.
+BI-D95FD249 separately owns scheduled delivery-author evidence authorization;
+a supervisor must route that recorded blocker rather than approve old envelopes,
+widen grants or reimplement its mandate. BI-65D75876 delivered the operator
+Workroom composition; extend its loader and disclosure patterns.
+
+### Objectives
+
+**OBJ-COO-PROGRESS:** Distinguish verified progress, authorized execution, durable
+waiting and owned blockage from scheduler activity.
+
+**OBJ-COO-RECOVERY:** Make the COO accountable for recovery follow-through through
+existing room coordinators, tasks, receipts and escalation boundaries.
+
+**OBJ-COO-EXTERNAL:** Preserve the same obligation when an external executor,
+conversation, credential or server process disappears.
+
+**OBJ-COO-LEGIBILITY:** Give the human one clear view of outcomes and necessary
+decisions, with current design, strategy and operating guidance aligned.
+
+### One control loop, three responsibilities
+
+The existing Workroom drive remains the lifecycle and dispatch authority.
+The room's Process Overseer owns local stage conformance, blocker resolution
+and escalation. The COO owns the cross-room recovery obligation and checks that
+the assigned response produced evidence. The human owns strategic decisions,
+changes to authority and other acts the existing action-specific policy reserves.
+
+A supervisor may select an existing supported recovery action and request it
+through the governed executor under current authority. It cannot manufacture
+authority, become its own independent reviewer, transfer ownership silently or
+turn a notification into a completed recovery.
+
+The lifecycle is observe -> classify -> assign/request -> acknowledge -> recover
+or wait -> verify. It reuses Workroom state and activity, ScheduledAgentTask and
+TaskRun, existing request/receipt identities and the canonical room relations.
+There is no second workflow engine, private chat task list or parallel work ledger.
+
+### Progress and effective outcomes
+
+Calculate the observed dispatch outcome before deriving conclusion, hold,
+attention and user-facing state. Provider hold, lease contention, unavailable
+reviewer, failed scheduling and successful enqueue need distinct truthful results.
+Enqueue confirms a task exists; it does not confirm work started or completed.
+
+Retain no-progress age across reason changes, heartbeats, repeated enqueue and
+capacity waiting. Clear it only on a new completing evidence receipt or a
+verified stage/graph-marking advancement. A new cycle has its own identity.
+Legacy rooms with no usable progress anchor report unknown age; do not backdate
+to updatedAt, which is also written by scheduler ticks.
+
+Quiet posture, the next standing cycle, inactive delivery awaiting acceptance,
+a recorded dependency and a genuine human decision are legitimate waits. Each
+wait names its owner, trigger and next check or deadline. Waiting must not be
+reported as abandonment or successful execution. A bounded execution window is
+not itself a promise that a stage advanced.
+
+### Durable supervision and recovery authority
+
+Use the existing standing-room/task dispatch path for COO supervision, with the
+same canonical COO identity as direct conversations. Changing optional briefing
+cadence must not disable an already authorized Workroom recovery obligation.
+Hard policy and explicit pauses still win; no activity is silently activated
+merely because the installation is development.
+
+The recovery state belongs to the affected Workroom and is keyed by room,
+shape run, stage/graph iteration and last confirmed progress. It contains:
+
+- the observed blocker and evidence references;
+- local recovery owner and COO follow-through owner, both resolved principals;
+- exact supported recovery request and its immutable task/receipt identity;
+- acknowledgement deadline, next check and observable unblocking trigger;
+- bounded attempts, last confirmed effect and any uncertain outcome;
+- result evidence, verification disposition and any necessary human decision.
+
+A transactional compare-and-set on the existing checkpoint revision fences
+concurrent supervisors. Re-read current authority, admission, stage, budget and
+request identity before every consequential action. A stored request grants no
+authority. A lost response is reconciled through its existing result/receipt;
+never issue a fresh request merely because the first result is not visible.
+
+The first response may be a mechanical supported repair, an authorized coworker
+request, a durable dependency wait or an actual human decision. Missing admission,
+competent owner, required grant or reachable executor is a named blocker.
+Resolve the recorded owner/offer or escalate the concrete authority decision;
+do not guess a specialist from its display name or grant broad administration.
+An assignment is acknowledged by an accepted task/receipt, not by prose.
+At its deadline the same obligation is reconciled and, within the current budget,
+retried or routed through the existing escalation policy. Closing requires
+readable result evidence and the affected outcome's verification.
+
+### Internal and external execution
+
+Codex, Claude, Grok and embedded workers are adapters under the same Workroom
+contract. The server owns the durable obligation; client hooks accelerate capture.
+The checkpoint must retain objective, remaining acceptance, source/artifact
+identity, dirty-output provenance, confirmed effects, pending intent, current
+authority, blockers and next safe action, following workroom-cycle-continuity.md.
+A replacement executor claims against the expected revision and reconciles before
+replay. An unavailable desktop chat is explicitly unavailable; server scheduling
+does not imply authority to wake or send to an arbitrary external conversation.
+
+Provider recovery consumes an observed provider recovery signal or the existing
+bounded probe/backoff policy. Capacity recovery follows actual queue capacity,
+not an invented failure cause. Dependency completion rechecks the waiting stage.
+No recovery cancels an independent gate, retries a possibly published effect
+blindly or spends on an unapproved provider.
+
+### Human experience and scalability
+
+Extend the existing Workroom/portfolio projection: owner, last verified progress,
+blocker, recovery action, acknowledgement/result, next check and necessary
+decision. Technical evidence stays behind disclosure. The COO conversation
+answers from that same durable projection. Notify once per unchanged decision;
+a retry or heartbeat is not news. Completion and exhausted recovery are material
+changes. Preserve a user-visible path to inspect every original item.
+
+No full-inventory model turn every tick and no per-room query fan-out. Mechanical
+classification uses the current bounded paginated inventory and due-recovery
+selection; model judgment receives only changed/actionable records with a
+continuation. Persist continuation after accepted processing. The initial
+reconciliation budget is at most 100 candidate rooms and 10 recovery requests
+per existing drive cycle; overflow remains due and explicitly incomplete,
+oldest-due first. These are proposed implementation bounds, not current telemetry.
+Scale beyond one install follows the existing sovereign-install control-plane
+boundary; this work does not centralize peer data or mutate paired records.
+
+### Acceptance contract
+
+| Acceptance ID | Objective IDs | Statement |
+| --- | --- | --- |
+| AC-COO-01 | OBJ-COO-PROGRESS | Effective provider/lease/dispatch outcomes, conclusions, holds and operator projections agree; an attempted dispatch never claims confirmed execution. |
+| AC-COO-02 | OBJ-COO-PROGRESS | No-progress age survives reason changes, heartbeat and retry ticks; verified advancement clears it, while legitimate waits retain their trigger and next check. |
+| AC-COO-03 | OBJ-COO-RECOVERY | The COO owns cross-room follow-through through the existing authorized process: every stalled actionable item has a recovery owner, action, acknowledgement deadline, next check and independently readable result. |
+| AC-COO-04 | OBJ-COO-EXTERNAL | Internal and external executors recover from durable Workroom state within existing authority; missing/unreachable runtime is explicit, and duplicate effects and blind retries are prevented. |
+| AC-COO-05 | OBJ-COO-RECOVERY, OBJ-COO-LEGIBILITY | Human escalation contains a specific necessary decision or exhausted authorized recovery, and routine unchanged state does not repeatedly notify the founder. |
+| AC-COO-06 | OBJ-COO-LEGIBILITY | Canonical design, architecture, strategy, COO skill/task/persona and user guidance consistently describe the current Workroom-based operating model and distinguish deployed behavior from pending acceptance. |
+| AC-COO-07 | OBJ-COO-PROGRESS, OBJ-COO-RECOVERY, OBJ-COO-EXTERNAL | Served-runtime evidence proves provider recovery, interrupted external executor and resolved dependency continuation without founder nudges, plus one genuine human decision routed once. Unit/source checks alone do not close operational acceptance. |
+
+Negative controls retain refused authority, canceled work, independent review,
+explicit pause and stale-executor fences. Restart/duplicate/uncertain-effect
+cases must be exercised. The observation window starts only when the canonical
+release containing the repair is served. No unit test or completed backlog label
+substitutes for that operational evidence.
+
+### Research & Benchmarking
+
+Research checked October 25, 2026; no new dependency is adopted.
+
+- [Kubernetes controllers](https://kubernetes.io/docs/concepts/architecture/controller/):
+  adopt observed-versus-desired reconciliation through the owning API; reject
+  treating a scheduler wake as evidence the desired outcome was reached.
+- [Temporal event history](https://docs.temporal.io/encyclopedia/event-history):
+  adopt durable execution identity and recoverable confirmed-event history;
+  reject another engine or an assumption of exactly-once external effects.
+- [BMAD autonomous loops](https://docs.bmad-method.org/): benchmark the existing
+  delivery-lifecycle comparator and explicit change/review/test stages. Adopt
+  scoped work and acceptance separation; reject making a client-local loop the
+  platform's recovery guarantee.
+- [Camunda job workers](https://docs.camunda.io/docs/components/concepts/job-workers/):
+  adopt acknowledged completion/failure and bounded retries with incidents;
+  reject reporting queue activation as completion.
+- [AWS Step Functions error handling](https://docs.aws.amazon.com/step-functions/latest/dg/concepts-error-handling.html):
+  adopt explicit retry/catch and bounded fallback outcomes; reject uniform blind
+  retries for authorization failures, uncertain publication and real human gates.
+
+### Delivery, compatibility and rollback
+
+The source/API/database owners are the existing Workroom, task and activity
+facilities. Additive JSON projection fields must retain legacy readers and fail
+closed on malformed identities. No schema migration, grant expansion or
+installation teardown is implicit in this design. An implementation needing one
+must state it in its independent review and migration plan.
+
+Ship truthful progress as BI-756C899D, then supervision as BI-C43FD3E5. Reuse the
+existing operator composition and review/continuity owners. At least 20 percent
+of implementation effort consolidates duplicated effective-outcome, progress,
+recovery and UI projections. This is the owner's task direction; funding-scope
+authority remains separately resolved rather than inferred from the install.
+
+Rollback stands down new supervision dispatch, preserves obligations/checkpoints
+and existing task results, and returns to the previous release through the
+governed release path. It must never clear a queue hold, lose a pending decision,
+discard history or convert unverified recovery to success.

@@ -72,28 +72,38 @@ switch that makes an idle coworker start working.
 
 ### What it does
 
-Six coworkers currently self-drive. Each does one concrete, repeatable,
-reversible piece of work on your behalf:
+Standing work is declared per coworker and per Workroom. The installed roster
+and its scheduled tasks show what is actually configured; the dial alone does
+not create a missing activity or prove its last run succeeded.
 
-| Coworker | What it does without being asked |
-|---|---|
-| Marketing Specialist | Reviews the marketing plan, records whether to keep or change the current campaign, and drafts its next asset for your review |
-| Finance Controller | Reports burn, revenue, and runway — and says what is unknown |
-| Inventory Specialist | Reviews stock position and flags what needs ordering |
-| Documentation Specialist | Refreshes the documentation health overview |
-| Platform Engineer | Reports platform posture |
-| Compliance Officer | Reports obligations and control reviews falling due, and any recurrence with no next date |
+Examples include marketing review, financial position, inventory review,
+documentation health, platform posture and compliance deadlines. Other roles
+also have declared recurring activities. This guide does not maintain a second
+inventory of the roster.
 
-The other coworkers on the roster have no standing work bound to them yet. Their
-Proactivity row is real — it changes how they behave in conversation — but
-turning one to Assertive will not produce work while you are away.
+### COO supervision and current delivery status
+
+The COO is responsible for operational follow-through across Workrooms, while
+each room's Process Overseer owns its specialist work. You should be able to ask
+the COO what advanced, what is blocked, who is resolving it and what decision
+needs you. A heartbeat, report or queued task is not proof that work advanced.
+
+The October 25 review found that the existing COO standing task reports stalls
+to the owner and the persona still describes an Advisor-only phase. Durable
+recovery supervision is being repaired under BI-4B48E7FE; this guide does not
+claim that the repair or its unattended recovery tests have passed. The
+[current design and acceptance contract](../../superpowers/specs/2026-09-03-coordinated-workrooms-design.md#october-25-amendment-coo-operational-follow-through)
+records the delivery boundary. Existing Workroom owner, wait and recovery
+information remains authoritative while that work proceeds.
 
 ### When it runs
 
-A self-driving coworker runs **weekly at Balanced** and **daily at Assertive**,
-each at its own off-peak time so they do not contend. At **Quiet** it does not
-self-drive at all. Changing the level takes effect on the coworker's next
-scheduled run, not immediately.
+Each declared activity has its own cadence. Balanced and Assertive select that
+activity's supported intensity; they do not universally mean weekly and daily.
+Quiet stands down optional coworker self-tasks. A room's declared obligations,
+explicit pause, deadlines and action-specific authority still follow its own
+governed process. Changing a briefing preference does not grant new authority or
+prove an existing recovery obligation has been fulfilled.
 
 **Your operating hours are read, not guessed.** When the business is closed, follow-up
 quietens down and the channel drops to in-app; when an obligation's deadline is approaching,
