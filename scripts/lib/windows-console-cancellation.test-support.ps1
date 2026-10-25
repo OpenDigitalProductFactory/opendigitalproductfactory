@@ -121,7 +121,12 @@ public static class DpfConsoleFixture {
         finally { CloseHandle(info.thread); if(info.process!=IntPtr.Zero) CloseHandle(info.process); }
     }
     public static void InitializeDriver() {
-        // A real handler is process-local. NULL/TRUE would immunize children.
+        // PowerShell inherits ignore-CTRL+C. Adding a handler does not clear
+        // that attribute, so GenerateConsoleCtrlEvent returns success and no
+        // process on the console runs a handler. Children copy it at
+        // CreateProcess. Clear it before the witness is installed and before
+        // the target starts. NULL/TRUE would immunize children again.
+        Check(SetConsoleCtrlHandler(null,false));
         handler=kind=>{ if(kind==0) { Interlocked.Increment(ref controls); return true; } return false; };
         Check(SetConsoleCtrlHandler(handler,true));
         output=CreateFile("CONOUT$",0xc0000000,3,IntPtr.Zero,3,0,IntPtr.Zero);
