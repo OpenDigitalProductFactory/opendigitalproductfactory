@@ -5,6 +5,8 @@ import { fulfillCoworkerEngagement } from "@/lib/mcp/external-coworker-task-adap
 import { parseRemoteTaskSubmitParams } from "@/lib/mcp-task-submit-params";
 import { remoteTaskRequestDigest } from "@/lib/mcp-task-capacity-contract";
 const admission = vi.hoisted(() => ({ allowed: true }));
+const capacityWake = vi.hoisted(() => vi.fn().mockResolvedValue(false));
+vi.mock("./engagement-capacity-recovery", () => ({ resumeCapacityWaitingEngagementTask: capacityWake }));
 vi.mock("@/lib/work-management/workroom-agent-access.server", () => ({ resolveAgentWorkroomAccess: async ({ requested }: { requested: string }) => ({ decision: { level: admission.allowed ? requested : "none", reason: "not-admitted" } }) }));
 
 const artifactRef = { kind: "repo-blob-at-commit", repositoryFullName: "owner/repo", commitSha: "a".repeat(40), path: "docs/design.md", providerBlobId: "b".repeat(40) } as const;
@@ -295,4 +297,25 @@ it("reports a projection interruption as actionable observation failure without 
     workroom: { findUnique: async () => ({ id: "room", capsuleId: binding.workroomId }) } };
   const result = await fulfillCoworkerEngagement(binding.engagementId, undefined, binding.userId, { agentId: binding.actorAgentId, apiTokenId: "current", authSource: "pat", tokenScope: "write", userContext: { userId: binding.userId } } as never, fake as never);
   expect(result).toMatchObject({ success: false, error: "engagement_projection_unavailable", data: { taskRunId: "TR-ORIGINAL", executionRequested: false } });
+});
+
+it("projects an actionable capacity pause even while engagement remains accepted", async () => {
+  const wait = { schemaVersion: 1, kind: "provider-capacity", failureKind: "busy", resumeMode: "same-taskrun", attempt: 1, observedAt: "2026-10-25T22:24:14Z", nextAttemptAt: "2026-10-25T22:25:14Z" };
+  const engagement = { ...snapshot().engagement, id: "ce-row", status: "accepted", updatedAt: new Date(), metadata: { fulfillment: { binding, taskRunId: "TR-ORIGINAL" } } };
+  const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+  const fake = { $queryRaw: async () => [], taskRun: { findUnique: async () => ({ status: "submitted", progressPayload: { resourceWait: wait, executedToolCount: 0, summary: "Provider refused before tools" }, a2aMetadata: { engagementBinding: binding } }) }, coworkerEngagement: { findUnique: async () => engagement, updateMany } };
+  await reconcileEngagementTaskResult("TR-ORIGINAL", fake as never);
+  expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "accepted", metadata: expect.objectContaining({ fulfillment: expect.objectContaining({ waitReason: "provider-capacity", resourceWait: wait, nextAction: expect.stringMatching(/identical fulfillment.*recorded retry time/i) }) }) }) }));
+});
+
+it("explicit identical fulfillment requests a safe capacity wake; observation never does", async () => {
+  capacityWake.mockClear();
+  const storedBinding = { ...binding, roomHeadSha: artifactRef.commitSha };
+  const engagement = { ...snapshot().engagement, status: "accepted", metadata: { fulfillment: { taskRunId: "TR-ORIGINAL", binding: storedBinding } } };
+  const fake = { $queryRaw: async () => [], coworkerEngagement: { findFirst: async () => engagement, findUnique: async () => engagement }, mcpApiToken: { findUnique: async () => ({ userId: binding.userId, kind: "operator", revokedAt: null, expiresAt: null }) }, workroom: { findUnique: async () => ({ ...snapshot().room, id: "room-row" }) }, taskRun: { findUnique: async () => null } };
+  const context = { agentId: binding.actorAgentId, apiTokenId: "current", authSource: "pat", tokenScope: "write", userContext: { userId: binding.userId } };
+  await fulfillCoworkerEngagement(binding.engagementId, { workroomId: binding.workroomId, stageKey: binding.stageKey, artifactRef }, binding.userId, context as never, fake as never);
+  expect(capacityWake).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ taskRunId: "TR-ORIGINAL", binding: storedBinding, token: expect.objectContaining({ tokenId: "current" }) }));
+  await fulfillCoworkerEngagement(binding.engagementId, undefined, binding.userId, context as never, fake as never);
+  expect(capacityWake).toHaveBeenCalledTimes(1);
 });

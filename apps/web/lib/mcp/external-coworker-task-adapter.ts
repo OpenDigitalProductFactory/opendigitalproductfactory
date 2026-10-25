@@ -270,6 +270,10 @@ export async function fulfillCoworkerEngagement(engagementId: string, locator: u
     const { resumeUnstartedEngagementTask } = await import("@/lib/coworker-service-catalog/engagement-pre-admission-recovery");
     await resumeUnstartedEngagementTask({ taskRunId: String(existing.taskRunId), binding,
       token: { tokenId: context.apiTokenId, userId, capability: context.tokenScope === "write" || context.tokenScope === "admin" ? "write" : "read", source: context.authSource } });
+    } else if (["accepted", "in-progress"].includes(engagement.status)) {
+      const { resumeCapacityWaitingEngagementTask } = await import("@/lib/coworker-service-catalog/engagement-capacity-recovery");
+      await resumeCapacityWaitingEngagementTask({ taskRunId: String(existing.taskRunId), binding,
+        token: { tokenId: context.apiTokenId, userId, capability: context.tokenScope === "write" || context.tokenScope === "admin" ? "write" : "read", source: context.authSource } });
     }
     return fulfillCoworkerEngagement(engagementId, undefined, userId, context, db);
   }

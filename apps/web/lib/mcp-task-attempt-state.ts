@@ -25,10 +25,14 @@ export async function settleRemoteTask(
       ...args,
       data: {
         ...args.data,
-        ...((reservation || dispatchClaim) && args.data.progressPayload && typeof args.data.progressPayload === "object"
+        ...((reservation || dispatchClaim || (current.progressPayload as Prisma.JsonObject | null)?.engagementPreAdmissionContinuation) && args.data.progressPayload && typeof args.data.progressPayload === "object"
           && !Array.isArray(args.data.progressPayload)
           ? { progressPayload: {
               ...args.data.progressPayload,
+              // This audit is server-owned history, never the executor's replacement.
+              ...((current.progressPayload as Prisma.JsonObject | null)?.engagementPreAdmissionContinuation
+                ? { engagementPreAdmissionContinuation: (current.progressPayload as Prisma.JsonObject).engagementPreAdmissionContinuation as Prisma.InputJsonValue }
+                : {}),
               ...(reservation ? { resumeReservedAt: reservation } : {}),
               ...(dispatchClaim ? { dispatch: (current.progressPayload as Prisma.JsonObject).dispatch as Prisma.InputJsonValue } : {}),
             } }
