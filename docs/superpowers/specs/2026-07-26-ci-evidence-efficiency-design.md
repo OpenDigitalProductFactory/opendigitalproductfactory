@@ -18,6 +18,7 @@ related:
   - apps/web/scripts/ux-route-sweep.ts
   - apps/web/lib/ux-budget/route-budget-baseline.json
 backlog:
+  - BI-07BCDD1E
   - BI-E5A0C9A7
   - BI-2F60FDCE
   - BI-9585E580
@@ -433,3 +434,76 @@ Implementation will affect contributor workflow and external-agent behavior. Eac
 - Work Capsule and backlog evidence with the measured before/after result.
 
 No operator-facing portal workflow changes are proposed by this architecture itself.
+
+## 2026-10-25: hosted production-build profile correction (BI-07BCDD1E)
+
+This is the owner-authorized Small correction coordinated by WC-C565E819. It
+restores the existing non-experimental production-build profile for PR events.
+It does not activate the broader evidence-selection architecture above.
+
+### Observed failure and comparison
+
+PR #6577 source `675c5e0142cb44a883d7153bc9ab4111af0d40c8` was tested as
+synthetic integration `92af3293aabde862aff92bec48259649d3651ed8`, with base
+`909f8eebaffa6e5c1eb2a9e40c53f7580546c64b`. Both Production Build attempts in
+[CI 40226908616](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/actions/runs/40226908616)
+compiled, then the hosted runner received a shutdown signal during page-data
+collection. The process ended with SIGTERM. Neither attempt completed the
+production build; no product exception or host-memory cause was established.
+
+The supported full manual [CI 40228878805](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/actions/runs/40228878805)
+on source `675c5e` completed successfully, including Production Build, all
+151 static pages, UX runtime and Merge Readiness. Its logged profile had
+experimental build caching off. Source/integration and event differences
+prevent a sole-variable cause or performance claim. The successful source run
+does not turn the original integration failure into a pass.
+
+BI-07BCDD1E retains the earlier #6465 investigation and evidence. Its original
+UI/runtime acceptance is not certified by this CI correction.
+
+### Bounded design and ordered delivery
+
+Reuse the existing workflow, build wrapper, evidence artifacts and protected
+queue. Remove the experimental cache restore step and set the existing
+`DPF_TURBOPACK_BUILD_CACHE` input to `0` for CI production builds. Keep the
+normal build command, heavy-scope selection, all required checks, 15-minute
+step/45-minute job bounds and exact-tree artifact handoff.
+
+1. Preserve the failed and successful run identities and the operator's scope.
+2. Apply the configuration correction and reconcile the workflow's profile log.
+3. Run applicable existing workflow/build/merge-policy checks and the governed
+   local gate; independently assess the exact committed change.
+4. Deliver this correction through its own protected PR and queue. Then refresh
+   normal #6577 integration validation while preserving its approved source patch.
+5. Record actual PR/merge-group results separately from branch diagnostics and
+   later installed acceptance. Stop on another blocker-of-blocker or recurrence.
+
+Kernel decision `DI-C5B69C1DC1C3` preferred the standard profile. Its qualitative
+scores are design estimates, not proof of a host cause or measured cost saving.
+
+### Objectives and acceptance for this correction
+
+**OBJ-CI-PROFILE:** Use the existing reliable production-build profile consistently across CI events.
+
+**OBJ-CI-PROOF:** Retain truthful source/integration identity and every protected validation requirement.
+
+| Acceptance | Objectives | Statement |
+|---|---|---|
+| AC-CI-PROFILE-1 | OBJ-CI-PROFILE | PR builds do not enable or restore the experimental Turbopack filesystem cache; the emitted profile log agrees with the configured value. |
+| AC-CI-PROFILE-2 | OBJ-CI-PROFILE, OBJ-CI-PROOF | The normal command, required checks, heavy-scope behavior, time bounds and exact-tree production artifact handoff remain intact. |
+| AC-CI-PROFILE-3 | OBJ-CI-PROOF | Existing applicable workflow/build/merge-policy checks and independent exact-source assessment pass; actual hosted PR and merge-group completion are recorded before claiming delivery. |
+| AC-CI-PROFILE-4 | OBJ-CI-PROOF | The original #6577 failures remain attributable; source-branch success is never relabeled as successful validation of a different integration candidate. |
+
+No new table, enum, tool, runner tier, credential, grant, skip, synthetic status
+or runtime image is introduced. Funding scope remains unresolved in the room;
+this correction assigns no allocation percentage or new paid capacity. Revert
+the single configuration concern through the normal protected pipeline if the
+observation shows a regression. Existing installed runtimes need no migration
+or configuration change; the repository workflow converges through merge.
+
+The GitHub [workflow event contract](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows)
+distinguishes source-branch manual dispatch from PR merge-branch execution.
+The [protected-branch contract](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches)
+retains required checks and merge-queue validation. Neither is replaced by this
+profile correction. Post-change implementation and hosted verification are
+unrun at design capture.
