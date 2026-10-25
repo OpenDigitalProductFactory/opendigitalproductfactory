@@ -1,3 +1,6 @@
+---
+status: active
+---
 # Original UX Critic engagement handoff implementation plan
 
 Backlog: BI-BCBCA8D1. Workroom: WC-6CCF8DAB.
@@ -59,7 +62,7 @@ return; send genuine result to original routing chat for author disposition.
 ## Backlog coverage
 
 One atomic deliverable: original-engagement-handoff, BI-BCBCA8D1; dependsOn=[].
-Coverage receipt: pending governed recording; no implementation admission claimed.
+Coverage receipt: cmvo23l846g8i01muim8ioqrg at immutable plan f93da777d5795fcf8fe75da20c60cb8f55b69fe4; research initiative-ed514e78-0428-45af-84d8-80ec7ca3b9c8; implementation admitted IRD-8699D18EC453. Refresh coverage after source/scope changes.
 
 ## Risks and rollback
 

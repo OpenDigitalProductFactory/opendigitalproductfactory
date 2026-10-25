@@ -13022,6 +13022,15 @@
         "what-to-watch"
       ]
     },
+    "docs/user-guide/platform/coworker-engagements.md": {
+      "publicHref": "/user-guide/platform/coworker-engagements/",
+      "portalHref": "/docs/platform/coworker-engagements",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "requesting-and-reading-a-coworker-contribution"
+      ]
+    },
     "docs/user-guide/platform/deployment-country-sharing.md": {
       "publicHref": "/user-guide/platform/deployment-country-sharing/",
       "portalHref": "/docs/platform/deployment-country-sharing",
