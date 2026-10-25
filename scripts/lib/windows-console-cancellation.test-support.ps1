@@ -193,6 +193,15 @@ public static class DpfConsoleFixture {
         foreach(var pair in owned) if(!pair.Value.HasExited) result.Add(pair.Key+":"+pair.Value.StartTime.ToUniversalTime().Ticks);
         return result.ToArray();
     }
+    public static int JobActiveCount() {
+        if(job==IntPtr.Zero) return 0;
+        var info=Marshal.AllocHGlobal(48);
+        try {
+            uint returned;
+            Check(QueryInformationJobObject(job,1,info,48,out returned));
+            return Marshal.ReadInt32(info,40);
+        } finally { Marshal.FreeHGlobal(info); }
+    }
     public static bool CleanupOwned() {
         bool emergency=false;
         try { foreach(var pair in owned) {
@@ -246,6 +255,13 @@ if (-not $Driver) {
             if ([DateTime]::UtcNow -ge $deadline) { throw 'Private console driver exceeded 150 seconds' }
         }
         if ($process.ExitCode -ne 0) { throw ('Private console driver exit ' + $process.ExitCode) }
+        # The driver returns when the owned cmd exits. Descendants in this job
+        # can still be leaving, and counting them as an emergency kill fails
+        # the trust case after Ctrl+C has already landed.
+        $settle = [DateTime]::UtcNow.AddSeconds(10)
+        while ([DateTime]::UtcNow -lt $settle -and [DpfConsoleFixture]::JobActiveCount() -gt 0) {
+            Start-Sleep -Milliseconds 50
+        }
     } catch { $failure = $_.Exception.Message }
     finally {
         $emergency = [DpfConsoleFixture]::CleanupOwned()
