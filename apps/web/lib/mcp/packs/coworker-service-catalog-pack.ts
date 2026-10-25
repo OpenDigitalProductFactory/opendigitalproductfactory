@@ -217,18 +217,21 @@ async function resolveCoworkerOfferAgentCard(params: Record<string, unknown>): P
   };
 }
 
+type EngagementFulfillmentPort = (engagementId: string, locator: unknown, userId: string, context?: ToolExecutionContext) => Promise<ToolResult>;
+
 async function requestCoworkerEngagement(
   params: Record<string, unknown>,
   userId: string,
   context?: ToolExecutionContext,
+  fulfill?: EngagementFulfillmentPort,
 ): Promise<ToolResult> {
   if (params["engagementId"] !== undefined) {
     if (typeof params["engagementId"] !== "string" || !params["engagementId"].trim()
       || Object.keys(params).some(key => !["engagementId", "fulfillment"].includes(key))) {
       return { success: false, error: "invalid_engagement_resume", message: "Resume with engagementId and fulfillment only; original request identity cannot be replaced." };
     }
-    const { fulfillCoworkerEngagement } = await import("@/lib/mcp/external-coworker-task-adapter");
-    try { return await fulfillCoworkerEngagement(params["engagementId"].trim(), params["fulfillment"], userId, context); }
+    if (!fulfill) return { success: false, error: "engagement_executor_unavailable", message: "The service execution adapter is unavailable. Restore the configured catalog adapter, then observe or resume this same engagementId." };
+    try { return await fulfill(params["engagementId"].trim(), params["fulfillment"], userId, context); }
     catch (error) { return { success: false, error: "engagement_fulfillment_refused", message: getErrorMessage(error) }; }
   }
   if (params["fulfillment"] !== undefined) return { success: false, error: "invalid_engagement_resume", message: "Fulfillment must name the original engagementId; create the request first and resume that same engagement." };
@@ -321,3 +324,10 @@ export const coworkerServiceCatalogPack: ToolPack = {
     analyze_coworker_engagement_refinement: ["coworker_catalog_read"],
   },
 };
+
+/** Composition supplies the execution owner; catalog metadata stays outside its runtime cycle. */
+export function withEngagementFulfillment(fulfill: EngagementFulfillmentPort): ToolPack {
+  return { ...coworkerServiceCatalogPack, handlers: { ...coworkerServiceCatalogPack.handlers,
+    request_coworker_engagement: (params, userId, context) => requestCoworkerEngagement(params, userId, context, fulfill),
+  } };
+}
