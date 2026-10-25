@@ -30,6 +30,8 @@ CONTRACT-WAIT: For a task carrying the server's Workroom-stage assignment, the s
 
 CONTRACT-EVIDENCE: A blocked record never earns a completing receipt. This repair cannot certify a success, accept a release, create credentials, change membership, spend money, or send externally.
 
+The approval wait also survives a successful report from the same required tool or a separate missing required write. The supported Ask again replacement supersedes an expired ancestor only through its recorded lineage and matching owner, coworker, action, run and binding fingerprints. It preserves independent unresolved requests and all history. Independent client review identified both cases; regression tests reproduced them before repair.
+
 ## Ordered repair
 
 1. Keep the two first-failing regression tests and extend the report matrix across wrong room, wrong agent, wrong kind/stage, governed stage, completed outcome, and missing run context. Resolve graph-linked tests before implementation.

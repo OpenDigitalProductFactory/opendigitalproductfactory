@@ -6,6 +6,7 @@ relatedCode:
   - apps/web/lib/work-management/writeback-latch.ts
   - apps/web/lib/queue/functions/workroom-drive-stage-run.ts
   - apps/web/lib/actions/agent-task-scheduler.ts
+  - apps/web/lib/tak/scheduled-task-runs.ts
 ---
 
 # Workroom reports and approval waits
@@ -17,5 +18,7 @@ Actions outside that reporting authority still pass through the existing permiss
 When a scheduled Workroom-stage task requests approval for a required action, its next periodic run is parked. The Workroom also waits on that run's recorded approval outcome, including across a new day. It does not create another request simply because no completing evidence has arrived.
 
 A declined, expired, failed, cancelled, or unreadable outcome stays paused for reconciliation. Approval alone is not proof that the action ran. After recorded execution, the ordinary stage checks still require completing evidence before advancing. Transient execution failures retain the existing bounded retry policy.
+
+Recording a blocker does not hide another action in the same run that still needs approval. If you choose **Ask again** for an expired request, work follows that exact replacement while preserving the old request in history. Executing the replacement releases that request's wait; a separate unanswered request still holds the work.
 
 This prevents repeated requests from scheduled Workroom stages. Broader handling of repeated permission denials and changes to the approval-card layout are separate work.

@@ -136,7 +136,9 @@ describe("the drive reads the exact run's approval outcomes", () => {
   const task = { taskId: TASK("WC-TEST"), taskRunId: "TR-SCHED-TEST", ownerUserId: "user-1", lastRunAt: NOW,
     lastStatus: "proposed", lastError: null, taskConfig: {} };
   const envelope = (status: string, owner = "user-1") => ({ id: "env-1", taskRunId: task.taskRunId, delegatingUserId: owner,
-    status, createdAt: NOW, expiresAt: null, toolExecutions: [] });
+    coworkerAgentId: "worker", manifestActionId: "record_workroom_evidence", approvalBindingFingerprint: "exact-binding", inputFingerprint: "exact-input",
+    argsJson: {} as Record<string, unknown>, status, createdAt: NOW, expiresAt: null,
+    toolExecutions: [] as Array<{ executionMode: string; success: boolean; result: unknown }> });
   const source = (approvals: ReturnType<typeof envelope>[]) => ({
     scheduledAgentTask: { findMany: vi.fn().mockResolvedValue([task]) },
     coworkerActionEnvelope: { findMany: vi.fn().mockResolvedValue(approvals) },
@@ -154,6 +156,25 @@ describe("the drive reads the exact run's approval outcomes", () => {
     for (const approvals of [[envelope("executed", "someone-else")], [envelope("executed"), envelope("proposed")]]) {
       expect((await loadStageRunTasks([task.taskId], source(approvals) as unknown as Db))?.get(task.taskId)?.approvalOutcome).not.toBe("executed");
     }
+  });
+  it("releases an expired request only through its exact executed Ask again replacement", async () => {
+    const old = { ...envelope("expired"), id: "old", createdAt: new Date(NOW.getTime() - 1000) };
+    const replacement = { ...envelope("executed"), id: "new", argsJson: { reraisedFrom: old.id } };
+    expect((await loadStageRunTasks([task.taskId], source([old, replacement]) as unknown as Db))?.get(task.taskId)?.approvalOutcome).toBe("executed");
+    for (const rows of [[old, replacement, { ...envelope("proposed"), id: "independent" }],
+      [old, { ...replacement, approvalBindingFingerprint: "different-binding" }],
+      [old, { ...replacement, manifestActionId: "different-tool" }],
+      [old, { ...replacement, delegatingUserId: "someone-else" }],
+      [{ ...old, argsJson: { humanApproval: {} } }, replacement],
+      [{ ...old, status: "declined" }, replacement],
+      [{ ...old, approvalBindingFingerprint: "" }, { ...replacement, approvalBindingFingerprint: "" }]]) {
+      expect((await loadStageRunTasks([task.taskId], source(rows) as unknown as Db))?.get(task.taskId)?.approvalOutcome).not.toBe("executed");
+    }
+    const intermediate = { ...replacement, status: "expired", createdAt: new Date(NOW.getTime() - 500) };
+    const latest = { ...replacement, id: "latest", argsJson: { reraisedFrom: intermediate.id } };
+    expect((await loadStageRunTasks([task.taskId], source([old, intermediate, latest]) as unknown as Db))?.get(task.taskId)?.approvalOutcome).toBe("executed");
+    const notRunAttempt = { ...old, toolExecutions: [{ executionMode: "approval-outcome", success: false, result: { status: "not-run" } }] };
+    expect((await loadStageRunTasks([task.taskId], source([notRunAttempt, replacement]) as unknown as Db))?.get(task.taskId)?.approvalOutcome).toBe("executed");
   });
   it("holds when approval reads fail or exceed the bounded observation", async () => {
     const db = source([]);

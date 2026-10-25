@@ -192,6 +192,21 @@ function playbookOutcome(): unknown {
 }
 
 describe("S2 in the scheduler — the playbook verdict for a diverted call (characterisation)", () => {
+  it("keeps a pending completed-report approval visible beside a successful blocked report from the same tool", async () => {
+    const task = { ...PLAYBOOK_TASK, taskKind: null, prompt: "Record the result with record_workroom_evidence.", taskConfig: {
+      workroomStage: { shapeKey: "delivery-medium", shapeVersion: "1.0.0", stageKey: "implement", tools: [] },
+    } };
+    arrangeCommon(task);
+    mocks.getAvailableTools.mockResolvedValue([{ name: "record_workroom_evidence", description: "Record", inputSchema: {}, sideEffect: true }]);
+    mocks.runAgenticLoop.mockResolvedValue({ content: "The completed report needs approval; recorded the blocker.", executedTools: [
+      { name: "record_workroom_evidence", args: { outcome: "completed" }, result: { success: false, error: "approval_required" } },
+      { name: "record_workroom_evidence", args: { outcome: "blocked" }, result: { success: true } },
+    ] });
+    await executeScheduledAgentTask(task.taskId);
+    expect(mocks.prisma.scheduledAgentTask.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ lastStatus: "proposed", nextRunAt: null }),
+    }));
+  });
   it("persists the current scheduled run before the coworker can use its stage reporting mandate", async () => {
     arrangePlaybook({ success: true });
     await executeScheduledAgentTask(PLAYBOOK_TASK.taskId);

@@ -11,12 +11,37 @@ import { isRecord } from "@/lib/shared/coerce";
 import { driveDispatchCapacity, type DriveDispatchCapacity } from "@/lib/work-management/drive-dispatch-cap";
 import { workroomDriveTaskId, workroomDriveBranchTaskId } from "@/lib/work-management/drive-plan-stage";
 import { readDispatchCheckpoint } from "@/lib/work-management/workroom-drive-checkpoint";
-import { projectApprovalOutcome, type ApprovalOutcomeState } from "@/lib/coworker/approval-outcome";
+import { projectApprovalOutcome, type ApprovalOutcomeState, type ApprovalOutcomeRow } from "@/lib/coworker/approval-outcome";
 
 import { resolveWorkShapeClaim } from "@/lib/work-management/workroom-shape-claim";
 import type { StageRunObservation } from "@/lib/work-management/writeback-latch";
 
 type StageRunDb = Pick<PrismaClient, "scheduledAgentTask"> & Partial<Pick<PrismaClient, "coworkerActionEnvelope">>;
+type StageApproval = ApprovalOutcomeRow & {
+  taskRunId: string | null; delegatingUserId: string; coworkerAgentId: string; manifestActionId: string;
+  approvalBindingFingerprint: string | null; inputFingerprint: string | null; argsJson: unknown;
+};
+
+/** Ask again retains its expired ancestor; only a proven exact replacement supersedes it. */
+function effectiveStageApprovals(rows: StageApproval[], now: Date): StageApproval[] {
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  const replaced = new Set<string>();
+  for (const child of rows) {
+    const parentId = isRecord(child.argsJson) ? child.argsJson.reraisedFrom : null;
+    const parent = typeof parentId === "string" ? byId.get(parentId) : null;
+    if (!parent || !parent.approvalBindingFingerprint || child.id === parent.id || child.createdAt <= parent.createdAt) continue;
+    const lapsed = parent.status === "expired"
+      || parent.status === "proposed" && parent.expiresAt !== null && parent.expiresAt <= now;
+    if (!lapsed) continue;
+    if (isRecord(parent.argsJson) && ("humanApproval" in parent.argsJson || "policyAuthority" in parent.argsJson)) continue;
+    if (child.taskRunId === parent.taskRunId && child.delegatingUserId === parent.delegatingUserId
+      && child.coworkerAgentId === parent.coworkerAgentId && child.manifestActionId === parent.manifestActionId
+      && child.approvalBindingFingerprint === parent.approvalBindingFingerprint && child.inputFingerprint === parent.inputFingerprint) {
+      replaced.add(parent.id);
+    }
+  }
+  return rows.filter((row) => !replaced.has(row.id));
+}
 export type StageRunTaskRow = {
   taskId: string;
   lastRunAt: Date | null;
@@ -110,15 +135,17 @@ export async function loadStageRunTasks(
       try {
         const approvals = await source.coworkerActionEnvelope.findMany({
           where: { taskRunId: { in: runIds } }, take: 1001,
-          select: { id: true, taskRunId: true, delegatingUserId: true, status: true, createdAt: true, expiresAt: true,
+          select: { id: true, taskRunId: true, delegatingUserId: true, coworkerAgentId: true, manifestActionId: true,
+            approvalBindingFingerprint: true, inputFingerprint: true, argsJson: true, status: true, createdAt: true, expiresAt: true,
             toolExecutions: { where: { executionMode: "approval-outcome" }, orderBy: { createdAt: "desc" }, take: 1,
               select: { executionMode: true, success: true, result: true } } },
         });
         // An incomplete observation cannot establish that every request ran.
-        if (approvals.length <= 1000) for (const approval of approvals) {
+        const now = new Date();
+        if (approvals.length <= 1000) for (const approval of effectiveStageApprovals(approvals, now)) {
           if (!approval.taskRunId) continue;
           const values = outcomes.get(approval.taskRunId) ?? [];
-          values.push({ owner: approval.delegatingUserId, state: projectApprovalOutcome(approval, new Date()).state });
+          values.push({ owner: approval.delegatingUserId, state: projectApprovalOutcome(approval, now).state });
           outcomes.set(approval.taskRunId, values);
         }
       } catch { /* Unknown approval state retains the wait. */ }

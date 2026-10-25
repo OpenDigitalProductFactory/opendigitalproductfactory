@@ -1464,7 +1464,8 @@
       "docs/user-guide/ai-workforce/decision-perspective.md"
     ],
     "apps/web/lib/tak/scheduled-task-runs.ts": [
-      "docs/architecture/gated-permissions-process.md"
+      "docs/architecture/gated-permissions-process.md",
+      "docs/user-guide/workroom-approval-recovery.md"
     ],
     "apps/web/lib/tak/tool-intent.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md"
@@ -4129,6 +4130,7 @@
     "docs/user-guide/workroom-approval-recovery.md": [
       "apps/web/lib/actions/agent-task-scheduler.ts",
       "apps/web/lib/queue/functions/workroom-drive-stage-run.ts",
+      "apps/web/lib/tak/scheduled-task-runs.ts",
       "apps/web/lib/work-management/room-stage-mandate.ts",
       "apps/web/lib/work-management/writeback-latch.ts"
     ],
