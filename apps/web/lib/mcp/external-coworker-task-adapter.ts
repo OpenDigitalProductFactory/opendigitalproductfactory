@@ -241,7 +241,14 @@ export async function fulfillCoworkerEngagement(engagementId: string, locator: u
       if (access.decision.level !== "content") throw new Error("engagement_read_access_refused");
     }
     const taskRunId = record(record(engagement.metadata).fulfillment).taskRunId;
-    if (text(taskRunId)) await reconcileEngagementTaskResult(taskRunId, db);
+    if (text(taskRunId)) {
+      try { await reconcileEngagementTaskResult(taskRunId, db); }
+      catch {
+        return { success: false, error: "engagement_projection_unavailable", entityId: engagementId,
+          message: "The original task is persisted but engagement result projection failed. Retry observation; no execution was requested.",
+          data: { engagementId, taskRunId, observedEngagementStatus: engagement.status, nextAction: "Observe this same engagementId again; inspect engagement-result-projection phase timings if it persists.", executionRequested: false } };
+      }
+    }
     const latest = await prisma.coworkerEngagement.findUnique({ where: { engagementId } });
     return { success: true, entityId: engagementId, message: "Persisted engagement state; no execution was requested.", data: { engagementId, status: latest?.status ?? engagement.status, fulfillment: record(latest?.metadata ?? engagement.metadata).fulfillment ?? null, result: record(latest?.metadata ?? engagement.metadata).result ?? null } };
   }
@@ -259,6 +266,11 @@ export async function fulfillCoworkerEngagement(engagementId: string, locator: u
   const existing = record(record(engagement.metadata).fulfillment);
   if (existing.taskRunId) {
     if (canonicalJson(existing.binding) !== canonicalJson(binding)) return { success: false, error: "engagement_already_bound", message: "Read the original engagementId without fulfillment to observe its existing task; do not submit a different revision or stage." };
+    if (engagement.status === "failed") {
+    const { resumeUnstartedEngagementTask } = await import("@/lib/coworker-service-catalog/engagement-pre-admission-recovery");
+    await resumeUnstartedEngagementTask({ taskRunId: String(existing.taskRunId), binding,
+      token: { tokenId: context.apiTokenId, userId, capability: context.tokenScope === "write" || context.tokenScope === "admin" ? "write" : "read", source: context.authSource } });
+    }
     return fulfillCoworkerEngagement(engagementId, undefined, userId, context, db);
   }
   const token: RemoteTaskSubmitAuth = { tokenId: context.apiTokenId, userId, capability: context.tokenScope === "write" || context.tokenScope === "admin" ? "write" : "read", source: context.authSource };
