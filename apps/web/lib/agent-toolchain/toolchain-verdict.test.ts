@@ -134,13 +134,22 @@ describe("formatToolchainNotice", () => {
       result: { verdict, reasons: ["fixture drift"] },
     })!;
     expect(notice).toContain("signed updater's dry-run");
-    expect(notice).toContain("If the installed copy is current");
+    expect(notice).toContain("If the dry-run finds no toolchain or configuration repairs");
     expect(notice).toContain("continue other authorized work");
     expect(notice).toContain("existing scoped authorization");
     expect(notice).toContain("ask only for missing authority or expanded scope");
     expect(notice).toContain("Honor host and tool refusals");
     expect(notice).toContain("never route a refused apply through another path");
     expect(notice).not.toContain("for approval to update");
+  });
+  it("requires configuration convergence even when the pack is current but credential policy is below-floor", () => {
+    const declaration = declared("grok");
+    const result = resolveToolchainVerdict({ declaration, credential: { authSource: "pat" }, mcpEndpoint: HTTPS, published: FLOORED, now: AFTER_GRACE });
+    expect(result.verdict).toBe("below-floor");
+    const notice = formatToolchainNotice({ ...base, declaration, probableClient: null, result })!;
+    expect(notice).toContain("If the dry-run finds no toolchain or configuration repairs");
+    expect(notice).toContain("connector, credential-wiring or plugin-pin repairs");
+    expect(notice).not.toContain("If the installed copy is current");
   });
   it("names the full installation id the updater must expect, when known", () => {
     const declaration = declared("codex", "0.2.8", "0".repeat(16));

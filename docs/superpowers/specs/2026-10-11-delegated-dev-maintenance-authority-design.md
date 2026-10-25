@@ -167,8 +167,10 @@ monitor. No new grant, authority store, approval flag or client trust tier.
 
 1. Direct stale connections to the signed updater's dry-run first. A loaded
    declaration describes a running connection; it does not prove installed
-   files need replacing. If installed files are current, request one client
-   restart and continue independent authorized work.
+   files need replacing. A current pack may still have stale connector settings,
+   credential wiring or project plugin pins. Request one client restart only if
+   the dry-run finds no relevant toolchain or configuration repair, and continue
+   independent authorized work.
 2. If files need updating, reuse current scoped operator authorization. Seek
    approval only if that authority is missing or the proposed change exceeds
    it. A dry-run does not authorize its own application. Preserve signed

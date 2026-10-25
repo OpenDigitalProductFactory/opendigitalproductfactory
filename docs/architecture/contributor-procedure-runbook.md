@@ -72,8 +72,9 @@ alternate client is never a remedy for an authorization denial.
 
 For a stale toolchain declaration, inspect the signed updater's dry-run before
 applying changes. The declaration describes the loaded connection, not the files
-currently on disk. If installed files match the released pack, request one client
-restart and continue independent authorized work. If an update is needed, reuse
+currently on disk. Request one client restart only when the dry-run finds no
+relevant file, connector, credential-wiring or plugin-pin repair. Continue
+independent authorized work. For required repairs, reuse
 existing authorization only within its scope; the dry-run never approves its own
 application. Keep signature, expected-installation identity and client settings
 checks. Record a refused apply and its supported remedy rather than retrying it
