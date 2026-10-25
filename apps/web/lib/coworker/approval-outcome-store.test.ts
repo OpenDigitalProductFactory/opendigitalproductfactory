@@ -32,6 +32,19 @@ function fixture() {
   return { coworkerActionEnvelope: { findFirst, findMany }, toolExecution: { create } };
 }
 describe("approval receipt owner and assistant isolation", () => {
+  it("returns the exact waiting request's card link without reading action evidence", async () => {
+    const pending = { ...row, status: "proposed", expiresAt: new Date(now.getTime() + 60_000), toolExecutions: [] };
+    const db = { coworkerActionEnvelope: { findFirst: vi.fn(async () => pending) },
+      toolExecution: { findMany: vi.fn() } };
+    const result = await readApprovalOutcome("e1", "u1", "a1", db as never, now);
+    expect(result).toMatchObject({ state: "waiting",
+      inboxHref: "/workspace/inbox?approval=e1#owner-decision-coworker-envelope-e1",
+      actionEvidence: { state: "missing", reason: "not-settled" } });
+    expect(db.coworkerActionEnvelope.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: "e1", delegatingUserId: "u1", coworkerAgentId: "a1" },
+    }));
+    expect(db.toolExecution.findMany).not.toHaveBeenCalled();
+  });
   it("records not-run then reads the result in a new request without transient UI state", async () => {
     const db = fixture();
     await recordApprovalOutcome("e1", "u1", { status: "not-run", reason: "credential-unavailable", message: "private raw details" }, db as never);
@@ -94,7 +107,7 @@ describe("caller-scoped pending approval discovery", () => {
     expect(result).toMatchObject({ hasMore: false, approvals: [{
       envelopeId: "e1", state: "waiting", delegatingUserId: "u1", coworkerAgentId: "a1",
       expiresAtIso: pending.expiresAt.toISOString(), taskRunId: "TR-1", reviewBinding: binding,
-      inboxHref: "/workspace/inbox?approval=e1#approval-result",
+      inboxHref: "/workspace/inbox?approval=e1#owner-decision-coworker-envelope-e1",
     }] });
     expect(JSON.stringify(result)).not.toContain("private-");
   });

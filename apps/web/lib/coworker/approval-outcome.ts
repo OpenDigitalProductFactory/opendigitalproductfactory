@@ -1,6 +1,6 @@
 import { SOURCE_CATALOG, type MessageKey } from "@dpf/i18n";
 import { isRecord } from "@/lib/shared/coerce";
-import { envelopeResultRoute } from "./envelope-routes";
+import { envelopeInboxRoute, envelopeResultRoute } from "./envelope-routes";
 import { readOnBehalfDecision, type OnBehalfDecision } from "./on-behalf-decision";
 
 /** A read model, not an authority or execution state machine. */
@@ -52,7 +52,7 @@ export function projectApprovalOutcome(row: ApprovalOutcomeRow, now: Date): Appr
     envelopeId: row.id, state, label,
     nextAction: state === "not-run" && reason ? RECOVERY[reason] : nextAction,
     nextActionKey,
-    inboxHref: envelopeResultRoute(row.id),
+    inboxHref: state === "waiting" ? envelopeInboxRoute(row.id) : envelopeResultRoute(row.id),
     createdAtIso: row.createdAt.toISOString(),
     ...(onBehalf ? { decidedOnBehalf: onBehalf } : {}),
   };
