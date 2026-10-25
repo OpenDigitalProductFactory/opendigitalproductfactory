@@ -274,6 +274,39 @@ describe("projectBacklogItemReadiness", () => {
     expect(projection.decision).toMatchObject({ verdict: "allowed", profile: "feature" });
   });
 
+  it("quotes a bound design with no marked objectives on the design requirements (BI-93A0E9A7)", () => {
+    const parserError = "The artifact has no marked objective statements.";
+    const projection = projectBacklogItemReadiness({
+      item,
+      activities: [],
+      target: "plan",
+      transitionObject,
+      authorization: "pass",
+      capsuleIdentity: "pass",
+      currentDesign: { state: "verified", digest: "sha256:unmarked", scopeManifestError: parserError },
+      evaluatedAt: "2026-10-25T00:00:00.000Z",
+    });
+    for (const code of ["CANONICAL_DESIGN_REQUIRED", "SPEC_APPROVAL_REQUIRED"] as const) {
+      const nextAction = projection.decision.unmet.find((entry) => entry.code === code)?.nextAction ?? "";
+      expect(nextAction).toContain(parserError);
+      expect(nextAction).toContain("OBJ-");
+      expect(nextAction).toContain("AC/OBJ table rows");
+      expect(nextAction).toContain("record_initiative_design_review");
+    }
+    const generic = projectBacklogItemReadiness({
+      item,
+      activities: [],
+      target: "plan",
+      transitionObject,
+      authorization: "pass",
+      capsuleIdentity: "pass",
+      evaluatedAt: "2026-10-25T00:00:00.000Z",
+    }).decision.unmet.find((entry) => entry.code === "CANONICAL_DESIGN_REQUIRED")?.nextAction ?? "";
+    expect(generic).not.toContain(parserError);
+    expect(generic).not.toContain("OBJ-");
+    expect(generic).toContain('record_initiative_design_review(gate: "design-spec")');
+  });
+
   it("fails closed for an implementation claim with only textual spec and plan hints", () => {
     const projection = projectBacklogItemReadiness({
       item,
