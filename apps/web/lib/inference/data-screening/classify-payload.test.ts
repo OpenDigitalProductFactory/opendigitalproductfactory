@@ -705,6 +705,13 @@ describe("invoice vocabulary is not a payment record (BI-12CD3010)", () => {
 
   it.each([
     "Invoice INV-1042 is overdue.",
+    "Invoice INV1042 is overdue.",
+    "Invoice A-1042 is overdue.",
+    "Invoice no. 1042 is payable.",
+    "Invoice dated 2026-10-25.",
+    "Invoice due on 2026-11-01.",
+    "Invoice for USD 125.00.",
+    "Invoice total EUR 125.00.",
     "Invoice #1042 is payable.",
     "Invoice amount: $125.00.",
     "Invoice for $125.00 from the vendor.",

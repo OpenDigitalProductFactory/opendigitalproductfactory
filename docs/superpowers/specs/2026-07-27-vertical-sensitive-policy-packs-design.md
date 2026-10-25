@@ -199,7 +199,7 @@ The same unchanged input with the repair retains the ambiguous employee match
 for audit, measures confidential, selects no vertical pack, and permits normal
 residency. Raw values are not stored in the screening receipt.
 
-Free-text invoice detection now requires a reference or amount. Bare invoice
+Free-text invoice detection now requires a reference, date or amount. Bare invoice
 vocabulary does not establish a payment record. Structured finance fields,
 other precise detectors, governed classifications, explicit sensitivity floors,
 local-only settings and embedded protected values retain their controls.
@@ -240,7 +240,7 @@ invoice case rather than asserting universal record recognition.
 ### Verification and recovery boundary
 
 The first regression run failed on five schema/prose cases. The repair passes
-82 focused tests and 315 related screening/reviewer/authority tests. The latter
+82 focused tests in its initial pass; the final expanded run passes 335 tests across 20 screening, memory, reviewer and authority suites. The latter
 include exact active approval, changed parameters/subject, expired authority,
 revoked grant, narrowed room and immutable binding controls. These are
 source-local results, not live cross-surface conformance.

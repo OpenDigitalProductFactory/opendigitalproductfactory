@@ -71,6 +71,18 @@ const EMPLOYEE_RECORD_AMBIGUOUS_VALUE_PATTERN =
 const SOURCE_CODE_VALUE_PATTERN =
   /(?:\b(?:const|let|var)\s+[A-Za-z_$][\w$]*\s*(?:[:=;,])|\bfunction\s+[A-Za-z_$][\w$]*\s*\(|\bclass\s+[A-Za-z_$][\w$]*(?:\s+extends\s+[A-Za-z_$][\w$]*)?\s*\{|\bimport\s+[\w*{},\s]+\s+from\s+["']|\bexport\s+(?:default\s+)?(?:const|let|var|function|class)\b|=>|```(?:ts|tsx|js|jsx|py|sql|sh|ps1)\b)/;
 
+// Invoice labels alone are schema/domain vocabulary. Match concrete references,
+// dates and amounts while leaving other finance detectors unchanged.
+const PAYMENT_RECORD_TEXT_PATTERN = new RegExp([
+  /\b(?:routing number|account number|credit card|bank account|tax id|ein|ssn)\b/.source,
+  /\binvoice\s+(?:id|number|no\.?|reference)\s*[:=#]\s*\S+/.source,
+  /\binvoice\s*#\s*[a-z0-9][\w/-]*/.source,
+  /\binvoice\s+(?:[a-z]{1,16}[-/]?\d[\w/-]*|\d[\w/-]*)/.source,
+  /\binvoice\s+(?:id|number|no\.?|reference|dated|date|due)\s*(?:(?:is|on)\s+|[:=]\s*)?\d/.source,
+  /\binvoice\s+(?:amount|total|balance)\s*(?:(?:is|of)\s+|[:=]\s*)?(?:[$€£]|USD|EUR|GBP)?\s*\d/.source,
+  /\binvoice\s+(?:for|of)\s+(?:[$€£]|USD|EUR|GBP)\s*\d/.source,
+].join("|"), "i");
+
 const CLASS_RULES: readonly ClassRule[] = [
   {
     dataClass: "secrets-credentials",
@@ -157,10 +169,10 @@ const CLASS_RULES: readonly ClassRule[] = [
     // corroboration bar — so the guard corroborated itself (BI-67CAF494).
     //
     // BI-12CD3010: "Invoice table" is a schema example, not a payment
-    // record. Require an invoice identifier or amount in free text. Structured
+    // record. Require an invoice identifier, date or amount in free text. Structured
     // payment fields and the other precise finance detectors retain their floor.
     textPattern:
-      /\b(?:routing number|account number|credit card|bank account|tax id|ein|ssn)\b|\binvoice(?:\s+(?:id|number|no\.?|reference)\s*[:=#]\s*\S+|\s*#\s*\d[\w/-]*|\s+(?:[a-z]{2,}[-/]\d[\w/-]*|\d[\w/-]*)|\s+(?:amount|total|balance)\s*(?:(?:is|of)\s+|[:=]\s*)?[$€£]?\s*\d|\s+(?:for|of)\s+[$€£]\s*\d)/i,
+      PAYMENT_RECORD_TEXT_PATTERN,
   },
   {
     dataClass: "health-phi",
