@@ -507,3 +507,16 @@ The [protected-branch contract](https://docs.github.com/en/repositories/configur
 retains required checks and merge-queue validation. Neither is replaced by this
 profile correction. Post-change implementation and hosted verification are
 unrun at design capture.
+
+### Original acceptance retained
+
+The following original item obligations remain in scope; this correction does
+not certify the old repair's installed UI acceptance:
+
+- AC-CI6465-1: retain exact source/event/cache/DB/runner identities and actual outcomes for both failures and the one changed-condition experiment; no false cause or pass.
+- AC-CI6465-2: identify and implement only a justified bounded recovery or existing canonical CI profile correction, with normal source claims/admission and independent assessment if code is needed. Preserve all protected required checks and original failed history.
+- AC-CI6465-3: original repair reaches normal protected PR/merge-queue completion on its actual current integration identity, then canonical deployment/live readback. Diagnostic success alone is insufficient.
+
+Only the configuration correction is delivered by this branch. Ordered phases
+above are internal sequencing for BI-07BCDD1E; PR #6577 remains its separately
+owned repair. Live coverage will bind this immutable addendum to BI-07BCDD1E.
