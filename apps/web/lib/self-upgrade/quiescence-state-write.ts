@@ -1,5 +1,5 @@
 import { prisma } from "@dpf/db";
-import { isTerminalQuiescenceStatus, TERMINAL_QUIESCENCE_STATUSES, type EnteredStateAt, type QuiescenceRunStatus } from "./quiescence";
+import { isTerminalQuiescenceStatus, TERMINAL_QUIESCENCE_STATUSES, type EnteredStateAt, type QuiescenceRunStatus } from "./quiescence-contract";
 
 export async function transitionState(
   runId: string,
