@@ -530,7 +530,9 @@ export async function runWorkroomDriveJob(
     const resolved = await resolveWithReview(room, driveInput);
     // BI-72679FE0: a room whose item is done, deferred or delivered gets no agent and raises no stall.
     // BI-7C0B2BD6: then the capacity cap, so a stood-down room never takes a dispatch slot.
-    const plan = admit(gateDrivePlanOnWorkItem(resolved.plan, room.workItemStatus));
+    const itemPlan = gateDrivePlanOnWorkItem(resolved.plan, room.workItemStatus);
+    // BI-9CD95438: applyDrivePlan still records the hold; known-held rooms do not spend a slot.
+    const plan = readWorkroomQueueHold(room.workspaceState) ? itemPlan : admit(itemPlan);
     const review = plan === resolved.plan ? resolved.review : null;
     plans.push({
       roomId: room.capsuleId,
