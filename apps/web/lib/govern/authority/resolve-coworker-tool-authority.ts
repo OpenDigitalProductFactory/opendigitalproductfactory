@@ -76,7 +76,10 @@ function asString(value: unknown): string | null {
 
 export function deriveCoworkerAuthoritySubject(
   params: Record<string, unknown>,
+  toolName?: string,
 ): CoworkerAuthoritySubject {
+  // create_backlog_item mints params.itemId. That id is not an existing item.
+  const skipMintedItemId = toolName === "create_backlog_item";
   const candidates: Array<
     [keyof Record<string, unknown>, CoworkerAuthoritySubject["kind"]]
   > = [
@@ -89,6 +92,7 @@ export function deriveCoworkerAuthoritySubject(
     ["teamId", "team"],
   ];
   for (const [key, kind] of candidates) {
+    if (skipMintedItemId && key === "itemId") continue;
     const id = asString(params[key]);
     if (id) return { kind, id };
   }
@@ -197,9 +201,15 @@ export function resolveBoundInitiativeReviewItem(
 }
 
 /** Resolve initiative subject and organization from the canonical item. Caller
- * organization fields are ignored; authenticated context can only narrow. */
+ * organization fields are ignored; authenticated context can only narrow.
+ *
+ * create_backlog_item ignores params.itemId: that id is being minted, so the
+ * subject is the parent (authenticated organization, or the platform). Tools
+ * that address an existing item still fail closed when it is absent.
+ */
 export async function resolveInitiativeAuthorityContext(input: {
   params: Record<string, unknown>;
+  toolName?: string;
   trustedBoundItemId?: string | null;
   authenticatedOrganizationId?: string | null;
   db: InitiativeAuthorityDb;
@@ -209,7 +219,7 @@ export async function resolveInitiativeAuthorityContext(input: {
 }> {
   const subject: CoworkerAuthoritySubject = input.trustedBoundItemId
     ? { kind: "backlog-item", id: input.trustedBoundItemId }
-    : deriveCoworkerAuthoritySubject(input.params);
+    : deriveCoworkerAuthoritySubject(input.params, input.toolName);
   if (subject.kind !== "backlog-item") {
     return {
       subject,
@@ -435,6 +445,7 @@ export const resolveCoworkerToolAuthorityInput =
       delegationPromise,
       resolveInitiativeAuthorityContext({
         params: execution.rawParams,
+        toolName: execution.toolName,
         trustedBoundItemId,
         authenticatedOrganizationId: execution.context?.organizationId,
         db,
