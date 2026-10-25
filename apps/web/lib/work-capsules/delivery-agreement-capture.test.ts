@@ -3,7 +3,7 @@ import { captureFiniteDeliveryState } from "./delivery-agreement-capture";
 import { readDeliveryAgreement } from "@/lib/work-management/delivery-agreement";
 const now = new Date("2026-10-25T12:00:00.000Z");
 const input = { objective: "Intake verified", source: "external-adoption", backlogItemId: "BI-1",
-  acceptanceBody: "## Acceptance\n- One intake reaches care\n## Notes\nA note", now };
+  acceptanceSource: { itemId: "BI-1", body: "## Acceptance\n- One intake reaches care\n## Notes\nA note" }, now };
 const intent = { schemaVersion: 1, primaryPurpose: "evolve-dpf", secondaryPurposes: [], relationshipIntents: ["same-organization"],
   pairedProductionInstallationRef: "customer-zero", evidence: [], confidence: "high", confirmation: { status: "confirmed", confirmedAt: now.toISOString(), confirmedByPrincipalId: "owner" } };
 function database() {
@@ -60,7 +60,7 @@ describe("delivery agreement capture", () => {
   });
   it("keeps the same acceptance digest after an unrelated body note changes", async () => {
     const first = readDeliveryAgreement(await captureFiniteDeliveryState({}, input));
-    const next = readDeliveryAgreement(await captureFiniteDeliveryState({}, { ...input, acceptanceBody: input.acceptanceBody + " changed" }));
+    const next = readDeliveryAgreement(await captureFiniteDeliveryState({}, { ...input, acceptanceSource: { ...input.acceptanceSource, body: input.acceptanceSource.body + " changed" } }));
     expect(first?.acceptance?.digest).toBe(next?.acceptance?.digest);
   });
 });
@@ -68,4 +68,20 @@ describe("delivery agreement capture", () => {
 it("captures an ordinary finite manual room and respects an adopted standing shape", async () => {
   expect(readDeliveryAgreement(await captureFiniteDeliveryState({}, { ...input, source: "manual" }))).not.toBeNull();
   expect(await captureFiniteDeliveryState({}, { ...input, scope: { workShape: "dependency-advisory-watch@1.0.0" } })).toEqual({});
+});
+
+it("captures criteria through an existing unique-only backlog adapter", async () => {
+  const findUnique = vi.fn(async () => ({ body: "## Acceptance\n- Preserve the intake identity" }));
+  const state = await captureFiniteDeliveryState({ backlogItem: { findUnique } }, { ...input, acceptanceSource: undefined });
+  expect(readDeliveryAgreement(state)?.acceptance?.criteria).toEqual(["Preserve the intake identity"]);
+  expect(findUnique).toHaveBeenCalledWith({ where: { itemId: "BI-1" }, select: { itemId: true, body: true } });
+});
+
+it("retains the already-read semantic source without consuming another lookup", async () => {
+  const findUnique = vi.fn(async () => null);
+  const state = await captureFiniteDeliveryState({ backlogItem: { findUnique } }, { ...input,
+    backlogItemId: "row-1",
+    acceptanceSource: { itemId: "BI-1", body: "## Acceptance\n- Keep the customer owner" } });
+  expect(findUnique).not.toHaveBeenCalled();
+  expect(readDeliveryAgreement(state)).toMatchObject({ backlogItemId: "BI-1", acceptance: { criteria: ["Keep the customer owner"] } });
 });

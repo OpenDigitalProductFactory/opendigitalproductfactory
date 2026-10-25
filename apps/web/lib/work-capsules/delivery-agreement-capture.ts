@@ -7,16 +7,21 @@ import { loadEnvironmentClassResolution } from "@/lib/install/environment-class"
 import { bodyCriteriaVersion } from "@/lib/backlog/initiative-readiness/body-baseline-version";
 import { deliveryObject, readDeliveryAgreement, retainDeliveryAgreement, type DeliveryContext } from "@/lib/work-management/delivery-agreement";
 
+export type DeliveryAcceptanceSource = { itemId: string; body: string | null };
+
 export type DeliveryAgreementCaptureDb = {
   platformConfig?: { findUnique(args: { where: { key: string } }): Promise<{ value: unknown } | null> };
-  backlogItem?: { findFirst(args: unknown): Promise<{ body: string | null } | null> };
+  backlogItem?: {
+    findUnique?(args: unknown): Promise<{ itemId?: string; body: string | null } | null>;
+    findFirst?(args: unknown): Promise<{ itemId?: string; body: string | null } | null>;
+  };
   federatedRecordMirror?: { findFirst(args: unknown): Promise<{ mirrorId: string; version: bigint;
     peerRecordRef: string | null; lastSyncedAt: Date | null; syncStatus: string } | null> };
   federationLink?: { findMany(args: unknown): Promise<Array<{ linkId: string; role: string; linkState: string;
     peerOrganizationRef: string | null; revokedAt: Date | null; quarantinedAt: Date | null }>> };
 };
 type CaptureInput = {
-  objective: string; source: string; backlogItemId?: string | null; acceptanceBody?: string | null;
+  objective: string; source: string; backlogItemId?: string | null; acceptanceSource?: DeliveryAcceptanceSource;
   workspaceState?: unknown; activityKind?: string | null; scope?: { workShape?: unknown } | null; now?: Date;
 };
 
@@ -50,7 +55,7 @@ async function inspectDeliveryContext(db: DeliveryAgreementCaptureDb, now: Date,
       sourceRefs: ["platform-config:installation.operating-intent.v1", `federation-link:${pairing.linkId}`] };
     // Read the scoped, share-safe snapshot already imported by the federation contract.
     // No peer network request, credentials or foreign authority enter this transaction.
-    if (input.backlogItemId && input.acceptanceBody && db.federatedRecordMirror) {
+    if (input.backlogItemId && input.acceptanceSource?.body && db.federatedRecordMirror) {
       const mirror = await db.federatedRecordMirror.findFirst({
         where: { federationLinkId: pairing.linkId, recordType: "backlog-item", localRecordRef: input.backlogItemId,
           canonicalSide: "peer", syncStatus: "synced" },
@@ -61,7 +66,7 @@ async function inspectDeliveryContext(db: DeliveryAgreementCaptureDb, now: Date,
         reason: `Read the linked deliverable snapshot as of ${mirror.lastSyncedAt.toISOString()}. It applies to ${input.backlogItemId}; local requirements and authority still govern.`,
         sourceRefs: [`federation-link:${pairing.linkId}`, `federated-record-mirror:${mirror.mirrorId}@${mirror.version}`,
           `peer-record:${mirror.peerRecordRef}`, `applies-to:${input.backlogItemId}`,
-          `sha256:${createHash("sha256").update(input.acceptanceBody).digest("hex")}`],
+          `sha256:${createHash("sha256").update(input.acceptanceSource.body).digest("hex")}`],
       };
     }
     return { ...base, state: "checked", peerRef: pairing.ref, guidanceState: "unavailable",
@@ -85,10 +90,16 @@ export async function captureFiniteDeliveryState(db: DeliveryAgreementCaptureDb,
   const sourceKey = input.source === "scheduled-steward" ? "scheduled" : "work-capsule";
   if (resolveRoomProjectionMode(sourceKey, shapeKey) === "standing") return { ...state };
   const now = input.now ?? new Date();
-  const acceptanceBody = input.acceptanceBody ?? (input.backlogItemId && db.backlogItem
-    ? (await db.backlogItem.findFirst({ where: { itemId: input.backlogItemId }, select: { body: true } }))?.body : null);
-  const version = bodyCriteriaVersion(acceptanceBody);
+  const readBody = db.backlogItem?.findUnique?.bind(db.backlogItem) ?? db.backlogItem?.findFirst?.bind(db.backlogItem);
+  let acceptanceSource = input.acceptanceSource;
+  if (!acceptanceSource && input.backlogItemId && readBody) {
+    const where = /^BI-/i.test(input.backlogItemId) ? { itemId: input.backlogItemId } : { id: input.backlogItemId };
+    const row = await readBody({ where, select: { itemId: true, body: true } });
+    if (row) acceptanceSource = { itemId: row.itemId ?? input.backlogItemId, body: row.body };
+  }
+  const backlogItemId = acceptanceSource?.itemId ?? input.backlogItemId ?? null;
+  const version = bodyCriteriaVersion(acceptanceSource?.body);
   const acceptance = version ? { digest: version.criteriaDigest, criteria: version.criteria } : null;
-  return retainDeliveryAgreement(state, { objective: input.objective, backlogItemId: input.backlogItemId ?? null,
-    capturedAt: now.toISOString(), basis: "created", acceptance, context: await inspectDeliveryContext(db, now, { ...input, acceptanceBody }, deps.environmentClass) });
+  return retainDeliveryAgreement(state, { objective: input.objective, backlogItemId,
+    capturedAt: now.toISOString(), basis: "created", acceptance, context: await inspectDeliveryContext(db, now, { ...input, backlogItemId, acceptanceSource }, deps.environmentClass) });
 }

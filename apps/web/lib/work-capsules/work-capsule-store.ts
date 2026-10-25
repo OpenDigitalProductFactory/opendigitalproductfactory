@@ -76,6 +76,7 @@ type CapsuleCreateInput = {
   epicId?: string | null;
   featureBuildId?: string | null;
   workspaceState?: Record<string, unknown>;
+  acceptanceSource?: import("./delivery-agreement-capture").DeliveryAcceptanceSource;
   scope?: WorkCapsuleScopeInput | null;
   // BI-B24F96D0: principal who commissioned the work (Requester), distinct from
   // the creating actor. Optional.
@@ -404,7 +405,7 @@ export async function claimBacklogItemWorkspace(args: {
     input: {
       title: args.input.title ?? `Work on ${item.itemId}`,
       objective: args.input.objective ?? item.title ?? `Claim-at-start binding for ${item.itemId}`,
-      acceptanceBody: item.body ?? null,
+      acceptanceSource: { itemId: item.itemId, body: item.body ?? null },
       repositoryFullName: args.input.repositoryFullName,
       headBranch: args.input.headBranch,
       worktreePath: args.input.worktreePath,
