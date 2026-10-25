@@ -166,6 +166,19 @@ with an audit retaining the original declaration and trusted approval reference.
 It changes no principal clearance or membership. The operator workflow is in
 [Work rooms](../user-guide/workspace/work-rooms.md).
 
+`list_workrooms(view="definitions")` returns a bounded catalogue from the
+canonical source registry and review-profile composer. Omitting `view` retains
+instance observations. Definition pages include sparse sources and canonical
+aliases, with profile composition status, fingerprints and canonical conflict reasons. They report
+`not-exercised` occurrence assessment and `unknown` organization applicability;
+definition counts never stand in for successful execution or coverage.
+
+The view keeps `view_platform`, `work_capsule_read` and native user context.
+It reads no room records. Instance filters and cursors are refused, and a
+changed definition inventory requires a fresh traversal. Whole pages fit the
+existing result budget; a refusal never advances past unseen definitions.
+The full contract is in [Workroom review profiles](workroom-review-profile-contract.md).
+
 `list_workrooms` accepts `headBranch` and `pullRequestNumber` so an assistant
 asked to take over a PR can find its room (BI-679D2BF6). For an OAuth
 assistant, a lookup also matches the person's rooms that another assistant

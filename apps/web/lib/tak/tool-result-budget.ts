@@ -97,7 +97,7 @@ function buildFullText(result: ModelFacingToolResult): string {
         data: { page: data.page, log: data.log ? { nextAfterSequence: data.log.nextAfterSequence, incomplete: data.log.incomplete } : undefined,
           recovery: data.recovery } });
     }
-    if (data?.page?.version === 1 && data.page.disposition === "restart-required" && data.recovery?.toolName === "list_workrooms") {
+    if (data?.page?.version === 1 && (data.page.disposition === "restart-required" || data.page.readKind === "workroom-definitions") && data.recovery?.toolName === "list_workrooms") {
       return JSON.stringify({ success: false, error: result.error, message: result.message,
         data: { page: data.page, recovery: data.recovery } });
     }
@@ -166,8 +166,10 @@ export function clampToolResultForModel(
   // A mask or an unusually small caller cap may enlarge/exceed the pre-sized
   // page. Refuse that envelope explicitly; its cursor must not skip unseen rows.
   const page = (result.data as { page?: { version?: number; observationId?: string; disposition?: string; readKind?: string } } | undefined)?.page;
-  if (page?.version === 1 && (typeof page.observationId === "string" || page.disposition === "restart-required" || page.readKind === "workroom-activity")) {
-    const recovery = page.readKind === "workroom-activity"
+  if (page?.version === 1 && (typeof page.observationId === "string" || page.disposition === "restart-required" || (page.readKind === "workroom-activity" || page.readKind === "workroom-definitions"))) {
+    const recovery = page.readKind === "workroom-definitions"
+      ? "Repeat list_workrooms with view:definitions, the unchanged cursor and limit:1. No cursor advancement is authorized."
+      : page.readKind === "workroom-activity"
       ? "Repeat get_workroom with activityMode:bounded, the unchanged sequence bounds and activityLimit:1, or select a narrower payloadPath. No cursor advancement is authorized."
       : "Restart list_workrooms without cursor and with limit:1; preserve filters.";
     const error = JSON.stringify({ success: false, error: "page_budget_too_small", recovery });
