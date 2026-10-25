@@ -72,3 +72,27 @@ never permission to self-grant or share source using the requester's identity.
 Source-only checks remain structural; acceptance requires actual Critic execution.
 Rollback retains historical bindings/effects and disables new admission; unknown
 outcomes remain fenced and unreplayed. Review and deployment proof are separate.
+
+
+## Live continuation correction (2026-10-25)
+
+The canonical .133 runtime admitted CE-724328D6 once, then its original task
+failed in immutable request reconstruction before execution reservation. The
+JSONB round trip reordered nested binding keys used by the v2 JSON.stringify
+digest. Preserve the original digest by normalizing only engagement bindings
+into the original admission order, including nested locators. Do not change
+non-engagement packet hashing. Verify actual PostgreSQL readback and unchanged
+original packet. Load reconciliation dependencies before its transaction and
+retain atomic completion plus Workroom return; phase timings locate any remaining
+latency. Observation errors must identify projection failure without dispatch.
+
+An explicit identical fulfillment may reserve one continuation of this exact
+known pre-admission failure on the same TaskRun. Require the worker's exact
+reconstruction error, original digest/CE/prompt/scope, unclaimed dispatch 1,
+no heartbeat, no effects/inference/messages/fences and no prior continuation.
+Revalidate current caller and original authority with the existing same OAuth
+family continuity contract; retain the origin identity and digest. Keep the
+entire failed progress snapshot in a versioned continuation record, CAS the
+original failed row, and persist a fresh deterministic dispatch event 2. Never
+resume an unknown or started execution. Observer calls never reserve work.
+This adds no service, authority grant, table, replacement CE or new TaskRun.

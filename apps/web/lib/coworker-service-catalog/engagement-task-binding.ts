@@ -46,7 +46,20 @@ export function parseEngagementTaskBinding(value: unknown): EngagementTaskBindin
       || !/^docs\/professions\/[a-z-]+\/wiki\/[a-z0-9-]+\.md$/.test(String(a.path)) || !/^[a-f0-9]{40,64}$/.test(String(a.providerBlobId))
       || Object.keys(a).some(key => !["kind", "repositoryFullName", "commitSha", "path", "providerBlobId"].includes(key));
   }))) return null;
-  return row as EngagementTaskBinding;
+  // JSONB does not preserve insertion order. v2 digests must reconstruct the
+  // original admission packet, including every nested immutable locator.
+  const normalizeArtifact = (value: unknown): Artifact => {
+    const a = value as Artifact;
+    return { kind: a.kind, repositoryFullName: a.repositoryFullName, commitSha: a.commitSha, path: a.path, providerBlobId: a.providerBlobId };
+  };
+  return {
+    version: 1, engagementId: String(row.engagementId), offerId: String(row.offerId), serviceId: String(row.serviceId),
+    providerAgentId: String(row.providerAgentId), actorAgentId: String(row.actorAgentId), userId: String(row.userId),
+    workroomId: String(row.workroomId), stageKey: String(row.stageKey), artifactRef: normalizeArtifact(row.artifactRef),
+    ...(row.roomHeadSha !== undefined ? { roomHeadSha: String(row.roomHeadSha) } : {}),
+    ...(Array.isArray(row.guidanceArtifacts) ? { guidanceArtifacts: row.guidanceArtifacts.map(normalizeArtifact) } : {}),
+    inputDigest: String(row.inputDigest),
+  };
 }
 
 export function engagementInputDigest(requestedOutcome: string, inputPayload: unknown): string {

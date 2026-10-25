@@ -287,3 +287,12 @@ it("rolls back completion when the Workroom return fails, then safely retries on
   expect(engagement.status).toBe("completed");
   expect(returnWrites).toBe(1);
 });
+
+it("reports a projection interruption as actionable observation failure without execution", async () => {
+  const engagement = { ...snapshot().engagement, status: "accepted", metadata: { fulfillment: { taskRunId: "TR-ORIGINAL", binding } } };
+  const fake = { $queryRaw: vi.fn().mockRejectedValue(new Error("transaction expired")), coworkerEngagement: { findFirst: async () => engagement },
+    mcpApiToken: { findUnique: async () => ({ kind: "operator", userId: binding.userId, revokedAt: null, expiresAt: null }) },
+    workroom: { findUnique: async () => ({ id: "room", capsuleId: binding.workroomId }) } };
+  const result = await fulfillCoworkerEngagement(binding.engagementId, undefined, binding.userId, { agentId: binding.actorAgentId, apiTokenId: "current", authSource: "pat", tokenScope: "write", userContext: { userId: binding.userId } } as never, fake as never);
+  expect(result).toMatchObject({ success: false, error: "engagement_projection_unavailable", data: { taskRunId: "TR-ORIGINAL", executionRequested: false } });
+});

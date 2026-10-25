@@ -37,3 +37,14 @@ An empty calibrated UX corpus is reported as **UNGROUNDED**. Critic findings
 remain advisory. Browser checks, a request, a task reservation and a passing build
 are different evidence from an executed specialist critique. The requesting
 Workroom receives the result; author disposition remains separately attributable.
+
+
+A failed request whose worker rejected the immutable packet before execution may
+be continued once using the same original fulfillment locator. First observe the
+engagement to project the actual task failure. The server verifies that exact
+pre-admission failure, unchanged request and current original consent family,
+and refuses any recorded execution, uncertainty or prior continuation. The task
+and engagement IDs remain unchanged; the original failure and digest are retained.
+All other failures require diagnosis of the original task. Observation alone
+never starts or resumes execution. A projection error explicitly says to retry
+observation and inspect phase timings; it does not imply the Critic ran.
