@@ -164,3 +164,43 @@ intact. Then verify one successful explicit refresh applies a valid atomic
 snapshot. Existing admission, independent review, governed gate and release
 requirements above remain; this design amendment reports no repaired runtime
 or passing implementation test.
+
+## October 25 shared header reflow
+
+Continue the same BI-9DC43E17 / WC-2EE23DD6 responsive acceptance contract.
+The original BI-5366EF78 / WC-A4E8BC72 case at390px genuinely measured
+document375/668 and a635.109375px implicit header grid track. Preserve failed
+RV-WORKROOM-HEADER-OVERFLOW-RECOVERY132-20261025 and its original evidence.
+The previously delivered refresh/disclosure passes do not close this failure.
+
+The earlier source owner protected-merged PR6575 and normally released its idle
+claims after restoring live own-lease proof. Root's fresh normal path claim is
+accepted. Preserve the finite-room originalObjective and delivery-agreement
+disclosure from that source; restore only the confirmed participant separator's
+four corrupted codepoints to the original middle dot using explicit UTF-8 IO.
+
+Reuse WorkroomHeader: constrain its existing header and grid with min-w-0,
+declare one narrow grid track and inherit overflow-wrap:anywhere. Keep md two
+columns and xl four columns, full IDs, text, status/read models, landmarks,
+controls, keyboard behavior and theme tokens. This consolidates wrapping at the
+existing shared boundary rather than copying rules into every field. No global
+overflow hiding, truncation, new primitive or new route is part of the repair.
+Decision DI-668BC894A43F selects shared-header-reflow over per-field rules and
+clipping; commit the exact-header propose-n-pick fit manifest.
+
+The related-test graph has no Header edges. Run the existing full WorkCaseDetailView
+consumer tests and adjacent delivery-agreement/stage-decision/shape-rebind tests,
+both web TypeScript programs and required source guards, then one governed gate.
+Do not create CSS-class assertions or mocked layout tests. The actual browser
+failure is RED evidence; source-local checks cannot establish rendered GREEN.
+Freeze the changed source, obtain a separately attributed corrective assessment
+including the added separator change, and publish through normal DCO/protected
+checks. Preserve uncertain native reviews; do not infer a verdict from merge.
+
+After a qualified containing deployment and CAN-TEST, repeat the exact original
+case at390px in light/dark: document scroll width must equal client width within
+one pixel, all reviewer/source IDs remain complete and no page scrolling is
+hidden. Check narrow and desktop breakpoints, existing keyboard focus/disclosures
+and the participant separator. Preserve finite-room objective/disclosure behavior
+and intentional process-strip scrolling. Independent scoped acceptance remains
+required; the wider BI and original seven scenarios stay open.

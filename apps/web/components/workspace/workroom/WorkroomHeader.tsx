@@ -37,7 +37,7 @@ function participantSummary(room: WorkroomView): string {
   if (count === 0) return "No participants listed";
   const names = room.participants.slice(0, 2).map((participant) => participant.displayName);
   const remainder = count - names.length;
-  return `${count} ${count === 1 ? "participant" : "participants"} Ã‚Â· ${names.join(", ")}${remainder > 0 ? ` +${remainder}` : ""}`;
+  return `${count} ${count === 1 ? "participant" : "participants"} · ${names.join(", ")}${remainder > 0 ? ` +${remainder}` : ""}`;
 }
 
 export function WorkroomHeader({ room, summary, workforce, stageDecision, shapeRebind }: Props) {
@@ -65,7 +65,7 @@ export function WorkroomHeader({ room, summary, workforce, stageDecision, shapeR
 
       <header
         aria-labelledby="work-room-title"
-        className="rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4 sm:p-5"
+        className="min-w-0 rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4 [overflow-wrap:anywhere] sm:p-5"
       >
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
@@ -134,7 +134,7 @@ export function WorkroomHeader({ room, summary, workforce, stageDecision, shapeR
 
         <WorkroomStructurePanel structure={room.structure} />
 
-        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-4 grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
           <section aria-label="Attention" className={`rounded-lg border border-[var(--dpf-border)] p-3${stageDecision || shapeRebind ? " md:col-span-2" : ""}`}>
             <p className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--dpf-muted)]">
               {room.work.attentionRequired || stageDecision || shapeRebind ? <AlertTriangle className="size-4 text-[var(--dpf-warning)]" aria-hidden="true" /> : null}

@@ -7,6 +7,7 @@ relatedCode:
   - apps/web/app/(shell)/workspace/cases/[caseKey]/page.tsx
   - apps/web/components/workspace/WorkCaseAttentionLens.tsx
   - apps/web/components/workspace/WorkCaseDetailView.tsx
+  - apps/web/components/workspace/workroom/WorkroomHeader.tsx
   - apps/web/components/workspace/workroom/WorkroomCycles.tsx
   - apps/web/components/workspace/workroom/WorkroomFlowMap.tsx
   - apps/web/components/ops/workrooms/AreaFlowPanel.tsx
@@ -44,6 +45,9 @@ The top of a Workroom answers four questions:
 2. What needs attention now?
 3. Who is accountable and who is participating?
 4. What is the next action?
+
+Long names and source identifiers wrap within the header on narrow screens,
+keeping the full value available.
 
 Below that header, **Room definition** names the reusable room pattern and its version.
 **This room** identifies whether you are seeing one occurrence, a standing stream, or its
