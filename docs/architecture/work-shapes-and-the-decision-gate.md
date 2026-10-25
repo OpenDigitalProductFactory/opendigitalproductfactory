@@ -1201,3 +1201,14 @@ fallback or grants execution authority.
 Measured on the development install 2026-09-09: **67 merged bug fixes stalled at completion, 0 with a live room, 0 with a readable shape.** `smallShapeAcceptance` — the clause that lets a small or break-fix item be accepted by a runtime check or a failing-to-passing test, with no spec, no plan and no reconciliation receipt — could therefore never fire for the population it was written to serve. Across the whole install only 46 of 353 live rooms carried a shape claim at all.
 
 A closed or completed room is now consulted as a **fallback**, newest first. A live room still wins, so an in-flight re-shape is honoured over a historical one. An `abandoned` or `superseded` room is still never consulted: abandoning the work is a statement that its shape claim no longer stands.
+
+## Finite delivery identity
+
+New finite delivery rooms retain their initial outcome, canonical criterion
+identity and scoped linked-installation context in workspaceState and the initial
+audit payload. Shape and authority rules still bound action. The room and MCP
+readers share one agreement projection. The successful governed terminal
+transaction retains its evidence-backed handoff in that state and the existing
+audit event. Different criterion statements require reconciliation; separately
+linked follow-on BIs leave the completed delivery intact.
+See [finite delivery agreements](../user-guide/workspace/finite-delivery-agreements.md).

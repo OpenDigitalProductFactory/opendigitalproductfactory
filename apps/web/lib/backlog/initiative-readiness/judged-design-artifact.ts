@@ -43,7 +43,7 @@ export type CurrentResearchEvidence =
   | { state: "unavailable" };
 
 export type CurrentDesignEvidence = (
-  | { state: "verified"; digest: string }
+  | { state: "verified"; digest: string; scopeManifestError?: string }
   | { state: "not-applicable" }
   | { state: "unavailable" }
 ) & { research?: CurrentResearchEvidence };

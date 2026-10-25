@@ -376,6 +376,30 @@ export async function recoverExpiredLeases(pool: Pool): Promise<number> {
   });
 }
 
+/**
+ * Free slots whose run is terminal or already gone (BI-04B6A2FF).
+ *
+ * `transition()` deletes the slot, but a status written by hand never goes
+ * through it, so the lane stays full and the next run waits forever. A
+ * queued, running, sleeping, or waiting run keeps its slot. Returns the run
+ * ids the freed slots named. No JobEvent: this must not fan out.
+ */
+export async function reclaimTerminalSlots(pool: Pool): Promise<string[]> {
+  const { rows } = await pool.query<{ runId: string }>(
+    `DELETE FROM "JobConcurrencySlot" AS slot
+     WHERE NOT EXISTS (
+       SELECT 1 FROM "JobRun" AS run
+       WHERE run.id = slot."runId"
+         AND run.status IN ('queued', 'running', 'sleeping', 'waiting')
+     )
+     RETURNING slot."runId"`,
+  );
+  if (rows.length > 0) {
+    console.log(`[jobs/postgres] reclaimed ${rows.length} concurrency slot(s) held by terminal or missing runs`);
+  }
+  return rows.map((row) => row.runId);
+}
+
 /** A wait that timed out resumes its run with a `null` result, as in Inngest. */
 export async function expireWaits(pool: Pool): Promise<number> {
   return withTransaction(pool, async (client) => {
