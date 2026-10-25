@@ -289,6 +289,36 @@ describe("PR-submit awaiting-acceptance (BI-7161625D)", () => {
     expect(mockBacklogUpdate).not.toHaveBeenCalled();
   });
 
+  it("recognizes the original PR when a sweep room has a repository but no URL", async () => {
+    mockWorkroomFindMany.mockResolvedValue([
+      { backlogItemId: "BI-CA54ACC8", pullRequestNumber: 5126, pullRequestUrl: null,
+        repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory" },
+    ]);
+    mockBacklogFindMany.mockResolvedValue([
+      { id: "row-1", itemId: "BI-CA54ACC8", status: "open", claimStatus: "active" },
+    ]);
+    mockActivityFindMany.mockResolvedValue([
+      { id: "old-submit", recordedAt: new Date("2026-10-21T15:30:00Z"), payload: {
+        actuator: "pr-submit-awaiting-acceptance", to: "awaiting-acceptance", pullRequestNumber: 5126,
+        pullRequestUrl: prPayload().pull_request.html_url,
+      } },
+      { id: "reopen", recordedAt: new Date("2026-10-25T17:07:00Z"), payload: { from: "done", to: "open" } },
+    ]);
+    expect((await sweepPrSubmittedBacklogItems()).moved).toEqual([]);
+    expect(mockBacklogUpdate).not.toHaveBeenCalled();
+  });
+
+  it("leaves a sparse sweep room alone when its PR repository cannot be established", async () => {
+    mockWorkroomFindMany.mockResolvedValue([
+      { backlogItemId: "BI-CA54ACC8", pullRequestNumber: 5126, pullRequestUrl: null, repositoryFullName: null },
+    ]);
+    mockBacklogFindMany.mockResolvedValue([
+      { id: "row-1", itemId: "BI-CA54ACC8", status: "open", claimStatus: "active" },
+    ]);
+    expect((await sweepPrSubmittedBacklogItems()).moved).toEqual([]);
+    expect(mockTransaction).not.toHaveBeenCalled();
+  });
+
   it("does not overwrite a status changed after the candidate was read", async () => {
     mockWorkroomFindMany.mockResolvedValue([]);
     mockBacklogFindMany.mockResolvedValue([
@@ -326,7 +356,7 @@ describe("PR-submit awaiting-acceptance (BI-7161625D)", () => {
   it("sweeps workrooms that already have a PR number", async () => {
     mockBacklogFindUnique.mockResolvedValue({ status: "in-progress" });
     mockWorkroomFindMany.mockResolvedValue([
-      { id: "room-1", backlogItemId: "BI-E54F7F87", pullRequestNumber: 4972 },
+      { id: "room-1", backlogItemId: "BI-E54F7F87", pullRequestNumber: 4972, repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory" },
     ]);
     mockBacklogFindMany.mockResolvedValue([
       { id: "row-2", itemId: "BI-E54F7F87", status: "in-progress", claimStatus: "active" },

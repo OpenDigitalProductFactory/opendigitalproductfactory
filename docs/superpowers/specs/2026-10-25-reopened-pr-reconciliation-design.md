@@ -20,6 +20,8 @@ This does not approve a review, satisfy acceptance, or change branch protection.
 Use existing BacklogItem status history, scoped to the same item and PR URL.
 Read that history while holding the existing item's transaction lock; compare
 the current status before writing. Record no fabricated completion evidence.
+When a Workroom lacks a saved PR URL, reconstruct the canonical URL only from
+its recorded repository and PR number; skip a room whose identity is unavailable.
 No schema, grant, credentials, runtime topology or offline execution privilege
 changes are required. Existing records remain intact.
 

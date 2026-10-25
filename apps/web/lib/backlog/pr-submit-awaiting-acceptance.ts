@@ -283,7 +283,7 @@ export async function sweepPrSubmittedBacklogItems(args?: { limit?: number }): P
       pullRequestNumber: { not: null },
       backlogItemId: { not: null },
     },
-    select: { backlogItemId: true, pullRequestNumber: true, pullRequestUrl: true },
+    select: { backlogItemId: true, pullRequestNumber: true, pullRequestUrl: true, repositoryFullName: true },
     take,
     orderBy: { updatedAt: "desc" },
   });
@@ -303,7 +303,10 @@ export async function sweepPrSubmittedBacklogItems(args?: { limit?: number }): P
   for (const item of items) {
     const room = byItem.get(item.itemId);
     const prNumber = room?.pullRequestNumber;
-    if (typeof prNumber !== "number") {
+    const repository = room?.repositoryFullName;
+    const prUrl = room?.pullRequestUrl ?? (repository && /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)
+      ? `https://github.com/${repository}/pull/${prNumber}` : null);
+    if (typeof prNumber !== "number" || !prUrl) {
       skipped += 1;
       continue;
     }
@@ -314,7 +317,7 @@ export async function sweepPrSubmittedBacklogItems(args?: { limit?: number }): P
       to: AWAITING_ACCEPTANCE_STATUS,
       reason: `Reconcile existing PR #${prNumber}`,
       pullRequestNumber: prNumber,
-      pullRequestUrl: room?.pullRequestUrl ?? `https://github.com/pull/${prNumber}`,
+      pullRequestUrl: prUrl,
     });
     if (did) moved.push(item.itemId);
     else skipped += 1;
