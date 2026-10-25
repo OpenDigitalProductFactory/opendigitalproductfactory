@@ -79,6 +79,10 @@ export const REVIEW_THRESHOLDS: ReviewThresholds = {
   weightSensitiveFlipsMin: 3,
 };
 
+export const RECOMMENDATION_MATURITY_DAYS = 7;
+
+export type ReviewPopulationCoverage = { complete: boolean; rowLimit: number };
+
 const UNANSWERED = new Set(["defer", "escalate"]);
 
 export function scopeOfProfileKind(kind: ReviewLedgerRow["profileKind"]): LedgerScope {
@@ -238,7 +242,7 @@ export function measureUnlearned(
   now: Date,
   thresholds: ReviewThresholds = REVIEW_THRESHOLDS,
 ): ReviewLine[] {
-  const weekAgo = now.getTime() - 7 * 24 * 60 * 60 * 1000;
+  const weekAgo = now.getTime() - RECOMMENDATION_MATURITY_DAYS * 86_400_000;
   const eligible = rows.filter((r) => r.recommendedOptionId && r.createdAt.getTime() <= weekAgo);
   const byGate = new Map<string, { total: number; unlearned: number; sample: ReviewLedgerRow }>();
   for (const row of eligible) {
@@ -339,10 +343,35 @@ export function measureWeightSensitive(
 
 export type ReviewInput = {
   rows: readonly ReviewLedgerRow[];
+  /** Separate mature recommendations from recent activity; omitted preserves direct-call behavior. */
+  overdueRows?: readonly ReviewLedgerRow[];
+  overdueCoverage?: ReviewPopulationCoverage;
   materialCountByProfile: Readonly<Record<string, number>>;
   now: Date;
   thresholds?: ReviewThresholds;
 };
+
+function overdueReviewLines(input: ReviewInput, thresholds: ReviewThresholds): ReviewLine[] {
+  const rows = input.overdueRows ?? input.rows;
+  const lines = measureUnlearned(rows, input.now, thresholds);
+  if (input.overdueCoverage?.complete !== false) return lines;
+  return [
+    ...lines.map(line => ({
+      ...line,
+      headline: `Sampled: ${line.headline}`,
+      evidence: { ...line.evidence, coverageComplete: 0 },
+    })),
+    {
+      lineKey: "unlearned:coverage",
+      measureKey: "unlearned",
+      scope: "wwmd",
+      professionKey: null,
+      headline: `Overdue recorded-choice coverage is incomplete: sampled ${rows.length} recommendations; additional recommendations remain unmeasured`,
+      evidence: { coverageComplete: 0, sampled: rows.length, rowLimit: input.overdueCoverage.rowLimit },
+      proposedAction: "no-action",
+    },
+  ];
+}
 
 /** Every measure, in report order. Deterministic for a given input. */
 export function computeReviewLines(input: ReviewInput): ReviewLine[] {
@@ -353,7 +382,7 @@ export function computeReviewLines(input: ReviewInput): ReviewLine[] {
     ...measureStarvation(input.rows, input.materialCountByProfile, t),
     ...measureRepeatEscalation(input.rows, t),
     ...measureEmptyQuestion(input.rows),
-    ...measureUnlearned(input.rows, input.now, t),
+    ...overdueReviewLines(input, t),
     ...measureAgreement(input.rows, t),
     ...measureWeightSensitive(input.rows, t),
   ];

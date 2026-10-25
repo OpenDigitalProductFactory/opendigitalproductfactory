@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: draft
 ---
 # Weekly review overdue recommendation population repair
 
@@ -79,8 +79,10 @@ No schema migration. Existing direct computeReviewLines callers keep their curre
 fallback population. The executor adopts the explicit population. Preserve the
 weekly schedule, routing, held-work behavior and existing report format.
 
-The extra bounded query adds read load; verify the existing createdAt index and its
-selection shape. A look-ahead proves overflow only, not the total overdue count.
+The extra query adds read load. The inspected schema has composite createdAt indexes,
+not a global createdAt index. The return limit does not bound database scan/sort work;
+observe the query plan and cost on the canonical runtime before claiming fleet-scale
+performance. A look-ahead proves overflow only, not the total overdue count.
 Retain coverage evidence in returned review lines. This does not fix the broader
 review persistence, provenance, routing-failure or correction-execution gaps.
 
@@ -101,3 +103,17 @@ Atomic delivery BI-F55BBB6B. Requirement refs: AC-1, AC-2, AC-3, AC-4, AC-5.
 Contract ref: CONTRACT-REVIEW-POPULATIONS. Flow ref: FLOW-RECENT-OVERDUE.
 Verification ref: V-OVERDUE-REGRESSION.
 Canonical coverage receipt must be recorded and checked before implementation.
+
+## Verification progress
+
+The owner selected delivery-small@1.0.0 on 2026-10-25. The implementation claim
+IRD-C4497FAF301A admitted that exact shape and source identity. The first query-aware
+regression run executed seven tests and failed, including the missing ten-day-old
+recommendation finding. After the source repair, all five self-review test files and
+54 tests passed. Green unit tests do not establish live integration acceptance.
+
+The atomic coverage writer was refused during self-upgrade quiescence after the
+Small implementation claim was admitted. Record and recheck the receipt when the
+portal returns; no coverage pass is claimed here. The already authorized source repair
+continues within that admitted scope. Runtime gates, native review and deployment
+remain to be verified through their supported paths.
