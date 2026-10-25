@@ -48,3 +48,12 @@ and engagement IDs remain unchanged; the original failure and digest are retaine
 All other failures require diagnosis of the original task. Observation alone
 never starts or resumes execution. A projection error explicitly says to retry
 observation and inspect phase timings; it does not imply the Critic ran.
+
+A provider-capacity pause retains its original engagement and task. After its
+recorded retry time, repeat the identical fulfillment packet to request a
+bounded wake of that task. Reading the engagement only observes it. Current and
+original authority are revalidated; changed scope, unknown execution outcomes
+and exhausted attempts do not dispatch. Prior continuation audit history stays
+attached through later waits and terminal results. A provider refusal is not a
+Critic contribution: a completed critique still requires the coworker's actual
+source reads, WSID evidence and persisted result returned to the Workroom.

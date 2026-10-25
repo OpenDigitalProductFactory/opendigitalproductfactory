@@ -1,3 +1,4 @@
+import { parseResourceWaitProjection, RESOURCE_WAIT_MAX_ATTEMPTS } from "@/lib/mcp-task-capacity-contract";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import type { Prisma } from "@dpf/db";
 import { completeArtifactReads, engagementReadEvidence, type EngagementRead } from "./engagement-read-provenance";
@@ -188,11 +189,18 @@ async function reconcileEngagementTaskResultInTransaction(taskRunId: string, db:
       ? validateEngagementContribution(binding, record(task.progressPayload).summary, executions, family.professionKey, engagementReadEvidence(record(task.a2aMetadata).engagementReadEvidence)) : null;
     status = result ? "completed" : "unavailable";
   } else if (["input-required", "auth-required"].includes(task.status)) status = "unknown";
-  if (status === engagement.status && !result) return;
-  const nextAction = status === "unknown" ? "Reconcile the original execution; do not replay." : status === "unavailable" ? "Inspect actual source/corpus provenance on the original task." : status === "failed" ? "Inspect the original failure and its supported recovery; do not create a replacement request." : status === "completed" ? "Request attributable author disposition in the original Workroom." : "Observe this same engagement and task.";
+  const capacityWait = status === "accepted" && task.status === "submitted" ? parseResourceWaitProjection(task.progressPayload) : null;
+  if (status === engagement.status && !result
+    && canonicalJson(association.resourceWait ?? null) === canonicalJson(capacityWait)) return;
+  const { waitReason: _priorWait, resourceWait: _priorResourceWait, ...stableAssociation } = association;
+  const nextAction = capacityWait ? capacityWait.attempt < RESOURCE_WAIT_MAX_ATTEMPTS
+    ? "After inspecting provider routing/availability, repeat the identical fulfillment packet after the recorded retry time to wake this same task; do not create another request."
+    : "Capacity retry budget is exhausted. Inspect the original task failure; do not submit a replacement request."
+    : status === "unknown" ? "Reconcile the original execution; do not replay." : status === "unavailable" ? "Inspect actual source/corpus provenance on the original task." : status === "failed" ? "Inspect the original failure and its supported recovery; do not create a replacement request." : status === "completed" ? "Request attributable author disposition in the original Workroom." : "Observe this same engagement and task.";
   const written = await db.coworkerEngagement.updateMany({ where: { id: engagement.id, updatedAt: engagement.updatedAt, status: engagement.status }, data: {
     status, completedAt: status === "completed" ? task.completedAt ?? new Date() : null,
-    metadata: { ...metadata, fulfillment: { ...association, state: status, taskStatus: task.status, nextAction,
+    metadata: { ...metadata, fulfillment: { ...stableAssociation, state: status, taskStatus: task.status, nextAction,
+      ...(capacityWait ? { waitReason: "provider-capacity", resourceWait: capacityWait } : {}),
       ...(status === "unavailable" ? { reason: record(task.a2aMetadata).engagementReadFailure ?? "No verifiable complete specialist source/corpus contribution was produced." } : {}) }, ...(result ? { result: { ...result, taskRunId } } : {}) } as Prisma.InputJsonValue,
   } });
   if (written.count === 1 && result) {

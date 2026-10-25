@@ -96,3 +96,37 @@ entire failed progress snapshot in a versioned continuation record, CAS the
 original failed row, and persist a fresh deterministic dispatch event 2. Never
 resume an unknown or started execution. Observer calls never reserve work.
 This adds no service, authority grant, table, replacement CE or new TaskRun.
+
+## Capacity continuation correction (2026-10-25)
+
+The real original worker passed reconstruction and authorization on .135, then
+received four known Anthropic quota refusals before any tool ran. Preserve that
+known failure separately from unknown provider outcomes. Supported Codex model
+discovery succeeds but supplies no context/output capacity: retain unknown
+limits and current clearance; do not invent evidence to force routing.
+
+Explicit identical fulfillment must wake only its original submitted, due
+capacity wait through the existing deterministic outbox/CAS. Reconstruct and
+match the complete stored engagement packet; validate both current caller and
+original authority in the same consent family. No new CE/task, origin rewrite,
+backoff/budget override, unknown replay or observation-triggered execution.
+Preserve server-owned pre-admission continuation history at the shared settlement
+seam for capacity, success, refusal and exception results. Add behavioral
+regressions for targeted queueing, due times, cancellation, concurrent retry,
+changed scope/current authority and immutable history. Source graph found the
+existing dispatch/worker/receipt-heal and adapter/fulfillment suites; settlement
+has no linked test, so add one and run the wider source-local execution suites.
+Existing import-cycle, architecture, derived-artifact, typecheck and governed
+integration obligations remain required. Completion still needs the real result.
+
+Attributable route evidence supersedes the capacity hypothesis for this turn:
+RouteDecisionLog cmvoeada201qc01p8m6kpkurf excluded every Codex/ChatGPT model for
+missing imageInput; raw authenticated model/list explicitly reports
+inputModalities=[text,image]. The shared OpenAI extractor discards this source
+field. Extend only that authenticated catalog shape, validate the supported
+modality list, retain explicit text-only versus unknown, preserve existing admin
+overrides and all unknown capacity values. The unchanged supported discovery/
+profile refresh then makes actual capability evidence available to routing.
+No coworker requirement, clearance, credential or grant is weakened. Related
+catalog BI-59E37E39 remains with its existing ownership; this narrow extractor
+correction is necessary to execute the original CE and is coordinated with E27.

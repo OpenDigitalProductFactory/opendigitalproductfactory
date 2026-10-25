@@ -1,7 +1,7 @@
 {
   "version": "1",
   "accountableOwner": "platform-operator",
-  "summary": "BI-BCBCA8D1. Extend existing engagement and task metadata with bounded server-owned read provenance and advisory result projection. No model, migration, retention-policy or grant change.",
+  "summary": "BI-BCBCA8D1. Preserve original engagement/task scope, bounded read provenance, advisory result and server-owned continuation history. Project actionable capacity waits and existing authenticated Codex catalog modality facts. No model, migration, retention-policy or grant change.",
   "changes": [
     {
       "kind": "projection",
@@ -13,11 +13,13 @@
       "derivedAssets": [
         "TaskRun.a2aMetadata.engagementReadEvidence",
         "CoworkerEngagement.metadata.result",
-        "WorkroomActivity.payload"
+        "WorkroomActivity.payload",
+        "TaskRun.progressPayload.engagementPreAdmissionContinuation",
+        "CoworkerEngagement.metadata.fulfillment.resourceWait"
       ],
       "retention": "Inherit canonical TaskRun, engagement and Workroom retention; keep compact digests/ranges only, never raw source or credentials.",
       "cleanupTest": "apps/web/lib/coworker-service-catalog/engagement-read-provenance.test.ts: bounds retained evidence and excludes raw source",
-      "reconciliationTest": "apps/web/lib/coworker-service-catalog/engagement-fulfillment.test.ts: unknown effects do not complete; actual persisted state and evidence are required"
+      "reconciliationTest": "apps/web/lib/coworker-service-catalog/engagement-capacity-recovery.test.ts: exact original authority and due safe wait only; apps/web/lib/mcp-task-attempt-state.test.ts: server-owned audit survives all settlements"
     },
     {
       "kind": "policy",
