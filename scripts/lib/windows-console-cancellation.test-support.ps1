@@ -238,10 +238,12 @@ if (-not $Driver) {
         $arguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File ' + [DpfConsoleFixture]::Quote($PSCommandPath) + ' -Configuration ' + [DpfConsoleFixture]::Quote($Configuration) + ' -Driver'
         $process = [DpfConsoleFixture]::Launch((Join-Path $PSHOME 'powershell.exe'), $arguments, $config.worktree, $true)
         Write-FixtureJson 'launcher.json' @{ driverPid=$process.Id; driverBirth=$process.StartTime.ToUniversalTime().Ticks }
-        $deadline = [DateTime]::UtcNow.AddSeconds(35)
+        # Above the driver's 120s target budget, including driver startup and
+        # the short closure poll after the target exits.
+        $deadline = [DateTime]::UtcNow.AddSeconds(150)
         while (-not $process.WaitForExit(100)) {
             if (Test-Path -LiteralPath (Join-Path $config.evidenceDirectory 'abort.request')) { throw 'Parent requested fixture emergency cleanup' }
-            if ([DateTime]::UtcNow -ge $deadline) { throw 'Private console driver exceeded 35 seconds' }
+            if ([DateTime]::UtcNow -ge $deadline) { throw 'Private console driver exceeded 150 seconds' }
         }
         if ($process.ExitCode -ne 0) { throw ('Private console driver exit ' + $process.ExitCode) }
     } catch { $failure = $_.Exception.Message }
@@ -268,9 +270,12 @@ try {
     $command = '/d /s /c "' + [DpfConsoleFixture]::Quote($config.pnpm) + ' ' + ($quoted -join ' ') + '"'
     $target = [DpfConsoleFixture]::Launch($env:ComSpec, $command, $config.worktree, $false)
     Write-FixtureJson 'driver-ready.json' @{ driverPid=$PID; targetPid=$target.Id; targetBirth=$target.StartTime.ToUniversalTime().Ticks }
-    $deadline = [DateTime]::UtcNow.AddSeconds(30)
+    # The parent waits up to 60s for the trusted child, and that wait starts
+    # after this process is already running. 120s covers that wait plus the
+    # Ctrl+C settlement that follows.
+    $deadline = [DateTime]::UtcNow.AddSeconds(120)
     while (-not $target.HasExited) {
-        if ([DateTime]::UtcNow -ge $deadline) { throw 'Private console target exceeded 30 seconds' }
+        if ([DateTime]::UtcNow -ge $deadline) { throw 'Private console target exceeded 120 seconds' }
         $screen = [DpfConsoleFixture]::ReadScreen()
         if (-not $sent -and (Test-Path -LiteralPath (Join-Path $config.evidenceDirectory 'cancel.request'))) {
             $before = [DpfConsoleFixture]::ValidateMembers()
