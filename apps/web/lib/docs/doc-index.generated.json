@@ -891,16 +891,15 @@
         "rationale-4",
         "principle-8-fail-fast-explain-clearly",
         "rule-7",
-        "rationale-5",
         "principle-9-responsible-capacity-utilization",
         "rule-8",
         "implementation-6",
-        "rationale-6",
+        "rationale-5",
         "application",
         "principle-10-query-the-canonical-business-product-boundary",
         "rule-9",
         "implementation-7",
-        "rationale-7"
+        "rationale-6"
       ]
     },
     "docs/architecture/ai-routing-document-map.md": {

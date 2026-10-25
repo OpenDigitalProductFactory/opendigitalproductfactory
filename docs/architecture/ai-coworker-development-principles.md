@@ -214,18 +214,27 @@ Exception: `executionMode: "proposal"` tools present a card for approval before 
 **Stop on the first error. Don't retry blindly. Tell the user what happened.**
 
 ### Rule
-When a tool call fails, the agent should:
-1. Report the error in plain language
-2. Explain what it was trying to do
-3. Suggest what the user can do (if applicable)
-4. Stop — do not retry the same call with the same arguments
+Classify the actual tool result before deciding what happens next.
 
-The agentic loop enforces a **tool repetition limit** (3-5 calls of the same tool). This is a safety net, not a feature — agents should not need it if they handle errors correctly.
+- A transient, explicitly retryable failure follows the existing bounded
+  backoff and preserves the original request identity.
+- An uncertain side effect is reconciled through its recorded result before
+  retry. A lost response does not establish failure.
+- An authorization refusal stops that action and routes its exact remedy to
+  the recorded owner. Do not switch credentials or transports to bypass it.
+- A genuine human decision is surfaced once with the options and evidence.
+- Independent authorized work continues while a dependency waits. A refusal
+  must not silently discharge the room's recovery obligation.
 
-### Rationale
-- Blind retries waste tokens and rate limit budget
-- Users need to understand what happened to provide guidance
-- The repetition limit exists because smaller models sometimes loop — but well-prompted agents with focused tool sets rarely trigger it
+Keep the blocker, recovery owner, next safe action and unblocking trigger in
+the canonical Workroom rather than asking the user to remember them. Follow
+[the common recoverability contract](2026-06-09-long-running-agentic-process-architecture.md)
+and the [current COO coordination contract](../superpowers/specs/2026-09-03-coordinated-workrooms-design.md#october-25-amendment-coo-operational-follow-through).
+This supersedes the early blanket stop-and-ask guidance.
+
+Tool repetition limits are a final circuit breaker, not a recovery strategy.
+The result and its documented retryability determine whether another attempt
+is useful; a different argument or new request identity is not itself a remedy.
 
 ---
 
