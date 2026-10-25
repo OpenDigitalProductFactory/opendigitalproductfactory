@@ -286,8 +286,6 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/installer/stage-ca-password.test.mjs",
         "scripts/installer/lib/state-lock-timeout.test.mjs",
         "scripts/installer/lib/doctor-redaction.test.mjs",
-        // BI-0FC727BB: a bare host-wide sync is refused. This test must run in CI.
-        "scripts/installer/no-bare-host-sync.test.mjs",
         "scripts/installer/install-release-assets.test.mjs",
         // BI-58C58CB6: these sat on the test-inventory allowlist, ran nowhere
         // in CI, and drifted on every host until BI-76334D21 caught them.
@@ -304,6 +302,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // BI-31F11C37: the installers' monitoring question.
         "scripts/installer/monitoring-choice.test.mjs",
       ),
+      // BI-0FC727BB: scans the live installer tree for a bare host-wide sync.
+      conformanceTest("scripts/installer/no-bare-host-sync.test.mjs"),
       conformanceTest("scripts/ci-runtime-install-state-fixture.test.mjs"),
       // BI-31F11C37: both installers ask, accept the flag and record the
       // choice before profiles resolve; reads the live installer sources.
