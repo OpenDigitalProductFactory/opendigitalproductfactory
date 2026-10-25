@@ -156,13 +156,11 @@ const CLASS_RULES: readonly ClassRule[] = [
     // made ONE word produce two distinct restricted reasons, which is exactly the
     // corroboration bar — so the guard corroborated itself (BI-67CAF494).
     //
-    // `invoice` and `bank account` are left precise on purpose. They read as
-    // domain words too, but no evidence shows them causing a false clamp, and
-    // demoting them stops semantic memory producing a mask obligation for
-    // confidential content — which silently DROPS the memory rather than storing
-    // it masked. Not changed without evidence that it needs changing.
+    // BI-12CD3010: "Invoice table" is a schema example, not a payment
+    // record. Require an invoice identifier or amount in free text. Structured
+    // payment fields and the other precise finance detectors retain their floor.
     textPattern:
-      /\b(?:routing number|account number|credit card|invoice|bank account|tax id|ein|ssn)\b/i,
+      /\b(?:routing number|account number|credit card|bank account|tax id|ein|ssn)\b|\binvoice(?:\s+(?:id|number|no\.?|reference)\s*[:=#]\s*\S+|\s*#\s*\d[\w/-]*|\s+(?:[a-z]{2,}[-/]\d[\w/-]*|\d[\w/-]*)|\s+(?:amount|total|balance)\s*(?:(?:is|of)\s+|[:=]\s*)?[$€£]?\s*\d|\s+(?:for|of)\s+[$€£]\s*\d)/i,
   },
   {
     dataClass: "health-phi",
@@ -341,7 +339,9 @@ export function classifyInferencePayload(
       )
       .map((match) => match.dataClass),
   );
-  const overallSensitivity = inferOverallSensitivity(dedupedMatches, input.governedData);
+  const overallSensitivity = inferOverallSensitivity(
+    dataMatches, input.governedData, restrictedCorroborated,
+  );
   const continuations = input.messages.map(message => localNativeContinuationFingerprint(message) ?? null);
   const inputHash = hashCanonical({
     messages: input.messages,
@@ -699,28 +699,14 @@ function restrictedEvidenceIsCorroborated(
 }
 
 function inferOverallSensitivity(
-  matches: readonly InferencePayloadMatch[],
+  dataMatches: readonly InferencePayloadMatch[],
   governedData: readonly GovernedPayloadHint[] | undefined,
+  restrictedCorroborated: boolean,
 ): InferencePayloadSensitivity {
-  if (governedData?.some((hint) => hint.sensitivity === "restricted")) {
-    return "restricted";
-  }
-
-  // Sensitivity rests on the turn's DATA only. Instruction-provenance matches
-  // stay in `matches` and `dataClasses` so the receipt reports everything
-  // detected, but they set no floor at all: a job description naming payroll is
-  // not evidence that payroll data is present, and holding it at `confidential`
-  // still summoned the PDP, which attached a mask obligation, which clamped
-  // residencyPolicy to local_only — the fourth of four channels, and the one
-  // that survived every narrower fix (BI-463BE12A).
-  //
-  // This is only safe BECAUSE provenance is declared at the source rather than
-  // inferred: anything the caller does not name as instruction — including an
-  // injected briefing or PAGE DATA block inside the prompt — is classified as
-  // data and escalates exactly as a message would.
-  const dataMatches = matches.filter((match) => !isInstructionProvenance(match));
+  // The same data-only evidence and corroboration result drive both this
+  // sensitivity and the PDP class set. Do not re-derive either downstream.
   const restrictedMatches = dataMatches.filter((match) => RESTRICTED_CLASSES.has(match.dataClass));
-  if (restrictedEvidenceIsCorroborated(dataMatches, governedData)) {
+  if (restrictedCorroborated) {
     return "restricted";
   }
 

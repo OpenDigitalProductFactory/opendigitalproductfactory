@@ -178,3 +178,79 @@ remain pure and independently tested.
 - Provider-suitability tests proving pack results cannot add providers.
 - Full web tests, typecheck, production build, and local merged-code gate.
 
+
+## 2026-10-25: Invoice prose at committed-review admission
+
+BI-12CD3010 repairs a confirmed input-detector defect. It does not change the
+PDP, provider clearance, residency policy, or action authority.
+
+The exact retained request in WC-CD6F907A, for committed head
+aeeafe0ca70a25696a8d077b157611cecb63ee36, contains an Invoice table type example
+and Compensation in rollback prose. The former matched payment-or-finance-text;
+the latter matched employee-record-ambiguous-term. A precise finance match
+made the shared corroboration predicate true, selected both vertical packs,
+and produced restricted/local_only. Both branch checkpoints record
+providerOutcome: not-dispatched. This is eligibility refusal, not provider outage.
+
+The parser-validated reconstruction reproduces the Change Reviewer's original
+screening input hash:
+dce97f90a558e8d01dc3cb7c039094cc04d4a98c2c0097c9d5382fe53b2f3895.
+The same unchanged input with the repair retains the ambiguous employee match
+for audit, measures confidential, selects no vertical pack, and permits normal
+residency. Raw values are not stored in the screening receipt.
+
+Free-text invoice detection now requires a reference or amount. Bare invoice
+vocabulary does not establish a payment record. Structured finance fields,
+other precise detectors, governed classifications, explicit sensitivity floors,
+local-only settings and embedded protected values retain their controls.
+One data-only match set and one corroboration result feed both sensitivity and
+PDP class derivation. Public repository provenance never exempts embedded data;
+this review contract supplies no authoritative public-source classification,
+so the internal caller floor remains.
+
+The saved exclusion list contains first decisive failures: 13 residency,
+7 clearance and 7 structuredOutput per branch. Removing a classification
+defect does not establish that every endpoint meets context/output capacity,
+structured-output, suitability or other independent requirements. The reviewer
+attaches no tools and does not require streaming; its actual prompt determines
+the context floor, including a 16,384-token completion reserve.
+
+### Separate approval findings and supported remedies
+
+Read-only samples establish distinct causes, not one common context-loss root:
+
+- A scheduled evidence writer had an empty authorityScope, no delegation chain,
+  and a server-resolved Propose boundary. Owner intent must reach the recorded
+  mandate before execution; a task objective alone is not a grant.
+- A handoff carried connection delegation but consequence refinement reported
+  handoff-boundary-unproven. Prove the exact handoff boundary or obtain its
+  action-specific authority; an unrelated approval cannot supply that proof.
+- A scheduled initiative writer lacked an immutable review binding and later
+  failed with AUTHORIZATION_DENIED: authenticated reviewer, authority decision and token scope are required. The policy projection labels this a human decision, while the
+  technical writer still needs valid artifact and actor provenance.
+
+BI-035BE8D1 and BI-331DBAD1 retain preflight ownership; BI-C5E51A15 owns bounded
+consequence/intent calibration, BI-39946DC1 delegated GPP lineage, BI-8E7F0276
+required-tool admission and BI-412A2F72 unchanged scheduled refusals.
+The samples are shadow analysis only: no historical approval was approved,
+replayed, or used to change live authority. Other text-only domain detectors
+remain a separately testable precision concern; this repair proves the observed
+invoice case rather than asserting universal record recognition.
+
+### Verification and recovery boundary
+
+The first regression run failed on five schema/prose cases. The repair passes
+82 focused tests and 315 related screening/reviewer/authority tests. The latter
+include exact active approval, changed parameters/subject, expired authority,
+revoked grant, narrowed room and immutable binding controls. These are
+source-local results, not live cross-surface conformance.
+
+The original review deadline elapsed at 2026-10-25T16:45:39.665Z. Preserve that
+execution and its evidence. After canonical deployment, use the server's
+qualified expired-successor path against the unchanged committed source;
+reconcile source/failure-evidence identity if that path requires a refreshed
+request. Never reset budgets or claim an unavailable semantic review passed.
+
+Plan: [context handling repair](../plans/2026-10-25-context-handling-repair.md).
+Coverage receipt: cmvo2de7x6j3t01mu43fxnqtl, atomic BI-12CD3010.
+
