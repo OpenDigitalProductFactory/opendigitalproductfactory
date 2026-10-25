@@ -9,6 +9,8 @@ date: 2026-09-10
 
 # Decision-engine weekly self-review — build plan
 
+**Current planning boundary (2026-10-25):** the completion integration amendment below governs proposed remaining work. Phases 1–4 preserve delivery history and original intent; they are not a verified current inventory. The amendment requires independent scope review and immutable plan coverage before implementation.
+
 Phased implementation of the design at `docs/superpowers/specs/2026-09-10-decision-engine-weekly-self-review-design.md`. Each phase is independently shippable and maps to one backlog item; the umbrella is BI-19CEC4B4.
 
 ## Phase 1 — measures module and fixture (AC-1, AC-2)
@@ -58,3 +60,105 @@ review-page section.
 ## Verification
 
 Unit: fixture and per-measure tests (Phase 1), executor idempotency (Phase 2), routing and suppression (Phase 3), proposal wiring (Phase 4). Live: after deploy, `list_scheduled_agent_tasks` shows the task; a manual `rerun_scheduled_agent_task` produces one run row and the review-page section on the DEV install.
+
+## Completion integration amendment (2026-10-25, draft)
+
+Anchor: BI-19CEC4B4 / EP-0AF96937. Workroom WC-CD6F907A. Source baseline
+afd6723da1f1e20bdfd75e41f975fa81e7c89033. This documentation does not implement a fix, approve a
+changed scope or close awaiting-acceptance work. Historical phases above retain their scope.
+
+**For agentic workers:** execute one independently reviewable BI at a time, on its own branch/PR.
+Follow current DPF red/green, independent-review and delivery procedures. Obtain the immutable
+design/plan approval and coverage required by the item's actual shape before implementation.
+
+### Reconcile historical assumptions
+
+| Historical statement | Current source finding / required disposition |
+|---|---|
+| New review-run/disposition tables are required | Neither proposed model was found. Audit ScheduledAgentTask/TaskRun, WorkroomActivity and DecisionResolutionProposal before schema work. |
+| ISO-week lookup establishes complete idempotency | Proposal deduplication and a historical activity lookup do not prove one durable complete review. Verify concurrency, restart and coverage. |
+| Every finding becomes a human proposal | Some stop at report/defect-needed or craft nomination. Under design section 10, delegated correction may act; missing authority becomes one owner decision. |
+| Seven days of rows measures outcomes overdue a week | Split reporting/overdue populations, canonical provenance-aware denominators and bounded continuation. |
+| Task status ok proves review completion | Measurement, routing, correction and verification have distinct coverage; partial failure stays visible. |
+| Learning wiring completes the outcome loop | Reported choice/weight proposal is not evidence of effect quality. Link the effect and subsequent observation. |
+
+### Deliverable graph and existing owners
+
+Keys below are stable plan references. Dependencies are sequencing, not implementation admission.
+Preserve existing acceptance work and parent decomposition rather than repeat delivered code.
+
+| Key | Live BI | Source seam / scope | Depends on | Requirement refs | Verification refs |
+|---|---|---|---|---|---|
+| stage-admission | BI-E9555B2D, BI-8E7F0276 | Existing stage projection, required tools, posture and authority; proactivity/propose-interception.ts and govern/authority/resolve-coworker-tool-authority.ts | Existing approved parent decomposition; no xlarge implementation | AC-REVIEW-HOLD | V-ADMISSION |
+| refusal-hold | BI-412A2F72 | Existing scheduled-work/TaskRun/Workroom holds and relevant-change wakeup | stage-admission | AC-REVIEW-HOLD | V-HOLD |
+| delegated-permit | BI-39946DC1 | gpp/bindings.ts, permit-verdict.ts and per-call consequence refinement | Classify actual effects before promotion | AC-REVIEW-LINEAGE | V-PERMIT |
+| review-measurement | BI-19CEC4B4 | decision/self-review/load-review-window.ts, measures.ts, decision-engine-review-task.ts | Existing outcome provenance; reproduce first | AC-REVIEW-WINDOW, AC-REVIEW-HONESTY | V-MEASURES |
+| outcome-efficacy | BI-FEDD8F45 | GppPermitObservation, ToolExecution/receipts, ExternalEvidenceRecord and decision-outcome stores | Recover owning design/branch; review-measurement | AC-REVIEW-LINEAGE | V-LINEAGE |
+| corrective-action | BI-73780C2E | decision/self-review/route-review-findings.ts, decision/resolution-proposal-store.ts, resolution-write-through.ts and existing executor | review-measurement, outcome-efficacy; applicable stage-admission/refusal-hold | AC-REVIEW-CORRECT, AC-REVIEW-UI | V-CORRECT, V-UI |
+| reference-demonstration | BI-F3C2EC7A | Canonical-runtime specimen and existing authorized-surface/attention views | Applicable components above and its recorded prerequisites | AC-REVIEW-LINEAGE, AC-REVIEW-UI | V-REFERENCE |
+
+BI-6082C235, BI-F302B80E, BI-01F8F06D and BI-7D1E43DE remain the subject, reported-choice,
+shadow-bridge and report-only trust owners. Verify their evidence before proposing deltas.
+BI-EAFD2D09 owns duplicate-merge refinement separately. BI-0B8657BD and BI-ADAC33D5 own related
+outcome/citation acceptance and reliability. Paired-installation-owned records remain read-only.
+
+### Ordered execution and verification
+
+1. **Reproduce and retain evidence.** Re-read live statuses and exact source; establish schedule/run
+   health through a bounded read. A truncated listing cannot prove absence. Reproduce window,
+   provenance, missing binding and repeated-refusal faults with exact run lineage.
+2. **Repair measurement before tuning.** V-MEASURES: include a ten-day-old unresolved decision,
+   recent decision, late outcome, agent report and human choice; test page-limit continuation,
+   duplicate ticks, restart, changed policy version and routing failure. Preserve unknowns and
+   sample minima. Do not promote weights or trust.
+3. **Reconcile admission.** V-ADMISSION/V-PERMIT: delegated intended use proceeds without redundant
+   approval; changed arguments/subject, revocation, expiry, denied grants, explicit checkpoint and
+   missing reviewer binding retain prescribed outcomes. Ordinary writes gain no Phase-2 permit
+   requirement. Shadow-replay the sampled queue; execute none of its historical requests.
+4. **Link outcomes.** V-LINEAGE: trace objective and doctrine/vector/weight versions through
+   judgment, applicable authorization/permit, execution, effect and observation. Missing or expired
+   lineage is incomplete. Reconcile uncertain effects before retry; publish M-1–M-7 denominators.
+5. **Complete correction.** V-CORRECT/V-HOLD: a repeated finding retains one action and owner,
+   executes only a delegated correction, survives restart, records effect and assesses it after
+   its observation window. Changed/revoked authority is rechecked. Ineffective tuning follows its
+   declared rollback/hold and remains visible.
+6. **Verify the owner view and reference specimen.** V-UI/V-REFERENCE: inline checkpoint, inbox and
+   Workroom share durable pending/resolved state after refresh/reconnect. Check keyboard,
+   screen-reader, narrow viewport and light/dark flow. Respect opened/dismissed panels. Test
+   human takeover, cancellation, duplicate attempts and no surprise queued agent effects.
+7. **Tune by observed results.** Compare declared baseline/window against purpose alignment,
+   outcome quality, M-2/M-5/M-7, repeated blocks and owner effort. Only recorded correction bounds
+   authorize changes. Broader doctrine/threshold/authority/trust changes return to the owner.
+   Retain old versions and an explicit no-change disposition when evidence is insufficient.
+
+### Refactoring, compatibility and rollback
+
+Consolidate stage/approval derivation, review denominators and decision/effect correlation in their
+existing homes. Add no second approval engine, ledger, scheduler or broad DEV bypass. Repair
+collection and routing before expanding tuning capability.
+
+Contract refs: GPP-PURPOSE-LINEAGE (GPP realization section 12), REVIEW-CORRECTION-LIFECYCLE
+(review design section 10), TAK-PD-003/006 (hard constraints and exact authorization).
+Flow refs: purpose-to-effect-to-observation and finding-to-correction-to-verification.
+
+If the audit proves additive schema fields necessary, use existing classification/retention and
+fleet-safe migration review. This amendment makes no schema change. Do not backfill causality from
+text similarity. Roll out measurement first, one scope/class in shadow, then a separately authorized
+bounded correction. Preserve schedules, evidence and per-binding enforcement mode.
+
+Rollback restores the prior resolver/projector version, revokes affected permits through the
+existing path and pauses the affected correction class; history remains. Compensation requires its
+own authority/recovery contract. No inference account password is required.
+
+### Backlog coverage
+
+This multi-item integration sequence is proposed, not implementation-ready coverage. All independent
+deliverables map to existing live BIs except the newly captured BI-73780C2E, still triaging.
+No current provider-verified immutable coverage receipt was established for this amendment.
+
+Publish the relevant revisions, obtain independent scope approval, then record decomposed plan
+coverage with mappings, dependencies and the requirement/contract/flow/verification refs above.
+Each independently shippable entry must name one live delivery BI in the receipt; split aggregate
+rows into their owning existing child items rather than submit an xlarge umbrella as a delivery.
+Copy the returned receipt here and revalidate it. Changed scope/artifacts refresh normal coverage;
+historical phase prose and this documentation change cannot substitute for a receipt or delivery.

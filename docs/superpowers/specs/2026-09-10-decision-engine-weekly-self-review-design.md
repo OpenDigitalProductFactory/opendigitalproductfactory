@@ -10,6 +10,18 @@ date: 2026-09-10
 
 _Status: draft · BI-19CEC4B4 · EP-0AF96937 · branch `feat/decision-engine-weekly-self-review`_
 
+## Current reconciliation status (2026-10-25)
+
+Sections 1–9 preserve the original design and acceptance history. They describe intent, not a
+verified deployed inventory. Section 10 proposes completion integration. The human-only correction
+assumption changes only after its amendment is approved and a valid delegation exists; current
+controls remain in force.
+
+Source baseline: origin/main afd6723da1f1e20bdfd75e41f975fa81e7c89033. BI-19CEC4B4 remains
+awaiting-acceptance. Measures, executor and proposal routing exist; that does not prove an
+end-to-end corrective loop. The two review-run/disposition models proposed below were not found
+in the inspected schema. Do not create tables merely to match this historical prose.
+
 ## 1. Problem
 
 Founder direction, 2026-09-08: the platform must review its own decision engine weekly and present to the right human what may or should change: how many decisions were made, where corpus is missing, where weights need examining.
@@ -111,3 +123,141 @@ A line is never auto-applied. `examine-weight` lines feed `persistWeightAdjustme
 ## 9. Non-goals
 
 Per-decision rulings (concierge); golden panels per profession (own item); changing any threshold in the gates themselves.
+
+## 10. Outcome review and corrective action (2026-10-25 proposal)
+
+### 10.1 Evidence and completion boundary
+
+This is the implementation companion to
+[GPP purpose-to-outcome correlation](2026-10-01-gpp-model-to-execution-design.md#12-purpose-decision-effect-and-outcome-reconciliation-2026-10-25-proposal).
+BI-19CEC4B4 retains measurement/routing. BI-73780C2E owns the independently shippable correction
+lifecycle. Design approval, immutable coverage and implementation admission remain pending.
+
+The 2026-10-25 trust report contained 15 class rows: 1,428 decisions, zero human samples, 31
+agent-reported choices, nine downstream outcome resolutions, 1,186 without a recommendation and
+202 unresolved. Evaluation time: 12:41 UTC. This report population is not every approval; sparse
+linked outcomes do not establish a causal diagnosis.
+
+The inbox snapshot held 26 pending envelopes: 20 blocked-run evidence writes, three handoffs, two
+research receipts with the same visible rationale/missing-binding error, and one backlog merge.
+Ten recent displayed results were authorized; three did not complete. This bounded sample is not
+a historical approval or safety rate.
+
+Source findings requiring served-target reproduction:
+- The loader selects the trailing seven days, while measureUnlearned selects rows at least seven
+  days old. Normal populations overlap only at the cutoff.
+- measureAgreement reads chosenOptionId without the human/agent provenance used by the trust
+  report, but labels the result human agreement. Reuse canonical denominator rules.
+- Unlearned/no-comparison lines are no-action. Some actionable findings stop at reported or
+  needs-defect-filed. Routing errors can become an empty summary while lastStatus becomes ok.
+- The loader caps one window at 20,000 rows without completeness information.
+- A full scheduled-task listing was truncated; activation and recent run health were not established.
+
+### 10.2 Cadence, populations and outcome quality
+
+Retain the existing weekly task and operator-owned schedule. Use existing operational events for
+material failures between reviews; do not create a second scheduler. Repeated unsuccessful firings
+are distinct from retries within a dispatch. BI-412A2F72 owns bounded holds/relevant-change wakeups;
+thresholds follow job purpose and risk, not a borrowed fixed number.
+
+Separate populations: decisions created in the reporting window, unresolved decisions whose
+outcomes are overdue, and corrections whose follow-up window has matured. Use a separate indexed,
+bounded traversal for overdue work, not a wider capped query. Compare the prior equivalent window
+and retain late observations without rewriting history. Page or record explicit incomplete coverage.
+
+Publish existing GPP M-1–M-7 through BI-FEDD8F45 alongside purpose/constraint violations,
+ineffective/uncertain/duplicated/reversed effects, missing outcome evidence, unnecessary human
+interruptions, repeated blocks, corpus/routing gaps and weight sensitivity. Track corrections
+applied, held, ineffective, verified and still awaiting sufficient evidence.
+
+Keep human concordance, agent-reported choices and independent/system observations separate.
+Agreement is not correctness; a later change is not proof of causality. Preserve observer, expected
+result, provenance and attribution limitations. Retain minimum-sample reporting and representative
+qualitative audits. Zero observed failures with incomplete observation is not a safety result.
+
+### 10.3 Correction through existing authority
+
+Each finding has a stable scope/class identity, accountable owner, evidence/window, proposed action,
+expected outcome, follow-up due time and explicit disposition. Refresh evidence on the same open
+finding; do not duplicate it or silently alter an approval's exact content. Materially changed
+evidence creates an attributable successor.
+
+Reuse DecisionResolutionProposal, Workroom/TaskRun execution and evidence. Audit their canonical
+fields before adding any table/type/tool. Persist measured and routed coverage; console output
+alone is insufficient. The historical proposed model names are not a schema mandate.
+
+Required lifecycle: measured finding -> owned disposition -> permitted correction -> recorded
+effect -> follow-up observation -> verified, ineffective or explicitly insufficient evidence.
+Map this onto existing canonical statuses rather than creating a second lifecycle vocabulary.
+
+Correction delegation names permitted operation classes, target scope, maximum change,
+budget/retry bounds, validity, reviewer requirement and rollback. Collecting evidence, drafting
+corpus and repairing routing follow their existing authority/delivery paths. Weight changes require
+an explicit delegation naming allowed axes, range, versioning and evaluation. Review cannot grant
+itself access, publish governing doctrine, retire controls or promote trust from favorable statistics.
+
+A settled correction inside valid delegation acts through GPP/TAK and normal delivery gates.
+Otherwise send one named decision to the owning scope with the missing authority or policy choice.
+Missing input, denied authority, missing evidence and transport faults have distinct remedies.
+An uncertain effect is reconciled before retry or handled through verified idempotency.
+
+Measurement may finish while correction remains open. Report measured/routed/actioned/verified
+coverage separately. Routing failure or an immature observation window prevents claiming the loop
+complete. Ineffective/harmful tuning follows its declared rollback or bounded hold through the same
+authority path, preserving original failure evidence.
+
+### 10.4 Owner experience
+
+Compose existing attention, owner-decision, report-kit and authorized-surface projections:
+- Separate required judgment from unread information and technical recovery.
+- Show weekly changes, results and coverage; only material owner decisions enter Needs you.
+- Present a genuine inline checkpoint and central inbox using one envelope, with purpose, scope,
+  consequence, governing reason and accountable resolver.
+- Reconstruct pending/resolved state and evidence after refresh/reconnect from durable records.
+- Typed connector/readiness remedies reach the principal able to fix them; an unrelated approval
+  cannot repair missing configuration or authority.
+- Respect user-opened evidence panels and preserve a dismissal for the run.
+
+Verify keyboard and screen-reader flow, meaningful labels, narrow viewports and light/dark themes.
+No new approval control is introduced by this amendment.
+
+### 10.5 Objectives and acceptance
+
+**OBJ-REVIEW-COVERAGE:** Reviews distinguish complete measurement from missing outcome/routing coverage.
+
+**OBJ-REVIEW-PURPOSE:** Corrections preserve versioned purpose, constraints and weighted tradeoffs through GPP action and observed outcome.
+
+**OBJ-REVIEW-CLOSE:** Actionable findings reach an owned disposition and executed corrections receive subsequent result assessment.
+
+| Acceptance | Objectives | Statement | Owning item |
+|---|---|---|---|
+| AC-REVIEW-WINDOW | OBJ-REVIEW-COVERAGE | A decision older than seven days without an outcome is reported; human, agent and observed-result populations remain separate; a window beyond the page limit is traversed or explicitly incomplete. | BI-19CEC4B4 |
+| AC-REVIEW-LINEAGE | OBJ-REVIEW-PURPOSE | A reference case links objective and doctrine/vector versions through judgment, applicable authority/permit, execution, effect and independently evidenced outcome; missing edges are reported. | BI-FEDD8F45, BI-F3C2EC7A |
+| AC-REVIEW-CORRECT | OBJ-REVIEW-CLOSE | Repeated reviews maintain one owned correction per unchanged finding, act only within current delegation, preserve failures and assess results after the observation window. | BI-73780C2E |
+| AC-REVIEW-HOLD | OBJ-REVIEW-CLOSE | Unchanged settled refusals do not redispatch; relevant change revalidates authority and resumes the same work without duplicate effect. | BI-412A2F72 |
+| AC-REVIEW-UI | OBJ-REVIEW-COVERAGE, OBJ-REVIEW-CLOSE | Results and genuine judgment requests share durable state across inline/inbox views and refresh; keyboard, screen-reader, narrow viewport and light/dark checks pass. | BI-73780C2E |
+| AC-REVIEW-HONESTY | OBJ-REVIEW-COVERAGE | Routing failure and incomplete traversal are visible and cannot count as full completion; shadow agreement never changes runtime autonomy. | BI-19CEC4B4, BI-7D1E43DE |
+
+### 10.6 Research and overlap disposition
+
+- [OPA decision logs](https://www.openpolicyagent.org/docs/management-decision-logs): adopt decision
+  identity, evaluated policy revision and masked input/result patterns; retain the DPF monitor/store.
+- OpenBot peer source review at 46642d6c91daa663bccff673595f4e12a419a496:
+  [inline approval](https://github.com/CopilotKit/OpenBot/blob/46642d6c91daa663bccff673595f4e12a419a496/app/src/components/approvals/inline-approval.tsx)
+  and [automatic learning](https://github.com/CopilotKit/OpenBot/blob/46642d6c91daa663bccff673595f4e12a419a496/docs/automatic-learning.md).
+  Adopt one approval record across views and separation of collection, publication and tool authority.
+  This is handed-off source research: OpenBot was not run, visual usability was not verified and
+  this pass could not refetch those pinned files. Reject default-allow, fixed failure thresholds,
+  volatile activity state and hosted dependencies as DPF requirements.
+- [Anthropic](https://www.anthropic.com/research/trustworthy-agents): adopt objective/plan-level
+  oversight with intervention for material exceptions; not unrestricted agency.
+- [OpenAI agent guide](https://cdn.openai.com/business-guides-and-resources/a-practical-guide-to-building-agents.pdf):
+  adopt effect-sensitive intervention and bounded recovery, subject to recorded DPF policy.
+- [DORA](https://dora.dev/capabilities/streamlining-change-approval/): adopt review near the work and
+  automated validation while retaining independence and mandatory controls.
+
+BI-0B8657BD owns proactive-review outcome/citation acceptance, not this weekly correction executor.
+Reuse that boundary and BI-ADAC33D5 outcome reliability rather than redefine correctness.
+BI-E9555B2D owns stage authority, BI-FEDD8F45 efficacy and BI-F3C2EC7A the reference demonstration.
+The correction successor BI-73780C2E differs from BI-19CEC4B4 measurement/routing and BI-31159978
+reviewer-writer schema repair. Component delivery status is not live integration evidence.

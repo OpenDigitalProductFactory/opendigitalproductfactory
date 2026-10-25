@@ -864,7 +864,7 @@ proposal paths. The promotion guard still refuses every promotion until those tw
 
 ## Research & Benchmarking
 
-See the spec's [§7 Research & Benchmarking](../specs/2026-10-01-gpp-model-to-execution-design.md#7-research--benchmarking).
+See the spec's [§7 Research & Benchmarking](../specs/2026-10-01-gpp-model-to-execution-design.md#7-research-benchmarking).
 For this phase, the relevant rows are object capabilities and complete mediation, Macaroons / Biscuit /
 RFC 9396 / OAuth Transaction Tokens (the attenuate-only claim model and parameter-hash binding), and
 credential brokers. DI-2DE3951FBB28 settles the opaque DB-backed permit now and a signed encoding later.
@@ -911,3 +911,15 @@ unmediated set that PR-A ratchets.
 - C-5 combination detection. The binding type supports it, but no detector exists on main.
 - Signed attenuable encodings (Biscuit, RAR-JWT) and the MCP extension (Phase 6).
 - Credential brokering inside the monitor (§5.3 item 5).
+
+## Integration follow-up (2026-10-25 proposal)
+
+[GPP realization section 12](../specs/2026-10-01-gpp-model-to-execution-design.md#12-purpose-decision-effect-and-outcome-reconciliation-2026-10-25-proposal)
+links versioned purpose and vector judgment to admission, effect and outcome. It preserves this
+plan's O/A/I-only permit scope and per-binding rollout. Ordinary writes retain room/stage authority;
+do not mint human approvals to compensate for missing correlation.
+
+BI-39946DC1 owns delegated-call admission before enforcement. BI-E9555B2D owns stage/approval
+projection, BI-FEDD8F45 owns efficacy and BI-F3C2EC7A the reference specimen. The
+[review completion sequence](2026-09-10-decision-engine-weekly-self-review-build.md) maps correction
+to these owners. These links are not promotion receipts or substitutes for required shadow evidence.

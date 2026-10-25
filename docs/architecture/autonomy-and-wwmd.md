@@ -9,6 +9,30 @@ That only works if judgment is not trapped in chat. In DPF, judgment is a platfo
 
 This page explains the whole substrate: the three layers of decisions, the vector retrieval and scoring math underneath them, the Job-Specific Intelligence (JSI) weight layer that refines scoring over time, and the dials — proactivity and earned trust — that move a coworker from passive assistant to active participant without ever widening its authority.
 
+**Purpose, execution and outcome review.**
+
+GPP connects a validated decision to permitted tool use for its declared purpose. Governing prose
+sets direction/constraints; decision vectors make preferences and weighted tradeoffs inspectable.
+Hard constraints and effective authority remain independent of scores. The
+[principle-directed contract](trusted-ai-kernel.md#713-principle-directed-decision-contract)
+states that separation; [GPP](gated-permissions-process.md#9-bindings-over-time) defines deciding
+once and acting inside the current binding.
+
+The intended feedback loop is versioned purpose -> evidenced decision -> authorized action ->
+recorded effect -> independently assessed outcome -> bounded correction and subsequent validation.
+A successful tool call, approved request, recorded choice and verified outcome are distinct.
+
+**Implementation boundary (2026-10-25):** measures, proposal routing and trust reporting exist;
+this pass did not establish a complete live corrective loop. Trust reporting remains report-only.
+[GPP Annex A](gated-permissions-process.md#annex-a-informative-dpf-realization-status)
+states enforcement mode; a model/configuration declaration is not proof of enforcement.
+
+The proposed [review/correction contract](../superpowers/specs/2026-09-10-decision-engine-weekly-self-review-design.md#10-outcome-review-and-corrective-action-2026-10-25-proposal)
+and [completion plan](../superpowers/plans/2026-09-10-decision-engine-weekly-self-review-build.md)
+define remaining integration. Reviews show changes, results and owner exceptions. Corrections act
+only within recorded delegation; tuning cannot grant itself tools, publish governing doctrine,
+widen scope or promote trust from agreement statistics.
+
 ## Why this matters
 
 AI coworkers hit open questions constantly:
@@ -79,7 +103,7 @@ How retrieval works today is deliberately boring, and that is a feature: the cow
 
 **A craft example.** A build coworker adding an `Invoice` table must choose a monetary column type: `FLOAT`, `DECIMAL(12,2)`, or integer cents. The data-architect corpus carries a commandment-tier page ("use exact numeric types for money", traced to ANSI SQL) and supporting material from DMBOK. Scoring returns `DECIMAL(12,2)` as the winner with integer cents a close second — and critically, `FLOAT` triggers a **commandment conflict flag**: a commandment-tier principle contributes strongly negatively to it, so even if a prompt nudged the model toward `FLOAT` "for performance," the gate marks it as violating professional doctrine, with the source cited.
 
-Full end-to-end walkthroughs of all three layers, with their ledger rows, are in [Decision Perspective in Practice](/user-guide/ai-workforce/decision-perspective-in-practice).
+Full end-to-end walkthroughs of all three layers, with their ledger rows, are in [Decision Perspective in Practice](../user-guide/ai-workforce/decision-perspective-in-practice.md).
 
 Code references:
 
