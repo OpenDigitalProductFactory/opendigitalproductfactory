@@ -31,7 +31,7 @@ describe("Workroom process inspection", () => {
     vi.setSystemTime(new Date("2026-09-21T12:00:00Z"));
     const current = structuredClone(graph);
     current.process!.readAt = "2026-09-21T12:00:00Z";
-    const { rerender } = render(<WorkroomShape graph={current} />);
+    const { rerender } = render(<WorkroomShape graph={current} refresh={{ onRefresh: refresh }} />);
     expect(screen.queryByText(/Snapshot stale/)).not.toBeInTheDocument();
     act(() => vi.advanceTimersByTime(60_000));
     expect(screen.getByText(/Snapshot stale/)).toBeInTheDocument();
@@ -41,7 +41,7 @@ describe("Workroom process inspection", () => {
     expect(screen.getByText(/Snapshot stale/)).toBeInTheDocument();
     const newer = structuredClone(current);
     newer.process!.readAt = "2026-09-21T12:01:00Z";
-    rerender(<WorkroomShape graph={newer} />);
+    rerender(<WorkroomShape graph={newer} refresh={{ onRefresh: refresh }} />);
     expect(screen.queryByText(/Snapshot stale/)).not.toBeInTheDocument();
   });
 
