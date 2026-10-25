@@ -1,3 +1,4 @@
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { describe, expect, it } from "vitest";
 import { retainDeliveryAgreement, readDeliveryAgreement, projectDeliveryAgreement, finishDeliveryAgreement } from "./delivery-agreement";
 
@@ -48,4 +49,10 @@ it("preserves the completed handoff on replay and refuses later replacement", ()
   const state = finishDeliveryAgreement(agreement(), handoff);
   expect(finishDeliveryAgreement(state, handoff)).toEqual(state);
   expect(() => finishDeliveryAgreement(state, { ...handoff, summary: "A different result" })).toThrow(/cannot be replaced/);
+});
+
+it("replays a persisted handoff when JSON storage changes object key order", () => {
+  const handoff = { completedAt: startedAt, baselineId: "BASE-1", evidenceRefs: ["EV-1"], summary: "Verified", followOnRefs: ["BI-NEXT"] };
+  const persisted = JSON.parse(canonicalJson(finishDeliveryAgreement(agreement(), handoff)));
+  expect(finishDeliveryAgreement(persisted, handoff)).toEqual(persisted);
 });

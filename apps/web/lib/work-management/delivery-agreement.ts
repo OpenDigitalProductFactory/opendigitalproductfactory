@@ -1,3 +1,5 @@
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
+
 /** Finite delivery identity. Existing readiness/terminal policy still owns success. */
 export type DeliveryContext = {
   state: "checked" | "not-required" | "unavailable";
@@ -89,7 +91,7 @@ export function finishDeliveryAgreement(workspaceState: unknown, input: Omit<Del
   if (!readDeliveryHandoff(next)) throw new Error("A delivery handoff requires outcome evidence and a valid completion time.");
   const prior = readDeliveryHandoff(state);
   if (Object.hasOwn(state, "deliveryHandoff")) {
-    if (!prior || JSON.stringify(prior) !== JSON.stringify(next.deliveryHandoff)) {
+    if (!prior || canonicalJson(prior) !== canonicalJson(next.deliveryHandoff)) {
       throw new Error("The recorded delivery handoff cannot be replaced.");
     }
     return { ...state };
