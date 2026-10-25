@@ -7,8 +7,11 @@ status: active
 **Umbrella:** BI-4B48E7FE. **Workroom:** WC-D5FD489C.
 **Design:** docs/superpowers/specs/2026-09-03-coordinated-workrooms-design.md,
 October 25 amendment. **Decision:** DI-EE06CE5554D2, ratified by the founder.
-**Current status:** design preparation; no implementation readiness or operational
-acceptance is claimed.
+**Current status (October 25):** the design and strategy are reconciled in source.
+The parent design/spec approvals remain blocked by uncertain original reviewer
+execution, tracked under BI-7906C73E; architecture review passed. P2 is not
+implemented. P1 has its own atomic plan/admission and tested source repair,
+with no merge, deployment or unattended operational acceptance claimed.
 
 For agentic workers: execute this plan one independently reviewable backlog item
 at a time -- one BI, one branch, one PR. Use dpf-tdd for red-green implementation,
@@ -134,3 +137,36 @@ no source tests or guard obligations were listed; regenerate/check doc-index,
 doc-impact and diagram artifacts where affected, then check PR health.
 Implementation claims must refresh exact source paths and carry every returned
 testImpact and guardObligation into the appropriate phase.
+
+
+## Current delivery evidence and resume conditions
+
+P1 is independently admitted by IRD-E06F5E4974CA, with atomic coverage receipt
+cmvo7c1zh050601mqxwgivlxg against its companion design at
+b433583daddc4f77dd83a616782c3e8170e677e0. Its governed branch is
+`fix/workroom-effective-progress`, WC-36F36351. Local signed source ends at
+4bb9f306765d2fe3d39c5b9941eed00c85885e2f and is not yet published as code.
+301 affected tests and six additional notification/reader/UI checks passed;
+three opt-in PostgreSQL tests skipped. A separate source-derived, read-only
+PostgreSQL SELECT qualification passed. Typecheck passed.
+
+P1 publication awaits approval of an overlapping claim on the canonical
+`docs/architecture/work-shapes-and-the-decision-gate.md` correction. The existing
+owner is WC-5D6B124A / BI-A798975C; the proposed edit only updates stale stall
+semantics and does not change that owner's finite-delivery agreement scope.
+The exact proposed patch is retained with the installation evidence. No edit
+was made through the refused claim, and no documentation exception hides it.
+Shared exact-tree integration, independent publication review, protected PR
+and served-runtime acceptance remain outstanding.
+
+The documentation branch's 126 readiness checks all passed, but its final
+qualification was inconclusive after origin/main changed during the run;
+head/tree stayed unchanged. The existing host-preflight performance item
+BI-5E4BB7CA carries that reproduction. Preserve the receipt and requalify under
+the existing procedure; do not edit evidence or call it ready.
+
+For P2, reconcile the original design/spec review executions through their
+current launcher, process-supervisor and effect-owner authority before resuming
+those exact reviews. Do not dispatch replacements or treat the completed
+architecture review as the missing design/spec receipts. No founder status
+nudge is an acceptance test, and no passing source suite closes P2.
