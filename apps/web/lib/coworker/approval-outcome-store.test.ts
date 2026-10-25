@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 vi.mock("@dpf/db", () => ({ prisma: {} }));
+const roomAccess = vi.hoisted(() => ({ human: vi.fn(), agent: vi.fn() }));
+vi.mock("@/lib/work-management/workroom-agent-access.server", () => ({
+  resolveHumanWorkroomAccess: roomAccess.human, resolveAgentWorkroomAccess: roomAccess.agent,
+}));
 import { listPendingApprovalOutcomes, loadApprovalOutcomes, readApprovalOutcome, recordApprovalOutcome } from "./approval-outcome-store";
 import { fingerprintCoworkerInput } from "@/lib/govern/authority/coworker-authority-decision";
 
@@ -135,5 +139,85 @@ describe("caller-scoped pending approval discovery", () => {
     const result = await listPendingApprovalOutcomes("u1", "a1", db as never, now);
     expect(result.approvals[0].reviewBinding).toBeNull();
     expect(JSON.stringify(result)).not.toContain("private-");
+  });
+});
+
+describe("recorded handoff failure explanation (BI-A83A4188)", () => {
+  function handoffFixture() {
+    roomAccess.human.mockReset().mockResolvedValue({ decision: { level: "none" } });
+    roomAccess.agent.mockReset().mockResolvedValue({ decision: { level: "none" } });
+    const parameters = { capsuleId: "WC-ORIGINAL", phase: "request", commandId: "original-handoff" };
+    const inputFingerprint = fingerprintCoworkerInput(parameters);
+    const envelope = { ...row, status: "failed", manifestActionId: "reassign_workroom_executor", inputFingerprint,
+      argsJson: { approvalBinding: { actingHumanUserId: "u1", actingAgentId: "a1", toolName: "reassign_workroom_executor",
+        inputFingerprint, taskRunId: null, chainId: null, routeContext: null } }, toolExecutions: [
+        { executionMode: "approval-outcome", success: false, result: { status: "failed" } },
+      ] };
+    const run = { id: "original-execution", envelopeId: "e1", userId: "u1", agentId: "a1", threadId: "",
+      taskRunId: null, toolName: "reassign_workroom_executor", executionMode: "external-jsonrpc", createdAt: now,
+      durationMs: 32, parameters, success: false,
+      result: { success: false, error: "handoff-transaction-required", message: "SECRET raw handler text", data: { secret: "SECRET" } } };
+    const db = { coworkerActionEnvelope: { findFirst: vi.fn(async () => envelope), findMany: vi.fn(async () => [envelope]) },
+      toolExecution: { findMany: vi.fn(async () => [run]) },
+      workroom: { findUnique: vi.fn(async () => ({ id: "room-row", capsuleId: "WC-ORIGINAL" })) } };
+    return { envelope, run, db };
+  }
+  it("recovers a safe reason from the original execution, not the newer generic status receipt", async () => {
+    const f = handoffFixture();
+    const result = await readApprovalOutcome("e1", "u1", "a1", f.db as never, now);
+    expect(result).toMatchObject({ state: "failed", failureEvidence: { state: "available",
+      code: "handoff-transaction-required", executionId: "original-execution" } });
+    expect(JSON.stringify(result)).not.toContain("SECRET");
+    expect(f.db.toolExecution.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { envelopeId: "e1", toolName: "reassign_workroom_executor" }, take: 11,
+    }));
+  });
+  it("shares the reason across owner history and exact caller readback while checking each reader's room access", async () => {
+    const f = handoffFixture();
+    roomAccess.human.mockResolvedValue({ decision: { level: "content" } });
+    roomAccess.agent.mockResolvedValue({ decision: { level: "content" } });
+    const exact = await readApprovalOutcome("e1", "u1", "a1", f.db as never, now);
+    const [owner] = await loadApprovalOutcomes("u1", "e1", f.db as never, now);
+    expect(owner.failureEvidence).toEqual(exact?.failureEvidence);
+    expect(owner.failureExplanation).toContain("stopped before transfer");
+    expect(owner.nextAction).toContain("does not authorize another attempt");
+    expect(owner.failureEvidence).toMatchObject({ roomHref: "/workspace/cases/work-capsule%3AWC-ORIGINAL" });
+    expect(roomAccess.human).toHaveBeenCalledWith({ userId: "u1", workroomId: "room-row", requested: "content" }, f.db);
+    expect(roomAccess.agent).toHaveBeenCalledWith({ userId: "u1", agentId: "a1", workroomId: "room-row", requested: "content" }, f.db);
+  });
+  it("keeps a proven refusal but suppresses navigation after current room access is removed", async () => {
+    const f = handoffFixture();
+    const result = await readApprovalOutcome("e1", "u1", "a1", f.db as never, now);
+    expect(result?.failureEvidence).toMatchObject({ state: "available", roomAccess: "unavailable" });
+    expect(result?.failureEvidence).not.toHaveProperty("roomHref");
+    expect(JSON.stringify(result)).not.toContain("WC-ORIGINAL");
+  });
+  it.each(["userId", "agentId", "envelopeId", "toolName", "threadId"])("does not explain a foreign execution when %s differs", async key => {
+    const f = handoffFixture(); Object.assign(f.run, { [key]: "foreign" });
+    const result = await readApprovalOutcome("e1", "u1", "a1", f.db as never, now);
+    expect(result?.failureEvidence).toMatchObject({ state: "conflicting", reason: "execution-binding-mismatch" });
+    expect(result?.failureExplanation).not.toContain("handoff");
+    expect(f.db.workroom.findUnique).not.toHaveBeenCalled();
+  });
+  it("does not explain a changed invocation under the original envelope", async () => {
+    const f = handoffFixture(); f.run.parameters.capsuleId = "WC-DIFFERENT";
+    expect((await readApprovalOutcome("e1", "u1", "a1", f.db as never, now))?.failureEvidence)
+      .toMatchObject({ state: "conflicting", reason: "execution-binding-mismatch" });
+  });
+  it("does not choose the latest of multiple actual executions", async () => {
+    const f = handoffFixture(); f.db.toolExecution.findMany.mockResolvedValue([f.run, { ...f.run, id: "second-execution" }]);
+    expect((await readApprovalOutcome("e1", "u1", "a1", f.db as never, now))?.failureEvidence)
+      .toMatchObject({ state: "conflicting", reason: "execution-ambiguous" });
+  });
+  it("does not infer a cause from a receipt without an actual execution", async () => {
+    const f = handoffFixture(); f.db.toolExecution.findMany.mockResolvedValue([]);
+    expect((await readApprovalOutcome("e1", "u1", "a1", f.db as never, now))?.failureEvidence)
+      .toMatchObject({ state: "missing", reason: "execution-missing" });
+  });
+  it("does not display an unknown raw error or private result payload", async () => {
+    const f = handoffFixture(); f.run.result.error = "SECRET unknown error";
+    const result = await readApprovalOutcome("e1", "u1", "a1", f.db as never, now);
+    expect(result?.failureEvidence).toMatchObject({ state: "missing", reason: "result-unproven" });
+    expect(JSON.stringify(result)).not.toContain("SECRET");
   });
 });

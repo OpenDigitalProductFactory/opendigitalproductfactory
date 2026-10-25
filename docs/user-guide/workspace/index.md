@@ -47,6 +47,12 @@ Do not approve again just because the original card disappeared; your assistant
 can check the result and the affected work first. You can only read your own
 approval results.
 
+For a failed handoff, a verified saved refusal explains why transfer stopped.
+**Inspect original Workroom** opens the original room only when you still have
+access. Missing or conflicting execution evidence stays explicit; a result or
+inspection link does not authorize another attempt. Private handler text stays
+out of the result.
+
 Your assistant can also check the stored action evidence for an approved
 provider-account test without running the test again. It reports the saved test
 outcome separately from the approval status. Missing, conflicting or unsupported

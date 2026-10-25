@@ -32,7 +32,7 @@ Regenerate required docs index/impact artifacts when source changes warrant them
 After local checks, run the shared governed local-CI gate, exact-source independent review, normal push/readiness, ready PR, all protected checks and merge queue. Advance the install only through the existing governed self-upgrade path and coordinate its owner. Source tests are not deployed acceptance.
 
 ## Backlog coverage
-Coverage pending the immutable published plan. One atomic deliverable: approval-result-recovery -> BI-A83A4188.
+Native atomic coverage cmvo79g0w04v401mq6du2pxti binds the published plan at 8ea0eac24337b3e421f962bca39bf64de164fbc0. Implementation admission IRD-9293F8BA7B60 was allowed before product edits. One atomic deliverable: approval-result-recovery -> BI-A83A4188.
 Requirement refs: OBJ-APR-1, OBJ-APR-2, OBJ-APR-3.
 Contract refs: CT-APR-BOUND-EXEC, CT-APR-READ, CT-APR-PRESENT.
 Flow refs: FLOW-APR-READ.

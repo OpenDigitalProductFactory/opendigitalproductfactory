@@ -33,6 +33,23 @@
     "task-waiting-again": "The task continued and needs another decision. Review the next request in your Inbox.",
     "expired": "The approval window closed before execution. Your assistant must check the target before sending a fresh request."
   },
+  "failure": {
+    "handoff-transaction-required": {
+      "reason": "The handoff stopped before transfer. Its required transfer procedure was not used.",
+      "next": "Your assistant must check the handoff requirement in the original room. This result does not authorize another attempt."
+    },
+    "unproven": {
+      "reason": "The failure reason could not be confirmed from the saved execution.",
+      "next": "Your assistant must inspect the original execution. Missing evidence does not prove that nothing happened."
+    },
+    "conflicting": {
+      "reason": "The saved executions do not establish a single failure reason.",
+      "next": "Your assistant must reconcile the original executions before taking further action."
+    },
+    "inspectRoom": "Inspect original Workroom",
+    "evidence": "Recorded execution",
+    "roomUnavailable": "The original room is not available for inspection through this result."
+  },
   "card": {
     "authorizationNeeded": "Human authorization needed",
     "saving": "Saving your decision. This can take a few seconds.",
