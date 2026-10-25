@@ -15,6 +15,7 @@ import type { ToolDefinition } from "@/lib/mcp-tool-types";
 
 import { buildCoworkerApprovalBinding, type CoworkerAuthorityInput } from "./coworker-authority-decision";
 import { enforceCoworkerToolAuthority, setCoworkerToolAuthorityOverridesForTests } from "./coworker-tool-authority-gate";
+import { GOVERNED_REJECTION_DISPOSITION, rejectionMessage } from "./governed-rejection-disposition";
 
 const TOOL = { name: "run_discovery_triage", sideEffect: true, executionMode: "immediate" } as unknown as ToolDefinition;
 
@@ -129,5 +130,78 @@ describe("coworker tool authority gate — the propose boundary", () => {
     });
     await enforceCoworkerToolAuthority(execution(), TOOL, true);
     expect(resume).toHaveBeenCalledWith("TR-SCHED-1");
+  });
+});
+
+describe("deterministic authority resolution refusals (BI-5FDE148A)", () => {
+  const tool = { name: "get_backlog_item", sideEffect: false, executionMode: "immediate" } as unknown as ToolDefinition;
+
+  function missingItemCall(): GovernedExecuteArgs {
+    return {
+      toolName: "get_backlog_item",
+      rawParams: { itemId: "BI-MISSING" },
+      userId: "user-1",
+      userContext: { userId: "user-1", platformRole: "HR-000", isSuperuser: true },
+      context: { agentId: "AGT-OPS" },
+      source: "external-jsonrpc",
+    };
+  }
+
+  function throwResolution(error: unknown) {
+    setCoworkerToolAuthorityOverridesForTests({
+      resolveCoworkerAuthorityInput: async () => {
+        throw error;
+      },
+    });
+  }
+
+  function callerMessage(result: Awaited<ReturnType<typeof enforceCoworkerToolAuthority>>, toolName: string): string {
+    if (result.outcome !== "reject") throw new Error(`expected a rejection, got ${result.outcome}`);
+    return rejectionMessage(toolName, result.message, GOVERNED_REJECTION_DISPOSITION[result.rejection]);
+  }
+
+  it("refuses an unknown item on a non-create tool instead of reporting the check unavailable", async () => {
+    throwResolution(new Error("The governed backlog item does not exist."));
+    const result = await enforceCoworkerToolAuthority(missingItemCall(), tool, true);
+    expect(result).toMatchObject({
+      outcome: "reject",
+      rejection: "authority_subject_not_found",
+      message: "The governed backlog item does not exist.",
+    });
+    const caller = callerMessage(result, "get_backlog_item");
+    expect(GOVERNED_REJECTION_DISPOSITION.authority_subject_not_found).toBe("refused");
+    expect(caller).toContain("The governed backlog item does not exist.");
+    expect(caller).not.toMatch(/unavailable/i);
+    expect(caller).not.toMatch(/retried unchanged/);
+  });
+
+  it("refuses a writer-tool binding mismatch instead of asking for an unchanged retry", async () => {
+    const reason = "The immutable initiative review writer tool does not match the executing tool.";
+    throwResolution(new Error(reason));
+    const result = await enforceCoworkerToolAuthority(missingItemCall(), tool, true);
+    expect(result).toMatchObject({ outcome: "reject", rejection: "authority_binding_mismatch", message: reason });
+    const caller = callerMessage(result, "record_initiative_design_review");
+    expect(caller).toContain("writer tool does not match");
+    expect(GOVERNED_REJECTION_DISPOSITION.authority_binding_mismatch).toBe("refused");
+    expect(caller).not.toMatch(/unavailable|retried unchanged/);
+  });
+
+  it.each([
+    ["connect ETIMEDOUT", "connect ETIMEDOUT"],
+    ["pool timeout", "Timed out fetching a new connection from the connection pool"],
+    ["missing relation", 'relation "BacklogItem" does not exist'],
+  ])("keeps a %s failure inconclusive", async (_label, reason) => {
+    throwResolution(new Error(reason));
+    const result = await enforceCoworkerToolAuthority(missingItemCall(), tool, true);
+    expect(result).toMatchObject({
+      outcome: "reject",
+      rejection: "authority_evidence_unavailable",
+      message: reason,
+    });
+    expect(GOVERNED_REJECTION_DISPOSITION.authority_evidence_unavailable).toBe("inconclusive");
+    const caller = callerMessage(result, "get_backlog_item");
+    expect(caller).toContain(reason);
+    expect(caller).toMatch(/retried unchanged/);
+    expect(caller).toMatch(/unavailable/);
   });
 });
