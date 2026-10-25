@@ -91,9 +91,7 @@ needs you. A heartbeat, report or queued task is not proof that work advanced.
 The October 25 review found that the existing COO standing task reports stalls
 to the owner and the persona still describes an Advisor-only phase. Durable
 recovery supervision is being repaired under BI-4B48E7FE; this guide does not
-claim that the repair or its unattended recovery tests have passed. The
-[current design and acceptance contract](../../superpowers/specs/2026-09-03-coordinated-workrooms-design.md#october-25-amendment-coo-operational-follow-through)
-records the delivery boundary. Existing Workroom owner, wait and recovery
+claim that the repair or its unattended recovery tests have passed. Unattended recovery verification remains pending. Existing Workroom owner, wait and recovery
 information remains authoritative while that work proceeds.
 
 ### When it runs
