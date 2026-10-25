@@ -2,6 +2,6 @@
   "version": "1",
   "decidedOption": "typed-existing-projection",
   "decisionInteractionId": "DI-D71AABE80783",
-  "scope": { "files": ["apps/web/app/(shell)/workspace/inbox/page.tsx", "apps/web/components/attention/ApprovalOutcomeHistory.tsx"] },
+  "scope": { "files": ["apps/web/components/attention/ApprovalOutcomeHistory.tsx"] },
   "evidence": { "kind": "propose-n-pick", "consideredOptions": ["typed-existing-projection", "generic-status-only", "raw-error-panel"] }
 }
