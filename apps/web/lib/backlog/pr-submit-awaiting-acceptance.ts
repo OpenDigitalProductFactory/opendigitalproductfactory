@@ -174,9 +174,39 @@ async function transitionItem(args: {
   if (args.from === args.to) return false;
   if (!isBacklogStatus(args.from) || !isLegalTransition(args.from, args.to)) return false;
 
-  await prisma.$transaction(async (tx) => {
+  return prisma.$transaction(async (tx) => {
+    // Serialize with explicit lifecycle changes before judging their history.
+    await tx.$queryRaw`SELECT "id" FROM "BacklogItem" WHERE "id" = ${args.id} FOR UPDATE`;
+    const current = await tx.backlogItem.findUnique({ where: { id: args.id }, select: { status: true } });
+    if (!current || current.status !== args.from) return false;
+    if (args.to === AWAITING_ACCEPTANCE_STATUS) {
+      const history = await tx.backlogItemActivity.findMany({
+        where: { backlogItemId: args.id, kind: "status_change" },
+        select: { id: true, recordedAt: true, payload: true },
+        orderBy: [{ recordedAt: "asc" }, { id: "asc" }],
+      });
+      let priorAdvanceAt: number | null = null;
+      let explicitResumeAt: number | null = null;
+      for (const row of history) {
+        const payload = row.payload;
+        if (!payload || typeof payload !== "object" || Array.isArray(payload)) continue;
+        const at = row.recordedAt.getTime();
+        if (payload.actuator === PR_SUBMIT_ACTUATOR) {
+          if (payload.to === AWAITING_ACCEPTANCE_STATUS
+            && payload.pullRequestNumber === args.pullRequestNumber
+            && (payload.pullRequestUrl == null || payload.pullRequestUrl === args.pullRequestUrl)) {
+            priorAdvanceAt = Math.min(priorAdvanceAt ?? at, at);
+          }
+        } else if (typeof payload.to === "string" && isCodingPoolStatus(payload.to)) {
+          explicitResumeAt = Math.max(explicitResumeAt ?? at, at);
+        }
+      }
+      // Equal timestamps cannot establish that the PR superseded the reopen.
+      // Preserve the explicit decision, including when old events were replayed.
+      if (priorAdvanceAt !== null && explicitResumeAt !== null && explicitResumeAt >= priorAdvanceAt) return false;
+    }
     await tx.backlogItem.update({
-      where: { id: args.id },
+      where: { id: args.id, status: args.from },
       data: {
         status: args.to,
         ...(args.to === AWAITING_ACCEPTANCE_STATUS
@@ -200,8 +230,8 @@ async function transitionItem(args: {
         },
       },
     });
+    return true;
   });
-  return true;
 }
 
 export async function applyGitHubPullRequestToBacklog(payload: unknown): Promise<PrSubmitActuatorResult> {
@@ -253,7 +283,7 @@ export async function sweepPrSubmittedBacklogItems(args?: { limit?: number }): P
       pullRequestNumber: { not: null },
       backlogItemId: { not: null },
     },
-    select: { backlogItemId: true, pullRequestNumber: true, pullRequestUrl: true },
+    select: { backlogItemId: true, pullRequestNumber: true, pullRequestUrl: true, repositoryFullName: true },
     take,
     orderBy: { updatedAt: "desc" },
   });
@@ -273,7 +303,10 @@ export async function sweepPrSubmittedBacklogItems(args?: { limit?: number }): P
   for (const item of items) {
     const room = byItem.get(item.itemId);
     const prNumber = room?.pullRequestNumber;
-    if (typeof prNumber !== "number") {
+    const repository = room?.repositoryFullName;
+    const prUrl = room?.pullRequestUrl ?? (repository && /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)
+      ? `https://github.com/${repository}/pull/${prNumber}` : null);
+    if (typeof prNumber !== "number" || !prUrl) {
       skipped += 1;
       continue;
     }
@@ -284,7 +317,7 @@ export async function sweepPrSubmittedBacklogItems(args?: { limit?: number }): P
       to: AWAITING_ACCEPTANCE_STATUS,
       reason: `Reconcile existing PR #${prNumber}`,
       pullRequestNumber: prNumber,
-      pullRequestUrl: room?.pullRequestUrl ?? `https://github.com/pull/${prNumber}`,
+      pullRequestUrl: prUrl,
     });
     if (did) moved.push(item.itemId);
     else skipped += 1;
