@@ -192,6 +192,38 @@ function playbookOutcome(): unknown {
 }
 
 describe("S2 in the scheduler — the playbook verdict for a diverted call (characterisation)", () => {
+  it("persists the current scheduled run before the coworker can use its stage reporting mandate", async () => {
+    arrangePlaybook({ success: true });
+    await executeScheduledAgentTask(PLAYBOOK_TASK.taskId);
+    const binding = mocks.prisma.scheduledAgentTask.update.mock.calls.findIndex(([arg]) => arg.data?.taskRunId === "TR-SCHED-PROP1");
+    expect(binding).toBeGreaterThanOrEqual(0);
+    expect(mocks.prisma.scheduledAgentTask.update.mock.invocationCallOrder[binding]).toBeLessThan(mocks.runAgenticLoop.mock.invocationCallOrder[0]!);
+  });
+  it.each([true, false])("parks a proposed required write only for a Workroom stage: %s", async (workroomStage) => {
+    arrangePlaybook(buildProposalToolResult("update_roadmap_item", "prop-1") as unknown as Record<string, unknown>);
+    mocks.prisma.scheduledAgentTask.findUnique.mockResolvedValue({ ...PLAYBOOK_TASK, prompt: "Use update_roadmap_item to record the change.",
+      taskConfig: { ...PLAYBOOK_TASK.taskConfig, ...(workroomStage ? {
+        workroomStage: { shapeKey: "delivery-medium", shapeVersion: "1.0.0", stageKey: "implement", tools: [] },
+      } : {}) } });
+    if (workroomStage) {
+      mocks.getAvailableTools.mockResolvedValue([
+        { name: "update_roadmap_item", description: "Update", inputSchema: {}, sideEffect: true },
+        { name: "record_workroom_evidence", description: "Record", inputSchema: {}, sideEffect: true },
+      ]);
+      mocks.runAgenticLoop.mockResolvedValue({ content: "Proposed the change and recorded the blocker.", executedTools: [
+        { name: "update_roadmap_item", args: { id: "R-1" }, result: buildProposalToolResult("update_roadmap_item", "prop-1") },
+        { name: "record_workroom_evidence", args: {}, result: { success: true } },
+      ] });
+    }
+    await executeScheduledAgentTask(PLAYBOOK_TASK.taskId);
+    expect(mocks.prisma.scheduledAgentTask.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ lastStatus: "proposed", nextRunAt: workroomStage ? null : expect.any(Date) }),
+    }));
+    expect(mocks.prisma.scheduledJob.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ nextRunAt: workroomStage ? null : expect.any(Date) }),
+    }));
+  });
+
   it("a diverted call is a success: the playbook run is completed", async () => {
     arrangePlaybook(buildProposalToolResult("update_roadmap_item", "prop-1") as unknown as Record<string, unknown>);
     await executeScheduledAgentTask(PLAYBOOK_TASK.taskId);

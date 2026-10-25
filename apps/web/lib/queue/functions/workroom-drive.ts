@@ -1,5 +1,3 @@
-// apps/web/lib/queue/functions/workroom-drive.ts
-//
 // BI-FCD639D9 — the standing Workroom drive. DPF owns wake, lease, dispatch,
 // attention, and stop. Codex/Claude/Grok/embedded coworkers are interchangeable
 // workers behind ScheduledAgentTask. Quiet rooms do not wake.
@@ -114,6 +112,7 @@ export type WorkroomDriveRoom = {
   stageDispatchedAt?: Date | null;
   /** BI-7C0B2BD6: what the room's task shows about the queued run; null when no task exists, absent when unread. */
   stageRun?: StageRunObservation | null;
+  stageRunsByTask?: Readonly<Record<string, StageRunObservation | null>>;
   /** Graph rooms only (Phase 3c): when each marked stage most recently started. */
   stageDispatchedAtByStage?: ReadonlyMap<string, Date> | null;
   /** Graph rooms only (PR-3c-5): each live sub-shape child's status and drive action/reason, by capsule id. */
@@ -521,6 +520,7 @@ export async function runWorkroomDriveJob(
       priorDrive: priorDriveFromStored(stored),
       writebackRetry: readWritebackRetry(asRecord(room.workspaceState)?.workroomDrive),
       ...(room.stageRun !== undefined ? { stageRun: room.stageRun } : {}),
+      ...(room.stageRunsByTask !== undefined ? { stageRunsByTask: room.stageRunsByTask } : {}),
       workspaceState: room.workspaceState,
       recordedEvidence: room.recordedEvidence ?? [],
       ...(room.subShapeChildren ? { subShapeChildren: room.subShapeChildren } : {}),

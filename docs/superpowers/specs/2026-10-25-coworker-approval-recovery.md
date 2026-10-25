@@ -1,6 +1,6 @@
 ---
 title: Stop repeated approvals for scheduled Workroom blockers
-status: proposed
+status: active
 backlog: BI-E458A9CB
 date: 2026-10-25
 ---
@@ -26,14 +26,14 @@ Prior designs: 2026-10-07-approval-convergence-on-envelope-design.md, 2026-09-25
 
 CONTRACT-REPORT: A default reporting mandate applies only to record_workroom_evidence with outcome blocked, a nonempty summary, this scheduled run's room, a real non-governed stage, its declared evidence kind, and its assigned agent. Missing identity, room, stage, malformed inputs, other tools, completed outcomes, archived/terminal rooms, or governed decisions receive no new mandate. Existing explicitly declared stage mandates retain their contract. The monitor continues checking current grants, room admission, sensitivity, consequential actions, and explicit operator approval policy.
 
-CONTRACT-WAIT: The scheduler records a proposed outcome without rearming its cron. The drive observes the durable proposal state and holds without increasing failure counts or releasing merely because a daily cycle changed. A matching completed stage receipt still advances normally. Approval expiry, denial, or failure must remain visible; no old request is silently approved, replayed, or deleted. Normal bounded transient retries remain unchanged.
+CONTRACT-WAIT: For a task carrying the server's Workroom-stage assignment, the scheduler records a proposed outcome without rearming its cron. Other cadences retain their existing scheduling policy. The drive observes the durable proposal state and holds without increasing failure counts or releasing merely because a daily cycle changed. A matching completed stage receipt still advances normally. Approval expiry, denial, or failure must remain visible; no old request is silently approved, replayed, or deleted. Normal bounded transient retries remain unchanged.
 
 CONTRACT-EVIDENCE: A blocked record never earns a completing receipt. This repair cannot certify a success, accept a release, create credentials, change membership, spend money, or send externally.
 
 ## Ordered repair
 
 1. Keep the two first-failing regression tests and extend the report matrix across wrong room, wrong agent, wrong kind/stage, governed stage, completed outcome, and missing run context. Resolve graph-linked tests before implementation.
-2. Extend the existing mandate resolver and both existing consumers with exact-call context. Permit only the CONTRACT-REPORT class, using server-read TaskRun source and room definition; do not add a tool-wide harmless flag or change shape grants.
+2. Extend the existing mandate resolver and both existing consumers with exact-call context. Persist the current TaskRun on the scheduled task before the coworker executes. Permit only the CONTRACT-REPORT class, using server-read TaskRun source, current task assignment and room definition; do not add a tool-wide harmless flag or change shape grants.
 3. Preserve the scheduler's proposed state as a wait: do not rearm the periodic task. Teach the existing drive latch to distinguish approval waiting from failed execution. Reconcile the linked envelope's terminal outcome before allowing a later attempt; retain no-outcome as a hold.
 4. Run affected scheduler, interceptor, authority, stage receipt, latch, and drive tests plus web typecheck. Run style/module-size and documentation guards from the impact contract.
 5. Run the governed exact-tree gate and independent semantic review, publish through DCO and the protected merge queue, and request the canonical upgrade through its normal authority boundary. Verify a real bounded blocked report writes evidence without an approval and cannot advance a stage; verify one genuine pending approval remains one request across repeated ticks.
@@ -65,5 +65,5 @@ The risk is accidentally treating an arbitrary evidence write as delegated work.
 
 ## Backlog coverage
 
-Coverage is pending the immutable artifact's publication and server validation. This document is a repair design, not a passing receipt. The two code changes form the single scheduled-stage approval recovery boundary; neither permits a completion or a wider action. Broader denial parking and stage prerequisite repairs retain their existing live backlog records.
+The initial published design received atomic coverage under BI-E458A9CB (receipt cmvo6vxrf5dko01qb5nsa83nw). The operator selected Medium repair within the existing process. This document is a repair design, not passing implementation evidence. The reporting and waiting changes form one scheduled-stage approval recovery boundary; neither permits a completion or a wider action. Broader denial parking and stage prerequisite repairs retain their existing live backlog records.
 

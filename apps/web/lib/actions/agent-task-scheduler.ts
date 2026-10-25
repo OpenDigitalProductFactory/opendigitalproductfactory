@@ -18,6 +18,7 @@ import { runArchitectureParitySteward } from "@/lib/ea/architecture-parity-stewa
 import { runConsolidationParitySteward } from "@/lib/ea/consolidation-parity-steward";
 import { computeNextCronRun, isOneShotCron } from "@/lib/operate/cron-next-run";
 import { extractScheduledTaskSummary } from "./agent-task-scheduler-summary";
+import { readWorkroomStageTaskConfig } from "@/lib/scheduling/workroom-stage-task-config";
 import { formatScheduledTurnPrompt } from "./scheduled-turn-prompt";
 import {
   classifyScheduledRequiredTools, scheduledToolsNeedingPin, scheduledRunLastStatus,
@@ -441,6 +442,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       proactivity,
       delegatedPosture,
     });
+    await prisma.scheduledAgentTask.update({ where: { taskId }, data: { taskRunId: taskRunRef.taskRunId } });
 
     await createTaskMessage({
       taskRunId: taskRunRef.taskRunId,
@@ -673,10 +675,8 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       });
     }
 
-    // Update task status and schedule next run. A one-shot ("Once") task
-    // deactivates after firing instead of re-arming a year later (BI-D72CC945).
     const oneShot = isOneShotCron(task.schedule);
-    const nextRunAt = oneShot ? null : computeNextCronRun(task.schedule, now);
+    const nextRunAt = oneShot || requiredTools.kind === "proposed" && readWorkroomStageTaskConfig(task.taskConfig) ? null : computeNextCronRun(task.schedule, now);
     await prisma.scheduledAgentTask.update({
       where: { taskId },
       data: {

@@ -14,7 +14,7 @@ import type { StageRunObservation, WritebackRetry } from "@/lib/work-management/
 import { WRITEBACK_RETRY_BASE_MS, WRITEBACK_RETRY_LIMIT } from "@/lib/work-management/writeback-latch";
 
 import { runWorkroomDriveJob, type WorkroomDriveEffects, type WorkroomDriveRoom } from "./workroom-drive";
-import { stageRunFromTask } from "./workroom-drive-stage-run";
+import { loadStageRunTasks, stageRunFromTask, withStageRuns } from "./workroom-drive-stage-run";
 
 const NOW = new Date("2026-09-01T06:00:00.000Z");
 const CYCLE = "obligation-assurance-watch@1.0.0:2026-09-01";
@@ -71,6 +71,16 @@ const run = (over: Partial<StageRunObservation> = {}): StageRunObservation => ({
 });
 
 describe("writeback latch on the drive tick (BI-7C0B2BD6)", () => {
+  it("keeps an approval parked across a new cycle even without an old dispatch checkpoint", async () => {
+    const fx = effects();
+    const result = await runWorkroomDriveJob(new Date("2026-09-02T06:00:00.000Z"), {
+      listRooms: async () => [room({ stageRun: run({ dispatchedAt: null, lastStatus: "proposed", approvalOutcome: "waiting" }) })], effects: fx,
+    });
+    expect(result.dispatched).toBe(0);
+    expect(fx.upsertAgentTask).not.toHaveBeenCalled();
+    expect(lastSnapshot(fx)).toMatchObject({ action: "pause", reason: "executor_writeback_unavailable" });
+    expect(String(lastSnapshot(fx).ledger)).toContain("already requested a decision");
+  });
   it("a latched room with no task for its stage dispatches again", async () => {
     const fx = effects();
     const result = await runWorkroomDriveJob(NOW, { listRooms: async () => [room({ stageRun: null })], effects: fx });
@@ -119,6 +129,43 @@ describe("writeback latch on the drive tick (BI-7C0B2BD6)", () => {
     expect(String((snapshot.ledger as string[])[0])).toMatch(/produced no governed work/);
     expect(snapshot.writebackRetry).toMatchObject({ failures: WRITEBACK_RETRY_LIMIT });
     expect(fx.persist.mock.calls.at(-1)?.[0]?.summary).toMatch(/produced no governed work/);
+  });
+});
+
+describe("the drive reads the exact run's approval outcomes", () => {
+  const task = { taskId: TASK("WC-TEST"), taskRunId: "TR-SCHED-TEST", ownerUserId: "user-1", lastRunAt: NOW,
+    lastStatus: "proposed", lastError: null, taskConfig: {} };
+  const envelope = (status: string, owner = "user-1") => ({ id: "env-1", taskRunId: task.taskRunId, delegatingUserId: owner,
+    status, createdAt: NOW, expiresAt: null, toolExecutions: [] });
+  const source = (approvals: ReturnType<typeof envelope>[]) => ({
+    scheduledAgentTask: { findMany: vi.fn().mockResolvedValue([task]) },
+    coworkerActionEnvelope: { findMany: vi.fn().mockResolvedValue(approvals) },
+  });
+  type Db = NonNullable<Parameters<typeof loadStageRunTasks>[1]>;
+
+  it.each([["proposed", "waiting"], ["executed", "executed"], ["failed", "failed"], ["declined", "declined"], ["expired", "expired"]])(
+    "reads %s as %s without treating a decision as execution", async (status, expected) => {
+      const db = source([envelope(status)]);
+      expect((await loadStageRunTasks([task.taskId], db as unknown as Db))?.get(task.taskId)?.approvalOutcome).toBe(expected);
+      expect(db.coworkerActionEnvelope.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { taskRunId: { in: [task.taskRunId] } } }));
+    },
+  );
+  it("does not release on a foreign owner's result or a partly executed run", async () => {
+    for (const approvals of [[envelope("executed", "someone-else")], [envelope("executed"), envelope("proposed")]]) {
+      expect((await loadStageRunTasks([task.taskId], source(approvals) as unknown as Db))?.get(task.taskId)?.approvalOutcome).not.toBe("executed");
+    }
+  });
+  it("holds when approval reads fail or exceed the bounded observation", async () => {
+    const db = source([]);
+    db.coworkerActionEnvelope.findMany.mockRejectedValue(new Error("read unavailable"));
+    expect((await loadStageRunTasks([task.taskId], db as unknown as Db))?.get(task.taskId)?.approvalOutcome).toBe("unknown");
+    expect((await loadStageRunTasks([task.taskId], source(Array.from({ length: 1001 }, () => envelope("executed"))) as unknown as Db))?.get(task.taskId)?.approvalOutcome).toBe("unknown");
+  });
+  it("carries observations for the primary and branch tasks", async () => {
+    const db = source([envelope("proposed")]);
+    const rows = await withStageRuns([room()], db as unknown as Db);
+    expect(rows[0]?.stageRunsByTask?.[task.taskId]?.approvalOutcome).toBe("waiting");
+    expect(db.scheduledAgentTask.findMany.mock.calls[0]?.[0].where.taskId.in).toContain(`${task.taskId}--sweep`);
   });
 });
 
