@@ -169,7 +169,7 @@ It changes no principal clearance or membership. The operator workflow is in
 `list_workrooms(view="definitions")` returns a bounded catalogue from the
 canonical source registry and review-profile composer. Omitting `view` retains
 instance observations. Definition pages include sparse sources and canonical
-aliases, with profile composition status and fingerprints. They report
+aliases, with profile composition status, fingerprints and canonical conflict reasons. They report
 `not-exercised` occurrence assessment and `unknown` organization applicability;
 definition counts never stand in for successful execution or coverage.
 

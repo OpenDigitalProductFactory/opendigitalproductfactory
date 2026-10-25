@@ -21,7 +21,7 @@ it.each(["unsupported", "unresolved"] as const)("reports %s composition without 
   const result = await call({ limit: 1 });
   expect(result).toMatchObject({ success: true, data: {
     occurrenceAssessment: "not-exercised", organizationApplicability: "unknown",
-    definitions: [expect.objectContaining({ assessment: "not-exercised", profile: { status, fingerprint: null } })],
+    definitions: [expect.objectContaining({ assessment: "not-exercised", profile: { status, fingerprint: null, conflicts: original.conflicts } })],
     page: { compositionCounts: { [status]: 1 } },
   } });
   expect(result.data).not.toHaveProperty("passCount");

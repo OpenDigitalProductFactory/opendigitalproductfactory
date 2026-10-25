@@ -8,7 +8,7 @@ const db = vi.hoisted(() => ({
 }));
 vi.mock("@dpf/db", () => ({ prisma: db, DISCOVERY_TRIAGE_AGENT_ID: "AGT-DISCOVERY" }));
 
-import { listRoomReviewDefinitions } from "@/lib/work-management/room-review-profile";
+import * as profiles from "@/lib/work-management/room-review-profile";
 import { clampToolResultForModel, DEFAULT_TOOL_RESULT_CHAR_CAP } from "@/lib/tak/tool-result-budget";
 import { tokenAdmitsTool } from "@/lib/mcp/token-tool-scope";
 import { can } from "@/lib/permissions";
@@ -21,6 +21,7 @@ async function call(params: Record<string, unknown>, name = "list_workrooms") {
 
 describe("Workroom definition catalogue through the installed pack handler", () => {
   beforeEach(() => {
+    vi.restoreAllMocks();
     vi.clearAllMocks();
     db.$transaction.mockImplementation(async (fn: (tx: unknown) => unknown) => fn(db));
   });
@@ -34,7 +35,7 @@ describe("Workroom definition catalogue through the installed pack handler", () 
   });
 
   it.each(["list_workrooms", "list_work_capsules"])("%s traverses canonical definitions without reading occurrences", async name => {
-    const inventory = listRoomReviewDefinitions({ limit: 200 });
+    const inventory = profiles.listRoomReviewDefinitions({ limit: 200 });
     const rows: Array<{ sourceKey: string; aliases: string[]; assessment: string }> = [];
     let cursor: string | undefined;
     const seen = new Set<string>();
@@ -63,6 +64,49 @@ describe("Workroom definition catalogue through the installed pack handler", () 
     expect(db.$transaction).not.toHaveBeenCalled();
     expect(db.workroom.update).not.toHaveBeenCalled();
     expect(db.workroomActivity.create).not.toHaveBeenCalled();
+  });
+
+  it.each(["list_workrooms", "list_work_capsules"])("%s retains canonical conflict reasons without implying assessment", async name => {
+    const original = profiles.composeRoomReviewProfile("booking", []);
+    const conflict = profiles.composeRoomReviewProfile("booking", [{
+      kind: "organization", ref: "catalogue-conflict-test@1",
+      requirements: [{ ...original.requirements[0]!, outcome: "conflicting test outcome" }],
+    }]);
+    expect(conflict.status).toBe("unresolved");
+    expect(conflict.conflicts).toEqual([`requirement-conflict:${original.requirements[0]!.ref}`]);
+    vi.spyOn(profiles, "composeRoomReviewProfile").mockReturnValue(conflict);
+
+    const result = await call({ view: "definitions", limit: 1 }, name);
+    expect(result).toMatchObject({ success: true, data: {
+      occurrenceAssessment: "not-exercised", organizationApplicability: "unknown",
+      definitions: [expect.objectContaining({ assessment: "not-exercised",
+        profile: { status: "unresolved", fingerprint: null, conflicts: conflict.conflicts } })],
+      page: { compositionCounts: { unresolved: 1 }, pageCount: 1 },
+    } });
+    expect(clampToolResultForModel(result).truncated).toBe(false);
+    expect(db.workroom.findMany).not.toHaveBeenCalled();
+    expect(db.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("refuses oversized canonical conflict reasons without advancing the confirmed cursor", async () => {
+    const first = await call({ view: "definitions", limit: 1 });
+    const cursor = (first.data!.page as { nextCursor: string }).nextCursor;
+    const conflict = profiles.composeRoomReviewProfile("booking", [{
+      kind: "organization", ref: "x".repeat(DEFAULT_TOOL_RESULT_CHAR_CAP), requirements: [],
+    }]);
+    expect(conflict.status).toBe("unresolved");
+    expect(conflict.conflicts[0]!.length).toBeGreaterThan(DEFAULT_TOOL_RESULT_CHAR_CAP);
+    vi.spyOn(profiles, "composeRoomReviewProfile").mockReturnValue(conflict);
+
+    const result = await call({ view: "definitions", limit: 1, cursor });
+    expect(result).toMatchObject({ success: false, error: "definition_page_budget_exceeded", data: {
+      page: { disposition: "budget-exceeded" },
+      recovery: { toolName: "list_workrooms", arguments: { view: "definitions", limit: 1, cursor } },
+    } });
+    expect(result.data).not.toHaveProperty("definitions");
+    expect(result.data).not.toHaveProperty("nextCursor");
+    expect(result.data!.page).not.toHaveProperty("nextCursor");
+    expect(clampToolResultForModel(result).truncated).toBe(false);
   });
 
   it("preserves the default instance view", async () => {

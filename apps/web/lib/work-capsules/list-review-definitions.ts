@@ -40,7 +40,7 @@ export function listReviewDefinitions(params: Record<string, unknown>, userId: s
       const definitions = inventory.items.map(item => {
         const profile = composeRoomReviewProfile(item.sourceKey, []);
         compositionCounts[profile.status]++;
-        return { ...item, profile: { status: profile.status, fingerprint: profile.fingerprint } };
+        return { ...item, profile: { status: profile.status, fingerprint: profile.fingerprint, conflicts: profile.conflicts } };
       });
       const result: ToolResult = { success: true, message: "", data: {
         view: "definitions", canonicalDefinitionCount: inventory.total,
