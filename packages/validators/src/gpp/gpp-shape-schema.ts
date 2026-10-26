@@ -32,16 +32,16 @@
 
 import { z } from "zod";
 
-import { DECISION_SCOPES } from "../decision-scopes.js";
-import { OUTCOME_DISPOSITIONS } from "../outcome-disposition.js";
-import { WORKROOM_SHAPE_KEYS, WORK_SHAPE_EVIDENCE_KINDS, WORK_SHAPE_TRIGGER_CLASSES } from "./work-vocabulary.js";
+import { DECISION_SCOPES } from "../decision-scopes.ts";
+import { OUTCOME_DISPOSITIONS } from "../outcome-disposition.ts";
+import { WORKROOM_SHAPE_KEYS, WORK_SHAPE_EVIDENCE_KINDS, WORK_SHAPE_TRIGGER_CLASSES } from "./work-vocabulary.ts";
 import type {
   WorkShapeBinding,
   WorkShapeBudget,
   WorkShapeDefinition,
   WorkShapeGate,
   WorkShapeStopCondition,
-} from "./work-shape-contracts.js";
+} from "./work-shape-contracts.ts";
 
 export const GPP_SHAPE_FORMAT = "gpp-shape/0.1";
 export const GPP_SHAPE_SCHEMA_ID = "urn:dpf:gpp-shape:0.1";

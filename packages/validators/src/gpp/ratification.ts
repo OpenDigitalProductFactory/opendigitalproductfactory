@@ -1,4 +1,4 @@
-import type { GppGate } from "./gpp-shape-schema.js";
+import type { GppGate } from "./gpp-shape-schema.ts";
 
 export type GateRatificationEntry =
   | { status: "proposed"; proposed: GppGate; basis: string }

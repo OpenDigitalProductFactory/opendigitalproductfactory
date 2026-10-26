@@ -24,6 +24,7 @@ const compilerOptions = {
   newLine: ts.NewLineKind.LineFeed,
   removeComments: false,
   verbatimModuleSyntax: true,
+  rewriteRelativeImportExtensions: true,
 };
 
 export function buildArtifacts(read = readSource) {
@@ -37,7 +38,7 @@ export function buildArtifacts(read = readSource) {
     const contents = read(path);
     sources[path] = hash(contents);
     const imports = ts.preProcessFile(contents).importedFiles.map((item) => item.fileName);
-    const expected = path.endsWith("/option-scoring.ts") ? ["./mcda-quality-gates.js"] : [];
+    const expected = path.endsWith("/option-scoring.ts") ? ["./mcda-quality-gates.ts"] : [];
     if (JSON.stringify(imports) !== JSON.stringify(expected))
       throw new Error(`Unreviewed runtime dependency in ${path}. Expand the explicit closure before generating.`);
     const output = ts.transpileModule(contents, { compilerOptions, fileName: path, reportDiagnostics: true });
@@ -52,7 +53,7 @@ export function buildArtifacts(read = readSource) {
     owner: "@markdbodman",
     backlogItem: "BI-4DD124E7",
     license: "Apache-2.0",
-    compiler: { name: "typescript", version: ts.version, target: "ES2022", module: "ES2022", newLine: "LF", removeComments: false, verbatimModuleSyntax: true },
+    compiler: { name: "typescript", version: ts.version, target: "ES2022", module: "ES2022", newLine: "LF", removeComments: false, verbatimModuleSyntax: true, rewriteRelativeImportExtensions: true },
     sources,
     outputs: Object.fromEntries([...artifacts].map(([path, contents]) => [path, hash(contents)])),
     runtimeDependencies: [],

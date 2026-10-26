@@ -1,5 +1,5 @@
-import type { GoldenTrianglePreference } from "../policy-types.js";
-import type { ProactivityLevel, ProactivityPlan } from "./proactivity-types.js";
+import type { GoldenTrianglePreference } from "../policy-types.ts";
+import type { ProactivityLevel, ProactivityPlan } from "./proactivity-types.ts";
 
 type PriorityAxis = "quality" | "cost" | "time" | "balanced";
 type PostureSource = "receiver-local" | "inherited-bias" | "receiver-override";

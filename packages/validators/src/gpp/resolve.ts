@@ -25,10 +25,10 @@
 //
 // OFFLINE TOOLING in Phase 3b: nothing in the running app imports this module.
 
-import type { ConsequenceClass, GppToolClassification as ConsequentialToolClassification, ToolConsequence } from "./tool-facts.js";
+import type { ConsequenceClass, GppToolClassification as ConsequentialToolClassification, ToolConsequence } from "./tool-facts.ts";
 
-import { bindingElementId, gateElementId, shapeElementId, stageElementId, toolElementId } from "./element-ids.js";
-import type { GppShapeDocument } from "./gpp-shape-schema.js";
+import { bindingElementId, gateElementId, shapeElementId, stageElementId, toolElementId } from "./element-ids.ts";
+import type { GppShapeDocument } from "./gpp-shape-schema.ts";
 
 /** What resolve reads. Each member is one registry the runtime already owns. */
 export type GppResolveSources = {

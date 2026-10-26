@@ -58,7 +58,7 @@ try {
   }
   for (const [target, text] of targets) for (const specifier of imports(text, target)) {
     if (specifier === "@dpf/integration-shared/canonical-json") continue;
-    if (!specifier.startsWith(".") || !specifier.endsWith(".js") || !targets.has(resolve(dirname(target), specifier.replace(/\.js$/, ".ts"))))
+    if (!specifier.startsWith(".") || !specifier.endsWith(".ts") || !targets.has(resolve(dirname(target), specifier)))
       throw new Error(`Import escapes the exact source closure: ${target}: ${specifier}`);
   }
   const canonicalPath = resolve(root, manifest.canonicalJsonSource);

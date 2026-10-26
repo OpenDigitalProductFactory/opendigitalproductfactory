@@ -43,9 +43,9 @@ import {
   type GppDiagnostic,
   type GppParseCode,
   type GppSchemaCode,
-} from "./diagnostics.js";
-import { elementsOfValue, nearestElementId, type GppElement } from "./element-ids.js";
-import { gppShapeDocumentSchema, type GppShapeDocument } from "./gpp-shape-schema.js";
+} from "./diagnostics.ts";
+import { elementsOfValue, nearestElementId, type GppElement } from "./element-ids.ts";
+import { gppShapeDocumentSchema, type GppShapeDocument } from "./gpp-shape-schema.ts";
 
 export type GppJsonParseResult =
   | { accepted: true; value: unknown; diagnostics: [] }

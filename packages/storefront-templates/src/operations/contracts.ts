@@ -1,4 +1,4 @@
-import type { Intent } from "./semantic-intent.js";
+import type { Intent } from "./semantic-intent.ts";
 
 /** The defining doctrine of the operating twin: humans, AI coworkers, and
  *  external partners (resellers/franchisees) inhabit the SAME surface. Every

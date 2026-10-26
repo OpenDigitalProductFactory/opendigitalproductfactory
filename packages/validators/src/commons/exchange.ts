@@ -1,6 +1,6 @@
-import type { DecisionScope } from "../decision-scopes.js";
-import { DECISION_SCOPES } from "../decision-scopes.js";
-import { isBoundedTrustedJson } from "../bounded-trusted-json.js";
+import type { DecisionScope } from "../decision-scopes.ts";
+import { DECISION_SCOPES } from "../decision-scopes.ts";
+import { isBoundedTrustedJson } from "../bounded-trusted-json.ts";
 
 /** References remain private host material. The projected result is the only outbound payload. */
 export interface CommonsCandidate {

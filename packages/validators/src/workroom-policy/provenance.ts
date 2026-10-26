@@ -15,9 +15,9 @@
  *
  * Pure: no React, no I/O, no ambient time.
  */
-import type { PolicyAdjustment } from "../policy-types.js";
+import type { PolicyAdjustment } from "../policy-types.ts";
 
-import type { PostureLayer, ResolvedWorkPosture } from "./resolve.js";
+import type { PostureLayer, ResolvedWorkPosture } from "./resolve.ts";
 
 /**
  * What actually drove a derived clamp. The derived layer is one precedence

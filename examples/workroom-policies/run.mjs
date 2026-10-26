@@ -70,7 +70,7 @@ try {
     const contents = await readFile(path, "utf8");
     sourceDigests[source] = digest(contents);
     for (const specifier of importsOf(contents, source))
-      if (!specifier.startsWith(".") || !specifier.endsWith(".js")) throw new Error(`Nonportable import in ${source}: ${specifier}`);
+      if (!specifier.startsWith(".") || !specifier.endsWith(".ts")) throw new Error(`Nonportable import in ${source}: ${specifier}`);
     const target = resolve(temp, "kernel", relative(base, path));
     await mkdir(dirname(target), { recursive: true });
     await writeFile(target, contents);
@@ -82,7 +82,7 @@ try {
     seen.add(path);
     const contents = sources.get(path);
     if (contents === undefined) throw new Error(`Manifest omitted source: ${path}`);
-    for (const specifier of importsOf(contents, path)) closure(resolve(dirname(path), specifier.replace(/\.js$/, ".ts")));
+    for (const specifier of importsOf(contents, path)) closure(resolve(dirname(path), specifier));
   }
   closure(resolve(temp, manifest.entry));
   closure(resolve(temp, "kernel/workroom/index.ts"));

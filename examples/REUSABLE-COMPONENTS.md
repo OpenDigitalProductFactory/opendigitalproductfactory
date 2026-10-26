@@ -188,12 +188,18 @@ chat handoff names the enclosing revision containing the updated proof fixtures.
 | GPP | Strict `gpp-shape/0.1` and layout schemas, parser, resolver, deterministic diagnostics, soundness, lowering/emission, draft bindings and reference interpretation. The Node compiler adds the canonical SHA-256 digest. | `apps/web/scripts/build-gpp-shapes.ts` uses the new DPF policy adapter; interpreter/soundness and their actual callers use portable modules. Twelve old pure implementation files are removed. Structural contracts and existing scope/evidence/trigger/collaboration/consequence vocabularies have canonical package homes. Application exports retain actual registry and policy responsibilities. |
 | Judgment | Existing scoring, MCDA quality and bounded retry preserve behavior. New `scoped-advice/0.1` validates bounded owner/context/reference/eligibility inputs and returns advice or hold. | MCP principle decisions, perspective, ledger, golden/backtest and retry callers use moved math. Three old math implementations are removed. The golden guard uses deterministically derived JavaScript rather than handwritten duplicate math. The new scoped-advice wrapper is exercised by the standalone consumer; production MCP callers still own their existing scope adapters. |
 
-The existing validators root facade also serves the framework's CommonJS
-TypeScript loader. Its decision-scope and trusted-JSON bridges retain
-extensionless source imports; their canonical implementations remain in the
-extracted leaf modules. The portable NodeNext entries retain their imports for emitted JavaScript. The framework-loader regression loads the complete legacy
-facade in an isolated child process, independently of Vitest's module resolver.
-This source-loading check does not establish served application or browser qualification.
+Portable TypeScript modules name relative source dependencies with `.ts`.
+This lets the application's CommonJS TypeScript loader resolve the same canonical
+sources used by the standalone consumers. The package and consumer compiler
+configurations enable TypeScript's `rewriteRelativeImportExtensions`, which
+emits `.js` runtime imports for compiled NodeNext consumers without changing
+source bytes during copying. The examples pin TypeScript 6.0.3 and Node 24.16.0;
+consumers need a compiler supporting that option (TypeScript 5.7 or newer).
+The source-loader regression loads every extracted entry and the legacy validators
+facade with the framework's actual hook in isolated child processes, independently
+of Vitest's module resolver. The seven isolated examples separately compile and
+execute the emitted JavaScript. These source-local checks do not establish served
+application or browser qualification. See the [TypeScript option documentation](https://www.typescriptlang.org/tsconfig/rewriteRelativeImportExtensions.html).
 
 The Workroom and judgment isolated source closures have zero runtime
 dependencies. GPP's only third-party runtime dependency is Zod **4.6.7**. Its

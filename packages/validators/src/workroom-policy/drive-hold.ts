@@ -8,7 +8,7 @@
 // the room's trail gets a row only when the hold changes, the stall surfaces
 // read the snapshot, and a room stuck for an hour reaches its owner once.
 
-import { isRecord } from "../guards.js";
+import { isRecord } from "../guards.ts";
 
 /** Consecutive stuck ticks before a pause is a stall: one hour at the 15-minute cadence. */
 export const WORKROOM_DRIVE_STALL_TICKS = 4;

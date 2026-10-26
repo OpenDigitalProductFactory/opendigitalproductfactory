@@ -1,8 +1,8 @@
 // Portable structural work-shape contracts; the application owns its registry,
 // pinned definitions, validation, admission and policy adapters.
-import type { DecisionScope } from "../decision-scopes.js";
-import type { OutcomeDisposition } from "../outcome-disposition.js";
-import type { WorkroomShapeKey, WorkShapeEvidenceKind, WorkShapeTriggerClass } from "./work-vocabulary.js";
+import type { DecisionScope } from "../decision-scopes.ts";
+import type { OutcomeDisposition } from "../outcome-disposition.ts";
+import type { WorkroomShapeKey, WorkShapeEvidenceKind, WorkShapeTriggerClass } from "./work-vocabulary.ts";
 
 /**
  * How a stage advances. `governed-decision` means the advance is a §8.4

@@ -10,10 +10,11 @@
     "module": "ES2022",
     "newLine": "LF",
     "removeComments": false,
-    "verbatimModuleSyntax": true
+    "verbatimModuleSyntax": true,
+    "rewriteRelativeImportExtensions": true
   },
   "sources": {
-    "packages/validators/src/judgment/option-scoring.ts": "bbae3d66e3fedf672173e33b5772431eff7d1f5866c4b3200cc59dd7beed3795",
+    "packages/validators/src/judgment/option-scoring.ts": "4947e9f9ac5f8bb2e1964da42779fc8fa5ceefca69dfa9e8334a17e68fac2125",
     "packages/validators/src/judgment/mcda-quality-gates.ts": "ce54eeeaf08cd0e74264f6293352a1154ab075ffc2f55deb423e5f811a369e49"
   },
   "outputs": {

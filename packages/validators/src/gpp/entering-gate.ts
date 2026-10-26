@@ -1,6 +1,6 @@
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
-import type { WorkShapeDefinition } from "./work-shape-contracts.js";
-import { buildShapeFlowGraph } from "../workroom/flow-graph.js";
+import type { WorkShapeDefinition } from "./work-shape-contracts.ts";
+import { buildShapeFlowGraph } from "../workroom/flow-graph.ts";
 
 /** DI-7D228A48C022: a binding belongs to the gate authorizing entry, never its exit. */
 export function enteringGate(document: Pick<WorkShapeDefinition, "stages" | "flow" | "stopConditions">, stageKey: string) {

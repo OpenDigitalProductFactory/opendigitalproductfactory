@@ -35,14 +35,14 @@ import { createHash } from "node:crypto";
 
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 
-import { hasBlockingDiagnostic, sortDiagnostics, type GppDiagnostic } from "./diagnostics.js";
-import { runDesignRules, type DesignRuleOptions } from "./drc.js";
-import { emitShapeModule, lowerToDefinition, type LoweredWorkShapeDefinition } from "./emit.js";
-import type { GppShapeDocument } from "./gpp-shape-schema.js";
-import { parseShapeDocument } from "./parse.js";
-import { resolveShapeDocument, type GppResolution, type GppResolveSources } from "./resolve.js";
-import { hasDesignRulePolicy } from "./design-rule-policy.js";
-import { CONSEQUENCE_CLASSES } from "./tool-facts.js";
+import { hasBlockingDiagnostic, sortDiagnostics, type GppDiagnostic } from "./diagnostics.ts";
+import { runDesignRules, type DesignRuleOptions } from "./drc.ts";
+import { emitShapeModule, lowerToDefinition, type LoweredWorkShapeDefinition } from "./emit.ts";
+import type { GppShapeDocument } from "./gpp-shape-schema.ts";
+import { parseShapeDocument } from "./parse.ts";
+import { resolveShapeDocument, type GppResolution, type GppResolveSources } from "./resolve.ts";
+import { hasDesignRulePolicy } from "./design-rule-policy.ts";
+import { CONSEQUENCE_CLASSES } from "./tool-facts.ts";
 
 /** Missing safety facts are compilation holds, even where a design preview can continue. */
 function unavailableFacts(resolution: GppResolution): GppDiagnostic[] {

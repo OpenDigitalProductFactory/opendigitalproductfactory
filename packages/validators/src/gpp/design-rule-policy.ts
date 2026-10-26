@@ -1,4 +1,4 @@
-import type { LoweredWorkShapeDefinition } from "./emit.js";
+import type { LoweredWorkShapeDefinition } from "./emit.ts";
 
 /** Read-only host policy facts. These ports never grant permission or execute a tool. */
 export type GppDesignRulePolicy = {

@@ -101,7 +101,7 @@ try {
     const contents = await readFile(path, "utf8"); sourceDigests[source] = digest(contents);
     for (const specifier of moduleImports(contents, source)) {
       if (specifier !== "zod" && specifier !== "@dpf/integration-shared/canonical-json" && specifier !== "node:crypto"
-        && (!specifier.startsWith(".") || !specifier.endsWith(".js"))) throw new Error(`Nonportable import in ${source}: ${specifier}`);
+        && (!specifier.startsWith(".") || !specifier.endsWith(".ts"))) throw new Error(`Nonportable import in ${source}: ${specifier}`);
     }
     const target = resolve(temp, "kernel", relative(base, path));
     await mkdir(dirname(target), { recursive: true }); await writeFile(target, contents); sourceByTarget.set(target, contents);
@@ -129,7 +129,7 @@ try {
     for (const specifier of moduleImports(contents, path)) {
       if (specifier.startsWith("node:")) throw new Error(`Browser entry reaches Node builtin: ${specifier}`);
       if (specifier === "zod" || specifier === "@dpf/integration-shared/canonical-json") continue;
-      browserClosure(resolve(dirname(path), specifier.replace(/\.js$/, ".ts")));
+      browserClosure(resolve(dirname(path), specifier));
     }
   }
   browserClosure(resolve(temp, manifest.browserEntry));

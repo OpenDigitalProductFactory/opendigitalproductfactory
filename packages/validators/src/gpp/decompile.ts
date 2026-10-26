@@ -39,12 +39,12 @@
 //
 // OFFLINE TOOLING in Phase 3a: nothing in the running app imports this module.
 
-import { declaresRefuseRoute } from "../workroom/flow-graph.js";
-import type { WorkShapeDefinition, WorkShapeStage } from "./work-shape-contracts.js";
+import { declaresRefuseRoute } from "../workroom/flow-graph.ts";
+import type { WorkShapeDefinition, WorkShapeStage } from "./work-shape-contracts.ts";
 
-import { copyBinding, copyGate } from "./emit.js";
-import { ratifiedGateFor, type GateRatificationEntry } from "./ratification.js";
-import { GPP_SHAPE_FORMAT, type GppShapeDocument } from "./gpp-shape-schema.js";
+import { copyBinding, copyGate } from "./emit.ts";
+import { ratifiedGateFor, type GateRatificationEntry } from "./ratification.ts";
+import { GPP_SHAPE_FORMAT, type GppShapeDocument } from "./gpp-shape-schema.ts";
 
 export type DecompileOptions = {
   /** Owning host's ratification facts. Absent means no scope is ratified. */

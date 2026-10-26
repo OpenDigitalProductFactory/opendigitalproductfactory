@@ -29,17 +29,17 @@
  * Pure and deterministic: no I/O, no ambient Date, no random. `now` and the
  * schedule arrive as inputs.
  */
-import type { QualityTier } from "../policy-types.js";
+import type { QualityTier } from "../policy-types.ts";
 import type {
   ProactivityActionBoundary,
   ProactivityLevel,
   ProactivityPlan,
-} from "./proactivity-types.js";
+} from "./proactivity-types.ts";
 import type {
   GoldenTrianglePreference,
   PolicyAdjustment,
   VerificationDepth,
-} from "../policy-types.js";
+} from "../policy-types.ts";
 
 import {
   activityKindBiasFor,
@@ -52,20 +52,20 @@ import {
   type ArchetypeStreamInput,
   type PostureBias,
   type WorkStakesInput,
-} from "./derive.js";
+} from "./derive.ts";
 import {
   dampProactivityLevel,
   tightenActionBoundary,
   tightenMinimumTier,
   tightenProactivityLevel,
   tightenVerificationDepth,
-} from "./tighten.js";
+} from "./tighten.ts";
 import {
   resolveTemporalBand,
   type TemporalBandInput,
   type TemporalBand,
   type TemporalBandResult,
-} from "./temporal-band.js";
+} from "./temporal-band.ts";
 
 /** Which precedence layer supplied a value — surfaced so the operator sees why. */
 export type PostureLayer =

@@ -50,3 +50,44 @@ describe("legacy validators source entry", () => {
     });
   });
 });
+
+const portableEntries = [
+  "packages/validators/src/workroom/index.ts",
+  "packages/validators/src/gpp/browser.ts",
+  "packages/validators/src/gpp/compiler.ts",
+  "packages/validators/src/judgment/index.ts",
+  "packages/validators/src/workroom-policy/index.ts",
+  "packages/validators/src/operating-composition/index.ts",
+  "packages/storefront-templates/src/operations/index.ts",
+  "packages/validators/src/commons/index.ts",
+  "packages/validators/src/commons/node.ts",
+];
+
+describe("portable source entries", () => {
+  it.each(portableEntries)("loads %s with the framework source loader", (entry) => {
+    const program = `
+      import { createRequire } from "node:module";
+      const require = createRequire(${JSON.stringify(resolve(webRoot, "package.json"))});
+      const hook = require("next/dist/build/next-config-ts/require-hook.js");
+      hook.registerHook({
+        jsc: { parser: { syntax: "typescript" }, target: "es2022" },
+        module: { type: "commonjs" },
+      });
+      try {
+        const api = require(${JSON.stringify(resolve(webRoot, "../..", entry))});
+        console.log(JSON.stringify(Object.keys(api)));
+      } finally {
+        hook.deregisterHook();
+      }
+    `;
+    const result = spawnSync(process.execPath, ["--input-type=module", "--eval", program], {
+      cwd: webRoot,
+      encoding: "utf8",
+      timeout: 15_000,
+      maxBuffer: 1024 * 1024,
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.status, result.stderr || result.stdout).toBe(0);
+    expect(JSON.parse(result.stdout.trim()).length).toBeGreaterThan(0);
+  });
+});

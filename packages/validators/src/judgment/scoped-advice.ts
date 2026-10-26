@@ -1,6 +1,6 @@
-import { decide, type DecideConfig, type DecisionOption, type DecisionPrinciple, type DecisionResult } from "./option-scoring.js";
-import { DECISION_SCOPES, type DecisionScope } from "./scopes.js";
-import { validateOptionIdentities } from "./option-identities.js";
+import { decide, type DecideConfig, type DecisionOption, type DecisionPrinciple, type DecisionResult } from "./option-scoring.ts";
+import { DECISION_SCOPES, type DecisionScope } from "./scopes.ts";
+import { validateOptionIdentities } from "./option-identities.ts";
 
 export const SCOPED_ADVICE_VERSION = "scoped-advice/0.1" as const;
 export type JudgmentOwner = { scope: DecisionScope; id: string };

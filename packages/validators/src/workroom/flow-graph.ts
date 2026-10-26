@@ -24,7 +24,7 @@
 // success stop; when no success stop is declared the last stage completes the
 // instance anyway (as `nextStageKey` does).
 
-import { flowEdgeElementId, flowNodeElementId, stageElementId, stopElementId } from "../gpp/element-ids.js";
+import { flowEdgeElementId, flowNodeElementId, stageElementId, stopElementId } from "../gpp/element-ids.ts";
 
 export type GppGateMode = "shadow" | "enforced";
 

@@ -6,7 +6,7 @@
 import {
   evaluateAutonomyEligibility,
   measureFeatureCoverage,
-} from "./mcda-quality-gates.js";
+} from "./mcda-quality-gates.ts";
 //
 // Spec: docs/superpowers/specs/2026-05-12-principles-as-wiki-kind-design.md §11
 // Plan: docs/superpowers/plans/2026-05-12-principles-as-wiki-kind.md (Phase 2 Tasks 2.5)

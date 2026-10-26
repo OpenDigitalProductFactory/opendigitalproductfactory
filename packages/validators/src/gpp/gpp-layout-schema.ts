@@ -16,7 +16,7 @@
 
 import { z } from "zod";
 
-import { GPP_SHAPE_REF_PATTERN } from "./gpp-shape-schema.js";
+import { GPP_SHAPE_REF_PATTERN } from "./gpp-shape-schema.ts";
 
 export const GPP_LAYOUT_FORMAT = "gpp-layout/0.1";
 

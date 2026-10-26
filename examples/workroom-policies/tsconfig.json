@@ -2,7 +2,7 @@
   "compilerOptions": {
     "target": "ES2022", "lib": ["ES2022"],
     "module": "NodeNext", "moduleResolution": "NodeNext",
-    "strict": true, "types": [], "noEmitOnError": true,
+    "rewriteRelativeImportExtensions": true, "strict": true, "types": [], "noEmitOnError": true,
     "rootDir": ".", "outDir": "dist", "declaration": true,
     "skipLibCheck": false
   },

@@ -20,8 +20,8 @@
  * the tighten-only invariant. In particular `out-of-hours` damps CADENCE AND
  * CHANNEL ONLY and never authority.
  */
-import type { DaySchedule, WeeklySchedule } from "./clock-types.js";
-import type { LowTrafficWindow } from "./clock-types.js";
+import type { DaySchedule, WeeklySchedule } from "./clock-types.ts";
+import type { LowTrafficWindow } from "./clock-types.ts";
 
 export const TEMPORAL_BANDS = [
   "in-hours",

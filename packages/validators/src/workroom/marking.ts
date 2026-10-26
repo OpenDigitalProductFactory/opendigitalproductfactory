@@ -63,8 +63,8 @@
  *   a room-level prior names one stage and would never latch a second branch
  *   (the #5166 defect, review blocker 2).
  */
-import { flowEdgeElementId, stageElementId } from "../gpp/element-ids.js";
-import { ok, type ActionSuccess } from "../action-result.js";
+import { flowEdgeElementId, stageElementId } from "../gpp/element-ids.ts";
+import { ok, type ActionSuccess } from "../action-result.ts";
 import {
   backwardReach,
   buildShapeFlowGraph,
@@ -72,9 +72,9 @@ import {
   type GppFlowGraph,
   type InterpretableGate,
   type InterpretableShape,
-} from "./flow-graph.js";
-import { isCompletingWorkroomDriveReceiptAt } from "./receipts.js";
-import type { PriorWorkroomDrive } from "./receipts.js";
+} from "./flow-graph.ts";
+import { isCompletingWorkroomDriveReceiptAt } from "./receipts.ts";
+import type { PriorWorkroomDrive } from "./receipts.ts";
 
 export const DRIVE_MARKING_FORMAT = "drive-marking/1";
 

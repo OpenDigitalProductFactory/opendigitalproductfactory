@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "target": "ES2022", "lib": ["ES2022"], "module": "NodeNext", "moduleResolution": "NodeNext",
-    "strict": true, "types": [], "noEmitOnError": true, "skipLibCheck": false,
+    "rewriteRelativeImportExtensions": true, "strict": true, "types": [], "noEmitOnError": true, "skipLibCheck": false,
     "rootDir": ".", "outDir": "dist", "declaration": true
   },
   "include": ["src/**/*.ts", "kernel/**/*.ts", "node_modules/@dpf/integration-shared/canonical-json.ts"]

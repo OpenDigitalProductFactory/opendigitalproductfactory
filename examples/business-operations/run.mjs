@@ -28,7 +28,7 @@ try {
       const contents = await readFile(path, "utf8");
       sourceDigests[source] = createHash("sha256").update(contents).digest("hex");
       for (const match of contents.matchAll(/(?:from\s*|import\s*\()(["'])([^"']+)\1/g)) {
-        if (!match[2].startsWith(".") || !match[2].endsWith(".js")) throw new Error(`Nonportable import in ${source}: ${match[2]}`);
+        if (!match[2].startsWith(".") || !match[2].endsWith(".ts")) throw new Error(`Nonportable import in ${source}: ${match[2]}`);
       }
       const target = resolve(temp, "kernel", relative(resolve(root, "packages/storefront-templates/src/operations"), path));
       await mkdir(dirname(target), { recursive: true });

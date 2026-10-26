@@ -1,4 +1,4 @@
-import type { TwinActor, TwinSnapshot } from "./contracts.js";
+import type { TwinActor, TwinSnapshot } from "./contracts.ts";
 
 export interface CustomerAccountFact { id: string; name: string; status: string; }
 export interface CustomerCommitmentFact { id: string; accountId: string; status: string; renewalAt: string; autoRenew: boolean; }

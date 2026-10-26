@@ -1,5 +1,5 @@
-import { isBoundedTrustedJson } from "../bounded-trusted-json.js";
-import { projectHiveResultBundle } from "./result-projection.js";
+import { isBoundedTrustedJson } from "../bounded-trusted-json.ts";
+import { projectHiveResultBundle } from "./result-projection.ts";
 
 const OPAQUE_RECEIPT_RE = /^(?!BI-|WC-|FB-|EP-)[A-Za-z0-9._:-]{8,200}$/i;
 const MAX_HIVE_RESULT_BYTES = 48 * 1024;

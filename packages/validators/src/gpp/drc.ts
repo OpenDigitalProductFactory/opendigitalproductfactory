@@ -108,19 +108,19 @@ import {
   type GppDiagnosticCode,
   type GppDiagnosticSeverity,
   type GppRuleId,
-} from "./diagnostics.js";
-import { constructsUsedBy } from "./constructs-used-by.js";
-import { elementIdsOf, gateElementId, shapeElementId } from "./element-ids.js";
-import { copyGate, lowerToDefinition } from "./emit.js";
-import { enteringGate } from "./entering-gate.js";
-import { CONSTRUCT_EXECUTABLE, type GppConstruct } from "./executable-constructs.js";
-import { ratifiedGateFor, type GateRatificationEntry } from "./ratification.js";
-import { hasDesignRulePolicy, type GppDesignRulePolicy } from "./design-rule-policy.js";
-import type { GppLayoutSidecar } from "./gpp-layout-schema.js";
-import type { GppGate, GppShapeDocument } from "./gpp-shape-schema.js";
-import { buildShapeFlowGraph } from "../workroom/flow-graph.js";
-import type { GppResolution, GppResolvedStage, GppResolvedTool } from "./resolve.js";
-import { checkSoundness } from "./soundness.js";
+} from "./diagnostics.ts";
+import { constructsUsedBy } from "./constructs-used-by.ts";
+import { elementIdsOf, gateElementId, shapeElementId } from "./element-ids.ts";
+import { copyGate, lowerToDefinition } from "./emit.ts";
+import { enteringGate } from "./entering-gate.ts";
+import { CONSTRUCT_EXECUTABLE, type GppConstruct } from "./executable-constructs.ts";
+import { ratifiedGateFor, type GateRatificationEntry } from "./ratification.ts";
+import { hasDesignRulePolicy, type GppDesignRulePolicy } from "./design-rule-policy.ts";
+import type { GppLayoutSidecar } from "./gpp-layout-schema.ts";
+import type { GppGate, GppShapeDocument } from "./gpp-shape-schema.ts";
+import { buildShapeFlowGraph } from "../workroom/flow-graph.ts";
+import type { GppResolution, GppResolvedStage, GppResolvedTool } from "./resolve.ts";
+import { checkSoundness } from "./soundness.ts";
 
 export type DesignRuleOptions = {
   /** Current host-owned policy facts; missing facts are never a pass. */

@@ -32,9 +32,9 @@
 //
 // OFFLINE TOOLING in Phase 3: nothing in the running app imports this module.
 
-import type { WorkShapeBinding, WorkShapeGate } from "./work-shape-contracts.js";
+import type { WorkShapeBinding, WorkShapeGate } from "./work-shape-contracts.ts";
 
-import type { GppBinding, GppGate, GppShapeDocument } from "./gpp-shape-schema.js";
+import type { GppBinding, GppGate, GppShapeDocument } from "./gpp-shape-schema.ts";
 
 /**
  * A WorkShapeDefinition that may carry the §4.4 additive fields. Structurally

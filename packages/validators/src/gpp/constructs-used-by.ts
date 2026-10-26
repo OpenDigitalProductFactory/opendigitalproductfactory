@@ -25,10 +25,10 @@
 // at module evaluation: putting the walk in the table's own module would make
 // a runtime import cycle.
 
-import type { InterpretableShape } from "../workroom/flow-graph.js";
+import type { InterpretableShape } from "../workroom/flow-graph.ts";
 
-import { flowEdgeElementId, flowNodeElementId, gateElementId, stageElementId } from "./element-ids.js";
-import type { GppConstruct } from "./executable-constructs.js";
+import { flowEdgeElementId, flowNodeElementId, gateElementId, stageElementId } from "./element-ids.ts";
+import type { GppConstruct } from "./executable-constructs.ts";
 
 /** One gated construct a definition uses. `path` is the element's JSON path in the definition (and its document). */
 export type ConstructUse = {

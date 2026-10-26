@@ -1,4 +1,4 @@
-import { isBoundedTrustedJson } from "../bounded-trusted-json.js";
+import { isBoundedTrustedJson } from "../bounded-trusted-json.ts";
 
 export const HIVE_RESULT_BUNDLE_SCHEMA_VERSION = "dpf.hive-result/1" as const;
 

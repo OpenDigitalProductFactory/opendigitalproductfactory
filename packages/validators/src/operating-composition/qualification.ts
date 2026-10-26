@@ -1,6 +1,6 @@
-import { isBoundedTrustedJson } from "../bounded-trusted-json.js";
+import { isBoundedTrustedJson } from "../bounded-trusted-json.ts";
 import { buildOperatingComposition, hasExactKeys, isCompositionRecord, isCompositionReference,
-  sameCompositionReference, type CompositionDiagnostic, type CompositionReference } from "./composition.js";
+  sameCompositionReference, type CompositionDiagnostic, type CompositionReference } from "./composition.ts";
 export const QUALIFICATION_FACT_VERSION = "operating-qualification-fact/0.1" as const;
 export type QualificationFacts = { schemaVersion: typeof QUALIFICATION_FACT_VERSION; reference: CompositionReference;
   subjectRef: CompositionReference; principalRef: CompositionReference; compositionRef: CompositionReference;

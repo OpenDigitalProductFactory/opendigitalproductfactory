@@ -36,7 +36,7 @@
 //
 // Shared by the source compiler and the Workroom flow/marking kernel.
 
-import { GPP_DOCUMENT_ELEMENT_ID, toJsonPointer } from "./diagnostics.js";
+import { GPP_DOCUMENT_ELEMENT_ID, toJsonPointer } from "./diagnostics.ts";
 
 export const GPP_ELEMENT_KINDS = ["shape", "trigger", "stage", "gate", "tool", "binding", "stop", "node", "edge"] as const;
 export type GppElementKind = (typeof GPP_ELEMENT_KINDS)[number];

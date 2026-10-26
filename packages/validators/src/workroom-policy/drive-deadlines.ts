@@ -34,10 +34,10 @@
  * - OPEN (openDeadlines). The entries whose token is still on that stage at
  *   that iteration in that run: what the attention inbox lists.
  */
-import { stageElementId } from "../gpp/element-ids.js";
+import { stageElementId } from "../gpp/element-ids.ts";
 
-import { iterationOf, stageToken, type DriveMarking } from "../workroom/marking.js";
-import type { WorkShapeDefinition } from "../gpp/work-shape-contracts.js";
+import { iterationOf, stageToken, type DriveMarking } from "../workroom/marking.ts";
+import type { WorkShapeDefinition } from "../gpp/work-shape-contracts.ts";
 
 export const DAY_MS = 86_400_000;
 

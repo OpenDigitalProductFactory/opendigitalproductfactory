@@ -18,13 +18,13 @@
  * — which the projection already produces for every leaf archetype. Authoring a
  * per-archetype posture table is the defect BI-BEDAFF57 exists to prevent.
  */
-import type { QualityTier } from "../policy-types.js";
+import type { QualityTier } from "../policy-types.ts";
 import type {
   ProactivityActionBoundary,
   ProactivityLevel,
-} from "./proactivity-types.js";
-import type { VerificationDepth } from "../policy-types.js";
-import type { TemporalBand } from "./temporal-band.js";
+} from "./proactivity-types.ts";
+import type { VerificationDepth } from "../policy-types.ts";
+import type { TemporalBand } from "./temporal-band.ts";
 
 /** What a single derivation input wants to tighten. All fields optional. */
 export interface PostureBias {

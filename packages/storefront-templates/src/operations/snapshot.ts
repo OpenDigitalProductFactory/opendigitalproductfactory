@@ -1,6 +1,6 @@
-import type { TwinTemplate } from "./template.js";
-import type { TwinActor, TwinSnapshot, TwinZoneSnapshot, TwinQueueSnapshot, TwinCogSnapshot, TwinStageFlow, TwinOutcome, CapacityChipData, FeedEventData, QuestData, UtilityMeterData, WorkItemData } from "./contracts.js";
-import type { OperationalDegradedSource, OperationalSourceWatermark } from "./source-health.js";
+import type { TwinTemplate } from "./template.ts";
+import type { TwinActor, TwinSnapshot, TwinZoneSnapshot, TwinQueueSnapshot, TwinCogSnapshot, TwinStageFlow, TwinOutcome, CapacityChipData, FeedEventData, QuestData, UtilityMeterData, WorkItemData } from "./contracts.ts";
+import type { OperationalDegradedSource, OperationalSourceWatermark } from "./source-health.ts";
 
 export const OPERATIONS_SNAPSHOT_SCHEMA_VERSION = "operations.v1" as const;
 

@@ -25,7 +25,7 @@
 //
 // Shared data contract for compiler findings and derived element identifiers.
 
-import { GPP_CONSTRUCTS, type GppConstruct } from "./executable-constructs.js";
+import { GPP_CONSTRUCTS, type GppConstruct } from "./executable-constructs.ts";
 
 /** Severities. `not-evaluated` is a check that could not run, never a pass (spec §7.2, C-5). */
 export const GPP_DIAGNOSTIC_SEVERITIES = ["error", "warning", "info", "not-evaluated"] as const;

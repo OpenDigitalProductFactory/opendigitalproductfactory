@@ -47,12 +47,12 @@
 //
 // OFFLINE TOOLING in Phase 3b: nothing in the running app imports this module.
 
-import { validateStopExits } from "./stop-exits.js";
+import { validateStopExits } from "./stop-exits.ts";
 
-import { toJsonPointer, sortDiagnostics, type GppDiagnostic } from "./diagnostics.js";
-import { gateElementId, shapeElementId } from "./element-ids.js";
-import type { GppShapeDocument } from "./gpp-shape-schema.js";
-import { buildShapeFlowGraph, forwardReach, type GppFlowEdge, type GppFlowGraph } from "../workroom/flow-graph.js";
+import { toJsonPointer, sortDiagnostics, type GppDiagnostic } from "./diagnostics.ts";
+import { gateElementId, shapeElementId } from "./element-ids.ts";
+import type { GppShapeDocument } from "./gpp-shape-schema.ts";
+import { buildShapeFlowGraph, forwardReach, type GppFlowEdge, type GppFlowGraph } from "../workroom/flow-graph.ts";
 
 type SoundnessRule = "S-1" | "S-2" | "S-3" | "S-4" | "S-5" | "S-6";
 type Segment = string | number;

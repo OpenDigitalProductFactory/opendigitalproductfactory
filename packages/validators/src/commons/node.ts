@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { normalizeHiveResultIntakeWithDigest, planHiveDeliveryAttempt } from "./result-intake.js";
+import { normalizeHiveResultIntakeWithDigest, planHiveDeliveryAttempt } from "./result-intake.ts";
 export function normalizeHiveResultIntake(payload: unknown) {
   return normalizeHiveResultIntakeWithDigest(payload, (bytes) => createHash("sha256").update(bytes).digest("hex"));
 }

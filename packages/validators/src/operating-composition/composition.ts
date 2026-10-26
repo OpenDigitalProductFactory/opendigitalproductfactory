@@ -1,6 +1,6 @@
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
-import { isBoundedTrustedJson } from "../bounded-trusted-json.js";
-import { DECISION_SCOPES, type DecisionScope } from "../decision-scopes.js";
+import { isBoundedTrustedJson } from "../bounded-trusted-json.ts";
+import { DECISION_SCOPES, type DecisionScope } from "../decision-scopes.ts";
 
 export const COMPOSITION_VERSION = "operating-composition/0.1" as const;
 /** Existing trusted-reference fields, with the digest mandatory for this contract. */
