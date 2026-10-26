@@ -44,3 +44,12 @@ it("holds source-only output when the immutable request requires provided images
  state.task.a2aMetadata.engagementVisualDelivery.manifestRef={...visualBinding.visualEvidenceRef,valueDigest:"b".repeat(64)};
  expect((await engagementReadCompletion("TR-original",visualBinding).inspect(content)).complete).toBe(false);
 });
+
+it("returns the actual missing immutable guidance in both the visible hold and persisted summary",async()=>{
+ state.executions=state.executions.filter(e=>e.id!=="guidance");
+ const hold=await engagementIncompleteOutcome({policy:engagementReadCompletion("TR-original",binding),taskRunId:"TR-original",result:{content,executedTools:[]},checkpoint:{},flags:{},skip:false});
+ const missing=`${guidance.path}@${guidance.commitSha}`;
+ expect(JSON.stringify(hold?.outcome)).toContain(missing);
+ expect(JSON.stringify(hold?.settlement.data.progressPayload)).toContain(missing);
+ expect(hold?.outcome).toMatchObject({kind:"result",result:{status:"input-required",resumable:false,requiresApproval:false}});
+});

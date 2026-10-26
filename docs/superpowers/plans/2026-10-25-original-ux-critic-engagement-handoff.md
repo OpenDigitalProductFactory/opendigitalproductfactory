@@ -251,3 +251,11 @@ option and concrete craft terms so broad kernel/org ranking is not mistaken for
 corpus absence. This uses supported retrieval configuration, adds no search tool,
 and leaves legacy admitted prompts unchanged. The Critic still performs its own
 reads, selects criteria/findings, and reports the actual empty-calibration limit.
+
+
+Held failures must retain the completion validator's precise missing requirement
+in both the visible task response and persisted timeline summary. The actual
+missing immutable guidance traversal regression first failed against the generic
+message, then passed with one captured inspection result. This is diagnostic
+retention only; held state, no approval, execution-proof and no-replay boundaries
+remain unchanged.

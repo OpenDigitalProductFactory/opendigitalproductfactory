@@ -37,8 +37,10 @@ export function engagementReadCompletion(taskRunId: string, binding: EngagementT
 export async function engagementIncompleteOutcome(input:{policy:ReadEvidencePolicy;taskRunId:string;result:{content:string;executedTools?:readonly unknown[]};checkpoint:Record<string,unknown>;flags:Record<string,unknown>;skip:boolean}):Promise<{
  settlement:Prisma.TaskRunUpdateManyArgs & {where:{taskRunId:string}};outcome:RemoteTaskSubmitOutcome;
 }|null> {
- if(input.skip||(await input.policy.inspect(input.result.content)).complete)return null;
- const message="Specialist contribution is incomplete. Inspect source/corpus provenance and native reader transport. Execution proof is unavailable, so this task is held without replay; obtain the existing recovery owner's supported finite disposition.";
+ if(input.skip)return null;
+ const check=await input.policy.inspect(input.result.content);
+ if(check.complete)return null;
+ const message=`Specialist contribution is incomplete: ${check.message}. Inspect source/corpus provenance and native reader transport. Execution proof is unavailable, so this task is held without replay; obtain the existing recovery owner's supported finite disposition.`;
  return {settlement:{where:{taskRunId:input.taskRunId},data:{status:"input-required",completedAt:null,progressPayload:{
   ...input.checkpoint,summary:message,riskClass:"read",executedToolCount:input.result.executedTools?.length??0,
   engagementEvidenceWait:{schemaVersion:1,kind:"incomplete-read-evidence",requiresExecutionProof:true,observedAt:new Date().toISOString(),resumeMode:"held"},...input.flags,
