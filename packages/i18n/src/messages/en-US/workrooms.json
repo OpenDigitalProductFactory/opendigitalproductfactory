@@ -201,7 +201,18 @@
       "prerequisite": "Resolve the source or review prerequisite shown in this Workroom before requesting a handoff.",
       "dependency": "A verification or environment lease still depends on the source executor. Settle that dependency before requesting a handoff.",
       "controlledHandover": "This room requires its existing controlled handover. The bounded assistant handoff is unavailable.",
-      "stale": "Earlier request retained as history"
+      "stale": "Earlier request retained as history",
+      "buildDependency": "A build still depends on the source executor. Settle that build through its existing workflow before requesting a handoff.",
+      "policyDependency": "A publication exception still depends on the source executor. Settle that exception through its existing workflow before requesting a handoff.",
+      "dependencyUnavailable": "Dependency checks could not be completed. Wait for platform verification before requesting another handoff.",
+      "clockUnavailable": "The current lease time could not be verified. Wait for platform verification before continuing.",
+      "verificationUnavailable": "The current handoff checks could not be completed. The source assistant must verify them before continuing.",
+      "governedPath": "The source assistant must submit the handoff through its governed command. The earlier failed operation remains history.",
+      "packetTooLarge": "The original context exceeds the recovery preview limit. The source assistant must prepare bounded context through the existing handoff workflow.",
+      "boundaryChanged": "The protected source or room boundary changed. The source assistant must read current state before requesting a fresh handoff.",
+      "existingRequest": "A handoff request is already recorded. Inspect its receiver and current outcome before requesting another.",
+      "existingCompletion": "A completed handoff is already recorded. Inspect its receipt and the current executor before continuing.",
+      "receiverConnection": "Only the recorded receiving assistant can acknowledge this request. Use that assistant’s own authenticated connection."
     }
   },
   "flow": {
