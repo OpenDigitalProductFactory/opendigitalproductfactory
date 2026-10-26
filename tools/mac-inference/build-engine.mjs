@@ -5,7 +5,7 @@ import { mkdtemp, mkdir, readdir, readFile, writeFile, lstat, cp, rm, realpath, 
 import { tmpdir, homedir, arch, platform } from 'node:os';
 import { resolve, join, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ENGINE_LOCK as lock, hashFile, enumerateFiles, fileRecord, contained, verifyPackage } from './package.mjs';
+import { ENGINE_LOCK as lock, hashFile, enumerateFiles, fileRecord, contained, verifyPackage, vendorNoticePaths, embeddedMitNotice } from './package.mjs';
 
 const { values: args } = parseArgs({ options: {
   archive: { type: 'string' }, cmake: { type: 'string' }, sdk: { type: 'string' },
@@ -76,13 +76,17 @@ async function main() {
     }
     await cp(join(source,'LICENSE'),join(out,'LICENSE'));
     await mkdir(join(out,'licenses'),{recursive:true});
-    for (const path of await readdir(join(source,'vendor'),{recursive:true})) {
-      if (!/^(LICENSE|COPYING|NOTICE)(\.|$)/i.test(basename(path))) continue;
+    for (const path of await vendorNoticePaths(join(source,'vendor'))) {
       const src = join(source,'vendor',path);
       if (!(await lstat(src)).isFile()) continue;
       const dst = join(out,'licenses','vendor',path);
       await mkdir(dirname(dst),{recursive:true}); await cp(src,dst);
     }
+    const jsonHeader=await readFile(join(source,'vendor/nlohmann/json.hpp'),'utf8');
+    const rootLicense=await readFile(join(source,'LICENSE'),'utf8');
+    const jsonNotice=join(out,'licenses/vendor/nlohmann/LICENSE.MIT');
+    await mkdir(dirname(jsonNotice),{recursive:true});
+    await writeFile(jsonNotice,embeddedMitNotice(jsonHeader,rootLicense));
     // Relocate only this staged package; never modify a Docker-managed file.
     for (const entry of await readdir(join(out,'bin'))) {
       const path = join(out,'bin',entry);

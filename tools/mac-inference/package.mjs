@@ -101,3 +101,21 @@ export async function verifyPackage(root) {
   return { schemaVersion: 1, requiredRuntimeLibrariesVerified:ENGINE_LOCK.requiredRuntimeLibraries.length, packageName: manifest.packageName, version: manifest.version,
     manifestSha256: sha256(raw), fileCount: seen.size, qualification: manifest.qualification, manifest };
 }
+
+// Keep embedded third-party notices verbatim, including headers whose projects
+// do not ship a standalone LICENSE file inside llama.cpp's vendor directory.
+export async function vendorNoticePaths(root) {
+  const paths=await readdir(root,{recursive:true});
+  const selected=[];
+  for(const path of paths) {
+    if(!/^(LICENSE|COPYING|NOTICE)(\.|$)/i.test(path.split('/').at(-1))&&!/\.(h|hpp)$/i.test(path)) continue;
+    if((await lstat(join(root,path))).isFile()) selected.push(path);
+  }
+  return selected.sort();
+}
+export function embeddedMitNotice(header,license) {
+  const copyright=header.match(/^\/\/ SPDX-FileCopyrightText: (.+)$/m)?.[1];
+  requireValue(copyright && /^\/\/ SPDX-License-Identifier: MIT$/m.test(header)
+    && license.includes('Permission is hereby granted'), 'Embedded MIT notice unavailable');
+  return 'JSON for Modern C++\n\nCopyright: '+copyright+'\nSPDX-License-Identifier: MIT\n\n'+license;
+}

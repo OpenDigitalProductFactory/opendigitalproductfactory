@@ -23,7 +23,7 @@ node scripts/host-resource-runner.mjs --class docker-build -- \
   --out /absolute/path/outside-git/dpf-engine-candidate --jobs 4
 ```
 
-The output contains server, benchmark, their built libraries, license notices and a file manifest. Staged library search paths are relocated to the package. Local binaries receive ad hoc signatures. The separate archive hash identifies its actual bytes; it is never Docker's vendor digest.
+The output contains server, benchmark, their built libraries, license notices and a file manifest. Embedded vendor header notices are retained alongside standalone license files; the bundled JSON library's SPDX copyright and complete MIT permission text are included explicitly. Staged library search paths are relocated to the package. Local binaries receive ad hoc signatures. The separate archive hash identifies its actual bytes; it is never Docker's vendor digest.
 
 The builder records compiler, SDK, minimum OS, CMake and flags. The initial qualification build used AppleClang 21, SDK 15.4 and CMake 4.4.4. CMake's downloaded vendor archive was checked against its published digest before use. Reproducible source inputs and a file manifest do not establish byte-for-byte reproducible builds, distributor identity, notarization or a trusted source-to-binary attestation. A maintained distribution must provide those release assurances before fleet adoption.
 

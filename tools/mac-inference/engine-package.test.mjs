@@ -5,7 +5,7 @@ import { mkdtemp, mkdir, writeFile, readFile, rm, symlink } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
-import { verifyPackage, ENGINE_LOCK } from './package.mjs';
+import { verifyPackage, ENGINE_LOCK, vendorNoticePaths, embeddedMitNotice } from './package.mjs';
 
 const hash = x => createHash('sha256').update(x).digest('hex');
 async function fixture(t) {
@@ -241,4 +241,15 @@ test('rejects missing Metal runtime even when its manifest row is also removed',
   f.manifest.files=f.manifest.files.filter(x=>x.path!=='bin/libggml-metal.dylib');
   await rm(join(f.root,'bin/libggml-metal.dylib'),{force:true});await f.save();
   await assert.rejects(verifyPackage(f.root),/Required package file missing.*libggml-metal/);
+});
+
+test('vendor notices include embedded headers as well as standalone licenses',async t=>{
+  const root=await mkdtemp(join(tmpdir(),'dpf-notices-'));t.after(()=>rm(root,{recursive:true,force:true}));
+  await mkdir(join(root,'nlohmann'));
+  await writeFile(join(root,'nlohmann/json.hpp'),'// SPDX-FileCopyrightText: 2013 - 2025 Niels Lohmann\n// SPDX-License-Identifier: MIT\n');
+  await writeFile(join(root,'LICENSE'),'license');await writeFile(join(root,'build.sh'),'not a notice');
+  assert.deepEqual(await vendorNoticePaths(root),['LICENSE','nlohmann/json.hpp']);
+  const notice=embeddedMitNotice(await readFile(join(root,'nlohmann/json.hpp'),'utf8'),'MIT License\nPermission is hereby granted');
+  assert.match(notice,/Niels Lohmann/);assert.match(notice,/Permission is hereby granted/);
+  assert.throws(()=>embeddedMitNotice('missing copyright','MIT'),/unavailable/);
 });
