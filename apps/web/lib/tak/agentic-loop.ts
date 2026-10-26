@@ -1,3 +1,4 @@
+import {currentReadEvidencePolicy, acceptReadEvidenceContribution} from "./read-evidence-policy";
 import { currentUserContext } from "@/lib/govern/current-user-context";
 // apps/web/lib/agentic-loop.ts
 // Agentic execution loop: LLM calls tools iteratively until it responds with text only.
@@ -393,34 +394,8 @@ function buildFabricationFailureMessage(params: {
  */
 type ExecutedTool = { name: string; args?: Record<string, unknown>; result: ToolResult; modelEvidenceTruncated?: boolean };
 
-function summarizeExecutedToolNames(executedTools: ExecutedTool[]): string {
-  const counts = new Map<string, number>();
-  for (const tool of executedTools) {
-    counts.set(tool.name, (counts.get(tool.name) ?? 0) + 1);
-  }
-  return [...counts.entries()]
-    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-    .slice(0, 5)
-    .map(([name, count]) => count > 1 ? `${name} x${count}` : name)
-    .join(", ");
-}
-
-// BI-0C19AFDD: this message must stay domain-agnostic. The prior copy hard-coded
-// a "finance reports"/"finance-summary tool" suggestion, which confabulated an
-// unrelated domain for every non-finance coworker (e.g. Dale's truck-parts build
-// was told to "use the finance reports directly"). Keep the guidance generic,
-// mirroring the honest max-iter sibling below.
-export function buildRuntimeLimitToolLoopMessage(executedTools: ExecutedTool[]): string {
-  const toolSummary = summarizeExecutedToolNames(executedTools) || "the available tools";
-  return [
-    `I used ${toolSummary}, but the coworker hit the runtime limit before it produced a final answer.`,
-    "I stopped before returning another raw tool request.",
-    "The route and tool attempts were recorded; try a narrower question, or break the request into a smaller step.",
-  ].join(" ");
-}
-
-import { buildMaxIterationsExhaustedMessage } from "./max-iterations-message";
-export { buildMaxIterationsExhaustedMessage };
+import { buildMaxIterationsExhaustedMessage, buildRuntimeLimitToolLoopMessage } from "./max-iterations-message";
+export { buildMaxIterationsExhaustedMessage, buildRuntimeLimitToolLoopMessage };
 
 // Pattern: response is a short clarifying question asking for a required field.
 // System prompt rule 13 allows ONE round of "I need X and Y" before acting.
@@ -985,6 +960,8 @@ export async function runAgenticLoop(params: RunAgenticLoopParams): Promise<Agen
 }
 
 async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSkillId: string | null }, restricted: boolean): Promise<AgenticResult> {
+  // Restricted composition rejects a competing specialist policy before entry.
+  const readEvidencePolicy = currentReadEvidencePolicy();
   const {
     chatHistory,
     systemPrompt,
@@ -1099,7 +1076,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     // `mcp__dpf__*` tools instead of text-described prompt content. Other
     // adapters ignore the field. The agentic loop is the only place with
     // both userId and threadId in scope, so it is the natural source.
-    mcpSession: { userId, agentId, threadId, routeContext, taskRunId: taskRunId ?? null, taskExecutionFence: params.taskExecutionFence },
+    mcpSession: { userId, agentId, threadId, routeContext, taskRunId: taskRunId ?? null, taskExecutionFence: params.taskExecutionFence, ...(readEvidencePolicy ? {readOnlyToolNames: readEvidencePolicy.toolNames, mintReadOnlySession: readEvidencePolicy.mintReadOnlySession, recordImageInputDelivery: readEvidencePolicy.recordImageInputDelivery} : {}) },
   };
 
   // BI-2AC48661: persistent execution plan. When enabled, expose the two
@@ -1420,7 +1397,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       resolvedMaxContextTokens,
     ).zone;
     const assembledMessages = withPlanReminder(
-      finitePreload ? messages : compactAgenticMessages(messages, resolvedMaxContextTokens, preCompactionZone, params.terminalToolPolicy?.readerToolNames),
+      finitePreload || (readEvidencePolicy && iteration === 0) ? messages : compactAgenticMessages(messages, resolvedMaxContextTokens, preCompactionZone, params.terminalToolPolicy?.readerToolNames),
     );
     const ctxPressure = classifyContextPressure(estimateContextTokens(assembledMessages, systemPrompt), resolvedMaxContextTokens);
     if (ctxPressure.estimatedTokens > ctxPeakTokens) ctxPeakTokens = ctxPressure.estimatedTokens;
@@ -1543,10 +1520,24 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     }
     totalInputTokens += result.inputTokens;
     totalOutputTokens += result.outputTokens;
+    // Both ordinary completion policies consume the same native-call audit once.
+    if (!restricted && (params.terminalToolPolicy || readEvidencePolicy)) {
+      await (await import("./native-mcp-executions")).foldNativeMcpExecutions({ taskRunId, providerId: result.providerId, sinceMs: startTime, records: executedTools });
+    }
     if (params.terminalToolPolicy) {
-      if (!restricted) await (await import("./native-mcp-executions")).foldNativeMcpExecutions({ taskRunId, providerId: result.providerId, sinceMs: startTime, records: executedTools });
       const refused = canonicalDesignRefusalMessage(params.terminalToolPolicy, executedTools);
       if (refused) { logTurnSummary(result.providerId, result.modelId); return terminalFailure(refused, result); }
+    }
+    if (readEvidencePolicy) {
+      if (!result.toolCalls?.length) {
+        const {readEvidenceExit} = await import("./read-evidence-policy");
+        const exit = readEvidenceExit(await readEvidencePolicy.inspect(result.content));
+        if (exit.kind === "blocked") return completeResult(exit.message, result, {failure:{kind:"policy-or-capability",message:exit.message}});
+        acceptReadEvidenceContribution(result.content);
+        // Immutable specialist evidence owns this typed contribution. Generic
+        // live-operational prose handling must not replace its verified JSON.
+        return completeResult(result.content, result);
+      }
     }
     // No tool calls — check if agent stalled with intent to continue
     if (!result.toolCalls || result.toolCalls.length === 0) {

@@ -1,3 +1,4 @@
+import { engagementVisualDeliveryRecorder, type EngagementVisualEvidence } from "./coworker-service-catalog/engagement-visual-evidence";
 import { withInferenceAuthorityCheck } from "./routing/governed-inference-deadline";
 import { EXECUTION_UNCERTAIN_MESSAGE, executionUncertaintyFromError, hasExecutionUncertainty } from "./shared/execution-uncertainty";
 import { reservationIdentity, dispatchIdentity, settleRemoteTask } from "./mcp-task-attempt-state";
@@ -8,16 +9,14 @@ import { createReassessmentReceiptCheck } from "./mcp-task-review-receipt-stop";
 import { parseReassessmentRootLocatorV2 } from "./routing/reassessment-phase-contract";
 import { currentReassessmentExecution, hasPersistedReassessmentExecution, isReassessmentExecutionError,
   matchesPersistedReassessmentScope, refuseReassessmentExecution } from "./routing/reassessment-execution-scope";
-import { projectRemoteTaskReplay } from "./mcp-task-replay-projection";
+import { projectRemoteTaskReplay, optionalString, remoteTaskContent } from "./mcp-task-replay-projection";
 import { TASK_IN_FLIGHT_STATES } from "@/lib/tak/task-states";
+import { currentReadEvidencePolicy, withReadEvidencePolicy } from "./tak/read-evidence-policy";
 import { remoteTaskConversation } from "./mcp-task-conversation";
 import { coworkerBriefSpans } from "@/lib/tak/coworker-prompt-provenance";
-import { loadPirEvidenceContext } from "./pir-evidence-context";
 import { remoteReviewSensitivity } from "./mcp-task-review-sensitivity";
-import { loadReviewerProfile } from "./backlog/initiative-readiness/reviewer-profile";
 import { prisma, type Prisma } from "@dpf/db";
 import { terminalWriterDispatchContractForProvider } from "@/lib/routing/execution-plan";
-import type { RequestContract } from "@/lib/routing/request-contract";
 import { loadInitiativeReviewOutcome, loadTaskInitiativeReviewOutcome, reconcilePersistedReviewStatus } from "./mcp-task-review-outcome";
 import { foldNativeMcpExecutions } from "@/lib/tak/native-mcp-executions";
 import { resolveCanonicalAgentId } from "@dpf/db/agent-identity";
@@ -28,22 +27,12 @@ import {
   resolveAutonomousWorkTools,
 } from "@/lib/tak/autonomous-work-run";
 import { createTaskMessage } from "@/lib/tak/task-records";
-import { deriveEffortWarrant } from "@/lib/tak/effort-warrant";
-import {
-  createInitiativeReviewTerminalToolPolicy,
-  enterTerminalWriterPhase,
-  terminalWriterFailureMessage as describeTerminalWriterFailure,
-} from "@/lib/tak/terminal-tool-policy";
+import { terminalWriterFailureMessage as describeTerminalWriterFailure } from "@/lib/tak/terminal-tool-policy";
 import {
   createResourceWaitProjection,
   preInferenceResourceWait,
   RESOURCE_WAIT_MAX_ATTEMPTS,
 } from "./mcp-task-capacity-contract";
-import {
-  narrowInitiativeReviewTools,
-  requiredToolNames,
-  requiresInitiativeReviewEffort,
-} from "./mcp-task-review-contract";
 import type { RemoteTaskSubmitAuth, RemoteTaskSubmitOutcome } from "./mcp-task-submit-types";
 import type { RemoteTaskSubmitParams } from "./mcp-task-submit-params";
 import { withTaskRunApprovalLocation } from "./mcp/external-approval-location-lookup";
@@ -58,14 +47,6 @@ import {
   terminalWriterEscalationWaitReason,
   terminalWriterRetryIsExhausted,
 } from "./mcp-task-terminal-writer-escalation";
-
-function optionalString(value: unknown): string | null {
-  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
-}
-
-function remoteTaskContent(text: string) {
-  return [{ type: "text", text }];
-}
 
 function approvalRequiredEnvelopeId(value: unknown): string | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
@@ -167,17 +148,6 @@ export async function executeRemoteTaskAttempt(input: {
     return displaced ?? projectRemoteTaskReplay({ existing: { ...admittedRun,
       status: "input-required", taskRunId: run.taskRunId }, requestMatches: true });
   }
-  if (parsed.engagementBinding) {
-    const { validateEngagementTask, reconcileEngagementTaskResult } = await import("./coworker-service-catalog/engagement-fulfillment");
-    try {
-      await reconcileEngagementTaskResult(run.taskRunId);
-      await validateEngagementTask({ binding: parsed.engagementBinding, token, taskRunId: run.taskRunId, authorityScope: parsed.authorityScope ?? [], requireAssociation: true, request: parsed });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Engagement authority unavailable";
-      const displaced = await settle({ where: { taskRunId: run.taskRunId }, data: { status: "failed", completedAt: new Date(), progressPayload: { summary: message, error: "engagement_execution_refused" } } });
-      return displaced ?? { kind: "result", result: { taskRunId: run.taskRunId, status: "failed", isError: true, content: remoteTaskContent(message) } };
-    }
-  }
   // Retain stable authority/windows; each branch rebuilds transient waits.
   const recoveryCheckpoint = Object.fromEntries(["reviewExecutionAuthority", "deadlineAt", "expiresAt"]
     .filter(key => progress[key] !== undefined).map(key => [key, progress[key]])) as Prisma.InputJsonObject;
@@ -185,6 +155,21 @@ export async function executeRemoteTaskAttempt(input: {
     ? { resumedFromTerminalWriterWait: true } : { resumedFromCapacity: true };
   let loopEntered = false;
   try {
+    if (reassessmentExecution && currentReadEvidencePolicy()) {
+      refuseReassessmentExecution("reassessment-read-evidence-scope-conflict");
+    }
+    let visualEvidence: EngagementVisualEvidence | null = null;
+    if (parsed.engagementBinding) {
+      const { validateEngagementTask, reconcileEngagementTaskResult } = await import("./coworker-service-catalog/engagement-fulfillment");
+      try {
+        await reconcileEngagementTaskResult(run.taskRunId);
+        visualEvidence = (await validateEngagementTask({ binding: parsed.engagementBinding, token, taskRunId: run.taskRunId, authorityScope: parsed.authorityScope ?? [], requireAssociation: true, request: parsed })).visualEvidence;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Engagement authority unavailable";
+        const displaced = await settle({ where: { taskRunId: run.taskRunId }, data: { status: "failed", completedAt: new Date(), progressPayload: { summary: message, error: "engagement_execution_refused" } } });
+        return displaced ?? { kind: "result", result: { taskRunId: run.taskRunId, status: "failed", isError: true, content: remoteTaskContent(message) } };
+      }
+    }
     if (reassessmentExecution) assertReassessmentOwnerSupport("worker", 2);
     if (reassessmentExecution && !matchesPersistedReassessmentScope(admittedRun.a2aMetadata, run.taskRunId)) {
       if (!parsed.initiativeReviewBinding) refuseReassessmentExecution("reassessment-manifest-invalid", "The accepted reassessment has no review binding.");
@@ -218,7 +203,7 @@ export async function executeRemoteTaskAttempt(input: {
           structuredContent: { error: "review_execution_authority_refused" } } };
       }
     }
-    const { agent, resolvedAgentId, modelRequirements, tools, effortWarrant, terminalToolPolicy, conversation } =
+    const { agent, resolvedAgentId, modelRequirements, tools, effortWarrant, terminalToolPolicy, conversation: preparedConversation } =
       await prepareRemoteReviewAttempt({ parsed, userContext, restricted: reassessmentExecution,
         resumeKind: input.resumeKind, terminalWriterContext: input.terminalWriterContext,
         validateResolvedAgent: resolved => {
@@ -228,34 +213,56 @@ export async function executeRemoteTaskAttempt(input: {
           }
         } }, { resolveAgent: resolveAutonomousWorkAgent, resolveTools: resolveAutonomousWorkTools });
 
+    // Preparation already includes terminal-writer context; engagement adds only its validated image inputs.
+    const conversation = visualEvidence?.inputs.length ? remoteTaskConversation({
+      systemPrompt: preparedConversation.systemPrompt,
+      prompt: parsed.prompt,
+      visualInputs: visualEvidence.inputs,
+    }) : preparedConversation;
+    const readEvidencePolicy = parsed.engagementBinding
+      ? (await import("./coworker-service-catalog/engagement-read-completion")).engagementReadCompletion(run.taskRunId, parsed.engagementBinding)
+      : undefined;
+    if (readEvidencePolicy) readEvidencePolicy.mintReadOnlySession = async () =>
+      (await import("./mcp/session-token")).createMcpSessionToken({
+        userId: token.userId, agentId: resolvedAgentId, threadId: input.threadId,
+        routeContext: parsed.routeContext, taskRunId: run.taskRunId, taskExecutionFence,
+        scopes: ["file_read", "registry_read"], capability: "read",
+      });
+    if (readEvidencePolicy && parsed.engagementBinding) {
+      readEvidencePolicy.recordImageInputDelivery = engagementVisualDeliveryRecorder(
+        run.taskRunId, parsed.engagementBinding, taskExecutionFence ?? null, visualEvidence,
+      );
+    }
     // BI-2E479619: rows a CLI wrote natively during THIS attempt start here.
     const attemptStartedMs = Date.now();
     loopEntered = true;
-    const runLoop = async () => executeAutonomousAgenticLoop({
-      ...(reassessmentExecution ? { canonicalReviewReceipt: createReassessmentReceiptCheck(run.taskRunId, parsed.initiativeReviewBinding) } : {}),
-      systemPrompt: conversation.systemPrompt,
-      systemPromptInstructionSpans: coworkerBriefSpans(agent.systemPrompt),
-      chatHistory: conversation.chatHistory,
-      sensitivity: await remoteReviewSensitivity(parsed, token, agent.sensitivity ?? "internal"),
-      tools: tools.tools,
-      toolsForProvider: tools.toolsForProvider,
-      deferredTools: tools.deferredTools,
-      userId: token.userId,
-      routeContext: parsed.routeContext,
-      agentId: resolvedAgentId,
-      threadId: input.threadId,
-      taskRunId: run.taskRunId,
-      apiTokenId: token.tokenId,
-      taskExecutionFence,
-      tokenScope: token.capability,
-      // Bound nested writer reads by the task's grant scope (BI-F8C661D0).
-      tokenGrantScopes: parsed.authorityScope,
-      taskType: "external-mcp",
-      agentDisplayName: optionalString(agent.displayName) ?? resolvedAgentId,
-      ...(effortWarrant ? { effortWarrant } : {}),
-      ...(terminalToolPolicy ? { terminalToolPolicy } : {}),
-      ...(modelRequirements ? { modelRequirements } : {}),
-    });
+    const runLoop = async () => withReadEvidencePolicy(
+      readEvidencePolicy, async () => executeAutonomousAgenticLoop({
+        ...(reassessmentExecution ? { canonicalReviewReceipt: createReassessmentReceiptCheck(run.taskRunId, parsed.initiativeReviewBinding) } : {}),
+        systemPrompt: conversation.systemPrompt,
+        systemPromptInstructionSpans: coworkerBriefSpans(agent.systemPrompt),
+        chatHistory: conversation.chatHistory,
+        sensitivity: await remoteReviewSensitivity(parsed, token, agent.sensitivity ?? "internal"),
+        tools: tools.tools,
+        toolsForProvider: tools.toolsForProvider,
+        deferredTools: tools.deferredTools,
+        userId: token.userId,
+        routeContext: parsed.routeContext,
+        agentId: resolvedAgentId,
+        threadId: input.threadId,
+        taskRunId: run.taskRunId,
+        apiTokenId: token.tokenId,
+        taskExecutionFence,
+        tokenScope: token.capability,
+        // Bound nested writer reads by the task's grant scope (BI-F8C661D0).
+        tokenGrantScopes: parsed.authorityScope,
+        taskType: "external-mcp",
+        agentDisplayName: optionalString(agent.displayName) ?? resolvedAgentId,
+        ...(effortWarrant ? { effortWarrant } : {}),
+        ...(terminalToolPolicy ? { terminalToolPolicy } : {}),
+        ...(modelRequirements ? { modelRequirements } : {}),
+      }),
+    );
 
     const result = await (parsed.engagementBinding ? withInferenceAuthorityCheck(async () => {
       const { validateEngagementTask } = await import("./coworker-service-catalog/engagement-fulfillment");
@@ -338,6 +345,11 @@ export async function executeRemoteTaskAttempt(input: {
         content: remoteTaskContent(EXECUTION_UNCERTAIN_MESSAGE), isError: false,
       } };
     }
+    const readHold = parsed.engagementBinding ? await (await import("./coworker-service-catalog/engagement-read-completion")).engagementIncompleteOutcome({
+      policy: readEvidencePolicy!, taskRunId: run.taskRunId, result, checkpoint: recoveryCheckpoint,
+      flags: resumedFlag, skip: !!preInferenceResourceWait(result),
+    }) : null;
+    if (readHold) return (await settle(readHold.settlement)) ?? readHold.outcome;
     // Enforce the terminal writer at async completion as main does (#4925, #4930).
     const terminalWriterExecutions = terminalToolPolicy
       ? (result.executedTools ?? []).filter((tool) => tool.name === terminalToolPolicy.writerToolName)

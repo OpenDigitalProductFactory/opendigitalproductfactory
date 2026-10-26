@@ -19,6 +19,7 @@ vi.mock("@/lib/skills/usage-events", () => ({ recordSkillUsageEvents: mocks.usag
 vi.mock("@/lib/inference/budget-gate", () => ({ checkAgentBudgetFromRegistry: vi.fn(async () => ({ status: "warning_95", actualTokens: 95, limitTokens: 100 })), writeBudgetEvent: mocks.budgetEvent }));
 
 import { runAgenticLoop } from "./agentic-loop";
+import { withReadEvidencePolicy } from "./read-evidence-policy";
 import { createInitiativeReviewTerminalToolPolicy } from "./terminal-tool-policy";
 import { assertReassessmentPlan, ReassessmentExecutionError, reassessmentToolSurfaceDigest, runReassessmentExecution,
   runReassessmentQualification, runReassessmentQualificationRequest, promoteReassessmentExecution, type ReassessmentExecutionSeed } from "../routing/reassessment-execution-scope";
@@ -99,6 +100,17 @@ beforeEach(() => {
 });
 
 describe("real core loop under a restricted reassessment scope", () => {
+  it.each(["legacy", "finite"])("refuses inherited specialist reader authority before %s reassessment inference", async mode => {
+    const inspect = vi.fn(async () => ({ complete: true, message: "Specialist evidence" }));
+    const mintReadOnlySession = vi.fn(async () => "must-not-mint");
+    const recordImageInputDelivery = vi.fn(async () => {});
+    await expect(withReadEvidencePolicy({ toolNames: ["wiki_query"], inspect, mintReadOnlySession, recordImageInputDelivery },
+      () => mode === "finite" ? inFiniteScope(() => runAgenticLoop(params())) : inScope()))
+      .rejects.toThrow("reassessment-read-evidence-scope-conflict");
+    for (const effect of [mocks.route, mocks.tool, mocks.fold, inspect, mintReadOnlySession, recordImageInputDelivery]) {
+      expect(effect).not.toHaveBeenCalled();
+    }
+  });
   it("preloads the full immutable source before inference and protects source, criteria and correction history", async () => {
     const source = "FIRST" + "中".repeat(14_000) + "MIDDLE" + "z".repeat(14_000) + "LAST";
     binding.artifactRef.providerBlobId = createHash("sha1").update(`blob ${Buffer.byteLength(source)}\0${source}`).digest("hex");

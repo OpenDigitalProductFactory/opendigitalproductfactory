@@ -94,7 +94,7 @@ const definitions: ToolDefinition[] = [
         contractContext: { type: "object", description: "Terms and data-boundary context." },
         metadata: { type: "object", description: "Additional engagement metadata." },
         engagementId: { type: "string", description: "Existing caller-owned engagement to fulfill. Never create another request to retry the same work." },
-        fulfillment: { type: "object", description: "Current workroomId (WC-*), stageKey, optional guidanceArtifacts (exact UX profession repository blobs at the room head), and the ORIGINAL artifactRef {kind: repo-blob-at-commit, repositoryFullName, commitSha, path, providerBlobId}. Original caller, offer and provider remain server-owned." },
+        fulfillment: { type: "object", description: "Current workroomId (WC-*), stageKey, optional guidanceArtifacts (exact UX profession repository blobs at the room head), optional visualEvidenceRef {kind: document-version, repositoryFullName, versionId, valueDigest} for an owned immutable capture manifest explicitly associated at FIRST binding, and the ORIGINAL artifactRef {kind: repo-blob-at-commit, repositoryFullName, commitSha, path, providerBlobId}. Original caller, offer and provider remain server-owned." },
       },
       required: [],
     },

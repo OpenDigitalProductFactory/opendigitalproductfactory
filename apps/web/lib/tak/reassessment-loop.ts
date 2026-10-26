@@ -2,6 +2,7 @@ import type { TaskExecutionFence } from "../shared/task-execution-fence";
 import type { ToolCallEntry } from "../routing/chat-message-types";
 import type { ToolResult } from "../mcp-tool-types";
 import type { InitiativeReviewBinding } from "../mcp-task-review-contract";
+import { currentReadEvidencePolicy } from "./read-evidence-policy";
 import { assertReassessmentActive, assertReassessmentPlan, assertReassessmentToolCall,
   isReassessmentExecutionError, refuseReassessmentExecution } from "../routing/reassessment-execution-scope";
 
@@ -15,6 +16,7 @@ type ReassessmentLoopInput = Identity & { tools: readonly { name: string }[]; to
 /** A captured loop never becomes ordinary merely because a callback lost ALS. */
 export function assertRestrictedReassessmentTurn(restricted: boolean, tools: readonly Record<string, unknown>[] | undefined): void {
   if (!restricted) return;
+  if (currentReadEvidencePolicy()) refuseReassessmentExecution("reassessment-read-evidence-scope-conflict");
   const context = assertReassessmentActive();
   if (!context) refuseReassessmentExecution("reassessment-context-missing");
   assertReassessmentPlan({ providerId: context.qualification.providerId, modelId: context.qualification.modelId,

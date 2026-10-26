@@ -57,6 +57,12 @@ import { executeRemoteTaskAttempt } from "./mcp-task-execution";
 import { _setGovernanceForTests } from "./mcp-governed-execute";
 import { qualifyReassessmentExecution } from "./inference/reassessment-execution-qualification";
 import { resolveAutonomousWorkTools } from "./tak/autonomous-work-run";
+import * as autonomousWork from "./tak/autonomous-work-run";
+import * as reassessmentCapture from "./mcp-task-reassessment-capture";
+import * as reassessmentWorker from "./mcp-task-reassessment-worker";
+import * as reviewPreparation from "./mcp-task-reassessment-preparation";
+import * as executionQualification from "./inference/reassessment-execution-qualification";
+import { currentReadEvidencePolicy, withReadEvidencePolicy, type ReadEvidencePolicy } from "./tak/read-evidence-policy";
 import { reassessmentExecutionManifestDigest } from "./mcp-task-reassessment-capture";
 import { reassessmentToolSurfaceDigest } from "./routing/reassessment-execution-scope";
 import { invalidateRoutingLoaderCache } from "./routing/loader";
@@ -243,6 +249,34 @@ function run() {
     idempotentReplay: false, capacityAttempt: 1, expectedReservation: fence.reservation, expectedDispatchClaim: fence.dispatchClaim });
 }
 const reservations = () => s.executions.filter((e: Row) => e.toolName === "reassessment_capture");
+function inheritedReaderPolicy() {
+  return { toolNames: ["wiki_query"], inspect: vi.fn(async () => ({ complete: true, message: "Synthetic specialist contribution" })),
+    mintReadOnlySession: vi.fn(async () => "must-not-mint"), recordImageInputDelivery: vi.fn(async () => {}) };
+}
+function observeExecutionEntries() {
+  // Call-through spies preserve the real connected worker/capture/loop wiring.
+  return [vi.spyOn(reviewPreparation, "prepareRemoteReviewAttempt"),
+    vi.spyOn(reassessmentCapture, "withPersistedReassessmentExecution"),
+    vi.spyOn(reassessmentCapture, "withPersistedReassessmentQualification"),
+    vi.spyOn(reassessmentWorker, "withPresentReassessmentWorker"),
+    vi.spyOn(autonomousWork, "resolveAutonomousWorkAgent"), vi.spyOn(autonomousWork, "resolveAutonomousWorkTools"),
+    vi.spyOn(autonomousWork, "executeAutonomousAgenticLoop"),
+    vi.spyOn(executionQualification, "qualifyReassessmentExecution"),
+    vi.spyOn(executionQualification, "prepareReassessmentNativeCandidateRoute"),
+    vi.spyOn(executionQualification, "precheckReassessmentNativeCandidate")];
+}
+async function runUnderReaderPolicy(policy: ReadEvidencePolicy) {
+  return withReadEvidencePolicy(policy, async () => {
+    expect(currentReadEvidencePolicy()).toBe(policy);
+    const outcome = await run();
+    expect(currentReadEvidencePolicy()).toBe(policy);
+    return { content: "Synthetic execution result", outcome };
+  });
+}
+function executionEffects() {
+  return structuredClone({ artifacts: s.artifacts, executions: s.executions, activities: s.activities,
+    requests: s.requests, providerEntries: s.providerEntries, repoRequests: s.repoRequests, authorities: s.authorities, log: s.log });
+}
 beforeEach(() => {
   Object.assign(s, { methods: {}, requests: [], providerEntries: 0, repoRequests: [], artifacts: [], executions: [], activities: [], authorities: [], log: [], locks: [],
     unconfigured: [], unsupported: [], unexpectedNetwork: [], failure: null, hidden: false, samePrincipal: false,
@@ -285,6 +319,32 @@ afterEach(() => {
 });
 
 describe("connected persisted R2 execution with synthetic exterior ports", () => {
+  it.each(["research", "design-spec"] as const)("refuses inherited reader authority before any new persisted %s execution work", async gate => {
+    await prepare(gate);
+    const policy = inheritedReaderPolicy(), entries = observeExecutionEntries(), before = executionEffects();
+    const { outcome } = await runUnderReaderPolicy(policy);
+    expect(outcome).toMatchObject({ kind: "result", result: { status: "failed", isError: true } });
+    expect(s.run.progressPayload.summary).toContain("reassessment-read-evidence-scope-conflict");
+    expect(executionEffects()).toEqual(before);
+    for (const effect of [...entries, policy.inspect, policy.mintReadOnlySession, policy.recordImageInputDelivery]) expect(effect).not.toHaveBeenCalled();
+  });
+  it.each(["research", "design-spec"] as const)("reads the actual committed %s receipt under inherited reader authority without restarting execution", async gate => {
+    await prepare(gate);
+    const pendingProgress = structuredClone(s.run.progressPayload);
+    expect(await run()).toMatchObject({ result: { status: "completed", isError: false } });
+    const [receipt] = s.activities;
+    expect(receipt.payload).toMatchObject({ gate, decision: "pass", artifactRef });
+    // Preserve the real governed writer's receipt while simulating a lost task
+    // completion write. A terminal TaskRun shortcut would not test readback.
+    s.run.status = "working"; s.run.progressPayload = pendingProgress;
+    const policy = inheritedReaderPolicy(), entries = observeExecutionEntries(), before = executionEffects();
+    const { outcome } = await runUnderReaderPolicy(policy);
+    expect(outcome).toMatchObject({ kind: "result", result: { status: "completed", isError: false,
+      structuredContent: { receiptId: receipt.id, decision: "pass" } } });
+    expect(s.run.progressPayload.reviewOutcome.receiptId).toBe(receipt.id);
+    expect(executionEffects()).toEqual(before);
+    for (const effect of [...entries, policy.inspect, policy.mintReadOnlySession, policy.recordImageInputDelivery]) expect(effect).not.toHaveBeenCalled();
+  });
   it("runs real worker, capture, routing, loop and governed research handlers through canonical receipt readback", async () => {
     const manifest = await prepare();
     const result = await run();
