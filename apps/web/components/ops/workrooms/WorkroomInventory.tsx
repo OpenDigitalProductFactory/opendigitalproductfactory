@@ -46,9 +46,10 @@ export type WorkroomInventoryRow = {
 };
 
 const viewOf = (room: WorkroomInventoryRow) => room.operator ?? projectWorkroomOperatorSummary(room);
-const roomHref = (room: WorkroomInventoryRow) => `/workspace/cases/${encodeWorkCaseKey(room.backlogItemId
-  ? { sourceType: "backlog-item", sourceId: room.backlogItemId }
-  : { sourceType: "work-capsule", sourceId: room.capsuleId })}`;
+const roomHref = (room: WorkroomInventoryRow) =>
+  room.coo?.actionHref ?? `/workspace/cases/${encodeWorkCaseKey(room.backlogItemId
+    ? { sourceType: "backlog-item", sourceId: room.backlogItemId }
+    : { sourceType: "work-capsule", sourceId: room.capsuleId })}`;
 
 function WorkroomRows({ rows, label }: { rows: WorkroomInventoryRow[]; label: string }) {
 const t = useT("workrooms");
@@ -93,7 +94,6 @@ function CooRoomDetails({ room, t }: { room: WorkroomCooFields; t: ReturnType<ty
     {room.overSpan && <p>{t("coo.overSpanFlag")}</p>}
     {room.escalationLabel && <p>{t("coo.escalation", { path: room.escalationLabel })}</p>}
     {room.missingAckCount > 0 && <p>{t("coo.missingAck", { count: room.missingAckCount })}</p>}
-    <Link className="text-dpf-accent hover:underline" href={room.actionHref}>{t("coo.openRoom")}</Link>
   </div>;
 }
 

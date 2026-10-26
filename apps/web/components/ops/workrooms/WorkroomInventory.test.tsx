@@ -88,7 +88,7 @@ describe("operator Workrooms inventory", () => {
     expect(screen.getByText("Next wake 2026-10-26T13:15:00.000Z")).toBeVisible();
     expect(screen.getByText("Over span of control")).toBeVisible();
     expect(screen.getByText("Escalation: PRN-human")).toBeVisible();
-    expect(screen.getByRole("link", { name: "Open room" })).toHaveAttribute("href", "/workspace/cases/work-capsule%3AWC-NOW");
+    expect(screen.queryByRole("link", { name: "Open room" })).toBeNull();
     expect(screen.getByRole("link", { name: "Prepare adoption event" })).toHaveAttribute("href", "/workspace/cases/work-capsule%3AWC-NOW");
     const supervision = screen.getByText("Supervision").closest("details")!;
     supervision.open = true; fireEvent(supervision, new Event("toggle"));
