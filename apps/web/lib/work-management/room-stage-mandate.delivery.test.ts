@@ -122,3 +122,19 @@ describe("dispatch provenance and restricted room turns", () => {
     expect(authority.withheldBecause).toBeNull();
   });
 });
+
+
+describe("current assignment and explicit approval policy", () => {
+  it("preserves an explicit always-review decision", async () => {
+    const f = scheduledDeliveryFixture(); Object.assign(f.input, { allowBlockedReport: false });
+    expect(await loadScheduledRoomMandate(f.db, f.input, f.deps)).toEqual([]);
+  });
+  it("does not admit the replaced run even when its dispatch snapshot matches", async () => {
+    const f = scheduledDeliveryFixture(); Object.assign(f.task, { taskRunId: "TR-SCHED-REPLACEMENT" });
+    expect(await loadScheduledRoomMandate(f.db, f.input, f.deps)).toEqual([]);
+  });
+  it("withholds completion after the room owner changes", async () => {
+    const f = scheduledDeliveryFixture(); Object.assign(f.room, { ownerUserId: "new-owner" });
+    expect(await loadScheduledRoomMandate(f.db, f.input, f.deps)).toEqual([]);
+  });
+});

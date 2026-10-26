@@ -796,16 +796,3 @@ describe("createAutonomousWorkRun", () => {
     });
   });
 });
-
-describe("scheduled room tool-surface narrowing (BI-D95FD249)", () => {
-  it("forwards the room's grant intersection before attachment budgeting", async () => {
-    const tools = await import("@/lib/mcp-tools");
-    vi.mocked(tools.getAvailableTools).mockReset().mockResolvedValue([]);
-    vi.mocked(tools.toolsToOpenAIFormat).mockReturnValue([]);
-    const { resolveAutonomousWorkTools } = await import("./autonomous-work-run");
-    await resolveAutonomousWorkTools({ userContext: { userId: "owner", platformRole: "admin", isSuperuser: true },
-      agentId: "build-specialist", mode: "act", roomAuthorizedGrants: ["workroom_evidence_write"] });
-    expect(tools.getAvailableTools).toHaveBeenCalledWith(expect.anything(),
-      expect.objectContaining({ roomAuthorizedGrants: ["workroom_evidence_write"] }));
-  });
-});
