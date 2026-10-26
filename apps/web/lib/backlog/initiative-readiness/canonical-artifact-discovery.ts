@@ -1,5 +1,6 @@
 import { prisma } from "@dpf/db";
 import { createHash } from "node:crypto";
+import { NO_MARKED_OBJECTIVE_STATEMENTS, parseInitiativeScopeManifest } from "./baseline-manifest";
 import type { CurrentDesignEvidence } from "./judged-design-artifact";
 import { prepareCurrentArtifactObservation } from "./current-artifact-observation";
 import { prepareCurrentResearchObservation, type CurrentResearchPorts } from "./current-research-artifact";
@@ -88,8 +89,26 @@ export async function readCurrentDesignArtifact(binding: BoundDesign, ports?: {
   const bytes = await readRepositoryProviderBlob({ repositoryFullName: binding.room.repositoryFullName,
     commitSha: binding.room.headSha, path: discovered.resolved ? discovered.artifact.path : binding.artifactRef.path,
     expectedBlobId: discovered.resolved ? discovered.artifact.providerBlobId : null });
-  return bytes.ok ? { state: "verified", digest: `sha256:${createHash("sha256").update(bytes.data).digest("hex")}` }
-    : { state: "unavailable" };
+  if (!bytes.ok) return { state: "unavailable" };
+  return {
+    state: "verified",
+    digest: `sha256:${createHash("sha256").update(bytes.data).digest("hex")}`,
+    ...missingObjectiveError(bytes.data),
+  };
+}
+
+/** Only a missing-objective parse is surfaced. Other read failures keep their own remedies. */
+function missingObjectiveError(data: Uint8Array): { scopeManifestError: string } | Record<string, never> {
+  let text: string;
+  try {
+    text = new TextDecoder("utf-8", { fatal: true }).decode(data);
+  } catch {
+    return {};
+  }
+  const manifest = parseInitiativeScopeManifest(text);
+  return manifest.ok || manifest.error !== NO_MARKED_OBJECTIVE_STATEMENTS
+    ? {}
+    : { scopeManifestError: manifest.error };
 }
 
 /** Provider work stays outside transactions; only this server closure crosses admission. */

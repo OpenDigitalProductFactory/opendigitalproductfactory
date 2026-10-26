@@ -1,3 +1,4 @@
+import type { WorkroomProcessSnapshot, WorkroomRefreshTarget } from "@/lib/work-management/workroom-process-snapshot";
 import { ArrowLeft, DoorClosed } from "lucide-react";
 
 import { EmptyState } from "@/components/ui/report-kit";
@@ -19,9 +20,11 @@ type Props = {
   stageDecision?: WorkroomStageDecisionView | null;
   shapeRebind?: WorkroomShapeRebindView | null;
   flowMap?: WorkroomFlowMapModel | null;
+  refreshTarget?: WorkroomRefreshTarget;
+  processSnapshot?: WorkroomProcessSnapshot;
 };
 
-export function WorkCaseDetailView({ detail, workforce, stageDecision, shapeRebind, flowMap, navigationContext = {} }: Props) {
+export function WorkCaseDetailView({ detail, workforce, stageDecision, shapeRebind, flowMap, refreshTarget, processSnapshot, navigationContext = {} }: Props) {
   if (detail.roomChoices?.length) {
     return (
       <Surface as="section" className="space-y-4 text-[var(--dpf-text)]" aria-labelledby="room-choice-title">
@@ -73,7 +76,7 @@ export function WorkCaseDetailView({ detail, workforce, stageDecision, shapeRebi
   return (
     <div className="space-y-5 text-[var(--dpf-text)]">
       <WorkroomHeader room={detail.room} summary={detail.summary} workforce={workforce} stageDecision={stageDecision} shapeRebind={shapeRebind} />
-      <WorkroomBody detail={detail} room={detail.room} flowMap={flowMap} />
+      <WorkroomBody detail={detail} room={detail.room} flowMap={flowMap} refreshTarget={refreshTarget} processSnapshot={processSnapshot} />
     </div>
   );
 }

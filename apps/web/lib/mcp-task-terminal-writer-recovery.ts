@@ -11,6 +11,12 @@ import { recoverTerminalWriterEscalation } from "./mcp-task-terminal-writer-esca
 import { parseTerminalWriterWait, type TerminalWriterWait } from "./mcp-task-replay-projection";
 function optionalString(value: unknown): string | null { return typeof value === "string" && value.trim() ? value.trim() : null; }
 
+function persistedWriterError(result: unknown): string | null {
+  if (!result || typeof result !== "object" || Array.isArray(result)) return null;
+  const error = (result as Record<string, unknown>).error;
+  return typeof error === "string" ? error : null;
+}
+
 /**
  * The attempt a resumed terminal-writer wait runs as. BI-50B0C471: a wait the
  * writer never caused (a capacity deferral after banked reads) resumes at the
@@ -112,6 +118,11 @@ export async function reserveTerminalWriterReplay(input: {
       || !existingWait
       || !["input-required", "stalled", "failed"].includes(input.existing.status)
     ) return null;
+    // Resuming would hydrate readers and can replace this refusal with
+    // terminal_reader_identity_conflict. The writer's refusal is terminal.
+    if (writerAttempt.success === false && persistedWriterError(writerAttempt.result) === "CANONICAL_DESIGN_REQUIRED") {
+      return null;
+    }
   }
 
   const progress = input.existing.progressPayload && typeof input.existing.progressPayload === "object"

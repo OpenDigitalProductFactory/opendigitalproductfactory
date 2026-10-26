@@ -1,10 +1,10 @@
-// The one read behind the weekly decision-engine review (BI-19CEC4B4).
+// The data-read boundary behind the weekly decision-engine review (BI-19CEC4B4).
 //
 // Deliberately the only place the review touches the database: the measures
 // (measures.ts) are pure over these rows, so every finding is reproducible from
 // a fixture and the run carries no model judgement at all.
 
-import type { ReviewLedgerRow } from "./measures";
+import { RECOMMENDATION_MATURITY_DAYS, type ReviewLedgerRow, type ReviewPopulationCoverage } from "./measures";
 
 /** Narrow client surface so tests need no Prisma. */
 export type ReviewWindowClient = {
@@ -21,6 +21,8 @@ export type ReviewWindowClient = {
 
 export type ReviewWindow = {
   rows: ReviewLedgerRow[];
+  overdueRows: ReviewLedgerRow[];
+  overdueCoverage: ReviewPopulationCoverage;
   materialCountByProfile: Record<string, number>;
   since: Date;
   until: Date;
@@ -35,6 +37,22 @@ export const REVIEW_WINDOW_DAYS = 7;
  */
 export const REVIEW_WINDOW_ROW_CAP = 20_000;
 
+const REVIEW_LEDGER_SELECT = {
+  interactionId: true,
+  profileId: true,
+  gateKey: true,
+  routeContext: true,
+  domainClass: true,
+  outcomeType: true,
+  riskTier: true,
+  question: true,
+  gateFallbackUsed: true,
+  outcomePayload: true,
+  recommendedOptionId: true,
+  chosenOptionId: true,
+  createdAt: true,
+} as const;
+
 export async function loadReviewWindow(
   db: ReviewWindowClient,
   options: { now?: Date; days?: number } = {},
@@ -43,26 +61,21 @@ export async function loadReviewWindow(
   const days = options.days ?? REVIEW_WINDOW_DAYS;
   const since = new Date(until.getTime() - days * 24 * 60 * 60 * 1000);
 
-  const [interactions, profiles, materialCounts] = await Promise.all([
+  const overdueUntil = new Date(until.getTime() - RECOMMENDATION_MATURITY_DAYS * 86_400_000);
+
+  const [interactions, overdueInteractions, profiles, materialCounts] = await Promise.all([
     db.decisionInteraction.findMany({
       where: { createdAt: { gte: since, lte: until } },
       orderBy: { createdAt: "desc" },
       take: REVIEW_WINDOW_ROW_CAP,
-      select: {
-        interactionId: true,
-        profileId: true,
-        gateKey: true,
-        routeContext: true,
-        domainClass: true,
-        outcomeType: true,
-        riskTier: true,
-        question: true,
-        gateFallbackUsed: true,
-        outcomePayload: true,
-        recommendedOptionId: true,
-        chosenOptionId: true,
-        createdAt: true,
-      },
+      select: REVIEW_LEDGER_SELECT,
+    }),
+    // Include recorded choices: selecting only gaps would corrupt the denominator.
+    db.decisionInteraction.findMany({
+      where: { createdAt: { lte: overdueUntil }, recommendedOptionId: { not: null } },
+      orderBy: [{ createdAt: "desc" }, { interactionId: "desc" }],
+      take: REVIEW_WINDOW_ROW_CAP + 1,
+      select: REVIEW_LEDGER_SELECT,
     }),
     db.decisionPerspectiveProfile.findMany({ select: { profileId: true, kind: true } }),
     // Only material the gate can actually read counts as coverage; a draft or
@@ -78,7 +91,25 @@ export async function loadReviewWindow(
     (profiles as Array<{ profileId: string; kind: string }>).map((p) => [p.profileId, p.kind]),
   );
 
-  const rows: ReviewLedgerRow[] = (interactions as Array<Record<string, unknown>>).map((r) => ({
+  const rows = mapReviewRows(interactions, kindByProfile);
+  const overdue = overdueInteractions as Array<Record<string, unknown>>;
+  const overdueRows = mapReviewRows(overdue.slice(0, REVIEW_WINDOW_ROW_CAP), kindByProfile);
+
+  const materialCountByProfile: Record<string, number> = {};
+  for (const row of materialCounts as Array<{ profileId: string; _count: { _all: number } }>) {
+    materialCountByProfile[row.profileId] = row._count._all;
+  }
+
+  return {
+    rows, overdueRows,
+    overdueCoverage: { complete: overdue.length <= REVIEW_WINDOW_ROW_CAP, rowLimit: REVIEW_WINDOW_ROW_CAP },
+    materialCountByProfile, since, until,
+  };
+}
+
+
+function mapReviewRows(interactions: unknown, kindByProfile: Map<string, string>): ReviewLedgerRow[] {
+  return (interactions as Array<Record<string, unknown>>).map((r) => ({
     interactionId: String(r.interactionId ?? ""),
     profileId: String(r.profileId ?? ""),
     profileKind: normaliseKind(kindByProfile.get(String(r.profileId ?? ""))),
@@ -100,15 +131,7 @@ export async function loadReviewWindow(
     sensitivity: sensitivityOf(r.outcomePayload),
     createdAt: r.createdAt instanceof Date ? r.createdAt : new Date(String(r.createdAt)),
   }));
-
-  const materialCountByProfile: Record<string, number> = {};
-  for (const row of materialCounts as Array<{ profileId: string; _count: { _all: number } }>) {
-    materialCountByProfile[row.profileId] = row._count._all;
-  }
-
-  return { rows, materialCountByProfile, since, until };
 }
-
 
 /**
  * `sensitivityUnstable` and `sensitivity` live INSIDE outcomePayload, written by

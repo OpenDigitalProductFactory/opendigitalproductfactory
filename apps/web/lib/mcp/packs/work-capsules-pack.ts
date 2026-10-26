@@ -85,10 +85,11 @@ const definitions: ToolDefinition[] = [
   {
     name: "list_workrooms",
     description:
-      "List Workroom coordination records for active portal, Build Studio, and external agent work, each annotated with its TRUE liveness (live | lease-expired | build-terminal | idle-stale | no-signal). Liveness is derived from lease expiry, the linked build's phase, an open PR, and last sync — NOT from updatedAt, which a daily heartbeat freezes for Build Studio capsules, so a `working` status is not proof of life. Includes a livenessSummary (live vs reap-candidate counts). Pass staleOnly=true for just the not-live reap candidates. Read-only.",
+      "List Workroom coordination records for active portal, Build Studio, and external agent work, each annotated with its TRUE liveness (live | lease-expired | build-terminal | idle-stale | no-signal). Liveness is derived from lease expiry, the linked build's phase, an open PR, and last sync — NOT from updatedAt, which a daily heartbeat freezes for Build Studio capsules, so a `working` status is not proof of life. Includes a livenessSummary (live vs reap-candidate counts). Pass staleOnly=true for just the not-live reap candidates. Use view=definitions for the bounded installed definition catalogue. Definition metadata is not exercised coverage; use only its definition cursors and no instance filters. Read-only.",
     inputSchema: {
       type: "object",
       properties: {
+        view: { type: "string", enum: ["instances", "definitions"], description: "Default instances lists Workroom observations. definitions lists source definitions and profile metadata. It does not assess occurrences or organization applicability. Instance filters are invalid in definitions view." },
         status: { type: "string", enum: ENUMS.statuses, description: "Filter by Workroom status." },
         decisionScope: { type: "string", enum: ENUMS.decisionScopes, description: "Filter by WWMD, WWWD, or WSID scope." },
         portfolioRole: { type: "string", enum: ENUMS.portfolioRoles, description: "Filter by primary portfolio role." },
@@ -96,7 +97,7 @@ const definitions: ToolDefinition[] = [
         headBranch: { type: "string", maxLength: 255, description: "Find the room for this branch, including one another assistant made for you." },
         pullRequestNumber: { type: "integer", minimum: 1, description: "Find the room for this pull request, including one another assistant made for you." },
         limit: { type: "integer", minimum: 1, maximum: 100, description: "Requested page size (default 5, maximum 100); whole rows are reduced to fit the client budget." },
-        cursor: { type: "string", maxLength: 1024, description: "Opaque continuation from this observation. Keep filters unchanged; expiry requires a fresh traversal." },
+        cursor: { type: "string", maxLength: 1024, description: "Opaque continuation for the selected view. Instance and definition cursors cannot be mixed. Keep instance filters unchanged. Instance expiry or changed definition inventory requires a fresh traversal." },
       },
       required: [],
     },

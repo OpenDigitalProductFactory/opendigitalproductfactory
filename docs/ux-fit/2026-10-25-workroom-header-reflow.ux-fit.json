@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "shared-header-reflow",
+  "decisionInteractionId": "DI-668BC894A43F",
+  "scope": {
+    "files": [
+      "apps/web/components/workspace/workroom/WorkroomHeader.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "shared-header-reflow",
+      "per-field-wrapping",
+      "truncate-or-hide-overflow"
+    ]
+  }
+}

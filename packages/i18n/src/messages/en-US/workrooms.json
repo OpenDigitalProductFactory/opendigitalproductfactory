@@ -1,7 +1,14 @@
 {
   "refresh": {
     "offline": "Browser offline. Showing the saved snapshot. Reconnect to refresh.",
-    "restored": "Connection restored. Refresh to check for changes."
+    "restored": "Connection restored. Refresh to check for changes.",
+    "failed": "Refresh failed. Showing the saved snapshot. Try again.",
+    "timeout": "Refresh timed out. Showing the saved snapshot. Try again.",
+    "changed": "The room selection changed. Showing the saved snapshot. Reopen this case.",
+    "sessionRequired": "Sign in again to read this room.",
+    "unavailable": "This room is no longer available to you.",
+    "signIn": "Sign in",
+    "openQueue": "Return to My Work"
   },
   "reviewProfile": {
     "section": "Review and learning",

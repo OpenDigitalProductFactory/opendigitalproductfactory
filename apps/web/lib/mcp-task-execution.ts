@@ -1,3 +1,6 @@
+import { narrowEngagementTools } from "./coworker-service-catalog/engagement-task-binding";
+import { withInferenceAuthorityCheck } from "./routing/governed-inference-deadline";
+import { sameTaskExecutionFence } from "./shared/task-execution-fence";
 import { EXECUTION_UNCERTAIN_MESSAGE, executionUncertaintyFromError, hasExecutionUncertainty } from "./shared/execution-uncertainty";
 import { reservationIdentity, dispatchIdentity, settleRemoteTask } from "./mcp-task-attempt-state";
 import { captureTaskExecutionFence } from "./shared/task-execution-fence";
@@ -108,7 +111,7 @@ export async function executeRemoteTaskAttempt(input: {
     || dispatchIdentity(admittedRun.progressPayload) !== dispatchClaim)) {
     return projectRemoteTaskReplay({ existing: { ...admittedRun, taskRunId: run.taskRunId }, requestMatches: true });
   }
-  const taskExecutionFence = parsed.initiativeReviewBinding ? captureTaskExecutionFence(admittedRun.progressPayload,
+  const taskExecutionFence = parsed.initiativeReviewBinding || parsed.engagementBinding ? captureTaskExecutionFence(admittedRun.progressPayload,
     (admittedRun.a2aMetadata as Record<string, unknown> | null)?.requestDigest) : undefined;
   const settle = (args: Prisma.TaskRunUpdateManyArgs & { where: { taskRunId: string } }) =>
     settleRemoteTask(args, reservation, dispatchClaim);
@@ -139,6 +142,17 @@ export async function executeRemoteTaskAttempt(input: {
     return displaced ?? projectRemoteTaskReplay({ existing: { ...admittedRun,
       status: "input-required", taskRunId: run.taskRunId }, requestMatches: true });
   }
+  if (parsed.engagementBinding) {
+    const { validateEngagementTask, reconcileEngagementTaskResult } = await import("./coworker-service-catalog/engagement-fulfillment");
+    try {
+      await reconcileEngagementTaskResult(run.taskRunId);
+      await validateEngagementTask({ binding: parsed.engagementBinding, token, taskRunId: run.taskRunId, authorityScope: parsed.authorityScope ?? [], requireAssociation: true, request: parsed });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Engagement authority unavailable";
+      const displaced = await settle({ where: { taskRunId: run.taskRunId }, data: { status: "failed", completedAt: new Date(), progressPayload: { summary: message, error: "engagement_execution_refused" } } });
+      return displaced ?? { kind: "result", result: { taskRunId: run.taskRunId, status: "failed", isError: true, content: remoteTaskContent(message) } };
+    }
+  }
   const progress = admittedRun.progressPayload && typeof admittedRun.progressPayload === "object"
     && !Array.isArray(admittedRun.progressPayload) ? admittedRun.progressPayload as Record<string, unknown> : {};
   // Stable authority and immutable windows survive every parked/terminal result;
@@ -166,7 +180,11 @@ export async function executeRemoteTaskAttempt(input: {
     userContext,
   });
   const modelRoutingAgentId = agent.agentId ?? parsed.agentId;
-  const resolvedAgentId = resolveCanonicalAgentId(modelRoutingAgentId);
+  const resolvedAgentId = parsed.engagementBinding ? modelRoutingAgentId : resolveCanonicalAgentId(modelRoutingAgentId);
+  if (parsed.engagementBinding) {
+    const { engagementProviderIdentityRefs } = await import("./coworker-service-catalog/engagement-fulfillment");
+    if (!engagementProviderIdentityRefs(parsed.engagementBinding.providerAgentId).includes(resolvedAgentId)) throw new Error("Engagement provider identity changed during runtime resolution.");
+  }
   const requestedAgentId = parsed.agentId;
   const requestedCanonicalAgentId = resolveCanonicalAgentId(requestedAgentId);
   let routingConfig: {
@@ -232,13 +250,14 @@ export async function executeRemoteTaskAttempt(input: {
   });
   const reviewProfile = parsed.initiativeReviewBinding?.gate === "spec-approval"
     ? await loadReviewerProfile(prisma, parsed.initiativeReviewBinding.itemId) : null;
-  const tools = narrowInitiativeReviewTools(
+  const reviewTools = narrowInitiativeReviewTools(
     resolvedTools,
     exactRequiredToolNames,
     parsed.initiativeReviewBinding,
     parsed.prompt,
     reviewProfile,
   );
+  const tools = parsed.engagementBinding ? narrowEngagementTools(reviewTools, exactRequiredToolNames) : reviewTools;
   const effortWarrant = requiresInitiativeReviewEffort(exactRequiredToolNames)
     ? deriveEffortWarrant({
         reasoningDepth: "high",
@@ -274,7 +293,7 @@ export async function executeRemoteTaskAttempt(input: {
   // BI-2E479619: rows a CLI wrote natively during THIS attempt start here.
   const attemptStartedMs = Date.now();
   try {
-    const result = await executeAutonomousAgenticLoop({
+    const runLoop = async () => executeAutonomousAgenticLoop({
       systemPrompt: conversation.systemPrompt,
       systemPromptInstructionSpans: coworkerBriefSpans(agent.systemPrompt),
       chatHistory: conversation.chatHistory,
@@ -299,6 +318,14 @@ export async function executeRemoteTaskAttempt(input: {
       ...(terminalToolPolicy ? { terminalToolPolicy } : {}),
       ...(modelRequirements ? { modelRequirements } : {}),
     });
+
+    const result = await (parsed.engagementBinding ? withInferenceAuthorityCheck(async () => {
+      const { validateEngagementTask } = await import("./coworker-service-catalog/engagement-fulfillment");
+      await validateEngagementTask({ binding: parsed.engagementBinding!, token, taskRunId: run.taskRunId, authorityScope: parsed.authorityScope ?? [], requireAssociation: true, request: parsed });
+      const current = await prisma.taskRun.findUnique({ where: { taskRunId: run.taskRunId }, select: { status: true, progressPayload: true, a2aMetadata: true } });
+      return current?.status === "working" && !hasExecutionUncertainty(current.progressPayload) && sameTaskExecutionFence(taskExecutionFence,
+        captureTaskExecutionFence(current.progressPayload, (current.a2aMetadata as Record<string, unknown> | null)?.requestDigest));
+    }, runLoop) : runLoop());
 
     // BI-2E479619: a CLI adapter runs the governed tools natively, so the
     // loop's records can miss them. Fold this attempt's native rows (deduped
