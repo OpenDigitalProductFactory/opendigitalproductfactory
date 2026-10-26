@@ -20,6 +20,20 @@ execution wait separately from completed individual verdicts. Retry only after
 reviewer execution recovers; original execution records remain intact. See the
 [MCP recovery contract](mcp-tool-authorization-runbook.md).
 
+**Restricted present reassessment (R2 source):** the
+[review settlement amendment](../superpowers/specs/2026-10-16-original-initiative-review-settlement-design.md)
+preserves uncertain original outcomes and defines a separate bounded current
+assessment. Its worker opens a sealed manifest before preparing the loop, binds
+the task/request, actor, generation, exact reader/writer and current provider
+configuration, and rejects callbacks outside that execution scope. The loop
+omits auxiliary grounding, draft reviews and asynchronous learning writers.
+Capture failure before an effect permits zero starts; failure after a start
+holds further effects and preserves unknown consumption. Readback reconciles a
+genuine committed writer receipt before reporting uncertainty. Neither a retry
+nor a new current verdict settles an unknown historical effect. Atomic admission,
+finite total-token qualification and canonical served positive/refusal acceptance
+remain required before this work is complete; this source note records no release.
+
 **Date:** 2026-06-09
 **Status:** Assessment / direction-setting. Not a build spec. The phased recommendations in §8 become backlog items, each promoted through Build Studio in the normal way.
 **Audience:** Operator (Mark), platform architects, the Build Studio sub-agents, and any coworker that owns a process which runs longer than a single request.

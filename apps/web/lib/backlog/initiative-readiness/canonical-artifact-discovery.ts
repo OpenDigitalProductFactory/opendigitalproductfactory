@@ -1,8 +1,11 @@
 import { prisma } from "@dpf/db";
 import { createHash } from "node:crypto";
-import { canonicalJson } from "@dpf/integration-shared/canonical-json";
+import { NO_MARKED_OBJECTIVE_STATEMENTS, parseInitiativeScopeManifest } from "./baseline-manifest";
 import type { CurrentDesignEvidence } from "./judged-design-artifact";
+import { prepareCurrentArtifactObservation } from "./current-artifact-observation";
+import { prepareCurrentResearchObservation, type CurrentResearchPorts } from "./current-research-artifact";
 import type { InitiativeArtifactRef } from "./receipt-schema";
+import { isFullSourceCommitSha } from "@/lib/work-capsules/work-capsule-branch-identity";
 
 import {
   cancelGithubResponseBody,
@@ -26,9 +29,15 @@ type BoundDesign = {
   artifactRef: Extract<InitiativeArtifactRef, { kind: "repo-blob-at-commit" }>;
   room: { capsuleId: string; repositoryFullName: string; baseSha: string; headSha: string; headBranch: string };
 };
-type CurrentDesignBinding = BoundDesign | { kind: "not-applicable" | "unavailable" };
+type CurrentDesignBinding = BoundDesign
+  | { kind: "not-applicable"; mayInheritResearch?: true }
+  | { kind: "unavailable" };
+type ClaimSource = {
+  repositoryFullName: string; headBranch: string;
+  baseSha?: string | null; headSha?: string | null;
+};
 
-async function loadCurrentDesignBinding(itemId: string, db: CurrentDesignDb): Promise<CurrentDesignBinding> {
+async function loadCurrentDesignBinding(itemId: string, db: CurrentDesignDb, claimSource?: ClaimSource): Promise<CurrentDesignBinding> {
   const item = await db.backlogItem.findFirst({ where: { OR: [{ itemId }, { id: itemId }] },
     select: { id: true, itemId: true, body: true } });
   if (!item) return { kind: "unavailable" };
@@ -38,12 +47,21 @@ async function loadCurrentDesignBinding(itemId: string, db: CurrentDesignDb): Pr
   const baseline = parseReadinessBaselines(activities, item.itemId);
   if (baseline.malformed || baseline.ambiguous) return { kind: "unavailable" };
   // A child with only inherited scope never authors a parent amendment.
-  if (!baseline.current || baseline.current.origin === "item-body") return { kind: "not-applicable" };
+  if (!baseline.current) return { kind: "not-applicable", mayInheritResearch: true };
+  if (baseline.current.origin === "item-body") return { kind: "not-applicable" };
   if (!baseline.current.artifactRef) return { kind: "unavailable" };
   if (baseline.current.artifactRef.kind !== "repo-blob-at-commit") return { kind: "not-applicable" };
+  // A claim tuple narrows the persisted subject binding; it supplies neither
+  // authority nor an artifact digest. Unscoped reads retain their ambiguity check.
+  if (claimSource && (!claimSource.repositoryFullName || !claimSource.headBranch
+    || !isFullSourceCommitSha(claimSource.baseSha) || !isFullSourceCommitSha(claimSource.headSha))) {
+    return { kind: "unavailable" };
+  }
   const rooms = await db.workroom.findMany({
     where: { backlogItemId: { in: [item.id, item.itemId] }, archivedAt: null,
-      status: { notIn: ["abandoned", "archived", "superseded"] } }, take: 2,
+      status: { notIn: ["abandoned", "archived", "superseded"] },
+      ...(claimSource ? { repositoryFullName: claimSource.repositoryFullName, headBranch: claimSource.headBranch,
+        baseSha: claimSource.baseSha, headSha: claimSource.headSha } : {}) }, take: 2,
     select: { capsuleId: true, repositoryFullName: true, baseSha: true, headSha: true, headBranch: true },
   });
   const room = rooms.length === 1 ? rooms[0] : null;
@@ -62,7 +80,7 @@ export async function readCurrentDesignArtifact(binding: BoundDesign, ports?: {
   readBlob?: typeof import("./repository-artifact").readRepositoryProviderBlob;
 }): Promise<CurrentDesignEvidence> {
   const discovered = await (ports?.discoverArtifact ?? discoverCanonicalDesignArtifact)({ ...binding.room,
-    backlogBody: binding.selection });
+    backlogBody: binding.selection, subjectItemId: binding.itemId });
   // Source-only follow-up commits need not touch their already approved design.
   // Never use this fallback to override an explicit or ambiguous selection.
   if (!discovered.resolved && (discovered.code !== "no-canonical-design"
@@ -71,45 +89,67 @@ export async function readCurrentDesignArtifact(binding: BoundDesign, ports?: {
   const bytes = await readRepositoryProviderBlob({ repositoryFullName: binding.room.repositoryFullName,
     commitSha: binding.room.headSha, path: discovered.resolved ? discovered.artifact.path : binding.artifactRef.path,
     expectedBlobId: discovered.resolved ? discovered.artifact.providerBlobId : null });
-  return bytes.ok ? { state: "verified", digest: `sha256:${createHash("sha256").update(bytes.data).digest("hex")}` }
-    : { state: "unavailable" };
+  if (!bytes.ok) return { state: "unavailable" };
+  return {
+    state: "verified",
+    digest: `sha256:${createHash("sha256").update(bytes.data).digest("hex")}`,
+    ...missingObjectiveError(bytes.data),
+  };
+}
+
+/** Only a missing-objective parse is surfaced. Other read failures keep their own remedies. */
+function missingObjectiveError(data: Uint8Array): { scopeManifestError: string } | Record<string, never> {
+  let text: string;
+  try {
+    text = new TextDecoder("utf-8", { fatal: true }).decode(data);
+  } catch {
+    return {};
+  }
+  const manifest = parseInitiativeScopeManifest(text);
+  return manifest.ok || manifest.error !== NO_MARKED_OBJECTIVE_STATEMENTS
+    ? {}
+    : { scopeManifestError: manifest.error };
 }
 
 /** Provider work stays outside transactions; only this server closure crosses admission. */
 export async function prepareCurrentDesignObservation(args: {
   itemId: string; db?: CurrentDesignDb;
+  /** Actual governed claim input; the reader verifies its persisted subject/room binding. */
+  claimSource?: ClaimSource;
   ports?: Partial<{
-    loadBinding: (itemId: string, db: CurrentDesignDb) => Promise<CurrentDesignBinding>;
+    loadBinding: (itemId: string, db: CurrentDesignDb, claimSource?: ClaimSource) => Promise<CurrentDesignBinding>;
     readCurrentArtifact: (binding: BoundDesign) => Promise<CurrentDesignEvidence>;
     lockBinding: (binding: BoundDesign, db: CurrentDesignDb) => Promise<void>;
+    research: CurrentResearchPorts;
   }>;
 }): Promise<{ evidence: CurrentDesignEvidence; admissionGuard: (tx: CurrentDesignDb) => Promise<CurrentDesignEvidence> }> {
   const db = args.db ?? prisma;
   const load = args.ports?.loadBinding ?? loadCurrentDesignBinding;
+  // Capture the selection once, including across the provider await and guard.
+  const claimSource = args.claimSource ? { repositoryFullName: args.claimSource.repositoryFullName,
+    headBranch: args.claimSource.headBranch, baseSha: args.claimSource.baseSha, headSha: args.claimSource.headSha } : undefined;
   const read = args.ports?.readCurrentArtifact ?? readCurrentDesignArtifact;
   const unavailable = { state: "unavailable" } as const;
-  let initial: CurrentDesignBinding;
-  let evidence: CurrentDesignEvidence;
-  try {
-    initial = await load(args.itemId, db);
-    evidence = initial.kind === "bound" ? await read(initial) : { state: initial.kind };
-    if (canonicalJson(await load(args.itemId, db)) !== canonicalJson(initial)) evidence = unavailable;
-  } catch {
-    initial = { kind: "unavailable" }; evidence = unavailable;
-  }
-  return { evidence, admissionGuard: async tx => {
-    if (evidence.state === "unavailable") return unavailable;
-    try {
-      if (initial.kind === "bound") {
-        if (args.ports?.lockBinding) await args.ports.lockBinding(initial, tx);
-        else {
-          if (!tx.$queryRaw) return unavailable;
-          await tx.$queryRaw`SELECT "id" FROM "BacklogItem" WHERE "id" = ${initial.itemRowId} FOR UPDATE`;
-          await tx.$queryRaw`SELECT "id" FROM "WorkCapsule" WHERE "capsuleId" = ${initial.room.capsuleId} FOR SHARE`;
-        }
-      }
-      return canonicalJson(await load(args.itemId, tx)) === canonicalJson(initial) ? evidence : unavailable;
-    } catch { return unavailable; }
+  let mayInheritResearch = false;
+  const design = await prepareCurrentArtifactObservation<CurrentDesignBinding, CurrentDesignEvidence>({
+    db, load: currentDb => load(args.itemId, currentDb as CurrentDesignDb, claimSource), read,
+    unbound: binding => {
+      mayInheritResearch = binding.kind === "not-applicable" && binding.mayInheritResearch === true;
+      return { state: binding.kind };
+    }, unavailable,
+    isUnavailable: evidence => evidence.state === "unavailable",
+    lock: args.ports?.lockBinding ? (binding, currentDb) => args.ports!.lockBinding!(binding, currentDb as CurrentDesignDb) : undefined,
+  });
+  // Own body/document baselines cannot inherit, so do not fetch unused research
+  // bytes for those subjects. The projector remains the inheritance authority.
+  const research = design.evidence.state === "not-applicable" && mayInheritResearch
+    ? await prepareCurrentResearchObservation({ itemId: args.itemId, db, claimSource, ports: args.ports?.research }) : null;
+  const combine = (evidence: CurrentDesignEvidence, ownResearch: CurrentDesignEvidence["research"]) =>
+    ownResearch ? { ...evidence, research: ownResearch } : evidence;
+  return { evidence: combine(design.evidence, research?.evidence), admissionGuard: async tx => {
+    const ownResearch = research ? await research.admissionGuard(tx) : undefined;
+    const evidence = await design.admissionGuard(tx);
+    return combine(evidence, ownResearch);
   } };
 }
 
@@ -178,6 +218,9 @@ export async function discoverCanonicalReviewArtifact(args: {
   repositoryFullName: string;
   baseSha: string;
   headSha: string;
+  /** Server-resolved subject and persisted branch; neither is a caller path selector. */
+  subjectItemId?: string;
+  headBranch?: string;
   purpose?: "post-implementation-review";
   /** Read from the live item by the claim handler, never a caller-supplied blob identity. */
   backlogBody?: string | null;
@@ -245,7 +288,8 @@ export async function discoverCanonicalDesignArtifact(
 }
 
 async function discoverCanonicalDesignArtifactWithFetch(
-  args: { repositoryFullName: string; baseSha: string; headSha: string; backlogBody?: string | null; purpose?: "post-implementation-review" },
+  args: { repositoryFullName: string; baseSha: string; headSha: string; backlogBody?: string | null; purpose?: "post-implementation-review";
+    subjectItemId?: string; headBranch?: string; db?: CanonicalArtifactDb },
   repo: { owner: string; name: string },
   token: string | null,
   fetchImpl: typeof fetch,
@@ -260,11 +304,21 @@ async function discoverCanonicalDesignArtifactWithFetch(
     return { resolved: false, code: "no-canonical-design",
       nextAction: "The item references an invalid canonical design path. Use a repository-relative file under docs/superpowers/specs/ without traversal segments." };
   }
-  if (paths.length > 1) {
+  let selectedPath: string | undefined;
+  if (paths.length > 1 && args.subjectItemId && args.headBranch) {
+    try {
+      const binding = await loadCurrentDesignBinding(args.subjectItemId,
+        (args.db ?? prisma) as unknown as CurrentDesignDb, { repositoryFullName: args.repositoryFullName,
+          headBranch: args.headBranch, baseSha: args.baseSha, headSha: args.headSha });
+      if (binding.kind === "bound" && binding.selection === (args.backlogBody ?? "")
+        && paths.includes(binding.artifactRef.path)) selectedPath = binding.artifactRef.path;
+    } catch { /* Missing or unreadable binding never selects a historical reference. */ }
+  }
+  if (paths.length > 1 && !selectedPath) {
     return { resolved: false, code: "ambiguous-canonical-design",
       nextAction: `The item references more than one canonical design (${paths.join(", ")}). Identify one canonical design before requesting review.` };
   }
-  const declaredPath = paths[0];
+  const declaredPath = selectedPath ?? paths[0];
   let response: Response;
   try {
     response = await fetchImpl(

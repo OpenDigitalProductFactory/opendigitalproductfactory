@@ -1,13 +1,38 @@
 import { randomUUID } from "node:crypto";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { Pool } from "pg";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { createHandoffDependencyPostgresFixture } from "../../../../packages/db/src/handoff-dependency-postgres-fixture";
 
-const databaseUrl = process.env.DATABASE_URL;
+const isolated = vi.hoisted(() => ({ prisma: null as ReturnType<typeof createHandoffDependencyPostgresFixture>["prisma"] | null,
+  telemetry: new Set<Promise<void>>() }));
+vi.mock("@dpf/db", async (original) => ({
+  ...await original<typeof import("@dpf/db")>(),
+  get prisma() { if (!isolated.prisma) throw new Error("FIFO fixture is not ready"); return isolated.prisma; },
+}));
+vi.mock("@/lib/queue/queue-telemetry", async (original) => {
+  const actual = await original<typeof import("@/lib/queue/queue-telemetry")>();
+  return { ...actual, recordQueueTransition: (...args: Parameters<typeof actual.recordQueueTransition>) => {
+    const pending = actual.recordQueueTransition(...args);
+    isolated.telemetry.add(pending);
+    void pending.finally(() => isolated.telemetry.delete(pending));
+    return pending;
+  } };
+});
+
+const configured = process.env.DATABASE_URL?.trim() ?? "";
+const databaseUrl = process.env.DPF_JOBS_TEST_DATABASE_URL?.trim() || (() => {
+  try { return /^\/dpf_local_ci_[01]$/.test(new URL(configured).pathname) ? configured : ""; }
+  catch { return ""; }
+})();
 const describeDatabase = databaseUrl ? describe : describe.skip;
-const environmentKey = `fifo-contract-${randomUUID()}`;
+// Reuse the fixture's validated schema namespace; environment identity stays canonical.
+const schema = `dpf_handoff_dependency_${randomUUID().replaceAll("-", "")}`;
+const environmentKey = "active-candidate";
 const claimPrefix = `fifo-contract:${randomUUID()}`;
 
 describeDatabase("nonproduction lease FIFO admission — PostgreSQL", () => {
-  let prisma: typeof import("@dpf/db").prisma;
+  let prisma: ReturnType<typeof createHandoffDependencyPostgresFixture>["prisma"];
+  let pool: Pool;
   let claimNonprodEnvironmentLease:
     typeof import("./environment-lease").claimNonprodEnvironmentLease;
   let releaseNonprodEnvironmentLease:
@@ -16,7 +41,14 @@ describeDatabase("nonproduction lease FIFO admission — PostgreSQL", () => {
     typeof import("./environment-lease").listQueuedNonprodEnvironmentLeases;
 
   beforeAll(async () => {
-    ({ prisma } = await import("@dpf/db"));
+    pool = new Pool({ connectionString: databaseUrl, options: `-c search_path=${schema}` });
+    await pool.query(`CREATE SCHEMA "${schema}"`);
+    // Structures only: no shared lease, config, task or telemetry row is copied.
+    for (const table of ["NonProductionEnvironmentLease", "QueueTelemetryEvent", "PlatformConfig", "TaskRun"]) {
+      await pool.query(`CREATE TABLE "${table}" (LIKE public."${table}" INCLUDING ALL)`);
+    }
+    prisma = createHandoffDependencyPostgresFixture(databaseUrl, schema).prisma;
+    isolated.prisma = prisma;
     ({
       claimNonprodEnvironmentLease,
       releaseNonprodEnvironmentLease,
@@ -25,21 +57,13 @@ describeDatabase("nonproduction lease FIFO admission — PostgreSQL", () => {
   });
 
   afterAll(async () => {
-    if (!prisma) return;
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    const rows = await prisma.nonProductionEnvironmentLease.findMany({
-      where: { environmentKey },
-      select: { leaseId: true },
-    });
-    await prisma.nonProductionEnvironmentLease.deleteMany({
-      where: { environmentKey },
-    });
-    await prisma.queueTelemetryEvent.deleteMany({
-      where: {
-        queueKey: `compute:nonprod-${environmentKey}`,
-        itemId: { in: rows.map((row) => row.leaseId) },
-      },
-    });
+    while (isolated.telemetry.size) await Promise.all([...isolated.telemetry]);
+    await prisma?.$disconnect();
+    if (pool) {
+      try { await pool.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`); }
+      finally { await pool.end(); }
+    }
+    isolated.prisma = null;
   });
 
   it("serializes simultaneous claimers into one owner and a stable FIFO", async () => {
@@ -47,7 +71,8 @@ describeDatabase("nonproduction lease FIFO admission — PostgreSQL", () => {
     const results = await Promise.all(
       Array.from({ length: 12 }, (_, index) =>
         claimNonprodEnvironmentLease({
-          environmentKey: environmentKey as never,
+          db: prisma,
+          environmentKey,
           ownerProvider: "codex",
           ownerSessionId: `pg-session-${index}`,
           claimKey: `${claimPrefix}:${String(index).padStart(2, "0")}`,
@@ -64,11 +89,12 @@ describeDatabase("nonproduction lease FIFO admission — PostgreSQL", () => {
     // A position returned during a simultaneous claim is an intentionally
     // point-in-time observation: later transactions can enqueue ahead of an
     // earlier response. Verify the durable post-burst ordering instead.
-    const queued = (await listQueuedNonprodEnvironmentLeases({}))
+    const queued = (await listQueuedNonprodEnvironmentLeases({ db: prisma }))
       .filter((lease) => lease.environmentKey === environmentKey);
     const observedPositions = await Promise.all(queued.map(async (lease) => {
       const observed = await claimNonprodEnvironmentLease({
-        environmentKey: environmentKey as never,
+        db: prisma,
+        environmentKey,
         ownerProvider: lease.ownerProvider as "codex",
         ownerSessionId: lease.ownerSessionId,
         claimKey: lease.claimKey!,
@@ -85,9 +111,10 @@ describeDatabase("nonproduction lease FIFO admission — PostgreSQL", () => {
 
     const oldest = queued[0]!;
     const active = results.find((result) => result.status === "admitted")!;
-    await releaseNonprodEnvironmentLease({ leaseId: active.lease.leaseId });
+    await releaseNonprodEnvironmentLease({ db: prisma, leaseId: active.lease.leaseId });
     const observed = await claimNonprodEnvironmentLease({
-      environmentKey: environmentKey as never,
+      db: prisma,
+      environmentKey,
       ownerProvider: oldest.ownerProvider as "codex",
       ownerSessionId: oldest.ownerSessionId,
       claimKey: oldest.claimKey!,

@@ -15,6 +15,9 @@ export type SectionNavLink = {
   label: string;
   href: string;
   active: boolean;
+  /** Essential sibling views in the current workspace, independent of the
+   * destination's diagnostic classification. Does not change route authority. */
+  primary?: boolean;
 };
 
 /**

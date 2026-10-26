@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { evaluateCompletionEvidence } from "./completion-evidence-policy";
 import {
   EXECUTION_EVIDENCE_KINDS,
   evidenceKindMetadata,
@@ -9,7 +10,7 @@ import {
 
 describe("execution evidence registry", () => {
   it("maps every closed evidence kind to one dimension and polarity", () => {
-    expect(EXECUTION_EVIDENCE_KINDS).toHaveLength(12);
+    expect(EXECUTION_EVIDENCE_KINDS).toHaveLength(13);
     for (const kind of EXECUTION_EVIDENCE_KINDS) {
       const metadata = evidenceKindMetadata(kind);
       expect(metadata.dimension).toBeTruthy();
@@ -23,6 +24,46 @@ describe("execution evidence registry", () => {
       polarity: "neutral",
       gateEligible: false,
     });
+  });
+
+  it("records a blocked or failed manual check as manual_fail, which the completion policy blocks on", () => {
+    expect(evidenceKindMetadata("manual_fail")).toEqual({
+      dimension: "manual",
+      polarity: "fail",
+      gateEligible: false,
+    });
+    const verdict = evaluateCompletionEvidence({
+      item: { id: "row-1", itemId: "BI-1", status: "in-progress", workType: "chore" },
+      rawManifest: { workClass: "operational", evidenceActivityIds: ["manual-pass"] },
+      evidence: [
+        {
+          id: "manual-pass",
+          itemId: "row-1",
+          evidenceKind: "manual_check",
+          recordedAt: new Date("2026-07-26T09:00:00.000Z"),
+          structurallyValid: true,
+        },
+        {
+          id: "manual-fail",
+          itemId: "row-1",
+          evidenceKind: "manual_fail",
+          recordedAt: new Date("2026-07-26T11:00:00.000Z"),
+          structurallyValid: true,
+        },
+      ],
+      activeBuildEvidence: null,
+      evidenceCutoff: new Date("2026-07-25T12:00:00.000Z"),
+      now: new Date("2026-07-26T12:00:00.000Z"),
+    });
+    expect(verdict.allowed).toBe(false);
+    expect(verdict.currentFailures).toEqual([
+      { dimension: "manual", evidenceActivityId: "manual-fail", evidenceKind: "manual_fail" },
+    ]);
+    expect(verdict.blockers).toContainEqual(expect.objectContaining({
+      code: "newer-failure",
+      dimension: "manual",
+      evidenceActivityId: "manual-fail",
+    }));
   });
 
   it("requires HTTP(S) provenance for source evidence", () => {

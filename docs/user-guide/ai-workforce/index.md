@@ -100,7 +100,7 @@ Model assignments explicitly saved by an operator remain unchanged during upgrad
 - Manage agent-to-provider assignments for specific platform capabilities
 - Optionally give the standing COO a conversational name from its coworker record; DPF always keeps the `AI COO` role visible and does not change the coworker's identity, authority, or audit attribution
 - View the **Authority** tab to understand agent tool grants, oversight levels, and escalation paths
-- Review the **Action History** to see every coworker request for approval and its outcome. It lists approval requests and the older proposals together, so history from before the change stays readable
+- Review the **Action History** to see every coworker request for approval and its outcome. It lists approval requests and the older proposals together, so history from before the change stays readable. An older proposal that nobody decided within seven days, the same window an approval request gets, shows as **Expired**: nothing ran, the record is kept, and the coworker can ask again if the action is still needed
 - On **Authority**, each supervisor agent card shows the coworker's newest pending approval. The person asked can **Authorize** or **Decline** it there; an admin who is not that person can **Decide on their behalf** with a reason
 - Inspect the **Tool Execution Log** to audit every tool call made by any agent (who, what, when, result)
 - Open a coworker record to review **Living Playbooks** and see when the platform is testing a better method

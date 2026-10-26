@@ -232,3 +232,46 @@ REA provenance, release metadata, license, and documented contracts were inspect
 After DPF recovery, record this founder direction in the existing work and retrieve live `absorb-dont-adopt` and `data-sovereignty-follows-control` guidance and valid WWMD decisions. Reconcile the proposal with EP-ECOSYSTEM-ABSORPTION-ARCH, EP-ASSET-INTELLIGENCE, and the existing estate/dependency sovereignty programmes. Check current status before reusing historical BI identifiers.
 
 Then record live backlog coverage for independently shippable slices, decide the analysis execution location, and implement the first fixture pilot in a governed worktree. Tests must cover grant denial, changed tool digests, unsupported providers, target containment, evidence preservation, repeated assessment, and cancellation/cleanup. UI delivery also needs served-target verification. This source record preserves research during the outage. It does not substitute for live backlog coverage, decision receipts, or execution evidence.
+
+
+## October 25 operating-model reconciliation
+
+The COO's cross-room operational follow-through is a prerequisite for independent
+business operation, including the investigations and absorption work described
+here. Customer demand, analysis, implementation and acceptance remain distinct
+Workroom outcomes with accountable coordinators. The COO follows blocked
+handoffs and verifies that recovery reaches its outcome; the founder must not
+supply a recurring status/restart loop.
+
+The October 26 clarification makes this an installation-aware operating model.
+The production COO follows production business objectives and decisions; the DEV
+COO follows development and delivery, consulting production for permitted context
+that is absent locally. Sandbox/test work has an admitted purpose, owner and
+expiry, and hands evidence back before disposal. Existing federation, canonical
+identity and projection boundaries carry coordination. No install inherits another
+install's decision authority, and test evidence does not establish production
+acceptance. Cross-install onboarding and operational verification remain pending.
+
+The [current coordination design](../superpowers/specs/2026-09-03-coordinated-workrooms-design.md#october-25-amendment-coo-operational-follow-through)
+is authoritative for that operating contract. BI-4B48E7FE tracks the repair;
+BI-756C899D owns truthful progress and BI-C43FD3E5 owns durable recovery supervision.
+This supersedes an Advisor-only or report-only COO interpretation, without
+granting authority to specialists or claiming the repair is already deployed.
+
+Assess this strategy by verified business outcomes and human steps removed,
+including recovery time, unacknowledged obligations, repeated founder nudges and
+unresolved external handoffs. Available tools, running agents and completed
+implementation records alone do not demonstrate independent operation.
+
+
+### Harness improvement and operational ownership
+
+The founder-supplied Harness2 and Meta-Harness references reinforce a proposed
+strategy of improving the system around the model from measured execution
+failures. The [coordination design](../superpowers/specs/2026-09-03-coordinated-workrooms-design.md#harness-engineering-alignment-requested-by-the-founder)
+records the research and DPF's boundaries. The COO owns operational follow-through;
+the existing improvement process owns tested, reviewed harness changes.
+Evaluate this approach by completed business outcomes, human interventions,
+recovery time and cost. An optimization benchmark or a revised COO prompt alone
+does not prove independent business operation. Implementation and onboarding
+verification remain pending.

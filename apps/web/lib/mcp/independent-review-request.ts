@@ -1,6 +1,6 @@
 import { prisma } from "@dpf/db";
 import type { ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
-import type { InitiativeReadinessDecision } from "@/lib/backlog/initiative-readiness";
+import type { InitiativeReadinessDecision, ReadinessRequirementResult } from "@/lib/backlog/initiative-readiness";
 import { currentUserContext } from "@/lib/govern/current-user-context";
 import { can } from "@/lib/permissions";
 import { expandGrants } from "@/lib/tak/agent-grants";
@@ -14,6 +14,8 @@ import { deterministicExternalTaskRunId, remoteTaskRequestMatches } from "@/lib/
 import { loadTaskInitiativeReviewOutcome } from "@/lib/mcp-task-review-outcome";
 import { BUILD_STUDIO_ASSISTANT_AGENT_ID, buildStudioOwedRoutes } from "@/lib/backlog/initiative-readiness/build-studio-owed-routes";
 import { reviewDocumentPreflight } from "@/lib/mcp-task-review-document";
+import { isCurrentDeliveredBodyAuthor } from "@/lib/backlog/initiative-readiness/body-baseline-author-room";
+import { isFullSourceCommitSha } from "@/lib/work-capsules/work-capsule-branch-identity";
 
 /** Match the durable request identity, never a caller's task-handle assertion. */
 async function matchingReviewRequest(params: Record<string, unknown>, userId: string, context: ToolExecutionContext) {
@@ -92,10 +94,13 @@ export async function authorizeCoworkerRequest(
     return deny("The connection's authorization is no longer current.");
   }
   const binding = parseInitiativeReviewBinding(params.initiativeReviewBinding);
+  if (binding?.presentReassessment && recoveryTarget !== undefined) {
+    return deny("A present assessment cannot resume an original review. Use its exact issued request for readback.");
+  }
   const lane = binding?.gate === "objective-mapping" && binding.writerToolName === "record_initiative_evidence"
     ? readinessLaneForRole("acceptance-reviewer")?.lane
     : binding && INITIATIVE_READINESS_LANES[binding.writerToolName];
-  if (options?.sourceOnly && (!binding || binding.eligibleEvidenceActivityIds?.length
+  if (options?.sourceOnly && (!binding || binding.presentReassessment || binding.eligibleEvidenceActivityIds?.length
     || !["record_initiative_design_review", "record_initiative_architecture_review"].includes(binding.writerToolName))) {
     return deny("This review does not have a source-only activity contract.");
   }
@@ -107,8 +112,20 @@ export async function authorizeCoworkerRequest(
   }
   // A Build Studio room records the item's ROW id in backlogItemId (the
   // attachment writes backlogItem.id); an adopted room records the BI- id.
-  const room = await prisma.workroom.findFirst({ where: { capsuleId: binding.workroomRef.workroomId, archivedAt: null },
-    select: { id: true, backlogItemId: true, executorKind: true, requestedByPrincipalId: true, featureBuild: { select: { createdById: true } } } });
+  const bodyAcceptance = binding.gate === "objective-mapping" && binding.artifactRef.kind === "document-version";
+  const roomSelect = { id: true, backlogItemId: true, executorKind: true, requestedByPrincipalId: true,
+    repositoryFullName: true, headBranch: true, baseSha: true, headSha: true,
+    featureBuild: { select: { createdById: true } } } as const;
+  let room = await prisma.workroom.findFirst({ where: { capsuleId: binding.workroomRef.workroomId, archivedAt: null,
+      ...(bodyAcceptance ? { status: { not: "archived" } } : {}) },
+    select: roomSelect });
+  if (!room && bodyAcceptance) {
+    const subject = await prisma.backlogItem.findUnique({ where: { itemId: binding.itemId }, select: { id: true } });
+    if (subject && await isCurrentDeliveredBodyAuthor(prisma, { ...subject, itemId: binding.itemId }, binding.workroomRef)) {
+      room = await prisma.workroom.findFirst({ where: { capsuleId: binding.workroomRef.workroomId, status: "archived" },
+        select: roomSelect });
+    }
+  }
   const roomOwnsItem = Boolean(room) && (room!.backlogItemId === binding.itemId
     || (room!.backlogItemId !== null && room!.backlogItemId === (await prisma.backlogItem.findUnique({ where: { itemId: binding.itemId }, select: { id: true } }))?.id));
   const buildStudioRoom = roomOwnsItem && room!.executorKind === "build-studio";
@@ -133,14 +150,28 @@ export async function authorizeCoworkerRequest(
   // Reuse the canonical readiness projection and recovery issuer; client names,
   // hashes and packet-shaped JSON are never evidence of server authorization.
   const { getBacklogItem } = await import("./packs/backlog-pack-read-tools");
-  const item = await getBacklogItem({ itemId: binding.itemId }, context.agentId);
+  let currentDesignSource;
+  if (binding.artifactRef.kind === "repo-blob-at-commit") {
+    if (!room || room.repositoryFullName !== binding.workroomRef.repositoryFullName
+      || room.headBranch !== binding.workroomRef.branchName || room.headSha !== binding.workroomRef.headSha
+      || !isFullSourceCommitSha(room.baseSha) || !isFullSourceCommitSha(room.headSha)) {
+      return !options?.sourceOnly && await hasCompletedReview(params, userId, context)
+        ? { bounded: true }
+        : deny("The selected Workroom's immutable source changed or is incomplete. Refresh its exact claim and review request.");
+    }
+    currentDesignSource = { repositoryFullName: room.repositoryFullName, headBranch: room.headBranch,
+      baseSha: room.baseSha, headSha: room.headSha };
+  }
+  const item = await getBacklogItem({ itemId: binding.itemId }, context.agentId, undefined, undefined,
+    currentDesignSource ? { currentDesignSource } : undefined);
   if (options?.sourceOnly && item.data?.scopeKind !== "platform") {
     return deny("Source-only classification requires a platform-scoped review.");
   }
-  const readiness = item.data?.readiness as { decisions?: Partial<Record<"plan" | "implementation" | "completion", InitiativeReadinessDecision>> } | undefined;
+  const readiness = item.data?.readiness as { decisions?: Partial<Record<"plan" | "implementation" | "completion", InitiativeReadinessDecision>>;
+    planBaselinePrerequisite?: ReadinessRequirementResult | null } | undefined;
   if (!item.success || !readiness?.decisions) return deny("This item's readiness could not be resolved.");
   const { decisionForIndependentReview } = await import("@/lib/backlog/initiative-readiness/design-phase-recovery");
-  const decision = decisionForIndependentReview(binding.writerToolName, readiness.decisions);
+  const decision = decisionForIndependentReview(binding.writerToolName, readiness.decisions, readiness.planBaselinePrerequisite);
   if (!decision) return !options?.sourceOnly && await hasCompletedReview(params, userId, context)
     ? { bounded: true } : deny("This item has no pending review for the requested lane.");
   if (decision.verdict === "allowed") return !options?.sourceOnly && await hasCompletedReview(params, userId, context)
@@ -162,13 +193,24 @@ export async function authorizeCoworkerRequest(
         })() : null });
       return recovery.reviewerRoutes.filter((route) => route.independent).map((route) => route.requestCoworker);
     })();
-  if (!issued.some((issuedPacket) => canonicalJson(issuedPacket) === canonicalJson(params))) {
+  const comparable = binding.presentReassessment ? await (async () => {
+    if (recoveryTarget !== undefined) return [];
+    const { issuePresentReassessmentRequest } = await import("@/lib/mcp-task-review-reassessment");
+    const packets: Record<string, unknown>[] = [];
+    for (const packet of issued) {
+      try { packets.push(await issuePresentReassessmentRequest({ packet, authorizationItemId: binding.presentReassessment!.authorizationItemId,
+        userId, actingAgentId: context.agentId!, tokenGrantScopes: context.tokenGrantScopes ?? [] })); }
+      catch { /* An unproven source does not issue an alternative packet. */ }
+    }
+    return packets;
+  })() : issued;
+  if (!comparable.some((issuedPacket) => canonicalJson(issuedPacket) === canonicalJson(params))) {
     if (!options?.sourceOnly && await hasCompletedReview(params, userId, context)) return { bounded: true };
     return deny("The review request has changed or is no longer eligible. This refusal does not deliver a replacement packet. Read get_backlog_item with itemId and recoveryGate for the current exact request or explicit recovery; never reconstruct it.");
   }
   // The native door must retain an issued original-task locator. Dropping it
   // cannot turn a recovery request into a new connection's duplicate task.
-  if (!options?.sourceOnly && !options?.forceBounded) {
+  if (!binding.presentReassessment && !options?.sourceOnly && !options?.forceBounded) {
     const { issueOriginalReviewRecoveryTarget } = await import("@/lib/mcp-task-review-recovery");
     const key = await resolveMcpTaskAuthorityKey({ tokenId: context.apiTokenId, userId, source: "oauth" });
     if (!key) return deny("The current connection's review task authority is unavailable.");

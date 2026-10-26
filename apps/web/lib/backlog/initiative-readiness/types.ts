@@ -133,6 +133,8 @@ export type InitiativeReadinessFacts = {
   deliveryEvidence: ReadinessEvidenceState;
   acceptanceEvidence: ReadinessEvidenceState;
   objectiveBaseline: ReadinessEvidenceState;
+  /** Retained independently approved repository scope keeps its amendment writer. */
+  objectiveBaselineRequiresReview?: boolean;
   objectiveBaselineConflict?: boolean;
   objectiveReconciliation: ReadinessEvidenceState;
   archetypeProvisioning: ArchetypeProvisioningFacts;

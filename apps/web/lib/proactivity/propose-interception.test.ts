@@ -88,7 +88,7 @@ describe("interceptToolCallAsProposal: a room cadence's declared writes run (BI-
     const resolveMandatedTools = vi.fn(async () => ["record_execution_evidence", "record_workroom_evidence"]);
     const result = await interceptToolCallAsProposal({ ...call, execute }, { persistence: messages(), resolveMandatedTools });
     expect(result).toBeNull();
-    expect(resolveMandatedTools).toHaveBeenCalledWith({ taskRunId: "TR-SCHED-1234ABCD", agentId: "AGT-WS-PORTFOLIO" });
+    expect(resolveMandatedTools).toHaveBeenCalledWith({ taskRunId: "TR-SCHED-1234ABCD", agentId: "AGT-WS-PORTFOLIO", toolName: call.toolName, params: call.args });
     expect(execute).not.toHaveBeenCalled();
   });
 

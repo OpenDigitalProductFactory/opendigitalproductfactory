@@ -1,10 +1,14 @@
 // scripts/gate-wait.test.mjs — BI-22E11EA2
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 
 import { classifyGateExit, GATE_EXIT } from "./lib/gate-exit-classification.mjs";
 import { EXIT_CANDIDATE_MERGE_CONFLICT, EXIT_SOURCE_DRIFT, EXIT_WAIT_CANCELLED } from "./lib/sandbox-freshness.mjs";
-import { delayForAttempt, parseGateStatus, waitForGate } from "./gate-wait.mjs";
+import { delayForAttempt, parseGateStatus, pregateSpawnOptions, runPregate, waitForGate } from "./gate-wait.mjs";
 
 const noSleep = async () => {};
 
@@ -27,6 +31,97 @@ test("a plain exit 1 is a real failure and stops immediately", () => {
   const v = classifyGateExit({ code: 1, output: "FAIL lib/foo.test.ts" });
   assert.equal(v.verdict, "fail");
   assert.equal(v.retry, false);
+});
+
+// BI-2FFDBE62: spawnSync("pnpm") on Windows returns status null. That is a
+// process that never started, not a verdict about the diff.
+for (const exitCode of [0, 23]) {
+  test(`Windows pregate launcher executes the installed pnpm entrypoint and preserves exit ${exitCode}`, t => {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), "dpf gate wait & literal-")));
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    const script = join(root, "node_modules", "pnpm", "bin", "pnpm.cjs");
+    mkdirSync(dirname(script), { recursive: true });
+    writeFileSync(join(root, "pnpm.cmd"), "@echo off\r\nexit /b 99\r\n");
+    writeFileSync(script, `console.log(JSON.stringify({ argv: process.argv.slice(2), cwd: process.cwd(), capture: process.env.DPF_PREGATE_ALLOW_CAPTURE, literal: process.env.DPF_TEST_LITERAL })); process.exit(${exitCode});\n`);
+    const literal = "%PATH% !NAME! a&b|c<>d^e";
+    const spec = pregateSpawnOptions({ platform: "win32", env: { Path: root, DPF_TEST_LITERAL: literal }, cwd: root });
+    let result;
+    const launch = runPregate({ platform: "win32", env: spec.options.env, cwd: root,
+      spawnSyncImpl: (command, args, options) => (result = spawnSync(command, args, { ...options, stdio: "pipe", encoding: "utf8", timeout: 5000 })) });
+    assert.equal(launch.code, exitCode, launch.launchError);
+    assert.equal(result.error, undefined, result.error?.message);
+    assert.equal(result.status, exitCode, result.stderr);
+    assert.deepEqual(JSON.parse(result.stdout), { argv: ["run", "pregate"], cwd: root, capture: "1", literal });
+    assert.equal(spec.options.shell, false);
+    assert.equal(spec.options.stdio, "inherit");
+  });
+}
+
+test("POSIX pregate keeps direct pnpm invocation and allows captured pregate", () => {
+  const posix = pregateSpawnOptions({ platform: "linux", env: { PATH: "x" }, cwd: "/repo" });
+  assert.equal(posix.command, "pnpm");
+  assert.deepEqual(posix.args, ["run", "pregate"]);
+  assert.equal(posix.options.cwd, "/repo");
+  assert.equal(posix.options.shell, false);
+  assert.equal(posix.options.env.DPF_PREGATE_ALLOW_CAPTURE, "1");
+  assert.equal(posix.options.env.PATH, "x");
+});
+for (const layout of ["missing", "unsupported"]) {
+  test(`Windows ${layout} pnpm is an actionable unrun gate without a spawn or retry`, async t => {
+    const root = mkdtempSync(join(tmpdir(), "dpf gate resolution-"));
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    if (layout === "unsupported") writeFileSync(join(root, "pnpm.cmd"), "@echo off\r\n");
+    let attempts = 0, spawns = 0;
+    const events = [];
+    const result = await waitForGate({
+      readStatus: async () => ({ verdict: "NO-RECORD" }), sleep: noSleep,
+      runGate: () => {
+        attempts++;
+        return runPregate({ platform: "win32", env: { Path: root }, cwd: root,
+          spawnSyncImpl: () => { spawns++; throw new Error("unexpected spawn"); } });
+      },
+      log: event => events.push(event),
+    });
+    assert.equal(attempts, 1);
+    assert.equal(spawns, 0);
+    assert.equal(result.outcome, "inconclusive");
+    assert.equal(result.exitCode, GATE_EXIT.ABANDONED_OR_UNRECORDED);
+    assert.equal(result.verdict.kind, "spawn-failed");
+    assert.equal(result.verdict.verdict, "none");
+    assert.match(result.verdict.summary, layout === "missing" ? /Cannot resolve pnpm on PATH/ : /JavaScript entrypoint/);
+    assert.equal(events[0].summary, result.verdict.summary);
+  });
+}
+
+test("reported and thrown launch errors retain diagnostics and cannot become a pass", () => {
+  for (const spawnSyncImpl of [
+    () => ({ status: 0, error: new Error("spawn failed: EACCES") }),
+    () => { throw new Error("spawn failed: EACCES"); },
+  ]) {
+    const result = runPregate({ platform: "linux", env: {}, spawnSyncImpl });
+    assert.equal(result.code, null);
+    assert.equal(result.launchError, "spawn failed: EACCES");
+    assert.equal(classifyGateExit(result).verdict, "none");
+  }
+});
+test("a null exit means pregate did not start and is not a diff failure", () => {
+  for (const code of [null, undefined]) {
+    const v = classifyGateExit({ code });
+    assert.equal(v.kind, "spawn-failed", `code ${code}`);
+    assert.equal(v.retry, false);
+    assert.equal(v.verdict, "none");
+    assert.doesNotMatch(v.summary, /gate failed/);
+  }
+});
+
+// BI-4BCD269B: a wrapped pregate stops before it occupies the pool. The code
+// must not fall through to a product FAIL.
+test("exit 11 is a wrapped invocation, not a product failure", () => {
+  assert.equal(GATE_EXIT.WRAPPED_INVOCATION, 11);
+  const v = classifyGateExit({ code: 11 });
+  assert.equal(v.kind, "wrapped");
+  assert.equal(v.retry, false);
+  assert.equal(v.verdict, "none");
 });
 
 // BI-FCC1DCB2: a candidate that conflicts with origin/main fails the same way on

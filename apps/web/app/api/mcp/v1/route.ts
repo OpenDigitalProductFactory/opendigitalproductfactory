@@ -1,3 +1,4 @@
+import { reviewTaskTransportRefusal } from "@/lib/mcp-task-reassessment-transport";
 // Real MCP JSON-RPC 2.0 transport for external coding agents (Claude Code,
 // Codex CLI, VS Code MCP) on the user's host. Spec snapshot in
 // docs/Reference/mcp/spec/ (version 2025-11-25).
@@ -18,13 +19,8 @@
 //                              AS, same scope vocabulary, same revocation
 //                              surface. A grant type, not a side door.
 //
-// This file previously read: "We do NOT implement OAuth 2.1 resource-server
-// discovery (the GitHub-PAT pattern, intentionally)." That was right for a
-// single-operator loopback surface and stopped being right once (a) five
-// external clients connect and all of them perform RFC 9728 discovery,
-// (b) `2025-11-25` made Protected Resource Metadata a server MUST while we
-// advertise that revision on the wire, and (c) consumer installs have no
-// operator with a portal habit to mint a token by hand.
+// RFC 9728 resource discovery serves external clients and installs whose
+// operators have no portal session from which to provision a token.
 //
 // The `dpfmcp_` PAT still resolves, and every configured client keeps working.
 // It is on a deprecation horizon: issuance closes first, resolution survives
@@ -372,7 +368,7 @@ async function handleTasksLifecycle(
       result = await handleTasksGet(token.userId, params);
       break;
     case "tasks/result":
-      result = await handleTasksResult(token.userId, params);
+      result = await handleTasksResult(token.userId, params, { actingAgentId: token.agentId ?? null, tokenGrantScopes: token.scopes });
       break;
     case "tasks/list":
       result = await handleTasksList(token.userId, params);
@@ -573,11 +569,9 @@ async function handleToolsCall(
       apiTokenId: token.tokenId,
       threadId: token.threadId ?? undefined,
       routeContext: token.routeContext ?? undefined,
-      // BI-B949993E: a session JWT minted for a governed TaskRun carries its
-      // id; governed execution resolves the TaskRun's immutable review
-      // binding from it (resolve-coworker-tool-authority), so a native CLI
-      // writer call is admitted routinely instead of parked on an envelope.
+      // Resolve the immutable review binding from the authenticated TaskRun.
       ...(token.taskRunId ? { taskRunId: token.taskRunId } : {}),
+      ...(token.taskExecutionFence ? { taskExecutionFence: token.taskExecutionFence } : {}),
       callerClient,
       authSource: token.source,
       tokenScope, tokenGrantScopes: expandedScopes,
@@ -710,6 +704,11 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   try {
+    const callbackRefusal = isNotification ? null : await reviewTaskTransportRefusal({
+      token, method: body.method, params: body.params,
+    });
+    if (callbackRefusal) return jsonRpcError(body.id ?? null, JSONRPC_INVALID_REQUEST,
+      callbackRefusal.message, { error: callbackRefusal.error }, 403);
     switch (body.method) {
       case "initialize":
         if (isNotification) {

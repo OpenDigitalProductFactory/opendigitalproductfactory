@@ -272,6 +272,26 @@ File: `apps/web/lib/gpp/shape-language/gate-ratification.test.ts`.
    the DI from 5a-0, the no-docs-needed reason ("compiler tooling only; no user, coworker or runtime
    surface"), DCO sign-off. `pnpm pr:health <n>`, then `gh pr merge <n> --squash --auto`.
 
+### PR-5a implementation clarification — 2026-10-20
+
+Workroom WC-8EEE805D / BI-D37B2C13 implements the compiler-only slice above.
+WWMD DI-7D228A48C022 resolves task 5a-0 to entry-gate ownership; the agent
+recorded agreement after implementing it. Binding drafts and C-3/D-7 now use
+that entry gate. A joined entry must have typed gates on every predecessor,
+with matching decision scope and gate fields; differing authorizers cannot
+produce one unambiguous binding draft. The outgoing gate retains its own D-8
+ratification check. This does not activate runtime bindings.
+
+The environment-binding and unregistered-egress fixtures now place their
+binding on the stage entered by the gate. Sandbox containment is informational
+and not applicable without sandbox-stage facts. Declared-flow sidecars are
+restricted to the separate source root, retain error severity, require exact
+tool sets, and refuse stale entries. Registry behavior assertions remain
+scoped to registry shapes; declared flows will have their own conformance tests.
+
+This is compiler tooling only; no user, coworker or runtime surface changes.
+PR-5b's founder gate ratification remains a separate outstanding requirement.
+
 ## PR-5b: Build Studio declared shape
 
 Branch `feat/gpp-phase-5b-build-studio-shape`, after PR-5a merges.

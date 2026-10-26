@@ -9,6 +9,9 @@ export const COWORKER_ENGAGEMENT_STATUSES = [
   "in-progress",
   "completed",
   "cancelled",
+  "failed",
+  "unavailable",
+  "unknown",
 ] as const;
 export type CoworkerEngagementStatus = (typeof COWORKER_ENGAGEMENT_STATUSES)[number];
 

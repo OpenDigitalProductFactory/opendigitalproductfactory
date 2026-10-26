@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "compact-shared-blocker",
+  "decisionInteractionId": "DI-0BD1DDAB44FE",
+  "scope": {
+    "files": [
+      "apps/web/components/workspace/workroom/NestedRoomCoordinationPanel.tsx",
+      "apps/web/components/workspace/workroom/WorkroomHeader.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "compact-shared-blocker",
+      "full-inline-blocker"
+    ]
+  }
+}

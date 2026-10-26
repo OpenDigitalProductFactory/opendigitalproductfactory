@@ -76,21 +76,83 @@ function readCandidateFiles(gitBin, worktreePath, sha) {
     : null;
 }
 
+const TREE_SHA = /^[0-9a-f]{40}$/i;
+
+/**
+ * BI-45553400 / BI-1F11D17A. `git merge-tree --write-tree` exits non-zero for
+ * a conflict and also for a missing object. Only the conflict text is a
+ * merge conflict. Anything else is "we could not build an integration tree",
+ * which a resumed gate still reports as source drift.
+ */
+export function classifyMergeTreeResult({ status, stdout = "", stderr = "" } = {}) {
+  const tree = String(stdout || "").trim().split(/\s+/)[0] || "";
+  if (status === 0 && TREE_SHA.test(tree)) return { kind: "clean", tree };
+  const text = `${stdout || ""}\n${stderr || ""}`;
+  if (status !== 0 && status !== null && status !== undefined && /conflict/i.test(text)) {
+    const paths = [];
+    for (const match of text.matchAll(/Merge conflict in (\S+)/g)) paths.push(match[1]);
+    return { kind: "conflict", paths };
+  }
+  return { kind: "unavailable" };
+}
+
+export function resolveIntegrationTree({
+  sha,
+  ancestorStatus,
+  mergeStatus,
+  mergeStdout = "",
+  mergeStderr = "",
+}) {
+  if (ancestorStatus === 0) return { kind: "ancestor", ref: sha };
+  const classified = classifyMergeTreeResult({
+    status: mergeStatus,
+    stdout: mergeStdout,
+    stderr: mergeStderr,
+  });
+  if (classified.kind === "clean") return { kind: "merged", ref: classified.tree };
+  if (classified.kind === "conflict") return { kind: "conflict", paths: classified.paths };
+  return { kind: "unavailable" };
+}
+
+/**
+ * What the gate should do with a pre-admission result. A merge conflict stops
+ * as status conflict for every invocation. A resumed gate that lost its
+ * identity for any other reason still stops as source drift.
+ */
+export function preAdmissionDisposition(documentationResult, { resumed = false } = {}) {
+  if (documentationResult?.mergeConflict) {
+    return {
+      action: "conflict",
+      exitCode: 10,
+      mergeConflict: documentationResult.mergeConflict,
+    };
+  }
+  if (resumed && !documentationResult?.gateIdentity) {
+    return { action: "source-drift", reasons: ["gate-identity-unavailable"] };
+  }
+  return { action: "continue", gateIdentity: documentationResult?.gateIdentity ?? null };
+}
+
 function integrationTreeRef(gitBin, worktreePath, sha) {
   const currentBase = spawnSync(
     gitBin,
     ["merge-base", "--is-ancestor", "origin/main", sha],
     { cwd: worktreePath, shell: false },
   );
-  if (currentBase.status === 0) return sha;
-  const merge = spawnSync(
-    gitBin,
-    ["merge-tree", "--write-tree", "origin/main", sha],
-    { cwd: worktreePath, encoding: "utf8", shell: false },
-  );
-  if (merge.status !== 0) return "";
-  const tree = (merge.stdout || "").trim().split(/\s+/)[0] || "";
-  return /^[0-9a-f]{40}$/i.test(tree) ? tree : "";
+  const merge = currentBase.status === 0
+    ? null
+    : spawnSync(
+      gitBin,
+      ["merge-tree", "--write-tree", "origin/main", sha],
+      { cwd: worktreePath, encoding: "utf8", shell: false },
+    );
+  return resolveIntegrationTree({
+    sha,
+    ancestorStatus: currentBase.status,
+    mergeStatus: merge?.status,
+    mergeStdout: merge?.stdout ?? "",
+    mergeStderr: merge?.stderr ?? "",
+  });
 }
 
 function runDocumentationCommands(worktreePath, env) {
@@ -142,8 +204,15 @@ export async function runPreAdmissionDocumentationLane({
 }) {
   resolveLocalCiTestProfile(env);
   if (!exactCandidateIsEligible({ gitBin, worktreePath, sha })) return { handled: false };
-  const integrationRef = integrationTreeRef(gitBin, worktreePath, sha);
-  if (!integrationRef) return { handled: false };
+  const integration = integrationTreeRef(gitBin, worktreePath, sha);
+  if (integration.kind === "conflict") {
+    return {
+      handled: false,
+      mergeConflict: { baseRef: "origin/main", paths: integration.paths ?? [] },
+    };
+  }
+  if (integration.kind !== "ancestor" && integration.kind !== "merged") return { handled: false };
+  const integrationRef = integration.ref;
   const changedFiles = readCandidateFiles(gitBin, worktreePath, integrationRef);
   if (!changedFiles) return { handled: false };
 

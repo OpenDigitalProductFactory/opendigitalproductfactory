@@ -5,6 +5,11 @@ const mocks = vi.hoisted(() => ({
   findFirst: vi.fn(),
   update: vi.fn(),
   runSetupCompletionSeeds: vi.fn(),
+  monitoringDecision: vi.fn(async () => null as "enabled" | "disabled" | "undecided" | null),
+}));
+
+vi.mock("@/lib/platform-runtime/monitoring-switch-loader", () => ({
+  loadMonitoringCapabilityDecision: mocks.monitoringDecision,
 }));
 
 vi.mock("@dpf/db", () => ({
@@ -29,6 +34,7 @@ function pendingSteps(): Record<string, StepStatus> {
 describe("completeSetupStepFromEvidence", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.monitoringDecision.mockResolvedValue(null);
     mocks.update.mockImplementation(async ({ data }: { data: unknown }) => data);
   });
 
@@ -75,6 +81,7 @@ describe("completeSetupStepFromEvidence", () => {
         "how-you-decide": "completed",
         "operating-hours": "completed",
         storefront: "completed",
+        monitoring: "skipped",
       },
     });
 

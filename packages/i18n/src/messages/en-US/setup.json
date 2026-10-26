@@ -32,6 +32,7 @@
     "storefront": "Storefront",
     "mailroom": "Mailroom",
     "platform-development": "Platform Dev",
+    "monitoring": "Monitoring",
     "build-studio": "Build",
     "meet-your-coo": "Meet Your COO",
     "workspace": "Workspace"
@@ -141,5 +142,18 @@
     "savedLocal": "Saved: Local only",
     "savedCloud": "Saved: Cloud allowed",
     "saveUnconfirmed": "Could not confirm the save. The last confirmed setting is shown. Try again."
+  },
+  "sourceCredentials": {
+    "assistantLabel": "Acts as assistant",
+    "accountOnly": "Your account only",
+    "loading": "Loading assistants…",
+    "permissionsHint": "Current assistant permissions still apply.",
+    "unboundHint": "Without an assistant, this client cannot join Workrooms.",
+    "discoveryUnavailable": "Could not load assistants. Close and try again.",
+    "creationUnavailable": "Could not create this client. Try again.",
+    "savedAssistantLabel": "Assistant:",
+    "clientNameHint": "Where this client runs.",
+    "scopeHint": "Choose needed access.",
+    "secretHint": "Keep this secret private. It appears once."
   }
 }

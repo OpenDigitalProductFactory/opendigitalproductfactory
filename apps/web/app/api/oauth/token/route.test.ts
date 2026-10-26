@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 const mock = vi.hoisted(() => ({
-  client: vi.fn(), human: vi.fn(), agent: vi.fn(), issue: vi.fn(), rotate: vi.fn(), exchange: vi.fn(), quiescence: vi.fn(), matches: vi.fn(), config: vi.fn(),
+  client: vi.fn(), human: vi.fn(), agent: vi.fn(), issue: vi.fn(), rotate: vi.fn(), exchange: vi.fn(), quiescence: vi.fn(), matches: vi.fn(), config: vi.fn(), consent: vi.fn(),
 }));
 vi.mock("@dpf/db", () => ({ prisma: { agent: { findUnique: mock.agent },
   oAuthClient: { update: vi.fn().mockResolvedValue({}) }, platformConfig: { findUnique: mock.config } } }));
@@ -9,6 +9,7 @@ vi.mock("@/lib/auth/oauth-identity-binding", () => ({ currentOAuthHuman: mock.hu
 vi.mock("@/lib/auth/oauth-tokens", () => ({ issueAccessToken: mock.issue,
   rotateOAuthRefreshToken: mock.rotate, exchangeOAuthCode: mock.exchange, secretMatches: mock.matches }));
 vi.mock("@/lib/self-upgrade/quiescence", () => ({ getQuiescenceConfig: mock.quiescence }));
+vi.mock("@/lib/auth/credentials-client-consent", () => ({ credentialsClientConsentBindingId: mock.consent }));
 import { POST } from "./route";
 function request(values: Record<string, string> = {}) {
   return new Request("http://localhost:3000/api/oauth/token", { method: "POST",
@@ -26,6 +27,7 @@ beforeEach(() => {
   mock.human.mockResolvedValue({ userId: "human" });
   mock.agent.mockResolvedValue({ agentId: "AGT-SERVICE", status: "active", archived: false });
   mock.issue.mockResolvedValue({ accessToken: "dpfoat_fixture", expiresIn: 300, publicScopes: ["dpf.read"] });
+  mock.consent.mockResolvedValue(null);
 });
 
 describe("OAuth continuity during quiescence", () => {
@@ -116,5 +118,26 @@ describe("configured OAuth services", () => {
     const response = await POST(request({ grant_type: "refresh_token", refresh_token: "dpfort_fixture", scope: "dpf.read unknown" }));
     expect(await response.json()).toMatchObject({ error: "invalid_scope" });
     expect(mock.rotate).not.toHaveBeenCalled();
+  });
+});
+
+// BI-79D26E39: an operator-bound approved assistant's credentials token
+// carries the owner's consent binding; anything else is issued unbound.
+describe("client_credentials consent binding", () => {
+  it("passes the consent binding for an operator-bound assistant into the token", async () => {
+    mock.consent.mockResolvedValue("binding-1");
+    const response = await POST(request() as never);
+    expect(response.status).toBe(200);
+    expect(mock.consent).toHaveBeenCalledWith(expect.objectContaining({
+      userId: "human", clientRowId: "client-row", agentId: "AGT-SERVICE", scopes: ["dpf.read"],
+      resource: expect.stringContaining("/api/mcp"),
+    }));
+    expect(mock.issue).toHaveBeenCalledWith(expect.objectContaining({ authorityBindingId: "binding-1", agentId: "AGT-SERVICE" }));
+  });
+
+  it("issues an unbound token when the consent rules give no binding", async () => {
+    mock.consent.mockResolvedValue(null);
+    await POST(request() as never);
+    expect(mock.issue).toHaveBeenCalledWith(expect.objectContaining({ authorityBindingId: null }));
   });
 });

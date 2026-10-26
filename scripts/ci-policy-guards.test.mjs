@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { readFileSync, mkdtempSync, realpathSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, it } from "node:test";
@@ -10,6 +10,9 @@ import {
   resolvePolicyGuardInvocation,
   runPolicyProfile,
 } from "./lib/ci-policy-guards.mjs";
+
+import { buildPreflightPlan } from "./lib/pregate-preflight.mjs";
+import { buildGatePlan } from "./pr-readiness/core.mjs";
 
 const EXPECTED_LEGACY_JOBS = [
   "actuator-inputs-writable",
@@ -113,7 +116,7 @@ function workflowJobBlock(workflow, jobId) {
 
 describe("CI policy guard registry", () => {
   it("launches pnpm through Node on Windows with literal arguments", t => {
-    const root = mkdtempSync(join(tmpdir(), "dpf-policy-pnpm-"));
+    const root = realpathSync(mkdtempSync(join(tmpdir(), "dpf-policy-pnpm-")));
     t.after(() => rmSync(root, { recursive: true, force: true }));
     writeFileSync(join(root, "pnpm.cmd"), "");
     const script = join(root, "pnpm.cjs");
@@ -287,4 +290,13 @@ describe("CI policy guard registry", () => {
       );
     }
   });
+});
+
+// This copied-package acceptance suite executes source bytes, not guard logic.
+it("keeps copied-package worktree acceptance in both normal host plans", () => {
+  const fixture = "packages/dpf-skill-pack/hooks/worktree-create.test.mjs";
+  assert.ok(buildPreflightPlan().some(entry => entry.commands.some(command => command[1].includes(fixture))),
+    "host preflight must exercise the cold copied package");
+  assert.ok(buildGatePlan().some(entry => entry.command[1].includes(fixture)),
+    "PR readiness must exercise the same copied-package acceptance");
 });

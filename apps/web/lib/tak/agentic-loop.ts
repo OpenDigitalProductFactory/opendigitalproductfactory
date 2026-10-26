@@ -1,3 +1,4 @@
+import {currentReadEvidencePolicy, acceptReadEvidenceContribution} from "./read-evidence-policy";
 import { currentUserContext } from "@/lib/govern/current-user-context";
 // apps/web/lib/agentic-loop.ts
 // Agentic execution loop: LLM calls tools iteratively until it responds with text only.
@@ -29,11 +30,12 @@ import { isGovernedToolRefusal } from "@/lib/govern/authority/governed-rejection
 import { sanitizeForLog } from "@/lib/security/safe-log";
 import { recordCoworkerTurnMetric } from "@/lib/operate/coworker-turn-metrics";
 import type { ChatMessage, ToolCallEntry } from "@/lib/routing/chat-message-types";
+import { transferLocalNativeContinuation, withLocalNativeContinuation } from "@/lib/routing/local-native-continuation";
 import { prisma } from "@dpf/db";
 import { interceptToolCallAsProposal } from "@/lib/proactivity/propose-interception";
 import { agentEventBus } from "./agent-event-bus";
 import { terminalTruncationMessage } from "./terminal-response-truncation";
-import { TIER_MINIMUM_DIMENSIONS, type QualityTier } from "../routing/quality-tiers";
+import { resolveEffectiveAgentRouteConfig } from "./agent-route-config";
 import {
   DEFAULT_MINIMUM_CONTEXT_TOKENS,
   resolveTurnGroundedGuidanceRoute,
@@ -73,10 +75,13 @@ import {
   resolveTerminalTextExit,
   resolveTerminalToolCall,
   selectTerminalToolSurface,
+  canonicalDesignRefusalMessage,
   type TerminalToolPolicy,
 } from "./terminal-tool-policy";
 import { rotateTerminalWriterRoute } from "./terminal-writer-route";
 import { shouldExitWithLocalToolCallDiagnostic } from "./local-tool-call-diagnostic";
+import { assertRestrictedReassessmentTurn, restrictedReassessmentLoop, restrictedReassessmentToolCall, restrictedReassessmentReceipt, rethrowRestrictedReassessmentError, type CanonicalReviewReceiptCheck } from "./reassessment-loop";
+import { preloadFiniteReassessment, fullReassessmentToolResult } from "./reassessment-preload";
 export { detectToolRefusedDespiteAvailability } from "./tool-refused-recovery";
 
 // Safety ceiling — the loop exits naturally when the model responds with text-only
@@ -229,109 +234,6 @@ function hasAuthoritativeToolProgress(
   ) ?? false;
 }
 
-type AgentRouteConfig = {
-  minimumDimensions?: Record<string, number>;
-  budgetClass?: "minimize_cost" | "balanced" | "quality_first";
-  preferredProviderId?: string;
-  preferredModelId?: string;
-  /** BI-7F2FBDA3: lineage of the pinned model, looked up even when it has retired. */
-  preferredModelFamily?: string | null;
-  allowedProviders?: string[];
-  deniedProviders?: string[];
-  residencyPolicy?: "local_only" | "approved_cloud" | "any_enabled";
-  effort?: "low" | "medium" | "high" | "max";
-};
-
-function resolveEffectiveAgentRouteConfig(params: {
-  agentModelConfig: {
-    minimumTier: string;
-    budgetClass: string;
-    pinnedProviderId: string | null;
-    pinnedModelId: string | null;
-  } | null;
-  modelRequirements: unknown;
-}): AgentRouteConfig {
-  const codeConfig: AgentRouteConfig =
-    params.modelRequirements && typeof params.modelRequirements === "object"
-      ? {
-          ...("defaultMinimumTier" in params.modelRequirements
-            ? {
-                minimumDimensions:
-                  TIER_MINIMUM_DIMENSIONS[
-                    params.modelRequirements.defaultMinimumTier as QualityTier
-                  ] ?? {},
-              }
-            : "minimumDimensions" in params.modelRequirements
-              ? {
-                  minimumDimensions:
-                    params.modelRequirements.minimumDimensions as Record<string, number>,
-                }
-              : {}),
-          ...("defaultBudgetClass" in params.modelRequirements
-            ? {
-                budgetClass: params.modelRequirements.defaultBudgetClass as
-                  | "minimize_cost"
-                  | "balanced"
-                  | "quality_first",
-              }
-            : "budgetClass" in params.modelRequirements
-              ? {
-                  budgetClass: params.modelRequirements.budgetClass as
-                    | "minimize_cost"
-                    | "balanced"
-                    | "quality_first",
-                }
-              : {}),
-          ...("preferredProviderId" in params.modelRequirements
-            ? { preferredProviderId: params.modelRequirements.preferredProviderId as string }
-            : {}),
-          ...("preferredModelId" in params.modelRequirements
-            ? { preferredModelId: params.modelRequirements.preferredModelId as string }
-            : {}),
-          ...("allowedProviders" in params.modelRequirements
-            ? { allowedProviders: params.modelRequirements.allowedProviders as string[] }
-            : {}),
-          ...("deniedProviders" in params.modelRequirements
-            ? { deniedProviders: params.modelRequirements.deniedProviders as string[] }
-            : {}),
-          ...("residencyPolicy" in params.modelRequirements
-            ? {
-                residencyPolicy: params.modelRequirements.residencyPolicy as
-                  | "local_only"
-                  | "approved_cloud"
-                  | "any_enabled",
-              }
-            : {}),
-          ...("defaultEffort" in params.modelRequirements
-            ? {
-                effort: params.modelRequirements.defaultEffort as
-                  | "low"
-                  | "medium"
-                  | "high"
-                  | "max",
-              }
-            : {}),
-        }
-      : {};
-
-  if (!params.agentModelConfig) return codeConfig;
-
-  return {
-    ...codeConfig,
-    minimumDimensions:
-      TIER_MINIMUM_DIMENSIONS[params.agentModelConfig.minimumTier as QualityTier] ??
-      codeConfig.minimumDimensions ??
-      {},
-    budgetClass: params.agentModelConfig.budgetClass as
-      | "minimize_cost"
-      | "balanced"
-      | "quality_first",
-    preferredProviderId:
-      params.agentModelConfig.pinnedProviderId ?? codeConfig.preferredProviderId,
-    preferredModelId:
-      params.agentModelConfig.pinnedModelId ?? codeConfig.preferredModelId,
-  };
-}
 
 /** Detect when the agent claims completion or narrates code without having called authoritative tools. */
 export function detectFabrication(
@@ -492,34 +394,8 @@ function buildFabricationFailureMessage(params: {
  */
 type ExecutedTool = { name: string; args?: Record<string, unknown>; result: ToolResult; modelEvidenceTruncated?: boolean };
 
-function summarizeExecutedToolNames(executedTools: ExecutedTool[]): string {
-  const counts = new Map<string, number>();
-  for (const tool of executedTools) {
-    counts.set(tool.name, (counts.get(tool.name) ?? 0) + 1);
-  }
-  return [...counts.entries()]
-    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-    .slice(0, 5)
-    .map(([name, count]) => count > 1 ? `${name} x${count}` : name)
-    .join(", ");
-}
-
-// BI-0C19AFDD: this message must stay domain-agnostic. The prior copy hard-coded
-// a "finance reports"/"finance-summary tool" suggestion, which confabulated an
-// unrelated domain for every non-finance coworker (e.g. Dale's truck-parts build
-// was told to "use the finance reports directly"). Keep the guidance generic,
-// mirroring the honest max-iter sibling below.
-export function buildRuntimeLimitToolLoopMessage(executedTools: ExecutedTool[]): string {
-  const toolSummary = summarizeExecutedToolNames(executedTools) || "the available tools";
-  return [
-    `I used ${toolSummary}, but the coworker hit the runtime limit before it produced a final answer.`,
-    "I stopped before returning another raw tool request.",
-    "The route and tool attempts were recorded; try a narrower question, or break the request into a smaller step.",
-  ].join(" ");
-}
-
-import { buildMaxIterationsExhaustedMessage } from "./max-iterations-message";
-export { buildMaxIterationsExhaustedMessage };
+import { buildMaxIterationsExhaustedMessage, buildRuntimeLimitToolLoopMessage } from "./max-iterations-message";
+export { buildMaxIterationsExhaustedMessage, buildRuntimeLimitToolLoopMessage };
 
 // Pattern: response is a short clarifying question asking for a required field.
 // System prompt rule 13 allows ONE round of "I need X and Y" before acting.
@@ -910,8 +786,8 @@ export function buildToolSessionHintMessage(
   );
 }
 
-export type RunAgenticLoopParams = {
-
+export type RunAgenticLoopParams = Pick<LoopToolContextInput, "taskExecutionFence"> & {
+  canonicalReviewReceipt?: CanonicalReviewReceiptCheck;
   chatHistory: ChatMessage[];
   systemPrompt: string;
   /** Instruction spans in `systemPrompt`; see RouteAndCallOptions (BI-463BE12A). */
@@ -1060,14 +936,15 @@ export type RunAgenticLoopParams = {
 };
 
 export async function runAgenticLoop(params: RunAgenticLoopParams): Promise<AgenticResult> {
+  const restricted = restrictedReassessmentLoop(params);
   const tracker = { activeSkillId: params.activeSkillId ?? null };
   let isSuccess = false;
   try {
-    const result = await _runAgenticLoop(params, tracker);
+    const result = await withLocalNativeContinuation(() => _runAgenticLoop(params, tracker, restricted));
     isSuccess = true;
     return result;
   } finally {
-    if (tracker.activeSkillId) {
+    if (!restricted && tracker.activeSkillId) {
       const { recordSkillUsageEvents } = await import("@/lib/skills/usage-events");
       void recordSkillUsageEvents({
         phase: isSuccess ? "completed" : "failed",
@@ -1082,7 +959,9 @@ export async function runAgenticLoop(params: RunAgenticLoopParams): Promise<Agen
   }
 }
 
-async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSkillId: string | null }): Promise<AgenticResult> {
+async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSkillId: string | null }, restricted: boolean): Promise<AgenticResult> {
+  // Restricted composition rejects a competing specialist policy before entry.
+  const readEvidencePolicy = currentReadEvidencePolicy();
   const {
     chatHistory,
     systemPrompt,
@@ -1150,12 +1029,9 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
   // the family successor rather than to whatever ranked first.
   effectiveConfig.preferredModelFamily ??= await lookupPinnedModelFamily(prisma, effectiveConfig.preferredProviderId, effectiveConfig.preferredModelId);
 
-  // BI-E8BCA547 — spend-aware routing. Check the agent's live daily spend once
-  // per turn and, when it is near the budget, bias the routing budget class
-  // toward cost so the router picks a cheaper (still capability-floor-respecting)
-  // model — instead of only logging the warning until the 100% hard-reject.
-  // Advisory: any failure leaves the class untouched and never blocks the turn.
-  try {
+  // BI-E8BCA547: ordinary turns may bias routing toward cost near budget.
+  // Restricted turns retain their qualified composition and budget owner.
+  if (!restricted) try {
     const { checkAgentBudgetFromRegistry, writeBudgetEvent } = await import("@/lib/inference/budget-gate");
     const { spendAwareBudgetClass } = await import("@/lib/inference/spend-aware-routing");
     const budget = await checkAgentBudgetFromRegistry(agentId);
@@ -1200,7 +1076,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     // `mcp__dpf__*` tools instead of text-described prompt content. Other
     // adapters ignore the field. The agentic loop is the only place with
     // both userId and threadId in scope, so it is the natural source.
-    mcpSession: { userId, agentId, threadId, routeContext, taskRunId: taskRunId ?? null },
+    mcpSession: { userId, agentId, threadId, routeContext, taskRunId: taskRunId ?? null, taskExecutionFence: params.taskExecutionFence, ...(readEvidencePolicy ? {readOnlyToolNames: readEvidencePolicy.toolNames, mintReadOnlySession: readEvidencePolicy.mintReadOnlySession, recordImageInputDelivery: readEvidencePolicy.recordImageInputDelivery} : {}) },
   };
 
   // BI-2AC48661: persistent execution plan. When enabled, expose the two
@@ -1254,6 +1130,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
   const executedTools: AgenticResult["executedTools"] = [];
+  const finitePreload = await preloadFiniteReassessment({ ...params, interactionMode }, executedTools, governedExecuteTool); if (finitePreload) messages.push(finitePreload);
   let lastResult: RoutedInferenceResult | null = null;
   let continuationNudges = 0;
   // BI-PIR-2fc2106c: one soft no-progress nudge per args signature.
@@ -1368,8 +1245,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     });
   };
 
-  // EP-27FD96BC · P1 — the unified warrant bounds iterations for this turn.
-  // Clamped to the hard MAX_ITERATIONS safety ceiling; absent warrant = 200.
+  // EP-27FD96BC: clamp the warrant to the hard iteration ceiling.
   const iterationCeiling = Math.min(
     MAX_ITERATIONS,
     effortWarrant?.maxIterations ?? MAX_ITERATIONS,
@@ -1382,11 +1258,12 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     );
   }
   for (let iteration = 0; iteration < iterationCeiling; iteration++) {
+    assertRestrictedReassessmentTurn(restricted, terminalProviderTools);
     if (params.terminalToolPolicy) {
-      routeOptions.tools = terminalToolSurfaceOverride
+      routeOptions.tools = restricted ? [...terminalProviderTools] : terminalToolSurfaceOverride
         ? selectTerminalToolSurface(terminalProviderTools, terminalToolSurfaceOverride)
         : applyTerminalToolSurface(params.terminalToolPolicy, executedTools, terminalProviderTools);
-      const writerOnlySurface = routeOptions.tools.length === 1
+      const writerOnlySurface = !restricted && routeOptions.tools.length === 1
         && selectTerminalToolSurface(routeOptions.tools, [params.terminalToolPolicy.writerToolName]).length === 1;
       routeOptions.toolChoice = writerOnlySurface ? "required" : undefined;
       routeOptions.terminalWriterToolName = writerOnlySurface ? params.terminalToolPolicy.writerToolName : undefined;
@@ -1398,9 +1275,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       break;
     }
 
-    // BI-4ab6be39 — cooperative heartbeat. If the row was canceled elsewhere
-    // (status != "working"), heartbeat returns false; we treat that as a
-    // cooperative-cancel signal and break out of the loop.
+    // BI-4ab6be39: stop cooperatively when the task's heartbeat is refused.
     if (taskRunId) {
       const { heartbeat } = await import("@/lib/observability/heartbeat");
       const alive = await heartbeat(taskRunId);
@@ -1498,7 +1373,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       const content = buildRepeatedToolStopMessage({
         toolName: repeated.toolName, count: repeated.count, routeContext, reasonHint: repeated.reasonHint,
       });
-      await recordRepeatedToolIssue({
+      if (!restricted) await recordRepeatedToolIssue({
         repeated, routeContext: routeContext ?? null, userId,
         agentId: agentId ?? null, threadId: threadId ?? null, taskRunId: taskRunId ?? null,
       });
@@ -1513,11 +1388,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
 
     // EP-INF-009b: All inference goes through V2 routing pipeline
     inferenceCallCount++;
-    // Assemble the compacted, plan-reminded context once (it was built twice,
-    // once per heartbeat branch below) and gauge its pressure. Observability
-    // only — the array is sent unchanged; this just makes context fill visible
-    // per dispatch (the autonomous loop is the run most likely to drift into
-    // the dumb zone). See ./context-pressure.
+    // Keep complete finite evidence; ordinary turns retain context compaction.
     // BI-3C8220ED — overload→trim. Measure the pressure BEFORE compaction and
     // feed the zone into the trim, so a turn already in the warning/dumb zone
     // compacts harder instead of only being logged after the fact.
@@ -1526,7 +1397,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       resolvedMaxContextTokens,
     ).zone;
     const assembledMessages = withPlanReminder(
-      compactAgenticMessages(messages, resolvedMaxContextTokens, preCompactionZone, params.terminalToolPolicy?.readerToolNames),
+      finitePreload || (readEvidencePolicy && iteration === 0) ? messages : compactAgenticMessages(messages, resolvedMaxContextTokens, preCompactionZone, params.terminalToolPolicy?.readerToolNames),
     );
     const ctxPressure = classifyContextPressure(estimateContextTokens(assembledMessages, systemPrompt), resolvedMaxContextTokens);
     if (ctxPressure.estimatedTokens > ctxPeakTokens) ctxPeakTokens = ctxPressure.estimatedTokens;
@@ -1577,6 +1448,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         );
       }
     } catch (routeErr) {
+      rethrowRestrictedReassessmentError(restricted, routeErr);
       const msg = routeErr instanceof Error ? routeErr.message : String(routeErr);
       const failure = describeToolRouteFailureOutcome(msg, routeOptions.tools?.length ?? 0, routeErr);
       console.warn(`[agentic-loop] routeAndCall threw: ${msg}`);
@@ -1648,7 +1520,25 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     }
     totalInputTokens += result.inputTokens;
     totalOutputTokens += result.outputTokens;
-    if (params.terminalToolPolicy) await (await import("./native-mcp-executions")).foldNativeMcpExecutions({ taskRunId, providerId: result.providerId, sinceMs: startTime, records: executedTools }); // BI-2E479619: CLI-native MCP calls are this turn's tool records too.
+    // Both ordinary completion policies consume the same native-call audit once.
+    if (!restricted && (params.terminalToolPolicy || readEvidencePolicy)) {
+      await (await import("./native-mcp-executions")).foldNativeMcpExecutions({ taskRunId, providerId: result.providerId, sinceMs: startTime, records: executedTools });
+    }
+    if (params.terminalToolPolicy) {
+      const refused = canonicalDesignRefusalMessage(params.terminalToolPolicy, executedTools);
+      if (refused) { logTurnSummary(result.providerId, result.modelId); return terminalFailure(refused, result); }
+    }
+    if (readEvidencePolicy) {
+      if (!result.toolCalls?.length) {
+        const {readEvidenceExit,inspectReadEvidenceContribution} = await import("./read-evidence-policy");
+        const exit = readEvidenceExit(await inspectReadEvidenceContribution(result.content));
+        if (exit.kind === "blocked") return completeResult(exit.message, result, {failure:{kind:"policy-or-capability",message:exit.message}});
+        acceptReadEvidenceContribution(result.content);
+        // Immutable specialist evidence owns this typed contribution. Generic
+        // live-operational prose handling must not replace its verified JSON.
+        return completeResult(result.content, result);
+      }
+    }
     // No tool calls — check if agent stalled with intent to continue
     if (!result.toolCalls || result.toolCalls.length === 0) {
       const trimmed = result.content.trim();
@@ -1670,14 +1560,14 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           const message = terminalTruncationMessage(params.terminalToolPolicy, executedTools, exhausted);
           if (exhausted) return terminalFailure(message, result);
           truncationContinues++;
-          messages = [...messages, { role: "assistant", content: result.content }, { role: "user", content: message }];
+          messages = [...messages, transferLocalNativeContinuation(result, { role: "assistant" as const, content: result.content }), { role: "user", content: message }];
           continue;
         }
         if (exit.kind === "nudge") {
           terminalToolNudges++;
           terminalToolSurfaceOverride = exit.allowedToolNames;
-          messages = [...messages, { role: "assistant", content: result.content }, { role: "user", content: exit.message }];
-          await rotateTerminalWriterRoute({ policy: params.terminalToolPolicy, records: executedTools, options: routeOptions, providerId: result.providerId, messages, systemPrompt: params.systemPrompt, sensitivity: params.sensitivity });
+          messages = [...messages, transferLocalNativeContinuation(result, { role: "assistant" as const, content: result.content }), { role: "user", content: exit.message }];
+          if (!restricted) await rotateTerminalWriterRoute({ policy: params.terminalToolPolicy, records: executedTools, options: routeOptions, providerId: result.providerId, messages, systemPrompt: params.systemPrompt, sensitivity: params.sensitivity });
           continue;
         }
         if (exit.kind === "input-required") {
@@ -1698,7 +1588,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         );
         messages = [
           ...messages,
-          { role: "assistant" as const, content: result.content },
+          transferLocalNativeContinuation(result, { role: "assistant" as const, content: result.content }),
           {
             role: "user" as const,
             content:
@@ -1835,7 +1725,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           console.warn(`[agentic-loop] evidence-required turn, zero authoritative tools; nudging. route=${JSON.stringify(routeContext)}`);
           messages = [
             ...messages,
-            { role: "assistant" as const, content: result.content },
+            transferLocalNativeContinuation(result, { role: "assistant" as const, content: result.content }),
             { role: "user" as const, content: recovery.nudgeMessage },
           ];
           continue;
@@ -1869,7 +1759,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         continuationNudges++;
         messages = [
           ...messages,
-          { role: "assistant" as const, content: result.content },
+          transferLocalNativeContinuation(result, { role: "assistant" as const, content: result.content }),
           {
             role: "user" as const,
             content:
@@ -1882,7 +1772,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         continuationNudges++;
         messages = [
           ...messages,
-          { role: "assistant" as const, content: result.content },
+          transferLocalNativeContinuation(result, { role: "assistant" as const, content: result.content }),
           {
             role: "user" as const,
             content:
@@ -1906,7 +1796,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           continuationNudges++;
           messages = [
             ...messages,
-            { role: "assistant" as const, content: result.content },
+            transferLocalNativeContinuation(result, { role: "assistant" as const, content: result.content }),
             {
               role: "user" as const,
               content: buildRepeatedQuestionNudge({
@@ -1957,7 +1847,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
             );
             messages = [
               ...messages,
-              { role: "assistant" as const, content: result.content },
+              transferLocalNativeContinuation(result, { role: "assistant" as const, content: result.content }),
               {
                 role: "user" as const,
                 content: buildFabricationRecoveryNudge({
@@ -1999,7 +1889,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           );
           messages = [
             ...messages,
-            { role: "assistant" as const, content: result.content },
+            transferLocalNativeContinuation(result, { role: "assistant" as const, content: result.content }),
             {
               role: "user" as const,
               content: buildFabricationRecoveryNudge({
@@ -2098,7 +1988,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           console.log(`[agentic-loop] permission-seeking nudge (${continuationNudges}/3): ${trimmed.slice(0, 100)}`);
           messages = [
             ...messages,
-            { role: "assistant" as const, content: result.content },
+            transferLocalNativeContinuation(result, { role: "assistant" as const, content: result.content }),
             {
               role: "user" as const,
               content: "Do not ask for permission. Proceed with the next step. You only need user approval at phase transitions (ideate→plan→build→review→ship), not within a phase. Act now.",
@@ -2129,7 +2019,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         messages = [
           ...messages,
           ...(trimmed.length > 0
-            ? [{ role: "assistant" as const, content: result.content }]
+            ? [transferLocalNativeContinuation(result, { role: "assistant" as const, content: result.content })]
             : []),
           {
             role: "user" as const,
@@ -2154,7 +2044,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         const phaseTools = getPhaseSpecificNudge(executedTools);
         messages = [
           ...messages,
-          { role: "assistant" as const, content: result.content },
+          transferLocalNativeContinuation(result, { role: "assistant" as const, content: result.content }),
           {
             role: "user" as const,
             content: `STOP apologizing and hedging. You have tools — use them. ${phaseTools} If a previous tool call failed, try a DIFFERENT approach. Do not repeat the same failing call.`,
@@ -2177,7 +2067,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           if (trimmed.length > bestPreNudgeContent.length) bestPreNudgeContent = trimmed;
           messages = [
             ...messages,
-            ...(trimmed.length > 0 ? [{ role: "assistant" as const, content: result.content }] : []),
+            ...(trimmed.length > 0 ? [transferLocalNativeContinuation(result, { role: "assistant" as const, content: result.content })] : []),
             { role: "user" as const, content: gate.nudge },
           ];
           continue;
@@ -2201,7 +2091,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     const chatApprovalIds: string[] = []; // BI-7BCC87BB: declared-proposal requests raised in chat this step
 
     for (const providerToolCall of result.toolCalls) {
-      let tc = providerToolCall;
+      let tc = restrictedReassessmentToolCall(restricted, params, providerToolCall);
       if (params.terminalToolPolicy) {
         // BI-E8237EAE: size governed reader pages to what this model can see whole.
         const normalized = normalizeTerminalToolArguments(params.terminalToolPolicy, tc.name, tc.arguments, resolveToolResultCharCap(resolvedMaxContextTokens));
@@ -2360,7 +2250,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       // side-effecting non-artifact tool is raised as an approval request through
       // the monitor for the owner to decide (null = execute normally; BI-7BCC87BB).
       const contextInput: LoopToolContextInput = {
-        routeContext, agentId, threadId, taskRunId, apiTokenId, interactionMode, chatHistory,
+        routeContext, agentId, threadId, taskRunId, taskExecutionFence: params.taskExecutionFence, apiTokenId, interactionMode, chatHistory,
         tokenScope: params.tokenScope, tokenGrantScopes: params.tokenGrantScopes, skillId: tracker.activeSkillId,
         workroomId: params.workroomId ?? null, externalAccessEnabled: params.externalAccessEnabled,
         requiresExternalAccess: toolDef.requiresExternalAccess, roomAuthority: params.roomAuthority,
@@ -2400,7 +2290,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       const toolStartMs = Date.now();
       let toolResult: ToolResult;
       try {
-        if (!tracker.activeSkillId && !hasResolvedSkillInvocation && tc.name !== LOAD_TOOLS_TOOL_NAME && !EXECUTION_PLAN_TOOL_NAMES.has(tc.name)) {
+        if (!restricted && !tracker.activeSkillId && !hasResolvedSkillInvocation && tc.name !== LOAD_TOOLS_TOOL_NAME && !EXECUTION_PLAN_TOOL_NAMES.has(tc.name)) {
           hasResolvedSkillInvocation = true;
           try {
             const { getSkillsForAgent } = await import("@/lib/skills/runtime");
@@ -2436,6 +2326,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           source: "agentic-loop",
         });
       } catch (err) {
+        rethrowRestrictedReassessmentError(restricted, err);
         const errorMsg = err instanceof Error ? err.message : "Unknown error";
         console.error(`[agentic-tool] UNCAUGHT iter=${iteration} tool=${tc.name}:`, errorMsg);
         toolResult = { success: false, error: errorMsg, message: `Tool ${tc.name} failed: ${errorMsg}` };
@@ -2461,7 +2352,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         refusalReasons.clear();
       }
 
-      const modelEvidenceTruncated = params.terminalToolPolicy?.readerToolNames.includes(tc.name)
+      const modelEvidenceTruncated = !finitePreload && params.terminalToolPolicy?.readerToolNames.includes(tc.name)
         ? clampToolResultForModel(toolResult, { maxChars: resolveToolResultCharCap(resolvedMaxContextTokens) }).truncated
         : undefined;
       executedTools.push({ name: tc.name, args: tc.arguments, result: toolResult, modelEvidenceTruncated });
@@ -2470,12 +2361,14 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       }
       iterationResults.push({ tc, toolResult });
       onProgress?.({ type: "tool:complete", tool: tc.name, success: toolResult.success });
+      const receipt = await restrictedReassessmentReceipt(restricted, params, tc.name, toolResult);
+      if (receipt) { logTurnSummary(result.providerId, result.modelId); return completeResult(receipt.summary, result); }
       const raisedId = declaredProposalInChat ? pendingApprovalEnvelopeId(toolResult) : null;
       // The turn ends on the raised request; later calls in this batch are not run.
       if (raisedId) { chatApprovalIds.push(raisedId); break; }
       // Also bound a batch from one inference; varying arguments evade the
       // exact-call repetition detector. Keep all completed calls in the result.
-      if (refusalStreak >= 3) return stopRefusedTurn();
+      { const refused = canonicalDesignRefusalMessage(params.terminalToolPolicy, executedTools); if (refused) { logTurnSummary(result.providerId, result.modelId); return terminalFailure(refused, result); } if (refusalStreak >= 3) return stopRefusedTurn(); }
     }
 
     // BI-7BCC87BB (spec D2 S1): a declared proposal in chat ends the turn on the request(s) it raised.
@@ -2491,16 +2384,14 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       };
     }
 
-    // Append ONE assistant message (with toolCalls preserved) + N tool result messages.
-    // This gives the model its own tool-call history in the native structured format
-    // that callProvider will serialize correctly per provider.
+    // Preserve native history only when the executed call snapshot still agrees.
     messages = [
       ...messages,
-      {
+      transferLocalNativeContinuation(result, {
         role: "assistant" as const,
         content: result.content,
         toolCalls: iterationResults.map(({ tc }) => tc.gemini ? result.toolCalls!.find((original) => original.id === tc.id) ?? tc : tc),
-      },
+      }),
       ...iterationResults.map(({ tc, toolResult }) => ({
         role: "tool" as const,
         // G1/P6 (context-engineering-standards.md): bound the model-facing
@@ -2508,7 +2399,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         // truncation notice. Replaces the prior silent `slice(0, 3000)`, which
         // left `message` unbounded and gave the model no signal that data was
         // cut. The stored toolResult (audit/receipts) is unaffected.
-        content: clampToolResultForModel(toolResult, {
+        content: finitePreload ? fullReassessmentToolResult(toolResult, tc.name) : clampToolResultForModel(toolResult, {
           maxChars: resolveToolResultCharCap(resolvedMaxContextTokens), toolName: tc.name, provenance: resolveToolResultProvenance(tc.name, (name) => dynamicToolSurface.definition(name)),
         }).text,
         toolCallId: tc.id,

@@ -345,6 +345,25 @@ if [ -f "scripts/pregate-status.mjs" ]; then
     completion_notice
     exit 0
   fi
+  # A published correction has its own machine-bound affected-check contract.
+  # This writes only an existing stage receipt and never a canonical gate PASS.
+  # The initial publication anchor, current PR and protected queue are checked
+  # before execution; unknown mappings or failed checks refuse this route.
+  if [ -f "scripts/published-correction.mjs" ]; then
+    if node scripts/published-correction.mjs --status >/dev/null 2>&1; then
+      echo "[pre-push-gate] affected correction proof reused; full integration UNRUN/delegated to protected GitHub."
+      completion_notice
+      exit 0
+    fi
+    if node scripts/published-correction.mjs --eligible >/dev/null 2>&1; then
+      if node scripts/published-correction.mjs; then
+        completion_notice
+        exit 0
+      fi
+      echo "[pre-push-gate] affected correction verification unresolved; no full local gate was restarted." >&2
+      exit 1
+    fi
+  fi
   # A cloud agent session (claude.ai/code container, CLAUDE_CODE_REMOTE=true)
   # has no local DPF install and cannot reach the local-CI lease, so pregate can
   # never run there. Record the push under external-contribution-no-install —

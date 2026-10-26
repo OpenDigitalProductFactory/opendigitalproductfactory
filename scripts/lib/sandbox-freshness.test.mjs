@@ -581,6 +581,38 @@ test("classifyGateOutcome passes/fails normally when the sandbox is green", () =
   assert.equal(failed.productEvidence, true);
 });
 
+// BI-B62A6686: prisma migrate deploy P1001 used to be stored as a reusable
+// product FAIL. A test title that merely mentions P1001 is still a product fail.
+test("prisma migrate deploy P1001 is control-plane starvation, not a product fail", () => {
+  const log = [
+    "> prisma migrate deploy",
+    "Error: P1001",
+    "Can't reach database server at `127.0.0.1:5432`",
+  ].join("\n");
+  const outcome = classifyGateOutcome({ freshnessVerdict: "green", gateExitCode: 1, gateOutput: log });
+  assert.equal(outcome.status, "blocked_control_plane_starvation");
+  assert.equal(outcome.gatePassed, false);
+  assert.equal(outcome.productEvidence, false);
+  assert.match(outcome.summary, /prisma migrate deploy/);
+});
+
+test("a test title that mentions P1001 stays a product failure", () => {
+  const log = "FAIL lib/foo.test.ts > reports P1001 when the database is down\n";
+  const outcome = classifyGateOutcome({ freshnessVerdict: "green", gateExitCode: 1, gateOutput: log });
+  assert.equal(outcome.status, "failed");
+  assert.equal(outcome.productEvidence, true);
+});
+
+test("ECONNREFUSED without prisma migrate deploy stays a product failure", () => {
+  const outcome = classifyGateOutcome({
+    freshnessVerdict: "green",
+    gateExitCode: 1,
+    gateOutput: "connect ECONNREFUSED 127.0.0.1:9\n",
+  });
+  assert.equal(outcome.status, "failed");
+  assert.equal(outcome.productEvidence, true);
+});
+
 test("classifyGateOutcome treats pnpm lifecycle exit 3 as product evidence when freshness is green", () => {
   const failed = classifyGateOutcome({ freshnessVerdict: "green", gateExitCode: EXIT_SANDBOX_DRIFT });
   assert.equal(failed.status, "failed");
@@ -620,6 +652,28 @@ test("a parent SIGTERM (exit 130) is blocked, not a product FAIL (BI-8392DA16)",
   const outcome = classifyGateOutcome({ freshnessVerdict: "green", gateExitCode: 130 });
   assert.equal(outcome.status, "blocked_child_signal_death");
   assert.equal(outcome.productEvidence, false);
+});
+
+test("a directly observed owner signal names the interruption without guessing memory exhaustion", () => {
+  for (const receivedSignal of ["SIGINT", "SIGTERM"]) {
+    const outcome = classifyGateOutcome({ freshnessVerdict: "green", gateExitCode: EXIT_CHILD_SIGNAL_DEATH, receivedSignal });
+    assert.equal(outcome.status, "blocked_child_signal_death");
+    assert.equal(outcome.gatePassed, false); assert.equal(outcome.productEvidence, false);
+    assert.ok(outcome.summary.includes(`gate owner received ${receivedSignal}`));
+    assert.doesNotMatch(outcome.summary, /out of memory|box is quieter/i);
+  }
+});
+
+test("unattributed signal death and log text cannot invent an owner cancellation or cause", () => {
+  for (const receivedSignal of [undefined, "SIGKILL", "forged SIGINT"]) {
+    const outcome = classifyGateOutcome({ freshnessVerdict: "green", gateExitCode: EXIT_CHILD_SIGNAL_DEATH,
+      receivedSignal, gateOutput: "gate-worktree: received SIGINT; child process tree terminated" });
+    assert.match(outcome.summary, /cause is unknown/);
+    assert.doesNotMatch(outcome.summary, /gate owner received|out of memory/i);
+    assert.equal(outcome.productEvidence, false);
+  }
+  const failed = classifyGateOutcome({ freshnessVerdict: "green", gateExitCode: 9, receivedSignal: "SIGINT" });
+  assert.equal(failed.status, "failed"); assert.equal(failed.productEvidence, true);
 });
 
 test("a fenced lease (exit 75) is blocked, not a product FAIL (BI-465B3D60)", () => {

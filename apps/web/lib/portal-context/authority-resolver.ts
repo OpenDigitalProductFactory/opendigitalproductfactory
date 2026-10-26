@@ -11,6 +11,8 @@ const PROMOTION_REVIEW_GRANT_KEY_SET = new Set<string>(PROMOTION_REVIEW_GRANT_KE
 export function resolvePortalAuthority(args: {
   user: PortalUserRow | null;
   userPrincipalId?: string | null;
+  /** Current canonical room action access, resolved by the server. */
+  roomActionAccess?: boolean;
   platformRole: string;
   work: WorkProjection;
   domainTools: string[];
@@ -20,11 +22,7 @@ export function resolvePortalAuthority(args: {
     platformRole: args.platformRole === "none" ? null : args.platformRole,
     isSuperuser: Boolean(args.user?.isSuperuser),
   };
-  const canActOnCapsule = canCurrentUserActOnCapsule({
-    capsule: args.work.capsule ?? null,
-    userId: args.user?.id ?? null,
-    principalId: args.userPrincipalId ?? null,
-  });
+  const canActOnCapsule = Boolean(args.work.capsule && !args.work.capsule.isLeaseExpired && args.roomActionAccess === true);
 
   return {
     canActOnCapsule,
@@ -93,21 +91,6 @@ export async function resolvePromotionReviewerGrantKeys(args: {
         .map((grant) => grant.grantKey),
     ),
   );
-}
-
-function canCurrentUserActOnCapsule(args: {
-  capsule: WorkProjection["capsule"] | null;
-  userId: string | null;
-  principalId: string | null;
-}) {
-  if (!args.capsule || args.capsule.isLeaseExpired) return false;
-
-  const actorRefs = new Set([args.userId, args.principalId].filter((value): value is string => Boolean(value)));
-  if (actorRefs.size === 0) return false;
-
-  if (args.capsule.executorRef && actorRefs.has(args.capsule.executorRef)) return true;
-  if (args.capsule.leaseHolderPrincipalId && actorRefs.has(args.capsule.leaseHolderPrincipalId)) return true;
-  return args.capsule.scopeClaimPrincipalIds.some((principalId) => actorRefs.has(principalId));
 }
 
 function hasPromotionReviewGrant(grantKeys: string[]) {

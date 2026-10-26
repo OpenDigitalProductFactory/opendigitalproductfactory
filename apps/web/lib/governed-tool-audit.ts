@@ -7,6 +7,8 @@ import { boundLargeStrings } from "./evidence/bounded-evidence-output";
 import { APPROVAL_RESUME_MARKER_KEY, buildApprovalResumeMarker } from "./coworker/approval-resume-marker";
 import type { GovernedExecuteContext, GovernedExecuteSource } from "./mcp-governed-execute-types";
 import type { ToolDefinition, ToolResult } from "./mcp-tool-types";
+import { TASK_EXECUTION_FENCE_AUDIT_KEY } from "./attention/coworker-envelope-decision";
+import { parseTaskExecutionFence } from "./shared/task-execution-fence";
 
 let createOverride: ((data: Record<string, unknown>) => Promise<unknown>) | null = null;
 let updateOverride: ((id: string, data: Record<string, unknown>) => Promise<unknown>) | null = null;
@@ -71,14 +73,17 @@ export async function writeGovernedToolAudit(data: {
   // by digest — never a multi-megabyte payload. Any string leaf above the
   // ceiling becomes {__dpfBounded, sha256, byteLength, head}; the durable full
   // copy is the evidence record's blob (same sha256), not this row.
-  const redactedParameters = boundLargeStrings(
+  const redactedParameters = { ...boundLargeStrings(
     redactWriteOnlyParameters(data.rawParams, data.tool?.inputSchema),
-  );
+  ) };
+  delete redactedParameters[TASK_EXECUTION_FENCE_AUDIT_KEY];
+  const executionFence = data.context?.taskRunId ? parseTaskExecutionFence(data.context.taskExecutionFence) : null;
   const row = {
     threadId: data.context?.threadId ?? "", agentId: data.context?.agentId ?? "unknown",
     userId: data.userId, taskRunId: data.context?.taskRunId ?? null, toolName: data.toolName,
     parameters: retainParameters ? {
       ...redactedParameters,
+      ...(executionFence ? { [TASK_EXECUTION_FENCE_AUDIT_KEY]: executionFence } : {}),
       ...(data.context?.surfaceInvocation ? { _surface: data.context.surfaceInvocation } : {}),
       ...(data.alignmentDecision ? { _takAlignment: {
         interactionId: data.alignmentDecision.interactionId,
@@ -122,6 +127,12 @@ export async function writeGovernedToolAudit(data: {
     const created = createOverride
       ? await createOverride(row)
       : await prisma.toolExecution.create({ data: row, select: { id: true } });
+    if (data.context?.taskRunId && data.context.agentId && data.result.success && ["read_source_at_version", "wiki_query", "search_ux_critique_corpus"].includes(data.toolName)
+      && typeof (created as { id?: unknown })?.id === "string") {
+      const { persistEngagementRead } = await import("./coworker-service-catalog/engagement-read-provenance");
+      await persistEngagementRead({ taskRunId: data.context.taskRunId, userId: data.userId, agentId: data.context.agentId,
+        executionId: String((created as { id: string }).id), toolName: data.toolName, args: data.rawParams, result: data.result, fence: data.context.taskExecutionFence });
+    }
     return typeof (created as { id?: unknown } | undefined)?.id === "string"
       ? { id: String((created as { id: string }).id) } : null;
   } catch (err) {

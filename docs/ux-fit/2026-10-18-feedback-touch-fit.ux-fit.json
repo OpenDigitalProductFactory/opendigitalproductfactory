@@ -1,0 +1,16 @@
+{
+  "version": "1",
+  "decidedOption": "reuse-feedback-touch-target",
+  "decisionInteractionId": "DI-5F2AF0D978A5",
+  "scope": {
+    "files": ["apps/web/components/feedback/FeedbackForm.tsx"]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["reuse-feedback-touch-target", "replace-feedback-form"]
+  },
+  "sourceDecision": {
+    "owningProfile": "mark-dpf-platform",
+    "evidenceClass": "Independent review of recovery115 and twelve live Feedback observations found 30px Submit/Cancel controls. Reuse the existing platform touch target; preserve the form workflow. This is platform direction, not native UX/WSID acceptance. Verify containing-release target geometry and overlay containment before accepting the follow-up."
+  }
+}

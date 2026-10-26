@@ -11,6 +11,17 @@
 
 ## 0. Two "shapes" — do not conflate them
 
+### Approval status is separate from original action evidence
+
+The exact caller-scoped `get_my_approval_status` reader includes a separate
+`actionEvidence` projection for stored provider-account test outcomes. It proves
+the original envelope, tool, actor and input before returning a bounded typed
+result; missing, conflicting and unsupported evidence remain explicit. Pending
+discovery retains its status-only contract. This read never dispatches or replays
+an action, and generic test success supplies neither a Responses verification
+receipt nor a selected-quota transaction receipt. It cannot settle an uncertain
+initiative review or substitute for the gate's independent writer.
+
 ### Medium body criteria and independent acceptance
 
 Effective medium work, including product-linked work, can satisfy its objective
@@ -29,6 +40,16 @@ server-issued packet. Its existing `read_source_at_version` reader hydrates the
 bound retained criteria only for that authorized TaskRun. Room admission is
 checked before reading and again before receipt writing. Automatic reviewer
 dispatch carries the recorded requesting person into these checks.
+
+A merged author's room can remain archived throughout body acceptance. The
+shared author resolver admits only the current unambiguous attempt with an exact
+server-owned, verified merged PR observation matching repository, number, branch
+and head. A newer incomplete or superseded attempt blocks historical fallback.
+This retains source authorship; it grants no execution lease or room admission.
+The reviewer TaskRun, OAuth authority, content access and author separation must
+remain current. Missing merge proof calls for source/observation reconciliation,
+not repeated reopening of a room the reaper correctly considers delivered.
+Spec and post-implementation review retain their existing live-room requirement.
 
 Changed criteria, source identity, organization or eligible evidence reject old
 requests. Refresh recovery for a current successor; unchanged retries reuse the
@@ -109,6 +130,37 @@ Cross-domain / archetype profiles add specialist review gates (data / ux / secur
 
 You do **not** choose the reviewer or hand-build the review call. The server issues a **recovery packet** naming, per unmet gate, the exact coworker and a ready-to-send handoff. The flow:
 
+**Native source identity.** Supplied `baseSha` and `headSha` must be full
+40-character commit IDs; malformed values are refused before claim or adoption
+writes. Source-less design and planning remain valid. Implementation requires
+both usable persisted values even when the optional claim inputs are omitted.
+Exact claim readback returns `baseSha`, `headSha` and `sourceIdentityComplete`.
+That flag describes recorded SHA syntax, not observed Git state, approval or
+publication authority. The existing local Git capture observes the actual
+repository, branch, worktree, merge base and head on the caller's host.
+
+**Current and historical review readback.** `get_workroom` and room liveness use
+the same bounded recovery projection. A complete history containing only older
+source is not a failed read, and its outcomes remain explicitly historical.
+Readback includes at most five historical executions and marks truncation;
+their requester-bound `tasks/result` actions retain the existing access check.
+No historical pass, task completion or source identity flag approves the current
+source. Missing current review, incomplete observation and conflicting identity
+remain distinct unknown states. Their recovery names the existing room holder
+principal when recorded and the delivery-coordinator role, then directs callers
+to `get_backlog_item(itemId, recoveryGate: "post-implementation-review")` for the
+current issuer's action. An unlinked room must first be linked by its coordinator.
+Repeating the identical room read does not repair that condition; historical
+unknown provider work must not be replayed or assigned a new request nonce.
+
+An unusable legacy value is named in `identityRepair.missingFields` and excluded
+from the repair packet; valid recorded values are retained. Capture the actual
+missing values locally, then use the issued `adopt_worktree` packet or retry the
+claim with the full values. No reviewer artifact lookup or dispatch uses an
+incomplete source identity. Never invent a base or substitute the running
+install's commit for unpublished work. Other readiness and authority gates
+still apply.
+
 1. **Bind a Workroom to the item, with a real base *and* head.** `adopt_worktree(title, objective, repositoryFullName, headBranch, headSha, baseBranch, baseSha, worktreePath, backlogItemId)`. Without **both** an immutable `baseSha` and `headSha`, no reviewer binding can be issued (`no-canonical-artifact`) — the review has nothing immutable to pin. The artifact commit must be **resolvable on the provider** (a squash-merged, deleted branch will not resolve — re-publish it).
 2. **Attempt the governed claim.** `claim_backlog_item_for_work(itemId, worktreePath, branchName, provider, sessionRef)`. When the item is not ready it *refuses* and returns `data.recovery`:
    - `reviewerRoutes[]` — per gate: `accountableRole`, `gate`, `targetAgentId`, `independent`, and a ready `requestCoworker` packet with `requiredToolNames` + `initiativeReviewBinding` (the writer tool + the immutable `artifactRef` — repo, commitSha, path, providerBlobId).
@@ -180,10 +232,19 @@ This is a tracked platform defect, **BI-ECFE0AC2** ("External initiative reviewe
 
 ## 7. Closing a small or medium item: the baseline is the body (BI-0F8E39D5)
 
-A small or medium item's objective baseline is the acceptance criteria in its body. Its shape owes no spec, so never seek spec approval for it. Two different refusals look alike, and the recovery packet now names each one (DI-FDAB20135537):
+For ordinary small or medium work without prior approved scope, the objective
+baseline is the acceptance criteria in its body. Do not create a spec solely
+for that gate. A medium item retaining an independently approved repository
+baseline keeps that approval's amendment writer: when the current design is
+stale, use the server-issued independent spec-approval packet bound to the
+existing baseline and current immutable artifact. Author body criteria cannot
+overwrite it. Inherited scope remains owned by its parent; this route never
+lets a child amend that parent. BI-31159978 repairs this ownership distinction.
+
+For body-owned scope, the recovery packet distinguishes two refusals (DI-FDAB20135537):
 
 - **`acceptance-criteria-missing`: the body has no criteria the parser can read.** Put them under a heading that contains "Acceptance" (for example `## Acceptance criteria`), one criterion per bullet, or use bullets that start with `AC-<id>:`. A bold line is not a heading. Update the body with `update_backlog_item` and retry. BI-FA769D87 was refused this way and closed minutes after its criteria moved under a heading.
-- **`body-baseline-unpersisted`: the criteria are there, but acceptance is unmet.** Platform work is accepted once its merge through branch protection is recognized. Bind the Workroom head to the merged commit, cite `manual_check` (and `ux_verified` when a UI changed), and read any merge-signal reason on the refusal. Other medium work needs an independent objective-mapping receipt, and no lane persists a baseline from body criteria yet. That gap stays open on BI-0F8E39D5. Minting a baseline from the body was weighed and deferred: it would touch the whole reviewer lane and could stale receipts that close today. It will be revisited when an unmerged medium item is actually blocked by it. Do not self-approve.
+- **`body-baseline-unpersisted`: the criteria are readable but no version is retained.** Follow the authorized body-baseline retention procedure above: a valid completion transition can retain the criteria and source identity, then fresh passing evidence and the exact independent acceptance packet are required. It never replaces an approved or inherited baseline or creates a passing receipt. Do not claim completion merely to obtain a baseline; the completion manifest must describe actual delivered work.
 
 ## Approval outcome readback
 
@@ -224,3 +285,68 @@ The [MCP authorization procedure](mcp-tool-authorization-runbook.md#recovering-a
 describes the current-authority checks, generation reservation and approval
 continuation. Completion still requires the original task's genuine governed
 writer receipt and the readiness finding it actually records.
+
+### A present assessment authorized by an approved policy
+
+Original recovery cannot restart uncertain or exhausted work. A separately
+approved retained policy may explicitly authorize a present assessment of its
+exact unchanged requirements. Supply its `reassessmentAuthorizationItemId` on
+the bounded `get_backlog_item` read alongside `itemId` and `recoveryGate`, then
+use the returned complete `request_coworker` packet. The current human,
+connection, author, independent reviewer and both Workrooms must still authorize
+it. A policy identifier never supplies those permissions.
+
+Every accepted assessment consumes that policy's allowance in every state.
+Retrying a request returns the existing assessment without another execution
+window. An initial qualification failure also consumes its accepted allocation;
+do not issue another key or connection family to replace it. The original
+unknown result remains unchanged. Only genuine governed receipts satisfy the
+requirements, and the parent's next normal admission check must still pass.
+See the [present reassessment authorization procedure](mcp-tool-authorization-runbook.md#explicitly-authorized-present-reassessments)
+for capture, budget, compatibility and restore restrictions.
+
+**Workroom review observations.**
+
+A Workroom includes both native semantic reviews and ordinary initiative reviews
+bound to its existing `initiativeReviewBinding.workroomRef`. The bounded reader
+qualifies the room, repository, branch, subject, source SHA, original requester
+and request digest through the canonical binding parser and readiness lane
+registry. A reviewed plan's immutable artifact version may precede the room's
+source head. Those are separate identities.
+
+Each ordinary gate and original request remains visible. Competing originals,
+unknown identity, unresolved historical executions and incomplete observations
+hold readiness; a newer result cannot silently erase them. The existing review
+disclosure shows the gate, artifact version and original request. Its result
+reference uses `tasks/result` with the exact request digest. Ordinary reviews
+never inherit the semantic-review retry action. The canonical wait projector
+supplies the recorded blocker reason, while `hasExecutionUncertainty` supplies
+uncertainty. Neither task completion nor generic resume hints prove a verdict.
+
+Room admission permits this bounded metadata observation. Full original results
+continue to require the original requester and current subject, room and content
+access. This reader does not grant access, dispatch work, publish a review receipt
+or reconcile unknown remote effects.
+
+Candidate discovery reads at most 21 rows per room and review family, retains 20,
+and explicitly identifies incomplete rooms. Pages are capped at 100 rooms;
+node checkpoints and payload subobjects are independently bounded. One busy room
+cannot consume another's allowance. Two partial ordered expression indexes serve
+the existing immutable request-binding predicates. They do not introduce a new
+metadata writer, relationship or result ledger; canonical identity still comes
+from the existing request and Workroom models. Broader migration of historic
+metadata relationships to typed fields is outside this repair.
+
+The index-only migration changes no row values and needs no data backfill. A
+rollback can leave the indexes present while restoring the previous reader;
+removing them later only affects query cost. Actual-query PostgreSQL tests apply
+the exact index DDL in an isolated schema and inspect the plan with unrelated
+history present. Source tests are not evidence of deployed behavior.
+
+This continuation belongs to BI-CAP-21C511CA / WC-062B8D41, extending the July 27
+shared change reviewer control design. The refactoring separates candidate
+selection, identity qualification and common execution presentation rather than
+creating parallel orchestration. It accounts for at least 20% of this repair.
+UX decision DI-0FFB15FBEE77 selects the existing disclosure over a new status page.
+The original identity repair BI-CAP-437F7745, role-and-room BI-56E9CEC2, original
+settlement BI-7906C73E and release acceptance BI-E3B918C2 retain their own scope.

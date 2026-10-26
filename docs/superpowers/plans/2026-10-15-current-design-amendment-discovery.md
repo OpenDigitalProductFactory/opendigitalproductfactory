@@ -97,3 +97,155 @@ No source tests or runtime acceptance have yet run for this continuation.
 Revert through the protected PR workflow. No schema migration or data rewrite.
 Provider failure reports unavailable and retains the original baseline/history;
 it must not authorize implementation or silently approve changed design bytes.
+
+## Current packet identity correction (2026-10-16)
+
+BI-C684AF45 exposed another issuer/admission disagreement after a substantive
+design amendment. A fresh design, spec-approval or architecture request was
+issued without the reviewer suffix used by the admission resolver. Admission
+therefore rejected the server's own unchanged packet. Existing owned legacy
+tasks masked the defect because history resolution retained their original key.
+
+Continue the same route-agreement acceptance criterion in WC-2A0FAF55. Preserve
+PR #6430 and its pending live acceptance. Reuse the trusted OAuth task-family
+resolver in governed recovery and the bounded item-read issuer for all four
+independent design gates. Resolve history before routing, including a
+spec-approval prerequisite synthesized before missing plan coverage. Keep exact
+packet comparison, room admission, grant checks and document preflight intact.
+Do not accept a caller-supplied task-family key, reset attempts, replace uncertain
+work or approve the author's design.
+
+Regressions first: pass an actual bounded item-read packet unchanged to the
+actual admission function for each gate; reject altered keys and revoked task
+authority; preserve an owned uncertain legacy design request byte for byte.
+Exercise the normal pre-plan claim with no plan-review obligation and a fix
+whose only unmet requirement is plan coverage with no baseline as well.
+Run the affected review/claim suites and both web TypeScript programs, obtain
+independent source assessment, publish through protected CI and the merge queue,
+then verify the original request only after a containing canonical deployment.
+
+## Exact claim Workroom selection (2026-10-16)
+
+The live BI-06AE6833 PLAN claim exposed an additional route/evaluation mismatch.
+Five active Workrooms belong to the subject. The current-design reader selects
+all subject rooms with a two-row ambiguity limit, even though the governed claim
+names one repository, branch and immutable base/head pair. It returns unavailable
+before reading the selected branch's design. Refusal IRD-861BBF5EE5B4 preserves
+this evidence; no baseline or item-body rebind is a remedy for that ambiguity.
+
+Continue `initial-design-amendment-discovery` under BI-4592CF69 and WC-2A0FAF55,
+using `AC-route-evaluation-agreement`, `exact-head-canonical-design`,
+`immutable-bytes`, `current-identity-recheck` and `governed-claim`. The following
+phases are internal sequencing of one repair, not independent deliverables.
+
+1. Integrate BI-023EF164's source-identity validation after its normal protected
+   merge and scope release. Its frozen d4497f0eb00b80902796adf706cfb56ea6078e51
+   does not implement current-design room selection. The owner normally released
+   `governed-work-claim.ts` and its test after publishing PR #6449; WC-2A0FAF55
+   normally claimed them and the reader/test pair on 2026-10-16. PR #6449 merged
+   as 203c62de7794a2074f952cb40d513d175786ffc8; normal integration uses current
+   main 1feeb7e27f3f807c5b1d8dff56a8209f66a4d66a and preserves its validation.
+2. Add failing regressions in `canonical-artifact-discovery.test.ts` and
+   `governed-work-claim.test.ts`. Exercise the actual persisted-binding reader:
+   multiple subject rooms plus an exact claim must read the selected room;
+   unscoped reads remain ambiguous. Missing, partial, invalid, foreign or stale
+   source tuples must remain unavailable. Verify baseline/body changes at the
+   same head, room/source changes during the provider read and before the locked
+   guard, and inherited-only scope. Assert the actual claim forwards its source
+   identity and the resulting readiness/recovery, rather than testing only a
+   caller-supplied binding stub.
+3. Extend `prepareCurrentDesignObservation` with the existing claim source tuple.
+   Resolve that tuple against the subject-bound, nonarchived persisted Workroom;
+   derive its capsule identity on the server. Carry the same selection through
+   initial read, provider recheck and locked admission guard. Reuse the existing
+   full-SHA validator after integration; syntax alone is not source authority.
+   Keep unscoped readers, provider limits, baseline/body checks and subject/room
+   locks intact. Run graph-related tests, both web TypeScript programs and the
+   required guards, obtain independent source assessment, then publish through
+   protected CI and verify the original exact PLAN claim on a containing release.
+
+Rollback remains a protected revert, with no schema or data rewrite. The main
+risk is accidentally selecting another subject's room or allowing a stale tuple;
+the negative and concurrent-read regressions are mandatory. Normal PLAN claim
+IRD-AE5997CBD8AC allowed this continuation. New immutable plan coverage and normal
+implementation admission were required before source implementation. Coverage
+cmvaq65oa0eu501pd97tqrjtw was checked valid at published plan commit
+37d39a6fc8f5809f74653320006564eb5e98b1d5. After the supported lease renewal,
+IRD-8D609D2B5376 allowed implementation. Final-head coverage must be refreshed
+before handoff; live acceptance remains pending.
+This repair does not settle or replay the uncertain BI-C684AF45 reviewer Task.
+
+The normal scope impact contract resolved all five paths. Live source-graph
+lookup returned `canonical-artifact-discovery.test.ts`,
+`terminal-recovery.declared-design.test.ts`, `governed-work-claim.test.ts`,
+`governed-work-claim-ownership.test.ts`,
+`governed-work-claim-small-fix-research.test.ts` and
+`build-entry-gate-small-fix-research.test.ts`; include these with the existing
+claim/detail/completion amendment regressions. The declared guard obligation is
+`node scripts/check-style-drift.mjs`; documentation-index freshness is also
+required. Discovery is verification planning, not evidence that tests ran.
+
+## Exact claim verification to date
+
+Eight reader regressions and the actual claim integration regression failed
+before the fix. With the scoped persisted-room selection and unchanged guard,
+1,369 affected tests pass in 118 suites; 10 PostgreSQL-dependent tests in two
+suites are skipped. This includes all Workroom and initiative-readiness suites,
+the graph-linked build-entry test, bounded item-read tests and the actual packet
+admission roundtrip. Style, diff and both web TypeScript programs pass.
+Independent source assessment, protected publication and containing-release
+verification remain required; a test pass is not live acceptance.
+
+## Selected-room packet admission follow-through
+
+Blast-radius inspection found that `apps/web/lib/mcp/independent-review-request.ts`
+already verifies the packet's subject and exact Workroom access, then calls
+`getBacklogItem` without that room's source identity. Its generic current-design
+read can still return unavailable and refuse the claim's unchanged packet.
+The earlier packet roundtrip suite stubs this reader and readiness; its pass
+does not prove admission with multiple actual rooms. Publication was held until
+the selected-room admission path could be exercised.
+
+This is the same atomic `governed-claim` / `exact-item-read` route-agreement
+repair. Before implementation, normally claim the admission file,
+`apps/web/lib/mcp/packs/backlog-pack-read-tools.ts` and
+`apps/web/lib/mcp/independent-review-packet-roundtrip.test.ts`, then refresh
+immutable coverage and normal admission. The first scope request was refused
+during the recovery-103 drain; it granted no edit authority for those files.
+
+Read the selected room's full source fields from the server only after the
+existing subject/access checks. Match them to the packet binding. Pass that
+verified tuple through a server-internal item-read option to the same canonical
+reader; public tool parameters cannot supply it. Add a regression through actual
+packet admission and the persisted-binding reader with multiple rooms, keeping
+pure readiness projection real. Reject forged or changed room/source bindings,
+revoked access and caller-injected selector parameters. Generic portal/item and
+completion reads remain unscoped and can still report unavailable; this work
+does not guess a room for them or add a public selection API. Run the affected
+admission, item-read, claim and readiness suites and both TypeScript programs,
+then independently assess the complete frozen change before publication.
+
+The owner normally released both admission source and its affected test after
+PR #6451 merged as ca812ae29d364fff864ae8271532a4a8f5a45090. WC-2A0FAF55 normally
+claimed them, integrated that merge, and refreshed published plan coverage to
+cmvarah4j07rd01t3nfg1n48n at ceaa2cc905a388016f1822cbe967356e6766305e; the native
+check returned valid and IRD-E004E4CF855F allowed implementation. The graph-linked
+authorization/document/exhaustion fixtures are also normally claimed.
+
+The actual claim-to-admission regression failed before source propagation and
+now passes with the real pure readiness projector, persisted-room reader and
+both real issuers. Public selector-shaped parameters remain ignored. Six
+foreign/changed/incomplete persisted-room cases refuse before readiness or
+protected document reads. A completed review can still return its existing
+writer receipt after the room source moves, but only for the identical persisted
+request and current room access; no receipt means refusal. The archived
+body-acceptance path from PR #6451 retains its source proof and policy.
+
+Current affected validation passes 1,518 tests across 125 suites, with 10
+PostgreSQL-dependent tests in two suites skipped. Both web TypeScript programs,
+style and diff checks pass. The earlier e9de6 handoff ran all 84 host preflight
+guards successfully; the subsequent main-only integration ran 14 fresh committed
+policy guards and explicitly skipped exhaustive host and shared-runtime gates.
+These are distinct results, not a full gate pass on a later tree. Independent
+assessment of the complete final change, final-head coverage, protected CI/queue
+and live exact-claim/current-packet acceptance remain pending.

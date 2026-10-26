@@ -169,6 +169,7 @@ COPY scripts/postgres-trial-restore.sh ./scripts/
 # host bootstrap against older images (see the script header).
 COPY scripts/link-web-src-workspace.sh ./scripts/
 COPY scripts/salvage-sweep.mjs ./scripts/
+COPY scripts/reassessment-capability-probe.mjs ./scripts/
 # Work Capsule change-impact planning executes the canonical gate-context CLI
 # at runtime. Package its exact transitive source closure into the image so a
 # mutable /host-dpf checkout can never substitute different rule bytes.
@@ -196,11 +197,18 @@ COPY scripts/lib/seed-fit-mechanism.mjs ./scripts/lib/
 COPY scripts/worktree-janitor.mjs ./scripts/
 COPY scripts/lib/worktree-janitor-core.mjs ./scripts/lib/
 COPY scripts/lib/worktree-session-heartbeat.mjs ./scripts/lib/
+# The janitor logs path and reason text through sanitizeForLog. That module
+# has to be in the image or the daily queue dies with ERR_MODULE_NOT_FOUND.
+COPY scripts/lib/safe-log.mjs ./scripts/lib/
 COPY scripts/lib/worktree-liveness.mjs ./scripts/lib/
 # worktree-janitor.mjs and worktree-liveness.mjs query leases and Workroom
 # claims through the shared MCP client (plan 2026-09-08 §10.5 S8).
 COPY scripts/lib/mcp-client.mjs ./scripts/lib/
 COPY scripts/lib/mcp-credential.mjs ./scripts/lib/
+COPY scripts/lib/mcp-host-trust.mjs ./scripts/lib/
+COPY scripts/lib/foreground-gate-process.mjs ./scripts/lib/
+COPY scripts/lib/resolve-compose-install-context.mjs ./scripts/lib/
+COPY scripts/installer/lib/mcp-client-env.sh ./scripts/installer/lib/
 # mcp-credential.mjs re-exports the client_credentials exchange from the skill pack (BI-84C1F526).
 COPY packages/dpf-skill-pack/scripts/lib/client-credentials-exchange.mjs ./packages/dpf-skill-pack/scripts/lib/
 COPY scripts/lib/junction-safe-worktree-remove.mjs ./scripts/lib/
@@ -379,7 +387,8 @@ WORKDIR /app
 # publish path materializes LFS via `actions/checkout` with `lfs: true`; this
 # is the same guarantee for the path that has no GitHub Actions runner.
 # Dockerfile.sandbox installs it for the same class of reason.
-RUN apk add --no-cache docker-cli docker-cli-buildx docker-cli-compose postgresql16-client git git-lfs curl nmap
+# Shared HTTPS tooling consumes the installer-owned Bash environment resolver.
+RUN apk add --no-cache docker-cli docker-cli-buildx docker-cli-compose postgresql16-client git git-lfs curl nmap bash
 ENV NODE_ENV=production
 ENV HOSTNAME=0.0.0.0
 ENV PORT=3000

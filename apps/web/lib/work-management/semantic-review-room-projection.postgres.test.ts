@@ -4,12 +4,15 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { createSemanticReviewRequest } from "@/lib/change-review/semantic-review-request";
 import { createSemanticReviewReceipt } from "@/lib/change-review/semantic-change-review";
-import { loadSemanticReviewRoomProjection, type ReviewerRoomClient, type ReviewerRunSnapshot } from "./semantic-review-room-projection";
+import { loadSemanticReviewRoomProjection, type ReviewerRoomClient } from "./semantic-review-room-projection";
 
 // Same governed, read-only PostgreSQL harness as workroom-stall.postgres.test.ts.
 // Fixture CTEs shadow every physical table; no records or schema are modified.
-const url = process.env.DPF_SQL_TEST_DATABASE_URL
-  ?? (process.env.CI === "true" ? process.env.DATABASE_URL : undefined);
+const admittedUrl = process.env.DPF_SQL_TEST_DATABASE_URL ?? process.env.DPF_LOCAL_CI_TEST_DATABASE_URL;
+if (process.env.DPF_LOCAL_CI_SLOT_KEY && !admittedUrl) {
+  throw new Error("Admitted local CI requires its SQL test database URL.");
+}
+const url = admittedUrl ?? (process.env.CI === "true" && process.env.GITHUB_ACTIONS === "true" ? process.env.DATABASE_URL : undefined);
 const databaseSuite = url ? describe : describe.skip;
 const now = new Date("2026-10-16T04:00:00Z");
 const head = "a".repeat(40);
@@ -26,10 +29,12 @@ function fixture(version: 1 | 2 = 2) {
   new Date("2026-10-16T03:50:00Z"), version);
   return {
     packet: packet as unknown as Record<string, any>,
-    task: { id: "row", taskRunId: "TR-SQL", userId: "requester",
-      a2aMetadata: { capsuleId: "WC-SQL", gateKey: packet.gateKey },
+    task: { id: "row", taskRunId: "TR-SQL", userId: "requester", status: "completed",
+      createdAt: now.toISOString(), updatedAt: now.toISOString(), lastHeartbeatAt: now.toISOString(), archivedAt: null,
+      a2aMetadata: { gateKind: "semantic-review", capsuleId: "WC-SQL", gateKey: packet.gateKey },
       progressPayload: { evidenceRecordId: "receipt", semanticReview: { requestDigest: packet.digest } } },
-    room: { id: "room", capsuleId: "WC-SQL", headSha: head, repositoryFullName: packet.repository },
+    room: { id: "room", capsuleId: "WC-SQL", headSha: head, repositoryFullName: packet.repository,
+      headBranch: "fix/sql", backlogItemId: "BI-SQL" },
     receipt: { id: "receipt", taskRunId: "TR-SQL", workCapsuleId: "room", actorUserId: "requester",
       operationType: "semantic-change-review.receipt", createdAt: now.toISOString(),
       details: createSemanticReviewReceipt({ identity: packet.input.identity, disposition: "reviewed", risk: "high",
@@ -48,25 +53,29 @@ databaseSuite("semantic review readback SQL on PostgreSQL", () => {
 
   async function project(data = fixture()) {
     let sqlFailure: unknown;
-    const row: ReviewerRunSnapshot = { ...data.task, status: "completed", updatedAt: now,
-      lastHeartbeatAt: now, nodes: [] };
     const db = {
-      taskRun: { findMany: async () => [row] },
       $queryRaw: async (parts: TemplateStringsArray, ...values: unknown[]) => {
         const sql = parts.reduce((text, part, index) => text + (index ? `$${index}` : "") + part, "");
         const parameter = `$${values.length + 1}`;
         const text = `WITH fixture AS (SELECT ${parameter}::jsonb AS data),
           "TaskRun" AS (SELECT t.* FROM fixture,
-            jsonb_to_record(data->'task') AS t(id text, "taskRunId" text, "userId" text,
+            jsonb_to_record(data->'task') AS t(id text, "taskRunId" text, "userId" text, status text,
+              "createdAt" timestamptz, "updatedAt" timestamptz, "lastHeartbeatAt" timestamptz, "archivedAt" timestamptz,
               "a2aMetadata" jsonb, "progressPayload" jsonb)),
           "WorkCapsule" AS (SELECT w.* FROM fixture,
-            jsonb_to_record(data->'room') AS w(id text, "capsuleId" text, "headSha" text, "repositoryFullName" text)),
+            jsonb_to_record(data->'room') AS w(id text, "capsuleId" text, "headSha" text, "repositoryFullName" text,
+              "headBranch" text, "backlogItemId" text)),
+          "TaskNode" AS (SELECT NULL::text AS id, NULL::text AS "taskNodeId", NULL::text AS "taskRunId",
+            NULL::text AS title, NULL::text AS status, NULL::timestamptz AS "updatedAt", NULL::jsonb AS "requestContract" WHERE false),
+          "BacklogItem" AS (SELECT 'item-row'::text AS id, 'BI-SQL'::text AS "itemId"),
+          "EmployeeProfile" AS (SELECT NULL::text AS id, NULL::text AS "userId", NULL::text AS "displayName" WHERE false),
+          "McpApiToken" AS (SELECT NULL::text AS id, NULL::text AS "userId", NULL::text AS "agentId" WHERE false),
           "TaskArtifact" AS (SELECT 'row'::text AS "taskRunId", 'semantic-review-request:TR-SQL'::text AS "artifactId",
             jsonb_build_array(jsonb_build_object('data', data->'packet')) AS parts FROM fixture),
           "ExternalEvidenceRecord" AS (SELECT e.* FROM fixture,
             jsonb_to_record(data->'receipt') AS e(id text, "taskRunId" text, "workCapsuleId" text,
               "actorUserId" text, "operationType" text, "createdAt" timestamptz, details jsonb))
-          ${sql}`;
+          ${/^\s*WITH\s+/i.test(sql) ? sql.replace(/^\s*WITH\s+/i, ", ") : sql}`;
         try {
           return (await client.query({ text, values: [...values, JSON.stringify(data)] })).rows;
         } catch (error) {
@@ -119,7 +128,7 @@ databaseSuite("semantic review readback SQL on PostgreSQL", () => {
     data.room.headSha = "c".repeat(40);
     const result = await project(data);
     expect(result.runs[0].identityScope).toBe("historical");
-    expect(result.partial).toBe(true);
+    expect(result.partial).toBe(false);
     expect(result.attentionReason).toContain("No request for the current source version");
   });
 

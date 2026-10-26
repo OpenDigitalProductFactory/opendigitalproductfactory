@@ -151,6 +151,8 @@ The reviewer's receipt is the stage's evidence (BI-80738C08): once every review 
 the stage declares has passed for the room's current head, the next tick advances it. A
 failing receipt blocks the stage and shows in the room with its finding count.
 
+A scheduled run may record its own assigned non-governed stage as blocked without a per-report approval (BI-E458A9CB). This default mandate requires the persisted run, coworker assignment, room, shape version, stage and declared evidence kind to match, with a nonblank summary. Explicit always-approve policy remains in force. It does not authorize a completed report or the blocked business action. The existing permission and consequence gates still apply; see [Workroom cycle continuity](workroom-cycle-continuity.md).
+
 Two bounded exceptions bind a non-governed `role:` stage to an agent; neither ever reaches a
 `governed-decision` advance (`boundStagePrincipal`, `drive-plan-stage.ts`). A room may carry
 its own `workShapeRoleBindings` scope claim naming the agent that holds a role there
@@ -169,12 +171,23 @@ agents into 341 such rooms, many untouched since 2026-09-25. Each run left no ev
 04:00Z 277 rooms were held on `executor_writeback_unavailable`, against a baseline of 6 a day,
 and the owner's "Needs you" showed ~56 of them. The item status now gates every plan
 (`drive-work-item-gate.ts`). When the item is `done`, `deferred` or `retired`, the room stands
-down entirely. When it is `awaiting-acceptance`, no agent runs and no agent-side pause is held,
-but a person stage (the acceptance itself) still asks. A conformance stop or escalation is never
-hidden. A stood-down tick is `do_not_wake`/`work_item_inactive`: it deactivates the room's task
+down entirely, escalations included, since there is no work left to coordinate. On 2026-10-21 a
+done item's room (`WC-F836CFFC`) had escalated for 1,234 ticks. When the item is
+`awaiting-acceptance`, no agent runs and no agent-side pause is held, but a person stage (the
+acceptance itself) and an escalation still ask. A conformance stop is never hidden. A stood-down tick is `do_not_wake`/`work_item_inactive`: it deactivates the room's task
 and replaces its pause, so an existing stall card clears on the next tick with no data repair.
 Reopening the item lets the next tick plan the room again. A room with no item, or an item whose
 status could not be read, is driven as before.
+
+**A stage task runs only while the drive wants it** ⟦runtime: 2026-10-21, `BI-1DDCE164`⟧. On
+2026-10-20/21, build-specialist ran 553 times in 14 hours across 14 room-stages. Each of those
+rooms had already moved to an attention stage, or had left the drive (a Build Studio executor
+since BI-B5751303, or archived), so no run's evidence was ever read. The drive now stops the
+task when a sequential room concludes attention on a stage other than the one it last enqueued.
+Each tick also stops the tasks of archived, terminal and Build Studio rooms. The stage brief
+names the room objective and the bound backlog item, with a pointer to read it through
+`get_backlog_item`. Before this, 737 of 1030 build-specialist stage records were `blocked`,
+mostly because the agent could not tell which work the room delivers.
 
 A room that never declared one gets a **derived** shape from what it already is
 (`derive-workroom-shape.ts`): a standing WSID room is craft stewardship by definition,
@@ -397,12 +410,19 @@ assuming coverage, because the honest scope is narrow by design:
 
 - **Tool coverage:** `CONSEQUENTIAL_DECISION_TOOLS` currently holds **two** tools —
   `triage_backlog_item` and `retire_backlog_item`.
-- **Surface:** only `source: "agentic-loop"` (in-portal coworker and Build Studio).
-  External CLI sessions are governed by the plane-1 `PreToolUse` hook instead; direct
-  REST/JSON-RPC is operator traffic and out of scope.
+- **Surface:** the agent surfaces, with one decision table for both:
+  `source: "agentic-loop"` (in-portal coworker and Build Studio) and, since
+  BI-638024F9, `source: "external-jsonrpc"` (external coding agents over
+  `/api/mcp/v1`). The plane-1 `PreToolUse` hook still runs on external clients, but
+  only as an accelerator. Direct REST/JSON-RPC and the portal's own MCP session are
+  operator traffic and out of scope.
 - **Consultation window:** a `principle_decide` call clears the gate for
   `CONSULT_WINDOW_MS` — 30 minutes. The intended bypass is "consult first".
-- **Mode:** `DPF_DECISION_GATE_MODE` = `enforce` (default) | `shadow` | `off`.
+- **Mode:** `DPF_DECISION_GATE_MODE` = `enforce` (default) | `shadow` | `off` for
+  internal agents. External agents follow `DPF_DECISION_GATE_EXTERNAL_MODE`, default
+  `shadow` while the rollout gathers audit data, and set to `enforce` to deny. A
+  global `off` turns the gate off for every source. Every audit line names its
+  `source`, so the shadow data can be read per surface.
 - **Fail-open:** any error allows. A governance guard must never wedge the loop.
 - **Ledger:** the consultation map is per-process and in-memory, so it holds for a
   single-portal deployment and would need a durable store for multi-instance portals.
@@ -416,7 +436,7 @@ unconsulted consequential decision.
 are gated. The general pre-execution interceptor over all consequential tool calls — with
 its four check families (alignment, authority and policy, consequence/HITL, and
 precondition/ordering) — is the target architecture in the
-[governance-gate spec](../superpowers/specs/2026-08-13-wwwd-constitutional-alignment-gate.md),
+[governance-gate spec](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/250447587496308226abc10aca79ee006ecd10f6/docs/superpowers/specs/2026-08-13-wwwd-constitutional-alignment-gate.md),
 not the current state.
 
 ## The shape's next steps, after the gate
@@ -509,7 +529,7 @@ cost against quality against time — through `resolveWorkroomPosture`
 Golden Triangle engines. `WorkroomView.posture` carries the result and the reason for every
 clamp. The load-bearing rule mirrors the two-level rule above: a derivation may TIGHTEN the
 action boundary and may never widen it, so shape can restrict autonomy but never grant it.
-Design: [Work Posture](../superpowers/specs/2026-08-22-workroom-work-posture-design.md).
+Design: [Work Posture](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/250447587496308226abc10aca79ee006ecd10f6/docs/superpowers/specs/2026-08-22-workroom-work-posture-design.md).
 
 ## Encoding and visualization
 
@@ -524,12 +544,12 @@ Workroom/cycle/task records. These are DPF contracts, not BPMN XML or SysML text
 | BPMN | Process tasks, gateways, waits, recovery paths and ownership lanes | `process-extract.ts` and `reconcile-process.ts` project selected state machines; WorkShape recovery extraction needs explicit coverage |
 | SysML v2 | Requirements, interfaces, allocation to components and verification evidence | Existing EA notation and Parity Engine; use stable source keys rather than a separately maintained model |
 
-The [SysML reference](../Reference/sysml-v2.md) owns notation selection; ArchiMate
+The [SysML reference](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/250447587496308226abc10aca79ee006ecd10f6/docs/Reference/sysml-v2.md) owns notation selection; ArchiMate
 remains the enterprise view and C4 the lightweight software explanation. Current
 views derive from registered definitions, transition rules and canonical receipts.
 Target-state sketches must be labeled as such until implemented and verified.
 
-The [reviewer recovery amendment](../superpowers/specs/2026-09-03-local-first-agentic-delivery-throughput-design.md#81-reviewer-recovery-and-receipt-settlement)
+The [reviewer recovery amendment](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/250447587496308226abc10aca79ee006ecd10f6/docs/superpowers/specs/2026-09-03-local-first-agentic-delivery-throughput-design.md#81-reviewer-recovery-and-receipt-settlement)
 defines the planned extension of `pull-request-flow-watch@1.0.0`, its version
 compatibility requirements and the operator display. A declared shape never proves
 that automatic replacement or gate advancement is running.
@@ -892,6 +912,33 @@ One case still holds unconditionally:
 - **An unknown cycle key on either side.** Reading "unknown" as "a new cycle"
   would silently re-open the every-tick loop.
 
+**The cycle bound still held for things that were not running** (BI-7C0B2BD6).
+On 2026-10-14, 279 rooms were paused on `executor_writeback_unavailable`. Some
+had no task at all, because an old `dispatch_agent` record never created one.
+Some had a task whose run had already failed. Some had a task that the pause
+itself had switched off before the scheduler ran it. The sequential drive now
+reads the room's task, and the latch holds only while the queued run is
+outstanding or waiting for a recorded approval outcome:
+
+- A proposed task stays parked until its linked approvals show execution. Waiting, declined, expired, failed, cancelled, not-run and unknown outcomes do not trigger another request on the next day. Graph tokens apply the same rule to their own task, and the scheduler does not rearm the proposed required action's cron. Execution alone still does not complete the stage.
+- If no task exists, or no enqueue was recorded, the ordinary execution latch releases.
+- An unfinished run keeps the room paused for up to 2 hours, with the task left
+  active so it can still run.
+- Outside that approval wait, a run that finished without a completing receipt is a failure. The room is
+  retried after a backoff of 15 minutes, then 30.
+- After three failures in one cycle the room stays paused, and its ledger and
+  trail row name the last error. A new cycle resets the count.
+
+Rooms released this way are dispatched at most at the agent-task dispatcher's
+own provider-slot count per tick. The rest read **waiting for agent capacity**
+(`do_not_wake`/`awaiting_agent_capacity`) and go out on later ticks, starting
+with the room that has waited longest.
+
+The same incident exposed a second fault. One room failing task-identity
+reconciliation threw, and the throw ended the tick for every room after it: 68
+rooms were not re-evaluated after midnight. A failure while driving one room is
+now recorded in the tick result as an `error` entry, and the tick carries on.
+
 The general lesson is worth stating plainly, because it applies to any
 fail-closed guard: a guard whose own output re-triggers its input has no
 recovery path, and the estate it protects can only degrade. Bound the latch to
@@ -993,6 +1040,38 @@ for an answer without the means to obtain one converts an honest failure into a
 confident falsehood — which is why the governed-evidence requirement is the load
 -bearing guard here, not the prompt.
 
+### Offered, or not dispatched; offered, then corrected once (BI-62DB6C03)
+
+The pin did its job. On 2026-10-21 the adopter health watch (`WC-0A92C30D`,
+customer-advisor on codex/gpt-5.6-luna) ended with "the required
+evidence-recording action is unavailable". The writer was in its tool list.
+The archived prompt of the same coworker's next failure lists
+`record_workroom_evidence` second under "Tools:", and every `/ops/workrooms`
+turn in the previous seven days attached 15 tools with the writer pinned. In
+those seven days 40 failed stage runs were this false claim (25 on
+chatgpt/gpt-5.6-sol, 10 on codex/gpt-5.6-luna). Nothing told the model it was
+wrong.
+
+The opposite case went unreported. The verdict counts a prompt-named writer as
+required only when it is authorized. A run offered no writer was recorded `ok`,
+and the drive dispatched the stage again. That happens at an advise boundary,
+which strips every side-effecting tool, or when the grant or owner capability is
+missing. Three rules now hold, in `scheduled-task-runs.ts` and the scheduler:
+
+- **A Workroom stage run is never dispatched without its writer.**
+  `scheduledMandatoryToolNames` requires `record_workroom_evidence` for any run
+  carrying `taskConfig.workroomStage` or a brief that names it, whatever the
+  grants say. `scheduledMandatoryToolGap` refuses the run before inference and
+  gives the reason. Advise mode withholds writers by design, so a Workroom
+  stage is not dispatched in advise mode.
+- **A writer that was handed over and not called gets one correction turn**
+  (`scheduledRequiredToolCorrection`). The turn says the tool is attached and
+  that a "blocked" outcome is the honest way to report not having done the
+  work. There is no correction if the writer already persisted under the run.
+- **The verdict says when the writer was offered.** The failure reads
+  "executed zero times; it was attached to the run and not called". That is
+  not an availability fault, and the record should not be read as one.
+
 ## A stage names the tools it needs
 
 Pinning the writer the prompt names was not enough. Live standing rooms kept
@@ -1072,7 +1151,7 @@ place, but widening one (a new tool, stage, evidence kind or grant, a changed
 accountable principal, or a governed decision relaxed to a status change)
 needs a new version and a fresh gate decision. Kernel decision DI-E4DAF14D9343
 chose bump-and-rebind. Design:
-[spec](../superpowers/specs/2026-10-01-workroom-shape-rebind-design.md).
+[spec](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/250447587496308226abc10aca79ee006ecd10f6/docs/superpowers/specs/2026-10-01-workroom-shape-rebind-design.md).
 
 - **A bump never stops a room.** The superseded definition moves to
   `WORK_SHAPE_PRIOR_VERSIONS` (`work-shape-prior-versions.ts`) in the same
@@ -1115,7 +1194,7 @@ fallback or grants execution authority.
 - [Workroom vocabulary boundary](workroom-vocabulary-boundary.md) — what the word means at each layer
 - [Trustworthy AI Agent Standards Family](agent-standards-family.md) — TAK, GAID, JSI, GPP and the composition rule
 - [Gated Permissions Process (GPP)](gated-permissions-process.md) — the standard that models each shape stage's gate and the tools it admits; see its [pairing diagram](gated-permissions-process.md#73-the-pairing-at-a-glance) and the [binding as a model](gated-permissions-process.md#123-the-binding-as-a-model)
-- [A Governance Gate on Consequential Tool Use](../superpowers/specs/2026-08-13-wwwd-constitutional-alignment-gate.md) — the target architecture
+- [A Governance Gate on Consequential Tool Use](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/250447587496308226abc10aca79ee006ecd10f6/docs/superpowers/specs/2026-08-13-wwwd-constitutional-alignment-gate.md) — the target architecture
 - [Work Rooms](../user-guide/workspace/work-rooms.md) — the end-user view
 
 ## A shape must outlive the room that decided it (BI-82DCD601)
@@ -1125,3 +1204,14 @@ fallback or grants execution authority.
 Measured on the development install 2026-09-09: **67 merged bug fixes stalled at completion, 0 with a live room, 0 with a readable shape.** `smallShapeAcceptance` — the clause that lets a small or break-fix item be accepted by a runtime check or a failing-to-passing test, with no spec, no plan and no reconciliation receipt — could therefore never fire for the population it was written to serve. Across the whole install only 46 of 353 live rooms carried a shape claim at all.
 
 A closed or completed room is now consulted as a **fallback**, newest first. A live room still wins, so an in-flight re-shape is honoured over a historical one. An `abandoned` or `superseded` room is still never consulted: abandoning the work is a statement that its shape claim no longer stands.
+
+## Finite delivery identity
+
+New finite delivery rooms retain their initial outcome, canonical criterion
+identity and scoped linked-installation context in workspaceState and the initial
+audit payload. Shape and authority rules still bound action. The room and MCP
+readers share one agreement projection. The successful governed terminal
+transaction retains its evidence-backed handoff in that state and the existing
+audit event. Different criterion statements require reconciliation; separately
+linked follow-on BIs leave the completed delivery intact.
+See [finite delivery agreements](../user-guide/workspace/finite-delivery-agreements.md).

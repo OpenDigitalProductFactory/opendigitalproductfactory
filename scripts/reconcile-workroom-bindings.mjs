@@ -24,7 +24,9 @@ import { fileURLToPath } from "node:url";
 
 import { isClaimExemptBranch } from "../packages/dpf-skill-pack/hooks/lib/workroom-claim-lookup.mjs";
 import { bindWorktreeToWorkroom, resolveMcpAccess } from "./lib/workroom-bind.mjs";
+import { MCP_CREDENTIAL_HELP } from "./lib/mcp-credential.mjs";
 import { gitText } from "./lib/git.mjs";
+import { sanitizeForLog } from "./lib/safe-log.mjs";
 
 
 // ── pure ─────────────────────────────────────────────────────────────────────
@@ -99,7 +101,7 @@ async function main() {
   const asJson = args.includes("--json");
 
   if (apply && !resolveMcpAccess()) {
-    console.error("[reconcile-workrooms] --apply needs DPF_MCP_BEARER_TOKEN; MCP is the only authority on claims.");
+    console.error(`[reconcile-workrooms] ${MCP_CREDENTIAL_HELP}\nMCP is the only authority on claims.`);
     process.exit(1);
   }
 
@@ -118,7 +120,7 @@ async function main() {
     });
     results.push({ ...w, ...r });
     if (r.status === "bound") bound += 1; else failed += 1;
-    console.log(`  ${r.status === "bound" ? "BOUND  " : "SKIP   "} ${w.branch}${r.capsuleId ? ` -> ${r.capsuleId}` : ""}${r.reason ? ` (${r.reason})` : ""}`);
+    console.log(`  ${r.status === "bound" ? "BOUND  " : "SKIP   "} ${sanitizeForLog(w.branch)}${r.capsuleId ? ` -> ${sanitizeForLog(r.capsuleId)}` : ""}${r.reason ? ` (${sanitizeForLog(r.reason)})` : ""}`);
   }
 
   if (asJson) {

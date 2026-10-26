@@ -11,7 +11,7 @@ import { classifyWorkCapsuleLiveness,
   isDemonstrablyWorking,
   type WorkCapsuleLiveness,
 } from "./liveness";
-import { projectWorkroomRecovery } from "./workroom-recovery-projection";
+import { loadWorkroomRecoveryItems, projectWorkroomRecovery } from "./workroom-recovery-projection";
 import { readBuildPrDeliveryState } from "@/lib/build/build-pr-delivery-state";
 import { projectPrFollowThroughStatus } from "@/lib/build/pr-follow-through";
 import { projectInvocationAttribution, recordedDriveTask } from "./invocation-attribution";
@@ -103,12 +103,14 @@ export async function loadCapsuleLivenessInventory(
     take: args.take,
     select: args.portalSummary
       ? { ...INVENTORY_SELECT, id: true, outcomeAnchor: false, scopeClaims: false, servesPortfolioRoles: false, dependsOnPortfolioRoles: false }
-      : args.compact ? { ...INVENTORY_SELECT, outcomeAnchor: false, scopeClaims: false, servesPortfolioRoles: false, dependsOnPortfolioRoles: false } : INVENTORY_SELECT,
+      : args.compact ? { ...INVENTORY_SELECT, outcomeAnchor: false, scopeClaims: false, servesPortfolioRoles: false, dependsOnPortfolioRoles: false,
+          createdByPrincipalId: true, requestedByPrincipalId: true } : INVENTORY_SELECT,
   });
   const titles = args.portalSummary ? await loadWorkroomDisplayTitles(db, rows) : null;
   // One bounded review read for the page, never one query per room. A truncated
   // history stays unknown; the detail action narrows the observation to a room.
   const reviews = await loadSemanticReviewRoomProjection(db, rows.map(row => row.capsuleId), now);
+  const recoveryItems = await loadWorkroomRecoveryItems(db, rows);
 
   const taskIds = rows.map((row) => recordedDriveTask(row)?.taskId).filter((id): id is string => Boolean(id));
   const tasks = taskIds.length && db.scheduledAgentTask ? await db.scheduledAgentTask.findMany({
@@ -162,9 +164,10 @@ export async function loadCapsuleLivenessInventory(
       ...rest,
       ...(titles ? { title: workroomDisplayTitle(row, titles) } : {}),
       ...(drive ? { drive: { action: drive.lastAction, reason: drive.lastReason,
+        lastCycleKey: drive.lastCycleKey,
         attentionRecorded: Boolean(projectStoredWorkroomDriveObservation(row.workspaceState).attentionReason) } } : {}),
       attribution: projectInvocationAttribution(row, tasksById.get(recordedDriveTask(row)?.taskId ?? "")),
-      recovery: projectWorkroomRecovery({ ...row, taskRun: row.taskRun }, reviews),
+      recovery: projectWorkroomRecovery({ ...row, taskRun: row.taskRun }, reviews, recoveryItems.get(row.backlogItemId ?? "") ?? null, now),
       liveness: verdict.liveness,
       isLive: verdict.isLive,
       isReapable: verdict.isReapable,

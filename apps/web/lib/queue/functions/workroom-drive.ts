@@ -1,5 +1,3 @@
-// apps/web/lib/queue/functions/workroom-drive.ts
-//
 // BI-FCD639D9 — the standing Workroom drive. DPF owns wake, lease, dispatch,
 // attention, and stop. Codex/Claude/Grok/embedded coworkers are interchangeable
 // workers behind ScheduledAgentTask. Quiet rooms do not wake.
@@ -19,6 +17,7 @@ import { NOT_ASKED_ACCOUNTABILITY, resolveAccountabilityForConclusion } from "./
 import { activeUserIdForHumanPrincipal, MISSING_TASK_OWNER_REASON, settleTickTaskOwner } from "./workroom-drive-task-owner";
 import type { PrismaClient } from "@dpf/db";
 import { jobs } from "@/lib/jobs";
+import { isRecord } from "@/lib/shared/coerce";
 import {
   jsiSchemePresent,
   resolveCoordinatorEligibility,
@@ -37,7 +36,7 @@ import {
   loadStandingRoomIds,
   loadWorkItemStatuses,
   reconcileCoordinationBindings,
-  reconcileStandingRoomNesting,
+  reconcileStandingRoomNesting, deactivateUndrivenRoomTasks, taskLeftBehind, workItemKeyOf, // BI-1DDCE164
 } from "./workroom-drive-data";
 export { loadStandingRoomIds, STANDING_ROOM_SCAN_LIMIT } from "./workroom-drive-data";
 import { earnGraphReceipts, graphSnapshotFields, hasStoredDriveMarking, withLatchedBlockedReceipts } from "@/lib/work-management/drive-graph-tick";
@@ -48,6 +47,9 @@ import type { SubShapeChildObservation } from "@/lib/work-management/drive-child
 import { applyReviewerDispatch, liveReviewerDispatch, reviewStageResolver, withReviewReceiptEvidence, type ReviewerDispatchEffect, type ReviewStageDeps, type ReviewStageOverlay } from "./workroom-drive-review-stages";
 import { earnEvidenceReceipts, type RecordedEvidence } from "@/lib/work-management/stage-evidence-receipts";
 import { sequentialRunFor } from "@/lib/work-management/drive-sequential-run";
+import { readWritebackRetry, type StageRunObservation } from "@/lib/work-management/writeback-latch";
+import { loadDispatchCapacity, withStageRuns } from "./workroom-drive-stage-run";
+import { createDispatchAdmission, orderRoomsOldestWaitingFirst, type DriveDispatchCapacity } from "@/lib/work-management/drive-dispatch-cap";
 
 import { gateAtEntry } from "../quiescence-gates";
 import type { ProactivityLevel } from "@/lib/proactivity/proactivity-types";
@@ -103,11 +105,15 @@ export type WorkroomDriveRoom = {
   receipts: { stageKey: string; kind: string; iteration?: number }[];
   /** The room's own objective, sent to the coworker in its stage brief. */
   objective?: string | null;
+  workItemKey?: string | null; // BI-1DDCE164: the item's semantic id (BI-*), named in the brief
   /** Stage-scoped evidence recorded through record_workroom_evidence — the only
    *  thing a completing receipt is earned from (BI-76B35820). */
   recordedEvidence?: RecordedEvidence[];
   /** When the current stage was most recently dispatched. */
   stageDispatchedAt?: Date | null;
+  /** BI-7C0B2BD6: what the room's task shows about the queued run; null when no task exists, absent when unread. */
+  stageRun?: StageRunObservation | null;
+  stageRunsByTask?: Readonly<Record<string, StageRunObservation | null>>;
   /** Graph rooms only (Phase 3c): when each marked stage most recently started. */
   stageDispatchedAtByStage?: ReadonlyMap<string, Date> | null;
   /** Graph rooms only (PR-3c-5): each live sub-shape child's status and drive action/reason, by capsule id. */
@@ -194,12 +200,6 @@ export type WorkroomDriveResult = {
 // One terminal rule for the drive and the nesting it walks (BI-CFB3FDB7).
 const TERMINAL = TERMINAL_WORKROOM_STATUSES;
 
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
-}
-
 function postureLevelOf(scopeClaims: unknown): ProactivityLevel | null {
   const declared = readWorkroomPostureClaim(scopeClaims)?.proactivityLevel;
   if (declared === "quiet" || declared === "balanced" || declared === "assertive") return declared;
@@ -278,6 +278,7 @@ export async function applyDrivePlan(input: {
     lastRunAt: now.toISOString(),
     lastCycleKey: plan.cycle?.cycleKey ?? null,
     ...(runKey !== undefined && !graph ? { runKey } : {}),
+    ...(plan.writebackRetry !== undefined ? { writebackRetry: plan.writebackRetry } : {}),
     receipts,
     budgetUsage: room.budgetUsage,
     stopConditionHits: room.stopConditionHits,
@@ -313,6 +314,7 @@ export async function applyDrivePlan(input: {
   }
 
   if (plan.action === "attention") {
+    const left = taskLeftBehind(room, plan); if (left) await effects.deactivateAgentTask(left); // BI-1DDCE164
     await persist({
       roomId: room.id,
       snapshot,
@@ -358,7 +360,7 @@ export async function applyDrivePlan(input: {
     if (!room.ownerUserId) return "skipped";
     // GPP element 2 "Attachment" + element 5 "Capability set": the brief and the
     // task carry the stage's declared tools; the scheduler pins them (BI-43C3E914).
-    const brief = stageBriefInputFromDefinition({ capsuleId: room.capsuleId, roomObjective: room.objective ?? null,
+    const brief = stageBriefInputFromDefinition({ capsuleId: room.capsuleId, roomObjective: room.objective ?? null, backlogItemKey: room.workItemKey ?? null,
       shapeKey: plan.shapeKey ?? "", shapeVersion: plan.shapeVersion ?? "", definition: plan.definition ?? null, stageKey: plan.stageKey ?? "" });
     const scheduled = await effects.upsertAgentTask({
       taskId: plan.taskId,
@@ -371,7 +373,7 @@ export async function applyDrivePlan(input: {
       // to leave; send it.
       prompt: buildStageBrief(brief),
       stage: { shapeKey: brief.shapeKey, shapeVersion: brief.shapeVersion, stageKey: brief.stageKey, tools: [...(brief.stageTools ?? [])] },
-      ...(plan.cycle ? { dispatchScope: { runKey: runKey ?? plan.cycle.cycleKey, cycleKey: plan.cycle.cycleKey, iteration: 0 } } : {}),
+      ...(plan.cycle ? { dispatchScope: { runKey: runKey ?? plan.cycle.cycleKey, cycleKey: plan.cycle.cycleKey, iteration: plan.dispatchAttempt ?? 0 } } : {}),
       now,
       lease: { roomId: room.id, expiresAt, holderPrincipalId: room.leaseHolderPrincipalId },
     });
@@ -393,10 +395,12 @@ export async function applyDrivePlan(input: {
     activityKind: WORKROOM_DRIVE_ACTIVITY_KIND,
     summary: plan.reason === MISSING_TASK_OWNER_REASON
       ? `Stage ${plan.stageKey ?? "unknown"} not dispatched: ${String(owner.taskOwner?.missing ?? "no task owner")}`
-      : `Drive ${plan.action}: ${plan.reason}`,
+      // Only a latch that read the task names what it waits on (BI-7C0B2BD6); the cycle-rule line is unchanged.
+      : plan.writebackRetry !== undefined && plan.ledger[0] ? plan.ledger[0] : `Drive ${plan.action}: ${plan.reason}`,
     payload: snapshot,
   });
-  if (plan.shapeKey) {
+  // BI-7C0B2BD6: a latch held for a run still outstanding must not switch off the task it waits on.
+  if (plan.shapeKey && !plan.keepTaskActive) {
     await effects.deactivateAgentTask(workroomDriveTaskId(room.capsuleId, plan.shapeKey));
   }
   return plan.action === "stop" ? "stopped" : "skipped";
@@ -411,6 +415,8 @@ export async function runWorkroomDriveJob(
     reconcileNesting?: () => Promise<number>;
     authorStageAutonomy?: (rooms: WorkroomDriveRoom[], now: Date) => Promise<AuthorStageAutonomyFor>;
     reviewStages?: ReviewStageDeps | null;
+    /** BI-7C0B2BD6: this tick's agent dispatch capacity. Defaults to the live pools; caller-supplied rooms are uncapped. */
+    dispatchCapacity?: () => Promise<DriveDispatchCapacity>;
   },
 ): Promise<WorkroomDriveResult> {
   // Materialize the declared nesting before driving. The tree is declared in
@@ -429,7 +435,7 @@ export async function runWorkroomDriveJob(
   if (deps?.listRooms) {
     rooms = await deps.listRooms();
   } else {
-    await reconcileCoordinationBindings();
+    await Promise.all([reconcileCoordinationBindings(), deactivateUndrivenRoomTasks()]); // BI-1DDCE164: stop tasks of unselected rooms
     const { prisma } = await import("@dpf/db");
     const [bindings, schemePresent] = [
       await loadCoordinationBindings(),
@@ -450,8 +456,14 @@ export async function runWorkroomDriveJob(
       stageDispatchedAt: dispatchByRoom.get(room.capsuleId) ?? null,
       ...(dispatchByStage.has(room.capsuleId) ? { stageDispatchedAtByStage: dispatchByStage.get(room.capsuleId) } : {}),
     }))));
+    // BI-7C0B2BD6: the writeback latch reads each room's task, so it holds only while a run is outstanding.
+    rooms = await withStageRuns(rooms);
   }
   const effects = deps?.effects ?? createWorkroomDriveEffects();
+  // BI-7C0B2BD6 / DI-7109D22D4812: dispatch no more than agent capacity allows; the rest wait, oldest first.
+  rooms = orderRoomsOldestWaitingFirst(rooms);
+  const admit = createDispatchAdmission(await (deps?.dispatchCapacity
+    ?? (deps?.listRooms ? async () => ({ cap: Number.POSITIVE_INFINITY, reason: "caller-supplied rooms" }) : () => loadDispatchCapacity(now)))());
   // BI-8A32EBFF: an agent runs role:author delivery stages only under the operator pre-authorisation, within budget.
   const authorStage = await (deps?.authorStageAutonomy ?? (deps?.listRooms ? async () => NO_AUTHOR_STAGE_AUTONOMY : loadAuthorStageAutonomy))(rooms, now);
   const resolveWithReview = reviewStageResolver(deps); // bounded readiness reads per tick (BI-2C8750FC)
@@ -462,6 +474,8 @@ export async function runWorkroomDriveJob(
   let skipped = 0;
 
   for (const room of rooms) {
+    // BI-7C0B2BD6: one room's failure is recorded and the tick goes on; it once ended the tick for every room after it.
+    try {
     const shape = resolveWorkShapeClaim(room.scopeClaims);
     const author = authorStage(room, shape?.key ?? null);
     const stored = readStoredWorkroomDriveState(room.workspaceState);
@@ -499,6 +513,9 @@ export async function runWorkroomDriveJob(
       coordinatorEligibility: room.coordinatorEligibility,
       now,
       priorDrive: priorDriveFromStored(stored),
+      writebackRetry: readWritebackRetry(isRecord(room.workspaceState) ? room.workspaceState.workroomDrive : undefined),
+      ...(room.stageRun !== undefined ? { stageRun: room.stageRun } : {}),
+      ...(room.stageRunsByTask !== undefined ? { stageRunsByTask: room.stageRunsByTask } : {}),
       workspaceState: room.workspaceState,
       recordedEvidence: room.recordedEvidence ?? [],
       ...(room.subShapeChildren ? { subShapeChildren: room.subShapeChildren } : {}),
@@ -507,7 +524,10 @@ export async function runWorkroomDriveJob(
     };
     const resolved = await resolveWithReview(room, driveInput);
     // BI-72679FE0: a room whose item is done, deferred or delivered gets no agent and raises no stall.
-    const plan = gateDrivePlanOnWorkItem(resolved.plan, room.workItemStatus);
+    // BI-7C0B2BD6: then the capacity cap, so a stood-down room never takes a dispatch slot.
+    const itemPlan = gateDrivePlanOnWorkItem(resolved.plan, room.workItemStatus);
+    // BI-9CD95438: applyDrivePlan still records the hold; known-held rooms do not spend a slot.
+    const plan = readWorkroomQueueHold(room.workspaceState) ? itemPlan : admit(itemPlan);
     const review = plan === resolved.plan ? resolved.review : null;
     plans.push({
       roomId: room.capsuleId,
@@ -520,6 +540,14 @@ export async function runWorkroomDriveJob(
     else if (outcome === "attention") attention += 1;
     else if (outcome === "stopped") stopped += 1;
     else skipped += 1;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`[workroom-drive] room ${room.capsuleId} failed; continuing the tick:`, error);
+      // The room's plan was not carried out, so the error replaces it in the tick's result.
+      if (plans.at(-1)?.roomId === room.capsuleId) plans.pop();
+      plans.push({ roomId: room.capsuleId, action: "error", reason: message.slice(0, 280), taskId: null });
+      skipped += 1;
+    }
   }
 
   try {
@@ -594,6 +622,7 @@ async function loadStandingRooms(
       id: row.id,
       capsuleId: row.capsuleId,
       backlogItemId: row.backlogItemId,
+      objective: row.objective, workItemKey: workItemKeyOf(row),
       coordinatorEligibility: resolveCoordinatorEligibility({
         shapeKey,
         bindings: (shapeKey ? coordinationBindings?.get(shapeKey) : undefined) ?? [],
@@ -681,7 +710,7 @@ export function createWorkroomDriveEffects(
                 AND: [{ leaseExpiresAt: { gt: clock() } }],
               } : {}),
             },
-            data: { workspaceState: { ...asRecord(current.workspaceState), workroomDrive: snapshot } as object },
+            data: { workspaceState: { ...(isRecord(current.workspaceState) ? current.workspaceState : {}), workroomDrive: snapshot } as object },
           });
           if (updated.count !== 1) return null;
         }

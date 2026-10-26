@@ -13,7 +13,7 @@
 // EXIT CODES
 //   0  gate passed (or passed with evidence pending — see the printed next step)
 //   1  the gate genuinely failed, or is blocked on something a retry cannot fix
-//   7  deadline elapsed without ever reaching a verdict (ABANDONED_OR_UNRECORDED)
+//   7  launch failed or deadline elapsed without a verdict (ABANDONED_OR_UNRECORDED)
 //      — deliberately NOT 0 and NOT 1: nothing was established about the diff.
 
 import { parseArgs as utilParseArgs } from "node:util";
@@ -25,6 +25,7 @@ import { classifyGateExit, GATE_EXIT } from "./lib/gate-exit-classification.mjs"
 import { PREGATE_VERDICTS } from "./lib/pregate-status.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
 import { scriptArgv } from "./lib/script-argv.mjs";
+import { resolveHostCommandInvocation } from "./lib/host-command-invocation.mjs";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -86,8 +87,11 @@ export async function waitForGate({
     if (watching) {
       log({ cycle, elapsedMs: now() - startedAt, kind: "watching", summary: "observing the existing durable attempt; no new claim", code: null });
     } else {
-      const { code } = await runGate();
+      const { code, launchError } = await runGate();
       let verdict = classifyGateExit({ code });
+      if (verdict.kind === "spawn-failed" && launchError) {
+        verdict = { ...verdict, summary: `${verdict.summary}; ${launchError}` };
+      }
       // An inconclusive record distinguishes infrastructure from a failing
       // diff; it never authorizes another claim.
       if (verdict.kind === "failed") {
@@ -103,6 +107,7 @@ export async function waitForGate({
       attempts.push({ attempt: attempts.length + 1, code, kind: verdict.kind, elapsedMs: now() - startedAt });
       log({ cycle, elapsedMs: now() - startedAt, ...verdict, code });
       if (!verdict.retry) {
+        if (verdict.kind === "spawn-failed") return { outcome: "inconclusive", exitCode: GATE_EXIT.ABANDONED_OR_UNRECORDED, verdict, attempts };
         if (verdict.verdict === "pass") return { outcome: "passed", exitCode: 0, verdict, attempts };
         return { outcome: "failed", exitCode: 1, verdict, attempts };
       }
@@ -137,6 +142,39 @@ function parseArgs(argv) {
   return options;
 }
 
+/** Resolve the installed package manager through the shared shell-free host adapter. */
+export function pregateSpawnOptions({
+  platform = process.platform,
+  env = process.env,
+  cwd = REPO_ROOT,
+} = {}) {
+  return {
+    ...resolveHostCommandInvocation("pnpm", ["run", "pregate"], { platform, env }),
+    options: {
+      cwd,
+      stdio: "inherit",
+      shell: false,
+      // gate:wait is the sanctioned capture. Pregate must not treat it as a wrapped invocation.
+      env: { ...env, DPF_PREGATE_ALLOW_CAPTURE: "1" },
+    },
+  };
+}
+
+/** A command that never launched is an unrun gate, including resolution errors. */
+export function runPregate({ spawnSyncImpl = spawnSync, ...options } = {}) {
+  const failed = error => ({
+    code: null,
+    launchError: String(error?.message ?? error ?? "Unknown process launch error").replace(/[\r\n\t]/g, " ").slice(0, 500),
+  });
+  try {
+    const spec = pregateSpawnOptions(options);
+    const run = spawnSyncImpl(spec.command, spec.args, spec.options);
+    return run.error ? failed(run.error) : { code: run.status };
+  } catch (error) {
+    return failed(error);
+  }
+}
+
 export async function main(argv = process.argv.slice(2)) {
   let options;
   try {
@@ -151,7 +189,7 @@ export async function main(argv = process.argv.slice(2)) {
       "pnpm gate:wait [-- --deadline <minutes>] [--json]\n" +
       "  Observes one durable gate request; queued requests are never re-claimed.\n" +
       "  Terminal or unreadable state stops for canonical reconciliation.\n" +
-      "  Exit 0 = passed, 1 = genuinely failed or blocked, 7 = deadline with no verdict.\n",
+      "  Exit 0 = passed, 1 = genuinely failed or blocked, 7 = launch failure or deadline with no verdict.\n",
     );
     return 0;
   }
@@ -160,10 +198,7 @@ export async function main(argv = process.argv.slice(2)) {
     deadlineMinutes: options.deadlineMinutes ?? DEFAULTS.deadlineMinutes,
     // Foreground and UNPIPED — the runbook lists redirecting pregate's output as
     // the most common way to lose a run, so the console goes straight through.
-    runGate: () => {
-      const run = spawnSync("pnpm", ["run", "pregate"], { cwd: REPO_ROOT, stdio: "inherit" });
-      return { code: run.status };
-    },
+    runGate: () => runPregate(),
     readStatus: () => {
       const run = spawnSync(process.execPath, [resolve(REPO_ROOT, "scripts/pregate-status.mjs"), "--json"], { cwd: REPO_ROOT, encoding: "utf8" });
       return parseGateStatus(run.stdout);
