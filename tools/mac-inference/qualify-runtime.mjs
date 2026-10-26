@@ -77,8 +77,35 @@ export async function awaitRuntimeAdmission({ claim, bind, assertSource, observe
   }
   throw new Error('Runtime reservation wait deadline reached; no native operation started');
 }
+export async function superviseRuntimeQualification({ report, terminate, onEvent, ...options }) {
+  check(!Object.hasOwn(options, 'release'), 'Native release is recorded separately by its owning agent');
+  let fenced = false, result, executionError;
+  try {
+    result = await superviseLeaseRun({ ...options,
+      terminate: async () => { fenced = true; report.authorityFenced = true; await terminate(); },
+      release: async () => {},
+      onEvent: event => {
+        // The common supervisor emits this after our intentionally empty callback.
+        // It is not an acknowledgement from the platform's actual release tool.
+        const truthful = event.type === 'released'
+          ? { type: 'release-not-attempted', at: event.at, reason: 'Owning agent must record the separate release outcome' } : event;
+        (report.leaseEvents ??= []).push(truthful); onEvent?.(truthful);
+      },
+    });
+  } catch (error) { executionError = error; }
+  // The shared supervisor awaits in-flight heartbeat/deadline work in finally.
+  // Its return value can have been selected before that work loses authority.
+  if (fenced || result?.status === 'fenced') {
+    report.authorityFenced = true; recordAuthorityFence(report); report.status = 'qualification-fenced';
+    throw new Error('Runtime qualification fenced: ' + (result?.reason ?? 'authority lost during finalization'));
+  }
+  if (executionError) throw executionError;
+  return result;
+}
 export function recordRuntimeFailure(report, error) {
-  if (!report.runtimeInspectionStarted) {
+  if (report.authorityFenced) {
+    report.status = 'qualification-fenced'; (report.obstacles ??= []).push(error.message);
+  } else if (!report.runtimeInspectionStarted) {
     report.status = 'unrun'; (report.obstacles ??= []).push(error.message);
   } else report.failures.push(error.message);
 }
@@ -231,7 +258,7 @@ async function run(a) {
     const matches = (listed.data?.leases ?? []).filter(x => x.leaseId === expected.id);
     check(matches.length === 1, 'Exact qualification lease not found'); lease = matches[0]; validate();
     deadline = Date.now() + 9 * 60000; report.admittedAt = new Date().toISOString();
-    await superviseLeaseRun({ ttlMs: admittedLeaseTtlMs(lease.expiresAt, 120000), expiresAt: lease.expiresAt,
+    await superviseRuntimeQualification({ report, ttlMs: admittedLeaseTtlMs(lease.expiresAt, 120000), expiresAt: lease.expiresAt,
       renew: async () => {
         const result = await mcpCall('renew_nonprod_environment_lease', { leaseId: expected.id, ownerSessionId: expected.owner, ttlMinutes: 2 }, connection);
         if (result?.success === true) {
@@ -241,7 +268,6 @@ async function run(a) {
         return result;
       },
       terminate: async () => { fenced = true; recordAuthorityFence(report); authority.abort(); cancel.abort(); if (service) await service.stop(); },
-      release: async () => {}, onEvent: event => { (report.leaseEvents ??= []).push(event); },
       run: async () => {
         try {
           report.runtimeInspectionStarted = true;
@@ -325,7 +351,8 @@ async function run(a) {
   finally {
     try { await cleanup(); } catch (error) { report.failures.push('Restoration: ' + error.message); }
     report.finishedAt = new Date().toISOString();
-    if (report.failures.length) report.status = 'qualification-failed';
+    if (report.authorityFenced) report.status = 'qualification-fenced';
+    else if (report.failures.length) report.status = 'qualification-failed';
     await checkpoint(); await writeFile(a.out, JSON.stringify(report, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
     console.log(JSON.stringify({ status: report.status, results: report.results, embedding: report.embedding, performance: report.performance,
       failures: report.failures, obstacles: report.obstacles, baselineRestored: report.baselineRestored, workspace, output: a.out }));

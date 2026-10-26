@@ -134,7 +134,7 @@ test('notice repackaging needs the actual old manifest and identical native reco
   assert.throws(() => verifyEngineQualification({ ...f.args(), qualifiedManifestBytes: original }), /native files/);
 });
 
-const { configurationSnapshot, runtimeLeaseProjection, loopbackManagementRoot, configureDrainedCandidate, awaitRuntimeAdmission, recordRuntimeFailure } = await import('./qualify-runtime.mjs');
+const { configurationSnapshot, runtimeLeaseProjection, loopbackManagementRoot, configureDrainedCandidate, awaitRuntimeAdmission, recordRuntimeFailure, superviseRuntimeQualification } = await import('./qualify-runtime.mjs');
 test('configuration capture preserves exact model tag, mode, context and flags while rejecting another model digest', () => {
   const digest = 'sha256:' + 'a'.repeat(64), model = 'hf.co/model:Q4_K_M';
   const row = { Backend: 'llama.cpp', Model: model, ModelID: digest, Mode: 'completion',
@@ -223,4 +223,61 @@ test('blocked admission is unrun evidence, while an inspected runtime failure re
   const inspected = { status: 'incomplete', runtimeInspectionStarted: true, failures: [] };
   recordRuntimeFailure(inspected, new Error('runtime HTTP 500'));
   assert.deepEqual(inspected.failures, ['runtime HTTP 500']); assert.equal(inspected.obstacles, undefined);
+});
+
+function runtimeSupervisionFixture() {
+  const report = { status: 'incomplete', runtimeInspectionStarted: true, failures: [] };
+  let heartbeat, deadline;
+  const options = { report, ttlMs: 120000, expiresAt: new Date(Date.now() + 120000).toISOString(),
+    schedule: callback => { heartbeat = callback; return 1; }, cancelSchedule: () => {},
+    scheduleDeadline: callback => { deadline = callback; return 2; }, cancelDeadline: () => {},
+    terminate: async () => {}, renew: async () => ({ success: true }),
+  };
+  return { report, options, heartbeat: () => heartbeat(), deadline: () => deadline() };
+}
+test('authority loss during the last checkpoint cannot leave a qualified final verdict', async () => {
+  const f = runtimeSupervisionFixture(); let checkpoint, finish;
+  const reached = new Promise(resolve => { checkpoint = resolve; });
+  const waiting = new Promise(resolve => { finish = resolve; });
+  const run = superviseRuntimeQualification({ ...f.options, run: async () => {
+    checkpoint(); await waiting; f.report.status = 'runtime-api-qualified'; return 'all controls completed';
+  } });
+  await reached; await f.deadline(); finish();
+  await assert.rejects(run, /fenced/); assert.notEqual(f.report.status, 'runtime-api-qualified');
+  assert.equal(f.report.authorityFenced, true);
+});
+test('an in-flight refusal settling in supervisor finally overrides the already selected completed result', async () => {
+  const f = runtimeSupervisionFixture(); let entered, rejectRenewal;
+  const pending = new Promise(resolve => { entered = resolve; });
+  const renewal = new Promise(resolve => { rejectRenewal = resolve; });
+  const run = superviseRuntimeQualification({ ...f.options, renew: async () => { entered(); return renewal; }, run: async () => {
+    void f.heartbeat(); f.report.status = 'runtime-api-qualified'; return 'all controls completed';
+  } });
+  await pending; await Promise.resolve(); rejectRenewal({ success: false, error: 'lease_terminal' });
+  await assert.rejects(run, /fenced/); assert.notEqual(f.report.status, 'runtime-api-qualified');
+  assert.equal(f.report.authorityFenced, true);
+});
+test('supervised native qualification records skipped external release without claiming release succeeded', async () => {
+  const f = runtimeSupervisionFixture();
+  const result = await superviseRuntimeQualification({ ...f.options, run: async () => 'finished' });
+  assert.equal(result.status, 'completed');
+  assert.equal(f.report.leaseEvents.some(event => event.type === 'released'), false);
+  assert.equal(f.report.leaseEvents.some(event => event.type === 'release-not-attempted'), true);
+});
+test('a deadline during final in-flight renewal remains fenced after that renewal subsequently succeeds', async () => {
+  const f = runtimeSupervisionFixture(); let entered, completeRenewal, terminateEntered, completeTermination;
+  const renewing = new Promise(resolve => { entered = resolve; });
+  const renewal = new Promise(resolve => { completeRenewal = resolve; });
+  const terminating = new Promise(resolve => { terminateEntered = resolve; });
+  const termination = new Promise(resolve => { completeTermination = resolve; });
+  const run = superviseRuntimeQualification({ ...f.options,
+    renew: async () => { entered(); return renewal; },
+    terminate: async () => { terminateEntered(); await termination; },
+    run: async () => { void f.heartbeat(); f.report.status = 'runtime-api-qualified'; return 'all controls completed'; },
+  });
+  await renewing; await Promise.resolve(); const deadline = f.deadline(); await terminating;
+  completeRenewal({ success: true, data: { lease: { expiresAt: new Date(Date.now() + 120000).toISOString() } } });
+  completeTermination(); await deadline;
+  await assert.rejects(run, /fenced/); assert.equal(f.report.authorityFenced, true);
+  assert.notEqual(f.report.status, 'runtime-api-qualified');
 });
