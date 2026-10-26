@@ -17,7 +17,8 @@ const url = process.env.DPF_SQL_TEST_DATABASE_URL ?? process.env.DPF_LOCAL_CI_TE
 const schema = `small_acceptance_${randomUUID().replaceAll("-", "")}`;
 const sha = "a".repeat(40), head = "b".repeat(40), merge = "c".repeat(40);
 const actor = { userId: "fixture-human", agentId: "fixture-agent", principalId: "fixture-principal" };
-const tables = ["RuntimeVerification", "WorkCapsule", "WorkCapsuleActivity", "BacklogItem", "BacklogItemActivity", "PlatformConfig"];
+const tables = ["RuntimeVerification", "WorkCapsule", "WorkCapsuleActivity", "BacklogItem", "BacklogItemActivity",
+  "PlatformConfig", "FeatureBuild", "ProductObjectiveWork"];
 
 // Only the explicit governed SQL target is used. Every write is schema-local;
 // installed work and history are never selected or changed.
