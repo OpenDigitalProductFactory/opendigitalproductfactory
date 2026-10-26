@@ -46,16 +46,6 @@ vi.mock("./mcp/external-approval-location-lookup", () => ({
 import { executeRemoteTaskAttempt } from "./mcp-task-execution";
 import { projectRemoteTaskReplay } from "./mcp-task-replay-projection";
 
-const readInspection=vi.hoisted(()=>vi.fn(async()=>({complete:false,code:"contribution-criteria-invalid",message:"criteria must be a nonempty string array"})));
-vi.mock("./coworker-service-catalog/engagement-read-completion",async(importOriginal)=>({
- ...await importOriginal<typeof import("./coworker-service-catalog/engagement-read-completion")>(),
- engagementReadCompletion:()=>({toolNames:[],inspect:readInspection}),
-}));
-vi.mock("./coworker-service-catalog/engagement-fulfillment",async(importOriginal)=>({
- ...await importOriginal<typeof import("./coworker-service-catalog/engagement-fulfillment")>(),
- validateEngagementTask:vi.fn(async()=>({visualEvidence:null})),
- reconcileEngagementTaskResult:vi.fn(async()=>{}),
-}));
 const writerToolName = "record_initiative_evidence";
 const parsed = {
   agentId: "AGT-WS-PORTFOLIO",
@@ -797,38 +787,4 @@ describe("agent residency policy is read, never inferred from a pin", () => {
     expect(cleared).toMatchObject({ residencyPolicy: "local_only" });
     expect(cleared).not.toHaveProperty("preferredProviderId");
   });
-});
-
-
-it("persists original rejected specialist data and the first failure on the existing task without replay",async()=>{
- vi.clearAllMocks();
- db.findModelConfig.mockResolvedValue(null);
- db.findTaskRun.mockResolvedValue({status:"working"});
- db.updateTaskRun.mockResolvedValue({count:1});
- autonomous.resolveAgent.mockResolvedValue({agentId:"ux-design-critic",displayName:"UX Design Critic",systemPrompt:"Critique the source.",sensitivity:"internal"});
- autonomous.resolveTools.mockResolvedValue({tools:[],toolsForProvider:[],deferredTools:[]});
- const original='{"summary":"actual provider output","criteria":[{"name":"Hierarchy"}]}';
- autonomous.execute.mockImplementationOnce(async()=>{
-  const {currentReadEvidencePolicy}=await import("./tak/read-evidence-policy");
-  await currentReadEvidencePolicy()!.inspect(original);
-  return {content:"Generated hold prose",executedTools:[]};
- });
- const engagementBinding={version:1 as const,engagementId:"CE-original",offerId:"offer",serviceId:"service",providerAgentId:"ux-design-critic",actorAgentId:"AGT-EXT-CODEX",userId:"human",workroomId:"WC-original",stageKey:"accept",inputDigest:"a".repeat(64),artifactRef:parsed.initiativeReviewBinding.artifactRef};
- const outcome=await executeRemoteTaskAttempt({
-  run:{id:"original-row",taskRunId:"TR-ORIGINAL-CRITIC",contextId:"thread"},threadId:"thread",
-  token:{tokenId:"oauth",userId:"human",capability:"write",source:"oauth"},userContext:{} as never,
-  parsed:{...parsed,agentId:"ux-design-critic",riskClass:"read",initiativeReviewBinding:undefined,engagementBinding},
-  idempotentReplay:false,capacityAttempt:1,
- });
- const {createTaskMessage}=await import("./tak/task-records");
- expect(createTaskMessage).toHaveBeenCalledWith(expect.objectContaining({
-  taskRunId:"TR-ORIGINAL-CRITIC",content:"Generated hold prose",
-  metadata:expect.objectContaining({engagementContributionAttempt:expect.objectContaining({
-   version:1,validated:false,check:expect.objectContaining({code:"contribution-criteria-invalid"}),original:expect.objectContaining({text:original,truncated:false,redacted:false}),
-  })}),
- }));
- expect(readInspection).toHaveBeenCalledExactlyOnceWith(original);
- expect(autonomous.execute).toHaveBeenCalledTimes(1);
- expect(outcome).toMatchObject({kind:"result",result:{status:"input-required",resumable:false}});
- expect(JSON.stringify(db.updateTaskRun.mock.calls)).toContain("contribution-criteria-invalid");
 });

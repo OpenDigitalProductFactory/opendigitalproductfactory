@@ -1,3 +1,4 @@
+import {redactDiagnosticEvidenceText} from "../shared/diagnostic-evidence-redaction";
 import {AsyncLocalStorage} from "node:async_hooks";
 import {createHash} from "node:crypto";
 export type ReadEvidenceCheck = {complete:boolean; message:string; code?:string};
@@ -8,7 +9,7 @@ export type ReadEvidenceInspection = {
 /** Bounded unvalidated model data, retained under the existing task access policy. */
 function retainOriginal(content:string):ReadEvidenceInspection["original"] {
  const bytes=Buffer.from(content,"utf8");
- const redacted=/data:image\/[^;]+;base64,|Bearer\s+[A-Za-z0-9._~-]+|eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+|(?:sk-|sk_live_)[A-Za-z0-9_-]{12,}/u.test(content);
+ const redacted=redactDiagnosticEvidenceText(content)!==content;
  // Decode only complete UTF-8 characters; re-encoding a split character can exceed the byte limit.
  let end=Math.min(bytes.length,100000);
  while(end>0 && end<bytes.length && (bytes[end]&0xc0)===0x80)end--;
@@ -30,18 +31,23 @@ export function readEvidenceExit(check: {complete: boolean; message: string}) {
 
 // Bind the policy to the server-owned execution lifetime, like inference authority.
 // This avoids making the shared interactive/autonomous seam a second owner of it.
-const execution = new AsyncLocalStorage<{policy: ReadEvidencePolicy; contribution: string | null; inspection:ReadEvidenceInspection|null}>();
+type ReadEvidenceScope={policy:ReadEvidencePolicy;contribution:string|null;inspection:ReadEvidenceInspection|null;inspecting?:Promise<ReadEvidenceCheck>};
+const execution = new AsyncLocalStorage<ReadEvidenceScope>();
 export const currentReadEvidencePolicy = () => execution.getStore()?.policy;
 export function acceptReadEvidenceContribution(content: string) { const scope = execution.getStore(); if (scope) scope.contribution = content; }
+/** Called only at the actual specialist terminal-output boundary. Keep policy identity intact. */
+export function inspectReadEvidenceContribution(content:string):Promise<ReadEvidenceCheck> {
+ const scope=execution.getStore();
+ if(!scope)throw new Error("Read-evidence execution scope is missing");
+ return scope.inspecting??=(async()=>{
+  const check=await scope.policy.inspect(content);
+  scope.inspection={check:{...check},original:retainOriginal(content)};
+  return scope.inspection.check;
+ })();
+}
 export async function withReadEvidencePolicy<T extends {content:string}>(policy: ReadEvidencePolicy | undefined, run:()=>Promise<T>): Promise<T & {readEvidenceInspection?:ReadEvidenceInspection}> {
   if (!policy) return run();
-  const scope:{policy:ReadEvidencePolicy;contribution:string|null;inspection:ReadEvidenceInspection|null}={policy,contribution:null,inspection:null};
-  let inspection:Promise<ReadEvidenceCheck>|undefined;
-  scope.policy={...policy,inspect:(content)=>inspection??=(async()=>{
-    const check=await policy.inspect(content);
-    scope.inspection={check:{...check},original:retainOriginal(content)};
-    return scope.inspection.check;
-  })()};
+  const scope:ReadEvidenceScope={policy,contribution:null,inspection:null};
   return execution.run(scope,async()=>{
     const result = await run();
     return {...result,...(scope.contribution===null?{}:{content:scope.contribution}),

@@ -1,5 +1,5 @@
 import {describe,it,expect,vi} from "vitest";
-import {readEvidenceExit,withReadEvidencePolicy,acceptReadEvidenceContribution,currentReadEvidencePolicy} from "./read-evidence-policy";
+import {readEvidenceExit,inspectReadEvidenceContribution,withReadEvidencePolicy,acceptReadEvidenceContribution,currentReadEvidencePolicy} from "./read-evidence-policy";
 describe("read evidence completion",()=>{
  it("holds incomplete evidence without another provider dispatch or invented proof",()=>{
   expect(readEvidenceExit({complete:false,message:"missing pinned artifact page"})).toMatchObject({kind:"blocked",message:expect.stringContaining("held without replay")});
@@ -21,7 +21,7 @@ it("retains the first actual rejected response and reason across held prose with
  const inspect = vi.fn().mockResolvedValueOnce({complete:false,code:"contribution-criteria-invalid",message:"criteria must be a nonempty string array"}).mockResolvedValue({complete:true,message:"conflicting second check"});
  const actual = '{"summary":"real rejected output","criteria":[{"name":"Hierarchy"}]}';
  const result = await withReadEvidencePolicy({toolNames:["reader"],inspect}, async () => {
-  await Promise.all([currentReadEvidencePolicy()!.inspect(actual),currentReadEvidencePolicy()!.inspect("conflicting later content")]);
+  await Promise.all([inspectReadEvidenceContribution(actual),inspectReadEvidenceContribution("conflicting later content")]);
   return {content:"Generated hold prose",executedTools:[]};
  });
  expect(result.readEvidenceInspection).toMatchObject({check:{complete:false,code:"contribution-criteria-invalid"},original:{text:actual,truncated:false}});
@@ -34,11 +34,19 @@ it("retains the first actual rejected response and reason across held prose with
 });
 it("bounds untrusted rejected output and excludes image data or credential-shaped output",async()=>{
  const run=(text:string)=>withReadEvidencePolicy({toolNames:[],inspect:async()=>({complete:false,message:"invalid"})},async()=>{
-  await currentReadEvidencePolicy()!.inspect(text);return {content:"hold"};
+  await inspectReadEvidenceContribution(text);return {content:"hold"};
  });
  const bounded=await run("é".repeat(100001));
  expect(Buffer.byteLength(bounded.readEvidenceInspection!.original.text!)).toBeLessThanOrEqual(100000);
  expect(bounded.readEvidenceInspection!.original.truncated).toBe(true);
  expect((await run("data:image/png;base64,private-pixels")).readEvidenceInspection!.original).toMatchObject({text:null,redacted:true});
  expect((await run("Bearer fixture-session-value")).readEvidenceInspection!.original).toMatchObject({text:null,redacted:true});
+});
+
+it("excludes native DPF tokens without changing original hash or byte attribution",async()=>{
+ const original="Rejected fixture includes "+"dpfmcp_"+"synthetic_fixture_not_a_real_credential";
+ const result=await withReadEvidencePolicy({toolNames:[],inspect:async()=>({complete:false,message:"invalid"})},async()=>{
+  await inspectReadEvidenceContribution(original);return {content:"hold"};
+ });
+ expect(result.readEvidenceInspection!.original).toMatchObject({text:null,redacted:true,bytes:Buffer.byteLength(original),sha256:expect.stringMatching(/^[a-f0-9]{64}$/)});
 });

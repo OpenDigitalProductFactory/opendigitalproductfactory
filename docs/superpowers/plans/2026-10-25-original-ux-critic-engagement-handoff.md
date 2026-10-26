@@ -289,3 +289,27 @@ replay/effect requirements do not change. Add actual loop/settlement regressions
 run affected tests/types and the required canonical gate and protected publication.
 The existing BI-7906C73E owner alone retains generic finite execution disposition;
 no retrospective receipt, task promotion, rekey, replacement request or replay.
+
+Independent assessment reproduced native dpfmcp_ token retention in the first
+prospective matcher. Consolidate the existing functional-evidence and build-tool
+diagnostic redactors with retained-output exclusion in one shared policy, rather
+than adding another partial scanner. Keep original digest/byte attribution while
+withholding the whole retained text on a known sensitive/image pattern. Pattern
+redaction cannot establish that arbitrary output contains no secrets.
+
+Protected c1ab (PR 6546) added initiative-specific present reassessment and reader
+scope identity checks. Integrate that actual framework, preserve the original
+ReadEvidencePolicy object identity, and capture the first inspection through an
+explicit terminal-output helper. Actual new integration tests initially exposed
+four policy-identity failures; do not weaken their assertions. Retain the
+engagement test in a focused file instead of growing the legacy execution suite
+past its 800-line limit. No limit or baseline is raised. The present-reassessment
+policy is restricted to its independently approved initiative subject; it does
+not admit either original Critic engagement, and no fake initiative binding,
+replacement request, retrospective closure receipt or replay is permitted.
+
+The initial dirty-worktree host preflight ended inconclusive with a real module
+size failure (802/831 lines) on superseded source. Its 84 passing guards are
+historical executions, not qualified exact-candidate evidence. Re-run the normal
+canonical gate on the final clean candidate after the module extraction and
+protected-framework integration; no skip or receipt identity rewrite.
