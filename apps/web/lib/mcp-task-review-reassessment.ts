@@ -105,8 +105,10 @@ export async function readApprovedReassessmentPolicy(input: {
   let bytes: Buffer;
   try { bytes = await (options.readBlob ?? readDocumentBlob)({ storageKey: blob.storageKey, expectedSha256: blob.sha256 }); }
   catch { return refuse(); }
+  // codeql[js/weak-cryptographic-algorithm,js/insufficient-password-hash]: Git blob ids are SHA-1 of the bytes "blob <size>\0<content>". This matches providerBlobId. It is not a password hash.
+  const gitBlobId = createHash("sha1").update(`blob ${bytes.length}\0`).update(bytes).digest("hex");
   if (bytes.length !== blob.sizeBytes || createHash("sha256").update(bytes).digest("hex") !== blob.sha256
-    || createHash("sha1").update(`blob ${bytes.length}\0`).update(bytes).digest("hex") !== ref.providerBlobId) refuse();
+    || gitBlobId !== ref.providerBlobId) refuse();
   let source: string;
   try { source = new TextDecoder("utf-8", { fatal: true }).decode(bytes); } catch { return refuse(); }
   const policy = parseReassessmentPolicy(source);
