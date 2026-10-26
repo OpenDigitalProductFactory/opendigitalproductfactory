@@ -148,7 +148,7 @@ export function boundedHandoffRefusalResult(error: unknown, command?: BoundedHan
 export type FailedHandoffOperation = { approvalId: string; executionId: string; executedAtIso: string; ownerUserId: string; sourceAgentId: string | null; command: BoundedHandoffRequest };
 
 /** Read-only, receipt-backed lineage. Arbitrary activity JSON is never proof. */
-export async function readBoundedHandoffLineage(db: CapsuleDb, capsule: HandoffRoom, failure: FailedHandoffOperation) {
+export async function readBoundedHandoffLineage(db: CapsuleDb, capsule: HandoffRoom, failure: FailedHandoffOperation, options: { actor?: WorkCapsuleActor } = {}) {
   if (!db.workroomActivity.findFirst) return fail("handoff-history-unavailable", "The original handoff lineage could not be verified.");
   const activity = await db.workroomActivity.findFirst({ where: { workCapsuleId: capsule.id, kind: "action",
     recordedAt: { gte: new Date(failure.executedAtIso) },
@@ -167,6 +167,20 @@ export async function readBoundedHandoffLineage(db: CapsuleDb, capsule: HandoffR
   }
   const completion = await readCompletionReceipt(db, capsule, activity.id, request);
   if (completion) return { ...completion.handoff, activityId: completion.activityId, recordedAt: completion.recordedAt };
+  if (options.actor) {
+    if (options.actor.userId !== failure.ownerUserId || options.actor.agentId !== failure.sourceAgentId)
+      return fail("handoff-authenticated-assistant-required", "Only the original source assistant can assess a fresh handoff for this owner.");
+    try {
+      // Use the same current room, roster, policy, mandate and lease predicate
+      // as the writer. A matching lease alone does not make an old request viable.
+      const current = await assessBoundedHandoff({ db, actor: options.actor, command: proposed });
+      assertHandoffSnapshot(current.snapshot, request.snapshot);
+    } catch (error) {
+      if (error instanceof BoundedHandoffRefusal && ["handoff-boundary-changed", "handoff-lease-snapshot-changed", "handoff-lease-expired", "handoff-source-changed"].includes(error.code))
+        return { state: "stale" as const, reason: error.code, requestId: activity.id };
+      throw error;
+    }
+  }
   const stale = capsule.executorKind !== request.snapshot.executorKind || capsule.executorRef !== request.snapshot.executorRef
     ? "handoff-source-changed"
     : capsule.leaseHolderPrincipalId !== request.snapshot.leaseHolderPrincipalId || capsule.leaseExpiresAt?.toISOString() !== request.snapshot.leaseExpiresAt

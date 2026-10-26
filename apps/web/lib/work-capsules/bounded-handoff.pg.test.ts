@@ -33,6 +33,7 @@ vi.mock("@/lib/work-management/workroom-agent-access.server", async (original) =
 }));
 import type { ReceiptDb } from "./command-receipts";
 import { commandDb, hasBoundCommandTransaction, receiptedWorkroomTool } from "./receipted-tool";
+import { readBoundedHandoffLineage } from "./bounded-handoff";
 import { prepareBoundedHandoff } from "./bounded-handoff-tool";
 import { recordSemanticReviewExemption } from "../change-review/semantic-review-policy-exemption";
 import { lockAllNonprodEnvironments, NONPROD_ENVIRONMENT_KEYS, type NonprodEnvironmentKey } from "../nonprod/environment-lease-lock";
@@ -92,6 +93,11 @@ function port(tx: RawTx): ReceiptDb & CapsuleDb & { workroomActivity: CapsuleDb[
           const executionId = where.AND.find((part: any) => part.payload.path.at(-1) === "executionId").payload.equals;
           const snapshotDigest = where.AND.find((part: any) => part.payload.path.at(-1) === "digest")?.payload.equals ?? null;
           const rows = await tx.$queryRaw<any[]>`SELECT * FROM "WorkCapsuleActivity" WHERE "workCapsuleId" = ${where.workCapsuleId} AND kind = 'action' AND payload->>'kind' = 'bounded-handoff' AND payload->>'state' = 'pending-acknowledgement' AND payload #>> '{request,command,handoffManifest,priorFailure,approvalId}' = ${original.payload.equals} AND payload #>> '{request,command,handoffManifest,priorFailure,executionId}' = ${executionId} AND (${snapshotDigest}::text IS NULL OR payload #>> '{request,snapshot,digest}' = ${snapshotDigest}) ORDER BY "recordedAt" DESC,id DESC LIMIT 1`;
+          return rows[0] ?? null;
+        }
+        if (where.AND.some((part: any) => part.payload.path[0] === "state" && part.payload.equals === "pending-acknowledgement")) {
+          const since = where.recordedAt?.gte ?? new Date(0);
+          const rows = await tx.$queryRaw<any[]>`SELECT * FROM "WorkCapsuleActivity" WHERE "workCapsuleId" = ${where.workCapsuleId} AND kind = 'action' AND payload->>'kind' = 'bounded-handoff' AND payload->>'state' = 'pending-acknowledgement' AND "recordedAt" >= ${since} ORDER BY "recordedAt" DESC,id DESC LIMIT 1`;
           return rows[0] ?? null;
         }
         const requestId = where.AND.find((part: any) => part.payload.path[0] === "requestId").payload.equals;
@@ -210,13 +216,20 @@ describe.skipIf(!DATABASE_URL)("bounded handoff transaction protocol (PostgreSQL
     expect(await call(winner)).toEqual(results.find(result => result.success));
     expect((await pool.query(`SELECT count(*)::int AS n FROM "WorkCapsuleActivity" WHERE kind='command-accepted'`)).rows[0].n).toBe(1);
   });
-  it("retains an obsolete lease request and admits one concurrent fresh recovery", async () => {
+  it.each(["lease", "head"] as const)("retains an obsolete %s request and admits one concurrent fresh recovery", async change => {
     const priorFailure = { approvalId: "original-refusal", executionId: "original-execution", reason: "handoff-transaction-required", preserve: true };
     const original = await call({ ...request, commandId: "before-lease-change", handoffManifest: { ...request.handoffManifest, priorFailure } });
     expect(original.success).toBe(true);
     const oldRequestId = (original.data as any).handoff.requestId;
-    await prisma.$executeRaw`UPDATE "WorkCapsule" SET "leaseExpiresAt" = "leaseExpiresAt" + interval '1 minute' WHERE "capsuleId" = 'WC-1'`;
-    expect(await call(ack(oldRequestId, "obsolete-lease-ack"), receiver)).toMatchObject({ success: false, error: "handoff-lease-snapshot-changed" });
+    if (change === "lease") await prisma.$executeRaw`UPDATE "WorkCapsule" SET "leaseExpiresAt" = "leaseExpiresAt" + interval '1 minute' WHERE "capsuleId" = 'WC-1'`;
+    else await prisma.$executeRaw`UPDATE "WorkCapsule" SET "headSha" = ${"b".repeat(40)} WHERE "capsuleId" = 'WC-1'`;
+    const reason = change === "lease" ? "handoff-lease-snapshot-changed" : "handoff-boundary-changed";
+    expect(await call(ack(oldRequestId, "obsolete-lease-ack"), receiver)).toMatchObject({ success: false, error: reason });
+    const db = port(prisma);
+    const currentRoom = await db.workroom.findUnique({ where: { capsuleId: "WC-1" } });
+    expect(await readBoundedHandoffLineage(db, currentRoom, { approvalId: priorFailure.approvalId, executionId: priorFailure.executionId,
+      executedAtIso: new Date(0).toISOString(), ownerUserId: source.userId, sourceAgentId: source.agentId,
+      command: { ...request, phase: "request" } }, { actor: source })).toMatchObject({ state: "stale", requestId: oldRequestId, reason });
     const fresh = { ...request, handoffManifest: { ...request.handoffManifest, priorFailure } };
     const results = await Promise.all([call({ ...fresh, commandId: "fresh-a" }), call({ ...fresh, commandId: "fresh-b" })]);
     expect(results.filter(result => result.success)).toHaveLength(1);

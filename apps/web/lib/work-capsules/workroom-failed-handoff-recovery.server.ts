@@ -75,13 +75,19 @@ export async function loadWorkroomFailedHandoffRecovery(input: Input, db: Db = p
                 envelopeId: operation.approvalId, executionId: operation.executionId, executedAt: operation.executedAtIso
             }, action: null
         };
+        // This is the actual admitted OAuth source, never a synthesized receiver.
+        // Constructing this read-only identity does not synchronize principals.
+        const actor = context?.authSource === "oauth" && context.apiTokenId && context.agentId === operation.sourceAgentId
+            && input.userId === operation.ownerUserId && authorityContext?.humanPrincipal?.id && authorityContext.agentPrincipal?.id
+            ? { userId: input.userId, agentId: context.agentId, principalId: authorityContext.humanPrincipal.id,
+                agentPrincipalId: authorityContext.agentPrincipal.id, taskAuthorityTokenId: context.apiTokenId } : undefined;
         let lineage: Awaited<ReturnType<typeof readBoundedHandoffLineage>>;
         try {
-            lineage = await readBoundedHandoffLineage(db as unknown as CapsuleDb, room as never, operation);
+            lineage = await readBoundedHandoffLineage(db as unknown as CapsuleDb, room as never, operation, { actor });
         }
-        catch {
+        catch (error) {
             return {
-                ...base, state: "unavailable", reason: "handoff-lineage-unavailable"
+                ...base, state: "unavailable", reason: error instanceof BoundedHandoffRefusal ? error.code : "handoff-lineage-unavailable"
             };
         }
         if (lineage?.state === "stale") base.staleRequest = { requestId: lineage.requestId, reason: lineage.reason };
@@ -118,11 +124,8 @@ export async function loadWorkroomFailedHandoffRecovery(input: Input, db: Db = p
         };
         if (Buffer.byteLength(JSON.stringify(args), "utf8") > PACKET_MAX_BYTES)
             return { ...base, reason: "handoff-recovery-packet-over-budget" };
-        if (!authorityContext?.humanPrincipal?.id || !authorityContext.agentPrincipal?.id)
+        if (!actor)
             return { ...base, reason: "handoff-canonical-identity-unavailable" };
-        const actor = {
-            userId: input.userId, agentId: context.agentId, principalId: authorityContext.humanPrincipal.id, agentPrincipalId: authorityContext.agentPrincipal.id, taskAuthorityTokenId: context.apiTokenId
-        };
         try {
             await assessBoundedHandoff({
                 db: db as unknown as CapsuleDb, actor, command: args
