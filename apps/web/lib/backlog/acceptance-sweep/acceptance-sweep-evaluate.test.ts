@@ -177,6 +177,19 @@ describe("authorAgentIdFrom", () => {
 describe("evaluateOwedAcceptance", () => {
   const item = { id: "row-3", itemId: "BI-AA000003", claimedByAgentId: null, agentId: null };
 
+  it.each(["small", "medium"] as const)("uses bound runtime acceptance only for retained %s work", async shape => {
+    const loadRetainedSmallCheck = vi.fn().mockResolvedValue({ state: "pass", evidenceRefs: ["native-check"] });
+    const result = await evaluateOwedAcceptance({ ...item, status: "done" }, {
+      loadAuthorAgentId: vi.fn().mockResolvedValue(null),
+      loadDeliveryActorIds: vi.fn().mockResolvedValue(ok([])),
+      loadCompletionDecision: vi.fn().mockResolvedValue({ ...decision,
+        shapeDecision: { declared: shape, effective: shape, sensitivity: null, raised: false } }),
+      resolveOwner: vi.fn(), loadRetainedSmallCheck,
+    });
+    expect(loadRetainedSmallCheck).toHaveBeenCalledTimes(shape === "small" ? 1 : 0);
+    expect(result?.closable).toBe(shape === "small");
+  });
+
   it("retains unresolved acceptance when the item closes after page selection", async () => {
     const resolveOwner = vi.fn();
     const result = await evaluateOwedAcceptance({ ...item, status: "awaiting-acceptance" }, {

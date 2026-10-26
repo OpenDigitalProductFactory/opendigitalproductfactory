@@ -1,5 +1,17 @@
 # Backlog & planning runbook
 
+For already deployed Small/low platform work, a fresh runtime check retains the
+delivery-coordinator acceptance lane (BI-80D1FBBF). Record `final-acceptance`
+through `record_runtime_verification` with the exact canonical closure activity
+as `backlogActivityId`, its `capsuleId`, command, observations, and actual start
+and completion times. The server binds the authenticated actor and current
+verified delivered/served revision. It refuses stronger shapes, stale checks,
+foreign closures and caller-supplied binding metadata. A stable verification ID
+can retry only the identical check; a new check has its own ID. The same retained
+validator refreshes owed acceptance; an old unbound observation or deployment
+alone never becomes acceptance. Medium/large and sensitivity-raised work retain
+their independent acceptance contract under BI-E3B918C2.
+
 A medium repair that retains an independently approved repository scope keeps
 that scope's amendment authority. A stale design uses the existing independent
 spec-approval writer and current server-issued packet, bound to the prior
