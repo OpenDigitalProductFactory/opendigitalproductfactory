@@ -89,6 +89,7 @@ export class ResourceLane {
   private pumpScheduled = false;
   private waiting = 0;
   private seq = 0;
+  private lastSelectionWasAgedPromotion = false;
   private readonly record: (input: QueueTransitionInput) => void;
   private readonly now: () => number;
 
@@ -256,8 +257,16 @@ export class ResourceLane {
       && entry.autonomousAgingMs != null
       && now - entry.enqueuedAt >= entry.autonomousAgingMs,
     );
-    if (agedAutonomous >= 0) return agedAutonomous;
     const interactive = this.queue.findIndex((entry) => entry.priority === "interactive");
+    // Aging gives background work a turn, not the entire remaining queue.
+    // Otherwise a batch that aged behind one long holder can exhaust every
+    // interactive wait budget while it drains. Alternate only while both
+    // classes contend; preserve FIFO and the existing first aged promotion.
+    if (agedAutonomous >= 0 && interactive >= 0 && !this.lastSelectionWasAgedPromotion) {
+      this.lastSelectionWasAgedPromotion = true;
+      return agedAutonomous;
+    }
+    this.lastSelectionWasAgedPromotion = false;
     return interactive >= 0 ? interactive : 0;
   }
 

@@ -383,7 +383,10 @@ function planGraphDrive(input: DriveResolutionInput & { definition: WorkShapeDef
     const token = stageToken(stepped.marking, stageKey);
     if (!stage || !token) continue;
     const iteration = iterationOf(stepped.marking, stageKey);
-    const planned = planStage({ input, definition, stage, conformance, cycle, prior: latchPriorFor(token, stageKey), iteration, runKey: stepped.marking.cycleKey });
+    const observed = input.stageRunsByTask?.[token.taskId ?? workroomDriveTaskId(input.roomId, definition.key)];
+    const approvalWait = observed?.lastStatus === "proposed" && observed.approvalOutcome !== "executed";
+    const planned = planStage({ input, definition, stage, conformance, cycle, prior: latchPriorFor(token, stageKey), iteration,
+      runKey: stepped.marking.cycleKey, ...(approvalWait ? { run: observed } : {}) });
     // A gate holding a completed stage (PR-3c-3) waits on a person, never on a re-dispatch:
     // a refuse with no route is `gate_refused`; no verdict, hold or escalate stays a governed decision.
     const gateHold = holds.get(stageKey);
