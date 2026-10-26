@@ -95,8 +95,8 @@ Recorded from operator direction, 2026-09-03, because the design is downstream o
 - The nesting is akin to human organization design — except the prime responsibility sits with an
   AI coworker, which **communicates upward as needed, and orders and tracks downward**.
 - **Employees may engage at any level.**
-- The COO's need is different in kind from a room owner's: it is **status tooling** — broadcast an
-  ask, check status, know schedules and workload, flag bottlenecks.
+- The COO needs cross-room supervision: inspect progress, name bottlenecks, request
+  authorized recovery, track acknowledgement and verify the resulting outcome.
 
 Two things follow that the substrate does not yet express. First, ownership is *derivable* — "the
 specialist for that area, aligned per portfolio" is a rule, not a per-room decision. Second, the
@@ -160,7 +160,10 @@ Two consequences worth carrying into how this platform makes decisions at all:
 The COO is a coworker (`AGT-ORCH-000`, already defined) plus a surface it reads and acts through.
 Its cross-room needs are status and recovery coordination. The October 25 amendment below supersedes the earlier report-only interpretation; specialists retain execution authority.
 
-| COO need | Substrate today | Gap |
+The table records the original September 3 substrate snapshot. The October 25
+readiness inventory below separates current tools from remaining delivery.
+
+| COO need | Original substrate snapshot | Gap |
 | --- | --- | --- |
 | Are all rooms progressing? | none — liveness ≠ progress | **cross-room progress view**: owner, last cycle, last action, ticks since it advanced |
 | Flag bottlenecks | `list_at_risk_queues`, `get_queue_status` (work queues, not rooms) | rooms paused, unowned, or repeating one action; finding 1 must become visible |
@@ -217,7 +220,9 @@ that enumeration is its own pass, with the operator, and inventing it here would
 - **Derivation may name an owner; it may never name an approver.** The human-owned stages of every
   standing shape stay human, at every layer of the nesting.
 - **Unowned is reported, never guessed** (§4).
-- **The COO cannot execute** (§5) — it reads, asks, and escalates.
+- **COO follow-through stays within current authority** (§5). It requests supported
+  recovery through existing executors and verifies results; specialist execution
+  and independent approval remain with their declared owners.
 - **Escalation terminates at a human.** The registry's chains already end at `HR-*` roles; the
   wiring must preserve that rather than looping between orchestrators.
 - **Appointment is a governed write** with `consequence: "authority"`, as `invite_room_participant`
@@ -274,7 +279,8 @@ archetype half. H is configuration.
 - Not a new work ledger, not a second hierarchy — `WorkroomRelation` and the agent registry are
   the sources of truth.
 - Not an org chart editor. Ownership derives; appointment is the exception, not the interface.
-- Not autonomy for the COO — it reads, asks, escalates (§5).
+- COO autonomy is bounded by current admission, budget and action-specific policy;
+  ownership never substitutes for those checks (§5).
 - Not enumerating the open-source-management room set here (§6.1); that is a pass with the operator.
 - Not changing what a shape's human-owned stages require, at any nesting depth.
 
@@ -498,3 +504,92 @@ Rollback stands down new supervision dispatch, preserves obligations/checkpoints
 and existing task results, and returns to the previous release through the
 governed release path. It must never clear a queue hold, lose a pending decision,
 discard history or convert unverified recovery to success.
+
+
+### COO awareness and tool-readiness contract
+
+The intended responsibility is explicit: oversee due work across all Workrooms,
+including external execution surfaces; identify absent progress; obtain an
+acknowledged recovery owner and safe next action; verify the result; retain a
+durable wait when appropriate; and involve the founder only for a necessary
+decision or exhausted authorized recovery. A status request is an intermediate
+step, not the end of this responsibility.
+
+This is a design mandate, not evidence the running COO has received it. The
+October 25 read-only audit found the source persona still at Advisor-only/no
+background loops, and its standing task still ending with the owner deciding.
+The route-facing prompt context lists product/backlog tools, while the canonical
+COO prompt context has no explicit domain-tool attachment. Discovery may supply
+additional tools; the attachment observation alone does not prove denial.
+
+The canonical agent is AGT-ORCH-000. A separate coo route row is present with
+narrower stored grants. Existing authority resolution canonicalizes aliases;
+implementation must use that resolver rather than merge both rows or silently
+select their union. Verify the direct-conversation and scheduled paths resolve
+the same principal, mandate and permitted tools.
+
+| Need | Existing tool seam | Canonical stored grant readiness on October 25 |
+| --- | --- | --- |
+| Inspect rooms and queue waits | list_workrooms, get_workroom, get_queue_status | work_capsule_read present; verify room access and real invocation |
+| Ask an accountable coworker | request_coworker | thread_write present; current delegation, action and request gates still apply |
+| Read the response and reconcile it | get_thread_result, get_child_threads; original task result/receipt | thread_read absent; qualify the supported result route before dispatch |
+| Inspect participation and messages | get_coworker_room_engagement, read_room_messages | work_room_read absent |
+| Record coordination and request supported recovery | post_room_message, record_agent_activity, resume_workroom_queue, reassign_workroom_executor, drive_workroom_runtime | relevant room/capsule write grants absent; each action requires its own authority/admission check |
+
+These are existing permission categories, not instructions to grant every write
+or expose all tools to every turn. Prefer the room coordinator's existing scoped
+recovery request where it suffices. A grant gap stays a named owner decision;
+never give broad administration merely to make supervision appear equipped.
+
+Implementation of AC-COO-03/06 must install the same mandate in the canonical
+persona, assigned skills, standing task and turn context, attach discoverable
+tools within their budget, and record the installed contract version. A COO
+onboarding rehearsal must read a controlled room, identify its blocker, obtain
+an eligible owner's acknowledgement, read the actual result, and independently
+verify advancement. A prose acknowledgement or a tool advertised in a prompt
+alone does not establish awareness plus usable capability. Until that rehearsal,
+report onboarding and operational readiness as pending.
+
+### Harness engineering alignment requested by the founder
+
+The founder identifies [Google Research Harness2](https://github.com/google-research/harness2)
+and [Joel Niklaus's harness optimization experiment](https://joelniklaus-harness-optimization.hf.space/)
+as design references. Reviewed October 25; neither project was installed or
+benchmarked for DPF, and their published results are not DPF performance claims.
+
+Harness2 separates task-level Propose-Probe-Compose refinement from persistent
+learning between tasks, with model weights fixed. Its task-level refinement
+uses execution contrasts without ground-truth feedback. Niklaus describes a
+separate Meta-Harness experiment with scored candidate promotion and held-out
+evaluation. These are complementary approaches, not the same implementation.
+Sources: the project README and the experiment's loop/promotion sections.
+
+DPF's mapping is a design decision:
+
+| Loop | Existing DPF home | COO responsibility |
+| --- | --- | --- |
+| Operational execution and recovery | Workroom drive, local Process Overseer, current task/receipt/checkpoint | Own cross-room follow-through to verified completion or a durable owned wait |
+| Improvement of the execution harness | Existing improvement/learning work BI-IMP-9DA35549 and review continuity BI-BF20F828 | Supply observed recurring failures and business impact; track the repair to acceptance |
+
+Prompts, tool guidance, skills, context selection, adapter behavior and recovery
+mechanisms are candidates for improvement through those existing owners. The COO
+does not become a second scheduler or self-approving harness author. A proposed
+change must name its hypothesis, exact incumbent/candidate identities, expected
+benefit, regression cases, execution evidence, cost/latency budget and rollback.
+Probe alternatives in an admitted isolated environment or against replayable
+records; do not replay live business side effects merely to compare candidates.
+
+Retain evidence for unsuccessful candidates, distinguish no result from a
+negative result, and promote only through the existing reviewed delivery path.
+Assess verified completion, correct deliverable placement, recovery time, human
+nudges, duplicate effects and cost; an attractive aggregate score cannot waive
+an unmet required outcome. Keep development cases separate from acceptance
+cases and recheck transfer across relevant models, professions and executors.
+The [Harness2 experiment guide](https://github.com/google-research/harness2/blob/main/docs/EXPERIMENTS.md)
+provides useful controls for comparison identity, budget and retained evidence.
+
+DPF does not adopt unrestricted execution, disabled sandboxes, editable authority
+or unbounded recursive spend as operating defaults. Harness optimization may
+improve how an authorized job runs; it cannot change who may authorize it or
+weaken its independent acceptance gate. No new engine, dependency or runtime
+permission is introduced by this design comparison.

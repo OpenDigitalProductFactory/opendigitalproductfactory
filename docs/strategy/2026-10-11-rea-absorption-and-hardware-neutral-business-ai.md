@@ -253,3 +253,16 @@ Assess this strategy by verified business outcomes and human steps removed,
 including recovery time, unacknowledged obligations, repeated founder nudges and
 unresolved external handoffs. Available tools, running agents and completed
 implementation records alone do not demonstrate independent operation.
+
+
+### Harness improvement and operational ownership
+
+The founder-supplied Harness2 and Meta-Harness references reinforce a proposed
+strategy of improving the system around the model from measured execution
+failures. The [coordination design](../superpowers/specs/2026-09-03-coordinated-workrooms-design.md#harness-engineering-alignment-requested-by-the-founder)
+records the research and DPF's boundaries. The COO owns operational follow-through;
+the existing improvement process owns tested, reviewed harness changes.
+Evaluate this approach by completed business outcomes, human interventions,
+recovery time and cost. An optimization benchmark or a revised COO prompt alone
+does not prove independent business operation. Implementation and onboarding
+verification remain pending.

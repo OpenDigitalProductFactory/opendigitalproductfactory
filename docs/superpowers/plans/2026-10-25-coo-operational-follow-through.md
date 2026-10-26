@@ -170,3 +170,23 @@ current launcher, process-supervisor and effect-owner authority before resuming
 those exact reviews. Do not dispatch replacements or treat the completed
 architecture review as the missing design/spec receipts. No founder status
 nudge is an acceptance test, and no passing source suite closes P2.
+
+
+## Design-only follow-up: COO onboarding and harness comparison
+
+The founder asks to establish the design before implementation. The canonical
+design now includes an explicit COO mandate, live tool/grant readiness matrix,
+alias-resolution requirement, and an onboarding rehearsal that proves actual
+read/request/result/verification capability. The running persona and standing
+task have not been updated, and no COO acknowledgement is claimed.
+
+Google Research Harness2 and Joel Niklaus's Meta-Harness experiment inform the
+comparison in that design. Operational follow-through remains the COO's job;
+measured harness improvement stays with the existing improvement and review
+owners. Add candidate/incumbent identity, isolated probes, regression and
+held-out acceptance cases, budgets and rollback to P2's relevant repair path.
+These clarify AC-COO-03/06 and existing learning boundaries; they do not create
+another optimization engine or authorize live grant changes. Existing review
+requests remain bound to their original artifacts. This revised design needs
+normal independent review after original execution settlement; no old receipt
+is claimed to cover the new text.
