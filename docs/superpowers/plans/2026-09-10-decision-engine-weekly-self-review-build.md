@@ -88,7 +88,9 @@ Preserve existing acceptance work and parent decomposition rather than repeat de
 
 | Key | Live BI | Source seam / scope | Depends on | Requirement refs | Verification refs |
 |---|---|---|---|---|---|
-| stage-admission | BI-E9555B2D, BI-8E7F0276 | Existing stage projection, required tools, posture and authority; proactivity/propose-interception.ts and govern/authority/resolve-coworker-tool-authority.ts | Existing approved parent decomposition; no xlarge implementation | AC-REVIEW-HOLD | V-ADMISSION |
+| stage-admission | BI-D95FD249 | Preserve admitted delivery-author evidence authority in the existing stage resolver; PR #6592 merged, live acceptance pending | Existing GPP/TAK authority and current funding/delegation | AC-REVIEW-HOLD | V-ADMISSION |
+| tool-attachment | BI-8E7F0276 | Explicit required-tool attachment and bounded budget recovery | Existing stage declarations | AC-REVIEW-HOLD | V-ADMISSION |
+| blocker-report | BI-E458A9CB | Bound blocked reporting and pending-approval waiting; PR #6588 deployed, broader refusal recovery remains open | Existing stage assignment and approval lineage | AC-REVIEW-HOLD | V-HOLD |
 | refusal-hold | BI-412A2F72 | Existing scheduled-work/TaskRun/Workroom holds and relevant-change wakeup | stage-admission | AC-REVIEW-HOLD | V-HOLD |
 | delegated-permit | BI-39946DC1 | gpp/bindings.ts, permit-verdict.ts and per-call consequence refinement | Classify actual effects before promotion | AC-REVIEW-LINEAGE | V-PERMIT |
 | review-measurement | BI-19CEC4B4 | decision/self-review/load-review-window.ts, measures.ts, decision-engine-review-task.ts | Existing outcome provenance; reproduce first | AC-REVIEW-WINDOW, AC-REVIEW-HONESTY | V-MEASURES |
@@ -100,6 +102,11 @@ BI-6082C235, BI-F302B80E, BI-01F8F06D and BI-7D1E43DE remain the subject, report
 shadow-bridge and report-only trust owners. Verify their evidence before proposing deltas.
 BI-EAFD2D09 owns duplicate-merge refinement separately. BI-0B8657BD and BI-ADAC33D5 own related
 outcome/citation acceptance and reliability. Paired-installation-owned records remain read-only.
+
+BI-E9555B2D remains the xlarge coordination umbrella, not an independently shippable
+implementation row. The three admission/reporting rows above reuse their existing delivery
+owners. A passing blocked-report write is not delivery-author completion permission or proof
+that every historical refusal is parked. Retain these distinct acceptance boundaries.
 
 ### Ordered execution and verification
 
