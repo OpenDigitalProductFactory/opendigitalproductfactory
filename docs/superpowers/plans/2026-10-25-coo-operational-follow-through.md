@@ -7,9 +7,10 @@ status: active
 **Umbrella:** BI-4B48E7FE. **Workroom:** WC-D5FD489C.
 **Design:** docs/superpowers/specs/2026-09-03-coordinated-workrooms-design.md,
 October 25 amendment. **Decision:** DI-EE06CE5554D2, ratified by the founder.
-**Current status (October 25):** the design and strategy are reconciled in source.
-The parent design/spec approvals remain blocked by uncertain original reviewer
-execution, tracked under BI-7906C73E; architecture review passed. P2 is not
+**Current status (October 26 UTC):** the design and strategy are reconciled in source.
+The current design and spec approvals passed at e48abd61281f and established
+ baseline-fb4de98c-353a-4e89-98b6-23a455810cc1. Current architecture review is
+ requested; the prior architecture receipt and uncertain attempts stay historical. P2 is not
 implemented. P1 has its own atomic plan/admission and tested source repair,
 with no merge, deployment or unattended operational acceptance claimed.
 
@@ -45,7 +46,8 @@ result without stale in-motion status. Preserve no-progress across retries
 and reason changes and clear on confirmed completing evidence or verified
 stage/marking advancement. Read legacy unknown age honestly.
 
-Requirement refs: AC-COO-01; AC-COO-02.
+Requirement refs: OBJ-COO-PROGRESS.
+Acceptance refs: AC-COO-01; AC-COO-02.
 Contract refs: apps/web/lib/work-management/drive-conclusion.ts;
 apps/web/lib/work-management/workroom-drive-hold.ts.
 Flow ref: plan -> observed dispatch outcome -> conclusion/hold -> persistence -> attention.
@@ -68,7 +70,8 @@ checkpoint/activity/result identities. Persist the obligation before dispatch;
 acknowledgement and verified result are separate states. Bound retry and
 reconcile uncertain effects before any successor.
 
-Requirement refs: AC-COO-03; AC-COO-04; AC-COO-05; AC-COO-06; AC-COO-07.
+Requirement refs: OBJ-COO-RECOVERY; OBJ-COO-EXTERNAL; OBJ-COO-LEGIBILITY; OBJ-COO-PROGRESS.
+Acceptance refs: AC-COO-03; AC-COO-04; AC-COO-05; AC-COO-06; AC-COO-07.
 Contract refs: apps/web/lib/work-management/workroom-stall-notice.ts;
 apps/web/lib/work-management/nested-room-coordination.server.ts;
 apps/web/lib/operate/scheduled-jobs/coworker-standing-self-tasks.ts;
@@ -128,8 +131,8 @@ missing investment authority.
 
 Decision: decomposed. P1 maps to BI-756C899D. P2 maps to BI-C43FD3E5 and depends
 on P1. The design/strategy/guide reconciliation accompanies these deliveries.
-Live coverage receipt: pending immutable plan publication and independent
-scope baseline. This document is not a receipt. Implementation remains held
+Live coverage receipt: pending corrected immutable plan traceability against
+ baseline-fb4de98c-353a-4e89-98b6-23a455810cc1. This document is not a receipt. Implementation remains held
 until record_plan_backlog_coverage and current readiness authorize the slice.
 
 The start-of-work change-impact contract is resolved for the design/doc paths:
