@@ -504,6 +504,14 @@ test('the startup budget is operator-tunable and ignores unusable values', async
 const original = '/// <reference types="next" />\n/// <reference types="next/image-types/global" />\nimport "./.next/types/routes.d.ts";\nimport "./.next/types/root-params.d.ts";\n';
 
 test('the real Next development writer changes only the projected runtime declaration, leaving admitted Git source clean', async t => {
+  const webRequire = createRequire(new URL('../../apps/web/package.json', import.meta.url));
+  try { webRequire.resolve('next/package.json'); } catch (error) {
+    if (error.code !== 'MODULE_NOT_FOUND') throw error;
+    t.skip('UNRUN: Next is not installed in this dependency-free checkout; dependency-present qualification must execute the real writer.');
+    return;
+  }
+  // A present package with a missing or broken writer must fail, not skip.
+  const { writeAppTypeDeclarations } = webRequire('next/dist/lib/typescript/writeAppTypeDeclarations.js');
   const directory = await mkdtemp(join(tmpdir(), 'dpf-preview-declaration-test-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const source = join(directory, 'source');
@@ -514,7 +522,6 @@ test('the real Next development writer changes only the projected runtime declar
   const git = args => execFileSync('git', ['-C', source, ...args], { encoding: 'utf8' }).trim();
   git(['init', '-q']); git(['add', '.']);
   git(['-c', 'user.name=Preview Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-qm', 'fixture']);
-  const { writeAppTypeDeclarations } = createRequire(import.meta.url)('next/dist/lib/typescript/writeAppTypeDeclarations.js');
   const generate = baseDir => writeAppTypeDeclarations({ baseDir, distDir: '.next/dev', imageImportsEnabled: true, hasAppDir: true, hasPagesDir: false });
 
   // Reproduce the incumbent failure with the installed writer, not a stub.
