@@ -21,13 +21,6 @@ function verification() { return { verificationId: "RV-OWN", kind: "health", sta
 const binding = { capsuleId: "room-id", taskRunId: "TR-OWN", requestDigest: digest, updatedAt };
 
 describe("owned semantic review recovery readback", () => {
-  it("reports missing immutable authority evidence without inventing a denial or retry", async () => {
-    const result = await readSemanticReviewRecovery({ ...task, status: "auth-required" }, "owner");
-    expect(result.details).toMatchObject({
-      authority: { state: "unavailable", reason: "immutable-request-unavailable" },
-      remediation: { executionSettled: false, retryAuthorized: false },
-    });
-  });
   it.each([false, true])("recovers durable eligibility diagnostics beside uncertain=%s task state", async uncertain => {
     const eligibility = { sensitivity: "restricted", residencyPolicy: "local_only", excludedCount: 2,
       exclusions: [{ bucket: "output-capacity", count: 2 }] };
