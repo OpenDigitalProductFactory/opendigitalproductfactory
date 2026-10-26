@@ -203,3 +203,12 @@ with four external desktop captures. Its original research-only objective and in
 remain unchanged. External captures establish supplied inputs only; the Critic must
 make its own real contribution. CE-724328D6 remains bound to f52 and unreplayed.
 Neither engagement grants current deployed UI acceptance or author disposition.
+
+
+The active read-evidence workflow also fences generic conversational inline
+deliberation. Its existing TAK executor returns the unchanged draft/revised=false
+before any review/debate inference when this workflow owns completion. Restoring
+validated JSON after generic processing is insufficient: it cannot undo an extra
+provider call, and a held result must not initiate one. Unscoped conversations
+retain their normal posture-driven review/debate behavior. This does not attest
+which historical calls used that path or change native execution-proof ownership.

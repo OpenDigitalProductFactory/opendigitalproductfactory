@@ -92,3 +92,7 @@ Unsupported image transport stops before inference. A source-only answer cannot
 complete a request bound to rendered inputs. Missing execution proof still holds
 an incomplete attempt without replay. An older bound request keeps its original
 revision; later material and its limits must be explicitly associated and reported.
+
+Structured specialist completion also holds the boundary against an additional
+conversational review/debate call. The validated contribution or held failure is
+returned unchanged; ordinary conversations retain their configured deliberation.

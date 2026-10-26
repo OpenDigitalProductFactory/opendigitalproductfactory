@@ -233,3 +233,13 @@ heartbeats; cancellation or a real fence/binding change still refuses. The real
 interleaving regression failed against the old code, then passed with this change.
 This also removes the metadata predicate that the heartbeat guard misclassified;
 no guard exception, heartbeat/status write or provider retry is added.
+
+
+The end-to-end autonomous seam can run a generic inline review/debate after the
+agentic loop returns. Restoring verified JSON afterward cannot undo that extra
+inference, and held work has no accepted contribution to restore. The existing
+TAK inline-review helper must return its unchanged draft before provider dispatch
+when a read-evidence workflow owns completion. Cover verified and held scopes,
+review and debate postures, normal unscoped behavior and async scope isolation.
+This prospective guard neither proves historical execution nor edits the shared
+autonomous seam, changes posture preferences, grants authority or permits retry.
