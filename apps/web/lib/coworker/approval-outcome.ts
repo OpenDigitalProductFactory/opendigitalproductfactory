@@ -13,9 +13,33 @@ export type ApprovalOutcome = {
   nextActionKey: MessageKey<"approvals">;
   inboxHref: string;
   createdAtIso: string;
+  failureEvidence?: ApprovalFailureEvidence;
+  failureExplanation?: string;
+  failureExplanationKey?: MessageKey<"approvals">;
   /** BI-7BCC87BB: an admin decided this request on the owner's behalf. */
   decidedOnBehalf?: OnBehalfDecision;
 };
+
+/** Closed absence reasons shared by approval evidence readers. */
+export type UnavailableApprovalEvidence = {
+  state: "missing" | "conflicting" | "unsupported";
+  reason: "not-settled" | "binding-unproven" | "operation-unsupported" | "execution-missing" | "execution-ambiguous" | "execution-binding-mismatch" | "result-unproven";
+};
+
+/** Safe recorded failure facts; raw operation data stays server-only. */
+export type ApprovalFailureEvidence =
+  | UnavailableApprovalEvidence
+  | { state: "available"; code: "handoff-transaction-required"; executionId: string; executedAtIso: string;
+      threadBinding: "matched" | "not-recorded"; roomHref?: string; roomAccess: "available" | "unavailable" };
+
+export function withApprovalFailureEvidence(outcome: ApprovalOutcome, evidence: ApprovalFailureEvidence): ApprovalOutcome {
+  if (outcome.state !== "failed") return outcome;
+  const key = evidence.state === "available" ? "handoff-transaction-required" : evidence.state === "conflicting" ? "conflicting" : "unproven";
+  const copy = SOURCE_CATALOG.approvals.failure[key];
+  return { ...outcome, failureEvidence: evidence, failureExplanation: copy.reason,
+    failureExplanationKey: `failure.${key}.reason`, nextAction: copy.next, nextActionKey: `failure.${key}.next` };
+}
+
 export type ApprovalOutcomeRow = {
   id: string;
   status: string;

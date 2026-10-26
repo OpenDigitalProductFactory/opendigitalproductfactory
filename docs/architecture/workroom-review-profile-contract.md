@@ -200,3 +200,158 @@ associate decisions with their input, result and policy revision. Preserve exact
 existing policy/source references when applicability is eventually resolved.
 These are design comparisons; no new provenance store, telemetry dependency or
 OPA engine is introduced.
+
+**Occurrence inheritance continuation (AC-02).**
+
+The installed catalogue satisfies AC-01's registered-definition inventory only.
+This continuation stays within BI-11458908 and the existing profile-resolution
+delivery mapping. It specifies how an authorized occurrence obtains inherited
+requirements; it does not mark AC-02 passed or admit runtime implementation.
+The common/source composer, definition catalogue and verified operator disclosure
+remain the shared owners. No second registry, policy store or scheduler is needed.
+
+The source audit at the incoming main revision
+`b7ee9ec259303456470a62095875d6e37d65f318` found two distinct gaps.
+`WorkItem` has source identity but no organization foreign key, and
+`WorkspaceRoomAuthContext` carries reader identity and clearance, not the
+subject's organization. In `room-posture.server.ts`, `resolveStream` selects
+the most recently updated storefront without an occurrence organization.
+That advisory posture lookup cannot become review-applicability authority.
+Neither an authorized room read nor a funding binding establishes which
+organization owns the business occurrence.
+
+**Resolve the subject before its requirements.**
+
+Extend the existing server loader seam used by
+`loadAuthorizedWorkspaceCase` / `loadWorkspaceWorkCaseDetail`; keep
+`buildWorkroomView` and `composeRoomReviewProfile` pure. After room-content
+authorization, resolve the canonical source address through its existing source
+adapter and apply that source's organization/content authorization before loading
+tenant metadata. Reader organization, installation organization, assigned worker,
+accountable human and funding owner are not fallback subject identities.
+A denied lookup exposes no tenant identity, layer reference or applicability
+detail. Discovery-only authorization must not trigger this resolver.
+
+The first concrete relation is `StorefrontBooking.organizationId` plus its
+`storefrontId` relation to `StorefrontConfig`. Resolve the booking using the
+existing adapter's identity semantics; do not reinterpret a display reference as
+a database id. Require the booking organization and the selected storefront's
+organization to agree. Read that exact organization and storefront, never a
+global `findFirst`. An absent source, ambiguous address, mismatched organization,
+unavailable source authority or unsupported adapter yields an explicit unknown
+scope; it cannot be treated as an empty tenant profile or a not-applicable case.
+This relation is a source-supported design example, not a live booking test.
+
+Other registered sources must supply equivalent authoritative relation evidence
+before their organization scope is supported. Do not infer it from a WorkItem's
+free-form evidence, messages, parent item, queue or participants. Workroom-only
+and platform-development cases retain unknown organization applicability until
+their owning source contract establishes it. Registry coverage and occurrence
+scope coverage therefore have separate denominators.
+
+**Canonical archetype selection and governed provenance.**
+
+For an established subject organization, use the exact
+`StorefrontConfig.archetypeId -> StorefrontArchetype.id` relation for the primary
+archetype; `StorefrontArchetype.archetypeId` is the canonical slug, not that FK.
+Read active `StorefrontArchetypeComposition` rows for the same storefront.
+Preserve their role, product-line binding, revision and removed state. A secondary
+archetype scoped to one product line is not applicable to every occurrence in
+the organization. Without an authoritative occurrence-to-product-line relation,
+that secondary's applicability remains unknown. No sorted-first or primary-only
+shortcut may claim the whole composition was considered.
+
+Use the canonical category, activation profile and typed operating-model facts
+from the existing storefront/template owners. A category or facet identity is
+a selector, not a review obligation by itself. Extend the current typed layer
+catalogue with versioned declarations and explicit applicability predicates;
+reuse its canonical alias, normalization, provenance and conflict logic.
+Representative pet-rescue/campground fixtures and the Four-Portfolio candidate
+catalogue's informative review application are not evidence of tenant adoption.
+
+Each selected extension must retain its controlling source reference and
+revision/content digest, owning scope, adoption/approval provenance, predicate
+inputs and evaluation, and freshness/review trigger. The declared obligation
+must identify outcome, required evidence, denominator/exclusions, critical
+failures, assessor eligibility, prohibited actions, retention/access and
+inheritance rationale. Reusable facets precede category baselines; leaf deltas
+must explain why their rule cannot be promoted to either shared layer.
+An unknown predicate input remains unknown, distinct from a proven false
+predicate. A complete scoped read with no applicable declaration may report
+not-applicable only with that exclusion evidence.
+
+The inspected `Policy` and `PolicyRequirement` models have no explicit
+organization binding. Their free-form applicability text, status or approval
+fields alone cannot authorize an organization overlay. Similarly,
+`DecisionPerspectiveProfile.ownerOrganizationId`, a promoted profile version
+or `PerspectiveMaterial.sourceRef` identifies decision material, not an
+established Workroom-constraint adoption contract. Reuse an owning governed
+contract only when its semantics bind this obligation, organization, revision
+and authority. Until that contract and its supported reader are verified,
+organization/jurisdiction/contract/deployment constraints stay unknown. Do not
+create a permissive JSON interpretation or copy these records into a review store
+to fill the gap.
+
+**Composition, history and operator presentation.**
+
+Continue to add common, source, shape, facet, category, leaf and organization
+requirements through the existing composer. Repeated references with the same
+payload deduplicate; conflicting versions/payloads or incompatible outcomes and
+denominators remain visible and unresolved. A lower layer cannot remove inherited
+evidence or weaken freshness. A removal request must fail or retain a separately
+authorized exception with reason, owner, controlling rule, applicability and
+expiry/review trigger; an empty layer is never an exception.
+
+Keep the existing composition fingerprint distinct from the occurrence's
+applicability provenance. A requirements hash alone does not prove that the
+organization and declarations used to select those requirements were authorized.
+The future cycle-admission contract must freeze both the composed requirements
+and exact selection provenance into its existing attributable evidence carrier,
+using that carrier's governed writer. A read must not write or rewrite a cycle.
+Changed inputs create a new revision/cohort; historical observations retain the
+old profile and denominator. Unknown, denied or conflicting applicability cannot
+earn a qualified cycle or be silently reconstructed from today's storefront.
+
+Extend the shared Workroom requirements disclosure, not a separate dashboard.
+Show what is inherited, which source selected it, and why a scope or declaration
+is unresolved. Distinguish composition status, applicability coverage and actual
+assessment. Preserve the room's usable common/source requirements while marking
+the incomplete scope; do not turn a resolved common-only profile into a tenant
+coverage badge. Denied readers receive no sensitive reason details. Keep keyboard
+disclosure, visible focus, long-label wrapping and light/dark narrow layouts;
+reuse the existing refresh-preservation proofs where their scope still applies.
+
+**Implementation admission and acceptance evidence.**
+
+Before runtime edits, publish this exact design, refresh author research and the
+normal implementation readiness, claim the actual owning paths and consume their
+impact/dependency contract. Current design admission is not implementation
+admission, independent architecture approval or settlement of held reviews.
+Resolve missing governed constraint adoption through the existing architecture
+and owner decision route; do not manufacture that evidence inside this reader.
+
+Add failing boundary tests for two organizations sharing a reader, denied source
+access, booking/storefront mismatch, absent/unmapped sources, inactive composition,
+product-line uncertainty and unknown versus false predicates. Verify bounded
+queries against exact subject keys, overflow/refusal without partial completeness,
+and mutation-free reads. Add tests proving facet/category/leaf reuse, conflicting
+declarations, attempted inherited-rule removal, source revision changes and
+frozen historical cycle identity. Reuse existing composer mechanics tests.
+
+The initial per-occurrence ceiling is 32 composition rows, 256 selected
+extension declarations and 512 resulting requirements, within the existing
+response budget and at most 128 KiB of serialized profile/provenance. Count
+one extra row to detect overflow; report incomplete applicability and a supported
+continuation instead of silently taking the first N. These are proposed reader
+limits, not measured scale passes. Raising them belongs to the existing parent
+initiative's AC-10 budget work, with new measured evidence before rollout.
+After affected tests, required gates and independent review, use only a qualified
+containing deployment and admitted fixtures for installed inheritance,
+conflict/removal and historical-profile checks. AC-02 closes only when those
+attributable results demonstrate every required layer; a source-only resolver,
+unknown organization constraints or representative fixtures cannot close it.
+
+The relevant refactoring remains shared identity, normalization, provenance and
+server-to-pure-reader composition. Existing PROV-DM and decision-log comparisons
+above explain the choice: keep the selecting authority and exact inputs with
+the outcome, while using existing DPF owners rather than adopting another engine.

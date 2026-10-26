@@ -16,6 +16,8 @@
 // `xPack,` line in the array. Nothing in mcp-tools.ts changes.
 
 import { composeToolPacks } from "./tool-registry";
+import { withEngagementFulfillment } from "./packs/coworker-service-catalog-pack";
+import { fulfillCoworkerEngagement } from "./external-coworker-task-adapter";
 import { deliberationSiemPack } from "./packs/deliberation-siem-pack";
 import { statutoryRatePack } from "./packs/statutory-rate-pack";
 import { roomMessagingPack } from "./packs/room-messaging-pack";
@@ -211,4 +213,4 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   productOutcomesPack,
   initiativeReadinessPack,
   surfaceReadinessPack,
-]);
+].map(pack => pack === coworkerServiceCatalogPack ? withEngagementFulfillment(fulfillCoworkerEngagement) : pack));
