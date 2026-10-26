@@ -93,6 +93,27 @@
       "unknown": "Open the room to establish its next step"
     }
   },
+  "coo": {
+    "supervision": "Supervision",
+    "unowned": "Unowned",
+    "paused": "Paused",
+    "overSpan": "Over span",
+    "missingAcks": "Missing acknowledgements",
+    "lastCycle": "Last cycle: {$cycle}",
+    "lastAction": "Last action: {$action}",
+    "lastReason": "Last reason: {$reason}",
+    "ticks": "{$count :number} ticks since advance",
+    "nextWake": "Next wake {$when}",
+    "nextWakeUnknown": "Next wake unknown",
+    "unownedRoom": "Unowned",
+    "pausedRoom": "Paused",
+    "suggestion": "Suggested owner — not a stall recipient",
+    "span": "Span of control: {$count :number}",
+    "overSpanFlag": "Over span of control",
+    "escalation": "Escalation: {$path}",
+    "missingAck": "{$count :number} missing acknowledgements",
+    "openRoom": "Open room"
+  },
   "stageDecision": {
     "yours": "Your decision: {$stage}.",
     "waitingOn": "Waiting on {$name} to decide: {$stage}.",

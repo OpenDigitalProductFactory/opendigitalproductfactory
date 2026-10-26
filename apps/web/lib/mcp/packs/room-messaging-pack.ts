@@ -29,6 +29,8 @@ import {
   ROOM_MESSAGING_WORK_ITEM_SELECT,
 } from "@/lib/work-management/room-participant-invitation-preflight.server";
 import { resolveAgentRoomAccess } from "@/lib/work-management/room-agent-access.server";
+import { resolveAgentWorkroomAccess } from "@/lib/work-management/workroom-agent-access.server";
+import { executeCooBroadcastAck, executeCooBroadcastAsk, type CooBroadcastDb } from "@/lib/operate/coo-broadcast.server";
 import type { WorkroomParticipantRole } from "@/lib/work-management/room-types";
 
 type PackContext = { agentId?: string };
@@ -421,6 +423,104 @@ async function getCoworkerRoomEngagementHandler(
   };
 }
 
+async function broadcastWorkroomAskHandler(
+  params: Record<string, unknown>,
+  userId: string,
+  context?: PackContext,
+): Promise<ToolResult> {
+  const agentId = context?.agentId;
+  if (!agentId) {
+    return { success: false, error: "invalid_caller", message: "broadcast_workroom_ask requires an acting coworker." };
+  }
+  const capsuleId = str(params, "capsuleId");
+  const body = str(params, "body");
+  if (!capsuleId || !body) {
+    return { success: false, error: "invalid_input", message: "capsuleId and body are required." };
+  }
+  const room = await prisma.workroom.findUnique({ where: { capsuleId }, select: { id: true } });
+  if (!room) {
+    return { success: false, error: "not_found", message: `No Workroom ${capsuleId}.` };
+  }
+  const access = await resolveAgentWorkroomAccess({
+    userId, agentId, workroomId: room.id, requested: "action",
+  });
+  if (access.decision.level !== "action") {
+    return {
+      success: false,
+      error: "forbidden",
+      message: `Not admitted to broadcast from ${capsuleId} (${access.decision.reason}).`,
+    };
+  }
+  const commentDb: PostCommentDb = {
+    workItemMessage: { create: (args) => prisma.workItemMessage.create(args as never) },
+    notification: { create: (args) => prisma.notification.create(args as never) },
+  };
+  const label = await agentLabel(agentId);
+  return executeCooBroadcastAsk({
+    db: prisma as CooBroadcastDb,
+    capsuleId,
+    body,
+    commandKey: str(params, "commandKey"),
+    actor: { userId, agentId },
+    postMessage: async ({ capsuleId: targetCapsuleId, workItemId, body: messageBody }) => {
+      const item = await prisma.workItem.findUnique({
+        where: { id: workItemId },
+        select: { id: true, title: true, itemId: true, sourceType: true, sourceId: true },
+      });
+      if (!item) return;
+      await postWorkItemComment({
+        db: commentDb,
+        workItemId: item.id,
+        workItemTitle: item.title,
+        roomRef: {
+          caseKey: `work-capsule:${targetCapsuleId}`,
+          caseId: `${item.sourceType}:${item.sourceId ?? item.itemId}`,
+          workItemId: item.itemId,
+        },
+        body: messageBody,
+        sender: { type: "agent", id: agentId, label },
+        roster: {},
+      });
+    },
+  });
+}
+
+async function acknowledgeWorkroomBroadcastHandler(
+  params: Record<string, unknown>,
+  userId: string,
+  context?: PackContext,
+): Promise<ToolResult> {
+  const agentId = context?.agentId;
+  if (!agentId) {
+    return { success: false, error: "invalid_caller", message: "acknowledge_workroom_broadcast requires an acting coworker." };
+  }
+  const capsuleId = str(params, "capsuleId");
+  const commandKey = str(params, "commandKey");
+  if (!capsuleId || !commandKey) {
+    return { success: false, error: "invalid_input", message: "capsuleId and commandKey are required." };
+  }
+  const room = await prisma.workroom.findUnique({ where: { capsuleId }, select: { id: true } });
+  if (!room) {
+    return { success: false, error: "not_found", message: `No Workroom ${capsuleId}.` };
+  }
+  const access = await resolveAgentWorkroomAccess({
+    userId, agentId, workroomId: room.id, requested: "action",
+  });
+  if (access.decision.level !== "action") {
+    return {
+      success: false,
+      error: "forbidden",
+      message: `Not admitted to acknowledge ${commandKey} in ${capsuleId} (${access.decision.reason}).`,
+    };
+  }
+  return executeCooBroadcastAck({
+    db: prisma as CooBroadcastDb,
+    capsuleId,
+    commandKey,
+    actor: { userId, agentId },
+  });
+}
+
 const definitions: ToolDefinition[] = [
   {
     name: "post_room_message",
@@ -450,6 +550,37 @@ const definitions: ToolDefinition[] = [
     },
     requiredCapability: "view_operations",
     sideEffect: false,
+  },
+  {
+    name: "broadcast_workroom_ask",
+    description:
+      "Post a COO ask down the contains hierarchy from a Workroom (capsuleId WC-*). Writes a shared commandKey ask ledger and optional room messages. Records acknowledgements separately via acknowledge_workroom_broadcast. Never dispatches a stage and never changes owners.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        capsuleId: { type: "string", description: "Root Workroom id (WC-*). The ask fans out to contains descendants." },
+        body: { type: "string", description: "The ask to post into each room." },
+        commandKey: { type: "string", description: "Optional shared broadcast id. Minted when omitted." },
+      },
+      required: ["capsuleId", "body"],
+    },
+    requiredCapability: "view_operations",
+    sideEffect: true,
+  },
+  {
+    name: "acknowledge_workroom_broadcast",
+    description:
+      "Record that this Workroom acknowledged a COO broadcast commandKey. Writes the ack ledger only. Never dispatches a stage.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        capsuleId: { type: "string", description: "Workroom id (WC-*) acknowledging the ask." },
+        commandKey: { type: "string", description: "The shared broadcast id from broadcast_workroom_ask." },
+      },
+      required: ["capsuleId", "commandKey"],
+    },
+    requiredCapability: "view_operations",
+    sideEffect: true,
   },
   {
     name: "appoint_room_coordinator",
@@ -549,6 +680,8 @@ export const roomMessagingPack: ToolPack = {
     plan_account_handover: (params, userId) => planAccountHandoverHandler(params, userId),
     apply_account_handover: (params, userId) => applyAccountHandoverHandler(params, userId),
     get_coworker_room_engagement: (params, userId, context) => getCoworkerRoomEngagementHandler(params, userId, context),
+    broadcast_workroom_ask: (params, userId, context) => broadcastWorkroomAskHandler(params, userId, context),
+    acknowledge_workroom_broadcast: (params, userId, context) => acknowledgeWorkroomBroadcastHandler(params, userId, context),
   },
   grants: {
     post_room_message: ["work_room_write"],
@@ -558,5 +691,7 @@ export const roomMessagingPack: ToolPack = {
     plan_account_handover: ["work_room_write"],
     apply_account_handover: ["work_room_write"],
     get_coworker_room_engagement: ["work_room_read"],
+    broadcast_workroom_ask: ["work_room_write"],
+    acknowledge_workroom_broadcast: ["work_room_write"],
   },
 };
