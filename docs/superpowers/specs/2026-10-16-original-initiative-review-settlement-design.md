@@ -382,8 +382,17 @@ rotation or administrator-written settlement is proposed.
 **Ordered P1 qualification within the existing atomic deliverable.**
 
 1. After genuine scope approval, exact coverage and ordinary implementation
-   admission, extend the existing launcher/supervisor and TaskArtifact repository
-   to retain a versioned producer contract. Bind original task row/semantic ID,
+   admission, begin trusted portal-side task/digest/attempt capture before private
+   auth-home creation, credential preparation or provider refresh. The existing
+   Codex adapter creates the home and calls prepareCodexCliAuth before
+   renderOwnedCliRunner; instrument that existing preparation boundary as well
+   as the owned runner. Retain sanitized preparation/refresh operation identity,
+   actual outcome and uncertainty without tokens, secrets or prompt content.
+   Initial capture failure refuses preparation and launch before effects. Capture
+   failure after a preparation effect retains that stage's uncertainty and owned
+   cleanup evidence; it never reconstructs a zero-effect history. Extend the
+   existing TaskArtifact owner repository for this versioned contract.
+   Bind original task row/semantic ID,
    immutable request digest, attempt/generation/budget identity, adapter and
    resolved binary/configuration identity, actual enabled capability inventory,
    original contained execution membership, and attributable closure and effect
@@ -403,8 +412,13 @@ rotation or administrator-written settlement is proposed.
    controlled test-original using existing task and authority contracts. Run the
    actual producer/supervisor on a known harmless child/grandchild workload with a
    closed local effect set and no external credentials or unbounded network
-   effects. Inject interruption before canonical result publication, retain the
-   authentic owner-produced records, and qualify them through real owner readers.
+   effects. Test interruption before, during and after preparation, before launch
+   and before canonical result publication. Verify capture failure prevents home
+   creation/preparation, and interrupted partial preparation stays unqualified.
+   Use no-secret local preparation doubles for those interruption cases; they
+   prove only validation, never actual OAuth-refresh or provider effect closure.
+   Retain authentic owner-produced records for the real controlled process and
+   qualify them through real owner readers.
    Hand-constructed proof fixtures do not satisfy this positive case. This proves
    only the declared test profile; it does not qualify the Codex provider or any
    historical attempt. A provider profile needs its own authorized real positive
@@ -421,6 +435,19 @@ rotation or administrator-written settlement is proposed.
    No original reviewer is restarted to collect proof. Producer plumbing remains
    internal sequencing of this atomic recovery deliverable, not independently
    accepted production recovery. Existing P2-P4 obligations remain.
+
+**Proposed first-version producer bounds.** Limit the encoded proof envelope to
+32,768 UTF-8 bytes, 64 contained members, 128 effect locators and 256 stage events;
+each limit is independently enforced before persistence. Overflow, truncation or
+an incomplete capture makes qualification fail closed, even if another limit is
+not reached. Retain at most 2,048 UTF-8 bytes of sanitized failure metadata with
+stage, bounded counts and opaque locators through the existing owner repository;
+never store unbounded rejected output as an audit workaround. Reuse the canonical
+TaskRun/TaskArtifact retention and expiry policy, with missing, expired or purged
+proof returning unavailable/unknown. No new retention daemon or silent ceiling
+increase is proposed. Higher-capacity profiles require a measured amendment in
+existing BI-7906C73E. The auxiliary eight-row inventory and 8,000-character result
+caps do not substitute for these new producer storage/event bounds.
 
 The first independent spec approval produces the genuine baseline; native plan
 coverage follows it, and ordinary implementation admission follows coverage.
