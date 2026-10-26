@@ -1,10 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, readFile, rm, realpath } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm, realpath, symlink, readlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir, homedir } from 'node:os';
 import { ENGINE_LOCK, sha256, enumerateFiles, fileRecord, unusedOutput, verifyPackage, vendorNoticePaths } from './package.mjs';
-import { RUNTIME_LOCK, verifyRuntimePackage, candidateEnvironment, verifyEngineQualification } from './runtime-profile.mjs';
+import { RUNTIME_LOCK, verifyRuntimePackage, candidateEnvironment, verifyEngineQualification, stageVerifiedRuntime } from './runtime-profile.mjs';
 import { parseRuntimeBuildOptions, findGoLicense } from './build-runtime.mjs';
 
 async function fixture(t) {
@@ -160,4 +160,14 @@ test('qualification management URLs reject remote hosts, credentials and path/qu
   for (const value of ['http://example.com', 'http://user@localhost', 'http://localhost/engines', 'http://localhost/?x=1']) {
     assert.throws(() => loopbackManagementRoot(value), /loopback/);
   }
+});
+
+test('staging retains relative native links and reports the package version without an escaping copy', async t => {
+  const f = await fixture(t); const destination = f.root + '-staged';
+  t.after(() => rm(destination, { recursive: true, force: true }));
+  await symlink('dmr', join(f.root, 'bin/dmr-alias'));
+  f.manifest.files.push(await fileRecord(f.root, 'bin/dmr-alias')); await f.save();
+  const staged = await stageVerifiedRuntime(f.root, destination);
+  assert.equal(await readlink(join(destination, 'bin/dmr-alias')), 'dmr');
+  assert.equal(staged.version, RUNTIME_LOCK.packageVersion);
 });

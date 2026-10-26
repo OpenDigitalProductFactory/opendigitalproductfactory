@@ -1,7 +1,7 @@
-import { readFile, realpath, lstat } from 'node:fs/promises';
+import { readFile, realpath, lstat, cp } from 'node:fs/promises';
 import { resolve, join, isAbsolute } from 'node:path';
 import { verifyPackage, readPackageManifest, safePath, fileRecord, enumerateFiles,
-  sha256, assertArm64MachO, contained } from './package.mjs';
+  sha256, assertArm64MachO, contained, unusedOutput } from './package.mjs';
 
 export const RUNTIME_LOCK = JSON.parse(await readFile(new URL('./runtime.lock.json', import.meta.url), 'utf8'));
 function requireValue(ok, message) { if (!ok) throw new Error(message); }
@@ -47,7 +47,7 @@ export async function verifyRuntimePackage(root) {
   const engine = await verifyPackage(join(root, 'engine'));
   requireValue(engine.version === RUNTIME_LOCK.engineVersion
     && engine.manifestSha256 === manifest.engine?.manifestSha256, 'Embedded engine identity changed');
-  return { manifest, manifestSha256: sha256(raw), engine, fileCount: seen.size,
+  return { manifest, version: manifest.version, manifestSha256: sha256(raw), engine, fileCount: seen.size,
     qualification: 'unqualified', activationAuthorized: false };
 }
 
@@ -103,4 +103,13 @@ export function verifyEngineQualification({ reportBytes, expectedReportSha256,
       'Repackaging changed qualified native files');
   }
   return { engineEvidenceReusable: true, runtimeIntegration: 'unrun', activationAuthorized: false };
+}
+
+export async function stageVerifiedRuntime(source, destination) {
+  const before = await verifyRuntimePackage(source);
+  await unusedOutput(destination);
+  await cp(source, destination, { recursive: true, verbatimSymlinks: true, errorOnExist: true, force: false });
+  const after = await verifyRuntimePackage(destination);
+  requireValue(after.manifestSha256 === before.manifestSha256, 'Staged runtime identity changed');
+  return after;
 }

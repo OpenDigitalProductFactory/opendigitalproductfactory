@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { parseArgs } from 'node:util';
-import { readFile, writeFile, rename, mkdtemp, cp, mkdir, access } from 'node:fs/promises';
+import { readFile, writeFile, rename, mkdtemp, mkdir, access } from 'node:fs/promises';
 import { platform, arch, tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { execFile } from 'node:child_process';
@@ -10,7 +10,7 @@ import { readMcpConnection } from '../../scripts/host-resource-runner.mjs';
 import { mcpCall } from '../../scripts/lib/mcp-client.mjs';
 import { admittedLeaseTtlMs, superviseLeaseRun } from '../../scripts/lib/lease-supervisor.mjs';
 import { sha256, hashFile } from './package.mjs';
-import { verifyRuntimePackage, verifyEngineQualification } from './runtime-profile.mjs';
+import { verifyRuntimePackage, stageVerifiedRuntime, verifyEngineQualification } from './runtime-profile.mjs';
 import { createRuntimeLaunchAgent, renderRuntimeLaunchAgent } from './runtime-launchagent.mjs';
 import { validateOwnedLease, validatedModelDigest, runnerActivity, metric, testEndpoint, makeContext,
   coldMessages, authorityAwareSignal, recordAuthorityFence } from './qualify-engine.mjs';
@@ -175,8 +175,7 @@ async function run(a) {
           const port = lease.ports?.[0]; check(Number.isInteger(port) && port > 1023, 'Bound native port required');
           workspace = await mkdtemp(join(tmpdir(), 'dpf-runtime-qualification-')); report.workspace = workspace;
           const packageRoot = join(workspace, 'package'), stateRoot = join(workspace, 'state');
-          await cp(resolve(a.package), packageRoot, { recursive: true, errorOnExist: true, force: false });
-          check((await verifyRuntimePackage(packageRoot)).manifestSha256 === verified.manifestSha256, 'Staged runtime bytes changed');
+          check((await stageVerifiedRuntime(resolve(a.package), packageRoot)).manifestSha256 === verified.manifestSha256, 'Staged runtime bytes changed');
           await mkdir(stateRoot, { mode: 0o700 }); leaseFile = join(workspace, 'lease.json'); await project();
           const label = 'local.dpf-inference.qualification-' + sha256(resolve(a.out)).slice(0, 16);
           const plistPath = join(workspace, 'runtime.plist');
