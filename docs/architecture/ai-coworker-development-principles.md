@@ -42,27 +42,27 @@ type ToolDefinition = {
 
 ## Principle 2: Orchestrator-Worker Pattern
 
-**A coordinator routes work to specialists. Specialists do not route to each other.**
+**Workrooms own the process; specialists execute it; the COO owns cross-room follow-through.**
 
 ### Rule
-Multi-step workflows use a hierarchical orchestrator-worker pattern. The build pipeline acts as the orchestrator, dispatching each phase to the appropriate specialist agent. Agents do not hand off directly to each other — the orchestrator mediates all transitions.
 
-### Implementation
-Each build phase maps to a specialist agent:
+Use the canonical Workroom shape, Process Overseer, governed dispatcher and
+independent review gates across business operations and delivery. Build Studio
+is one execution surface alongside external agents. A direct, authorized
+coworker handoff may supply expertise; it does not replace the room's lifecycle
+or transfer authority.
 
-| Phase | Agent Role | IT4IT Alignment | Model Tier |
-|-------|-----------|----------------|-----------|
-| Ideate | Product Designer | §5.2.1 Conceptualize | Standard (Haiku) |
-| Plan | Architect | §5.2.4 Define Architecture | Standard (Haiku) |
-| Build | Software Engineer | §5.3.3 Design & Develop | Frontier (Sonnet) |
-| Review | QA / Scrum Master | §5.3.5 Accept & Publish | Standard (Haiku) |
-| Ship | Operations Engineer | §5.4 Deploy + §5.5 Release | Standard (Haiku) |
+The Process Overseer follows local work through its outcome. The COO checks
+cross-room progress and owns unresolved recovery follow-through. A handoff,
+scheduler tick, heartbeat or queued task is not verified progress. Human
+involvement is for a specific required decision or exhausted authorized recovery,
+not routine status chasing.
 
-### Rationale
-- Simple phases (ideate, plan, review, ship) are deterministic workflows that smaller models handle well
-- The build phase requires complex multi-step tool reasoning and code generation — it needs a stronger model
-- This matches the industry pattern: cheap models for routing, expensive models for complex reasoning
-- Token budget is 3-4x lower per call, enabling more iterations within rate limits
+The current contract and pending delivery/acceptance are in
+[Coordinated Workrooms](../superpowers/specs/2026-09-03-coordinated-workrooms-design.md#october-25-amendment-coo-operational-follow-through).
+This supersedes the early build-pipeline-only interpretation and its fixed
+phase/model table. Model and tool selection follow the current task, measured
+capability and scoped authority; historical model names are not policy.
 
 ---
 
@@ -214,18 +214,27 @@ Exception: `executionMode: "proposal"` tools present a card for approval before 
 **Stop on the first error. Don't retry blindly. Tell the user what happened.**
 
 ### Rule
-When a tool call fails, the agent should:
-1. Report the error in plain language
-2. Explain what it was trying to do
-3. Suggest what the user can do (if applicable)
-4. Stop — do not retry the same call with the same arguments
+Classify the actual tool result before deciding what happens next.
 
-The agentic loop enforces a **tool repetition limit** (3-5 calls of the same tool). This is a safety net, not a feature — agents should not need it if they handle errors correctly.
+- A transient, explicitly retryable failure follows the existing bounded
+  backoff and preserves the original request identity.
+- An uncertain side effect is reconciled through its recorded result before
+  retry. A lost response does not establish failure.
+- An authorization refusal stops that action and routes its exact remedy to
+  the recorded owner. Do not switch credentials or transports to bypass it.
+- A genuine human decision is surfaced once with the options and evidence.
+- Independent authorized work continues while a dependency waits. A refusal
+  must not silently discharge the room's recovery obligation.
 
-### Rationale
-- Blind retries waste tokens and rate limit budget
-- Users need to understand what happened to provide guidance
-- The repetition limit exists because smaller models sometimes loop — but well-prompted agents with focused tool sets rarely trigger it
+Keep the blocker, recovery owner, next safe action and unblocking trigger in
+the canonical Workroom rather than asking the user to remember them. Follow
+[the common recoverability contract](2026-06-09-long-running-agentic-process-architecture.md)
+and the [current COO coordination contract](../superpowers/specs/2026-09-03-coordinated-workrooms-design.md#october-25-amendment-coo-operational-follow-through).
+This supersedes the early blanket stop-and-ask guidance.
+
+Tool repetition limits are a final circuit breaker, not a recovery strategy.
+The result and its documented retryability determine whether another attempt
+is useful; a different argument or new request identity is not itself a remedy.
 
 ---
 

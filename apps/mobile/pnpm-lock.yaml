@@ -17,6 +17,7 @@ overrides:
   shell-quote@>=1.8.4 <1.11.0: 1.11.0
   compression@<1.8.2: 1.8.2
   postcss-selector-parser@<7.1.6: 7.1.6
+  zod@>=4 <4.6.6: 4.6.7
   js-yaml@3.15.2>argparse: '-'
   jest: ^30.0.0
   jest-cli: ^30.0.0
@@ -4668,8 +4669,8 @@ packages:
   zod@3.25.76:
     resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
 
-  zod@4.6.5:
-    resolution: {integrity: sha512-v5l/aFXZQeai4awLbOpSoHecE9UiMrnfx75tEXLjNonXVARxQ5mOeipTjROUchszUNCqnE+hqAMujRsRHsut2Q==}
+  zod@4.6.7:
+    resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
 
   zustand@5.0.15:
     resolution: {integrity: sha512-MpSEjRiBkA9crSYeOUH32rJC7SVqAbm0Fqcqge/bUi2PPoLcBWKOsG+C8mevmpr8TwXHBVkChbbJiyvkE+i/3A==}
@@ -5288,7 +5289,7 @@ snapshots:
 
   '@dpf/validators@file:../../packages/validators':
     dependencies:
-      zod: 4.6.5
+      zod: 4.6.7
 
   '@emnapi/core@1.10.0':
     dependencies:
@@ -9865,7 +9866,7 @@ snapshots:
 
   zod@3.25.76: {}
 
-  zod@4.6.5: {}
+  zod@4.6.7: {}
 
   zustand@5.0.15(@types/react@19.3.0)(immer@11.1.18)(react@19.2.3)(use-sync-external-store@1.6.0(react@19.2.3)):
     optionalDependencies:

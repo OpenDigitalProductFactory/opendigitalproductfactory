@@ -47,6 +47,21 @@ The legacy `scripts/seed-worktree-mcp.{ps1,sh}` and `scripts/ensure-dpf-skill-pa
 
 Restart Claude Code in the worktree afterwards so `/mcp` picks up the `dpf` connector. See [`docs/operations/install.md`](../operations/install.md) for the readiness states and what each one means.
 
+## Routine client permissions
+
+Bootstrap also converges routine Codex, Claude and Grok permissions for the
+explicitly named source worktree through the signed updater's shared
+`--permissions-only` writer. Use that worktree as the client's actual workspace;
+the installed runtime remains an MCP administration context. Existing restrictive
+profiles, deny/ask rules and managed requirements keep their authority. A saved
+configuration does not widen an already-running managed chat.
+
+Routine independent review reuses the DEV task's existing scope, budget, grants
+and consent. No new approval is needed solely for a delivery phase. Source tests,
+protected publication and actual authority refusals still apply. See
+[routine development client permissions](../operations/install.md#routine-development-client-permissions)
+for backups, native diagnostics, parser compatibility and effective-session proof.
+
 ## Verification readiness classification
 
 The MCP seed scripts write `.dpf-worktree-readiness.json` with `compile-ready` or `source-only`.

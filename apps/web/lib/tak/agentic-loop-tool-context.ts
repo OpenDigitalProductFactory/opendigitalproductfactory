@@ -34,7 +34,7 @@ export type LoopToolContextInput = {
 
 export function loopToolContext(
   input: LoopToolContextInput,
-  extra: Pick<GovernedExecuteContext, "proposeBoundary" | "approvalCompletion" | "chatMessageId"> = {},
+  extra: Pick<GovernedExecuteContext, "proposeBoundary" | "approvalCompletion" | "chatMessageId" | "allowApprovalRequest"> = {},
 ): GovernedExecuteContext {
   return {
     routeContext: input.routeContext,
