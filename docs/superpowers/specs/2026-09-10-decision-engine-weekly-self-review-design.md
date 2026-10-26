@@ -16,9 +16,7 @@ Sections 1–9 retain the original problem and objectives; section 5 and the cor
 assumption changes only after its amendment is approved and a valid delegation exists; current
 controls remain in force.
 
-Source baseline: origin/main afd6723da1f1e20bdfd75e41f975fa81e7c89033. BI-19CEC4B4 remains
-awaiting-acceptance. Measures, executor and proposal routing exist; that does not prove an
-end-to-end corrective loop. The historical review-run/disposition models were not found in the inspected schema. Section 5 selects the existing task/result and proposal stores; persistence is settled for this amendment. Implementing that contract and independent scope approval remain owed.
+Original investigation baseline: origin/main afd6723da1f1e20bdfd75e41f975fa81e7c89033. BI-19CEC4B4 remains awaiting-acceptance for its implementation and runtime obligations. That backlog status is separate from the independent spec approval requested for this amendment. Section 5 selects the proposed persistence contract for review; it does not claim that contract is implemented or independently approved. A passing design review would approve the reviewed scope, without completing the BI, establishing runtime acceptance, or replacing required coverage and implementation admission. Existing measures, executor and routing do not prove an end-to-end corrective loop. The historical review-run/disposition models were not found; the selected contract uses existing task/result and proposal stores.
 
 ## 1. Problem
 
