@@ -21,6 +21,13 @@ proves interruption, not unchanged authority. On source base
 no call refinement. `reassign-executor-handler.ts` immediately transfers the
 lease and can admit a new assistant. There is no receiver acknowledgement.
 
+PR #6552 subsequently delivered source `1e275624e0cd6d2cca125b8417e6fd80ec896cf2`
+through protected merge `3ccdb097ae67208ab250ed2c28b53ef31efe5fe8`.
+The served request on October 24 returned `handoff-transaction-required` before
+a pending request was created. Its rejected command and unchanged boundary remain
+evidence. The transaction-proof correction below addresses that actual defect;
+source publication did not establish successful served acceptance.
+
 ## Objectives and acceptance
 
 **OBJ-1:** Complete authorized same-mandate executor handoffs without a human approval click.
@@ -35,7 +42,7 @@ lease and can admit a new assistant. There is no receiver acknowledgement.
 | AC-2 | OBJ-2 | Neither phase changes owners, participant roles, grants, sensitivity, work shape or mandate; missing delegation, restricted/consequential effects, new admission and legacy direct reassignment retain their existing gates. |
 | AC-3 | OBJ-2, OBJ-3 | Changed owner, participant eligibility, mandate, executor or lease identity refuses completion; concurrent requests serialize; duplicate commands and acknowledgements cannot execute the transfer twice. |
 | AC-4 | OBJ-3 | The existing room timeline and MCP readback distinguish waiting for acknowledgement, completed and failed; a request alone never appears as a completed transfer. |
-| AC-5 | OBJ-1, OBJ-2, OBJ-3 | Tests prove classification, actual writer effects, failures, retries and concurrency; exact-source delivery and served DEV evidence remain distinct from local tests. |
+| AC-5 | OBJ-1, OBJ-2, OBJ-3 | Tests exercise the actual receipt wrapper and Prisma callback, exact transaction-client identity, nested savepoint and outer rollback, classification, failures, retries and concurrency; exact-source delivery and served DEV evidence remain distinct from source-local tests. |
 
 ## Design grounding
 
@@ -178,10 +185,44 @@ Add real PostgreSQL races covering rolled-back failure versus accepted retry,
 and rejection publication versus a different payload, checking caller outcomes
 as well as the single durable receipt and at-most-once transfer.
 
-The handler must use the receipt's existing transaction client; it must not
-pretend that client supports a nested transaction. The production bounded path
-requires a real transaction and room lock. Missing transaction support refuses
-the bounded operation; a test adapter fallback cannot become production safety.
+The handler must use the exact server-owned client stored by the active receipt
+transaction context after bound preparation and the shared lock prefix. Require
+both an active bound context and object identity between that context's database
+client and the candidate passed to the handler. The database object is server
+input, never a public command parameter. Require the existing raw-query port to
+be callable. An absent context, an active but unbound context, or a root/foreign
+object that is not this callback client refuses before handoff effects.
+
+Presence or absence of a `$transaction` member is not transaction-membership
+proof. The installed Prisma 7 callback client can retain that member for nested
+transaction/savepoint behavior used by the existing lease writer. Preserve that
+capability inside the receipt transaction. The handoff handler must not open a
+separate outer transaction or strip client methods to satisfy a shape test.
+The existing private receipt context remains the single proof owner; introduce
+no caller flag, exported context setter, capability registry or alternate
+transaction lifecycle. The identity check adds no database query or scan.
+
+This corrects the earlier nested-transaction assumption. Before implementing it,
+run a failing request through the real receipt wrapper and actual Prisma callback,
+without mocking the transaction-proof helper or deleting `$transaction`.
+After correction, prove exact-bound-client acceptance and absent, active-unbound,
+root and foreign-client rejection. A PostgreSQL acknowledgement must exercise
+the existing lease writer's actual nested boundary. Force outer completion or
+publication failure after that boundary and prove executor kind/ref, human lease
+holder, expiry, transfer count, activity and accepted receipt roll back together.
+A handler-only mock or successful isolated nested call is insufficient.
+
+Keep a proven pre-effect transaction-required rejection durable under its old
+command key. After the deployed correction, a legitimate fresh command may use
+the existing ordinary protocol within the continuing owner instruction and
+current exact-room authority, receiver, boundary and lease. It creates one pending
+request and transfers only on the exact receiver's acknowledgement. Link and
+preserve the old rejection/envelope; never replay its key or vary a fingerprint
+to evade a refusal. Another API or human approval is not inherently required
+solely for this repaired execution. Unknown old effects, changed scope or a real
+new authority requirement retain their native remedy. If the old room no longer
+needs a handoff, retain its history and use the authorized synthetic fixture for
+positive acceptance. These are required checks, not passing results.
 
 Keep accountable assistant identity separate from an executor locator. The
 current `handler-actor.ts` resolves the OAuth human and assistant and preserves
@@ -375,3 +416,11 @@ claim before editing the pack. No force override or competing write is authorize
 Rollback removes the new phase inputs/refinement and restores the static
 authority floor. Historical activity and receipts stay readable. Pending requests
 remain uncompleted; rollback never transfers a lease or changes permissions.
+
+
+**October 26 bounded source recovery.** The existing operator-authorized recovery
+procedure is recorded in the [implementation plan](../plans/2026-10-15-bounded-workroom-handoffs.md).
+It limits this repair to exact active receipt-client identity, preserves Prisma
+nested savepoints, and records the actual failing-then-passing wrapper tests.
+Native review uncertainty and the ordinary admission requirements remain explicit;
+no independent approval, historical settlement or served acceptance is inferred.
