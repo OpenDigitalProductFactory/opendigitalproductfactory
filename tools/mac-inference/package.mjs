@@ -88,7 +88,7 @@ export async function verifyPackage(root) {
       requireValue(/^[a-f0-9]{64}$/.test(record.sha256) && record.sha256 === actual.sha256, 'File hash mismatch: ' + record.path);
     }
   }
-  for (const required of ['bin/llama-server', 'bin/llama-bench', 'LICENSE']) {
+  for (const required of ['bin/llama-server', 'bin/llama-bench', 'LICENSE', ...ENGINE_LOCK.requiredRuntimeLibraries]) {
     requireValue(seen.has(required), 'Required package file missing: ' + required);
   }
   for (const path of await enumerateFiles(root)) requireValue(path === 'manifest.json' || seen.has(path), 'Unlisted package file: ' + path);
@@ -97,6 +97,7 @@ export async function verifyPackage(root) {
     requireValue(((await lstat(join(root,path))).mode & 0o111) !== 0, 'Required binary is not executable');
     await assertArm64MachO(join(root,path));
   }
-  return { schemaVersion: 1, packageName: manifest.packageName, version: manifest.version,
+  for(const path of ENGINE_LOCK.requiredRuntimeLibraries) await assertArm64MachO(join(root,path));
+  return { schemaVersion: 1, requiredRuntimeLibrariesVerified:ENGINE_LOCK.requiredRuntimeLibraries.length, packageName: manifest.packageName, version: manifest.version,
     manifestSha256: sha256(raw), fileCount: seen.size, qualification: manifest.qualification, manifest };
 }

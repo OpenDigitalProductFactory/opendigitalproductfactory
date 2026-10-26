@@ -10,5 +10,17 @@
   },
   "patchSha256": "21d843a0f7ef5243d8633df8fd06629c3c96679c80ae3e0603c6926cfcfaa070",
   "minimumMacOS": "13.3",
-  "buildNumber": 9879
+  "buildNumber": 9879,
+  "requiredRuntimeLibraries": [
+    "bin/libggml-base.dylib",
+    "bin/libggml-blas.dylib",
+    "bin/libggml-cpu.dylib",
+    "bin/libggml-metal.dylib",
+    "bin/libggml.dylib",
+    "bin/libllama-bench-impl.dylib",
+    "bin/libllama-common.dylib",
+    "bin/libllama-server-impl.dylib",
+    "bin/libllama.dylib",
+    "bin/libmtmd.dylib"
+  ]
 }

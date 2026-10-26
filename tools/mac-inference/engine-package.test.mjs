@@ -13,7 +13,7 @@ async function fixture(t) {
   t.after(() => rm(root, { recursive: true, force: true }));
   await mkdir(join(root, 'bin'));
   const files = [];
-  for (const [path, content] of [['bin/llama-server', Buffer.from('cffaedfe0c000001736572766572', 'hex')], ['bin/llama-bench', Buffer.from('cffaedfe0c00000162656e6368', 'hex')], ['LICENSE', 'MIT fixture']]) {
+  for (const [path, content] of [['bin/llama-server', Buffer.from('cffaedfe0c000001736572766572', 'hex')], ['bin/llama-bench', Buffer.from('cffaedfe0c00000162656e6368', 'hex')], ['LICENSE', 'MIT fixture'],...ENGINE_LOCK.requiredRuntimeLibraries.map(path=>[path,Buffer.from('cffaedfe0c0000016c696272617279','hex')])]) {
     await writeFile(join(root, path), content, { mode: path.startsWith('bin/') ? 0o755 : 0o644 });
     files.push({ path, type: 'file', sizeBytes: Buffer.byteLength(content), sha256: hash(content) });
   }
@@ -27,7 +27,8 @@ async function fixture(t) {
 }
 test('verifies a complete candidate without declaring model qualification', async t => {
   const f = await fixture(t); const result = await verifyPackage(f.root);
-  assert.equal(result.fileCount, 3); assert.equal(result.qualification.status, 'unqualified');
+  assert.equal(result.fileCount, 3+ENGINE_LOCK.requiredRuntimeLibraries.length);
+  assert.equal(result.requiredRuntimeLibrariesVerified,ENGINE_LOCK.requiredRuntimeLibraries.length); assert.equal(result.qualification.status, 'unqualified');
 });
 test('rejects changed executable bytes', async t => {
   const f = await fixture(t); await writeFile(join(f.root, 'bin/llama-server'), 'tampered');
@@ -234,4 +235,10 @@ test('first qualification accepts no baseline report; reuse is explicitly option
   const argv=names.flatMap(k=>['--'+k,'fixture']);
   assert.equal(parseQualificationOptions(argv)['baseline-report'],undefined);
   assert.equal(parseQualificationOptions([...argv,'--baseline-report','prior.json'])['baseline-report'],'prior.json');
+});
+test('rejects missing Metal runtime even when its manifest row is also removed',async t=>{
+  const f=await fixture(t);
+  f.manifest.files=f.manifest.files.filter(x=>x.path!=='bin/libggml-metal.dylib');
+  await rm(join(f.root,'bin/libggml-metal.dylib'),{force:true});await f.save();
+  await assert.rejects(verifyPackage(f.root),/Required package file missing.*libggml-metal/);
 });
