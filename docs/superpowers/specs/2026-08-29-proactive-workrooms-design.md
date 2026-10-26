@@ -311,3 +311,31 @@ so the generic layers are proven before customer 0's own business rides on them.
 - [DPF-PAAW](../../architecture/four-portfolio-archetype-ai-workforce-operating-standard.md) §6, §9.5
 - [AI Coworker Proactivity Policy](2026-06-29-ai-coworker-proactivity-policy-design.md) — the engine this drives through
 - [Workroom portfolio convergence](../plans/2026-08-24-workroom-portfolio-convergence.md) — where definitions and instances live in the UI
+
+## 11. Phase G — open-source-management leaf (BI-015012AA)
+
+Slice E in §8 is the original `software-platform` standing-room profile.
+Coordinated Workrooms Phase G adds the missing leaf so a generic SaaS
+install in the same category does not inherit source-repository rooms.
+The canonical write-up is
+[2026-10-26-osm-leaf-design.md](2026-10-26-osm-leaf-design.md). The
+markers below are the scope baseline for that item, kept on this artifact
+because initiative-readiness bound this path.
+
+**OBJ-LEAF:** `open-source-management` exists as a second leaf under category `software-platform`.
+**OBJ-GATE:** `operatesASourceRepository` is true only for a leaf-id set that contains `open-source-management` and does not contain `software-platform`.
+**OBJ-SAAS:** `deriveStandingRooms` for generic `software-platform` returns five parents and seven universal children and does not include `pull-request-flow-watch`.
+**OBJ-COVER:** The seven operator concerns map onto existing room keys; no new `shapeKey` is introduced.
+**OBJ-TREE:** `deriveStandingRooms` for `open-source-management` returns the current 17-room tree, with For Employees on `contributor-relations`, `contributor-intake`, and `coworker-fitness`.
+**OBJ-MIGRATE:** After seed, this operator install points `StorefrontConfig.archetypeId` at the OSM row through the existing storefront writer without wiping operator identity or live storefront content.
+**OBJ-DEMARC:** `packages/storefront-templates` contains no forge hostname, token, owner/repo coordinate, or operator-install name.
+**OBJ-ROSTER:** Roster follows rooms via the Phase F `deriveRequiredRoster` contract; this slice does not author a second roster table.
+**OBJ-UX:** `/ea/workrooms` and Operations show the leaf-derived rooms; no new route is added.
+
+| AC-ID | Objectives | Statement |
+| --- | --- | --- |
+| AC-COVER | OBJ-COVER | The reusable leaf covers licence/provenance, security/advisory handling, contribution flow, community/adopter inquiry, release coordination, upstream/downstream relationships, and partner/reseller relationship work. |
+| AC-SAAS | OBJ-SAAS, OBJ-GATE | A generic SaaS software-platform install does not receive source-repository rooms merely from sharing the category. |
+| AC-TREE | OBJ-TREE, OBJ-MIGRATE | The live install is configured to the new leaf and retains its 5-parent/12-child hierarchy, For Employees placement, employee gates, and organization-specific WWWD profile. |
+| AC-UX | OBJ-UX | `/ea/workrooms` and Operations show the leaf-derived rooms and roster coverage. |
+| AC-VERIFY | OBJ-LEAF, OBJ-DEMARC | Focused derivation/demarcation tests, production build, migration verification, live UX verification, and canonical runtime evidence pass. |

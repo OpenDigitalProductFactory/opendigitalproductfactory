@@ -89,13 +89,15 @@ slice does not author a second roster table.
 `/platform/ai/overview` shows roster coverage after Phase F is live. No
 new route is added.
 
-Acceptance bullets, quoted from the live BI body:
+Acceptance, quoted from the live BI body and marked for the scope-baseline parser:
 
-- The reusable leaf covers licence/provenance, security/advisory handling, contribution flow, community/adopter inquiry, release coordination, upstream/downstream relationships, and partner/reseller relationship work.
-- A generic SaaS software-platform install does not receive source-repository rooms merely from sharing the category.
-- The live install is configured to the new leaf and retains its 5-parent/12-child hierarchy, For Employees placement, employee gates, and organization-specific WWWD profile.
-- `/ea/workrooms` and Operations show the leaf-derived room and roster coverage.
-- Focused derivation/demarcation tests, production build, migration verification, live UX verification, and canonical runtime evidence pass.
+| AC-ID | Objectives | Statement |
+| --- | --- | --- |
+| AC-COVER | OBJ-COVER | The reusable leaf covers licence/provenance, security/advisory handling, contribution flow, community/adopter inquiry, release coordination, upstream/downstream relationships, and partner/reseller relationship work. |
+| AC-SAAS | OBJ-SAAS, OBJ-GATE | A generic SaaS software-platform install does not receive source-repository rooms merely from sharing the category. |
+| AC-TREE | OBJ-TREE, OBJ-MIGRATE | The live install is configured to the new leaf and retains its 5-parent/12-child hierarchy, For Employees placement, employee gates, and organization-specific WWWD profile. |
+| AC-UX | OBJ-UX | `/ea/workrooms` and Operations show the leaf-derived rooms and roster coverage. |
+| AC-VERIFY | OBJ-LEAF, OBJ-DEMARC | Focused derivation/demarcation tests, production build, migration verification, live UX verification, and canonical runtime evidence pass. |
 
 ## 3. Operator-named coverage (BI-015012AA set)
 
