@@ -1,10 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import type { PrismaClient } from "../../../../../packages/db/generated/client/client";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { captureTaskExecutionFence } from "@/lib/shared/task-execution-fence";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ResolvedMcpTransportAuth } from "@/lib/mcp/transport-auth";
 import { Prisma as fixturePrisma } from "@dpf/db";
 import { createReviewPostgresFixture } from "../../../test-support/review-postgres-fixture";
+import { createReviewExecutionTransportFixture } from "../../../test-support/review-execution-transport-fixture";
 
 const state = vi.hoisted(() => ({ db: null as unknown as Record<string, unknown> }));
 vi.mock("@dpf/db", async (original) => {
@@ -18,9 +19,10 @@ vi.mock("@dpf/db", async (original) => {
     } }),
   };
 });
-// Only external provenance/storage and reviewer lookup are injected. The two
-// production writers, their transaction/locks, receipts, baselines and pins run
-// against real PostgreSQL. These fixtures are not independent review receipts.
+// Provenance/storage and reviewer authority are fixture supplied. The execution
+// helper also isolates ancillary routing/outcome/message ports. CAS, executor
+// capture, signed authentication and both writers run their real boundaries.
+// These fixtures are not independent review receipts or full admission proof.
 vi.mock("./artifact-resolver", () => ({ resolveInitiativeArtifact: async () => ({
   ok: true, artifact: { ref: artifactRef, digest: `sha256:${digest}`,
     authorPrincipalId: "fixture-author", authorAgentId: "fixture-author-agent", bytes: Buffer.from(content) },
@@ -50,16 +52,20 @@ const artifactRef = { kind: "repo-blob-at-commit" as const,
   path: "docs/superpowers/specs/fixture.md" };
 const workroomRef = { kind: "workroom-head" as const, workroomId: "WC-WRITER-FIXTURE",
   repositoryFullName: artifactRef.repositoryFullName, branchName: "fix/fixture", headSha: artifactRef.commitSha };
-const binding = { taskRunId, requestDigest, executionFence: captureTaskExecutionFence({}, requestDigest)! };
 const common = { itemId: "BI-WRITER-FIXTURE", artifactRef, workroomRef, expectedCurrentBaselineId: null,
   reason: "Isolated SQL transaction fixture.", reviewerUserId: "fixture-user", reviewerAgentId: "fixture-reviewer",
-  authorityDecisionId: "fixture-allow", tokenScope: "write", boundReviewTask: binding,
+  authorityDecisionId: "fixture-allow", tokenScope: "write",
   resolvedFindingRefs: [], supersessionDispositions: [] };
+function authenticatedWriterArgs(auth: ResolvedMcpTransportAuth) {
+  if (!auth.taskRunId) throw new Error("The writer requires its authenticated fixture task.");
+  return { ...common, reviewerUserId: auth.userId, reviewerAgentId: auth.agentId ?? null, tokenScope: auth.capability,
+    boundReviewTask: { taskRunId: auth.taskRunId, requestDigest, executionFence: auth.taskExecutionFence } };
+}
 const writers = [
-  { gate: "design-spec", run: () => recordInitiativeGateReceipt({ ...common, actionKey: "record_initiative_design_review",
+  { gate: "design-spec", run: (auth: ResolvedMcpTransportAuth) => recordInitiativeGateReceipt({ ...authenticatedWriterArgs(auth), actionKey: "record_initiative_design_review",
     gate: "design-spec", allowedGates: ["design-spec"], requiredCapability: "manage_backlog", requiredGrant: "initiative_design_review",
     requiresIndependentReviewer: true, decision: "pass", findings: [] }) },
-  { gate: "spec-approval", run: () => recordInitiativeSpecApproval({ ...common, profile: "feature", artifactRole: "design-spec" }) },
+  { gate: "spec-approval", run: (auth: ResolvedMcpTransportAuth) => recordInitiativeSpecApproval({ ...authenticatedWriterArgs(auth), profile: "feature", artifactRole: "design-spec" }) },
 ] as const;
 
 function earlyWriterResult(result: { ok: boolean; code?: string; error?: string }) {
@@ -75,12 +81,15 @@ it("exposes the real Prisma transaction isolation helper before PostgreSQL admis
 describe.skipIf(!url)("canonical review writer transactions on PostgreSQL", () => {
   let pool: Pool, db: PrismaClient;
   let fixture: Awaited<ReturnType<typeof createReviewPostgresFixture>> | undefined;
+  let closeExecution: (() => Promise<void>) | undefined;
   beforeAll(async () => {
     fixture = await createReviewPostgresFixture({ url: url!, schema, tables });
     ({ pool, db } = fixture);
     state.db = db as unknown as Record<string, unknown>;
   });
   afterAll(async () => {
+    // A failed drain must prevent dropping a schema still used by an executor.
+    await closeExecution?.();
     await fixture?.close();
   });
 
@@ -94,6 +103,9 @@ describe.skipIf(!url)("canonical review writer transactions on PostgreSQL", () =
     throw new Error(`The actual writer did not reach its PostgreSQL ${table} lock.`);
   }
   const verdictCount = () => db.backlogItemActivity.count({ where: { kind: "initiative_gate_receipt" } });
+  const baselineCount = () => db.backlogItemActivity.count({ where: { kind: "initiative_scope_baseline" } });
+  const fenceRefusal = { ok: false, code: "AUTHORIZATION_DENIED",
+    error: "The bound review execution is held, uncertain, unversioned or displaced. No new review effect was published." };
 
   it("uses real isolated enums with canonical labels and no public table fallback", async () => {
     const types = await pool.query<{ namespace: string; type_kind: string; labels_match: boolean }>(`
@@ -125,11 +137,13 @@ describe.skipIf(!url)("canonical review writer transactions on PostgreSQL", () =
           : change === "authority" ? { reviewExecutionAuthority: { schemaVersion: 1, tokenId: "new-authority" } } : {};
     const status = change === "cancellation" ? "canceled"
       : ["hold", "unknown"].includes(change) ? "input-required" : "working";
-    await client.query('UPDATE "TaskRun" SET status=$1,"progressPayload"=$2::jsonb,"updatedAt"=clock_timestamp() WHERE "taskRunId"=$3', [status, JSON.stringify(progress), taskRunId]);
+    await client.query('UPDATE "TaskRun" SET status=$1,"progressPayload"=COALESCE("progressPayload",\'{}\'::jsonb)||$2::jsonb,"updatedAt"=clock_timestamp() WHERE "taskRunId"=$3', [status, JSON.stringify(progress), taskRunId]);
   }
 
   for (const writer of writers) describe(writer.gate, () => {
+    let session: Awaited<ReturnType<typeof createReviewExecutionTransportFixture>>;
     beforeEach(async () => {
+      await closeExecution?.();
       await pool.query(`TRUNCATE ${tables.map(table => `"${table}"`).join(",")}`);
       await db.organization.create({ data: { orgId: "fixture-org", slug: "fixture-org", name: "Fixture" } });
       await db.backlogItem.create({ data: { itemId: common.itemId, title: "Fixture", status: "open", type: "product", workType: "feature", scopeKind: "platform" } });
@@ -137,13 +151,45 @@ describe.skipIf(!url)("canonical review writer transactions on PostgreSQL", () =
         backlogItemId: common.itemId, createdByPrincipalId: "fixture-author",
         repositoryFullName: artifactRef.repositoryFullName, headBranch: workroomRef.branchName, headSha: artifactRef.commitSha } });
       await db.taskRun.create({ data: { taskRunId, userId: common.reviewerUserId, currentAgentId: common.reviewerAgentId,
-        title: "Fixture", objective: "Fixture", status: "working", progressPayload: {}, a2aMetadata: {
+        title: "Fixture", objective: "Fixture", status: "submitted", progressPayload: {}, a2aMetadata: {
           trigger: "external-mcp", requestDigest, initiativeReviewBinding: { writerToolName: "record_initiative_design_review",
             itemId: common.itemId, gate: writer.gate, artifactRef, workroomRef, expectedCurrentBaselineId: null },
         } } });
       await db.authorizationDecisionLog.create({ data: { decisionId: common.authorityDecisionId, actorType: "agent", actorRef: common.reviewerAgentId,
         actionKey: "record_initiative_design_review", decision: "allow", policyVersion: "fixture-v1", rationale: { taskRunId } } });
+      session = await createReviewExecutionTransportFixture({ db, taskRunId, requestDigest, userId: common.reviewerUserId,
+        registerCleanup: close => { closeExecution = close; },
+        parsed: { agentId: common.reviewerAgentId, routeContext: "/build", title: "Fixture", objective: "Fixture", prompt: "Fixture",
+          idempotencyKey: `fixture:${writer.gate}`, riskClass: "bounded-write", collaborationKind: "handoff",
+          authorityScope: [`backlog-item:${common.itemId}`, "tool:record_initiative_design_review"],
+          initiativeReviewBinding: { writerToolName: "record_initiative_design_review", itemId: common.itemId,
+            gate: writer.gate, artifactRef, workroomRef, expectedCurrentBaselineId: null } } });
     });
+    afterEach(async () => {
+      await closeExecution?.();
+    }, 15000);
+
+    it("commits a new effect from the executor-captured and authenticated session", async () => {
+      const result = await writer.run(session.auth);
+      expect(result).toMatchObject({ ok: true });
+      if (!result.ok) throw earlyWriterResult(result);
+      expect(await db.backlogItemActivity.findUnique({ where: { id: result.receiptId } }))
+        .toMatchObject({ kind: "initiative_gate_receipt" });
+      expect(await verdictCount()).toBe(1);
+      expect(await baselineCount()).toBe(writer.gate === "spec-approval" ? 1 : 0);
+      expect(await db.initiativeArtifactRetentionPin.count()).toBe(writer.gate === "spec-approval" ? 1 : 0);
+      expect(await db.taskRun.findUnique({ where: { taskRunId } })).toMatchObject({ status: "working" });
+    }, 15000);
+
+    it("authenticates a signed legacy session but refuses its unfenced new effect", async () => {
+      const legacy = await session.authenticateWithoutFence();
+      expect(legacy).toMatchObject({ source: "session-jwt", taskRunId });
+      expect(legacy.taskExecutionFence).toBeUndefined();
+      expect(await writer.run(legacy)).toMatchObject(fenceRefusal);
+      expect(await verdictCount()).toBe(0);
+      expect(await baselineCount()).toBe(0);
+      expect(await db.initiativeArtifactRetentionPin.count()).toBe(0);
+    }, 15000);
 
     async function markPresent() {
       const owner = await db.backlogItem.create({ data: { itemId: "BI-7906C73E", title: "Synthetic policy owner", status: "open", type: "product" } });
@@ -161,7 +207,7 @@ describe.skipIf(!url)("canonical review writer transactions on PostgreSQL", () =
 
     it("refuses a new marked V2 effect without actual promoted E authority", async () => {
       await markPresent();
-      expect(await writer.run()).toMatchObject({ ok: false, code: "AUTHORIZATION_DENIED" });
+      expect(await writer.run(session.auth)).toMatchObject({ ok: false, code: "AUTHORIZATION_DENIED" });
       expect(await verdictCount()).toBe(0);
       expect(await db.initiativeArtifactRetentionPin.count()).toBe(0);
     });
@@ -172,7 +218,7 @@ describe.skipIf(!url)("canonical review writer transactions on PostgreSQL", () =
       await blocker.query("BEGIN");
       try {
         await blocker.query('SELECT "id" FROM "BacklogItem" WHERE "id"=$1 FOR UPDATE', [owner.id]);
-        publication = writer.run(); void publication.catch(() => undefined);
+        publication = writer.run(session.auth); void publication.catch(() => undefined);
         await Promise.race([waitForBlockedWriter("BacklogItem"), publication.then(result => { throw earlyWriterResult(result); })]);
         await blocker.query("COMMIT");
         expect(await publication).toMatchObject({ ok: false, code: "AUTHORIZATION_DENIED" });
@@ -183,15 +229,19 @@ describe.skipIf(!url)("canonical review writer transactions on PostgreSQL", () =
     }, 15000);
 
     it("reads its genuine committed receipt after quarantine and loss of the current policy owner", async () => {
-      expect(await writer.run()).toMatchObject({ ok: true });
+      const result = await writer.run(session.auth);
+      expect(result).toMatchObject({ ok: true });
+      if (!result.ok) throw earlyWriterResult(result);
       const owner = await markPresent();
       await db.taskRun.update({ where: { taskRunId }, data: { status: "input-required", progressPayload: {
         reassessmentQuarantine: { schemaVersion: 1, replayAllowed: false },
       } } });
       await db.backlogItem.delete({ where: { id: owner.id } });
-      expect(await writer.run()).toMatchObject({ ok: true, deduplicated: true });
+      expect(await writer.run(session.auth)).toMatchObject({ ok: true, receiptId: result.receiptId, deduplicated: true });
       expect(await verdictCount()).toBe(1);
+      expect(await baselineCount()).toBe(writer.gate === "spec-approval" ? 1 : 0);
       expect(await db.initiativeArtifactRetentionPin.count()).toBe(writer.gate === "spec-approval" ? 1 : 0);
+      expect(await db.taskRun.findUnique({ where: { taskRunId } })).toMatchObject({ status: "input-required" });
     });
 
     it.each(["hold", "unknown", "working-unknown", "generation", "dispatch", "authority", "cancellation"])("appends nothing when %s wins the real row lock", async (change) => {
@@ -200,12 +250,13 @@ describe.skipIf(!url)("canonical review writer transactions on PostgreSQL", () =
       let pending: ReturnType<typeof writer.run> | undefined;
       try {
         await displace(blocker, change);
-        pending = writer.run();
+        pending = writer.run(session.auth);
         void pending.catch(() => undefined);
         await Promise.race([waitForBlockedWriter(), pending.then(result => { throw earlyWriterResult(result); })]);
         await blocker.query("COMMIT");
-        expect(await pending).toMatchObject({ ok: false });
+        expect(await pending).toMatchObject(change === "cancellation" ? { ok: false } : fenceRefusal);
         expect(await verdictCount()).toBe(0);
+        expect(await baselineCount()).toBe(0);
         expect(await db.initiativeArtifactRetentionPin.count()).toBe(0);
       } finally {
         await blocker.query("ROLLBACK");
@@ -223,7 +274,7 @@ describe.skipIf(!url)("canonical review writer transactions on PostgreSQL", () =
         // Both actual writers lock TaskRun before BacklogItem. Hold only the
         // subject so the writer owns its TaskRun lock before queuing the hold.
         await subjectBlocker.query('SELECT "id" FROM "BacklogItem" WHERE "itemId"=$1 FOR UPDATE', [common.itemId]);
-        publication = writer.run();
+        publication = writer.run(session.auth);
         void publication.catch(() => undefined);
         await Promise.race([waitForBlockedWriter("BacklogItem"), publication.then(result => { throw earlyWriterResult(result); })]);
         displacement = displace(taskUpdater, "unknown");
@@ -232,10 +283,13 @@ describe.skipIf(!url)("canonical review writer transactions on PostgreSQL", () =
         await subjectBlocker.query("COMMIT");
         const result = await publication;
         expect(result).toMatchObject({ ok: true });
+        if (!result.ok) throw earlyWriterResult(result);
         await displacement;
-        expect(await writer.run()).toMatchObject({ ok: true, deduplicated: true });
+        expect(await writer.run(session.auth)).toMatchObject({ ok: true, receiptId: result.receiptId, deduplicated: true });
         expect(await verdictCount()).toBe(1);
+        expect(await baselineCount()).toBe(writer.gate === "spec-approval" ? 1 : 0);
         expect(await db.initiativeArtifactRetentionPin.count()).toBe(writer.gate === "spec-approval" ? 1 : 0);
+        expect(await db.taskRun.findUnique({ where: { taskRunId } })).toMatchObject({ status: "input-required" });
       } finally {
         await subjectBlocker.query("ROLLBACK");
         await publication?.catch(() => undefined); await displacement?.catch(() => undefined);
