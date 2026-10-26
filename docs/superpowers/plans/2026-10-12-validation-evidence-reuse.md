@@ -463,3 +463,11 @@ Reestablish an eligible same-source receipt before changing only environment
 in the reuse regression, so a base change cannot explain that cache miss.
 These paths are included in the current 16-path Workroom impact contract;
 there are no additional inferred tests, guards, or dependency edges.
+
+Current atomic coverage is `cmvpcyepm6kqy01mtx0vm7pcl`, binding the published
+plan commit `d2df31b5c34d9f3f756d1db914a2fbcb10433208` and blob
+`4dd14443295f9047d170fa5d28d401732b17c905` to the declared 16-path scope.
+The native check returned valid, and implementation admission
+`IRD-7C4C0BCDD8C5` allowed continuation. The only filtered fetch in the current
+readiness inventory is Decision Baseline's already-performed origin/main
+setup; unrelated evidence fetches remain in the plan. No dependency edges.
