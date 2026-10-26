@@ -43,6 +43,28 @@ and keeps its retry budget. Exact new-task history takes precedence. Issuance an
 authorization resolve with the same current OAuth task authority for all four
 independent gates; neither path accepts a caller-constructed replacement.
 
+The original document reviews in WC-0AB5A73C expose a remaining connection-change
+case: their persisted keys have no reviewer suffix, while a current connection
+can issue a reviewer-scoped key without finding that original family. Before
+issuing a replacement, the history adapter checks at most two pending OAuth
+tasks for the same human, exact legacy key and immutable review binding. It
+validates each recorded family's deterministic task identity. This restores only
+the candidate key; it never treats another family's task as exhausted or grants
+execution authority. Changed reviewer identity, request digest, authority,
+deadline, uncertain execution or an ambiguous original remains subject to the
+existing original-task recovery refusal and generation checks.
+
+The adapter and recovery guard form one delivery unit. The guard must also check
+the original legacy key when an exact reviewer-scoped task exists, so the newer
+task cannot conceal a pending original. Concurrent originals, including combined
+reviewer and connection changes, must return a non-dispatchable result. Preserve
+the existing proven same-family exhausted-reviewer alternative; locating pending
+history is not authority to reset its budget or replay it. Do not publish the
+adapter alone. Acceptance requires normal original-task readback after deployment,
+with no sibling TaskRun, before any actual bounded continuation. The observed
+six-read failure still needs its real traversal evidence; this routing repair
+does not increase the reader budget or claim a review verdict.
+
 Compare the already shipped plan-review implementation with each affected gate.
 A parameterized regression proves both predicate admission and alternate
 selection. Negative fixtures preserve non-exhausted/foreign/uncertain states.

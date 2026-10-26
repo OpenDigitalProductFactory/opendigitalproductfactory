@@ -61,7 +61,7 @@ export async function unloadWithRestorationObligation(report, unload) {
 export function validateOwnedLease(v,expected) {
   if(!v || v.leaseId!==expected.id || v.status!=='active' || v.phase!=='running'
     ||v.slotManifestVersion!==1||v.environmentKey!=='local-integration-ci'
-    ||v.ownerSessionId!==expected.owner||v.branchName!=='codex/mac-metal-engine-package'
+    ||v.ownerSessionId!==expected.owner||v.branchName!==(expected.branch??'codex/mac-metal-engine-package')
     ||!validLeaseExpiry(v.expiresAt)) fail('Exact active bound qualification lease not proven');
   return v;
 }
@@ -91,7 +91,7 @@ async function json(url, body, timeout=240000, cancellation=abort.signal) {
   if (!r.ok) fail('Diagnostic HTTP '+r.status+' at '+new URL(url).pathname);
   return r.json();
 }
-function metric(response, elapsedMs) {
+export function metric(response, elapsedMs) {
   const usage=response.usage??{}; const t=response.timings??{};
   const number=x=>typeof x==='number'&&Number.isFinite(x)?x:null;
   return {elapsedMs,promptTokens:number(usage.prompt_tokens),outputTokens:number(usage.completion_tokens),
@@ -115,30 +115,30 @@ async function complete(base, messages, tools, recovery=false) {
   return {response,metric:metric(response,performance.now()-start)};
   }});
 }
-async function testEndpoint(label, base, context) {
+export async function testEndpoint(label, base, context, {request=complete,results=report.results}={}) {
   console.log(JSON.stringify({phase:label+'-model-checks'}));
-  const arithmetic=await complete(base,[{role:'user',content:'What is 19 + 23? Return only the integer.'}]);
+  const arithmetic=await request(base,[{role:'user',content:'What is 19 + 23? Return only the integer.'}]);
   const message=arithmetic.response.choices?.[0]?.message;
-  report.results.push({engine:label,case:'arithmetic',correct:message?.content?.trim()==='42'
+  results.push({engine:label,case:'arithmetic',correct:message?.content?.trim()==='42'
     && arithmetic.metric.finishReason==='stop',...arithmetic.metric});
   const tools=[{type:'function',function:{name:'record_result',description:'Return a calculated integer.',
     parameters:{type:'object',properties:{value:{type:'integer'}},required:['value'],additionalProperties:false}}}];
-  const tool=await complete(base,[{role:'user',content:'Call record_result with value equal to 19 + 23.'}],tools);
+  const tool=await request(base,[{role:'user',content:'Call record_result with value equal to 19 + 23.'}],tools);
   let correct=false;
   try { const calls=tool.response.choices[0].message.tool_calls;
     correct=calls.length===1 && calls[0].function.name==='record_result'
       && JSON.parse(calls[0].function.arguments).value===42 && tool.metric.finishReason==='tool_calls';
   } catch { /* absent or malformed tool output is a failed observation */ }
-  report.results.push({engine:label,case:'tool-call-format',correct,...tool.metric});
+  results.push({engine:label,case:'tool-call-format',correct,...tool.metric});
   const messages=coldMessages(context);
-  const cold=await complete(base,messages);
+  const cold=await request(base,messages);
   const coldMessage=cold.response.choices?.[0]?.message;
-  report.results.push({engine:label,case:'long-cold',correct:coldMessage?.content?.trim()==='MATCH731'
+  results.push({engine:label,case:'long-cold',correct:coldMessage?.content?.trim()==='MATCH731'
     && cold.metric.finishReason==='stop',...cold.metric});
   if (!coldMessage || typeof coldMessage.content!=='string') fail('Cold completion missing');
   // Preserve the actual assistant message in memory so the next prefix is faithful.
-  const warm=await complete(base,[...messages,coldMessage,{role:'user',content:'Repeat only the same benchmark marker.'}]);
-  report.results.push({engine:label,case:'long-warm',correct:warm.response.choices?.[0]?.message?.content?.trim()==='MATCH731'
+  const warm=await request(base,[...messages,coldMessage,{role:'user',content:'Repeat only the same benchmark marker.'}]);
+  results.push({engine:label,case:'long-warm',correct:warm.response.choices?.[0]?.message?.content?.trim()==='MATCH731'
     && warm.metric.finishReason==='stop',...warm.metric});
 }
 async function runnersIdle(root) {
@@ -303,10 +303,10 @@ async function main() {
   });
   if(supervision.status==='fenced') {report.backendEffectSettlement='unknown after authority fence; HTTP abort is not effect settlement';fail('Qualification fenced: '+supervision.reason);}
 }
-function makeContext(n) {
+export function makeContext(n) {
   return 'DPF_MAC_ENGINE_QUALIFICATION_V1\n'+Array.from({length:n},(_,i)=>'Record '+String(i).padStart(4,'0')+' is archived.').join('\n')+'\nThe benchmark marker is MATCH731.';
 }
-function coldMessages(context) {
+export function coldMessages(context) {
   return [{role:'system',content:context},{role:'user',content:'Return only the benchmark marker.'}];
 }
 function workloadRecord(lines) {

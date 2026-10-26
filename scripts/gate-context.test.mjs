@@ -292,3 +292,36 @@ test("review outage routes to publication policy without inventing a review pass
   assert.match(brief.nextAction, /unrun/);
   assert.equal(brief.authorizesExecution, false);
 });
+
+test("an explicit candidate keeps diff scope immutable while the default includes working changes", async t => {
+  const { mkdtempSync, writeFileSync, rmSync } = await import("node:fs");
+  const { collectWorktreeDiff } = await import("./gate-context.mjs");
+  const cwd = mkdtempSync(join(tmpdir(), "dpf-pinned-scope-"));
+  t.after(() => rmSync(cwd, { recursive: true, force: true }));
+  const git = args => {
+    const result = spawnSync("git", args, { cwd, encoding: "utf8", windowsHide: true });
+    assert.equal(result.status, 0, result.stderr);
+    return result.stdout.trim();
+  };
+  const commit = message => { git(["add", "."]); git(["-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "-m", message]); };
+  git(["init", "-b", "topic"]);
+  writeFileSync(join(cwd, "AGENTS.md"), "base\n");
+  commit("base");
+  const base = git(["rev-parse", "HEAD"]);
+  writeFileSync(join(cwd, "AGENTS.md"), "base\ncandidate\n");
+  commit("candidate");
+  const head = git(["rev-parse", "HEAD"]);
+  writeFileSync(join(cwd, "later.ts"), "export const later = true;\n");
+  commit("later candidate");
+  git(["update-ref", "refs/remotes/origin/main", "HEAD"]);
+  writeFileSync(join(cwd, "AGENTS.md"), "base\ncandidate\ndirty\n");
+  writeFileSync(join(cwd, "untracked.ts"), "untracked\n");
+
+  const pinned = collectWorktreeDiff({ base, head, cwd });
+  assert.deepEqual(pinned.changedFiles, [{ path: "AGENTS.md", status: "M" }]);
+  assert.deepEqual([...pinned.addedLinesByFile], [["AGENTS.md", 1]]);
+  assert.equal(pinned.mergeBase, base);
+  const working = collectWorktreeDiff({ base, cwd });
+  assert.deepEqual(working.changedFiles.map(entry => entry.path).sort(), ["AGENTS.md", "later.ts", "untracked.ts"]);
+  assert.equal(working.addedLinesByFile.get("AGENTS.md"), 2);
+});

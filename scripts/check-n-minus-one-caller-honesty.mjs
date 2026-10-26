@@ -134,8 +134,8 @@ export function findViolations({ baselineCallerKeys, harnessKeys, scaffolding = 
     .sort();
 }
 
-function resolveBaseRef(explicit) {
-  if (explicit) return explicit;
+export function resolveBaseRef(explicit, env = process.env) {
+  if (explicit || env.BASE_SHA) return explicit || env.BASE_SHA;
   for (const candidate of ["origin/main", "main"]) {
     try {
       git(["rev-parse", "--verify", "--quiet", candidate]);

@@ -23,6 +23,11 @@ export const GIT_OK = spawnSync("git", ["--version"], { encoding: "utf8" }).stat
 // when vitest runs two of these files side by side. A hung promote still fails.
 export const PROMOTE_TEST_TIMEOUT_MS = 120_000;
 
+export function reassessmentCapabilityFixture(sourceSha: string): string {
+  return JSON.stringify({ schemaVersion: 1, sourceSha, sourceContentHash: "a".repeat(64), contractSha256: "b".repeat(64),
+    owners: Object.fromEntries(["transport", "approval", "worker", "writer"].map(owner => [owner, { version: 2, sourceSha256: "e".repeat(64) }])) });
+}
+
 let bashDrivePrefix: string | undefined;
 
 export function toBashPath(value: string): string {
@@ -125,7 +130,7 @@ if [ "\${1-}" = inspect ] || { [ "\${1-}" = image ] && [ "\${2-}" = inspect ]; }
         [ "\${DPF_TEST_SANDBOX_IMAGE_MODEL:-}" = uninspectable ] && exit 1
         if [ "\${DPF_TEST_SANDBOX_IMAGE_MODEL:-}" = build-compatibility ] && [ "$inspect_target" = bi547-source-check-sandbox ]; then exit 1; fi
         printf 'sha256:sandbox-target'
-      else printf "%s" "\${DPF_TEST_RELEASE_ENGINE_ID:-$DPF_TEST_RELEASE_CONFIG_DIGEST}"; fi
+      else printf "%s" "\${DPF_TEST_RELEASE_ENGINE_ID:-\${DPF_TEST_RELEASE_CONFIG_DIGEST:-sha256:${"c".repeat(64)}}}"; fi
       exit 0 ;;
     "{{range .RepoDigests}}{{println .}}{{end}}")
       printf "%s@%s\\n" "$DPF_TEST_RELEASE_REPO" "\${DPF_TEST_RELEASE_REPO_ID:-$DPF_TEST_RELEASE_ENGINE_ID}"; exit 0 ;;
@@ -136,6 +141,10 @@ if [ "\${1-}" = inspect ] || { [ "\${1-}" = image ] && [ "\${2-}" = inspect ]; }
   esac
 fi
 case "$*" in
+  *"/app/scripts/reassessment-capability-probe.mjs"*)
+    [ -n "\${DPF_TEST_REASSESSMENT_REPORT:-}" ] || exit 78
+    printf '%s' "$DPF_TEST_REASSESSMENT_REPORT"
+    ;;
   *"ps -q sandbox"*) printf 'sandbox-container' ;;
   *"config --images sandbox"*)
     case "\${DPF_TEST_SANDBOX_IMAGE_MODEL:-}" in
@@ -217,7 +226,7 @@ case "$*" in
       printf "not-needed"
     fi
     ;;
-  *"up -d --no-deps --force-recreate portal"*|*"up -d --no-deps --force-recreate sandbox"*)
+  *"up -d --no-build --no-deps --force-recreate portal"*|*"up -d --no-deps --force-recreate sandbox"*)
     case "$*" in *"force-recreate sandbox"*) [ "\${DPF_TEST_SANDBOX_RECREATE_FAILS:-0}" = "1" ] && exit 1 ;; esac
     service=
     for service in "$@"; do :; done
@@ -255,6 +264,9 @@ exit 0
   );
   chmodSync(join(bin, "docker"), 0o755);
   chmodSync(join(bin, "curl"), 0o755);
+  // Bind timed commands to this companion shim even if the caller changes PATH.
+  writeFileSync(join(bin, "timeout"), '#!/bin/sh\n[ "$1" = "-k" ] || exit 64\nshift 3\n[ "$1" = "docker" ] || exit 64\nshift\nexec "$(dirname "$0")/docker" "$@"\n');
+  chmodSync(join(bin, "timeout"), 0o755);
   return bin;
 }
 
@@ -338,6 +350,7 @@ export function runPromote(opts: {
     `export PROMOTE_SOURCE=${shellQuote(toBashPath(opts.source))}`,
     ...(opts.installRoot ? [`export PROMOTE_INSTALL_ROOT=${shellQuote(toBashPath(opts.installRoot))}`] : []),
     `export PROMOTE_TARGET_SHA=${shellQuote(opts.targetSha)}`,
+    `export DPF_TEST_REASSESSMENT_REPORT=${shellQuote(reassessmentCapabilityFixture(opts.targetSha))}`,
     `export PROMOTE_BACKUP_PATH=${shellQuote(toBashPath(opts.backup))}`,
     `export DPF_PROMOTER_STATE_DIR=${shellQuote(toBashPath(join(opts.backup, "state")))}`,
     `export DPF_RUNTIME_TRANSITION_SECRET_FILE=${shellQuote(toBashPath(secretPath))}`,

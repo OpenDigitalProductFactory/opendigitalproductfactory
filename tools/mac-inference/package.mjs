@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import { createReadStream, constants } from 'node:fs';
-import { readFile, readdir, lstat, realpath, readlink, open } from 'node:fs/promises';
-import { resolve, relative, isAbsolute, join, dirname } from 'node:path';
+import { readFile, readdir, lstat, realpath, readlink, open, access } from 'node:fs/promises';
+import { resolve, relative, isAbsolute, join, dirname, basename } from 'node:path';
+import { homedir } from 'node:os';
 
 export const ENGINE_LOCK = JSON.parse(await readFile(new URL('./engine.lock.json', import.meta.url), 'utf8'));
 export const sha256 = value => createHash('sha256').update(value).digest('hex');
@@ -46,13 +47,30 @@ export async function fileRecord(root, path) {
   requireValue(contained(await realpath(root), await realpath(full)), 'File escapes package');
   return { path, type: 'file', sizeBytes: stat.size, sha256: await hashFile(full) };
 }
-async function assertArm64MachO(path) {
+export async function assertArm64MachO(path) {
   const fd = await open(path, 'r');
   try {
     const header = Buffer.alloc(8); const read = await fd.read(header,0,8,0);
     requireValue(read.bytesRead === 8 && header.readUInt32LE(0) === 0xfeedfacf
       && header.readUInt32LE(4) === 0x0100000c, 'Required arm64 Mach-O binary: ' + path);
   } finally { await fd.close(); }
+}
+// Shared by native builders: never replace an install or emit into a checkout.
+export async function unusedOutput(value) {
+  if (!value) throw new Error('--out is required');
+  const path = resolve(value); const parent = await realpath(dirname(path));
+  const actual = join(parent, basename(path));
+  for (const forbidden of [homedir(), '/Applications', '/System', '/usr', '/bin', '/sbin', '/Library', join(homedir(), '.docker')]) {
+    if (actual === forbidden || (forbidden !== homedir() && contained(forbidden, actual))) throw new Error('Protected output path');
+  }
+  for (let p = parent; ; p = dirname(p)) {
+    try { await access(join(p,'.git')); throw new Error('Output must be outside a Git checkout'); }
+    catch (error) { if (error.code !== 'ENOENT') throw error; }
+    if (p === dirname(p)) break;
+  }
+  try { await lstat(actual); throw new Error('Output already exists; no replacement is permitted'); }
+  catch (error) { if (error.code !== 'ENOENT') throw error; }
+  return actual;
 }
 export async function readPackageManifest(path,openFile=open) {
   const limit=1024*1024;
@@ -119,11 +137,14 @@ export async function verifyPackage(root) {
 
 // Keep embedded third-party notices verbatim, including headers whose projects
 // do not ship a standalone LICENSE file inside llama.cpp's vendor directory.
-export async function vendorNoticePaths(root) {
+export async function vendorNoticePaths(root, { includeHeaders = true, includePatents = false } = {}) {
   const paths=await readdir(root,{recursive:true});
   const selected=[];
   for(const path of paths) {
-    if(!/^(LICENSE|COPYING|NOTICE)(\.|$)/i.test(path.split('/').at(-1))&&!/\.(h|hpp)$/i.test(path)) continue;
+    const name = path.split('/').at(-1);
+    if(!/^(LICENSE|COPYING|NOTICE)(\.|$)/i.test(name)
+      && !(includePatents && /^PATENTS(\.|$)/i.test(name))
+      && !(includeHeaders && /\.(h|hpp)$/i.test(name))) continue;
     if((await lstat(join(root,path))).isFile()) selected.push(path);
   }
   return selected.sort();

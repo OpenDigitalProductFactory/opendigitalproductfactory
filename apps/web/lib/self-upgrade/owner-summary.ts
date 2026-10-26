@@ -17,6 +17,7 @@
 import type { LocalChangesResult } from "@/lib/self-upgrade/local-changes-ledger";
 import { describeSkipReason } from "@/lib/self-upgrade/skip-reason";
 import { describeFailureReason } from "@/lib/self-upgrade/failure-reason";
+import type { SelfUpgradeRecoveryState } from "@/lib/self-upgrade/recovery-eligibility";
 import { isLandedSwapFalseFailureReason } from "@/lib/self-upgrade/landed-swap-identity";
 
 /** The release state an owner cares about — deliberately coarser than the run status machine. */
@@ -105,13 +106,8 @@ export interface OwnerReleaseInput {
   blackoutUntil: string | null;
   blackoutName: string | null;
   platformVersion: { version: string; gitSha: string | null };
-  /**
-   * Whether a governed recovery point exists for the last run, so this update
-   * can be undone. Computed by the caller (via `hasGovernedRecoveryPoint`) and
-   * passed in as a plain boolean, keeping this builder free of the prisma-backed
-   * rollback module.
-   */
-  rollbackAvailable: boolean;
+  /** Restore policy projection, separate from the existence of a saved backup. */
+  recovery: Pick<SelfUpgradeRecoveryState, "available" | "detail">;
   latestRun: {
     status: string;
     reason: string | null;
@@ -273,14 +269,10 @@ export function buildOwnerReleaseSummary(
         detail: localChanges.note ?? "We couldn't check your local changes just now.",
       };
 
-  const rollbackAvailable = input.rollbackAvailable;
+  const rollbackAvailable = input.recovery.available;
   const rollback = {
     available: rollbackAvailable,
-    detail: state === "unavailable"
-      ? "There is no automatic update action to undo on this install."
-      : rollbackAvailable
-      ? "You can restore the version from before the last update — a recovery point was saved."
-      : "A recovery point is saved automatically before each update, so an update can be undone.",
+    detail: input.recovery.detail,
   };
 
   const breaking = input.latestRunImpact?.counts.breaking ?? 0;
@@ -308,10 +300,10 @@ export function buildOwnerReleaseSummary(
         : "The previous attempt didn't finish — check the details below before you retry.",
     );
   }
-  // Always reassure with the safety net, last.
+  // A prior-image fallback is conditional; a saved backup does not guarantee undo.
   if (state !== "unavailable") {
     whatCouldGoWrong.push(
-      "If an update fails, the platform restores the previous version on its own.",
+      "A prior version can be used only if it is compatible with the retained history.",
     );
   }
 
@@ -376,11 +368,9 @@ export function buildOwnerReleaseSummary(
       }
       riskNotice = {
         consequence: "Installs the new version and briefly restarts the portal.",
-        reversibility: rollbackAvailable
-          ? "Reversible — restore the saved recovery point to undo it."
-          : "A recovery point is saved first, so it can be undone.",
+        reversibility: rollback.detail,
         duration: "Usually a few minutes.",
-        recovery: "If it fails, the previous version is restored automatically.",
+        recovery: "A prior version can be used only if it is compatible with the retained history.",
       };
       break;
     case "in-progress":

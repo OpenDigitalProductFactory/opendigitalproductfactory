@@ -419,6 +419,32 @@ describe("bound terminal effect identity carriage", () => {
     mocks.findReads.mockResolvedValue([]);
   });
 
+  it.each(["design-spec", "spec-approval"])("refuses an external TaskRun's %s writer when its accepted binding is absent", async gate => {
+    mocks.findTaskRun.mockResolvedValue({ a2aMetadata: { trigger: "external-mcp", initiativeReviewBinding: null } });
+    mocks.recordGateReceipt.mockResolvedValue({ ok: true, receiptId: "unbound-receipt" });
+    mocks.recordSpecApproval.mockResolvedValue({ ok: true, receiptId: "unbound-receipt", baselineId: "unbound-baseline" });
+    const result = await initiativeReadinessPack.handlers.record_initiative_design_review!({ ...params, itemId: "BI-BOUND", gate, artifactRef },
+      "user", { taskRunId: "TR-UNBOUND", agentId: "AGT-WS-REVIEW", authorityDecisionId: "AUTH-1", tokenScope: "write" } as never);
+    expect(result).toMatchObject({ success: false, error: "initiative_review_binding_required" });
+    expect(mocks.recordGateReceipt).not.toHaveBeenCalled();
+    expect(mocks.recordSpecApproval).not.toHaveBeenCalled();
+  });
+
+  it.each([{}, { writerToolName: "record_initiative_architecture_review", itemId: "BI-BOUND", gate: "design-spec", artifactRef },
+    { writerToolName: "record_initiative_design_review", itemId: "BI-BOUND", gate: "design-spec", artifactRef, futureAuthority: true }])("refuses malformed or mismatched persisted external review binding %j", initiativeReviewBinding => {
+    mocks.findTaskRun.mockResolvedValue({ a2aMetadata: { trigger: "external-mcp", initiativeReviewBinding } });
+    return expect(initiativeReadinessPack.handlers.record_initiative_design_review!({ ...params, itemId: "BI-BOUND", gate: "design-spec", artifactRef },
+      "user", { taskRunId: "TR-UNBOUND", agentId: "AGT-WS-REVIEW" } as never)).resolves.toMatchObject({ success: false, error: "initiative_review_binding_required" });
+  });
+
+  it("preserves a non-external TaskRun's ordinary independent writer authority", async () => {
+    mocks.findTaskRun.mockResolvedValue({ a2aMetadata: { trigger: "scheduled" } });
+    mocks.recordGateReceipt.mockResolvedValue({ ok: true, receiptId: "ordinary-receipt" });
+    expect(await initiativeReadinessPack.handlers.record_initiative_design_review!({ ...params, itemId: "BI-BOUND", gate: "design-spec", artifactRef },
+      "user", { taskRunId: "TR-SCHED-REVIEW", agentId: "AGT-WS-REVIEW" } as never)).toMatchObject({ success: true });
+    expect(mocks.recordGateReceipt).toHaveBeenCalledOnce();
+  });
+
   it.each(["design-spec", "spec-approval"])("carries authenticated task/digest for %s, ignoring forged tool arguments", async (gate) => {
     mocks.findTaskRun.mockResolvedValue({ a2aMetadata: { trigger: "external-mcp", requestDigest, initiativeReviewBinding: {
       writerToolName: "record_initiative_design_review", itemId: "BI-BOUND", gate, artifactRef,
