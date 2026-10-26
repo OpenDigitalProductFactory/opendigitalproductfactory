@@ -202,15 +202,17 @@ rooms are gated on the *category* (finding 9), so today every software-platform 
 them identically.
 
 That is wrong in both directions: a SaaS product company in the same category does not run
-contributor intake or DCO enforcement, and an open-source management business needs rooms this
-design has not enumerated (licence and provenance, community and contributor relations, release
-signing, upstream/downstream coordination, security disclosure handling).
+source-repository rooms (advisory, repository policy / DCO, pull-request flow, issue triage,
+release readiness), and an open-source management business needs those rooms plus licence /
+provenance, community, release, upstream/downstream, and partner coverage.
 
 So the archetype work is: **add `open-source-management` as a leaf** under `software-platform`,
 move the source-operations gate from category to leaf, and declare that leaf's room set and
-required roster. This design does not enumerate that room set beyond the obvious candidates —
-that enumeration is its own pass, with the operator, and inventing it here would be exactly the
-"author per archetype" failure the derivation discipline exists to prevent.
+required roster. The operator pass for that enumeration is recorded in
+[2026-10-26-osm-leaf-design.md](2026-10-26-osm-leaf-design.md): the seven concerns map onto the
+existing 12 children rather than seven new keys, so a migrated install keeps the 5-parent /
+12-child tree. `contributor-intake` stays universal (people-ops); it is not a source-repository
+room.
 
 ## 7. Safety
 
@@ -281,7 +283,7 @@ archetype half. H is configuration.
 - Not an org chart editor. Ownership derives; appointment is the exception, not the interface.
 - COO autonomy is bounded by current admission, budget and action-specific policy;
   ownership never substitutes for those checks (§5).
-- Not enumerating the open-source-management room set here (§6.1); that is a pass with the operator.
+- Not minting extra open-source-management rooms here (§6.1); the operator pass and room mapping live in [2026-10-26-osm-leaf-design.md](2026-10-26-osm-leaf-design.md).
 - Not changing what a shape's human-owned stages require, at any nesting depth.
 
 ## 11. Related
