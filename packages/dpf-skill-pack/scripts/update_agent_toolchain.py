@@ -17,6 +17,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -100,13 +101,52 @@ def write_json(path: Path, data: Any) -> bool:
     return write_text_if_changed(path, content)
 
 
+def validate_toml(content: str) -> None:
+    """Refuse an unparseable candidate before touching any client configuration."""
+    try:
+        import tomllib as parser
+    except ImportError:
+        try:
+            import tomli as parser
+        except ImportError:
+            raise ValueError("TOML updates require Python 3.11+ or tomli; configuration unchanged") from None
+    try:
+        parser.loads(content)
+    except ValueError:
+        # Parser diagnostics can echo operator credentials. Keep this bounded.
+        raise ValueError("Invalid TOML candidate; configuration unchanged") from None
+
+
 def write_text_if_changed(path: Path, content: str) -> bool:
+    if path.suffix == ".toml":
+        validate_toml(content)
+        before = path.read_bytes() if path.exists() else None
+        after = content.encode("utf-8")
+        if before == after:
+            return False
+        path.parent.mkdir(parents=True, exist_ok=True)
+        # Same-directory replacement leaves the previous file intact if staging
+        # fails. Never truncate the only working client configuration.
+        descriptor, staged = tempfile.mkstemp(prefix="." + path.name + ".", dir=path.parent)
+        temporary = Path(staged)
+        try:
+            with os.fdopen(descriptor, "wb") as stream:
+                stream.write(after)
+                stream.flush()
+                os.fsync(stream.fileno())
+            if before is not None:
+                shutil.copymode(path, temporary)
+            current = path.read_bytes() if path.exists() else None
+            if current != before:
+                raise ValueError("Concurrent TOML edit; configuration unchanged, retry from current state")
+            os.replace(temporary, path)
+        finally:
+            temporary.unlink(missing_ok=True)
+        return True
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.exists() and path.read_text(encoding="utf-8") == content:
         return False
-    # Path.write_text() only grew its newline= kwarg in Python 3.10; the
-    # bootstrap runs this script with the system python3, which is 3.9 on
-    # stock macOS. Write bytes so LF endings survive on every platform.
+    # Write bytes so LF endings survive on Python 3.9 and every platform.
     path.write_bytes(content.encode("utf-8"))
     return True
 
@@ -560,50 +600,46 @@ def ensure_claude_marketplace(home: Path, version: str, dry_run: bool) -> bool:
 
 
 def split_toml_dotted_key(key: str) -> list[str] | None:
+    """Decode TOML bare, basic-quoted and literal-quoted key components."""
     parts: list[str] = []
-    current: list[str] = []
-    quoted = False
-    escape = False
+    token = re.compile(r"\s*(\"(?:[^\"\\]|\\.)*\"|'[^']*'|[A-Za-z0-9_-]+)\s*")
+    remaining = key.strip()
+    while remaining:
+        match = token.match(remaining)
+        if not match:
+            return None
+        spelling = match.group(1)
+        try:
+            part = json.loads(spelling) if spelling.startswith('"') else spelling[1:-1] if spelling.startswith("'") else spelling
+        except ValueError:
+            return None
+        parts.append(part)
+        remaining = remaining[match.end():]
+        if not remaining:
+            return parts
+        if not remaining.startswith("."):
+            return None
+        remaining = remaining[1:].lstrip()
+        if not remaining:
+            return None
+    return None
 
-    for char in key.strip():
-        if quoted:
-            if escape:
-                current.append(char)
-                escape = False
-            elif char == "\\":
-                escape = True
-            elif char == '"':
-                quoted = False
-            else:
-                current.append(char)
-        elif char == '"':
-            quoted = True
-        elif char == ".":
-            part = "".join(current).strip()
-            if not part:
-                return None
-            parts.append(part)
-            current = []
-        else:
-            current.append(char)
 
-    if quoted or escape:
-        return None
-    part = "".join(current).strip()
-    if not part:
-        return None
-    parts.append(part)
-    return parts
+def toml_assignment(line: str) -> tuple[str | None, str]:
+    """Recognize one scalar key without confusing quoted spelling with identity."""
+    match = re.match(r"^\s*(\"(?:[^\"\\]|\\.)*\"|'[^']*'|[A-Za-z0-9_-]+)\s*=(.*)$", line)
+    if not match:
+        return None, ""
+    parts = split_toml_dotted_key(match.group(1))
+    return (parts[0] if parts and len(parts) == 1 else None), match.group(2)
 
 
 def canonical_toml_table_header(line: str) -> str | None:
-    stripped = line.strip()
-    if not stripped.startswith("[") or not stripped.endswith("]") or stripped.startswith("[["):
+    match = re.fullmatch(r"\s*\[(?!\[)(.+)\]\s*(?:#.*)?", line)
+    if not match:
         return None
-    parts = split_toml_dotted_key(stripped[1:-1])
-    if parts is None:
-        return None
-    return ".".join(parts)
+    parts = split_toml_dotted_key(match.group(1))
+    return ".".join(parts) if parts is not None else None
 
 
 def _is_table_boundary(line: str) -> bool:
@@ -680,7 +716,8 @@ def toml_table_enabled(text: str, canonical_key: str) -> Optional[bool]:
             continue
         end = index + 1
         while end < len(lines) and not _is_table_boundary(lines[end]):
-            match = re.match(r"^\s*enabled\s*=\s*(true|false)\s*(?:#.*)?$", lines[end], re.IGNORECASE)
+            key, value = toml_assignment(lines[end])
+            match = re.fullmatch(r"\s*(true|false)\s*(?:#.*)?", value) if key == "enabled" else None
             if match:
                 return match.group(1).lower() == "true"
             end += 1
@@ -696,7 +733,7 @@ def set_codex_plugin_enabled(text: str, plugin_id: str, enabled: bool) -> str:
         if _is_table_boundary(line):
             active = not seen and canonical_toml_table_header(line) == f"plugins.{plugin_id}"
             seen = seen or active
-        elif active and line.partition("=")[0].strip() != "enabled":
+        elif active and toml_assignment(line)[0] != "enabled":
             retained.append(line)
     while retained and not retained[-1].strip():
         retained.pop()
@@ -725,8 +762,8 @@ def existing_codex_mcp_endpoint(text: str) -> Optional[str]:
                 return None
             active = canonical_toml_table_header(line) == "mcp_servers.dpf"
             continue
-        key, separator, value = line.partition("=")
-        if not active or not separator or key.strip() != "url":
+        key, value = toml_assignment(line)
+        if not active or key != "url":
             continue
         match = re.fullmatch(r'''\s*("(?:[^"\\]|\\.)*"|'[^']*')\s*(?:#.*)?''', value)
         if not match:
@@ -759,14 +796,14 @@ def codex_mcp_body(text: str, endpoint: Optional[str], declaration_header: Optio
             continue
         if not active:
             continue
-        key, separator, value = line.partition("=")
-        if separator and key.strip() in ("url", "enabled"):
+        key, value = toml_assignment(line)
+        if key in ("url", "enabled"):
             continue
-        if separator and key.strip() == "bearer_token_env_var":
+        if key == "bearer_token_env_var":
             if value.strip().strip('"').strip("'") == TOKEN_ENV_VAR:
                 continue
             custom_bearer = True
-        if separator and key.strip() == "http_headers":
+        if key == "http_headers":
             # The toolchain declaration (BI-DE1E6485) is the one header line
             # the updater owns; an operator's own headers table is kept as is.
             if "X-DPF-Toolchain" in value:
@@ -828,6 +865,7 @@ def ensure_codex_config(
         "[mcp_servers.dpf]",
         codex_mcp_body(text, mcp_url, declaration_header),
     )
+    validate_toml(text)
     if dry_run:
         return True
     return write_text_if_changed(path, text)
@@ -2542,27 +2580,33 @@ def main(argv: list[str]) -> int:
 
     if not args.claude_only:
         ensure_codex_marketplace(home, codex_version, args.dry_run)
-        ensure_codex_config(home, args.mcp_url, args.dry_run, process_spine_root, codex_header)
         codex_status = "skipped by flag"
-        if not args.skip_codex_cli_install:
-            codex_status = install_codex_plugin(home, args.dry_run)
-            codex_install_failed = codex_status.startswith("failed:")
-            # Codex currently writes a legacy `[plugins."<name>"]` alias while
-            # installing a qualified registry id. Converge again after the CLI
-            # mutation so the next process does not warn that `dpf-platform`
-            # lacks its `@marketplace` qualifier.
+        try:
             ensure_codex_config(home, args.mcp_url, args.dry_run, process_spine_root, codex_header)
-        if args.project_root and args.project_root.resolve() != home.resolve():
-            global_config = codex_config_path(home)
-            saved = global_config.read_text(encoding="utf-8-sig") if global_config.exists() else ""
-            endpoint = args.mcp_url or existing_codex_mcp_endpoint(saved) or DEFAULT_MCP_URL
-            project_status = converge_codex_project_config(args.project_root, endpoint, args.dry_run)
-            print(f"  Codex project override : {project_status}")
-        codex_hooks_status = install_codex_hooks(codex_managed, home, args.dry_run)
-        print(
-            f"  Codex      : marketplace + config converged; plugin {codex_status}; "
-            f"hooks {codex_hooks_status}"
-        )
+            codex_status = "skipped by flag"
+            if not args.skip_codex_cli_install:
+                codex_status = install_codex_plugin(home, args.dry_run)
+                codex_install_failed = codex_status.startswith("failed:")
+                # Codex currently writes a legacy `[plugins."<name>"]` alias while
+                # installing a qualified registry id. Converge again after the CLI
+                # mutation so the next process does not warn that `dpf-platform`
+                # lacks its `@marketplace` qualifier.
+                ensure_codex_config(home, args.mcp_url, args.dry_run, process_spine_root, codex_header)
+            if args.project_root and args.project_root.resolve() != home.resolve():
+                global_config = codex_config_path(home)
+                saved = global_config.read_text(encoding="utf-8-sig") if global_config.exists() else ""
+                endpoint = args.mcp_url or existing_codex_mcp_endpoint(saved) or DEFAULT_MCP_URL
+                project_status = converge_codex_project_config(args.project_root, endpoint, args.dry_run)
+                print(f"  Codex project override : {project_status}")
+            codex_hooks_status = install_codex_hooks(codex_managed, home, args.dry_run)
+            print(
+                f"  Codex      : marketplace + config converged; plugin {codex_status}; "
+                f"hooks {codex_hooks_status}"
+            )
+        except ValueError as error:
+            codex_status = f"failed: {error}"
+            codex_install_failed = True
+            print(f"  Codex      : {codex_status}")
         grok_status = "skipped by flag"
         if not args.skip_grok_cli_install:
             grok_status = install_grok_plugin(shared_managed, args.dry_run)

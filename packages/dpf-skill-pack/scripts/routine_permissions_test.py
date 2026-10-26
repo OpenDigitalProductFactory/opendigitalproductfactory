@@ -264,4 +264,22 @@ class RoutinePermissionsTest(unittest.TestCase):
         self.assertEqual('user',row['reviewer'])
         self.assertEqual('danger-full-access',permissions.read_toml(path)['sandbox_mode'])
 
+    def test_permission_apply_then_core_updater_and_repeat_preserves_global_config(self):
+        import update_agent_toolchain as updater
+        path = self.home / '.codex/config.toml'
+        path.parent.mkdir(exist_ok=True)
+        path.write_text('model="operator-choice"\n[plugins."dpf-platform@personal"]\nenabled=false\n[mcp_servers.dpf]\nurl="http://127.0.0.1:3000/api/mcp/v1?tier=full"\nenabled=true\n', encoding='utf-8')
+        permissions.apply_permissions(self.plan(), dry_run=False)
+        expected = permissions.read_toml(path)
+        updater.ensure_codex_config(self.home, None, False)
+        actual = permissions.read_toml(path)
+        self.assertEqual(actual['model'], expected['model'])
+        self.assertEqual(actual['mcp_servers'], expected['mcp_servers'])
+        self.assertEqual(actual['projects'], expected['projects'])
+        self.assertFalse(actual['plugins']['dpf-platform@personal']['enabled'])
+        first = path.read_bytes()
+        permissions.apply_permissions(self.plan(), dry_run=False)
+        updater.ensure_codex_config(self.home, None, False)
+        self.assertEqual(first, path.read_bytes())
+
 if __name__=='__main__': unittest.main()

@@ -388,6 +388,15 @@ see [fleet operations](../edge-node/fleet-operations.md).
 
 ## Routine development client permissions
 
+Toolchain refresh validates the entire Codex TOML candidate before saving it,
+including dry-run. Quoted keys from permission setup retain the same meaning
+as bare keys. Invalid candidates leave the previous file intact; valid TOML
+updates use staged atomic replacement. Python 3.11+ (or `tomli`) is required
+for this validation. If parsing is unavailable, Codex configuration and native
+plugin mutation are refused and reported as failed; other clients can continue.
+Do not treat that result as a completed Codex update.
+
+
 The source bootstrap converges routine Codex, Claude and Grok permissions through
 one delivered policy, `packages/dpf-skill-pack/contracts/client-permission-baseline.json`,
 and the existing signed toolchain updater. It targets the explicitly named DPF
