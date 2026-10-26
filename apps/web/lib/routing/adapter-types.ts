@@ -22,6 +22,8 @@ export interface ResolvedProvider {
 export interface AdapterMcpSession {
   /** Server-owned exact native read lane; original task authority still gates every call. */
   readOnlyToolNames?: readonly string[];
+  /** Execution layer prebinds exact identity/fence and fixed read scopes. */
+  mintReadOnlySession?: () => Promise<string>;
   userId: string;
   agentId?: string | null;
   threadId?: string | null;

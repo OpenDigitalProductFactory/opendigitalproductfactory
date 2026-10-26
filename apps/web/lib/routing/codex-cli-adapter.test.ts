@@ -62,7 +62,6 @@ function makeMockProcess(): MockProcess {
   return proc;
 }
 
-vi.mock("@/lib/mcp/session-token", () => ({ createMcpSessionToken: vi.fn().mockResolvedValue("test-session-secret") }));
 
 const mockSpawn = vi.fn();
 const mockExecAsync = vi.fn();
@@ -560,13 +559,15 @@ describe("governed read-only Codex MCP transport", () => {
       return proc;
     });
     const names = ["read_source_at_version", "wiki_query", "search_ux_critique_corpus"];
+    const mintReadOnlySession = vi.fn(async()=>"test-session-secret");
     const { codexCliAdapter } = await import("./codex-cli-adapter");
     const result = await codexCliAdapter.execute(makeRequest({
       tools: names.map(name => ({type:"function",function:{name,parameters:{type:"object",properties:{}}}})),
       mcpSession: {userId:"human",agentId:"ux-design-critic",threadId:"thread",taskRunId:"TR-original",
         taskExecutionFence:{schemaVersion:1,reservation:"reserved",dispatchClaim:"claimed",authorityDigest:null,requestDigest:"a".repeat(64)},
-        readOnlyToolNames:names} as never,
+        readOnlyToolNames:names,mintReadOnlySession},
     }));
+    expect(mintReadOnlySession).toHaveBeenCalledExactlyOnceWith();
     const config = writes.find(w=>w.path.endsWith("/config.toml"));
     expect(config?.content).toContain('[mcp_servers.dpf]');
     expect(config?.content).toContain('required = true');

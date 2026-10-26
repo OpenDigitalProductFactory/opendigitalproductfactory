@@ -135,8 +135,17 @@ const readParams={...params,terminalToolPolicy:undefined,agentId:"ux-design-crit
 describe("read-only native specialist completion",()=>{
  it("folds actual native reader rows once before completion without dispatching them again",async()=>{
   const inspect=vi.fn(async()=>({complete:true,message:"verified full artifact/corpus provenance"}));
-  vi.mocked(routeAndCall).mockImplementation(async()=>{table.rows.push(...names.map(name=>nativeRow(name,{},true)));return {...cliProse(contribution),providerId:"codex",modelId:"gpt-5.6-luna"} as never;});
-  const result=await withReadEvidencePolicy({toolNames:names,inspect},()=>runAgenticLoop(readParams));
+  const mintReadOnlySession=vi.fn(async()=>"execution-bound-test-session");
+  vi.mocked(routeAndCall).mockImplementation(async(messages,system,_sensitivity,options)=>{
+   expect(options?.mcpSession?.mintReadOnlySession).toBe(mintReadOnlySession);
+   const {codexReadMcpConfig}=await import("../routing/codex-read-mcp");
+   const config=await codexReadMcpConfig(options!.mcpSession!,readParams.toolsForProvider,"http://portal:3000");
+   expect(config).toContain("execution-bound-test-session");
+   expect(JSON.stringify({messages,system})).not.toContain("execution-bound-test-session");
+   table.rows.push(...names.map(name=>nativeRow(name,{},true)));return {...cliProse(contribution),providerId:"codex",modelId:"gpt-5.6-luna"} as never;
+  });
+  const result=await withReadEvidencePolicy({toolNames:names,inspect,mintReadOnlySession},()=>runAgenticLoop(readParams));
+  expect(mintReadOnlySession).toHaveBeenCalledExactlyOnceWith();
   expect(result.content).toBe(contribution);expect(result.executedTools.map(t=>t.name)).toEqual(names);
   expect(result.executedTools.map(t=>(t as typeof t & {nativeExecutionId?:string}).nativeExecutionId)).toEqual(table.rows.map(t=>t.id));
   expect(governedExecuteTool).not.toHaveBeenCalled();expect(routeAndCall).toHaveBeenCalledTimes(1);

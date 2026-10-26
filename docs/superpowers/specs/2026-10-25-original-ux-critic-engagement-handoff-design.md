@@ -151,3 +151,8 @@ BI-7906C73E. This repair does not manufacture attestation or repeat an unatteste
 native execution. Original CE724 remains open for a supported finite recovery
 disposition and real attributable result; a new revision's review must be
 associated separately and cannot silently satisfy the original f52 request.
+
+The execution layer owns the no-argument native session minter, prebound to the
+original task identity/fence and fixed read scopes. Routing receives that
+capability through the transient policy/session and cannot select new identity
+or authority. Missing minter is a transport refusal, not textual-tool fallback.

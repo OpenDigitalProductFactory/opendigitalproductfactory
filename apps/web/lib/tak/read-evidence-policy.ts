@@ -2,6 +2,7 @@ import {AsyncLocalStorage} from "node:async_hooks";
 /** Read-only specialist completion: evidence first, no invented receipt writer. */
 export type ReadEvidencePolicy = {
   toolNames: readonly string[];
+  mintReadOnlySession?: () => Promise<string>;
   inspect(content: string): Promise<{complete: boolean; message: string}>;
 };
 export function readEvidenceExit(check: {complete: boolean; message: string}) {

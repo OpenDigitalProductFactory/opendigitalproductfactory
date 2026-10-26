@@ -135,7 +135,7 @@ correction is necessary to execute the original CE and is coordinated with E27.
 ## Native read transport correction (2026-10-26)
 
 DEV v2026.10.26 / 966b served verification passed. Same-task dispatch 3 completed
-with zero actual ToolExecution rows. Both known settled Codex turns refused the
+with zero actual ToolExecution rows. Both normally returned Codex turns refused the
 text-described tool protocol even though the private prompt archive contained
 all three schemas. The evidence guard correctly withheld the unverified draft;
 CE-724328D6 is unavailable, not a critique. This is no longer a provider-capacity
@@ -149,7 +149,7 @@ read-only sandbox with shell disabled, owned-child closure and private cleanup.
 No native calls are extracted or dispatched a second time. Fold this attempt's
 native executions once before the evidence guard. Add a read-evidence completion
 policy using existing immutable traversal/profession/calibration provenance;
-bounded in-turn correction must not invent a writer or accept prose as evidence.
+incomplete evidence must not trigger another inference or accept prose as evidence.
 
 A completed legacy INV5 attempt is NOT resumable from zero governed DB calls
 alone: its unrestricted native shell/descendant/credential effects were not
@@ -171,3 +171,24 @@ recovery owner supplies a supported finite disposition and the real result runs.
 
 Official CLI contract: https://learn.chatgpt.com/docs/extend/mcp?surface=cli and
 https://learn.chatgpt.com/docs/config-file/config-reference (2026-10-26).
+
+
+### Dependency correction and original research participation
+
+Host preflight rejected the new routing-to-MCP import. Keep token creation in
+mcp-task-execution, prebound to the exact server-owned principal, task and fence
+with fixed read scopes. Pass a no-argument minter through the existing transient
+completion policy and adapter session. Routing validates its exact reader surface
+and fails closed without that minter; no dependency exception is introduced.
+Regression coverage includes actual routing, fallback and provider-to-adapter
+callback propagation, private staging and absent-minter refusal.
+
+CE-1FE20783 remains a separate original request for research/prototype advice on
+the proposed three-column explorer. Current binding/idempotency checks found no
+TaskRun for it; the broad metadata match is CE724's separately bound task. After
+the served transport correction, seek its FIRST fulfillment under the unchanged
+objective and input digest. Explicitly associate the later concrete f52 prototype
+as research material; it was not originally pinned in CE1. Require actual source,
+WSID/corpus and calibration provenance and the routing author's attributable
+response. This does not resolve CE724, confer current-code acceptance or authorize
+production edits. No execution or successful Critic result is asserted here.

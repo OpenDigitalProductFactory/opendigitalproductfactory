@@ -285,6 +285,7 @@ export async function executeRemoteTaskAttempt(input: {
   // BI-2E479619: rows a CLI wrote natively during THIS attempt start here.
   const readEvidencePolicy = parsed.engagementBinding
     ? (await import("./coworker-service-catalog/engagement-read-completion")).engagementReadCompletion(run.taskRunId, parsed.engagementBinding) : undefined;
+  if (readEvidencePolicy) readEvidencePolicy.mintReadOnlySession = async () => (await import("./mcp/session-token")).createMcpSessionToken({userId:token.userId,agentId:resolvedAgentId,threadId:input.threadId,routeContext:parsed.routeContext,taskRunId:run.taskRunId,taskExecutionFence,scopes:["file_read","registry_read"],capability:"read"});
   const attemptStartedMs = Date.now();
   try {
     const runLoop = async () => (await import("./tak/read-evidence-policy")).withReadEvidencePolicy(readEvidencePolicy, async () => executeAutonomousAgenticLoop({

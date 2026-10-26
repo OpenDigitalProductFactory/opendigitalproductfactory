@@ -185,6 +185,17 @@ describe("callProvider", () => {
     });
   });
 
+  it("preserves the native session callback through actual provider-to-adapter dispatch",async()=>{
+    mockPrisma.modelProvider.findUnique.mockResolvedValue({providerId:"openai",status:"active",authMethod:"api_key",authHeader:"Authorization",baseUrl:"https://api.openai.com/v1",endpoint:null});
+    mockGetDecryptedCredential.mockResolvedValue({secretRef:"test-key"});
+    const mintReadOnlySession=vi.fn(async()=>"test-session");
+    const mcpSession={userId:"human",mintReadOnlySession};
+    await callProvider("openai","model",[{role:"user",content:"Review prototype"}],"Help",undefined,undefined,undefined,mcpSession);
+    expect(mockAdapterExecute.mock.calls[0]?.[0].mcpSession).toBe(mcpSession);
+    expect(mockAdapterExecute.mock.calls[0]?.[0].mcpSession.mintReadOnlySession).toBe(mintReadOnlySession);
+    expect(mintReadOnlySession).not.toHaveBeenCalled();
+  });
+
   it("waits for admission before inspecting the GPU and releases on deferral", async () => {
     mockPrisma.modelProvider.findUnique.mockResolvedValue({
       providerId: "openai", status: "active", authMethod: "api_key", authHeader: "Authorization",
