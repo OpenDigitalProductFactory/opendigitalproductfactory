@@ -670,6 +670,8 @@ demote a binding, revert its promotion PR. In an emergency the operator sets
 - `GPP-Enforced`: **partial.** Room narrowing, the alignment and escalation gates are enforced; the shape gate is in shadow mode, and the Phase 2 permit is enforced per binding with no binding promoted yet; exact-action projection covers 11 tools.
 - `GPP-Evidenced`: **not yet.**
 
+Scheduled Workroom recovery (BI-E458A9CB) keeps a pending required approval visible even when the same tool also records a successful blocked report or another required write is absent. An exact **Ask again** replacement can supersede its expired unanswered ancestor without retiring independent requests. These are existing scheduled-run and envelope contracts, not new permissions. The bounded reporting mandate, approval wait, lineage checks and unchanged completion rules are described in [Workroom cycle continuity](workroom-cycle-continuity.md).
+
 ## Annex B (informative): proposed assertions
 
 | ID | Assertion |

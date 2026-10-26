@@ -43,6 +43,7 @@ type AuthorityDb = {
     findFirst(args: unknown): Promise<{
       id: string;
       agentId: string;
+      slugId?: string | null;
       sensitivity: string;
       hitlTierDefault: number;
       governanceProfile: {
@@ -399,6 +400,7 @@ export const resolveCoworkerToolAuthorityInput =
         select: {
           id: true,
           agentId: true,
+          slugId: true,
           sensitivity: true,
           hitlTierDefault: true,
           governanceProfile: {
@@ -555,7 +557,10 @@ export const resolveCoworkerToolAuthorityInput =
           ? await loadScheduledRoomMandate(db as unknown as RoomMandateDb, {
               taskRunId: task.taskRunId,
               a2aMetadata: task.a2aMetadata,
-              agentIds: [agent.agentId, actingAgentId],
+              agentIds: [agent.agentId, actingAgentId, ...(agent.slugId ? [agent.slugId] : [])],
+              toolName: execution.toolName,
+              params: execution.rawParams,
+              allowBlockedReport: agent.governanceProfile?.hitlPolicy.trim().toLowerCase() !== "always",
             })
           : null,
       }),

@@ -1,3 +1,4 @@
+import { parseResourceWaitProjection, RESOURCE_WAIT_MAX_ATTEMPTS } from "@/lib/mcp-task-capacity-contract";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import type { Prisma } from "@dpf/db";
 import { completeArtifactReads, engagementReadEvidence, type EngagementRead } from "./engagement-read-provenance";
@@ -10,7 +11,7 @@ type Offer = { offerId: string; serviceId: string; status: string; authorityBoun
 type Service = { serviceId: string; providerAgentId: string; status: string; authorityBoundary: string; riskTier: string; availabilityScope: string };
 type Engagement = { engagementId: string; offerId: string; serviceId: string; providerAgentId: string; requestedByUserId: string | null; requestedByAgentId: string | null; requestedOutcome: string; inputPayload: unknown; status: string; approvalContext: unknown; metadata: unknown };
 type Room = { capsuleId: string; repositoryFullName: string | null; headSha: string | null; archivedAt: Date | null; workspaceState: unknown };
-export function assertEngagementSnapshot(binding: EngagementTaskBinding, state: { engagement: Engagement; offer: Offer; service: Service; room: Room }, taskRunId?: string): void {
+export function assertEngagementSnapshot(binding: EngagementTaskBinding, state: { engagement: Engagement; offer: Offer; service: Service; room: Room }, taskRunId?: string, allowFailedPreAdmission = false): void {
   const { engagement, offer, service, room } = state;
   const reject = () => { throw new Error("engagement_binding_refused: current request, offer, authority or immutable scope no longer matches"); };
   if (!parseEngagementTaskBinding(binding)
@@ -18,7 +19,7 @@ export function assertEngagementSnapshot(binding: EngagementTaskBinding, state: 
     || engagement.serviceId !== binding.serviceId || engagement.providerAgentId !== binding.providerAgentId
     || engagement.requestedByUserId !== binding.userId || engagement.requestedByAgentId !== binding.actorAgentId
     || engagementInputDigest(engagement.requestedOutcome, engagement.inputPayload) !== binding.inputDigest
-    || !["requested", "accepted", "in-progress"].includes(engagement.status)
+    || !["requested", "accepted", "in-progress", ...(allowFailedPreAdmission ? ["failed"] : [])].includes(engagement.status)
     || record(engagement.approvalContext).required !== false
     || offer.offerId !== binding.offerId || offer.serviceId !== binding.serviceId
     || service.serviceId !== binding.serviceId || service.providerAgentId !== binding.providerAgentId
@@ -57,6 +58,8 @@ export async function validateEngagementTask(input: {
   binding: EngagementTaskBinding; token: RemoteTaskSubmitAuth; authorityScope: readonly string[];
   taskRunId: string; db?: Prisma.TransactionClient; requireAssociation?: boolean;
   request?: { objective: string; prompt: string };
+  /** Server-only after exact unstarted reconstruction-failure proof. */
+  allowPreAdmissionRecovery?: boolean;
 }) {
   const { prisma } = await import("@dpf/db");
   const db = input.db ?? prisma;
@@ -107,7 +110,7 @@ export async function validateEngagementTask(input: {
       ? !(ENGAGEMENT_READ_TOOLS as readonly string[]).includes(scope.slice(5))
       : !tokenGrants.includes(scope) || !actorGrants.includes(scope))
     || ENGAGEMENT_READ_TOOLS.some(name => !input.authorityScope.includes(`tool:${name}`))) throw new Error("engagement_grant_intersection_refused");
-  assertEngagementSnapshot(binding, { engagement, offer: engagement.offer, service: engagement.service, room }, input.taskRunId);
+  assertEngagementSnapshot(binding, { engagement, offer: engagement.offer, service: engagement.service, room }, input.taskRunId, input.allowPreAdmissionRecovery);
   if (input.request && (input.request.objective !== engagement.requestedOutcome
     || input.request.prompt !== buildEngagementTaskPrompt(binding, engagement))) throw new Error("engagement_request_content_refused");
   if (input.requireAssociation && record(record(engagement.metadata).fulfillment).taskRunId !== input.taskRunId) throw new Error("engagement_execution_association_missing");
@@ -143,12 +146,27 @@ export function validateEngagementContribution(binding: EngagementTaskBinding, c
 
 /** Observation repairs projection only. The terminal task and successful audits are canonical. */
 export async function reconcileEngagementTaskResult(taskRunId: string, db?: Prisma.TransactionClient): Promise<void> {
-  if (!db || typeof (db as unknown as { $transaction?: unknown }).$transaction === "function") {
-    const client = db ?? (await import("@dpf/db")).prisma;
-    return (client as unknown as { $transaction(work: (tx: Prisma.TransactionClient) => Promise<void>): Promise<void> }).$transaction(tx => reconcileEngagementTaskResult(taskRunId, tx));
+  const started = Date.now();
+  const [{ hasExecutionUncertainty }, { findProfessionFamilyForAgentIdentity }] = await Promise.all([
+    import("@/lib/shared/execution-uncertainty"), import("@/lib/decision-perspective/resolve-profession-profile"),
+  ]);
+  const loaded = Date.now();
+  try {
+    if (!db || typeof (db as unknown as { $transaction?: unknown }).$transaction === "function") {
+      const client = db ?? (await import("@dpf/db")).prisma;
+      await (client as unknown as { $transaction(work: (tx: Prisma.TransactionClient) => Promise<void>): Promise<void> }).$transaction(tx => reconcileEngagementTaskResultInTransaction(taskRunId, tx, { hasExecutionUncertainty, findProfessionFamilyForAgentIdentity }));
+    } else await reconcileEngagementTaskResultInTransaction(taskRunId, db, { hasExecutionUncertainty, findProfessionFamilyForAgentIdentity });
+  } finally {
+    console.info("[engagement-result-projection]", { taskRunId, dependencyLoadMs: loaded - started, transactionMs: Date.now() - loaded });
   }
+}
+
+async function reconcileEngagementTaskResultInTransaction(taskRunId: string, db: Prisma.TransactionClient, dependencies: {
+  hasExecutionUncertainty: typeof import("@/lib/shared/execution-uncertainty").hasExecutionUncertainty;
+  findProfessionFamilyForAgentIdentity: typeof import("@/lib/decision-perspective/resolve-profession-profile").findProfessionFamilyForAgentIdentity;
+}): Promise<void> {
+  const { hasExecutionUncertainty, findProfessionFamilyForAgentIdentity } = dependencies;
   await db.$queryRaw`SELECT "id" FROM "TaskRun" WHERE "taskRunId" = ${taskRunId} FOR UPDATE`;
-  const { hasExecutionUncertainty } = await import("@/lib/shared/execution-uncertainty");
   const task = await db.taskRun.findUnique({ where: { taskRunId }, select: { status: true, progressPayload: true, a2aMetadata: true, completedAt: true } });
   const binding = parseEngagementTaskBinding(record(task?.a2aMetadata).engagementBinding);
   if (!task || !binding) return;
@@ -164,7 +182,6 @@ export async function reconcileEngagementTaskResult(taskRunId: string, db?: Pris
   else if (task.status === "working") status = "in-progress";
   else if (task.status === "completed") {
     const executions = await db.toolExecution.findMany({ where: { taskRunId, agentId: { in: engagementProviderIdentityRefs(binding.providerAgentId) }, userId: binding.userId, success: true }, select: { id: true, toolName: true, parameters: true, result: true, success: true } });
-    const { findProfessionFamilyForAgentIdentity } = await import("@/lib/decision-perspective/resolve-profession-profile");
     const provider = await db.agent.findUnique({ where: { agentId: binding.providerAgentId }, select: { agentId: true, name: true, slugId: true } });
     const family = provider ? findProfessionFamilyForAgentIdentity(provider) : null;
     // A later room head does not erase an executed historical artifact's provenance.
@@ -172,11 +189,18 @@ export async function reconcileEngagementTaskResult(taskRunId: string, db?: Pris
       ? validateEngagementContribution(binding, record(task.progressPayload).summary, executions, family.professionKey, engagementReadEvidence(record(task.a2aMetadata).engagementReadEvidence)) : null;
     status = result ? "completed" : "unavailable";
   } else if (["input-required", "auth-required"].includes(task.status)) status = "unknown";
-  if (status === engagement.status && !result) return;
-  const nextAction = status === "unknown" ? "Reconcile the original execution; do not replay." : status === "unavailable" ? "Inspect actual source/corpus provenance on the original task." : status === "failed" ? "Inspect the original failure and its supported recovery; do not create a replacement request." : status === "completed" ? "Request attributable author disposition in the original Workroom." : "Observe this same engagement and task.";
+  const capacityWait = status === "accepted" && task.status === "submitted" ? parseResourceWaitProjection(task.progressPayload) : null;
+  if (status === engagement.status && !result
+    && canonicalJson(association.resourceWait ?? null) === canonicalJson(capacityWait)) return;
+  const { waitReason: _priorWait, resourceWait: _priorResourceWait, ...stableAssociation } = association;
+  const nextAction = capacityWait ? capacityWait.attempt < RESOURCE_WAIT_MAX_ATTEMPTS
+    ? "After inspecting provider routing/availability, repeat the identical fulfillment packet after the recorded retry time to wake this same task; do not create another request."
+    : "Capacity retry budget is exhausted. Inspect the original task failure; do not submit a replacement request."
+    : status === "unknown" ? "Reconcile the original execution; do not replay." : status === "unavailable" ? "Inspect actual source/corpus provenance on the original task." : status === "failed" ? "Inspect the original failure and its supported recovery; do not create a replacement request." : status === "completed" ? "Request attributable author disposition in the original Workroom." : "Observe this same engagement and task.";
   const written = await db.coworkerEngagement.updateMany({ where: { id: engagement.id, updatedAt: engagement.updatedAt, status: engagement.status }, data: {
     status, completedAt: status === "completed" ? task.completedAt ?? new Date() : null,
-    metadata: { ...metadata, fulfillment: { ...association, state: status, taskStatus: task.status, nextAction,
+    metadata: { ...metadata, fulfillment: { ...stableAssociation, state: status, taskStatus: task.status, nextAction,
+      ...(capacityWait ? { waitReason: "provider-capacity", resourceWait: capacityWait } : {}),
       ...(status === "unavailable" ? { reason: record(task.a2aMetadata).engagementReadFailure ?? "No verifiable complete specialist source/corpus contribution was produced." } : {}) }, ...(result ? { result: { ...result, taskRunId } } : {}) } as Prisma.InputJsonValue,
   } });
   if (written.count === 1 && result) {

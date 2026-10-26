@@ -511,6 +511,9 @@
     "apps/web/components/workspace/workroom/WorkroomFlowMap.tsx": [
       "docs/user-guide/workspace/work-rooms.md"
     ],
+    "apps/web/components/workspace/workroom/WorkroomHeader.tsx": [
+      "docs/user-guide/workspace/work-rooms.md"
+    ],
     "apps/web/components/workspace/workroom/WorkroomParticipants.tsx": [
       "docs/user-guide/workspace/work-rooms.md"
     ],
@@ -522,7 +525,8 @@
       "docs/testing/ci-evidence.md"
     ],
     "apps/web/lib/actions/agent-task-scheduler.ts": [
-      "docs/architecture/agent-standards-dpf-conformance.md"
+      "docs/architecture/agent-standards-dpf-conformance.md",
+      "docs/user-guide/workroom-approval-recovery.md"
     ],
     "apps/web/lib/actions/build.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
@@ -1247,6 +1251,9 @@
     "apps/web/lib/queue/functions/workroom-drive-deadlines.ts": [
       "docs/architecture/gated-permissions-process.md"
     ],
+    "apps/web/lib/queue/functions/workroom-drive-stage-run.ts": [
+      "docs/user-guide/workroom-approval-recovery.md"
+    ],
     "apps/web/lib/queue/functions/workroom-drive.ts": [
       "docs/architecture/work-shapes-and-the-decision-gate.md"
     ],
@@ -1463,7 +1470,8 @@
       "docs/user-guide/ai-workforce/decision-perspective.md"
     ],
     "apps/web/lib/tak/scheduled-task-runs.ts": [
-      "docs/architecture/gated-permissions-process.md"
+      "docs/architecture/gated-permissions-process.md",
+      "docs/user-guide/workroom-approval-recovery.md"
     ],
     "apps/web/lib/tak/tool-intent.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md"
@@ -1583,6 +1591,9 @@
       "docs/architecture/work-shapes-and-the-decision-gate.md",
       "docs/user-guide/ai-workforce/how-governed-work-runs.md"
     ],
+    "apps/web/lib/work-management/room-stage-mandate.ts": [
+      "docs/user-guide/workroom-approval-recovery.md"
+    ],
     "apps/web/lib/work-management/room-types.ts": [
       "docs/architecture/work-shapes-and-the-decision-gate.md",
       "docs/user-guide/workspace/finite-delivery-agreements.md"
@@ -1616,6 +1627,9 @@
     ],
     "apps/web/lib/work-management/workspace-room-access.ts": [
       "docs/user-guide/workspace/work-rooms.md"
+    ],
+    "apps/web/lib/work-management/writeback-latch.ts": [
+      "docs/user-guide/workroom-approval-recovery.md"
     ],
     "apps/web/lib/work-posture/derive.ts": [
       "docs/user-guide/ai-workforce/how-governed-work-runs.md"
@@ -4121,6 +4135,13 @@
     "docs/user-guide/platform/edge-nodes.md": [
       "docker-compose.edge.macvlan.yml"
     ],
+    "docs/user-guide/workroom-approval-recovery.md": [
+      "apps/web/lib/actions/agent-task-scheduler.ts",
+      "apps/web/lib/queue/functions/workroom-drive-stage-run.ts",
+      "apps/web/lib/tak/scheduled-task-runs.ts",
+      "apps/web/lib/work-management/room-stage-mandate.ts",
+      "apps/web/lib/work-management/writeback-latch.ts"
+    ],
     "docs/user-guide/workspace/attention-inbox.md": [
       "apps/web/components/attention/AttentionInbox.tsx",
       "apps/web/components/attention/OwnerDecisionCards.tsx",
@@ -4146,6 +4167,7 @@
       "apps/web/components/workspace/WorkCaseDetailView.tsx",
       "apps/web/components/workspace/workroom/WorkroomCycles.tsx",
       "apps/web/components/workspace/workroom/WorkroomFlowMap.tsx",
+      "apps/web/components/workspace/workroom/WorkroomHeader.tsx",
       "apps/web/components/workspace/workroom/WorkroomParticipants.tsx",
       "apps/web/lib/work-management/coworker-engagement-case-projection.ts",
       "apps/web/lib/work-management/room-ai-spend.ts",
