@@ -1169,6 +1169,7 @@
         "privatepublic-change-segregation-is-content-based",
         "creating-a-worktree",
         "seeding-a-new-worktree",
+        "routine-client-permissions",
         "verification-readiness-classification",
         "compose-project-isolation",
         "freshness-a-stale-worktree-base-is-a-landmine",
@@ -6248,7 +6249,8 @@
         "reconcile-installed-plugins-flag",
         "what-install-dpf-does-not-do",
         "see-also",
-        "mapping-a-network-from-another-machine"
+        "mapping-a-network-from-another-machine",
+        "routine-development-client-permissions"
       ]
     },
     "docs/operations/integrations/email-postmark-setup.md": {
@@ -12415,6 +12417,7 @@
       "publishedPortal": true,
       "anchors": [
         "agent-development-environments-claude-codex-grok-antigravity",
+        "routine-permissions-and-existing-authority",
         "how-the-pieces-fit-together",
         "why-a-dedicated-agent-client-instead-of-build-studio",
         "prerequisites",
