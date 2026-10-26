@@ -250,4 +250,18 @@ class RoutinePermissionsTest(unittest.TestCase):
             self.assertTrue(all(x['action']=='unrun' for x in rows))
             self.assertFalse((self.root/'.claude').exists())
 
+    def test_existing_global_full_access_is_not_combined_with_a_new_non_escalating_sandbox(self):
+        (self.home/'.codex').mkdir()
+        path=self.home/'.codex/config.toml'
+        path.write_text('sandbox_mode="danger-full-access"\napproval_policy="never"\napprovals_reviewer="user"\n',encoding='utf-8')
+        rows=permissions.apply_permissions(self.plan(),dry_run=False)
+        local=permissions.read_toml(self.root/'.codex/config.toml')
+        self.assertNotIn('sandbox_mode',local)
+        self.assertNotIn('sandbox_workspace_write',local)
+        row=next(x for x in rows if x['client']=='codex')
+        self.assertEqual('danger-full-access',row['posture'])
+        self.assertEqual('never',row['approvalPolicy'])
+        self.assertEqual('user',row['reviewer'])
+        self.assertEqual('danger-full-access',permissions.read_toml(path)['sandbox_mode'])
+
 if __name__=='__main__': unittest.main()

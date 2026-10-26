@@ -169,9 +169,13 @@ def plan_permissions(project_root: Path, home: Path, skill_pack: Path, *, client
         # Preserve an explicit named/config profile rather than silently replace it.
         if not any(key in config for config in (c,trust) for key in ('default_permissions','profile')):
             inherited_sandbox=trust.get('sandbox_mode')
-            c.setdefault('sandbox_mode',inherited_sandbox if inherited_sandbox in ('read-only','workspace-write') else 'workspace-write')
-            inherited_network=_mapping(trust,'sandbox_workspace_write').get('network_access',True)
-            _table(c,'sandbox_workspace_write').setdefault('network_access',inherited_network)
+            # Preserve a user-selected full-access mode by leaving it inherited.
+            # Do not create a new project full-access directive, or combine an
+            # inherited never-ask policy with a newly restricted sandbox.
+            if inherited_sandbox!='danger-full-access' or 'sandbox_mode' in c:
+                c.setdefault('sandbox_mode',inherited_sandbox if inherited_sandbox in ('read-only','workspace-write') else 'workspace-write')
+                inherited_network=_mapping(trust,'sandbox_workspace_write').get('network_access',True)
+                _table(c,'sandbox_workspace_write').setdefault('network_access',inherited_network)
         direct=_mapping(trust,'mcp_servers').get('dpf')
         # A project server entry replaces the transport rather than deep-merging
         # it. Never synthesize a partial server or copy user auth into the repo.
@@ -224,8 +228,10 @@ def plan_permissions(project_root: Path, home: Path, skill_pack: Path, *, client
         if not any(k in ui for k in ('permission_mode','approval_mode','yolo')): ui['permission_mode']='auto'
         _table(c,'sandbox').setdefault('profile','off' if sys.platform=='win32' else 'workspace')
     gu=document(home/'.grok/config.toml','grok','toml',grok_user)
+    named_config_profile=any('profile' in config for config in (codex_config,trust))
+    codex_posture=codex_config.get('sandbox_mode',codex_config.get('default_permissions','existing-config-profile' if named_config_profile else trust.get('default_permissions',trust.get('sandbox_mode','existing-config-profile'))))
     client_rows=(
-        {'client':'codex','posture':_label(codex_config.get('sandbox_mode',codex_config.get('default_permissions',trust.get('default_permissions','existing-config-profile'))),('read-only','workspace-write','danger-full-access',':read-only',':workspace',':danger-full-access','existing-config-profile')),'approvalPolicy':_label(codex_config.get('approval_policy','selected-config-profile'),('never','on-request','untrusted','on-failure','selected-config-profile')),
+        {'client':'codex','posture':_label(codex_posture,('read-only','workspace-write','danger-full-access',':read-only',':workspace',':danger-full-access','existing-config-profile')),'approvalPolicy':_label(codex_config.get('approval_policy','selected-config-profile'),('never','on-request','untrusted','on-failure','selected-config-profile')),
          'reviewer':_label(codex_config.get('approvals_reviewer','selected-config-profile'),('user','auto_review','selected-config-profile')),'trust':_label(trust['projects'][str(root)].get('trust_level'),('trusted','untrusted')),
          'ruleCount':rules.count('prefix_rule('),'managedConstraints':'Host and managed requirements retain precedence; session policy is not established by these files.'},
         {'client':'claude-code','posture':_label(cc['permissions']['defaultMode'],('default','acceptEdits','plan','bypassPermissions','auto','dontAsk','delegate')),'ruleCount':len(cc['permissions']['allow']),

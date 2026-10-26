@@ -441,3 +441,7 @@ before changing configuration; the existing bootstrap/updater still converges
 its skills and connectors and reports the permission scope as unverified. Agents
 should select an available supported Python runtime before claiming this baseline.
 The updater does not silently install an undeclared dependency.
+
+An existing explicit user full-access choice remains inherited for Codex; the
+writer neither creates a project full-access directive nor replaces that choice
+with a restricted sandbox paired with a non-escalating approval policy.
