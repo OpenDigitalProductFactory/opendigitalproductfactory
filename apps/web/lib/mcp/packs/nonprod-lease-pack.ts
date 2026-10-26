@@ -21,7 +21,7 @@ import { isRecord } from "@/lib/shared/coerce";
 import { resolveLeaseRequestTiming } from "@/lib/nonprod/environment-lease-timing";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { nonprodLeaseDefinitions as definitions } from "./nonprod-lease-definitions";
-import { listNonprodEnvironmentLeases, toolSafeLease } from "./nonprod-lease-queries";
+import { listNonprodEnvironmentLeases, toolSafeLease } from "@/lib/nonprod/lease-queries";
 
 // Per-key trimmed string coercer — a copy of the inline helper the former switch
 // cases used, so the pack owns its inputs without depending on mcp-tools.ts

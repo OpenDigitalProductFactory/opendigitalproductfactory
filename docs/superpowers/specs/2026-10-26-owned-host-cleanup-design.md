@@ -109,3 +109,5 @@ acceptance or canonical heavy integration. The normal direct-release classifier
 and its process/foreign-owner negatives are unchanged.
 
 Independent review identified a post-completion renewal race. Four failing regressions covered late success, transport error, transient refusal and authoritative refusal; the finalization fence makes them green and prevents stale callbacks from renewing or terminating a completed command.
+
+The query helper lives in the existing nonprod library, outside the tool-pack discovery directory. Its regression test is registered with the normal CI guard profile; no new selectable pack or tool is introduced. Linked contributor, operations and pattern guidance describe the same completion contract.
