@@ -63,7 +63,7 @@ Each measure yields zero or more **review lines**: `{ measureKey, scope, ownerRe
 
 ### 4.2 The run
 
-New `taskKind: "decision-engine-review"` in `SCHEDULED_AGENT_TASK_KINDS`, executor `decision/self-review/decision-engine-review-task.ts` mirroring `bookkeeping-cycle-task.ts`: deterministic, idempotent per ISO week (`periodKey`), off the LLM path. It writes one `DecisionEngineReviewRun` row (period, computed measures as JSON, line count, routed count) and posts the digest into the standing governance Workroom the concierge design names. Seeded on every install by the scheduled-task seed with the default cron `0 6 * * 1` (Monday 06:00 UTC), owned by the install's operator principal.
+New `taskKind: "decision-engine-review"` in `SCHEDULED_AGENT_TASK_KINDS`, executor `decision/self-review/decision-engine-review-task.ts` mirroring `bookkeeping-cycle-task.ts`: deterministic, idempotent per ISO week (`periodKey`), off the LLM path. Under the amended persistence contract in section 5, it writes an immutable TaskArtifact result linked to the existing TaskRun (period, measured/routed coverage and evidence references) and posts the digest into the standing governance Workroom the concierge design names. Seeded on every install by the scheduled-task seed with the default cron `0 6 * * 1` (Monday 06:00 UTC), owned by the install's operator principal.
 
 ### 4.3 Routing (the "right human")
 
@@ -77,7 +77,7 @@ A line is never auto-applied. `examine-weight` lines feed `persistWeightAdjustme
 
 - Review page section "This week's engine review": the latest run's lines grouped by scope, each with confirm / reject / snooze; rejected lines carry a reason that the next run reads (a rejected line with the same key and unchanged evidence is not re-raised for 4 weeks).
 - Attention plane: a new `decision-engine-review` source emitting one item per routed line, lane per §4.3.
-- `DecisionEngineReviewRun` is queryable so week-over-week deltas are computed from prior runs, not recomputed history.
+- The authorized TaskRun/TaskArtifact result projection (section 5) supplies prior frozen results for week-over-week deltas, not recomputed history.
 
 ### 4.5 Guardrails
 
