@@ -88,8 +88,8 @@ No schema migration, new service, table, grant, credential, tool or UI is added.
 Native blocked host cleanup diagnosis: BI-521A92CF activity
 cmvplh1mn09ym01mll5vpwsnu. Existing scope-release diagnosis remains separate under
 BI-8D8939E5. Independent architecture assessment was read-only at the baseline;
-it is a client assessment, not a native passing receipt. Tests and live acceptance
-for this new implementation have not run.
+it is a client assessment, not a native passing receipt. Source verification is
+recorded below; canonical integration and live acceptance remain outstanding.
 
 
 ## Acceptance baseline (verbatim)
@@ -103,7 +103,9 @@ for this new implementation have not run.
 
 Implementation was admitted by IRD-36FB73BD3914 after the Medium acceptance
 baseline was recorded. First-failing runner, exact-readback and supervisor
-regressions were observed before implementation. Source tests now pass (93 Node
+regressions were observed before implementation. Source tests now pass (97 Node
 fixtures and 95 affected Vitest checks). These are source checks, not live
 acceptance or canonical heavy integration. The normal direct-release classifier
 and its process/foreign-owner negatives are unchanged.
+
+Independent review identified a post-completion renewal race. Four failing regressions covered late success, transport error, transient refusal and authoritative refusal; the finalization fence makes them green and prevents stale callbacks from renewing or terminating a completed command.

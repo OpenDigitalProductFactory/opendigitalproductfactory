@@ -111,6 +111,7 @@ export async function superviseLeaseRun({
 }) {
   const startedAt = new Date().toISOString();
   let fencedReason = "";
+  let finalizing = false;
   let heartbeatInFlight = null;
   let deadlineInFlight = null;
   let deadlineTimer = null;
@@ -121,7 +122,7 @@ export async function superviseLeaseRun({
   onEvent({ type: "started", at: startedAt });
 
   const fence = async (reason, eventType, detail = {}) => {
-    if (fencedReason) return;
+    if (finalizing || fencedReason) return;
     fencedReason = reason;
     onEvent({
       type: eventType,
@@ -141,6 +142,7 @@ export async function superviseLeaseRun({
   };
 
   const armAuthorityDeadline = () => {
+    if (finalizing) return;
     if (deadlineTimer !== null) cancelDeadline(deadlineTimer);
     const delayMs = Math.max(0, knownExpiryMs - safetyMarginMs - now());
     deadlineTimer = scheduleDeadline(() => {
@@ -162,7 +164,7 @@ export async function superviseLeaseRun({
   };
 
   const scheduleUncertainRetry = () => {
-    if (fencedReason) return;
+    if (finalizing || fencedReason) return;
     cancelRetryTimer();
     const delayMs = uncertainRetryDelayMs(ttlMs, uncertainStreak);
     onEvent({
@@ -178,12 +180,13 @@ export async function superviseLeaseRun({
   };
 
   const heartbeat = async () => {
-    if (fencedReason || heartbeatInFlight) return heartbeatInFlight;
+    if (finalizing || fencedReason || heartbeatInFlight) return heartbeatInFlight;
     heartbeatInFlight = (async () => {
       let response;
       try {
         response = await renew();
       } catch (error) {
+        if (finalizing) return;
         // Unreachable, not lost. Retry soon instead of surrendering a third of
         // the authority budget to a transport hiccup (BI-ECAE03F7).
         uncertainStreak += 1;
@@ -197,6 +200,7 @@ export async function superviseLeaseRun({
         scheduleUncertainRetry();
         return;
       }
+      if (finalizing) return;
       if (response?.success === true) {
         uncertainStreak = 0;
         cancelRetryTimer();
@@ -244,11 +248,16 @@ export async function superviseLeaseRun({
   } finally {
     // Finalization runs once after supervision. Host callers may observe natural
     // expiry instead of requesting release; other callers retain their release path.
+    // A renewal already on the wire may finish, but cannot restart supervision.
+    finalizing = true;
     cancelSchedule(timer);
     cancelRetryTimer();
     if (deadlineTimer !== null) cancelDeadline(deadlineTimer);
     if (heartbeatInFlight) await heartbeatInFlight;
     if (deadlineInFlight) await deadlineInFlight;
+    cancelRetryTimer();
+    if (deadlineTimer !== null) cancelDeadline(deadlineTimer);
+    deadlineTimer = null;
     // A failed release must not take the run's verdict with it: the evidence is
     // recorded after this, and an unreleased lease still accepts it.
     if (observeReservation) {

@@ -525,3 +525,42 @@ test("unavailable reservation observation preserves command outcome and redacts 
   assert.doesNotMatch(JSON.stringify(events), /private observer details/);
   assert.ok(!events.some(e => e.type === "released"));
 });
+
+
+for (const outcome of ["success", "transport-error", "transient-refusal", "authority-refusal"]) {
+  test(`in-flight renewal ${outcome} cannot rearm timers or renew after finalization`, async () => {
+    const child = deferred();
+    const finalization = deferred();
+    let resolveRenew, rejectRenew, heartbeat;
+    const renewResult = new Promise((resolve, reject) => { resolveRenew = resolve; rejectRenew = reject; });
+    let renewals = 0, terminations = 0;
+    const retries = new Map(), deadlines = new Map(), oldCallbacks = [];
+    let sequence = 0;
+    const resultPromise = superviseLeaseRun({ ttlMs: 60000, now: () => 0,
+      run: () => child.promise,
+      renew: () => { ++renewals; return renewResult; },
+      terminate: async () => { ++terminations; },
+      observeReservation: async () => ({ reservationState: "pending" }),
+      schedule: fn => { heartbeat = fn; return "heartbeat"; },
+      cancelSchedule: () => finalization.resolve(),
+      scheduleRetry: fn => { const key = ++sequence; retries.set(key, fn); oldCallbacks.push(fn); return key; },
+      cancelRetry: key => retries.delete(key),
+      scheduleDeadline: fn => { const key = ++sequence; deadlines.set(key, fn); oldCallbacks.push(fn); return key; },
+      cancelDeadline: key => deadlines.delete(key),
+    });
+    const renewing = heartbeat();
+    child.resolve({ status: 0 });
+    await finalization.promise;
+    if (outcome === "transport-error") rejectRenew(new Error("temporary"));
+    else resolveRenew(outcome === "success" ? { success: true, data: { lease: { expiresAt: new Date(120000).toISOString() } } }
+      : { success: false, error: outcome === "authority-refusal" ? "lease_lost" : "portal_quiescing" });
+    await renewing;
+    assert.equal((await resultPromise).status, "completed");
+    assert.equal(retries.size, 0, "late completion must not leave a retry armed");
+    assert.equal(deadlines.size, 0, "late completion must not rearm the authority deadline");
+    await heartbeat();
+    for (const callback of oldCallbacks) await callback();
+    assert.equal(renewals, 1, "stale callbacks cannot issue another renewal");
+    assert.equal(terminations, 0, "late callbacks cannot terminate a completed command");
+  });
+}
