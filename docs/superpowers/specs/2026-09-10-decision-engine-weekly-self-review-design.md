@@ -12,15 +12,13 @@ _Status: draft · BI-19CEC4B4 · EP-0AF96937 · branch `feat/decision-engine-wee
 
 ## Current reconciliation status (2026-10-25)
 
-Sections 1–9 preserve the original design and acceptance history. They describe intent, not a
-verified deployed inventory. Section 10 proposes completion integration. The human-only correction
+Sections 1–9 retain the original problem and objectives; section 5 and the corresponding acceptance/phasing references now explicitly supersede the absent proposed tables. They describe design intent, not a verified deployed inventory. Section 10 proposes completion integration. The human-only correction
 assumption changes only after its amendment is approved and a valid delegation exists; current
 controls remain in force.
 
 Source baseline: origin/main afd6723da1f1e20bdfd75e41f975fa81e7c89033. BI-19CEC4B4 remains
 awaiting-acceptance. Measures, executor and proposal routing exist; that does not prove an
-end-to-end corrective loop. The two review-run/disposition models proposed below were not found
-in the inspected schema. Do not create tables merely to match this historical prose.
+end-to-end corrective loop. The historical review-run/disposition models were not found in the inspected schema. Section 5 selects the existing task/result and proposal stores; persistence is settled for this amendment. Implementing that contract and independent scope approval remain owed.
 
 ## 1. Problem
 
@@ -88,11 +86,37 @@ A line is never auto-applied. `examine-weight` lines feed `persistWeightAdjustme
 - Thresholds live in one module with a test per measure over a fixture ledger.
 - The run never writes to any corpus; only the human's confirmation or the specialist's draft-first path does.
 
-## 5. Data model
+## 5. Persistence contract (2026-10-25 amendment)
 
-- `DecisionEngineReviewRun { runId, periodKey, startedAt, completedAt, measures Json, lines Json, routedCount, status }`, unique on `periodKey`.
-- `DecisionEngineReviewLineDisposition { runId, lineKey, disposition (confirmed|rejected|snoozed), reason, byPrincipalId, at }`.
-- No change to `DecisionInteraction`.
+This section replaces the historical proposal for DecisionEngineReviewRun and DecisionEngineReviewLineDisposition tables. Neither table is required. Reuse TaskRun, TaskNode, TaskArtifact, WorkroomActivity and DecisionResolutionProposal. This is a design contract; the current deterministic executor has not yet been connected to this durable result path.
+
+### 5.1 Canonical home and identity
+
+TaskRun owns review execution. Its unique public taskRunId is derived server-side from installation, owner, scheduled task, ISO week and review-definition version. The first admitted creation freezes the measurement cutoff and population/query versions in a2aMetadata. A same-identity dispatch joins that run after checking those bindings; it cannot replace its owner, cutoff or definition. TaskNode holds bounded execution attempts using its existing states. The deterministic dispatcher must enter this task path explicitly: the later LLM scheduler's createTaskRunForScheduledTask call does not currently wrap it.
+
+TaskArtifact owns the measured/routed result. Its taskRunId references TaskRun.id, not the public TR-* value. parts carries the versioned structured result; metadata carries schema version, cutoff, definition/source revisions, content digest and predecessor reference. producerAgentId and producerNodeId identify the producer. TaskRun.progressPayload contains artifact references and coverage summaries only; it is a projection, never a second result ledger. ScheduledAgentTask/ScheduledJob lastStatus/lastRunAt remain scheduling metadata, not review history or correction acceptance.
+
+The result contains period and scope, exact population windows and provenance classes, counts/denominators, page limits/cursors/completeness, line identities and query evidence, per-line routing destinations or failures, and references to existing proposal/correction/effect records. Missing edges stay explicit. Large evidence goes through the existing bounded-output/blob mechanism; do not embed full ledger rows or logs. Read through the existing task-result authorization and retain the owning models' lifecycle and retention policy; this amendment grants no purge or broader access. No change to DecisionInteraction or new persistent model is needed.
+
+### 5.2 Concurrency, retries and late evidence
+
+Use the existing database uniqueness constraints and a transaction, not a text search in backlog activity. Extend the canonical task/artifact writer to accept server-derived deterministic identity and a transaction; its present random-ID createTaskArtifact helper alone is insufficient. Each attempt artifact has a unique artifactId derived from run, attempt node and content digest. Replaying identical content returns that artifact; conflicting content under the same identity is an integrity failure. Freeze a completed result with a unique run/result artifactId and atomically set the run's current result reference. Concurrent contenders read the winner; they never overwrite it.
+
+Before routing an effect, persist its stable finding key (scope, profile/class, measure and target) and intended destination. Reuse the destination's canonical idempotency key or reconcile its existing record on recovery. A transaction cannot promise exactly-once external execution: an uncertain effect remains open for reconciliation before retry. A later attempt appends evidence and references its predecessor. A completed run is not rerun by another tick. Deliberate remeasurement with a changed cutoff/definition creates a separately identified successor with parentTaskRunId referencing the prior row; it must reuse the finding's existing open destination. Late observations append to that correction's evidence and appear in the next review, preserving the original measurement.
+
+Persist partial results before reporting failure. Measurement and routing coverage are separate; routing failure cannot become an empty successful summary. TaskRun may complete when its declared measurement/routing work is complete, even while corrections are open, but the result must report those open corrections and never call them verified. A persistence failure leaves execution failed or unresolved and cannot advance a successful schedule cursor. Readers treat missing, expired or unreadable evidence as unknown coverage.
+
+### 5.3 Dispositions and correction outcomes
+
+DecisionResolutionProposal is the source of truth for an actual owner ruling: its existing status, ruledByUserId, ruledAt, rulingNote, acceptedPayload and replacement chain retain their meaning. Automated correction must never populate human-ruling fields. Review lines reference these records; they do not copy a second mutable disposition.
+
+Delegated correction belongs to its existing Workroom/TaskRun. Append evidence through WorkroomActivity's existing evidence path, binding finding key, review artifact, disposition/hold reason, expected outcome, follow-up due time, applicable authority and effect/outcome references. The current projector derives correction and follow-up state from those records and their existing lifecycle; no parallel status machine is introduced. ExternalEvidenceRecord remains the referenced effect/verification evidence carrier, not a duplicate weekly review store. Preserve observer provenance and distinguish execution from independently observed quality.
+
+Suppression requires the current proposal ruling or attributable correction evidence and its explicit due/expiry time. The original four-week rejection rule remains a policy input, not an unbounded activity-text search. A snooze or no-change disposition is owned evidence with a due time; absence of evidence never suppresses a finding. Changed evidence creates an attributable successor while preserving the prior decision.
+
+### 5.4 Audit and decision
+
+Audited at source 7ac0c84858d819c58f5763477eee106284c9220f: packages/db/prisma/schema/build-delivery.prisma (TaskRun, TaskNode, TaskArtifact, ExternalEvidenceRecord), packages/db/prisma/schema/decision-governance.prisma (DecisionResolutionProposal), apps/web/lib/tak/task-records.ts and autonomous-work-run.ts, and the deterministic scheduler/review executor. Native scope finding IF-5A9AEEE7D45366B2 required this concrete persistence choice. WWMD consult DI-7A2EDCFADAEE recommends task-artifact over telemetry-manifest or dedicated tables. Its feature scores are stated engineering estimates, not measured outcomes or a scope approval. The initial featureless consult DI-1ACFFF508A5C was insufficient signal and confers no recommendation.
 
 ## 6. Objectives
 
@@ -107,7 +131,7 @@ A line is never auto-applied. `examine-weight` lines feed `persistWeightAdjustme
 | AC-ID | Objectives | Statement |
 |---|---|---|
 | AC-1 | OBJ-1 | A fixture ledger reproducing the 2026-09-08 measurements yields lines for craft-fallback (enterprise-architecture, 348), unlearned (kernel-consult, ratio 1.0), empty-question (4 tool names) and starvation (mark-dpf-platform). |
-| AC-2 | OBJ-1 | Running the task twice in one ISO week produces one `DecisionEngineReviewRun`. |
+| AC-2 | OBJ-1 | Concurrent ticks and restart in one ISO week reuse one logical TaskRun for the same definition and one frozen completed TaskArtifact result; partial attempts and deliberate successors remain attributable under section 5. |
 | AC-3 | OBJ-2 | Lines route by scope: WWMD to founder review, WWWD to the owner digest lane, WSID to the registry's accountable coworker; each line carries its query and counts. |
 | AC-4 | OBJ-2 | `examine-weight` lines appear as weight proposals on the review page through the existing proposal store; no run writes to `WikiPage` or `PerspectiveMaterial`. |
 | AC-5 | OBJ-3 | A rejected line with unchanged evidence is not re-emitted for 4 weeks; a confirmed line is not re-emitted while its evidence trends down. |
@@ -115,7 +139,7 @@ A line is never auto-applied. `examine-weight` lines feed `persistWeightAdjustme
 
 ## 8. Phasing
 
-1. Measures module + fixture tests + `DecisionEngineReviewRun` (AC-1, AC-2).
+1. Measures module + fixture tests + existing TaskRun/TaskArtifact persistence contract (AC-1, AC-2).
 2. Task kind, executor, seed, room digest (AC-6).
 3. Routing + attention source + review-page section with dispositions (AC-3, AC-5).
 4. Weight-proposal and corpus-BI wiring (AC-4).
@@ -182,9 +206,7 @@ expected outcome, follow-up due time and explicit disposition. Refresh evidence 
 finding; do not duplicate it or silently alter an approval's exact content. Materially changed
 evidence creates an attributable successor.
 
-Reuse DecisionResolutionProposal, Workroom/TaskRun execution and evidence. Audit their canonical
-fields before adding any table/type/tool. Persist measured and routed coverage; console output
-alone is insufficient. The historical proposed model names are not a schema mandate.
+Use the selected persistence contract in section 5: TaskRun/TaskArtifact for review execution/results, DecisionResolutionProposal for actual owner rulings, and Workroom/TaskRun evidence for delegated correction and follow-up. Persist measured and routed coverage; console output alone is insufficient. No review-run or disposition table is proposed.
 
 Required lifecycle: measured finding -> owned disposition -> permitted correction -> recorded
 effect -> follow-up observation -> verified, ineffective or explicitly insufficient evidence.

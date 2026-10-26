@@ -17,7 +17,7 @@ Phased implementation of the design at `docs/superpowers/specs/2026-09-10-decisi
 
 - `apps/web/lib/decision/self-review/measures.ts`: pure, deterministic measures over `ReviewLedgerRow[]` (volume, craft-fallback, starvation, repeat-escalation, empty-question, unlearned, agreement, weight-sensitive); one `REVIEW_THRESHOLDS` module; `computeReviewLines`.
 - `measures.test.ts`: fixture reproducing the 2026-09-08 findings; per-measure edge cases; determinism.
-- `DecisionEngineReviewRun` and `DecisionEngineReviewLineDisposition` Prisma models + migration; unique on `periodKey`.
+- Historical table proposal superseded: use the existing TaskRun/TaskArtifact persistence contract in design section 5; no new review-run or disposition models.
 - Loader `load-review-window.ts`: trailing 7 days of `DecisionInteraction` joined with profile kind, plus material counts per profile.
 - Deliverable BI: this item (BI-19CEC4B4) until decomposed at plan review.
 
@@ -34,8 +34,7 @@ Phased implementation of the design at `docs/superpowers/specs/2026-09-10-decisi
 `0 6 * * 1` (Monday 06:00 UTC, before the bookkeeping cycle so a week of
 governance findings is waiting when the operating week opens). The executor
 `decision/self-review/decision-engine-review-task.ts` mirrors
-`bookkeeping-cycle-task.ts`: deterministic, off the LLM path, idempotent per
-ISO week. `load-review-window.ts` is the single read behind it, so the measures
+`bookkeeping-cycle-task.ts`: deterministic and off the LLM path. The original claim of durable per-ISO-week idempotency is not established by its activity-text lookup; design section 5 and V-PERSISTENCE define the required repair. `load-review-window.ts` is the single read behind it, so the measures
 stay pure and every finding is reproducible from a fixture.
 
 Material coverage counts only rows the gate can actually read
@@ -59,7 +58,7 @@ review-page section.
 
 ## Verification
 
-Unit: fixture and per-measure tests (Phase 1), executor idempotency (Phase 2), routing and suppression (Phase 3), proposal wiring (Phase 4). Live: after deploy, `list_scheduled_agent_tasks` shows the task; a manual `rerun_scheduled_agent_task` produces one run row and the review-page section on the DEV install.
+Unit: fixture and per-measure tests (Phase 1), executor idempotency (Phase 2), routing and suppression (Phase 3), proposal wiring (Phase 4). Live: after deploy, `list_scheduled_agent_tasks` shows the task; a manual `rerun_scheduled_agent_task` produces one logical TaskRun and frozen TaskArtifact result under design section 5, with the review-page projection on the DEV install.
 
 ## Completion integration amendment (2026-10-25, draft)
 
@@ -75,7 +74,7 @@ design/plan approval and coverage required by the item's actual shape before imp
 
 | Historical statement | Current source finding / required disposition |
 |---|---|
-| New review-run/disposition tables are required | Neither proposed model was found. Audit ScheduledAgentTask/TaskRun, WorkroomActivity and DecisionResolutionProposal before schema work. |
+| New review-run/disposition tables are required | Superseded by design section 5: TaskRun/TaskArtifact own review execution/results, proposal records own actual owner rulings, and Workroom/TaskRun evidence owns delegated correction. No new tables. |
 | ISO-week lookup establishes complete idempotency | Proposal deduplication and a historical activity lookup do not prove one durable complete review. Verify concurrency, restart and coverage. |
 | Every finding becomes a human proposal | Some stop at report/defect-needed or craft nomination. Under design section 10, delegated correction may act; missing authority becomes one owner decision. |
 | Seven days of rows measures outcomes overdue a week | Split reporting/overdue populations, canonical provenance-aware denominators and bounded continuation. |
@@ -107,7 +106,7 @@ outcome/citation acceptance and reliability. Paired-installation-owned records r
 1. **Reproduce and retain evidence.** Re-read live statuses and exact source; establish schedule/run
    health through a bounded read. A truncated listing cannot prove absence. Reproduce window,
    provenance, missing binding and repeated-refusal faults with exact run lineage.
-2. **Verify merged measurement and close remaining defects before tuning.** BI-F55BBB6B / PR #6577 repairs the mature-population query and completeness disclosure; do not reimplement it. V-MEASURES: include a ten-day-old unresolved decision,
+2. **Implement the selected durable review contract and verify measurement before tuning.** Under BI-19CEC4B4, wire the deterministic dispatcher to existing TaskRun/TaskNode execution and TaskArtifact results (design section 5); extend the canonical task-record writer for server-derived IDs and transaction support. Freeze cutoff/definition, persist per-line intended destinations before effects, preserve partial routing failures, and publish the completed artifact reference atomically. V-PERSISTENCE: concurrent ticks, mid-routing crash/restart, identity/content conflict, completed-run replay, changed-definition successor, uncertain effect reconciliation, unauthorized result read and late observation. Assert one frozen result, no duplicated destination, no fabricated human ruling and explicit unknown coverage. Then verify merged measurement. BI-F55BBB6B / PR #6577 repairs the mature-population query and completeness disclosure; do not reimplement it. V-MEASURES: include a ten-day-old unresolved decision,
    recent decision, late outcome, agent report and human choice; test page-limit continuation,
    duplicate ticks, restart, changed policy version and routing failure. Preserve unknowns and
    sample minima. Do not promote weights or trust.
@@ -138,11 +137,10 @@ existing homes. Add no second approval engine, ledger, scheduler or broad DEV by
 collection and routing before expanding tuning capability.
 
 Contract refs: GPP-PURPOSE-LINEAGE (GPP realization section 12), REVIEW-CORRECTION-LIFECYCLE
-(review design section 10), TAK-PD-003/006 (hard constraints and exact authorization).
+(review design section 10), REVIEW-PERSISTENCE (review design section 5), TAK-PD-003/006 (hard constraints and exact authorization).
 Flow refs: purpose-to-effect-to-observation and finding-to-correction-to-verification.
 
-If the audit proves additive schema fields necessary, use existing classification/retention and
-fleet-safe migration review. This amendment makes no schema change. Do not backfill causality from
+The audited persistence choice uses existing fields and model policies (design section 5); no additive schema field or table is planned. An implementation finding that disproves this choice requires an explicit scope amendment and the existing data review, rather than a silent carrier change. This amendment makes no schema change. Do not backfill causality from
 text similarity. Roll out measurement first, one scope/class in shadow, then a separately authorized
 bounded correction. Preserve schedules, evidence and per-binding enforcement mode.
 
