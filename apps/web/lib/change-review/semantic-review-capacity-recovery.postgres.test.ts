@@ -71,7 +71,6 @@ vi.mock("@/lib/inference/host-gpu-admission", () => ({
 vi.mock("@/lib/observability/threshold-lookup", () => ({
   resolveThresholdForTaskRun: async () => ({ scope: "fixture", heartbeatTimeoutSeconds: 180, totalPhaseTimeoutSeconds: 1800 }),
 }));
-vi.mock("@/lib/self-upgrade/quiescence", () => ({ getQuiescenceLevel: async () => "normal" }));
 vi.mock("@/lib/operate/scheduled-jobs/core", () => ({ isJobEnabled: async () => true }));
 vi.mock("@/lib/mcp-task-background-worker", () => ({
   executePersistedRemoteTask: async () => ports.unexpected("unrelated remote task execution"),
@@ -99,6 +98,7 @@ import { tickCrons } from "@/lib/jobs/postgres/store";
 import { createJobWorker, maxAttemptsFor, type JobWorker } from "@/lib/jobs/postgres/worker";
 import { REMOTE_TASK_EXECUTION_EVENT } from "@/lib/queue/mcp-task-run-events";
 import { mcpTaskRunExecute, mcpTaskRunDispatchReconciliation } from "@/lib/queue/functions/mcp-task-run-execute";
+import { getQuiescenceConfig, invalidateQuiescenceCache, QUIESCENCE_CONFIG_KEY } from "@/lib/self-upgrade/quiescence";
 import { enqueueSemanticReview, reconcileSemanticReviews } from "./semantic-review-background";
 import { createSemanticReviewRequest, type SemanticReviewRequest } from "./semantic-review-request";
 import { claimSemanticReviewSingleFlight, createPrismaSemanticReviewSingleFlightStore } from "./semantic-review-single-flight";
@@ -107,7 +107,7 @@ import { failureAnalysisFixture } from "./failure-analysis.test-fixtures";
 // No DATABASE_URL fallback. A missing governed SQL slot reports all cases skipped.
 const url = process.env.DPF_SQL_TEST_DATABASE_URL ?? process.env.DPF_LOCAL_CI_TEST_DATABASE_URL;
 const schema = `review_capacity_${randomUUID().replaceAll("-", "")}`;
-const tables = ["TaskRun", "TaskArtifact", "TaskNode", "WorkCapsule", "ExternalEvidenceRecord", "WorkCapsuleActivity",
+const tables = ["TaskRun", "TaskArtifact", "TaskNode", "WorkCapsule", "ExternalEvidenceRecord", "WorkCapsuleActivity", "PlatformConfig",
   "JobEvent", "JobRun", "JobStep", "JobWait", "JobConcurrencySlot", "JobCronState"];
 const capsuleId = "WC-CAPACITY-COMPOSITION-FIXTURE";
 const executionId = "mcp/task-run-execute";
@@ -157,6 +157,7 @@ describe.skipIf(!url)("semantic capacity continuation through PostgreSQL jobs an
     await bounded(Promise.allSettled([...inFlight]), "capacity fixture operations drain", 15_000);
     if (worker) await bounded(worker.stop(), "capacity fixture worker stop", 10_000);
     worker = undefined;
+    invalidateQuiescenceCache();
   }
 
   // Registered before setup: a setup timeout must still await its real outcome.
@@ -197,6 +198,14 @@ describe.skipIf(!url)("semantic capacity continuation through PostgreSQL jobs an
     await pool.query(`TRUNCATE ${tables.map(table => `"${table}"`).join(",")}`);
     vi.clearAllMocks();
     ports.capacityAvailable = false;
+    // The real recovery path reads this existing configuration table. Keep the
+    // reader/cache real and its row schema-local, rather than mocking a dynamic
+    // module import that the observed canonical run did not intercept.
+    const quiescence = { level: "normal", runId: null, enteredAt: new Date(0).toISOString() };
+    await db.platformConfig.create({ data: { key: QUIESCENCE_CONFIG_KEY, value: quiescence } });
+    invalidateQuiescenceCache();
+    expect(await getQuiescenceConfig()).toEqual(quiescence);
+    invalidateQuiescenceCache(); // The worker must make its own fresh read.
     const artifact = "diff --git a/fixture.tsx b/fixture.tsx\n+controlled capacity fixture\n";
     packet = createSemanticReviewRequest({ surface: "external", authorSurface: "codex", artifactType: "code-change",
       title: "Controlled capacity continuation", artifact, changedFiles: ["fixture.tsx"],

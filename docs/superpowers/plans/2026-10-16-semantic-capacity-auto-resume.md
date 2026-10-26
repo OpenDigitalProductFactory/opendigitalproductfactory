@@ -186,8 +186,8 @@ Use unchanged `createReviewPostgresFixture` with an explicit governed
 `DPF_SQL_TEST_DATABASE_URL` or `DPF_LOCAL_CI_TEST_DATABASE_URL`, unique
 review-prefixed UUID schema and no public-table fallback. Required existing
 table copies are TaskRun, TaskArtifact, TaskNode, WorkCapsule,
-ExternalEvidenceRecord, WorkCapsuleActivity, JobEvent, JobRun, JobStep, JobWait,
-JobConcurrencySlot and JobCronState. Correctly distinguish internal task row
+ExternalEvidenceRecord, WorkCapsuleActivity, PlatformConfig, JobEvent, JobRun,
+JobStep, JobWait, JobConcurrencySlot and JobCronState. Correctly distinguish internal task row
 IDs from public TaskRun IDs.
 
 The shared helper clones definitions, indexes, enums and checks, not foreign
@@ -198,8 +198,11 @@ import `semantic-review-background.test-fixtures.ts` and thereby mock away
 the mechanism under test.
 
 Provider responses, authority/evidence observations, craft lookup, host
-telemetry, quiescence, unrelated task/reviewer dispatch and external publication
-remain explicit controlled ports. Use the actual capacity policy with a
+telemetry, unrelated task/reviewer dispatch and external publication remain
+explicit controlled ports. Quiescence uses its real reader/cache against the
+isolated PlatformConfig row `portal.quiescence`, seeded to normal and read back
+before each case; invalidate the cache before workflow execution and after
+draining each case. Use the actual capacity policy with a
 fixture lease reader and its actual typed deferral error. No real host lease
 is acquired or released by a case. Fail on unexpected provider, portal,
 GitHub or external queue calls. A terminal receipt is genuinely persisted by
@@ -299,3 +302,19 @@ through a signed revert of this test/plan change; no runtime deployment is
 required for a test-only change. Never erase native history to close the slice.
 
 Amendment admission checkpoint (2026-10-26): plan commit `2e9a5f00ef759e951c4a16b38d9d1f378f691ae7`, blob `f38c2ab58ba1237f18e73514e48ed81e5f68e161`, was published through the normal signed documentation path. Coverage `cmvpmvmo50oh001ml9e7010aa` was recorded and checked current. The initial implementation decision `IRD-6D12D76D22D8` identified stale author research; its prescribed design-claim and current-source research remedy produced receipt `initiative-52afa095-a093-4352-a360-c456dc325b33`. Decision `IRD-562959CEFC4F` then allowed implementation under the unchanged Medium/low scope. This checkpoint supersedes the pending admission statements above; it does not claim that tests have executed or that native acceptance is complete. Refresh immutable coverage for the final published plan.
+
+Canonical RED checkpoint (2026-10-26): candidate
+`5194054d60cda0efd621ffda74e3731725135a3b`, lease `NPEL-E8A7C8B1CF`,
+EER `cmvpp3pbr0bpl01lguhj8448h` executed all three SQL cases: two passed and
+the continuation case failed with P2021. The retained stack reaches
+`resumeCapacityWait` through the real `getQuiescenceLevel` /
+`getQuiescenceConfig` reader and then the absent isolated `PlatformConfig`
+table, before recovery CAS or final receipt publication. The intended module
+mock was not used on that observed path; the reason for that bypass is unproven.
+The authorized fixture repair adds this thirteenth existing canonical table,
+seeds and verifies only its normal quiescence row, removes the module mock and
+invalidates the real cache between cases. Queue, request, CAS, checkpoints,
+receipt/activity transactions and their assertions remain real and unchanged.
+No production schema, installed data or public-schema fallback is added.
+The failed result remains historical; corrected-source verification and genuine
+served acceptance remain UNRUN.
