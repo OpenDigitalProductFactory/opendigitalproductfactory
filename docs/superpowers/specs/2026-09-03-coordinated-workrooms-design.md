@@ -619,6 +619,8 @@ the same principal, mandate and permitted tools.
 | Ask an accountable coworker | request_coworker | thread_write present; current delegation, action and request gates still apply |
 | Read the response and reconcile it | get_thread_result, get_child_threads; original task result/receipt | thread_read absent; qualify the supported result route before dispatch |
 | Inspect participation and messages | get_coworker_room_engagement, read_room_messages | work_room_read absent |
+| Resolve local installation purpose and peer limit | get_my_coworker_profile.installationContext plus existing trusted-link/estate projection | October 26 caller inspection confirms DEV/evolve-dpf/read-only peer; the COO must invoke its own admitted path |
+| Consult another installation’s COO | existing federation/A2A task, outbox and result contracts | Not qualified: helper presence and local A2A health do not prove a reachable remote COO tool; retain an explicit dependency until the federation owner supplies the supported route |
 | Record coordination and request supported recovery | post_room_message, record_agent_activity, resume_workroom_queue, reassign_workroom_executor, drive_workroom_runtime | relevant room/capsule write grants absent; each action requires its own authority/admission check |
 
 These are existing permission categories, not instructions to grant every write
@@ -634,6 +636,13 @@ an eligible owner's acknowledgement, read the actual result, and independently
 verify advancement. A prose acknowledgement or a tool advertised in a prompt
 alone does not establish awareness plus usable capability. Until that rehearsal,
 report onboarding and operational readiness as pending.
+
+AC-COO-08 extends that rehearsal: identify the local installation and a verified
+peer COO, request one permitted production fact absent from DEV, retain source
+and freshness, and read the destination’s acknowledgement and result through
+its authorized route. Also prove denied/unreachable context stays an owned wait
+and a sandbox returns evidence before expiry. A local handoff, federated mirror
+or membership invitation is not a substitute for this end-to-end qualification.
 
 ### Harness engineering alignment requested by the founder
 
