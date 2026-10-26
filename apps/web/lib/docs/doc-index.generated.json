@@ -13349,6 +13349,15 @@
         "what-to-watch"
       ]
     },
+    "docs/user-guide/workroom-approval-recovery.md": {
+      "publicHref": "/user-guide/workroom-approval-recovery/",
+      "portalHref": "/docs/workroom-approval-recovery",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "workroom-reports-and-approval-waits"
+      ]
+    },
     "docs/user-guide/workspace/attention-inbox.md": {
       "publicHref": "/user-guide/workspace/attention-inbox/",
       "portalHref": "/docs/workspace/attention-inbox",
