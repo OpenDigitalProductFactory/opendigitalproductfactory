@@ -1,3 +1,5 @@
+import {captureTaskExecutionFence} from "@/lib/shared/task-execution-fence";
+import {assertEngagementVisualReadGrants,loadEngagementVisualEvidence,hasEngagementVisualDelivery} from "./engagement-visual-evidence";
 import { parseResourceWaitProjection, RESOURCE_WAIT_MAX_ATTEMPTS } from "@/lib/mcp-task-capacity-contract";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import type { Prisma } from "@dpf/db";
@@ -42,6 +44,7 @@ export function assertEngagementSnapshot(binding: EngagementTaskBinding, state: 
     if (!repository || repository !== binding.artifactRef.repositoryFullName || encoded[2] !== binding.artifactRef.path) throw new Error("engagement_original_artifact_required: original free-text repository and path must match; artifact substitution is refused");
   }
   const fulfillment = record(engagement.metadata).fulfillment;
+  if(service.serviceId==="svc-ux-design-critique"&&fulfillment===undefined&&!binding.visualEvidenceRef)throw new Error("engagement_rendered_input_required: bind owned immutable rendered captures before first Critic dispatch");
   if (fulfillment !== undefined && (!taskRunId || record(fulfillment).taskRunId !== taskRunId
     || canonicalJson(record(fulfillment).binding) !== canonicalJson(binding))) reject();
 }
@@ -110,6 +113,7 @@ export async function validateEngagementTask(input: {
       ? !(ENGAGEMENT_READ_TOOLS as readonly string[]).includes(scope.slice(5))
       : !tokenGrants.includes(scope) || !actorGrants.includes(scope))
     || ENGAGEMENT_READ_TOOLS.some(name => !input.authorityScope.includes(`tool:${name}`))) throw new Error("engagement_grant_intersection_refused");
+  if(binding.visualEvidenceRef)assertEngagementVisualReadGrants([tokenGrants,actorGrants,providerGrants]);
   assertEngagementSnapshot(binding, { engagement, offer: engagement.offer, service: engagement.service, room }, input.taskRunId, input.allowPreAdmissionRecovery);
   if (input.request && (input.request.objective !== engagement.requestedOutcome
     || input.request.prompt !== buildEngagementTaskPrompt(binding, engagement))) throw new Error("engagement_request_content_refused");
@@ -118,12 +122,13 @@ export async function validateEngagementTask(input: {
     const access = await resolveAgentWorkroomAccess({ userId: token.userId, agentId, workroomId: room.id, requested }, db);
     if (access.decision.level !== requested) throw new Error(`engagement_room_access_refused:${access.decision.reason}`);
   }
-  return { engagement, room };
+  const visualEvidence=await loadEngagementVisualEvidence(binding,undefined,db);
+  return { engagement, room, visualEvidence };
 }
 
 type ContributionExecution = { id: string; toolName: string; success: boolean; parameters: unknown; result: unknown };
-export function validateEngagementContribution(binding: EngagementTaskBinding, content: unknown, executions: readonly ContributionExecution[], professionKey?: string, evidence: readonly EngagementRead[] = []) {
-  if (typeof content !== "string" || content.length > 100_000) return null;
+export function validateEngagementContribution(binding: EngagementTaskBinding, content: unknown, executions: readonly ContributionExecution[], professionKey?: string, evidence: readonly EngagementRead[] = [], visualDelivery?:unknown) {
+  if (typeof content !== "string" || content.length > 100_000 || !hasEngagementVisualDelivery(binding,visualDelivery)) return null;
   let contribution: Record<string, unknown>;
   try { contribution = record(JSON.parse(content.replace(/^\x60\x60\x60(?:json)?\s*/u, "").replace(/\s*\x60\x60\x60$/u, ""))); } catch { return null; }
   const nonemptyStrings = (value: unknown): value is string[] => Array.isArray(value) && value.length > 0 && value.length <= 100 && value.every(text);
@@ -140,6 +145,7 @@ export function validateEngagementContribution(binding: EngagementTaskBinding, c
     actorAgentId: binding.actorAgentId, providerAgentId: binding.providerAgentId,
     engagementId: binding.engagementId, professionKey: professionKey ?? null,
     workroomId: binding.workroomId, stageKey: binding.stageKey, advisoryOnly: true, authorDisposition: "pending",
+    ...(binding.visualEvidenceRef?{renderedEvidence:visualDelivery}:{}),
     readProvenance: proven, critiqueCorpusEvidence: calibration, calibrationLimitations: calibration.some(row => row.total === 0) ? ["UNGROUNDED: calibrated UX critique corpus is empty; findings remain advisory."] : [],
     scopeLimitations: ["Review applies to the named immutable artifact, not to a newer deployed revision.", "Wiki query evidence identifies consulted previews; full pinned guidance reads are separately listed."] };
 }
@@ -171,7 +177,7 @@ async function reconcileEngagementTaskResultInTransaction(taskRunId: string, db:
   const binding = parseEngagementTaskBinding(record(task?.a2aMetadata).engagementBinding);
   if (!task || !binding) return;
   const engagement = await db.coworkerEngagement.findUnique({ where: { engagementId: binding.engagementId } });
-  if (!engagement || !["accepted", "in-progress", "unknown"].includes(engagement.status)) return;
+  if (!engagement || !["accepted", "in-progress", "unknown", "unavailable"].includes(engagement.status)) return;
   const metadata = record(engagement.metadata), association = record(metadata.fulfillment);
   if (association.taskRunId !== taskRunId || canonicalJson(association.binding) !== canonicalJson(binding)) return;
   let status: string = "accepted";
@@ -185,18 +191,20 @@ async function reconcileEngagementTaskResultInTransaction(taskRunId: string, db:
     const provider = await db.agent.findUnique({ where: { agentId: binding.providerAgentId }, select: { agentId: true, name: true, slugId: true } });
     const family = provider ? findProfessionFamilyForAgentIdentity(provider) : null;
     // A later room head does not erase an executed historical artifact's provenance.
-    result = family && !record(task.a2aMetadata).engagementReadFailure && engagementInputDigest(engagement.requestedOutcome, engagement.inputPayload) === binding.inputDigest
-      ? validateEngagementContribution(binding, record(task.progressPayload).summary, executions, family.professionKey, engagementReadEvidence(record(task.a2aMetadata).engagementReadEvidence)) : null;
+    result = family && !record(task.a2aMetadata).engagementReadFailure && hasEngagementVisualDelivery(binding,record(task.a2aMetadata).engagementVisualDelivery,captureTaskExecutionFence(task.progressPayload,record(task.a2aMetadata).requestDigest??null)) && engagementInputDigest(engagement.requestedOutcome, engagement.inputPayload) === binding.inputDigest
+      ? validateEngagementContribution(binding, record(task.progressPayload).summary, executions, family.professionKey, engagementReadEvidence(record(task.a2aMetadata).engagementReadEvidence),record(task.a2aMetadata).engagementVisualDelivery) : null;
     status = result ? "completed" : "unavailable";
-  } else if (["input-required", "auth-required"].includes(task.status)) status = "unknown";
+  } else if (task.status === "input-required" && record(record(task.progressPayload).engagementEvidenceWait).kind === "incomplete-read-evidence") status = "unavailable";
+  else if (["input-required", "auth-required"].includes(task.status)) status = "unknown";
   const capacityWait = status === "accepted" && task.status === "submitted" ? parseResourceWaitProjection(task.progressPayload) : null;
-  if (status === engagement.status && !result
-    && canonicalJson(association.resourceWait ?? null) === canonicalJson(capacityWait)) return;
   const { waitReason: _priorWait, resourceWait: _priorResourceWait, ...stableAssociation } = association;
+  const incompleteReadAction = "Native capability, descendant closure and effects lack qualified execution proof. Do not replay this execution. Obtain the existing recovery owner's supported finite disposition preserving this engagement and task history.";
   const nextAction = capacityWait ? capacityWait.attempt < RESOURCE_WAIT_MAX_ATTEMPTS
     ? "After inspecting provider routing/availability, repeat the identical fulfillment packet after the recorded retry time to wake this same task; do not create another request."
     : "Capacity retry budget is exhausted. Inspect the original task failure; do not submit a replacement request."
-    : status === "unknown" ? "Reconcile the original execution; do not replay." : status === "unavailable" ? "Inspect actual source/corpus provenance on the original task." : status === "failed" ? "Inspect the original failure and its supported recovery; do not create a replacement request." : status === "completed" ? "Request attributable author disposition in the original Workroom." : "Observe this same engagement and task.";
+    : status === "unknown" ? "Reconcile the original execution; do not replay." : status === "unavailable" ? incompleteReadAction : status === "failed" ? "Inspect the original failure and its supported recovery; do not create a replacement request." : status === "completed" ? "Request attributable author disposition in the original Workroom." : "Observe this same engagement and task.";
+  if (status === engagement.status && !result && (status !== "unavailable" || association.nextAction === nextAction)
+    && canonicalJson(association.resourceWait ?? null) === canonicalJson(capacityWait)) return;
   const written = await db.coworkerEngagement.updateMany({ where: { id: engagement.id, updatedAt: engagement.updatedAt, status: engagement.status }, data: {
     status, completedAt: status === "completed" ? task.completedAt ?? new Date() : null,
     metadata: { ...metadata, fulfillment: { ...stableAssociation, state: status, taskStatus: task.status, nextAction,

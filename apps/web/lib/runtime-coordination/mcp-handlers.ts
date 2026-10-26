@@ -1,4 +1,4 @@
-import { prisma } from "@dpf/db";
+import { prisma, type Prisma } from "@dpf/db";
 
 import type { ToolResult } from "@/lib/mcp-tool-types";
 import {
@@ -311,6 +311,16 @@ export async function recordRuntimeVerificationTool(
       db: runtimeDb(),
       input,
       actor: await actor(userId, context),
+      smallAcceptance: kind === "final-acceptance" && input.backlogActivityId ? {
+        load: async args => {
+          const { loadSmallAcceptanceContext } = await import("./small-acceptance-binding.server");
+          return loadSmallAcceptanceContext({ ...args, db: args.db as unknown as Prisma.TransactionClient });
+        },
+        refresh: async (db, itemId) => {
+          const { refreshSmallAcceptanceSnapshot } = await import("./small-acceptance-binding.server");
+          await refreshSmallAcceptanceSnapshot(db as unknown as Prisma.TransactionClient, itemId);
+        },
+      } : undefined,
     });
     return {
       success: true,

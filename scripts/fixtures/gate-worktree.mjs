@@ -77,12 +77,12 @@ export async function startGateFixtureMcp(resultFor, { tls } = {}) {
       body += chunk;
       if (body.length > 128 * 1024) request.destroy();
     });
-    request.on("end", () => {
+    request.on("end", async () => {
       try {
         const payload = JSON.parse(body);
         const call = { name: payload.params.name, args: payload.params.arguments };
         calls.push(call);
-        const result = resultFor(call, calls);
+        const result = await resultFor(call, calls);
         response.setHeader("content-type", "application/json");
         response.end(JSON.stringify({ jsonrpc: "2.0", id: payload.id, result: { content: [{ type: "text", text: JSON.stringify(result) }] } }));
       } catch (error) { response.writeHead(500).end(String(error)); }

@@ -7,7 +7,7 @@ vi.mock("@/lib/tak/agent-grants", () => ({
 }));
 import { getAgentToolGrantsAsync } from "@/lib/tak/agent-grants";
 import { createSemanticReviewRequest } from "./semantic-review-request";
-import { verifySemanticReviewAuthority } from "./semantic-review-authority";
+import { inspectSemanticReviewAuthority, verifySemanticReviewAuthority } from "./semantic-review-authority";
 
 function fixture() {
   const packet = createSemanticReviewRequest({ surface: "external", authorSurface: "codex", artifactType: "code-change",
@@ -25,6 +25,36 @@ function fixture() {
 }
 beforeEach(() => { vi.mocked(getAgentToolGrantsAsync).mockResolvedValue(["backlog_write"]); });
 describe("durable review authority", () => {
+  it.each([
+    ["inactive-user", "human-capability-denied"], ["missing-token", "saved-token-unavailable"],
+    ["read-token", "saved-token-scope-denied"], ["revoked-grant", "coworker-grant-denied"],
+    ["reassigned-run", "task-authority-denied"], ["unsupported-source", "auth-source-unsupported"],
+    ["oauth-client-missing", "oauth-authority-invalid"],
+  ])("explains %s with fixed categories and the same execution refusal", async (condition, reason) => {
+    const { packet, db } = fixture();
+    if (condition === "inactive-user") db.user.findUnique.mockResolvedValue({ isActive: false, isSuperuser: true, groups: [] });
+    if (condition === "missing-token") db.mcpApiToken.findFirst.mockResolvedValue(null);
+    if (condition === "read-token") db.mcpApiToken.findFirst.mockResolvedValue({ scope: "read", scopes: [] });
+    if (condition === "revoked-grant") vi.mocked(getAgentToolGrantsAsync).mockResolvedValue([]);
+    if (condition === "reassigned-run") db.taskRun.findUnique.mockResolvedValue({ id: "run-1", userId: "other", initiatingAgentId: "other" });
+    if (condition === "unsupported-source") packet.actor.authSource = "unsupported";
+    if (condition === "oauth-client-missing") packet.actor.authSource = "oauth";
+    expect(await inspectSemanticReviewAuthority(packet, "TR-1", db as never)).toEqual({ state: "denied", reason });
+    expect(await verifySemanticReviewAuthority(packet, "TR-1", db as never)).toBe(false);
+  });
+  it("preserves thrown observation failures without disclosing raw data", async () => {
+    const { packet, db } = fixture();
+    db.user.findUnique.mockRejectedValue(new Error("database unavailable"));
+    await expect(inspectSemanticReviewAuthority(packet, "TR-1", db as never)).rejects.toThrow("database unavailable");
+    await expect(verifySemanticReviewAuthority(packet, "TR-1", db as never)).rejects.toThrow("database unavailable");
+  });
+  it("separates unknown target observation from a target denial while retaining fail-closed execution", async () => {
+    const { packet, db } = fixture();
+    db.taskRun.findUnique.mockRejectedValue(new Error("private database failure"));
+    expect(await inspectSemanticReviewAuthority(packet, "TR-1", db as never))
+      .toEqual({ state: "unavailable", reason: "task-authority-unavailable" });
+    expect(await verifySemanticReviewAuthority(packet, "TR-1", db as never)).toBe(false);
+  });
   it("revalidates an admitted OAuth actor through its stored token and client", async () => {
     const { packet, db } = fixture();
     packet.actor.authSource = "oauth";

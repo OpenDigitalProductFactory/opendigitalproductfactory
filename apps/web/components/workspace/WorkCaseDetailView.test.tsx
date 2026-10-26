@@ -220,6 +220,21 @@ const detail: WorkspaceWorkCaseDetailView = {
 };
 
 describe("WorkCaseDetailView", () => {
+  it("offers a compact in-page blocker inspection without exposing its full explanation in the header", () => {
+    const blockedRoom: WorkroomView = { ...room, state: "waiting-on-system", work: { ...room.work,
+      nextAction: "Inspect the recorded blocker before continuing.", attentionReason: "Work is blocked.", recordedBlocker: {
+      reason: "workroom-blocked" as const, explanation: "A private recorded transfer prerequisite",
+      explanationState: "current" as const, expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+      source: { kind: "workroom-status-override" as const, capsuleId: "WC-ORIGINAL" }, coordinationOnly: true as const,
+    } } };
+    const html = renderToStaticMarkup(<WorkCaseDetailView detail={{ ...detail, room: blockedRoom }} />);
+    const header = html.slice(0, html.indexOf("</header>"));
+    expect(header).toContain('href="#workroom-recorded-blocker"');
+    expect(header).toContain("Inspect recorded blocker");
+    expect(header).not.toContain("A private recorded transfer prerequisite");
+    expect(header).toContain("Jamie Rivera");
+  });
+
   it("offers room links that preserve operation and filter context", () => {
     const html = renderToStaticMarkup(<WorkCaseDetailView detail={{ ...detail, room: undefined,
       roomChoices: [{ capsuleId: "WC-ONE", title: "First reviewer", status: "ready" }] }}

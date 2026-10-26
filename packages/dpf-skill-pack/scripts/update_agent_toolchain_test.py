@@ -2275,6 +2275,22 @@ class CodexRegistrationConvergenceTest(unittest.TestCase):
                 self.assertEqual(result.returncode, 0 if exit_code == 0 else 1)
                 self.assertEqual("PLAN_REACHED" in result.stdout, exit_code == 0)
 
+    def test_shell_bootstrap_does_not_report_saved_permissions_as_an_installed_cli(self):
+        source = Path(__file__).resolve().parents[3] / "scripts/dpf-bootstrap-agent-toolchain.sh"
+        if not source.exists():
+            self.skipTest("Repository adapter is not shipped in standalone packs")
+        text = source.read_text(encoding="utf-8")
+        block = text[text.index("CLAUDE_PRESENT=0"):text.index('if [ -n "${DPF_MCP_BEARER_TOKEN:-}" ]; then')]
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Path(tmp) / "config.toml"
+            config.write_text('[projects."source"]\ntrust_level = "trusted"\n', encoding="utf-8")
+            for binary, expected in (("", "0"), ("/native/codex", "1")):
+                setup = 'maybe_install_agy() { :; }; resolve_claude_bin() { :; }; resolve_grok_bin() { :; }; resolve_agy_bin() { :; }; resolve_codex_bin() { printf "%s" "$DPF_TEST_CODEX_BIN"; };\n'
+                result = subprocess.run([updater.shutil.which("bash") or "bash", "-c", setup + block + '\nprintf "%s" "$CODEX_PRESENT"'],
+                    env={**os.environ, "CODEX_CONFIG_PATH": config.as_posix(), "DPF_TEST_CODEX_BIN": binary},
+                    capture_output=True, text=True, check=True)
+                self.assertEqual(result.stdout, expected, "Saved permissions cannot prove an installed Codex CLI")
+
     def test_registration_only_mode_does_not_write_connectors_or_other_clients(self):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)

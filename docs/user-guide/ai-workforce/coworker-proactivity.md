@@ -94,6 +94,20 @@ recovery supervision is being repaired under BI-4B48E7FE; this guide does not
 claim that the repair or its unattended recovery tests have passed. Unattended recovery verification remains pending. Existing Workroom owner, wait and recovery
 information remains authoritative while that work proceeds.
 
+### Which installation the COO coordinates
+
+The intended model gives each COO responsibility for its installation's work.
+The production COO follows the production business. The development COO follows
+development, testing and delivery, and asks the production COO for permitted
+business context that is missing locally. Sandbox and test work has a named
+parent owner, purpose and expiry; its evidence returns to that owner.
+
+The COO must identify which installation and source an answer comes from, and
+say when context is unavailable or stale. A copied database or test result does
+not establish a production decision or authorization. This coordination is an
+implementation requirement under BI-C43FD3E5; live COO-to-COO onboarding and
+recovery tests have not yet established it as working behavior.
+
 ### When it runs
 
 Each declared activity has its own cadence. Balanced and Assertive select that

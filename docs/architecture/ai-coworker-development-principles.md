@@ -58,6 +58,13 @@ scheduler tick, heartbeat or queued task is not verified progress. Human
 involvement is for a specific required decision or exhausted authorized recovery,
 not routine status chasing.
 
+COO responsibility is scoped to the installation's declared purpose. DEV, PROD
+and sandbox/test contexts coordinate through the existing authenticated federation
+and task/evidence boundaries. A peer's missing corpus is an owned context request,
+not permission to invent a production decision. Preserve installation and source
+identity, applicability and authority; a shared role name or copied database does
+not make two instances one principal. The owning installation controls its work.
+
 The current contract and pending delivery/acceptance are in
 [Coordinated Workrooms](../superpowers/specs/2026-09-03-coordinated-workrooms-design.md#october-25-amendment-coo-operational-follow-through).
 This supersedes the early build-pipeline-only interpretation and its fixed
