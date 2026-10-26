@@ -177,13 +177,13 @@ Shared criteria describe integration acceptance, not permission for any one comp
 claim the complete criterion. Existing delivered behavior is verified and retained; these
 mappings do not authorize rewriting it or applying weight proposals automatically.
 
-This multi-item integration sequence is proposed, not implementation-ready coverage. All independent
-deliverables map to existing live BIs except the newly captured BI-73780C2E, still triaging.
-No current provider-verified immutable coverage receipt was established for this amendment.
+Recorded decomposed coverage: `cmvp7xstr4xon01mtiye1qe52`, umbrella BI-19CEC4B4,
+immutable plan commit `378fff6d361f3c7d1bd4d3428ad7664a25788062`, provider blob
+`bc0441b2e68dd956c76731b49badb83c67314cab`. The nine live BI mappings and dependencies
+are the deliverable graph above; all twelve baseline acceptance criteria are mapped.
+BI-73780C2E remains triaging. Coverage records scope allocation, not implementation
+admission, delivered outcomes or a passing independent plan review.
 
-Publish the relevant revisions, obtain independent scope approval, then record decomposed plan
-coverage with mappings, dependencies and the requirement/contract/flow/verification refs above.
-Each independently shippable entry must name one live delivery BI in the receipt; split aggregate
-rows into their owning existing child items rather than submit an xlarge umbrella as a delivery.
-Copy the returned receipt here and revalidate it. Changed scope/artifacts refresh normal coverage;
-historical phase prose and this documentation change cannot substitute for a receipt or delivery.
+Revalidate the receipt through `check_plan_backlog_coverage` and obtain the normal independent
+plan review before implementation. Changed scope/artifacts refresh normal coverage; historical
+phase prose and this documentation change cannot substitute for delivery.
