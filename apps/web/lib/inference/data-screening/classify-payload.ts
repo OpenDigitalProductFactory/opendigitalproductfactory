@@ -24,7 +24,7 @@ type ClassRule = {
   reason: string;
   confidence: InferencePayloadMatch["confidence"];
   pathPattern?: RegExp;
-  textPattern?: RegExp;
+  textPattern?: Pick<RegExp, "test">;
   /**
    * Occurrences matching this are removed from the probe text BEFORE
    * `textPattern` is evaluated, so the rule fires only on evidence that is NOT
@@ -73,22 +73,41 @@ const SOURCE_CODE_VALUE_PATTERN =
 
 // Invoice labels alone are schema/domain vocabulary. Match concrete references,
 // dates and amounts while leaving other finance detectors unchanged.
-const INVOICE_RECORD_DETAILS_PATTERN = [
-  /(?:id|number|no\.?|reference)\s*[:=#]\s*\S+/.source,
-  /(?:id|number|no\.?|reference)\s+(?:[a-z]{1,16}[-_/]?\d[\w/-]*|\d[\w/-]*)/.source,
-  /(?:[a-z]{1,16}[-_/]?\d[\w/-]*|\d[\w/-]*)/.source,
-  /(?:id|number|no\.?|reference|dated|date|due)\s*(?:(?:is|on)\s+|[:=]\s*)?\d/.source,
-  /(?:amount|total|balance)\s*(?:(?:is|of)\s+|[:=]\s*)?(?:[$€£]|USD|EUR|GBP)?\s*\d/.source,
-  /(?:for|of)\s+(?:[$€£]|USD|EUR|GBP)\s*\d/.source,
-  /(?:[$€£]|USD|EUR|GBP)\s*\d/.source,
-].join("|");
+const NON_INVOICE_FINANCE_TEXT_PATTERN =
+  /\b(?:routing number|account number|credit card|bank account|tax id|ein|ssn)\b/i;
 
-const PAYMENT_RECORD_TEXT_PATTERN = new RegExp([
-  /\b(?:routing number|account number|credit card|bank account|tax id|ein|ssn)\b/.source,
-  String.raw`\binvoice\b(?:\s*[:=-]\s*|\s+)(?:${INVOICE_RECORD_DETAILS_PATTERN})`,
-  /\binvoice\s*#\s*[a-z0-9][\w/-]*/.source,
-  /\binvoice\s*[$€£]\s*\d/.source,
+const INVOICE_REFERENCE_PATTERN =
+  /^["'\x60]?\s*(?:[:=-]\s*)?["'(\[\x60]?(?:#\s*[a-z0-9][\w/-]*|[a-z]{1,16}[-_/]?\d[\w/-]*|\d[\w/-]*)/i;
+const INVOICE_LABELLED_VALUE_PATTERN = new RegExp([
+  /\b(?:id|number|no\.?|reference)\s*[:=#]\s*\S+/.source,
+  /\b(?:id|number|no\.?|reference)\s+["'(\[\x60]?(?:[a-z]{1,16}[-_/]?\d[\w/-]*|\d[\w/-]*)/.source,
+  /\b(?:dated|date|due(?:\s+date)?)\s*(?:(?:is|on)\s+|[:=]\s*)?["'(\x60]?[+-]?\s*(?:\d|[a-z]{3,9}[ \t]+\d{1,2}(?:,[ \t]*|[ \t]+)\d{4})/.source,
+  /\b(?:amount|total|balance)\s*(?:(?:is|of)\s+|[:=]\s*)?["'(\x60]?[+-]?\s*\d/.source,
 ].join("|"), "i");
+const INVOICE_CURRENCY_CODES = Intl.supportedValuesOf("currency").join("|");
+const INVOICE_CURRENCY_AMOUNT_PATTERN = new RegExp(
+  String.raw`(?:\p{Sc}|\b(?:${INVOICE_CURRENCY_CODES}))\s*["'(\[\x60]?[+-]?\s*\d`
+    + String.raw`|\d\s*["')\]\x60]?\s*(?:\p{Sc}|(?:${INVOICE_CURRENCY_CODES})\b)`,
+  "iu",
+);
+
+const PAYMENT_RECORD_TEXT_MATCHER: Pick<RegExp, "test"> = {
+  test(text) {
+    if (NON_INVOICE_FINANCE_TEXT_PATTERN.test(text)) return true;
+    // Keep record context within one paragraph. A topic in one paragraph must
+    // not borrow an unrelated release date or budget from the next paragraph.
+    return text.split(/\r?\n[ \t]*\r?\n/).some((paragraph) => {
+      let firstDetails: string | undefined;
+      for (const invoice of paragraph.matchAll(/\binvoice\b/gi)) {
+        const details = paragraph.slice(invoice.index + invoice[0].length);
+        firstDetails ??= details;
+        if (INVOICE_REFERENCE_PATTERN.test(details)) return true;
+      }
+      return firstDetails !== undefined && (INVOICE_LABELLED_VALUE_PATTERN.test(firstDetails)
+        || INVOICE_CURRENCY_AMOUNT_PATTERN.test(firstDetails));
+    });
+  },
+};
 
 const CLASS_RULES: readonly ClassRule[] = [
   {
@@ -179,7 +198,7 @@ const CLASS_RULES: readonly ClassRule[] = [
     // record. Require an invoice identifier, date or amount in free text. Structured
     // payment fields and the other precise finance detectors retain their floor.
     textPattern:
-      PAYMENT_RECORD_TEXT_PATTERN,
+      PAYMENT_RECORD_TEXT_MATCHER,
   },
   {
     dataClass: "health-phi",

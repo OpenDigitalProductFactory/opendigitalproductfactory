@@ -345,7 +345,9 @@ describe("committed governance documentation screening (BI-12CD3010)", () => {
     expect(result.receipt.rawPayloadStored).toBe(false);
   });
 
-  it.each(["Invoice: INV-1042\nAmount: $125.00.", "Invoice INV_1042", "Invoice $125.00",
+  it.each(["Invoice due date: 2026-11-01", "Invoice for 125.00 USD",
+    "Invoice total: -125.00 USD", "Invoice from Acme for $125.00",
+    "Invoice: INV-1042\nAmount: $125.00.", "Invoice INV_1042", "Invoice $125.00",
     "Invoice INV-1042 amount: $125.", "Employee salary is 125000.",
     "Customer contact: pat@example.com."])("keeps mixed protected data fenced: %s", (record) => {
     const result = screen(prose + "\n" + record);
