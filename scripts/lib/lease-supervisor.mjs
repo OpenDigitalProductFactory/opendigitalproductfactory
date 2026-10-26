@@ -112,6 +112,7 @@ export async function superviseLeaseRun({
   const startedAt = new Date().toISOString();
   let fencedReason = "";
   let finalizing = false;
+  let authorityClosed = false;
   let heartbeatInFlight = null;
   let deadlineInFlight = null;
   let deadlineTimer = null;
@@ -122,7 +123,7 @@ export async function superviseLeaseRun({
   onEvent({ type: "started", at: startedAt });
 
   const fence = async (reason, eventType, detail = {}) => {
-    if (finalizing || fencedReason) return;
+    if (fencedReason || (finalizing && (observeReservation || authorityClosed))) return;
     fencedReason = reason;
     onEvent({
       type: eventType,
@@ -200,7 +201,14 @@ export async function superviseLeaseRun({
         scheduleUncertainRetry();
         return;
       }
-      if (finalizing) return;
+      if (finalizing) {
+        // Legacy qualifiers still consume authority loss until their outstanding
+        // renewal settles. Host observation closes command authority immediately.
+        if (!observeReservation && isAuthoritativeRefusal(response)) {
+          await fence(response?.error || "lease-renewal-failed", "heartbeat-lost");
+        }
+        return;
+      }
       if (response?.success === true) {
         uncertainStreak = 0;
         cancelRetryTimer();
@@ -241,10 +249,9 @@ export async function superviseLeaseRun({
   };
 
   const timer = schedule(heartbeat, heartbeatIntervalMs(ttlMs));
+  let result;
   try {
-    const result = await run();
-    if (fencedReason) return { status: "fenced", reason: fencedReason, result };
-    return { status: "completed", result };
+    result = await run();
   } finally {
     // Finalization runs once after supervision. Host callers may observe natural
     // expiry instead of requesting release; other callers retain their release path.
@@ -252,9 +259,12 @@ export async function superviseLeaseRun({
     finalizing = true;
     cancelSchedule(timer);
     cancelRetryTimer();
-    if (deadlineTimer !== null) cancelDeadline(deadlineTimer);
+    // Keep a legacy qualifier's existing deadline through its final renewal;
+    // this is authority evidence, not permission to restart supervision.
+    if (observeReservation && deadlineTimer !== null) cancelDeadline(deadlineTimer);
     if (heartbeatInFlight) await heartbeatInFlight;
     if (deadlineInFlight) await deadlineInFlight;
+    authorityClosed = true;
     cancelRetryTimer();
     if (deadlineTimer !== null) cancelDeadline(deadlineTimer);
     deadlineTimer = null;
@@ -276,4 +286,8 @@ export async function superviseLeaseRun({
       }
     }
   }
+  // Classify only after final authority evidence has settled. A thrown command
+  // still propagates through finally rather than becoming a completed result.
+  if (fencedReason) return { status: "fenced", reason: fencedReason, result };
+  return { status: "completed", result };
 }

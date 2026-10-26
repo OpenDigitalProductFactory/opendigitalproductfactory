@@ -103,7 +103,7 @@ recorded below; canonical integration and live acceptance remain outstanding.
 
 Implementation was admitted by IRD-36FB73BD3914 after the Medium acceptance
 baseline was recorded. First-failing runner, exact-readback and supervisor
-regressions were observed before implementation. Source tests now pass (97 Node
+regressions were observed before implementation. Source tests now pass (100 Node
 fixtures and 95 affected Vitest checks). These are source checks, not live
 acceptance or canonical heavy integration. The normal direct-release classifier
 and its process/foreign-owner negatives are unchanged.
@@ -111,3 +111,7 @@ and its process/foreign-owner negatives are unchanged.
 Independent review identified a post-completion renewal race. Four failing regressions covered late success, transport error, transient refusal and authoritative refusal; the finalization fence makes them green and prevents stale callbacks from renewing or terminating a completed command.
 
 The query helper lives in the existing nonprod library, outside the tool-pack discovery directory. Its regression test is registered with the normal CI guard profile; no new selectable pack or tool is introduced. Linked contributor, operations and pattern guidance describe the same completion contract.
+
+Published correction: the shared native qualifier consumes late authority evidence during its final renewal drain. Preserve that existing refusal/deadline contract for legacy release callers, while host-observation callers close command authority immediately. New renewals, retries and deadline rearming remain stopped for both; after draining, all authority callbacks are closed and remaining timers are cancelled. Two portable regressions were observed failing before the correction, then all 100 host/supervisor tests and five exact qualifier authority cases passed. The full Mac package fixture suite is platform-sensitive on Windows; its required Linux CI result remains separate. The original canonical integration and native-review identities remain historical; fresh protected correction checks govern the changed tree.
+
+Successful result classification now follows finalization, so gate and preview callers also receive fenced after a late legacy authority loss. Original command exceptions still propagate. Two returned-status assertions were observed red before this refactor; the exception-preservation control and host completed-status controls pass.

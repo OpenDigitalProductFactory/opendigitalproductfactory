@@ -12,9 +12,9 @@ import {
 } from "./lease-supervisor.mjs";
 
 function deferred() {
-  let resolve;
-  const promise = new Promise((done) => { resolve = done; });
-  return { promise, resolve };
+  let resolve, reject;
+  const promise = new Promise((done, fail) => { resolve = done; reject = fail; });
+  return { promise, resolve, reject };
 }
 
 test("heartbeat cadence is no greater than one third of the lease TTL", () => {
@@ -564,3 +564,64 @@ for (const outcome of ["success", "transport-error", "transient-refusal", "autho
     assert.equal(terminations, 0, "late callbacks cannot terminate a completed command");
   });
 }
+
+
+test("legacy in-flight authority refusal still fences before finalization settles", async () => {
+  const child = deferred(), closing = deferred(), renewal = deferred();
+  let heartbeat, terminations = 0;
+  const events = [];
+  const result = superviseLeaseRun({ ttlMs: 60000,
+    run: () => child.promise, renew: () => renewal.promise,
+    terminate: async () => { ++terminations; }, release: async () => {},
+    schedule: fn => { heartbeat = fn; return 1; }, cancelSchedule: () => closing.resolve(),
+    scheduleDeadline: () => 2, cancelDeadline: () => {},
+    onEvent: event => events.push(event),
+  });
+  const pending = heartbeat(); child.resolve({ status: 0 }); await closing.promise;
+  renewal.resolve({ success: false, error: "lease_terminal" });
+  await pending;
+  const outcome = await result;
+  assert.equal(outcome.status, "fenced");
+  assert.equal(outcome.reason, "lease_terminal");
+  assert.equal(terminations, 1);
+  assert.equal(events.filter(event => event.type === "heartbeat-lost").length, 1);
+});
+
+test("legacy authority deadline remains effective while final renewal is draining", async () => {
+  const child = deferred(), closing = deferred(), renewal = deferred();
+  let heartbeat, deadline, terminations = 0, cancelledDeadlines = 0;
+  const result = superviseLeaseRun({ ttlMs: 60000,
+    run: () => child.promise, renew: () => renewal.promise,
+    terminate: async () => { ++terminations; }, release: async () => {},
+    schedule: fn => { heartbeat = fn; return 1; }, cancelSchedule: () => closing.resolve(),
+    scheduleDeadline: fn => { deadline = fn; return 2; }, cancelDeadline: () => { ++cancelledDeadlines; },
+  });
+  const pending = heartbeat(); child.resolve({ status: 0 }); await closing.promise;
+  assert.equal(cancelledDeadlines, 0, "retain existing authority deadline while draining");
+  await deadline();
+  assert.equal(terminations, 1);
+  renewal.resolve({ success: true }); await pending;
+  const outcome = await result;
+  assert.equal(outcome.status, "fenced");
+  assert.equal(outcome.reason, "lease-authority-deadline");
+  await deadline();
+  assert.equal(terminations, 1, "no second fence after finalization");
+  assert.ok(cancelledDeadlines > 0);
+});
+
+
+test("legacy final authority refusal preserves the original thrown command error", async () => {
+  const child = deferred(), closing = deferred(), renewal = deferred();
+  const commandError = new Error("original command error");
+  let heartbeat;
+  const result = superviseLeaseRun({ ttlMs: 60000,
+    run: () => child.promise, renew: () => renewal.promise,
+    terminate: async () => {}, release: async () => {},
+    schedule: fn => { heartbeat = fn; return 1; }, cancelSchedule: () => closing.resolve(),
+    scheduleDeadline: () => 2, cancelDeadline: () => {},
+  });
+  const rejection = assert.rejects(result, error => error === commandError);
+  const pending = heartbeat(); child.reject(commandError); await closing.promise;
+  renewal.resolve({ success: false, error: "lease_terminal" });
+  await pending; await rejection;
+});
