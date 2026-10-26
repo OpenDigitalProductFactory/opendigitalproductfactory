@@ -2441,7 +2441,26 @@ def main(argv: list[str]) -> int:
     home = home_dir()
     codex_managed = codex_managed_plugin_path(home)
     shared_managed = shared_managed_plugin_path(home)
+    permission_runtime_unavailable = False
+    if args.project_root and (args.project_root / 'packages/dpf-skill-pack').is_dir():
+        import routine_permissions
+        permission_runtime_unavailable = routine_permissions.tomllib is None
+        if permission_runtime_unavailable:
+            print('Routine permissions UNRUN: Python 3.11+ or tomli is required; no permission configuration changed.')
+    selected_permission_clients = ('codex','grok') if args.codex_only else ('claude-code',) if args.claude_only else ('codex','claude-code','grok')
+    unrun_permission_rows = [{'client': client, 'scope': 'permissions:' + str(args.project_root.resolve()),
+        'action': 'unrun', 'sessionVerified': False, 'restartRequired': False,
+        'detail': 'TOML parser unavailable; existing permissions retained. Use a supported Python runtime.'}
+        for client in selected_permission_clients] if permission_runtime_unavailable else []
     if args.permissions_only:
+        if permission_runtime_unavailable:
+            if args.report_json:
+                import toolchain_convergence as convergence
+                portal_manifest = read_json(Path(args.portal_manifest), {}) if args.portal_manifest else None
+                report = convergence.ConvergenceReport(home, convergence.Declarations(skill_pack, portal_manifest), portal_manifest)
+                report.add_permissions(unrun_permission_rows)
+                report.write(args.report_json, args.dry_run)
+            return 2
         if not args.project_root or args.codex_plugin_only or args.grok_client_stdin or args.codex_only or args.claude_only:
             parser.error("--permissions-only requires --project-root and cannot refresh plugins or credentials")
         import routine_permissions
@@ -2633,7 +2652,7 @@ def main(argv: list[str]) -> int:
         print(f"  Claude competitive: {claude_competitive_status}")
 
     permission_failed = False
-    if args.project_root and (args.project_root / 'packages/dpf-skill-pack').is_dir():
+    if args.project_root and (args.project_root / 'packages/dpf-skill-pack').is_dir() and not permission_runtime_unavailable:
         import routine_permissions
         try:
             permission_rows = routine_permissions.apply_permissions(
@@ -2646,6 +2665,8 @@ def main(argv: list[str]) -> int:
         except (OSError, routine_permissions.PermissionPlanError) as error:
             permission_failed = True
             print(f"Permission convergence failed: {error}", file=sys.stderr)
+    if permission_runtime_unavailable and report:
+        report.add_permissions(unrun_permission_rows)
     token_present = bool(os.environ.get(TOKEN_ENV_VAR))
     print("  MCP auth   : OAuth configuration written; sign in and verify through the client. Unverified clients/transports require explicit legacy compatibility." if args.auth_mode == "oauth" else "  MCP auth   : explicit legacy compatibility")
     print(f"  MCP token  : {'present' if token_present else 'missing'} ({TOKEN_ENV_VAR})")
@@ -2676,6 +2697,8 @@ def main(argv: list[str]) -> int:
             exit_code = exit_code or 1
     if exit_code:
         print("Incomplete: toolchain convergence is unverified; resolve the reported failure before restarting a client.")
+    elif permission_runtime_unavailable:
+        print("Skills and connectors converged; routine permissions remain UNRUN because the Python TOML parser is unavailable.")
     else:
         print("Done. Start a new Codex/Claude/Grok session to load updated skills.")
     return exit_code

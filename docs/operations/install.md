@@ -434,3 +434,10 @@ Grok's documented `--trust` is used only for this named project when it has no
 prior explicit untrusted decision. No model turn, provider login or provider
 spend is part of configuration convergence. External-provider consent, new spend
 and actions beyond the current delegation retain their owner gates.
+
+Permission convergence needs Python 3.11+ or an already available `tomli` parser.
+On older Python without that parser, permission-only execution reports unrun
+before changing configuration; the existing bootstrap/updater still converges
+its skills and connectors and reports the permission scope as unverified. Agents
+should select an available supported Python runtime before claiming this baseline.
+The updater does not silently install an undeclared dependency.

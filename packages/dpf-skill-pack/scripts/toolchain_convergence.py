@@ -401,7 +401,7 @@ class ConvergenceReport:
                            "releaseId": self.manifest.get("releaseId")})
         return {
             "schemaVersion": 1,
-            "result": "failed" if any(row["action"] == "failed" for row in clients) else "converged",
+            "result": "failed" if any(row["action"] == "failed" for row in clients) else "unverified" if any(row["action"] == "unrun" for row in clients) else "converged",
             "dryRun": dry_run,
             "source": source,
             "packVersion": self.declarations.pack,

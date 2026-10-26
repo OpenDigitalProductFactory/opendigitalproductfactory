@@ -578,9 +578,16 @@ fi
 # One shared writer owns routine permissions, separate from plugin refresh.
 permission_args=(--permissions-only --project-root "$REPO_ROOT")
 [ "$DRY_RUN" -eq 1 ] && permission_args+=(--dry-run)
-if ! bash "$PLUGIN_UPDATER" "${permission_args[@]}"; then
-  fail "Routine permission convergence failed."
-  exit 1
+if bash "$PLUGIN_UPDATER" "${permission_args[@]}"; then
+  :
+else
+  permission_status=$?
+  if [ "$permission_status" -eq 2 ]; then
+    warn "Routine permissions unrun: use Python 3.11+ or an available tomli parser. Existing client setup continues."
+  else
+    fail "Routine permission convergence failed."
+    exit "$permission_status"
+  fi
 fi
 
 # --- Compute plan via Node bridge --------------------------------------------

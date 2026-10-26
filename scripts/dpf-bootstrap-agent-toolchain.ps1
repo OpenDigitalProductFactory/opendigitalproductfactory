@@ -370,7 +370,8 @@ if ($LASTEXITCODE -ne 0) {
 
 # One shared writer owns routine permissions, separate from plugin refresh.
 & $PluginUpdater -PermissionsOnly -ProjectRoot $RepoRoot -SkillPackPath (Join-Path $RepoRoot "packages\dpf-skill-pack") -DryRun:$DryRun
-if ($LASTEXITCODE -ne 0) { Write-Fail2 "Routine permission convergence failed."; exit $LASTEXITCODE }
+if ($LASTEXITCODE -eq 2) { Write-Warn2 "Routine permissions unrun: use Python 3.11+ or an available tomli parser. Existing client setup continues." }
+elseif ($LASTEXITCODE -ne 0) { Write-Fail2 "Routine permission convergence failed."; exit $LASTEXITCODE }
 
 # --- Compute plan via Node bridge --------------------------------------------
 $BootstrapCli = Join-Path $RepoRoot "packages\dpf-bootstrap\src\agent-toolchain\cli\compute-plan.ts"

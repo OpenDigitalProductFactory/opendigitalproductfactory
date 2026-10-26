@@ -222,4 +222,32 @@ class RoutinePermissionsTest(unittest.TestCase):
             self.assertNotIn(key,local)
         self.assertEqual('selected-config-profile',next(x for x in rows if x['client']=='codex')['reviewer'])
 
+    def test_module_import_without_either_toml_parser_is_handled_before_writes(self):
+        import importlib.util
+        name='_dpf_permissions_no_parser'
+        spec=importlib.util.spec_from_file_location(name,permissions.__file__)
+        module=importlib.util.module_from_spec(spec)
+        with patch.dict(sys.modules,{'tomllib':None,'tomli':None,name:module}):
+            spec.loader.exec_module(module)
+            self.assertIsNone(module.tomllib)
+            with self.assertRaises(module.PermissionPlanError): module.plan_permissions(self.root,self.home,PACK)
+        self.assertFalse((self.root/'.codex').exists())
+    def test_missing_parser_reports_unrun_without_aborting_core_updater(self):
+        import update_agent_toolchain as updater
+        import toolchain_convergence
+        import contextlib,io
+        for only in (True,False):
+            report=self.home/('only.json' if only else 'core.json')
+            argv=['--skill-pack-path',str(PACK),'--project-root',str(self.root),'--report-json',str(report)]
+            argv += ['--permissions-only'] if only else ['--skip-codex-cli-install','--skip-claude-cli-install','--skip-grok-cli-install','--skip-antigravity-cli-install']
+            with self.subTest(only=only),patch.object(permissions,'tomllib',None),patch.object(updater,'home_dir',return_value=self.home),patch.object(updater,'resolve_codex_binary',return_value=None),patch.object(toolchain_convergence,'cli_versions',return_value={}),contextlib.redirect_stdout(io.StringIO()):
+                code=updater.main(argv)
+            self.assertEqual(2 if only else 0,code)
+            value=json.loads(report.read_text(encoding='utf-8'))
+            self.assertEqual('unverified',value['result'])
+            rows=[x for x in value['clients'] if x['scope'].startswith('permissions:')]
+            self.assertEqual(3,len(rows))
+            self.assertTrue(all(x['action']=='unrun' for x in rows))
+            self.assertFalse((self.root/'.claude').exists())
+
 if __name__=='__main__': unittest.main()

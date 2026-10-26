@@ -21,7 +21,10 @@ import uuid
 try:
     import tomllib
 except ImportError:
-    import tomli as tomllib
+    try:
+        import tomli as tomllib
+    except ImportError:
+        tomllib = None
 
 MARKER = '# DPF routine permissions v1; server authority and managed restrictions still apply.\n'
 
@@ -43,6 +46,8 @@ def _bytes(path: Path) -> bytes | None:
 
 
 def _load(path: Path, kind: str) -> tuple[dict, bytes | None]:
+    if kind=='toml' and tomllib is None:
+        raise PermissionPlanError('Routine permission convergence requires Python 3.11+ or an available tomli parser; configuration unchanged.')
     raw = _bytes(path)
     try:
         value = (json.loads(raw.decode('utf-8-sig')) if kind == 'json' else tomllib.loads(raw.decode('utf-8-sig'))) if raw is not None else {}
@@ -69,6 +74,7 @@ def _value(value) -> str:
 
 
 def dump_toml(data: dict) -> str:
+    if tomllib is None: raise PermissionPlanError('TOML validation unavailable; configuration unchanged.')
     lines = []
     def table(value, path):
         if path: lines.extend(['', '[' + '.'.join(json.dumps(x) for x in path) + ']'])
@@ -127,6 +133,8 @@ class PermissionPlan:
 
 
 def plan_permissions(project_root: Path, home: Path, skill_pack: Path, *, clients=('codex','claude-code','grok')) -> PermissionPlan:
+    if tomllib is None:
+        raise PermissionPlanError('Routine permission convergence requires Python 3.11+ or an available tomli parser; configuration unchanged.')
     root = project_root.expanduser().absolute()
     if root.is_symlink() or getattr(root,'is_junction',lambda:False)():
         raise PermissionPlanError('Linked project root refused.')
