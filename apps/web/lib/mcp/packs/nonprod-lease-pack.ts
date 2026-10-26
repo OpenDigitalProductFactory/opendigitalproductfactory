@@ -1,3 +1,4 @@
+import { isNonprodEnvironmentKey } from "@/lib/nonprod/environment-lease-lock";
 // Shared nonproduction environment lease tool pack — BI-ARCH-TOOLPACKS.
 //
 // Drains the self-contained "nonproduction environment lease" domain out of the
@@ -174,7 +175,7 @@ async function claimNonprodEnvironmentLeaseHandler(
       message: `Missing required nonproduction lease field(s): ${missing.join(", ")}`,
     };
   }
-  if (!["active-candidate", "local-integration-ci", "host-heavy-resource"].includes(environmentKey)) {
+  if (!isNonprodEnvironmentKey(environmentKey)) {
     return { success: false, error: "invalid_environment_key", message: `Unsupported environmentKey: ${environmentKey}` };
   }
   const { NONPROD_OWNER_PROVIDERS } = await import("@/lib/nonprod/environment-lease");
@@ -565,7 +566,9 @@ async function renewNonprodEnvironmentLeaseHandler(params: Record<string, unknow
     return {
       success: false,
       error: "lease_lost",
-      message: `Lease cannot be renewed (${result.reason}); re-claim if you still need the environment.`,
+      message: result.reason === "yielded"
+        ? "Contributor preview yielded the shared local-CI slot: it passed its bounded hold while pre-PR gates were waiting. Re-claim to queue behind them."
+        : `Lease cannot be renewed (${result.reason}); re-claim if you still need the environment.`,
       data: { reason: result.reason },
     };
   }

@@ -485,15 +485,26 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
     hasPlan,
     evaluatedAt,
   }));
-  const readiness = gateCompletion
+  const deliveryReadiness = gateCompletion
     ? { ...projectedReadiness, completionEvaluation: { source: "completion-gate" as const, mergeDelivery: gateCompletion.mergedThroughGates } }
     : projectedReadiness;
+  const { loadPlanBaselinePrerequisite } = await import("@/lib/backlog/initiative-readiness/plan-baseline-prerequisite");
+  const readiness = { ...deliveryReadiness, planBaselinePrerequisite: await loadPlanBaselinePrerequisite({
+    db: prisma, item, decision: projectedReadiness.decisions?.implementation,
+    currentDesignState: projectedReadiness.currentDesignState,
+  }) };
   const requestedGate = params["recoveryGate"];
+  const reassessmentAuthorizationItemId = params["reassessmentAuthorizationItemId"];
+  if (reassessmentAuthorizationItemId !== undefined && (typeof reassessmentAuthorizationItemId !== "string"
+    || !/^BI-[A-F0-9]{8}$/.test(reassessmentAuthorizationItemId)
+    || !["design-spec", "spec-approval"].includes(String(requestedGate)) || context?.authSource !== "oauth")) {
+    return { success: false, error: "reassessment-policy-unproven", message: "A present reassessment requires one exact approved authorization item and design review gate on the current connection." };
+  }
   if (requestedGate !== undefined && !isRecoveryReadGate(requestedGate)) {
     return { success: false, error: "invalid_recovery_gate", message: "Choose a declared recoveryGate from get_backlog_item's schema. No review request was delivered." };
   }
   const completion = requestedGate !== undefined
-    ? await recoveryReadDecision(requestedGate, readiness.decisions ?? {}) : readiness.decisions?.completion;
+    ? await recoveryReadDecision(requestedGate, readiness.decisions ?? {}, readiness.planBaselinePrerequisite) : readiness.decisions?.completion;
   const needsTerminalRecovery = currentDesign.evidence.state !== "unavailable" && completion && completion.verdict !== "allowed"
     && (requestedGate !== undefined || [...completion.blockers, ...completion.unmet]
       .some((entry) => ["POST_IMPLEMENTATION_REVIEW_REQUIRED", "PLAN_REVIEW_REQUIRED",
@@ -530,6 +541,17 @@ export async function getBacklogItem(params: Record<string, unknown>, currentAge
         .resolveMcpTaskAuthorityKey({ tokenId: context.apiTokenId, userId: currentUserId, source: "oauth" }) : null);
       if (!key) return { success: false, error: "review_task_authority_unavailable", message: "The current connection's review task authority could not be verified. No request was delivered." };
       for (const route of recovery.reviewerRoutes.filter(route => route.gate === requestedGate && route.independent)) {
+        if (typeof reassessmentAuthorizationItemId === "string") {
+          try {
+            const { issuePresentReassessmentRequest } = await import("@/lib/mcp-task-review-reassessment");
+            route.requestCoworker = await issuePresentReassessmentRequest({ packet: route.requestCoworker,
+              authorizationItemId: reassessmentAuthorizationItemId, userId: currentUserId, actingAgentId: currentAgentId,
+              tokenGrantScopes: context.tokenGrantScopes ?? [] }) as typeof route.requestCoworker;
+          } catch {
+            return { success: false, error: "reassessment-policy-unproven", message: "The current approval, original readback or exact source could not authorize a present request. No replacement was delivered." };
+          }
+          continue;
+        }
         const issued = await issueOriginalReviewRecoveryTarget({ packet: route.requestCoworker,
           userId: currentUserId, actingAgentId: currentAgentId, taskAuthorityKey: key,
           tokenGrantScopes: context.tokenGrantScopes });

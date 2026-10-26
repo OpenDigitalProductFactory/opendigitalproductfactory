@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   item: vi.fn(), readiness: vi.fn(), recovery: vi.fn(), history: vi.fn(), historyMany: vi.fn(), authority: vi.fn(),
   access: vi.fn(), design: vi.fn(), itemFirst: vi.fn(), activities: vi.fn(), rooms: vi.fn(), room: vi.fn(),
-  collect: vi.fn(),
+  collect: vi.fn(), completion: vi.fn(),
 }));
 vi.mock("@dpf/db", () => ({ prisma: {
   backlogItem: { findUnique: mocks.item, findFirst: mocks.itemFirst },
@@ -27,7 +27,7 @@ vi.mock("@/lib/backlog/initiative-readiness/entry-adapter", async importOriginal
   ...await importOriginal<typeof import("@/lib/backlog/initiative-readiness/entry-adapter")>(),
   projectBacklogItemReadinessSummary: mocks.readiness,
 }));
-vi.mock("@/lib/backlog/initiative-readiness/backlog-completion-evaluation", () => ({ readBacklogItemCompletion: async () => null }));
+vi.mock("@/lib/backlog/initiative-readiness/backlog-completion-evaluation", () => ({ readBacklogItemCompletion: mocks.completion }));
 vi.mock("@/lib/backlog/initiative-readiness/canonical-artifact-discovery", async importOriginal => ({
   ...await importOriginal<typeof import("@/lib/backlog/initiative-readiness/canonical-artifact-discovery")>(),
   prepareCurrentDesignObservation: mocks.design,
@@ -65,6 +65,7 @@ const gates = [
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.completion.mockReset().mockResolvedValue(null);
   mocks.itemFirst.mockReset().mockResolvedValue(null);
   mocks.activities.mockReset().mockResolvedValue([]);
   mocks.rooms.mockReset().mockResolvedValue([]);
@@ -108,7 +109,8 @@ function prepare(gate: readonly [typeof gates[number][0], typeof gates[number][1
 }
 
 describe("bounded recovery packet round trip", () => {
-  it("admits the actual scoped claim packet with real readiness and multiple persisted rooms", async () => {
+  it.each(["amended-design", "merged-fix"])("admits the actual %s claim packet with real readiness", async scenario => {
+    const mergedFix = scenario === "merged-fix";
     const canonical = await vi.importActual<typeof import("@/lib/backlog/initiative-readiness/canonical-artifact-discovery")>(
       "@/lib/backlog/initiative-readiness/canonical-artifact-discovery");
     const entry = await vi.importActual<typeof import("@/lib/backlog/initiative-readiness/entry-adapter")>(
@@ -122,7 +124,7 @@ describe("bounded recovery packet round trip", () => {
       baseSha: "3".repeat(40), headSha: "1".repeat(40) };
     const artifact = { kind: "repo-blob-at-commit" as const, repositoryFullName: source.repositoryFullName,
       commitSha: source.baseSha, path: "docs/superpowers/specs/roundtrip.md", providerBlobId: "b".repeat(40) };
-    const activities = readyActivities().map(activity => activity.kind === "initiative_scope_baseline"
+    const activities = (mergedFix ? readyActivities().filter(activity => activity.gateKey === "research") : readyActivities()).map(activity => activity.kind === "initiative_scope_baseline"
       ? { ...activity, payload: { ...activity.payload, artifactRef: artifact } } : activity);
     const room = { ...source, id: "room-row", capsuleId: "WC-ENTRY", backlogItemId: input.backlogItemId,
       executorKind: "codex-desktop", archivedAt: null, status: "ready", isLive: true };
@@ -136,34 +138,63 @@ describe("bounded recovery packet round trip", () => {
     Object.assign(db, { $queryRaw: vi.fn().mockResolvedValue([]) });
     vi.mocked(db.workroom.findMany).mockImplementation(selectRooms as never);
     const oldItem = await mocks.item();
-    const item = { ...oldItem, id: "row-bi", itemId: input.backlogItemId, activities };
+    const item = { ...oldItem, id: "row-bi", itemId: input.backlogItemId, activities,
+      ...(mergedFix ? { status: "awaiting-acceptance", type: "product", workType: "bug" } : {}) };
+    vi.mocked(db.backlogItem!.findFirst).mockResolvedValue(item);
+    if (mergedFix) mocks.completion.mockResolvedValue({ mergedThroughGates: "merged", decision: {
+      ...entry.projectBacklogItemReadinessSummary({ item, activities, hasSpec: false, hasPlan: false,
+        evaluatedAt: "2026-10-23T00:00:00Z" }).decisions.completion,
+      verdict: "allowed", unmet: [], blockers: [],
+    } });
     mocks.item.mockResolvedValue(item); mocks.itemFirst.mockResolvedValue(item);
-    mocks.activities.mockResolvedValue(activities); mocks.rooms.mockImplementation(selectRooms);
+    mocks.activities.mockImplementation(async ({ where }) => typeof where.kind === "string"
+      ? activities.filter(activity => activity.kind === where.kind) : activities);
+    mocks.rooms.mockImplementation(selectRooms);
     mocks.room.mockResolvedValue(room);
     mocks.readiness.mockImplementation(entry.projectBacklogItemReadinessSummary);
     mocks.design.mockImplementation((args: Parameters<typeof canonical.prepareCurrentDesignObservation>[0]) =>
       canonical.prepareCurrentDesignObservation({ ...args, ports: { readCurrentArtifact: async () => ({ state: "verified", digest: "sha256:new-design" }) } }));
     const discover = async () => ({ resolved: true as const, path: artifact.path, providerBlobId: artifact.providerBlobId });
     const issued = await claimGovernedBacklogWorkspace({ db, input: { ...input, ...source },
-      actor: { ...actor, userId: "human", agentId: "AGT-AUTHOR", taskAuthorityTokenId: "access" }, workIntent: "plan",
+      actor: { ...actor, userId: "human", agentId: "AGT-AUTHOR", taskAuthorityTokenId: "access" }, workIntent: mergedFix ? "implementation" : "plan",
       dependencies: { discoverCanonicalArtifact: discover } });
     expect(issued.ok).toBe(false);
     if (issued.ok) throw new Error("The changed design still requires approval");
     const packet = issued.data.recovery.reviewerRoutes.find(route => route.gate === "spec-approval")!.requestCoworker;
     mocks.recovery.mockImplementation((args: Parameters<typeof terminal.resolveTerminalInitiativeRecovery>[0]) =>
       terminal.resolveTerminalInitiativeRecovery({ ...args, ports: { ...terminal.DEFAULT_TERMINAL_RECOVERY_PORTS,
-        loadLiveRooms: async ({ refusedWorkroomId }) => rooms.filter(row => row.capsuleId === refusedWorkroomId),
-        loadBaselinePayloads: async () => [activities[0]!.payload],
+        loadLiveRooms: async ({ refusedWorkroomId }) => refusedWorkroomId
+          ? rooms.filter(row => row.capsuleId === refusedWorkroomId) : mergedFix ? [room] : rooms,
+        loadBaselinePayloads: async () => activities.filter(activity => activity.kind === "initiative_scope_baseline").map(activity => activity.payload),
         discoverArtifact: async () => ({ resolved: true, artifact: { path: artifact.path, providerBlobId: artifact.providerBlobId } }),
         loadPlanArtifact: async () => ({ resolved: false, nextAction: "Plan coverage is not part of this design review" }),
         resolveRecovery: args => resolveInitiativeReviewerRecovery({ ...args, db: db as never }),
       } }));
+    if (mergedFix) {
+      const before = await getBacklogItem({ itemId: item.itemId }, "AGT-AUTHOR", "human", context, { currentDesignSource: source });
+      expect(before.data?.readiness).toMatchObject({
+        planBaselinePrerequisite: { code: "OBJECTIVE_BASELINE_REQUIRED" },
+        decisions: { completion: { verdict: "allowed" } },
+      });
+      const bounded = await getBacklogItem({ itemId: item.itemId, recoveryGate: "spec-approval" },
+        "AGT-AUTHOR", "human", context, { currentDesignSource: source });
+      expect(bounded.success, JSON.stringify(bounded)).toBe(true);
+      expect(packetFrom(bounded)).toEqual(packet);
+    }
     const authorityResult = await authorizeCoworkerRequest(packet, "human", context);
     expect(authorityResult.refusal, JSON.stringify(authorityResult)).toBeUndefined();
     expect(authorityResult.bounded).toBe(true);
     const unscoped = await getBacklogItem({ itemId: input.backlogItemId, claimSource: source,
       currentDesignSource: source, internal: { currentDesignSource: source } });
     expect(mocks.design).toHaveBeenLastCalledWith({ itemId: input.backlogItemId });
+    if (mergedFix) {
+      expect(unscoped.data?.readiness).toMatchObject({ decisions: { completion: { verdict: "allowed" } } });
+      const retained = readyActivities().find(activity => activity.kind === "initiative_scope_baseline")!;
+      activities.push({ ...retained, payload: { ...retained.payload, artifactRef: artifact } });
+      const changedHistory = await authorizeCoworkerRequest(packet, "human", context);
+      expect(changedHistory.refusal).toBeDefined();
+      return;
+    }
     expect(unscoped.data?.readiness).toMatchObject({ decisions: { plan: { unmet: expect.arrayContaining([
       expect.objectContaining({ code: "CANONICAL_DESIGN_REQUIRED", state: "missing",
         nextAction: expect.stringContaining("Current immutable design verification is unavailable") }),
@@ -174,11 +205,13 @@ describe("bounded recovery packet round trip", () => {
     const read = await getBacklogItem({ itemId: "BI-ROUNDTRIP", recoveryGate: gate[0], taskAuthorityKey: "client-forgery" }, "AGT-AUTHOR", "human", context);
     expect(read.success, JSON.stringify(read)).toBe(true);
     const packet = packetFrom(read);
+    const originalKey = packet.requestKey.replace(/:reviewer:[a-f0-9]{64}$/, "");
     expect(mocks.historyMany).toHaveBeenCalledWith(expect.objectContaining({ where: {
       userId: "human", status: { notIn: ["completed", "canceled", "rejected", "archived"] },
-      AND: [{ a2aMetadata: { path: ["idempotencyKey"], equals: packet.requestKey } },
+      AND: [{ OR: [{ a2aMetadata: { path: ["idempotencyKey"], equals: originalKey } },
+        { a2aMetadata: { path: ["idempotencyKey"], string_starts_with: `${originalKey}:reviewer:` } }] },
         { a2aMetadata: { path: ["tokenSource"], equals: "oauth" } }],
-    } }));
+    }, take: 501, orderBy: [{ id: "asc" }] }));
     expect(await authorizeCoworkerRequest(packet, "human", context)).toEqual({ bounded: true });
     expect(mocks.authority).toHaveBeenCalledWith({ tokenId: "access", userId: "human", source: "oauth" });
     expect((await authorizeCoworkerRequest({ ...packet, requestKey: `${packet.requestKey}:changed` }, "human", context)).refusal).toBeDefined();
@@ -197,7 +230,8 @@ describe("bounded recovery packet round trip", () => {
       taskRunId, userId: "human", currentAgentId: old.targetAgent, status: "input-required", authorityScope,
       updatedAt: new Date("2026-10-16T00:00:00Z"),
       a2aMetadata: { taskAuthorityKey: authority.taskAuthorityKey, idempotencyKey: old.requestKey, requestedAgentId: old.targetAgent,
-        ...(hasOAuthMetadata ? { tokenSource: "oauth", apiTokenId: "access" } : {}),
+        initiativeReviewBinding: old.initiativeReviewBinding,
+        ...(hasOAuthMetadata ? { tokenSource: "oauth", apiTokenId: "access", tokenCapability: "write" } : {}),
         requestDigestVersion: 2, requestDigest: remoteTaskRequestDigest({ agentId: old.targetAgent, routeContext: "/build",
           title: old.questionPacketSummary, objective: old.objective, prompt: old.objective, idempotencyKey: old.requestKey,
           riskClass: "bounded-write", authorityScope, collaborationKind: "handoff", initiativeReviewBinding: old.initiativeReviewBinding }) },
@@ -210,14 +244,7 @@ describe("bounded recovery packet round trip", () => {
     };
     mocks.history.mockImplementation(async ({ where }) =>
       where.taskRunId === taskRunId && where.userId === row.userId ? row : null);
-    mocks.historyMany.mockImplementation(async ({ where }) => {
-      const key = where.AND.find((entry: { a2aMetadata: { path: string[] } }) =>
-        entry.a2aMetadata.path[0] === "idempotencyKey")?.a2aMetadata.equals;
-      const source = where.AND.find((entry: { a2aMetadata: { path: string[] } }) =>
-        entry.a2aMetadata.path[0] === "tokenSource")?.a2aMetadata.equals;
-      return where.userId === row.userId && !where.status.notIn.includes(row.status)
-        && key === row.a2aMetadata.idempotencyKey && source === row.a2aMetadata.tokenSource ? [row] : [];
-    });
+    mocks.historyMany.mockImplementation(async ({ where }) => matchesHistoricalReview(row, where) ? [row] : []);
     const read = await getBacklogItem({ itemId: "BI-ROUNDTRIP", recoveryGate: "design-spec" }, "AGT-AUTHOR", "human", context);
     if (hasOAuthMetadata) {
       expect(read).toMatchObject({ success: false, error: "original_review_recovery_required",
@@ -241,4 +268,30 @@ describe("bounded recovery packet round trip", () => {
 
 function packetFrom(result: ToolResult) {
   return (result.data!.recovery as InitiativeReviewerRecovery).reviewerRoutes[0]!.requestCoworker;
+}
+
+// Model the query's Boolean predicates instead of assuming every AND child is
+// one JSON leaf. Unsupported fixture queries fail rather than hide a saved task.
+function matchesHistoricalReview(row: { userId: string; status: string; a2aMetadata: Record<string, unknown> },
+  where: Record<string, unknown>): boolean {
+  return Object.entries(where).every(([key, value]) => {
+    if (key === "AND" || key === "OR") {
+      if (!Array.isArray(value)) throw new Error("Unsupported historical-review Boolean fixture");
+      const matches = value.map(clause => matchesHistoricalReview(row, clause));
+      return key === "AND" ? matches.every(Boolean) : matches.some(Boolean);
+    }
+    if (key === "userId") return row.userId === value;
+    if (key === "status" && value && typeof value === "object" && "notIn" in value && Array.isArray(value.notIn)) {
+      return !value.notIn.includes(row.status);
+    }
+    if (key === "a2aMetadata" && value && typeof value === "object" && "path" in value
+      && Array.isArray(value.path) && value.path.length === 1) {
+      const saved = row.a2aMetadata[String(value.path[0])];
+      if ("equals" in value) return saved === value.equals;
+      if ("string_starts_with" in value && typeof value.string_starts_with === "string") {
+        return typeof saved === "string" && saved.startsWith(value.string_starts_with);
+      }
+    }
+    throw new Error(`Unsupported historical-review fixture predicate: ${key}`);
+  });
 }

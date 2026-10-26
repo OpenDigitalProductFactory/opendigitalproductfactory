@@ -25,6 +25,43 @@ function room(over: Record<string, unknown> = {}) {
 }
 
 describe("roomStageMandatedTools (BI-C1781121)", () => {
+  it("lets the assigned release coworker report a blocked stage without asking a person", () => {
+    const releaseRoom = room({ scopeClaims: [buildWorkShapeClaim("release-readiness-watch@1.0.0")] });
+    expect(roomStageMandatedTools({
+      scheduledTaskId: workroomDriveTaskId(CAPSULE, "release-readiness-watch"),
+      room: releaseRoom,
+      agentIds: ["build-specialist"],
+      assignedStageKey: "report",
+      toolName: "record_workroom_evidence",
+      params: { capsuleId: CAPSULE, stageKey: "report", kind: "assurance-finding", outcome: "blocked", summary: "Release identifier is missing." },
+    })).toEqual(["record_workroom_evidence"]);
+  });
+
+  it.each([
+    { capsuleId: "WC-OTHER" }, { stageKey: "cut" }, { stageKey: "invented" },
+    { outcome: "completed" }, { outcome: undefined }, { summary: " " }, { summary: undefined }, { kind: "decision-record" },
+  ])("does not turn a changed or malformed report into stage authority: %j", (changed) => {
+    expect(roomStageMandatedTools({
+      scheduledTaskId: workroomDriveTaskId(CAPSULE, "release-readiness-watch"),
+      room: room({ scopeClaims: [buildWorkShapeClaim("release-readiness-watch@1.0.0")] }),
+      agentIds: ["build-specialist"], assignedStageKey: "report", toolName: "record_workroom_evidence",
+      params: { capsuleId: CAPSULE, stageKey: "report", kind: "assurance-finding", outcome: "blocked", summary: "Missing release identifier", ...changed },
+    })).toEqual([]);
+  });
+
+  it("keeps explicit always-approve policy and unassigned coworkers outside the default report mandate", () => {
+    const input = { scheduledTaskId: workroomDriveTaskId(CAPSULE, "release-readiness-watch"),
+      room: room({ scopeClaims: [buildWorkShapeClaim("release-readiness-watch@1.0.0")] }),
+      agentIds: ["build-specialist"], assignedStageKey: "report", toolName: "record_workroom_evidence",
+      params: { capsuleId: CAPSULE, stageKey: "report", kind: "assurance-finding", outcome: "blocked", summary: "Missing release identifier" } };
+    expect(roomStageMandatedTools({ ...input, allowBlockedReport: false })).toEqual([]);
+    expect(roomStageMandatedTools({ ...input, assignedStageKey: null })).toEqual([]);
+    expect(roomStageMandatedTools({ ...input, assignedStageKey: "sweep" })).toEqual([]);
+    expect(roomStageMandatedTools({ ...input, agentIds: ["customer-advisor"] })).toEqual([]);
+    expect(roomStageMandatedTools({ ...input, toolName: "request_self_upgrade" })).toEqual([]);
+    expect(roomStageMandatedTools({ ...input, room: { ...input.room, archivedAt: new Date() } })).toEqual([]);
+  });
+
   it("grants the room-bound agent exactly the writes its stage declares, for the room's own drive task", () => {
     expect(roomStageMandatedTools({ scheduledTaskId: TASK, room: room(), agentIds: ["AGT-WS-PORTFOLIO"] }))
       .toEqual([...ACCEPTANCE_VERIFIER_WRITES].sort());
@@ -81,6 +118,24 @@ describe("loadScheduledRoomMandate (BI-C1781121)", () => {
     });
     expect(tools).toEqual([...ACCEPTANCE_VERIFIER_WRITES].sort());
     expect(fake.taskRun.findUnique).not.toHaveBeenCalled();
+  });
+
+  it("resolves the release report call from the recorded scheduled source", async () => {
+    const taskId = workroomDriveTaskId(CAPSULE, "release-readiness-watch");
+    const fake = db({ kind: "scheduled-task", id: taskId }, [room({ scopeClaims: [buildWorkShapeClaim("release-readiness-watch@1.0.0")] })]);
+    const assignment = { agentId: "build-specialist", taskRunId: "TR-SCHED-REPORT", taskConfig: {
+      workroomStage: { shapeKey: "release-readiness-watch", shapeVersion: "1.0.0", stageKey: "report", tools: [] },
+    } };
+    const scheduledAgentTask = { findUnique: vi.fn().mockResolvedValue(assignment) };
+    const input = { taskRunId: "TR-SCHED-REPORT", agentIds: ["build-specialist"],
+      toolName: "record_workroom_evidence", params: { capsuleId: CAPSULE, stageKey: "report", kind: "assurance-finding", outcome: "blocked", summary: "Missing release identifier" } };
+    expect(await loadScheduledRoomMandate({ ...fake, scheduledAgentTask }, input))
+      .toEqual(["record_workroom_evidence"]);
+    for (const changed of [null, { ...assignment, taskRunId: "TR-SCHED-OLD" }, { ...assignment, agentId: "someone-else" },
+      { ...assignment, taskConfig: { workroomStage: { shapeKey: "other", shapeVersion: "1.0.0", stageKey: "report" } } }]) {
+      scheduledAgentTask.findUnique.mockResolvedValue(changed);
+      expect(await loadScheduledRoomMandate({ ...fake, scheduledAgentTask }, input)).toEqual([]);
+    }
   });
 
   it("is empty for a run that is not scheduled, not a Workroom drive task, or names no room", async () => {

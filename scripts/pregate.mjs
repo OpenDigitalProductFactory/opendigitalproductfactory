@@ -17,6 +17,8 @@
 import { parseArgs as utilParseArgs } from "node:util";
 import { scriptArgv } from "./lib/script-argv.mjs";
 import { spawnSync } from "node:child_process";
+import { runForegroundGate, withForegroundCancellation } from "./lib/foreground-gate-process.mjs";
+export { runForegroundGate } from "./lib/foreground-gate-process.mjs";
 import { createObservedProcessRunner } from "./lib/local-ci-process-observer.mjs";
 import { gitTextOrNull } from "./lib/git.mjs";
 import { sandboxDecisionForHead } from "./derived-artifacts-gate.mjs";
@@ -60,6 +62,7 @@ import {
 import { collectSlotVerdicts, resolveWorktreeContext } from "./pregate-status.mjs";
 import { reconcileSlots } from "./lib/pregate-status.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
+import { runWithHostMcpTrust } from "./lib/mcp-host-trust.mjs";
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = dirname(THIS_FILE);
@@ -724,7 +727,8 @@ export async function runGateWithQueuedRevival({
   useShell = false,
   env = process.env,
   now = () => Date.now(),
-  spawnSyncImpl = spawnSync,
+  runGateImpl = runForegroundGate,
+  signalSource = process,
   reviveInterruptedQueuedGateImpl = reviveInterruptedQueuedGate,
   recoverInterruptedGateImpl = recoverInterruptedGate,
   stderr = process.stderr,
@@ -736,7 +740,7 @@ export async function runGateWithQueuedRevival({
     env,
     nowMs: now(),
   });
-
+  return withForegroundCancellation(async signal => {
   for (;;) {
     const invocationArgs = queuedRevivals === 0
       ? args
@@ -753,16 +757,16 @@ export async function runGateWithQueuedRevival({
 
     if (useShell) {
       stderr.write("pregate: DPF_PREGATE_FORCE_SH=1 set — routing through compatibility shell entry point.\n");
-      result = spawnSyncImpl("sh", [join(SCRIPT_DIR, "gate-worktree.sh"), ...invocationArgs], { stdio: "inherit" });
+      result = await runGateImpl("sh", [join(SCRIPT_DIR, "gate-worktree.sh"), ...invocationArgs], { env, signal });
     } else {
       stderr.write("pregate: routing through the Node-native gate (scripts/gate-worktree.mjs).\n");
-      result = spawnSyncImpl(process.execPath, [join(SCRIPT_DIR, "gate-worktree.mjs"), ...invocationArgs], { stdio: "inherit" });
+      result = await runGateImpl(process.execPath, [join(SCRIPT_DIR, "gate-worktree.mjs"), ...invocationArgs], { env, signal });
     }
 
     if (result.error || (result.status ?? 1) === 0) {
       return { result, queuedRevivals, timedOut: false };
     }
-    if (now() < queueRevivalWindow.deadlineMs) {
+    if (!signal.aborted && now() < queueRevivalWindow.deadlineMs) {
       const revived = await reviveInterruptedQueuedGateImpl({ args, result });
       if (revived.revived) {
         queuedRevivals += 1;
@@ -773,6 +777,7 @@ export async function runGateWithQueuedRevival({
     await recoverInterruptedGateImpl({ args, result });
     return { result, queuedRevivals, timedOut: false };
   }
+  }, { signalSource });
 }
 
 // Thin, failure-tolerant readers for the two safety guards above. Both fail
@@ -908,7 +913,7 @@ export async function runHostPreflight({
   stderr = (text) => process.stderr.write(text),
 } = {}) {
   if (shouldRunPreflight(args, env)) {
-    const quiescence = await readStatusImpl({ args, env, warn: stderr });
+    const quiescence = await readStatusImpl({ args, env, warn: stderr, strictConnection: true });
     if (quiescenceBlocksWrites(quiescence)) {
       // No gate record, lease, observer or pending-evidence mutation on this path.
       stderr(JSON.stringify(quiescenceWait(quiescence)) + "\n");
@@ -1005,8 +1010,8 @@ export function readReconciledVerdictAtHead({
 // comparison must survive symlinked invocation spellings (macOS /var tmpdir),
 // or the guard silently skips main() and exits 0 (BI-745658D7).
 if (isEntryModule(import.meta.url)) {
-  main().catch((error) => {
-    process.stderr.write(`pregate: ${error?.stack || String(error)}\n`);
-    process.exit(1);
+  runWithHostMcpTrust(main).then(code => { if (typeof code === "number") process.exit(code); }).catch((error) => {
+    process.stderr.write(`pregate: ${error?.code ? error.message : error?.stack || String(error)}\n`);
+    process.exit(error?.hostTrustPrerequisite ? GATE_EXIT.HOST_CONNECTION_UNAVAILABLE : 1);
   });
 }

@@ -119,6 +119,7 @@ import {
   isVerboseGateConsole,
 } from "./lib/pregate-console.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
+import { runWithHostMcpTrust } from "./lib/mcp-host-trust.mjs";
 import { spawnDurableWaitResumer } from "./lib/durable-wait-resumer.mjs";
 import { decideTerminalClaim, isResumedGateRun, resumeClaimFields, verifyPinnedSource } from "./lib/gate-resume-pin.mjs";
 
@@ -2675,6 +2676,8 @@ async function main() {
   } : classifyGateOutcome({
     freshnessVerdict: freshnessReport ? freshnessReport.verdict : "",
     gateExitCode: runResult.status,
+    // Only this owner's signal handlers establish an observed interruption.
+    receivedSignal,
     // BI-FCC1DCB2: the conflicting paths, quoted only from THIS run's metadata.
     mergeConflict: metadataMergeConflictForRun(contentMetadata, { leaseId, sha }),
     // BI-B62A6686: P1001 on prisma migrate deploy is read from this run's log.
@@ -3000,7 +3003,6 @@ async function main() {
   }
   if (outcome.status === "blocked_child_signal_death") {
     process.stderr.write(`gate-worktree: BLOCKED (child signal death): ${outcome.summary}\n`);
-    process.stderr.write("gate-worktree: this is infrastructure evidence, not a product failure; retry on a quieter host\n");
     process.exit(EXIT_CHILD_SIGNAL_DEATH);
   }
   die("gate failed");
@@ -3071,7 +3073,11 @@ function writeState(stateFile, {
 // check must survive symlinked invocation paths (macOS /var tmpdir, symlinked
 // checkouts) where argv[1] and import.meta.url spell the same file differently.
 if (isEntryModule(import.meta.url)) {
-  main().catch((error) => {
+  runWithHostMcpTrust(main).then(code => { if (typeof code === "number") process.exit(code); }).catch((error) => {
+    if (error?.hostTrustPrerequisite) {
+      process.stderr.write(`gate-worktree: ${error.message}\n`);
+      process.exit(88);
+    }
     die(error?.stack || String(error));
   });
 }

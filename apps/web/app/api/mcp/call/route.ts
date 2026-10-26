@@ -49,7 +49,11 @@ export async function POST(request: Request) {
   if (
     result.governance?.rejected === "forbidden_capability" ||
     result.governance?.rejected === "forbidden_grant" ||
-    result.governance?.rejected === "authority_denied"
+    result.governance?.rejected === "authority_denied" ||
+    // Settled authority resolution (BI-5FDE148A). Not 503: retrying cannot succeed.
+    result.governance?.rejected === "authority_subject_not_found" ||
+    result.governance?.rejected === "authority_binding_mismatch" ||
+    result.governance?.rejected === "authority_scope_missing"
   ) {
     return Response.json(result, { status: 403 });
   }

@@ -489,6 +489,9 @@ test("the executable runner refuses a persisted exhausted profile before spawn",
     assert.equal(result.status, 86, `${result.stdout}\n${result.stderr}`);
     assert.match(result.stderr, /without another child/);
     assert.equal(JSON.parse(readFileSync(diagnosticsPath, "utf8")).retryExhausted, true);
+    assert.deepEqual(JSON.parse(readFileSync(diagnosticsPath, "utf8")).selection, {
+      mode: "exhaustive", stage: "exhaustive-vitest", extraArgs: [], reason: "no-base-ref",
+    }, "even an unrun exhausted attempt persists its intended selection separately");
   } finally {
     rmSync(temp, { recursive: true, force: true });
   }

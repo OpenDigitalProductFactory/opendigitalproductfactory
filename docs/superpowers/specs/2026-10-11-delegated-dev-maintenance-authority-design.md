@@ -149,3 +149,55 @@ An active verification must not reuse a token marked expired or whose decoded JW
 
 Consumer review found a further renewal classification defect in the first qualified source candidate: HTTP 429/500/503 and unknown OAuth 400 replies could mark the captured credential expired or request reauthentication. Four new cases reproduced failures before repair. Guarded renewal now treats quota/server availability and unknown request failures separately, without credential writes. HTTP 401/403 and a recognized OAuth 400 invalid_grant retain the existing grant-refusal path and captured expiry fence. The predecessor gate and native receipt remain historical; the corrected commit requires fresh exact-source qualification.
 
+
+## Authorization reuse in recovery instructions - BI-D50FAA80
+
+The diagnosis skill requires ratification before every mutation; the served
+stale-toolchain notice requires a fresh approval before every update. Both
+instructions can recreate a consent loop even when the operator has already
+authorized the named routine maintenance. Reuse that authority within its scope.
+This section repairs the instruction contract; it does not relax execution gates.
+
+### Design grounding and bounded change
+
+Existing substrates: `mcp/agent-host-instructions.ts`,
+`agent-toolchain/toolchain-verdict.ts`, the diagnosis skill and the contributor
+procedure runbook. Current action authorization remains with the reference
+monitor. No new grant, authority store, approval flag or client trust tier.
+
+1. Direct stale connections to the signed updater's dry-run first. A loaded
+   declaration describes a running connection; it does not prove installed
+   files need replacing. A current pack may still have stale connector settings,
+   credential wiring or project plugin pins. Request one client restart only if
+   the dry-run finds no relevant toolchain or configuration repair, and continue
+   independent authorized work.
+2. If files need updating, reuse current scoped operator authorization. Seek
+   approval only if that authority is missing or the proposed change exceeds
+   it. A dry-run does not authorize its own application. Preserve signed
+   manifest/archive verification and the exact expected installation identity.
+3. Make diagnosis step 8 report evidence and continue authorized repair. Link
+   the contributor runbook's authority rule rather than keep a second blanket
+   ratification requirement. Unknown cause still requires investigation.
+4. Preserve every host refusal, tool denial, missing capability, independent
+   review, production-integrity control, teardown capture and paired-peer limit.
+   Never route a refused update through another tool or execution path.
+
+### Acceptance
+
+- AC-I1: recovery guidance distinguishes loaded-session drift from installed drift.
+- AC-I2: the notice reuses existing scoped authorization and preserves absent
+  authority, expanded scope and host-refusal boundaries.
+- AC-I3: diagnosis reports evidence and continues already-authorized work
+  without ceremonial ratification.
+- AC-I4: portal locator, full installation identity, current/undeclared/floor
+  behavior and client reload advice remain intact.
+- AC-I5: source tests and instruction guards are reported separately from live
+  release verification; this item does not claim end-to-end DEV autonomy.
+
+No schema or runtime-policy migration. Existing clients receive the served notice
+with the canonical server release and the skill through the signed pack update.
+Rollback restores prior instructions; it grants or revokes no permission.
+
+Client allowlists/posture remain BI-F90A822E; runtime stage authority remains
+BI-6B610D94; routine monitoring consequences remain BI-C5E51A15. Those repairs
+need their own evidence and are not delivered by this instruction change.

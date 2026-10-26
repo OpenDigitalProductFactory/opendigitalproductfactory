@@ -7,6 +7,7 @@ relatedCode:
   - apps/web/app/(shell)/workspace/cases/[caseKey]/page.tsx
   - apps/web/components/workspace/WorkCaseAttentionLens.tsx
   - apps/web/components/workspace/WorkCaseDetailView.tsx
+  - apps/web/components/workspace/workroom/WorkroomHeader.tsx
   - apps/web/components/workspace/workroom/WorkroomCycles.tsx
   - apps/web/components/workspace/workroom/WorkroomFlowMap.tsx
   - apps/web/components/ops/workrooms/AreaFlowPanel.tsx
@@ -44,6 +45,9 @@ The top of a Workroom answers four questions:
 2. What needs attention now?
 3. Who is accountable and who is participating?
 4. What is the next action?
+
+Long names and source identifiers wrap within the header on narrow screens,
+keeping the full value available.
 
 Below that header, **Room definition** names the reusable room pattern and its version.
 **This room** identifies whether you are seeing one occurrence, a standing stream, or its
@@ -125,15 +129,21 @@ success. The projection check time and latest evidence time are separate; an
 unknown timestamp does not imply a fresh observation.
 
 After a minute, the process snapshot is marked stale. **Refresh state** reads
-the room again while keeping your selected step and filters. The warning clears
-only when a newer server read arrives. Refreshing does not resume work, approve
-a transition, or prove progress. A missing or future read time remains unknown.
+the selected room's process, definition and flow map together. Your selected
+step, filters, layout, open evidence and keyboard focus stay in place. The warning
+clears only when a newer server read arrives. Other room panels retain their own
+snapshot. Refreshing does not resume work, approve a transition, or prove progress.
+A missing or future read time remains unknown.
 
 If your browser reports offline, **Refresh state** keeps the displayed snapshot
 and announces that you need to reconnect. When the browser reports a restored
 connection, refresh manually to check for changes. Reconnecting alone does not
-refresh the page or establish that the server is reachable. A connection lost
-during a request may still require a browser reload after reconnection.
+refresh the page or establish that the server is reachable. If a request fails
+or times out, the saved process snapshot remains available with a manual retry.
+A changed selection asks you to reopen the case. If your session ends or room
+access is removed, the protected process is hidden with a sign-in or My Work
+link. A failed flow-map read is marked partial rather than retaining an old map
+under a new check time.
 
 Native reviews submitted through OAuth use the same current permission checks as other authenticated reviews. Before dispatch or recovery, the worker checks token expiry, token and client revocation, tool grants, and task ownership. A failed authority check pauses the review before a provider call; it does not grant permission or silently switch credentials.
 
@@ -146,6 +156,25 @@ reported as incomplete. A completed reviewer task still needs its completion rec
 it does not prove that the Workroom outcome is complete.
 
 The **Activity** stream distinguishes messages, asks, coworker handoffs, work changes, decisions, artifacts, governed actions, verification, receipts, and cycle transitions. A message is an update; it is not proof that the outcome was achieved.
+
+### Handing development work to another assistant
+
+An assistant can request a handoff to another assistant already admitted to the
+same room. The request records the destination and next action. **Waiting for
+receiver** means the current executor still owns the work. **Handoff completed**
+appears only after the named receiving assistant acknowledges the request for
+the same human owner.
+
+A same-mandate handoff uses existing authority and standing delegation. It does
+not invite a participant or expand anyone's permissions. Restricted work, linked
+builds, or changes to the room's owner, scope or authority keep their existing
+controlled handover. A destination session is endorsed by the receiving assistant;
+the platform does not authenticate an external chat from its session label.
+
+**Handoff refused** gives the recorded reason. If the room or its lease changed,
+the requesting assistant reads the current room and submits a fresh request.
+Active or queued verification leases and an applicable review exemption must be
+settled through their owning workflow before execution moves.
 
 People and AI coworkers appear together as named participants. Their room role and current work state are separate:
 
@@ -210,7 +239,7 @@ Each area's **Work** view opens with the same five measures, so the four portfol
 | **Finished per week** | Runs that reached a success stop. |
 | **Cost** | Points in flight, points delivered this quarter, and the AI used by this area's rooms over the last four weeks. AI use is counted only from conversations and dispatched work that name a room, so it is never guessed. Recorded dollars are shown when a provider records a cost. Work on a subscription records no per-call cost, so it shows as subscription tokens (for example *subscription: $0 recorded, 832.3k tokens*) and never as a bare $0. |
 
-**Flow time**, **flow efficiency** and **finished per week** each have a small trend line for the last eight weeks, and their change against the four weeks before. **In flow now** shows today's count only, with no trend yet: a room that ends without a recorded stop does not yet close its history, so a past count would overstate it.
+**Flow time**, **flow efficiency** and **finished per week** each have a small trend line for the last eight weeks, and their change against the four weeks before. A dashed mark on a trend line shows the week a new version of a work shape started running in this area, so you can read a change in the line against the change that may have caused it. **In flow now** shows today's count only, with no trend yet: a room that ends without a recorded stop does not yet close its history, so a past count would overstate it.
 
 Below the measures:
 
@@ -229,6 +258,16 @@ Under the picture, **Where the time goes, step by step** puts the numbers on eac
 - **Slower lately** or **Faster lately** appears on a step whose last seven days differ from its usual time by a quarter or more, with both times shown.
 - **The timeline** lays the measured steps side by side, with process time on the upper line and waiting time on the lower line. Below it is the total of each and the shape's **flow efficiency**: the share of the time the work was actually being worked.
 
+Below the steps, **Flow reviews** compares the shape version with how it started. Its first four weeks of step data are its **baseline**. Each work shape sets how often it is reviewed, for example every 28 days. At each review, the panel shows:
+
+- How long a step typically takes and the flow efficiency over the four weeks before the review, each next to its baseline.
+- The step where the most waiting built up, weighing rooms held by how long work typically waits there.
+- For the latest review only, why most rooms at that step are held. Earlier reviews do not show a reason, because the daily step data does not record one.
+
+A review covers every room on that shape version, in every area, because the daily step data is not split by area. Its counts can therefore be larger than the rooms you see in this area.
+
+Until the baseline is complete, the panel says when the first review will be. A review with too few finished steps to compare says so rather than showing a number.
+
 **Products** (`/portfolio`) shows the four portfolios side by side on the same measures. Rooms with no portfolio are shown in their own **Unplaced** column and never counted in another.
 
 ### The main value stream on your home page
@@ -237,7 +276,7 @@ Below **What needs you**, the home page shows your business's **main value strea
 
 The panel shows four things:
 
-- **One sentence** naming where the most work is held right now, and why. For example: *5 rooms are held at merge in Small change (waiting on a person).*
+- **One sentence** naming where the most waiting builds up right now, and why. It weighs how many rooms are held at a step by how long work typically waits there, so two rooms stuck for days outrank five that clear in an hour. For example: *2 rooms are held at review in Small change, typically waiting 2d (waiting on a person).* A step with too few finished passes to measure is only named when no held step can be measured.
 - **Four numbers**: in flow now, flow time, flow efficiency, and finished per week.
 - **The busiest work shape**, drawn live.
 

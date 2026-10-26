@@ -1,6 +1,102 @@
 # Platform Support Watch-List (living document)
 
-## Contributor preview mount identity on Docker Desktop (BI-0ACB97B5)
+**Windows foreground gate cancellation.**
+
+BI-BFDB98B6's AC4 follow-up reproduces cancellation through the real Windows
+`pnpm.cmd` entry point. A controlled Ctrl-C after admission previously stopped
+the owned processes while leaving the native gate record `running` without
+lease release. The termination journal proved cleanup started; it did not prove
+that the final-state writer ran. This reproduction does not establish the cause
+of an earlier interrupted host run.
+
+The existing pregate wrapper and saved-CA startup re-exec share a bounded
+foreground wait. Cancellation listeners remain until the child closes and
+interrupted-state recovery finishes. The HTTPS fixture loads a valid isolated
+CA into the fresh Node process; hostname and certificate validation remain on.
+Explicit cancellation does not revive queued work. Windows receives one console
+Ctrl-C; forwarding `child.kill("SIGINT")` would forcibly terminate the child.
+If normal cancellation cannot close it within 30 seconds, the wrapper terminates
+only its owned child and waits another 10 seconds for closure. Unobserved closure
+remains an error and cannot trigger terminal recovery or lease release.
+The enclosing saved-CA startup owner allows 60 seconds before termination so it
+cannot preempt the inner close budget and existing recovery, then retains the
+same 10-second closure bound.
+
+The Windows console regression runs in the existing Gate Executor Liveness
+guard. Its isolated fixture tests normal completion, admitted cancellation on
+direct and saved-CA routes, and an actual nonzero child exit. Cancellation must retain native nonpass state,
+release the exact fixture lease and leave no owned process requiring harness
+cleanup; completed failures remain failures. Fixture receipts are never platform
+canonical evidence or deployed acceptance. A cancelled Windows Job may have no
+completed execution checkpoint; do not manufacture one or finalize it as a pass.
+`pregate:status` remains read-only. Whole-chain loss still requires reconciliation
+of the original durable task and retained evidence before another attempt.
+
+The driver retains its early two-second closure snapshot, then releases only
+observation handles. The launcher observes its enclosing Windows Job for up to
+ten seconds before the first destructive cleanup, including when the driver
+failed. Driver console closure alone does not prove that every Job member has
+exited. Cleanup outcomes and exceptions remain recorded separately from natural
+settlement; a later empty Job never clears a driver failure. The shared Job query retains initial and final active
+counts, available PID/creation identities, elapsed time, budget and bounded
+progress snapshots. Only verified natural emptiness within that budget passes;
+timeout, query or identity failure, and emergency termination remain failures.
+The Job handle owns containment, so diagnostic PIDs never become kill authority.
+Native regression probes cover an empty Job, a short-lived non-console child,
+a persistent child, missing Job handles, query/identity failures, and a failed
+driver whose descendants close naturally. A controlled delayed lease response
+crosses the early snapshot boundary: native cancellation must still write one
+non-success result, release once, close naturally and leave the outside sentinel
+running. A response held beyond final settlement remains unverified and requires
+explicit containment; it must not produce a passing result. This extends the documented
+[Job member query](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_basic_process_id_list)
+and [handle membership check](https://learn.microsoft.com/en-us/windows/win32/api/jobapi/nf-jobapi-isprocessinjob).
+The earlier saved-CA fixture recorded emergency cleanup without the residual
+member identity; its cause remains unknown and its failed result is retained.
+
+The documentation-anchor preflight uses the same configured MCP URL and
+refreshable client credential as the gate, retaining the legacy endpoint and
+PAT fallback. A stale ambient legacy connection must not override an explicitly
+configured client file and URL. Unavailable authority evidence remains an
+unverified citation with a warning; it is neither a missing item nor a verified
+anchor. No credential export or switch of identity is needed for this check.
+
+## Saved host CA trust and stale clients
+
+The historical repair is evidenced by the merged [saved host trust change, PR 6497](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/pull/6497).
+
+The supported Node gate launch (`pnpm run pregate`, including its native gate
+entry) reads existing authorized endpoint/trust through the installer client-env
+resolver. A desktop client can remain open after setup persists the Windows
+User environment or macOS/Linux managed environment. Its process can therefore
+lack `NODE_EXTRA_CA_CERTS`. Launch resolves the saved setting and starts a fresh
+Node process when the selected roots were not loaded at startup. Child gates
+inherit that environment. Shared native MCP and source OAuth requests also apply
+the selected bundle per request alongside Node's effective default roots.
+
+Trust precedence is explicit `DPF_MCP_CA_FILE`, explicit `DPF_PKI_TRUST_BUNDLE`,
+process `NODE_EXTRA_CA_CERTS`, install bundle, saved user bundle, then the
+existing managed root when present. A selected missing/invalid/expired bundle
+stops with its own diagnostic; it never silently falls back to a different CA.
+Without a managed bundle, ordinary public CA verification remains in effect.
+No certificate is harvested from the endpoint or installed by launch.
+
+A bounded verified TLS handshake precedes host guards, authentication and lease
+admission. It sends no HTTP request or credential. Hostname mismatch, expired
+server certificates, unverified issuer and connectivity errors identify separate
+remedies. HTTP401/403 remain authentication/authorization failures, and a
+confirmed drain retains the existing quiescence wait. Transport/prerequisite
+failure exits 88 with no verdict about the diff. Repair the named configuration
+or managed PKI problem before re-running the gate; do not disable verification.
+A slow quiescence read remains inconclusive after transport verification;
+the existing authoritative late admission still governs writes.
+
+Windows uses the User environment through PowerShell 5.1+. macOS/Linux use the
+existing managed environment reader through Bash, without sourcing saved text.
+Windows launch and fixture tests establish local behavior; adapter simulations
+and shell twin tests do not establish native macOS/Linux execution.
+
+## Contributor preview mount identity on Docker Desktop (BI-0ACB97B5, BI-81AF5884)
 
 The Windows host records the admitted worktree as a drive-absolute path while
 Docker Desktop reports its bind source as `/run/desktop/mnt/host/<drive>/...`.
@@ -11,11 +107,31 @@ loopback port, environment class and current ownership checks remain required.
 Regression fixtures cover both verification adapters; a failed initialization
 or binding check never earns a served UX pass.
 
+Desktop may report an admitted POSIX `/Users/...` bind as `/host_mnt/Users/...`.
+Both adapters first preserve direct path equality, then permit this one leading
+namespace translation only when a fresh read from the inspected Docker daemon
+reports `OperatingSystem` exactly `Docker Desktop`. The read is bounded to ten
+seconds and repeated during keeper renewal checks. Missing, failed or native
+Linux metadata supplies no alias authority; existing direct POSIX and Windows
+comparisons remain valid. Case, root, NUL/CR/LF, traversal and prefix lookalikes
+still cannot establish another worktree's identity. Host-only source changes
+cannot update the canonical sign-in issuer; the reviewed release and separately
+authorized install advance must deliver both consumers before served acceptance.
+
 The full local-CI runner also reuses the verified native shell adapter for its
 child environment. Windows fixtures that invoke `sh` must not inherit WSL or
 depend on an agent manually extending PATH. A missing compatible shell is an
 unavailable prerequisite (exit 88), not a failing product test. The parent
 environment, worker limits, test deadlines and lease fences stay unchanged.
+
+Contributor preview declaration isolation (BI-6B109903) binds a private regular
+host file directly at `/workspace/apps/web/next-env.d.ts`; a host file placed
+under node_modules would be hidden by existing named output volumes. Exact
+Windows/Desktop path matching also applies to this file, with fresh daemon
+qualification. Compose omits `read_only: false` in normalized config; actual
+inspection still requires `RW: true`, and `create_host_path: false` prevents a
+missing file from becoming a directory. A native governed preview must verify
+the bind; a simulated filesystem projection establishes only writer isolation.
 
 ## Literal Windows package-manager arguments (BI-263055E3)
 

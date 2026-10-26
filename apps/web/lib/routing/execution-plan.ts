@@ -305,9 +305,6 @@ export function activityBudgetExclusion(
     return "Invalid activity token envelope";
   }
   if (contract.estimatedInputTokens > maxInputTokens) return "Activity input allowance exceeded";
-  if (resolvePlanEffort(contract, endpoint).extraMaxTokens >= maxOutputTokens) {
-    return "Activity completion allowance leaves no room beyond fixed thinking budget";
-  }
   if (endpoint.maxOutputTokens === null || !Number.isSafeInteger(endpoint.maxOutputTokens) || endpoint.maxOutputTokens <= 0) {
     return "Activity completion capacity is unknown; refresh endpoint capacity evidence";
   }
@@ -320,6 +317,13 @@ export function activityBudgetExclusion(
   if (endpoint.maxContextTokens <
       Math.max(contract.minContextTokens ?? 0, contract.estimatedInputTokens + maxOutputTokens)) {
     return "Activity input and completion allowance exceeds known model context capacity";
+  }
+  // Admit the same bounded thinking settings that execution will use, not the
+  // larger proportional request before its final-output reserve is applied.
+  try {
+    bindActivityThinkingSettings(resolvePlanEffort(contract, endpoint).settings, maxOutputTokens);
+  } catch (error) {
+    return error instanceof Error ? error.message : "Invalid activity thinking allowance";
   }
   return null;
 }
@@ -346,17 +350,12 @@ export function attachHarnessRecipeToPlan(
   };
 }
 
-/** Bind admitted activity execution settings and its governed harness together. */
-export function bindActivityExecutionPlan(
-  plan: RoutedExecutionPlan,
-  activity: ActivityContract,
-  hint: HarnessBindingHint,
-  overrides?: ActivityHarnessConfidenceOverride[],
-): RoutedExecutionPlan {
-  const harness = applyHarnessConfidenceOverride(
-    bindHarnessRecipeForActivity(activity, hint), hint, overrides,
-  );
-  const total = activity.tokenEnvelope.maxOutputTokens;
+/** One total-completion/thinking contract for both admission and dispatch. */
+function bindActivityThinkingSettings(
+  settings: RoutedExecutionPlan["providerSettings"],
+  total: number,
+  localThinkingBudgetRequest?: number,
+): RoutedExecutionPlan["providerSettings"] {
   if (!Number.isSafeInteger(total) || total <= 0) throw new Error("Invalid activity completion allowance");
   const reserve = Math.min(total - 1, Math.max(2048, Math.ceil(total / 4)));
   const bounded = (value: unknown): number => {
@@ -366,9 +365,9 @@ export function bindActivityExecutionPlan(
     if (total <= 1) throw new Error("Activity completion allowance leaves no final output room");
     return Math.min(value, total - reserve);
   };
-  const providerSettings = { ...plan.providerSettings };
+  const providerSettings = { ...settings };
   if (providerSettings.thinking_budget_tokens !== undefined) {
-    providerSettings.thinking_budget_tokens = bounded(plan.localThinkingBudgetRequest ?? providerSettings.thinking_budget_tokens);
+    providerSettings.thinking_budget_tokens = bounded(localThinkingBudgetRequest ?? providerSettings.thinking_budget_tokens);
   }
   const thinking = providerSettings.thinking as { type?: string; budget_tokens?: unknown } | undefined;
   if (thinking?.type === "enabled") {
@@ -380,6 +379,21 @@ export function bindActivityExecutionPlan(
   if (thinkingConfig?.thinkingBudget !== undefined) {
     providerSettings.thinkingConfig = { ...thinkingConfig, thinkingBudget: bounded(thinkingConfig.thinkingBudget) };
   }
+  return providerSettings;
+}
+
+/** Bind admitted activity execution settings and its governed harness together. */
+export function bindActivityExecutionPlan(
+  plan: RoutedExecutionPlan,
+  activity: ActivityContract,
+  hint: HarnessBindingHint,
+  overrides?: ActivityHarnessConfidenceOverride[],
+): RoutedExecutionPlan {
+  const harness = applyHarnessConfidenceOverride(
+    bindHarnessRecipeForActivity(activity, hint), hint, overrides,
+  );
+  const total = activity.tokenEnvelope.maxOutputTokens;
+  const providerSettings = bindActivityThinkingSettings(plan.providerSettings, total, plan.localThinkingBudgetRequest);
   return attachHarnessRecipeToPlan({
     ...plan,
     providerSettings,

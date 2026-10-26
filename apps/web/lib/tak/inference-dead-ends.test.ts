@@ -10,6 +10,30 @@ import {
   unexplainedDeadEndHandoff,
 } from "./inference-dead-ends";
 
+describe("local admission wait recovery", () => {
+  const cause = "inference admission timeout on local engine after 120000ms (origin=interactive, provider=local)";
+  it.each([cause, `All endpoints failed for tool-action. Attempts: ${JSON.stringify([
+    { endpointId: "local", error: cause, code: "INFERENCE_ADMISSION_TIMEOUT" },
+  ])}`])("identifies queued capacity without inventing a setup repair: %s", message => {
+    const outcome = describeToolRouteFailureOutcome(message, 15);
+    expect(outcome.kind).toBe("capacity");
+    expect(outcome.message).toMatch(/queue/i);
+    expect(outcome.message).toMatch(/did not start/i);
+    expect(outcome.message).not.toMatch(/start_sandbox|Providers & Routing|Nothing is misconfigured|30 seconds/i);
+    expect(outcome.message).not.toMatch(/Once that's done, tell me/i);
+  });
+
+  it("preserves a real provider failure in a mixed endpoint chain", () => {
+    const message = `All endpoints failed for tool-action. Attempts: ${JSON.stringify([
+      { endpointId: "local", error: cause, code: "INFERENCE_ADMISSION_TIMEOUT" },
+      { endpointId: "anthropic", error: "invalid API key", code: "auth" },
+    ])}`;
+    const outcome = describeToolRouteFailureOutcome(message, 15);
+    expect(outcome.kind).not.toBe("capacity");
+    expect(outcome.message).toContain("invalid API key");
+  });
+});
+
 // BI-33F1EA72. Measured on the live install: 196 of 1,138 assistant messages
 // were dead ends, and 84% of those were provider availability — the paths the
 // hand-off rung originally did NOT cover.

@@ -30,6 +30,8 @@ function fakeDb(overrides: Partial<{ rooms: unknown[]; builds: unknown[]; tasks:
     },
     buildActivity: { create: vi.fn(async () => ({})) },
     agent: { findMany: vi.fn(async () => [{ agentId: "AGT-1", portfolioId: "pf-found" }]) },
+    mcpApiToken: { count: vi.fn(async () => 4) },
+    oAuthRefreshToken: { count: vi.fn(async () => 1) },
     scheduledAgentTask: {
       // Like Prisma: ScheduledAgentTask has no `agent` relation, only the agentId string.
       findMany: vi.fn(async ({ select }: { select: Record<string, unknown> }) => {
@@ -60,6 +62,21 @@ describe("planAccountHandover", () => {
       ["room", "WC-1", "u-mark"],
       ["scheduled-task", "task-1", "u-mark"],
     ]);
+    expect(plan.data.digest).toBe(handoverDigest(plan.data.items, "u-admin"));
+  });
+
+  // BI-9D2199D4: the handover moves work, not access. The approver sees the
+  // account's live agent credentials, which stay live until someone ends them.
+  it("reports the account's live agent credentials without putting them in the digest", async () => {
+    const db = fakeDb();
+    const now = new Date("2026-10-14T00:00:00Z");
+    const plan = await planAccountHandover(db, { sourceAccount: "admin@dpf.local", now });
+    if (!plan.ok) throw new Error("expected a plan");
+    expect(plan.data.liveAgentCredentials).toEqual({ accessTokens: 4, refreshGrants: 1 });
+    expect(db.mcpApiToken.count).toHaveBeenCalledWith({ where: {
+      userId: "u-admin", revokedAt: null, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] } });
+    expect(db.oAuthRefreshToken.count).toHaveBeenCalledWith({ where: {
+      userId: "u-admin", revokedAt: null, consumedAt: null, expiresAt: { gt: now } } });
     expect(plan.data.digest).toBe(handoverDigest(plan.data.items, "u-admin"));
   });
 

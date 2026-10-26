@@ -147,3 +147,26 @@ describe("stageBriefInputFromDefinition", () => {
     expect(brief).toMatchObject({ shapeTitle: null, stageTitle: null, doneWhen: null, evidenceKinds: [], stopConditions: [], stageTools: [] });
   });
 });
+
+// BI-1DDCE164: 737 of 1030 live build-specialist stage records were "blocked",
+// most because the agent could not tell which work the room delivers.
+describe("the room's subject in the brief", () => {
+  it("names the bound backlog item and the tool that reads it", () => {
+    const brief = buildStageBrief({ ...input, backlogItemKey: "BI-725E605A" });
+    expect(brief).toContain("Backlog item: BI-725E605A");
+    expect(brief).toContain('get_backlog_item with itemId "BI-725E605A"');
+  });
+
+  it("adds no backlog line when the room delivers no item", () => {
+    expect(buildStageBrief(input)).not.toContain("Backlog item");
+    expect(buildStageBrief({ ...input, backlogItemKey: null })).not.toContain("Backlog item");
+  });
+
+  it("forwards the item key from the definition helper", () => {
+    const brief = stageBriefInputFromDefinition({
+      capsuleId: "WC-1", roomObjective: null, shapeKey: "", shapeVersion: "", definition: null, stageKey: "",
+      backlogItemKey: "BI-1",
+    });
+    expect(brief.backlogItemKey).toBe("BI-1");
+  });
+});

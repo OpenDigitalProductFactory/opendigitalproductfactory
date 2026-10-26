@@ -32,6 +32,30 @@ _dry_run=0
 _readiness=0
 _promoter_dir="${DPF_PROMOTER_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 
+# reassessment-compatibility-begin
+# Kept in this N-1-staged owner: the exact portal supplies its packaged probe.
+_assert_reassessment_image() {
+  local image="$1" expected="$2" overlay="${3:-}" config report name
+  config="$(docker image inspect "$image" --format '{{.Id}}' | tr -d '[:space:]')" || return 78
+  [[ "$config" =~ ^sha256:[a-f0-9]{64}$ ]] || return 78
+  name="dpf-reassessment-probe-$$-$RANDOM"
+  command -v timeout >/dev/null 2>&1 || return 78
+  if ! report="$(timeout -k 5 60 docker run --rm --read-only --name "$name" --network none --cap-drop ALL \
+    --security-opt no-new-privileges --memory 128m --cpus 1 --pids-limit 64 --pull never \
+    --entrypoint node "$config" /app/scripts/reassessment-capability-probe.mjs | head -c 8193)"; then
+    docker rm -f "$name" >/dev/null 2>&1 || true
+    return 78
+  fi
+  if ! printf '%s' "$report" | node -e '
+const fs=require("node:fs"),b=fs.readFileSync(0,"utf8"),expected=process.argv[1],names=["transport","approval","worker","writer"];
+const exact=(v,k)=>v&&typeof v==="object"&&!Array.isArray(v)&&Object.keys(v).length===k.length&&k.every(x=>Object.hasOwn(v,x)),hash=v=>typeof v==="string"&&/^[a-f0-9]{64}$/.test(v);
+try{const v=JSON.parse(b);if(Buffer.byteLength(b)>8192||!exact(v,["schemaVersion","sourceSha","sourceContentHash","contractSha256","owners"])||v.schemaVersion!==1||!/^[a-f0-9]{40}$/.test(v.sourceSha??"")||(expected&&v.sourceSha!==expected)||!hash(v.sourceContentHash)||!hash(v.contractSha256)||!exact(v.owners,names)||names.some(n=>!exact(v.owners[n],["version","sourceSha256"])||v.owners[n].version!==2||!hash(v.owners[n].sourceSha256)))process.exit(78)}catch{process.exit(78)}' "$expected"; then return 78; fi
+  [[ "$(docker image inspect "$image" --format '{{.Id}}' | tr -d '[:space:]')" == "$config" ]] || return 78
+  if [[ -n "$overlay" ]]; then printf 'services:\n  portal:\n    image: "%s"\n    pull_policy: never\n' "$config" > "$overlay" || return 78; fi
+  printf '%s\n' "$config"
+}
+# reassessment-compatibility-end
+
 for _protocol_arg in "$@"; do
   if [[ "$_protocol_arg" == "--runtime-capability-protocol-info" ]]; then
     [[ "$#" -eq 1 ]] || { printf 'invalid_runtime_protocol_probe_arguments\n' >&2; exit 64; }
@@ -817,6 +841,11 @@ emit_step backup
 if [[ $_dry_run -eq 0 && $_promote_phase == all ]]; then
   _prev_sha=$(curl -fsS "${PROMOTE_HEALTH_URL}/sha" 2>/dev/null | tr -d '[:space:]' || true)
   printf '%s\n' "${_prev_sha:-unknown}" > "$PROMOTE_BACKUP_PATH/previous-sha.txt" 2>/dev/null || true
+  _reassessment_baseline_id="$(docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" "${_f_args[@]}" ps -q portal)" || _reassessment_baseline_id=""
+  _reassessment_baseline_config=""
+  if [[ "$_reassessment_baseline_id" =~ ^[a-f0-9]{12,64}$ ]]; then
+    _reassessment_baseline_config="$(docker inspect --format '{{.Image}}' "$_reassessment_baseline_id" | tr -d '[:space:]')" || _reassessment_baseline_config=""
+  fi
 fi
 
 # Persist the exact projection approved during candidate readiness. The portal
@@ -882,23 +911,9 @@ if [[ $_dry_run -eq 0 ]]; then
 fi
 
 # --- Step 3: docker-build ---
-# Rebuild the portal image from the host source. The DPF_VERSION stamp is
-# derived from the ACTUAL bytes being built — `rev-parse HEAD` of the build
-# source (plus a `-dirty` suffix when the tree has uncommitted changes) — NOT
-# from the caller-supplied target. This is the load-bearing truth fix: the
-# image can only ever report the identity of the code it actually contains, so
-# the later sha-verify is a real check rather than reading back a value we set.
-#
-# PROMOTE_TARGET_SHA is the orchestrator's intended identity (the stamp it
-# computed after preparing/merging the source). The spec §4.3 / BI-5B6C1C35
-# invariant is stamp == built HEAD == target, asserted PRE-SWAP. A divergence
-# here means the bytes about to be deployed are NOT the bytes the orchestrator
-# resolved — exactly the stale-image class of bug — so we FAIL LOUD before
-# building rather than recreating the portal under a label that lies about its
-# contents. (A dirty build tree is also rejected: a `-dirty` stamp can never
-# equal a clean target SHA, and promoting uncommitted bytes is never intended.)
-# The real platform version (DPF_PLATFORM_VERSION, from git tags) is baked in
-# the same build.
+# Derive DPF_VERSION from actual build-source HEAD, rejecting dirty or divergent
+# trees before build. Stamp == built HEAD == target (BI-5B6C1C35); the same build
+# also carries DPF_PLATFORM_VERSION from the source's Git tags.
 emit_step docker-build
 if [[ $_dry_run -eq 0 ]]; then
   if [[ $_release_mode -eq 1 ]]; then
@@ -914,7 +929,22 @@ if [[ $_dry_run -eq 0 ]]; then
     printf 'error: cannot resolve HEAD of build source %s\n' "$PROMOTE_SOURCE" >&2
     exit 1
   }
-  if [[ -n "$(git -C "$PROMOTE_SOURCE" status --porcelain 2>/dev/null || true)" ]]; then
+  # LFS clean filters spool even unchanged materialized files. The source is
+  # mounted read-only, so give this check private scratch storage outside it.
+  _source_lfs_storage=$(mktemp -d) || {
+    printf 'error: cannot allocate scratch storage for build source verification\n' >&2
+    exit 1
+  }
+  # A missing/broken clean filter is unverifiable source, never a clean tree.
+  # Keep Git's diagnostic so the failure names the tool/filter that failed.
+  if ! _source_status=$(git -c core.hooksPath=/dev/null -c "lfs.storage=$_source_lfs_storage" \
+    -C "$PROMOTE_SOURCE" status --porcelain); then
+    rm -rf -- "$_source_lfs_storage"
+    printf 'error: cannot verify build source status (including Git LFS filters); refusing to build an image with unverified source identity\n' >&2
+    exit 1
+  fi
+  rm -rf -- "$_source_lfs_storage"
+  if [[ -n "$_source_status" ]]; then
     _built_sha="${_built_sha}-dirty"
   fi
   if [[ "$PROMOTE_TARGET_SHA" != "$_built_sha" ]]; then
@@ -948,6 +978,17 @@ if [[ $_dry_run -eq 0 ]]; then
   fi
 fi
 
+if [[ $_dry_run -eq 0 ]]; then
+  _reassessment_candidate_ref="${_project}-portal"
+  [[ $_release_mode -eq 0 ]] || _reassessment_candidate_ref="$_candidate_portal"
+  _reassessment_candidate_digest="$(_assert_reassessment_image "$_reassessment_candidate_ref" "$_built_sha")" || exit 78
+  if [[ $_promote_phase == all ]]; then
+    _reassessment_candidate_override="$PROMOTE_BACKUP_PATH/reassessment-candidate-$$.yml"
+    _assert_reassessment_image "$_reassessment_candidate_digest" "$_built_sha" "$_reassessment_candidate_override" >/dev/null || exit 78
+    _f_args+=(-f "$_reassessment_candidate_override")
+  fi
+fi
+
 if [[ $_promote_phase == build ]]; then
   emit_step done
   trap - EXIT
@@ -955,19 +996,9 @@ if [[ $_promote_phase == build ]]; then
 fi
 
 # --- Step 3a: ensure Postgres provides pgvector ---
-# BET-5 (BI-A1E864A5): the vector migration runs `CREATE EXTENSION vector`, which the plain
-# `postgres:16` image does not ship. A self-upgrade recreates ONLY the portal (step 4, --no-deps),
-# so an existing install's postgres container keeps whatever image it launched with — and the
-# Phase-0 compose bump to `pgvector/pgvector:pg16` never reaches it. Without this step, step 3b
-# `migrate deploy` fails with "extension \"vector\" is not available" and the upgrade aborts
-# before the swap. Recreate postgres onto the compose-pinned pgvector image BEFORE migrate.
-#
-# IDEMPOTENT: skips when the running container's image already provides pgvector (a fresh install
-# built from the new compose, or an install already upgraded), detected image-agnostically via
-# pg_available_extensions. DATA-PRESERVING: pgvector/pgvector is the same PG16 engine as postgres:16
-# on the same pgdata volume (a strict superset image), so the recreate keeps all data — no
-# dump/restore. FAIL-CLOSED like migrate: if the recreate or the readiness wait fails, abort before
-# the swap so the old portal keeps serving the old code.
+# BET-5 (BI-A1E864A5): ensure pgvector before migrations. Check the running engine
+# image-agnostically; when absent, recreate the same PG16 volume with pgvector.
+# No dump/restore occurs. Any recreate/readiness failure stops before portal swap.
 emit_step ensure-pgvector
 if [[ $_dry_run -eq 0 ]]; then
   _pg_container="${DPF_PRODUCTION_DB_CONTAINER:-${_project}-postgres-1}"
@@ -1094,22 +1125,9 @@ if [[ $_dry_run -eq 0 ]]; then
 fi
 
 # --- Step 3b: migrate ---
-# Apply DB migrations using the FRESHLY BUILT portal image BEFORE recreating the
-# long-running portal. The swap in step 4 recreates ONLY `portal` (--no-deps),
-# so it never runs the one-shot `portal-init` service that a normal
-# `docker compose up` runs to migrate the DB. Without this step a self-upgrade
-# that ships a migration leaves the live DB drifted, and every query for a new
-# column throws Prisma P2022 ColumnNotFound — the 2026-06-07 crash incident
-# (BI-D9BAB4FA) where /ops/self-upgrade, /build, /platform and /workbooks all
-# died after a swap. Running `prisma migrate deploy` from the new image's own
-# bytes is forward-only and FAIL-CLOSED: `set -e` aborts the upgrade on a
-# migration error BEFORE the swap, so the OLD portal keeps serving the OLD code
-# against a consistent DB rather than a new image landing on an un-migrated one.
-# DPF migrations are additive (expand), so applying them while the old portal is
-# still running is safe — it simply ignores the new columns until it is replaced.
-# NOTE: step 4b (seed) re-runs the full /docker-entrypoint.sh AFTER the swap,
-# which includes migrations as part of its retry loop — safe because migrate
-# deploy is idempotent. Step 3b is still needed as the pre-swap schema guard.
+# Apply additive migrations from the freshly built image before portal-only
+# recreation; portal-init does not run under --no-deps (BI-D9BAB4FA). A migration
+# error aborts before swap. The later entrypoint repeats this idempotent deploy.
 emit_step migrate
 if [[ $_dry_run -eq 0 ]]; then
   docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
@@ -1127,6 +1145,9 @@ if [[ $_dry_run -eq 0 && $_promote_phase == all && -f "$_promoter_dir/promoter-e
   node "$_promoter_dir/promoter-epoch-evidence.mjs" --phase capture \
     || printf 'step=maintenance-epoch-capture-unavailable\n'
 fi
+if [[ $_dry_run -eq 0 ]]; then
+  _assert_reassessment_image "$_reassessment_candidate_digest" "$_built_sha" >/dev/null || exit 78
+fi
 emit_step docker-up
 if [[ $_dry_run -eq 0 ]]; then
   # BI-3267763F: inngest first, so the new portal's boot-time sync is signed
@@ -1137,7 +1158,7 @@ if [[ $_dry_run -eq 0 ]]; then
       "${_f_args[@]}" up -d --no-deps --force-recreate inngest
   fi
   docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$_compose_root" -p "$_project" \
-    "${_f_args[@]}" up -d --no-deps --force-recreate portal
+    "${_f_args[@]}" up -d --no-build --no-deps --force-recreate portal
 fi  # DPF_PLATFORM_VERSION stays exported from above so any rebuild keeps the stamp
 
 # --- Step 4b: seed ---
@@ -1257,34 +1278,20 @@ if [[ $_release_mode -eq 1 && $_dry_run -eq 0 ]]; then
     printf 'error: release identity commit failed; restoring the prior portal tag\n' >&2
     _rollback_f_args=()
     for _f in "${_compose_files[@]}"; do _rollback_f_args+=(-f "$PROMOTE_SOURCE/$_f"); done
+    _reassessment_fallback_override="$PROMOTE_BACKUP_PATH/reassessment-fallback-$$.yml"
+    _assert_reassessment_image "${_reassessment_baseline_config:-}" "" "$_reassessment_fallback_override" >/dev/null || exit 78
+    _rollback_f_args+=(-f "$_reassessment_fallback_override")
     docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
-      "${_rollback_f_args[@]}" up -d --no-deps --force-recreate portal || true
+      "${_rollback_f_args[@]}" up -d --no-build --no-deps --force-recreate portal || true
     exit 1
   fi
 fi
 
 # --- Step 7b: sandbox-refresh ---
-# Rebuild + recreate the dpf-sandbox image the same way step 3/4 do the portal
-# (BI-A8686CFC). The promote chain historically rebuilt ONLY the portal, so
-# every improvement to Dockerfile.sandbox — the opencode coding agent that the
-# Build Studio build phase shells into, the macOS TTS env wiring, provisioned
-# build engines — never reached an installed sandbox via self-upgrade. Its
-# image would sit at whatever was built at install time (a month stale on the
-# install that surfaced this), so BS builds died at the coding phase (exit 127,
-# `opencode` not found) and env-only compose fixes never took effect until a
-# manual `--force-recreate`. Kernel decision: mirror the portal contract
-# exactly — unconditional build every upgrade, letting the BuildKit layer cache
-# make an unchanged Dockerfile.sandbox near-instant, rather than a git-diff gate
-# whose missed input would silently reintroduce the very staleness this fixes.
-#
-# Sequenced AFTER the portal is fully verified and deliberately fail-LOUD but
-# NOT fail-ABORT: the portal swap already happened at step 4 and the
-# orchestrator process died with it, so a non-zero exit here reverts nothing —
-# it would only mislabel a genuinely-promoted portal as a failed upgrade. A
-# stale sandbox is a recoverable degraded state (recover_sandbox tool, the
-# health-alert surface) so we emit an explicit sandbox-refresh-failed marker and
-# continue to cleanup + done rather than aborting. This is the opposite of the
-# original silent bug: the rebuild always runs, and its failure is never hidden.
+# Always rebuild/recreate sandbox after portal verification (BI-A8686CFC).
+# This carries updated tools, environment and provisioned engines to the install.
+# Failure is visible degradation, not a reversal of the already-verified portal;
+# emit sandbox-refresh-failed, then continue cleanup and completion.
 emit_step sandbox-refresh
 if [[ $_dry_run -eq 0 ]]; then
   _sandbox_required="$(printf '%s' "$_capability_projection" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).requiredServices.includes("sandbox")?"yes":"no"))')"

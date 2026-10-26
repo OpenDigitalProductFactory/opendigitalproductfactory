@@ -1,10 +1,81 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { signTransitionPayload } from "@/lib/platform-runtime/transition-protocol";
-import { refreshMigrationHandoffAfterDrain, resolveReadinessBackupHostPath, runCandidatePreflight, type InstallStateMigrationHandoff } from "./preflight";
+import { refreshMigrationHandoffAfterDrain, resolveReadinessBackupHostPath, runCandidatePreflight, runReassessmentCandidatePreflight, type InstallStateMigrationHandoff } from "./preflight";
 
 const fsMocks = vi.hoisted(() => ({ readFile: vi.fn() }));
 vi.mock("node:fs/promises", () => ({ readFile: fsMocks.readFile }));
+
+describe("reassessment candidate compatibility", () => {
+  const configDigest = `sha256:${"d".repeat(64)}`;
+  const sourceSha = "a".repeat(40);
+  const info = { schemaVersion: 1, sourceSha, sourceContentHash: "b".repeat(64), contractSha256: "c".repeat(64),
+    owners: Object.fromEntries(["transport", "approval", "worker", "writer"].map(owner => [owner, { version: 2, sourceSha256: "e".repeat(64) }])) };
+  const ports = (override: { probe?: unknown; inspection?: string; exitCode?: number } = {}) => {
+    const runDocker = vi.fn(async (args: string[]) => args[0] === "image"
+      ? { exitCode: override.exitCode ?? 0, stdout: override.inspection ?? `${configDigest}\n`, stderr: "" }
+      : { exitCode: override.exitCode ?? 0, stdout: JSON.stringify(override.probe ?? info), stderr: "" });
+    return { runId: "SUR-COMPAT", targetSha: sourceSha, composeProject: "actual-project", stage: "preflight" as const,
+      failRun: vi.fn(), emitFailure: vi.fn(), recordCompatibility: vi.fn(), runDocker };
+  };
+  it("resolves the source candidate once and probes only its immutable config digest", async () => {
+    const p = ports();
+    const result = await runReassessmentCandidatePreflight(p);
+    expect(result).toEqual({ ok: true, data: { proof: { ...info, configDigest } } });
+    expect(p.runDocker.mock.calls.filter(([args]) => args[0] === "image").map(([args]) => args)).toEqual([
+      ["image", "inspect", "--format", "{{.Id}}", "actual-project-portal"],
+      ["image", "inspect", "--format", "{{.Id}}", "actual-project-portal"],
+    ]);
+    const command = p.runDocker.mock.calls.find(([args]) => args[0] === "run")![0];
+    expect(command).toEqual(expect.arrayContaining(["--network", "none", "--read-only", configDigest, "/app/scripts/reassessment-capability-probe.mjs"]));
+    expect(command).not.toContain("actual-project-portal");
+    expect(p.recordCompatibility).toHaveBeenCalledWith("SUR-COMPAT", { stage: "preflight", observedAt: expect.any(String), proof: { ...info, configDigest } });
+    expect(p.failRun).not.toHaveBeenCalled();
+  });
+  it("uses the default compose project and refuses tag movement before evidence is recorded", async () => {
+    const p = ports();
+    p.runDocker.mockResolvedValueOnce({ exitCode: 0, stdout: configDigest, stderr: "" })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: JSON.stringify(info), stderr: "" })
+      .mockResolvedValueOnce({ exitCode: 0, stdout: `sha256:${"f".repeat(64)}`, stderr: "" });
+    expect(await runReassessmentCandidatePreflight({ ...p, composeProject: undefined })).toMatchObject({ ok: false, reason: "reassessment-compatibility-unproven" });
+    expect(p.runDocker).toHaveBeenCalledWith(["image", "inspect", "--format", "{{.Id}}", "dpf-portal"]);
+    expect(p.recordCompatibility).not.toHaveBeenCalled();
+  });
+  it("probes a release's frozen config digest without resolving any moving image tag", async () => {
+    const p = ports();
+    const release = { tag: "v2.0.0", ghcrOwner: "owner", channelDigest: `sha256:${"1".repeat(64)}`, platformManifestDigest: `sha256:${"2".repeat(64)}`, configDigest,
+      platformOs: "linux" as const, platformArchitecture: "amd64" };
+    expect(await runReassessmentCandidatePreflight({ ...p, stage: "swap", release })).toMatchObject({ ok: true });
+    expect(p.runDocker).toHaveBeenCalledOnce();
+    expect(p.recordCompatibility).toHaveBeenCalledWith("SUR-COMPAT", expect.objectContaining({ stage: "swap" }));
+  });
+  it("refuses a release missing its frozen digest instead of falling back to a source image", async () => {
+    const p = ports();
+    expect(await runReassessmentCandidatePreflight({ ...p, release: {} as never })).toMatchObject({ ok: false });
+    expect(p.runDocker).not.toHaveBeenCalled(); expect(p.recordCompatibility).not.toHaveBeenCalled();
+  });
+  it.each([
+    ["missing image identity", { inspection: "" }], ["mutable image identity", { inspection: "latest" }],
+    ["failed observation", { exitCode: 1 }], ["different source", { probe: { ...info, sourceSha: "f".repeat(40) } }],
+    ["missing owner", { probe: { ...info, owners: {} } }],
+    ["old worker", { probe: { ...info, owners: { ...info.owners, worker: { version: 1, sourceSha256: "e".repeat(64) } } } }],
+  ])("refuses %s before recording proof", async (_name, override) => {
+    const p = ports(override);
+    expect(await runReassessmentCandidatePreflight(p)).toEqual({ ok: false, reason: "reassessment-compatibility-unproven" });
+    expect(p.recordCompatibility).not.toHaveBeenCalled();
+    expect(p.failRun).toHaveBeenCalledWith("SUR-COMPAT", "reassessment-compatibility-unproven");
+    expect(p.emitFailure).toHaveBeenCalledWith("SUR-COMPAT");
+  });
+  it("refuses unavailable evidence persistence instead of admitting an unrecorded candidate", async () => {
+    const p = ports(); p.recordCompatibility.mockRejectedValueOnce(new Error("unavailable"));
+    expect(await runReassessmentCandidatePreflight(p)).toMatchObject({ ok: false });
+    expect(p.failRun).toHaveBeenCalledOnce();
+  });
+  it("dry run performs no image or proof effects", async () => {
+    const p = ports(); expect(await runReassessmentCandidatePreflight({ ...p, dryRun: true })).toEqual({ ok: true, data: {} });
+    expect(p.runDocker).not.toHaveBeenCalled(); expect(p.recordCompatibility).not.toHaveBeenCalled();
+  });
+});
 
 describe("candidate signed install-state handoff", () => {
   it("resolves a published release promoter without attempting a source build", async () => {

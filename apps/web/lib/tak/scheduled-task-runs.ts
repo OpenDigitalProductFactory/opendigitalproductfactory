@@ -1,4 +1,6 @@
-import { workroomStageToolsFromTaskConfig } from "@/lib/scheduling/workroom-stage-task-config";
+import { isRecord } from "@/lib/shared/coerce";
+import { readDispatchCheckpoint } from "@/lib/work-management/workroom-drive-checkpoint";
+import { readWorkroomStageTaskConfig, workroomStageToolsFromTaskConfig } from "@/lib/scheduling/workroom-stage-task-config";
 import {
   createAutonomousWorkRun,
   type AutonomousWorkRunRef,
@@ -182,9 +184,16 @@ export function classifyScheduledRequiredTools(input: {
   prompt: string;
   authorizedTools: Array<{ name: string; sideEffect?: boolean }>;
   executedTools: ScheduledRunToolExecution[];
+  /** Workroom runs must retain every pending required call, even beside a successful report or another missing write. */
+  preservePendingApprovals?: boolean;
 }): ScheduledRequiredToolOutcome {
   const prompt = input.prompt.toLowerCase();
   let proposed: ScheduledRequiredToolOutcome | null = null;
+  if (input.preservePendingApprovals) {
+    const pending = input.authorizedTools.find((tool) => tool.sideEffect && promptNamesTool(prompt, tool.name)
+      && input.executedTools.some((call) => call.name === tool.name && scheduledCallAwaitsDecision(call)));
+    if (pending) return { kind: "proposed", toolName: pending.name };
+  }
 
   for (const tool of input.authorizedTools) {
     if (!tool.sideEffect || !promptNamesTool(prompt, tool.name)) continue;
@@ -208,12 +217,7 @@ export function classifyScheduledRequiredTools(input: {
     // tool executed zero times" is why the readiness and evidence chain looks
     // broken: the coworker requested approval, was handed back a failure, and
     // retried until it exhausted its turn.
-    const awaitingDecision = calls.some(
-      (execution) =>
-        (execution.result?.success === true &&
-          execution.result.data?.status === "proposed") ||
-        execution.result?.error === "approval_required",
-    );
+    const awaitingDecision = calls.some(scheduledCallAwaitsDecision);
     if (awaitingDecision) {
       // Remember it, but keep looking: a genuinely absent mutation elsewhere
       // still outranks this.
@@ -224,6 +228,11 @@ export function classifyScheduledRequiredTools(input: {
   }
 
   return proposed ?? { kind: "executed" };
+}
+
+function scheduledCallAwaitsDecision(call: ScheduledRunToolExecution): boolean {
+  return call.result?.success === true && call.result.data?.status === "proposed"
+    || call.result?.error === "approval_required";
 }
 
 /**
@@ -257,11 +266,85 @@ export function detectScheduledRequiredToolFailure(input: {
   prompt: string;
   authorizedTools: Array<{ name: string; sideEffect?: boolean }>;
   executedTools: ScheduledRunToolExecution[];
+  /** The names the model was handed. When the absent writer is among them, the
+   *  verdict says so, so the failure is not read as an availability fault
+   *  (BI-62DB6C03). */
+  attachedToolNames?: readonly string[];
 }): string | null {
   const outcome = classifyScheduledRequiredTools(input);
-  return outcome.kind === "absent"
-    ? `required governed tool ${outcome.toolName} executed zero times`
-    : null;
+  if (outcome.kind !== "absent") return null;
+  const offered = input.attachedToolNames?.includes(outcome.toolName)
+    ? "; it was attached to the run and not called"
+    : "";
+  return `required governed tool ${outcome.toolName} executed zero times${offered}`;
+}
+
+/** The writer every Workroom stage run records its stage evidence through. */
+export const WORKROOM_STAGE_EVIDENCE_TOOL = "record_workroom_evidence";
+
+/**
+ * The governed writers a run must be OFFERED, whatever its grants say
+ * (BI-62DB6C03).
+ *
+ * scheduledRequiredToolNames and the verdict derive "required" from the
+ * AUTHORIZED set, so a run that is not offered the writer — an advise boundary
+ * strips every side-effecting tool, or the grant or owner capability is
+ * missing — has nothing required, is recorded ok, and the drive dispatches the
+ * stage again. A Workroom stage run (taskConfig.workroomStage, or a brief naming
+ * the writer) cannot do its job without the writer, so that requirement is
+ * stated here independently of authority.
+ */
+export function scheduledMandatoryToolNames(input: { prompt: string; taskConfig?: unknown }): string[] {
+  const isStageRun = readWorkroomStageTaskConfig(input.taskConfig) !== null
+    || promptNamesTool(input.prompt.toLowerCase(), WORKROOM_STAGE_EVIDENCE_TOOL);
+  return isStageRun ? [WORKROOM_STAGE_EVIDENCE_TOOL] : [];
+}
+
+/**
+ * Why this run must not be dispatched, or null when every mandatory writer is
+ * attached. Checked BEFORE the model runs: a stage run without its writer can
+ * only end in a blocked answer or a false "done", so it is refused with the
+ * reason instead (BI-62DB6C03). An advise boundary withholds writers by design;
+ * a Workroom stage is therefore never dispatched in advise mode.
+ */
+export function scheduledMandatoryToolGap(input: {
+  prompt: string;
+  taskConfig?: unknown;
+  mode: "advise" | "act";
+  attached: ReadonlyArray<{ name: string }>;
+  deferred: ReadonlyArray<{ name: string }>;
+}): string | null {
+  const attached = new Set(input.attached.map((tool) => tool.name));
+  const missing = scheduledMandatoryToolNames(input).filter((name) => !attached.has(name));
+  if (missing.length === 0) return null;
+  const names = missing.join(", ");
+  if (input.mode === "advise") {
+    return `required governed tool ${names} is withheld at the advise action boundary, so this Workroom stage is not dispatched in advise mode`;
+  }
+  const deferred = new Set(input.deferred.map((tool) => tool.name));
+  return missing.every((name) => deferred.has(name))
+    ? `required governed tool ${names} is authorized but was left outside the attachment budget, so this Workroom stage was not dispatched`
+    : `required governed tool ${names} is not authorized for this coworker and owner (agent grant or user capability missing), so this Workroom stage was not dispatched`;
+}
+
+/**
+ * The single correction turn for a run that was HANDED its required writer and
+ * ended without calling it (BI-62DB6C03). Live, the model said the writer was
+ * "unavailable" while it was listed in its tools; nothing told it otherwise.
+ * Null when the writer ran, was diverted for approval, or was never attached.
+ */
+export function scheduledRequiredToolCorrection(input: {
+  prompt: string;
+  authorizedTools: Array<{ name: string; sideEffect?: boolean }>;
+  attachedToolNames: readonly string[];
+  executedTools: ScheduledRunToolExecution[];
+}): { toolName: string; message: string } | null {
+  const outcome = classifyScheduledRequiredTools(input);
+  if (outcome.kind !== "absent" || !input.attachedToolNames.includes(outcome.toolName)) return null;
+  const tool = outcome.toolName;
+  return { toolName: tool, message: `${tool} is attached to this run: it is in your tool list now. Your answer did not call it, and it is the only thing that records this run. `
+    + `Call ${tool} now. If you could not do the work, call it with outcome "blocked" and say what blocked you. `
+    + `Do not say a tool is unavailable when it is in your tool list.` };
 }
 
 export function detectScheduledRunFailure(input: {
@@ -272,6 +355,7 @@ export function detectScheduledRunFailure(input: {
     result?: { success?: boolean; data?: { proposalId?: string; status?: string } };
   }>;
   content: string | null | undefined;
+  attachedToolNames?: readonly string[];
 }): string | null {
   return detectScheduledRequiredToolFailure(input) ??
     detectScheduledRunInferenceFailure({ executedToolCount: input.executedTools.length, content: input.content });
@@ -288,7 +372,9 @@ export async function createTaskRunForScheduledTask(input: {
   proactivity?: ProactivityPlan;
   /** BI-754C9E82: auditable effective posture the scheduler delegates with. */
   delegatedPosture?: ResolvedDelegatedPosture;
+  taskConfig?: unknown;
 }): Promise<ScheduledTaskRunRef> {
+  const checkpoint = readDispatchCheckpoint(isRecord(input.taskConfig) ? input.taskConfig.workroomDispatchCheckpoint : null);
   return createAutonomousWorkRun({
     trigger: "scheduled",
     userId: input.ownerUserId,
@@ -302,6 +388,7 @@ export async function createTaskRunForScheduledTask(input: {
       kind: "scheduled-task",
       id: input.taskId,
     },
+    ...(checkpoint ? { metadata: { workroomDispatchCheckpoint: checkpoint } } : {}),
     proactivity: input.proactivity,
     delegatedPosture: input.delegatedPosture,
   });

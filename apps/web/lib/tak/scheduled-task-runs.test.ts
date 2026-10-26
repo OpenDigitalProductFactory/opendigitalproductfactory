@@ -107,6 +107,20 @@ describe("classifyScheduledRequiredTools (BI-4F64C5D3)", () => {
   const REQUIRED = [{ name: "run_hive_scout_ingest", sideEffect: true }];
   const PROMPT = "Invoke run_hive_scout_ingest once before writing any summary.";
 
+  it.each(["proposal", "envelope"])("retains a Workroom's pending %s beside a successful same-tool call and an absent different write", async (kind) => {
+    const { classifyScheduledRequiredTools } = await import("./scheduled-task-runs");
+    const input = { prompt: "Call record_workroom_evidence and create_backlog_item.",
+      authorizedTools: [{ name: "create_backlog_item", sideEffect: true }, { name: "record_workroom_evidence", sideEffect: true }],
+      executedTools: [
+        { name: "record_workroom_evidence", result: kind === "proposal"
+          ? { success: true, data: { status: "proposed" } } : { success: false, error: "approval_required" } },
+        { name: "record_workroom_evidence", result: { success: true } },
+      ] };
+    expect(classifyScheduledRequiredTools({ ...input, preservePendingApprovals: true }))
+      .toEqual({ kind: "proposed", toolName: "record_workroom_evidence" });
+    expect(classifyScheduledRequiredTools(input)).toEqual({ kind: "absent", toolName: "create_backlog_item" });
+  });
+
   it("calls a landed mutation executed", async () => {
     const { classifyScheduledRequiredTools } = await import("./scheduled-task-runs");
     expect(
@@ -517,5 +531,32 @@ describe("withPersistedExecutions (BI-D48B3B0F)", () => {
     ]);
     expect(merged.map((tool) => tool.name)).toEqual(["record_workroom_evidence", "list_bills"]);
     expect(merged[0]).toBe(own);
+  });
+});
+
+describe("scheduled Workroom dispatch snapshot (BI-D95FD249)", () => {
+  it("copies the server dispatch identity into the run instead of reusing mutable task configuration", async () => {
+    const { prisma } = await import("@dpf/db");
+    const { buildDispatchCheckpoint } = await import("@/lib/work-management/workroom-drive-checkpoint");
+    const { createTaskRunForScheduledTask } = await import("./scheduled-task-runs");
+    vi.mocked(prisma.taskRun.create).mockReset().mockResolvedValue({ id: "row", taskRunId: "TR-SCHED-BOUND", contextId: "thread" } as never);
+    const checkpoint = buildDispatchCheckpoint(null, { taskId: "workroom-WC-BOUND-delivery-small", roomId: "room",
+      objective: "Repair", stage: { shapeKey: "delivery-small", shapeVersion: "1.0.0", stageKey: "repair", tools: ["record_workroom_evidence"] },
+      holderPrincipalId: "driver", leaseExpiresAt: "2026-10-26T00:10:00Z", now: "2026-10-26T00:00:00Z" });
+    await createTaskRunForScheduledTask({ taskId: checkpoint.confirmedEffect.taskId, ownerUserId: "owner", agentId: "build-specialist",
+      threadId: "thread", routeContext: "/ops/workrooms", title: "Repair", prompt: "Record scoped evidence",
+      taskConfig: { workroomDispatchCheckpoint: checkpoint, authorityOverride: "untrusted" } });
+    const data = vi.mocked(prisma.taskRun.create).mock.calls[0]?.[0].data;
+    expect(data?.a2aMetadata).toMatchObject({ trigger: "scheduled",
+      sourceRef: { kind: "scheduled-task", id: checkpoint.confirmedEffect.taskId }, workroomDispatchCheckpoint: checkpoint });
+    expect(data?.a2aMetadata).not.toHaveProperty("authorityOverride");
+  });
+  it("does not promote a malformed checkpoint into the run's authority metadata", async () => {
+    const { prisma } = await import("@dpf/db"); const { createTaskRunForScheduledTask } = await import("./scheduled-task-runs");
+    vi.mocked(prisma.taskRun.create).mockReset().mockResolvedValue({ id: "row", taskRunId: "TR-SCHED-UNBOUND", contextId: "thread" } as never);
+    await createTaskRunForScheduledTask({ taskId: "workroom-WC-BOUND-delivery-small", ownerUserId: "owner", agentId: "build-specialist",
+      threadId: "thread", routeContext: "/ops/workrooms", title: "Repair", prompt: "Record scoped evidence",
+      taskConfig: { workroomDispatchCheckpoint: { version: 999, authority: "all" } } });
+    expect(vi.mocked(prisma.taskRun.create).mock.calls[0]?.[0].data.a2aMetadata).not.toHaveProperty("workroomDispatchCheckpoint");
   });
 });
