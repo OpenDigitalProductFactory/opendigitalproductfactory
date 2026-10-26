@@ -204,3 +204,95 @@ hidden. Check narrow and desktop breakpoints, existing keyboard focus/disclosure
 and the participant separator. Preserve finite-room objective/disclosure behavior
 and intentional process-strip scrolling. Independent scoped acceptance remains
 required; the wider BI and original seven scenarios stay open.
+
+
+## October 26 recorded blocker visibility continuation
+
+Continue BI-9DC43E17 / WC-2EE23DD6. Preserve the completed refresh/header
+source and independent scoped acceptance. This is a new observed failure in the
+existing blocker/next-action visibility contract, not a replacement initiative
+or a recovery attempt against an old reviewer.
+
+On served966b7164fa25544c91980424fb461735b44a23f9,
+RV-WINDOWS-BLOCKER-PROJECTION-966-20261026 records a failed UI result:
+WC-C6796FCF correctly becomes waiting-on-system, yet Overview and expanded
+recovery omit its current recorded explanation and retain a generic wait.
+The bounded native status-override activity42 independently retains the reason
+and expiry. The approved transfer remains failed before request creation and
+the old executor remains assigned; explanation is not successful transfer.
+
+Source diagnosis: status-projection reduces a blocked capsule to a generic
+reason; case loaders pass only its identity/status/title into that projection.
+projectWorkroomRecovery considers source identity and reviewer execution but
+does not accept blocked status/recorded explanation, so a complete-identity room
+with no observed reviewer can incorrectly return actionable. A missing source
+field or an unread review inventory must never be invented to reuse that helper.
+
+Research the existing status writer and recovery projection, shared case/room
+read models, authorized selection, source evidence and report-kit primitives.
+Reuse the current workspaceState.statusOverride reason/until carrier. Add a
+small pure recorded-blocker projector within the existing recovery substrate;
+MCP and UI consume the same validated observation. Do not add another work or
+recovery ledger, a new grant, a global source lookup or a text-to-command parser.
+This shared normalization and precedence work is the useful refactoring slice.
+
+A current blocked/provider-blocked room remains blocked even if its explanation
+is absent, malformed, blank, expired or too large. A resolved/terminal room must
+not be reopened by a stale status note. Validate record shape, expiry and text
+bounds; distinguish unavailable/expired explanation from an empty successful
+read. Keep identity-repair and independent-review uncertainty explicit and
+preserve every existing request, receipt and budget. A bounded readback must
+retain the compact blocker observation even if the raw workspace snapshot does
+not fit. Its text is reported coordination, never instrumented cause proof.
+
+Project only from the already authorized selected room. Anchored and standalone
+cases use their existing content checks before loading; cross-case/sibling
+selection and discovery-only access must not expose blocker text. Do not add
+unqueried source-identity fields or treat missing review input as an empty audit.
+Do not scan an activity history to rediscover the current status override.
+
+Room accountability stays separate from repair responsibility. Never extract
+an owner, item, URL, tool packet or permission from reason prose. An executable
+repair action or repair owner requires an existing typed, current, separately
+authorized source linkage; otherwise show the absence explicitly. Read-only
+inspection is not approval, resumption, notification or retry. In particular,
+the Windows explanation cannot authorize the main transaction-guard handoff.
+
+The working design prototype is the local
+workroom-recorded-blocker.prototype.html in this chat's evidence directory.
+It compares full inline explanation with a compact attention area and full
+attributed details. DI-0BD1DDAB44FE chose compact-shared-blocker with usable,
+high-confidence, autonomy-eligible advice and no commandment conflict; all four
+feature axes are engineering estimates, not measured human performance.
+The consultation's runtime citation time00:44:27.730Z belongs to the underlying
+status event; its failed UI snapshot actually dates01:00:27.081Z, as corrected
+in the recorded decision outcome. Retain that provenance distinction.
+
+Keep the existing Attention/Next action/accountability layout. The full
+explanation and diagnostic identity belong in existing Details recovery content.
+Use existing native disclosure, focus and theme tokens. If adding an inspection
+link or disclosure, carry the exact propose-n-pick UX manifest and keep it
+strictly read-only. No new dashboard, retry button, source-specific hardcoding,
+silent clipping or prose-derived action is allowed. Engage the UX specialist
+through its existing governed offer for this genuinely new deliverable; do not
+replace or replay any earlier engagement or immutable input.
+
+Before runtime edits, finish this normal design publication, refresh genuine
+author research and implementation readiness, claim the owning paths and
+resolve test impact. AC02 currently owns room-read-model.ts during its frozen
+gate; coordinate sequential integration and never disturb that source.
+Test actual blocked-to-actionable regression, exact-expiry/malformed/over-budget
+explanations, terminal precedence, missing versus unread evidence, authorization
+and selected-room fences, and hostile prose with no executable action.
+Reuse existing recovery/case/room and component tests rather than class-name
+assertions or mocked layout proofs. Both web TypeScript programs and the exact
+governed gate remain mandatory; old gates do not cover this continuation.
+
+After protected delivery, a qualified containing deployment and CAN-TEST,
+independently repeat the original Windows failed case. The actual recorded
+blocker must be reachable, old executor/failed transfer remain unchanged,
+accountability and repair ownership remain distinct, and absent typed action
+must not look like permission. Verify narrow light/dark layout, keyboard
+inspection and stale/missing source states. Source tests and prototype do not
+earn this runtime acceptance. Full BI9, the original seven scenarios, main
+transaction-guard repair and the whole thread outcome remain open.
