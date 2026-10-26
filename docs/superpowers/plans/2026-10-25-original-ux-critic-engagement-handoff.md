@@ -243,3 +243,11 @@ when a read-evidence workflow owns completion. Cover verified and held scopes,
 review and debate postures, normal unscoped behavior and async scope isolation.
 This prospective guard neither proves historical execution nor edits the shared
 autonomous seam, changes posture preferences, grants authority or permits retry.
+
+
+Live readiness confirmed UX profession pages exist while calibrated critiques
+remain empty. The new visual UX packet names the existing wiki_query professionKey
+option and concrete craft terms so broad kernel/org ranking is not mistaken for
+corpus absence. This uses supported retrieval configuration, adds no search tool,
+and leaves legacy admitted prompts unchanged. The Critic still performs its own
+reads, selects criteria/findings, and reports the actual empty-calibration limit.

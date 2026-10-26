@@ -146,7 +146,7 @@ describe("bounded advisory engagement fulfillment", () => {
     const fake = authorityDb();
     const currentBinding = { ...binding, providerAgentId: "AGT-906" };
     // Isolate authority ownership: this fixture's canonical provider is qualified.
-    // The live UX critic still lacks file_read; this fixture does not grant it.
+    // Fixture grants are synthetic; live grants are revalidated by the runtime.
     const canonical = { ...fake.provider, agentId: "AGT-906" };
     const runtime = { ...fake.provider, agentId: "ux-design-critic", toolGrants: [] as Array<{ grantKey: string }> };
     Object.assign(fake.state.engagement, { providerAgentId: "AGT-906" });
