@@ -134,7 +134,7 @@ test('notice repackaging needs the actual old manifest and identical native reco
   assert.throws(() => verifyEngineQualification({ ...f.args(), qualifiedManifestBytes: original }), /native files/);
 });
 
-const { configurationSnapshot, runtimeLeaseProjection, loopbackManagementRoot } = await import('./qualify-runtime.mjs');
+const { configurationSnapshot, runtimeLeaseProjection, loopbackManagementRoot, configureDrainedCandidate } = await import('./qualify-runtime.mjs');
 test('configuration capture preserves exact model tag, mode, context and flags while rejecting another model digest', () => {
   const digest = 'sha256:' + 'a'.repeat(64), model = 'hf.co/model:Q4_K_M';
   const row = { Backend: 'llama.cpp', Model: model, ModelID: digest, Mode: 'completion',
@@ -170,4 +170,23 @@ test('staging retains relative native links and reports the package version with
   const staged = await stageVerifiedRuntime(f.root, destination);
   assert.equal(await readlink(join(destination, 'bin/dmr-alias')), 'dmr');
   assert.equal(staged.version, RUNTIME_LOCK.packageVersion);
+});
+
+test('stock configure cannot preload candidate weights while any Docker model remains resident', async () => {
+  let writes = 0;
+  const entries = [{ model: 'm:Tag', digest: 'sha256:' + 'a'.repeat(64), original: [{ model: 'm:Tag', mode: 'completion', 'context-size': 131072 }] }];
+  await assert.rejects(configureDrainedCandidate(entries, {
+    readBaselineRunners: async () => [{ backend_name: 'llama.cpp', model_name: 'm:Tag', mode: 'completion' }],
+    writeConfiguration: async () => { writes++; }, readConfiguration: async () => [],
+  }), /resident/);
+  assert.equal(writes, 0); assert.equal(entries[0].candidate, undefined);
+});
+test('candidate configuration remains unverified when the API readback differs', async () => {
+  const digest = 'sha256:' + 'a'.repeat(64), model = 'm:Tag'; let writes = 0;
+  const entries = [{ model, digest, original: [{ model, mode: 'completion', 'context-size': 131072 }] }];
+  await assert.rejects(configureDrainedCandidate(entries, {
+    readBaselineRunners: async () => [], writeConfiguration: async () => { writes++; },
+    readConfiguration: async () => [{ Backend: 'llama.cpp', Model: model, ModelID: digest, Mode: 'completion', Config: { 'context-size': 4096 } }],
+  }), /configuration changed/);
+  assert.equal(writes, 1); assert.equal(entries[0].candidate, undefined);
 });

@@ -99,7 +99,7 @@ export async function buildRuntime(options) {
     await dependenciesMatch();
     run('git', ['apply', '--check', patch], source); run('git', ['apply', patch], source);
     // These are real upstream packages plus the reviewed regression patch. No weights are loaded.
-    run(options.go, ['test', '-mod=readonly', '-count=1', './pkg/inference/backends/llamacpp', './pkg/server'], source);
+    run(options.go, ['test', '-mod=readonly', '-count=1', './pkg/inference/backends/llamacpp', './pkg/server', './pkg/sandbox'], source);
     await mkdir(out, { mode: 0o700 }); created = true; await mkdir(join(out, 'bin'));
     const flags = ['-mod=readonly', '-trimpath', '-ldflags', '-X main.Version=' + lock.packageVersion];
     run(options.go, ['build', ...flags, '-o', join(out, 'bin/dmr'), './cmd/dmr'], source);

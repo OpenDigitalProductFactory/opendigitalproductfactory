@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "packageVersion": "1.2.8-dpf-metal4.2",
+  "packageVersion": "1.2.8-dpf-metal4.3",
   "source": {
     "repository": "https://github.com/docker/model-runner",
     "commit": "5a3112fdc10bcfe236a7450fcfa7e83ed3c0209e",
@@ -9,7 +9,7 @@
     "goModSha256": "366a0b75a34898db7801cf54a4f95a768fc3623c08f097ec4a34b0713d31b97a",
     "goSumSha256": "a2088947ba76ec3fe76600288e424675ab85b8dd4b290ab877d4b5e1301cb98f"
   },
-  "patchSha256": "d19fab38184d740ffcca23042291d57973855f46985e36d7529a695e6a30d2d3",
+  "patchSha256": "297034bbc84b62b5e5b6c0acba6ea91fe8c2ec4bb82e0eca19484680770d9982",
   "engineVersion": "b9879-dpf-metal4.1",
   "minimumGo": "1.25.8",
   "initialQualifiedDevice": "Apple M5 Max"

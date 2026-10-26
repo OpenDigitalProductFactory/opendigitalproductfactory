@@ -3,6 +3,7 @@ import { parseArgs } from 'node:util';
 import { readFile, writeFile, rename, mkdtemp, mkdir, access } from 'node:fs/promises';
 import { platform, arch, tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { isEntryModule } from '../../scripts/lib/entry-module.mjs';
@@ -41,6 +42,19 @@ export function runtimeLeaseProjection(lease, expected) {
   validateOwnedLease(lease, { ...expected, branch: BRANCH });
   const { leaseId, ownerSessionId, branchName, status, phase, expiresAt } = lease;
   return { schemaVersion: 1, leaseId, ownerSessionId, branchName, status, phase, expiresAt };
+}
+export async function configureDrainedCandidate(entries, { readBaselineRunners, writeConfiguration, readConfiguration }) {
+  for (const entry of entries) {
+    for (const config of entry.original) {
+      const rows = await readBaselineRunners();
+      check(runnerActivity(rows).idle && rows.length === 0,
+        'Docker model resident before configure-triggered candidate preload');
+      await writeConfiguration(config);
+    }
+    const observed = configurationSnapshot(await readConfiguration(entry.model), entry.model, entry.digest);
+    check(JSON.stringify(entry.original) === JSON.stringify(observed), 'Candidate model configuration changed');
+    entry.candidate = observed;
+  }
 }
 export function parseRuntimeQualificationOptions(args = process.argv.slice(2)) {
   const names = ['package', 'out', 'lease-id', 'owner-session', 'model-ref', 'model-digest',
@@ -165,6 +179,10 @@ async function run(a) {
       run: async () => {
         try {
           const verified = await verifyRuntimePackage(a.package);
+          report.qualifierSource = {};
+          for (const name of ['qualify-runtime.mjs', 'runtime-profile.mjs', 'runtime-launchagent.mjs', 'qualify-engine.mjs']) {
+            report.qualifierSource[name] = await hashFile(fileURLToPath(new URL('./' + name, import.meta.url)));
+          }
           const hardware = JSON.parse((await execute('/usr/sbin/system_profiler', ['SPDisplaysDataType', '-json'], { timeout: 15000 })).stdout);
           const device = hardware.SPDisplaysDataType?.[0]?.sppci_model;
           verifyEngineQualification({ reportBytes: await readFile(a['engine-report']), expectedReportSha256: a['engine-report-sha256'],
@@ -200,10 +218,9 @@ async function run(a) {
             const transferred = await transfer(candidate, model, digest);
             check(transferred.modelMetadataSha256 === sha256(JSON.stringify(originalCard.config)), 'Transferred model metadata changed');
             report.models.push(transferred);
-            for (const body of config) await (await request(candidate + '/engines/_configure', { body, timeout: 30000 })).arrayBuffer();
-            const observed = configurationSnapshot(await json(candidate, '/engines/_configure?model=' + encodeURIComponent(model), { timeout: 3000 }), model, digest);
-            check(JSON.stringify(config) === JSON.stringify(observed), 'Candidate model configuration changed');
-            report.configurations.push({ model, original: config, candidate: observed }); await checkpoint();
+            // POST configure preloads weights asynchronously in stock DMR.
+            // Capture now; defer the write until the baseline is fully drained.
+            report.configurations.push({ model, digest, original: config, candidate: 'unrun' }); await checkpoint();
           }
           await unload(original);
           const context = makeContext(3197);
@@ -211,6 +228,12 @@ async function run(a) {
             coldMessagesSha256: sha256(JSON.stringify(coldMessages(context))), transport: 'stock-model-runner-api', thinking: false, maxOutputTokens: 256 };
           await testEndpoint('docker-baseline', original + '/engines/llama.cpp', context, { request: completion, results: report.results }); await checkpoint();
           await unload(original);
+          await configureDrainedCandidate(report.configurations, {
+            readBaselineRunners: () => json(original, '/engines/ps', { timeout: 3000 }),
+            writeConfiguration: async body => (await request(candidate + '/engines/_configure', { body, timeout: 30000 })).arrayBuffer(),
+            readConfiguration: model => json(candidate, '/engines/_configure?model=' + encodeURIComponent(model), { timeout: 3000 }),
+          });
+          await checkpoint();
           await testEndpoint('corrected-candidate', candidate + '/engines/llama.cpp', context, { request: completion, results: report.results }); await checkpoint();
           const started = performance.now();
           const embedding = await json(candidate, '/engines/llama.cpp/v1/embeddings', { body: { model: a['embedding-ref'], input: ['DPF Mac inference qualification'] } });
