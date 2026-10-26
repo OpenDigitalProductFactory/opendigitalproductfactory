@@ -92,6 +92,8 @@ Actual dark rendering gave 14.70:1 and 8.12:1 text contrast for the two explanat
 
 The keeper exited normally after interruption; both identified preview containers were absent and the preview lease was absent from the admitted/queued inventory. The browser color-scheme emulation and viewport override were reset, and the temporary QA tab closed. Screenshots, accessibility trees and measurement inputs are retained in the chat's artifact directory; the Workroom records their source and lease identity. This evidence is not a native review receipt, a deployment record or a parent reassessment.
 
+Independent source review then found a compatibility-failure integration defect: the final swap check bypassed the existing failure owner, so a competing successful completion could still be reported as failed, while a genuine compatibility failure omitted its failure event. The compatibility check now uses the same recorded-result and winning-outcome handling as adjacent preflight checks. Two new regressions first reproduced both failures; the corrected swap suites pass 19 tests. The correction adds no upgrade trigger or recovery authority and does not settle the earlier unknown admission.
+
 ## Sources
 
 - [Approved original initiative design](../superpowers/specs/2026-10-16-original-initiative-review-settlement-design.md).

@@ -180,11 +180,9 @@ export async function finishSelfUpgrade(ctx: SelfUpgradeSwapContext): Promise<Re
   if (!dryRun) {
     const compatibility = await runReassessmentCandidatePreflight({ runId, targetSha: ctx.builtStamp,
       composeProject: ctx.promoter.composeProject, release: ctx.promoter.release, stage: "swap",
-      failRun, emitFailure, recordCompatibility: recordReassessmentCompatibility });
+      failRun: recordPreflightFailure, emitFailure, recordCompatibility: recordReassessmentCompatibility });
     if (!compatibility.ok) {
-      if (quiescenceRunId) await failQuiescenceSwap(quiescenceRunId, compatibility.reason);
-      await recordCooldown(now, cooldownMinutes);
-      return { ok: false, status: "failed", runId, quiescenceRunId, reason: compatibility.reason };
+      return finishFailure(compatibility.reason, { reason: compatibility.reason });
     }
   }
 
