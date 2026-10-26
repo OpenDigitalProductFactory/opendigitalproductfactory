@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { verifyPackage, hashFile, sha256 } from './package.mjs';
 import { readMcpConnection } from '../../scripts/host-resource-runner.mjs';
 import { mcpCall } from '../../scripts/lib/mcp-client.mjs';
+import { superviseLeaseRun,admittedLeaseTtlMs } from '../../scripts/lib/lease-supervisor.mjs';
 
 const exec = promisify(execFile);
 let a = {};
@@ -51,6 +52,7 @@ async function ownedLease() {
   if (matches.length!==1 || v.status!=='active' || v.environmentKey!=='local-integration-ci'
     || v.ownerSessionId!==a['owner-session'] || v.branchName!=='codex/mac-metal-engine-package'
     || !validLeaseExpiry(v.expiresAt)) fail('Exact active qualification lease not proven');
+  lease=v;
   return v;
 }
 async function json(url, body, timeout=240000, cancellation=abort.signal) {
@@ -206,7 +208,30 @@ async function main() {
   if (!['127.0.0.1','localhost','[::1]'].includes(root.hostname)||root.username||root.password
     ||!['http:','https:'].includes(root.protocol)||root.pathname!=='/'||root.search||root.hash) fail('DMR root must be a loopback management root');
   connection=readMcpConnection(); if (!connection) fail('Governed lease connection unavailable');
-  lease=await ownedLease();deadline=Math.min(Date.now()+9*60000,Date.parse(lease.expiresAt)-15000);
+  lease=await ownedLease();deadline=Date.now()+9*60000;
+  const supervision=await superviseLeaseRun({
+    ttlMs:admittedLeaseTtlMs(lease.expiresAt,120000),expiresAt:lease.expiresAt,
+    run:()=>performQualification(root),
+    renew:async()=>{
+      const r=await mcpCall('renew_nonprod_environment_lease',{
+        leaseId:lease.leaseId,ownerSessionId:a['owner-session'],ttlMinutes:2},connection);
+      if(r?.success===true) {
+        const v=r.data?.lease;
+        if(v?.leaseId!==lease.leaseId || v.ownerSessionId!==a['owner-session']
+          || v.status!=='active' || !validLeaseExpiry(v.expiresAt))
+          return {success:false,error:'qualification_lease_renewal_unproven'};
+        lease=v;
+      }
+      return r;
+    },
+    terminate:async()=>{abort.abort();await stopCandidate();},
+    // Cleanup/restoration and the native release remain visible to the owning agent.
+    release:async()=>{},
+    onEvent:event=>{if(event.type!=='released') (report.leaseEvents??=[]).push(event);},
+  });
+  if(supervision.status==='fenced') fail('Qualification fenced: '+supervision.reason);
+}
+async function performQualification(root) {
   const verified=await verifyPackage(a.package);
   report.package={version:verified.version,manifestSha256:verified.manifestSha256,fileCount:verified.fileCount};
   report.leaseId=lease.leaseId;report.startedAt=new Date().toISOString();
