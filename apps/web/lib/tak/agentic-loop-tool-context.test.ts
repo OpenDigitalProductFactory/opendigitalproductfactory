@@ -8,6 +8,11 @@ describe("captured execution context", () => {
       taskRunId: "task", taskExecutionFence, interactionMode: "autonomous", chatHistory: [] }))
       .toMatchObject({ taskRunId: "task", taskExecutionFence });
   });
+  it("carries the server's narrowing approval reuse control", () => {
+    expect(loopToolContext({ routeContext: "/ops/workrooms", agentId: "author", threadId: "thread",
+      interactionMode: "autonomous", chatHistory: [] }, { proposeBoundary: true, approvalCompletion: "platform", allowApprovalRequest: false }))
+      .toMatchObject({ proposeBoundary: true, approvalCompletion: "platform", allowApprovalRequest: false });
+  });
   it("leaves legacy callers unversioned", () => {
     expect(loopToolContext({ routeContext: "/build", agentId: "reviewer", threadId: "thread",
       taskRunId: "task", interactionMode: "autonomous", chatHistory: [] }).taskExecutionFence).toBeUndefined();

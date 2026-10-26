@@ -13,7 +13,11 @@ relatedCode:
 
 A coworker assigned to a scheduled Workroom stage can report that its own stage is blocked without asking you to approve the report. The report must name the same room and stage, use an evidence kind declared by that stage, and include a summary. It records the obstacle; it does not complete the stage or authorize the action that is blocked. Coworkers configured to require approval for every action retain that policy.
 
-Actions outside that reporting authority still pass through the existing permission and approval checks. A completed-work report does not acquire extra authority from this rule. Requests for credentials, changed ownership, or consequential actions retain their existing controls.
+An author stage admitted under the existing standing authorization and funding can also record its declared completion evidence without another approval. This applies to the current assigned run and its own room and stage, while its membership and tool permissions remain valid. Explicit advice, proposal, and always-review policies retain their restrictions.
+
+If that completion authority expires, is revoked, or is replaced by a later dispatch, the run can still report a blocker. It can reuse an exact approval that is already valid, and a retry returns an existing recorded outcome. It does not create another approval request for the withheld dispatch.
+
+Other actions still pass through the existing permission and approval checks. Requests for external-provider consent, new spending authority, changed ownership, or consequential actions retain their existing controls.
 
 When a scheduled Workroom-stage task requests approval for a required action, its next periodic run is parked. The Workroom also waits on that run's recorded approval outcome, including across a new day. It does not create another request simply because no completing evidence has arrived.
 

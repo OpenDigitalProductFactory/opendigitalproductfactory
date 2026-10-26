@@ -59,6 +59,10 @@ const mocks = vi.hoisted(() => ({
   runSelfOptimizationSweep: vi.fn(),
 }));
 
+// Authority is covered by the delivery flow suite; these tests isolate writer attachment/correction.
+vi.mock("@/lib/work-management/room-stage-mandate", () => ({
+  loadScheduledRoomAuthorityLive: async () => ({ mandatedTools: [], roomTurn: null, withheldBecause: null, deliveryStage: null }),
+}));
 vi.mock("@/lib/auth", () => ({ auth: mocks.auth }));
 vi.mock("@/lib/platform-runtime/work-admission", () => ({ admitRuntimeGuardedWork: vi.fn() }));
 vi.mock("@dpf/db", () => ({
