@@ -210,8 +210,9 @@ channels must refuse before provider admission or inference, without health chan
 Validate exact source/engagement/organization/actor/version ownership and current
 credential plus provider read authority before loading supplied bytes; no new grant,
 identity, arbitrary path/URL fetch, runtime activation or document substrate.
-Requester document_write without document_read is currently under authority-contract
-review; no implicit grant is assumed and no read denial has been circumvented.
+Authority inspection confirmed registry_read is an existing canonical doc_load
+alternative. Native pinned-manifest read succeeded under that supported grant;
+document_write never implies read authority and no read denial was circumvented.
 Server completion must bind actual provided image inputs, real source/corpus reads
 and model contribution, preserving old bindings and holding incomplete results.
 
