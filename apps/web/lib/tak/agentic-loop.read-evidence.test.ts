@@ -1,13 +1,7 @@
-// BI-2E479619 (and BI-907D6878 AC-1): a Claude CLI turn executes the platform
-// tools itself through its --mcp-config session. The server records each call
-// as a ToolExecution row (executionMode "internal-mcp-session", this taskRunId),
-// but the adapter drops mcp__dpf__* calls from its parsed toolCalls, so today the
-// loop judges the turn with zero tool records and calls a reviewer that read the
-// artifact and minted a receipt "prose without the required writer".
-//
-// These tests stub only the ToolExecution reader (prisma.toolExecution.findMany,
-// a filtered in-memory table) and the routed inference. They pin behaviour, not
-// the shape of the fix.
+// Bounded specialist completion forwards native reader authority, folds audited
+// calls once, and holds unverified prose without another inference. These unit
+// tests stub inference and the ToolExecution reader; source/corpus validation has
+// separate completion coverage. They are not actual coworker participation.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 type Row = {
@@ -65,14 +59,12 @@ vi.mock("./terminal-tool-policy", async (importOriginal) => {
 import { prisma } from "@dpf/db";
 import { routeAndCall } from "@/lib/routed-inference";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
-import { resolveTerminalTextExit } from "./terminal-tool-policy";
 import { runAgenticLoop } from "./agentic-loop";
 
 const TASK_RUN_ID = "TR-MCP-NATIVE-6C272F7C1DAE";
 const THREAD_ID = "thread-native-review";
 const writer = "record_initiative_design_review";
 const reader = "read_source_at_version";
-const RECEIPT_ID = "initiative-628e7bbd-ced2-4f4a-b2fc-0d82d36e42ae";
 
 // What the CLI adapter returns today for a native-MCP turn: the narration only.
 const cliProse = (content: string) => ({
@@ -94,13 +86,6 @@ function nativeRow(toolName: string, result: Record<string, unknown>, success: b
   };
 }
 const nativeRead = (patch: Partial<Row> = {}) => nativeRow(reader, {}, true, patch);
-const nativeWriterSuccess = () => nativeRow(writer, {
-  success: true, entityId: RECEIPT_ID, message: "design-spec receipt recorded for BI-C8EC05C9.",
-  data: { receiptId: RECEIPT_ID },
-}, true);
-const nativeWriterRefused = () => nativeRow(writer, {
-  success: false, error: "CANONICAL_DESIGN_REQUIRED", message: "AC-CHAR has a malformed objective link.",
-}, false);
 
 const params = {
   chatHistory: [{ role: "user" as const, content: "Review the bound design and record the governed assessment." }],
