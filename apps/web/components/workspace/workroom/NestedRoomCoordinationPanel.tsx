@@ -20,6 +20,7 @@ const SETUP_HELP: Record<string, MessageKey<"workrooms">> = {
 };
 
 const HANDOFF_HELP: Record<string, MessageKey<"workrooms">> = {
+  "handoff-history-over-budget": "nestedRecovery.handoff.historyUnavailable",
   "handoff-authenticated-assistant-required": "nestedRecovery.handoff.sourceConnection",
   "handoff-identity-changed": "nestedRecovery.handoff.identityUnavailable",
   "handoff-completion-unproven": "nestedRecovery.handoff.historyUnavailable",

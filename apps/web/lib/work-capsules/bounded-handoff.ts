@@ -56,6 +56,39 @@ async function readCompletionReceipt(db: CapsuleDb, capsule: HandoffRoom, reques
     recordedAt: terminal.recordedAt instanceof Date ? terminal.recordedAt.toISOString() : typeof terminal.recordedAt === "string" ? terminal.recordedAt : null };
 }
 
+type RecoveryLocator = { approvalId: string; executionId: string };
+type RecoveryRequest = { activityId: string; request: StoredRequest; completion: Awaited<ReturnType<typeof readCompletionReceipt>> };
+const RECOVERY_REQUEST_LIMIT = 20;
+
+/** One finite, genuine receipt set serves both observation and locked execution. */
+async function readRecoveryRequests(db: CapsuleDb, capsule: HandoffRoom, locator: RecoveryLocator, after?: Date): Promise<RecoveryRequest[]> {
+  const history = db.workroomActivity as CapsuleDb["workroomActivity"] & { findMany?(args: unknown): Promise<Array<{ id: string }>> };
+  if (!history.findMany) return fail("handoff-history-unavailable", "The complete bounded recovery history could not be read.");
+  const activities = await history.findMany({ where: { workCapsuleId: capsule.id, kind: "action", ...(after ? { recordedAt: { gte: after } } : {}), AND: [
+    { payload: { path: ["kind"], equals: "bounded-handoff" } },
+    { payload: { path: ["state"], equals: "pending-acknowledgement" } },
+    { payload: { path: ["request", "command", "handoffManifest", "priorFailure", "approvalId"], equals: locator.approvalId } },
+    { payload: { path: ["request", "command", "handoffManifest", "priorFailure", "executionId"], equals: locator.executionId } },
+  ] }, orderBy: [{ recordedAt: "desc" }, { id: "desc" }], take: RECOVERY_REQUEST_LIMIT + 1 });
+  if (activities.length > RECOVERY_REQUEST_LIMIT) return fail("handoff-history-over-budget", "The recovery history exceeds its bounded verification limit.");
+  const records: RecoveryRequest[] = [];
+  for (const activity of activities) {
+    const request = await readRequest(db, capsule, activity.id);
+    const prior = readObject(request.command.handoffManifest.priorFailure);
+    if (prior?.approvalId !== locator.approvalId || prior.executionId !== locator.executionId || prior.reason !== "handoff-transaction-required" || prior.preserve !== true)
+      return fail("handoff-failure-lineage-unproven", "The stored request does not prove this original recovery identity.");
+    records.push({ activityId: activity.id, request, completion: await readCompletionReceipt(db, capsule, activity.id, request) });
+  }
+  return records;
+}
+
+/** Completion first, then any current viable snapshot, then latest stale history. */
+function selectRecoveryRequest(records: readonly RecoveryRequest[], snapshot?: HandoffSnapshot) {
+  return records.find(record => record.completion)
+    ?? (snapshot ? records.find(record => record.request.snapshot.digest === snapshot.digest) : undefined)
+    ?? records[0] ?? null;
+}
+
 /** Read-only consequence preview and locked execution use the same positive predicate. */
 export async function assessBoundedHandoff(input: Input, options: { lock?: boolean } = {}) {
   const { db, actor, command } = input;
@@ -90,30 +123,18 @@ export async function executeBoundedHandoff(input: Input): Promise<ToolResult> {
     if (prior?.reason === "handoff-transaction-required" && prior.preserve === true) {
       if (typeof prior.approvalId !== "string" || typeof prior.executionId !== "string" || !db.workroomActivity.findFirst)
         return fail("handoff-history-unavailable", "The original recovery identity could not be checked.");
-      const where = { workCapsuleId: capsule.id, kind: "action", AND: [
-        { payload: { path: ["kind"], equals: "bounded-handoff" } },
-        { payload: { path: ["state"], equals: "pending-acknowledgement" } },
-        { payload: { path: ["request", "command", "handoffManifest", "priorFailure", "approvalId"], equals: prior.approvalId } },
-        { payload: { path: ["request", "command", "handoffManifest", "priorFailure", "executionId"], equals: prior.executionId } },
-      ] };
-      // Find a viable snapshot first: a newer stale row cannot hide an earlier
-      // viable request, including rows with the same database timestamp.
-      const viable = await db.workroomActivity.findFirst({ where: { ...where, AND: [...where.AND,
-        { payload: { path: ["request", "snapshot", "digest"], equals: snapshot.digest } },
-      ] } });
-      const existing = viable ?? await db.workroomActivity.findFirst({ where, orderBy: [{ recordedAt: "desc" }, { id: "desc" }] });
-      if (existing) {
-        const previous = await readRequest(db, capsule, existing.id);
-        if (await readCompletionReceipt(db, capsule, existing.id, previous))
-          return fail("handoff-recovery-already-completed", "This original failure already has a completed handoff. Read its recorded outcome.");
-        try { assertHandoffSnapshot(snapshot, previous.snapshot); }
+      const records = await readRecoveryRequests(db, capsule, { approvalId: prior.approvalId, executionId: prior.executionId });
+      const selected = selectRecoveryRequest(records, snapshot);
+      if (selected?.completion)
+        return fail("handoff-recovery-already-completed", "This original failure already has a completed handoff. Read its recorded outcome.");
+      if (selected) {
+        try { assertHandoffSnapshot(snapshot, selected.request.snapshot); }
         catch (error) {
           if (!(error instanceof BoundedHandoffRefusal) || !["handoff-lease-snapshot-changed", "handoff-boundary-changed"].includes(error.code)) throw error;
-          // A definitively stale immutable request is history, not a permanent
-          // lockout. The fresh request uses the fully rechecked current snapshot.
-          if (viable) throw error;
+          // The complete bounded set has no viable request. Its stale receipts
+          // remain immutable history; the fresh request captures current authority.
         }
-        if (viable || snapshot.digest === previous.snapshot.digest)
+        if (snapshot.digest === selected.request.snapshot.digest)
           return fail("handoff-recovery-already-requested", "This original failure already has a current handoff request. Read that request and its actual receiver outcome.");
       }
     }
@@ -149,44 +170,52 @@ export type FailedHandoffOperation = { approvalId: string; executionId: string; 
 
 /** Read-only, receipt-backed lineage. Arbitrary activity JSON is never proof. */
 export async function readBoundedHandoffLineage(db: CapsuleDb, capsule: HandoffRoom, failure: FailedHandoffOperation, options: { actor?: WorkCapsuleActor } = {}) {
-  if (!db.workroomActivity.findFirst) return fail("handoff-history-unavailable", "The original handoff lineage could not be verified.");
-  const activity = await db.workroomActivity.findFirst({ where: { workCapsuleId: capsule.id, kind: "action",
-    recordedAt: { gte: new Date(failure.executedAtIso) },
-    AND: [{ payload: { path: ["kind"], equals: "bounded-handoff" } }, { payload: { path: ["state"], equals: "pending-acknowledgement" } }] },
-    orderBy: [{ recordedAt: "desc" }, { id: "desc" }],
-  });
-  if (!activity) return null;
-  const request = await readRequest(db, capsule, activity.id);
-  const prior = readObject(request.command.handoffManifest.priorFailure);
-  const original = failure.command, proposed = request.command;
-  if (prior?.approvalId !== failure.approvalId || prior.executionId !== failure.executionId || prior.reason !== "handoff-transaction-required" || prior.preserve !== true
-    || request.ownerUserId !== failure.ownerUserId || request.sourceAgentId !== failure.sourceAgentId
-    || proposed.expectedExecutorKind !== original.expectedExecutorKind || proposed.expectedExecutorRef !== original.expectedExecutorRef
-    || proposed.targetAgentId !== original.targetAgentId || proposed.toExecutorKind !== original.toExecutorKind || proposed.toExecutorRef !== original.toExecutorRef) {
-    return fail("handoff-failure-lineage-unproven", "The handoff does not prove a continuation of this original failed operation.");
+  const records = await readRecoveryRequests(db, capsule, failure, new Date(failure.executedAtIso));
+  if (!records.length) {
+    // An unreadable/dangling row is not authoritative empty history. Preserve the
+    // existing conservative check before permitting fresh recovery eligibility.
+    if (!db.workroomActivity.findFirst) return fail("handoff-history-unavailable", "The original handoff lineage could not be verified.");
+    const unexpected = await db.workroomActivity.findFirst({ where: { workCapsuleId: capsule.id, kind: "action", recordedAt: { gte: new Date(failure.executedAtIso) },
+      AND: [{ payload: { path: ["kind"], equals: "bounded-handoff" } }, { payload: { path: ["state"], equals: "pending-acknowledgement" } }] },
+      orderBy: [{ recordedAt: "desc" }, { id: "desc" }] });
+    if (unexpected) { await readRequest(db, capsule, unexpected.id); return fail("handoff-failure-lineage-unproven", "This history does not prove the original failed operation."); }
+    return null;
   }
-  const completion = await readCompletionReceipt(db, capsule, activity.id, request);
-  if (completion) return { ...completion.handoff, activityId: completion.activityId, recordedAt: completion.recordedAt };
+  const original = failure.command;
+  for (const { request } of records) {
+    const proposed = request.command;
+    if (request.ownerUserId !== failure.ownerUserId || request.sourceAgentId !== failure.sourceAgentId
+      || proposed.expectedExecutorKind !== original.expectedExecutorKind || proposed.expectedExecutorRef !== original.expectedExecutorRef
+      || proposed.targetAgentId !== original.targetAgentId || proposed.toExecutorKind !== original.toExecutorKind || proposed.toExecutorRef !== original.toExecutorRef)
+      return fail("handoff-failure-lineage-unproven", "The handoff does not prove a continuation of this original failed operation.");
+  }
+  let selected = selectRecoveryRequest(records)!;
+  if (selected.completion) return { ...selected.completion.handoff, activityId: selected.completion.activityId, recordedAt: selected.completion.recordedAt };
   if (options.actor) {
     if (options.actor.userId !== failure.ownerUserId || options.actor.agentId !== failure.sourceAgentId)
       return fail("handoff-authenticated-assistant-required", "Only the original source assistant can assess a fresh handoff for this owner.");
-    try {
-      // Use the same current room, roster, policy, mandate and lease predicate
-      // as the writer. A matching lease alone does not make an old request viable.
-      const current = await assessBoundedHandoff({ db, actor: options.actor, command: proposed });
-      assertHandoffSnapshot(current.snapshot, request.snapshot);
-    } catch (error) {
-      if (error instanceof BoundedHandoffRefusal && ["handoff-boundary-changed", "handoff-lease-snapshot-changed", "handoff-lease-expired", "handoff-source-changed"].includes(error.code))
-        return { state: "stale" as const, reason: error.code, requestId: activity.id };
+    let current: Awaited<ReturnType<typeof assessBoundedHandoff>>;
+    try { current = await assessBoundedHandoff({ db, actor: options.actor, command: original }); }
+    catch (error) {
+      if (error instanceof BoundedHandoffRefusal && ["handoff-lease-expired", "handoff-source-changed"].includes(error.code))
+        return { state: "stale" as const, reason: error.code, requestId: selected.activityId };
+      throw error;
+    }
+    selected = selectRecoveryRequest(records, current.snapshot)!;
+    try { assertHandoffSnapshot(current.snapshot, selected.request.snapshot); }
+    catch (error) {
+      if (error instanceof BoundedHandoffRefusal && ["handoff-boundary-changed", "handoff-lease-snapshot-changed"].includes(error.code))
+        return { state: "stale" as const, reason: error.code, requestId: selected.activityId };
       throw error;
     }
   }
+  const { request, activityId } = selected;
   const stale = capsule.executorKind !== request.snapshot.executorKind || capsule.executorRef !== request.snapshot.executorRef
     ? "handoff-source-changed"
     : capsule.leaseHolderPrincipalId !== request.snapshot.leaseHolderPrincipalId || capsule.leaseExpiresAt?.toISOString() !== request.snapshot.leaseExpiresAt
       ? "handoff-lease-snapshot-changed"
       : !capsule.leaseExpiresAt || capsule.leaseExpiresAt.getTime() <= (await databaseWallTime(db)).getTime() ? "handoff-lease-expired" : null;
-  if (stale) return { state: "stale" as const, reason: stale, requestId: activity.id };
-  return { state: "pending" as const, requestId: activity.id, requestDigest: handoffDigest(request),
-    receiverRef: proposed.toExecutorRef, receivingAgentId: proposed.targetAgentId };
+  if (stale) return { state: "stale" as const, reason: stale, requestId: activityId };
+  return { state: "pending" as const, requestId: activityId, requestDigest: handoffDigest(request),
+    receiverRef: request.command.toExecutorRef, receivingAgentId: request.command.targetAgentId };
 }
