@@ -65,17 +65,31 @@
     "cleanup": "Cleanup",
     "executing": "Executing",
     "status": {
-      "closeout": "Ready for closeout", "delivered": "Source merged", "closed": "Closed",
-      "ended": "Session ended", "ownerNeeded": "Owner needed", "attention": "Needs attention",
-      "check": "Check required", "capacity": "Waiting for capacity", "paused": "Worker paused",
-      "idle": "No recent progress", "verifying": "Checking result", "working": "Working", "unknown": "State not recorded"
+      "closeout": "Ready for closeout",
+      "delivered": "Source merged",
+      "closed": "Closed",
+      "ended": "Session ended",
+      "ownerNeeded": "Owner needed",
+      "attention": "Needs attention",
+      "check": "Check required",
+      "capacity": "Waiting for capacity",
+      "paused": "Worker paused",
+      "idle": "No recent progress",
+      "verifying": "Checking result",
+      "working": "Working",
+      "unknown": "State not recorded"
     },
     "nextAction": {
-      "closeout": "Review the result before closing the room", "history": "Open the retained record",
-      "owner": "Assign an accountable person in the room", "decision": "Open the room to answer its pending decision",
-      "hold": "Resolve the recorded hold in the room", "blocker": "Open the room to check its blocker",
-      "capacity": "The system manages queue admission", "paused": "Waiting for the worker to return",
-      "idle": "Check the worker's last result in the room", "working": "Open the room to follow progress",
+      "closeout": "Review the result before closing the room",
+      "history": "Open the retained record",
+      "owner": "Assign an accountable person in the room",
+      "decision": "Open the room to answer its pending decision",
+      "hold": "Resolve the recorded hold in the room",
+      "blocker": "Open the room to check its blocker",
+      "capacity": "The system manages queue admission",
+      "paused": "Waiting for the worker to return",
+      "idle": "Check the worker's last result in the room",
+      "working": "Open the room to follow progress",
       "unknown": "Open the room to establish its next step"
     }
   },
@@ -156,6 +170,28 @@
       "conflictingRole": "An administrator must resolve the responsible role's multiple holders.",
       "nonHumanHolder": "An administrator must record a person as the responsible role's holder.",
       "incompleteRoute": "The Workroom owner must review this incomplete recovery route."
+    },
+    "blocker": {
+      "inspect": "Inspect recorded blocker",
+      "heading": "Recorded blocker",
+      "expired": "The recorded explanation has expired. The Workroom remains blocked.",
+      "unavailable": "No current explanation is available. The Workroom remains blocked.",
+      "authority": "This explanation does not authorize another attempt. Repair owner and action are not recorded here.",
+      "source": "Recorded on Workroom",
+      "missing": "Not recorded",
+      "expires": "Explanation expires"
+    },
+    "handoff": {
+      "heading": "Handoff history",
+      "reportedAuthority": "The reported explanation describes the hold. Verified handoff history is recorded separately below.",
+      "resolved": "A later handoff completed. The original refusal remains in the history.",
+      "waiting": "Waiting for the recorded receiver to acknowledge this request. No second request is needed.",
+      "ready": "The source assistant can submit a fresh governed handoff request. Current checks and receiver acknowledgement still apply.",
+      "unavailable": "A fresh handoff is not available. The source assistant must resolve the current prerequisites before continuing.",
+      "owner": "Recorded source assistant",
+      "original": "Original failed operation",
+      "receiver": "Recorded receiver and request",
+      "completion": "Completed request and receipt"
     }
   },
   "flow": {

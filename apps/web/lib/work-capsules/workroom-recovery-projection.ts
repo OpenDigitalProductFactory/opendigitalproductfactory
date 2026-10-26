@@ -1,7 +1,73 @@
+import type { BoundedHandoffRequest } from "./bounded-handoff-command";
 import type { InitiativeReviewerRecovery } from "@/lib/tak/initiative-readiness-tool-grants";
 import { projectRecordedTaskState } from "@/lib/tak/task-states";
 import type { loadSemanticReviewRoomProjection } from "@/lib/work-management/semantic-review-room-projection";
 import { isFullSourceCommitSha } from "./work-capsule-branch-identity";
+import { isRecord } from "@/lib/shared/coerce";
+
+export const RECORDED_BLOCKER_REASON_MAX_BYTES = 2048;
+type RecordedBlockerRoom = { capsuleId?: string; status?: string | null; workspaceState?: unknown };
+
+/** Reported coordination explains a hold; it never supplies authority or a repair action. */
+export function projectRecordedWorkroomBlocker(room: RecordedBlockerRoom, now = new Date()) {
+  if (room.status !== "blocked" && room.status !== "provider-blocked") return null;
+  const workspace = isRecord(room.workspaceState) ? room.workspaceState : null;
+  const override = workspace && isRecord(workspace.statusOverride) ? workspace.statusOverride : null;
+  const until = typeof override?.until === "string" ? override.until : null;
+  const expiry = until ? Date.parse(until) : NaN;
+  const validExpiry = Number.isFinite(expiry) && new Date(expiry).toISOString() === until;
+  const reason = typeof override?.reason === "string" ? override.reason.trim() : null;
+  const nowMs = now.getTime();
+  const explanationState = !validExpiry || !Number.isFinite(nowMs) ? "unavailable" as const
+    : expiry <= nowMs ? "expired" as const
+      : !reason ? "unavailable" as const
+        : Buffer.byteLength(reason, "utf8") > RECORDED_BLOCKER_REASON_MAX_BYTES ? "over-budget" as const
+          : "current" as const;
+  return {
+    reason: "workroom-blocked" as const,
+    explanation: explanationState === "current" ? reason : null,
+    explanationState,
+    expiresAt: validExpiry ? until : null,
+    source: { kind: "workroom-status-override" as const, capsuleId: room.capsuleId ?? null },
+    coordinationOnly: true as const,
+  };
+}
+
+export type FailedHandoffRecovery = {
+  kind: "failed-bounded-handoff"; state: "ready" | "waiting" | "blocked" | "resolved" | "unavailable"; reason: string; checkedAt: string;
+  owner: { userId: string; agentId: string; executorRef: string } | null;
+  original: { envelopeId: string; executionId: string; executedAt: string } | null;
+  action: { toolName: "reassign_workroom_executor"; args: BoundedHandoffRequest; requiresExecutionRecheck: true; requiresReceiverAcknowledgement: true } | null;
+  pending?: { requestId: string; requestDigest: string; receiverRef: string };
+  resolution?: { requestId: string; activityId: string; recordedAt: string };
+};
+export type RecordedWorkroomBlocker = NonNullable<ReturnType<typeof projectRecordedWorkroomBlocker>> | null;
+export type WorkroomBlockerContentAuthorizer = (workroomRowId: string) => Promise<boolean>;
+
+export type WorkroomHandoffRecoveryLoader = (workroomRowId: string, now: Date) => Promise<FailedHandoffRecovery | null>;
+
+/** Authorize the exact selected room before reading either private history source. */
+export async function loadContentAuthorizedWorkroomRecovery(
+  room: (RecordedBlockerRoom & { id?: string }) | null | undefined, now: Date,
+  canRead?: WorkroomBlockerContentAuthorizer, loadRecovery?: WorkroomHandoffRecoveryLoader,
+): Promise<{ recordedBlocker: RecordedWorkroomBlocker; failedHandoffRecovery: FailedHandoffRecovery | null }> {
+  const withheld = { recordedBlocker: null, failedHandoffRecovery: null };
+  if (!room?.id?.trim() || !canRead || ["complete", "archived", "abandoned", "superseded"].includes(room.status ?? "")) return withheld;
+  if (!loadRecovery && room.status !== "blocked" && room.status !== "provider-blocked") return withheld;
+  try { if (await canRead(room.id) !== true) return withheld; } catch { return withheld; }
+  let failedHandoffRecovery: FailedHandoffRecovery | null = null;
+  try { failedHandoffRecovery = await loadRecovery?.(room.id, now) ?? null; }
+  catch { failedHandoffRecovery = { kind: "failed-bounded-handoff", state: "unavailable", reason: "handoff-history-unavailable", checkedAt: now.toISOString(), owner: null, original: null, action: null }; }
+  return { recordedBlocker: projectRecordedWorkroomBlocker(room, now), failedHandoffRecovery };
+}
+
+/** Compatibility for callers that only need the recorded explanation. */
+export async function loadContentAuthorizedWorkroomBlocker(
+  room: (RecordedBlockerRoom & { id?: string }) | null | undefined, now: Date,
+  canRead?: WorkroomBlockerContentAuthorizer,
+): Promise<RecordedWorkroomBlocker> {
+  return (await loadContentAuthorizedWorkroomRecovery(room, now, canRead)).recordedBlocker;
+}
 
 type WorkroomIdentity = {
   capsuleId?: string;
@@ -209,10 +275,13 @@ export function projectWorkroomIdentityRepair(
 }
 
 export function projectWorkroomRecovery(
-  room: WorkroomIdentity & WorkroomRepairContext & { taskRun?: LinkedTaskRun },
+  room: WorkroomIdentity & WorkroomRepairContext & RecordedBlockerRoom & { taskRun?: LinkedTaskRun },
   review?: ReviewProjection,
   recoveryItemId: string | null = semanticBacklogId(room.backlogItemId) ? room.backlogItemId ?? null : null,
+  now = new Date(),
+  handoffRecovery: FailedHandoffRecovery | null = null,
 ) {
+  const recordedBlocker = projectRecordedWorkroomBlocker(room, now);
   const identityRepair = projectWorkroomIdentityRepair(room, repairContextFields(room));
   // These are recorded states, not proof of a current heartbeat. In particular,
   // waiting for input or recovery must never look like queued execution.
@@ -237,10 +306,15 @@ export function projectWorkroomRecovery(
       repair: { toolName: identityRepair.toolName, packet: identityRepair.packet },
     }
     : null;
+  const failedHandoffRecovery = handoffRecovery?.action && (prerequisite || semantic?.blocker)
+    ? { ...handoffRecovery, state: "blocked" as const, reason: "workroom-prerequisite-unresolved", action: null } : handoffRecovery;
   return {
+    failedHandoffRecovery,
     state: identityRepair
       ? "blocked" as const
-      : semantic?.state ?? executionState ?? "actionable" as const,
+      : semantic?.state === "unknown" ? "unknown" as const
+        : recordedBlocker ? "blocked" as const : semantic?.state ?? executionState ?? "actionable" as const,
+    recordedBlocker,
     prerequisite,
     reviewerExecution: recoveryExecution,
     reviewerExecutions: semantic?.reviewerExecutions ?? (recoveryExecution ? [recoveryExecution] : []),
@@ -248,6 +322,9 @@ export function projectWorkroomRecovery(
     historicalReviewerExecutions: semantic?.historicalReviewerExecutions ?? [],
     historicalReviewHistoryTruncated: semantic?.historicalReviewHistoryTruncated ?? false,
     blocker: prerequisite ? { reason: "source-identity-missing", accountableRole: prerequisite.accountableRole,
-      nextAction: prerequisite.nextAction, action: prerequisite.repair } : semantic?.blocker ?? null,
+      nextAction: prerequisite.nextAction, action: prerequisite.repair } : semantic?.blocker ?? (recordedBlocker ? {
+      reason: failedHandoffRecovery?.reason ?? recordedBlocker.reason, accountableOwner: failedHandoffRecovery?.owner ?? null,
+      nextAction: "Inspect the recorded blocker and verified handoff history in this Workroom before continuing.", action: failedHandoffRecovery?.action ?? null,
+    } : null),
   };
 }

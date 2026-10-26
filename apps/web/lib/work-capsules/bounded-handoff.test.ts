@@ -6,7 +6,7 @@ vi.mock("./bounded-handoff-dependencies", () => ({ assertBoundedHandoffDependenc
 vi.mock("@/lib/auth/oauth-identity-binding", () => ({ APPROVED_EXTERNAL_ROLES: ["AGT-EXT-CLAUDE", "AGT-EXT-CODEX", "AGT-EXT-GROK"] }));
 vi.mock("@/lib/work-management/workroom-agent-access.server", async (original) => ({ ...await original<typeof import("@/lib/work-management/workroom-agent-access.server")>(), resolveAgentWorkroomAccess: mocks.access }));
 import { reassignCapsuleExecutor } from "./reassign-executor-handler";
-import { assessBoundedHandoff } from "./bounded-handoff";
+import { assessBoundedHandoff, readBoundedHandoffLineage } from "./bounded-handoff";
 import { commandAuthorityScopeKey, commandPayloadBinding } from "./command-receipts";
 import { parseBoundedHandoffCommand } from "./bounded-handoff-command";
 import type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
@@ -23,7 +23,7 @@ function database() {
     findUnique: vi.fn(async () => ({ ...room })), update: vi.fn(async ({ data }: { data: Record<string, unknown> }) => { Object.assign(room, data); return { ...room }; }),
   }, workroomActivity: {
     create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => { const row = { id: "activity-" + activities.length, ...JSON.parse(JSON.stringify(data)) }; activities.push(row); return row; }),
-    findFirst: vi.fn(async ({ where }: any) => activities.find((row) => row.workCapsuleId === where.workCapsuleId && row.kind === where.kind && (!where.id || row.id === where.id) && (!where.commandScopeKey || row.commandScopeKey === where.commandScopeKey) && (!where.commandKey || row.commandKey === where.commandKey) && (!where.AND || where.AND.every((clause: any) => row.payload[clause.payload.path[0]] === clause.payload.equals))) ?? null),
+    findFirst: vi.fn(async ({ where }: any) => activities.find((row) => row.workCapsuleId === where.workCapsuleId && row.kind === where.kind && (!where.id || row.id === where.id) && (!where.commandScopeKey || row.commandScopeKey === where.commandScopeKey) && (!where.commandKey || row.commandKey === where.commandKey) && (!where.AND || where.AND.every((clause: any) => clause.payload.path.reduce((value: any, key: string) => value?.[key], row.payload) === clause.payload.equals))) ?? null),
   }, workroomParticipant: { findMany: vi.fn(async () => roster), create: vi.fn(), update: vi.fn() }, $queryRaw: vi.fn(async (sql: TemplateStringsArray) => sql.join("").includes("clock_timestamp") ? [{ now: state.now }] : []) };
   mocks.access.mockImplementation(async ({ agentId }: { agentId: string }) => {
     const id = agentId === "AGT-EXT-CLAUDE" ? "claude" : "codex";
@@ -118,3 +118,15 @@ describe("bounded receiver handoff", () => {
     expect(await execute(env, { ...request, phase: "accept" })).toMatchObject({ success: false, error: "handoff-invalid-input" }); expect(env.db.workroom.update).not.toHaveBeenCalled();
   });
 });
+
+const priorFailure = {approvalId:"failed-approval",executionId:"failed-execution",reason:"handoff-transaction-required",preserve:true};
+const failedOperation = {approvalId:priorFailure.approvalId,executionId:priorFailure.executionId,executedAtIso:NOW.toISOString(),ownerUserId:source.userId,sourceAgentId:source.agentId,command:{...request,phase:"request" as const}};
+async function pendingRecovery(env: ReturnType<typeof database>) {const result=await execute(env,{...request,handoffManifest:{...request.handoffManifest,priorFailure}});expect(result.success).toBe(true);return (result.data as any).handoff.requestId as string;}
+describe("validated failed-handoff lineage readback",()=>{
+ it("returns an accepted existing request as waiting without executing or creating another request",async()=>{const env=database();const id=await pendingRecovery(env);const count=env.activities.length;expect(await readBoundedHandoffLineage(env.db as unknown as CapsuleDb,env.room as never,failedOperation)).toMatchObject({state:"pending",requestId:id,receiverRef:"receiver-chat"});expect(env.activities).toHaveLength(count);expect(env.db.workroom.update).not.toHaveBeenCalled();});
+ it("returns a later completion only with its genuine request and accepted ACK receipt",async()=>{const env=database();const id=await pendingRecovery(env);await execute(env,ack(id),receiver);expect(await readBoundedHandoffLineage(env.db as unknown as CapsuleDb,env.room as never,failedOperation)).toMatchObject({state:"completed",requestId:id,toExecutorRef:"receiver-chat",fromExecutorRef:"source-chat"});expect(env.db.workroom.update).toHaveBeenCalledTimes(1);});
+ it("refuses a manufactured pending row with no accepted source command",async()=>{const env=database();await pendingRecovery(env);env.activities.splice(env.activities.findIndex(row=>row.kind==="command-accepted"),1);await expect(readBoundedHandoffLineage(env.db as unknown as CapsuleDb,env.room as never,failedOperation)).rejects.toMatchObject({code:"handoff-request-unproven"});});
+ it("refuses a mismatched original failure locator even when that request was genuinely accepted",async()=>{const env=database();await pendingRecovery(env);await expect(readBoundedHandoffLineage(env.db as unknown as CapsuleDb,env.room as never,{...failedOperation,executionId:"other-original"})).rejects.toMatchObject({code:"handoff-failure-lineage-unproven"});});
+});
+
+it("refuses a second stale ready packet for the same original failure under the request lock",async()=>{const env=database();const a={...request,commandId:"ready-a",handoffManifest:{...request.handoffManifest,priorFailure}};const b={...a,commandId:"ready-b"};await assessBoundedHandoff({db:env.db as unknown as CapsuleDb,actor:source,command:parseBoundedHandoffCommand(a)!});await assessBoundedHandoff({db:env.db as unknown as CapsuleDb,actor:source,command:parseBoundedHandoffCommand(b)!});expect(await execute(env,a)).toMatchObject({success:true});expect(await execute(env,b)).toMatchObject({success:false,error:"handoff-recovery-already-requested"});expect(env.activities.filter(row=>row.kind==="action"&&row.payload?.state==="pending-acknowledgement")).toHaveLength(1);expect(env.db.workroom.update).not.toHaveBeenCalled();});

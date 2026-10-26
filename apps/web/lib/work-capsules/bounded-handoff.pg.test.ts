@@ -87,6 +87,12 @@ function port(tx: RawTx): ReceiptDb & CapsuleDb & { workroomActivity: CapsuleDb[
       async findFirst({ where }: any) {
         if (where.commandScopeKey) { const rows = await tx.$queryRaw<any[]>`SELECT * FROM "WorkCapsuleActivity" WHERE "commandScopeKey" = ${where.commandScopeKey} AND "commandKey" = ${where.commandKey}`; return rows[0] ?? null; }
         if (where.id) { const rows = await tx.$queryRaw<any[]>`SELECT * FROM "WorkCapsuleActivity" WHERE id = ${where.id} AND "workCapsuleId" = ${where.workCapsuleId} AND kind = ${where.kind}`; return rows[0] ?? null; }
+        const original = where.AND.find((part: any) => part.payload.path.at(-1) === "approvalId");
+        if (original) {
+          const executionId = where.AND.find((part: any) => part.payload.path.at(-1) === "executionId").payload.equals;
+          const rows = await tx.$queryRaw<any[]>`SELECT * FROM "WorkCapsuleActivity" WHERE "workCapsuleId" = ${where.workCapsuleId} AND kind = 'action' AND payload->>'kind' = 'bounded-handoff' AND payload->>'state' = 'pending-acknowledgement' AND payload #>> '{request,command,handoffManifest,priorFailure,approvalId}' = ${original.payload.equals} AND payload #>> '{request,command,handoffManifest,priorFailure,executionId}' = ${executionId} ORDER BY "recordedAt" DESC,id DESC LIMIT 1`;
+          return rows[0] ?? null;
+        }
         const requestId = where.AND.find((part: any) => part.payload.path[0] === "requestId").payload.equals;
         const rows = await tx.$queryRaw<any[]>`SELECT * FROM "WorkCapsuleActivity" WHERE "workCapsuleId" = ${where.workCapsuleId} AND kind = 'action' AND payload->>'kind' = 'bounded-handoff' AND payload->>'state' = 'completed' AND payload->>'requestId' = ${requestId}`; return rows[0] ?? null;
       },
@@ -189,6 +195,19 @@ describe.skipIf(!DATABASE_URL)("bounded handoff transaction protocol (PostgreSQL
     expect((await pool.query('SELECT transfers,"leaseHolderPrincipalId" FROM "WorkCapsule"')).rows[0]).toEqual({ transfers: 1, leaseHolderPrincipalId: "human" });
     expect((await pool.query(`SELECT count(*)::int AS n FROM "WorkCapsuleActivity" WHERE kind='executor-changed'`)).rows[0].n).toBe(1);
     expect(fixture.nestedTransactions).toBe(1);
+  });
+  it("serializes stale recovery previews into one actual pending request", async () => {
+    const priorFailure = { approvalId: "original-refusal", executionId: "original-execution", reason: "handoff-transaction-required", preserve: true };
+    const a = { ...request, commandId: "recovery-preview-a", handoffManifest: { ...request.handoffManifest, priorFailure } };
+    const b = { ...a, commandId: "recovery-preview-b" };
+    const results = await Promise.all([call(a), call(b)]);
+    expect(results.filter(result => result.success)).toHaveLength(1);
+    expect(results.find(result => !result.success)).toMatchObject({ error: "handoff-recovery-already-requested" });
+    expect((await pool.query(`SELECT count(*)::int AS n FROM "WorkCapsuleActivity" WHERE kind='action' AND payload->>'state'='pending-acknowledgement'`)).rows[0].n).toBe(1);
+    expect((await pool.query('SELECT transfers FROM "WorkCapsule"')).rows[0].transfers).toBe(0);
+    const winner = results[0].success ? a : b;
+    expect(await call(winner)).toEqual(results.find(result => result.success));
+    expect((await pool.query(`SELECT count(*)::int AS n FROM "WorkCapsuleActivity" WHERE kind='command-accepted'`)).rows[0].n).toBe(1);
   });
   it("serializes competing requests and refuses the losing snapshot", async () => {
     const [a,b] = await Promise.all([pending("request-a"),pending("request-b")]);
