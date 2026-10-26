@@ -44,6 +44,9 @@ Record package SHA256 and exact configuration. Do not claim a speedup before mat
 ## Phase 4: protected delivery and learning
 The assembled change is the one independently reviewable delivery.
 Run the affected tests, documentation checks and exact-tree publication gates.
+Run the existing Node package behavior suite in the existing source-policy CI job
+in `.github/workflows/ci.yml`, so later changes cannot omit these controls.
+This source-only suite does not build an engine, load model weights or require a GPU.
 Use DCO and protected PR/merge queue. No hand-built image or direct live engine replacement.
 Link actual qualification to DOC-B39A42F1 and BI-IMP-AE7792A0/IP-89CEE.
 Record physical older-Mac coverage as unrun; record a blocked inference qualification as unrun.
