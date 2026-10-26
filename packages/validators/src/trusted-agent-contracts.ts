@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { DECISION_SCOPES } from "./decision-scope";
 import { OUTCOME_DISPOSITIONS } from "./outcome-disposition";
-import { isBoundedTrustedJson } from "./bounded-trusted-json.js";
-export { isBoundedTrustedJson } from "./bounded-trusted-json.js";
+import { isBoundedTrustedJson } from "./bounded-trusted-json";
+export { isBoundedTrustedJson } from "./bounded-trusted-json";
 
 // Structural schemas describe data, not authenticated authority. The importer
 // additionally checks bounded JSON, extensions and cross-field semantics.

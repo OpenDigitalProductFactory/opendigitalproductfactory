@@ -188,6 +188,13 @@ chat handoff names the enclosing revision containing the updated proof fixtures.
 | GPP | Strict `gpp-shape/0.1` and layout schemas, parser, resolver, deterministic diagnostics, soundness, lowering/emission, draft bindings and reference interpretation. The Node compiler adds the canonical SHA-256 digest. | `apps/web/scripts/build-gpp-shapes.ts` uses the new DPF policy adapter; interpreter/soundness and their actual callers use portable modules. Twelve old pure implementation files are removed. Structural contracts and existing scope/evidence/trigger/collaboration/consequence vocabularies have canonical package homes. Application exports retain actual registry and policy responsibilities. |
 | Judgment | Existing scoring, MCDA quality and bounded retry preserve behavior. New `scoped-advice/0.1` validates bounded owner/context/reference/eligibility inputs and returns advice or hold. | MCP principle decisions, perspective, ledger, golden/backtest and retry callers use moved math. Three old math implementations are removed. The golden guard uses deterministically derived JavaScript rather than handwritten duplicate math. The new scoped-advice wrapper is exercised by the standalone consumer; production MCP callers still own their existing scope adapters. |
 
+The existing validators root facade also serves the framework's CommonJS
+TypeScript loader. Its decision-scope and trusted-JSON bridges retain
+extensionless source imports; their canonical implementations remain in the
+extracted leaf modules. The portable NodeNext entries retain their imports for emitted JavaScript. The framework-loader regression loads the complete legacy
+facade in an isolated child process, independently of Vitest's module resolver.
+This source-loading check does not establish served application or browser qualification.
+
 The Workroom and judgment isolated source closures have zero runtime
 dependencies. GPP's only third-party runtime dependency is Zod **4.6.7**. Its
 Node digest additionally imports the existing pure
