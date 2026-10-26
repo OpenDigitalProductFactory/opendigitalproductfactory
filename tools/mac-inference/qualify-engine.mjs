@@ -18,6 +18,8 @@ function argumentsFromCLI() { return parseArgs({ options: Object.fromEntries(
 const report = { schemaVersion:1, status:'incomplete', runtimeFilesChanged:false, providerConfigurationChanged:false,
   physicalOlderMacCoverage:'unrun', platformWorkflowIntegration:'unrun', results:[], failures:[] };
 let child, workspace, lease, deadline, connection;
+let cleanupRan=false,authorityLost=false;
+const helpers=new Set();
 const abort = new AbortController();
 const pause = ms => new Promise(r=>setTimeout(r,ms));
 function fail(message) { throw new Error(message); }
@@ -152,6 +154,35 @@ export async function stopOwnedChild(process, graceMs=5000) {
   }
   if (!ended()) fail('Candidate shutdown not confirmed');
 }
+export async function runOwnedNative(command,args,{timeout=30000,maxBuffer=1024*1024,graceMs=5000}={},cancellation=abort.signal) {
+  const signal=AbortSignal.any([cancellation,AbortSignal.timeout(timeout)]);
+  if(signal.aborted) fail('Native helper cancelled before launch');
+  const proc=spawn(command,args,{stdio:['ignore','pipe','pipe']});
+  if(proc.pid) helpers.add(proc);
+  let stdout='',stderr='',overflow=false,spawnError=false;
+  return new Promise((resolveResult,reject)=>{
+    const stop=()=>{void stopOwnedChild(proc,graceMs).catch(()=>{});};
+    const collect=key=>b=>{
+      if(key==='stdout') stdout+=b.toString();else stderr+=b.toString();
+      if(Buffer.byteLength(stdout)+Buffer.byteLength(stderr)>maxBuffer){overflow=true;stop();}
+    };
+    proc.stdout.on('data',collect('stdout'));proc.stderr.on('data',collect('stderr'));
+    proc.once('error',()=>{spawnError=true;});
+    signal.addEventListener('abort',stop,{once:true});
+    proc.once('close',code=>{
+      helpers.delete(proc);signal.removeEventListener('abort',stop);
+      if(signal.aborted) reject(new Error('Native helper cancelled; owned process closed'));
+      else if(overflow||spawnError||code!==0) reject(new Error('Native helper execution failed'));
+      else resolveResult({stdout,stderr});
+    });
+    if(signal.aborted) stop();
+  });
+}
+async function stopAllOwnedProcesses() {
+  const results=await Promise.allSettled([...helpers].map(p=>stopOwnedChild(p)));
+  await stopCandidate();
+  if(results.some(r=>r.status==='rejected')) fail('Owned native helper shutdown unconfirmed');
+}
 async function stopCandidate() { await stopOwnedChild(child); }
 export const MATCHED_ENGINE_SETTINGS=Object.freeze({context:131072,slots:4,kvUnified:true,
   gpuLayers:999,threads:9,batch:512,microBatch:512,flashAttention:'on',cacheK:'f16',cacheV:'f16',mmap:false});
@@ -165,6 +196,7 @@ export function nativeEngineArguments({model,modelRef,port,mmproj}) {
     ...(mmproj?['--mmproj',resolve(mmproj)]:[])];
 }
 async function startOwnedEngine(binary,label) {
+  if(abort.signal.aborted) fail('Qualification cancelled before engine launch');
   await ownedLease();
   const port=lease.ports?.[0];let startup='';
   if(!Number.isInteger(port)||port<1024||port>65535) fail('Qualification lease did not reserve a usable native port');
@@ -181,6 +213,8 @@ async function startOwnedEngine(binary,label) {
     if(!ready) await pause(1000);
   }
   if(!ready) fail('Owned '+label+' readiness timed out');
+  if(label==='corrected-candidate' && (!/has tensor\s*=\s*true/.test(startup)
+    || /tensor API is not supported/.test(startup))) fail('Loaded candidate did not establish tensor support');
   const props=await json(endpoint+'/props',undefined,3000);
   if(props.default_generation_settings?.n_ctx!==MATCHED_ENGINE_SETTINGS.context
     || props.total_slots!==MATCHED_ENGINE_SETTINGS.slots
@@ -216,7 +250,7 @@ async function main() {
   lease=await ownedLease();deadline=Date.now()+9*60000;
   const supervision=await superviseLeaseRun({
     ttlMs:admittedLeaseTtlMs(lease.expiresAt,120000),expiresAt:lease.expiresAt,
-    run:()=>performQualification(root),
+    run:async()=>{try{return await performQualification(root);}finally{await cleanupWhileLeased();}},
     renew:async()=>{
       const r=await mcpCall('renew_nonprod_environment_lease',{
         leaseId:lease.leaseId,ownerSessionId:a['owner-session'],ttlMinutes:2},connection);
@@ -229,7 +263,7 @@ async function main() {
       }
       return r;
     },
-    terminate:async()=>{abort.abort();await stopCandidate();},
+    terminate:async()=>{authorityLost=true;abort.abort();await stopAllOwnedProcesses();},
     // Cleanup/restoration and the native release remain visible to the owning agent.
     release:async()=>{},
     onEvent:event=>{if(event.type!=='released') (report.leaseEvents??=[]).push(event);},
@@ -244,18 +278,19 @@ async function performQualification(root) {
   await runnersIdle(management);
   workspace=await mkdtemp(join(tmpdir(),'dpf-metal-qualification-'));
   const probe=join(workspace,'tensor-probe');
-  await exec('xcrun',['clang','-isysroot',a.sdk,'-target','arm64-apple-macos13.3','-fobjc-arc',
+  await runOwnedNative('xcrun',['clang','-isysroot',a.sdk,'-target','arm64-apple-macos13.3','-fobjc-arc',
     fileURLToPath(new URL('./metal-language-probe.m',import.meta.url)),'-framework','Foundation','-framework','Metal','-o',probe],{timeout:30000});
-  report.tensorControls=JSON.parse((await exec(probe,[],{timeout:30000})).stdout);
+  report.tensorControls=JSON.parse((await runOwnedNative(probe,[],{timeout:30000})).stdout);
   const control=report.tensorControls.controls;
   if (!control.find(x=>x.mode==='tensor')?.pipelineOK||!control.find(x=>x.mode==='fallback')?.fallbackUnchanged) fail('Tensor/fallback control failed');
-  const version=await exec(join(a.package,'bin/llama-server'),['--version'],{timeout:30000,maxBuffer:1024*1024});
+  const version=await runOwnedNative(join(a.package,'bin/llama-server'),['--version'],{timeout:30000,maxBuffer:1024*1024});
   report.engineVersion=(version.stdout+version.stderr).split('\n').filter(x=>/version:|build =|built with/.test(x));
   if (!report.engineVersion.some(x=>x.includes('72874f5-dpf-metal4.1'))) fail('Candidate build identity missing');
-  const devices=await exec(join(a.package,'bin/llama-server'),['--list-devices'],{timeout:60000,maxBuffer:1024*1024});
+  const devices=await runOwnedNative(join(a.package,'bin/llama-server'),['--list-devices'],{timeout:60000,maxBuffer:1024*1024});
   const deviceLog=devices.stdout+devices.stderr;
   report.nativeDeviceEvidence=deviceLog.split('\n').filter(x=>/GPU name|has tensor|tensor API|error compiling source/.test(x));
-  if(!/has tensor\s*=\s*true/.test(deviceLog)||/tensor API is not supported/.test(deviceLog)) fail('Built engine did not establish tensor support on this M5');
+  report.nativeDeviceAvailability=deviceLog.split('\n').filter(x=>/MTL\d+:.*Apple/.test(x));
+  if(report.nativeDeviceAvailability.length===0) fail('Built engine did not advertise an Apple Metal device');
   if(!/^[a-f0-9]{64}$/.test(a['baseline-engine-sha256'])
     || await hashFile(a['baseline-engine'])!==a['baseline-engine-sha256']) fail('Docker-distributed baseline binary identity changed');
   if(a['baseline-engine-sha256']===await hashFile(join(a.package,'bin/llama-server'))) fail('Baseline and candidate must be different binaries');
@@ -300,17 +335,23 @@ async function restoreDockerBaseline() {
   report.baselineRestored=restore.metric.finishReason==='stop';
   if(!report.baselineRestored) fail('Docker model restoration not confirmed');
 }
+async function cleanupWhileLeased() {
+  if(cleanupRan) return;
+  cleanupRan=true;
+  if(lease) deadline=Math.min(Date.now()+45000,Date.parse(lease.expiresAt)-15000);
+  await stopAllOwnedProcesses();
+  if(authorityLost && report.baselineUnloadedForQualification && !report.baselineRestored)
+    fail('Lease authority lost; Docker restoration not authorized or confirmed');
+  await restoreAfterQualification({unloaded:report.baselineUnloadedForQualification,
+    restored:report.baselineRestored,stop:stopCandidate,restore:restoreDockerBaseline});
+}
 async function run() {
   a=argumentsFromCLI();
   for(const signal of ['SIGINT','SIGTERM']) process.once(signal,()=>{abort.abort();void stopCandidate();});
   try { await main(); } catch(error) { report.failures.push(error.message); }
   finally {
-    try {
-      // Reserve a separate, bounded recovery interval while the same lease is active.
-      if(lease) deadline=Math.min(Date.now()+45000,Date.parse(lease.expiresAt)-15000);
-      await restoreAfterQualification({unloaded:report.baselineUnloadedForQualification,
-        restored:report.baselineRestored,stop:stopCandidate,restore:restoreDockerBaseline});
-    } catch(error) {report.failures.push('Restoration: '+error.message);report.baselineRestored=false;}
+    try {await cleanupWhileLeased();}
+    catch(error) {report.failures.push('Restoration: '+error.message);report.baselineRestored=false;}
     if(workspace) await rm(workspace,{recursive:true,force:true});
     report.finishedAt=new Date().toISOString();
     if(report.failures.length && report.status==='model-smoke-qualified') report.status='qualification-failed';

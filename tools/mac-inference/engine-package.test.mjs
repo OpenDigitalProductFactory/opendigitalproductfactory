@@ -77,7 +77,7 @@ test('refuses a manifest that declares its own model qualification', async t => 
 
 // Qualification must accept the observed Docker schema without inventing a
 // loading observation, and must keep the Docker engine recoverable on failure.
-const {runnerActivity,restoreAfterQualification,stopOwnedChild,validLeaseExpiry,modelLayerBinding,unloadWithRestorationObligation,nativeEngineArguments,performanceComparison}=await import('./qualify-engine.mjs');
+const {runnerActivity,restoreAfterQualification,stopOwnedChild,validLeaseExpiry,modelLayerBinding,unloadWithRestorationObligation,nativeEngineArguments,performanceComparison,runOwnedNative}=await import('./qualify-engine.mjs');
 test('observed Docker runner schema proves idle without claiming loading capture',()=>{
   assert.deepEqual(runnerActivity([{in_use:false}]),{idle:true,loadingFieldObserved:false});
   assert.equal(runnerActivity([{in_use:true}]).idle,false);
@@ -156,4 +156,16 @@ test('Docker omitempty activity booleans decode only on an identified status row
   assert.equal(runnerActivity([{...row,loading:true}]).idle,false);
   assert.throws(()=>runnerActivity([{...row,in_use:'false'}]),/capture unavailable/);
   assert.throws(()=>runnerActivity([{}]),/capture unavailable/);
+});
+
+test('cancelled native helper closes its owned child before returning',async()=>{
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),150);
+  try {
+    await assert.rejects(runOwnedNative(process.execPath,['-e',"process.on('SIGTERM',()=>{});setInterval(()=>{},1000)"],{timeout:2000,graceMs:25},controller.signal),/owned process closed/);
+  } finally {clearTimeout(timer);}
+});
+test('already-fenced native helper never launches',async()=>{
+  const controller=new AbortController();controller.abort();
+  await assert.rejects(runOwnedNative('/does-not-exist',[],{},controller.signal),/before launch/);
 });
