@@ -384,3 +384,64 @@ per site, so each estate stays separate.
 Start with the [edge node deployment topology guide](../edge-node/deployment-topology.md),
 which covers where a node can run and how it connects. For many nodes at once,
 see [fleet operations](../edge-node/fleet-operations.md).
+
+
+## Routine development client permissions
+
+The source bootstrap converges routine Codex, Claude and Grok permissions through
+one delivered policy, `packages/dpf-skill-pack/contracts/client-permission-baseline.json`,
+and the existing signed toolchain updater. It targets the explicitly named DPF
+source project; installed runtime assets remain administered through MCP.
+
+For an existing installation, the updater's `--permissions-only --project-root <source>`
+route changes only scoped permission configuration and native project trust.
+It does not refresh plugins, credentials or connectors. Both bootstrap adapters
+call that same writer. An ordinary updater run with a DPF source project also
+uses it; the updater retains its existing behavior for other projects.
+
+Missing settings receive workspace-write/automatic review for Codex, acceptEdits
+for Claude and automatic permission review for Grok. Existing explicit restrictive
+choices, deny/ask rules, managed requirements, hooks and model/provider selections
+remain effective. Grok sandboxing is reported separately: Windows has no supported
+kernel sandbox profile in this baseline, so an absent profile is explicitly off;
+other supported hosts default an absent profile to workspace. An explicit existing
+profile is retained. No client allowlist supplies platform authority.
+
+The scoped writer plans all files first, rejects malformed or linked targets,
+backs up changed existing files beside their originals and writes atomically.
+A dry-run writes no client configuration or trust decision; an explicitly requested
+JSON report is still produced. A second run is a no-op when inputs are unchanged.
+Backups may contain the original user's secrets; keep them local and do not attach
+them to issues or reports. Restore only the intended backup after checking for
+later operator edits.
+
+`--report-json <path>` extends the existing convergence report with a permission
+scope per client, installed CLI versions, configured posture, rule counts,
+planned paths/backups, native trust/managed observations and restart state. It
+never copies raw remembered rules or credentials. Configuration evidence is
+separate from `sessionVerified`, which remains false until the actual client
+session is exercised. An absent CLI or unresolved trust is reported as unrun.
+An existing managed Codex chat can retain host-imposed workspace roots and review
+policy; editing a saved file cannot widen it. A selected Codex config or permission
+profile keeps its posture instead of receiving conflicting defaults. Per-invocation
+CLI profile/approval/sandbox overrides remain the caller's responsibility and must
+be included when checking the actual session; configuration convergence cannot
+establish their effective value. Open future source sessions in the
+source project/governed worktree and verify their effective writable roots.
+
+Native checks use Codex's parser/`execpolicy check` and Grok `inspect --json`.
+Grok's documented `--trust` is used only for this named project when it has no
+prior explicit untrusted decision. No model turn, provider login or provider
+spend is part of configuration convergence. External-provider consent, new spend
+and actions beyond the current delegation retain their owner gates.
+
+Permission convergence needs Python 3.11+ or an already available `tomli` parser.
+On older Python without that parser, permission-only execution reports unrun
+before changing configuration; the existing bootstrap/updater still converges
+its skills and connectors and reports the permission scope as unverified. Agents
+should select an available supported Python runtime before claiming this baseline.
+The updater does not silently install an undeclared dependency.
+
+An existing explicit user full-access choice remains inherited for Codex; the
+writer neither creates a project full-access directive nor replaces that choice
+with a restricted sandbox paired with a non-escalating approval policy.

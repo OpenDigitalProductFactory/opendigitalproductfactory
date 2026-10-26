@@ -32,6 +32,28 @@ completed execution checkpoint; do not manufacture one or finalize it as a pass.
 `pregate:status` remains read-only. Whole-chain loss still requires reconciliation
 of the original durable task and retained evidence before another attempt.
 
+The driver retains its early two-second closure snapshot, then releases only
+observation handles. The launcher observes its enclosing Windows Job for up to
+ten seconds before the first destructive cleanup, including when the driver
+failed. Driver console closure alone does not prove that every Job member has
+exited. Cleanup outcomes and exceptions remain recorded separately from natural
+settlement; a later empty Job never clears a driver failure. The shared Job query retains initial and final active
+counts, available PID/creation identities, elapsed time, budget and bounded
+progress snapshots. Only verified natural emptiness within that budget passes;
+timeout, query or identity failure, and emergency termination remain failures.
+The Job handle owns containment, so diagnostic PIDs never become kill authority.
+Native regression probes cover an empty Job, a short-lived non-console child,
+a persistent child, missing Job handles, query/identity failures, and a failed
+driver whose descendants close naturally. A controlled delayed lease response
+crosses the early snapshot boundary: native cancellation must still write one
+non-success result, release once, close naturally and leave the outside sentinel
+running. A response held beyond final settlement remains unverified and requires
+explicit containment; it must not produce a passing result. This extends the documented
+[Job member query](https://learn.microsoft.com/en-us/windows/win32/api/winnt/ns-winnt-jobobject_basic_process_id_list)
+and [handle membership check](https://learn.microsoft.com/en-us/windows/win32/api/jobapi/nf-jobapi-isprocessinjob).
+The earlier saved-CA fixture recorded emergency cleanup without the residual
+member identity; its cause remains unknown and its failed result is retained.
+
 The documentation-anchor preflight uses the same configured MCP URL and
 refreshable client credential as the gate, retaining the legacy endpoint and
 PAT fallback. A stale ambient legacy connection must not override an explicitly

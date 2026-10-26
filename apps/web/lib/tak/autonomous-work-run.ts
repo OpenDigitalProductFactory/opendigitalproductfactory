@@ -248,6 +248,7 @@ export async function resolveAutonomousWorkTools(input: {
    *  schemas inside the attachment budget so the model never has to discover a
    *  known governed writer through the public marketplace. */
   requiredToolNames?: readonly string[];
+  roomAuthorizedGrants?: readonly string[] | null;
 }): Promise<{
   tools: ToolDefinition[];
   toolsForProvider: Array<Record<string, unknown>>;
@@ -265,6 +266,7 @@ export async function resolveAutonomousWorkTools(input: {
     unifiedMode: input.unifiedMode,
     agentId: input.agentId,
     additionalGrants: COWORKER_AUTHORIZED_SURFACE_BASELINE_GRANTS,
+    ...(input.roomAuthorizedGrants ? { roomAuthorizedGrants: input.roomAuthorizedGrants } : {}),
   });
 
   // BI-CAP-F2D39F8F: right-size the ATTACHMENT for autonomous runs with the

@@ -888,6 +888,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // BI-99395B29 follow-up: liveness comes from the Workroom claim, and an
         // unreadable claim record must fail safe rather than reap on a guess.
         "scripts/lib/worktree-liveness.test.mjs",
+        // CodeQL js/log-injection: one CR/LF strip for the janitor, the preview
+        // runtime, and the auth-only bootstrap.
+        "scripts/lib/safe-log.test.mjs",
         "scripts/lib/worktree-janitor-core.test.mjs",
         "scripts/worktree-janitor.test.mjs",
         "scripts/worktree-janitor-sh.test.mjs",

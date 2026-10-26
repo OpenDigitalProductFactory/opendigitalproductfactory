@@ -56,6 +56,7 @@ export const DELIVERY_SHAPE_VERSION = "1.0.0";
 
 /** The role that answers for the author's stages (`role:author`). */
 export const DELIVERY_AUTHOR_ROLE = "author";
+export const DELIVERY_AUTHOR_EVIDENCE_TOOL = "record_workroom_evidence";
 
 /** `key@version` references a claim may declare. */
 export const DELIVERY_SHAPE_REFS = DELIVERY_SHAPE_KEYS.map((key) => `${key}@${DELIVERY_SHAPE_VERSION}`);
@@ -86,7 +87,7 @@ const acceptance = (condition: string, evidence: readonly WorkShapeEvidenceKind[
 
 const reviewPoint = { everyDays: 7, description: "A delivery room open past its appetite is reviewed weekly whether or not it moved: reshape, split, or close." };
 
-export const DELIVERY_SHAPES: Record<DeliveryShapeKey, WorkShapeDefinition> = {
+const deliveryShapeDefinitions: Record<DeliveryShapeKey, WorkShapeDefinition> = {
   [DELIVERY_BREAK_FIX_SHAPE_KEY]: {
     key: DELIVERY_BREAK_FIX_SHAPE_KEY,
     version: DELIVERY_SHAPE_VERSION,
@@ -350,3 +351,20 @@ export function deliveryShapeSize(ref: string | null | undefined): "small" | "me
   const key = ref?.split("@")[0];
   return isDeliveryShapeKey(key) ? DELIVERY_SHAPE_SIZE[key] : null;
 }
+
+
+/** Normalize author declarations once; do not mutate the raw definitions. */
+function withAuthorEvidence(definitions: Record<DeliveryShapeKey, WorkShapeDefinition>) {
+  const result = { ...definitions };
+  for (const key of DELIVERY_SHAPE_KEYS) {
+    const shape = definitions[key];
+    result[key] = { ...shape, stages: shape.stages.map((stage) =>
+      key !== DELIVERY_XLARGE_SHAPE_KEY && stage.accountablePrincipalRef === `role:${DELIVERY_AUTHOR_ROLE}`
+        && stage.advance.kind !== "governed-decision"
+        ? { ...stage, tools: [...new Set([...(stage.tools ?? []), DELIVERY_AUTHOR_EVIDENCE_TOOL])],
+            mandatedTools: [...new Set([...(stage.mandatedTools ?? []), DELIVERY_AUTHOR_EVIDENCE_TOOL])] }
+        : stage) };
+  }
+  return result;
+}
+export const DELIVERY_SHAPES = withAuthorEvidence(deliveryShapeDefinitions);
