@@ -148,3 +148,12 @@ test('missing or invalid prompt counts cannot qualify a timing comparison',()=>{
   assert.equal(performanceComparison(before,{...before,prefillMs:50},2).comparable,true);
   assert.equal(performanceComparison(before,{...before,prefillMs:NaN},2).comparable,false);
 });
+
+test('Docker omitempty activity booleans decode only on an identified status row',()=>{
+  const row={backend_name:'llama.cpp',model_name:'model',mode:'completion',last_used:'2026-10-26T02:35:08Z'};
+  assert.equal(runnerActivity([row]).idle,true);
+  assert.equal(runnerActivity([{...row,in_use:true}]).idle,false);
+  assert.equal(runnerActivity([{...row,loading:true}]).idle,false);
+  assert.throws(()=>runnerActivity([{...row,in_use:'false'}]),/capture unavailable/);
+  assert.throws(()=>runnerActivity([{}]),/capture unavailable/);
+});

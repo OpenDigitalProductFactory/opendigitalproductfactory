@@ -114,17 +114,22 @@ async function runnersIdle(root) {
     if (!Array.isArray(rows)) fail('Runner activity capture unavailable');
     const state=runnerActivity(rows);
     if (state.idle) {
-      (report.drainCaptures??=[]).push({runners:rows.length,loadingFieldObserved:state.loadingFieldObserved});
+      (report.drainCaptures??=[]).push({runners:rows.length,loadingFieldObserved:state.loadingFieldObserved,
+        inUseFieldObserved:rows.every(x=>typeof x.in_use==='boolean'),
+        activityContract:'Docker Model Runner v1.2.8: bool fields use omitempty'});
       return rows;
     }
     await pause(3000);
   }
   fail('Existing runner did not become idle; no candidate model launched');
 }
-// Docker's observed management contract has in_use but may omit loading.
-// Missing in_use is unknown activity; an omitted optional loading is recorded.
+// Docker Model Runner v1.2.8 scheduling/api.go:82-84 declares both activity
+// booleans with omitempty. Omitted means false only on an identified status row.
 export function runnerActivity(rows) {
-  if (!Array.isArray(rows) || rows.some(x=>!x || typeof x.in_use!=='boolean'
+  const identified=x=>typeof x.backend_name==='string'&&x.backend_name.length>0
+    &&typeof x.model_name==='string'&&x.model_name.length>0&&typeof x.mode==='string'&&x.mode.length>0;
+  if (!Array.isArray(rows) || rows.some(x=>!x
+    || (x.in_use===undefined?!identified(x):typeof x.in_use!=='boolean')
     || (x.loading!==undefined && typeof x.loading!=='boolean'))) fail('Runner activity capture unavailable');
   return {idle:rows.every(x=>!x.in_use && x.loading!==true),
     loadingFieldObserved:rows.every(x=>typeof x.loading==='boolean')};
