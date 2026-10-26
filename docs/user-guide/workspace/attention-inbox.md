@@ -64,6 +64,8 @@ administrator privileges do not let you answer someone else's request.
 
 ## How long a coworker's request waits
 
+Scheduled Workroom coworkers can record an assigned stage's blocked report themselves. When a required action does need approval, the task waits on that request instead of asking again on its next run or on a new day. See [Workroom reports and approval waits](../workroom-approval-recovery.md).
+
 A request that sends something outside your business, such as an email, a post, an ad or a pull request, waits 15 minutes. What it was going to send can go out of date, and it cannot be recalled once it is sent. Every other request waits up to seven days, so a request raised while you are away is still there when you come back. Before an approved request runs, it is checked again. An approval that is too old for what the action now is does not run.
 
 If nobody answers in time, the request is not lost. It comes back in the Friday review as **Expired unanswered**, with no Authorize or Decline buttons, so a closed request can never be approved by accident. Choose **Ask again** and the same request returns to you for a fresh decision. Nothing is asked again unless you or your coworker choose to. A link to a request opens that request's own card, even when it is in the Friday review.

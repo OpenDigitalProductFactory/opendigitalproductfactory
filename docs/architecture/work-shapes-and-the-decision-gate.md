@@ -151,6 +151,8 @@ The reviewer's receipt is the stage's evidence (BI-80738C08): once every review 
 the stage declares has passed for the room's current head, the next tick advances it. A
 failing receipt blocks the stage and shows in the room with its finding count.
 
+A scheduled run may record its own assigned non-governed stage as blocked without a per-report approval (BI-E458A9CB). This default mandate requires the persisted run, coworker assignment, room, shape version, stage and declared evidence kind to match, with a nonblank summary. Explicit always-approve policy remains in force. It does not authorize a completed report or the blocked business action. The existing permission and consequence gates still apply; see [Workroom cycle continuity](workroom-cycle-continuity.md).
+
 Two bounded exceptions bind a non-governed `role:` stage to an agent; neither ever reaches a
 `governed-decision` advance (`boundStagePrincipal`, `drive-plan-stage.ts`). A room may carry
 its own `workShapeRoleBindings` scope claim naming the agent that holds a role there
@@ -916,12 +918,13 @@ had no task at all, because an old `dispatch_agent` record never created one.
 Some had a task whose run had already failed. Some had a task that the pause
 itself had switched off before the scheduler ran it. The sequential drive now
 reads the room's task, and the latch holds only while the queued run is
-outstanding:
+outstanding or waiting for a recorded approval outcome:
 
-- If no task exists, or no enqueue was recorded, the latch releases.
+- A proposed task stays parked until its linked approvals show execution. Waiting, declined, expired, failed, cancelled, not-run and unknown outcomes do not trigger another request on the next day. Graph tokens apply the same rule to their own task, and the scheduler does not rearm the proposed required action's cron. Execution alone still does not complete the stage.
+- If no task exists, or no enqueue was recorded, the ordinary execution latch releases.
 - An unfinished run keeps the room paused for up to 2 hours, with the task left
   active so it can still run.
-- A run that finished without a completing receipt is a failure. The room is
+- Outside that approval wait, a run that finished without a completing receipt is a failure. The room is
   retried after a backoff of 15 minutes, then 30.
 - After three failures in one cycle the room stays paused, and its ledger and
   trail row name the last error. A new cycle resets the count.
@@ -1201,3 +1204,14 @@ fallback or grants execution authority.
 Measured on the development install 2026-09-09: **67 merged bug fixes stalled at completion, 0 with a live room, 0 with a readable shape.** `smallShapeAcceptance` — the clause that lets a small or break-fix item be accepted by a runtime check or a failing-to-passing test, with no spec, no plan and no reconciliation receipt — could therefore never fire for the population it was written to serve. Across the whole install only 46 of 353 live rooms carried a shape claim at all.
 
 A closed or completed room is now consulted as a **fallback**, newest first. A live room still wins, so an in-flight re-shape is honoured over a historical one. An `abandoned` or `superseded` room is still never consulted: abandoning the work is a statement that its shape claim no longer stands.
+
+## Finite delivery identity
+
+New finite delivery rooms retain their initial outcome, canonical criterion
+identity and scoped linked-installation context in workspaceState and the initial
+audit payload. Shape and authority rules still bound action. The room and MCP
+readers share one agreement projection. The successful governed terminal
+transaction retains its evidence-backed handoff in that state and the existing
+audit event. Different criterion statements require reconciliation; separately
+linked follow-on BIs leave the completed delivery intact.
+See [finite delivery agreements](../user-guide/workspace/finite-delivery-agreements.md).

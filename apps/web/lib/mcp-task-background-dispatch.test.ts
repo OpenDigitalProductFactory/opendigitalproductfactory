@@ -739,3 +739,8 @@ describe("external TaskRun durable dispatch", () => {
     expect(notify.publish).toHaveBeenCalledWith("token-1", terminal);
   });
 });
+
+it("limits an explicit capacity wake to the already authorized original task", async () => {
+  await reconcilePersistedRemoteTaskDispatches({ taskRunId: "TR-ORIGINAL", includeOrdinary: false } as never);
+  expect(db.findMany.mock.calls[0][0].where).toMatchObject({ taskRunId: "TR-ORIGINAL" });
+});

@@ -127,7 +127,12 @@ public static class DpfConsoleFixture {
         finally { CloseHandle(info.thread); if(info.process!=IntPtr.Zero) CloseHandle(info.process); }
     }
     public static void InitializeDriver() {
-        // A real handler is process-local. NULL/TRUE would immunize children.
+        // PowerShell inherits ignore-CTRL+C. Adding a handler does not clear
+        // that attribute, so GenerateConsoleCtrlEvent returns success and no
+        // process on the console runs a handler. Children copy it at
+        // CreateProcess. Clear it before the witness is installed and before
+        // the target starts. NULL/TRUE would immunize children again.
+        Check(SetConsoleCtrlHandler(null,false));
         handler=kind=>{ if(kind==0) { Interlocked.Increment(ref controls); return true; } return false; };
         Check(SetConsoleCtrlHandler(handler,true));
         output=CreateFile("CONOUT$",0xc0000000,3,IntPtr.Zero,3,0,IntPtr.Zero);
@@ -277,7 +282,7 @@ function Write-FixtureJson([string]$Name, $Value) {
 }
 
 function Wait-OwnedJobClosure([string]$Fault) {
-    $budgetMs = 2000
+    $budgetMs = 10000
     $elapsed = [Diagnostics.Stopwatch]::StartNew()
     $snapshots = [Collections.Generic.List[object]]::new()
     $result = @{ outcome='timed-out'; budgetMs=$budgetMs; elapsedMs=0; initialActiveCount=$null; finalActiveCount=$null; initialMembers=@(); finalMembers=@(); failure=$null; snapshots=$snapshots }
@@ -318,10 +323,10 @@ if (-not $Driver) {
             $arguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File ' + [DpfConsoleFixture]::Quote($PSCommandPath) + ' -Configuration ' + [DpfConsoleFixture]::Quote($Configuration) + ' -Driver'
             $process = [DpfConsoleFixture]::Launch((Join-Path $PSHOME 'powershell.exe'), $arguments, $config.worktree, $true)
             Write-FixtureJson 'launcher.json' @{ driverPid=$process.Id; driverBirth=$process.StartTime.ToUniversalTime().Ticks }
-            $deadline = [DateTime]::UtcNow.AddSeconds(35)
+            $deadline = [DateTime]::UtcNow.AddSeconds(150)
             while (-not $process.WaitForExit(100)) {
                 if (Test-Path -LiteralPath (Join-Path $config.evidenceDirectory 'abort.request')) { throw 'Parent requested fixture emergency cleanup' }
-                if ([DateTime]::UtcNow -ge $deadline) { throw 'Private console driver exceeded 35 seconds' }
+                if ([DateTime]::UtcNow -ge $deadline) { throw 'Private console driver exceeded 150 seconds' }
             }
             if ($process.ExitCode -ne 0) { throw ('Private console driver exit ' + $process.ExitCode) }
         }
@@ -368,9 +373,12 @@ try {
     $command = '/d /s /c "' + [DpfConsoleFixture]::Quote($config.pnpm) + ' ' + ($quoted -join ' ') + '"'
     $target = [DpfConsoleFixture]::Launch($env:ComSpec, $command, $config.worktree, $false)
     Write-FixtureJson 'driver-ready.json' @{ driverPid=$PID; targetPid=$target.Id; targetBirth=$target.StartTime.ToUniversalTime().Ticks }
-    $deadline = [DateTime]::UtcNow.AddSeconds(30)
+    # The parent waits up to 60s for the trusted child, and that wait starts
+    # after this process is already running. 120s covers that wait plus the
+    # Ctrl+C settlement that follows.
+    $deadline = [DateTime]::UtcNow.AddSeconds(120)
     while (-not $target.HasExited) {
-        if ([DateTime]::UtcNow -ge $deadline) { throw 'Private console target exceeded 30 seconds' }
+        if ([DateTime]::UtcNow -ge $deadline) { throw 'Private console target exceeded 120 seconds' }
         $screen = [DpfConsoleFixture]::ReadScreen()
         if (-not $sent -and (Test-Path -LiteralPath (Join-Path $config.evidenceDirectory 'cancel.request'))) {
             $before = [DpfConsoleFixture]::ValidateMembers()

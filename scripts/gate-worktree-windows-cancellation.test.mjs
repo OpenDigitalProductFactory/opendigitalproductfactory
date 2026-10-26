@@ -20,6 +20,10 @@ async function until(predicate, describe, timeoutMs = 20000) {
   while (Date.now() < deadline) { const value = predicate(); if (value) return value; await delay(50); }
   throw new Error("Fixture timed out: " + describe);
 }
+// Trust startup re-execs Node to load the fixture CA. A loaded host preflight
+// passed 20s with the child still not ready. The helper keeps its driver at
+// 120s and its launcher at 150s, both above this wait plus Ctrl+C settlement.
+const CANCEL_READY_TIMEOUT_MS = 60_000;
 
 function assertNaturalJobClosure(drain) {
   assert.equal(drain?.outcome, "naturally-empty", JSON.stringify(drain));
@@ -66,7 +70,7 @@ function writeHarmlessCommand(path, cancel, ready, heartbeat, tree, fails) {
 for (const scenario of ["success", "cancellation", "failure", "trust-cancellation"]) {
   const cancel = scenario.endsWith("cancellation"), fails = scenario === "failure", needsTrust = scenario === "trust-cancellation";
   test("real Windows pnpm.cmd " + (needsTrust ? "trusted startup cancellation preserves native settlement" : cancel ? "cancellation persists native non-success" : fails ? "actual child failure stays failed" : "normal completion reaches the native writer"),
-    { skip: process.platform !== "win32", timeout: 90000 }, async t => {
+    { skip: process.platform !== "win32", timeout: 240_000 }, async t => {
     const evidence = mkdtempSync(join(tmpdir(), "dpf-console-acceptance-"));
     const tls = needsTrust ? createGateFixtureTls(evidence) : null;
     const worktree = makeTempWorktree({ pregateScript: join(root, "scripts/pregate.mjs") });
@@ -81,7 +85,9 @@ for (const scenario of ["success", "cancellation", "failure", "trust-cancellatio
     writeHarmlessCommand(command, cancel, ready, heartbeat, tree, fails);
     const leaseId = "NPEL-CONSOLE-FIXTURE";
     const mcp = await startGateFixtureMcp(call => {
-      const lease = { leaseId, expiresAt: new Date(Date.now() + 60000).toISOString() };
+      // Renew returns this same grant, and the supervisor fences at its expiry.
+      // The grant has to outlive the 150s launcher budget.
+      const lease = { leaseId, expiresAt: new Date(Date.now() + 300_000).toISOString() };
       if (call.name === "claim_nonprod_environment_lease") return { success: true, entityId: leaseId,
         data: { lease, gateKey: "c".repeat(64), admission: { status: "admitted", slotKey: "slot-0", waitAgeMs: 0 } } };
       if (call.name === "renew_nonprod_environment_lease") return { success: true, entityId: leaseId, data: { lease } };
@@ -128,7 +134,7 @@ for (const scenario of ["success", "cancellation", "failure", "trust-cancellatio
         await until(() => {
           const state = json(stateFile);
           return state?.status === "running" && state.leaseId === leaseId && json(ready) && existsSync(heartbeat);
-        }, "real admission, running marker and harmless child ready");
+        }, "real admission, running marker and harmless child ready", CANCEL_READY_TIMEOUT_MS);
         if (needsTrust) {
           assert.equal(env.NODE_EXTRA_CA_CERTS, undefined, "the original launcher must require startup re-exec");
           assert.equal(json(ready).startupExtraRootCount, 1, "the real trusted child must load the isolated CA at startup");

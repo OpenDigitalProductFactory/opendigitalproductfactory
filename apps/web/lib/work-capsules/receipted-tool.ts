@@ -31,9 +31,11 @@ export function commandDb(): CapsuleDb {
   return commandTransaction.getStore()?.db ?? (prisma as unknown as CapsuleDb);
 }
 
-/** Server-only proof that the active handler passed the bound transaction/lock prefix. */
-export function hasBoundCommandTransaction(): boolean {
-  return commandTransaction.getStore()?.bound === true;
+/** The exact server-owned client that passed the bound receipt lock prefix.
+ * Prisma transaction clients may expose $transaction for nested savepoints. */
+export function hasBoundCommandTransaction(candidate: CapsuleDb): boolean {
+  const active = commandTransaction.getStore();
+  return active?.bound === true && active.db === candidate;
 }
 
 class ToolRefusal extends Error {

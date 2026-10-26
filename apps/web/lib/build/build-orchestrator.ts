@@ -709,7 +709,8 @@ export function parseQAVerification(qaContent: string): QAVerification {
   }
 
   return {
-    typecheckPassed: hasTypecheckPass || (!hasTypecheckFail && hasTestResults),
+    // Test counts are not a typecheck signal. Absence of one does not pass.
+    typecheckPassed: hasTypecheckPass,
     testsPassed,
     testsFailed,
     parseConfidence: "high",

@@ -1,7 +1,6 @@
 // scripts/check-ci-build-cache.test.mjs
-// node --test (no vitest). Keeps the production-build Turbopack cache exact-key
-// only: broad restore fallbacks can hydrate stale multi-GB caches and push PR
-// builds past the hosted runner's practical budget.
+// node --test (no vitest). Keeps production builds on the standard cache-off
+// profile while preserving their bounded execution and typecheck warm state.
 
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -26,23 +25,19 @@ function jobBlock(jobName, nextJobName) {
   return ciWorkflow.slice(start, next);
 }
 
-test("Production Build Turbopack cache uses exact keys only", () => {
-  const block = stepBlock("Cache Turbopack build cache");
+test("Production Build does not restore experimental filesystem state", () => {
+  const block = jobBlock("build", "ux-route-sweep-runtime");
 
-  assert.match(block, /path:\s*\$\{\{\s*github\.workspace\s*\}\}\/apps\/web\/\.next\/cache/);
-  assert.match(block, /key:\s*nextjs-/);
-  assert.doesNotMatch(block, /\n\s+restore-keys:/);
+  assert.doesNotMatch(block, /Cache Turbopack build cache/);
+  assert.doesNotMatch(block, /apps\/web\/\.next\/cache/);
 });
 
-test("Production Build cache key avoids unbounded source glob hashing", () => {
-  const block = stepBlock("Cache Turbopack build cache");
+test("Production Build uses the standard cache-off profile for every event", () => {
+  const block = stepBlock("Build web (Next.js production)");
 
-  // GitHub evaluates hashFiles while rendering the workflow. Scanning every
-  // web source file can exceed the 120s template limit before the job starts.
-  // The immutable commit SHA already changes on every source commit, so it is a
-  // bounded and exact cache discriminator.
-  assert.match(block, /\$\{\{\s*github\.sha\s*\}\}/);
-  assert.doesNotMatch(block, /hashFiles\(['"]apps\/web\/\*\*/);
+  assert.match(block, /DPF_TURBOPACK_BUILD_CACHE:\s*["']0["']/);
+  assert.match(block, /turbopack_cache=0 timeout=/);
+  assert.doesNotMatch(block, /github\.event_name\s*==/);
 });
 
 test("Production Build is bounded and identifies timed-out evidence", () => {
@@ -53,8 +48,6 @@ test("Production Build is bounded and identifies timed-out evidence", () => {
   assert.match(buildStep, /production-build.*run=\$\{\{ github\.run_id \}\}/);
   assert.match(buildStep, /tree=\$\{\{ github\.sha \}\}/);
   assert.match(buildStep, /timeout=15m\/step 45m\/job/);
-  // Turbopack FS cache only on pull_request — merge_group must not hard-pin "1".
-  assert.match(buildStep, /DPF_TURBOPACK_BUILD_CACHE:\s*\$\{\{\s*github\.event_name\s*==\s*'pull_request'/);
   assert.match(buildStep, /pnpm --filter web build/);
   assert.doesNotMatch(buildStep, /continue-on-error:\s*true/);
 });

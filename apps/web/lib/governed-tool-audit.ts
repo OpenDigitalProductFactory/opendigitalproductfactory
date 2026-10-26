@@ -127,6 +127,12 @@ export async function writeGovernedToolAudit(data: {
     const created = createOverride
       ? await createOverride(row)
       : await prisma.toolExecution.create({ data: row, select: { id: true } });
+    if (data.context?.taskRunId && data.context.agentId && data.result.success && ["read_source_at_version", "wiki_query", "search_ux_critique_corpus"].includes(data.toolName)
+      && typeof (created as { id?: unknown })?.id === "string") {
+      const { persistEngagementRead } = await import("./coworker-service-catalog/engagement-read-provenance");
+      await persistEngagementRead({ taskRunId: data.context.taskRunId, userId: data.userId, agentId: data.context.agentId,
+        executionId: String((created as { id: string }).id), toolName: data.toolName, args: data.rawParams, result: data.result, fence: data.context.taskExecutionFence });
+    }
     return typeof (created as { id?: unknown } | undefined)?.id === "string"
       ? { id: String((created as { id: string }).id) } : null;
   } catch (err) {
