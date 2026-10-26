@@ -297,3 +297,5 @@ Contain them through real row readback, exact identity/counter assertions,
 fail-on-call ports, bounded cleanup and explicit evidence labels. Roll back
 through a signed revert of this test/plan change; no runtime deployment is
 required for a test-only change. Never erase native history to close the slice.
+
+Amendment admission checkpoint (2026-10-26): plan commit `2e9a5f00ef759e951c4a16b38d9d1f378f691ae7`, blob `f38c2ab58ba1237f18e73514e48ed81e5f68e161`, was published through the normal signed documentation path. Coverage `cmvpmvmo50oh001ml9e7010aa` was recorded and checked current. The initial implementation decision `IRD-6D12D76D22D8` identified stale author research; its prescribed design-claim and current-source research remedy produced receipt `initiative-52afa095-a093-4352-a360-c456dc325b33`. Decision `IRD-562959CEFC4F` then allowed implementation under the unchanged Medium/low scope. This checkpoint supersedes the pending admission statements above; it does not claim that tests have executed or that native acceptance is complete. Refresh immutable coverage for the final published plan.
