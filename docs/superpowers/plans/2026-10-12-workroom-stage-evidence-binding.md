@@ -432,3 +432,34 @@ preview and exact receiver ACK remaining mandatory. Actual native acceptance
 requires qualified containing deployment and CAN-TEST on the original failed
 Windows case; source mocks cannot qualify that outcome. Shared extraction,
 canonical binding and predicate reuse are the useful refactoring portion.
+
+
+### Pending and completed handoff lineage precedes fresh recovery
+
+Independent review of f819ec4 found P2: an eligible fresh action must not
+precede validation of an existing pending request or completed receiver ACK.
+The assessment is workroom-s6-typed-recovery-plan-f819-review-20261026.json,
+SHA256e744863601ada95235b03a4f5e4229c7f525e17df178542adb3bdef87d3ce9a8.
+This amendment corrects that ordering before implementation, preserving the
+reviewed artifact and the original acceptance obligation.
+
+After exact current room content admission and original failed-operation
+binding, inspect the existing typed handoff lineage first. Reuse readRequest
+and acceptedHandoff validation with exact room, immutable request digest,
+original failure locators and actual accepted command receipt. A currently
+pending matching request names its exact receiver and waits for that receiver;
+it must not produce another fresh request. The read projection never
+acknowledges for that receiver. A validated later completed ACK to the actual
+current destination resolves the original refusal as historical without
+rewriting it. Only after no existing applicable lineage is established may
+a fresh-request eligibility preview run. Missing, forged, conflicting or
+unreadable lineage makes recovery explicitly unavailable, not absent.
+
+The actual Windows request handoff-df26f135-35b3-4f20-848c-1d2f8f4f1b4f
+and actual receiver ACK61 now exist on Recovery139. Their immutable manifest
+contains priorFailure locators. This is the real resolved acceptance case;
+do not recreate a refusal or retain a stale retry merely to exercise UI.
+Source tests must cover valid pending/no duplicate request, valid completed
+resolution with no fresh action, mismatched priorFailure, missing or forged
+request/receipt/digest and changed current executor. Source/history evidence
+is not a new approval, inference retry or proof of unrelated effect closure.
