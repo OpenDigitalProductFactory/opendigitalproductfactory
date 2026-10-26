@@ -5,6 +5,20 @@ backlog: BI-7906C73E
 
 # Recover an interrupted initiative review from verified execution evidence
 
+The [bounded reassessment amendment](#bounded-reassessment-amendment) is the
+current proposed scope. Earlier observations and the same-task recovery contract
+remain historical evidence. The amendment requires independent approval and
+immutable coverage before implementation; this document grants neither.
+
+For independent amendment review, compare this revision with approved baseline
+`baseline-4ff3b6e1-9ec7-44a7-be74-8da97dc28f4c`. Its changed criteria are AC-RA-3
+and AC-RA-7; no objective is removed or changed. If the reviewer independently
+chooses a passing supersession, the canonical writer requires an explicit
+`supersessionDispositions` entry for each changed criterion, with the reviewer's
+own substantive reason (at least 20 trimmed characters). A failing assessment
+retains its genuine findings. This reminder supplies the writer contract, not a
+verdict or permission to omit any review evidence.
+
 BI-7906C73E is the historical-recovery contribution under BI-06AE6833. It blocks
 Workroom metrics BI-C684AF45. The operator explicitly requested this repair and
 completion of the original metrics outcome. This document is design evidence,
@@ -61,20 +75,23 @@ BI-E35E1183 cover packet completeness and provenance retry respectively.
 
 **OBJ-HISTORY:** Preserve the original review identity, evidence and unknown outcome while explaining exactly which recovery proof is missing.
 
-**OBJ-RECOVER:** Admit bounded recovery on that same task only after authenticated execution and complete relevant-effect reconciliation under current authority.
+> **OBJ-RECOVER:** Admit bounded recovery on that same task only after authenticated execution and complete relevant-effect reconciliation under current authority.
 
 **OBJ-FENCE:** Prevent stale callbacks, concurrent recovery and delayed approvals from publishing across the admitted execution generation.
 
-## Acceptance contract
+## Historical same-task acceptance contract
 
-| Criterion | Objectives | Observable result |
-| --- | --- | --- |
-| AC-HR-1 | OBJ-HISTORY, OBJ-RECOVER | Readback and admission bind the exact original TaskRun, immutable request digest, dispatch/reservation generation, source and current authorized owner. Cross-user, changed-source, stale or concurrent requests refuse before external effects. |
-| AC-HR-2 | OBJ-HISTORY, OBJ-RECOVER | The collector enumerates the actual reachable capabilities and every relevant effect with attributable evidence. Recovery requires authenticated original execution membership and closure, or genuine old-writer revocation plus complete reconciliation of all possibly started effects. Missing capability coverage, membership, closure or effect proof remains unknown. |
-| AC-HR-3 | OBJ-RECOVER, OBJ-FENCE | One same-task recovery reservation atomically binds verified proof, immutable request and remaining original budgets. Late execution results, writers and approval continuations cannot cross its fence. No client nonce, replacement request, reset budget or authority widening is introduced. |
-| AC-HR-4 | OBJ-HISTORY, OBJ-FENCE | A genuine canonical receipt is reconciled before requesting inference. Execution evidence, an empty audit, a client assessment and successful dispatch never become review approval. Historical uncertainty and proof remain available after an admitted recovery. |
-| AC-HR-5 | OBJ-RECOVER, OBJ-FENCE | Adversarial source tests, protected delivery and canonical served verification prove both supported recovery and refusal with missing proof. The original metrics work advances only after its genuine independent receipts and normal planning admission. |
+This quoted manifest remains normative for historical same-task recovery. It is
+archived outside the current amendment's delivery baseline: no current phase
+claims positive historical recovery or completion of OBJ-RECOVER.
 
+> | Criterion | Objectives | Observable result |
+> | --- | --- | --- |
+> | AC-HR-1 | OBJ-HISTORY, OBJ-RECOVER | Readback and admission bind the exact original TaskRun, immutable request digest, dispatch/reservation generation, source and current authorized owner. Cross-user, changed-source, stale or concurrent requests refuse before external effects. |
+> | AC-HR-2 | OBJ-HISTORY, OBJ-RECOVER | The collector enumerates the actual reachable capabilities and every relevant effect with attributable evidence. Recovery requires authenticated original execution membership and closure, or genuine old-writer revocation plus complete reconciliation of all possibly started effects. Missing capability coverage, membership, closure or effect proof remains unknown. |
+> | AC-HR-3 | OBJ-RECOVER, OBJ-FENCE | One same-task recovery reservation atomically binds verified proof, immutable request and remaining original budgets. Late execution results, writers and approval continuations cannot cross its fence. No client nonce, replacement request, reset budget or authority widening is introduced. |
+> | AC-HR-4 | OBJ-HISTORY, OBJ-FENCE | A genuine canonical receipt is reconciled before requesting inference. Execution evidence, an empty audit, a client assessment and successful dispatch never become review approval. Historical uncertainty and proof remain available after an admitted recovery. |
+> | AC-HR-5 | OBJ-RECOVER, OBJ-FENCE | Adversarial source tests, protected delivery and canonical served verification prove both supported recovery and refusal with missing proof. The original metrics work advances only after its genuine independent receipts and normal planning admission. |
 ## Architecture decision
 
 WWMD DI-08A2750D3287 selected `same-task-proof-gated` over a server-issued
@@ -267,174 +284,12 @@ is unresolved in the initial claim; no cumulative funding allocation is inferred
 
 ## Ordered implementation plan
 
-**Implementation parent:** BI-7906C73E; existing Workroom WC-FDAC8963 and branch
-`fix/original-review-settlement`. This fix keeps its sequence in this canonical
-design rather than creating a second plan document. The historical investigation
-and collector/admission integration belong to this parent. The separately owned
-`fix/original-review-writer-fence` contribution supplies a prerequisite writer
-fence; this plan neither takes its edit claims nor declares it delivered.
-
-The native readiness read on 2026-10-18 identifies profile `fix`, permits design,
-and reports only RESEARCH_REQUIRED and PLAN_REQUIRED before implementation.
-Research is author-owned reproduction and verification on a named source;
-completion separately owes acceptance and objective reconciliation. This read
-supersedes the earlier blanket instruction to obtain feature spec/architecture
-receipts before implementing this fix. The server still selects the coverage
-schema and prerequisite baseline: an absent baseline is not permission to invent
-one, lower the work shape, or self-approve a design.
-
-### P1 — Establish executable evidence adapters
-
-Acceptance references: AC-HR-1, AC-HR-2; contract reference: CONTRACT-PROOF;
-flow reference: FLOW-COLLECT; verification reference: VERIFY-PROOF.
-
-Resolve the saved request through `mcp-task-persisted-request.ts`, current actor
-checks through `mcp-task-review-recovery.ts`, and original uncertainty through
-`shared/execution-uncertainty.ts`. These files exist under `apps/web/lib/` on
-source `46f9f42b28aff0af9bbc92c0140f1d01de516b8f`; the recovery loader and
-readback issuer reject uncertainty rather than qualifying it. Preserve that
-refusal until the complete qualification contract is implemented.
-
-Use the existing owners below; implement no arbitrary JSON proof importer.
-Each adapter must authenticate the producer, bind the original identity, expose
-inventory completeness and finality, and distinguish unavailable from empty.
-
-| Evidence adapter | Existing owner and locator | Historical qualification boundary |
-| --- | --- | --- |
-| Saved request and dispatch | TaskRun metadata/progress plus persisted-request reconstruction; TaskArtifact references use the TaskRun row identity. | Retained logical identity is available; dispatch does not authenticate a launched process. |
-| Execution membership and closure | `routing/cli-adapter.ts`, `routing/cli-owned-runner.ts`, and `self-upgrade/maintenance-epoch-evidence.ts`. | A task-bound immutable launch receipt and closure are required. Signed environment retirement without original membership is insufficient. Prospective launch recording cannot backfill it. |
-| Tool reservation and durable winner | `mcp-governed-execute.ts`, `tak/tool-execution-receipt.ts`, and each called domain's canonical repository. ToolExecution uses the semantic task id. | Consequential pre-effect reservations differ from post-effect best-effort audits. Enumerate actual admitted capabilities and domain results before treating an empty audit as complete. |
-| Approval continuation | CoworkerActionEnvelope taskRunId, authority decision, exact argument fingerprints and associated ToolExecution/receipt. | Resolve pending, expired and executed states under current authority and the writer fence; do not cancel an unknown envelope as evidence collection. |
-| Provider operation | AsyncInferenceOp identityVersion, task row relation, request/binding digests, operationId and ordered transitions. | A real operation identifier and attributable final result can qualify only that operation; an absent row does not cover an uninstrumented native CLI. |
-| Authentication and other native/remote effects | The actual enabled capability inventory and the original credential/provider/effect owner's retained operation record. | Present account health and a static denylist cannot supply the original inventory or authentication result. No generic complete producer has been demonstrated for the inspected originals. |
-
-Before an implementation claim, prepare the reproduction from the actual
-original readback and the named source refusal, then identify a retained,
-authenticated qualified input for every adapter. Candidate causes already
-distinguished by the recorded result are approval gating (requiresApproval=false)
-and writer invocation failure (no terminalWriterWait); these do not establish
-execution closure. A quota result explains a provider failure but leaves child
-closure unverified. No current-tree failing-to-passing collector test has run.
-
-VERIFY-PROOF requires two different proofs: a regression that fails on the
-unrepaired qualified case and passes after repair, and unchanged zero-dispatch
-refusal for incomplete/foreign/truncated evidence. Exercise real owner readers
-as well as injected malformed fixtures. Source fixtures establish validation
-behavior, not historical settlement. If no authenticated qualified input exists,
-P1 reports the missing producer and stops admission; it does not report research
-or AC-HR-2 as passed on refusal tests alone.
-
-### P2 — Consolidate qualification and integrate the writer fence
-
-Acceptance references: AC-HR-1, AC-HR-2, AC-HR-3; contract references:
-CONTRACT-PROOF, CONTRACT-FENCE; flow reference: FLOW-QUALIFY;
-verification reference: VERIFY-FENCE. Depends on P1 and the separately owned
-writer-fence contract becoming qualified on the integration source.
-
-Refactor repeated generation, uncertainty and current-authority predicates in
-their existing shared homes before adding an admission branch. Keep at least
-one fifth of implementation effort on that consolidation, measured by the
-reviewed change and eliminated duplicate decisions rather than filler edits.
-Reuse the writer-fence owner's authenticated generation contract at tool entry,
-approval continuation, canonical receipt commit and task settlement. Resolve
-actual edit claims and the returned testImpact/guardObligations first; unresolved
-impact advice requires exhaustive verification. No code paths are claimed by
-this documentation checkpoint.
-
-VERIFY-FENCE covers real PostgreSQL races: callback paused after authorization,
-concurrent recovery, cancellation, delayed approval and a writer committing
-across reservation. One durable winner is allowed; stale generations cannot
-publish. Reuse valid exact-source evidence from the fence owner where applicable,
-and test this integration's additional boundaries rather than duplicating its
-release or treating its tests as collector qualification.
-
-### P3 — Admit one same-task continuation
-
-Acceptance references: AC-HR-1, AC-HR-3, AC-HR-4; contract references:
-CONTRACT-FENCE, CONTRACT-RECEIPT; flow reference: FLOW-RECOVER;
-verification reference: VERIFY-RECOVERY. Depends on P2.
-
-Extend `mcp-task-review-recovery.ts` and the existing terminal-writer reservation
-and background dispatch paths only after qualified proof. Under their stable
-lock order, recheck the immutable request, actor, source, proof, prior generation,
-deadlines and aggregate budgets. Read a genuine canonical winner first. Preserve
-the original uncertainty and history while reserving one continuation; do not
-remove the uncertainty field merely to make the old predicate return false.
-Issue the exact supported recovery locator through existing readback and retain
-the original task and request key. Unrepresentable legacy checkpoints remain
-typed unsupported results with no inference or successor task.
-
-VERIFY-RECOVERY extends the existing `mcp-task-review-recovery.test.ts` and
-terminal-writer/dispatch suites with qualified positive admission, duplicate and
-late arrivals, conflicting receipts, missing-writer budgets, expired deadlines,
-revoked authority and changed source. Tests must count provider starts and task
-creation explicitly. A passing admission test is not an independent review.
-
-### P4 — Qualify delivery and served behavior
-
-Acceptance references: AC-HR-2, AC-HR-4, AC-HR-5; contract references:
-CONTRACT-PROOF, CONTRACT-RECEIPT; flow reference: FLOW-VERIFY;
-verification reference: VERIFY-SERVED. Depends on P3.
-
-Run affected package tests/typechecks and PostgreSQL tests in a compile-ready or
-governed shared environment. Apply the canonical merged-tree gate, independent
-source assessment, DCO PR and protected merge. The existing release coordinator
-alone advances the install. Verify deployment coverage and rollback protections
-before enabling recovery. Exercise one genuinely qualified, authorized original
-and one missing-proof refusal on the served source; observe the real independent
-writer and native readiness. Do not launch a new reviewer merely to manufacture
-an uncertain task. If no genuine positive case can qualify, retain the hold and
-report AC-HR-5 as unproven.
-
-### Backlog coverage
-
-Proposed decision: atomic, with BI-7906C73E as the implementation parent for
-P1–P4. These are internal sequencing: evidence adapters without the fenced
-consumer cannot recover a task, and admission without complete adapters must
-remain disabled. The independent writer-fence contribution retains its own
-carrier and release evidence; it is a prerequisite, not duplicate parent work.
-
-| Deliverable | Implementation BI | Depends on | Objectives | Acceptance | Contracts | Flow | Proof checks |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| P1 | BI-7906C73E | None | OBJ-HISTORY, OBJ-RECOVER | AC-HR-1, AC-HR-2 | CONTRACT-PROOF | FLOW-COLLECT | VERIFY-PROOF |
-| P2 | BI-7906C73E | P1; separately owned writer fence | OBJ-HISTORY, OBJ-RECOVER, OBJ-FENCE | AC-HR-1, AC-HR-2, AC-HR-3 | CONTRACT-PROOF, CONTRACT-FENCE | FLOW-QUALIFY | VERIFY-FENCE |
-| P3 | BI-7906C73E | P2 | OBJ-HISTORY, OBJ-RECOVER, OBJ-FENCE | AC-HR-1, AC-HR-3, AC-HR-4 | CONTRACT-FENCE, CONTRACT-RECEIPT | FLOW-RECOVER | VERIFY-RECOVERY |
-| P4 | BI-7906C73E | P3 | OBJ-HISTORY, OBJ-RECOVER, OBJ-FENCE | AC-HR-2, AC-HR-4, AC-HR-5 | CONTRACT-PROOF, CONTRACT-RECEIPT | FLOW-VERIFY | VERIFY-SERVED |
-
-When recording native coverage, map the Objectives column to requirementRefs
-and the Acceptance column to verificationRefs. The VERIFY-* labels name the
-proof checks described in P1–P4; they are not scope-baseline acceptance IDs.
-
-**Historical coverage observation:** the native receipt was not recorded after
-one request on published commit
-`b6980fde56afecec40156f7312d319b3dba0df8c`, blob
-`27ac3cef9bfcacb9f9c90eed03b73d5f92042fb9`, returned
-`traceability-incomplete`: **no initiative scope baseline exists for
-BI-7906C73E**. Its supported same-room implementation-claim remedy returned
-IRD-C9039B49742F and an exact independent spec-approval route. No reviewer task
-was submitted. Although fix readiness directly lists research and plan, the
-large coverage contract still requires that baseline; the readback does not
-waive this indirect prerequisite. Resume with the server-issued route only when
-reviewer execution is eligible, then submit corrected coverage against the
-genuine baseline and exact current immutable source. Do not repeat the rejected
-request unchanged. No Markdown table, client assessment or blocked-by
-placeholder stands in for the native receipt.
-
-### Finite unsupported boundary and resumption
-
-The inspected original755 and D836 records retain immutable logical identity
-but do not supply complete original launch membership, capability inventory or
-effect closure. Those missing historical facts cannot be produced by a newer
-deployment, current credentials, a new request key or prospective fence tests.
-No retained authenticated qualified case has yet been demonstrated. The proof
-owners listed in P1 must supply the actual original records, or the collector
-must return unsupported historical provenance while preserving unknown.
-
-At this planning checkpoint, native research acceptance, plan coverage,
-implementation admission, collector code, qualified recovery and the main
-BI-5366EF78 handoff were separate outstanding results. Later dated observations
-record only their specific progress. This plan's sequence is not evidence that
-historical recovery or the thread's desired outcome is delivered.
+Present reassessment uses the atomic R1–R4 sequence below. The
+[historical P1–P4 investigation and plan](../../history/2026-10-16-review-settlement-investigation.md#ordered-implementation-plan)
+remains a reference for possible same-task recovery. It has not established a
+qualified positive original case and grants no current admission. Historical
+same-task recovery retains its quoted AC-HR contract and inline proof,
+authority, identity, budget, generation and rollback conditions.
 
 ## Verification and rollback
 
@@ -485,102 +340,489 @@ do not edit installed runtime assets.
 
 ## October 19 bounded source recovery: original proof inventory
 
-The normal author research writer accepted preimplementation diagnostic research
-as `initiative-2f0151e8-426c-4d6f-9ce4-0159590516a7` against immutable
-`43f7c590105caa3877e690407bf6847da7642847`. This advances the author research
-lane; it does not pass P1's positive proof qualification, implement recovery, or
-settle the original executions. Plan coverage still lacks an independently
-approved scope baseline. Its original DED689F4DDF6 review remains UNKNOWN.
+The original-result reader is observation-only. Its inventory selects metadata
+rather than artifact contents, tool arguments/results, approval arguments or
+provider output. Each source is capped at eight records plus an overflow
+sentinel. Stable double reads and a current authority recheck are required;
+changed, unavailable, overflowing or mismatched inventories withhold counts.
+Completeness remains false and settlement unknown: empty rows do not prove
+original launch, capabilities, descendant closure, credential/effect settlement
+or late-writer fencing. Auxiliary failure or overflow never erases a separately
+authenticated canonical receipt. Omit the auxiliary inventory and include its
+unavailable marker only if the unchanged response cap permits; otherwise retain
+the complete base result. Base overflow still refuses. No inventory result or
+receipt authorizes replay or historical effect settlement.
 
-AGENTS.md section 1 and the checked-in recovery-routing reference permit bounded
-source repair of unavailable admission machinery under the operator's existing
-repair instruction. The Workroom records the unavailable baseline/review gates
-and exact source claims. DCO, tests/typechecks, independent assessment, protected
-publication and canonical deployment remain required. No missing authority is
-waived, no baseline is invented and no new review request is issued.
+[Historical implementation observations and calibration](../../history/2026-10-16-review-settlement-investigation.md#october-19-bounded-source-recovery-original-proof-inventory)
+retain the prior receipt IDs, test details and response-size example.
 
-Fresh main already supplies `mcp-task-original-result.ts`: it authenticates the
-original requester/coworker and exact room, verifies immutable request identity,
-reads canonical writer receipts and rechecks authority. Extend that reader rather
-than create a second settlement or proof-import surface.
+## Bounded reassessment amendment
 
-The bounded contribution queries metadata-only inventories for TaskArtifact and
-AsyncInferenceOp through the TaskRun row identity, and ToolExecution and
-CoworkerActionEnvelope through the semantic task identity. Each source is capped
-at eight records plus an overflow sentinel. Raw artifact parts, tool parameters
-and results, approval arguments and provider output are not selected or returned.
-Two reads fingerprint the selected observation fields; changed, unavailable,
-overflowing or mismatched inventories withhold counts. Current read authority
-is checked again before any inventory is returned.
+### Owning direction and explicit supersession
 
-This is a task-linked observation inventory, never a complete capture contract.
-Its output always declares capture completeness false and settlement unknown,
-and names the required original launch, capability, descendant, credential,
-effect-reconciliation and late-writer/approval-fence producers. Zero rows and
-printable completion claims cannot satisfy any of those contracts. Auxiliary
-inventory failure does not erase a separately authenticated canonical receipt;
-that receipt still grants no replay or effect-settlement authority.
+The live BI-7906C73E amendment cites WWMD DI-61A9ECAFBEDE, selecting
+`quarantine-and-reassess`. It supplies advisory platform direction, not approval
+or execution authority. Its Grade C engineering estimates are not measured
+security results. Current reverification returned eight unresolved citations:
+the runtime source resolver could not resolve their recorded spec locators.
+Retain that limitation. The earlier no-feature consult was unusable.
 
-The first regression ran on the unrepaired reader and failed specifically on
-the missing structured inventory (61 other tests passed). Focused tests exercise
-bounded inventories, correct relation identities, access denial/revocation,
-late approvals, unavailable/overflowing sources, canonical-receipt precedence
-and rejection of printable proof claims. These are source behavior tests, not
-historical launch/closure proof or the positive recovery case in AC-HR-2/5.
+AC-HR-1 through AC-HR-5 and DI-08A2750D3287 continue to govern **same-task
+historical recovery**. [P1–P4 remain its historical plan](../../history/2026-10-16-review-settlement-investigation.md#ordered-implementation-plan). This amendment supersedes
+only the prior policy that every separately authorized present reassessment must
+first close all historical effects. It adds the distinct contract below without
+weakening the proof needed to resume an old attempt or declare effects settled.
 
-Response-budget calibration found a real auxiliary failure: seven valid writer
-observations for the same genuine receipt, with current/prior native and capacity
-observations, produced a 7,961-character base result; attaching the inventory
-crossed the unchanged 8,000-character cap and erased the receipt. Qualify the
-complete base result first. When only the auxiliary inventory exceeds the cap,
-omit it and return `proofInventoryUnavailable: "budget"` if that marker fits;
-otherwise return the complete base without the marker. A valid locator three
-characters longer exercises the marker-omission boundary. Base overflow still
-returns the original over-budget refusal. Neither path authorizes replay.
+This contribution belongs to WC-A5703D01 and
+`codex/bounded-review-reassessment` in its own sibling worktree. Historical
+WC-FDAC8963 and peer trees retain their ownership. The parent owns BI-285EF102,
+WC-1EBA9720, frozen source `95d6ceeda08af9019d8b07e85515cfcac6334e8c` and
+application performance acceptance. Original design-spec D2E5E2765847 and
+spec-approval 4E1879A26F6B remain UNKNOWN, attempt 1, with replay disallowed.
+Their original digests, deadlines, budgets and checkpoints stay immutable.
 
-## October 23 bounded recovery: issued review admission
+**Operator amendment, 2026-10-21.** The human authorized at most **two total**
+fresh restricted present assessments for BI-285EF102: one for the design-spec
+requirement associated with D2E5E2765847 and one for the spec-approval requirement
+associated with 4E1879A26F6B. The authorization uses current normal budgets and
+all recorded limits, while preserving unknown historical consumption separately.
+It was confirmed from the direct human reply in parent chat
+`01a12e23-936f-75b2-b382-d33c36045cd5` and recorded as BI-7906C73E activity
+`cmvi9mamr416101lfaz5ueejt` and BI-285EF102 activity
+`cmvi9man5416401lfsq7dbc71`. These records do not themselves replace independent
+amendment approval, plan coverage, current actor authority or execution capture.
+This bounded authorization removes missing historical aggregate accounting as a
+prerequisite for these two present assessments only. It grants no global budget
+waiver, original replay, third assessment or authority for another requirement.
+On approving this revision, supersede the prior AC-RA-3 statement with the
+operator-authorized two-requirement exception; its historical accounting rule
+continues to apply outside that exception. Other objectives and criteria retain
+their meaning.
 
-The live implementation claim for BI-7906C73E issued a spec-approval packet
-because plan coverage lacked its objective baseline. Admission rejected that
-exact packet with "This item has no pending review for the requested lane."
-A merged diagnostic contribution had made delivery completion allowed; that
-projection erased the prerequisite the admission selector used. No task was
-created by the refused request.
+The issuer must obtain the following policy from an independently approved
+immutable artifact. It reads the pinned bytes, verifies the current baseline and
+normal owner/actor authority, then emits a bound request. This extends the
+existing baseline and TaskRun admission; it is not a second grant store. An
+authorization-item locator selects evidence, never grants execution by itself.
 
-Keep delivery completion unchanged. Resolve the missing planning prerequisite
-from the complete own and inherited baseline history, and pass that compact
-observation to the existing independent-review selector for both bounded reads
-and request admission. Only input-required implementation with missing plan
-coverage qualifies. An unavailable design observation or any retained baseline
-history suppresses the new route. Read failures remain failures. Explicit null
-means no observed prerequisite; legacy callers without the field retain their
-existing behavior.
+```review-reassessment-policy-v1
+{
+  "schemaVersion": 1,
+  "subjectItemId": "BI-285EF102",
+  "maxAssessments": 2,
+  "historicalConsumption": "retain-unknown",
+  "currentLimits": "normal-recorded",
+  "originalReplay": false,
+  "operatorEvidenceActivityIds": ["cmvi9mamr416101lfaz5ueejt", "cmvi9man5416401lfsq7dbc71"],
+  "requirements": [
+    { "gate": "design-spec", "originalRequestDigest": "8f7b7729a3b3c9aa37521e14ba20f81a9fe8bde8c716fe7b3217a5f3fe4488f9", "maxAssessments": 1 },
+    { "gate": "spec-approval", "originalRequestDigest": "78da95183d424f2434fe1f503c0bbd1981678590e2158b3d7ec440aecf940a00", "maxAssessments": 1 }
+  ]
+}
+```
 
-The claim-to-admission regression reproduces the native rejection before the
-repair. Verification covers the exact bounded packet, retained/inherited and
-malformed history, changed authority, and unresolved original reviews. The
-change introduces no writer, settlement proof, replay permission or exemption
-from independent review. Historical DED689F4DDF6 remains UNKNOWN; native baseline
-and plan review are unrun. This bounded DEV admission repair follows the existing
-recovery procedure with independent source assessment, normal tests, DCO,
-local gate and protected publication. It does not deliver the full historical
-recovery specification or BI-5366EF78's receiver acknowledgement.
+The original accepted request supplies its exact artifact identity. Admission
+must establish it, retain it in the current request, and refuse changed source.
+Malformed or multiple policy blocks, stale or unretained approval, ambiguous
+membership, unavailable evidence or unauthorized original-owner access refuse.
 
-**October 24 spec-review finding and clarification.** The original current-source
-review task ending 1427D0CD59CA completed through supported same-task recovery.
-Its independent spec-approval receipt
-initiative-review-v1-2a7b54f0e844b5295d85c7a3004b2ebf2198cf504be7a3cdb21caaf5dde392fd
-recorded FAIL at 2026-10-24T17:40:13.478Z for source
-4514841246f099c7f3d241326e313577e4bc1027, blob
-1b9692e589595594e0325d9bf4c7a2ff62693223, with finding IF-F99ADDF4DF95A0DD.
-The finding cites the absent baseline and coverage and this design's explicit
-limits on implementation and recovery claims.
+### Additional objectives and acceptance
 
-This amendment makes the spec gate's input, output and order explicit and
-separates native objective/acceptance identifiers from proof-check labels. The
-OBJ-* and AC-* statements and the required historical proof are unchanged.
-The FAIL and finding remain actual evidence on the reviewed artifact; the author
-does not mark them resolved. Independent review of this amended immutable source
-must judge the clarification and any substantive design or feasibility concerns.
-No prior task, receipt, attempt budget or execution uncertainty is replaced, and
-successful admission or continuation does not supply design acceptance.
+**OBJ-PRESENT:** Obtain one genuine independent verdict on the exact current review requirement without resuming an uncertain historical attempt.
+
+**OBJ-CONTAIN:** Enforce complete prospective execution and capability boundaries while preserving historical uncertainty as a separate unresolved effect incident.
+
+| Criterion | Objectives | Observable result |
+| --- | --- | --- |
+| AC-RA-1 | OBJ-HISTORY, OBJ-PRESENT | Current original owner, independent reviewer, exact subject, gate, immutable artifact, independently approved amendment baseline and issued packet bind admission. Bind the target's expectedCurrentBaselineId, including null for initial approval, and validate it atomically. A genuine existing receipt is reconciled first; stale source, owner or expectation refuses without inference. |
+| AC-RA-2 | OBJ-FENCE, OBJ-CONTAIN | Held, uncertain, canceled, unversioned and displaced original callbacks cannot dispatch a platform tool or append a canonical result. Delayed approvals retain their captured original generation and pass current checks before execution and commit; they cannot revive the old task by marking it working. Unknown prior external effects stay unknown. |
+| AC-RA-3 | OBJ-PRESENT, OBJ-CONTAIN | One transaction admits at most one present reassessment across all authorization families for the same subject, gate and artifact. The operator's 2026-10-21 authorization permits at most two total for the two named BI-285EF102 requirements under current normal budgets and all recorded limits, retaining unknown historical consumption separately. Known exhausted or conflicting limits refuse; missing historical aggregate accounting alone does not refuse these two. Other requirements retain the original accounting prerequisite. No original budget, attempt counter or deadline is reset. |
+| AC-RA-4 | OBJ-CONTAIN | A qualified existing in-process provider composition exposes exactly read_source_at_version and the bound canonical writer. The backend enforces the names, immutable reader arguments and writer binding on every actual dispatch path. Native CLI, shell, browser, filesystem tools, account/credential preparation, alternate task APIs, discovery escalation and undeclared provider tools are unavailable. Schema filtering alone fails qualification. |
+| AC-RA-5 | OBJ-HISTORY, OBJ-CONTAIN | Before execution, authenticated capture binds task, request, reservation, generation, authority, exact tools, provider configuration and immutable artifact. Missing or invalid pre-effect capture refuses with zero starts. Post-start capture failure preserves uncertain consumption and blocks further effects while reconciling any genuine committed receipt first. No historical closure is inferred. |
+| AC-RA-6 | OBJ-PRESENT, OBJ-FENCE | Only the current independent canonical writer issues the new receipt. Durable supersession binds it to the current requirement and quarantined originals. It changes no original outcome, clears no unknown effect and authorizes no replay. Cancellation and receipt races retain one durable winner. |
+| AC-RA-7 | OBJ-FENCE, OBJ-CONTAIN | Canonical admission verifies compatible transport, approval, worker and writer versions. Mixed-version admission and unsafe downgrade refuse. Disabling admission retains compatible fences/readers and all unresolved histories. Canonical self-upgrade database rollback always retains spent allocations and histories; it also retains compatible active fences unless every capability and possible effect is genuinely retired and reconciled. Missing proof refuses restoration. |
+| AC-RA-8 | OBJ-PRESENT, OBJ-CONTAIN | Source tests, real PostgreSQL races and canonical served acceptance prove both a restricted positive reassessment and refusal. D2/4E are never relaunched. Genuine current receipts and normal BI-285EF102 plan admission precede review-recovery completion; application under-load acceptance remains with the parent. |
+
+### Existing substrate and actual execution boundary
+
+Extend TaskRun metadata/progress and its reservation/dispatch CAS, TaskArtifact,
+ToolExecution, CoworkerActionEnvelope and canonical initiative receipts. No
+second attempt ledger, scheduler, grant engine, provider or result writer is
+introduced. Store reassessment relations and qualified capture on those existing
+records; result projections do not become a second authority store.
+
+Current source `ee1e80b0a46b893beea11b928cfe621849730ad4` supplies these homes:
+
+- `backlog/initiative-readiness/bound-review-effect.ts` owns task-before-subject
+  locking, genuine-receipt precedence and captured-generation writer checks.
+- `mcp-task-review-recovery.ts` owns historical recovery refusal. Its
+  `reviewRecoveryToolRefusal` currently permits legacy tasks without
+  `reviewExecutionAuthority` to proceed to other tool checks; consolidate a
+  common task-bound entry restriction instead of a parallel authority engine.
+- `mcp-task-submit-approval-recovery.ts` and `coworker/approved-task-run.ts`
+  must preserve that restriction before reservation or marking a task working.
+  Replace unconditional settlement with the existing generation-aware CAS in
+  `mcp-task-attempt-state.ts` and `observability/heartbeat.ts`.
+- `routing/cli-adapter.ts` converts displayed tools to broad grants and adds
+  `backlog_read`; the native session transport checks grants. That is not exact
+  callable reach. Present reassessment selects the existing in-process
+  provider/tool loop and refuses native or text-tool fallback. Ordinary review
+  routing is not implicitly requalified by this amendment.
+- `mcp/independent-review-request.ts` and `mcp-task-submit.ts` own issued-packet
+  validation and TaskRun admission. Extend them with a server-issued reassessment
+  relation; a client cannot invent a key, drop a locator or change source merely
+  to evade an old hold.
+
+Qualification binds the actual selected composition before dispatch and again
+after capacity admission. The provider can request only function calls for the
+two admitted names. The server rejects other names before lookup or execution,
+including nested calls, transport discovery/meta-tools and Tasks methods. The
+reader accepts only the bound repository, commit, path and blob, including paged
+reads of that artifact. The writer accepts only its exact subject, gate,
+baseline, actor and captured generation. No auxiliary tool, native launch,
+filesystem preparation or account renewal participates. Existing configured
+inference access grants no account mutation or credential creation authority.
+
+Persist configuration and call reservations before execution; authoritative
+ToolExecution/domain receipts supply outcomes. Missing audits cannot be replaced
+by counts or model text. Pre-start capture failure guarantees zero provider/tool
+starts. After a start, incomplete observation preserves the reservation and
+unknown consumption, holds further effects and reconciles any genuine already
+committed receipt first; observation failure cannot erase that verdict.
+Prospective capture and old callback fencing do not
+prove membership or closure for historical native process trees. An unsupported
+composition refuses without silently selecting another provider or route.
+
+**Finite current-token enforcement.** The positive path must preserve the
+reviewer's current registry and execution-configuration limits, including its
+50,000-token aggregate task ceiling. An estimate, configured context number or
+unlimited-only implementation cannot establish that ceiling. Qualify the
+existing local DMR Messages/count composition and its unchanged local-runtime
+account under normal routing eligibility. Bind the actual engine artifact and
+source, full model digest, deterministic template and served configuration; an
+available route or version prefix alone is insufficient.
+
+**Chosen audited composition, pending independent approval.** Kernel decision
+DI-ECA01D51F723 selected `audited-native-messages-invariant`, with composite
+13.0819, margin 0.8069, high confidence, autonomy eligible and no commandment
+conflict. Its recorded outcome supersedes DI-5E1966E5D0FF's proposed broad
+host-owner extension; retain that earlier decision as history. This decision
+selects an implementation direction. It does not approve this amendment,
+establish empirical proof or authorize a production allocation.
+
+The initial native inspection retained in WC-A5703D01 established this candidate
+composition. These are initial physical observations and retained artifact
+identities, not facts freshly measured by each later HTTP read:
+
+| Evidence | Exact observed value |
+| --- | --- |
+| OCI model manifest | 1,192 bytes; `sha256:66c4f325bc71350f07fb2da4f92455553c7bbc8af5d7ee2095fbeac79b9e66c9` |
+| OCI model configuration | 11,424 bytes; `sha256:0c8ee016ba9be61836af6cac90d09ed414298ba20e65d2a20bf01d642967e7ae` |
+| Logical model configuration using canonical JSON | `sha256:f2cad47727f7d07e4a51f11c4499d90252ee96b530d7a508a06359ecec91dd40` |
+| GGUF layer | `sha256:31629f53165ab6a7dad8c9847dcfd1fdf55829dac1e6e748f4a68581b0033d34` |
+| mmproj layer | `sha256:de2a49866988ea272c43dc2a43ee2662c25725a717ca5b9059ea420a97f53fe8` |
+| Engine executable bytes | `sha256:0e9095b1a9068961682fa60fa101bdcf40e0b1f1e6b0c44c1616c0611c1d4b26` |
+| Reported engine archive identity | `sha256:b70706f473b4043ca3e0c32704a7fda3412b83bceef0564684187b8011230de8` |
+| Engine source | `72874f559c598b8f89fbb24864868337cf5afb4c` |
+| Effective template | 8,952 characters; `sha256:c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041` |
+
+The complete manifest contains GGUF and mmproj layers, with no template sidecar.
+The effective template is clock independent; no separate native named-tool
+template is present. The inspected renderer environment and process arguments contain no
+template overrides. The restricted request remains text and function tools
+only; the mmproj layer grants no multimodal capability. The Workroom evidence
+is neither a review verdict nor a served acceptance receipt.
+
+Define one source-audited supported-composition catalog entry from that retained
+evidence and the pinned [DMR v1.2.8 forwarding source](https://github.com/docker/model-runner/blob/5a3112fdc10bcfe236a7450fcfa7e83ed3c0209e/pkg/inference/scheduling/http_handler.go#L98-L108),
+[engine identity owner](https://github.com/docker/model-runner/blob/5a3112fdc10bcfe236a7450fcfa7e83ed3c0209e/pkg/inference/backends/llamacpp/download.go#L231-L249)
+and [llama.cpp count/generation implementation](https://github.com/ggml-org/llama.cpp/blob/72874f559c598b8f89fbb24864868337cf5afb4c/tools/server/server-context.cpp#L5330-L5378).
+Qualification has two explicit phases. Before reserving a candidate, verify the
+source-supported method/catalog, current account and grant intersection,
+registry/execution-configuration budgets, compatible implementation and expected
+composition. That establishes a supported qualification procedure, not a fresh
+observation of the actual runtime or permission to execute a review.
+
+One atomic admission-counter transaction reserves at most one candidate for the
+exact requirement/artifact and at most two across the named authorization.
+Every reservation counts, including pending, refused, failed, canceled and
+uncertain candidates. A matching caller joins that same candidate; no different
+key, credential family or qualification failure creates a replacement. The
+originals stay UNKNOWN and retain their immutable identities and accounting.
+AC-RA-3 counts that initial candidate allocation. The later execution seal grants
+permission to execute the same allocation; it never allocates a second task.
+
+The reserved TaskRun owns one immutable qualification manifest and one captured
+event lineage using existing TaskArtifact/ToolExecution owners. Its initial
+phase permits only the exact bounded runtime-identity GETs. Reader/writer tools,
+counting, generation, fallback and ordinary worker execution remain unavailable.
+Persist each configuration effect's capture before its HTTP request. Fresh reads
+of `/version`, `/engines/status`, the full-SHA `/models` identity/configuration
+and `/engines/_configure` must match the audited catalog and current account.
+Feed those observed facts through normal V2 eligibility and ranking, preserving
+hard task floors, preferences and account restrictions. Only the supported
+expected composition may proceed; a changed selection does not trigger fallback.
+
+Atomically accept the final immutable execution seal under the same TaskRun
+fence and review-subject locking protocol, rechecking authority, baseline,
+membership, compatibility and remaining bounds. The seal binds the actual plan,
+tools, configuration and complete qualification capture. Only then admit reader,
+writer, count and generation effects. Keep the same capture open, event ordinals,
+reservation identity and original window; promotion cannot restart the deadline
+or replenish starts/tokens. A failed qualification consumes its reservation and
+cannot enter ordinary recovery or allocate another assessment.
+
+Revalidate the required logical identities after capacity admission and before
+count/generation dispatch, using captured configuration reads that themselves
+consume the existing allowance. Keep configuration observation separate from the
+check that would otherwise recursively request another observation. Fresh logical
+self-reports are not fresh physical hashes of the executable, inherited
+environment or model files. Unknown, ambiguous, incomplete or changed tuples
+refuse; a matching version prefix does not qualify them. No uncaptured
+pre-reservation HTTP lookup stands in for this protocol.
+
+The composition proof must establish semantic invariance across every supported
+typed DPF mutator. Context reconciliation changes capacity without changing the
+fixed model's tokenizer or renderer. Install, removal, unload and reload paths
+must either preserve those semantics for the exact full model SHA or refuse
+the request. An alias change cannot select a different model for the sealed
+full-SHA body. Audit the effective template selection, absence of sidecars and
+renderer overrides, default template arguments, tokenization and completion
+counter. A supported transition that can change those semantics invalidates the
+catalog entry until a real compatible guard or another proof closes it. Repeated
+identity reads alone cannot exclude a change and reversal between reads.
+
+The trust boundary includes the native runtime, its host administrator and the
+integrity of its self-reports, installed artifacts, environment and startup
+arguments. Arbitrary host/native administrative changes to those facts are
+outside the supported typed DPF contract and invalidate qualification. This
+includes privileged approved `admin_run_command` or sandbox execution; those
+surfaces retain their existing authority and are not claimed absent or retired.
+The trust boundary must be explicit; it does not turn an unsupported renderer mutation
+into a safe one. No new native observer or durable host lease is required solely
+to protect an invariant that every supported transition already preserves.
+Existing admission, execution-generation, resource-capacity and cancellation
+controls still apply. Source audits and kernel decisions cannot substitute for
+the initial physical evidence or actual runtime verification.
+
+Preserve existing local resource-capacity admission. Its `/engines/ps` reads must
+use the same bounded captured transport. The restricted composition cannot
+perform automatic unload or other model-management effects; wait or refuse
+within its unchanged window when capacity is unavailable. Typed capture and
+scope refusals must escape ordinary best-effort error handling.
+
+Inside the admitted window, serialize each complete native Messages body once.
+Capture the count request, validate its nonnegative safe-integer prompt count,
+then durably reserve that exact count plus the full enforced output ceiling
+before sending the unchanged serialized body for generation. Count and
+generation use the exact full model SHA and the catalog's deterministic renderer
+and tokenizer. Every actual HTTP request, including configuration and count
+reads, consumes the recorded start allowance and deadline and receives valid
+pre-effect capture. Configuration reads and prospective counts are not generated
+token usage. Retain every generation reservation in full, including outstanding
+or uncertain consumption; no refund replenishes the task allowance.
+
+Preserve the normal current daily-budget gate at every start, using the current
+registry/configuration intersection and observed UTC-day usage. That gate is an
+observed-usage pre-call check, not a cross-worker reservation of the remaining
+daily allowance. Do not claim a new hard daily aggregate guarantee from it. The
+present task's finite aggregate ceiling uses its strict durable reservations;
+this amendment changes no daily setting, funding authority or normal gate rule.
+
+Before normal V2 selection, apply the existing spend-aware budget-class policy
+for the current daily warning state while preserving hard task floors. Bind that
+class into the execution seal. If its applicable policy changes before dispatch,
+refuse further execution under the spent allocation; do not silently reroute or
+reset qualification, reservations or the window.
+
+Validate complete generation usage: uncached plus cached input must equal the
+reserved prompt count, and output must not exceed the reserved ceiling. Missing
+or conflicting usage, unsupported response blocks, changed configuration or
+incomplete capture holds further effects and reconciles any genuine committed
+receipt first. Refuse media, hidden native tools, fallback, account preparation,
+native process launch and silent setting removal. Pre-start capture failure
+allows zero starts; post-start uncertainty preserves the reservation and history.
+
+To reduce provider starts, the implementation may preload the complete bound
+artifact through the same governed immutable reader, with attributable capture
+and traversal evidence, and stop when the canonical receipt is verified. It must
+not truncate source, tool history or output allowances to fit the budget, invent
+reader evidence, or replace the independent writer's judgment. Failure to fit
+the full reservation refuses execution.
+
+The new authenticated finite qualifier and production integration remain
+unimplemented. Draft reservation and Messages tests do not establish their
+installation, qualification or served acceptance. The independently approved
+amendment baseline, refreshed atomic R1–R4 coverage, compatible producer and
+transport evidence, and real positive/refusal verification remain required
+before their respective implementation and delivery gates. No finite positive
+task is admitted until its actual enforcement is established. This choice
+changes no AC-RA-4/5/7 semantics, human budget authorization, historical unknown
+consumption or original-task replay prohibition.
+
+### Atomic admission, original limits and concurrency
+
+Resolve authorized original readback and genuine exact receipts first. The
+server-owned membership key is tenant, canonical backlog item, gate and immutable
+repository/commit/path/blob identity, independent of credential family, reviewer
+and request key. Include every accepted matching request plus all explicitly
+linked predecessors/supersessions, held/canceled/completed rows and outstanding
+reservations. Resolve accepted request digests and canonical item/Workroom/task
+relations; a client-supplied lineage list is not authoritative. Legacy candidates
+linked to those owning relations whose immutable binding cannot be established
+return `reassessment-lineage-unproven`, never an assumed exclusion. Parent D2/4E
+must be present in their respective exact-artifact membership sets.
+
+Lock related TaskRuns in
+stable order before the owning review subject, preserving the canonical writer's
+task-before-subject order. Recheck lineage after acquiring the subject lock;
+every relevant creation route must serialize on that same subject. If the
+recheck finds changed membership, abort and restart from the refreshed ordered
+task set without provider execution; never acquire another existing task lock
+while holding the subject lock. Demonstrate the protocol in real PostgreSQL races.
+
+In that transaction, recheck current actor and normal grant intersection,
+exact artifact/baseline and packet, original immutable identities, cancellation,
+the source-supported qualification procedure, compatibility and remaining
+aggregate allowance. For a reserved candidate, the final execution seal
+rechecks those conditions and the actual qualified composition before granting
+execution; it does not create another allocation.
+Current per-task writer attempts and saved inference/deadline ceilings are
+owned by accepted TaskRun requests and terminal-writer checkpoints. Provider
+usage and pending reservations come from task-linked AsyncInferenceOp,
+TaskArtifact and ToolExecution/effect owners; no absent row means zero usage.
+The current coworker daily-token gate is additional, not an original lineage
+allowance. Preserve every known inherited limit and reservation. A recorded
+exhausted ceiling or a conflict with an applicable limit refuses. For an ordinary
+reassessment outside the two named authorizations, derive inherited allowance
+and prior consumption from authoritative records, count outstanding reservations
+in full, and refuse unknown bounds as `reassessment-accounting-unproven`.
+An unknown historical amount may be charged at an upper bound only when that
+original enforced bound is authenticated; it never becomes zero or a current
+default.
+
+For the two operator-authorized BI-285EF102 requirements, retain historical
+attempts, reservations and unknown consumption as historical observations;
+do not invent an original allowance or subtract an invented historical charge.
+Admission records a distinct present allocation under normal current authority,
+the actual current budget configuration and the existing bounded effort warrant,
+request/output limits and execution window. Record those bounds before execution
+and count every actual provider start, internal transport retry and outstanding
+present reservation against them. Fail closed if a required current bound or
+its enforcement cannot be established. Normal daily budgets remain enforced,
+including their recorded configuration; this amendment creates no token-quota
+setting or substitute funding authority. Funding attribution uses the normal
+owner scope and never follows from installation or administrator identity.
+
+Count the two admitted present tasks across both gates, all credentials and
+families, including canceled, failed and uncertain tasks; cancellation or an
+unobserved result does not replenish either allocation. A matching caller joins
+the existing winner. No replacement provider task, new request key or completed
+task replay creates another assessment. Neither a new task nor a new credential
+changes an original deadline, attempt count or spend limit. The new present
+window belongs only to the new admitted task and cannot revive the old window.
+
+At most one reassessment may exist for the bound requirement/artifact,
+irrespective of token, reviewer selection or family. Concurrent callers join the
+same durable winner or receive its refusal. The immutable new binding names the
+quarantined predecessors, current requirement and supersession authority.
+Workers, approvals, task settlement and canonical writers compare the captured
+identity at their existing CAS/commit boundaries. A pass, fail or not-applicable
+current verdict changes only that requirement; the historical incident stays
+open. Exact-subject lineage queries are paged; truncation/overflow refuses.
+The scale boundary is the existing per-install substrate under EP-ABB3AC9D,
+without full-install scans or a new cross-install coordination service.
+
+### Ordered amendment implementation and coverage
+
+R1–R4 replace P1–P4 **only for present reassessment**. Same-task recovery keeps
+its original proof prerequisites. BI-7906C73E stays `delivery-large@1.0.0`.
+Independent baseline approval, immutable coverage and current implementation
+admission precede source implementation; body text and WWMD are not receipts.
+
+| Deliverable | Implementation BI | Depends on | Objective requirementRefs | Contracts | Flow | Acceptance verificationRefs |
+| --- | --- | --- | --- | --- | --- | --- |
+| R1: shared callback and approval fencing | BI-7906C73E | Genuine amendment baseline and coverage | OBJ-HISTORY, OBJ-PRESENT, OBJ-FENCE, OBJ-CONTAIN | CONTRACT-RA-FENCE | FLOW-RA-CONTAIN | AC-RA-1, AC-RA-2, AC-RA-6 |
+| R2: restricted composition and capture | BI-7906C73E | R1 | OBJ-HISTORY, OBJ-FENCE, OBJ-CONTAIN | CONTRACT-RA-CAPTURE | FLOW-RA-QUALIFY | AC-RA-4, AC-RA-5, AC-RA-7 |
+| R3: atomic exact-artifact admission | BI-7906C73E | R2 | OBJ-HISTORY, OBJ-PRESENT, OBJ-FENCE, OBJ-CONTAIN | CONTRACT-RA-ADMIT | FLOW-RA-ADMIT | AC-RA-1, AC-RA-3, AC-RA-6 |
+| R4: protected delivery and served acceptance | BI-7906C73E | R3 | OBJ-PRESENT, OBJ-FENCE, OBJ-CONTAIN | CONTRACT-RA-RELEASE | FLOW-RA-VERIFY | AC-RA-7, AC-RA-8 |
+
+R1 consolidates checks in the existing shared homes and tests old/late callbacks,
+original delayed approvals, cancellation, stale authority and callbacks paused
+between authorization and commit. R2 claims exact loop/dispatch paths and proves
+both admitted tools execute while hidden tools, task/meta APIs, immutable-reader
+changes, native fallback, capability mismatch and overflow cannot execute. R3
+tests concurrent families, the two-task authorization ceiling, known exhausted
+limits, unknown historical accounting retained separately, stale owner/source/
+baseline, receipt precedence, cancellation and positive restricted reassessment.
+Resolve each claimed path's testImpact and guardObligations before edits;
+unresolved advice expands verification. At least one fifth of implementation
+consolidates existing generation, authority and effect predicates.
+
+R4 requires affected unit tests, real PostgreSQL races, package typechecks,
+exact committed-tree gates, independent assessment, DCO PR and protected merge.
+The planned server-owned `mcp-task-reassessment-contract.ts` must obtain explicit
+support from the actual transport, approval, worker and canonical-writer owners
+and bind it to the executing container config digest and baked source identity.
+Reuse the existing immutable runtime-image observer and packaged protocol-probe
+pattern; neither environment SHA alone nor a liveness heartbeat proves support.
+Seal and recheck that evidence through existing TaskRun/TaskArtifact owners.
+Prove that an actual old binding parser refuses the nested new relation through
+persisted-request digest reconstruction before preparation or inference.
+
+Enforce candidate compatibility through existing self-upgrade preflight, final
+swap and promoter rollback owners. Forced draining cannot waive it. Automatic
+rollback cannot restore incompatible writer/reader bytes while retained
+obligations require the fences; quiescence alone is not retirement proof. These
+deployment and compatibility producers remain unimplemented and require real
+positive, missing-proof, mixed-version and unsafe-downgrade verification.
+
+The existing canonical PostgreSQL rollback owner,
+`apps/web/lib/self-upgrade/rollback.ts`, restores an earlier database snapshot;
+image compatibility alone cannot preserve newer task fences or capture history.
+R4 therefore includes an obligation check at this owner. Always prove retention
+of consumed candidate allocations and required histories; capability retirement
+never permits their deletion or rewinds the one-per-requirement/two-total ceiling.
+Also prove retention of current compatible fences, or complete authenticated
+retirement and reconciliation of every issued capability and possibly started
+effect. Exclude reassessment admission and protected allocation, capture,
+settlement and canonical-writer commits from proof validation through restoration
+and post-restore verification. Resume only after restore execution is positively
+settled and the surviving proof is verified. Loss of a lock or connection does
+not prove an external restore process stopped. A process-local mutex or a
+database row lock assumed to survive restoration is not that exclusion.
+Use the existing canonical restore/admission boundary only when its exclusion
+and evidence survive the restore; otherwise refuse before any restore effect.
+Missing, uncertain or stale proof also refuses. Reuse canonical state and the
+rollback contract; do not invent a second history store or infer retirement
+from quiescence or an empty active-task list. Test a recovery point predating
+admission, cross-worker admission and protected-commit races through the entire
+restore, lock loss with a continuing restore process, missing proof, post-restore
+retention of spent allowances/histories and genuine capability retirement without
+a third allocation. Existing destructive permissions and
+typed confirmation remain mandatory. This scope covers only canonical
+self-upgrade database rollback; arbitrary privileged database/file/host
+administration remains the declared trusted-admin boundary. WWMD decision
+`DI-31985D298EC9` selected this pending design clarification; it grants neither
+amendment approval nor implementation admission.
+
+Only canonical `request_self_upgrade` advances the install. Served acceptance
+verifies compatible writer/approval/transport coverage, a restricted positive
+case and refusal cases. The parent obtains genuine current D2/4E requirement
+receipts and BI-285EF102 plan admission without replaying historical tasks;
+its application under-load evidence remains separate. No authenticated positive
+qualification for D2/4E is established yet. A missing membership or allowance
+producer is a concrete admission blocker, not a claim those originals can advance.
+
+Proposed coverage is atomic: these are sequencing steps in one admission
+contract. R1 cannot satisfy the present review, R2 without R3 admits nothing,
+and R3 without R2 must refuse. The shipped collector and writer-fence BIs retain
+their own records and are not reimplemented. This table asserts no baseline or
+coverage receipt; record the genuine returned receipts before implementation.
+
+Rollback disables new admission while retaining compatible fences, readers and
+histories. A pre-fence downgrade requires positive capability retirement and
+reconciliation of possibly started effects; missing proof refuses it. Neither
+rollback nor a current verdict clears the historical incident.
+
+[October 23–24 upstream admission observations and historical plan clarification](../../history/2026-10-16-review-settlement-investigation.md#october-24-upstream-historical-plan-clarification) retain their immutable source, failed review and unchanged original request history separately from the present reassessment contract.

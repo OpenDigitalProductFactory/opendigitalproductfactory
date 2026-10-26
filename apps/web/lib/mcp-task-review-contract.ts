@@ -1,4 +1,5 @@
 import { SOURCE_READ_MAX_CHARS, SOURCE_READ_MAX_LINES } from "./source-page-lines";
+import { parsePresentReassessmentRelation, type PresentReassessmentRelation } from "./mcp-task-reassessment-policy";
 import type { ToolDefinition } from "@/lib/mcp-tool-types";
 import {
   IMMUTABLE_PAGE_READER_TOOLS,
@@ -13,6 +14,7 @@ export type InitiativeReviewBinding = {
   gate: string;
   expectedCurrentBaselineId?: string | null;
   eligibleEvidenceActivityIds?: string[];
+  presentReassessment?: PresentReassessmentRelation;
   workroomRef?: {
     kind: "workroom-head";
     workroomId: string;
@@ -140,6 +142,8 @@ export function parseInitiativeReviewBinding(value: unknown): InitiativeReviewBi
   const itemId = optionalString(binding["itemId"]);
   const gate = optionalString(binding["gate"]);
   const expectedCurrentBaselineId = binding["expectedCurrentBaselineId"];
+  const rawPresent = binding["presentReassessment"];
+  const presentReassessment = rawPresent === undefined ? undefined : parsePresentReassessmentRelation(rawPresent);
   const rawEligibleEvidenceActivityIds = binding["eligibleEvidenceActivityIds"];
   const eligibleEvidenceActivityIds = rawEligibleEvidenceActivityIds === undefined
     ? undefined
@@ -157,6 +161,8 @@ export function parseInitiativeReviewBinding(value: unknown): InitiativeReviewBi
     || !itemId?.startsWith("BI-")
     || !gate
     || !parsedArtifactRef
+    || (rawPresent !== undefined && (!presentReassessment || !["design-spec", "spec-approval"].includes(gate)
+      || parsedArtifactRef.kind !== "repo-blob-at-commit" || writerToolName !== "record_initiative_design_review"))
     || (expectedCurrentBaselineId !== undefined
       && expectedCurrentBaselineId !== null
       && typeof expectedCurrentBaselineId !== "string")
@@ -179,6 +185,7 @@ export function parseInitiativeReviewBinding(value: unknown): InitiativeReviewBi
       ? { expectedCurrentBaselineId: expectedCurrentBaselineId as string | null }
       : {}),
     ...(eligibleEvidenceActivityIds ? { eligibleEvidenceActivityIds } : {}),
+    ...(presentReassessment ? { presentReassessment } : {}),
     ...(workroomRef && workroomId && workroomRepositoryFullName && branchName && headSha
       ? {
         workroomRef: {
@@ -216,19 +223,10 @@ export function validateInitiativeReviewAuthorityScope(
   return null;
 }
 
-export function narrowInitiativeReviewTools<T extends {
-  tools: ToolDefinition[];
-  toolsForProvider: Array<Record<string, unknown>>;
-  deferredTools: ToolDefinition[];
-}>(
-  input: T,
-  requiredNames: readonly string[],
-  binding: InitiativeReviewBinding | undefined,
-  prompt?: string,
-  authoritativeProfile?: string | null,
-): T {
-  if (!binding) return input;
-  const exactNames = new Set(requiredNames);
+/** One variable-argument contract for the provider schema and the actual
+ * restricted dispatcher. Binding identity is injected by the canonical writer
+ * from the accepted task; these are the fields the assessment may supply. */
+export function initiativeReviewWriterArgumentContract(binding: InitiativeReviewBinding, prompt?: string) {
   const currentBaselineId = optionalString(binding.expectedCurrentBaselineId);
   const eligibleEvidenceActivityIds = binding.eligibleEvidenceActivityIds ?? [];
   const objectiveMappingProposal = binding.writerToolName === "record_initiative_evidence"
@@ -254,6 +252,24 @@ export function narrowInitiativeReviewTools<T extends {
     ...(binding.gate === "spec-approval" ? ["profile", "artifactRole"] : []),
     ...(binding.gate === "classification" ? ["profile"] : []),
   ];
+  return { writerPropertyNames, requiredWriterNames, objectiveMappingProposal, currentBaselineId, eligibleEvidenceActivityIds };
+}
+
+export function narrowInitiativeReviewTools<T extends {
+  tools: ToolDefinition[];
+  toolsForProvider: Array<Record<string, unknown>>;
+  deferredTools: ToolDefinition[];
+}>(
+  input: T,
+  requiredNames: readonly string[],
+  binding: InitiativeReviewBinding | undefined,
+  prompt?: string,
+  authoritativeProfile?: string | null,
+): T {
+  if (!binding) return input;
+  const exactNames = new Set(requiredNames);
+  const { writerPropertyNames, requiredWriterNames, objectiveMappingProposal, currentBaselineId, eligibleEvidenceActivityIds }
+    = initiativeReviewWriterArgumentContract(binding, prompt);
   const narrowSchema = (schema: Record<string, unknown>) => {
     const properties = schema.properties && typeof schema.properties === "object" && !Array.isArray(schema.properties)
       ? schema.properties as Record<string, unknown>

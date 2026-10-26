@@ -909,6 +909,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/promoter-compose-mounts.test.mjs",
         "scripts/lib/maintenance-epoch-receipt.test.mjs",
         "scripts/promoter-epoch-evidence.test.mjs",
+        "scripts/promote-reassessment-compatibility.test.mjs",
+        "scripts/reassessment-capability-probe.test.mjs",
         "scripts/sandbox-entrypoint.test.mjs",
         "scripts/lib/local-integration-ci.test.mjs",
         // BI-ECAE03F7: the supervisor that fences a long gate run was

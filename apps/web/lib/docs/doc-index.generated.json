@@ -910,6 +910,7 @@
       "anchors": [
         "ai-routing-document-map",
         "current-authority",
+        "restricted-present-reassessment",
         "streaming-versus-result-delivery",
         "approved-adjacent-delivery-contract",
         "proposed-architecture",
@@ -1331,6 +1332,7 @@
         "the-three-laws",
         "the-standards-p1p13",
         "enforcement-how-subsequent-changes-stay-conformant",
+        "restricted-review-surface",
         "how-to-apply-quick-checklist-when-changing-a-model-facing-surface",
         "related"
       ]
@@ -2028,7 +2030,8 @@
         "7-closing-a-small-or-medium-item-the-baseline-is-the-body-bi-0f8e39d5",
         "approval-outcome-readback",
         "anti-patterns-observed",
-        "original-review-recovery-across-connection-changes"
+        "original-review-recovery-across-connection-changes",
+        "a-present-assessment-authorized-by-an-approved-policy"
       ]
     },
     "docs/architecture/job-specific-intelligence.md": {
@@ -2169,6 +2172,7 @@
         "parent-bounded-local-review-execution-bi-03ac2fd9",
         "recovering-an-original-initiative-review-after-a-connection-change",
         "canonical-review-writer-execution-identity",
+        "explicitly-authorized-present-reassessments",
         "bounded-workroom-activity-reads"
       ]
     },
@@ -2876,6 +2880,23 @@
         "a-statement-names-its-room",
         "the-room-inspector-renders-what-the-projections-resolve",
         "a-room-with-no-workitem-is-its-own-case"
+      ]
+    },
+    "docs/audits/2026-10-22-review-reassessment-restore-availability.md": {
+      "publicHref": "/audits/2026-10-22-review-reassessment-restore-availability/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "recovery-availability-on-the-self-upgrade-page",
+        "finding-and-approved-scope",
+        "prototype-and-fit-decision",
+        "implementation-plan",
+        "verification-and-publication",
+        "task-and-scorecard-contract",
+        "source-and-delivery-checks",
+        "served-verification-26-october",
+        "sources"
       ]
     },
     "docs/business-types/_readability-report.md": {
@@ -5536,6 +5557,25 @@
         "observed-real-world-patterns-from-recent-high-quality-prs",
         "the-minimal-official-template",
         "recommended-prompt-for-future-prs-copy-paste-ready"
+      ]
+    },
+    "docs/history/2026-10-16-review-settlement-investigation.md": {
+      "publicHref": "/history/2026-10-16-review-settlement-investigation/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "review-settlement-historical-investigation-and-sequencing",
+        "ordered-implementation-plan",
+        "p1-establish-executable-evidence-adapters",
+        "p2-consolidate-qualification-and-integrate-the-writer-fence",
+        "p3-admit-one-same-task-continuation",
+        "p4-qualify-delivery-and-served-behavior",
+        "backlog-coverage",
+        "finite-unsupported-boundary-and-resumption",
+        "october-19-bounded-source-recovery-original-proof-inventory",
+        "october-24-upstream-historical-plan-clarification",
+        "october-23-bounded-recovery-issued-review-admission"
       ]
     },
     "docs/install/cloud-single-vm.md": {

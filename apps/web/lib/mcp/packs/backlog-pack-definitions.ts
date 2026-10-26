@@ -278,6 +278,7 @@ export const backlogPackDefinitions: ToolDefinition[] = [
       properties: {
         itemId: { type: "string", description: "Semantic backlog item id (e.g. BI-PORT-005)" },
         recoveryGate: { type: "string", enum: RECOVERY_READ_GATES, description: "Return only this gate's exact current recovery request or explicit issuer escalation, without large body/history. Re-read unchanged identity for the same request; never reconstruct a packet." },
+        reassessmentAuthorizationItemId: { type: "string", description: "Optional immutable approved policy item locator for a separately authorized present design-spec or spec-approval reassessment. Selects evidence only; cannot grant execution, replay an original task or replenish an allowance." },
       },
       required: ["itemId"],
     },

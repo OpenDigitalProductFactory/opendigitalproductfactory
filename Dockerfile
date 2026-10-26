@@ -169,6 +169,7 @@ COPY scripts/postgres-trial-restore.sh ./scripts/
 # host bootstrap against older images (see the script header).
 COPY scripts/link-web-src-workspace.sh ./scripts/
 COPY scripts/salvage-sweep.mjs ./scripts/
+COPY scripts/reassessment-capability-probe.mjs ./scripts/
 # Work Capsule change-impact planning executes the canonical gate-context CLI
 # at runtime. Package its exact transitive source closure into the image so a
 # mutable /host-dpf checkout can never substitute different rule bytes.

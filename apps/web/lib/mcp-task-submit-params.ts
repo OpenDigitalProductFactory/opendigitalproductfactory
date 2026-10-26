@@ -110,6 +110,10 @@ export function parseRemoteTaskSubmitParams(params: Record<string, unknown> | un
     || !initiativeReviewBinding?.workroomRef || riskClass !== "bounded-write")) {
     return "tasks/submit reviewRecovery requires an exact original task, digest, version and Workroom-bound review";
   }
+  if (!initiativeReviewBinding && authorityScope?.some(scope =>
+    /^tool:record_initiative_.+_review$/.test(scope.trim()))) {
+    return "tasks/submit independent review writer authority requires a valid immutable initiativeReviewBinding";
+  }
 
   return {
     agentId,

@@ -407,7 +407,7 @@ export async function recordInitiativeSpecApproval(args: {
     }
     if (winnerOnly) return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS",
       error: "Concurrent approval did not leave a qualified winner. No write was retried." };
-    const executionRefusal = checkBoundReviewWriteExecution(effectScope, taskLock.execution);
+    const executionRefusal = await checkBoundReviewWriteExecution(effectScope, taskLock.execution, tx);
     if (executionRefusal) return executionRefusal;
     const chain = validateInitiativeBaselineChainHead(entries, args.expectedCurrentBaselineId);
     if (!chain.ok) return chain;
