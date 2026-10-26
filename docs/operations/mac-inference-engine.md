@@ -58,6 +58,35 @@ The tool stops only its owned test process, then restores Docker with a bounded 
 
 ## Activation, rollback and AI Ops
 
+Managed integration is tracked separately by BI-CD4EB130 / WC-C8326144 and its
+[runtime design](../superpowers/specs/2026-10-26-mac-inference-runtime-design.md)
+and [ordered plan](../superpowers/plans/2026-10-26-mac-inference-runtime-plan.md).
+The candidate combines a separately pinned standalone Docker Model Runner with
+the unchanged corrected engine. It does not replace Docker's files. The reviewed
+runner patch recognizes the upstream binary name, retains the custom engine's
+version without advertising a Docker vendor variant, rejects an unavailable
+explicit engine, and restricts HTTP and TLS listeners to loopback. Container
+reachability, the model-management workflow and supported native convergence
+still require actual qualification before activation.
+
+`runtime.lock.json` pins runner source, Go module/sum and patch identities.
+`build-runtime.mjs` applies the patch to a fresh verified archive, runs the actual
+affected upstream package tests, builds ARM64 without CGO, retains dependency
+notices and embeds the verified engine unchanged. Its output remains unqualified.
+`verifyRuntimePackage` binds the complete composite payload and refuses altered
+or unlisted files and a self-qualified manifest. Neither successful compilation
+nor an artifact hash grants activation. Engine evidence can be reused only with
+the exact model/device/report and unchanged native bytes; it does not qualify
+the new runner or platform workflow.
+
+The stock runner already provides export/load of its OCI model representation;
+its own CLI uses that path to materialize a private store. Prefer that supported
+path to copying mutable Docker store metadata or downloading/repackaging the
+weights under a different identity. Verify the retained OCI digest and tag it
+only within the private managed store. Treat export/load and native service
+qualification as separately admitted effects, not as a consequence of inspecting
+a package.
+
 The package is an isolated candidate, not an installed Docker replacement. Do not overwrite `~/.docker/bin/inference`, modify vendor executable headers, reuse vendor digests, change provider routing or manually build a DPF live image. Integration needs an explicit supported installer/runtime contract, authenticated release artifacts, compatibility evidence and canonical release controls. DPF live advances use `request_self_upgrade`; a package build does not authorize a live advance.
 
 Before activation, rollback consists of stopping the owned test candidate, restoring Docker if the test unloaded it, releasing the test reservation and keeping the package marked unqualified. Preserve failed/incomplete reports. After a future supported activation, rollback must select the previously verified package through the same supported integration path.
@@ -83,3 +112,13 @@ The operator-supplied [video transcript](https://www.youtube.com/watch?v=x_qmqqp
 The admitted, supervised workload-v1 run completed all eight model controls correctly and restored Docker. The package's actual public Metal backend initializer reported successful f16/bfloat tests and tensor capability. The matched 32011-token cold input took 173016.605 ms in Docker's supplied engine and 91380.104 ms in the corrected candidate: an observed 1.893x prefill ratio (about47% less prefill time). Both warm continuations reused32015tokens and finished in about0.7seconds. Short arithmetic latency was higher on the candidate; decode throughput was similar. This is one completed sample per engine under the declared native profile, not a general latency or fleet guarantee.
 
 The current candidate is model-smoke-qualified on this M5 Max. It is not installed, authenticated for distribution or physically qualified on older Macs. The video transcript's approximately40second cold-read claim is still faster than this observed91second result; that remaining gap is not closed by this package test. The subsequent source-only required-library completeness fix does not change any native package bytes, model inputs or measured configuration. Re-verify the same manifest against the stronger file contract and reuse the recorded native run rather than repeat identical inference solely for that verifier change.
+
+## Managed runner candidate — October 26, 2026
+
+BI-CD4EB130 owns activation and rollback. The standalone runner is pinned to Docker Model Runner 1.2.8 source, with a reviewed custom-engine status/listener patch and a finite native experiment fence. `build-runtime.mjs` produced the 186-file `1.2.8-dpf-metal4.2` candidate; archive SHA256 `1f29d710bb6b7c2ce90b47c7925df4cce74bbe6c748a28c29c5acb4cd9420a32`, manifest SHA256 `b1eabac297026ac07d8a3ebfa9542dcc28e75c49050bc423d5b52215a1d577a8`. The embedded engine files are unchanged. Source tests and a successful build do not qualify this new runner or activate it.
+
+`qualify-runtime.mjs` requires the exact active reserved window, package and baseline identities, prior native engine report and physical GPU match. It stages a private copy under an owned LaunchAgent, transfers existing model artifacts through stock export/load/tag APIs, and copies stored per-model configuration. Model tags retain their case; the model-card capacity and configured runtime context are distinct facts. Here the Qwen model advertises 262144 tokens while its stored runtime context is 131072 tokens.
+
+The qualifier exercises matched arithmetic, tool-call, cold/warm prefix and embedding controls through both runners' model APIs. It checkpoints the restoration obligation before unloading Docker, verifies candidate shutdown before restoring Docker, preserves failed reports, and never changes the platform provider. The native daemon independently stops when its projected reservation expires or its finite experiment deadline arrives, even if its client disappears. That private expiry projection contains no credentials and grants no platform authority.
+
+Full DPF workflow/under-load proof, the supported existing-install activation entry, protected source publication and older physical Mac qualification remain unfinished. Keep Docker's installed binaries and provider configuration intact until those delivery conditions are met.

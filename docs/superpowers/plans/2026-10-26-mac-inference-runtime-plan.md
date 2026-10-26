@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: active
 backlog_item: BI-CD4EB130
 workroom: WC-C8326144
 ---
@@ -18,7 +18,7 @@ Implement [the canonical design](../specs/2026-10-26-mac-inference-runtime-desig
 
 ## Backlog coverage
 
-Parent and single delivery: BI-CD4EB130 / WC-C8326144. Decision proposed: atomic. Receipt pending immutable plan publication and governed coverage writer. This text is not coverage or implementation admission.
+Parent and single delivery: BI-CD4EB130 / WC-C8326144. Decision: atomic. Current governed receipt: cmvpbrkdvbdq901t7ov7s0fdt, bound to published plan 0a23cfc3f7cb1fd981fd920f3cb8c9d46d1dc299 / blob 3c54465176f7bc711bf3f495b34e272da467b817. It supersedes cmvpa9n7malb001t7ll4q898k after the required item research note changed scope. Author research: initiative-2a3b51f3-41ec-4cfc-a698-496af14cf705. Implementation admission: IRD-273B96AAC778 (allowed). No independently shippable children or dependencies; existing BI-86B65F35 is prior delivered package evidence, not delivered again by this plan.
 
 Traceability: AC-MRI1 through AC-MRI6; CONTRACT-MRI-IDENTITY, CONTRACT-MRI-PROVIDER, CONTRACT-MRI-LIFECYCLE, CONTRACT-MRI-ADMISSION, CONTRACT-MRI-ROLLBACK; FLOW-MRI-TRANSITION; VERIFY-MRI-RUNTIME. The design defines each reference.
 
