@@ -18,6 +18,8 @@ import { coworkerEnvelopeToAttentionItem } from "@/lib/attention/sources/coworke
 import { summarizeCoworkerEnvelopeDecision } from "@/lib/attention/coworker-envelope-decision";
 import { buildOwnerAttentionProjection } from "@/lib/attention/owner-projection";
 import type { AttentionEnvelopeApproval } from "@/lib/attention/types";
+import { defaultVisibleHtml } from "@/lib/ux-budget/scope";
+import { visibleUtterances } from "@/lib/owner-first/ux-audit";
 
 const NOW = Date.parse("2026-08-25T20:00:00.000Z");
 
@@ -75,6 +77,48 @@ afterEach(() => {
 });
 
 describe("CoworkerEnvelopeApproval", () => {
+  it("defers research identities and policy text while keeping the decision controls visible", () => {
+    const { container } = render(<CoworkerEnvelopeApproval approval={approval()} />);
+    const visible = visibleUtterances(defaultVisibleHtml(container.innerHTML)).join(" ");
+    expect(visible).not.toContain("BI-MCP-EFF-0285909C");
+    expect(visible).not.toContain("Covers this one request only");
+    expect(visible).toMatch(/research/i);
+    expect(screen.getByRole("button", { name: "Authorize" }).closest("details")).toBeNull();
+    expect(screen.getByRole("button", { name: "Decline" }).closest("details")).toBeNull();
+    expect(screen.getByText("BI-MCP-EFF-0285909C").closest("details")?.open).toBe(false);
+  });
+
+  it("keeps long routine reports and internal fields behind intentional disclosure", () => {
+    const summary = "The release candidate was not supplied. " + "Internal verification detail. ".repeat(40);
+    const decision = summarizeCoworkerEnvelopeDecision({
+      toolName: "record_workroom_evidence",
+      proposedParameters: { capsuleId: "WC-PRIVATE-REPORT", kind: "assurance-finding", outcome: "blocked", summary, stageKey: "report", commandId: "internal-command-123" },
+      recommenderAgentId: "AGT-WS-BUILD", authorizerUserId: "user-1",
+    });
+    const { container } = render(<CoworkerEnvelopeApproval approval={approval({ decision })} />);
+    const visible = visibleUtterances(defaultVisibleHtml(container.innerHTML)).join(" ");
+    expect(visible).not.toContain("WC-PRIVATE-REPORT");
+    expect(visible).not.toContain("internal-command-123");
+    expect(visible).not.toContain("Internal verification detail.");
+    expect(visible).toMatch(/record|save/i);
+    expect(JSON.parse(container.querySelector("pre")!.textContent!)).toEqual(JSON.parse(decision.completeProposedContent!));
+  });
+
+  it("does not hide critical nested values when it defers an unsupported proposal", () => {
+    const decision = summarizeCoworkerEnvelopeDecision({
+      toolName: "unsupported_internal_operation",
+      proposedParameters: { routingId: "internal-routing-456", payment: { amount: 1250, currency: "USD", recurrence: "monthly", recipient: { email: "supplier@example.test" } }, permission: { grant: "admin_write" }, deadline: "2026-11-01" },
+      recommenderAgentId: "AGT-WS-BUILD", authorizerUserId: "user-1", consequence: "irreversible",
+    });
+    const { container } = render(<CoworkerEnvelopeApproval approval={approval({ decision })} />);
+    const visible = visibleUtterances(defaultVisibleHtml(container.innerHTML)).join(" ");
+    expect(visible).not.toContain("unsupported_internal_operation");
+    expect(visible).not.toContain("internal-routing-456");
+    for (const fact of ["1250", "USD", "monthly", "supplier@example.test", "admin_write", "2026-11-01"]) expect(visible).toContain(fact);
+    expect(visible).toMatch(/cannot be undone|irreversible/i);
+    expect(visible).toMatch(/unresolved|not established/i);
+  });
+
   it.each(["record_workroom_evidence", "record_initiative_evidence", "reassign_workroom_executor"])("offers complete literal content before authorizing %s", (toolName) => {
     const params = { decision: "pass", capsuleId: "WC-1", toExecutorKind: "codex-desktop", body: "x".repeat(900) + "<script>unsafe()</script>", clear: null, empty: "", enabled: false };
     const decision = summarizeCoworkerEnvelopeDecision({ toolName, proposedParameters: params, reviewBinding: { gate: "research", itemId: "BI-1" }, recommenderAgentId: "AGT-EXT-CODEX", authorizerUserId: "user-1" });
@@ -275,12 +319,12 @@ describe("OwnerDecisionCards routing", () => {
   }
 
   it("renders the envelope approval card, not the proposal controls", async () => {
-    render(<OwnerDecisionCards entries={[entryFor()]} />);
+    const { container } = render(<OwnerDecisionCards entries={[entryFor()]} />);
 
-    expect(screen.getByText("Authorize this research receipt?")).toBeTruthy();
+    expect(screen.getByText("Record the research review?")).toBeTruthy();
     expect(screen.getByText(/research passes with no findings/i)).toBeTruthy();
     expect(screen.getByText("Human authorization needed")).toBeTruthy();
-    expect(screen.queryByText("record_initiative_evidence")).toBeNull();
+    expect(visibleUtterances(defaultVisibleHtml(container.innerHTML)).join(" ")).not.toContain("record_initiative_evidence");
     fireEvent.click(screen.getByRole("button", { name: "Authorize" }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
@@ -294,20 +338,31 @@ describe("OwnerDecisionCards routing", () => {
   });
 
   it("keeps identity plumbing under technical detail", () => {
-    render(<OwnerDecisionCards entries={[entryFor()]} />);
+    const { container } = render(<OwnerDecisionCards entries={[entryFor()]} />);
 
-    expect(screen.queryByText("record_initiative_evidence")).toBeNull();
-    expect(
-      screen.queryByText("89e875eb49be0604ee8fa4156d0903b6a0932e62"),
-    ).toBeNull();
+    const before = visibleUtterances(defaultVisibleHtml(container.innerHTML)).join(" ");
+    expect(before).not.toContain("record_initiative_evidence");
+    expect(before).not.toContain("89e875eb49be0604ee8fa4156d0903b6a0932e62");
 
-    fireEvent.click(screen.getByRole("button", { name: /Technical detail/ }));
+    const disclosure = screen.getByText("Technical evidence").closest("details")!;
+    expect(disclosure.open).toBe(false);
+    fireEvent.click(screen.getByText("Technical evidence"));
+    expect(disclosure.open).toBe(true);
 
     expect(screen.getByText("record_initiative_evidence")).toBeTruthy();
     expect(
       screen.getByText("89e875eb49be0604ee8fa4156d0903b6a0932e62"),
     ).toBeTruthy();
     expect(screen.getByText("bddca7c5a0b109f9460f84b2b0d886f5d794cbb6")).toBeTruthy();
+  });
+
+  it("locates a focused decision without opening its technical evidence", () => {
+    const entry = entryFor();
+    const { container } = render(<OwnerDecisionCards entries={[entry]} focusItemId={entry.item.id} />);
+    expect(document.getElementById("owner-decision-coworker-envelope-cmt932fn301el01p7vfb2gas7")).not.toBeNull();
+    expect(Array.from(container.querySelectorAll("details")).every(details => !details.open)).toBe(true);
+    expect(screen.getByRole("button", { name: "Authorize" })).toBeTruthy();
+    expect(visibleUtterances(defaultVisibleHtml(container.innerHTML)).join(" ")).not.toContain("89e875eb49be0604ee8fa4156d0903b6a0932e62");
   });
 });
 

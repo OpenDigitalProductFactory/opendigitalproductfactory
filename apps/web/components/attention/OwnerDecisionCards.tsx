@@ -6,6 +6,9 @@ import { useEffect, useState } from "react";
 import { ownerDecisionCardDomId } from "@/lib/attention/owner-decision-dom-id";
 import type { OwnerAttentionEntry } from "@/lib/attention/owner-projection";
 import { ExpandableCard, StatusBadge } from "@/components/ui/report-kit";
+import { Surface } from "@/components/ui/Surface";
+import { envelopePrimaryDecision } from "@/lib/attention/coworker-envelope-decision";
+import { SOURCE_CATALOG } from "@dpf/i18n";
 import { CoworkerEnvelopeApproval } from "./CoworkerEnvelopeApproval";
 import { CoworkerProposalActions } from "./CoworkerProposalActions";
 import { ProactivityProposalActions } from "./ProactivityProposalActions";
@@ -47,6 +50,21 @@ export function OwnerDecisionCards({
       {shown.map((entry) => {
         const disclosureId = ownerDecisionCardDomId(entry.item.id);
         const open = openId === entry.item.id;
+        if (entry.item.envelope) {
+          const primary = envelopePrimaryDecision(entry.item.envelope.decision);
+          return (
+            <Surface as="article" key={entry.item.id} id={disclosureId} className="scroll-mt-4 space-y-3">
+              <header>
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <h3 className="text-dpf-title font-dpf-medium text-dpf-text">{entry.item.envelope.expiredUnanswered ? SOURCE_CATALOG.approvals.expiredUnanswered.label : primary.title}</h3>
+                  {entry.card.tags.map((tag) => <StatusBadge key={`${tag.kind}:${tag.label}`} domain="ownerDecisionImpact" status={tag.kind} label={tag.label} variant="soft" uppercase={false} />)}
+                </div>
+                <p className="mt-1 break-words text-dpf-caption text-dpf-muted">{entry.card.byline && !/\bAgt\b/i.test(entry.card.byline) ? entry.card.byline : SOURCE_CATALOG.approvals.card.coworkerByline}</p>
+              </header>
+              <CoworkerEnvelopeApproval approval={entry.item.envelope} technicalDetail={<TechnicalDetail entry={entry} />} />
+            </Surface>
+          );
+        }
         return (
           <ExpandableCard
             key={entry.item.id}

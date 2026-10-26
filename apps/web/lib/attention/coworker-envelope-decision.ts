@@ -1,3 +1,5 @@
+import { SOURCE_CATALOG, formatSource } from "@dpf/i18n";
+
 // Decision-first owner copy for a proposed CoworkerActionEnvelope (BI-F95B0795).
 //
 // The envelope row stores the approval binding, not the proposed call. The
@@ -61,6 +63,8 @@ export type EnvelopeDecisionSummary = {
   action: string;
   /** Where it lands: the record or surface the change is written to. */
   target: string;
+  /** A readable target name resolved under the viewing person's access policy. */
+  targetLabel?: string;
   /** A bounded preview of the proposed content. Empty when unresolved. */
   proposed: EnvelopeProposedField[];
   /** Complete original input for review; absent on older projections, null when unresolved. */
@@ -241,6 +245,7 @@ type SummaryContext = {
   params: Record<string, unknown> | null;
   consequence?: string | null;
   rationale?: string | null;
+  targetLabel?: string;
 };
 
 function sharedFacts(input: SummaryContext) {
@@ -254,6 +259,7 @@ function sharedFacts(input: SummaryContext) {
     consequence: consequenceText(input.consequence),
     whyAPerson: input.rationale?.trim() || "No reason was recorded for asking a person.",
     scope: SCOPE_TEXT,
+    ...(input.targetLabel ? { targetLabel: input.targetLabel } : {}),
   };
 }
 
@@ -358,6 +364,7 @@ export function summarizeCoworkerEnvelopeDecision(input: {
   consequence?: string | null;
   /** The governing reason stored on the envelope. */
   rationale?: string | null;
+  targetLabel?: string;
 }): EnvelopeDecisionSummary {
   const fromExecution = originalToolParameters(input.proposedParameters);
   const fromEnvelope = originalToolParameters(input.argsJson);
@@ -368,6 +375,7 @@ export function summarizeCoworkerEnvelopeDecision(input: {
     params: resolvedParams,
     consequence: input.consequence ?? null,
     rationale: input.rationale ?? null,
+    targetLabel: input.targetLabel,
   };
   const toolName = input.toolName.trim();
   const gate =
@@ -423,5 +431,66 @@ export function summarizeCoworkerEnvelopeDecision(input: {
     authorizerLabel: "You",
     toolName,
     ...sharedFacts(context),
+  };
+}
+
+/** Human presentation only. The original proposal remains the execution binding. */
+export function envelopePrimaryDecision(decision: EnvelopeDecisionSummary) {
+  let params: Record<string, unknown> = {};
+  try { params = objectRecord(JSON.parse(decision.completeProposedContent ?? "null")) ?? {}; } catch { /* Older unresolved projection. */ }
+  const copy = SOURCE_CATALOG.approvals.card.primary;
+  const recordsResult = decision.kind !== "unknown"
+    && ["record_workroom_evidence", "record_execution_evidence"].includes(decision.toolName)
+    && !!stringParam(params, "summary");
+  const handover = decision.kind === "handover" ? ASSISTANT_NAMES[stringParam(params, "toExecutorKind") ?? ""] : undefined;
+  const research = decision.kind === "known" && decision.gate === "research";
+  const unresolved = !recordsResult && !handover && !research;
+  let title = copy.unresolvedTitle;
+  let description = copy.unresolvedDescription;
+  let consequence = decision.consequence.startsWith("None declared.") ? copy.effectUnknown : decision.consequence;
+  let recommendation = copy.unresolvedRecommendation;
+  if (handover) {
+    const args = { assistant: handover.name };
+    title = formatSource("en-US", copy.handoverTitle, args);
+    description = formatSource("en-US", copy.handoverDescription, args);
+    consequence = copy.handoverConsequence;
+    recommendation = formatSource("en-US", copy.handoverRecommendation, args);
+  } else if (recordsResult) {
+    title = copy.recordTitle;
+    description = params.outcome === "blocked" ? copy.blockedDescription : copy.recordDescription;
+    consequence = params.stageKey && params.outcome === "completed" ? copy.stageConsequence : copy.recordConsequence;
+    recommendation = copy.recordRecommendation;
+  } else if (research) {
+    title = copy.reviewTitle;
+    description = `${decision.authorization.charAt(0).toUpperCase()}${decision.authorization.slice(1)}.`;
+    consequence = copy.reviewConsequence;
+    recommendation = decision.recommendation;
+  }
+  if (!unresolved && !decision.consequence.startsWith("None declared.")) {
+    consequence = `${consequence} ${decision.consequence}`;
+  }
+  const facts: EnvelopeProposedField[] = [];
+  // Unknown effects stay unresolved. These recorded facts must not disappear
+  // with technical detail, even when they are long, nested, false or missing.
+  const materialKey = /amount|currency|recipient|destination|payee|beneficiary|payment|recurr|frequency|permission|grant|canAct|role|access|delet|destroy|irrevers|deadline|expir|scope|sensitivity|endpoint|^url$|^(?:to|cc|bcc)$/i;
+  function visit(value: unknown, path: string[], material: boolean) {
+    const empty = Array.isArray(value) ? value.length === 0 : objectRecord(value) ? Object.keys(value as object).length === 0 : false;
+    if (empty && material) {
+      facts.push({ label: path.map(humanizeKey).join(" · "), value: copy.notProvided });
+      return;
+    }
+    if (Array.isArray(value)) {
+      value.forEach((entry, index) => visit(entry, [...path, String(index + 1)], material));
+    } else if (objectRecord(value)) {
+      for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+        visit(child, [...path, key], material || materialKey.test(key));
+      }
+    } else if (material) {
+      facts.push({ label: path.map(humanizeKey).join(" · "), value: value === null || value === "" ? copy.notProvided : String(value) });
+    }
+  }
+  if (unresolved) visit(params, [], false);
+  return { title, description, consequence, facts, unresolved,
+    target: decision.targetLabel ?? copy.targetUnavailable, recommendation,
   };
 }

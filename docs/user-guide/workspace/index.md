@@ -26,6 +26,18 @@ Process pauses appear in the room's attention summary. Observed execution
 separates activity events from receipts, and the header shows the same recorded
 or inherited human accountability as the workforce panel.
 
+## Before you decide
+
+A coworker request shows what would change, the affected work and its consequence.
+Amounts, recipients, permission changes and deadlines stay visible when they
+matter. An unresolved effect is labelled so you can hold the request until it is
+clear. A reported result is the coworker's claim, not proof that the work passed.
+
+Choose **Authorize** or **Decline** on the card. Open **Why am I being asked?**
+for context or **Technical evidence** for the full proposal and supporting
+records. Opening a request's link keeps those details collapsed. Authorizing
+one request covers that exact change once.
+
 ## Checking an approval result
 
 After you approve or decline a coworker's request, the Inbox keeps its result.

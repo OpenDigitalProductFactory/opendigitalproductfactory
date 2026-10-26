@@ -4,6 +4,7 @@ import {
   envelopeIdFromExecutionResult,
   originalToolParameters,
   summarizeCoworkerEnvelopeDecision,
+  envelopePrimaryDecision,
 } from "./coworker-envelope-decision";
 
 const RESEARCH = {
@@ -12,6 +13,38 @@ const RESEARCH = {
   recommenderAgentId: "AGT-WS-BUILD",
   authorizerUserId: "user-1",
 };
+
+describe("primary decision disclosure", () => {
+  it.each(["record_workroom_evidence", "record_initiative_evidence", "reassign_workroom_executor"])("keeps the declared irreversible effect visible for %s", toolName => {
+    const decision = summarizeCoworkerEnvelopeDecision({ ...RESEARCH, toolName, recommenderAgentId: "AGT-EXT-CODEX", consequence: "irreversible",
+      proposedParameters: { capsuleId: "WC-1", summary: "Reported result", decision: "pass", toExecutorKind: "codex-desktop" } });
+    expect(envelopePrimaryDecision(decision).consequence).toContain("Cannot be undone");
+  });
+
+  it("keeps a missing record proposal unresolved", () => {
+    const decision = summarizeCoworkerEnvelopeDecision({ ...RESEARCH, toolName: "record_workroom_evidence", proposedParameters: undefined });
+    expect(envelopePrimaryDecision(decision).unresolved).toBe(true);
+  });
+
+  it("preserves complete material values and missing recipients without exposing unrelated routing", () => {
+    const recipient = "long-recipient-" + "x".repeat(800) + "@example.test";
+    const decision = summarizeCoworkerEnvelopeDecision({ ...RESEARCH, toolName: "unrecognized_action", proposedParameters: {
+      routingId: "internal-only", recipients: [], payment: { amount: 1250, currency: "USD", recipient },
+    } });
+    const primary = envelopePrimaryDecision(decision);
+    expect(primary.facts.some(fact => fact.value === recipient)).toBe(true);
+    expect(primary.facts.some(fact => /recipients/i.test(fact.label) && fact.value === "Not provided")).toBe(true);
+    expect(primary.facts.some(fact => fact.value === "internal-only")).toBe(false);
+  });
+
+  it("does not present permission names inside a report as a permission change", () => {
+    const decision = summarizeCoworkerEnvelopeDecision({ ...RESEARCH, toolName: "record_workroom_evidence", proposedParameters: {
+      capsuleId: "WC-REPORT", kind: "note", summary: "Reviewed permissions", result: { permissions: ["admin_write"] },
+    } });
+    expect(envelopePrimaryDecision(decision).facts).toEqual([]);
+    expect(JSON.parse(decision.completeProposedContent!).result.permissions).toEqual(["admin_write"]);
+  });
+});
 
 describe("summarizeCoworkerEnvelopeDecision", () => {
   it("preserves the complete proposal beyond summary limits, including clearing values", () => {

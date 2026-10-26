@@ -13400,6 +13400,7 @@
       "publishedPortal": true,
       "anchors": [
         "overview",
+        "before-you-decide",
         "checking-an-approval-result",
         "operations-and-performance",
         "spatial-operations-for-tables-and-rooms",
