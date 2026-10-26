@@ -232,7 +232,7 @@ Original BI criteria AC-1 through AC-10 map respectively to AC-S01, S02, S03, S0
 
 ## 10. Delivery boundaries and dependency disposition
 
-These are candidate delivery boundaries for independent review, not executable plan coverage. Before writing an implementation plan, search live work again, map each boundary to a new/existing BI, obtain the umbrella scope baseline and record governed decomposition/coverage.
+These delivery boundaries now have live triage mappings below. They are not executable plan coverage. Before writing an implementation plan, refresh overlap and source claims, obtain the umbrella scope baseline and record governed decomposition/coverage.
 
 | Boundary | Deliverable and likely source seams | Dependency / stop condition |
 | --- | --- | --- |
@@ -243,7 +243,22 @@ These are candidate delivery boundaries for independent review, not executable p
 | D5 | Source-change invalidation, bounded dependency fanout and cumulative/observed-impact feedback. | D2/D3; existing qualification-impact lifecycle from BI-6DB95601. |
 | D6 | Existing decision/Workroom comparison and trace disclosure, authorized MCP/headless projection and served verification. | D2/D3; coordinate with current progressive-disclosure and Workroom UI owners. |
 
-D1-D6 are independently reviewable and cannot remain only Markdown tasks when planning begins. No implementation is admitted under the xlarge umbrella. A parent design publication does not complete the feature or any existing dependency.
+### 10.1 Live delivery mappings
+
+| Boundary | Live item | Acceptance contribution | Depends on |
+| --- | --- | --- | --- |
+| D1 | BI-06EAE6C6 | AC-S07, S11, S12, S20 | Parent approval and coverage |
+| D2 | BI-ED7E6F09 | AC-S01, S10, S14, S15, S16, S17 | D1 |
+| D3 | BI-466EA592 | AC-S02, S04, S06, S08, S20 | D1, D2 |
+| D4 | BI-222BB6AF | AC-S03, S06, S08, S09, S13, S20 | D3; existing preflight/authority owners |
+| D5 | BI-C020360A | AC-S05, S09, S16, S18 | D2, D3 |
+| D6 | BI-A4B0F05F | AC-S01, S08, S15, S19 | D2, D3; existing UI owners |
+
+Each item contains its scope, the verbatim parent acceptance statements it contributes to, verification obligations and overlap disposition. A cross-slice acceptance case is not complete from one child's partial evidence. BI-038AA4BC retains general consequence-first approval rendering; D6 supplies the stakeholder comparison and authorized read model without taking over that renderer.
+
+All six items remain triaging. These mappings are author preparation, not a scope baseline, approved implementation plan or plan-coverage receipt. The original design-spec and spec-approval executions against the first immutable design remain unresolved; this mapping revision neither settles nor replaces them. Broader live queries that returned client-truncated payloads are not claimed exhaustive; exact ownership and path claims must be refreshed before edits.
+
+D1-D6 are independently reviewable. No implementation is admitted under the xlarge umbrella. A parent design publication does not complete the feature or any existing dependency.
 
 ## 11. Compatibility, rollout and rollback
 
