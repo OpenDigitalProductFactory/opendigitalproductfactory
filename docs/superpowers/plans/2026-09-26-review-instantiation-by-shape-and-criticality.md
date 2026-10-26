@@ -57,6 +57,24 @@ obtain current architecture approval, native plan coverage and independent plan
 review before expanded implementation. Do not replay a completed failed task
 to obtain another verdict or rewrite a head solely to mint a new request.
 
+### October 25 execution-contract correction
+
+Native design admission IRD-31B80C010141 permits this bounded authoring amendment,
+not expanded implementation. The newly demonstrated gap is the difference
+between a profession's applicable procedure, a configured service capability and
+what its executable adapter actually receives or can do. The Critic requires
+captured screens; a three-reader profile and text-serialized images cannot prove
+that requirement. Source/corpus transport and image delivery must qualify
+separately, with an honest unavailable result when either is missing.
+
+The design now elaborates AC-7/AC-9 with executable profile reconciliation,
+authorized supplied captures and actual input-delivery provenance. Consume the
+existing BI-BCBCA8D1 correction and BI-4538254D architect guidance; do not take
+their transport or corpus ownership. E85C6B35FC8B stays UNKNOWN/nonreplayable,
+and the earlier 8c648be architecture result covers that artifact only. This
+amendment has no independent current-artifact approval, new baseline, coverage,
+implementation admission or runtime proof. No review is dispatched here.
+
 ## Implementation procedure
 
 Refresh the governed source worktree against current main and read its operating
@@ -99,6 +117,10 @@ do not raise cycle or module-size baselines.
 - Retire active legacy classifier/persona policy while preserving historical
   immutable packet selection and prompts. Prefer the actual registered steward;
   do not label another UX role as the UX Design Critic.
+- Reconcile each selected service and applicable profession procedure with the
+  actual authorized tool surface and supported input channel. Use existing
+  contracts; do not union every skill/grant or add a second hardcoded map.
+  Missing required rendering, corpus or modality support remains unavailable.
 - Bound concurrency at three while retaining all required outcomes. Craft
   proposals are data for the independent core reviewer, not blocking verdicts.
 - Verify registry extension, deterministic paths, HTML before React, more than
@@ -145,6 +167,23 @@ do not raise cycle or module-size baselines.
   Metrics-only `ToolExecution.result = {}` is not corpus content. Model-provided
   references, later mutable lookups or incomplete reads cannot manufacture
   provenance. Reuse existing artifact/receipt machinery; no raw-source journal.
+- Consume authorized supplied captures through pinned DocumentVersion/blob
+  identities and original/provider access checks. Preserve source/route/state,
+  viewport/theme/time and capture producer; never label another revision or
+  external capture as the Critic's own current rendering. Reuse canonical grant
+  alternatives; a write grant or ownership is not a new read permission.
+- Verify real image input through supported API/CLI channels and a server-owned
+  successful-delivery receipt bound to the exact task/contribution/digest/attempt/fence,
+  provider/channel and image hashes. Enforce count/MIME/byte/pixel limits,
+  private staging/cleanup and sensitivity floors. Serialize evidence checkpoints
+  without losing concurrent provenance or treating a heartbeat as displacement.
+  Checkpoint recovery never repeats inference. No raw-image text archives,
+  unsupported-adapter fallback, new evidence store or implicit native retry.
+- Verify missing capture, inaccessible/changed version, forged reference,
+  mismatched source, stripped modality, failed delivery, absent receipt and
+  leaked staging paths cannot satisfy completion. A positive UX qualification
+  needs actual Critic pixel inspection plus source/corpus evidence and a
+  separately attributable author response; capture or dispatch alone is not it.
 - Add attributable accept/reject/request-changes dispositions with contribution
   identity and rationale. Preserve the assessed result and history.
 - Retain `consultProfessionKey` separately from authenticated actor identity in

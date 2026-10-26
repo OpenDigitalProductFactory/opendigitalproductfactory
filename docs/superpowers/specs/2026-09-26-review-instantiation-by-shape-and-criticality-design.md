@@ -251,6 +251,58 @@ review are separate obligations with separate eligible principals. Preserve all
 obligations across batches and distinguish an unavailable contribution from an
 advisory finding returned by a completed one.
 
+### Executable craft obligations and supplied inputs
+
+AC-7 and AC-9 require the selected profession's actual work, not merely its
+identity, a configured service capability or a completed inference. Before
+admission, reconcile the requested service and applicable profession procedure
+with the authorized executable tool surface and the transport's supported input
+channels. Preserve the distinction between required evidence, tool authority and
+runtime availability. An advertised browser capability cannot prove that a
+worker can render, and a model's image capability cannot prove that its adapter
+sent pixels. Missing requirements produce an explicit unavailable contribution;
+they do not silently turn the requested service into a source-only substitute.
+
+Use existing service, skill, profession, task and adapter contracts. Do not union
+all of a coworker's skills or grants, enable optional runtime capabilities, or
+introduce another profession-to-tool map. A registered identity remains data;
+unsupported execution must be explained rather than hidden by that declaration.
+Configuration can select supported behavior but cannot grant authority or invent
+a transport implementation. BI-4538254D owns the cross-cutting architect guidance;
+this delivery consumes that boundary rather than creating a competing classifier.
+
+For a UX procedure requiring captured screens, an authorized supplied capture
+may satisfy the input requirement without the Critic operating a browser. Bind
+the exact source revision and image DocumentVersion/blob digest, capture route,
+state, viewport, theme, time and attributed capture producer. Distinguish an
+external capture from the Critic's own rendering and from current deployed
+acceptance. A later public prototype is not equivalent to an older artifact
+merely because their layouts resemble each other. The selected Critic must
+receive real image input and perform its own source/corpus-backed assessment;
+an engineering screenshot, a second model's findings, an image URL in prose or
+base64 serialized into a text prompt cannot establish that contribution.
+
+Supplied images retain the same current original-requester, provider, token,
+organization, sensitivity and resource-access checks as other evidence. Reuse
+the canonical tool-grant alternatives and document access policy; neither write
+permission nor document ownership creates an implicit read grant. Resolve pinned
+versions through authorized storage, not arbitrary caller-selected local paths.
+Keep image count, MIME, decoded-byte and pixel limits, private staging, cleanup
+and the original sensitivity floor. No capture route may bypass a denied access
+path, and no supplied input retroactively widens a historical task's authority.
+
+The initial immutable association records supplied inputs before dispatch. A
+server-owned receipt binds actual successful image delivery to the task, contribution/node,
+request digest, attempt/fence, selected provider/channel and capture digests. Staging or
+model-written capture references alone are insufficient. Serialize the existing
+metadata checkpoint so a heartbeat or concurrent provenance append is not
+mistaken for task-fence displacement or lost evidence. Database checkpoint
+recovery never repeats inference. Reuse existing task,
+DocumentVersion, blob and receipt machinery without raw-image prompt archives,
+a new evidence ledger or agent-authored calibration. Unsupported adapters refuse
+before dispatch; an incomplete or uncertain execution never earns an implicit
+retry. The original contribution and author response remain required.
+
 ### Existing engagement fulfillment
 
 Extend the existing service-catalog engagement and governed task lifecycle.
@@ -330,6 +382,25 @@ fulfillment. Use exact-source governed preview evidence before activation and
 bind post-release acceptance to the containing canonical revision.
 
 ## 9. Migration and evidence history
+
+### October 25 execution-evidence amendment (unimplemented)
+
+The Critic repair exposed a mismatch between the assigned rendered-surface
+procedure and the exact three-reader worker profile, followed by a missing
+image-input channel in the remote conversation and Codex adapter. A normal
+native document read also demonstrated why the canonical alternative-grant rule
+must be reused instead of assuming every named grant is required. These are
+concrete execution-contract gaps under AC-7/AC-9, not evidence that a specialist
+completed its work. Their native observations are recorded in WC-6CCF8DAB and
+WC-8D35443E; the configuration-versus-code case is recorded on BI-4538254D.
+
+The new subsection makes the required evidence and input-delivery contract
+explicit without changing the ten marked acceptance statements or five
+objectives. Implementation and runtime qualification remain outstanding. Native
+review E85C6B35FC8B of the earlier 8c648be artifact remains UNKNOWN and
+nonreplayable; this amendment neither settles it nor author-resolves its earlier
+findings. Current-artifact review, coverage and implementation admission still
+apply. No replacement review is dispatched by editing these documents.
 
 Baseline baseline-c1c09681-bff9-409b-af5a-bf2a45831d5e approved the earlier f336
 artifact. New independent review must explicitly disposition AC-3's active/legacy
