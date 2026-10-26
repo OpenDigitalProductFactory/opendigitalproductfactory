@@ -14,6 +14,7 @@ import { resolveMcpCredential } from './mcp-credential.mjs';
 import { mcpCall } from './mcp-client.mjs';
 import { superviseLeaseRun, admittedLeaseTtlMs } from './lease-supervisor.mjs';
 import { sampleLocalCiHostPressure } from './local-ci-host-pressure.mjs';
+import { sanitizeForLog } from './safe-log.mjs';
 
 export function assertToolReadiness(response) {
   const report = deliveryReadinessFromDiscovery(response);
@@ -376,5 +377,5 @@ export async function main(env = process.env) {
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  main().catch(error => { console.error(error.message); process.exitCode = 1; });
+  main().catch(error => { console.error(sanitizeForLog(error?.message ?? error)); process.exitCode = 1; });
 }

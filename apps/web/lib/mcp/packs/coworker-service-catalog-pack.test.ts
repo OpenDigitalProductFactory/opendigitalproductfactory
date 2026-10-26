@@ -1,7 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
+import { withEngagementFulfillment } from "./coworker-service-catalog-pack";
+import { TOOL_PACK_REGISTRY } from "../pack-registry";
 import { PLATFORM_TOOLS } from "@/lib/mcp-tools";
 import { TOOL_TO_GRANTS } from "@/lib/tak/agent-grants";
+
+const adapter = vi.hoisted(() => vi.fn().mockResolvedValue({ success: true, data: { status: "accepted" } }));
+vi.mock("@/lib/mcp/external-coworker-task-adapter", () => ({ fulfillCoworkerEngagement: adapter }));
 
 describe("coworker service catalog MCP surface", () => {
   it("exposes governed discovery and engagement tools", () => {
@@ -23,4 +28,20 @@ describe("coworker service catalog MCP surface", () => {
     expect(TOOL_TO_GRANTS.request_coworker_engagement).toEqual(["coworker_engagement_write"]);
     expect(TOOL_TO_GRANTS.analyze_coworker_engagement_refinement).toEqual(["coworker_catalog_read"]);
   });
+});
+
+it("binds the supported fulfillment port without exposing a caller-selected executor", async () => {
+  const fulfill = vi.fn().mockResolvedValue({ success: true, data: { status: "accepted" } });
+  const pack = withEngagementFulfillment(fulfill);
+  const context = { agentId: "AGT-EXT-CODEX" };
+  await expect(pack.handlers.request_coworker_engagement({ engagementId: "CE-724328D6" }, "operator", context)).resolves.toMatchObject({ success: true });
+  expect(fulfill).toHaveBeenCalledExactlyOnceWith("CE-724328D6", undefined, "operator", context);
+  await expect(pack.handlers.request_coworker_engagement({ engagementId: "CE-724328D6", requestedOutcome: "replacement" }, "operator", context)).resolves.toMatchObject({ success: false, error: "invalid_engagement_resume" });
+  expect(fulfill).toHaveBeenCalledTimes(1);
+});
+it("the runtime registry binds fulfillment to the governed adapter", async () => {
+  const handler = TOOL_PACK_REGISTRY.getHandler("request_coworker_engagement")!;
+  const context = { agentId: "AGT-EXT-CODEX" };
+  await expect(handler({ engagementId: "CE-724328D6" }, "operator", context)).resolves.toMatchObject({ success: true });
+  expect(adapter).toHaveBeenCalledExactlyOnceWith("CE-724328D6", undefined, "operator", context);
 });

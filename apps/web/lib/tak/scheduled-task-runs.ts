@@ -1,3 +1,5 @@
+import { isRecord } from "@/lib/shared/coerce";
+import { readDispatchCheckpoint } from "@/lib/work-management/workroom-drive-checkpoint";
 import { readWorkroomStageTaskConfig, workroomStageToolsFromTaskConfig } from "@/lib/scheduling/workroom-stage-task-config";
 import {
   createAutonomousWorkRun,
@@ -182,9 +184,16 @@ export function classifyScheduledRequiredTools(input: {
   prompt: string;
   authorizedTools: Array<{ name: string; sideEffect?: boolean }>;
   executedTools: ScheduledRunToolExecution[];
+  /** Workroom runs must retain every pending required call, even beside a successful report or another missing write. */
+  preservePendingApprovals?: boolean;
 }): ScheduledRequiredToolOutcome {
   const prompt = input.prompt.toLowerCase();
   let proposed: ScheduledRequiredToolOutcome | null = null;
+  if (input.preservePendingApprovals) {
+    const pending = input.authorizedTools.find((tool) => tool.sideEffect && promptNamesTool(prompt, tool.name)
+      && input.executedTools.some((call) => call.name === tool.name && scheduledCallAwaitsDecision(call)));
+    if (pending) return { kind: "proposed", toolName: pending.name };
+  }
 
   for (const tool of input.authorizedTools) {
     if (!tool.sideEffect || !promptNamesTool(prompt, tool.name)) continue;
@@ -208,12 +217,7 @@ export function classifyScheduledRequiredTools(input: {
     // tool executed zero times" is why the readiness and evidence chain looks
     // broken: the coworker requested approval, was handed back a failure, and
     // retried until it exhausted its turn.
-    const awaitingDecision = calls.some(
-      (execution) =>
-        (execution.result?.success === true &&
-          execution.result.data?.status === "proposed") ||
-        execution.result?.error === "approval_required",
-    );
+    const awaitingDecision = calls.some(scheduledCallAwaitsDecision);
     if (awaitingDecision) {
       // Remember it, but keep looking: a genuinely absent mutation elsewhere
       // still outranks this.
@@ -224,6 +228,11 @@ export function classifyScheduledRequiredTools(input: {
   }
 
   return proposed ?? { kind: "executed" };
+}
+
+function scheduledCallAwaitsDecision(call: ScheduledRunToolExecution): boolean {
+  return call.result?.success === true && call.result.data?.status === "proposed"
+    || call.result?.error === "approval_required";
 }
 
 /**
@@ -363,7 +372,9 @@ export async function createTaskRunForScheduledTask(input: {
   proactivity?: ProactivityPlan;
   /** BI-754C9E82: auditable effective posture the scheduler delegates with. */
   delegatedPosture?: ResolvedDelegatedPosture;
+  taskConfig?: unknown;
 }): Promise<ScheduledTaskRunRef> {
+  const checkpoint = readDispatchCheckpoint(isRecord(input.taskConfig) ? input.taskConfig.workroomDispatchCheckpoint : null);
   return createAutonomousWorkRun({
     trigger: "scheduled",
     userId: input.ownerUserId,
@@ -377,6 +388,7 @@ export async function createTaskRunForScheduledTask(input: {
       kind: "scheduled-task",
       id: input.taskId,
     },
+    ...(checkpoint ? { metadata: { workroomDispatchCheckpoint: checkpoint } } : {}),
     proactivity: input.proactivity,
     delegatedPosture: input.delegatedPosture,
   });

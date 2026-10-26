@@ -43,6 +43,7 @@ type AuthorityDb = {
     findFirst(args: unknown): Promise<{
       id: string;
       agentId: string;
+      slugId?: string | null;
       sensitivity: string;
       hitlTierDefault: number;
       governanceProfile: {
@@ -399,6 +400,7 @@ export const resolveCoworkerToolAuthorityInput =
         select: {
           id: true,
           agentId: true,
+          slugId: true,
           sensitivity: true,
           hitlTierDefault: true,
           governanceProfile: {
@@ -434,6 +436,20 @@ export const resolveCoworkerToolAuthorityInput =
       task,
       execution.toolName,
     );
+    const engagementMetadata = objectRecord(task?.a2aMetadata);
+    if (engagementMetadata?.engagementBinding != null) {
+      const { parseEngagementTaskBinding, engagementToolAllowed, validateEngagementTask, engagementProviderIdentityRefs } = await import("@/lib/coworker-service-catalog/engagement-fulfillment");
+      const binding = parseEngagementTaskBinding(engagementMetadata.engagementBinding);
+      const tokenId = asString(engagementMetadata.apiTokenId);
+      const source = engagementMetadata.tokenSource;
+      const sourceRef = objectRecord(engagementMetadata.sourceRef);
+      if (!task || !binding || !tokenId || (source !== "oauth" && source !== "pat")
+        || engagementMetadata.trigger !== "external-mcp" || sourceRef?.kind !== "mcp-token" || sourceRef.id !== tokenId
+        || !engagementProviderIdentityRefs(binding.providerAgentId).includes(actingAgentId) || execution.userId !== binding.userId
+        || !engagementToolAllowed(binding, execution.toolName, execution.rawParams)) throw new Error("Engagement tool is outside its immutable advisory binding.");
+      await validateEngagementTask({ binding, token: { tokenId, userId: execution.userId, capability: "write", source },
+        taskRunId: task.taskRunId, requireAssociation: true, authorityScope: Array.isArray(task.authorityScope) ? task.authorityScope.filter((scope): scope is string => typeof scope === "string") : [] });
+    }
     const trustedBoundItemId = await resolveTrustedInitiativeItemId({
       task,
       toolName: execution.toolName,
@@ -541,7 +557,10 @@ export const resolveCoworkerToolAuthorityInput =
           ? await loadScheduledRoomMandate(db as unknown as RoomMandateDb, {
               taskRunId: task.taskRunId,
               a2aMetadata: task.a2aMetadata,
-              agentIds: [agent.agentId, actingAgentId],
+              agentIds: [agent.agentId, actingAgentId, ...(agent.slugId ? [agent.slugId] : [])],
+              toolName: execution.toolName,
+              params: execution.rawParams,
+              allowBlockedReport: agent.governanceProfile?.hitlPolicy.trim().toLowerCase() !== "always",
             })
           : null,
       }),

@@ -14,7 +14,7 @@ This reproduces the defect already recorded against BI-271B8EEC and PR #6081.
 An explicit transition back into the coding pool after this same PR already
 advanced the item supersedes that PR's automatic status advance. Reobserving
 the PR, receiving a duplicate webhook, or sweeping its Workroom must preserve
-the reopen and its active claim. A different PR may advance the item normally.
+the reopen and its active claim. A later delivery may advance the item normally.
 This does not approve a review, satisfy acceptance, or change branch protection.
 
 Use existing BacklogItem status history, scoped to the same item and PR URL.
@@ -24,6 +24,32 @@ When a Workroom lacks a saved PR URL, reconstruct the canonical URL only from
 its recorded repository and PR number; skip a room whose identity is unavailable.
 No schema, grant, credentials, runtime topology or offline execution privilege
 changes are required. Existing records remain intact.
+
+## Live acceptance correction
+
+PR #6571 was deployed by SUR-780A521E on 2026-10-25. The canonical install
+contained its merge commit, but live acceptance failed: activity
+`cmvo8sagt0bnd01qfec4j3nd6` advanced BI-7A4E70E9 from open to awaiting acceptance
+at 19:50:07.613 UTC using PR #6426, after the explicit reopen at 19:49:40.888 UTC.
+GitHub records PR #6426 as merged on October 16 at 05:09:48 UTC. The earlier
+same-PR history guard alone does not establish that an older merged PR belongs
+to the resumed work. No absence of earlier #6426 status history is asserted.
+
+Carry the existing provider `mergedAt` field through inventory reconciliation
+and the webhook's `merged_at` into the shared transition. Under the existing
+row lock, compare it with the latest explicit transition from done or awaiting
+acceptance back into the coding pool. An older or equal merge cannot supersede
+that reopen. Missing or invalid merge time cannot prove a later delivery.
+The Workroom-only sweep has no provider delivery timestamp and must preserve
+such a reopen; webhook or inventory evidence can establish a later delivery.
+This extends the same existing actuator; it creates no new lifecycle or store.
+
+Regression coverage includes an older merged PR with no prior local advance,
+both provider adapters, a sparse sweep, missing/invalid/equal timestamps, and a
+genuinely later merge. Inventory tests must prove the provider time survives
+the adapter. Earlier source checks remain historical evidence, not acceptance
+of this correction. Re-deployment and another canonical acceptance exercise
+are still owed before this repair is complete.
 
 ## Ordered implementation and verification
 

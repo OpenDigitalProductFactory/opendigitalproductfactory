@@ -1,4 +1,6 @@
+import { readDeliveryAgreement } from "@/lib/work-management/delivery-agreement";
 import { randomUUID } from "node:crypto";
+import { captureFiniteDeliveryState } from "./delivery-agreement-capture";
 import { normalizePersistedScope, adoptionScopePatch, assertScopeReadback, replaceOwnershipClaims, scopeChangeEvidence, scopeWriteWhere } from "./scope-input";
 import {
   STATUS_OVERRIDE_TTL_MS,
@@ -74,6 +76,7 @@ type CapsuleCreateInput = {
   epicId?: string | null;
   featureBuildId?: string | null;
   workspaceState?: Record<string, unknown>;
+  acceptanceSource?: import("./delivery-agreement-capture").DeliveryAcceptanceSource;
   scope?: WorkCapsuleScopeInput | null;
   // BI-B24F96D0: principal who commissioned the work (Requester), distinct from
   // the creating actor. Optional.
@@ -156,9 +159,9 @@ export async function createWorkCapsule(args: {
           servesPortfolioRoles: scope.servesPortfolioRoles,
           dependsOnPortfolioRoles: scope.dependsOnPortfolioRoles,
           // BI-8C54B216: convened WITH a shape. Rides scopeClaims (the home
-          // workroom-shape-claim.ts reads) — no migration, invisible to readers.
+          // workroom-shape-claim.ts reads) â€” no migration, invisible to readers.
           scopeClaims: buildWorkCapsuleScopeClaims(scope, now),
-          workspaceState: args.input.workspaceState ?? {},
+          workspaceState: await captureFiniteDeliveryState(tx, { ...args.input, activityKind: scope.activityKind, now }),
           idempotencyKey: args.input.idempotencyKey,
           ...workroomOwnershipData(args.actor, args.input.executorKind, now, args.input.requestedByPrincipalId),
           status,
@@ -168,6 +171,7 @@ export async function createWorkCapsule(args: {
         workCapsuleId: created.id,
         kind: "created",
         summary: `Created Work Capsule ${created.capsuleId}`,
+        payload: { deliveryAgreement: readDeliveryAgreement(created.workspaceState) },
         actor: args.actor,
       });
       return created;
@@ -272,6 +276,7 @@ export async function adoptWorktreeCapsule(args: {
           title: args.input.title,
           objective: args.input.objective,
           source: "external-adoption",
+          workspaceState: await captureFiniteDeliveryState(tx, { ...args.input, source: "external-adoption", now }),
           status: "ready",
           executorKind: args.input.executorKind ?? null,
           executorRef: args.input.executorRef ?? null,
@@ -300,7 +305,7 @@ export async function adoptWorktreeCapsule(args: {
         workCapsuleId: capsule.id,
         kind: "adopted",
         summary: `Adopted ${args.input.headBranch}`,
-        payload: { worktreePath: args.input.worktreePath },
+        payload: { worktreePath: args.input.worktreePath, deliveryAgreement: readDeliveryAgreement(capsule.workspaceState) },
         actor: args.actor,
       });
       return capsule;
@@ -336,19 +341,7 @@ export type BacklogWorkspaceConflict = {
   }>;
 };
 
-/**
- * Soft claim-at-start (BI-7D20BFDF): bind a BacklogItem to the location + session
- * that is starting work on it, so a directly-working agent's BI no longer looks
- * unclaimed to a parallel session. Creates (or reuses + late-binds) the
- * Workroom for (repositoryFullName, headBranch) and stamps the BI claim
- * fields, FOLLOWING the existing 12h-stale claim convention.
- *
- * This is advisory, not a hard lock (per the WWMD kernel decision): an existing
- * FRESH claim held by a DIFFERENT agent/session is NOT overwritten and is
- * returned as a non-blocking `conflict` — but the capsule is still bound so the
- * work is tracked. Multiple capsules per BI (one per branch) are expected and are
- * NOT themselves a conflict.
- */
+/** Bind existing backlog work to this source identity without overwriting a live owner. */
 export async function claimBacklogItemWorkspace(args: {
   db: CapsuleDb;
   input: ClaimBacklogWorkspaceInput;
@@ -373,7 +366,7 @@ export async function claimBacklogItemWorkspace(args: {
     select: {
       id: true,
       itemId: true,
-      epicId: true,
+      epicId: true, title: true, body: true,
       claimStatus: true,
       claimedById: true,
       claimedByAgentId: true,
@@ -411,7 +404,8 @@ export async function claimBacklogItemWorkspace(args: {
     db: args.db,
     input: {
       title: args.input.title ?? `Work on ${item.itemId}`,
-      objective: args.input.objective ?? `Claim-at-start binding for ${item.itemId}`,
+      objective: args.input.objective ?? item.title ?? `Claim-at-start binding for ${item.itemId}`,
+      acceptanceSource: { itemId: item.itemId, body: item.body ?? null },
       repositoryFullName: args.input.repositoryFullName,
       headBranch: args.input.headBranch,
       worktreePath: args.input.worktreePath,
@@ -605,7 +599,7 @@ export async function recordAgentActivity(args: {
 
 /**
  * A scope claim on another active capsule that conflicts with an incoming
- * claim — same `kind:value`, with at least one side claiming `edit` intent.
+ * claim â€” same `kind:value`, with at least one side claiming `edit` intent.
  */
 export type ScopeConflict = {
   capsuleId: string;
@@ -638,7 +632,7 @@ export class ScopeOverlapError extends Error {
 /**
  * Find active claims on OTHER capsules that conflict with `claims`. "Active" =
  * not archived, not in a terminal status, and (for lease-backed executors) the
- * lease has not expired — an expired-lease capsule has released its hold, so its
+ * lease has not expired â€” an expired-lease capsule has released its hold, so its
  * scope is reclaimable. Conflict detection is done in JS over the parsed
  * scopeClaims JSON (the active-capsule population is small), mirroring how the
  * rest of this store reasons about scope.
@@ -672,7 +666,7 @@ export async function detectScopeConflicts(args: {
     for (const existing of parseScopeClaims(other.scopeClaims)) {
       // A `path` claim covers its whole subtree, so a directory claim conflicts
       // with a file/dir beneath it (and vice-versa) even though the kind:value
-      // strings differ — without this, `path:dir/` and `path:dir/file.ts` were
+      // strings differ â€” without this, `path:dir/` and `path:dir/file.ts` were
       // treated as disjoint and two sessions could both "own" overlapping edit
       // scope. Non-path kinds keep exact-value matching.
       const incoming = args.claims.find(

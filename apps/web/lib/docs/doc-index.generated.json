@@ -2796,7 +2796,8 @@
         "a-stage-names-the-tools-it-needs",
         "a-new-shape-version-reaches-a-live-room-only-by-rebind-bi-cb5c0dce",
         "related-references",
-        "a-shape-must-outlive-the-room-that-decided-it-bi-82dcd601"
+        "a-shape-must-outlive-the-room-that-decided-it-bi-82dcd601",
+        "finite-delivery-identity"
       ]
     },
     "docs/architecture/workos-iam-equivalence-scorecard.md": {
@@ -6293,6 +6294,22 @@
         "pilot-decision-report",
         "recovery",
         "evidence-contract"
+      ]
+    },
+    "docs/operations/mac-inference-engine.md": {
+      "publicHref": "/operations/mac-inference-engine/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "maintained-mac-inference-engine-candidate",
+        "why-this-package-exists",
+        "build-and-provenance",
+        "qualification-and-maintenance-window",
+        "activation-rollback-and-ai-ops",
+        "recorded-initial-candidate",
+        "qualification-progress-on-october-25-2026-chicago",
+        "fresh-model-control-result-2026-10-26-0326-utc"
       ]
     },
     "docs/operations/mobile-privacy-policy-draft.md": {
@@ -13023,6 +13040,15 @@
         "what-to-watch"
       ]
     },
+    "docs/user-guide/platform/coworker-engagements.md": {
+      "publicHref": "/user-guide/platform/coworker-engagements/",
+      "portalHref": "/docs/platform/coworker-engagements",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "requesting-and-reading-a-coworker-contribution"
+      ]
+    },
     "docs/user-guide/platform/deployment-country-sharing.md": {
       "publicHref": "/user-guide/platform/deployment-country-sharing/",
       "portalHref": "/docs/platform/deployment-country-sharing",
@@ -13338,6 +13364,15 @@
         "what-to-watch"
       ]
     },
+    "docs/user-guide/workroom-approval-recovery.md": {
+      "publicHref": "/user-guide/workroom-approval-recovery/",
+      "portalHref": "/docs/workroom-approval-recovery",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "workroom-reports-and-approval-waits"
+      ]
+    },
     "docs/user-guide/workspace/attention-inbox.md": {
       "publicHref": "/user-guide/workspace/attention-inbox/",
       "portalHref": "/docs/workspace/attention-inbox",
@@ -13366,6 +13401,13 @@
         "ai-coworker-support",
         "what-to-watch"
       ]
+    },
+    "docs/user-guide/workspace/finite-delivery-agreements.md": {
+      "publicHref": "/user-guide/workspace/finite-delivery-agreements/",
+      "portalHref": "/docs/workspace/finite-delivery-agreements",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": []
     },
     "docs/user-guide/workspace/index.md": {
       "publicHref": "/user-guide/workspace/",

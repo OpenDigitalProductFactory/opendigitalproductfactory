@@ -219,6 +219,7 @@ export interface WorkroomOutcomeView {
 }
 
 export interface WorkroomView {
+  delivery?: import("./delivery-agreement").DeliveryAgreementView | null;
   /** Source requirements are read through the room's existing access boundary.
    * They do not establish organization applicability or qualification. */
   reviewProfile?: {
