@@ -2361,7 +2361,9 @@ def hook_reference(skill_pack: Path) -> str:
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="Update DPF Codex/Claude/Grok/Antigravity agent skills and MCP wiring.")
     parser.add_argument("--skill-pack-path", default=str(default_skill_pack_path()))
-    parser.add_argument("--project-root", type=Path, help="Explicit repository whose existing Codex override should converge")
+    parser.add_argument("--project-root", type=Path, help="Explicit DPF source project for client configuration")
+    parser.add_argument("--permissions-only", action="store_true",
+                        help="Converge only routine native permissions for --project-root; no plugin, credential or connector refresh.")
     parser.add_argument("--mcp-url", default=os.environ.get("DPF_MCP_URL") or None)
     parser.add_argument("--auth-mode", choices=("oauth", "legacy"), default=os.environ.get("DPF_MCP_AUTH_MODE", "oauth"))
     parser.add_argument("--codex-only", action="store_true")
@@ -2439,6 +2441,25 @@ def main(argv: list[str]) -> int:
     home = home_dir()
     codex_managed = codex_managed_plugin_path(home)
     shared_managed = shared_managed_plugin_path(home)
+    if args.permissions_only:
+        if not args.project_root or args.codex_plugin_only or args.grok_client_stdin or args.codex_only or args.claude_only:
+            parser.error("--permissions-only requires --project-root and cannot refresh plugins or credentials")
+        import routine_permissions
+        import toolchain_convergence as convergence
+        try:
+            plan = routine_permissions.plan_permissions(args.project_root, home, skill_pack)
+            rows = routine_permissions.apply_permissions(plan, args.dry_run, native=True)
+        except (OSError, routine_permissions.PermissionPlanError) as error:
+            print(f"Permission convergence failed: {error}", file=sys.stderr)
+            return 1
+        for row in rows:
+            print(f"  {row['client']}: {row['action']} routine permissions; session verification pending")
+        if args.report_json:
+            portal_manifest = read_json(Path(args.portal_manifest), {}) if args.portal_manifest else None
+            report = convergence.ConvergenceReport(home, convergence.Declarations(skill_pack, portal_manifest), portal_manifest)
+            report.add_permissions(rows)
+            report.write(args.report_json, args.dry_run)
+        return 1 if any(row['action'] == 'failed' for row in rows) else 0
 
     if args.codex_plugin_only:
         if args.claude_only or args.codex_only or args.skip_codex_cli_install:
@@ -2611,13 +2632,27 @@ def main(argv: list[str]) -> int:
             )
         print(f"  Claude competitive: {claude_competitive_status}")
 
+    permission_failed = False
+    if args.project_root and (args.project_root / 'packages/dpf-skill-pack').is_dir():
+        import routine_permissions
+        try:
+            permission_rows = routine_permissions.apply_permissions(
+                routine_permissions.plan_permissions(args.project_root, home, skill_pack,
+                    clients=('codex','grok') if args.codex_only else ('claude-code',) if args.claude_only else ('codex','claude-code','grok')),
+                args.dry_run, native=True)
+            permission_failed = any(row['action'] == 'failed' for row in permission_rows)
+            if report:
+                report.add_permissions(permission_rows)
+        except (OSError, routine_permissions.PermissionPlanError) as error:
+            permission_failed = True
+            print(f"Permission convergence failed: {error}", file=sys.stderr)
     token_present = bool(os.environ.get(TOKEN_ENV_VAR))
     print("  MCP auth   : OAuth configuration written; sign in and verify through the client. Unverified clients/transports require explicit legacy compatibility." if args.auth_mode == "oauth" else "  MCP auth   : explicit legacy compatibility")
     print(f"  MCP token  : {'present' if token_present else 'missing'} ({TOKEN_ENV_VAR})")
     for line in guard_liveness_advisory():
         print(line)
 
-    exit_code = 1 if codex_install_failed or claude_install_failed else 0
+    exit_code = 1 if codex_install_failed or claude_install_failed or permission_failed else 0
     roster_printed = False
     plugin_plane = codex_plugin_hooks_active(codex_managed, home)
     trust_pending = codex_hook_trust_pending(home, codex_present=codex_present, plugin_plane=plugin_plane)

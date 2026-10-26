@@ -368,6 +368,10 @@ if ($LASTEXITCODE -ne 0) {
     exit $LASTEXITCODE
 }
 
+# One shared writer owns routine permissions, separate from plugin refresh.
+& $PluginUpdater -PermissionsOnly -ProjectRoot $RepoRoot -SkillPackPath (Join-Path $RepoRoot "packages\dpf-skill-pack") -DryRun:$DryRun
+if ($LASTEXITCODE -ne 0) { Write-Fail2 "Routine permission convergence failed."; exit $LASTEXITCODE }
+
 # --- Compute plan via Node bridge --------------------------------------------
 $BootstrapCli = Join-Path $RepoRoot "packages\dpf-bootstrap\src\agent-toolchain\cli\compute-plan.ts"
 if (-not (Test-Path -LiteralPath $BootstrapCli)) {

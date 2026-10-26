@@ -6248,7 +6248,8 @@
         "reconcile-installed-plugins-flag",
         "what-install-dpf-does-not-do",
         "see-also",
-        "mapping-a-network-from-another-machine"
+        "mapping-a-network-from-another-machine",
+        "routine-development-client-permissions"
       ]
     },
     "docs/operations/integrations/email-postmark-setup.md": {

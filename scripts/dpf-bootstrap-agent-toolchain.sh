@@ -575,6 +575,14 @@ if ! bash "$PLUGIN_UPDATER" "${plugin_update_args[@]}"; then
   exit 1
 fi
 
+# One shared writer owns routine permissions, separate from plugin refresh.
+permission_args=(--permissions-only --project-root "$REPO_ROOT")
+[ "$DRY_RUN" -eq 1 ] && permission_args+=(--dry-run)
+if ! bash "$PLUGIN_UPDATER" "${permission_args[@]}"; then
+  fail "Routine permission convergence failed."
+  exit 1
+fi
+
 # --- Compute plan via Node bridge --------------------------------------------
 
 BOOTSTRAP_CLI="$REPO_ROOT/packages/dpf-bootstrap/src/agent-toolchain/cli/compute-plan.ts"
