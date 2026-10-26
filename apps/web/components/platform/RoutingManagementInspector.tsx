@@ -59,7 +59,7 @@ export function RoutingManagementInspector({ receipt: r, scope, onClose }: {
     </dl>
     {r.shadowMode && <StatusBadge intent="neutral" label={t("shadowDecision")}/>}
     {r.execution === "success" && r.selectedExecution === "error" && <StatusBadge intent="warning" label={t("recovered")}/>}
-    <section><h3 className="mb-2 font-semibold">{t("whyThisPath")}</h3><p className="text-sm text-[var(--dpf-muted)]">{t("selectedEndpoint")}<span className="break-all font-mono">{r.endpointId}</span>. {r.correlation === "exact" ? t("attemptsAreJoinedByAnExactRequestTrace") : r.correlation === "ambiguous" ? t("thisTraceBelongsToMultipleDecisionsAttemptsAnd") : t("noRequestTraceWasRecordedAttemptAndCost")}</p></section>
+    <section><h3 className="mb-2 font-semibold">{t("whyThisPath")}</h3><p className="text-sm text-[var(--dpf-muted)]">{r.correlation === "exact" ? t("attemptsAreJoinedByAnExactRequestTrace") : r.correlation === "ambiguous" ? t("thisTraceBelongsToMultipleDecisionsAttemptsAnd") : t("noRequestTraceWasRecordedAttemptAndCost")}</p></section>
     <section><h3 className="mb-2 font-semibold">{t("excludedCandidates")}{r.exclusions.length}</h3>
       {r.exclusions.length ? <ul className="space-y-2">{r.exclusions.map((e, i) => <li key={i} className="flex flex-wrap justify-between gap-2 rounded-md bg-[var(--dpf-surface-2)] p-3 text-sm"><span>{e.providerId ?? t("providerNotRecorded")} · {e.modelId ?? t("modelNotRecorded")}</span><StatusBadge intent="warning" label={t(`holds.${e.hold}`)}/></li>)}</ul> : <p className="text-sm text-[var(--dpf-muted)]">{t("noExclusionReceiptRecorded")}</p>}
     </section>
@@ -73,7 +73,7 @@ export function RoutingManagementInspector({ receipt: r, scope, onClose }: {
       </li>)}</ol> : <EmptyState size="sm" title={t("noCorrelatedAttemptEvidence")}/>}
     </section>
     <section><h3 className="mb-2 font-semibold">{t("taskQuality")}</h3><p className="text-sm text-[var(--dpf-muted)]">{r.quality === null ? t("noDecisionLinkedEvaluatorScoreExecutionSuccessAnd") : t("evaluatorScore", { p0: r.quality })}</p><p className="mt-1 break-words text-sm">{t("recipe")}{r.recipeKey ?? t("notRecorded")}{t("evaluator")}{r.evaluator ?? t("notRecorded")}</p></section>
-    <details className="text-sm"><summary className="min-h-11 cursor-pointer py-3">{t("sourceEvidenceIdentifiers")}</summary><p className="break-all font-mono">{t("routedecisionlog")}{r.id}</p><ul className="mt-2 space-y-1 break-all font-mono">{r.sourceIds.map(id => <li key={id}>{id}</li>)}</ul></details>
+    <details className="text-sm"><summary className="min-h-11 cursor-pointer py-3">{t("sourceEvidenceIdentifiers")}</summary><p className="break-all font-mono">{t("selectedEndpoint")}{" "}<span>{r.endpointId}</span></p><p className="break-all font-mono">{t("routedecisionlog")}{r.id}</p><ul className="mt-2 space-y-1 break-all font-mono">{r.sourceIds.map(id => <li key={id}>{id}</li>)}</ul></details>
     <footer className="flex flex-wrap gap-2">
       {r.providerId && <Link className={ROUTING_ACTION_CLASS} href={routingHref(`/platform/ai/providers/${encodeURIComponent(r.providerId)}`, { ...scope, provider: r.providerId })}>{t("providerSettingsOverrides")}</Link>}
       {r.actorId && <Link className={ROUTING_ACTION_CLASS} href={`/platform/ai/agent/${encodeURIComponent(r.actorId)}`}>{t("assignmentSettings")}</Link>}

@@ -33,6 +33,7 @@ vi.mock("@/lib/work-management/workroom-agent-access.server", async (original) =
 }));
 import type { ReceiptDb } from "./command-receipts";
 import { commandDb, hasBoundCommandTransaction, receiptedWorkroomTool } from "./receipted-tool";
+import { readBoundedHandoffLineage } from "./bounded-handoff";
 import { prepareBoundedHandoff } from "./bounded-handoff-tool";
 import { recordSemanticReviewExemption } from "../change-review/semantic-review-policy-exemption";
 import { lockAllNonprodEnvironments, NONPROD_ENVIRONMENT_KEYS, type NonprodEnvironmentKey } from "../nonprod/environment-lease-lock";
@@ -53,7 +54,7 @@ const waiver = () => ({ capsuleId: "WC-1", sourceHeadSha: HEAD, baseTreeHash: "d
 const operator = { userContext: { userId: "owner", platformRole: "HR-000", isSuperuser: false }, agentId: "AGT-EXT-CLAUDE", approvedAuthorityEnvelopeId: "approved-fixture" };
 type FixtureLeaseRow = { leaseId: string; ownerSessionId: string; status: string; environmentKey: string };
 type FixtureLeaseQuery = { where: { ownerSessionId: { in: string[] }; status: { notIn: string[] } } };
-function port(tx: RawTx): ReceiptDb & CapsuleDb & { workroomActivity: CapsuleDb["workroomActivity"] & { findUnique(args?: unknown): Promise<unknown> }; externalEvidenceRecord: any; nonProductionEnvironmentLease: any; platformConfig: any } {
+function port(tx: RawTx): ReceiptDb & CapsuleDb & { workroomActivity: CapsuleDb["workroomActivity"] & { findUnique(args?: unknown): Promise<unknown>; findMany(args: any): Promise<any[]> }; externalEvidenceRecord: any; nonProductionEnvironmentLease: any; platformConfig: any } {
   return {
     $queryRaw: tx.$queryRaw.bind(tx), $executeRaw: tx.$executeRaw.bind(tx),
     // Preserve Prisma's actual nested transaction shape and savepoint semantics.
@@ -83,10 +84,28 @@ function port(tx: RawTx): ReceiptDb & CapsuleDb & { workroomActivity: CapsuleDb[
       async findMany({ where, take }: any) { return tx.$queryRaw<any[]>`SELECT * FROM "ExternalEvidenceRecord" WHERE "workCapsuleId" = ${where.workCapsuleId} AND "operationType" = ${where.operationType} AND details->>'sourceHeadSha' = ${where.details.path ? where.details.equals : HEAD} ORDER BY id LIMIT ${take}`; },
       async create({ data }: any) { await fixture.beforeEvidenceInsert?.(tx); const id = randomUUID(); await tx.$executeRaw`INSERT INTO "ExternalEvidenceRecord" (id, "workCapsuleId", "operationType", details) VALUES (${id}, ${data.workCapsuleId}, ${data.operationType}, ${JSON.stringify(data.details)}::jsonb)`; return { id, ...data }; },
     }, workroomActivity: {
+      async findMany({ where, take }: any) {
+        const approvalId = where.AND.find((part: any) => part.payload.path.at(-1) === "approvalId").payload.equals;
+        const executionId = where.AND.find((part: any) => part.payload.path.at(-1) === "executionId").payload.equals;
+        const since = where.recordedAt?.gte ?? new Date(0);
+        return tx.$queryRaw<any[]>`SELECT * FROM "WorkCapsuleActivity" WHERE "workCapsuleId" = ${where.workCapsuleId} AND kind = 'action' AND payload->>'kind' = 'bounded-handoff' AND payload->>'state' = 'pending-acknowledgement' AND payload #>> '{request,command,handoffManifest,priorFailure,approvalId}' = ${approvalId} AND payload #>> '{request,command,handoffManifest,priorFailure,executionId}' = ${executionId} AND "recordedAt" >= ${since} ORDER BY "recordedAt" DESC,id DESC LIMIT ${take}`;
+      },
       async findUnique() { return { id: "review", workCapsuleId: "row-1", kind: "evidence-recorded", recordedById: "owner", recordedByAgentId: "reviewer-fixture", payload: { result: { capsuleId: "WC-1", sourceHeadSha: HEAD, headTreeHash: TREE, diffDigest: DIFF, decision: "pass", rationale: "Independent fixture review covered the source and failure paths." } } }; },
       async findFirst({ where }: any) {
         if (where.commandScopeKey) { const rows = await tx.$queryRaw<any[]>`SELECT * FROM "WorkCapsuleActivity" WHERE "commandScopeKey" = ${where.commandScopeKey} AND "commandKey" = ${where.commandKey}`; return rows[0] ?? null; }
         if (where.id) { const rows = await tx.$queryRaw<any[]>`SELECT * FROM "WorkCapsuleActivity" WHERE id = ${where.id} AND "workCapsuleId" = ${where.workCapsuleId} AND kind = ${where.kind}`; return rows[0] ?? null; }
+        const original = where.AND.find((part: any) => part.payload.path.at(-1) === "approvalId");
+        if (original) {
+          const executionId = where.AND.find((part: any) => part.payload.path.at(-1) === "executionId").payload.equals;
+          const snapshotDigest = where.AND.find((part: any) => part.payload.path.at(-1) === "digest")?.payload.equals ?? null;
+          const rows = await tx.$queryRaw<any[]>`SELECT * FROM "WorkCapsuleActivity" WHERE "workCapsuleId" = ${where.workCapsuleId} AND kind = 'action' AND payload->>'kind' = 'bounded-handoff' AND payload->>'state' = 'pending-acknowledgement' AND payload #>> '{request,command,handoffManifest,priorFailure,approvalId}' = ${original.payload.equals} AND payload #>> '{request,command,handoffManifest,priorFailure,executionId}' = ${executionId} AND (${snapshotDigest}::text IS NULL OR payload #>> '{request,snapshot,digest}' = ${snapshotDigest}) ORDER BY "recordedAt" DESC,id DESC LIMIT 1`;
+          return rows[0] ?? null;
+        }
+        if (where.AND.some((part: any) => part.payload.path[0] === "state" && part.payload.equals === "pending-acknowledgement")) {
+          const since = where.recordedAt?.gte ?? new Date(0);
+          const rows = await tx.$queryRaw<any[]>`SELECT * FROM "WorkCapsuleActivity" WHERE "workCapsuleId" = ${where.workCapsuleId} AND kind = 'action' AND payload->>'kind' = 'bounded-handoff' AND payload->>'state' = 'pending-acknowledgement' AND "recordedAt" >= ${since} ORDER BY "recordedAt" DESC,id DESC LIMIT 1`;
+          return rows[0] ?? null;
+        }
         const requestId = where.AND.find((part: any) => part.payload.path[0] === "requestId").payload.equals;
         const rows = await tx.$queryRaw<any[]>`SELECT * FROM "WorkCapsuleActivity" WHERE "workCapsuleId" = ${where.workCapsuleId} AND kind = 'action' AND payload->>'kind' = 'bounded-handoff' AND payload->>'state' = 'completed' AND payload->>'requestId' = ${requestId}`; return rows[0] ?? null;
       },
@@ -189,6 +208,60 @@ describe.skipIf(!DATABASE_URL)("bounded handoff transaction protocol (PostgreSQL
     expect((await pool.query('SELECT transfers,"leaseHolderPrincipalId" FROM "WorkCapsule"')).rows[0]).toEqual({ transfers: 1, leaseHolderPrincipalId: "human" });
     expect((await pool.query(`SELECT count(*)::int AS n FROM "WorkCapsuleActivity" WHERE kind='executor-changed'`)).rows[0].n).toBe(1);
     expect(fixture.nestedTransactions).toBe(1);
+  });
+  it("serializes stale recovery previews into one actual pending request", async () => {
+    const priorFailure = { approvalId: "original-refusal", executionId: "original-execution", reason: "handoff-transaction-required", preserve: true };
+    const a = { ...request, commandId: "recovery-preview-a", handoffManifest: { ...request.handoffManifest, priorFailure } };
+    const b = { ...a, commandId: "recovery-preview-b" };
+    const results = await Promise.all([call(a), call(b)]);
+    expect(results.filter(result => result.success)).toHaveLength(1);
+    expect(results.find(result => !result.success)).toMatchObject({ error: "handoff-recovery-already-requested" });
+    expect((await pool.query(`SELECT count(*)::int AS n FROM "WorkCapsuleActivity" WHERE kind='action' AND payload->>'state'='pending-acknowledgement'`)).rows[0].n).toBe(1);
+    expect((await pool.query('SELECT transfers FROM "WorkCapsule"')).rows[0].transfers).toBe(0);
+    const winner = results[0].success ? a : b;
+    expect(await call(winner)).toEqual(results.find(result => result.success));
+    expect((await pool.query(`SELECT count(*)::int AS n FROM "WorkCapsuleActivity" WHERE kind='command-accepted'`)).rows[0].n).toBe(1);
+  });
+  it.each(["lease", "head"] as const)("retains an obsolete %s request and admits one concurrent fresh recovery", async change => {
+    const priorFailure = { approvalId: "original-refusal", executionId: "original-execution", reason: "handoff-transaction-required", preserve: true };
+    const original = await call({ ...request, commandId: "before-lease-change", handoffManifest: { ...request.handoffManifest, priorFailure } });
+    expect(original.success).toBe(true);
+    const oldRequestId = (original.data as any).handoff.requestId;
+    if (change === "lease") await prisma.$executeRaw`UPDATE "WorkCapsule" SET "leaseExpiresAt" = "leaseExpiresAt" + interval '1 minute' WHERE "capsuleId" = 'WC-1'`;
+    else await prisma.$executeRaw`UPDATE "WorkCapsule" SET "headSha" = ${"b".repeat(40)} WHERE "capsuleId" = 'WC-1'`;
+    const reason = change === "lease" ? "handoff-lease-snapshot-changed" : "handoff-boundary-changed";
+    expect(await call(ack(oldRequestId, "obsolete-lease-ack"), receiver)).toMatchObject({ success: false, error: reason });
+    const db = port(prisma);
+    const currentRoom = await db.workroom.findUnique({ where: { capsuleId: "WC-1" } });
+    expect(await readBoundedHandoffLineage(db, currentRoom, { approvalId: priorFailure.approvalId, executionId: priorFailure.executionId,
+      executedAtIso: new Date(0).toISOString(), ownerUserId: source.userId, sourceAgentId: source.agentId,
+      command: { ...request, phase: "request" } }, { actor: source })).toMatchObject({ state: "stale", requestId: oldRequestId, reason });
+    const fresh = { ...request, handoffManifest: { ...request.handoffManifest, priorFailure } };
+    const results = await Promise.all([call({ ...fresh, commandId: "fresh-a" }), call({ ...fresh, commandId: "fresh-b" })]);
+    expect(results.filter(result => result.success)).toHaveLength(1);
+    expect(results.find(result => !result.success)).toMatchObject({ error: "handoff-recovery-already-requested" });
+    expect((await pool.query(`SELECT count(*)::int AS n FROM "WorkCapsuleActivity" WHERE kind='action' AND payload->>'state'='pending-acknowledgement'`)).rows[0].n).toBe(2);
+    expect((await pool.query('SELECT transfers FROM "WorkCapsule"')).rows[0].transfers).toBe(0);
+    expect((await pool.query('SELECT id FROM "WorkCapsuleActivity" WHERE id=$1', [oldRequestId])).rows).toHaveLength(1);
+  });
+  it("uses the same viable request after head restoration and preserves its later genuine completion", async () => {
+    const priorFailure = { approvalId: "original-refusal", executionId: "original-execution", reason: "handoff-transaction-required", preserve: true };
+    const command = { ...request, phase: "request" as const, handoffManifest: { ...request.handoffManifest, priorFailure } };
+    const a = await call({ ...command, commandId: "head-a-request" }); expect(a.success).toBe(true);
+    const requestA = (a.data as any).handoff.requestId;
+    await prisma.$executeRaw`UPDATE "WorkCapsule" SET "headSha" = ${"b".repeat(40)} WHERE "capsuleId" = 'WC-1'`;
+    const b = await call({ ...command, commandId: "head-b-request" }); expect(b.success).toBe(true);
+    await prisma.$executeRaw`UPDATE "WorkCapsule" SET "headSha" = ${HEAD} WHERE "capsuleId" = 'WC-1'`;
+    const failure = { ...priorFailure, executedAtIso: new Date(0).toISOString(), ownerUserId: source.userId, sourceAgentId: source.agentId, command };
+    const db = port(prisma);
+    expect(await readBoundedHandoffLineage(db, await db.workroom.findUnique({ where: { capsuleId: "WC-1" } }), failure, { actor: source }))
+      .toMatchObject({ state: "pending", requestId: requestA });
+    expect(await call({ ...command, commandId: "third-restored-head-request" })).toMatchObject({ success: false, error: "handoff-recovery-already-requested" });
+    expect(await call(ack(requestA, "ack-restored-head"), receiver)).toMatchObject({ success: true });
+    expect(await readBoundedHandoffLineage(db, await db.workroom.findUnique({ where: { capsuleId: "WC-1" } }), failure, { actor: source }))
+      .toMatchObject({ state: "completed", requestId: requestA });
+    expect((await pool.query(`SELECT count(*)::int AS n FROM "WorkCapsuleActivity" WHERE kind='action' AND payload->>'state'='pending-acknowledgement'`)).rows[0].n).toBe(2);
+    expect((await pool.query('SELECT transfers FROM "WorkCapsule"')).rows[0].transfers).toBe(1);
   });
   it("serializes competing requests and refuses the losing snapshot", async () => {
     const [a,b] = await Promise.all([pending("request-a"),pending("request-b")]);

@@ -123,3 +123,92 @@ Rollback disables new fulfillment admission while retaining compatible readers,
 provenance, identity bindings and fences. Never deploy an older writer capable
 of producing unfenced effects while a task is unresolved. No new table, service,
 provider dependency, grant, identity or runtime configuration is proposed.
+
+
+## Deployed native reader boundary (2026-10-26 correction)
+
+The original attempt reached Codex but declined the textual tool-call protocol
+with no actual source/corpus executions. Tool schemas were present; the native
+MCP transport was missing from that adapter. Add an opt-in exact read-only lane
+using the existing internal user/coworker/task-fenced MCP session. Stage private
+per-child configuration over stdin; require startup, restrict the MCP allowlist
+to the three existing readers, disable shell, use the read-only sandbox, and
+retain the existing owned-child lifetime and private cleanup. No persistent
+credential, new identity, tool grant or operator account configuration is added.
+
+Bind a typed read-evidence completion policy to the server execution lifetime.
+Keep the first immutable request packet complete; use the existing actual page,
+wiki, calibration and result validator. Fold native audit rows once and never
+parse native calls back into duplicate dispatch. Preserve the verified Critic
+JSON before unrelated conversational editing. Exhausted evidence budgets refuse
+further governed readers. Incomplete source/corpus work is unavailable with an
+explicit held, nonresumable missing-proof next action. No initiative writer or
+gating authority is invented.
+
+Neither zero governed DB effects nor an ordinary model reply proves absence of
+historical unrestricted native effects. Generic proof producers remain owned by
+BI-7906C73E. This repair does not manufacture attestation or repeat an unattested
+native execution. Original CE724 remains open for a supported finite recovery
+disposition and real attributable result; a new revision's review must be
+associated separately and cannot silently satisfy the original f52 request.
+
+The execution layer owns the no-argument native session minter, prebound to the
+original task identity/fence and fixed read scopes. Routing receives that
+capability through the transient policy/session and cannot select new identity
+or authority. Missing minter is a transport refusal, not textual-tool fallback.
+
+
+## Provided rendered input through existing document versions
+
+A Critic review that requires rendered surfaces now accepts an optional immutable
+`visualEvidenceRef` of the existing `document-version` type, bound into the original
+engagement's first TaskRun digest. It names a JSON capture manifest whose source
+artifact must equal the primary bound repository blob. Existing bindings without
+this optional field keep their digest and reconstruction semantics. An existing
+binding cannot acquire different screenshots, scope or versions on retry.
+
+Revalidate the canonical `doc_load` grant alternatives for original token, canonical
+requester and canonical provider, alongside existing human/Workroom authority.
+`registry_read` is already an admitted alternative; document_write never implies
+read authority. Narrow content further to the install organization and the active
+requester's existing PrincipalAlias: document owner, document creator and immutable
+version creator must match. Refuse restricted, external, archived or higher-classified
+records, wrong source/engagement, corrupt/missing versions and blobs. No URL fetch,
+caller filesystem path, current-version substitution or authority change occurs.
+DocumentVersion/blob storage and original version references remain the durable
+source; later deletion/corruption produces an actionable refusal, never recapture.
+
+At most four PNG/JPEG captures, four megabytes aggregate and forty million pixels
+per image reach existing ChatMessage image blocks. Server and CLI probe real MIME,
+dimensions and digest. Codex stages private files via stdin, passes actual --image
+arguments, keeps bytes out of prompt archives, and deletes the entire private home
+through existing owned-child cleanup. Claude CLI image transport is explicitly
+unavailable before inference/accounting; routing may select another eligible
+transport. It never silently converts pixels into text or changes provider health.
+
+After an actual adapter response the provider boundary reports the image hashes,
+provider/model and adapter to a server-bound callback. The exact active TaskRun
+fence, request digest and engagement binding must still match before an atomic
+metadata update under the existing TaskRun row-lock pattern. Read fresh metadata
+after locking and preserve unrelated read provenance; heartbeat timestamps are
+not an execution fence. A receipt write failure holds specialist completion and cannot
+cause another provider call. This is input-delivery provenance, not native closure
+or effect proof and not authorization to retry an unknown execution. Both loop
+completion and final result persistence require this receipt for visual bindings,
+plus the existing actual full source, guidance, WSID and calibrated corpus reads.
+The returned contribution includes capture version/hash references and limitations.
+
+CE-1FE20783's first explicit material association is the later public d236 prototype
+with four external desktop captures. Its original research-only objective and inputs
+remain unchanged. External captures establish supplied inputs only; the Critic must
+make its own real contribution. CE-724328D6 remains bound to f52 and unreplayed.
+Neither engagement grants current deployed UI acceptance or author disposition.
+
+
+The active read-evidence workflow also fences generic conversational inline
+deliberation. Its existing TAK executor returns the unchanged draft/revised=false
+before any review/debate inference when this workflow owns completion. Restoring
+validated JSON after generic processing is insufficient: it cannot undo an extra
+provider call, and a held result must not initiate one. Unscoped conversations
+retain their normal posture-driven review/debate behavior. This does not attest
+which historical calls used that path or change native execution-proof ownership.

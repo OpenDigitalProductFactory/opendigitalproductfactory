@@ -254,6 +254,15 @@ export async function callProvider(
     if (typeof executionAdapterRaw !== "string") throw e;
     selector = null;
   }
+  if (selector?.kind === "claude-code-cli" && messages.some(message => Array.isArray(message.content) && message.content.some(block => block.type === "image_url"))) {
+    // Local transport refusal: no provider request or health mutation occurred.
+    throw new Error("image_input_transport_unavailable: Claude CLI cannot deliver supplied pixels; select an image-capable transport");
+  }
+  let providedImageHashes:string[]|null=null;
+  if(mcpSession?.recordImageInputDelivery&&messages.some(m=>Array.isArray(m.content)&&m.content.some(b=>b.type==="image_url"))){
+    const {codexImageInput}=await import("../routing/codex-image-input"),{createHash}=await import("node:crypto");
+    providedImageHashes=codexImageInput(messages,"/tmp/unused-input-hash").images.map(i=>createHash("sha256").update(Buffer.from(i.base64,"base64")).digest("hex"));
+  }
   const isCliAdapter = selector !== null
     && (selector.kind === "claude-code-cli" || selector.kind === "codex-cli");
   // Required tool choice on an adapter that cannot force it: refuse, or — for a
@@ -436,6 +445,8 @@ export async function callProvider(
       });
       result = await execute();
     }
+    // Receipt persistence cannot authorize another provider call after actual inference.
+    if (providedImageHashes && mcpSession?.recordImageInputDelivery) await mcpSession.recordImageInputDelivery({sha256:providedImageHashes,providerId,modelId,adapterKind:selector?.kind??String(executionAdapterRaw)}).catch(()=>console.warn("[image-input] delivery receipt unavailable; specialist completion remains held"));
     endTimer();
   } catch (err) {
     endTimer();

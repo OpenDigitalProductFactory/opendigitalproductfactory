@@ -57,3 +57,42 @@ and exhausted attempts do not dispatch. Prior continuation audit history stays
 attached through later waits and terminal results. A provider refusal is not a
 Critic contribution: a completed critique still requires the coworker's actual
 source reads, WSID evidence and persisted result returned to the Workroom.
+
+
+### Native reader failures
+
+The Critic's bounded read lane attaches the authorized source, profession wiki
+and calibrated critique readers directly to Codex through DPF MCP. It preserves
+the original coworker, user, artifact and task fence. A restricted read profile
+cannot run shell commands or write files. It must obtain complete immutable
+artifact pages and actual corpus evidence before its contribution can complete.
+An empty calibration corpus remains an explicit advisory limitation.
+
+Missing evidence produces a held, nonresumable outcome with the missing source
+or corpus requirement. Native closure/effect proof belongs to the existing
+execution-proof producer; this reader repair does not manufacture that proof or
+repeat provider calls to turn missing evidence into a passing contribution.
+The earlier pre-inference capacity wait and completed-result observation paths
+retain their existing bounded, idempotent recovery contracts.
+
+Historical unrestricted CLI attempts without native capability, descendant
+closure and effect evidence remain unavailable for replay even if they returned
+normal text and recorded no governed tools. Their next action names the existing
+recovery owner's supported finite disposition. A newer restricted transport does
+not supply retrospective proof for an earlier attempt. Unknown outcomes and
+unattested native attempts remain held without replacement requests.
+
+
+For a visual critique, supplied captures can be bound to the original request with
+an immutable document-version manifest. Each capture records the reviewed source
+revision, state, time, viewport, image dimensions and exact version/hash. Captures
+are inputs; only the coworker's persisted contribution counts as participation.
+Missing or inaccessible captures stop execution with `engagement_visual_input_refused`.
+Unsupported image transport stops before inference. A source-only answer cannot
+complete a request bound to rendered inputs. Missing execution proof still holds
+an incomplete attempt without replay. An older bound request keeps its original
+revision; later material and its limits must be explicitly associated and reported.
+
+Structured specialist completion also holds the boundary against an additional
+conversational review/debate call. The validated contribution or held failure is
+returned unchanged; ordinary conversations retain their configured deliberation.
