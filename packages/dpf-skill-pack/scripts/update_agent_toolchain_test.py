@@ -2525,5 +2525,99 @@ class ClaimRefreshParityTest(unittest.TestCase):
             self.assertEqual(pruned_cmds, ["node /foreign/audit.js"])
 
 
+@unittest.skipIf(tomllib is None, "TOML regression requires Python 3.11+")
+class QuotedCodexConvergenceTest(unittest.TestCase):
+    def test_permission_writer_then_updater_preserves_choices_and_is_idempotent(self):
+        import routine_permissions
+        original = {
+            "model": "operator-model",
+            "plugins": {"dpf-platform@personal": {"enabled": False, "custom": "keep"},
+                        **{key: {"enabled": False} for key in updater.codex_competitive_plugin_ids(None)}},
+            "mcp_servers": {"dpf": {
+                "url": "http://127.0.0.1:3000/api/mcp/v1?tier=full",
+                "enabled": True, "startup_timeout_sec": 90,
+                "bearer_token_env_var": "OPERATOR_TOKEN",
+                "http_headers": {"X-Custom": "keep"},
+            }},
+            "hooks": {"state": {"operator": {"trusted_hash": "keep"}}},
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            target = home / ".codex/config.toml"
+            target.parent.mkdir()
+            target.write_text(routine_permissions.dump_toml(original), encoding="utf-8")
+            updater.ensure_codex_config(home, None, False)
+            parsed = tomllib.loads(target.read_text())
+            for key in original:
+                self.assertEqual(parsed[key], original[key], key)
+            first = target.read_bytes()
+            self.assertFalse(updater.ensure_codex_config(home, None, False))
+            self.assertEqual(first, target.read_bytes())
+
+    def test_literal_quoted_keys_and_headers_preserve_endpoint_and_disabled_choice(self):
+        text = "['plugins'.'dpf-platform@personal'] # operator\n'enabled' = false\n['mcp_servers'.'dpf'] # saved\n'url' = 'http://127.0.0.1:3000/api/mcp/v1?tier=full'\n'enabled' = true\n"
+        self.assertFalse(updater.desired_codex_plugin_enabled(text))
+        self.assertEqual(updater.existing_codex_mcp_endpoint(text), "http://127.0.0.1:3000/api/mcp/v1?tier=full")
+        changed = updater.set_codex_plugin_enabled(text, updater.CODEX_PLUGIN_ID, False)
+        changed = updater.upsert_toml_table(changed, "[mcp_servers.dpf]", updater.codex_mcp_body(changed, None))
+        self.assertEqual(tomllib.loads(text), tomllib.loads(changed))
+
+    def test_invalid_candidate_never_replaces_existing_config(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "config.toml"
+            target.write_text('model = "keep"\n', encoding="utf-8")
+            before = target.read_bytes()
+            with self.assertRaises(ValueError):
+                updater.write_text_if_changed(target, 'enabled = true\n"enabled" = false\n')
+            self.assertEqual(before, target.read_bytes())
+
+    def test_dry_run_also_rejects_invalid_candidate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            with patch.object(updater, "codex_mcp_body", return_value=['url = "https://localhost/api/mcp/v1"', 'enabled = true', '"enabled" = true']):
+                with self.assertRaises(ValueError):
+                    updater.ensure_codex_config(home, None, True)
+            self.assertFalse((home / ".codex/config.toml").exists())
+
+    def test_failed_atomic_replace_keeps_original_and_cleans_staging(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "config.toml"
+            target.write_bytes(b'model = "keep"\n')
+            with patch.object(updater.os, "replace", side_effect=OSError("fixture failure")):
+                with self.assertRaises(OSError):
+                    updater.write_text_if_changed(target, 'model = "new"\n')
+            self.assertEqual(target.read_bytes(), b'model = "keep"\n')
+            self.assertEqual(list(target.parent.iterdir()), [target])
+
+    def test_missing_parser_refuses_write_without_touching_original(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "config.toml"
+            target.write_bytes(b'model = "keep"\n')
+            with patch.dict(sys.modules, {"tomllib": None, "tomli": None}):
+                with self.assertRaisesRegex(ValueError, "Python 3.11"):
+                    updater.write_text_if_changed(target, 'model = "new"\n')
+            self.assertEqual(target.read_bytes(), b'model = "keep"\n')
+
+    def test_managed_quoted_bearer_is_removed_without_changing_custom_options(self):
+        text = '["mcp_servers"."dpf"]\n"url"="http://127.0.0.1:3000/api/mcp/v1?tier=full"\n"enabled"=true\n"bearer_token_env_var"="DPF_MCP_BEARER_TOKEN"\n"startup_timeout_sec"=90\n'
+        with patch.dict(os.environ, {"DPF_MCP_AUTH_MODE": "oauth"}):
+            updated = updater.upsert_toml_table(text, "[mcp_servers.dpf]", updater.codex_mcp_body(text, None))
+        data = tomllib.loads(updated)["mcp_servers"]["dpf"]
+        self.assertNotIn("bearer_token_env_var", data)
+        self.assertEqual(data["startup_timeout_sec"], 90)
+
+    def test_refused_global_candidate_skips_native_plugin_mutation(self):
+        import contextlib
+        import io
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            with patch.object(updater, "home_dir", return_value=home), patch.object(updater, "validate_toml", side_effect=ValueError("Invalid TOML candidate; configuration unchanged")), patch.object(updater, "install_codex_plugin") as native, contextlib.redirect_stdout(io.StringIO()) as output:
+                code = updater.main(["--skill-pack-path", str(Path(updater.__file__).resolve().parents[1]), "--skip-claude-cli-install", "--skip-grok-cli-install", "--skip-antigravity-cli-install"])
+            self.assertEqual(code, 1)
+            native.assert_not_called()
+            self.assertIn("configuration unchanged", output.getvalue())
+            self.assertNotIn("Codex      : marketplace + config converged", output.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()
