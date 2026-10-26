@@ -162,6 +162,7 @@ export const MCP_TASK_SELECT = {
 
 const MCP_TASK_DURABLE_SELECT = {
   ...MCP_TASK_SELECT,
+  id: true,
   a2aMetadata: true,
 } as const;
 

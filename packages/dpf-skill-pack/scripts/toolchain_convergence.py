@@ -353,11 +353,16 @@ class ConvergenceReport:
         self.manifest = manifest or {}
         self.before = snapshot(home)
         self.entries: list[dict[str, Any]] = []
+        self.permission_entries: list[dict[str, Any]] = []
 
     def add(self, client: str, scope: str, status: str = "", action: Optional[str] = None,
             backup_path: Optional[str] = None, detail: Optional[str] = None) -> None:
         self.entries.append({"client": client, "scope": scope, "status": status, "action": action,
                              "backupPath": backup_path, "detail": detail})
+
+    def add_permissions(self, entries: list[dict[str, Any]]) -> None:
+        """Sanitized permission metadata is distinct from installed pack proof."""
+        self.permission_entries.extend(entries)
 
     def finish(self, dry_run: bool) -> dict[str, Any]:
         after = snapshot(self.home)
@@ -388,13 +393,15 @@ class ConvergenceReport:
             if content_failed:
                 row["detail"] = "Installed content does not match the expected pack; supported update remains unverified, client-owned cache retained."
             clients.append(row)
+        for entry in self.permission_entries:
+            clients.append({**entry, "cliVersion": versions.get(entry["client"])})
         source: dict[str, Any] = {"kind": "portal" if self.manifest else "local"}
         if self.manifest:
             source.update({"deviceId": self.manifest.get("deviceId"), "mcpEndpoint": self.manifest.get("mcpEndpoint"),
                            "releaseId": self.manifest.get("releaseId")})
         return {
             "schemaVersion": 1,
-            "result": "failed" if any(row["action"] == "failed" for row in clients) else "converged",
+            "result": "failed" if any(row["action"] == "failed" for row in clients) else "unverified" if any(row["action"] == "unrun" for row in clients) else "converged",
             "dryRun": dry_run,
             "source": source,
             "packVersion": self.declarations.pack,

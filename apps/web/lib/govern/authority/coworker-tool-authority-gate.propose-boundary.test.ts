@@ -205,3 +205,39 @@ describe("deterministic authority resolution refusals (BI-5FDE148A)", () => {
     expect(caller).toMatch(/unavailable/);
   });
 });
+
+
+describe("withheld scheduled authority reuses exact approvals (BI-D95FD249)", () => {
+  const existingOnly = () => execution({ proposeBoundary: true, approvalCompletion: "platform", allowApprovalRequest: false });
+  it("does not mint a new request when automatic dispatch authority was withheld", async () => {
+    arrange(authorityInput(true));
+    expect(await enforceCoworkerToolAuthority(existingOnly(), TOOL, true))
+      .toMatchObject({ outcome: "reject", rejection: "authority_denied" });
+    expect(ensure).not.toHaveBeenCalled();
+    expect(reserve).not.toHaveBeenCalled();
+  });
+  it("still reserves a current exact approval once", async () => {
+    const input = authorityInput(true);
+    arrange({ ...input, approval: { envelopeId: "ENV-APPROVED", status: "approved",
+      expiresAt: new Date(Date.now() + 60_000), binding: buildCoworkerApprovalBinding(input), proposeBoundary: true } });
+    expect(await enforceCoworkerToolAuthority(existingOnly(), TOOL, true)).toMatchObject({ outcome: "allow", approvedEnvelopeId: "ENV-APPROVED" });
+    expect(reserve).toHaveBeenCalledOnce(); expect(ensure).not.toHaveBeenCalled();
+  });
+  it("returns a stored outcome after automatic evidence authority becomes available", async () => {
+    const input = authorityInput(false); input.action.toolName = "record_workroom_evidence";
+    arrange(input);
+    const settled = { envelopeId: "ENV-EXECUTED", status: "executed" as const, result: { success: true, entityId: "EV-EXISTING" } };
+    setCoworkerToolAuthorityOverridesForTests({ authorityExecutedOutcome: async () => settled });
+    expect(await enforceCoworkerToolAuthority({ ...execution(), toolName: "record_workroom_evidence" }, TOOL, true))
+      .toMatchObject({ outcome: "settled", ...settled });
+    expect(reserve).not.toHaveBeenCalled(); expect(ensure).not.toHaveBeenCalled();
+  });
+  it("does not repeat evidence when its existing approval outcome cannot be read", async () => {
+    const input = authorityInput(false); input.action.toolName = "record_workroom_evidence"; arrange(input);
+    setCoworkerToolAuthorityOverridesForTests({ authorityExecutedOutcome: async () => { throw new Error("database unavailable"); } });
+    expect(await enforceCoworkerToolAuthority({ ...execution(), toolName: "record_workroom_evidence" }, TOOL, true))
+      .toMatchObject({ outcome: "reject", rejection: "authority_evidence_unavailable" });
+    expect(ensure).not.toHaveBeenCalled(); expect(reserve).not.toHaveBeenCalled();
+  });
+
+});

@@ -123,3 +123,88 @@ This slice is documentation only.
 - independent review of the draft standard, which remains outstanding
 
 Rollback is a PR revert.
+
+## Scheduled delivery evidence authority repair (BI-D95FD249)
+
+This bounded repair implements the existing GPP stage binding through current
+Workroom, ScheduledAgentTask and TaskRun records. It adds no permission store,
+DEV bypass, grant, funding decision, or governed reviewer authority.
+
+**OBJ-D95-1:** An admitted delivery author records evidence for its exact live
+room and stage without another human envelope, while missing or stale authority
+retains its refusal or intended gate.
+
+### Reproduction and chosen approach
+
+On source ref `966b7164fa25544c91980424fb461735b44a23f9`, the existing
+room-stage mandate reads persisted role bindings and declared stage writes.
+The drive's funded author binding is transient, delivery author stages declare
+no evidence mandate, and the scheduler omits room-turn authority. Existing
+room-stage, author-autonomy and proposal-interception suites pass 36 tests.
+The new `room-stage-mandate.delivery.test.ts` regression fails because a valid
+admitted delivery fixture receives `[]` instead of
+`["record_workroom_evidence"]`.
+
+Reuse `apps/web/lib/work-management/room-stage-mandate.ts::loadScheduledRoomMandate`,
+`apps/web/lib/work-management/author-stage-autonomy-live.ts::loadAuthorStageAutonomy`
+and `apps/web/lib/work-management/workroom-drive-checkpoint.ts::readDispatchCheckpoint`.
+One shared reconstruction serves
+`scheduled dispatch -> attachment -> proposal interception -> reference monitor -> scoped evidence`.
+A blanket act boundary would admit unrelated actions; persisting a second
+authorization would become stale after revocation. Neither is used.
+
+### Ordered implementation and verification
+
+1. Preserve the first-failing regression and baseline source identity.
+2. Capture the existing server-written dispatch checkpoint in TaskRun metadata
+   when the scheduler creates the run. Match run, task, room, stage, generation,
+   current actor/owner, activity state, expiry and checkpoint provenance.
+3. Reuse the live author preauthorization and funding resolver; merge transient
+   bindings beneath explicit room bindings. Retain explicit propose/advise
+   restrictions, participant membership and current grant intersection.
+4. Declare the evidence writer on non-governed author stages and use the shared
+   resolver for attachment, proposal interception and reference-monitor steering.
+   Match evidence parameters to the source capsule and stage. Carry a narrowed
+   room-turn context; it must not create general preauthorized room steering.
+5. Cover positive and negative cases through scheduler, proposal and monitor
+   paths. Run graph-linked tests, both TypeScript programs, applicable guards,
+   canonical shared integration and independent semantic review before a ready PR.
+   After the canonical release, verify the scoped path with a negative control.
+
+The implementation parent is **BI-D95FD249**, declared medium/fix. These steps
+are atomic: declaration, immutable dispatch capture and all enforcement callers
+must agree before the repair can ship safely.
+
+### Acceptance criteria
+
+| ID | Objective | Statement |
+|---|---|---|
+| AC-D95-1 | OBJ-D95-1 | The admitted non-governed delivery author records internal evidence for its exact source room/stage without creating a new human envelope. |
+| AC-D95-2 | OBJ-D95-1 | Explicit propose/advise scope, missing/revoked preauthorization, unfunded work, mismatched actor/room/stage, stale dispatch/checkpoint, canceled/terminal work and governed review decisions retain refusal or their intended gate. |
+| AC-D95-3 | OBJ-D95-1 | A current existing approval is neither consumed twice nor discarded; retry returns the stored result and denied actions park rather than mint repeated requests. |
+| AC-D95-4 | OBJ-D95-1 | Positive and negative tests cover dispatch through the actual scheduler/proposal/authority path; live DEV verification records real evidence with no operator interaction and a meaningful negative control. |
+| AC-D95-5 | OBJ-D95-1 | Use existing substrates; refactor duplicated authority reconstruction instead of introducing a new DEV flag or parallel permit store. |
+
+### Evidence and rollback
+
+Verification references:
+- `apps/web/lib/work-management/room-stage-mandate.delivery.test.ts`
+- `apps/web/lib/actions/agent-task-scheduler-proactivity.test.ts`
+- `apps/web/lib/proactivity/propose-interception.test.ts`
+- `apps/web/lib/govern/authority/room-mandate-steering.test.ts`
+
+First-failing command:
+`pnpm --filter web exec vitest run lib/work-management/room-stage-mandate.delivery.test.ts`.
+Observed: 1 failed, expected the evidence writer but received an empty list.
+
+Wrong-room, wrong-stage, revoked/unfunded, expired, superseded, terminal,
+nonmember and governed-writer controls must remain refused or gated. Existing
+approval settlement/idempotency remains owned by the governed executor.
+Rollback is one PR revert; there is no migration or new live permission data.
+
+### Backlog coverage
+
+Canonical implementation parent: BI-D95FD249. One atomic deliverable D95-R1
+covers AC-D95-1 through AC-D95-5. The immutable plan coverage receipt
+is recorded through `record_plan_backlog_coverage`; its live receipt is
+authoritative and no receipt is claimed before that write succeeds.
