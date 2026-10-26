@@ -1,9 +1,10 @@
 import { DELIVERY_WORKFLOW_TOOLS, deliveryReadinessFromDiscovery } from '../../packages/integration-shared/src/delivery-readiness-contract.cjs';
 import { previewMountMatches } from '../../packages/integration-shared/src/preview-mount-identity.cjs';
+import { createPreviewDeclaration, assertPreviewDeclarationFile, previewDeclarationMount, assertPreviewDeclarationMount, reclaimPreviewDeclaration, stopDeclarationWriters } from './dev-preview-declaration.mjs';
 export const REQUIRED_PREVIEW_DELIVERY_TOOLS = DELIVERY_WORKFLOW_TOOLS;
 import { gitText } from './git.mjs';
 import { spawn } from 'node:child_process';
-import { readFile, writeFile, mkdir, rm, realpath } from 'node:fs/promises';
+import { readFile, writeFile, rm, realpath } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import { homedir } from 'node:os';
 import { dirname, resolve, isAbsolute } from 'node:path';
@@ -31,7 +32,7 @@ export async function assertAdmittedWorktreePath(admittedPath, worktree) {
   if (canonicalPath !== worktree) throw new Error('preview_admission_binding_mismatch');
 }
 
-export function previewOverride({ worktree, sha, leaseId, cloneImage }) {
+export function previewOverride({ worktree, sha, leaseId, cloneImage, declarationPath }) {
   const service = () => ({
     volumes: [{ type: 'bind', source: worktree, target: '/workspace' }],
     labels: { 'dpf.preview.lease': leaseId, 'dpf.preview.sha': sha },
@@ -44,10 +45,12 @@ export function previewOverride({ worktree, sha, leaseId, cloneImage }) {
     init.command = ['cd /workspace && pnpm install --frozen-lockfile && pnpm --filter @dpf/db exec prisma generate && pnpm --filter @dpf/db exec node ./scripts/dev-preview-migrate-deploy.mjs && cd /app && pnpm --filter @dpf/db exec tsx src/sanitized-clone.ts'];
     init.labels['dpf.preview.clone-image'] = cloneImage;
   }
-  return { services: { 'dev-init': init, 'dev-portal': service() } };
+  const portal = service();
+  if (declarationPath) portal.volumes.push(previewDeclarationMount(declarationPath));
+  return { services: { 'dev-init': init, 'dev-portal': portal } };
 }
 
-export function assertPreviewConfig(config, { worktree, sha, leaseId }) {
+export function assertPreviewConfig(config, { worktree, sha, leaseId, declarationPath }) {
   for (const name of ['dev-init', 'dev-portal']) {
     const service = config.services?.[name];
     const mount = service?.volumes?.find(volume => volume.target === '/workspace');
@@ -56,6 +59,7 @@ export function assertPreviewConfig(config, { worktree, sha, leaseId }) {
         || service.labels?.['dpf.preview.sha'] !== sha
         || service.labels?.['dpf.preview.lease'] !== leaseId) throw new Error(`preview_identity_mismatch:${name}`);
   }
+  assertPreviewDeclarationMount(config.services['dev-portal'].volumes, { declarationPath });
   const init = config.services['dev-init'].environment;
   if (!init.CONTRIBUTOR_PREVIEW_PASSWORD || !init.PRODUCTION_DATABASE_URL || !init.DATABASE_URL
       || init.PRODUCTION_DATABASE_URL === init.DATABASE_URL) throw new Error('preview_prerequisites_incomplete');
@@ -64,7 +68,7 @@ export function assertPreviewConfig(config, { worktree, sha, leaseId }) {
   if (destination.hostname !== 'dev-postgres' || destination.pathname !== '/dpf') throw new Error('preview_destination_not_disposable');
 }
 
-export function assertPreviewContainer(container, { worktree, sha, leaseId, dockerOperatingSystem }) {
+export function assertPreviewContainer(container, { worktree, sha, leaseId, dockerOperatingSystem, declarationPath }) {
   const mount = container.Mounts?.find(volume => volume.Destination === '/workspace');
   if (mount?.Type !== 'bind' || !previewMountMatches(mount.Source, worktree, dockerOperatingSystem)) throw new Error('preview_actual_mount_mismatch');
   if (!container.Config?.Env?.includes('DPF_ENVIRONMENT_CLASS=development')
@@ -72,6 +76,7 @@ export function assertPreviewContainer(container, { worktree, sha, leaseId, dock
       || !container.Config?.Env?.includes(`DPF_PREVIEW_LEASE_ID=${leaseId}`)) throw new Error('preview_actual_environment_mismatch');
   if (container.Config?.Labels?.['dpf.preview.sha'] !== sha
       || container.Config?.Labels?.['dpf.preview.lease'] !== leaseId) throw new Error('preview_actual_identity_mismatch');
+  assertPreviewDeclarationMount(container.Mounts, { declarationPath, dockerOperatingSystem }, true);
 }
 
 export async function inspectPreviewBinding({ runner, id, identity }) {
@@ -237,10 +242,9 @@ async function runAdmittedPreview(env, cleanupState) {
   if (!canonical.State?.Running || !/^sha256:[a-f0-9]{64}$/.test(canonical.Image)) throw new Error('preview_canonical_image_unverified');
   // An install predating this repair is not ready to initialize an old feature.
   await runner.run(['exec', portals[0], 'test', '-f', '/app/packages/db/src/sanitized-clone-batches.ts']);
-  const identity = { worktree, sha, leaseId, cloneImage: canonical.Image };
+  const declaration = await createPreviewDeclaration({ worktree, stateDirectory: dirname(statePath) });
+  const identity = { worktree, sha, leaseId, cloneImage: canonical.Image, declarationPath: declaration.path };
   const overridePath = resolve(dirname(statePath), `preview-${randomBytes(12).toString('hex')}.json`);
-  await mkdir(dirname(overridePath), { recursive: true, mode: 0o700 });
-  await writeFile(overridePath, JSON.stringify(previewOverride(identity)), { mode: 0o600, flag: 'wx' });
   const base = ['compose', '-p', state.composeProjectName || 'dpf', '--project-directory', root, '--env-file', envFile,
     ...files.flatMap(file => ['-f', file]), '-f', overridePath, '--profile', 'dev'];
   let protectedBefore;
@@ -256,11 +260,12 @@ async function runAdmittedPreview(env, cleanupState) {
     return result;
   };
   const ownedIds = new Set();
+  let runtimeMayHaveWriters = false;
   const initName = `dpf-preview-init-${randomBytes(12).toString('hex')}`;
   let finish;
   const wait = new Promise(resolveWait => { finish = resolveWait; });
   const stopOwned = async () => {
-    await stopOwnedPreviewContainers({ runner, leaseId, projectName: state.composeProjectName || 'dpf', initName, ownedIds });
+    await stopDeclarationWriters({ runner, declarationPath: declaration.path, leaseId, projectName: state.composeProjectName || 'dpf', initName });
   };
   const terminate = async () => { runner.terminate(); try { await stopOwned(); } finally { finish(); } };
   const mcpUrl = env.DPF_MCP_URL || 'http://127.0.0.1:3000/api/mcp/v1';
@@ -271,6 +276,8 @@ async function runAdmittedPreview(env, cleanupState) {
     if (!result.success) throw new Error(`Release ${leaseId} for owning session ${ownerSessionId}: ${result.message || result.error || 'approval required'}`);
   };
   try {
+    await assertPreviewDeclarationFile(declaration);
+    await writeFile(overridePath, JSON.stringify(previewOverride(identity)), { mode: 0o600, flag: 'wx' });
     assertToolReadiness(await call('load_tools', { names: REQUIRED_PREVIEW_DELIVERY_TOOLS }));
     const leases = await call('list_nonprod_environment_leases', {});
     const admitted = leases.data?.leases?.find(lease => lease.leaseId === leaseId);
@@ -289,6 +296,7 @@ async function runAdmittedPreview(env, cleanupState) {
       await runner.run(['image', 'inspect', image]);
     }
     const inspect = async () => {
+      await assertPreviewDeclarationFile(declaration);
       const id = await compose(['ps', '-q', 'dev-portal']);
       if (!id || /\s/.test(id)) throw new Error('preview_container_missing');
       ownedIds.add(id);
@@ -328,9 +336,14 @@ async function runAdmittedPreview(env, cleanupState) {
             console.log(`Contributor preview bound to ${branch} @ ${sha}; initialization complete.`);
           },
           wait: () => wait, active: { initName },
-          onPhase: phase => Object.assign(startup, { phase, phaseStartedAtMs: Date.now() }) }),
+          onPhase: phase => {
+            // Native admission, exact configuration and image checks precede
+            // this point. A failed prerequisite grants no container authority.
+            if (phase === 'init') runtimeMayHaveWriters = true;
+            Object.assign(startup, { phase, phaseStartedAtMs: Date.now() });
+          } }),
         renew: async () => {
-          try { await verifySource(); if (ownedIds.size) await inspect(); } catch { return { success: false, error: 'preview_binding_changed' }; }
+          try { await assertPreviewDeclarationFile(declaration); await verifySource(); if (ownedIds.size) await inspect(); } catch { return { success: false, error: 'preview_binding_changed' }; }
           const stalled = previewStartupLiveness({ ...startup, nowMs: Date.now(), budgetMs,
             initRunning: startup.phase === 'init' ? await initRunning() : false });
           if (stalled) return { success: false, error: stalled };
@@ -343,8 +356,9 @@ async function runAdmittedPreview(env, cleanupState) {
       if (outcome.status !== 'completed') throw new Error(`preview_fenced:${outcome.reason}`);
     } finally { process.off('SIGINT', signal); process.off('SIGTERM', signal); }
   } finally {
-    await rm(overridePath, { force: true });
-
+    try {
+      await reclaimPreviewDeclaration({ declaration, runtimeMayHaveWriters, stopOwned });
+    } finally { await rm(overridePath, { force: true }); }
   }
 }
 

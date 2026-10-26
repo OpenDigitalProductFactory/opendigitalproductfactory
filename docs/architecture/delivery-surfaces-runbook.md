@@ -79,6 +79,14 @@ preview database with its
 own signing key. The sweep consumes that one-time link and saves its own browser
 storage state. Production cookies and operator passwords are not preview inputs.
 
+Next development declarations use one controller-owned file bind at
+`/workspace/apps/web/next-env.d.ts`, outside the admitted worktree. Config and
+actual mount inspection verify that file; full source cleanliness remains
+mandatory, including after initialization. The keeper removes verified owned
+writers before deleting backing storage. Foreign file references, writable
+ancestor binds or uncertain cleanup retain storage and fail closed. Existing
+readonly directory mounts of canonical state remain untouched.
+
 For shared-header changes, record the complete touched-route inventory first.
 Use desktop (1280×900), mobile (390×844), normal and Simple (`worker`) navigation,
 light/dark themes and representative persona/account states. The local 40-route
