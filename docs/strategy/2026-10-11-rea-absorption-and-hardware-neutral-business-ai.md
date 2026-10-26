@@ -243,6 +243,15 @@ Workroom outcomes with accountable coordinators. The COO follows blocked
 handoffs and verifies that recovery reaches its outcome; the founder must not
 supply a recurring status/restart loop.
 
+The October 26 clarification makes this an installation-aware operating model.
+The production COO follows production business objectives and decisions; the DEV
+COO follows development and delivery, consulting production for permitted context
+that is absent locally. Sandbox/test work has an admitted purpose, owner and
+expiry, and hands evidence back before disposal. Existing federation, canonical
+identity and projection boundaries carry coordination. No install inherits another
+install's decision authority, and test evidence does not establish production
+acceptance. Cross-install onboarding and operational verification remain pending.
+
 The [current coordination design](../superpowers/specs/2026-09-03-coordinated-workrooms-design.md#october-25-amendment-coo-operational-follow-through)
 is authoritative for that operating contract. BI-4B48E7FE tracks the repair;
 BI-756C899D owns truthful progress and BI-C43FD3E5 owns durable recovery supervision.
