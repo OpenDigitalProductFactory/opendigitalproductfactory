@@ -691,3 +691,27 @@ it("blocks every paid fallback before adapter dispatch when parent authority is 
   expect(mockAdapterExecute).not.toHaveBeenCalled();
   expect(mockPrisma.modelProvider.findUnique).not.toHaveBeenCalled();
 });
+
+it("refuses an unsupported Claude CLI image channel before provider accounting or dispatch",async()=>{
+ vi.clearAllMocks();
+ await expect(callProvider("anthropic","claude",[{role:"user",content:[{type:"image_url",image_url:{url:"data:image/png;base64,pixels"}}]}],"Critic",undefined,{
+ providerId:"anthropic",modelId:"claude",recipeId:null,contractFamily:"conversation",executionAdapter:"claude-cli",maxTokens:1024,providerSettings:{},toolPolicy:{},responsePolicy:{}
+ })).rejects.toThrow("image_input_transport_unavailable");
+ expect(mockPrisma.modelProvider.findUnique).not.toHaveBeenCalled();
+ expect(mockAdapterExecute).not.toHaveBeenCalled();
+ expect(mockAcquireSlot).not.toHaveBeenCalled();
+ expect(mockStartTimer).not.toHaveBeenCalled();
+});
+
+it("records image delivery only after actual adapter success and never retries a failed receipt",async()=>{
+ vi.clearAllMocks();
+ const recordImageInputDelivery=vi.fn(async()=>{throw new Error("receipt write failed");});
+ const plan={providerId:"codex",modelId:"actual",recipeId:null,contractFamily:"conversation",executionAdapter:"codex-cli",maxTokens:1024,providerSettings:{},toolPolicy:{},responsePolicy:{}};
+ const image={type:"image_url" as const,image_url:{url:"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aHNcAAAAASUVORK5CYII="}};
+ const result=await callProvider("codex","actual",[{role:"user",content:[image]}],"Critic",undefined,plan,undefined,{userId:"human",recordImageInputDelivery});
+ expect(result.content).toBe("ok");expect(mockAdapterExecute).toHaveBeenCalledOnce();
+ expect(recordImageInputDelivery).toHaveBeenCalledExactlyOnceWith({sha256:[expect.stringMatching(/^[a-f0-9]{64}$/)],providerId:"codex",modelId:"actual",adapterKind:"codex-cli"});
+ recordImageInputDelivery.mockClear();mockAdapterExecute.mockRejectedValueOnce(new Error("dispatch failed"));
+ await expect(callProvider("codex","actual",[{role:"user",content:[image]}],"Critic",undefined,plan,undefined,{userId:"human",recordImageInputDelivery})).rejects.toThrow("dispatch failed");
+ expect(recordImageInputDelivery).not.toHaveBeenCalled();
+});

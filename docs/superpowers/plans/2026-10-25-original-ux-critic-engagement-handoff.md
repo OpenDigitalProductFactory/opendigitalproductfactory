@@ -187,8 +187,38 @@ CE-1FE20783 remains a separate original request for research/prototype advice on
 the proposed three-column explorer. Current binding/idempotency checks found no
 TaskRun for it; the broad metadata match is CE724's separately bound task. After
 the served transport correction, seek its FIRST fulfillment under the unchanged
-objective and input digest. Explicitly associate the later concrete f52 prototype
+objective and input digest. Explicitly associate the later concrete d236 prototype
 as research material; it was not originally pinned in CE1. Require actual source,
 WSID/corpus and calibration provenance and the routing author's attributable
 response. This does not resolve CE724, confer current-code acceptance or authorize
 production edits. No execution or successful Critic result is asserted here.
+
+
+### Provided rendered input correction (2026-10-26)
+
+Before any first CE1 dispatch, verify actual image transport: CLI adapters currently
+serialize image_url blocks into text. Source-only output cannot fulfill the Critic's
+rendered-surface craft contract. Keep the original request and first explicit d236
+prototype association, with four allowed public HTTPS captures in immutable managed
+DocumentVersions and one hashed manifest. This is supplied evidence, not Critic
+participation, CE724/f52 coverage, current application review, or acceptance.
+
+Reuse existing document-version refs, ChatMessage image blocks and private Codex
+stdin staging; pass real --image files, bound count/bytes/formats, exclude pixels
+from prompt archives, and clean private files on all paths. Unsupported image
+channels must refuse before provider admission or inference, without health changes.
+Validate exact source/engagement/organization/actor/version ownership and current
+credential plus provider read authority before loading supplied bytes; no new grant,
+identity, arbitrary path/URL fetch, runtime activation or document substrate.
+Requester document_write without document_read is currently under authority-contract
+review; no implicit grant is assumed and no read denial has been circumvented.
+Server completion must bind actual provided image inputs, real source/corpus reads
+and model contribution, preserving old bindings and holding incomplete results.
+
+Red/green coverage: pixel forwarding and archive exclusion, image budgets and MIME,
+immutable manifest/source matching, cross-org/owner/restricted/ref/digest rejection,
+old request compatibility, no unsupported inference, complete/held result persistence.
+No gate lease was admitted for 01c7; its preclaim quiescence wait is superseded only
+by this corrected frozen candidate. Run affected tests/types/guards and the normal
+canonical integrated gate, protected PR/release and served happy path. Completion
+still requires an actual persisted Critic result and attributable routing disposition.

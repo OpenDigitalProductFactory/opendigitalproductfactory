@@ -156,3 +156,48 @@ The execution layer owns the no-argument native session minter, prebound to the
 original task identity/fence and fixed read scopes. Routing receives that
 capability through the transient policy/session and cannot select new identity
 or authority. Missing minter is a transport refusal, not textual-tool fallback.
+
+
+## Provided rendered input through existing document versions
+
+A Critic review that requires rendered surfaces now accepts an optional immutable
+`visualEvidenceRef` of the existing `document-version` type, bound into the original
+engagement's first TaskRun digest. It names a JSON capture manifest whose source
+artifact must equal the primary bound repository blob. Existing bindings without
+this optional field keep their digest and reconstruction semantics. An existing
+binding cannot acquire different screenshots, scope or versions on retry.
+
+Revalidate the canonical `doc_load` grant alternatives for original token, canonical
+requester and canonical provider, alongside existing human/Workroom authority.
+`registry_read` is already an admitted alternative; document_write never implies
+read authority. Narrow content further to the install organization and the active
+requester's existing PrincipalAlias: document owner, document creator and immutable
+version creator must match. Refuse restricted, external, archived or higher-classified
+records, wrong source/engagement, corrupt/missing versions and blobs. No URL fetch,
+caller filesystem path, current-version substitution or authority change occurs.
+DocumentVersion/blob storage and original version references remain the durable
+source; later deletion/corruption produces an actionable refusal, never recapture.
+
+At most four PNG/JPEG captures, four megabytes aggregate and forty million pixels
+per image reach existing ChatMessage image blocks. Server and CLI probe real MIME,
+dimensions and digest. Codex stages private files via stdin, passes actual --image
+arguments, keeps bytes out of prompt archives, and deletes the entire private home
+through existing owned-child cleanup. Claude CLI image transport is explicitly
+unavailable before inference/accounting; routing may select another eligible
+transport. It never silently converts pixels into text or changes provider health.
+
+After an actual adapter response the provider boundary reports the image hashes,
+provider/model and adapter to a server-bound callback. The exact active TaskRun
+fence, request digest and engagement binding must still match before an atomic
+metadata update. A receipt write failure holds specialist completion and cannot
+cause another provider call. This is input-delivery provenance, not native closure
+or effect proof and not authorization to retry an unknown execution. Both loop
+completion and final result persistence require this receipt for visual bindings,
+plus the existing actual full source, guidance, WSID and calibrated corpus reads.
+The returned contribution includes capture version/hash references and limitations.
+
+CE-1FE20783's first explicit material association is the later public d236 prototype
+with four external desktop captures. Its original research-only objective and inputs
+remain unchanged. External captures establish supplied inputs only; the Critic must
+make its own real contribution. CE-724328D6 remains bound to f52 and unreplayed.
+Neither engagement grants current deployed UI acceptance or author disposition.

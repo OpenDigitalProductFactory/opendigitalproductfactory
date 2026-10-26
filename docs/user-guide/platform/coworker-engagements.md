@@ -81,3 +81,14 @@ normal text and recorded no governed tools. Their next action names the existing
 recovery owner's supported finite disposition. A newer restricted transport does
 not supply retrospective proof for an earlier attempt. Unknown outcomes and
 unattested native attempts remain held without replacement requests.
+
+
+For a visual critique, supplied captures can be bound to the original request with
+an immutable document-version manifest. Each capture records the reviewed source
+revision, state, time, viewport, image dimensions and exact version/hash. Captures
+are inputs; only the coworker's persisted contribution counts as participation.
+Missing or inaccessible captures stop execution with `engagement_visual_input_refused`.
+Unsupported image transport stops before inference. A source-only answer cannot
+complete a request bound to rendered inputs. Missing execution proof still holds
+an incomplete attempt without replay. An older bound request keeps its original
+revision; later material and its limits must be explicitly associated and reported.

@@ -1,3 +1,5 @@
+import {captureTaskExecutionFence} from "@/lib/shared/task-execution-fence";
+import {hasEngagementVisualDelivery} from "./engagement-visual-evidence";
 import { prisma, type Prisma } from "@dpf/db";
 import type {RemoteTaskSubmitOutcome} from "@/lib/mcp-task-submit-types";
 import type { EngagementTaskBinding } from "./engagement-task-binding";
@@ -12,12 +14,13 @@ export function engagementReadCompletion(taskRunId: string, binding: EngagementT
       import("./engagement-fulfillment"), import("@/lib/decision-perspective/resolve-profession-profile"),
     ]);
     const [task, executions, provider] = await Promise.all([
-      prisma.taskRun.findUnique({where:{taskRunId},select:{a2aMetadata:true,status:true}}),
+      prisma.taskRun.findUnique({where:{taskRunId},select:{a2aMetadata:true,status:true,progressPayload:true}}),
       prisma.toolExecution.findMany({where:{taskRunId,agentId:{in:engagementProviderIdentityRefs(binding.providerAgentId)},userId:binding.userId,success:true},select:{id:true,toolName:true,parameters:true,result:true,success:true}}),
       prisma.agent.findUnique({where:{agentId:binding.providerAgentId},select:{agentId:true,name:true,slugId:true}}),
     ]);
     const metadata = record(task?.a2aMetadata), family = provider ? findProfessionFamilyForAgentIdentity(provider) : null;
     if (task?.status !== "working" || metadata.engagementReadFailure || !family) return {complete:false,message:"The original task, craft identity or evidence budget cannot authorize completion"};
+    if(!hasEngagementVisualDelivery(binding,metadata.engagementVisualDelivery,captureTaskExecutionFence(task.progressPayload,metadata.requestDigest??null)))return {complete:false,message:"Provided rendered input delivery is missing; source-only output cannot complete this visual critique"};
     const evidence = engagementReadEvidence(metadata.engagementReadEvidence);
     const successfulIds = new Set(executions.map(e=>e.id));
     const proven = evidence.filter(e=>successfulIds.has(e.executionId));
@@ -25,7 +28,7 @@ export function engagementReadCompletion(taskRunId: string, binding: EngagementT
     if (missing.length) return {complete:false,message:`Complete immutable artifact traversal is missing for ${missing.join(", ")}`};
     if (!proven.some(e=>e.kind==="corpus")) return {complete:false,message:"Run wiki_query with the UX profession corpus included and cite the returned slugs"};
     if (!proven.some(e=>e.kind==="calibration")) return {complete:false,message:"Run search_ux_critique_corpus with calibratedOnly=true and retain an empty set as a limitation"};
-    const valid = validateEngagementContribution(binding,content,executions,family.professionKey,evidence);
+    const valid = validateEngagementContribution(binding,content,executions,family.professionKey,evidence,metadata.engagementVisualDelivery);
     return {complete:!!valid,message:valid?"Complete immutable source/corpus contribution verified":"Return the required JSON with nonempty criteria/corpusRefs from actually consulted profession pages and a findings array"};
   }};
 }

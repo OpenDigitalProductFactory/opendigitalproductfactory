@@ -1,3 +1,4 @@
+import { codexImageInput } from "./codex-image-input";
 import { parseCliTerminalResultMetadata } from "./cli-result-errors";
 // apps/web/lib/routing/codex-cli-adapter.ts
 
@@ -256,17 +257,18 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
     const poolIdentity = request.plan.providerConnectionId ? { providerId, providerConnectionId: request.plan.providerConnectionId } : undefined;
     const startMs = Date.now();
 
+    const authHome = `/tmp/dpf-codex-auth-${randomUUID()}`;
+    const imageInput = codexImageInput(messages, authHome);
+
     // 2. Build prompt from messages
     const promptParts: string[] = [];
     if (systemPrompt) {
       promptParts.push(systemPrompt);
       promptParts.push("---");
     }
-    for (const msg of messages) {
+    for (const [index, msg] of messages.entries()) {
       if (msg.role === "system") continue;
-      const content = typeof msg.content === "string"
-        ? msg.content
-        : JSON.stringify(msg.content);
+      const content = imageInput.contents[index];
 
       if (msg.role === "user") {
         promptParts.push(`Human: ${content}`);
@@ -308,7 +310,6 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
     const slug = `codex-conv-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     // Inference consumes the supplied packet, not the unrelated shared build tree.
     // Match the Claude adapter: never discover project rules from /workspace.
-    const authHome = `/tmp/dpf-codex-auth-${randomUUID()}`;
     const promptFile = `${authHome}/${slug}-prompt.txt`;
     const runnerScript = `${authHome}/${slug}-run.js`;
 
@@ -324,6 +325,7 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
       // See writeContainerFileViaStdin for full rationale.
       const promptB64 = Buffer.from(prompt).toString("base64");
       await writeContainerFileViaStdin(promptB64, promptFile);
+      for (const image of imageInput.images) await writeContainerFileViaStdin(image.base64, image.path, "600");
 
       if (nativeReads) {
         const { codexReadMcpConfig } = await import("./codex-read-mcp");
@@ -334,7 +336,7 @@ export const codexCliAdapter: ExecutionAdapterHandler = {
       // 4. Build runner script
 
       // The container supervisor owns the child handle through settlement and cleanup.
-      const script = renderOwnedCliRunner({ command: "codex", args: ["exec", "-c", 'cli_auth_credentials_store="file"', ...(nativeReads ? ["--sandbox", "read-only", "--ephemeral"] : ["--dangerously-bypass-approvals-and-sandbox"]), "--skip-git-repo-check", ...(modelId ? ["-m", modelId] : [])],
+      const script = renderOwnedCliRunner({ command: "codex", args: ["exec", "-c", 'cli_auth_credentials_store="file"', ...(nativeReads ? ["--sandbox", "read-only", "--ephemeral"] : ["--dangerously-bypass-approvals-and-sandbox"]), "--skip-git-repo-check", ...imageInput.args, ...(modelId ? ["-m", modelId] : [])],
         home: authHome, cwd: authHome, promptFile, timeoutMs: CLI_TIMEOUT_MS, env: { CODEX_HOME: authHome } });
 
       const scriptB64 = Buffer.from(script).toString("base64");

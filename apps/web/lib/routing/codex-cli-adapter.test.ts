@@ -562,6 +562,7 @@ describe("governed read-only Codex MCP transport", () => {
     const mintReadOnlySession = vi.fn(async()=>"test-session-secret");
     const { codexCliAdapter } = await import("./codex-cli-adapter");
     const result = await codexCliAdapter.execute(makeRequest({
+      messages:[{role:"user",content:[{type:"text",text:"Inspect rendered input"},{type:"image_url",image_url:{url:"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aHNcAAAAASUVORK5CYII="}}]}],
       tools: names.map(name => ({type:"function",function:{name,parameters:{type:"object",properties:{}}}})),
       mcpSession: {userId:"human",agentId:"ux-design-critic",threadId:"thread",taskRunId:"TR-original",
         taskExecutionFence:{schemaVersion:1,reservation:"reserved",dispatchClaim:"claimed",authorityDigest:null,requestDigest:"a".repeat(64)},
@@ -583,6 +584,11 @@ describe("governed read-only Codex MCP transport", () => {
     expect(runner).not.toContain("test-session-secret");
     expect(runner).not.toContain("--dangerously-bypass-approvals-and-sandbox");
     expect(runner).toContain('read-only');
+    expect(runner).toContain('--image');
+    expect(writes.find(w=>w.path.endsWith('/image-1.png'))).toBeDefined();
+    expect(prompt).not.toContain('iVBORw0KGgo');
+    expect(prompt).toContain('[Attached image 1]');
+    expect(runner).toContain("fs.rmSync(config.home, { recursive: true, force: true })");
     expect(result.toolCalls).toEqual([]);
     expect(mockExecAsync.mock.calls.some(([cmd])=>cmd.includes("test-session-secret"))).toBe(false);
   });

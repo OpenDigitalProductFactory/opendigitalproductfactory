@@ -136,15 +136,17 @@ describe("read-only native specialist completion",()=>{
  it("folds actual native reader rows once before completion without dispatching them again",async()=>{
   const inspect=vi.fn(async()=>({complete:true,message:"verified full artifact/corpus provenance"}));
   const mintReadOnlySession=vi.fn(async()=>"execution-bound-test-session");
+  const recordImageInputDelivery=vi.fn(async()=>{});
   vi.mocked(routeAndCall).mockImplementation(async(messages,system,_sensitivity,options)=>{
    expect(options?.mcpSession?.mintReadOnlySession).toBe(mintReadOnlySession);
+   expect(options?.mcpSession?.recordImageInputDelivery).toBe(recordImageInputDelivery);
    const {codexReadMcpConfig}=await import("../routing/codex-read-mcp");
    const config=await codexReadMcpConfig(options!.mcpSession!,readParams.toolsForProvider,"http://portal:3000");
    expect(config).toContain("execution-bound-test-session");
    expect(JSON.stringify({messages,system})).not.toContain("execution-bound-test-session");
    table.rows.push(...names.map(name=>nativeRow(name,{},true)));return {...cliProse(contribution),providerId:"codex",modelId:"gpt-5.6-luna"} as never;
   });
-  const result=await withReadEvidencePolicy({toolNames:names,inspect,mintReadOnlySession},()=>runAgenticLoop(readParams));
+  const result=await withReadEvidencePolicy({toolNames:names,inspect,mintReadOnlySession,recordImageInputDelivery},()=>runAgenticLoop(readParams));
   expect(mintReadOnlySession).toHaveBeenCalledExactlyOnceWith();
   expect(result.content).toBe(contribution);expect(result.executedTools.map(t=>t.name)).toEqual(names);
   expect(result.executedTools.map(t=>(t as typeof t & {nativeExecutionId?:string}).nativeExecutionId)).toEqual(table.rows.map(t=>t.id));
@@ -173,4 +175,11 @@ describe("read-only native specialist completion",()=>{
   expect(vi.mocked(routeAndCall).mock.calls[0]![0].some(m=>m.content===original)).toBe(true);
  });
 
+});
+
+it("keeps actual supplied image blocks in the original specialist dispatch",async()=>{
+ const images=[{type:"text" as const,text:"Original scope"},{type:"image_url" as const,image_url:{url:"data:image/png;base64,provided"}}];
+ vi.mocked(routeAndCall).mockResolvedValue({...cliProse(contribution),providerId:"codex"} as never);
+ await withReadEvidencePolicy({toolNames:names,inspect:async()=>({complete:true,message:"verified"})},()=>runAgenticLoop({...readParams,chatHistory:[{role:"user",content:images}]}));
+ expect(vi.mocked(routeAndCall).mock.calls[0][0].some(m=>Array.isArray(m.content)&&m.content.some(b=>b.type==="image_url"&&b.image_url.url==="data:image/png;base64,provided"))).toBe(true);
 });

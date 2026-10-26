@@ -1,9 +1,9 @@
+import {engagementVisualDeliveryRecorder,type EngagementVisualEvidence} from "./coworker-service-catalog/engagement-visual-evidence";
 import { narrowEngagementTools } from "./coworker-service-catalog/engagement-task-binding";
 import { withInferenceAuthorityCheck } from "./routing/governed-inference-deadline";
-import { sameTaskExecutionFence } from "./shared/task-execution-fence";
+import { sameTaskExecutionFence, captureTaskExecutionFence } from "./shared/task-execution-fence";
 import { EXECUTION_UNCERTAIN_MESSAGE, executionUncertaintyFromError, hasExecutionUncertainty } from "./shared/execution-uncertainty";
 import { reservationIdentity, dispatchIdentity, settleRemoteTask } from "./mcp-task-attempt-state";
-import { captureTaskExecutionFence } from "./shared/task-execution-fence";
 import { projectRemoteTaskReplay, optionalString, remoteTaskContent } from "./mcp-task-replay-projection";
 import { TASK_IN_FLIGHT_STATES } from "@/lib/tak/task-states";
 import { remoteTaskConversation } from "./mcp-task-conversation";
@@ -134,11 +134,12 @@ export async function executeRemoteTaskAttempt(input: {
     return displaced ?? projectRemoteTaskReplay({ existing: { ...admittedRun,
       status: "input-required", taskRunId: run.taskRunId }, requestMatches: true });
   }
+  let visualEvidence:EngagementVisualEvidence|null=null;
   if (parsed.engagementBinding) {
     const { validateEngagementTask, reconcileEngagementTaskResult } = await import("./coworker-service-catalog/engagement-fulfillment");
     try {
       await reconcileEngagementTaskResult(run.taskRunId);
-      await validateEngagementTask({ binding: parsed.engagementBinding, token, taskRunId: run.taskRunId, authorityScope: parsed.authorityScope ?? [], requireAssociation: true, request: parsed });
+      visualEvidence=(await validateEngagementTask({ binding: parsed.engagementBinding, token, taskRunId: run.taskRunId, authorityScope: parsed.authorityScope ?? [], requireAssociation: true, request: parsed })).visualEvidence;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Engagement authority unavailable";
       const displaced = await settle({ where: { taskRunId: run.taskRunId }, data: { status: "failed", completedAt: new Date(), progressPayload: { summary: message, error: "engagement_execution_refused" } } });
@@ -276,6 +277,7 @@ export async function executeRemoteTaskAttempt(input: {
       ? { resumedFromTerminalWriterWait: true }
       : { resumedFromCapacity: true };
   const conversation = remoteTaskConversation({
+    visualInputs: visualEvidence?.inputs,
     systemPrompt: `${agent.systemPrompt}\n${await loadPirEvidenceContext(prisma, parsed.initiativeReviewBinding)}`,
     prompt: parsed.prompt,
     resumeKind: input.resumeKind,
@@ -286,6 +288,7 @@ export async function executeRemoteTaskAttempt(input: {
   const readEvidencePolicy = parsed.engagementBinding
     ? (await import("./coworker-service-catalog/engagement-read-completion")).engagementReadCompletion(run.taskRunId, parsed.engagementBinding) : undefined;
   if (readEvidencePolicy) readEvidencePolicy.mintReadOnlySession = async () => (await import("./mcp/session-token")).createMcpSessionToken({userId:token.userId,agentId:resolvedAgentId,threadId:input.threadId,routeContext:parsed.routeContext,taskRunId:run.taskRunId,taskExecutionFence,scopes:["file_read","registry_read"],capability:"read"});
+  if(readEvidencePolicy && parsed.engagementBinding)readEvidencePolicy.recordImageInputDelivery=engagementVisualDeliveryRecorder(run.taskRunId,parsed.engagementBinding,taskExecutionFence??null,visualEvidence);
   const attemptStartedMs = Date.now();
   try {
     const runLoop = async () => (await import("./tak/read-evidence-policy")).withReadEvidencePolicy(readEvidencePolicy, async () => executeAutonomousAgenticLoop({

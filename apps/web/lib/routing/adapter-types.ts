@@ -19,7 +19,9 @@ export interface ResolvedProvider {
  * (currently only the Claude CLI execution adapter, for `--mcp-config`)
  * read this. Other adapters ignore it.
  */
+export type ImageInputDelivery = {sha256:string[];providerId:string;modelId:string;adapterKind:string};
 export interface AdapterMcpSession {
+  recordImageInputDelivery?: (delivery:ImageInputDelivery)=>Promise<void>;
   /** Server-owned exact native read lane; original task authority still gates every call. */
   readOnlyToolNames?: readonly string[];
   /** Execution layer prebinds exact identity/fence and fixed read scopes. */

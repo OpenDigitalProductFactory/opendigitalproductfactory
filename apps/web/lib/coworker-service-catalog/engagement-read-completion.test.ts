@@ -35,3 +35,12 @@ it("holds incomplete native work without declaring a settled profile or authoriz
  expect(hold?.settlement.data.progressPayload).toMatchObject({engagementEvidenceWait:{requiresExecutionProof:true,resumeMode:"held"}});
  expect(JSON.stringify(hold)).not.toContain("knownSettled");expect(JSON.stringify(hold)).not.toContain("transportProfile");
 });
+
+it("holds source-only output when the immutable request requires provided images",async()=>{
+ const visualBinding={...binding,visualEvidenceRef:{kind:"document-version" as const,repositoryFullName:"owner/repo",versionId:"manifest",valueDigest:"f".repeat(64)}};
+ expect((await engagementReadCompletion("TR-original",visualBinding).inspect(content)).complete).toBe(false);
+ state.task.a2aMetadata.engagementVisualDelivery={version:1,manifestRef:visualBinding.visualEvidenceRef,captures:[{sha256:"a".repeat(64)}],deliveredAt:new Date().toISOString(),providerId:"codex",modelId:"actual",dispatchFence:{schemaVersion:1,reservation:null,dispatchClaim:null,authorityDigest:null,requestDigest:null}};
+ expect((await engagementReadCompletion("TR-original",visualBinding).inspect(content)).complete).toBe(true);
+ state.task.a2aMetadata.engagementVisualDelivery.manifestRef={...visualBinding.visualEvidenceRef,valueDigest:"b".repeat(64)};
+ expect((await engagementReadCompletion("TR-original",visualBinding).inspect(content)).complete).toBe(false);
+});
