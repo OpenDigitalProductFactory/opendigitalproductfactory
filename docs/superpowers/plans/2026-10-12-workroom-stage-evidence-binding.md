@@ -269,7 +269,8 @@ status event; its failed UI snapshot actually dates01:00:27.081Z, as corrected
 in the recorded decision outcome. Retain that provenance distinction.
 
 Keep the existing Attention/Next action/accountability layout. The full
-explanation and diagnostic identity belong in existing Details recovery content.
+explanation and diagnostic identity belong in the existing Delegation and recovery
+disclosure below the workforce, reachable from either Overview or Details.
 Use existing native disclosure, focus and theme tokens. If adding an inspection
 link or disclosure, carry the exact propose-n-pick UX manifest and keep it
 strictly read-only. No new dashboard, retry button, source-specific hardcoding,
@@ -296,3 +297,138 @@ must not look like permission. Verify narrow light/dark layout, keyboard
 inspection and stale/missing source states. Source tests and prototype do not
 earn this runtime acceptance. Full BI9, the original seven scenarios, main
 transaction-guard repair and the whole thread outcome remain open.
+
+
+### Recorded blocker implementation verification
+
+The shared projector and actual native readback tests are committed at ea691663.
+The follow-through uses one inventory snapshot clock, preserves stronger process,
+review and drive directions, and passes the same bounded observation through both
+existing content-authorized selected-room loaders. Terminal case projection drops
+stale blocker metadata. No repair owner, URL, action packet or grant is extracted
+from reported text.
+
+The header keeps its compact layout and adds an in-page inspection link to the
+existing Delegation and recovery disclosure. It opens and focuses the actual
+blocker heading, including repeated inspection of the same fragment. Other
+disclosures remain open. A missing workforce or unreadable coordination chain
+does not remove the selected room's authorized blocker explanation. Copy uses the
+existing typed Workroom catalog and pseudo-locales; raw reported explanation is
+rendered as text. This is UI navigation only.
+
+Normal scope release and admission, rather than a forced co-claim, sequenced the
+AC02-owned model, loader and catalog paths. Native claim sequence233 admitted the
+integration. The existing UX-specialist engagement CE-0EA43EDA remains requested;
+no specialist verdict or participation has been inferred. The existing working
+HTML prototype could not be rendered through Browser Use because its local-file
+URL is disallowed; that visual check is unrun and no alternate browser workaround
+was attempted. Source tests are not a substitute for changed-source live layout.
+
+Actual source-local verification: the inventory clock regression first failed
+current-versus-expired, then122 tests passed across4 recovery suites. The new UI
+cases first failed4, and the selected/standalone/model cases first failed3 for
+missing behavior. Integrated graph-linked and colocated verification passed419
+tests across28 files; i18n passed42 tests across3 files. Both web TypeScript
+programs passed, along with prose-lint and26 prose-guard tests. Style/token drift
+passed before final localization; the exact frozen tree still needs its full
+governed gate, independent UI/source review, protected publication and qualified
+deployment. Harness corrections (missing jest-dom matchers and source-helper
+line endings) are not product failures or runtime acceptance.
+
+Self-review additionally reproduced one disclosure regression: a refreshed reason
+reopened a manually closed panel when its fragment remained selected. The effect
+now reacts to blocker presence and explicit inspection, preserving the operator
+choice across new readback objects. The focused39 UI tests passed afterward.
+The UX manifest lists the two control-adding files derived with the checked-in
+guard; route and workforce files only carry the already authorized observation.
+
+### Independent exact-room permission correction
+
+Independent review of43c939ce found P1-selected-room-blocker-disclosure in
+both loaders. WorkItem content admission and a standalone historical creator
+check do not establish the canonical room roster, removal/narrowing, declared or
+backlog-derived clearance. The attributed changes-requested assessment is
+D:/DPF-temp/workroom-blocker-43c939-independent-assessment-20261026.json,
+SHA25661013c35a4c4bfecb104993a84ac8b81c20e0c17c11b8ee6c33ca6663bbe3fef.
+The frozen source and finding remain preserved; no native approval is inferred.
+
+Four meaningful disclosure regressions reproduced the finding. The shared reader
+now withholds explanation unless a canonical row and explicit current content
+decision are available; refusal, missing authority or permission-read error
+returns no private observation. Both loaders use this one admission-before-read
+seam. The authenticated server adapter binds the existing
+resolveHumanWorkroomAccess predicate to the actual session user, selected row and
+source database. It passes this callback into anchored and standalone paths; it
+never substitutes WorkItem membership, an administrator flag or client input.
+Six additional server-binding cases first failed, then the five affected suites
+passed165 tests, including the existing canonical removal and sensitivity policy.
+Authorized positive controls still expose their own explanation.
+
+Normal claim238 followed the profile owner's release of server.ts/test.ts; no
+forced overlap or foreign Workroom mutation occurred. This common permission seam
+lands first. AC02 must integrate the actual protected change, apply the same
+canonical decision to its new source-context read, and verify its changed tree.
+The profile's earlier frozen gate remains historical, not acceptance of the new
+integration. Follow-up independent assessment and the final exact-tree governed
+gate remain required before publication.
+
+
+### Original S6 typed failed-handoff recovery
+
+The original acceptance requires a verified repair owner and an executable
+recovery action where current authority permits one. The245ec107 explanation
+repair deliberately leaves both absent. Independent assessment
+workroom-s6-typed-recovery-gap-245ec-20261026.json records this remaining
+acceptance gap; its SHA256 is
+c1b810d9e1b92f8266b3c85223e0aa48fc7045e0853e145648be63aceab1b5a9.
+Continue this same BI9 concern. Earlier source reviews and source-local tests
+remain historical to their exact trees.
+
+Reuse the server-only original failed approval/execution binding in
+coworker/approval-action-evidence.ts. It validates exact owner, assistant,
+operation, input fingerprint, one genuine failed execution and recorded time.
+Extract the shared validated reader only as needed; expose no raw execution
+result, approval binding or unbounded argument object. Bounded discovery must
+be scoped to the current authorized room and actual owner, refuse ambiguity
+or incomplete history, and perform canonical room content admission before
+reading private explanation or action evidence. Do not infer correlation from
+a reason string, a URL, the room's human accountable owner or a chat title.
+
+Project the originating assistant as recovery owner only when the failed
+operation establishes that responsibility. A separate platform-code repair
+owner needs a genuine typed dependency and stays unavailable when absent.
+Retain exact original failed envelope and execution locators as history.
+Nothing changes that envelope's status, consent, execution or original command.
+
+Only an actual authenticated OAuth source assistant may receive a fresh typed
+request action. The browser human session must not impersonate it. Parse the
+original typed bounded request, preserve its declared destination and mandate,
+require source identity and exact current room/source/lease, and call the
+existing read-only assessBoundedHandoff predicate for current admission,
+owner, role, dependency and clock checks. Missing, changed, unavailable,
+restricted, archived, revoked or expired prerequisites withhold the action
+and retain an exact safe reason. A positive preview is not execution authority:
+the normal governed reassign_workroom_executor writer repeats all checks
+under receipt locks, then still waits for the real receiver's exact native
+acknowledgement. Do not reuse the original failed command id or envelope,
+acknowledge for another actor, clear a blocker automatically or create a new
+executor, recovery ledger, grant, scheduler or tool.
+
+Share this typed observation between the existing MCP recovery readback and
+the already authorized selected-room UI where feasible. The compact existing
+recovery disclosure may display verified owner, original failure and current
+action availability. It must distinguish an executable packet for its actual
+assistant from an unavailable action for a human observer. Keep room
+accountability, stronger review uncertainty, terminal precedence and the
+original inspection link. No browser mutation control is justified by this
+amendment alone. Extend the existing UX manifest only if adding a control.
+
+Before implementation refresh author research, ordinary path claims and test
+impact. Tests first reproduce the absent typed owner/action; positive control
+requires exact current bound actor. Cover foreign actor/room, denied content,
+ambiguous or forged execution, fingerprint mismatch, no bounded phase, changed
+destination/source/lease, failed dependency, unreadable prerequisite, stale
+preview and exact receiver ACK remaining mandatory. Actual native acceptance
+requires qualified containing deployment and CAN-TEST on the original failed
+Windows case; source mocks cannot qualify that outcome. Shared extraction,
+canonical binding and predicate reuse are the useful refactoring portion.
