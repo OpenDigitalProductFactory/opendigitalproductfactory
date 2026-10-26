@@ -84,16 +84,20 @@ export default async function PlatformAiOverviewPage({
           hint="Health, profession coverage, and technical management"
         >
         <div className="space-y-6 pb-4 pt-2">
-          <WorkforceSummaryPanel summary={summary} />
-          <ArchetypeRosterCoveragePanel
-            coverage={coverage}
-            copy={{
-              heading: tRoster("rosterCoverage.heading"),
-              staffedLabel: tRoster("rosterCoverage.staffedLabel"),
-              missingLabel: tRoster("rosterCoverage.missingLabel"),
-              platformOrchestrators: tRoster("rosterCoverage.platformOrchestrators"),
-              completeHint: tRoster("rosterCoverage.completeHint"),
-            }}
+          <WorkforceSummaryPanel
+            summary={summary}
+            extraCards={
+              <ArchetypeRosterCoveragePanel
+                coverage={coverage}
+                copy={{
+                  heading: tRoster("rosterCoverage.heading"),
+                  staffedLabel: tRoster("rosterCoverage.staffedLabel"),
+                  missingLabel: tRoster("rosterCoverage.missingLabel"),
+                  platformOrchestrators: tRoster("rosterCoverage.platformOrchestrators"),
+                  completeHint: tRoster("rosterCoverage.completeHint"),
+                }}
+              />
+            }
           />
           <ProfessionCorpusPanel signals={corpusSignals} />
         </div>

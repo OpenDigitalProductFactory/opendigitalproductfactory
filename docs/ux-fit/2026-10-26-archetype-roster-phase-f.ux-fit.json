@@ -4,7 +4,8 @@
   "decisionInteractionId": "DI-F0536A59F0C1",
   "scope": {
     "files": [
-      "apps/web/components/platform/coworker-record/ArchetypeRosterCoveragePanel.tsx"
+      "apps/web/components/platform/coworker-record/ArchetypeRosterCoveragePanel.tsx",
+      "apps/web/components/platform/coworker-record/WorkforceSummaryPanel.tsx"
     ]
   },
   "evidence": {
@@ -15,5 +16,5 @@
       "add-visible-kpi-band"
     ]
   },
-  "notes": "Phase F extends /platform/ai/overview inside the existing Workforce administration OwnerFirstDisclosure (research option B). Staffed/required and missing-role names stay in that collapsed disclosure as report-kit StatCards with no links, so default-visible words and the heading/landmark tree do not grow. /workforce stays the identity directory. Allocation board BI-7AE90091 is out of scope."
+  "notes": "Phase F extends /platform/ai/overview inside the existing Workforce administration OwnerFirstDisclosure (research option B). Staffed/required and missing-role names sit as extra report-kit StatCards in WorkforceSummaryPanel's existing KPI grid (no unique caption paragraph, no links), so default-visible words and the heading/landmark tree do not grow. /workforce stays the identity directory. Allocation board BI-7AE90091 is out of scope."
 }

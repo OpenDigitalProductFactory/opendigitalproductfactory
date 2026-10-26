@@ -17,41 +17,24 @@ export function ArchetypeRosterCoveragePanel({
   copy: RosterCoverageCopy;
 }) {
   const complete = coverage.missing.length === 0;
+  // Fragment of StatCards only: a unique caption paragraph (or a wrapping
+  // section after MixRow) grows the frozen /platform/ai/overview a11y tree
+  // because collapseRepeatedSiblings cannot merge a new sibling kind. Sit
+  // these cards in WorkforceSummaryPanel's existing KPI grid instead.
   return (
-    <section style={{ marginBottom: 18 }}>
-      <p
-        style={{
-          fontSize: 11,
-          fontWeight: 600,
-          textTransform: "uppercase",
-          letterSpacing: "0.08em",
-          color: "var(--dpf-muted)",
-          marginBottom: 10,
-        }}
-      >
-        {copy.heading}
-      </p>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))",
-          gap: 10,
-          marginBottom: 12,
-        }}
-      >
-        <StatCard
-          label={copy.staffedLabel}
-          value={`${coverage.staffedCount}/${coverage.requiredCount}`}
-          hint={coverage.archetypeId ?? copy.platformOrchestrators}
-          intent={complete ? "success" : "warning"}
-        />
-        <StatCard
-          label={copy.missingLabel}
-          value={coverage.missing.length}
-          hint={complete ? copy.completeHint : coverage.missing.join(", ")}
-          intent={complete ? "success" : "warning"}
-        />
-      </div>
-    </section>
+    <>
+      <StatCard
+        label={copy.staffedLabel}
+        value={`${coverage.staffedCount}/${coverage.requiredCount}`}
+        hint={coverage.archetypeId ?? copy.platformOrchestrators}
+        intent={complete ? "success" : "warning"}
+      />
+      <StatCard
+        label={copy.missingLabel}
+        value={coverage.missing.length}
+        hint={complete ? copy.completeHint : coverage.missing.join(", ")}
+        intent={complete ? "success" : "warning"}
+      />
+    </>
   );
 }
