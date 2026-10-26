@@ -5,10 +5,11 @@ vi.mock("@dpf/db", () => ({ prisma: {} }));
 
 vi.mock("@/lib/i18n/t.server", () => ({ getT: async () => (key: string) => key }));
 const fixture = vi.hoisted(() => ({
-  load: vi.fn(), owners: vi.fn(),
+  load: vi.fn(), owners: vi.fn(), coo: vi.fn(),
 }));
 vi.mock("@/lib/work-capsules/liveness-inventory", () => ({ loadCapsuleLivenessInventory: fixture.load }));
 vi.mock("@/lib/work-management/room-workforce.server", () => ({ loadRoomAccountabilityBatch: fixture.owners }));
+vi.mock("@/lib/operate/coo-surface.server", () => ({ loadCooSupervision: fixture.coo }));
 import { WorkroomActivitySection, workroomInventoryWhere } from "./WorkroomActivitySection";
 import { WorkroomInventory } from "./WorkroomInventory";
 
@@ -37,6 +38,17 @@ describe("workroomInventoryWhere", () => {
     fixture.owners.mockResolvedValue(new Map(rooms.map(room => [room.id, {
       accountableDisplayName: "Recorded person", accountability: { state: "resolved", principalId: "P-1", source: "organization-owner", inheritedFrom: [] },
     }])));
+    fixture.coo.mockResolvedValue({
+      rooms: rooms.map(room => ({
+        roomId: room.capsuleId, title: room.title, ownerPrincipalId: "P-1", ownerDisplayName: "Recorded person",
+        ownerIsSuggestion: true, stallRecipientPrincipalId: "P-1", lastCycleKey: null, lastAction: null,
+        lastReason: null, ticksSinceAdvance: null, nextWakeAt: null, spanOfControl: 200, overSpan: true,
+        unowned: false, paused: false, escalationLabel: "Recorded person", missingAckCount: 0,
+        actionHref: `/workspace/cases/work-capsule%3A${room.capsuleId}`,
+      })),
+      unowned: [], paused: [], overSpanOwners: [{ principalId: "P-1", displayName: "Recorded person", roomCount: 200 }],
+      missingAcks: [],
+    });
     const element = await WorkroomActivitySection({});
     let payload: unknown;
     const walk = (node: ReactNode) => Children.forEach(node, child => {
@@ -50,6 +62,7 @@ describe("workroomInventoryWhere", () => {
     const serialized = JSON.stringify(payload);
     expect(serialized).not.toMatch(/large-outcome-packet|scope-private|source-path/);
     expect(serialized).toContain("Recorded person");
+    expect(serialized).toContain("/workspace/cases/work-capsule%3AWC-0");
     expect(serialized.length).toBeLessThan(JSON.stringify(rooms).length / 10);
     expect(fixture.load).toHaveBeenCalledWith({}, expect.objectContaining({ take: 200, portalSummary: true }));
     console.info(`Workroom fixture payload: ${JSON.stringify(rooms).length} → ${serialized.length} characters`);

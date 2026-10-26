@@ -1699,10 +1699,12 @@
     },
     {
       "key": "work_room_write",
-      "description": "Post a message into a Work Room and invite participants.",
+      "description": "Post a message into a Work Room, invite participants, and broadcast a COO ask.",
       "category": "integrate",
       "sensitivity": "internal",
       "honored_by_tools": [
+        "acknowledge_workroom_broadcast",
+        "broadcast_workroom_ask",
         "invite_room_participant",
         "post_room_message"
       ],
