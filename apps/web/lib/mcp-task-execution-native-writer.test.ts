@@ -151,6 +151,9 @@ function settledData() {
   return (call?.[0] as { data: { status: string; progressPayload: Record<string, unknown> } } | undefined)?.data;
 }
 
+const reviewTaskIdentity = { userId: "user-1", currentAgentId: parsed.agentId,
+  a2aMetadata: { requestDigest: "9".repeat(64), initiativeReviewBinding: parsed.initiativeReviewBinding } };
+
 beforeEach(() => {
   vi.clearAllMocks();
   seq = 0;
@@ -161,7 +164,7 @@ beforeEach(() => {
     activities: [{ id: RECEIPT_ID, kind: "initiative_gate_receipt", gateKey: "design_spec", recordedAt: new Date(), payload: receipt }],
   };
   db.findModelConfig.mockResolvedValue(null);
-  db.findTaskRun.mockResolvedValue({ status: "working", progressPayload: {}, updatedAt: new Date() });
+  db.findTaskRun.mockResolvedValue({ ...reviewTaskIdentity, status: "working", progressPayload: {}, updatedAt: new Date() });
   db.updateTaskRun.mockResolvedValue({ count: 1 });
   autonomous.resolveAgent.mockResolvedValue({ agentId: "AGT-WS-REVIEW", displayName: "Change Reviewer",
     systemPrompt: "Review independently.", sensitivity: "internal" });
@@ -170,7 +173,7 @@ beforeEach(() => {
 
 it("holds an uncertain native execution without creating a writer retry or losing prior evidence", async () => {
   db.item = { activities: [] };
-  db.findTaskRun.mockResolvedValue({ status: "working", progressPayload: { originalEvidence: "retained" }, updatedAt: new Date() });
+  db.findTaskRun.mockResolvedValue({ ...reviewTaskIdentity, status: "working", progressPayload: { originalEvidence: "retained" }, updatedAt: new Date() });
   autonomous.execute.mockResolvedValue({ ...liveCliLoopResult(), failure: {
     kind: "execution-uncertain", message: "Existing execution needs reconciliation.",
     executionUncertainty: { schemaVersion: 1, kind: "execution-uncertain", settlement: "unknown", providerId: "anthropic-sub",
@@ -190,20 +193,19 @@ it("holds an uncertain native execution without creating a writer retry or losin
 
 it("refuses a queued attempt whose admitted generation already contains uncertainty", async () => {
   db.item = { activities: [] };
-  db.findTaskRun.mockResolvedValue({ status: "working", progressPayload: {
+  db.findTaskRun.mockResolvedValue({ ...reviewTaskIdentity, status: "working", progressPayload: {
     executionUncertainty: { schemaVersion: 1, settlement: "unknown" },
   }, updatedAt: new Date() });
   autonomous.execute.mockResolvedValue(liveCliLoopResult());
-  expect(await run()).toMatchObject({ result: { status: "input-required", resumable: false, waitReason: "execution-uncertain" } });
+  expect(await run()).toMatchObject({ result: { status: "working", resumable: false, waitReason: "execution-uncertain",
+    progressPayload: { executionUncertainty: { settlement: "unknown" } } } });
   expect(autonomous.execute).not.toHaveBeenCalled();
-  expect(db.updateTaskRun).toHaveBeenCalledTimes(1);
-  expect(settledData()).toMatchObject({ status: "input-required", completedAt: null,
-    progressPayload: { executionUncertainty: { settlement: "unknown" } } });
+  expect(db.updateTaskRun).not.toHaveBeenCalled();
 });
 
 it("retains admitted read-risk progress when the native execution becomes uncertain", async () => {
   db.item = { activities: [] };
-  db.findTaskRun.mockResolvedValue({ status: "working", progressPayload: { originalEvidence: "read-checkpoint" } });
+  db.findTaskRun.mockResolvedValue({ ...reviewTaskIdentity, status: "working", progressPayload: { originalEvidence: "read-checkpoint" } });
   autonomous.execute.mockResolvedValue({ ...liveCliLoopResult(), failure: { kind: "execution-uncertain", message: "Unknown effects." } });
   await executeRemoteTaskAttempt({ run: { id: "run-internal", taskRunId: TASK_RUN_ID, contextId: "thread-1" },
     threadId: "thread-1", token: { tokenId: "PAT", userId: "user-1", capability: "write", source: "pat" },
@@ -216,8 +218,8 @@ it("retains admitted read-risk progress when the native execution becomes uncert
 it("does not overwrite cancellation when parking a queued uncertain execution", async () => {
   db.item = { activities: [] };
   const progressPayload = { executionUncertainty: { schemaVersion: 1, settlement: "unknown" } };
-  db.findTaskRun.mockResolvedValueOnce({ status: "working", progressPayload })
-    .mockResolvedValue({ status: "canceled", progressPayload });
+  db.findTaskRun.mockResolvedValueOnce({ ...reviewTaskIdentity, status: "working", progressPayload })
+    .mockResolvedValue({ ...reviewTaskIdentity, status: "canceled", progressPayload });
   db.updateTaskRun.mockResolvedValue({ count: 0 });
   expect(await run()).toMatchObject({ result: { status: "canceled", resumable: false } });
   expect(autonomous.execute).not.toHaveBeenCalled();

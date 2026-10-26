@@ -451,7 +451,7 @@ jobs:
       - name: Run named source policy guards
         run: node scripts/ci-policy-guards.mjs --profile source --results "$RUNNER_TEMP/policy-guards-source.json"
       - name: Run Mac inference package source tests
-        run: node --test tools/mac-inference/engine-package.test.mjs
+        run: node --test tools/mac-inference/*.test.mjs
       - name: Upload source policy results
         if: always()
         uses: actions/upload-artifact@v7

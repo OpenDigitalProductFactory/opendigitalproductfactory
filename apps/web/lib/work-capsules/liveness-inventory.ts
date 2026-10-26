@@ -164,6 +164,7 @@ export async function loadCapsuleLivenessInventory(
       ...rest,
       ...(titles ? { title: workroomDisplayTitle(row, titles) } : {}),
       ...(drive ? { drive: { action: drive.lastAction, reason: drive.lastReason,
+        lastCycleKey: drive.lastCycleKey,
         attentionRecorded: Boolean(projectStoredWorkroomDriveObservation(row.workspaceState).attentionReason) } } : {}),
       attribution: projectInvocationAttribution(row, tasksById.get(recordedDriveTask(row)?.taskId ?? "")),
       recovery: projectWorkroomRecovery({ ...row, taskRun: row.taskRun }, reviews, recoveryItems.get(row.backlogItemId ?? "") ?? null, now),

@@ -5,7 +5,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ agent: vi.fn(), token: vi.fn(), room: vi.fn(), rooms: vi.fn(), snapshots: vi.fn(),
   human: vi.fn(), currentConsent: vi.fn(), access: vi.fn(), item: vi.fn(), recovery: vi.fn(),
   task: vi.fn(), authorityKey: vi.fn(), outcome: vi.fn(), itemRow: vi.fn(), alias: vi.fn(), buildStudioRoutes: vi.fn(),
-  preflight: vi.fn() }));
+  preflight: vi.fn(), presentIssuer: vi.fn() }));
+vi.mock("@/lib/mcp-task-review-reassessment", async original => ({ ...await original<typeof import("@/lib/mcp-task-review-reassessment")>(),
+  issuePresentReassessmentRequest: mocks.presentIssuer }));
 vi.mock("@dpf/db", () => ({ prisma: {
   agent: { findUnique: mocks.agent }, mcpApiToken: { findUnique: mocks.token },
   workroom: { findFirst: mocks.room, findMany: mocks.rooms }, contributorInventorySnapshot: { findMany: mocks.snapshots },
@@ -39,6 +41,7 @@ import { boundedBacklogRecoveryRead } from "./backlog-recovery-read";
 import { createPullRequestObservation } from "@/lib/contributor-change-lanes/pull-request-observation";
 import { projectBacklogItemReadiness } from "@/lib/backlog/initiative-readiness/entry-adapter";
 import { baseline as approvedScope, item as readinessItem, readyActivities } from "@/lib/backlog/initiative-readiness/entry-adapter.test-fixtures";
+import { presentReassessmentPacket } from "@/lib/mcp-task-review-reassessment";
 
 const binding: InitiativeReviewBinding = { writerToolName: "record_initiative_post_implementation_review", itemId: "BI-TEST", gate: "post-implementation-review",
   expectedCurrentBaselineId: null,
@@ -72,6 +75,37 @@ beforeEach(() => {
 });
 
 describe("consent-bound independent review request", () => {
+  it.each(["fresh", "already-allocated", "mixed-original-recovery"])("roundtrips the exact present packet for %s without using original replay authority", async scenario => {
+    const design = { ...packet, initiativeReviewBinding: { ...binding, itemId: "BI-285EF102", writerToolName: "record_initiative_design_review", gate: "design-spec" },
+      requiredToolNames: ["read_source_at_version", "record_initiative_design_review"] };
+    const proof = { authorizationItemId: "BI-7906C73E", baselineId: "baseline-current", policyDigest: "c".repeat(64), authorityArtifact: binding.artifactRef,
+      policy: { subjectItemId: "BI-285EF102" } };
+    const originals = [{ gate: "design-spec", taskRunId: "TR-ORIGINAL", requestDigest: "d".repeat(64), readback: { binding: { artifactRef: binding.artifactRef } } }];
+    const issue = (source: Record<string, unknown>) => presentReassessmentPacket({ packet: source, proof: proof as never, originals: originals as never });
+    const present = issue(design);
+    mocks.presentIssuer.mockImplementation(async ({ packet: source }) => issue(source));
+    mocks.room.mockResolvedValue({ ...await mocks.room(), backlogItemId: "BI-285EF102" });
+    const implementation = { target: "implementation", verdict: "input-required", subject: { id: "BI-285EF102" }, blockers: [],
+      unmet: [{ code: "CANONICAL_DESIGN_REQUIRED", accountableRole: "design-checklist-reviewer" }] };
+    mocks.item.mockResolvedValue({ success: true, data: { readiness: { decisions: { implementation } } } });
+    mocks.recovery.mockResolvedValue({ reviewerRoutes: [{ independent: true, requestCoworker: design }] });
+    recoveryTarget.mockResolvedValue({ kind: "refused", reason: "original-review-not-safely-resumable" });
+    if (scenario !== "fresh") {
+      const digest = remoteTaskRequestDigest({ agentId: present.targetAgent, routeContext: "/build", title: present.questionPacketSummary,
+        objective: present.objective, prompt: present.objective, idempotencyKey: present.requestKey, riskClass: "bounded-write", collaborationKind: "handoff",
+        authorityScope: [...context.tokenGrantScopes!, "backlog-item:BI-285EF102", ...design.requiredToolNames.map(name => `tool:${name}`)],
+        initiativeReviewBinding: present.initiativeReviewBinding } as never);
+      mocks.task.mockResolvedValue({ a2aMetadata: { requestDigestVersion: 2, requestDigest: digest } });
+    }
+    if (scenario === "mixed-original-recovery") {
+      mocks.outcome.mockResolvedValue({ summary: "Existing genuine receipt" });
+      const result = await authorizeCoworkerRequest({ ...present, reviewRecovery: { taskRunId: "TR-MCP-original", requestDigest: "d".repeat(64),
+        expectedUpdatedAt: new Date().toISOString() } }, "human", context);
+      expect(result.refusal).toMatchObject({ success: false, error: "independent_review_request_denied" });
+      expect(mocks.outcome).not.toHaveBeenCalled();
+    } else expect(await authorizeCoworkerRequest(present, "human", context)).toEqual({ bounded: true });
+    expect(recoveryTarget).not.toHaveBeenCalled();
+  });
   it.each([{ repositoryFullName: "other/repo" }, { headBranch: "fix/other" },
     { headSha: "f".repeat(40) }, { baseSha: "invalid" }, { headSha: null }, { backlogItemId: "BI-FOREIGN" }])(
     "refuses a foreign or changed persisted room before readiness %j", async change => {

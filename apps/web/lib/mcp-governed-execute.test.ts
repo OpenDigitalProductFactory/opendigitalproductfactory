@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+vi.mock("@dpf/db", () => ({ prisma: { taskRun: { findUnique: vi.fn(async () => ({ progressPayload: {}, a2aMetadata: {} })) } } }));
+vi.mock("./mcp-task-review-recovery", () => ({ reviewRecoveryToolRefusal: vi.fn(async () => null) }));
 import {
   _setGovernanceForTests,
   agentHasAnyGrant,
@@ -520,13 +522,8 @@ describe("governedExecuteTool — resilience", () => {
   });
 });
 
-// BI-16A80690: some MCP clients serialize array/object tool args as JSON
-// strings on the wire. governedExecuteTool is the single funnel for all MCP
-// wire transports, so it re-hydrates those strings (schema-driven) before the
-// tool switch sees them. These tests use the REAL principle_decide schema from
-// PLATFORM_TOOLS (resolved by findTool) and assert via the executeTool spy that
-// the handler receives native values — locking BOTH the JSON-string and the
-// already-structured shapes.
+// BI-16A80690: use the real principle_decide schema to verify that serialized
+// JSON arguments and structured arguments both reach the handler as native values.
 describe("governedExecuteTool — JSON-string arg coercion (BI-16A80690)", () => {
   const STRUCTURED_OPTIONS = [
     { id: "a", description: "Option A" },

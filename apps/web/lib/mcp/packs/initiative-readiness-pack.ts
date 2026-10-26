@@ -1,6 +1,7 @@
 import type { InitiativeArtifactRef, InitiativeGateKey } from "@/lib/backlog/initiative-readiness";
 import { INITIATIVE_DISPOSITION_GUIDANCE, validateInitiativeDisposition, findingEvidenceMatchesRead, type InitiativeFindingEvidence } from "@/lib/backlog/initiative-readiness/disposition-contract";
 import { prisma } from "@dpf/db";
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { parseInitiativeReviewBinding, type InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
 import {
   RESEARCH_DEFINITIONS,
@@ -234,11 +235,7 @@ function parseObjectiveMappings(value: unknown): Array<{ objectiveId: string; ev
   return mappings;
 }
 
-async function resolveExternalInitiativeReviewBinding(
-  actionKey: string,
-  taskRunId: string | undefined,
-  executionFence: import("@/lib/shared/task-execution-fence").TaskExecutionFence | null | undefined,
-): Promise<{
+type ExternalInitiativeReviewBinding = {
   itemId: string;
   gate: string;
   expectedCurrentBaselineId?: string | null;
@@ -246,20 +243,27 @@ async function resolveExternalInitiativeReviewBinding(
   artifactRef: InitiativeArtifactRef;
   workroomRef?: InitiativeReviewBinding["workroomRef"] | null;
   boundReviewTask?: import("@/lib/backlog/initiative-readiness/bound-review-effect").BoundReviewTask;
-} | null> {
-  if (!taskRunId) return null;
+};
+
+async function resolveExternalInitiativeReviewBinding(
+  actionKey: string,
+  taskRunId: string | undefined,
+  executionFence: import("@/lib/shared/task-execution-fence").TaskExecutionFence | null | undefined,
+): Promise<{ externalMcp: boolean; validated: boolean; binding: ExternalInitiativeReviewBinding | null }> {
+  const absent = (externalMcp = false) => ({ externalMcp, validated: false, binding: null });
+  if (!taskRunId) return absent();
   const run = await prisma.taskRun.findUnique({
     where: { taskRunId },
     select: { a2aMetadata: true },
   });
   const metadata = run?.a2aMetadata;
-  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return absent();
   const record = metadata as Record<string, unknown>;
-  if (record["trigger"] !== "external-mcp") return null;
+  if (record["trigger"] !== "external-mcp") return absent();
   const rawBinding = record["initiativeReviewBinding"];
-  if (!rawBinding || typeof rawBinding !== "object" || Array.isArray(rawBinding)) return null;
+  if (!rawBinding || typeof rawBinding !== "object" || Array.isArray(rawBinding)) return absent(true);
   const binding = rawBinding as Record<string, unknown>;
-  if (binding["writerToolName"] !== actionKey) return null;
+  if (binding["writerToolName"] !== actionKey) return absent(true);
   const itemId = typeof binding["itemId"] === "string" ? binding["itemId"].trim() : "";
   const gate = typeof binding["gate"] === "string" ? binding["gate"].trim() : "";
   const rawArtifact = binding["artifactRef"];
@@ -273,7 +277,7 @@ async function resolveExternalInitiativeReviewBinding(
     ? rawEligibleEvidenceActivityIds as string[]
     : null;
   if (!itemId.startsWith("BI-") || !gate || !rawArtifact || typeof rawArtifact !== "object" || Array.isArray(rawArtifact)) {
-    return null;
+    return absent(true);
   }
   const artifact = rawArtifact as Record<string, unknown>;
   // Reuse the issued-packet parser. Invalid context fails closed below; an
@@ -298,8 +302,9 @@ async function resolveExternalInitiativeReviewBinding(
       && typeof expectedCurrentBaselineId !== "string")
     || (rawEligibleEvidenceActivityIds !== undefined && !eligibleEvidenceActivityIds)
     || (gate === "objective-mapping" && !eligibleEvidenceActivityIds)
-  ) return null;
-  return {
+  ) return absent(true);
+  const parsed = parseInitiativeReviewBinding(rawBinding);
+  return { externalMcp: true, validated: !!parsed && canonicalJson(parsed) === canonicalJson(rawBinding), binding: {
     itemId,
     gate,
     boundReviewTask: { taskRunId, requestDigest: typeof record.requestDigest === "string" ? record.requestDigest : "", executionFence },
@@ -318,7 +323,7 @@ async function resolveExternalInitiativeReviewBinding(
         path: artifact["path"] as string,
         providerBlobId: artifact["providerBlobId"] as string,
       },
-  };
+  } };
 }
 
 /**
@@ -330,7 +335,7 @@ async function resolveStewardRoomBinding(
   actionKey: string,
   params: Record<string, unknown>,
   taskRunId: string | undefined,
-): Promise<{ binding: Awaited<ReturnType<typeof resolveExternalInitiativeReviewBinding>> } | { refusal: ToolResult } | null> {
+): Promise<{ binding: ExternalInitiativeReviewBinding | null } | { refusal: ToolResult } | null> {
   if (actionKey !== "record_initiative_evidence") return null;
   const steward = await resolveAcceptanceStewardRunBinding(taskRunId);
   if (!steward) return null;
@@ -347,9 +352,14 @@ async function resolveStewardRoomBinding(
 
 function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
   return async (params, userId, context): Promise<ToolResult> => {
-    let binding = await resolveExternalInitiativeReviewBinding(actionKey, context?.taskRunId, context?.taskExecutionFence);
+    const resolved = await resolveExternalInitiativeReviewBinding(actionKey, context?.taskRunId, context?.taskExecutionFence);
+    let binding = resolved.binding;
     if (binding?.workroomRef === null) return { success: false, error: "CANONICAL_DESIGN_AMBIGUOUS",
       message: "The accepted review's workroom binding is malformed. Reconcile the server-issued packet before retrying." };
+    if (lane.independent && resolved.externalMcp && !resolved.validated) {
+      return { success: false, error: "initiative_review_binding_required",
+        message: "An external independent review writer requires its accepted immutable review binding. Refresh the governed review packet before publication." };
+    }
     if (!binding) {
       const steward = await resolveStewardRoomBinding(actionKey, params, context?.taskRunId);
       if (steward && "refusal" in steward) return steward.refusal;

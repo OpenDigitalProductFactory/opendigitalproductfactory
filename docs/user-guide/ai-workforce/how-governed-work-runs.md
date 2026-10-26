@@ -403,3 +403,8 @@ prior execution is uncertain, cancelled or exhausted, DPF holds the request for
 reconciliation. Dispatch is not completion: the governed review receipt records
 the actual result. The agent obtains the supported request through the
 [initiative readiness recovery procedure](../../architecture/initiative-readiness-runbook.md#original-review-recovery-across-connection-changes).
+
+A late response from an old review cannot restart tools or change the review's
+status after DPF has held or replaced that execution. This also applies to an
+approval returned for the old execution. You can still inspect the review's
+recorded status and result; inspecting that evidence does not restart it.

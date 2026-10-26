@@ -8,7 +8,9 @@
 //     one either (spec D2 S2, "No pause").
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@dpf/db", () => ({ prisma: {} }));
+const live = vi.hoisted(() => ({ task: vi.fn(), update: vi.fn(), guard: vi.fn() }));
+vi.mock("@dpf/db", () => ({ prisma: { taskRun: { findUnique: live.task, updateMany: live.update } } }));
+vi.mock("@/lib/mcp-task-review-recovery", () => ({ reviewRecoveryToolRefusal: live.guard }));
 
 import type { GovernedExecuteArgs } from "@/lib/mcp-governed-execute-types";
 import type { ToolDefinition } from "@/lib/mcp-tool-types";
@@ -75,14 +77,37 @@ function arrange(input: CoworkerAuthorityInput) {
   });
 }
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => { vi.clearAllMocks(); live.task.mockResolvedValue(null); live.guard.mockResolvedValue(null); live.update.mockResolvedValue({ count: 1 }); });
 afterEach(() => setCoworkerToolAuthorityOverridesForTests({
   resolveCoworkerAuthorityInput: null, authorizationDecisionCreate: null, authorityApprovalEnvelopeCreate: null,
   authorityApprovalTaskResume: null, policyAuthorityProjectionAttempt: null, policyAuthorityEnvelopeReserve: null,
   authorityExecutedOutcome: null,
+  authorityApprovalEnvelopeFinalize: null,
 }));
 
 describe("coworker tool authority gate — the propose boundary", () => {
+  it("resumes a current bound approval with its captured identity and one atomic working transition", async () => {
+    const input = { ...authorityInput(false), steering: "none" as const };
+    arrange({ ...input, approval: { envelopeId: "ENV-CURRENT", status: "approved", expiresAt: new Date(Date.now() + 60_000), binding: buildCoworkerApprovalBinding(input) } });
+    setCoworkerToolAuthorityOverridesForTests({ authorityApprovalTaskResume: null });
+    const updatedAt = new Date(), taskExecutionFence = { schemaVersion: 1 as const, reservation: null, dispatchClaim: null, authorityDigest: null, requestDigest: "a".repeat(64) };
+    live.task.mockResolvedValue({ status: "input-required", updatedAt, progressPayload: {}, a2aMetadata: { initiativeReviewBinding: {} } });
+    expect(await enforceCoworkerToolAuthority(execution({ taskExecutionFence }), TOOL, true)).toMatchObject({ outcome: "allow" });
+    expect(live.guard).toHaveBeenCalledWith(expect.objectContaining({ executionFence: taskExecutionFence, phase: "approval-resume", actingAgentId: "AGT-OPS" }));
+    expect(live.update).toHaveBeenCalledWith(expect.objectContaining({ where: { taskRunId: "TR-SCHED-1", status: "input-required", updatedAt },
+      data: expect.objectContaining({ status: "working", lastHeartbeatAt: expect.any(Date) }) }));
+  });
+  it("does not mark a held bound review working before the callback fence can refuse it", async () => {
+    const input = { ...authorityInput(false), steering: "none" as const };
+    arrange({ ...input, approval: { envelopeId: "ENV-OLD", status: "approved", expiresAt: new Date(Date.now() + 60_000), binding: buildCoworkerApprovalBinding(input) } });
+    const finalize = vi.fn();
+    setCoworkerToolAuthorityOverridesForTests({ authorityApprovalTaskResume: null, authorityApprovalEnvelopeFinalize: finalize });
+    live.task.mockResolvedValue({ status: "input-required", progressPayload: { executionUncertainty: {} }, a2aMetadata: { initiativeReviewBinding: {} } });
+    live.guard.mockResolvedValue({ success: false, error: "review_execution_authority_refused", message: "Held original" });
+    expect(await enforceCoworkerToolAuthority(execution(), TOOL, true)).toMatchObject({ outcome: "reject", rejection: "authority_denied" });
+    expect(live.update).not.toHaveBeenCalled();
+    expect(finalize).toHaveBeenCalledWith("ENV-OLD", false);
+  });
   it("mints through the one path, carrying the boundary flag and the chat message", async () => {
     arrange(authorityInput(true));
     const result = await enforceCoworkerToolAuthority(

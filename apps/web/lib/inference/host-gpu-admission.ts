@@ -17,10 +17,13 @@
 
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
+import { resolve } from "node:path";
 
 import { estimateModelVramGb, MODEL_HEADROOM_GB } from "@/lib/inference/local-model-policy";
 import { getOllamaApiRoot } from "@/lib/inference/ollama-url";
 import { isLocalProviderId } from "@/lib/routing/provider-locality";
+import { currentReassessmentExecution, isReassessmentExecutionError, refuseReassessmentExecution } from "../routing/reassessment-execution-scope";
+import { captureReassessmentHttpRequest, currentReassessmentHttpTransport } from "./reassessment-http-capture";
 
 export const HOST_GPU_SNAPSHOT_MAX_AGE_MS = 20_000;
 /** Desktop composition sits well under this. A game or another renderer does not. */
@@ -211,11 +214,13 @@ export async function readDefaultHostGpuSnapshot(nowMs: number): Promise<HostGpu
 }
 
 export async function listDefaultLocalRunners(): Promise<LocalRunner[]> {
+  if (currentReassessmentExecution()) return refuseReassessmentExecution("reassessment-capacity-wrapper-required");
   const body = await fetchJson(`${getOllamaApiRoot()}/engines/ps`, { method: "GET" }, 1_500);
   return parseEngineRunners(body);
 }
 
 export async function unloadDefaultIdleRunners(): Promise<void> {
+  if (currentReassessmentExecution()) return refuseReassessmentExecution("reassessment-model-management-unavailable");
   await fetchJson(`${getOllamaApiRoot()}/engines/unload`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -226,7 +231,8 @@ export async function unloadDefaultIdleRunners(): Promise<void> {
 async function readOr<T>(read: () => Promise<T>, fallback: T): Promise<T> {
   try {
     return await read();
-  } catch {
+  } catch (error) {
+    if (isReassessmentExecutionError(error)) throw error;
     return fallback;
   }
 }
@@ -247,17 +253,19 @@ export async function assertLocalGpuFree(input: {
 } = {}): Promise<void> {
   if (input.providerId && !isLocalProviderId(input.providerId)) return;
   const vitest = process.env.VITEST === "true" || process.env.VITEST === "1";
-  if (!input.inspectGpu && vitest) return;
+  const restricted = currentReassessmentExecution();
+  if (!input.inspectGpu && vitest && !restricted) return;
 
   let decision: LocalGpuAdmission;
   try {
     decision = input.inspectGpu
       ? await input.inspectGpu({ modelId: input.modelId ?? null })
       : await inspectLocalGpuAdmission({ modelId: input.modelId ?? null });
-  } catch {
+  } catch (error) {
+    if (isReassessmentExecutionError(error)) throw error;
     return;
   }
-  if (decision.unloadIdle) {
+  if (decision.unloadIdle && !restricted) {
     try {
       if (input.unloadIdleRunners) await input.unloadIdleRunners();
       else await unloadDefaultIdleRunners();
@@ -273,6 +281,71 @@ export async function assertLocalGpuFree(input: {
 
 export async function inspectLocalGpuAdmission(input: LocalGpuInspectDeps = {}): Promise<LocalGpuAdmission> {
   const nowMs = input.nowMs ?? Date.now();
+  const restricted = currentReassessmentExecution();
+  if (restricted) {
+    if (input.listRunners) return refuseReassessmentExecution("reassessment-capacity-uncaptured-runners");
+    let snapshot: HostGpuSnapshot | null = null, provenance: Record<string, unknown>;
+    try {
+      if (input.readSnapshot) {
+        snapshot = await input.readSnapshot(); provenance = { source: "injected-published-observation" };
+      } else {
+        const path = resolve(defaultHostGpuSnapshotPath());
+        let bytes: Buffer | null;
+        try { bytes = await fs.promises.readFile(path); }
+        catch (error) {
+          if (!error || typeof error !== "object" || !("code" in error) || error.code !== "ENOENT") throw error;
+          bytes = null;
+        }
+        provenance = bytes === null ? { source: "published-file", path, readOutcome: "absent", errorCode: "ENOENT" }
+          : { source: "published-file", path, readOutcome: "complete", bodyEncoding: "base64", bodyBase64: bytes.toString("base64") };
+        if (bytes !== null) {
+          const source = new TextDecoder("utf-8", { fatal: true }).decode(bytes), raw = JSON.parse(source);
+          // The publisher's object is flat. Preserve all bytes, while refusing
+          // duplicate/unknown keys, coercion and conflicting timestamp forms.
+          const names = [...source.matchAll(/"(?:\\.|[^"\\])*"\s*:/g)].map(match => JSON.parse(match[0].slice(0, -1).trim()) as string);
+          if (!raw || typeof raw !== "object" || Array.isArray(raw) || new Set(names).size !== names.length || names.length !== Object.keys(raw).length
+            || Object.keys(raw).some(key => !["observedAt", "observedAtMs", "memoryUsedMiB", "memoryTotalMiB", "utilizationPercent"].includes(key))
+            || [raw.memoryUsedMiB, raw.memoryTotalMiB, raw.utilizationPercent].some(value => typeof value !== "number")
+            || raw.observedAt !== undefined && typeof raw.observedAt !== "string" || raw.observedAtMs !== undefined && typeof raw.observedAtMs !== "number"
+            || raw.observedAt !== undefined && raw.observedAtMs !== undefined && Date.parse(raw.observedAt) !== raw.observedAtMs) {
+            return refuseReassessmentExecution("reassessment-capacity-evidence-invalid");
+          }
+          snapshot = parseHostGpuSnapshotJson(source);
+          if (!snapshot) return refuseReassessmentExecution("reassessment-capacity-evidence-invalid");
+        }
+      }
+    } catch (error) {
+      if (isReassessmentExecutionError(error)) throw error;
+      return refuseReassessmentExecution("reassessment-capacity-evidence-unavailable");
+    }
+    if (snapshot && (!Object.values(snapshot).every(value => typeof value === "number" && Number.isFinite(value)) || snapshot.memoryTotalMiB <= 0
+      || snapshot.memoryUsedMiB < 0 || snapshot.memoryUsedMiB > snapshot.memoryTotalMiB || snapshot.utilizationPercent < 0 || snapshot.utilizationPercent > 100)) {
+      return refuseReassessmentExecution("reassessment-capacity-evidence-invalid");
+    }
+    const observation = () => {
+      const observedAtMs = input.nowMs ?? Date.now();
+      const unknownReason = !snapshot ? "published-snapshot-absent" : observedAtMs - snapshot.observedAtMs > HOST_GPU_SNAPSHOT_MAX_AGE_MS
+        ? "published-snapshot-stale" : snapshot.observedAtMs - observedAtMs > 60_000 ? "published-snapshot-future" : null;
+      return { snapshot: unknownReason ? null : snapshot, provenance: { ...provenance, ...(unknownReason ? { unknownReason } : {}) }, observedAtMs };
+    };
+    const ports = currentReassessmentHttpTransport(), proof = restricted.qualification.finiteTokenProof;
+    if (!proof) return refuseReassessmentExecution("reassessment-capacity-composition-unproven");
+    let decision: LocalGpuAdmission | null = null;
+    const response = await captureReassessmentHttpRequest({ url: `${proof.apiRoot}/engines/ps`, method: "GET", operation: "configuration",
+      ...ports, captureAdditional: async response => {
+        const evidence = observation();
+        let body: unknown; try { body = await response.json(); } catch { return { ...evidence, parseStatus: "invalid" }; }
+        if (!response.ok || !Array.isArray(body) || body.some(row => !row || typeof row !== "object"
+          || typeof row.model_name !== "string" || typeof row.mode !== "string" || typeof row.in_use !== "boolean" || typeof row.loading !== "boolean")) {
+          return { ...evidence, parseStatus: "invalid" };
+        }
+        const runners = parseEngineRunners(body);
+        decision = decideLocalGpuAdmission({ runners, snapshot: evidence.snapshot, nowMs: evidence.observedAtMs, requiredMiB: requiredLocalModelMiB(input.modelId) });
+        return { ...evidence, runners, decision };
+      } });
+    if (!response.ok || !decision) return refuseReassessmentExecution("reassessment-capacity-response-invalid");
+    return decision;
+  }
   const [runners, snapshot] = await Promise.all([
     readOr(input.listRunners ?? listDefaultLocalRunners, [] as LocalRunner[]),
     readOr(input.readSnapshot ?? (() => readDefaultHostGpuSnapshot(nowMs)), null),

@@ -11,6 +11,8 @@ const mocks = vi.hoisted(() => ({
   failRun: vi.fn(),
   recordPromoterReadiness: vi.fn(),
   recordRunRecoveryPoint: vi.fn(),
+  recordReassessmentCompatibility: vi.fn(),
+  runReassessmentCandidatePreflight: vi.fn(async () => ({ ok: true, proof: {} })),
   loadInstallStateSigningContext: vi.fn(),
   refreshMigrationHandoffAfterDrain: vi.fn(),
   createSelfUpgradeRecoveryPoint: vi.fn(),
@@ -33,12 +35,14 @@ vi.mock("@/lib/self-upgrade/run-store", () => ({
   failRun: mocks.failRun,
   recordPromoterReadiness: mocks.recordPromoterReadiness,
   recordRunRecoveryPoint: mocks.recordRunRecoveryPoint,
+  recordReassessmentCompatibility: mocks.recordReassessmentCompatibility,
 }));
 vi.mock("@/lib/self-upgrade/preflight", () => ({
   loadInstallStateSigningContext: mocks.loadInstallStateSigningContext,
   refreshMigrationHandoffAfterDrain: mocks.refreshMigrationHandoffAfterDrain,
   resolveReadinessBackupHostPath: vi.fn(),
   runCandidatePreflight: vi.fn(),
+  runReassessmentCandidatePreflight: mocks.runReassessmentCandidatePreflight,
 }));
 vi.mock("@/lib/self-upgrade/completion", () => ({ isFeatureBuildDeployed: vi.fn(), getDeployedSha: mocks.getDeployedSha }));
 vi.mock("@/lib/self-upgrade/build-failure-classifier", () => ({ classifyBuildFailure: vi.fn(), formatClassifiedExcerpt: vi.fn() }));
@@ -87,6 +91,7 @@ describe("finishSelfUpgrade on a retried step (BI-0E216B0E)", () => {
       for (const fn of [
         mocks.loadInstallStateSigningContext,
         mocks.createSelfUpgradeRecoveryPoint,
+        mocks.runReassessmentCandidatePreflight,
         mocks.refreshMigrationHandoffAfterDrain,
         mocks.guardAdmissionClosedForSwap,
         mocks.runPromoter,
@@ -201,6 +206,7 @@ describe("durable swap replay after process replacement", () => {
     expect(result).toMatchObject({ ok: true, status: "already-finalized", runStatus: "succeeded" });
     expect(phases.begin).toHaveBeenCalledOnce(); expect(phases.settle).toHaveBeenCalledOnce();
     expect(mocks.runPromoter).toHaveBeenCalledOnce(); expect(mocks.createSelfUpgradeRecoveryPoint).toHaveBeenCalledOnce();
+    expect(mocks.runReassessmentCandidatePreflight).toHaveBeenCalledOnce();
     expect(mocks.refreshMigrationHandoffAfterDrain).toHaveBeenCalledOnce();
     for (const fn of [mocks.failRun, mocks.failQuiescenceSwap, mocks.recordCooldown, mocks.emitUpgradeEvent]) expect(fn).not.toHaveBeenCalled();
   });

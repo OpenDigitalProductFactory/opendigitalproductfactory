@@ -43,3 +43,19 @@ describe("explicit original-review recovery request", () => {
       .toEqual(expect.stringContaining("reviewRecovery"));
   });
 });
+
+describe("external independent review writer binding", () => {
+  it.each(["design", "architecture", "data", "ux", "security", "compliance", "domain", "archetype", "post_implementation"])("requires an immutable binding for an explicit %s writer", name => {
+    expect(parseRemoteTaskSubmitParams({ ...request, initiativeReviewBinding: undefined,
+      authorityScope: [`tool:record_initiative_${name}_review`] }))
+      .toEqual(expect.stringContaining("initiativeReviewBinding"));
+  });
+  it("checks writer scopes beyond the tool attachment limit", () => {
+    expect(parseRemoteTaskSubmitParams({ ...request, initiativeReviewBinding: undefined,
+      authorityScope: ["tool:a", "tool:b", "tool:c", "tool:d", "tool:record_initiative_design_review"] }))
+      .toEqual(expect.stringContaining("initiativeReviewBinding"));
+  });
+  it.each([undefined, [], ["tool:read_source_at_version"], ["tool:record_workroom_evidence"], ["tool:record_initiative_evidence"]])("preserves ordinary unbound work with scope %j", authorityScope => {
+    expect(parseRemoteTaskSubmitParams({ ...request, initiativeReviewBinding: undefined, authorityScope })).toMatchObject({ agentId: request.agentId });
+  });
+});
