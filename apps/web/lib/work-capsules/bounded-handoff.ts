@@ -90,15 +90,31 @@ export async function executeBoundedHandoff(input: Input): Promise<ToolResult> {
     if (prior?.reason === "handoff-transaction-required" && prior.preserve === true) {
       if (typeof prior.approvalId !== "string" || typeof prior.executionId !== "string" || !db.workroomActivity.findFirst)
         return fail("handoff-history-unavailable", "The original recovery identity could not be checked.");
-      const existing = await db.workroomActivity.findFirst({ where: { workCapsuleId: capsule.id, kind: "action", AND: [
+      const where = { workCapsuleId: capsule.id, kind: "action", AND: [
         { payload: { path: ["kind"], equals: "bounded-handoff" } },
         { payload: { path: ["state"], equals: "pending-acknowledgement" } },
         { payload: { path: ["request", "command", "handoffManifest", "priorFailure", "approvalId"], equals: prior.approvalId } },
         { payload: { path: ["request", "command", "handoffManifest", "priorFailure", "executionId"], equals: prior.executionId } },
-      ] }, orderBy: [{ recordedAt: "desc" }, { id: "desc" }] });
+      ] };
+      // Find a viable snapshot first: a newer stale row cannot hide an earlier
+      // viable request, including rows with the same database timestamp.
+      const viable = await db.workroomActivity.findFirst({ where: { ...where, AND: [...where.AND,
+        { payload: { path: ["request", "snapshot", "digest"], equals: snapshot.digest } },
+      ] } });
+      const existing = viable ?? await db.workroomActivity.findFirst({ where, orderBy: [{ recordedAt: "desc" }, { id: "desc" }] });
       if (existing) {
-        await readRequest(db, capsule, existing.id);
-        return fail("handoff-recovery-already-requested", "This original failure already has a handoff request. Read that request and its actual receiver outcome.");
+        const previous = await readRequest(db, capsule, existing.id);
+        if (await readCompletionReceipt(db, capsule, existing.id, previous))
+          return fail("handoff-recovery-already-completed", "This original failure already has a completed handoff. Read its recorded outcome.");
+        try { assertHandoffSnapshot(snapshot, previous.snapshot); }
+        catch (error) {
+          if (!(error instanceof BoundedHandoffRefusal) || !["handoff-lease-snapshot-changed", "handoff-boundary-changed"].includes(error.code)) throw error;
+          // A definitively stale immutable request is history, not a permanent
+          // lockout. The fresh request uses the fully rechecked current snapshot.
+          if (viable) throw error;
+        }
+        if (viable || snapshot.digest === previous.snapshot.digest)
+          return fail("handoff-recovery-already-requested", "This original failure already has a current handoff request. Read that request and its actual receiver outcome.");
       }
     }
     const requestId = "handoff-" + randomUUID();
@@ -151,6 +167,12 @@ export async function readBoundedHandoffLineage(db: CapsuleDb, capsule: HandoffR
   }
   const completion = await readCompletionReceipt(db, capsule, activity.id, request);
   if (completion) return { ...completion.handoff, activityId: completion.activityId, recordedAt: completion.recordedAt };
+  const stale = capsule.executorKind !== request.snapshot.executorKind || capsule.executorRef !== request.snapshot.executorRef
+    ? "handoff-source-changed"
+    : capsule.leaseHolderPrincipalId !== request.snapshot.leaseHolderPrincipalId || capsule.leaseExpiresAt?.toISOString() !== request.snapshot.leaseExpiresAt
+      ? "handoff-lease-snapshot-changed"
+      : !capsule.leaseExpiresAt || capsule.leaseExpiresAt.getTime() <= (await databaseWallTime(db)).getTime() ? "handoff-lease-expired" : null;
+  if (stale) return { state: "stale" as const, reason: stale, requestId: activity.id };
   return { state: "pending" as const, requestId: activity.id, requestDigest: handoffDigest(request),
     receiverRef: proposed.toExecutorRef, receivingAgentId: proposed.targetAgentId };
 }

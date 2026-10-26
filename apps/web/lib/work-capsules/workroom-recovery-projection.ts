@@ -38,6 +38,7 @@ export type FailedHandoffRecovery = {
   owner: { userId: string; agentId: string; executorRef: string } | null;
   original: { envelopeId: string; executionId: string; executedAt: string } | null;
   action: { toolName: "reassign_workroom_executor"; args: BoundedHandoffRequest; requiresExecutionRecheck: true; requiresReceiverAcknowledgement: true } | null;
+  staleRequest?: { requestId: string; reason: string };
   pending?: { requestId: string; requestDigest: string; receiverRef: string };
   resolution?: { requestId: string; activityId: string; recordedAt: string };
 };

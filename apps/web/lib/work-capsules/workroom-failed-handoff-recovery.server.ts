@@ -84,6 +84,7 @@ export async function loadWorkroomFailedHandoffRecovery(input: Input, db: Db = p
                 ...base, state: "unavailable", reason: "handoff-lineage-unavailable"
             };
         }
+        if (lineage?.state === "stale") base.staleRequest = { requestId: lineage.requestId, reason: lineage.reason };
         if (lineage?.state === "pending")
             return {
                 ...base, state: "waiting", reason: "handoff-receiver-acknowledgement-required", pending: {

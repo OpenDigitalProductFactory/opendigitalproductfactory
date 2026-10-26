@@ -185,13 +185,23 @@
       "heading": "Handoff history",
       "reportedAuthority": "The reported explanation describes the hold. Verified handoff history is recorded separately below.",
       "resolved": "A later handoff completed. The original refusal remains in the history.",
-      "waiting": "Waiting for the recorded receiver to acknowledge this request. No second request is needed.",
+      "waiting": "Waiting for the recorded receiver to acknowledge this request and pass current checks. No second request is needed while it remains current.",
       "ready": "The source assistant can submit a fresh governed handoff request. Current checks and receiver acknowledgement still apply.",
       "unavailable": "A fresh handoff is not available. The source assistant must resolve the current prerequisites before continuing.",
       "owner": "Recorded source assistant",
       "original": "Original failed operation",
       "receiver": "Recorded receiver and request",
-      "completion": "Completed request and receipt"
+      "completion": "Completed request and receipt",
+      "sourceConnection": "The source assistant must use its own authenticated connection to request the handoff. This page cannot act as that assistant.",
+      "sourceChanged": "The source executor changed. Read the current executor before choosing the next handoff.",
+      "authorityRequired": "The source assistant needs current owner authority and room admission. Resolve the recorded permission hold before continuing.",
+      "identityUnavailable": "The current human and assistant identities could not be verified. Reconnect the source assistant before continuing.",
+      "historyUnavailable": "The handoff history could not be verified. Inspect the original operation and its receipts before requesting another handoff.",
+      "leaseChanged": "The recorded request no longer matches a live source lease. The source assistant must read current state before requesting a fresh handoff.",
+      "prerequisite": "Resolve the source or review prerequisite shown in this Workroom before requesting a handoff.",
+      "dependency": "A verification or environment lease still depends on the source executor. Settle that dependency before requesting a handoff.",
+      "controlledHandover": "This room requires its existing controlled handover. The bounded assistant handoff is unavailable.",
+      "stale": "Earlier request retained as history"
     }
   },
   "flow": {

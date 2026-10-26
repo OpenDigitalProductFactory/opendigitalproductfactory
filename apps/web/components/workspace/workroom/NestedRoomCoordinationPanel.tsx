@@ -19,6 +19,27 @@ const SETUP_HELP: Record<string, MessageKey<"workrooms">> = {
   "role-holder-not-human": "nestedRecovery.setup.nonHumanHolder",
 };
 
+const HANDOFF_HELP: Record<string, MessageKey<"workrooms">> = {
+  "authenticated-source-assistant-required": "nestedRecovery.handoff.sourceConnection",
+  "handoff-source-changed": "nestedRecovery.handoff.sourceChanged",
+  "handoff-current-write-authority-required": "nestedRecovery.handoff.authorityRequired",
+  "handoff-canonical-identity-unavailable": "nestedRecovery.handoff.identityUnavailable",
+  "handoff-original-operation-unproven": "nestedRecovery.handoff.historyUnavailable",
+  "handoff-failure-history-ambiguous": "nestedRecovery.handoff.historyUnavailable",
+  "handoff-history-unavailable": "nestedRecovery.handoff.historyUnavailable",
+  "handoff-lineage-unavailable": "nestedRecovery.handoff.historyUnavailable",
+  "handoff-completion-not-current": "nestedRecovery.handoff.historyUnavailable",
+  "handoff-lease-expired": "nestedRecovery.handoff.leaseChanged",
+  "handoff-lease-snapshot-changed": "nestedRecovery.handoff.leaseChanged",
+  "workroom-prerequisite-unresolved": "nestedRecovery.handoff.prerequisite",
+  "handoff-room-admission-required": "nestedRecovery.handoff.authorityRequired",
+  "handoff-owner-required": "nestedRecovery.handoff.authorityRequired",
+  "handoff-verification-lease-bound": "nestedRecovery.handoff.dependency",
+  "handoff-lease-dependency": "nestedRecovery.handoff.dependency",
+  "handoff-build-boundary": "nestedRecovery.handoff.controlledHandover",
+  "handoff-restricted-boundary": "nestedRecovery.handoff.controlledHandover",
+};
+
 const BLOCKER_ID = "workroom-recorded-blocker";
 const INSPECT_EVENT = "dpf:inspect-workroom-blocker";
 
@@ -94,10 +115,11 @@ export function NestedRoomCoordinationPanel({ coordination, recordedBlocker, fai
       </section> : null}
       {failedHandoffRecovery ? <section aria-labelledby="workroom-handoff-history" className="mb-4 min-w-0 [overflow-wrap:anywhere]">
         <h4 id="workroom-handoff-history" className="text-sm font-semibold text-[var(--dpf-text)]">{t("nestedRecovery.handoff.heading")}</h4>
-        <p className="mt-2 text-sm text-[var(--dpf-text)]">{t(failedHandoffRecovery.state === "resolved" ? "nestedRecovery.handoff.resolved" : failedHandoffRecovery.state === "waiting" ? "nestedRecovery.handoff.waiting" : failedHandoffRecovery.state === "ready" ? "nestedRecovery.handoff.ready" : "nestedRecovery.handoff.unavailable")}</p>
+        <p className="mt-2 text-sm text-[var(--dpf-text)]">{t(failedHandoffRecovery.state === "resolved" ? "nestedRecovery.handoff.resolved" : failedHandoffRecovery.state === "waiting" ? "nestedRecovery.handoff.waiting" : failedHandoffRecovery.state === "ready" ? "nestedRecovery.handoff.ready"  : HANDOFF_HELP[failedHandoffRecovery.reason] ?? "nestedRecovery.handoff.unavailable")}</p>
         <dl className="mt-3 space-y-2 text-sm text-[var(--dpf-text)]">
           {failedHandoffRecovery.owner ? <div><dt className="text-[var(--dpf-muted)]">{t("nestedRecovery.handoff.owner")}</dt><dd>{failedHandoffRecovery.owner.agentId}</dd><dd>{failedHandoffRecovery.owner.executorRef}</dd></div> : null}
           {failedHandoffRecovery.original ? <div><dt className="text-[var(--dpf-muted)]">{t("nestedRecovery.handoff.original")}</dt><dd>{failedHandoffRecovery.original.envelopeId}</dd><dd>{failedHandoffRecovery.original.executionId}</dd></div> : null}
+          {failedHandoffRecovery.staleRequest ? <div><dt className="text-[var(--dpf-muted)]">{t("nestedRecovery.handoff.stale")}</dt><dd>{failedHandoffRecovery.staleRequest.requestId}</dd></div> : null}
           {failedHandoffRecovery.pending ? <div><dt className="text-[var(--dpf-muted)]">{t("nestedRecovery.handoff.receiver")}</dt><dd>{failedHandoffRecovery.pending.receiverRef}</dd><dd>{failedHandoffRecovery.pending.requestId}</dd></div> : null}
           {failedHandoffRecovery.resolution ? <div><dt className="text-[var(--dpf-muted)]">{t("nestedRecovery.handoff.completion")}</dt><dd>{failedHandoffRecovery.resolution.requestId}</dd><dd>{failedHandoffRecovery.resolution.activityId}</dd><dd><time dateTime={failedHandoffRecovery.resolution.recordedAt}>{failedHandoffRecovery.resolution.recordedAt}</time></dd></div> : null}
         </dl>

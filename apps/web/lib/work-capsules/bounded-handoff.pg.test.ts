@@ -90,7 +90,8 @@ function port(tx: RawTx): ReceiptDb & CapsuleDb & { workroomActivity: CapsuleDb[
         const original = where.AND.find((part: any) => part.payload.path.at(-1) === "approvalId");
         if (original) {
           const executionId = where.AND.find((part: any) => part.payload.path.at(-1) === "executionId").payload.equals;
-          const rows = await tx.$queryRaw<any[]>`SELECT * FROM "WorkCapsuleActivity" WHERE "workCapsuleId" = ${where.workCapsuleId} AND kind = 'action' AND payload->>'kind' = 'bounded-handoff' AND payload->>'state' = 'pending-acknowledgement' AND payload #>> '{request,command,handoffManifest,priorFailure,approvalId}' = ${original.payload.equals} AND payload #>> '{request,command,handoffManifest,priorFailure,executionId}' = ${executionId} ORDER BY "recordedAt" DESC,id DESC LIMIT 1`;
+          const snapshotDigest = where.AND.find((part: any) => part.payload.path.at(-1) === "digest")?.payload.equals ?? null;
+          const rows = await tx.$queryRaw<any[]>`SELECT * FROM "WorkCapsuleActivity" WHERE "workCapsuleId" = ${where.workCapsuleId} AND kind = 'action' AND payload->>'kind' = 'bounded-handoff' AND payload->>'state' = 'pending-acknowledgement' AND payload #>> '{request,command,handoffManifest,priorFailure,approvalId}' = ${original.payload.equals} AND payload #>> '{request,command,handoffManifest,priorFailure,executionId}' = ${executionId} AND (${snapshotDigest}::text IS NULL OR payload #>> '{request,snapshot,digest}' = ${snapshotDigest}) ORDER BY "recordedAt" DESC,id DESC LIMIT 1`;
           return rows[0] ?? null;
         }
         const requestId = where.AND.find((part: any) => part.payload.path[0] === "requestId").payload.equals;
@@ -208,6 +209,21 @@ describe.skipIf(!DATABASE_URL)("bounded handoff transaction protocol (PostgreSQL
     const winner = results[0].success ? a : b;
     expect(await call(winner)).toEqual(results.find(result => result.success));
     expect((await pool.query(`SELECT count(*)::int AS n FROM "WorkCapsuleActivity" WHERE kind='command-accepted'`)).rows[0].n).toBe(1);
+  });
+  it("retains an obsolete lease request and admits one concurrent fresh recovery", async () => {
+    const priorFailure = { approvalId: "original-refusal", executionId: "original-execution", reason: "handoff-transaction-required", preserve: true };
+    const original = await call({ ...request, commandId: "before-lease-change", handoffManifest: { ...request.handoffManifest, priorFailure } });
+    expect(original.success).toBe(true);
+    const oldRequestId = (original.data as any).handoff.requestId;
+    await prisma.$executeRaw`UPDATE "WorkCapsule" SET "leaseExpiresAt" = "leaseExpiresAt" + interval '1 minute' WHERE "capsuleId" = 'WC-1'`;
+    expect(await call(ack(oldRequestId, "obsolete-lease-ack"), receiver)).toMatchObject({ success: false, error: "handoff-lease-snapshot-changed" });
+    const fresh = { ...request, handoffManifest: { ...request.handoffManifest, priorFailure } };
+    const results = await Promise.all([call({ ...fresh, commandId: "fresh-a" }), call({ ...fresh, commandId: "fresh-b" })]);
+    expect(results.filter(result => result.success)).toHaveLength(1);
+    expect(results.find(result => !result.success)).toMatchObject({ error: "handoff-recovery-already-requested" });
+    expect((await pool.query(`SELECT count(*)::int AS n FROM "WorkCapsuleActivity" WHERE kind='action' AND payload->>'state'='pending-acknowledgement'`)).rows[0].n).toBe(2);
+    expect((await pool.query('SELECT transfers FROM "WorkCapsule"')).rows[0].transfers).toBe(0);
+    expect((await pool.query('SELECT id FROM "WorkCapsuleActivity" WHERE id=$1', [oldRequestId])).rows).toHaveLength(1);
   });
   it("serializes competing requests and refuses the losing snapshot", async () => {
     const [a,b] = await Promise.all([pending("request-a"),pending("request-b")]);
