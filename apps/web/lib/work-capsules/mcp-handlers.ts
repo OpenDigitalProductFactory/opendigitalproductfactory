@@ -141,6 +141,13 @@ function parseClaimInputs(params: Record<string, unknown>): Array<Pick<ScopeClai
 }
 
 export async function listWorkCapsulesTool(params: Record<string, unknown>, userId: string, context?: ToolExecutionContext): Promise<ToolResult> {
+  if (params.view !== undefined && params.view !== "instances" && params.view !== "definitions") {
+    return { success: false, error: "invalid_view", message: "view must be instances or definitions." };
+  }
+  if (params.view === "definitions") {
+    const { listReviewDefinitions } = await import("./list-review-definitions");
+    return listReviewDefinitions(params, userId, context);
+  }
   const status = stringParam(params, "status");
   const decisionScope = stringParam(params, "decisionScope");
   const portfolioRole = stringParam(params, "portfolioRole");

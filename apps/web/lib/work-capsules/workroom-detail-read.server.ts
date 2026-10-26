@@ -1,4 +1,5 @@
 import { prisma } from "@dpf/db";
+import { projectDeliveryAgreement } from "@/lib/work-management/delivery-agreement";
 import type { ToolExecutionContext, ToolResult } from "@/lib/mcp-tool-types";
 import { clampToolResultForModel, MCP_ROUTE_TOOL_RESULT_CHAR_CAP } from "@/lib/tak/tool-result-budget";
 
@@ -56,7 +57,7 @@ export async function readWorkroomDetail(params: Record<string, unknown>, userId
   const log = afterSequence === undefined ? null
     : { afterSequence, ...(await readActivityAfter(prisma as never, { workCapsuleId: capsule.id, afterSequence })) };
   const message = `Loaded ${capsule.capsuleId}.`;
-  const data = boundWorkroomRecoveryReadback({ capsule: { ...capsule, recovery: projectWorkroomRecovery(capsule, reviews,
+  const data = boundWorkroomRecoveryReadback({ capsule: { ...capsule, delivery: projectDeliveryAgreement({ workspaceState: capsule.workspaceState, currentObjective: capsule.objective, terminal: ["complete", "archived", "abandoned"].includes(capsule.status) }), recovery: projectWorkroomRecovery(capsule, reviews,
     recoveryItems.get(capsule.backlogItemId ?? "") ?? null), nestedCoordination, investment },
     ...(log ? { log } : {}) }, value => !clampToolResultForModel({ success: true, message, data: value },
       { maxChars: MCP_ROUTE_TOOL_RESULT_CHAR_CAP, toolName: "get_workroom" }).truncated);

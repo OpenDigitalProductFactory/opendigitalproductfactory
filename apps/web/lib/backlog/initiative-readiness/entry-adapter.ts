@@ -10,6 +10,7 @@ import type { InitiativeArtifactRef } from "./receipt-schema";
 import { readinessCodesForEvidenceDimension } from "./readiness-guidance";
 import type { DeliverySensitivityAssessment } from "./delivery-sensitivity";
 import { effectiveShape } from "./shape-requirements";
+import { NO_MARKED_OBJECTIVE_STATEMENTS } from "./baseline-manifest";
 import { judgedDesignDigest, type CurrentDesignEvidence, type CurrentResearchEvidence } from "./judged-design-artifact";
 import { parseInitiativeReviewArtifactRef } from "@/lib/mcp-task-review-contract";
 import type {
@@ -555,6 +556,11 @@ export function projectBacklogItemReadiness(args: {
   // The caller owns the predicate; here it is a pure state coercion.
   const recognizeMerge = args.recognizeMergeThroughGates === true;
   const pass = (s: ReadinessEvidenceState): ReadinessEvidenceState => (recognizeMerge ? "pass" : s);
+  const missingObjectiveMarkers = !inherited
+    && args.currentDesign?.state === "verified"
+    && args.currentDesign.scopeManifestError === NO_MARKED_OBJECTIVE_STATEMENTS;
+  const revealMissingObjectives = (state: ReadinessEvidenceState): ReadinessEvidenceState =>
+    missingObjectiveMarkers && (state === "pass" || state === "not-applicable") ? "missing" : state;
   // BI-7876699F: research is satisfiable from the reproduction the author already
   // cited, on the shapes whose gate table says so.
   //
@@ -607,12 +613,12 @@ export function projectBacklogItemReadiness(args: {
     workType: args.item.workType ?? null,
     evaluatedAt: args.evaluatedAt,
     classification: profile ? "pass" : "missing",
-    canonicalDesign: pass(currentDesignUnavailable ? "missing" : baselineState),
+    canonicalDesign: revealMissingObjectives(pass(currentDesignUnavailable ? "missing" : baselineState)),
     canonicalDesignAmbiguous: recognizeMerge ? false : baseline.ambiguous,
     research: pass(researchState),
-    specApproval: pass(currentDesignUnavailable
+    specApproval: revealMissingObjectives(pass(currentDesignUnavailable
       ? state(evidence, "spec-approval") === "fail" ? "fail" : "missing"
-      : specApprovalState(state(evidence, "spec-approval"), designAmended)),
+      : specApprovalState(state(evidence, "spec-approval"), designAmended))),
     specialistReviews: {
       architecture: pass(state(evidence, "architecture-review")),
       data: state(evidence, "data-review"),
@@ -662,6 +668,16 @@ export function projectBacklogItemReadiness(args: {
     } : ownResearchUnavailable ? {
       ...args.completion?.requirementReasons,
       RESEARCH_REQUIRED: ["The child's current research source could not be verified. Restore its Workroom source binding and provider access before recording more research; the inherited design remains unchanged."],
+    } : missingObjectiveMarkers ? {
+      ...args.completion?.requirementReasons,
+      CANONICAL_DESIGN_REQUIRED: [
+        ...(args.completion?.requirementReasons?.CANONICAL_DESIGN_REQUIRED ?? []),
+        `${NO_MARKED_OBJECTIVE_STATEMENTS} Required markers are OBJ- lines (for example **OBJ-1:**) and AC/OBJ table rows that name the objective.`,
+      ],
+      SPEC_APPROVAL_REQUIRED: [
+        ...(args.completion?.requirementReasons?.SPEC_APPROVAL_REQUIRED ?? []),
+        `${NO_MARKED_OBJECTIVE_STATEMENTS} Required markers are OBJ- lines (for example **OBJ-1:**) and AC/OBJ table rows that name the objective.`,
+      ],
     } : args.completion?.requirementReasons,
   };
   return {

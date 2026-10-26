@@ -2,6 +2,14 @@ import { prisma } from "@dpf/db";
 
 import type { DpfSession } from "@/lib/govern/auth";
 
+/** A live authority refusal is distinct from an unavailable identity database. */
+export class EffectiveAuthContextError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "EffectiveAuthContextError";
+  }
+}
+
 import {
   buildEffectiveAuthContext,
   type AuthSource,
@@ -194,10 +202,10 @@ export async function loadEffectiveAuthContext(
 
   const principal = principalAlias?.principal ?? null;
   if (input.user.principalId && !principal) {
-    throw new Error(`Principal ${input.user.principalId} could not be resolved`);
+    throw new EffectiveAuthContextError(`Principal ${input.user.principalId} could not be resolved`);
   }
   if (principal && principal.status !== "active") {
-    throw new Error(`Principal ${principal.principalId} is not active`);
+    throw new EffectiveAuthContextError(`Principal ${principal.principalId} is not active`);
   }
   if (input.user.type === "customer") {
     if (!contactState
@@ -205,7 +213,7 @@ export async function loadEffectiveAuthContext(
       || contactState.mergedIntoId
       || !isCustomerAccountSessionCapable(contactState.account.status)
       || contactState.account.accountId !== input.user.accountId) {
-      throw new Error("Customer session scope is no longer active or canonical");
+      throw new EffectiveAuthContextError("Customer session scope is no longer active or canonical");
     }
   }
 
