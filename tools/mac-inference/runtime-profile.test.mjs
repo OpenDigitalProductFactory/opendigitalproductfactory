@@ -281,3 +281,12 @@ test('a deadline during final in-flight renewal remains fenced after that renewa
   await assert.rejects(run, /fenced/); assert.equal(f.report.authorityFenced, true);
   assert.notEqual(f.report.status, 'runtime-api-qualified');
 });
+test('legacy qualified labels cannot override explicit authority-fence evidence when reusing an engine report', async t => {
+  const f = await evidence(t);
+  for (const field of ['authorityFenced', 'backendEffectSettlement']) {
+    f.report[field] = field === 'authorityFenced' ? true : 'unknown after authority fence; HTTP abort is not effect settlement';
+    assert.throws(() => verifyEngineQualification(f.args()), /authority fence/); delete f.report[field];
+  }
+  f.report.leaseEvents = [{ type: 'heartbeat-lost', reason: 'lease_terminal' }];
+  assert.throws(() => verifyEngineQualification(f.args()), /authority fence/);
+});

@@ -73,6 +73,11 @@ export function verifyEngineQualification({ reportBytes, expectedReportSha256,
     'Qualification report identity changed');
   const report = JSON.parse(reportBytes.toString());
   const engineManifest = engine.manifest;
+  const fenceEvents = new Set(['heartbeat-lost', 'authority-deadline', 'fence-termination-failed']);
+  requireValue(report.authorityFenced !== true && report.backendEffectSettlement === undefined
+    && (report.leaseEvents === undefined || (Array.isArray(report.leaseEvents)
+      && !report.leaseEvents.some(event => fenceEvents.has(event?.type)))),
+  'Qualification carries an authority fence; a qualified label cannot override it');
   requireValue(report.schemaVersion === 1 && report.status === 'model-smoke-qualified'
     && report.baselineRestored === true && Array.isArray(report.failures) && report.failures.length === 0,
     'Incomplete engine qualification');
