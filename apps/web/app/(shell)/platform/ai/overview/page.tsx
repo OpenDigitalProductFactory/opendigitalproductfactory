@@ -9,9 +9,12 @@ import { loadProfessionCorpusSignals } from "@/lib/coworker-record/corpus-signal
 import { RosterView } from "@/components/platform/coworker-record/RosterView";
 import { ProfessionCorpusPanel } from "@/components/platform/coworker-record/ProfessionCorpusPanel";
 import { WorkforceSummaryPanel } from "@/components/platform/coworker-record/WorkforceSummaryPanel";
+import { ArchetypeRosterCoveragePanel } from "@/components/platform/coworker-record/ArchetypeRosterCoveragePanel";
 import { computeWorkforceSummary } from "@/lib/coworker-record/workforce-summary";
+import { loadArchetypeRosterCoverage } from "@/lib/coworker-record/archetype-roster-coverage.server";
 import { OwnerFirstDisclosure } from "@/components/owner-first/OwnerFirstDisclosure";
 import { auth } from "@/lib/auth";
+import { getT } from "@/lib/i18n/t.server";
 import { getGrantedCapabilities } from "@/lib/permissions";
 
 type PageSearchParams = Record<string, string | string[] | undefined>;
@@ -21,10 +24,12 @@ export default async function PlatformAiOverviewPage({
 }: {
   searchParams?: Promise<PageSearchParams>;
 } = {}) {
-  const [{ rows, facets }, corpusSignals, session] = await Promise.all([
+  const [{ rows, facets }, corpusSignals, session, coverage, tRoster] = await Promise.all([
     loadRoster(),
     loadProfessionCorpusSignals(),
     auth(),
+    loadArchetypeRosterCoverage(),
+    getT("coworkerRecord"),
   ]);
   const initialQuery = toQueryString(
     searchParams ? await searchParams : {},
@@ -80,6 +85,16 @@ export default async function PlatformAiOverviewPage({
         >
         <div className="space-y-6 pb-4 pt-2">
           <WorkforceSummaryPanel summary={summary} />
+          <ArchetypeRosterCoveragePanel
+            coverage={coverage}
+            copy={{
+              heading: tRoster("rosterCoverage.heading"),
+              staffedLabel: tRoster("rosterCoverage.staffedLabel"),
+              missingLabel: tRoster("rosterCoverage.missingLabel"),
+              platformOrchestrators: tRoster("rosterCoverage.platformOrchestrators"),
+              completeHint: tRoster("rosterCoverage.completeHint"),
+            }}
+          />
           <ProfessionCorpusPanel signals={corpusSignals} />
         </div>
         </OwnerFirstDisclosure>

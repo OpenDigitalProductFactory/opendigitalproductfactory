@@ -7,6 +7,7 @@
 // compile error (AC-TYPED-KEYS).
 
 import admin from "./messages/en-US/admin.json";
+import coworkerRecord from "./messages/en-US/coworkerRecord.json";
 import customerMap from "./messages/en-US/customerMap.json";
 import deliveryAgreements from "./messages/en-US/deliveryAgreements.json";
 import deploymentSharing from "./messages/en-US/deploymentSharing.json";
@@ -29,7 +30,7 @@ import { isPseudoLocale } from "./pseudo";
 import { formatSource } from "./runtime";
 
 /** The en-US source catalog, one entry per namespace. Add a namespace here and in messages/en-US/. */
-export const SOURCE_CATALOG = { admin, approvals, customerMap, deliveryAgreements, deploymentSharing, errors, footprint, geographic, mcpTools, portfolio, providerAccounts, routingManagement, setup, shell, storefront, upgrade, workrooms } as const;
+export const SOURCE_CATALOG = { admin, approvals, coworkerRecord, customerMap, deliveryAgreements, deploymentSharing, errors, footprint, geographic, mcpTools, portfolio, providerAccounts, routingManagement, setup, shell, storefront, upgrade, workrooms } as const;
 
 export type Namespace = keyof typeof SOURCE_CATALOG;
 
