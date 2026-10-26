@@ -204,3 +204,111 @@ owner before a new budget decision.
 Rollback disables the new actuator/consumer while preserving documents, versions,
 original Done closures, immutable receipts, unresolved obligations and all old
 TaskRun identities. Do not rewrite historical passes or invent backfill.
+
+## October 26 continuation: actual ownership and acceptance boundary
+
+This is a DESIGN-only continuation of BI-E3B918C2. It records new operational
+evidence and corrects the proposed proportionality boundary. It does not deliver
+the acceptance writer, approve a design, settle an original execution or satisfy
+plan coverage.
+
+### Native ownership and original review
+
+The existing WC-65B54867 was transferred through genuine request
+`handoff-5060335a-9b72-45b1-bb51-71cfb93c6dc0` and the actual receiving chat's
+acknowledgment `e3-actual-evaluation-receiver-ack-design-5060335a-20261026`.
+The request digest is
+`c9d770613e9a3c193fc2b7cd75be85735b46af33b37d8aec73df187936c6dde6`.
+Native completion preserved the human owner, admitted assistant, Large shape,
+branch, base and head; it changed only the recorded executor to the receiving
+chat. The initial `branch_occupied` refusal is retained. No forced claim or
+new branch was used.
+
+The receiving chat consumed the complete native command/manifest through
+bounded selected-value reads. An oversized full payload and snapshot were
+explicitly undelivered; they were not treated as complete receipts. The writer
+revalidated the immutable request and current authority during acknowledgment.
+
+A fresh requester-authorized original `tasks/result` read on October 26 returned
+HTTP 200 for the exact original 7F task and digest. It still reports
+`input_required`, `terminal: false`, `resumable: false`,
+`classification: unknown`, `replayAllowed: false`, and
+`original-execution-proof-incomplete`. Required proof remains:
+
+- authoritative original dispatch;
+- authoritative descendant closure;
+- complete reconciliation of unresolved and late effects.
+
+The task-linked inventory is incomplete. Its zero observed artifact, tool,
+approval and async-operation rows do not prove absence. The checkpoint remains
+October 16 at 10:37:38.596 UTC, attempt 1. An outer process close does not
+establish descendant closure. A later writer fence does not retroactively prove
+the original attempt's effect closure.
+
+After the real handoff, the current native DESIGN decision is allowed.
+PLAN and IMPLEMENTATION remain input-required. The refreshed design-spec route
+names the same immutable spec blob `dc87d98cdf74f9a4d7f96a862e3e631a58f8268f`
+as the original 7F review, with no original recovery locator. It was not
+submitted: a new Workroom locator or plan commit cannot authorize repeating the
+unchanged held design. The completion read's unpersisted allowed projection is
+not implementation admission or independent acceptance.
+
+### Proportional acceptance contract
+
+The current sweep unconditionally calls `retainedAcceptanceWithoutBinding`
+for Done items. That fallback currently supplies the acceptance-reviewer role
+for all shapes. Preserve its truthful missing-binding state, while keeping the
+required actor proportional to the recorded shape and sensitivity.
+
+The existing DB4 owner is separately addressing BI-80D1FBBF / WC-80FA2F4F, the low-sensitivity Small-lane
+defect. E3 must consume that owner's governed result rather than implement a
+second Small fix. Small runtime-check acceptance must not acquire an independent
+reviewer, spec baseline or plan gate solely because delivery already closed.
+Medium/Large work retains the independence it actually owes. High/elevated
+sensitivity continues to raise the applicable requirements.
+
+For every lane, actor, closure, original criteria, delivered revision and current
+runtime applicability must come from authenticated server context and immutable
+records. Caller-authored RuntimeVerification result JSON, a different chat with
+the same principal, deployment alone and a client assessment are not substitutes
+for a required independent receipt. Existing observations stay readable without
+being reclassified as authenticated acceptance.
+
+Known consumers remain separate:
+
+- BI-A83A4188: delivered Medium approval-result repair, scoped live UI/MCP proof
+  retained; independent deployed-revision acceptance remains missing.
+- BI-5366EF78: delivered handoff repair, actual receiver ACK and duplicate fence
+  proof retained; browser waiting/completion evidence is now recorded, while
+  formal acceptance and missing hostile/concurrency cases remain distinct.
+- BI-DB4E6F81: existing low-sensitivity Small repair and its runtime-check lane;
+  it must not inherit Medium independence from the retained fallback.
+
+### Refactoring allocation and verification
+
+The operator's current direction for this continuation is 80% relevant
+refactoring/integration/reliability work and 20% thin new behavior. It supersedes
+the earlier 20% direction within this task. It is a planning target, not a
+retroactive assertion about elapsed labor or token use. Funding ownership is
+still unresolved; this does not change organization-wide allocation.
+
+Use four consolidation packages: immutable criteria/version reads, authenticated
+issuer and scheduled-run identity, transaction-bound result validation, and the
+shared sweep/Task Hub projection. Keep only the final typed adapter and
+presentation wiring as the thin behavior package. Do not refactor unrelated
+code to satisfy a percentage. Record future source work and checks against these
+packages; past uninstrumented effort remains unmeasured.
+
+After authentic original settlement or a genuinely supported disposition is
+available, obtain current native design/spec/architecture approval and exact
+coverage/plan review before implementation. Reuse existing valid source/PG and
+live evidence only when its identities and scope match. Repeat the original
+failure-inspection, layout, normal refresh and authorized offline/recovery
+scenarios after the containing canonical deployment; compare observable task
+outcomes and report timing bounds without claiming a latency improvement.
+
+The existing original-proof producer/effect owners retain the missing
+settlement prerequisite under BI-7906C73E and its current coordinator. This
+continuation creates no proof, disposition, approval, review attempt or receipt.
+The next permitted implementation event is actual native readiness allowing it,
+not another operator confirmation or another read of unchanged history.
