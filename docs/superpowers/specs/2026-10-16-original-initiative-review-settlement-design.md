@@ -209,17 +209,27 @@ This amendment completes neither native research acceptance nor collector
 implementation. No failing-then-passing collector proof, genuinely qualified
 historical recovery, or served recovery success has been run here. In particular,
 a missing-proof refusal and the separate writer-fence tests cannot satisfy the
-positive recovery case in AC-HR-2/5. Before implementation admission, the owner
-must name an available authenticated producer for each required evidence family
-and demonstrate a genuinely qualified input without replaying the held originals.
+positive recovery case in AC-HR-2/5.
+Before recovery activation, every reachable evidence family must have an
+authenticated producer and a genuinely qualified input. Producer implementation
+and qualification are separate from recovery activation: ordinary independent
+scope approval, coverage and implementation admission authorize source work;
+they do not authorize recovery of a held original. The P1 correction below
+supersedes the earlier requirement to demonstrate a producer's complete positive
+output before implementing that missing producer. No held original is replayed.
 
 ### Atomic fence and original-task recovery
 
-Refactor existing generation predicates into one shared server-only contract.
-The existing bound-review-effect lock explicitly is not a generation fence:
-it selects status and metadata, and does not itself reject input-required,
-executionUncertainty or changed progress generation. Establish actual coverage
-at every reachable effect boundary rather than changing that one comment.
+Reuse the delivered shared/task-execution-fence.ts contract and
+backlog/initiative-readiness/bound-review-effect.ts rather than duplicating them.
+At source 966b7164fa25544c91980424fb461735b44a23f9,
+checkBoundReviewWriteExecution rejects non-working, uncertain, unversioned or
+displaced executions while the original task lock is held; receipt-repository.ts
+and baseline-repository.ts call it after genuine winner readback and before new
+publication. This supersedes the older description of that delivered interface
+as only a row lock. Establish end-to-end coverage at each remaining reachable
+effect and approval-continuation boundary; the existing canonical-writer fence
+does not itself prove native process closure or all effect reconciliation.
 
 After proof qualification, lock the original task and relevant effect
 reservations in stable order. Recheck current human/coworker OAuth authority,
@@ -252,11 +262,14 @@ cannot truthfully promise that a missing immutable launch/configuration record
 can be reconstructed. Original metrics8c, its body and755 remain unchanged.
 Do not claim prospective recording or a newly deployed collector clears them.
 
-Before implementation admission, establish an executable proof collector for
-each effect family and a real authoritative source for every field it requires.
-If no such source exists for historical attempts, publish that specific
-unsupported condition. A collector that only refuses missing evidence is not
-completion of AC-HR-2/5 or of the original metrics objective.
+Before enabling recovery for an execution profile, establish an executable
+proof collector for each reachable effect family and a real authoritative source
+for every required field. Implement and qualify a missing producer first through
+ordinary source admission; do not require its future output as an input to writing
+that producer. If no retained source exists for historical attempts, publish that
+specific unsupported condition and preserve unknown. A collector that only
+refuses missing evidence, or qualifies a narrower test profile, is not completion
+of AC-HR-2/5 or of the original metrics objective.
 
 Implementation must resolve scoped tests/impact guards and satisfy the current
 server-issued readiness requirements, plan coverage and normal implementation
@@ -271,8 +284,10 @@ is unresolved in the initial claim; no cumulative funding allocation is inferred
 `fix/original-review-settlement`. This fix keeps its sequence in this canonical
 design rather than creating a second plan document. The historical investigation
 and collector/admission integration belong to this parent. The separately owned
-`fix/original-review-writer-fence` contribution supplies a prerequisite writer
-fence; this plan neither takes its edit claims nor declares it delivered.
+`fix/original-review-writer-fence` contribution has delivered the canonical
+writer-generation interface identified above. Reuse that interface and verify
+this integration's remaining boundaries; this plan takes no competing edit
+claims and does not duplicate its implementation or release.
 
 The native readiness read on 2026-10-18 identifies profile `fix`, permits design,
 and reports only RESEARCH_REQUIRED and PLAN_REQUIRED before implementation.
@@ -308,28 +323,122 @@ inventory completeness and finality, and distinguish unavailable from empty.
 | Provider operation | AsyncInferenceOp identityVersion, task row relation, request/binding digests, operationId and ordered transitions. | A real operation identifier and attributable final result can qualify only that operation; an absent row does not cover an uninstrumented native CLI. |
 | Authentication and other native/remote effects | The actual enabled capability inventory and the original credential/provider/effect owner's retained operation record. | Present account health and a static denylist cannot supply the original inventory or authentication result. No generic complete producer has been demonstrated for the inspected originals. |
 
-Before an implementation claim, prepare the reproduction from the actual
-original readback and the named source refusal, then identify a retained,
-authenticated qualified input for every adapter. Candidate causes already
-distinguished by the recorded result are approval gating (requiresApproval=false)
-and writer invocation failure (no terminalWriterWait); these do not establish
-execution closure. A quota result explains a provider failure but leaves child
-closure unverified. No current-tree failing-to-passing collector test has run.
+Before a producer implementation claim, prepare the reproduction from actual
+original readback and the named source refusal, identify each missing producer
+and its trusted owner, and specify the controlled qualification case below.
+Passing independent scope approval and native coverage must precede ordinary
+source implementation. Complete positive producer output is required before
+recovery activation, rather than before implementing the producer. Candidate
+causes already distinguished by the recorded result are approval gating
+(requiresApproval=false) and writer invocation failure (no terminalWriterWait);
+these do not establish closure. A quota result leaves child closure unverified.
+No current-tree failing-to-passing collector test has run.
 
 VERIFY-PROOF requires two different proofs: a regression that fails on the
 unrepaired qualified case and passes after repair, and unchanged zero-dispatch
 refusal for incomplete/foreign/truncated evidence. Exercise real owner readers
 as well as injected malformed fixtures. Source fixtures establish validation
 behavior, not historical settlement. If no authenticated qualified input exists,
-P1 reports the missing producer and stops admission; it does not report research
-or AC-HR-2 as passed on refusal tests alone.
+P1 reports the missing producer and stops recovery activation for that profile;
+it does not report AC-HR-2 as passed on refusal tests alone. Ordinary admitted
+producer source work may continue. Historical recovery remains refused when its
+original attributable proof is absent.
+
+**October 25 producer-first correction — unimplemented.** The earlier P1
+sequencing made a missing producer's qualified output a prerequisite for writing
+that producer. This is a substantive sequencing correction under the existing
+BI-7906C73E scope, not a new review key or a declaration that an original is safe.
+Kernel consultation DI-584435BE93E9 recommended producer-first design with usable,
+high-confidence advice, autonomy eligible and no commandment conflict. Advice
+grants no baseline, writer authority or implementation permission. OBJ-* and
+AC-HR-* remain unchanged. Existing FAIL receipts and unresolved findings
+IF-E4D84CCEF04B1F4A and IF-2DFF2DB08FCE9BEE remain the independent reviewer's
+responsibility; the author resolves none of them.
+
+**Current missing capability and ownership.** At source
+966b7164fa25544c91980424fb461735b44a23f9, routing/cli-owned-runner.ts owns the
+direct child, timeout and private-home cleanup, but retains no authenticated
+task-bound launch/capability manifest or descendant-finality receipt. The Codex
+adapter's native bypass flags do not establish a closed read-only capability set.
+The original-proof inventory deliberately returns captureComplete=false and
+settlement=unknown; row counts and a fingerprint are observations, not a proof
+consumer. TaskArtifact's producer identifiers alone do not authenticate process
+observations. Extend existing owner paths, never trust agent-written JSON.
+
+| Proof family | Recoverable facts and current limit | Accountable existing owner |
+| --- | --- | --- |
+| Accepted request, source and dispatch | Persisted TaskRun/request digests and native dispatch observations are retained; they prove logical identity, not launch membership. | TaskRun and persisted-request repository. |
+| Governed effects and approvals | Existing ToolExecution/domain winners and exact envelopes can be read under current content authority. Missing rows do not prove complete coverage. No restricted payload is retrieved through a fallback. | Governed executor, each domain repository and approval-continuation owner. |
+| Native launch, actual capabilities and descendants | No qualifying retained record has been demonstrated for the held Codex attempts. Exit zero, stderr presence and later sandbox retirement cannot supply missing original membership. | Codex adapter/owned-runner maintainer and trusted sandbox supervisor. |
+| Credential preparation and provider/native effects | Account identity and telemetry are partial locators; original operations and their finality require owner records. A current credential check is insufficient. | Existing provider-account and actual effect owners. |
+| Writer and continuation fence | Current generation checks must cover commit and delayed approval boundaries, not merely preflight. | Existing canonical writer/approval authority and separately owned writer-fence contribution. |
+
+Existing WC-FDAC8963 retains this source contribution; canonical deployment stays
+with the existing release coordinator. The first missing capability is
+an authenticated native execution/effect producer plus a validating internal
+consumer. No generic proof-import MCP tool, new grant, new ledger, credential
+rotation or administrator-written settlement is proposed.
+
+**Ordered P1 qualification within the existing atomic deliverable.**
+
+1. After genuine scope approval, exact coverage and ordinary implementation
+   admission, extend the existing launcher/supervisor and TaskArtifact repository
+   to retain a versioned producer contract. Bind original task row/semantic ID,
+   immutable request digest, attempt/generation/budget identity, adapter and
+   resolved binary/configuration identity, actual enabled capability inventory,
+   original contained execution membership, and attributable closure and effect
+   locators. Authenticate outside the untrusted child using existing trusted
+   owner boundaries; child output, producer ID labels and a content hash alone
+   cannot qualify it. Secrets and prompts are excluded from the proof.
+2. Establish the actual containment and capability contract before claiming
+   completeness. A direct child close is not descendant closure. An authenticated
+   retired sandbox epoch may contribute contained-local-process closure only for
+   executions whose original membership was already bound to it; it does not
+   qualify the whole execution or enumerate remote/native effects. Existing
+   broadly enabled native profiles stay unsupported unless all reachable effects
+   have complete owner readers. Do not infer a restrictive profile from requested
+   tool names or prompt prose; any enforced narrower profile must be measured and
+   recorded by the actual execution owner.
+3. In the governed shared nonproduction environment, create one deliberately new
+   controlled test-original using existing task and authority contracts. Run the
+   actual producer/supervisor on a known harmless child/grandchild workload with a
+   closed local effect set and no external credentials or unbounded network
+   effects. Inject interruption before canonical result publication, retain the
+   authentic owner-produced records, and qualify them through real owner readers.
+   Hand-constructed proof fixtures do not satisfy this positive case. This proves
+   only the declared test profile; it does not qualify the Codex provider or any
+   historical attempt. A provider profile needs its own authorized real positive
+   case and complete native/provider effect coverage before activation.
+4. Record actual RED on the unrepaired producer/consumer boundary, then GREEN on
+   the implemented boundary. Exercise missing, foreign, truncated, stale,
+   mismatched-digest and changed-generation proof with zero recovery dispatch;
+   also exercise late writers and approval completion. Reuse existing receipt
+   and lock order. A qualified controlled original may continue once through the
+   existing same-task lane only after current authority, all effect owners and
+   remaining budget qualify. It never stands in for a held original.
+5. Keep production recovery disabled until qualification, protected delivery,
+   canonical deployment and actual served verification cover the exact profile.
+   No original reviewer is restarted to collect proof. Producer plumbing remains
+   internal sequencing of this atomic recovery deliverable, not independently
+   accepted production recovery. Existing P2-P4 obligations remain.
+
+The first independent spec approval produces the genuine baseline; native plan
+coverage follows it, and ordinary implementation admission follows coverage.
+The controlled positive proof then gates recovery activation. This order removes
+the producer-before-producer cycle without inventing baseline or effect facts.
+Current native FD15/6BD7 and older F969/4E58/755 outcomes remain unknown under
+their original identities and budgets. The typed handoff-transaction-required
+refusal is separate from those review effects. No existing failure is relabelled
+as a pass. All proposed producer code, changed-source tests, controlled execution
+and served recovery checks are UNAPPLIED/UNRUN at this design amendment.
 
 ### P2 — Consolidate qualification and integrate the writer fence
 
 Acceptance references: AC-HR-1, AC-HR-2, AC-HR-3; contract references:
 CONTRACT-PROOF, CONTRACT-FENCE; flow reference: FLOW-QUALIFY;
-verification reference: VERIFY-FENCE. Depends on P1 and the separately owned
-writer-fence contract becoming qualified on the integration source.
+verification reference: VERIFY-FENCE. Depends on P1 qualification and verification
+of the delivered writer-fence contract on the integration source. Existing
+canonical-writer checks remain in place throughout producer work.
 
 Refactor repeated generation, uncertainty and current-authority predicates in
 their existing shared homes before adding an admission branch. Keep at least
