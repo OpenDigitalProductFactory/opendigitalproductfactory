@@ -97,14 +97,14 @@ const PAYMENT_RECORD_TEXT_MATCHER: Pick<RegExp, "test"> = {
     // Keep record context within one paragraph. A topic in one paragraph must
     // not borrow an unrelated release date or budget from the next paragraph.
     return text.split(/\r?\n[ \t]*\r?\n/).some((paragraph) => {
-      let firstDetails: string | undefined;
+      let hasInvoice = false;
       for (const invoice of paragraph.matchAll(/\binvoice\b/gi)) {
         const details = paragraph.slice(invoice.index + invoice[0].length);
-        firstDetails ??= details;
+        hasInvoice = true;
         if (INVOICE_REFERENCE_PATTERN.test(details)) return true;
       }
-      return firstDetails !== undefined && (INVOICE_LABELLED_VALUE_PATTERN.test(firstDetails)
-        || INVOICE_CURRENCY_AMOUNT_PATTERN.test(firstDetails));
+      return hasInvoice && (INVOICE_LABELLED_VALUE_PATTERN.test(paragraph)
+        || INVOICE_CURRENCY_AMOUNT_PATTERN.test(paragraph));
     });
   },
 };

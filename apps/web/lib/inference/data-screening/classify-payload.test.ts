@@ -698,6 +698,7 @@ describe("invoice vocabulary is not a payment record (BI-12CD3010)", () => {
     "Compensation requires its own authority after rollback. Review the Invoice schema design.",
     "Invoice table uses integer cents.\n\nRelease date: 2026-11-01. Budget $125.00.",
     "Invoice schema version 125 SDK describes a document type.",
+    "Release date: 2026-11-01. Budget $125.00.\n\nInvoice table uses integer cents.",
     "Discuss credential permissions, governance, invoice matching and sensitive domains.",
     "The field names password, apiKey, invoice and payment describe the schema.",
   ])("does not infer a payment record from documentation: %s", (content) => {
@@ -730,6 +731,9 @@ describe("invoice vocabulary is not a payment record (BI-12CD3010)", () => {
     "Invoice for ₹125.00",
     "Invoice for 125.00 €",
     "Invoice from Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor Vendor for $125.00",
+    "Please pay $125.00 for this invoice.",
+    "Amount: $125.00\nInvoice",
+    "Due date: 2026-11-01\nInvoice",
     "Invoice INV-1042 is overdue.",
     "Invoice INV1042 is overdue.",
     "Invoice A-1042 is overdue.",
