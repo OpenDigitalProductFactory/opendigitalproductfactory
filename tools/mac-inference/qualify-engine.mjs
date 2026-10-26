@@ -196,25 +196,28 @@ async function stopAllOwnedProcesses() {
 }
 async function stopCandidate() { await stopOwnedChild(child); }
 export const MATCHED_ENGINE_SETTINGS=Object.freeze({context:131072,slots:4,kvUnified:true,
-  gpuLayers:999,threads:9,batch:512,microBatch:512,flashAttention:'on',cacheK:'f16',cacheV:'f16',mmap:false});
+  gpuLayers:999,threads:9,batch:512,microBatch:512,flashAttention:'on',cacheK:'f16',cacheV:'f16',mmap:false,verbosity:4});
 export function nativeEngineArguments({model,modelRef,port,mmproj}) {
   const s=MATCHED_ENGINE_SETTINGS;
   return ['--model',resolve(model),'--alias',modelRef,'--host','127.0.0.1','--port',String(port),
     '--ctx-size',String(s.context),'--parallel',String(s.slots),'--kv-unified',
     '--n-gpu-layers',String(s.gpuLayers),'--threads',String(s.threads),
     '--threads-batch',String(s.threads),'--batch-size',String(s.batch),'--ubatch-size',String(s.microBatch),
-    '--flash-attn',s.flashAttention,'--cache-type-k',s.cacheK,'--cache-type-v',s.cacheV,'--no-mmap','--jinja',
+    '--verbosity',String(s.verbosity),'--flash-attn',s.flashAttention,'--cache-type-k',s.cacheK,'--cache-type-v',s.cacheV,'--no-mmap','--jinja',
     ...(mmproj?['--mmproj',resolve(mmproj)]:[])];
 }
 async function startOwnedEngine(binary,label) {
   if(abort.signal.aborted) fail('Qualification cancelled before engine launch');
-  const port=lease.ports?.[0];let startup='';
+  const port=lease.ports?.[0];let startup='';const startupEvidence=new Set();
   if(!Number.isInteger(port)||port<1024||port>65535) fail('Qualification lease did not reserve a usable native port');
   await guardedLeaseAction({act:()=>{
   child=spawn(binary,nativeEngineArguments({model:a.model,modelRef:a['model-ref'],port,mmproj:a.mmproj}),
     {stdio:['ignore','pipe','pipe']});
   child.on('error',()=>abort.abort());
-  for(const stream of [child.stdout,child.stderr]) stream.on('data',b=>{startup=(startup+b.toString()).slice(-65536);});
+  for(const stream of [child.stdout,child.stderr]) stream.on('data',b=>{
+    startup=(startup+b.toString()).slice(-65536);
+    for(const line of startup.split('\n')) if(/has tensor|tensor API|n_ctx_slot|n_slots|n_ubatch|error compiling source/.test(line)) startupEvidence.add(line);
+  });
   }});
   const endpoint='http://127.0.0.1:'+port;const readyUntil=Math.min(deadline,Date.now()+120000);
   let ready=false;
@@ -225,8 +228,10 @@ async function startOwnedEngine(binary,label) {
     if(!ready) await pause(1000);
   }
   if(!ready) fail('Owned '+label+' readiness timed out');
-  if(label==='corrected-candidate' && (!/has tensor\s*=\s*true/.test(startup)
-    || /tensor API is not supported/.test(startup))) fail('Loaded candidate did not establish tensor support');
+  const evidenceLines=[...startupEvidence].slice(-40);
+  (report.nativeStartupEvidence??=[]).push({engine:label,lines:evidenceLines});
+  if(label==='corrected-candidate' && (!evidenceLines.some(x=>/has tensor\s*=\s*true/.test(x))
+    || evidenceLines.some(x=>/tensor API is not supported/.test(x)))) fail('Loaded candidate did not establish tensor support');
   const props=await json(endpoint+'/props',undefined,3000);
   if(props.default_generation_settings?.n_ctx!==MATCHED_ENGINE_SETTINGS.context
     || props.total_slots!==MATCHED_ENGINE_SETTINGS.slots
@@ -234,8 +239,6 @@ async function startOwnedEngine(binary,label) {
   (report.runtimeConfiguration??=[]).push({engine:label,settings:MATCHED_ENGINE_SETTINGS,
     effectiveContext:props.default_generation_settings.n_ctx,effectiveSlots:props.total_slots,
     launchMode:'isolated-owned-process',liveDockerServiceSettingsChanged:false});
-  (report.nativeStartupEvidence??=[]).push({engine:label,lines:startup.split('\n')
-    .filter(x=>/has tensor|tensor API|n_ctx_slot|n_slots|n_ubatch/.test(x)).slice(0,20)});
   return endpoint;
 }
 export function performanceComparison(before,after,configurationCount) {

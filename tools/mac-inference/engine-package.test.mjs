@@ -135,7 +135,7 @@ test('ambiguous unload acknowledgement still creates a restoration obligation',a
 
 test('both native engine versions receive identical material benchmark settings',()=>{
   const args=nativeEngineArguments({model:'/model.gguf',modelRef:'model',port:49231,mmproj:'/projector.gguf'});
-  for(const [flag,value] of [['--ctx-size','131072'],['--parallel','4'],['--batch-size','512'],['--ubatch-size','512'],['--threads','9'],['--threads-batch','9'],['--cache-type-k','f16'],['--cache-type-v','f16'],['--flash-attn','on'],['--mmproj','/projector.gguf']]) assert.equal(args[args.indexOf(flag)+1],value);
+  for(const [flag,value] of [['--ctx-size','131072'],['--parallel','4'],['--batch-size','512'],['--ubatch-size','512'],['--threads','9'],['--threads-batch','9'],['--cache-type-k','f16'],['--cache-type-v','f16'],['--flash-attn','on'],['--verbosity','4'],['--mmproj','/projector.gguf']]) assert.equal(args[args.indexOf(flag)+1],value);
   assert.ok(args.includes('--kv-unified'));assert.ok(args.includes('--no-mmap'));
 });
 
