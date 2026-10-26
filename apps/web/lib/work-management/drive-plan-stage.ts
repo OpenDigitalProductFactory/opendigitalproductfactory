@@ -308,6 +308,8 @@ export function planStage(args: {
 /** The ledger line for a held latch: what is outstanding, or what failed and when it is retried. */
 function latchLedger(stageKey: string, latch: Extract<WritebackLatchDecision, { hold: true }>): string {
   switch (latch.why) {
+    case "approval":
+      return `Stage ${stageKey} already requested a decision (${latch.outcome}); no new attempt is scheduled. Reconcile that request's outcome before continuing.`;
     case "outstanding":
       return `Stage ${stageKey} was dispatched and its run has not finished; holding until it does, for up to ${Math.round(WRITEBACK_RUN_DEADLINE_MS / 3_600_000)}h.`;
     case "backoff":
