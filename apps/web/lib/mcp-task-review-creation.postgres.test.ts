@@ -1,11 +1,18 @@
-import { randomUUID } from "node:crypto";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { createHash, randomUUID } from "node:crypto";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Prisma } from "@dpf/db";
 import { createReviewPostgresFixture } from "../test-support/review-postgres-fixture";
 import { parseRemoteTaskSubmitParams } from "./mcp-task-submit-params";
-import { remoteTaskRequestDigest } from "./mcp-task-capacity-contract";
+import { deterministicExternalTaskRunId, remoteTaskRequestDigest } from "./mcp-task-capacity-contract";
 import { lockInitiativeReviewCreationSubject } from "./mcp-task-review-reassessment";
+import { issueOriginalReviewRecoveryTarget } from "./mcp-task-review-recovery";
 import type { InitiativeReviewBinding } from "./mcp-task-review-contract";
+
+// These inventory cases must stop before result collection. Keep a regression
+// from reaching a global database outside the explicitly isolated SQL fixture.
+vi.mock("./mcp-task-original-result", () => ({ readOriginalReviewResult: () => {
+  throw new Error("Inventory refusal must precede original result collection");
+} }));
 
 // Only a governed isolated SQL slot may execute these tests. They create no
 // provider request, real assessment, source approval or native receipt.
@@ -52,6 +59,38 @@ describe.skipIf(!url)("ordinary review creation exclusion on PostgreSQL", () => 
     await tx.taskRun.create({ data: value.row }); await tx.taskMessage.create({ data: value.message });
   }
   const transaction = <T>(fn: (tx: Prisma.TransactionClient) => Promise<T>) => fixture.db.$transaction(fn, { isolationLevel: "ReadCommitted", timeout: 10_000 });
+  const aliasRoot = "review-sql-alias-inventory";
+  const aliasUser = "fixture-alias-owner";
+  const currentReviewer = "fixture-reviewer-current";
+  const currentFamily = "oauth-family:sql-current";
+  const aliasBinding: InitiativeReviewBinding = { ...binding, workroomRef: { kind: "workroom-head", workroomId: "WC-FIXTURE",
+    repositoryFullName: "fixture/repository", branchName: "codex/sql-alias-inventory", headSha: "a".repeat(40) } };
+  const aliasKey = (reviewer: string, root = aliasRoot) => `${root}:reviewer:${createHash("sha256").update(reviewer).digest("hex")}`;
+  function alias(key: string, family: string, reviewer: string, status = "input-required") {
+    const parsed = parseRemoteTaskSubmitParams({ agentId: reviewer, routeContext: "/build", title: "Synthetic alias review",
+      objective: "Review exact immutable alias fixture", prompt: "Review exact immutable alias fixture", riskClass: "bounded-write",
+      collaborationKind: "handoff", idempotencyKey: key,
+      authorityScope: [`backlog-item:${binding.itemId}`, "tool:read_source_at_version", "tool:record_initiative_design_review"],
+      initiativeReviewBinding: aliasBinding });
+    if (typeof parsed === "string") throw new Error(parsed);
+    return { id: randomUUID(), taskRunId: deterministicExternalTaskRunId(family, key), userId: aliasUser,
+      currentAgentId: reviewer, routeContext: parsed.routeContext, title: parsed.title, objective: parsed.objective, status,
+      authorityScope: json(parsed.authorityScope), progressPayload: json({ terminalWriterWait: { schemaVersion: 1,
+        kind: "missing-terminal-writer", resumeMode: "same-taskrun", writerToolName: binding.writerToolName,
+        attempt: 1, observedAt: new Date().toISOString() } }),
+      a2aMetadata: json({ trigger: "external-mcp", apiTokenId: "fixture-alias-token", tokenSource: "oauth", tokenCapability: "write",
+        taskAuthorityKey: family, requestedAgentId: reviewer, requestedThreadId: null, requestObjective: parsed.objective,
+        collaborationKind: parsed.collaborationKind, idempotencyKey: key, riskClass: parsed.riskClass,
+        requestDigestVersion: 2, requestDigest: remoteTaskRequestDigest(parsed), initiativeReviewBinding: parsed.initiativeReviewBinding }) };
+  }
+  function readAliases() {
+    return transaction(tx => issueOriginalReviewRecoveryTarget({ packet: { targetAgent: currentReviewer,
+      questionPacketSummary: "Synthetic alias review", objective: "Review exact immutable alias fixture",
+      requestKey: aliasKey(currentReviewer), initiativeReviewBinding: aliasBinding },
+      userId: aliasUser, actingAgentId: "AGT-EXT-CODEX", taskAuthorityKey: currentFamily }, tx));
+  }
+  const aliasSnapshot = () => fixture.db.taskRun.findMany({ orderBy: { taskRunId: "asc" },
+    select: { taskRunId: true, status: true, a2aMetadata: true, progressPayload: true, authorityScope: true } });
   async function createOrdinary(target = binding) {
     return transaction(async tx => {
       await lockInitiativeReviewCreationSubject(tx, target);
@@ -99,5 +138,59 @@ describe.skipIf(!url)("ordinary review creation exclusion on PostgreSQL", () => 
       await expect(createOrdinary()).rejects.toMatchObject({ code: "reassessment-original-recovery-required" });
       expect(await fixture.db.taskRun.count()).toBe(1);
     } finally { await blocker.query("ROLLBACK"); blocker.release(); }
+  });
+
+  it("inventories coexisting unresolved unsuffixed and scoped keys across OAuth families with the real JSON query", async () => {
+    await fixture.db.taskRun.createMany({ data: [alias(aliasRoot, "oauth-family:sql-original", currentReviewer),
+      alias(aliasKey(currentReviewer), currentFamily, currentReviewer)] });
+    const before = await aliasSnapshot();
+    await expect(readAliases()).resolves.toEqual({ kind: "refused", reason: "original-review-ambiguous" });
+    expect(await aliasSnapshot()).toEqual(before);
+  });
+
+  it("finds unresolved scoped aliases when neither belongs to the current reviewer or family", async () => {
+    await fixture.db.taskRun.createMany({ data: [
+      alias(aliasKey("fixture-reviewer-first"), "oauth-family:sql-first", "fixture-reviewer-first"),
+      alias(aliasKey("fixture-reviewer-second"), "oauth-family:sql-second", "fixture-reviewer-second"),
+    ] });
+    const before = await aliasSnapshot();
+    await expect(readAliases()).resolves.toEqual({ kind: "refused", reason: "original-review-ambiguous" });
+    expect(await aliasSnapshot()).toEqual(before);
+  });
+
+  it("does not hide a legacy unsuffixed original when both reviewer and OAuth family change", async () => {
+    const original = alias(aliasRoot, "oauth-family:sql-original", "fixture-reviewer-original");
+    await fixture.db.taskRun.create({ data: original });
+    const before = await aliasSnapshot();
+    await expect(readAliases()).resolves.toEqual({ kind: "refused", reason: "original-review-not-safely-resumable" });
+    expect(await aliasSnapshot()).toEqual(before);
+  });
+
+  it("does not let a completed current scoped alias mask an unresolved legacy original", async () => {
+    await fixture.db.taskRun.createMany({ data: [
+      alias(aliasKey(currentReviewer), currentFamily, currentReviewer, "completed"),
+      alias(aliasRoot, "oauth-family:sql-original", "fixture-reviewer-original"),
+    ] });
+    const before = await aliasSnapshot();
+    await expect(readAliases()).resolves.toEqual({ kind: "refused", reason: "original-review-not-safely-resumable" });
+    expect(await aliasSnapshot()).toEqual(before);
+  });
+
+  it("fails closed on more than 500 matching aliases before selecting an original", async () => {
+    await fixture.db.taskRun.createMany({ data: Array.from({ length: 501 }, (_, index) => {
+      const reviewer = `fixture-reviewer-overflow-${index}`;
+      return alias(aliasKey(reviewer), "oauth-family:sql-original", reviewer);
+    }) });
+    const before = await aliasSnapshot();
+    expect(before).toHaveLength(501);
+    await expect(readAliases()).resolves.toEqual({ kind: "refused", reason: "original-review-history-limit" });
+    expect(await aliasSnapshot()).toEqual(before);
+  });
+
+  it("does not inventory a distinct original-key namespace as a reviewer alias", async () => {
+    await fixture.db.taskRun.create({ data: alias(aliasKey(currentReviewer, `${aliasRoot}-unrelated`), currentFamily, currentReviewer) });
+    const before = await aliasSnapshot();
+    await expect(readAliases()).resolves.toEqual({ kind: "none" });
+    expect(await aliasSnapshot()).toEqual(before);
   });
 });

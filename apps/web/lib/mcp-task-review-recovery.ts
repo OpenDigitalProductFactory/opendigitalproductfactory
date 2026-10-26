@@ -1,7 +1,8 @@
 import { parseReviewExecutionAuthority } from "./mcp-task-persisted-request";
 export { parseReviewExecutionAuthority } from "./mcp-task-persisted-request";
 import { ok, err, type ActionSuccess, type ActionFailure } from "./shared/action-result";
-import { prisma } from "@dpf/db";
+import { prisma, type Prisma } from "@dpf/db";
+import { createHash } from "node:crypto";
 import { matchesPersistedReassessmentScope } from "./routing/reassessment-execution-scope";
 import { resolveCanonicalAgentId } from "@dpf/db/agent-identity";
 import { OAUTH_EXECUTION_AUTHORITY_SELECT, isCurrentOAuthExecutionAuthority } from "./auth/oauth-tokens";
@@ -18,6 +19,7 @@ import { parseInitiativeReviewBinding } from "./mcp-task-review-contract";
 import type { UserContext } from "./permissions";
 import type { RemoteTaskSubmitParams } from "./mcp-task-submit-params";
 import type { ExistingRemoteTask, RemoteTaskSubmitAuth } from "./mcp-task-submit-types";
+import { createExhaustedPlanReviewPredicate } from "./backlog/initiative-readiness/exhausted-plan-review";
 
 type RecoveryTask = ExistingRemoteTask & { authorityScope: string[] };
 type RecoverySelection = ActionSuccess<{ existing: RecoveryTask }> | (ActionFailure & {
@@ -120,49 +122,132 @@ export async function revalidateReviewExecutionAuthority(input: {
   return authorized.ok && resolveCanonicalAgentId(authorized.data.current.agentId) === resolveCanonicalAgentId(ref.actingAgentId);
 }
 
+const originalReviewKey = (key: string) => key.replace(/:reviewer:[a-f0-9]{64}$/, "");
+const ORIGINAL_REVIEW_ALIAS_LIMIT = 500;
+const sameBinding = (left: unknown, right: unknown) => canonicalJson(left ?? null) === canonicalJson(right ?? null);
+const validReviewKey = (key: string, root: string, agent: string) => key === root
+  || key === `${root}:reviewer:${createHash("sha256").update(agent).digest("hex")}`;
+
+/** The established exhaustion proof is reused against the inventoried snapshot.
+ * This permits only a different reviewer in the SAME current family; unknown,
+ * held and restricted assessment histories never become an alternate budget. */
+export async function isProvenExhaustedReviewAlternate(input: {
+  packet: Record<string, unknown>; userId: string; taskAuthorityKey: string; authorityScope?: readonly string[];
+  actingAgentId?: string; currentTokenId?: string;
+}, value: unknown, db: Pick<Prisma.TransactionClient, "mcpApiToken" | "user" | "agent" | "authorityBinding" | "oAuthRefreshToken"> = prisma): Promise<boolean> {
+  if (!isRecord(value) || !isRecord(value.a2aMetadata) || !isRecord(input.packet.initiativeReviewBinding)) return false;
+  const metadata = value.a2aMetadata, progress = isRecord(value.progressPayload) ? value.progressPayload : {};
+  const savedKey = metadata.idempotencyKey, savedAgent = metadata.requestedAgentId;
+  if (typeof savedKey !== "string" || typeof savedAgent !== "string" || typeof input.packet.requestKey !== "string"
+    || typeof input.packet.targetAgent !== "string"
+    || savedKey === input.packet.requestKey
+    || resolveCanonicalAgentId(savedAgent) === resolveCanonicalAgentId(input.packet.targetAgent)
+    || originalReviewKey(savedKey) !== originalReviewKey(input.packet.requestKey)
+    || !validReviewKey(savedKey, originalReviewKey(input.packet.requestKey), savedAgent)
+    || !validReviewKey(input.packet.requestKey, originalReviewKey(input.packet.requestKey), input.packet.targetAgent)
+    || value.userId !== input.userId || metadata.taskAuthorityKey !== input.taskAuthorityKey
+    || !input.taskAuthorityKey.startsWith("oauth-family:") || metadata.tokenSource !== "oauth" || metadata.tokenCapability !== "write"
+    || Object.hasOwn(progress, "reassessmentQuarantine") || Object.hasOwn(metadata, "reassessmentExecution")
+    || hasExecutionUncertainty(progress) || Object.hasOwn(input.packet.initiativeReviewBinding, "presentReassessment")
+    || !sameBinding(metadata.initiativeReviewBinding, input.packet.initiativeReviewBinding)) return false;
+  const packet = { ...input.packet, requestKey: savedKey, targetAgent: savedAgent } as Parameters<ReturnType<typeof createExhaustedPlanReviewPredicate>>[0];
+  if (input.authorityScope) {
+    const { parseRemoteTaskSubmitParams } = await import("./mcp-task-submit-params");
+    const current = parseRemoteTaskSubmitParams({ agentId: savedAgent, routeContext: "/build", title: packet.questionPacketSummary,
+      objective: packet.objective, prompt: packet.objective, idempotencyKey: savedKey, riskClass: "bounded-write",
+      collaborationKind: "handoff", authorityScope: input.authorityScope, initiativeReviewBinding: packet.initiativeReviewBinding });
+    if (typeof current === "string" || !reconcileReviewReplayScope(metadata, value.authorityScope, current)) return false;
+  }
+  // The owner predicate still validates deterministic identity, exact saved
+  // request digest, target, writer, counters and escalation. No second query
+  // can swap the snapshot after this guard's complete inventory.
+  if (!await createExhaustedPlanReviewPredicate({ userId: input.userId, taskAuthorityKey: input.taskAuthorityKey },
+    { taskRun: { findFirst: async () => value } })(packet) || typeof metadata.apiTokenId !== "string") return false;
+  let currentAgent = input.actingAgentId;
+  if (input.currentTokenId) {
+    const current = await db.mcpApiToken.findUnique({ where: { id: input.currentTokenId },
+      select: { ...OAUTH_EXECUTION_AUTHORITY_SELECT, oauthFamilyKey: true, capability: true, scopes: true } });
+    if (!current || current.userId !== input.userId || current.capability !== "write"
+      || current.oauthClient?.registrationKind === "credentials" || !current.oauthFamilyKey
+      || input.taskAuthorityKey !== `oauth-family:${current.oauthFamilyKey}` || !await isCurrentOAuthExecutionAuthority(current, db)) return false;
+    const available = new Set(expandGrants(current.scopes));
+    if (!input.authorityScope || input.authorityScope.some(scope =>
+      !scope.startsWith("tool:") && !scope.startsWith("backlog-item:") && !available.has(scope))) return false;
+    currentAgent = current.agentId ?? undefined;
+  }
+  const origin = await db.mcpApiToken.findUnique({ where: { id: metadata.apiTokenId }, select: { userId: true, agentId: true } });
+  return Boolean(origin?.userId === input.userId && origin.agentId && currentAgent
+    && resolveCanonicalAgentId(origin.agentId) === resolveCanonicalAgentId(currentAgent));
+}
+
 /** Readback supplies a locator only after the owning surface checks room content access. */
 export async function issueOriginalReviewRecoveryTarget(input: {
   packet: Record<string, unknown>; userId: string; actingAgentId: string; taskAuthorityKey: string;
   tokenGrantScopes?: readonly string[];
-}): Promise<{ kind: "none" } | { kind: "refused"; reason: string;
+}, db: Prisma.TransactionClient = prisma): Promise<{ kind: "none" } | { kind: "refused"; reason: string;
   originalResult?: import("./mcp-task-original-result").OriginalReviewResult;
   resultRead?: { method: "tasks/result"; params: { taskId: string; requestDigest: string } };
-} | {
-  kind: "target"; target: import("./mcp-task-submit-params").ReviewTaskRecoveryTarget;
-}> {
+} | { kind: "target"; target: import("./mcp-task-submit-params").ReviewTaskRecoveryTarget }> {
   const { parseRemoteTaskSubmitParams } = await import("./mcp-task-submit-params");
   const { packet } = input;
   if (typeof packet.requestKey !== "string") return { kind: "none" };
-  const rows = await prisma.taskRun.findMany({ where: { userId: input.userId,
+  const rootKey = originalReviewKey(packet.requestKey);
+  const rows = await db.taskRun.findMany({ where: { userId: input.userId,
     status: { notIn: ["completed", "canceled", "rejected", "archived"] },
-    AND: [{ a2aMetadata: { path: ["idempotencyKey"], equals: packet.requestKey } },
+    AND: [{ OR: [{ a2aMetadata: { path: ["idempotencyKey"], equals: rootKey } },
+      { a2aMetadata: { path: ["idempotencyKey"], string_starts_with: `${rootKey}:reviewer:` } }] },
       { a2aMetadata: { path: ["tokenSource"], equals: "oauth" } }],
-  }, take: 3, orderBy: [{ createdAt: "desc" }], select: {
-    taskRunId: true, status: true, updatedAt: true, a2aMetadata: true, progressPayload: true, authorityScope: true,
+  }, take: ORIGINAL_REVIEW_ALIAS_LIMIT + 1, orderBy: [{ id: "asc" }], select: {
+    taskRunId: true, userId: true, currentAgentId: true, status: true, updatedAt: true, a2aMetadata: true, progressPayload: true, authorityScope: true,
   } });
   if (!rows.length) return { kind: "none" };
-  if (rows.length !== 1) return { kind: "refused", reason: "original-review-ambiguous" };
-  const row = rows[0]!;
+  if (rows.length > ORIGINAL_REVIEW_ALIAS_LIMIT) return { kind: "refused", reason: "original-review-history-limit" };
+  if (new Set(rows.map(row => row.taskRunId)).size !== rows.length) return { kind: "refused", reason: "original-review-ambiguous" };
+  const unresolved: typeof rows = [];
+  for (const row of rows) {
+    const metadata = isRecord(row.a2aMetadata) ? row.a2aMetadata : {};
+    const savedKey = metadata.idempotencyKey, savedAgent = metadata.requestedAgentId;
+    if (row.userId !== input.userId || typeof savedKey !== "string" || typeof savedAgent !== "string"
+      || !row.currentAgentId || resolveCanonicalAgentId(row.currentAgentId) !== resolveCanonicalAgentId(savedAgent)
+      || !validReviewKey(savedKey, rootKey, savedAgent)
+      || !sameBinding(metadata.initiativeReviewBinding, packet.initiativeReviewBinding)
+      || metadata.tokenSource !== "oauth" || metadata.tokenCapability !== "write"
+      || typeof metadata.taskAuthorityKey !== "string" || !metadata.taskAuthorityKey.startsWith("oauth-family:")
+      || deterministicExternalTaskRunId(metadata.taskAuthorityKey, savedKey) !== row.taskRunId) {
+      return { kind: "refused", reason: "original-review-not-safely-resumable" };
+    }
+    const saved = parseRemoteTaskSubmitParams({ agentId: savedAgent, routeContext: "/build", title: packet.questionPacketSummary,
+      objective: packet.objective, prompt: packet.objective, idempotencyKey: savedKey, riskClass: "bounded-write", collaborationKind: "handoff",
+      authorityScope: row.authorityScope, initiativeReviewBinding: packet.initiativeReviewBinding });
+    if (typeof saved === "string" || !matchingRemoteTaskRequestDigest(metadata, saved)) {
+      return { kind: "refused", reason: "original-review-not-safely-resumable" };
+    }
+    if (!await isProvenExhaustedReviewAlternate(input, row, db)) unresolved.push(row);
+  }
+  if (!unresolved.length) return { kind: "none" };
+  if (unresolved.length !== 1) return { kind: "refused", reason: "original-review-ambiguous" };
+  const row = unresolved[0]!;
   const metadata = isRecord(row.a2aMetadata) ? row.a2aMetadata : {};
+  const savedKey = metadata.idempotencyKey as string, savedAgent = metadata.requestedAgentId as string;
   const parsed = parseRemoteTaskSubmitParams({ agentId: packet.targetAgent, routeContext: "/build",
     title: packet.questionPacketSummary, objective: packet.objective, prompt: packet.objective,
-    idempotencyKey: packet.requestKey, riskClass: "bounded-write", collaborationKind: "handoff",
+    idempotencyKey: savedKey, riskClass: "bounded-write", collaborationKind: "handoff",
     authorityScope: row.authorityScope, initiativeReviewBinding: packet.initiativeReviewBinding });
   const wait = parseTerminalWriterWait(row.progressPayload);
   if (typeof parsed === "string" || !parsed.initiativeReviewBinding?.workroomRef
-    || typeof metadata.taskAuthorityKey !== "string"
+    || savedAgent !== packet.targetAgent || typeof metadata.taskAuthorityKey !== "string"
     || !metadata.taskAuthorityKey.startsWith("oauth-family:") || typeof metadata.apiTokenId !== "string"
     || matchingRemoteTaskRequestDigest(metadata, parsed) !== metadata.requestDigest
     || typeof metadata.requestDigest !== "string"
-    || deterministicExternalTaskRunId(metadata.taskAuthorityKey, packet.requestKey) !== row.taskRunId) {
+    || deterministicExternalTaskRunId(metadata.taskAuthorityKey, savedKey) !== row.taskRunId) {
     return { kind: "refused", reason: "original-review-not-safely-resumable" };
   }
-  const origin = await prisma.mcpApiToken.findUnique({ where: { id: metadata.apiTokenId }, select: { userId: true, agentId: true } });
+  const origin = await db.mcpApiToken.findUnique({ where: { id: metadata.apiTokenId }, select: { userId: true, agentId: true } });
   if (!origin || origin.userId !== input.userId || !origin.agentId
     || resolveCanonicalAgentId(origin.agentId) !== resolveCanonicalAgentId(input.actingAgentId)) {
     return { kind: "refused", reason: "original-human-or-coworker-mismatch" };
   }
-  if (row.status !== "input-required" || !wait || hasExecutionUncertainty(row.progressPayload)
+  if (savedKey !== packet.requestKey || row.status !== "input-required" || !wait || hasExecutionUncertainty(row.progressPayload)
     || recoverTerminalWriterEscalation(row.progressPayload)
     || nextTerminalWriterAttempt(wait) > TERMINAL_WRITER_MAX_ATTEMPTS
     || !recoveryWindowOpen(metadata, row.progressPayload)) {

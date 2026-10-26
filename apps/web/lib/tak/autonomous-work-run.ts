@@ -17,6 +17,7 @@ import { narrowInitiativeReviewTools, type InitiativeReviewBinding } from "@/lib
 import { immutablePageReaderForArtifact } from "./terminal-tool-policy";
 import { ReassessmentExecutionError, currentReassessmentExecution, assertReassessmentToolCall } from "@/lib/routing/reassessment-execution-scope";
 import type { CanonicalReviewReceiptCheck } from "./reassessment-loop";
+import type { RemoteTaskSubmitParams } from "@/lib/mcp-task-submit-params";
 
 /** Best-effort latest user-turn text, for the reviewer's context. */
 function lastUserRequest(history: ChatMessage[]): string {
@@ -85,6 +86,8 @@ export type AutonomousWorkRunInput = {
   /** Server-only atomic persistence, after creation and before the deferred
    * input commits. Never accepted from serialized client or tool arguments. */
   afterTaskCreated?: (tx: Prisma.TransactionClient, run: AutonomousWorkRunRef) => Promise<void>;
+  /** Server-derived MCP context only; never accepted from serialized tools. */
+  reviewCreationAuthority?: { taskAuthorityKey: string; tokenId: string; parsed: RemoteTaskSubmitParams };
   transactionIsolationLevel?: Prisma.TransactionIsolationLevel;
   /**
    * Closed deferred callers may commit their first user message in the same
@@ -130,6 +133,7 @@ export async function createAutonomousWorkRun(
   if (input.deferredSubmission && input.trigger !== "external-mcp") {
     throw new Error("Deferred submission is restricted to external MCP work.");
   }
+  if (input.reviewCreationAuthority && input.trigger !== "external-mcp") throw new Error("Review creation authority is restricted to external MCP work.");
   const threadId = input.threadId ?? null;
   const a2aMetadata = {
     trigger: input.trigger,
@@ -145,7 +149,8 @@ export async function createAutonomousWorkRun(
     await input.admissionGuard?.(tx);
     if (input.metadata?.initiativeReviewBinding) {
       const { lockInitiativeReviewCreationSubject } = await import("../mcp-task-review-reassessment");
-      await lockInitiativeReviewCreationSubject(tx, input.metadata.initiativeReviewBinding);
+      await lockInitiativeReviewCreationSubject(tx, input.metadata.initiativeReviewBinding,
+        input.reviewCreationAuthority ? { ...input.reviewCreationAuthority, userId: input.userId } : undefined);
     }
     const taskRun = await tx.taskRun.create({
       data: {

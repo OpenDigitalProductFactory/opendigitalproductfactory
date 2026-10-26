@@ -712,6 +712,20 @@ execution-uncertain or exhausted predecessor requires reconciliation; readback
 returns a refusal rather than a replacement request. Dropping a recovery locator
 from a bounded native request does not authorize a new task.
 
+Before issuing recovery, the original-review guard inventories the unsuffixed
+key and every reviewer-scoped alias, including histories from earlier OAuth
+families. Coexisting unresolved tasks refuse as ambiguous even when one matches
+the current key. A completed alias cannot hide an unresolved original. Malformed
+identities, changed request bytes and incomplete inventory refuse safely.
+
+Ordinary creation repeats the predecessor check under the subject lock before
+allocating a task. Its only exhausted-reviewer exception reuses the existing
+terminal-writer exhaustion proof for a different canonical reviewer in the same
+current OAuth family. Both keys, the saved digest, artifact, binding, tool scope,
+human and requesting coworker must match their recorded authority. Renaming the
+same reviewer, changing family, uncertain execution or a present reassessment
+cannot supply another budget.
+
 The locator grants no authority. Submission rechecks the current interactive
 OAuth connection, authenticated human, canonical acting coworker, live grants,
 exact Workroom action admission and current server-issued review packet. The

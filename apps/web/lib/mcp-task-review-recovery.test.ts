@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { beforeEach, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ collect: vi.fn(), liveTask: vi.fn(), cas: vi.fn(), reads: vi.fn(), writer: vi.fn(), tasks: vi.fn(), task: vi.fn(), token: vi.fn(), current: vi.fn(), authorize: vi.fn() }));
 vi.mock("@dpf/db", () => ({ prisma: { taskRun: { findFirst: mocks.task, findUnique: mocks.liveTask, findMany: mocks.tasks, updateMany: mocks.cas }, toolExecution: { findMany: mocks.reads, findFirst: mocks.writer }, mcpApiToken: { findUnique: mocks.token } } }));
@@ -15,15 +16,18 @@ const raw = { agentId: "AGT-WS-EA", routeContext: "/build", title: "Review", obj
   initiativeReviewBinding: { itemId: "BI-TEST", gate: "architecture-review", writerToolName: "record_initiative_architecture_review",
     artifactRef: { kind: "repo-blob-at-commit", repositoryFullName: "org/repo", commitSha: "a".repeat(40), path: "docs/design.md", providerBlobId: "b".repeat(40) },
     workroomRef: { kind: "workroom-head", workroomId: "WC-TEST", repositoryFullName: "org/repo", branchName: "fix/test", headSha: "a".repeat(40) } } };
-const normalized = parseRemoteTaskSubmitParams(raw);
-if (typeof normalized === "string") throw Error(normalized);
+const normalized = (() => {
+  const parsed = parseRemoteTaskSubmitParams(raw);
+  if (typeof parsed === "string") throw Error(parsed);
+  return parsed;
+})();
 const digest = remoteTaskRequestDigest(normalized);
 const taskRunId = deterministicExternalTaskRunId("oauth-family:original", raw.idempotencyKey);
 const updatedAt = new Date("2026-10-13T18:00:00.053Z");
-const row = { id: "row-original", taskRunId, userId: "human", threadId: "thread-original", contextId: "context-original",
+const row = { id: "row-original", taskRunId, userId: "human", currentAgentId: raw.agentId, threadId: "thread-original", contextId: "context-original",
   status: "input-required", updatedAt, lastHeartbeatAt: null, completedAt: null, authorityScope: scope,
   a2aMetadata: { apiTokenId: "old-token", tokenSource: "oauth", tokenCapability: "write", taskAuthorityKey: "oauth-family:original", idempotencyKey: raw.idempotencyKey,
-    requestedAgentId: raw.agentId, requestDigestVersion: 2, requestDigest: digest },
+    requestedAgentId: raw.agentId, requestDigestVersion: 2, requestDigest: digest, initiativeReviewBinding: normalized.initiativeReviewBinding },
   progressPayload: { terminalWriterWait: { schemaVersion: 1, kind: "missing-terminal-writer", resumeMode: "same-taskrun",
     writerToolName: raw.initiativeReviewBinding.writerToolName, dispatchContract: "required-tool-call", attempt: 1, observedAt: updatedAt.toISOString() } } };
 const token = { tokenId: "new-token", userId: "human", source: "oauth" as const, capability: "write" as const };
@@ -246,4 +250,127 @@ it("rechecks a recovered task's live permission at each governed effect and hold
   expect(await reviewRecoveryToolRefusal(effect)).toMatchObject({ success: false });
   mocks.liveTask.mockRejectedValue(Error("authority store unavailable"));
   expect(await reviewRecoveryToolRefusal(effect)).toMatchObject({ success: false, error: "review_execution_authority_unavailable" });
+});
+
+const reviewerKey = (agent: string) => `${raw.idempotencyKey}:reviewer:${createHash("sha256").update(agent).digest("hex")}`;
+function aliasTask(key: string, family = "oauth-family:original", agent = raw.agentId) {
+  return { ...structuredClone(row), currentAgentId: agent,
+    taskRunId: deterministicExternalTaskRunId(family, key),
+    a2aMetadata: { ...row.a2aMetadata, taskAuthorityKey: family, idempotencyKey: key, requestedAgentId: agent,
+      initiativeReviewBinding: normalized.initiativeReviewBinding,
+      requestDigest: remoteTaskRequestDigest({ ...normalized, agentId: agent, idempotencyKey: key }) } };
+}
+type AliasTask = ReturnType<typeof aliasTask>;
+// Query-contract adapter: exercise which persisted rows the real guard asks for,
+// rather than return rows that its exact-key query would never see.
+function matchesAliasWhere(task: AliasTask, value: unknown): boolean {
+  const where = value as Record<string, unknown>;
+  if (Array.isArray(where.AND) && !where.AND.every(part => matchesAliasWhere(task, part))) return false;
+  if (Array.isArray(where.OR) && !where.OR.some(part => matchesAliasWhere(task, part))) return false;
+  if (typeof where.userId === "string" && task.userId !== where.userId) return false;
+  const status = where.status as { notIn?: string[] } | undefined;
+  if (status?.notIn?.includes(task.status)) return false;
+  const filter = where.a2aMetadata as { path?: string[]; equals?: unknown; string_starts_with?: string } | undefined;
+  if (filter) {
+    let actual: unknown = task.a2aMetadata;
+    for (const key of filter.path ?? []) actual = (actual as Record<string, unknown>)?.[key];
+    if (Object.hasOwn(filter, "equals") && actual !== filter.equals) return false;
+    if (filter.string_starts_with !== undefined && (typeof actual !== "string" || !actual.startsWith(filter.string_starts_with))) return false;
+  }
+  return true;
+}
+function inventory(tasks: AliasTask[]) {
+  mocks.tasks.mockImplementation(async ({ where, take }: { where: unknown; take: number }) =>
+    tasks.filter(task => matchesAliasWhere(task, where)).slice(0, take));
+}
+async function readAliasGuard(targetAgent = raw.agentId, family = "oauth-family:new") {
+  const { issueOriginalReviewRecoveryTarget } = await import("./mcp-task-review-recovery");
+  return issueOriginalReviewRecoveryTarget({ packet: { targetAgent, objective: raw.objective,
+    questionPacketSummary: raw.title, requestKey: reviewerKey(targetAgent), initiativeReviewBinding: normalized.initiativeReviewBinding },
+    userId: "human", actingAgentId: "AGT-EXT-CODEX", taskAuthorityKey: family });
+}
+function exhaust(task: AliasTask) {
+  task.progressPayload.terminalWriterWait.attempt = 3;
+  return task;
+}
+
+it("does not let a completed scoped key hide an unresolved unsuffixed original", async () => {
+  const original = aliasTask(raw.idempotencyKey), completed = aliasTask(reviewerKey(raw.agentId), "oauth-family:new");
+  completed.status = "completed";
+  const tasks = [completed, original], before = JSON.stringify(tasks);
+  inventory(tasks);
+  expect(await readAliasGuard()).toMatchObject({ kind: "refused" });
+  expect(JSON.stringify(tasks)).toBe(before);
+  expect(mocks.cas).not.toHaveBeenCalled();
+});
+
+it("refuses coexisting unresolved original and scoped reviews across credential families", async () => {
+  inventory([aliasTask(reviewerKey(raw.agentId), "oauth-family:new"), aliasTask(raw.idempotencyKey)]);
+  expect(await readAliasGuard()).toMatchObject({ kind: "refused", reason: "original-review-ambiguous" });
+  expect(mocks.collect).not.toHaveBeenCalled();
+});
+
+it("retains a legacy original when both the reviewer roster and OAuth family change", async () => {
+  inventory([aliasTask(raw.idempotencyKey)]);
+  expect(await readAliasGuard("reviewer-fixture-other")).toMatchObject({ kind: "refused" });
+  expect(mocks.cas).not.toHaveBeenCalled();
+});
+
+it("inventories other scoped aliases even when no current scoped task exists", async () => {
+  inventory([aliasTask(reviewerKey("reviewer-fixture-first"), "oauth-family:first", "reviewer-fixture-first"),
+    aliasTask(reviewerKey("reviewer-fixture-second"), "oauth-family:second", "reviewer-fixture-second")]);
+  expect(await readAliasGuard()).toMatchObject({ kind: "refused", reason: "original-review-ambiguous" });
+});
+
+it("preserves a fully proven same-family exhausted reviewer alternate without resetting its history", async () => {
+  const tasks = [exhaust(aliasTask(raw.idempotencyKey))], before = JSON.stringify(tasks);
+  inventory(tasks);
+  expect(await readAliasGuard("reviewer-fixture-other", "oauth-family:original")).toEqual({ kind: "none" });
+  expect(JSON.stringify(tasks)).toBe(before);
+  expect(mocks.cas).not.toHaveBeenCalled();
+});
+
+it.each(["uncertain", "capacity", "writer-rejected", "approval", "cross-family", "quarantined"])(
+  "never excludes an exhausted-looking %s original to admit a sibling", async condition => {
+    const task = exhaust(aliasTask(raw.idempotencyKey));
+    const progress = task.progressPayload as Record<string, unknown>;
+    if (condition === "uncertain") progress.executionUncertainty = { schemaVersion: 1, kind: "execution-uncertain", settlement: "unknown" };
+    if (condition === "capacity") Object.assign(task.progressPayload.terminalWriterWait, { capacityDeferred: true });
+    if (condition === "writer-rejected") Object.assign(task.progressPayload.terminalWriterWait, {
+      writerRejection: { schemaVersion: 1, error: "fixture-rejection", message: "Fixture packet was rejected.", observedAt: updatedAt.toISOString() } });
+    if (condition === "approval") progress.approvalEnvelopeId = "approval-fixture";
+    if (condition === "quarantined") progress.reassessmentQuarantine = { schemaVersion: 1, marker: "fixture" };
+    inventory([task]);
+    expect(await readAliasGuard("reviewer-fixture-other", condition === "cross-family" ? "oauth-family:new" : "oauth-family:original"))
+      .toMatchObject({ kind: "refused" });
+    expect(mocks.cas).not.toHaveBeenCalled();
+  });
+
+it("refuses an overflowing alias inventory instead of hiding a later unresolved original", async () => {
+  inventory(Array.from({ length: 501 }, (_, index) => {
+    const agent = `reviewer-fixture-${index}`;
+    return exhaust(aliasTask(reviewerKey(agent), "oauth-family:original", agent));
+  }));
+  expect(await readAliasGuard("reviewer-fixture-other", "oauth-family:original"))
+    .toMatchObject({ kind: "refused", reason: "original-review-history-limit" });
+});
+
+it("does not confuse a distinct original-key namespace with a reviewer alias", async () => {
+  inventory([aliasTask(`${raw.idempotencyKey}-different`)]);
+  expect(await readAliasGuard()).toEqual({ kind: "none" });
+});
+
+it("refuses a saved review whose current reviewer no longer matches its immutable requested reviewer", async () => {
+  const task = aliasTask(reviewerKey(raw.agentId));
+  task.currentAgentId = "reviewer-fixture-changed";
+  inventory([task]);
+  expect(await readAliasGuard()).toMatchObject({ kind: "refused" });
+});
+
+it("never excludes a counterfeit reviewer alias or another requesting coworker's exhausted task", async () => {
+  inventory([exhaust(aliasTask(`${raw.idempotencyKey}:reviewer:${"e".repeat(64)}`))]);
+  expect(await readAliasGuard("reviewer-fixture-other", "oauth-family:original")).toMatchObject({ kind: "refused" });
+  inventory([exhaust(aliasTask(raw.idempotencyKey))]);
+  mocks.token.mockResolvedValue({ userId: "human", agentId: "different-requesting-coworker" });
+  expect(await readAliasGuard("reviewer-fixture-other", "oauth-family:original")).toMatchObject({ kind: "refused" });
 });

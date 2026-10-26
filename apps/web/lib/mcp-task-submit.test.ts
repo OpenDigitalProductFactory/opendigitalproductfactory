@@ -63,9 +63,9 @@ const immutableParams = {
   authorityScope: ["initiative_design_review"],
   collaborationKind: "summon",
 };
-function submit(tokenId: string, params: Record<string, unknown> = immutableParams) {
+function submit(tokenId: string, params: Record<string, unknown> = immutableParams, source: "pat" | "oauth" = "pat") {
   return submitRemoteCoworkerTask({
-    token: { tokenId, userId: "user-1", capability: "write", source: "pat" },
+    token: { tokenId, userId: "user-1", capability: "write", source },
     userContext,
     params,
   });
@@ -683,7 +683,7 @@ describe("submitRemoteCoworkerTask idempotency", () => {
     expect(autonomous.resolveAgent).not.toHaveBeenCalled();
   });
 
-  it("pins the immutable reader beside the spec-approval writer and server-binds the baseline precondition", async () => {
+  it.each(["pat", "oauth"] as const)("pins the spec-approval reader and baseline while forwarding only server-owned OAuth creation authority (%s)", async source => {
     const reader = {
       name: "read_source_at_version",
       inputSchema: { type: "object", properties: {} },
@@ -722,6 +722,8 @@ describe("submitRemoteCoworkerTask idempotency", () => {
       },
     };
 
+    const authority = vi.spyOn(taskAuthority, "resolveMcpTaskAuthorityKey").mockResolvedValue("oauth-family:fixture");
+    try {
     await submit("PAT-SPEC", {
       agentId: "AGT-WS-REVIEW",
       routeContext: "/build/work/WC-7FF8A505",
@@ -735,7 +737,8 @@ describe("submitRemoteCoworkerTask idempotency", () => {
         `tool:${writer.name}`,
       ],
       initiativeReviewBinding,
-    });
+    }, source);
+    } finally { authority.mockRestore(); }
 
     const execution = autonomous.execute.mock.calls[0]?.[0] as {
       tools: Array<{ name: string; inputSchema: { properties: Record<string, unknown> } }>;
@@ -767,6 +770,13 @@ describe("submitRemoteCoworkerTask idempotency", () => {
     expect(autonomous.create).toHaveBeenCalledWith(expect.objectContaining({
       metadata: expect.objectContaining({ initiativeReviewBinding }),
     }));
+    const input = autonomous.create.mock.calls[0]?.[0] as Record<string, unknown>;
+    if (source === "oauth") expect(input.reviewCreationAuthority).toMatchObject({
+      taskAuthorityKey: "oauth-family:fixture", tokenId: "PAT-SPEC",
+      parsed: { idempotencyKey: "spec-review-bound-baseline", initiativeReviewBinding },
+    });
+    else expect(input).not.toHaveProperty("reviewCreationAuthority");
+    expect(input.metadata).not.toHaveProperty("reviewCreationAuthority");
   });
 
   it("does not expand ordinary external work to the research-review budget", async () => {

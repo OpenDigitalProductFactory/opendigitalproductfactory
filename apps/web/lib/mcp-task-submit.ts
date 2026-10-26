@@ -571,6 +571,8 @@ export async function submitRemoteCoworkerTask(input: {
       threadId: thread.id,
       authorityScope: parsed.authorityScope ?? [],
       sourceRef: { kind: sourceKind, id: token.tokenId },
+      ...(parsed.initiativeReviewBinding && !presentAdmission && token.source === "oauth"
+        ? { reviewCreationAuthority: { taskAuthorityKey, tokenId: token.tokenId, parsed } } : {}),
       metadata: {
         idempotencyKey: parsed.idempotencyKey,
         requestDigest,

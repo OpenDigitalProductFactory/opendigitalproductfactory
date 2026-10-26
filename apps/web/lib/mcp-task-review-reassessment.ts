@@ -15,6 +15,7 @@ import { resolveAgentWorkroomAccess } from "./work-management/workroom-agent-acc
 import { collectReviewCreationPredecessors } from "./mcp-task-reassessment-lineage";
 import { hasExecutionUncertainty } from "./shared/execution-uncertainty";
 import { TASK_IN_FLIGHT_STATES } from "./tak/task-states";
+import type { RemoteTaskSubmitParams } from "./mcp-task-submit-params";
 
 type PolicyDatabase = Pick<Prisma.TransactionClient, "backlogItem" | "backlogItemActivity" | "initiativeArtifactRetentionPin">;
 const object = (v: unknown): Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v) ? v as Record<string, unknown> : {};
@@ -27,7 +28,8 @@ function refuse(code = "reassessment-policy-unproven"): never { throw new Review
 /** Every bound review creation, including ordinary/legacy lanes, serializes
  * on the same subject. A reassessment guard must first lock its collected
  * existing TaskRuns in stable order; this helper never locks another task. */
-export async function lockInitiativeReviewCreationSubject(tx: Prisma.TransactionClient, rawBinding: unknown): Promise<void> {
+export async function lockInitiativeReviewCreationSubject(tx: Prisma.TransactionClient, rawBinding: unknown,
+  current?: { userId: string; taskAuthorityKey: string; tokenId: string; parsed: RemoteTaskSubmitParams }): Promise<void> {
   const binding = parseInitiativeReviewBinding(rawBinding);
   if (!binding || !equal(binding, rawBinding)) refuse("reassessment-lineage-unproven");
   const rows = await tx.$queryRaw<Array<{ id: string }>>`SELECT "id" FROM "BacklogItem" WHERE "itemId" = ${binding.itemId} FOR UPDATE`;
@@ -39,7 +41,14 @@ export async function lockInitiativeReviewCreationSubject(tx: Prisma.Transaction
   for (const predecessor of await collectReviewCreationPredecessors(tx, binding)) {
     const progress = object(predecessor.progressPayload);
     if (predecessor.binding.presentReassessment || Object.hasOwn(progress, "reassessmentQuarantine")
-      || hasExecutionUncertainty(predecessor.progressPayload) || (TASK_IN_FLIGHT_STATES as readonly string[]).includes(predecessor.status)) {
+      || hasExecutionUncertainty(predecessor.progressPayload)) refuse("reassessment-original-recovery-required");
+    if ((TASK_IN_FLIGHT_STATES as readonly string[]).includes(predecessor.status)) {
+      const { isProvenExhaustedReviewAlternate } = await import("./mcp-task-review-recovery");
+      if (current && equal(current.parsed.initiativeReviewBinding, binding) && current.parsed.prompt === current.parsed.objective
+        && await isProvenExhaustedReviewAlternate({ userId: current.userId, taskAuthorityKey: current.taskAuthorityKey,
+          currentTokenId: current.tokenId, authorityScope: current.parsed.authorityScope,
+          packet: { targetAgent: current.parsed.agentId, questionPacketSummary: current.parsed.title, objective: current.parsed.prompt,
+            requestKey: current.parsed.idempotencyKey, initiativeReviewBinding: binding } }, predecessor, tx)) continue;
       refuse("reassessment-original-recovery-required");
     }
   }
