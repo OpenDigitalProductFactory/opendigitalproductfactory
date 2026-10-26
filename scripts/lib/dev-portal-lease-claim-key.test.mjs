@@ -561,6 +561,46 @@ async function fixture(t) {
 }
 
 for (const replacement of ['regular', 'symlink']) {
+  test(`seed replacement before the first pathname observation cannot supply backing (${replacement})`, async t => {
+    const input = await fixture(t);
+    const seed = await realpath(join(input.worktree, 'apps/web/next-env.d.ts'));
+    const foreign = join(input.directory, 'foreign-seed');
+    await writeFile(foreign, 'foreign seed bytes');
+    const originalLstat = fs.promises.lstat;
+    const originalOpen = fs.promises.open;
+    let replaced = false, openCalls = 0, readCalls = 0, closeCalls = 0;
+    t.mock.method(fs.promises, 'lstat', async (...args) => {
+      if (args[0] === seed && !replaced) {
+        replaced = true;
+        if (replacement === 'regular') await fs.promises.rename(foreign, seed);
+        else { await unlink(seed); await symlink(foreign, seed); }
+      }
+      return originalLstat(...args);
+    });
+    t.mock.method(fs.promises, 'open', async (...args) => {
+      const handle = await originalOpen(...args);
+      openCalls += 1;
+      const read = handle.readFile.bind(handle);
+      const close = handle.close.bind(handle);
+      t.mock.method(handle, 'readFile', async (...readArgs) => { readCalls += 1; return read(...readArgs); });
+      t.mock.method(handle, 'close', async (...closeArgs) => { closeCalls += 1; return close(...closeArgs); });
+      return handle;
+    });
+    syncBuiltinESMExports();
+    let failure, declaration;
+    try { declaration = await createPreviewDeclaration(input); } catch (error) { failure = error; }
+    finally { t.mock.restoreAll(); syncBuiltinESMExports(); }
+    assert.equal(replaced, true, 'the real pathname was replaced before its first observation');
+    assert.equal(declaration, undefined, 'a replacement must not become the accepted seed or create backing');
+    assert.ok(failure);
+    assert.match(failure.message, /preview_declaration_seed_(invalid|changed)/);
+    assert.equal(readCalls, 0, 'pathname uncertainty must be rejected before reading any seed bytes');
+    assert.equal(closeCalls, openCalls, 'every opened seed descriptor must close on refusal');
+    assert.deepEqual(await fs.promises.readdir(input.stateDirectory), []);
+  });
+}
+
+for (const replacement of ['regular', 'symlink']) {
   test(`seed path replacement after its regular-file check is refused (${replacement})`, async t => {
     const input = await fixture(t);
     const seed = await realpath(join(input.worktree, 'apps/web/next-env.d.ts'));
@@ -593,6 +633,24 @@ for (const replacement of ['regular', 'symlink']) {
     assert.deepEqual(await fs.promises.readdir(input.stateDirectory), [], 'no backing may be created from a raced seed');
   });
 }
+
+test('a FIFO seed is refused without blocking or creating backing', async t => {
+  if (process.platform === 'win32') { t.skip('UNRUN: POSIX FIFO fixture requires mkfifo'); return; }
+  const input = await fixture(t);
+  const seed = join(input.worktree, 'apps/web/next-env.d.ts');
+  await unlink(seed);
+  const fifo = spawnSync('mkfifo', [seed], { encoding: 'utf8' });
+  assert.equal(fifo.status, 0, fifo.stderr || String(fifo.error || 'mkfifo failed'));
+  const helper = new URL('./dev-preview-declaration.mjs', import.meta.url).href;
+  const script = `import { createPreviewDeclaration } from ${JSON.stringify(helper)};
+    try { await createPreviewDeclaration({ worktree: process.argv[1], stateDirectory: process.argv[2] }); process.exitCode = 1; }
+    catch (error) { if (error.message !== 'preview_declaration_seed_invalid') throw error; }`;
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', script, input.worktree, input.stateDirectory], {
+    encoding: 'utf8', timeout: 2000,
+  });
+  assert.equal(result.status, 0, result.stderr || String(result.error || 'FIFO seed did not refuse'));
+  assert.deepEqual(await fs.promises.readdir(input.stateDirectory), []);
+});
 
 for (const fault of ['open-error', 'stat-error', 'read-error', 'path-swap', 'content-mutation', 'path-missing', 'post-read-stat-error', 'close-error']) {
   test(`seed descriptor failure refuses backing and closes every opened handle (${fault})`, async t => {
