@@ -7,13 +7,13 @@ status: active
 **Umbrella:** BI-4B48E7FE. **Workroom:** WC-D5FD489C.
 **Design:** docs/superpowers/specs/2026-09-03-coordinated-workrooms-design.md,
 October 25 amendment. **Decision:** DI-EE06CE5554D2, ratified by the founder.
-**Current status (October 26 UTC):** the design and strategy are reconciled in source.
-The current design and spec approvals passed at e48abd61281f and established
- baseline-fb4de98c-353a-4e89-98b6-23a455810cc1. Current architecture review is
- requested; the prior architecture receipt and uncertain attempts stay historical. P2 is not
-implemented. P1 has its own atomic plan/admission and tested source repair,
-with no merge, deployment or unattended operational acceptance claimed.
-
+**Current status (October 26 UTC):** current native design/spec approval at
+e48abd61281f established baseline-fb4de98c-353a-4e89-98b6-23a455810cc1.
+The plan at 297e69b44b0f has native approval and decomposed coverage. Current
+architecture attempts stopped on invalid source cursor calls before a verdict;
+BI-E8237EAE owns the bounded reader repair. P2 implementation is not admitted.
+P1 has tested source and remains unpublished after a repeated host gate failure.
+No merge, deployment or unattended operational acceptance is claimed.
 For agentic workers: execute this plan one independently reviewable backlog item
 at a time -- one BI, one branch, one PR. Use dpf-tdd for red-green implementation,
 dpf-local-merge-ci-before-push plus the completion gate before any success claim,
@@ -131,9 +131,12 @@ missing investment authority.
 
 Decision: decomposed. P1 maps to BI-756C899D. P2 maps to BI-C43FD3E5 and depends
 on P1. The design/strategy/guide reconciliation accompanies these deliveries.
-Live coverage receipt: pending corrected immutable plan traceability against
- baseline-fb4de98c-353a-4e89-98b6-23a455810cc1. This document is not a receipt. Implementation remains held
-until record_plan_backlog_coverage and current readiness authorize the slice.
+Live decomposed coverage cmvol5jge0sr701o0xwelfc4l binds the plan at
+297e69b44b0f116bb8e38e46c6878e61b0bf89c8 to baseline
+baseline-fb4de98c-353a-4e89-98b6-23a455810cc1. Native plan approval is
+initiative-review-v1-f016d738ee67c46249678f403792f4a296dc0dffd4539e3cdcb28fb626b9dc69.
+These receipts cover their immutable artifacts, not later verification notes.
+Revalidate live readiness and the exact source before implementing a slice.
 
 The start-of-work change-impact contract is resolved for the design/doc paths:
 no source tests or guard obligations were listed; regenerate/check doc-index,
@@ -282,23 +285,31 @@ The finite-delivery owner normally released all thirty idle path claims. A fresh
 ordinary claim for the canonical shape architecture page succeeded, so the old
 forced shared-edit approval is no longer needed for this work. P1 now includes
 the real canonical documentation correction and current main's provider-hold
-capacity fix. The final corrected source is 3a91aa3f589bb767c56429c2d86a9e7a8c9cbeaa.
-Its source-local suite passed 317 tests with zero failures and three opt-in
-PostgreSQL skips; typecheck passed. The original host preflight finished on
-October 26 at 01:02:51 UTC: 84 of 85 checks passed. Gate Executor Liveness failed
-the existing real Windows console success fixture because the launcher reported
-emergency cleanup. BI-BFDB98B6 owns that contract and carries the reproduction.
-No shared integration lease or passing gate record exists. The earlier drain
-and Windows waiter spawn failure remain history, not the current next action.
+capacity fix. P1 now integrates protected main PRs 6586, 6587 and 6588 at source
+a958958135a5ff2ecb1598f9a58ce4a5a049f63a. The expanded source-local suite has
+368 passes, zero failures and three opt-in PostgreSQL skips. Application and
+test typechecks pass. PR 6586's four Windows conformance cases pass alone.
+The full host preflight completed at 2026-10-26T01:57:18.465Z with 84 of 85
+checks passing; trusted-startup cancellation still reported owned descendants
+at cleanup. BI-BFDB98B6 carries the same-head fixture h3RxaL counterexample.
+No integration lease or passing gate record exists; do not repeat it unchanged.
 
-Resolve that existing gate failure, then run exact-tree shared integration and
-obtain fresh independent review. Do not repeat the unchanged failing gate or
-weaken its assertion. Native design/spec execution settlement remains with
-BI-7906C73E; bounded executor handoff recovery remains with BI-5366EF78. A bounded
-COO briefing was refused through native review routing, so acknowledgement and
-tool qualification remain unverified. Technical recovery is not a founder
-rubber-stamp request. No runtime code publication, merge, deployment or full
-COO activation is claimed.
+Native current design, spec and plan approvals are real receipts. Earlier
+uncertain executions remain historical under BI-7906C73E. Architecture tasks
+5D5CAF6B0BCB and 768EA9526890 reached their reader budget without a verdict;
+audits show literal cursor values 0 and 1 rejected by the immutable reader.
+The separately admitted BI-E8237EAE repair shares actionable error feedback and
+first-read guidance. Its six regressions fail before the repair and pass after;
+133 related tests, both typechecks and applicable local guards pass. Shared
+publication and served architecture recovery remain unrun.
+
+The native finite executor transfer still requires recovery under BI-5366EF78;
+coordination acknowledgement does not transfer its authority. The attempted
+COO briefing remains refused, so acknowledgement and tool qualification are
+unverified. No runtime code publication, merge, deployment or full COO activation
+is claimed. Resolve the existing gate and reader defects through their owners,
+then obtain exact-tree integration, independent publication review and served
+acceptance; technical recovery does not require a founder rubber stamp.
 ### Final coordination transfer and current verification
 
 The human in "Prioritize DPF platform design" directed transfer of its remaining
@@ -318,7 +329,7 @@ separately owned follow-ons. The existing UI proofs remain scoped evidence.
 An independent client assessment at f1ed74cb48f6416ea32da6f48f569abb334bf4d3
 found a deadline payload discriminator regression. P1 repaired that finding with
 a failing then passing runner-level test and six graph evidence tests at
-3a91aa3f589b. The final focused suite has 317 passes, zero failures and three
+3a91aa3f589b. The suite at that source has 317 passes, zero failures and three
 opt-in PostgreSQL skips; typecheck passes. The old changes-requested assessment
 is preserved and does not become a pass after an author repair. Current shared
 gate and independent publication review still require their own receipts.
