@@ -93,6 +93,18 @@ Prevent double counting when one underlying effect appears in multiple corpora, 
 
 Hard constraints are evaluated before ranking feasible alternatives. An unavailable mandatory check cannot become a favorable score. Model confidence and scoring-margin stability do not establish legal applicability or control effectiveness.
 
+### 3.2 Ask for the assessment at the actual decision interfaces
+
+The contract must be consumed by `principle_decide`, `evaluate_org_business_decision` and `evaluate_profession_decision`. Extend their existing consultation/extraction instructions and context assembly so the LLM is explicitly asked for party-specific benefits, burdens, incentive changes, uncertainty and concise source-backed explanations for each material alternative. Return stable claim and option identities alongside their governed feature projections. Reuse current inference routing and owning-scope doctrine.
+
+Both caller-supplied and server-derived claims enter the same validation boundary. Under `apps/web/lib`, the current source seams are `mcp/packs/principle-decide-pack.ts`, `mcp/packs/org-decision-pack.ts`, `mcp/packs/profession-decision-pack.ts`, `mcp/org-context-bundle.ts` and the existing `decision-perspective` input/projection modules. These are proposed integration seams, not implementation path claims. The persistence slice supplies source-access resolution and exact immutable version binding before a complete audited trace can be claimed.
+
+The initial capture slice can return a proposed assessment. Schema validity alone establishes neither source access nor current evidence, coverage or authority. The server derives verification state; callers cannot declare their own proposal verified. Assessment-dependent prerequisites remain unsatisfied until their actual source and persistence adapters are delivered.
+
+An absent legacy assessment remains explicitly not-assessed; it is never synthesized from a positive feature score. A profile that requires an assessment cannot rank the affected alternatives as eligible without a current valid one. Additive input compatibility does not waive that policy. Routine decisions can reuse applicable current context and assess their incremental effects within the declared consultation budget.
+
+Verification must drive representative fast-credit, open-source support and pricing alternatives through all three existing interfaces, checking common claim semantics, owning-scope projections and honest missingness. A validator tested in isolation does not establish this integration.
+
 ## 4. Concern applicability and process coverage
 
 A concern is a source-backed assertion about an interest, hazard, obligation or competent-practice requirement. It is not automatically binding because an LLM generated it or a page was retrieved.
@@ -236,7 +248,7 @@ These delivery boundaries now have live triage mappings below. They are not exec
 
 | Boundary | Deliverable and likely source seams | Dependency / stop condition |
 | --- | --- | --- |
-| D1 | Typed assessment, source/party/option/projection validation and representative fixtures; proposed shared module under decision-perspective. | Confirm inventory projection compatibility with BI-C6801B5A; no new uncontrolled axes. |
+| D1 | Typed assessment, existing LLM consultation/extraction instructions, all three scoped decision adapters, shared claim/projection validation and representative fixtures. | Confirm inventory projection compatibility with BI-C6801B5A; no new uncontrolled axes or inference service. |
 | D2 | Managed assessment document kind, typed decision/room version links, indexed versioned DocumentReference dependencies and versioned seal extension. | D1 and independent data/security review; existing Document writer and trust envelope owners. |
 | D3 | Concern applicability and coverage projection feeding existing shape conformance, with qualified participant/control evidence. | D1/D2; reuse delivered BI-3913EB49, coordinate with current Workroom changes. |
 | D4 | Exact-action preflight and mutation fencing for the first production-data-deletion class, including human/AI adapter parity. | D3; delivered tested precondition/authority/retention contracts from existing owners. Do not implement the entire policy bridge here. |
@@ -247,7 +259,7 @@ These delivery boundaries now have live triage mappings below. They are not exec
 
 | Boundary | Live item | Acceptance contribution | Depends on |
 | --- | --- | --- | --- |
-| D1 | BI-06EAE6C6 | AC-S07, S11, S12, S20 | Parent approval and coverage |
+| D1 | BI-06EAE6C6 | AC-S01, S07, S11, S12, S20 | Parent approval and coverage |
 | D2 | BI-ED7E6F09 | AC-S01, S10, S14, S15, S16, S17 | D1 |
 | D3 | BI-466EA592 | AC-S02, S04, S06, S08, S20 | D1, D2 |
 | D4 | BI-222BB6AF | AC-S03, S06, S08, S09, S13, S20 | D3; existing preflight/authority owners |
