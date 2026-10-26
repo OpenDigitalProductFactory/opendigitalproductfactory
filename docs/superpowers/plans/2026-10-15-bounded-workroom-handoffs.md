@@ -288,3 +288,34 @@ Main risks are classification/execution races, accidental admission or ownership
 change, and duplicate transfer. Reuse the room lock and command receipts and
 positively revalidate identity/policy inside the writer. Rollback restores legacy
 authority; it does not remove historical activities or complete pending transfers.
+
+
+**October 26 bounded source recovery.** The operator explicitly authorized the
+narrow transaction repair and continued DEV debugging. The ordinary readiness
+readback reports authorization, plan, plan review, coverage and traceability as
+passed, while the current spec/architecture executions remain unknown and the
+amended baseline unavailable. This is failed review coordination, not a grant
+denial. AGENTS.md section 1's existing bounded-source recovery procedure applies;
+it does not turn these missing reviews into approvals or mint a baseline. The
+ordinary admission sequence above remains the normal path. Existing original
+review identities, budgets, FAIL findings and unknown results are preserved.
+
+Production changes are limited to the existing receipt helper and handoff guard:
+accept only the exact active bound receipt client and require a callable query
+port. Prisma's nested transaction capability is retained. No new transaction,
+authority branch, grant, API or ledger is introduced. The integration fixture now
+uses the real receipt wrapper rather than mocking its proof, and its publication
+race observer starts only after the handoff owns its transaction. Shared context
+proof is consolidated in one existing helper instead of duplicated predicates.
+
+Before production edits, a real savepoint-capable Prisma callback through the
+prepared receipt wrapper reproduced handoff-transaction-required. After the fix,
+101 related source tests and 23 real PostgreSQL cases pass, including exact-client
+acceptance, outside/root/foreign rejection, active-but-unbound rejection, single
+concurrent acknowledgement, preserved controlled refusal plus a fresh ordinary
+command, dependency races and outer-publication rollback after the lease
+savepoint. PostgreSQL ran in an admitted shared slot with authenticated renewal;
+source fingerprints remained stable. The fixture is not proof of historical
+live no-effects or OAuth admission. Web typecheck passed. Canonical gate,
+independent committed assessment, protected publication, canonical deployment and
+served acceptance still remain; source checks are not a delivery claim.

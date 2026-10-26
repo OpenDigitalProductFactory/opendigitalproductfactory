@@ -416,3 +416,11 @@ claim before editing the pack. No force override or competing write is authorize
 Rollback removes the new phase inputs/refinement and restores the static
 authority floor. Historical activity and receipts stay readable. Pending requests
 remain uncompleted; rollback never transfers a lease or changes permissions.
+
+
+**October 26 bounded source recovery.** The existing operator-authorized recovery
+procedure is recorded in the [implementation plan](../plans/2026-10-15-bounded-workroom-handoffs.md).
+It limits this repair to exact active receipt-client identity, preserves Prisma
+nested savepoints, and records the actual failing-then-passing wrapper tests.
+Native review uncertainty and the ordinary admission requirements remain explicit;
+no independent approval, historical settlement or served acceptance is inferred.
