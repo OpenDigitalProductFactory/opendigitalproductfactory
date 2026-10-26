@@ -213,6 +213,7 @@ public static class DpfConsoleFixture {
         public string failure;
     }
     static int ActiveJobCount() {
+        if(job==IntPtr.Zero) throw new InvalidOperationException("Owned Job handle unavailable");
         var info=Marshal.AllocHGlobal(48);
         try {
             uint returned; Check(QueryInformationJobObject(job,1,info,48,out returned));
@@ -225,7 +226,7 @@ public static class DpfConsoleFixture {
         const int capacity=128; int size=8+IntPtr.Size*capacity;
         var info=Marshal.AllocHGlobal(size);
         try {
-            if(job==IntPtr.Zero) throw new InvalidOperationException("Owned Job handle unavailable");
+            if(job==IntPtr.Zero || fault=="missing-job") throw new InvalidOperationException("Owned Job handle unavailable");
             uint returned;
             Check(QueryInformationJobObject(fault=="query-failure" ? new IntPtr(-1) : job,3,info,(uint)size,out returned));
             int assigned=Marshal.ReadInt32(info,0), count=Marshal.ReadInt32(info,4);
@@ -250,6 +251,16 @@ public static class DpfConsoleFixture {
         finally { Marshal.FreeHGlobal(info); }
         return observation;
     }
+    public static void ReleaseRetained() {
+        // Observation handles do not own descendant lifetime. Only the launcher
+        // owns containment and may terminate its Job after bounded settlement.
+        var errors=new List<Exception>();
+        foreach(var pair in owned) {
+            try { Check(CloseHandle(pair.Value.Handle)); } catch(Exception error) { errors.Add(error); }
+        }
+        owned.Clear();
+        if(errors.Count>0) throw new AggregateException("Retained handle release failed",errors);
+    }
     public static bool CleanupOwned() {
         bool emergency=false;
         try { foreach(var pair in owned) {
@@ -268,8 +279,7 @@ public static class DpfConsoleFixture {
                 }
             } finally { Check(CloseHandle(job));job=IntPtr.Zero; }
         } } finally {
-            foreach(var pair in owned) Check(CloseHandle(pair.Value.Handle));
-            owned.Clear();
+            ReleaseRetained();
         } }
         return emergency;
     }
@@ -285,14 +295,14 @@ function Wait-OwnedJobClosure([string]$Fault) {
     $budgetMs = 10000
     $elapsed = [Diagnostics.Stopwatch]::StartNew()
     $snapshots = [Collections.Generic.List[object]]::new()
-    $result = @{ outcome='timed-out'; budgetMs=$budgetMs; elapsedMs=0; initialActiveCount=$null; finalActiveCount=$null; initialMembers=@(); finalMembers=@(); failure=$null; snapshots=$snapshots }
+    $result = @{ outcome='timed-out'; budgetMs=$budgetMs; elapsedMs=0; initialActiveCount=$null; finalActiveCount=$null; initialMembers=@(); finalMembers=@(); failure=$null; observedAt=$null; snapshots=$snapshots }
     try {
         do {
             $snapshot = [DpfConsoleFixture]::ObserveJob($Fault)
-            $entry = @{ elapsedMs=$elapsed.ElapsedMilliseconds; activeCount=$snapshot.activeCount; members=@($snapshot.members); failure=$snapshot.failure }
+            $entry = @{ observedAt=[DateTime]::UtcNow.ToString('o'); elapsedMs=$elapsed.ElapsedMilliseconds; activeCount=$snapshot.activeCount; members=@($snapshot.members); failure=$snapshot.failure }
             $snapshots.Add($entry)
             if ($snapshots.Count -eq 1) { $result.initialActiveCount=$entry.activeCount; $result.initialMembers=$entry.members }
-            $result.finalActiveCount=$entry.activeCount; $result.finalMembers=$entry.members
+            $result.finalActiveCount=$entry.activeCount; $result.finalMembers=$entry.members; $result.observedAt=$entry.observedAt
             $result.elapsedMs=$elapsed.ElapsedMilliseconds
             Write-FixtureJson 'job-drain-progress.json' $result
             if ($snapshot.failure) { throw $snapshot.failure }
@@ -301,7 +311,7 @@ function Wait-OwnedJobClosure([string]$Fault) {
                 break
             }
             if ($result.elapsedMs -ge $budgetMs) { break }
-            if ($config.jobProbe.kind -eq 'short-lived') {
+            if ($config.jobProbe.kind -in @('short-lived','driver-failure')) {
                 [IO.File]::WriteAllText((Join-Path $config.evidenceDirectory 'probe-exit.request'), 'observed owned child')
             }
             Start-Sleep -Milliseconds ([Math]::Min(25,$budgetMs-$result.elapsedMs))
@@ -328,18 +338,22 @@ if (-not $Driver) {
                 if (Test-Path -LiteralPath (Join-Path $config.evidenceDirectory 'abort.request')) { throw 'Parent requested fixture emergency cleanup' }
                 if ([DateTime]::UtcNow -ge $deadline) { throw 'Private console driver exceeded 150 seconds' }
             }
-            if ($process.ExitCode -ne 0) { throw ('Private console driver exit ' + $process.ExitCode) }
+            if ($process.ExitCode -ne 0) { $failure='Private console driver exit ' + $process.ExitCode }
         }
-        $jobDrain = Wait-OwnedJobClosure ([string]$config.jobProbe.kind)
-        if ($jobDrain.outcome -ne 'naturally-empty') { throw ('Owned Job natural closure ' + $jobDrain.outcome + ': ' + $jobDrain.failure) }
     } catch { $failure = $_.Exception.Message }
     finally {
+        # The driver may have failed while the native writer is still settling.
+        # Observe before the first destructive cleanup and retain both outcomes.
+        try { $jobDrain = Wait-OwnedJobClosure ([string]$config.jobProbe.kind) }
+        catch { $jobDrain=@{ outcome='observation-failed'; failure=$_.Exception.Message }; if (-not $failure) { $failure=$_.Exception.Message } }
+        if ($jobDrain.outcome -ne 'naturally-empty' -and -not $failure) { $failure='Owned Job natural closure ' + $jobDrain.outcome + ': ' + $jobDrain.failure }
         $emergency = $null
         $cleanupFailure = $null
+        $cleanupStartedAt = [DateTime]::UtcNow.ToString('o')
         try { $emergency = [DpfConsoleFixture]::CleanupOwned() }
         catch { $cleanupFailure=$_.Exception.Message; if (-not $failure) { $failure=$cleanupFailure } }
         if ($emergency -and -not $failure) { $failure='Owned Job required emergency cleanup' }
-        Write-FixtureJson 'launcher-result.json' @{ failure=$failure; emergencyCleanup=$emergency; cleanupFailure=$cleanupFailure; jobDrain=$jobDrain }
+        Write-FixtureJson 'launcher-result.json' @{ failure=$failure; emergencyCleanup=$emergency; cleanupFailure=$cleanupFailure; cleanupStartedAt=$cleanupStartedAt; cleanupCompletedAt=[DateTime]::UtcNow.ToString('o'); jobDrain=$jobDrain }
     }
     if ($failure) { [Console]::Error.WriteLine($failure); exit 1 }
     exit 0
@@ -367,8 +381,7 @@ try {
             }
             Write-FixtureJson 'probe-identity.json' @{ identity=$identity; pid=$probePid; consoleMember=([DpfConsoleFixture]::Members() -contains $probePid) }
         }
-        return # The existing finally records console closure, then this driver exits.
-    }
+    } else {
     $quoted = @($config.arguments | ForEach-Object { [DpfConsoleFixture]::Quote([string]$_) })
     $command = '/d /s /c "' + [DpfConsoleFixture]::Quote($config.pnpm) + ' ' + ($quoted -join ' ') + '"'
     $target = [DpfConsoleFixture]::Launch($env:ComSpec, $command, $config.worktree, $false)
@@ -393,19 +406,30 @@ try {
         Start-Sleep -Milliseconds 50
     }
     $screen = [DpfConsoleFixture]::ReadScreen()
-    # This observes closure before the launcher's enclosing Job is closed.
+    # Keep an early diagnostic snapshot. The launcher owns the final bounded
+    # Job settlement; this console inventory must never terminate a writer.
     $closureDeadline = [DateTime]::UtcNow.AddSeconds(2)
     do {
         $live = [DpfConsoleFixture]::LiveRetained()
         if ($live.Count -eq 0) { break }
         Start-Sleep -Milliseconds 50
     } while ([DateTime]::UtcNow -lt $closureDeadline)
+    }
 } catch { $failure = $_.Exception.Message }
 finally {
-    $exitCode = if ($target -and $target.HasExited) { $target.ExitCode } else { $null }
-    Write-FixtureJson 'driver-result.json' @{ failure=$failure; exitCode=$exitCode; sent=$sent; controlWitnessCount=[DpfConsoleFixture]::ControlCount; batchConfirmed=$confirmed; members=$before; liveBeforeHarnessCleanup=$live; screen=$screen }
-    $emergency = [DpfConsoleFixture]::CleanupOwned()
-    Write-FixtureJson 'driver-cleanup.json' @{ emergencyCleanup=$emergency }
+    $cleanupFailure = $null
+    try {
+        $exitCode = if ($target -and $target.HasExited) { $target.ExitCode } else { $null }
+        Write-FixtureJson 'driver-result.json' @{ failure=$failure; exitCode=$exitCode; sent=$sent; controlWitnessCount=[DpfConsoleFixture]::ControlCount; batchConfirmed=$confirmed; members=$before; liveBeforeHarnessCleanup=$live; observedAt=[DateTime]::UtcNow.ToString('o'); screen=$screen }
+    } catch { if (-not $failure) { $failure=$_.Exception.Message } }
+    finally {
+        try {
+            [DpfConsoleFixture]::ReleaseRetained()
+            if ($config.jobProbe.kind -eq 'driver-failure') { throw 'Injected driver handle-release failure after handles closed' }
+        } catch { $cleanupFailure=$_.Exception.Message; if (-not $failure) { $failure=$cleanupFailure } }
+        try { Write-FixtureJson 'driver-cleanup.json' @{ emergencyCleanup=$false; outcome=$(if ($cleanupFailure) { 'release-failed' } else { 'handles-released' }); failure=$cleanupFailure; completedAt=[DateTime]::UtcNow.ToString('o') } }
+        catch { if (-not $failure) { $failure=$_.Exception.Message }; [Console]::Error.WriteLine($_.Exception.Message) }
+    }
 }
-if ($failure) { exit 1 }
+if ($failure) { [Console]::Error.WriteLine($failure); exit 1 }
 exit 0
