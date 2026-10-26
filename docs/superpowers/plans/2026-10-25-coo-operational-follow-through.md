@@ -279,14 +279,23 @@ The finite-delivery owner normally released all thirty idle path claims. A fresh
 ordinary claim for the canonical shape architecture page succeeded, so the old
 forced shared-edit approval is no longer needed for this work. P1 now includes
 the real canonical documentation correction and current main's provider-hold
-capacity fix. Integrated source head f1ed74cb48f6416ea32da6f48f569abb334bf4d3 passed
-311 affected tests with three PostgreSQL skips and typecheck; documentation-impact
-and design-grounding guards pass. Shared integration has not run: an upgrade
-drain first refused admission, and the sanctioned waiter's Windows child spawn
-then failed before pregate started. No lease or gate record exists, and no
-passing runtime verification is inferred. Resume the supported foreground gate
-when the drain clears; do not duplicate a queued claim or edit receipts.
+capacity fix. The final corrected source is 3a91aa3f589bb767c56429c2d86a9e7a8c9cbeaa.
+Its source-local suite passed 317 tests with zero failures and three opt-in
+PostgreSQL skips; typecheck passed. The original host preflight finished on
+October 26 at 01:02:51 UTC: 84 of 85 checks passed. Gate Executor Liveness failed
+the existing real Windows console success fixture because the launcher reported
+emergency cleanup. BI-BFDB98B6 owns that contract and carries the reproduction.
+No shared integration lease or passing gate record exists. The earlier drain
+and Windows waiter spawn failure remain history, not the current next action.
 
+Resolve that existing gate failure, then run exact-tree shared integration and
+obtain fresh independent review. Do not repeat the unchanged failing gate or
+weaken its assertion. Native design/spec execution settlement remains with
+BI-7906C73E; bounded executor handoff recovery remains with BI-5366EF78. A bounded
+COO briefing was refused through native review routing, so acknowledgement and
+tool qualification remain unverified. Technical recovery is not a founder
+rubber-stamp request. No runtime code publication, merge, deployment or full
+COO activation is claimed.
 ### Final coordination transfer and current verification
 
 The human in "Prioritize DPF platform design" directed transfer of its remaining
