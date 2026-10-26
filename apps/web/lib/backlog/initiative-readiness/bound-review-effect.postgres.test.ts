@@ -62,10 +62,12 @@ function authenticatedWriterArgs(auth: ResolvedMcpTransportAuth) {
     boundReviewTask: { taskRunId: auth.taskRunId, requestDigest, executionFence: auth.taskExecutionFence } };
 }
 const writers = [
-  { gate: "design-spec", run: (auth: ResolvedMcpTransportAuth) => recordInitiativeGateReceipt({ ...authenticatedWriterArgs(auth), actionKey: "record_initiative_design_review",
+  { gate: "design-spec", raceNoWinnerError: "Concurrent publication did not leave a qualified canonical winner. No write was retried.",
+    run: (auth: ResolvedMcpTransportAuth) => recordInitiativeGateReceipt({ ...authenticatedWriterArgs(auth), actionKey: "record_initiative_design_review",
     gate: "design-spec", allowedGates: ["design-spec"], requiredCapability: "manage_backlog", requiredGrant: "initiative_design_review",
     requiresIndependentReviewer: true, decision: "pass", findings: [] }) },
-  { gate: "spec-approval", run: (auth: ResolvedMcpTransportAuth) => recordInitiativeSpecApproval({ ...authenticatedWriterArgs(auth), profile: "feature", artifactRole: "design-spec" }) },
+  { gate: "spec-approval", raceNoWinnerError: "Concurrent approval did not leave a qualified winner. No write was retried.",
+    run: (auth: ResolvedMcpTransportAuth) => recordInitiativeSpecApproval({ ...authenticatedWriterArgs(auth), profile: "feature", artifactRole: "design-spec" }) },
 ] as const;
 
 function earlyWriterResult(result: { ok: boolean; code?: string; error?: string }) {
@@ -191,6 +193,27 @@ describe.skipIf(!url)("canonical review writer transactions on PostgreSQL", () =
       expect(await db.initiativeArtifactRetentionPin.count()).toBe(0);
     }, 15000);
 
+    it("refuses its first new effect when the hold committed after capture", async () => {
+      const original = await db.taskRun.findUniqueOrThrow({ where: { taskRunId } });
+      const updater = await pool.connect();
+      try {
+        // Autocommit finishes the hold before the first writer transaction.
+        // The separately tested lock race may instead lose its SQL snapshot.
+        await displace(updater, "hold");
+      } finally { updater.release(); }
+      const held = await db.taskRun.findUniqueOrThrow({ where: { taskRunId } });
+      expect(held.status).toBe("input-required");
+      expect(held.progressPayload).toEqual(original.progressPayload);
+      expect(await verdictCount()).toBe(0);
+      expect(await baselineCount()).toBe(0);
+      expect(await db.initiativeArtifactRetentionPin.count()).toBe(0);
+      expect(await writer.run(session.auth)).toMatchObject(fenceRefusal);
+      expect(await verdictCount()).toBe(0);
+      expect(await baselineCount()).toBe(0);
+      expect(await db.initiativeArtifactRetentionPin.count()).toBe(0);
+      expect(await db.taskRun.findUnique({ where: { taskRunId } })).toMatchObject({ status: "input-required" });
+    }, 15000);
+
     async function markPresent() {
       const owner = await db.backlogItem.create({ data: { itemId: "BI-7906C73E", title: "Synthetic policy owner", status: "open", type: "product" } });
       const task = await db.taskRun.findUniqueOrThrow({ where: { taskRunId } });
@@ -254,7 +277,11 @@ describe.skipIf(!url)("canonical review writer transactions on PostgreSQL", () =
         void pending.catch(() => undefined);
         await Promise.race([waitForBlockedWriter(), pending.then(result => { throw earlyWriterResult(result); })]);
         await blocker.query("COMMIT");
-        expect(await pending).toMatchObject(change === "cancellation" ? { ok: false } : fenceRefusal);
+        // After a Serializable rollback, production permits only winner readback,
+        // never another append. Direct held-state refusal is asserted separately.
+        expect(await pending).toMatchObject(change === "cancellation" ? { ok: false } : {
+          ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS", error: writer.raceNoWinnerError,
+        });
         expect(await verdictCount()).toBe(0);
         expect(await baselineCount()).toBe(0);
         expect(await db.initiativeArtifactRetentionPin.count()).toBe(0);
