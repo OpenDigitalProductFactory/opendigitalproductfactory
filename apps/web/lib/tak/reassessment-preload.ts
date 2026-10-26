@@ -61,6 +61,7 @@ export async function preloadFiniteReassessment(input: PreloadInput, records: Te
     if (!progress.partialEvidence || progress.readerBudgetExhausted || !progress.continuationCursor) refuse();
     cursor = progress.continuationCursor;
   }
+  // codeql[js/weak-cryptographic-algorithm,js/insufficient-password-hash]: Git blob ids are SHA-1 of the bytes "blob <size>\0<content>". This matches providerBlobId. It is not a password hash.
   const blob = createHash("sha1").update(`blob ${Buffer.byteLength(source, "utf8")}\0${source}`).digest("hex");
   if (source.length !== totalChars || blob !== binding.artifactRef.providerBlobId) refuse();
   const data = { kind: "immutable-source-preload-v1", taskRunId: scope.taskRunId, agentId: scope.agentId,
