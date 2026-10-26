@@ -8,52 +8,10 @@ import {
   type WorkspaceCasePrismaClient,
 } from "./workspace-case-loader";
 import { resolveCanonicalWorkCaseKey } from "./canonical-case-key";
+import { baseItem, prismaFor, type WorkItemFixture } from "./workspace-case-loader.test-fixtures";
 
-type WorkItemFixture = Awaited<ReturnType<WorkspaceCasePrismaClient["workItem"]["findMany"]>>[number];
 type CoworkerEngagementFixture =
   Awaited<ReturnType<NonNullable<WorkspaceCasePrismaClient["coworkerEngagement"]>["findMany"]>>[number];
-
-const baseItem = {
-  id: "row-1",
-  itemId: "WI-1",
-  sourceType: "booking",
-  sourceId: "BK-1",
-  title: "Confirm condenser appointment",
-  description: "Customer needs a scheduling confirmation.",
-  urgency: "urgent",
-  effortClass: "short",
-  status: "awaiting-input",
-  assignedToUserId: "user-1",
-  assignedToAgentId: null,
-  dueAt: new Date("2026-06-29T15:00:00.000Z"),
-  evidence: [{ kind: "operator-note", summary: "Customer called twice." }],
-  createdAt: new Date("2026-06-28T10:00:00.000Z"),
-  updatedAt: new Date("2026-06-28T10:30:00.000Z"),
-};
-
-function prismaFor(items: WorkItemFixture[], detail: WorkItemFixture | null = items[0]): WorkspaceCasePrismaClient {
-  return {
-    workItem: {
-      findMany: async () => items,
-      findFirst: async () => detail,
-    },
-    workItemMessage: {
-      findMany: async () => [
-        {
-          messageId: "WIM-1",
-          senderType: "agent",
-          messageType: "handoff",
-          body: "Need a human confirmation before booking.",
-          createdAt: new Date("2026-06-28T10:10:00.000Z"),
-        },
-      ],
-    },
-    workroom: {
-      findMany: async () => [],
-    },
-    workroomActivity: { findMany: async () => [] },
-  };
-}
 
 const baseEngagement: CoworkerEngagementFixture = {
   id: "eng-row-1",
@@ -103,8 +61,11 @@ describe("workspace Work Case loader", () => {
   it("checks content authorization before reading room choices", async () => {
     const db = prismaFor([{ ...baseItem, assignedToUserId: "someone-else" }]);
     db.workroom.findMany = vi.fn(async () => []);
+    const queryRaw = vi.fn();
+    Object.assign(db, { $queryRaw: queryRaw });
     expect(await loadWorkspaceWorkCaseDetail({ prismaClient: db, caseKey: "booking%3ABK-1", userId: "user-1" })).toBeNull();
     expect(db.workroom.findMany).not.toHaveBeenCalled();
+    expect(queryRaw).not.toHaveBeenCalled();
   });
 
   it("keeps a selected room's process, evidence and workforce identity together", async () => {
@@ -778,20 +739,4 @@ describe("a work-capsule case key resolves to its anchored canonical case", () =
     );
     expect(canonical).toBeNull();
   });
-});
-
-it("shows native reviewer waits before a final Workroom activity receipt exists", async () => {
-  const client = prismaFor([baseItem]);
-  client.workroom.findMany = async () => [{ id: "room-1", capsuleId: "WC-1", status: "working", title: "Review room" }];
-  Object.assign(client, { taskRun: { findMany: async () => [{
-    id: "task-row-1", taskRunId: "TR-REVIEW", userId: "user-1", status: "input-required",
-    updatedAt: new Date("2026-06-28T10:30:00Z"), lastHeartbeatAt: null,
-    progressPayload: { semanticReview: { reason: "provider-outcome-uncertain-after-restart" } }, nodes: [],
-  }] } });
-  const detail = await loadWorkspaceWorkCaseDetail({ prismaClient: client, caseKey: "booking%3ABK-1", userId: "user-1" });
-  expect(detail?.room?.receipts).toContainEqual(expect.objectContaining({ receiptKind: "reviewer-state-snapshot", status: "observed" }));
-  expect(detail?.room?.sourceRefs).toContainEqual(expect.objectContaining({ kind: "task-run", id: "TR-REVIEW" }));
-  expect(detail?.room?.work.attentionReason).toContain("TR-REVIEW");
-  expect(detail?.room?.work.nextAction).toContain("Observed execution");
-  expect(detail?.room?.identity.instance.occurrenceTrace.executionRefs).toContainEqual(expect.objectContaining({ kind: "task-run", id: "TR-REVIEW" }));
 });

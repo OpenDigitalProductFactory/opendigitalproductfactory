@@ -46,16 +46,17 @@ function terminalDecisionActivity() {
 }
 
 function fakeDb(options: {
+  workspaceState?: unknown;
   itemStatus?: string;
   activities?: Array<Record<string, unknown>>;
   evidence?: boolean;
   identity?: boolean;
 } = {}) {
-  const updateMany = vi.fn(async () => ({ count: 1 }));
+  const updateMany = vi.fn(async (_args: unknown) => ({ count: 1 }));
   const capsule = {
     id: "capsule-row-1", capsuleId: "WC-1", status: "working", backlogItemId: "BI-1",
     featureBuildId: null, archivedAt: null, executorRef: "AGT-1",
-    leaseHolderPrincipalId: options.identity === false ? "PRN-OTHER" : "PRN-1", workspaceState: {},
+    leaseHolderPrincipalId: options.identity === false ? "PRN-OTHER" : "PRN-1", workspaceState: options.workspaceState ?? {},
   };
   const item = {
     id: "row-1", itemId: "BI-1", status: options.itemStatus ?? "in-progress", type: "portfolio", source: "user-request", workType: "feature",
@@ -165,4 +166,57 @@ describe("completeWorkCapsuleTransition", () => {
       data: expect.objectContaining({ status: "complete" }),
     }));
   });
+});
+
+
+it("records the agreed delivery handoff only after canonical completion allows mutation", async () => {
+  const { retainDeliveryAgreement } = await import("@/lib/work-management/delivery-agreement");
+  const stamp = "2026-10-25T12:00:00.000Z";
+  const workspaceState = retainDeliveryAgreement({}, { objective: "Agreed work delivered", backlogItemId: "BI-1",
+    capturedAt: stamp, basis: "created", acceptance: null,
+    context: { state: "unavailable", checkedAt: stamp, peerRef: null, guidanceState: "unavailable", reason: "No context reader", sourceRefs: [] } });
+  const fake = fakeDb({ workspaceState });
+  const result = await completeWorkCapsuleTransition({ db: fake.db, capsuleId: "WC-1", expectedStatus: "working", reason: "Agreed result verified", actor,
+    evaluatedAt: "2026-10-25T12:30:00.000Z", dependencies: {
+      reconcileObjectives: () => ({ state: "pass", baselineId: "BASE-1", evidenceRefs: ["OE-1"], requiredStatementIds: ["OBJ-1"] }),
+      projectReadiness: () => projected("allowed"),
+    } });
+  expect(result.ok).toBe(true);
+  const write = fake.updateMany.mock.calls[0]?.[0] as unknown as { data: { workspaceState: Record<string, unknown> } };
+  expect(write.data.workspaceState.deliveryAgreement).toEqual(workspaceState.deliveryAgreement);
+  expect(write.data.workspaceState.deliveryHandoff).toMatchObject({ baselineId: "BASE-1", evidenceRefs: expect.arrayContaining(["OE-1", "WE-1"]), summary: "Agreed result verified" });
+});
+
+it("does not complete a captured agreement against silently replaced body criteria", async () => {
+  const { retainDeliveryAgreement } = await import("@/lib/work-management/delivery-agreement");
+  const state = retainDeliveryAgreement({}, { objective: "Agreed result", backlogItemId: "BI-1", capturedAt: "2026-10-25T12:00:00Z", basis: "created",
+    acceptance: { digest: "sha256:original", criteria: ["Original required behavior"] }, context: { state: "unavailable", guidanceState: "unavailable",
+      checkedAt: "2026-10-25T12:00:00Z", peerRef: null, reason: "No permitted source", sourceRefs: [] } });
+  const { db, updateMany } = fakeDb({ workspaceState: state, activities: [{ id: "BASE-ACT-1", kind: "initiative_scope_baseline", recordedAt: new Date(),
+    payload: { baselineId: "BASE-1", origin: "item-body", criteriaDigest: "sha256:replacement" } }] });
+  const result = await completeWorkCapsuleTransition({ db, capsuleId: "WC-1", expectedStatus: "working", reason: "Done",
+    actor: { userId: "USER-1", agentId: "AGT-1", principalId: "PRN-1" }, dependencies: {
+      reconcileObjectives: () => ({ state: "pass", baselineId: "BASE-1", evidenceRefs: ["OE-1"], requiredStatementIds: ["OBJ-1"] }),
+      projectReadiness: () => projected("allowed"),
+    } });
+  expect(result.ok).toBe(false);
+  expect(updateMany).not.toHaveBeenCalled();
+});
+
+it("allows harmless body-anchor changes when the agreed criterion statements are still proven", async () => {
+  const { retainDeliveryAgreement } = await import("@/lib/work-management/delivery-agreement");
+  const { bodyBaselineDigest } = await import("./body-baseline-version");
+  const state = retainDeliveryAgreement({}, { objective: "Agreed result", backlogItemId: "BI-1", capturedAt: "2026-10-25T12:00:00Z", basis: "created",
+    acceptance: { digest: "sha256:original-anchors", criteria: ["Original required behavior"] }, context: { state: "unavailable", guidanceState: "unavailable",
+      checkedAt: "2026-10-25T12:00:00Z", peerRef: null, reason: "No permitted source", sourceRefs: [] } });
+  const { db, updateMany } = fakeDb({ workspaceState: state, activities: [{ id: "BASE-ACT-1", kind: "initiative_scope_baseline", recordedAt: new Date(),
+    payload: { baselineId: "BASE-1", origin: "item-body", criteriaDigest: "sha256:new-anchors", acceptanceStatements: [
+      { acceptanceId: "AC-BODY-001", artifactAnchor: "line:5", statementDigest: bodyBaselineDigest("Original required behavior") }] } }] });
+  const result = await completeWorkCapsuleTransition({ db, capsuleId: "WC-1", expectedStatus: "working", reason: "Done",
+    actor: { userId: "USER-1", agentId: "AGT-1", principalId: "PRN-1" }, dependencies: {
+      reconcileObjectives: () => ({ state: "pass", baselineId: "BASE-1", evidenceRefs: ["OE-1"], requiredStatementIds: ["AC-BODY-001"] }),
+      projectReadiness: () => projected("allowed"),
+    } });
+  expect(result.ok).toBe(true);
+  expect(updateMany).toHaveBeenCalledOnce();
 });

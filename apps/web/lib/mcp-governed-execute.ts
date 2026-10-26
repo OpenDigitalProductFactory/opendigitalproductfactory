@@ -457,6 +457,9 @@ async function governedExecuteToolRun(args: GovernedExecuteArgs, run: ApprovalRu
       };
       if (
         authorityGate.rejection === "authority_denied"
+        || authorityGate.rejection === "authority_subject_not_found"
+        || authorityGate.rejection === "authority_binding_mismatch"
+        || authorityGate.rejection === "authority_scope_missing"
         || authorityGate.rejection === "approval_required"
         || consequence.consequential
       ) {

@@ -10,7 +10,8 @@ import type { InitiativeArtifactRef } from "./receipt-schema";
 import { readinessCodesForEvidenceDimension } from "./readiness-guidance";
 import type { DeliverySensitivityAssessment } from "./delivery-sensitivity";
 import { effectiveShape } from "./shape-requirements";
-import { judgedDesignDigest, type CurrentDesignEvidence } from "./judged-design-artifact";
+import { NO_MARKED_OBJECTIVE_STATEMENTS } from "./baseline-manifest";
+import { judgedDesignDigest, type CurrentDesignEvidence, type CurrentResearchEvidence } from "./judged-design-artifact";
 import { parseInitiativeReviewArtifactRef } from "@/lib/mcp-task-review-contract";
 import type {
   InitiativeReadinessDecision,
@@ -221,7 +222,8 @@ export function persistedTerminalCompletionDecision(
  */
 // `canonical` is the design the design gates judge (judged-design-artifact.ts,
 // BI-4592CF69); `baseline` is the approved one plan reviews may still cite.
-type AcceptedDigests = { canonical: string | null; baseline: string | null; plan: string | null };
+type AcceptedDigests = { canonical: string | null; baseline: string | null; plan: string | null;
+  ownResearch?: CurrentResearchEvidence };
 
 function isStaleFor(gate: string, artifactDigest: unknown, digests: AcceptedDigests): boolean {
   if (gate === "plan-review") {
@@ -242,6 +244,16 @@ function projectGateReceipt(
     receiptId: activity.id, gate, subject: { kind: "backlog-item", id: itemId },
   })) return { state: "malformed", malformed: true, gate };
   const decision = payload.decision;
+  // A child authors its own research on its own source; it cannot approve or
+  // amend the parent's design. An unavailable/newer own receipt still wins over
+  // an older or inherited pass, and never becomes approval by omission.
+  if (gate === "research" && digests.ownResearch
+    && object(payload.artifactRef)?.kind === "repo-blob-at-commit") {
+    const observed = digests.ownResearch;
+    return { state: observed.state === "verified" && observed.receiptId === activity.id
+      && observed.digest === payload.artifactDigest ? decision as ReadinessEvidenceState : "stale",
+    malformed: false, gate };
+  }
   if (isStaleFor(gate, payload.artifactDigest, digests)) {
     return { state: "stale", malformed: false, gate };
   }
@@ -263,20 +275,22 @@ function latestGateStates(
   activities: readonly InitiativeReadinessActivity[],
   digests: AcceptedDigests,
   itemId: string,
-): { states: Map<string, ReadinessEvidenceState>; malformed: boolean } {
+): { states: Map<string, ReadinessEvidenceState>; malformed: boolean; researchArtifactKind: unknown } {
   const latest = [...activities]
     .filter((activity) => activity.kind === "initiative_gate_receipt")
     .sort((left, right) => right.recordedAt.getTime() - left.recordedAt.getTime() || right.id.localeCompare(left.id));
   const states = new Map<string, ReadinessEvidenceState>();
   let malformed = false;
+  let researchArtifactKind: unknown = null;
   for (const activity of latest) {
     const gate = normalizeGate(activity.gateKey);
     if (gate && states.has(gate)) continue;
+    if (gate === "research") researchArtifactKind = object(object(activity.payload)?.artifactRef)?.kind;
     const projected = projectGateReceipt(activity, digests, itemId);
     malformed ||= projected.malformed;
     if (projected.gate) states.set(projected.gate, projected.state);
   }
-  return { states, malformed };
+  return { states, malformed, researchArtifactKind };
 }
 
 function state(states: ReadonlyMap<string, ReadinessEvidenceState>, gate: string): ReadinessEvidenceState {
@@ -488,7 +502,12 @@ export function projectBacklogItemReadiness(args: {
     baseline: digest,
     plan: projectedCoverage.planDigest,
   };
-  const ownReceipts = latestGateStates(args.activities, digests, args.item.itemId);
+  const ownReceipts = latestGateStates(args.activities, inherited
+    ? { ...digests, ownResearch: args.currentDesign?.research ?? { state: "unavailable" } }
+    : digests, args.item.itemId);
+  const ownResearchUnavailable = inherited && ownReceipts.states.get("research") === "stale"
+    && ownReceipts.researchArtifactKind === "repo-blob-at-commit"
+    && args.currentDesign?.research?.state !== "verified";
   const parentReceipts = inherited ? latestGateStates(inherited.activities, digests, inherited.parentItemId) : null;
   const receipts = parentReceipts
     ? {
@@ -537,6 +556,11 @@ export function projectBacklogItemReadiness(args: {
   // The caller owns the predicate; here it is a pure state coercion.
   const recognizeMerge = args.recognizeMergeThroughGates === true;
   const pass = (s: ReadinessEvidenceState): ReadinessEvidenceState => (recognizeMerge ? "pass" : s);
+  const missingObjectiveMarkers = !inherited
+    && args.currentDesign?.state === "verified"
+    && args.currentDesign.scopeManifestError === NO_MARKED_OBJECTIVE_STATEMENTS;
+  const revealMissingObjectives = (state: ReadinessEvidenceState): ReadinessEvidenceState =>
+    missingObjectiveMarkers && (state === "pass" || state === "not-applicable") ? "missing" : state;
   // BI-7876699F: research is satisfiable from the reproduction the author already
   // cited, on the shapes whose gate table says so.
   //
@@ -589,12 +613,12 @@ export function projectBacklogItemReadiness(args: {
     workType: args.item.workType ?? null,
     evaluatedAt: args.evaluatedAt,
     classification: profile ? "pass" : "missing",
-    canonicalDesign: pass(currentDesignUnavailable ? "missing" : baselineState),
+    canonicalDesign: revealMissingObjectives(pass(currentDesignUnavailable ? "missing" : baselineState)),
     canonicalDesignAmbiguous: recognizeMerge ? false : baseline.ambiguous,
     research: pass(researchState),
-    specApproval: pass(currentDesignUnavailable
+    specApproval: revealMissingObjectives(pass(currentDesignUnavailable
       ? state(evidence, "spec-approval") === "fail" ? "fail" : "missing"
-      : specApprovalState(state(evidence, "spec-approval"), designAmended)),
+      : specApprovalState(state(evidence, "spec-approval"), designAmended))),
     specialistReviews: {
       architecture: pass(state(evidence, "architecture-review")),
       data: state(evidence, "data-review"),
@@ -641,6 +665,19 @@ export function projectBacklogItemReadiness(args: {
       CANONICAL_DESIGN_REQUIRED: ["Current immutable design verification is unavailable; historical receipts do not prove the current head."],
       SPEC_APPROVAL_REQUIRED: ["The current design could not be verified. Restore source access before issuing another review."],
       OBJECTIVE_BASELINE_REQUIRED: ["The current design/baseline binding could not be verified. No baseline or approval was changed."],
+    } : ownResearchUnavailable ? {
+      ...args.completion?.requirementReasons,
+      RESEARCH_REQUIRED: ["The child's current research source could not be verified. Restore its Workroom source binding and provider access before recording more research; the inherited design remains unchanged."],
+    } : missingObjectiveMarkers ? {
+      ...args.completion?.requirementReasons,
+      CANONICAL_DESIGN_REQUIRED: [
+        ...(args.completion?.requirementReasons?.CANONICAL_DESIGN_REQUIRED ?? []),
+        `${NO_MARKED_OBJECTIVE_STATEMENTS} Required markers are OBJ- lines (for example **OBJ-1:**) and AC/OBJ table rows that name the objective.`,
+      ],
+      SPEC_APPROVAL_REQUIRED: [
+        ...(args.completion?.requirementReasons?.SPEC_APPROVAL_REQUIRED ?? []),
+        `${NO_MARKED_OBJECTIVE_STATEMENTS} Required markers are OBJ- lines (for example **OBJ-1:**) and AC/OBJ table rows that name the objective.`,
+      ],
     } : args.completion?.requirementReasons,
   };
   return {

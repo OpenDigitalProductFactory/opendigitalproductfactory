@@ -61,6 +61,8 @@ The coworker operates within a two-layer authorization model:
 - **Only the person asked decides** — a request lends your authority, so only you can decide it. For a scheduled task, that is the task's owner. An admin can decide on someone's behalf when that person has left or cannot sign in: they open the request's link, choose **Decide on their behalf**, and give a reason. The decision, the admin and the reason are recorded and shown on the request
 - **Every action is recorded** — all tool calls (not just proposals) are logged with your identity and the agent's identity for audit purposes. View the log at `/platform/ai/authority`
 
+An **Authorized, but did not complete** result keeps the approval separate from execution. When a saved execution proves the failure reason, the result explains it and offers **Inspect original Workroom** if you still have access. Missing or conflicting evidence stays explicit. An inspection link does not authorize another attempt.
+
 On a business Product's **Direction** page, informational cards and links do
 not send a coworker prompt. **Preview a demand review** first shows the product
 scope, source kinds, proposed writes, approval boundary, and schedule effect.

@@ -49,9 +49,10 @@ describe("current canonical design observation", () => {
     expect(prepared.evidence).toEqual({ state: "unavailable" });
     expect(await prepared.admissionGuard({} as never)).toEqual({ state: "unavailable" });
   });
-  it("does not read provider bytes for inherited, document or absent own repository scope", async () => {
+  it("does not read provider bytes without an own design or research receipt", async () => {
     const p = ports(); p.loadBinding.mockResolvedValue({ kind: "not-applicable" });
-    const prepared = await prepareCurrentDesignObservation({ itemId: "BI-X", ports: p });
+    const { store } = stored(); store.backlogItemActivity.findMany.mockResolvedValue([]);
+    const prepared = await prepareCurrentDesignObservation({ itemId: "BI-X", db: store as never, ports: p });
     expect(prepared.evidence).toEqual({ state: "not-applicable" });
     expect(p.readCurrentArtifact).not.toHaveBeenCalled();
   });
@@ -200,6 +201,18 @@ describe("current canonical design observation", () => {
       expect(result).toMatchObject({ resolved: false, code: "ambiguous-canonical-design" });
       expect(fetchImpl).not.toHaveBeenCalled();
     });
+  it("attaches the missing-objective parser error without treating other bytes as that failure", async () => {
+    const marked = ["**OBJ-1:** Preserve the source.", "", "| ID | Objectives | Criterion |", "| --- | --- | --- |", "| AC-1 | OBJ-1 | Keep all source text. |"].join("\n");
+    const readBlob = vi.fn()
+      .mockResolvedValueOnce({ ok: true, data: new TextEncoder().encode("design with no markers"), blobId: BLOB_SHA })
+      .mockResolvedValueOnce({ ok: true, data: new TextEncoder().encode(marked), blobId: BLOB_SHA });
+    const discoverArtifact = vi.fn().mockResolvedValue({ resolved: false, code: "no-canonical-design" });
+    const unmarked = await readCurrentDesignArtifact({ ...snapshot(), selection: "Source-only repair with no declared design path" }, { discoverArtifact, readBlob });
+    const parsed = await readCurrentDesignArtifact({ ...snapshot(), selection: "Source-only repair with no declared design path" }, { discoverArtifact, readBlob });
+    expect(unmarked).toMatchObject({ state: "verified", scopeManifestError: "The artifact has no marked objective statements." });
+    expect(parsed).toMatchObject({ state: "verified" });
+    expect(parsed).not.toHaveProperty("scopeManifestError");
+  });
   it("uses normal canonical discovery before falling back to an unchanged baseline path", async () => {
     const binding = { ...snapshot(), selection: "Source-only repair with no declared design path" };
     const discoverArtifact = vi.fn().mockResolvedValue({ resolved: false, code: "no-canonical-design" });

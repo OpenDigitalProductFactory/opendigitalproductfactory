@@ -376,6 +376,23 @@ function correctionReminder(policy: TerminalToolPolicy, records: readonly Termin
     + INITIATIVE_DISPOSITION_GUIDANCE;
 }
 
+/** The latest writer call refused with a non-retryable canonical-design error. Other failures return null. */
+export function canonicalDesignRefusalMessage(
+  policy: TerminalToolPolicy | undefined,
+  records: readonly { name: string; result: { success: boolean; error?: string; message?: string } }[],
+): string | null {
+  if (!policy) return null;
+  for (let index = records.length - 1; index >= 0; index -= 1) {
+    const record = records[index];
+    if (!record || record.name !== policy.writerToolName) continue;
+    if (record.result.success === false && record.result.error === "CANONICAL_DESIGN_REQUIRED") {
+      return terminalWriterFailureMessage(policy, records as readonly TerminalToolRecord[]);
+    }
+    return null;
+  }
+  return null;
+}
+
 export function terminalWriterFailureMessage(policy: TerminalToolPolicy, records: readonly TerminalToolRecord[]): string {
   const last = records.filter((record) => record.name === policy.writerToolName).at(-1);
   return last

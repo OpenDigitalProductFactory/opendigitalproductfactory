@@ -19,8 +19,8 @@ export async function settleRemoteTask(
 ): Promise<RemoteTaskSubmitOutcome | null> {
   const current = await prisma.taskRun.findUnique({
     where: { taskRunId: args.where.taskRunId },
-    select: { status: true, updatedAt: true, progressPayload: true,
-      ...(boundReview ? { userId: true, currentAgentId: true, a2aMetadata: true } : {}) },
+    select: { status: true, updatedAt: true, progressPayload: true, a2aMetadata: true,
+      ...(boundReview ? { userId: true, currentAgentId: true } : {}) },
   });
   if (current && (TASK_IN_FLIGHT_STATES as readonly string[]).includes(current.status)
     && reservationIdentity(current.progressPayload) === reservation
@@ -34,10 +34,14 @@ export async function settleRemoteTask(
       ...args,
       data: {
         ...args.data,
-        ...((reservation || dispatchClaim) && args.data.progressPayload && typeof args.data.progressPayload === "object"
+        ...((reservation || dispatchClaim || (current.progressPayload as Prisma.JsonObject | null)?.engagementPreAdmissionContinuation) && args.data.progressPayload && typeof args.data.progressPayload === "object"
           && !Array.isArray(args.data.progressPayload)
           ? { progressPayload: {
               ...args.data.progressPayload,
+              // This audit is server-owned history, never the executor's replacement.
+              ...((current.progressPayload as Prisma.JsonObject | null)?.engagementPreAdmissionContinuation
+                ? { engagementPreAdmissionContinuation: (current.progressPayload as Prisma.JsonObject).engagementPreAdmissionContinuation as Prisma.InputJsonValue }
+                : {}),
               ...(reservation ? { resumeReservedAt: reservation } : {}),
               ...(dispatchClaim ? { dispatch: (current.progressPayload as Prisma.JsonObject).dispatch as Prisma.InputJsonValue } : {}),
             } }
@@ -45,7 +49,15 @@ export async function settleRemoteTask(
       },
       where: { ...args.where, status: current.status, updatedAt: current.updatedAt },
     });
-    if (written.count === 1) return null;
+    if (written.count === 1) {
+      if (current.a2aMetadata && typeof current.a2aMetadata === "object" && !Array.isArray(current.a2aMetadata)
+        && current.a2aMetadata.engagementBinding) {
+        const { reconcileEngagementTaskResult } = await import("./coworker-service-catalog/engagement-fulfillment");
+        // Task settlement is canonical; a projection interruption is repaired on the next engagement read.
+        await reconcileEngagementTaskResult(args.where.taskRunId).catch(() => console.error("Engagement projection deferred; read the original engagement to reconcile persisted task state."));
+      }
+      return null;
+    }
   }
   const persisted = await prisma.taskRun.findUnique({
     where: { taskRunId: args.where.taskRunId },

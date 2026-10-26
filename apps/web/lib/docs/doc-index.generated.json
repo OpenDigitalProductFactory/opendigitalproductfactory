@@ -1348,6 +1348,7 @@
         "contributor-procedure-runbook",
         "new-page-routes-regenerate-companions-bi-206dab95",
         "3-strongly-typed-string-enums-mandatory",
+        "routine-maintenance-and-recovery-authority",
         "13-login-local-qa",
         "9-external-tools",
         "7-subagent-dispatch-discipline",
@@ -2173,7 +2174,8 @@
         "parent-bounded-local-review-execution-bi-03ac2fd9",
         "recovering-an-original-initiative-review-after-a-connection-change",
         "canonical-review-writer-execution-identity",
-        "explicitly-authorized-present-reassessments"
+        "explicitly-authorized-present-reassessments",
+        "bounded-workroom-activity-reads"
       ]
     },
     "docs/architecture/mcp-tool-packs.md": {
@@ -2801,7 +2803,8 @@
         "a-stage-names-the-tools-it-needs",
         "a-new-shape-version-reaches-a-live-room-only-by-rebind-bi-cb5c0dce",
         "related-references",
-        "a-shape-must-outlive-the-room-that-decided-it-bi-82dcd601"
+        "a-shape-must-outlive-the-room-that-decided-it-bi-82dcd601",
+        "finite-delivery-identity"
       ]
     },
     "docs/architecture/workos-iam-equivalence-scorecard.md": {
@@ -5571,7 +5574,9 @@
         "p4-qualify-delivery-and-served-behavior",
         "backlog-coverage",
         "finite-unsupported-boundary-and-resumption",
-        "october-19-bounded-source-recovery-original-proof-inventory"
+        "october-19-bounded-source-recovery-original-proof-inventory",
+        "october-24-upstream-historical-plan-clarification",
+        "october-23-bounded-recovery-issued-review-admission"
       ]
     },
     "docs/install/cloud-single-vm.md": {
@@ -13058,6 +13063,15 @@
         "what-to-watch"
       ]
     },
+    "docs/user-guide/platform/coworker-engagements.md": {
+      "publicHref": "/user-guide/platform/coworker-engagements/",
+      "portalHref": "/docs/platform/coworker-engagements",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "requesting-and-reading-a-coworker-contribution"
+      ]
+    },
     "docs/user-guide/platform/deployment-country-sharing.md": {
       "publicHref": "/user-guide/platform/deployment-country-sharing/",
       "portalHref": "/docs/platform/deployment-country-sharing",
@@ -13402,6 +13416,13 @@
         "what-to-watch"
       ]
     },
+    "docs/user-guide/workspace/finite-delivery-agreements.md": {
+      "publicHref": "/user-guide/workspace/finite-delivery-agreements/",
+      "portalHref": "/docs/workspace/finite-delivery-agreements",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": []
+    },
     "docs/user-guide/workspace/index.md": {
       "publicHref": "/user-guide/workspace/",
       "portalHref": "/docs/workspace/index",
@@ -13449,6 +13470,7 @@
         "activity-and-participants",
         "delegation-and-recovery",
         "inspecting-the-process",
+        "handing-development-work-to-another-assistant",
         "reading-the-flow-map",
         "how-work-flows-in-each-area",
         "the-main-value-stream-on-your-home-page",

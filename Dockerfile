@@ -203,6 +203,7 @@ COPY scripts/lib/worktree-liveness.mjs ./scripts/lib/
 COPY scripts/lib/mcp-client.mjs ./scripts/lib/
 COPY scripts/lib/mcp-credential.mjs ./scripts/lib/
 COPY scripts/lib/mcp-host-trust.mjs ./scripts/lib/
+COPY scripts/lib/foreground-gate-process.mjs ./scripts/lib/
 COPY scripts/lib/resolve-compose-install-context.mjs ./scripts/lib/
 COPY scripts/installer/lib/mcp-client-env.sh ./scripts/installer/lib/
 # mcp-credential.mjs re-exports the client_credentials exchange from the skill pack (BI-84C1F526).

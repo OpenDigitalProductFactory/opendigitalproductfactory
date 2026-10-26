@@ -23,7 +23,40 @@ function configure() {
     minimumContextTokens: 16000, minimumCapabilities: { toolUse: true }, residencyPolicy: "approved_cloud" });
   mocks.pir.mockResolvedValue("All review criteria"); mocks.sensitivity.mockResolvedValue("internal");
 }
+function engagementRequest() {
+  return { ...parsed, agentId: "ux-design-critic", initiativeReviewBinding: undefined,
+    authorityScope: ["tool:read_source_at_version"],
+    engagementBinding: { version: 1 as const, engagementId: "CE-merge-proof", offerId: "offer-ux", serviceId: "service-ux",
+      providerAgentId: "ux-design-critic", actorAgentId: "AGT-EXT-CODEX", userId: "human", workroomId: "WC-merge-proof",
+      stageKey: "review", inputDigest: "d".repeat(64), artifactRef: binding.artifactRef } };
+}
 describe("one shared remote review preparation", () => {
+  it("preserves an engagement's registered runtime provider identity", async () => {
+    configure();
+    mocks.agent.mockResolvedValue({ agentId: "ux-design-critic", systemPrompt: "Complete persona", sensitivity: "internal" });
+    const turn = await prepareRemoteReviewAttempt({ parsed: engagementRequest(), userContext: human, restricted: false }, ports);
+    expect(turn.resolvedAgentId).toBe("ux-design-critic");
+    expect(mocks.tools).toHaveBeenLastCalledWith(expect.objectContaining({ agentId: "ux-design-critic" }));
+  });
+  it("refuses an unrelated engagement provider before resolving any tools", async () => {
+    configure(); mocks.tools.mockClear();
+    mocks.agent.mockResolvedValue({ agentId: "unrelated-provider", systemPrompt: "Other persona", sensitivity: "internal" });
+    await expect(prepareRemoteReviewAttempt({ parsed: engagementRequest(), userContext: human, restricted: false }, ports))
+      .rejects.toThrow("Engagement provider identity changed during runtime resolution.");
+    expect(mocks.tools).not.toHaveBeenCalled();
+  });
+  it("limits every engagement tool attachment lane to its exact admitted names", async () => {
+    configure();
+    mocks.agent.mockResolvedValue({ agentId: "ux-design-critic", systemPrompt: "Complete persona", sensitivity: "internal" });
+    mocks.tools.mockResolvedValue({ tools: schemas, toolsForProvider: [
+      { type: "function", function: { name: schemas[0].name, parameters: schemas[0].inputSchema } },
+      { type: "function", name: schemas[1].name, parameters: schemas[1].inputSchema },
+    ], deferredTools: [schemas[1]] });
+    const turn = await prepareRemoteReviewAttempt({ parsed: engagementRequest(), userContext: human, restricted: false }, ports);
+    expect(turn.tools.tools.map(tool => tool.name)).toEqual(["read_source_at_version"]);
+    expect(turn.tools.toolsForProvider).toEqual([{ type: "function", function: { name: schemas[0].name, parameters: schemas[0].inputSchema } }]);
+    expect(turn.tools.deferredTools).toEqual([]);
+  });
   it("retains the normal operator preferences, hard floors, complete persona and exact authorized tool surface", async () => {
     configure();
     const turn = await prepareRemoteReviewAttempt({ parsed, userContext: human, restricted: true }, ports);

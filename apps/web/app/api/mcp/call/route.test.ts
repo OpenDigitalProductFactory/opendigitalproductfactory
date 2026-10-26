@@ -158,6 +158,25 @@ describe("POST /api/mcp/call", () => {
     });
   });
 
+  it.each([
+    "authority_subject_not_found",
+    "authority_binding_mismatch",
+    "authority_scope_missing",
+  ] as const)("maps settled authority refusal %s to 403, not 503", async (rejected) => {
+    authMock.mockResolvedValue({
+      user: { id: "u1", platformRole: "ceo", isSuperuser: true },
+    });
+    govMock.mockResolvedValue({
+      success: false,
+      error: rejected,
+      message: "get_backlog_item rejected: The governed backlog item does not exist.",
+      disposition: "refused",
+      governance: { rejected },
+    });
+    const res = await POST(makeRequest({ name: "get_backlog_item", agentId: "AGT-100" }));
+    expect(res.status).toBe(403);
+  });
+
   it("returns 503 when required authority evidence cannot be recorded", async () => {
     authMock.mockResolvedValue({
       user: { id: "u1", platformRole: "ceo", isSuperuser: true },

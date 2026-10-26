@@ -19,6 +19,7 @@ import { lookupPinnedModelFamily } from "./routing/model-successor";
 import { DEFAULT_MINIMUM_CONTEXT_TOKENS, resolveTurnMinimumCapabilities, type AgentMinimumCapabilities } from "./routing/agent-capability-types";
 import { captureTaskExecutionFence } from "./shared/task-execution-fence";
 import { reassessmentToolSurfaceDigest } from "./routing/reassessment-execution-scope";
+import { engagementProviderIdentityRefs, narrowEngagementTools } from "./coworker-service-catalog/engagement-task-binding";
 
 type PreparationPorts = {
   resolveAgent(input: { agentId: string; routeContext: string; userContext: UserContext }): Promise<{
@@ -43,7 +44,10 @@ export async function prepareRemoteReviewAttempt(input: {
     userContext,
   });
   const modelRoutingAgentId = agent.agentId ?? parsed.agentId;
-  const resolvedAgentId = resolveCanonicalAgentId(modelRoutingAgentId);
+  const resolvedAgentId = parsed.engagementBinding ? modelRoutingAgentId : resolveCanonicalAgentId(modelRoutingAgentId);
+  if (parsed.engagementBinding && !engagementProviderIdentityRefs(parsed.engagementBinding.providerAgentId).includes(resolvedAgentId)) {
+    throw new Error("Engagement provider identity changed during runtime resolution.");
+  }
   input.validateResolvedAgent?.(resolvedAgentId);
   const requestedAgentId = parsed.agentId;
   const requestedCanonicalAgentId = resolveCanonicalAgentId(requestedAgentId);
@@ -104,13 +108,14 @@ export async function prepareRemoteReviewAttempt(input: {
   });
   const reviewProfile = parsed.initiativeReviewBinding?.gate === "spec-approval"
     ? await loadReviewerProfile(prisma, parsed.initiativeReviewBinding.itemId) : null;
-  const tools = narrowInitiativeReviewTools(
+  const reviewTools = narrowInitiativeReviewTools(
     resolvedTools,
     exactRequiredToolNames,
     parsed.initiativeReviewBinding,
     parsed.prompt,
     reviewProfile,
   );
+  const tools = parsed.engagementBinding ? narrowEngagementTools(reviewTools, exactRequiredToolNames) : reviewTools;
   const effortWarrant = requiresInitiativeReviewEffort(exactRequiredToolNames)
     ? deriveEffortWarrant({
       reasoningDepth: "high",

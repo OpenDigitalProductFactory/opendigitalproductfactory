@@ -186,3 +186,74 @@ describe("stageRunFromTask (BI-7C0B2BD6)", () => {
     expect(stageRunFromTask({ taskId: TASK("WC-TEST"), task, roomWorkspaceState: { workroomDispatchCheckpoint: checkpoint("other") } })?.dispatchedAt).toBeNull();
   });
 });
+
+describe("provider-held rooms preserve dispatch capacity (BI-9CD95438)", () => {
+  const hold = { since: "2026-08-31T00:00:00.000Z", kind: "rate-limit", taskId: "held-task", error: "provider unavailable" };
+  const freshRoom = (id: string, workspaceState: Record<string, unknown> = {}) =>
+    room({ id: `row-${id}`, capsuleId: `WC-${id}`, currentStageKey: null, workspaceState });
+  const snapshotFor = (fx: ReturnType<typeof effects>, id: string) =>
+    fx.persist.mock.calls.find((call) => call[0].roomId === `row-${id}`)?.[0]?.snapshot;
+
+  it("leaves four held rooms paused while eligible rooms use only the available slots", async () => {
+    const fx = effects();
+    const heldRooms = ["A1", "A2", "A3", "A4"].map((id) => freshRoom(id, { queueHold: { ...hold } }));
+    const before = structuredClone(heldRooms.map((held) => held.workspaceState));
+    const result = await runWorkroomDriveJob(NOW, {
+      listRooms: async () => [freshRoom("D"), ...heldRooms, freshRoom("C"), freshRoom("B")],
+      effects: fx,
+      dispatchCapacity: async () => ({ cap: 2, reason: "two available slots" }),
+    });
+
+    expect(result.dispatched).toBe(2);
+    expect(fx.upsertAgentTask.mock.calls.map(([task]) => task.taskId)).toEqual([TASK("WC-B"), TASK("WC-C")]);
+    expect(fx.acquireLease.mock.calls.map(([lease]) => lease.roomId)).toEqual(["row-B", "row-C"]);
+    for (const id of ["A1", "A2", "A3", "A4"]) {
+      expect(snapshotFor(fx, id)).toMatchObject({ reason: "provider_held" });
+    }
+    expect(snapshotFor(fx, "D")).toMatchObject({ action: "do_not_wake", reason: "awaiting_agent_capacity" });
+    expect(heldRooms.map((held) => held.workspaceState)).toEqual(before);
+  });
+
+  it("keeps the provider hold visible even when earlier eligible work used the cap", async () => {
+    const fx = effects();
+    await runWorkroomDriveJob(NOW, {
+      listRooms: async () => [freshRoom("Z-HELD", { queueHold: { ...hold } }), freshRoom("A-ELIGIBLE")],
+      effects: fx,
+      dispatchCapacity: async () => ({ cap: 1, reason: "one available slot" }),
+    });
+
+    expect(snapshotFor(fx, "Z-HELD")).toMatchObject({ reason: "provider_held" });
+    expect(fx.upsertAgentTask.mock.calls.map(([task]) => task.taskId)).toEqual([TASK("WC-A-ELIGIBLE")]);
+    expect(fx.acquireLease).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses the canonical hold reader so malformed data does not bypass the cap", async () => {
+    const fx = effects();
+    await runWorkroomDriveJob(NOW, {
+      listRooms: async () => [freshRoom("A", { queueHold: { since: hold.since } }), freshRoom("B")],
+      effects: fx,
+      dispatchCapacity: async () => ({ cap: 1, reason: "one available slot" }),
+    });
+
+    expect(fx.upsertAgentTask.mock.calls.map(([task]) => task.taskId)).toEqual([TASK("WC-A")]);
+    expect(snapshotFor(fx, "B")).toMatchObject({ action: "do_not_wake", reason: "awaiting_agent_capacity" });
+  });
+
+  it("counts a formerly held room normally on a later tick after its hold is removed", async () => {
+    const fx = effects();
+    const candidate = freshRoom("A", { queueHold: { ...hold } });
+    const listRooms = async () => [candidate, freshRoom("B")];
+    const dispatchCapacity = async () => ({ cap: 1, reason: "one available slot" });
+    await runWorkroomDriveJob(NOW, { listRooms, effects: fx, dispatchCapacity });
+    expect(fx.upsertAgentTask.mock.calls.map(([task]) => task.taskId)).toEqual([TASK("WC-B")]);
+
+    candidate.workspaceState = {};
+    fx.upsertAgentTask.mockClear();
+    fx.acquireLease.mockClear();
+    fx.persist.mockClear();
+    await runWorkroomDriveJob(new Date(NOW.getTime() + 60_000), { listRooms, effects: fx, dispatchCapacity });
+
+    expect(fx.upsertAgentTask.mock.calls.map(([task]) => task.taskId)).toEqual([TASK("WC-A")]);
+    expect(snapshotFor(fx, "B")).toMatchObject({ action: "do_not_wake", reason: "awaiting_agent_capacity" });
+  });
+});

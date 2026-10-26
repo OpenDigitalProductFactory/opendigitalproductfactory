@@ -27,6 +27,24 @@ function completion(unmet: InitiativeReadinessDecision["unmet"]): InitiativeRead
 }
 
 describe("designPhaseReviewDecision", () => {
+  it("keeps an observed planning prerequisite independent of allowed delivery completion", () => {
+    const missing = readinessRequirement({ code: "OBJECTIVE_BASELINE_REQUIRED", state: "missing", accountableRole: "design-checklist-reviewer" });
+    const implementation = { ...completion([readinessRequirement({ code: "PLAN_REQUIRED", state: "missing", accountableRole: "plan-author" })]), target: "implementation" as const };
+    const delivered = { ...completion([]), verdict: "allowed" as const };
+    const decisions = { implementation, completion: delivered };
+    expect(decisionForIndependentReview("record_initiative_design_review", decisions, missing))
+      .toMatchObject({ target: "implementation", unmet: [missing], blockers: [] });
+    expect(decisionForIndependentReview("record_initiative_architecture_review", decisions, missing)).toBeNull();
+    expect(decisionForIndependentReview("record_initiative_evidence", decisions, missing)).toBe(delivered);
+    expect(decisionForIndependentReview("record_initiative_design_review", { ...decisions,
+      implementation: { ...implementation, verdict: "allowed" } }, missing)).toBeNull();
+    const legacy = { ...decisions, completion: completion([missing]) };
+    expect(decisionForIndependentReview("record_initiative_design_review", legacy)?.unmet).toEqual([missing]);
+    expect(decisionForIndependentReview("record_initiative_design_review", legacy, null)).toBeNull();
+    expect(decisionForIndependentReview("record_initiative_design_review", decisions, { ...missing, accountableRole: "product-owner" })).toBeNull();
+    expect(decisions.completion).toBe(delivered);
+  });
+
   it("keeps a completion-owned plan review requestable for a decomposed xlarge parent", () => {
     const planReview = readinessRequirement({ code: "PLAN_REVIEW_REQUIRED", state: "missing", accountableRole: "plan-reviewer" });
     const terminal = completion([planReview,

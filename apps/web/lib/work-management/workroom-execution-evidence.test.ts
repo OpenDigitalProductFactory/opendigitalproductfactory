@@ -10,6 +10,16 @@ const rooms = [{ id: "room-row", capsuleId: "WC-ROOM" }];
 const event = (id: string) => ({ id, workCapsuleId: "room-row", kind: "verification",
   summary: "Recorded check", recordedAt: now });
 
+function evidenceQueries(requirementRows: Record<string, unknown>[] = []) {
+  return vi.fn().mockImplementation(async (query: TemplateStringsArray | { strings: readonly string[] }) => {
+    const parts = Array.isArray(query) ? query : (query as { strings: readonly string[] }).strings;
+    const sql = parts.join("");
+    if (sql.includes("WITH rooms AS")) return [];
+    if (sql.includes("SELECT receipt.* FROM (VALUES")) return requirementRows;
+    throw new Error("Unexpected SQL category in execution evidence fixture");
+  });
+}
+
 describe("loadWorkroomExecutionEvidence", () => {
   it("retains current-source requirement evidence beyond the recent activity window", async () => {
     const room = { ...rooms[0], repositoryFullName: "org/repo", headSha: "a".repeat(40),
@@ -21,7 +31,7 @@ describe("loadWorkroomExecutionEvidence", () => {
     } };
     const recent = Array.from({ length: 21 }, (_, i) => ({ ...event(`newer-${i}`), kind: "note" }));
     const db = { workroomActivity: { findMany: vi.fn().mockResolvedValue(recent) },
-      $queryRaw: vi.fn().mockResolvedValue([receipt]), taskRun: { findMany: vi.fn().mockResolvedValue([]) } };
+      $queryRaw: evidenceQueries([receipt]) };
     const result = await loadWorkroomExecutionEvidence(db, [room], now);
     expect(result.activities).toHaveLength(20);
     expect(result.partial).toBe(true);
@@ -29,7 +39,15 @@ describe("loadWorkroomExecutionEvidence", () => {
       table: "WorkroomActivity", id: receipt.id }, processEvidence: {
       definitionRef: "delivery-medium@1.0.0", stageKey: "implement", evidenceKind: "pr-gate", relationship: "required-evidence",
     } })]);
-    expect(db.$queryRaw).toHaveBeenCalledOnce();
+    expect(db.$queryRaw).toHaveBeenCalledTimes(2);
+    const candidateQuery = db.$queryRaw.mock.calls.find(([query]) => Array.isArray(query));
+    const requirementQuery = db.$queryRaw.mock.calls.find(([query]) => !Array.isArray(query));
+    expect(candidateQuery?.[0].join("")).toContain("WITH rooms AS");
+    expect(candidateQuery?.slice(1)).toEqual([["WC-ROOM"]]);
+    expect(requirementQuery?.[0].strings.join("")).toContain("SELECT receipt.* FROM (VALUES");
+    expect(requirementQuery?.[0].values[0]).toEqual(expect.arrayContaining([
+      expect.objectContaining({ values: ["room-row", expect.stringContaining('"capsuleId":"WC-ROOM"')] }),
+    ]));
     // The same immutable receipt in both lanes is shown once.
     db.workroomActivity.findMany.mockResolvedValue([receipt]);
     expect((await loadWorkroomExecutionEvidence(db, [room], now)).receipts).toHaveLength(1);
@@ -53,7 +71,7 @@ describe("loadWorkroomExecutionEvidence", () => {
         headSha: room.headSha, definitionRef: "delivery-medium@1.0.0", stageKey: "implement", evidenceKind: "pr-gate" },
     } };
     const db = { workroomActivity: { findMany: vi.fn().mockResolvedValue([row]) },
-      taskRun: { findMany: vi.fn().mockResolvedValue([]) } };
+      $queryRaw: evidenceQueries() };
     const result = await loadWorkroomExecutionEvidence(db, [room], now);
     expect(result.receipts[0]).toMatchObject({ status: "observed", processEvidence: {
       definitionRef: "delivery-medium@1.0.0", stageKey: "implement", evidenceKind: "pr-gate", relationship: "required-evidence",
@@ -64,15 +82,17 @@ describe("loadWorkroomExecutionEvidence", () => {
   });
   it("does not read unrelated execution when there are no rooms", async () => {
     const findMany = vi.fn();
-    const result = await loadWorkroomExecutionEvidence({ workroomActivity: { findMany }, taskRun: { findMany } }, [], now);
+    const queryRaw = evidenceQueries();
+    const result = await loadWorkroomExecutionEvidence({ workroomActivity: { findMany }, $queryRaw: queryRaw }, [], now);
     expect(findMany).not.toHaveBeenCalled();
+    expect(queryRaw).not.toHaveBeenCalled();
     expect(result).toMatchObject({ activities: [], receipts: [], partial: false });
   });
 
   it("marks truncated history partial and keeps a bounded observed evidence window", async () => {
     const findMany = vi.fn().mockResolvedValue(Array.from({ length: 21 }, (_, i) => event(`event-${i}`)));
     const result = await loadWorkroomExecutionEvidence({ workroomActivity: { findMany },
-      taskRun: { findMany: vi.fn().mockResolvedValue([]) } }, rooms, now);
+      $queryRaw: evidenceQueries() }, rooms, now);
     expect(findMany).toHaveBeenCalledWith({ where: { workCapsuleId: { in: ["room-row"] } },
       orderBy: [{ recordedAt: "desc" }, { id: "desc" }], take: 21 });
     expect(result.partial).toBe(true);
@@ -83,19 +103,32 @@ describe("loadWorkroomExecutionEvidence", () => {
   });
 
   it("preserves journal evidence when the reviewer source fails", async () => {
+    const queryRaw = evidenceQueries().mockRejectedValue(new Error("unavailable"));
     const result = await loadWorkroomExecutionEvidence({
       workroomActivity: { findMany: vi.fn().mockResolvedValue([event("event-1")]) },
-      taskRun: { findMany: vi.fn().mockRejectedValue(new Error("unavailable")) },
+      $queryRaw: queryRaw,
     }, rooms, now);
+    expect(queryRaw).toHaveBeenCalledOnce();
+    expect(queryRaw.mock.calls[0]?.[0].join("")).toContain("WITH rooms AS");
+    expect(queryRaw.mock.calls[0]?.slice(1)).toEqual([["WC-ROOM"]]);
     expect(result.partial).toBe(true);
     expect(result.receipts).toHaveLength(1);
     expect(result.attentionReason).toContain("could not be read");
   });
 
   it("distinguishes an unavailable journal from a successfully read empty history", async () => {
-    const taskRun = { findMany: vi.fn().mockResolvedValue([]) };
-    expect((await loadWorkroomExecutionEvidence({ taskRun }, rooms, now)).partial).toBe(true);
-    expect((await loadWorkroomExecutionEvidence({ taskRun,
+    const queryRaw = evidenceQueries();
+    expect((await loadWorkroomExecutionEvidence({ $queryRaw: queryRaw }, rooms, now)).partial).toBe(true);
+    expect((await loadWorkroomExecutionEvidence({ $queryRaw: queryRaw,
       workroomActivity: { findMany: vi.fn().mockResolvedValue([]) } }, rooms, now)).partial).toBe(false);
+    expect(queryRaw).toHaveBeenCalledTimes(2);
+    for (const call of queryRaw.mock.calls) {
+      expect(call[0].join("")).toContain("WITH rooms AS");
+      expect(call.slice(1)).toEqual([["WC-ROOM"]]);
+    }
+    // Missing the new query port must still fail closed, independently of an empty journal.
+    expect((await loadWorkroomExecutionEvidence({
+      workroomActivity: { findMany: vi.fn().mockResolvedValue([]) },
+    }, rooms, now)).partial).toBe(true);
   });
 });

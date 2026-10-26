@@ -1,3 +1,4 @@
+import { withInferenceAuthorityCheck } from "./routing/governed-inference-deadline";
 import { EXECUTION_UNCERTAIN_MESSAGE, executionUncertaintyFromError, hasExecutionUncertainty } from "./shared/execution-uncertainty";
 import { reservationIdentity, dispatchIdentity, settleRemoteTask } from "./mcp-task-attempt-state";
 import { captureTaskExecutionFence, sameTaskExecutionFence } from "./shared/task-execution-fence";
@@ -116,7 +117,7 @@ export async function executeRemoteTaskAttempt(input: {
     return projectRemoteTaskReplay({ existing: { ...admittedRun, taskRunId: run.taskRunId }, requestMatches: true });
   }
   const reassessmentExecution = hasPersistedReassessmentExecution(admittedRun.a2aMetadata);
-  const taskExecutionFence = parsed.initiativeReviewBinding || reassessmentExecution ? captureTaskExecutionFence(admittedRun.progressPayload,
+  const taskExecutionFence = parsed.initiativeReviewBinding || parsed.engagementBinding || reassessmentExecution ? captureTaskExecutionFence(admittedRun.progressPayload,
     (admittedRun.a2aMetadata as Record<string, unknown> | null)?.requestDigest) : undefined;
   const settle = (args: Prisma.TaskRunUpdateManyArgs & { where: { taskRunId: string } }) =>
     settleRemoteTask(args, reservation, dispatchClaim, parsed.initiativeReviewBinding || reassessmentExecution ? {
@@ -165,6 +166,17 @@ export async function executeRemoteTaskAttempt(input: {
     } });
     return displaced ?? projectRemoteTaskReplay({ existing: { ...admittedRun,
       status: "input-required", taskRunId: run.taskRunId }, requestMatches: true });
+  }
+  if (parsed.engagementBinding) {
+    const { validateEngagementTask, reconcileEngagementTaskResult } = await import("./coworker-service-catalog/engagement-fulfillment");
+    try {
+      await reconcileEngagementTaskResult(run.taskRunId);
+      await validateEngagementTask({ binding: parsed.engagementBinding, token, taskRunId: run.taskRunId, authorityScope: parsed.authorityScope ?? [], requireAssociation: true, request: parsed });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Engagement authority unavailable";
+      const displaced = await settle({ where: { taskRunId: run.taskRunId }, data: { status: "failed", completedAt: new Date(), progressPayload: { summary: message, error: "engagement_execution_refused" } } });
+      return displaced ?? { kind: "result", result: { taskRunId: run.taskRunId, status: "failed", isError: true, content: remoteTaskContent(message) } };
+    }
   }
   // Retain stable authority/windows; each branch rebuilds transient waits.
   const recoveryCheckpoint = Object.fromEntries(["reviewExecutionAuthority", "deadlineAt", "expiresAt"]
@@ -219,7 +231,7 @@ export async function executeRemoteTaskAttempt(input: {
     // BI-2E479619: rows a CLI wrote natively during THIS attempt start here.
     const attemptStartedMs = Date.now();
     loopEntered = true;
-    const result = await executeAutonomousAgenticLoop({
+    const runLoop = async () => executeAutonomousAgenticLoop({
       ...(reassessmentExecution ? { canonicalReviewReceipt: createReassessmentReceiptCheck(run.taskRunId, parsed.initiativeReviewBinding) } : {}),
       systemPrompt: conversation.systemPrompt,
       systemPromptInstructionSpans: coworkerBriefSpans(agent.systemPrompt),
@@ -245,7 +257,18 @@ export async function executeRemoteTaskAttempt(input: {
       ...(modelRequirements ? { modelRequirements } : {}),
     });
 
-    // BI-2E479619: fold deduped native CLI calls into the writer/count evidence.
+    const result = await (parsed.engagementBinding ? withInferenceAuthorityCheck(async () => {
+      const { validateEngagementTask } = await import("./coworker-service-catalog/engagement-fulfillment");
+      await validateEngagementTask({ binding: parsed.engagementBinding!, token, taskRunId: run.taskRunId, authorityScope: parsed.authorityScope ?? [], requireAssociation: true, request: parsed });
+      const current = await prisma.taskRun.findUnique({ where: { taskRunId: run.taskRunId }, select: { status: true, progressPayload: true, a2aMetadata: true } });
+      return current?.status === "working" && !hasExecutionUncertainty(current.progressPayload) && sameTaskExecutionFence(taskExecutionFence,
+        captureTaskExecutionFence(current.progressPayload, (current.a2aMetadata as Record<string, unknown> | null)?.requestDigest));
+    }, runLoop) : runLoop());
+
+    // BI-2E479619: a CLI adapter runs the governed tools natively, so the
+    // loop's records can miss them. Fold this attempt's native rows (deduped
+    // against any the loop already folded) so the writer check, a writer
+    // refusal and executedToolCount all read the same calls.
     if (terminalToolPolicy) {
       await foldNativeMcpExecutions({
         taskRunId: run.taskRunId,

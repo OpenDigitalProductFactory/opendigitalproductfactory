@@ -1,5 +1,6 @@
 import { parseInitiativeReviewBinding, validateInitiativeReviewAuthorityScope, type InitiativeReviewBinding } from "./mcp-task-review-contract";
 import { parseDurableInferenceTaskRecipeId, type DurableInferenceTaskRecipeId } from "./mcp-task-durable-inference-contract";
+import { parseEngagementTaskBinding, type EngagementTaskBinding, ENGAGEMENT_READ_TOOLS } from "./coworker-service-catalog/engagement-task-binding";
 
 function optionalString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
@@ -39,6 +40,7 @@ export type RemoteTaskSubmitParams = {
   authorityScope?: string[];
   collaborationKind?: "handoff" | "summon";
   initiativeReviewBinding?: InitiativeReviewBinding;
+  engagementBinding?: EngagementTaskBinding;
   recipeId?: DurableInferenceTaskRecipeId;
   reviewRecovery?: ReviewTaskRecoveryTarget;
 };
@@ -92,6 +94,16 @@ export function parseRemoteTaskSubmitParams(params: Record<string, unknown> | un
     const scopeError = validateInitiativeReviewAuthorityScope(initiativeReviewBinding, authorityScope);
     if (scopeError) return `tasks/submit ${scopeError}`;
   }
+  const engagementBinding = params["engagementBinding"] === undefined ? undefined : parseEngagementTaskBinding(params["engagementBinding"]);
+  if (params["engagementBinding"] !== undefined && !engagementBinding) return "tasks/submit requires a valid immutable engagementBinding";
+  if (engagementBinding && (initiativeReviewBinding || durableRecipeId || riskClass !== "read"
+    || agentId !== engagementBinding.providerAgentId
+    || optionalString(params["threadId"]) !== null
+    || idempotencyKey !== `coworker-engagement:${engagementBinding.engagementId}`
+    || !authorityScope || ENGAGEMENT_READ_TOOLS.some(name => !authorityScope.includes(`tool:${name}`))
+    || authorityScope.some(scope => scope.startsWith("tool:") && !(ENGAGEMENT_READ_TOOLS as readonly string[]).includes(scope.slice(5))))) {
+    return "tasks/submit engagement requires its original provider/key, read-only tool scope and no other task binding";
+  }
   const reviewRecovery = params["reviewRecovery"] === undefined
     ? undefined : parseReviewTaskRecoveryTarget(params["reviewRecovery"]);
   if (params["reviewRecovery"] !== undefined && (!reviewRecovery
@@ -114,6 +126,7 @@ export function parseRemoteTaskSubmitParams(params: Record<string, unknown> | un
     threadId: optionalString(params["threadId"]),
     authorityScope,
     initiativeReviewBinding: initiativeReviewBinding ?? undefined,
+    ...(engagementBinding ? { engagementBinding } : {}),
     collaborationKind: params["collaborationKind"] === "handoff" || params["collaborationKind"] === "summon"
       ? params["collaborationKind"]
       : undefined,

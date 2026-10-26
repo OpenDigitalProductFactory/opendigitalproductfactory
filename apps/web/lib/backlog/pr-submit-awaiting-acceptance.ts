@@ -19,6 +19,7 @@ export type GitHubPullRequestEvent = {
   pullRequestUrl: string;
   draft: boolean;
   merged: boolean;
+  mergedAt?: string | null;
   state: string;
   title: string;
   body: string;
@@ -104,6 +105,7 @@ export function parseGitHubPullRequestEvent(payload: unknown): GitHubPullRequest
     pullRequestUrl: url,
     draft: pullRequest.draft === true,
     merged: pullRequest.merged === true,
+    mergedAt: typeof pullRequest.merged_at === "string" ? pullRequest.merged_at : null,
     state: typeof pullRequest.state === "string" ? pullRequest.state : "",
     title: typeof pullRequest.title === "string" ? pullRequest.title : "",
     body: typeof pullRequest.body === "string" ? pullRequest.body : "",
@@ -170,13 +172,56 @@ async function transitionItem(args: {
   reason: string;
   pullRequestNumber: number;
   pullRequestUrl: string;
+  delivery?: { kind: "merged"; mergedAt: string | null } | { kind: "workroom" };
 }): Promise<boolean> {
   if (args.from === args.to) return false;
   if (!isBacklogStatus(args.from) || !isLegalTransition(args.from, args.to)) return false;
 
-  await prisma.$transaction(async (tx) => {
+  return prisma.$transaction(async (tx) => {
+    // Serialize with explicit lifecycle changes before judging their history.
+    await tx.$queryRaw`SELECT "id" FROM "BacklogItem" WHERE "id" = ${args.id} FOR UPDATE`;
+    const current = await tx.backlogItem.findUnique({ where: { id: args.id }, select: { status: true } });
+    if (!current || current.status !== args.from) return false;
+    if (args.to === AWAITING_ACCEPTANCE_STATUS) {
+      const history = await tx.backlogItemActivity.findMany({
+        where: { backlogItemId: args.id, kind: "status_change" },
+        select: { id: true, recordedAt: true, payload: true },
+        orderBy: [{ recordedAt: "asc" }, { id: "asc" }],
+      });
+      let priorAdvanceAt: number | null = null;
+      let explicitResumeAt: number | null = null;
+      let explicitReopenAt: number | null = null;
+      for (const row of history) {
+        const payload = row.payload;
+        if (!payload || typeof payload !== "object" || Array.isArray(payload)) continue;
+        const at = row.recordedAt.getTime();
+        if (payload.actuator === PR_SUBMIT_ACTUATOR) {
+          if (payload.to === AWAITING_ACCEPTANCE_STATUS
+            && payload.pullRequestNumber === args.pullRequestNumber
+            && (payload.pullRequestUrl == null || payload.pullRequestUrl === args.pullRequestUrl)) {
+            priorAdvanceAt = Math.min(priorAdvanceAt ?? at, at);
+          }
+        } else if (typeof payload.to === "string" && isCodingPoolStatus(payload.to)) {
+          explicitResumeAt = Math.max(explicitResumeAt ?? at, at);
+          if (payload.from === "awaiting-acceptance" || payload.from === "done") {
+            explicitReopenAt = Math.max(explicitReopenAt ?? at, at);
+          }
+        }
+      }
+      // Equal timestamps cannot establish that the PR superseded the reopen.
+      // Preserve the explicit decision, including when old events were replayed.
+      if (priorAdvanceAt !== null && explicitResumeAt !== null && explicitResumeAt >= priorAdvanceAt) return false;
+      // A merged PR can predate a reopen without ever having advanced this
+      // item locally. Use the provider's merge time, not observation time.
+      // A sparse Workroom association supplies no newer delivery evidence.
+      if (explicitReopenAt !== null && args.delivery) {
+        if (args.delivery.kind === "workroom") return false;
+        const mergedAt = args.delivery.mergedAt === null ? NaN : Date.parse(args.delivery.mergedAt);
+        if (!Number.isFinite(mergedAt) || mergedAt <= explicitReopenAt) return false;
+      }
+    }
     await tx.backlogItem.update({
-      where: { id: args.id },
+      where: { id: args.id, status: args.from },
       data: {
         status: args.to,
         ...(args.to === AWAITING_ACCEPTANCE_STATUS
@@ -200,8 +245,8 @@ async function transitionItem(args: {
         },
       },
     });
+    return true;
   });
-  return true;
 }
 
 export async function applyGitHubPullRequestToBacklog(payload: unknown): Promise<PrSubmitActuatorResult> {
@@ -239,6 +284,7 @@ export async function applyGitHubPullRequestToBacklog(payload: unknown): Promise
         : `PR #${event.pullRequestNumber} withdrawn without merge`,
       pullRequestNumber: event.pullRequestNumber,
       pullRequestUrl: event.pullRequestUrl,
+      ...(event.merged ? { delivery: { kind: "merged" as const, mergedAt: event.mergedAt ?? null } } : {}),
     });
     if (did) moved.push(item.itemId);
     else skipped += 1;
@@ -253,7 +299,7 @@ export async function sweepPrSubmittedBacklogItems(args?: { limit?: number }): P
       pullRequestNumber: { not: null },
       backlogItemId: { not: null },
     },
-    select: { backlogItemId: true, pullRequestNumber: true, pullRequestUrl: true },
+    select: { backlogItemId: true, pullRequestNumber: true, pullRequestUrl: true, repositoryFullName: true },
     take,
     orderBy: { updatedAt: "desc" },
   });
@@ -273,7 +319,10 @@ export async function sweepPrSubmittedBacklogItems(args?: { limit?: number }): P
   for (const item of items) {
     const room = byItem.get(item.itemId);
     const prNumber = room?.pullRequestNumber;
-    if (typeof prNumber !== "number") {
+    const repository = room?.repositoryFullName;
+    const prUrl = room?.pullRequestUrl ?? (repository && /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)
+      ? `https://github.com/${repository}/pull/${prNumber}` : null);
+    if (typeof prNumber !== "number" || !prUrl) {
       skipped += 1;
       continue;
     }
@@ -284,7 +333,8 @@ export async function sweepPrSubmittedBacklogItems(args?: { limit?: number }): P
       to: AWAITING_ACCEPTANCE_STATUS,
       reason: `Reconcile existing PR #${prNumber}`,
       pullRequestNumber: prNumber,
-      pullRequestUrl: room?.pullRequestUrl ?? `https://github.com/pull/${prNumber}`,
+      pullRequestUrl: prUrl,
+      delivery: { kind: "workroom" },
     });
     if (did) moved.push(item.itemId);
     else skipped += 1;
@@ -301,6 +351,7 @@ export async function applyObservedPullRequestsToBacklog(
     headBranch: string;
     state: "open" | "merged" | "closed";
     isDraft: boolean;
+    mergedAt?: string | null;
   }[],
 ): Promise<PrSubmitActuatorResult> {
   const moved: string[] = [];
@@ -314,6 +365,7 @@ export async function applyObservedPullRequestsToBacklog(
         html_url: observation.url,
         draft: observation.isDraft,
         merged: observation.state === "merged",
+        merged_at: observation.mergedAt ?? null,
         state: observation.state === "open" ? "open" : "closed",
         title: observation.title ?? "",
         body: "",

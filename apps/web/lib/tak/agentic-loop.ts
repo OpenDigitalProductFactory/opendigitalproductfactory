@@ -74,6 +74,7 @@ import {
   resolveTerminalTextExit,
   resolveTerminalToolCall,
   selectTerminalToolSurface,
+  canonicalDesignRefusalMessage,
   type TerminalToolPolicy,
 } from "./terminal-tool-policy";
 import { rotateTerminalWriterRoute } from "./terminal-writer-route";
@@ -1542,7 +1543,11 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     }
     totalInputTokens += result.inputTokens;
     totalOutputTokens += result.outputTokens;
-    if (!restricted && params.terminalToolPolicy) await (await import("./native-mcp-executions")).foldNativeMcpExecutions({ taskRunId, providerId: result.providerId, sinceMs: startTime, records: executedTools }); // BI-2E479619
+    if (params.terminalToolPolicy) {
+      if (!restricted) await (await import("./native-mcp-executions")).foldNativeMcpExecutions({ taskRunId, providerId: result.providerId, sinceMs: startTime, records: executedTools });
+      const refused = canonicalDesignRefusalMessage(params.terminalToolPolicy, executedTools);
+      if (refused) { logTurnSummary(result.providerId, result.modelId); return terminalFailure(refused, result); }
+    }
     // No tool calls — check if agent stalled with intent to continue
     if (!result.toolCalls || result.toolCalls.length === 0) {
       const trimmed = result.content.trim();
@@ -2372,7 +2377,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       if (raisedId) { chatApprovalIds.push(raisedId); break; }
       // Also bound a batch from one inference; varying arguments evade the
       // exact-call repetition detector. Keep all completed calls in the result.
-      if (refusalStreak >= 3) return stopRefusedTurn();
+      { const refused = canonicalDesignRefusalMessage(params.terminalToolPolicy, executedTools); if (refused) { logTurnSummary(result.providerId, result.modelId); return terminalFailure(refused, result); } if (refusalStreak >= 3) return stopRefusedTurn(); }
     }
 
     // BI-7BCC87BB (spec D2 S1): a declared proposal in chat ends the turn on the request(s) it raised.

@@ -8,8 +8,8 @@ vi.mock("@/lib/self-upgrade/preflight", () => ({
   runReassessmentCandidatePreflight: mocks.compatibility,
 }));
 vi.mock("@/lib/self-upgrade/promoter", () => ({ runPromoter: mocks.runPromoter }));
-vi.mock("@/lib/self-upgrade/run-store", () => ({ completeRun: vi.fn(), failRun: mocks.failRun, recordPromoterReadiness: vi.fn(), recordRunRecoveryPoint: vi.fn(), recordReassessmentCompatibility: mocks.record }));
-vi.mock("@/lib/self-upgrade/completion", () => ({ isFeatureBuildDeployed: vi.fn() }));
+vi.mock("@/lib/self-upgrade/run-store", () => ({ getRun: vi.fn(async () => ({ runId: "SUR-COMPAT", status: "running", currentSha: "b".repeat(40) })), completeRun: vi.fn(), failRun: mocks.failRun, recordPromoterReadiness: vi.fn(), recordRunRecoveryPoint: vi.fn(), recordReassessmentCompatibility: mocks.record }));
+vi.mock("@/lib/self-upgrade/completion", () => ({ getDeployedSha: vi.fn(async () => null), isFeatureBuildDeployed: vi.fn() }));
 vi.mock("@/lib/self-upgrade/cooldown", () => ({ clearCooldown: vi.fn(), recordCooldown: vi.fn() }));
 vi.mock("@/lib/self-upgrade/notifications", () => ({ emitUpgradeEvent: vi.fn() }));
 vi.mock("@/lib/self-upgrade/recovery-point", () => ({ createSelfUpgradeRecoveryPoint: vi.fn(async () => ({ status: "ok" })), summarizeRecoveryPointDegradation: vi.fn(), summarizeRecoveryPointFailure: vi.fn() }));

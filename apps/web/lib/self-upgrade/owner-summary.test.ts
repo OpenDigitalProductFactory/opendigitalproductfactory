@@ -509,3 +509,112 @@ describe("buildOwnerReleaseSummary — a failure explains itself", () => {
     for (const term of JARGON) expect(copy).not.toContain(term);
   });
 });
+
+// SUR-90C34FAC: a swap retry reported a completed drain as failure after the
+// target was already running. Freshness alone must never hide real failures.
+describe("buildOwnerReleaseSummary - landed swap reporting", () => {
+  const target = "a".repeat(40);
+  const replayReason = "admission-reopened-before-swap: the drain already ended (completed)";
+
+  it("reports current only for the known replay failure whose target is actually running", () => {
+    const summary = buildOwnerReleaseSummary(baseInput({
+      targetSha: target,
+      deployedSha: target.toUpperCase(),
+      latestRun: { status: "failed", reason: replayReason, targetSha: target },
+    }), NO_LOCAL_CHANGES);
+    expect(summary.state).toBe("up-to-date");
+    expect(summary.tone).toBe("success");
+    expect(summary.recommendedAction.label).toBe("No action needed");
+    expect(summary.whatCouldGoWrong.join(" ")).not.toContain("didn't finish");
+    expect(summary.ifYouDoNothing).not.toContain("previous version");
+  });
+
+  it.each([null, "b".repeat(40)])("keeps the replay failure visible without matching runtime identity: %s", (deployedSha) => {
+    const summary = buildOwnerReleaseSummary(baseInput({
+      targetSha: target,
+      deployedSha,
+      latestRun: { status: "failed", reason: replayReason, targetSha: target },
+    }), NO_LOCAL_CHANGES);
+    expect(summary.state).toBe("failed");
+    expect(summary.tone).toBe("danger");
+  });
+
+  it("recognizes the deployed merge identity when upstream lineage differs", () => {
+    const summary = buildOwnerReleaseSummary(baseInput({
+      targetSha: "b".repeat(40),
+      deployedSha: target,
+      latestRun: { status: "failed", reason: replayReason, targetSha: "b".repeat(40), deployedSha: target },
+    }), NO_LOCAL_CHANGES);
+    expect(summary.state).toBe("up-to-date");
+    expect(summary.recommendedAction.label).toBe("No action needed");
+  });
+
+  it("does not substitute matching lineage for a different expected deployed identity", () => {
+    const summary = buildOwnerReleaseSummary(baseInput({
+      targetSha: target,
+      deployedSha: target,
+      latestRun: { status: "failed", reason: replayReason, targetSha: target, deployedSha: "b".repeat(40) },
+    }), NO_LOCAL_CHANGES);
+    expect(summary.state).toBe("failed");
+    expect(summary.tone).toBe("danger");
+  });
+
+  it("preserves a genuine failure when the deployed merge identity is running", () => {
+    const summary = buildOwnerReleaseSummary(baseInput({
+      targetSha: "b".repeat(40),
+      deployedSha: target,
+      latestRun: { status: "failed", reason: "host-out-of-memory", targetSha: "b".repeat(40), deployedSha: target },
+    }), NO_LOCAL_CHANGES);
+    expect(summary.state).toBe("failed");
+    expect(summary.headline).toContain("ran out of memory");
+    expect(summary.recommendedAction.detail).toContain("version is running");
+    expect(allCopy(summary)).not.toContain("Nothing was installed");
+  });
+  it("requires the failed run's target, not the current update target, to match", () => {
+    const summary = buildOwnerReleaseSummary(baseInput({
+      targetSha: target,
+      deployedSha: target,
+      latestRun: { status: "failed", reason: replayReason, targetSha: null },
+    }), NO_LOCAL_CHANGES);
+    expect(summary.state).toBe("failed");
+  });
+
+  it.each([null, "unclassified-failure", "host-out-of-memory"])("preserves a genuine or unknown failure on the running target: %s", (reason) => {
+    const summary = buildOwnerReleaseSummary(baseInput({
+      targetSha: target,
+      deployedSha: target,
+      latestRun: { status: "failed", reason, targetSha: target },
+    }), NO_LOCAL_CHANGES);
+    expect(summary.state).toBe("failed");
+    expect(summary.tone).toBe("danger");
+    expect(summary.recommendedAction.detail).toContain("version is running");
+    expect(summary.ifYouDoNothing).not.toContain("previous version");
+    expect(allCopy(summary)).not.toContain("Nothing was installed");
+    expect(allCopy(summary)).not.toContain("kept running the version you already had");
+    if (reason === "host-out-of-memory") expect(summary.headline).toContain("ran out of memory");
+  });
+
+  it("keeps a newer update visible after the earlier target landed", () => {
+    const summary = buildOwnerReleaseSummary(baseInput({
+      isFresh: false,
+      targetSha: "c".repeat(40),
+      deployedSha: target,
+      latestRun: { status: "failed", reason: replayReason, targetSha: target },
+    }), NO_LOCAL_CHANGES);
+    expect(summary.state).toBe("update-available");
+    expect(summary.updatePending).toBe(true);
+    expect(summary.availableVersion).toContain("ccccccc");
+    expect(summary.availableVersionLabel).toBe("Update ready");
+  });
+
+  it("does not imply current status when update discovery is unavailable", () => {
+    const summary = buildOwnerReleaseSummary(baseInput({
+      targetAvailability: "unavailable",
+      targetSha: null,
+      deployedSha: target,
+      latestRun: { status: "failed", reason: replayReason, targetSha: target },
+    }), NO_LOCAL_CHANGES);
+    expect(summary.state).toBe("unavailable");
+    expect(summary.recommendedAction.label).toBe("No update action available");
+  });
+});

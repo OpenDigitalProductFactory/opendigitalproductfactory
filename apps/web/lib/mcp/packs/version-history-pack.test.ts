@@ -398,14 +398,58 @@ describe("version-history pack — handler behavior (delegation preserved)", () 
     expect(res.error).toBe("no such path");
   });
 
-  it("all git tools short-circuit when git history is unavailable", async () => {
+  it("git-only tools short-circuit when git history is unavailable", async () => {
     gitUtils.isGitAvailable.mockResolvedValue(false);
-    for (const t of ["read_source_at_version", "search_source_at_version", "list_source_directory", "compare_versions"]) {
+    for (const t of ["read_source_at_version", "list_source_directory", "compare_versions"]) {
       const res = await versionHistoryPack.handlers[t]({ path: "x", query: "x", from: "a" }, "u1");
       expect(res.success, t).toBe(false);
       if (t === "read_source_at_version") expect(res.message, t).toContain("repositoryFullName");
       else expect(res.message, t).toBe("Git not available.");
     }
+  });
+
+  it("searches one immutable provider file when the live git volume is unavailable", async () => {
+    gitUtils.isGitAvailable.mockResolvedValue(false);
+    repositoryArtifact.readRepositoryProviderBlob.mockResolvedValue({
+      ok: true,
+      data: Buffer.from("no match\nterminalWriterDispatchContract here\nsecond terminalWriterDispatchContract\n", "utf8"),
+      blobId: "b".repeat(40),
+    });
+    const res = await versionHistoryPack.handlers.search_source_at_version({
+      repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+      query: "terminalWriterDispatchContract",
+      glob: "apps/web/lib/routing/execution-adapter-types.ts",
+      version: "a".repeat(40),
+      expectedBlobId: "b".repeat(40),
+      offset: 1,
+      maxResults: 1,
+    }, "u1");
+
+    expect(res).toMatchObject({
+      success: true,
+      data: {
+        results: [{ path: "apps/web/lib/routing/execution-adapter-types.ts", line: 3, text: "second terminalWriterDispatchContract" }],
+        repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+        blobId: "b".repeat(40),
+        offset: 1,
+        hasMore: false,
+      },
+    });
+    expect(repositoryArtifact.readRepositoryProviderBlob).toHaveBeenCalledWith({
+      repositoryFullName: "OpenDigitalProductFactory/opendigitalproductfactory",
+      commitSha: "a".repeat(40),
+      path: "apps/web/lib/routing/execution-adapter-types.ts",
+      expectedBlobId: "b".repeat(40),
+    });
+  });
+
+  it("names the immutable locator needed for provider-backed search", async () => {
+    gitUtils.isGitAvailable.mockResolvedValue(false);
+    const res = await versionHistoryPack.handlers.search_source_at_version({ query: "needle", glob: "*.ts", version: "main" }, "u1");
+    expect(res).toMatchObject({ success: false, error: "immutable_search_locator_required" });
+    expect(res.message).toContain("repositoryFullName");
+    expect(res.message).toContain("40-character commit");
+    expect(res.message).toContain("one exact source path");
   });
 
   it("search_source_at_version returns a deterministic page and continuation offset", async () => {
@@ -446,6 +490,7 @@ describe("version-history pack — handler behavior (delegation preserved)", () 
     }));
     const search = versionHistoryPack.definitions.find((tool) => tool.name === "search_source_at_version")!;
     expect(search.inputSchema.properties).toEqual(expect.objectContaining({
+      repositoryFullName: expect.objectContaining({ type: "string" }),
       offset: expect.objectContaining({ type: "number" }),
       expectedBlobId: expect.objectContaining({ type: "string" }),
     }));

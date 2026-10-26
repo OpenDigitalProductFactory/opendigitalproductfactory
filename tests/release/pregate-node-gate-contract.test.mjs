@@ -245,7 +245,7 @@ test("gate-worktree.mjs refuses to run when neither an explicit command, the stu
   mkdirSync(join(temp, "scripts", "lib"), { recursive: true });
   mkdirSync(join(temp, "apps", "web", "lib", "nonprod"), { recursive: true });
   cpSync(gateScript, join(temp, "scripts", "gate-worktree.mjs"));
-  for (const name of ["mcp-host-trust.mjs", "resolve-compose-install-context.mjs"]) {
+  for (const name of ["mcp-host-trust.mjs", "foreground-gate-process.mjs", "resolve-compose-install-context.mjs"]) {
     cpSync(join(repoRoot, "scripts", "lib", name), join(temp, "scripts", "lib", name));
   }
   // BI-A254A94C: sandbox admission is a static import. The temp tree has to
@@ -266,6 +266,8 @@ test("gate-worktree.mjs refuses to run when neither an explicit command, the stu
   cpSync(join(repoRoot, "scripts", "lib", "documentation-evidence-lane.mjs"), join(temp, "scripts", "lib", "documentation-evidence-lane.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "semantic-review-gate.mjs"), join(temp, "scripts", "lib", "semantic-review-gate.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "local-integration-ci.mjs"), join(temp, "scripts", "lib", "local-integration-ci.mjs"));
+  cpSync(join(repoRoot, "scripts", "lib", "local-ci-vitest-selection.mjs"), join(temp, "scripts", "lib", "local-ci-vitest-selection.mjs"));
+  cpSync(join(repoRoot, "scripts", "lib", "local-ci-stage-receipt.mjs"), join(temp, "scripts", "lib", "local-ci-stage-receipt.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "host-command-invocation.mjs"), join(temp, "scripts", "lib", "host-command-invocation.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "local-ci-failure-summary.mjs"), join(temp, "scripts", "lib", "local-ci-failure-summary.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "sandbox-freshness.mjs"), join(temp, "scripts", "lib", "sandbox-freshness.mjs"));

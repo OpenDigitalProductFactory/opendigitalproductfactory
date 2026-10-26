@@ -120,6 +120,9 @@ export type CoworkerToolAuthorityGateResult =
         | "authority_denied"
         | "approval_required"
         | "authority_evidence_unavailable"
+        | "authority_subject_not_found"
+        | "authority_binding_mismatch"
+        | "authority_scope_missing"
       >;
       message: string;
       authorityReason?: CoworkerAuthorityDecision["reasonCode"];
@@ -132,6 +135,53 @@ export type CoworkerToolAuthorityGateResult =
         expiresAt: string | null;
       };
     };
+
+export type DeterministicAuthorityRefusal = Extract<
+  GovernedExecuteRejection,
+  | "authority_subject_not_found"
+  | "authority_binding_mismatch"
+  | "authority_scope_missing"
+>;
+
+/**
+ * Resolution errors that are an answer, not a missed check (BI-5FDE148A).
+ * Anything else, including database, timeout, and connection failures, stays
+ * inconclusive. Match the stable sentences the resolver throws; a generic
+ * "does not exist" (a missing relation) is infrastructure and must not match.
+ */
+export function classifyDeterministicAuthorityRefusal(
+  error: unknown,
+): DeterministicAuthorityRefusal | null {
+  const message = error instanceof Error
+    ? error.message
+    : typeof error === "string"
+      ? error
+      : "";
+  if (message.includes("The governed backlog item does not exist.")) {
+    return "authority_subject_not_found";
+  }
+  if (
+    message.includes("writer tool does not match")
+    || message.includes("invalid immutable initiative review binding")
+    || message.includes("requires an external MCP TaskRun")
+    || message.includes("does not match the authenticated organization")
+  ) {
+    return "authority_binding_mismatch";
+  }
+  if (
+    message.includes("missing exact authority scope")
+    || message.includes("requires an authenticated organization context")
+  ) {
+    return "authority_scope_missing";
+  }
+  return null;
+}
+
+function resolutionErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) return error.message.trim();
+  if (typeof error === "string" && error.trim()) return error.trim();
+  return "verified authority context is unavailable";
+}
 
 let overrides: AuthorityGateOverrides = {};
 
@@ -402,18 +452,22 @@ export async function enforceCoworkerToolAuthority(
   try {
     input = await resolveAuthorityInput(execution, tool, agentGrantAllowed);
   } catch (error) {
+    const message = resolutionErrorMessage(error);
+    const refusal = classifyDeterministicAuthorityRefusal(error);
     console.error(
-      "[governed-execute] authority context unavailable tool=%s source=%s: %s",
+      "[governed-execute] authority context %s tool=%s source=%s: %s",
+      refusal ? "refused" : "unavailable",
       JSON.stringify(execution.toolName),
       JSON.stringify(execution.source),
-      error instanceof Error
-        ? JSON.stringify(error.message)
-        : JSON.stringify(String(error)),
+      JSON.stringify(message),
     );
+    if (refusal) {
+      return { outcome: "reject", rejection: refusal, message };
+    }
     return {
       outcome: "reject",
       rejection: "authority_evidence_unavailable",
-      message: "verified authority context is unavailable",
+      message,
     };
   }
 

@@ -385,13 +385,34 @@ export async function startRun(runId: string): Promise<SelfUpgradeRunRow> {
   return updated;
 }
 
+/** A conditional UPDATE is the fence: a read followed by an UPDATE races boot reconciliation. */
+async function transitionActiveRun(
+  runId: string,
+  data: Prisma.SelfUpgradeRunUpdateInput,
+): Promise<{ row: SelfUpgradeRunRow; changed: boolean }> {
+  try {
+    const row = await prisma.selfUpgradeRun.update({
+      where: { runId, status: { in: ["queued", "pending", "running", "completing"] } },
+      data,
+    });
+    return { row, changed: true };
+  } catch (error) {
+    if (!error || typeof error !== "object" || !("code" in error) || error.code !== "P2025") throw error;
+    return { row: await prisma.selfUpgradeRun.findUniqueOrThrow({ where: { runId } }), changed: false };
+  }
+}
+
 export async function completeRun(runId: string): Promise<SelfUpgradeRunRow> {
   const completedAt = new Date();
-  const updated = await prisma.selfUpgradeRun.update({
-    where: { runId },
-    data: { status: "succeeded", completedAt },
-  });
-  notifyRunState(updated.runId, "succeeded");
+  const transition = await transitionActiveRun(runId, { status: "succeeded", completedAt, reason: null, failureLog: null });
+  if (!transition.changed) return transition.row;
+  return publishRunCompletion(transition.row);
+}
+
+/** Also used after the separately fenced, evidence-backed historical repair. */
+export async function publishRunCompletion(updated: SelfUpgradeRunRow): Promise<SelfUpgradeRunRow> {
+  const runId = updated.runId;
+  notifyRunState(runId, "succeeded");
   await safeSyncSelfUpgradeChangeRecord(runId);
   await recordCorrectiveRecoveryEvidence({
     source: "self-upgrade-failure",
@@ -400,7 +421,7 @@ export async function completeRun(runId: string): Promise<SelfUpgradeRunRow> {
       currentSha: updated.currentSha,
       targetSha: updated.targetSha,
       deployedSha: updated.deployedSha,
-      completedAt: updated.completedAt ?? completedAt,
+      completedAt: updated.completedAt ?? new Date(),
     },
   });
   // Durable upgrade state is the source; the existing dispatcher reconciles a
@@ -427,15 +448,11 @@ export async function failRun(runId: string, error: string, reason?: string): Pr
   // below to fingerprint the corrective BI and then threw away; callers that
   // already know the cause (preflight, release-target) pass it explicitly.
   const resolvedReason = (reason ?? deriveFailureReason(error)).slice(0, FAILURE_REASON_MAX);
-  const updated = await prisma.selfUpgradeRun.update({
-    where: { runId },
-    data: {
-      status: "failed",
-      completedAt: new Date(),
-      failureLog: error,
-      reason: resolvedReason,
-    },
+  const transition = await transitionActiveRun(runId, {
+    status: "failed", completedAt: new Date(), failureLog: error, reason: resolvedReason,
   });
+  if (!transition.changed) return transition.row;
+  const updated = transition.row;
   notifyRunState(updated.runId, "failed");
   await safeSyncSelfUpgradeChangeRecord(runId);
   // BI-9EA09823 — best-effort: every self-upgrade failure lands a fingerprinted

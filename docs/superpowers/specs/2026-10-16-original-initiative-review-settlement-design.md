@@ -24,6 +24,24 @@ Workroom metrics BI-C684AF45. The operator explicitly requested this repair and
 completion of the original metrics outcome. This document is design evidence,
 not implementation admission, execution settlement or independent approval.
 
+**Spec-approval scope and gate order.** This review assesses the proposed design,
+its marked objectives and acceptance statements, and the adequacy of its proof,
+authority and verification contracts. For the first scope baseline, a passing
+independent spec-approval receipt atomically creates that baseline through the
+governed writer. The baseline is an output of this gate. The author then records
+plan coverage against the genuine baseline and obtains normal implementation
+admission. This order follows the [backlog and planning
+contract](../../architecture/backlog-and-planning-runbook.md); an absent first
+baseline or downstream coverage receipt describes preimplementation state.
+Neither is a substitute for independent design judgment.
+
+Spec approval does not establish original launch membership, capability or
+effect closure, qualify a historical execution, or authorize replay. The
+implementation prerequisites and positive recovery requirements below remain
+mandatory. A substantive defect in their design or feasibility remains grounds
+for a failing review. Approval of the proposed scope cannot waive those later
+checks or turn the dated observations below into completed work.
+
 ## Observed failure and boundary
 
 On served recovery107, original initiative review 75512C999571 remains
@@ -806,3 +824,5 @@ Rollback disables new admission while retaining compatible fences, readers and
 histories. A pre-fence downgrade requires positive capability retirement and
 reconciliation of possibly started effects; missing proof refuses it. Neither
 rollback nor a current verdict clears the historical incident.
+
+[October 23–24 upstream admission observations and historical plan clarification](../../history/2026-10-16-review-settlement-investigation.md#october-24-upstream-historical-plan-clarification) retain their immutable source, failed review and unchanged original request history separately from the present reassessment contract.

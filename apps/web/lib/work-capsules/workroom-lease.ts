@@ -152,6 +152,8 @@ export async function reassignWorkCapsuleExecutor(args: {
   handoffManifest?: Record<string, unknown>;
   /** The holder the caller read; `undefined` skips the check, `null` expects none. */
   expectedLeaseHolderPrincipalId?: string | null;
+  /** The outer command receipt publishes only after its transaction commits. */
+  deferPublication?: boolean;
   now?: Date;
 }) {
   if (!isWorkCapsuleExecutorKind(args.toExecutorKind)) {
@@ -196,7 +198,7 @@ export async function reassignWorkCapsuleExecutor(args: {
         handoffManifest: args.handoffManifest ?? null,
       },
       actor: args.actor,
-    });
+    }, { deferPublication: args.deferPublication });
     return updated;
   });
 }
