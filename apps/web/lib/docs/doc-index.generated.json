@@ -6299,6 +6299,20 @@
         "evidence-contract"
       ]
     },
+    "docs/operations/mac-inference-engine.md": {
+      "publicHref": "/operations/mac-inference-engine/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "maintained-mac-inference-engine-candidate",
+        "why-this-package-exists",
+        "build-and-provenance",
+        "qualification-and-maintenance-window",
+        "activation-rollback-and-ai-ops",
+        "recorded-initial-candidate"
+      ]
+    },
     "docs/operations/mobile-privacy-policy-draft.md": {
       "publicHref": "/operations/mobile-privacy-policy-draft/",
       "portalHref": null,

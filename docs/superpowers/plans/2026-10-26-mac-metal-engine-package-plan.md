@@ -51,7 +51,7 @@ Record physical older-Mac coverage as unrun; record a blocked inference qualific
 ## Backlog coverage
 Atomic deliverable: BI-86B65F35.
 The source patch, provenance builder, verifier, qualification controls and operating contract are one package contract; none is independently safe to ship.
-Coverage receipt pending the immutable plan commit. This text does not assert a receipt.
+Native v3 atomic coverage receipt: cmvolr35x6h5t01qfm9z9u29l, recorded for the plan at commit 65b32976c98b6665ca43c6ef43c1e763ee884a3f. This receipt covers planning, not runtime qualification or delivery.
 Requirement references: AC-MAC1, AC-MAC2, AC-MAC3, AC-MAC4, AC-MAC5.
 Contract references: CONTRACT-MAC-ARTIFACT, CONTRACT-MAC-RUNTIME.
 Flow reference: FLOW-MAC-CANDIDATE.
