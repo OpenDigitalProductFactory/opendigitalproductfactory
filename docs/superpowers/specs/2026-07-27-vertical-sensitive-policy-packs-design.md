@@ -203,6 +203,8 @@ The same unchanged input with the repair retains the ambiguous employee match
 for audit, measures confidential, selects no vertical pack, and permits normal
 residency. Raw values are not stored in the screening receipt.
 
+Independent source review exposed missed real records with colon/equal labels, underscore references and direct amounts. Nine added classifier/screening regressions failed before correction. The shared invoice separator/value grammar now retains these protected forms while bare schema/domain wording remains a negative control.
+
 Free-text invoice detection now requires a reference, date or amount. Bare invoice
 vocabulary does not establish a payment record. Structured finance fields,
 other precise detectors, governed classifications, explicit sensitivity floors,

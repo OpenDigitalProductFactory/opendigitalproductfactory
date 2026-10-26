@@ -694,6 +694,7 @@ describe("invoice vocabulary is not a payment record (BI-12CD3010)", () => {
 
   it.each([
     "A build coworker adding an Invoice table chooses DECIMAL(12,2) or integer cents.",
+    "Invoice: table schema; Invoice = document type; Invoice - example table.",
     "Compensation requires its own authority after rollback. Review the Invoice schema design.",
     "Discuss credential permissions, governance, invoice matching and sensitive domains.",
     "The field names password, apiKey, invoice and payment describe the schema.",
@@ -704,6 +705,15 @@ describe("invoice vocabulary is not a payment record (BI-12CD3010)", () => {
   });
 
   it.each([
+    "Invoice: INV-1042\nAmount: $125.00.",
+    "Invoice=INV-1042",
+    "Invoice INV_1042",
+    "Invoice $125.00",
+    "Invoice: EUR 125.00",
+    "Invoice number INV_1042",
+    "Invoice # INV-1042",
+    "Invoice$125.00",
+    "Invoice - INV_1042",
     "Invoice INV-1042 is overdue.",
     "Invoice INV1042 is overdue.",
     "Invoice A-1042 is overdue.",

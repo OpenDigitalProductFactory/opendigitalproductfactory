@@ -4,7 +4,7 @@ status: active
 
 # Context screening repair
 
-Backlog: BI-12CD3010. Workroom: WC-BB089556.
+**Backlog item:** BI-12CD3010. Workroom: WC-BB089556.
 Shape: delivery-medium@1.0.0. Owner direction: shared platform reliability repair.
 Funding attribution remains unresolved in the live room; this plan grants no spend authority.
 
@@ -51,7 +51,7 @@ All phases are sequencing of one independently reviewable classifier repair; non
 
 1. Characterize exact retained packet and safe trigger locations. RED tests in classify-payload.test.ts and screen-inference-payload.test.ts cover schema prose, compensation, governance vocabulary, metadata and genuine/mixed values. Preserve rawPayloadStored:false.
 2. Repair apps/web/lib/inference/data-screening/classify-payload.ts. Reuse one restricted evidence result for overall sensitivity and dataEvidencedClasses. GREEN tests cover real invoice identifiers and amounts, secret tokens, employee/contact data, governed hints and explicit local_only.
-3. Run graph-linked tests: classify-payload-authorship-email.test.ts, evaluate-inference-policy.test.ts, source-contact-evidence.test.ts, routing/local-continuation-boundaries.test.ts; expand to data-screening tests and routed review tests. Verify runner root matches this worktree. Run package typecheck.
+3. Verify apps/web/lib/inference/thread-sensitivity-pinning.test.ts: domain-only invoice prose does not pin a later turn, while actual protected invoice history does. Include punctuation, underscore references and direct-currency values as positive controls. Run graph-linked tests: classify-payload-authorship-email.test.ts, evaluate-inference-policy.test.ts, source-contact-evidence.test.ts, routing/local-continuation-boundaries.test.ts; expand to data-screening tests and routed review tests. Verify runner root matches this worktree. Run package typecheck.
 4. Apply changeImpactContract: style-drift-guard via node scripts/check-style-drift.mjs; regenerate doc-index; gate:context; pregate:preflight; exact-tree pregate in shared lease; independent review; DCO PR and pr:health. Heavy production build remains cloud/shared governed runtime.
 5. After canonical deployment, recover exact review identity through its supported TaskRun contract. Its original deadline is 2026-10-25T16:45:39.665Z; do not replay expired execution. Use only a server-qualified successor when needed. Record actual provider dispatch and semantic outcome, or precise unrun blocker.
 6. Shadow-read representative approvals, preserving no bulk approval or replay. Compare current recorded authority and exact arguments/target, expiry/revocation and consequence across entry points. Cite existing boundary regression tests; do not claim source-local tests establish live equivalence.
@@ -65,11 +65,17 @@ No inference account passwords are accessed or changed. No production peer mutat
 
 ## Backlog coverage
 
+- Decision: atomic
+- Parent: BI-12CD3010
+- Receipt: cmvo2de7x6j3t01mu43fxnqtl
+- Rationale: The detector, shared evidence derivation, protected-value regressions and documentation ship as one repair; no phase is independently useful or safe.
+- Dependencies: none
+
 Atomic mapping: context-screening -> BI-12CD3010.
 Requirement refs: AC-1, AC-2, AC-3, AC-4, AC-5.
 Contract ref: apps/web/lib/inference/data-screening/classify-payload.ts.
 Flow ref: apps/web/lib/inference/data-screening/screen-inference-payload.ts.
 Verification ref: apps/web/lib/inference/data-screening/screen-inference-payload.test.ts.
 Research receipt: initiative-11e8b030-052b-40a7-b848-e7208bfac17c.
-Governed immutable plan coverage must be recorded before implementation; pending is not a pass.
+This initial receipt was accepted against fa43eb5ddaa1dde99abc7187ae263786ddb85df0 before implementation. Later source-head revalidation rejects that historical locator; BI-595F388E records the provenance-reader defect. On owner-directed resumption the current Workroom implementation claim was explicitly allowed. Refresh coverage against the final provider-visible committed plan; retain this historical receipt rather than presenting it as a current revalidation pass.
 

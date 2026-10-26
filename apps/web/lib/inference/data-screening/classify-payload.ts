@@ -73,14 +73,21 @@ const SOURCE_CODE_VALUE_PATTERN =
 
 // Invoice labels alone are schema/domain vocabulary. Match concrete references,
 // dates and amounts while leaving other finance detectors unchanged.
+const INVOICE_RECORD_DETAILS_PATTERN = [
+  /(?:id|number|no\.?|reference)\s*[:=#]\s*\S+/.source,
+  /(?:id|number|no\.?|reference)\s+(?:[a-z]{1,16}[-_/]?\d[\w/-]*|\d[\w/-]*)/.source,
+  /(?:[a-z]{1,16}[-_/]?\d[\w/-]*|\d[\w/-]*)/.source,
+  /(?:id|number|no\.?|reference|dated|date|due)\s*(?:(?:is|on)\s+|[:=]\s*)?\d/.source,
+  /(?:amount|total|balance)\s*(?:(?:is|of)\s+|[:=]\s*)?(?:[$€£]|USD|EUR|GBP)?\s*\d/.source,
+  /(?:for|of)\s+(?:[$€£]|USD|EUR|GBP)\s*\d/.source,
+  /(?:[$€£]|USD|EUR|GBP)\s*\d/.source,
+].join("|");
+
 const PAYMENT_RECORD_TEXT_PATTERN = new RegExp([
   /\b(?:routing number|account number|credit card|bank account|tax id|ein|ssn)\b/.source,
-  /\binvoice\s+(?:id|number|no\.?|reference)\s*[:=#]\s*\S+/.source,
+  String.raw`\binvoice\b(?:\s*[:=-]\s*|\s+)(?:${INVOICE_RECORD_DETAILS_PATTERN})`,
   /\binvoice\s*#\s*[a-z0-9][\w/-]*/.source,
-  /\binvoice\s+(?:[a-z]{1,16}[-/]?\d[\w/-]*|\d[\w/-]*)/.source,
-  /\binvoice\s+(?:id|number|no\.?|reference|dated|date|due)\s*(?:(?:is|on)\s+|[:=]\s*)?\d/.source,
-  /\binvoice\s+(?:amount|total|balance)\s*(?:(?:is|of)\s+|[:=]\s*)?(?:[$€£]|USD|EUR|GBP)?\s*\d/.source,
-  /\binvoice\s+(?:for|of)\s+(?:[$€£]|USD|EUR|GBP)\s*\d/.source,
+  /\binvoice\s*[$€£]\s*\d/.source,
 ].join("|"), "i");
 
 const CLASS_RULES: readonly ClassRule[] = [
