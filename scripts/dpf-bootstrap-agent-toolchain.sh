@@ -314,9 +314,9 @@ CODEX_BIN="$(resolve_codex_bin || true)"
 GROK_BIN="$(resolve_grok_bin || true)"
 AGY_BIN="$(resolve_agy_bin || true)"
 [ -n "$CLAUDE_BIN" ] && CLAUDE_PRESENT=1
-# Codex wiring is file-based (config.toml), so a present-but-not-on-PATH Codex
-# (or an existing Codex config dir) is still wirable.
-{ [ -n "$CODEX_BIN" ] || [ -f "$CODEX_CONFIG_PATH" ]; } && CODEX_PRESENT=1
+# Saved configuration may be provisioned before installation. Only a resolved
+# native binary (including bundled GUI paths above) proves the client is present.
+[ -n "$CODEX_BIN" ] && CODEX_PRESENT=1
 [ -n "$GROK_BIN" ] && GROK_PRESENT=1
 [ -n "$AGY_BIN" ] && AGY_PRESENT=1
 if [ -n "${DPF_MCP_BEARER_TOKEN:-}" ]; then
