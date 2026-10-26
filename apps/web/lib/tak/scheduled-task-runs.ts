@@ -1,3 +1,5 @@
+import { isRecord } from "@/lib/shared/coerce";
+import { readDispatchCheckpoint } from "@/lib/work-management/workroom-drive-checkpoint";
 import { readWorkroomStageTaskConfig, workroomStageToolsFromTaskConfig } from "@/lib/scheduling/workroom-stage-task-config";
 import {
   createAutonomousWorkRun,
@@ -363,7 +365,9 @@ export async function createTaskRunForScheduledTask(input: {
   proactivity?: ProactivityPlan;
   /** BI-754C9E82: auditable effective posture the scheduler delegates with. */
   delegatedPosture?: ResolvedDelegatedPosture;
+  taskConfig?: unknown;
 }): Promise<ScheduledTaskRunRef> {
+  const checkpoint = readDispatchCheckpoint(isRecord(input.taskConfig) ? input.taskConfig.workroomDispatchCheckpoint : null);
   return createAutonomousWorkRun({
     trigger: "scheduled",
     userId: input.ownerUserId,
@@ -377,6 +381,7 @@ export async function createTaskRunForScheduledTask(input: {
       kind: "scheduled-task",
       id: input.taskId,
     },
+    ...(checkpoint ? { metadata: { workroomDispatchCheckpoint: checkpoint } } : {}),
     proactivity: input.proactivity,
     delegatedPosture: input.delegatedPosture,
   });

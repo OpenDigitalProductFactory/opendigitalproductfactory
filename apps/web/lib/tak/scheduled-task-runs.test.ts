@@ -519,3 +519,30 @@ describe("withPersistedExecutions (BI-D48B3B0F)", () => {
     expect(merged[0]).toBe(own);
   });
 });
+
+describe("scheduled Workroom dispatch snapshot (BI-D95FD249)", () => {
+  it("copies the server dispatch identity into the run instead of reusing mutable task configuration", async () => {
+    const { prisma } = await import("@dpf/db");
+    const { buildDispatchCheckpoint } = await import("@/lib/work-management/workroom-drive-checkpoint");
+    const { createTaskRunForScheduledTask } = await import("./scheduled-task-runs");
+    vi.mocked(prisma.taskRun.create).mockReset().mockResolvedValue({ id: "row", taskRunId: "TR-SCHED-BOUND", contextId: "thread" } as never);
+    const checkpoint = buildDispatchCheckpoint(null, { taskId: "workroom-WC-BOUND-delivery-small", roomId: "room",
+      objective: "Repair", stage: { shapeKey: "delivery-small", shapeVersion: "1.0.0", stageKey: "repair", tools: ["record_workroom_evidence"] },
+      holderPrincipalId: "driver", leaseExpiresAt: "2026-10-26T00:10:00Z", now: "2026-10-26T00:00:00Z" });
+    await createTaskRunForScheduledTask({ taskId: checkpoint.confirmedEffect.taskId, ownerUserId: "owner", agentId: "build-specialist",
+      threadId: "thread", routeContext: "/ops/workrooms", title: "Repair", prompt: "Record scoped evidence",
+      taskConfig: { workroomDispatchCheckpoint: checkpoint, authorityOverride: "untrusted" } });
+    const data = vi.mocked(prisma.taskRun.create).mock.calls[0]?.[0].data;
+    expect(data?.a2aMetadata).toMatchObject({ trigger: "scheduled",
+      sourceRef: { kind: "scheduled-task", id: checkpoint.confirmedEffect.taskId }, workroomDispatchCheckpoint: checkpoint });
+    expect(data?.a2aMetadata).not.toHaveProperty("authorityOverride");
+  });
+  it("does not promote a malformed checkpoint into the run's authority metadata", async () => {
+    const { prisma } = await import("@dpf/db"); const { createTaskRunForScheduledTask } = await import("./scheduled-task-runs");
+    vi.mocked(prisma.taskRun.create).mockReset().mockResolvedValue({ id: "row", taskRunId: "TR-SCHED-UNBOUND", contextId: "thread" } as never);
+    await createTaskRunForScheduledTask({ taskId: "workroom-WC-BOUND-delivery-small", ownerUserId: "owner", agentId: "build-specialist",
+      threadId: "thread", routeContext: "/ops/workrooms", title: "Repair", prompt: "Record scoped evidence",
+      taskConfig: { workroomDispatchCheckpoint: { version: 999, authority: "all" } } });
+    expect(vi.mocked(prisma.taskRun.create).mock.calls[0]?.[0].data.a2aMetadata).not.toHaveProperty("workroomDispatchCheckpoint");
+  });
+});

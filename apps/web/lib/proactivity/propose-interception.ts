@@ -150,7 +150,9 @@ export async function interceptToolCallAsProposal(input: {
   // decision (the same one the escalation gate steers as `scheduled-mandate`),
   // so it runs. The propose boundary stays in force for every other write, and
   // an unreadable mandate diverts as before.
-  if (await runMandatesTool(input, deps.resolveMandatedTools)) return null;
+  const mandate = await runMandatesTool(input, deps.resolveMandatedTools);
+  if (mandate.refusal) return mandate.refusal;
+  if (mandate.mandated) return null;
   if (input.toolDef && toolTakesSecretInput(input.toolDef)) return secretRefusal(input.toolName);
 
   let result: ToolResult;
@@ -186,15 +188,22 @@ export async function interceptToolCallAsProposal(input: {
 }
 
 async function runMandatesTool(
-  input: { toolName: string; agentId: string; taskRunId: string | null },
+  input: { toolName: string; agentId: string; taskRunId: string | null; args: Record<string, unknown> },
   resolve?: (input: { taskRunId: string | null; agentId: string }) => Promise<readonly string[]>,
-): Promise<boolean> {
+): Promise<{ mandated: boolean; refusal?: ToolResult }> {
   try {
-    const load = resolve
-      ?? (await import("@/lib/work-management/room-stage-mandate")).loadScheduledRoomMandateLive;
-    return (await load({ taskRunId: input.taskRunId, agentId: input.agentId })).includes(input.toolName);
+    if (resolve) return { mandated: (await resolve({ taskRunId: input.taskRunId, agentId: input.agentId })).includes(input.toolName) };
+    const { loadScheduledRoomAuthorityLive } = await import("@/lib/work-management/room-stage-mandate");
+    const authority = await loadScheduledRoomAuthorityLive({
+      taskRunId: input.taskRunId, agentId: input.agentId, toolName: input.toolName, params: input.args,
+    });
+    if (authority.withheldBecause) return { mandated: false, refusal: {
+      success: false, error: "scheduled_stage_authority_withheld",
+      message: `${authority.withheldBecause} The tool was not run. Do not retry this unchanged dispatch.`,
+    } };
+    return { mandated: authority.mandatedTools.includes(input.toolName) };
   } catch {
-    return false;
+    return { mandated: false };
   }
 }
 
