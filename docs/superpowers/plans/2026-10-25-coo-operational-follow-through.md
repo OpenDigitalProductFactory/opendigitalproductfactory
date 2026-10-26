@@ -197,7 +197,7 @@ is claimed to cover the new text.
 The founder now authorizes coordination with "Prioritize DPF platform design"
 and implementation of the agreed design and plan. That chat confirmed the
 ownership split and supplied a bounded handoff rather than another design.
-This chat coordinates P1/P2. BI-A798975C retains finite completion acceptance;
+This chat coordinates P1/P2 and the remaining BI-A798975C finite completion acceptance;
 BI-IMP-9DA35549 and BI-BF20F828 retain learning/review; Rationalize approval list
 retains approval-policy ownership. No source permission or review is delegated
 by this paragraph.
@@ -206,8 +206,7 @@ Handoff provenance: coordinated-coo-implementation-handoff.json supplied by chat
 01a173c1-2a8e-74d2-a14b-bad35032d891. The receiver read the actual file and verified
 SHA256 2404f9f247322c69b1ee78d81631a87f74a7da8ba109d200a4ee38a3e127d1b6.
 It is coordination evidence, not a native review, coverage or acceptance receipt.
-Its original native recording was refused during an upgrade drain; record this
-same identity through Workroom evidence when normal writes return.
+Its original native recording was refused during an upgrade drain; adoption was subsequently recorded through Workroom evidence.
 
 ### Adopted order and completion boundaries
 
@@ -265,7 +264,7 @@ Those facts do not establish a native independent semantic-review verdict.
    direct and scheduled paths resolve the same canonical principal.
 6. Run affected tests/typecheck, exact-tree shared integration, independent review,
    protected publication and canonical served acceptance. Finite closeout tests
-   remain with BI-A798975C's owner; record the integration evidence and its limits.
+   are coordinated here under BI-A798975C; record integration evidence and its limits.
 
 The acceptance replay must show provider hold -> owned permitted recovery ->
 verified advancement, external interruption without the old conversation,
@@ -287,3 +286,27 @@ drain first refused admission, and the sanctioned waiter's Windows child spawn
 then failed before pregate started. No lease or gate record exists, and no
 passing runtime verification is inferred. Resume the supported foreground gate
 when the drain clears; do not duplicate a queued claim or edit receipts.
+
+### Final coordination transfer and current verification
+
+The human in "Prioritize DPF platform design" directed transfer of its remaining
+work before archiving that chat. This chat accepted coordination of BI-A798975C's
+remaining finite acceptance and native handoff recovery. Its native executor has
+not transferred: the governed request returned handoff-transaction-required with
+no request identity. Resolve that command transaction through its owning path;
+this planning acknowledgement grants no control of WC-5D6B124A. Nothing depends
+on further action in the archived chat.
+
+The receiver read final-archive-handoff.json and verified SHA256
+5247e1fa23826592fc9286f9092f8a1107f7bdfb80c014ce34ce2b67035daf0f.
+Remaining finite acceptance is canonical completion/replay, changed criteria
+reconciliation, missing evidence blocking, immutable completed handoff and
+separately owned follow-ons. The existing UI proofs remain scoped evidence.
+
+An independent client assessment at f1ed74cb48f6416ea32da6f48f569abb334bf4d3
+found a deadline payload discriminator regression. P1 repaired that finding with
+a failing then passing runner-level test and six graph evidence tests at
+3a91aa3f589b. The final focused suite has 317 passes, zero failures and three
+opt-in PostgreSQL skips; typecheck passes. The old changes-requested assessment
+is preserved and does not become a pass after an author repair. Current shared
+gate and independent publication review still require their own receipts.
