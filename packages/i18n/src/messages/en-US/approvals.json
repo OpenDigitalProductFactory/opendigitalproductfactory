@@ -74,6 +74,7 @@
       "handoverRecommendation": "Continue with {$assistant} for this work.",
       "recordRecommendation": "Your coworker asks to save this result for the work record.",
       "targetUnavailable": "Work name unavailable",
+      "permissionScope": "Coworker permissions",
       "notProvided": "Not provided",
       "effectUnknown": "Reversibility is not established."
     },

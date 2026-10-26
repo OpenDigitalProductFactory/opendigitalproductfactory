@@ -15,6 +15,25 @@ const RESEARCH = {
 };
 
 describe("primary decision disclosure", () => {
+  it.each(["grant", "revoke"])("keeps the full permission-change intent visible: %s", action => {
+    const decision = summarizeCoworkerEnvelopeDecision({ ...RESEARCH, toolName: "manage_coworker_tool_grant", consequence: "authority",
+      proposedParameters: { coworker: "Build Lead", grantKey: "admin_write", action } });
+    const primary = envelopePrimaryDecision(decision);
+    expect(primary.facts).toEqual(expect.arrayContaining([
+      { label: "Coworker", value: "Build Lead" }, { label: "Grant Key", value: "admin_write" }, { label: "Action", value: action },
+    ]));
+    expect(primary.target).not.toBe("Work name unavailable");
+    expect(primary.unresolved).toBe(true);
+  });
+
+  it("keeps the target and direction of an irreversible unknown operation visible", () => {
+    const decision = summarizeCoworkerEnvelopeDecision({ ...RESEARCH, toolName: "unknown_operation", consequence: "irreversible",
+      proposedParameters: { path: "/reports/closing.csv", action: "delete", routingId: "internal-only" } });
+    expect(envelopePrimaryDecision(decision).facts).toEqual([
+      { label: "Path", value: "/reports/closing.csv" }, { label: "Action", value: "delete" },
+    ]);
+  });
+
   it.each(["record_workroom_evidence", "record_initiative_evidence", "reassign_workroom_executor"])("keeps the declared irreversible effect visible for %s", toolName => {
     const decision = summarizeCoworkerEnvelopeDecision({ ...RESEARCH, toolName, recommenderAgentId: "AGT-EXT-CODEX", consequence: "irreversible",
       proposedParameters: { capsuleId: "WC-1", summary: "Reported result", decision: "pass", toExecutorKind: "codex-desktop" } });

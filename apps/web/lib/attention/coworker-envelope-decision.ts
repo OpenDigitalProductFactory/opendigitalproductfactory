@@ -473,6 +473,7 @@ export function envelopePrimaryDecision(decision: EnvelopeDecisionSummary) {
   // Unknown effects stay unresolved. These recorded facts must not disappear
   // with technical detail, even when they are long, nested, false or missing.
   const materialKey = /amount|currency|recipient|destination|payee|beneficiary|payment|recurr|frequency|permission|grant|canAct|role|access|delet|destroy|irrevers|deadline|expir|scope|sensitivity|endpoint|^url$|^(?:to|cc|bcc)$/i;
+  const intentKey = /^(?:coworker|agent(?:Id)?|user(?:Id)?|target(?:Id)?|subject(?:Id)?|account(?:Id)?|resource(?:Id)?|room(?:Id)?|action|operation|path|file(?:Path)?|name)$/i;
   function visit(value: unknown, path: string[], material: boolean) {
     const empty = Array.isArray(value) ? value.length === 0 : objectRecord(value) ? Object.keys(value as object).length === 0 : false;
     if (empty && material) {
@@ -482,8 +483,11 @@ export function envelopePrimaryDecision(decision: EnvelopeDecisionSummary) {
     if (Array.isArray(value)) {
       value.forEach((entry, index) => visit(entry, [...path, String(index + 1)], material));
     } else if (objectRecord(value)) {
-      for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
-        visit(child, [...path, key], material || materialKey.test(key));
+      const entries = Object.entries(value as Record<string, unknown>);
+      const consequential = material || entries.some(([key]) => materialKey.test(key))
+        || (path.length === 0 && !decision.consequence.startsWith("None declared."));
+      for (const [key, child] of entries) {
+        visit(child, [...path, key], material || materialKey.test(key) || (consequential && intentKey.test(key)));
       }
     } else if (material) {
       facts.push({ label: path.map(humanizeKey).join(" · "), value: value === null || value === "" ? copy.notProvided : String(value) });
@@ -491,6 +495,6 @@ export function envelopePrimaryDecision(decision: EnvelopeDecisionSummary) {
   }
   if (unresolved) visit(params, [], false);
   return { title, description, consequence, facts, unresolved,
-    target: decision.targetLabel ?? copy.targetUnavailable, recommendation,
+    target: decision.toolName === "manage_coworker_tool_grant" ? copy.permissionScope : decision.targetLabel ?? copy.targetUnavailable, recommendation,
   };
 }
