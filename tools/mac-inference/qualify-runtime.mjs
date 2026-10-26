@@ -9,6 +9,9 @@ import { promisify } from 'node:util';
 import { isEntryModule } from '../../scripts/lib/entry-module.mjs';
 import { readMcpConnection } from '../../scripts/host-resource-runner.mjs';
 import { mcpCall } from '../../scripts/lib/mcp-client.mjs';
+import { sampleLocalCiHostPressure } from '../../scripts/lib/local-ci-host-pressure.mjs';
+import { LOCAL_CI_SLOT_KEYS, createLocalCiSlotManifest, resolveLocalCiRootClone } from '../../scripts/lib/local-ci-slot-manifest.mjs';
+import { defaultBuildStrategy, buildIsDelegated } from '../../scripts/lib/local-integration-ci.mjs';
 import { admittedLeaseTtlMs, superviseLeaseRun } from '../../scripts/lib/lease-supervisor.mjs';
 import { sha256, hashFile } from './package.mjs';
 import { verifyRuntimePackage, stageVerifiedRuntime, verifyEngineQualification } from './runtime-profile.mjs';
@@ -56,12 +59,31 @@ export async function configureDrainedCandidate(entries, { readBaselineRunners, 
     entry.candidate = observed;
   }
 }
+export async function awaitRuntimeAdmission({ claim, bind, assertSource, observe = async () => {},
+  delay = pause, now = Date.now, waitDeadline, signal }) {
+  let leaseId;
+  while (now() < waitDeadline) {
+    check(!signal?.aborted, 'Qualification cancelled while waiting');
+    await assertSource();
+    const result = await claim(leaseId);
+    check(result?.success === true, 'Runtime reservation stopped: ' + (result?.error ?? 'acknowledgement unavailable'));
+    const current = result.data?.lease;
+    check(current?.leaseId && (!leaseId || current.leaseId === leaseId), 'Runtime reservation identity changed');
+    leaseId = current.leaseId;
+    if (current.status === 'active') return bind(current);
+    check(current.status === 'queued', 'Runtime reservation is terminal; a new request is required');
+    await observe({ phase: 'waiting-for-runtime-window', leaseId, taskRunId: result.data?.admission?.taskRunId });
+    await delay(Math.min(45000, waitDeadline - now()));
+  }
+  throw new Error('Runtime reservation wait deadline reached; no native operation started');
+}
 export function parseRuntimeQualificationOptions(args = process.argv.slice(2)) {
-  const names = ['package', 'out', 'lease-id', 'owner-session', 'model-ref', 'model-digest',
+  const names = ['package', 'out', 'owner-session', 'model-ref', 'model-digest',
     'embedding-ref', 'embedding-digest', 'dmr-root', 'baseline-engine', 'baseline-engine-sha256',
     'engine-report', 'engine-report-sha256', 'qualified-engine-manifest'];
-  const { values } = parseArgs({ args, options: Object.fromEntries(names.map(key => [key, { type: 'string' }])) });
+  const { values } = parseArgs({ args, options: Object.fromEntries([...names, 'lease-id', 'claim-key'].map(key => [key, { type: 'string' }])) });
   for (const key of names) check(values[key], '--' + key + ' is required');
+  check(Boolean(values['lease-id']) !== Boolean(values['claim-key']), 'Exactly one of --lease-id or --claim-key is required');
   loopbackManagementRoot(values['dmr-root']);
   return values;
 }
@@ -161,10 +183,49 @@ async function run(a) {
   };
   for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => cancel.abort());
   try {
+    if (a['claim-key']) {
+      const git = async args => (await execute('git', args, { timeout: 15000 })).stdout.trim();
+      const sourceHead = await git(['rev-parse', 'HEAD']);
+      const sourceTree = await git(['rev-parse', 'HEAD^{tree}']);
+      check(await git(['branch', '--show-current']) === BRANCH, 'Qualification requires its governed runtime branch');
+      check(!(await git(['status', '--porcelain'])), 'Commit the qualifier before requesting its runtime window');
+      const gitCommonDir = await git(['rev-parse', '--path-format=absolute', '--git-common-dir']);
+      const rootPath = resolveLocalCiRootClone(gitCommonDir);
+      const candidateGitDir = await git(['rev-parse', '--absolute-git-dir']);
+      const manifests = LOCAL_CI_SLOT_KEYS.map(slotKey => createLocalCiSlotManifest({ rootClone: rootPath, gitCommonDir, candidateGitDir, slotKey }));
+      const waitingUntil = Date.now() + 20 * 60000;
+      const args = { environmentKey: 'local-integration-ci', ownerProvider: 'codex', ownerSessionId: expected.owner,
+        branchName: BRANCH, worktreePath: process.cwd(), claimKey: a['claim-key'], purpose: 'BI-CD4EB130 bounded native API qualification at ' + sourceHead,
+        requestedTtlMs: 120000, expiresAt: new Date(Date.now() + 120000).toISOString(), waitDeadlineAt: new Date(waitingUntil).toISOString(),
+        slotManifestVersion: 1, productionBuild: buildIsDelegated(defaultBuildStrategy()) ? 'delegated' : 'local',
+        url: manifests[0].portal.url, ports: [manifests[0].portal.port, manifests[0].postgres.hostPort],
+        cleanupCommand: 'node scripts/local-ci-slot-cleanup.mjs --slot-key ' + manifests[0].slotKey };
+      lease = await awaitRuntimeAdmission({ waitDeadline: waitingUntil, signal: cancel.signal,
+        assertSource: async () => {
+          check(await git(['rev-parse', 'HEAD']) === sourceHead && await git(['rev-parse', 'HEAD^{tree}']) === sourceTree
+            && !(await git(['status', '--porcelain'])), 'Queued qualification source changed; native work unrun');
+        },
+        claim: async resumeLeaseId => mcpCall('claim_nonprod_environment_lease', { ...args, ...(resumeLeaseId ? { resumeLeaseId } : {}),
+          hostPressure: await sampleLocalCiHostPressure({ rootPath, convergenceLockPaths: manifests.map(x => x.dependencies.convergenceLock),
+            fencePaths: manifests.map(x => x.fence.path), evidenceIsolationHealthy: manifests.every(x => x.schemaVersion === 1) }) }, connection),
+        bind: async current => {
+          check(current.ownerSessionId === expected.owner && current.branchName === BRANCH && current.slotManifestVersion === 1,
+            'Runtime admission owner/source changed');
+          const slot = manifests.find(x => x.slotKey === current.slotKey); check(slot, 'Unknown assigned runtime slot');
+          const result = await mcpCall('renew_nonprod_environment_lease', { leaseId: current.leaseId, ownerSessionId: expected.owner, ttlMinutes: 2,
+            slotBinding: { manifestVersion: 1, slotKey: slot.slotKey, url: slot.portal.url, ports: [slot.portal.port, slot.postgres.hostPort],
+              cleanupCommand: 'node scripts/local-ci-slot-cleanup.mjs --slot-key ' + slot.slotKey } }, connection);
+          check(result?.success === true, 'Runtime admission binding refused'); return result.data?.lease;
+        }, observe: event => { report.reservation = event; console.log(JSON.stringify(event)); },
+      });
+      a['lease-id'] = lease.leaseId; expected.id = lease.leaseId;
+      report.sourceHead = sourceHead; report.sourceTree = sourceTree;
+    }
     const listed = await mcpCall('list_nonprod_environment_leases', {}, connection);
     check(listed?.success === true, 'Lease inventory unavailable');
     const matches = (listed.data?.leases ?? []).filter(x => x.leaseId === expected.id);
     check(matches.length === 1, 'Exact qualification lease not found'); lease = matches[0]; validate();
+    deadline = Date.now() + 9 * 60000; report.admittedAt = new Date().toISOString();
     await superviseLeaseRun({ ttlMs: admittedLeaseTtlMs(lease.expiresAt, 120000), expiresAt: lease.expiresAt,
       renew: async () => {
         const result = await mcpCall('renew_nonprod_environment_lease', { leaseId: expected.id, ownerSessionId: expected.owner, ttlMinutes: 2 }, connection);

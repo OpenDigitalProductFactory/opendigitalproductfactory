@@ -134,7 +134,7 @@ test('notice repackaging needs the actual old manifest and identical native reco
   assert.throws(() => verifyEngineQualification({ ...f.args(), qualifiedManifestBytes: original }), /native files/);
 });
 
-const { configurationSnapshot, runtimeLeaseProjection, loopbackManagementRoot, configureDrainedCandidate } = await import('./qualify-runtime.mjs');
+const { configurationSnapshot, runtimeLeaseProjection, loopbackManagementRoot, configureDrainedCandidate, awaitRuntimeAdmission } = await import('./qualify-runtime.mjs');
 test('configuration capture preserves exact model tag, mode, context and flags while rejecting another model digest', () => {
   const digest = 'sha256:' + 'a'.repeat(64), model = 'hf.co/model:Q4_K_M';
   const row = { Backend: 'llama.cpp', Model: model, ModelID: digest, Mode: 'completion',
@@ -189,4 +189,28 @@ test('candidate configuration remains unverified when the API readback differs',
     readConfiguration: async () => [{ Backend: 'llama.cpp', Model: model, ModelID: digest, Mode: 'completion', Config: { 'context-size': 4096 } }],
   }), /configuration changed/);
   assert.equal(writes, 1); assert.equal(entries[0].candidate, undefined);
+});
+
+test('waiting native qualifier resumes one reservation and binds only the assigned active admission', async () => {
+  const calls = [], bound = []; let now = 0, count = 0;
+  const value = await awaitRuntimeAdmission({ waitDeadline: 120000, now: () => now,
+    assertSource: async () => {}, delay: async ms => { now += ms; },
+    claim: async id => { calls.push(id); return { success: true, data: { lease: { leaseId: 'NPEL-one', status: ++count === 3 ? 'active' : 'queued' } } }; },
+    bind: async lease => { bound.push(lease.leaseId); return lease; },
+  });
+  assert.equal(value.leaseId, 'NPEL-one'); assert.deepEqual(calls, [undefined, 'NPEL-one', 'NPEL-one']);
+  assert.deepEqual(bound, ['NPEL-one']); assert.equal(now, 90000);
+});
+test('native admission refusal, expiry and changed source never bind or generate a replacement reservation', async () => {
+  for (const error of ['approval_required', 'lease_terminal', 'lease_owner_mismatch']) {
+    let calls = 0, bindings = 0;
+    await assert.rejects(awaitRuntimeAdmission({ waitDeadline: Date.now() + 120000, assertSource: async () => {},
+      claim: async () => { calls++; return { success: false, error }; }, bind: async () => { bindings++; },
+    }), /reservation stopped/);
+    assert.equal(calls, 1); assert.equal(bindings, 0);
+  }
+  let calls = 0;
+  await assert.rejects(awaitRuntimeAdmission({ waitDeadline: Date.now() + 120000,
+    assertSource: async () => { throw new Error('source changed'); }, claim: async () => { calls++; }, bind: async () => {},
+  }), /source changed/); assert.equal(calls, 0);
 });
