@@ -77,7 +77,7 @@ test('refuses a manifest that declares its own model qualification', async t => 
 
 // Qualification must accept the observed Docker schema without inventing a
 // loading observation, and must keep the Docker engine recoverable on failure.
-const {runnerActivity,restoreAfterQualification,stopOwnedChild,validLeaseExpiry,modelLayerBinding,unloadWithRestorationObligation,nativeEngineArguments}=await import('./qualify-engine.mjs');
+const {runnerActivity,restoreAfterQualification,stopOwnedChild,validLeaseExpiry,modelLayerBinding,unloadWithRestorationObligation,nativeEngineArguments,performanceComparison}=await import('./qualify-engine.mjs');
 test('observed Docker runner schema proves idle without claiming loading capture',()=>{
   assert.deepEqual(runnerActivity([{in_use:false}]),{idle:true,loadingFieldObserved:false});
   assert.equal(runnerActivity([{in_use:true}]).idle,false);
@@ -137,4 +137,14 @@ test('both native engine versions receive identical material benchmark settings'
   const args=nativeEngineArguments({model:'/model.gguf',modelRef:'model',port:49231,mmproj:'/projector.gguf'});
   for(const [flag,value] of [['--ctx-size','131072'],['--parallel','4'],['--batch-size','512'],['--ubatch-size','512'],['--threads','9'],['--threads-batch','9'],['--cache-type-k','f16'],['--cache-type-v','f16'],['--flash-attn','on'],['--mmproj','/projector.gguf']]) assert.equal(args[args.indexOf(flag)+1],value);
   assert.ok(args.includes('--kv-unified'));assert.ok(args.includes('--no-mmap'));
+});
+
+test('missing or invalid prompt counts cannot qualify a timing comparison',()=>{
+  for(const promptTokens of [null,undefined,0,-1,NaN,Infinity]) {
+    const m={promptTokens,cachedTokens:0,prefillMs:100};
+    assert.equal(performanceComparison(m,m,2).comparable,false);
+  }
+  const before={promptTokens:32000,cachedTokens:0,prefillMs:100};
+  assert.equal(performanceComparison(before,{...before,prefillMs:50},2).comparable,true);
+  assert.equal(performanceComparison(before,{...before,prefillMs:NaN},2).comparable,false);
 });

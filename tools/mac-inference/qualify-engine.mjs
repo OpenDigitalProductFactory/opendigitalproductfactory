@@ -185,6 +185,18 @@ async function startOwnedEngine(binary,label) {
     .filter(x=>/has tensor|tensor API|n_ctx_slot|n_slots|n_ubatch/.test(x)).slice(0,20)});
   return endpoint;
 }
+export function performanceComparison(before,after,configurationCount) {
+  const positive=x=>typeof x==='number'&&Number.isFinite(x)&&x>0;
+  const matchedPromptTokens=Number.isSafeInteger(before.promptTokens)&&before.promptTokens>0
+    &&before.promptTokens===after.promptTokens;
+  const coldPrefixCacheMatched=Number.isSafeInteger(before.cachedTokens)&&before.cachedTokens>=0
+    &&before.cachedTokens===after.cachedTokens;
+  const timingKnown=positive(before.prefillMs)&&positive(after.prefillMs);
+  return {matchedPromptTokens,coldPrefixCacheMatched,
+    observedColdPrefillRatio:timingKnown?before.prefillMs/after.prefillMs:null,
+    comparable:configurationCount===2&&matchedPromptTokens&&coldPrefixCacheMatched&&timingKnown,
+    scope:'Same immutable model/projector, explicit shared native engine arguments and verified effective context/slots; one cold sample per engine, not live service or fleet performance'};
+}
 async function main() {
   for (const key of ['package','sdk','out','lease-id','owner-session','model','model-ref','model-digest','oci-manifest','baseline-engine','baseline-engine-sha256','dmr-root']) {
     if (!a[key]) fail('--'+key+' is required');
@@ -244,13 +256,7 @@ async function main() {
   const cold=label=>report.results.find(x=>x.engine===label&&x.case==='long-cold');
   const warm=label=>report.results.find(x=>x.engine===label&&x.case==='long-warm');
   const before=cold('docker-baseline'),after=cold('corrected-candidate');
-  report.performance={matchedPromptTokens:before.promptTokens===after.promptTokens&&before.promptTokens!==null,
-    observedColdPrefillRatio:before.prefillMs&&after.prefillMs?before.prefillMs/after.prefillMs:null,
-    coldPrefixCacheMatched:before.cachedTokens!==null&&before.cachedTokens===after.cachedTokens,
-    comparable:report.runtimeConfiguration.length===2&&before.promptTokens===after.promptTokens
-      &&before.cachedTokens!==null&&before.cachedTokens===after.cachedTokens
-      &&before.prefillMs>0&&after.prefillMs>0,
-    scope:'Same immutable model/projector, explicit shared native engine arguments and verified effective context/slots; one cold sample per engine, not live service or fleet performance'};
+  report.performance=performanceComparison(before,after,report.runtimeConfiguration.length);
   const correct=report.results.length===8&&report.results.every(x=>x.correct);
   const cache=warm('docker-baseline')?.cachedTokens>0&&warm('corrected-candidate')?.cachedTokens>0;
   report.status=correct&&cache&&report.baselineRestored&&report.performance.matchedPromptTokens?'model-smoke-qualified':'qualification-failed';
