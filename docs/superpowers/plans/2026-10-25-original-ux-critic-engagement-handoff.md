@@ -260,3 +260,32 @@ missing immutable guidance traversal regression first failed against the generic
 message, then passed with one captured inspection result. This is diagnostic
 retention only; held state, no approval, execution-proof and no-replay boundaries
 remain unchanged.
+
+
+### First live CE1 completion failure and prospective diagnostic retention
+
+Recovery 142 served exact merged daba68549295df81956069fd74a548afbb1fcc39;
+canonical preflight returned CAN-TEST. CE-1FE20783's FIRST actual task ending
+D170F2F755AF executed 17 successful governed Critic reads, all pinned source and
+guidance traversal, one profession query and an empty calibrated-only query.
+Its four actual image inputs were delivered through Codex/gpt-5.6-luna. The
+8225-character normal response failed generic contribution validation and was
+replaced with held prose before task settlement; no original response was kept.
+TaskMessage 02fb0f6f-7f95-4b07-bbcc-5d2fda18b90b retains only that first generic
+failure. RV-CE1-FIRST-142-HELD records a failed workflow verification. Neither
+the precise rejected predicate nor actual findings can be reconstructed.
+There is no completed Critic result, acceptance or author disposition.
+
+The bounded follow-up uses the existing execution scope, TaskMessage metadata
+and held TaskRun projection. Capture one authoritative first inspection and the
+original provider text before conversion; retain at most 100000 UTF-8 bytes,
+digest, original byte length and truncation/redaction state. Exclude image data
+and credential-shaped output. Mark retained output unvalidated assessment data,
+under the original task's current access and sensitivity; never execute it or
+publish it as a contribution. Preserve first parse/schema/profession-reference,
+source, corpus, image and task-state reasons. Settlement consumes the same first
+inspection and never validates generated hold prose. Completion validation and
+replay/effect requirements do not change. Add actual loop/settlement regressions,
+run affected tests/types and the required canonical gate and protected publication.
+The existing BI-7906C73E owner alone retains generic finite execution disposition;
+no retrospective receipt, task promotion, rekey, replacement request or replay.
