@@ -129,7 +129,7 @@ Per-decision rulings (concierge); golden panels per profession (own item); chang
 ### 10.1 Evidence and completion boundary
 
 This is the implementation companion to
-[GPP purpose-to-outcome correlation](2026-10-01-gpp-model-to-execution-design.md#12-purpose-decision-effect-and-outcome-reconciliation-2026-10-25-proposal).
+[GPP model-to-execution design](2026-10-01-gpp-model-to-execution-design.md). Its prepared purpose-to-outcome amendment is a separate publication; no missing amendment confers runtime authority.
 BI-19CEC4B4 retains measurement/routing. BI-73780C2E owns the independently shippable correction
 lifecycle. Design approval, immutable coverage and implementation admission remain pending.
 
@@ -143,15 +143,15 @@ research receipts with the same visible rationale/missing-binding error, and one
 Ten recent displayed results were authorized; three did not complete. This bounded sample is not
 a historical approval or safety rate.
 
-Source findings requiring served-target reproduction:
+Source findings at the original snapshot, with delivery reconciliation:
 - The loader selects the trailing seven days, while measureUnlearned selects rows at least seven
   days old. Normal populations overlap only at the cutoff.
 - measureAgreement reads chosenOptionId without the human/agent provenance used by the trust
   report, but labels the result human agreement. Reuse canonical denominator rules.
 - Unlearned/no-comparison lines are no-action. Some actionable findings stop at reported or
   needs-defect-filed. Routing errors can become an empty summary while lastStatus becomes ok.
-- The loader caps one window at 20,000 rows without completeness information.
-- A full scheduled-task listing was truncated; activation and recent run health were not established.
+- PR #6577 adds look-ahead and completeness disclosure at the 20,000-row limit; this bounds returned rows, not database scan cost. Verify runtime cost before declaring acceptance.
+- The existing owned decision-engine-review-weekly task was located through a bounded metadata read. Its last observed run was healthy, but this is not evidence that correction and follow-up are complete; retain the existing task and cron.
 
 ### 10.2 Cadence, populations and outcome quality
 
@@ -261,3 +261,13 @@ Reuse that boundary and BI-ADAC33D5 outcome reliability rather than redefine cor
 BI-E9555B2D owns stage authority, BI-FEDD8F45 efficacy and BI-F3C2EC7A the reference demonstration.
 The correction successor BI-73780C2E differs from BI-19CEC4B4 measurement/routing and BI-31159978
 reviewer-writer schema repair. Component delivery status is not live integration evidence.
+
+### 10.7 Current approval-noise reference case and delivery sequence
+
+The served inbox observed on 2026-10-25 (America/Chicago; observation 2026-10-26T00:32Z) displayed 15 pending approvals and 10 other notices. Visible pending envelopes include ordinary Workroom evidence writes with outcome blocked. Three successive WC-31246E11 requests say the prior evidence request is awaiting approval. The displayed propose boundary requests a separate owner authorization for each write. This observation establishes a repeated interruption path, not permission to approve or replay those requests.
+
+Refactor the existing authority resolver and stage projection to distinguish append-only observability from a gate ruling. A blocked or inconclusive fact may be recorded only for the validated actor, assigned Workroom, current subject and stage; its payload must not mint a receipt, complete a stage, approve a design, publish doctrine, widen a grant or cause an external effect. A stage-bound observation does not turn a proposed implementation into an authorized implementation. Validate required input and exact source bindings before creating an approval envelope. Missing technical context returns a named repair to the agent; it is not a human policy choice. Preserve denials and genuine checkpoint ownership.
+
+The first implementation comparison must reproduce this distinction through the actual governed entry point: ordinary bound blocked evidence, wrong room, missing task/stage binding, attempts to write a pass or completion receipt, explicit human checkpoint, expired or revoked mandate, and changed arguments. Show whether each call executed, was refused, requested input or required judgment, with no historical queue replay. Measure owner interruptions per distinct effect, duplicate unchanged requests and recorded outcome coverage before and after. Do not count hidden cards as reduced approvals.
+
+Publish this review amendment first, then the separate GPP correlation amendment, preserving both original artifacts in aeeafe0ca70a25696a8d077b157611cecb63ee36. Independent approval and live plan coverage are owed by implementation; documentation publication alone grants no new execution authority. BI-73780C2E owns correction-and-follow-up, with the stage/admission owners in section 10.6 retaining their scopes.

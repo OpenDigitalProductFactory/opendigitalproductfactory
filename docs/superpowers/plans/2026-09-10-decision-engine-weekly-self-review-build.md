@@ -107,7 +107,7 @@ outcome/citation acceptance and reliability. Paired-installation-owned records r
 1. **Reproduce and retain evidence.** Re-read live statuses and exact source; establish schedule/run
    health through a bounded read. A truncated listing cannot prove absence. Reproduce window,
    provenance, missing binding and repeated-refusal faults with exact run lineage.
-2. **Repair measurement before tuning.** V-MEASURES: include a ten-day-old unresolved decision,
+2. **Verify merged measurement and close remaining defects before tuning.** BI-F55BBB6B / PR #6577 repairs the mature-population query and completeness disclosure; do not reimplement it. V-MEASURES: include a ten-day-old unresolved decision,
    recent decision, late outcome, agent report and human choice; test page-limit continuation,
    duplicate ticks, restart, changed policy version and routing failure. Preserve unknowns and
    sample minima. Do not promote weights or trust.
