@@ -190,3 +190,100 @@ another optimization engine or authorize live grant changes. Existing review
 requests remain bound to their original artifacts. This revised design needs
 normal independent review after original execution settlement; no old receipt
 is claimed to cover the new text.
+
+
+## Coordinated implementation handoff accepted October 25
+
+The founder now authorizes coordination with "Prioritize DPF platform design"
+and implementation of the agreed design and plan. That chat confirmed the
+ownership split and supplied a bounded handoff rather than another design.
+This chat coordinates P1/P2. BI-A798975C retains finite completion acceptance;
+BI-IMP-9DA35549 and BI-BF20F828 retain learning/review; Rationalize approval list
+retains approval-policy ownership. No source permission or review is delegated
+by this paragraph.
+
+Handoff provenance: coordinated-coo-implementation-handoff.json supplied by chat
+01a173c1-2a8e-74d2-a14b-bad35032d891. The receiver read the actual file and verified
+SHA256 2404f9f247322c69b1ee78d81631a87f74a7da8ba109d200a4ee38a3e127d1b6.
+It is coordination evidence, not a native review, coverage or acceptance receipt.
+Its original native recording was refused during an upgrade drain; record this
+same identity through Workroom evidence when normal writes return.
+
+### Adopted order and completion boundaries
+
+| Order | Existing delivery | Concrete next outcome | Dependencies and ownership |
+| --- | --- | --- | --- |
+| 1 | BI-756C899D | Publish and verify truthful effective dispatch/progress | This chat; independent of the optimization program |
+| 2 | BI-C43FD3E5 under BI-4B48E7FE | Server-owned COO recovery and onboarding | Current design/plan review, valid coverage/admission, P1 and existing finite agreement contract |
+| 3 | BI-34999E95, BI-B93E9C6E, BI-69803ACC | Correct schema-valid true/false/null attribution; join existing outcomes; fixed-cohort quality, throughput, cost and human-attention scorecard | Existing measurement owners; verify BI-58A9FC76 delivered resolver before replacing anything |
+| 4 | BI-1B7BB954, BI-6DB95601, then BI-A472354E | Qualification/integrity gates followed by one bounded versioned candidate/incumbent pilot | Existing learning/review owners; scorecard and each BI's current prerequisites |
+
+Orders 3/4 are separately owned follow-ons, not added acceptance criteria for
+P1 or P2. They cannot prevent ordinary authorized recovery or silently reopen a
+completed finite agreement. Their current live readiness still controls start.
+
+### Concrete finite-agreement integration for P2
+
+Consume the already merged finite contract from PR 6575, merge
+909f8eebaffa6e5c1eb2a9e40c53f7580546c64b. Its plan coverage is
+cmvo6frnw171d01qhgu1aznxj and implementation admission IRD-5F9E819B30BA.
+Those facts do not establish a native independent semantic-review verdict.
+
+- apps/web/lib/work-capsules/delivery-agreement-capture.ts owns capture of the
+  initial objective, semantic acceptance digest and scoped guidance context.
+  Recovery retains that agreement; it does not capture a replacement objective.
+- apps/web/lib/work-management/delivery-agreement.ts owns typed readers and
+  projectDeliveryAgreement. Legacy rooms keep unknown initial history, and
+  standing rooms retain cycle semantics.
+- apps/web/lib/work-capsules/workroom-detail-read.server.ts exposes capsule.delivery;
+  apps/web/lib/work-management/room-read-model.ts shares the operator projection.
+  The COO consumes that projection alongside effective progress and next action.
+- apps/web/lib/backlog/initiative-readiness/work-capsule-terminal-transition.ts
+  remains the completion authority: readiness, objective reconciliation and CAS,
+  then one immutable handoff in the successful transaction. The COO never writes
+  deliveryHandoff or PASS directly.
+- Existing evidence result.followOnRefs carries separately owned BI references.
+  Later learning or a new request goes there; it cannot rewrite current acceptance.
+
+### Implementation and acceptance sequence for P2
+
+1. Obtain classification, independent current design/plan receipts and coverage.
+   The latest native design/spec requests at design head 14ee8608dd4d ended with
+   unknown execution outcomes again. Preserve their identities and reconcile;
+   no replacement, stale pass or downgraded delivery shape is a remedy.
+2. Claim only actual P2 source paths in its own governed worktree; consume the
+   returned testImpact and guard obligations before red tests. Reuse the above
+   merged contract and existing room/task recovery owners.
+3. Add failing cases for immutable agreement through retry/restart, changed
+   acceptance, dependency release, provider recovery, cancelled work, denied
+   authority and result acknowledgement without verified advancement.
+4. Implement durable owner/action/acknowledgement/next-check/result state through
+   existing Workroom/task/checkpoint facilities with revision fencing. Keep
+   uncertain external effects on their original reconciliation path.
+5. Align canonical COO persona, standing task, skills and reachable tool context;
+   qualify any actual permission change through its own authority gate. Prove
+   direct and scheduled paths resolve the same canonical principal.
+6. Run affected tests/typecheck, exact-tree shared integration, independent review,
+   protected publication and canonical served acceptance. Finite closeout tests
+   remain with BI-A798975C's owner; record the integration evidence and its limits.
+
+The acceptance replay must show provider hold -> owned permitted recovery ->
+verified advancement, external interruption without the old conversation,
+dependency continuation, and one deduplicated genuine human decision. Completion
+must retain the agreed outcome and produce a durable handoff; separately owned
+follow-ons do not reopen it. Preserve explicit unavailable peer guidance rather
+than assuming a trusted pairing means that guidance was read.
+
+### Current unblocking evidence
+
+The finite-delivery owner normally released all thirty idle path claims. A fresh
+ordinary claim for the canonical shape architecture page succeeded, so the old
+forced shared-edit approval is no longer needed for this work. P1 now includes
+the real canonical documentation correction and current main's provider-hold
+capacity fix. Integrated source head f1ed74cb48f6416ea32da6f48f569abb334bf4d3 passed
+311 affected tests with three PostgreSQL skips and typecheck; documentation-impact
+and design-grounding guards pass. Shared integration has not run: an upgrade
+drain first refused admission, and the sanctioned waiter's Windows child spawn
+then failed before pregate started. No lease or gate record exists, and no
+passing runtime verification is inferred. Resume the supported foreground gate
+when the drain clears; do not duplicate a queued claim or edit receipts.
