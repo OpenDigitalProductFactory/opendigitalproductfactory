@@ -77,7 +77,7 @@ test('refuses a manifest that declares its own model qualification', async t => 
 
 // Qualification must accept the observed Docker schema without inventing a
 // loading observation, and must keep the Docker engine recoverable on failure.
-const {runnerActivity,restoreAfterQualification,stopOwnedChild,validLeaseExpiry,modelLayerBinding,unloadWithRestorationObligation,nativeEngineArguments,performanceComparison,runOwnedNative,guardedLeaseAction,authorityAwareSignal,validateBaselineReport,MATCHED_ENGINE_SETTINGS,recordAuthorityFence,validateOwnedLease}=await import('./qualify-engine.mjs');
+const {runnerActivity,restoreAfterQualification,stopOwnedChild,validLeaseExpiry,modelLayerBinding,unloadWithRestorationObligation,nativeEngineArguments,performanceComparison,runOwnedNative,guardedLeaseAction,authorityAwareSignal,validateBaselineReport,MATCHED_ENGINE_SETTINGS,recordAuthorityFence,validateOwnedLease,parseQualificationOptions}=await import('./qualify-engine.mjs');
 test('observed Docker runner schema proves idle without claiming loading capture',()=>{
   assert.deepEqual(runnerActivity([{in_use:false}]),{idle:true,loadingFieldObserved:false});
   assert.equal(runnerActivity([{in_use:true}]).idle,false);
@@ -197,7 +197,7 @@ test('authority fence aborts an in-flight recovery request independently of user
 });
 
 function baselineFixture() {
-  const current={package:{manifestSha256:'package'},model:{ociDigest:'model',ggufSha256:'weights',binding:{projectorLayerDigest:'projector'}},tensorControls:{device:'device'}};
+  const current={workload:{version:'dpf-mac-model-controls.v1',contextLineCount:2900,specificationSha256:'spec',coldMessagesSha256:'messages'},package:{manifestSha256:'package'},model:{ociDigest:'model',ggufSha256:'weights',binding:{projectorLayerDigest:'projector'}},tensorControls:{device:'device'}};
   const previous=structuredClone({...current,schemaVersion:1,baselineRestored:true,
     baselineEngine:{sha256:'binary'},finishedAt:new Date().toISOString(),
     runtimeConfiguration:[{engine:'docker-baseline',settings:MATCHED_ENGINE_SETTINGS,effectiveContext:131072,effectiveSlots:4}],
@@ -207,7 +207,7 @@ function baselineFixture() {
 test('reuse accepts only a restored, completed and matching recent baseline',()=>{
   const {previous,current}=baselineFixture();
   assert.equal(validateBaselineReport(previous,current,'binary').rows.length,4);
-  for(const mutate of [p=>p.model.ggufSha256='other',p=>p.baselineRestored=false,p=>p.results[0].correct=false,p=>p.results[2].promptTokens=null,p=>p.results[3].cachedTokens=0,p=>p.runtimeConfiguration[0].settings.slots=2,p=>p.finishedAt='not-a-date']) {
+  for(const mutate of [p=>p.model.ggufSha256='other',p=>p.baselineRestored=false,p=>p.results[0].correct=false,p=>p.results[2].promptTokens=null,p=>p.results[3].cachedTokens=0,p=>p.runtimeConfiguration[0].settings.slots=2,p=>p.finishedAt='not-a-date',p=>delete p.workload,p=>p.workload.coldMessagesSha256='different-same-length',p=>p.results[2].prefillMs=Infinity,p=>p.results[3].cachedTokens=0.5,p=>p.results[0].finishReason='tool_calls']) {
     const copy=structuredClone(previous);mutate(copy);
     assert.throws(()=>validateBaselineReport(copy,current,'binary'));
   }
@@ -227,4 +227,11 @@ test('qualification refuses unbound, queued and foreign reservations',()=>{
   const expected={id:'own',owner:'session'};
   assert.equal(validateOwnedLease(v,expected).leaseId,'own');
   for(const change of [{phase:'admitted-unbound'},{status:'queued'},{ownerSessionId:'other'},{branchName:'other'},{expiresAt:'invalid'}]) assert.throws(()=>validateOwnedLease({...v,...change},expected),/not proven/);
+});
+
+test('first qualification accepts no baseline report; reuse is explicitly optional',()=>{
+  const names=['package','sdk','out','lease-id','owner-session','model','model-ref','model-digest','oci-manifest','baseline-engine','baseline-engine-sha256','dmr-root'];
+  const argv=names.flatMap(k=>['--'+k,'fixture']);
+  assert.equal(parseQualificationOptions(argv)['baseline-report'],undefined);
+  assert.equal(parseQualificationOptions([...argv,'--baseline-report','prior.json'])['baseline-report'],'prior.json');
 });

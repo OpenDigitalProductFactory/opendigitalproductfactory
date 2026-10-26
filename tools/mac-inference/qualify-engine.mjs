@@ -13,8 +13,13 @@ import { superviseLeaseRun,admittedLeaseTtlMs } from '../../scripts/lib/lease-su
 
 const exec = promisify(execFile);
 let a = {};
-function argumentsFromCLI() { return parseArgs({ options: Object.fromEntries(
-  ['package','sdk','out','lease-id','owner-session','model','model-ref','model-digest','oci-manifest','mmproj','baseline-engine','baseline-engine-sha256','baseline-report','dmr-root'].map(k=>[k,{type:'string'}])) }).values; }
+const REQUIRED_OPTIONS=['package','sdk','out','lease-id','owner-session','model','model-ref',
+  'model-digest','oci-manifest','baseline-engine','baseline-engine-sha256','dmr-root'];
+export function parseQualificationOptions(args=process.argv.slice(2)) {
+  const values=parseArgs({args,options:Object.fromEntries([...REQUIRED_OPTIONS,'mmproj','baseline-report'].map(k=>[k,{type:'string'}]))}).values;
+  for(const key of REQUIRED_OPTIONS) if(!values[key]) fail('--'+key+' is required');
+  return values;
+}
 const report = { schemaVersion:1, status:'incomplete', runtimeFilesChanged:false, providerConfigurationChanged:false,
   physicalOlderMacCoverage:'unrun', platformWorkflowIntegration:'unrun', results:[], failures:[] };
 let child, workspace, lease, deadline, connection;
@@ -119,7 +124,7 @@ async function testEndpoint(label, base, context) {
       && JSON.parse(calls[0].function.arguments).value===42 && tool.metric.finishReason==='tool_calls';
   } catch { /* absent or malformed tool output is a failed observation */ }
   report.results.push({engine:label,case:'tool-call-format',correct,...tool.metric});
-  const messages=[{role:'system',content:context},{role:'user',content:'Return only the benchmark marker.'}];
+  const messages=coldMessages(context);
   const cold=await complete(base,messages);
   const coldMessage=cold.response.choices?.[0]?.message;
   report.results.push({engine:label,case:'long-cold',correct:coldMessage?.content?.trim()==='MATCH731'
@@ -265,9 +270,6 @@ export function performanceComparison(before,after,configurationCount) {
     scope:'Same immutable model/projector, explicit shared native engine arguments and verified effective context/slots; one cold sample per engine, not live service or fleet performance'};
 }
 async function main() {
-  for (const key of ['package','sdk','out','lease-id','owner-session','model','model-ref','model-digest','oci-manifest','baseline-engine','baseline-engine-sha256','baseline-report','dmr-root']) {
-    if (!a[key]) fail('--'+key+' is required');
-  }
   if(platform()!=='darwin'||arch()!=='arm64') fail('Native qualification requires an Apple Silicon Mac');
   const root=new URL(a['dmr-root']);
   if (!['127.0.0.1','localhost','[::1]'].includes(root.hostname)||root.username||root.password
@@ -295,7 +297,22 @@ async function main() {
   });
   if(supervision.status==='fenced') {report.backendEffectSettlement='unknown after authority fence; HTTP abort is not effect settlement';fail('Qualification fenced: '+supervision.reason);}
 }
+function makeContext(n) {
+  return 'DPF_MAC_ENGINE_QUALIFICATION_V1\n'+Array.from({length:n},(_,i)=>'Record '+String(i).padStart(4,'0')+' is archived.').join('\n')+'\nThe benchmark marker is MATCH731.';
+}
+function coldMessages(context) {
+  return [{role:'system',content:context},{role:'user',content:'Return only the benchmark marker.'}];
+}
+function workloadRecord(lines) {
+  if(!Number.isSafeInteger(lines)||lines<1||lines>6000) fail('Baseline workload line count unavailable');
+  return {version:'dpf-mac-model-controls.v1',contextLineCount:lines,
+    specificationSha256:sha256(JSON.stringify({makeContext:makeContext.toString(),coldMessages:coldMessages.toString(),
+      testEndpoint:testEndpoint.toString(),complete:complete.toString(),modelRef:a['model-ref']})),
+    coldMessagesSha256:sha256(JSON.stringify(coldMessages(makeContext(lines))))};
+}
 export function validateBaselineReport(previous,current,expectedBinarySha) {
+  if(previous.workload?.version!=='dpf-mac-model-controls.v1'
+    ||JSON.stringify(previous.workload)!==JSON.stringify(current.workload)) fail('Baseline workload identity missing or mismatched');
   if(previous.schemaVersion!==1 || previous.baselineRestored!==true
     || previous.baselineEngine?.sha256!==expectedBinarySha
     || previous.package?.manifestSha256!==current.package.manifestSha256
@@ -312,7 +329,10 @@ export function validateBaselineReport(previous,current,expectedBinarySha) {
   const rows=previous.results?.filter(x=>x.engine==='docker-baseline')??[];
   const cases=['arithmetic','tool-call-format','long-cold','long-warm'];
   if(rows.length!==4||cases.some(c=>rows.filter(x=>x.case===c&&x.correct===true).length!==1)
-    ||rows.some(x=>!Number.isSafeInteger(x.promptTokens)||x.promptTokens<=0||!['stop','tool_calls'].includes(x.finishReason))
+    ||rows.some(x=>!Number.isSafeInteger(x.promptTokens)||x.promptTokens<=0
+      ||x.finishReason!==(x.case==='tool-call-format'?'tool_calls':'stop')
+      ||!Number.isFinite(x.prefillMs)||x.prefillMs<=0
+      ||!Number.isSafeInteger(x.cachedTokens)||x.cachedTokens<0||x.cachedTokens>x.promptTokens)
     ||rows.find(x=>x.case==='long-cold').cachedTokens!==0
     ||!(rows.find(x=>x.case==='long-cold').prefillMs>0)
     ||!(rows.find(x=>x.case==='long-warm').cachedTokens>0)) fail('Baseline report completion/cache evidence missing');
@@ -363,7 +383,9 @@ async function performQualification(root) {
   if(a['baseline-report']) {
     if((await stat(a['baseline-report'])).size>1024*1024) fail('Baseline report too large');
     const raw=await readFile(a['baseline-report']);
-    reused=validateBaselineReport(JSON.parse(raw),report,a['baseline-engine-sha256']);
+    const previous=JSON.parse(raw);
+    report.workload=workloadRecord(previous.workload?.contextLineCount);
+    reused=validateBaselineReport(previous,report,a['baseline-engine-sha256']);
     report.baselineReuse={reportSha256:sha256(raw),comparisonWindow:'separate coordinated windows within one hour; not simultaneous A/B',
       validation:'same package manifest, native engine binary, model, device and explicit profile; completed/cache controls and Docker restoration'};
     report.results.push(...reused.rows);
@@ -372,11 +394,13 @@ async function performQualification(root) {
   await unloadWithRestorationObligation(report,()=>exec('docker',['model','unload',a['model-ref']],{timeout:30000}));
   const first=await startOwnedEngine(reused?join(a.package,'bin/llama-server'):a['baseline-engine'],
     reused?'corrected-candidate':'docker-baseline');
-  let lines=2500;
-  const makeContext=n=>'DPF_MAC_ENGINE_QUALIFICATION_V1\n'+Array.from({length:n},(_,i)=>'Record '+String(i).padStart(4,'0')+' is archived.').join('\n')+'\nThe benchmark marker is MATCH731.';
-  const initial=await json(first+'/tokenize',{model:a['model-ref'],content:makeContext(lines)},30000);
-  if(!Array.isArray(initial.tokens)||initial.tokens.length===0) fail('Exact tokenizer count unavailable');
-  lines=Math.max(1,Math.min(6000,Math.floor(lines*32000/initial.tokens.length)));
+  let lines=reused?report.workload.contextLineCount:2500;
+  if(!reused) {
+    const initial=await json(first+'/tokenize',{model:a['model-ref'],content:makeContext(lines)},30000);
+    if(!Array.isArray(initial.tokens)||initial.tokens.length===0) fail('Exact tokenizer count unavailable');
+    lines=Math.max(1,Math.min(6000,Math.floor(lines*32000/initial.tokens.length)));
+    report.workload=workloadRecord(lines);
+  }
   const context=makeContext(lines);
   if(!reused) {
     await testEndpoint('docker-baseline',first,context);
@@ -414,7 +438,7 @@ async function cleanupWhileLeased() {
     restored:report.baselineRestored,stop:stopCandidate,restore:restoreDockerBaseline});
 }
 async function run() {
-  a=argumentsFromCLI();
+  a=parseQualificationOptions();
   for(const signal of ['SIGINT','SIGTERM']) process.once(signal,()=>{abort.abort();void stopCandidate();});
   try { await main(); } catch(error) { report.failures.push(error.message); }
   finally {
