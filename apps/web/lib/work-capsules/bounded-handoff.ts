@@ -67,7 +67,7 @@ export async function assessBoundedHandoff(input: Input, options: { lock?: boole
 }
 /** Runs only inside the real receipt transaction after the shared lock prefix. */
 export async function executeBoundedHandoff(input: Input): Promise<ToolResult> {
-  if (!hasBoundCommandTransaction() || !input.db.$queryRaw || input.db.$transaction) return fail("handoff-transaction-required", "Use the governed handoff command with its command identity and transaction.");
+  if (!hasBoundCommandTransaction(input.db) || typeof input.db.$queryRaw !== "function") return fail("handoff-transaction-required", "Use the governed handoff command with its command identity and transaction.");
   const { capsule, request, proposed, authority, snapshot, terminal } = await assessBoundedHandoff(input, { lock: true });
   const { db, actor, command } = input;
   if (terminal) return { success: true, entityId: capsule.capsuleId, message: "This receiving assistant already acknowledged the completed handoff.", data: { handoff: terminal, assistantAdmitted: false } };
