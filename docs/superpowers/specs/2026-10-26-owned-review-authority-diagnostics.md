@@ -1,6 +1,6 @@
 ---
 title: Owned review authority diagnostics
-status: proposed
+status: draft
 date: 2026-10-26
 backlog:
   - BI-924ADA3A
@@ -34,6 +34,13 @@ fixed stage/reason categories and fixed remedy text. A query exception yields
 unavailable, never a claimed denial or permission to execute. Preserve execution
 callers' fail-closed behavior and their distinction between unavailable and denied.
 
+The existing signed-in task-detail endpoint also calls the same bounded reader
+for the exact original human owner. Its existing task admission runs first.
+An administrator reading another owner's task receives no added authority
+diagnosis. This is the existing Tasks surface, not a new endpoint or tool, and
+lets the original owner inspect safe recovery even when a client lacks protocol
+Tasks methods. No client credential is read or substituted.
+
 Reuse the immutable request loader for both worker and reader. Its stored artifact
 must match task row, owner, room, gate key and exact saved request digest before
 authority is inspected. Missing/malformed/conflicting packets yield unavailable;
@@ -61,6 +68,8 @@ provider request, review attempt or approval policy is required.
 3. Verify every denial stage, allowed OAuth continuity, unavailable storage,
    missing/mismatched packet and foreign owner. Assert no raw errors, actor/token
    identifiers or packet content leave the projection and no mutating path runs.
+   Verify the signed-in task-detail owner path, unsigned refusal, unrelated family
+   exclusion and administrator cross-owner exclusion through its route handler.
 4. Run affected tests, both web TypeScript programs and governed publication gates.
    Deliver through a signed PR and protected queue; reuse valid evidence.
 5. On the canonical served revision, the original admitted owner reads BFA3's actual
