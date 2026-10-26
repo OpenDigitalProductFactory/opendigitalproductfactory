@@ -143,7 +143,7 @@ export async function interceptToolCallAsProposal(input: {
 }, deps: {
   persistence?: ProposeMessagePersistence;
   /** Test seam; production reads room-stage-mandate.ts. */
-  resolveMandatedTools?: (input: { taskRunId: string | null; agentId: string }) => Promise<readonly string[]>;
+  resolveMandatedTools?: (input: { taskRunId: string | null; agentId: string; toolName: string; params: Record<string, unknown> }) => Promise<readonly string[]>;
 } = {}): Promise<ToolResult | null> {
   if (!shouldProposeToolCall(input.toolDef, input.proposeSideEffects)) return null;
   // BI-C1781121: a write the run's Workroom stage declares is a recorded
@@ -186,13 +186,13 @@ export async function interceptToolCallAsProposal(input: {
 }
 
 async function runMandatesTool(
-  input: { toolName: string; agentId: string; taskRunId: string | null },
-  resolve?: (input: { taskRunId: string | null; agentId: string }) => Promise<readonly string[]>,
+  input: { toolName: string; agentId: string; taskRunId: string | null; args: Record<string, unknown> },
+  resolve?: (input: { taskRunId: string | null; agentId: string; toolName: string; params: Record<string, unknown> }) => Promise<readonly string[]>,
 ): Promise<boolean> {
   try {
     const load = resolve
       ?? (await import("@/lib/work-management/room-stage-mandate")).loadScheduledRoomMandateLive;
-    return (await load({ taskRunId: input.taskRunId, agentId: input.agentId })).includes(input.toolName);
+    return (await load({ taskRunId: input.taskRunId, agentId: input.agentId, toolName: input.toolName, params: input.args })).includes(input.toolName);
   } catch {
     return false;
   }
