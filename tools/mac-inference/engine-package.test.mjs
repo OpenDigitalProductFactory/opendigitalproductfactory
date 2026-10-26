@@ -77,7 +77,7 @@ test('refuses a manifest that declares its own model qualification', async t => 
 
 // Qualification must accept the observed Docker schema without inventing a
 // loading observation, and must keep the Docker engine recoverable on failure.
-const {runnerActivity,restoreAfterQualification,stopOwnedChild,validLeaseExpiry,modelLayerBinding,unloadWithRestorationObligation,nativeEngineArguments,performanceComparison,runOwnedNative,guardedLeaseAction}=await import('./qualify-engine.mjs');
+const {runnerActivity,restoreAfterQualification,stopOwnedChild,validLeaseExpiry,modelLayerBinding,unloadWithRestorationObligation,nativeEngineArguments,performanceComparison,runOwnedNative,guardedLeaseAction,authorityAwareSignal}=await import('./qualify-engine.mjs');
 test('observed Docker runner schema proves idle without claiming loading capture',()=>{
   assert.deepEqual(runnerActivity([{in_use:false}]),{idle:true,loadingFieldObserved:false});
   assert.equal(runnerActivity([{in_use:true}]).idle,false);
@@ -183,4 +183,15 @@ test('user cancellation still permits restoration while authority remains valid'
   await guardedLeaseAction({read:async()=>{},restore:true,isAuthorityLost:()=>false,
     signal:controller.signal,act:()=>{acted=true;}});
   assert.equal(acted,true);
+});
+
+test('authority fence aborts an in-flight recovery request independently of user cancellation',async()=>{
+  const authority=new AbortController();
+  const recovery=new AbortController();
+  const signal=authorityAwareSignal(recovery.signal,authority.signal,2000);
+  const pending=new Promise((resolve,reject)=>signal.addEventListener('abort',()=>reject(Error('request aborted')),{once:true}));
+  assert.equal(signal.aborted,false);
+  authority.abort();
+  await assert.rejects(pending,/request aborted/);
+  assert.equal(signal.aborted,true);
 });

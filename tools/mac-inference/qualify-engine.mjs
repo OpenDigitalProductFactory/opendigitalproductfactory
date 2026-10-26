@@ -21,6 +21,7 @@ let child, workspace, lease, deadline, connection;
 let cleanupRan=false,authorityLost=false;
 const helpers=new Set();
 const abort = new AbortController();
+const authorityAbort = new AbortController();
 const pause = ms => new Promise(r=>setTimeout(r,ms));
 function fail(message) { throw new Error(message); }
 export function validLeaseExpiry(value, now=Date.now()) {
@@ -57,9 +58,12 @@ async function ownedLease() {
   lease=v;
   return v;
 }
+export function authorityAwareSignal(cancellation,authority,timeoutMs) {
+  return AbortSignal.any([cancellation,authority,AbortSignal.timeout(timeoutMs)]);
+}
 async function json(url, body, timeout=240000, cancellation=abort.signal) {
   if (Date.now()>=deadline) fail('Qualification deadline reached');
-  const signal=AbortSignal.any([cancellation,AbortSignal.timeout(Math.max(1,Math.min(timeout,deadline-Date.now())))]);
+  const signal=authorityAwareSignal(cancellation,authorityAbort.signal,Math.max(1,Math.min(timeout,deadline-Date.now())));
   const r=await fetch(url,{method:body===undefined?'GET':'POST',
     ...(body===undefined?{}:{headers:{'content-type':'application/json'},body:JSON.stringify(body)}),signal});
   if (!r.ok) fail('Diagnostic HTTP '+r.status+' at '+new URL(url).pathname);
@@ -271,12 +275,12 @@ async function main() {
       }
       return r;
     },
-    terminate:async()=>{authorityLost=true;abort.abort();await stopAllOwnedProcesses();},
+    terminate:async()=>{authorityLost=true;authorityAbort.abort();abort.abort();await stopAllOwnedProcesses();},
     // Cleanup/restoration and the native release remain visible to the owning agent.
     release:async()=>{},
     onEvent:event=>{if(event.type!=='released') (report.leaseEvents??=[]).push(event);},
   });
-  if(supervision.status==='fenced') fail('Qualification fenced: '+supervision.reason);
+  if(supervision.status==='fenced') {report.backendEffectSettlement='unknown after authority fence; HTTP abort is not effect settlement';fail('Qualification fenced: '+supervision.reason);}
 }
 async function performQualification(root) {
   const verified=await verifyPackage(a.package);
