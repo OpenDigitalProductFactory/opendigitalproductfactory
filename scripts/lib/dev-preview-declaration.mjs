@@ -10,13 +10,14 @@ const sameSeed = (stat, expected) => regular(stat) && sameFile(stat, expected)
   && ['size', 'mtimeNs', 'ctimeNs', 'mtimeMs', 'ctimeMs'].every(key => stat[key] === expected[key]);
 
 async function readPreviewSeed(path) {
-  const checked = await lstat(path, { bigint: true });
-  if (!regular(checked)) throw new Error('preview_declaration_seed_invalid');
   let handle;
   try {
     handle = await open(path, constants.O_RDONLY | (constants.O_NONBLOCK ?? 0) | (constants.O_NOFOLLOW ?? 0));
     const opened = await handle.stat({ bigint: true });
-    if (!sameSeed(opened, checked)) throw new Error('preview_declaration_seed_changed');
+    if (!regular(opened)) throw new Error('preview_declaration_seed_invalid');
+    const checked = await lstat(path, { bigint: true });
+    if (!regular(checked)) throw new Error('preview_declaration_seed_invalid');
+    if (!sameSeed(checked, opened)) throw new Error('preview_declaration_seed_changed');
     const bytes = await handle.readFile();
     const [after, current] = await Promise.all([handle.stat({ bigint: true }), lstat(path, { bigint: true })]);
     if (!sameSeed(after, opened) || !sameSeed(current, opened) || BigInt(bytes.length) !== opened.size) {

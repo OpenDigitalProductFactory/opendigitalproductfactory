@@ -84,7 +84,9 @@ Next development declarations use one controller-owned file bind at
 actual mount inspection verify that file; full source cleanliness remains
 mandatory, including after initialization. Seed bytes are read through one
 regular file descriptor whose identity and metadata match the source pathname
-before and after reading. Replacement or concurrent writes refuse before
+before and after reading. The read-only descriptor is opened before pathname
+checks; its first stat anchors the identity, and the pathname must match it
+before any bytes are read. Replacement or concurrent writes refuse before
 backing storage is created, and the descriptor closes before that creation.
 The keeper removes verified owned
 writers before deleting backing storage. Foreign file references, writable
