@@ -134,7 +134,7 @@ test('notice repackaging needs the actual old manifest and identical native reco
   assert.throws(() => verifyEngineQualification({ ...f.args(), qualifiedManifestBytes: original }), /native files/);
 });
 
-const { configurationSnapshot, runtimeLeaseProjection, loopbackManagementRoot, configureDrainedCandidate, awaitRuntimeAdmission } = await import('./qualify-runtime.mjs');
+const { configurationSnapshot, runtimeLeaseProjection, loopbackManagementRoot, configureDrainedCandidate, awaitRuntimeAdmission, recordRuntimeFailure } = await import('./qualify-runtime.mjs');
 test('configuration capture preserves exact model tag, mode, context and flags while rejecting another model digest', () => {
   const digest = 'sha256:' + 'a'.repeat(64), model = 'hf.co/model:Q4_K_M';
   const row = { Backend: 'llama.cpp', Model: model, ModelID: digest, Mode: 'completion',
@@ -213,4 +213,14 @@ test('native admission refusal, expiry and changed source never bind or generate
   await assert.rejects(awaitRuntimeAdmission({ waitDeadline: Date.now() + 120000,
     assertSource: async () => { throw new Error('source changed'); }, claim: async () => { calls++; }, bind: async () => {},
   }), /source changed/); assert.equal(calls, 0);
+});
+
+test('blocked admission is unrun evidence, while an inspected runtime failure remains a failure', () => {
+  const blocked = { status: 'incomplete', failures: [] };
+  recordRuntimeFailure(blocked, new Error('approval_required'));
+  assert.equal(blocked.status, 'unrun'); assert.deepEqual(blocked.failures, []);
+  assert.deepEqual(blocked.obstacles, ['approval_required']);
+  const inspected = { status: 'incomplete', runtimeInspectionStarted: true, failures: [] };
+  recordRuntimeFailure(inspected, new Error('runtime HTTP 500'));
+  assert.deepEqual(inspected.failures, ['runtime HTTP 500']); assert.equal(inspected.obstacles, undefined);
 });

@@ -77,6 +77,11 @@ export async function awaitRuntimeAdmission({ claim, bind, assertSource, observe
   }
   throw new Error('Runtime reservation wait deadline reached; no native operation started');
 }
+export function recordRuntimeFailure(report, error) {
+  if (!report.runtimeInspectionStarted) {
+    report.status = 'unrun'; (report.obstacles ??= []).push(error.message);
+  } else report.failures.push(error.message);
+}
 export function parseRuntimeQualificationOptions(args = process.argv.slice(2)) {
   const names = ['package', 'out', 'owner-session', 'model-ref', 'model-digest',
     'embedding-ref', 'embedding-digest', 'dmr-root', 'baseline-engine', 'baseline-engine-sha256',
@@ -239,6 +244,7 @@ async function run(a) {
       release: async () => {}, onEvent: event => { (report.leaseEvents ??= []).push(event); },
       run: async () => {
         try {
+          report.runtimeInspectionStarted = true;
           const verified = await verifyRuntimePackage(a.package);
           report.qualifierSource = {};
           for (const name of ['qualify-runtime.mjs', 'runtime-profile.mjs', 'runtime-launchagent.mjs', 'qualify-engine.mjs']) {
@@ -315,14 +321,14 @@ async function run(a) {
         } finally { await cleanup(); }
       },
     });
-  } catch (error) { report.failures.push(error.message); }
+  } catch (error) { recordRuntimeFailure(report, error); }
   finally {
     try { await cleanup(); } catch (error) { report.failures.push('Restoration: ' + error.message); }
     report.finishedAt = new Date().toISOString();
     if (report.failures.length) report.status = 'qualification-failed';
     await checkpoint(); await writeFile(a.out, JSON.stringify(report, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
     console.log(JSON.stringify({ status: report.status, results: report.results, embedding: report.embedding, performance: report.performance,
-      failures: report.failures, baselineRestored: report.baselineRestored, workspace, output: a.out }));
+      failures: report.failures, obstacles: report.obstacles, baselineRestored: report.baselineRestored, workspace, output: a.out }));
     if (report.status !== 'runtime-api-qualified') process.exitCode = 1;
   }
 }

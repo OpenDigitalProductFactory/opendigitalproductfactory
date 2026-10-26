@@ -36,3 +36,10 @@ Traceability: AC-MRI1 through AC-MRI6; CONTRACT-MRI-IDENTITY, CONTRACT-MRI-PROVI
 All runtime-bound evidence belongs to the canonical served target or admitted shared lease. Node source tests may run without application dependencies when genuinely independent; source-only status forbids claiming pnpm/typecheck/Vitest passes. The current root index lock is not removed or bypassed. Full build runs in governed/cloud CI.
 
 Reuse the completed engine qualification when its immutable payload/model/profile still match; do not repeat it solely because installer source changed. The new runner/lifecycle/API workflow needs its own actual qualification. Before activation the original Docker runtime remains active. During failure restore only the recorded previous selection, verify model service and retain the failed attempt. Unknown effects remain unknown until reconciled.
+
+
+## Evidence checkpoint — October 26, 2026
+
+Source-pinned metal4.3 runner build, relocated-library sandbox allow/deny controls, bounded native reservation wait/expiry handling and runtime API qualification are complete. The API test passed eight chat/tool/prefix controls and the candidate embedding shape check, stopped all owned native processes and restored Docker. Operations evidence records the85-second candidate cold read and the baseline load caveat.
+
+This checkpoint does not close the atomic delivery. The supported managed native activation entry, full DPF workflow/under-load proof, protected publication and live convergence remain unfinished. Preserve the separate owner's unresolved original-upgrade obligation; do not submit a second uncertain upgrade or infer activation from this test.
