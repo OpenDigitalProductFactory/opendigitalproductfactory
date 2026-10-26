@@ -952,7 +952,7 @@ export default function SelfUpgradeClient({
                 </div>
               )}
               {!recovery.available && (
-                <p className="mt-2 text-[var(--dpf-muted)]" data-recovery-unavailable-reason={recovery.reason}>
+                <p className="mt-2 text-[var(--dpf-text)]" data-recovery-unavailable-reason={recovery.reason}>
                   {recovery.detail}
                 </p>
               )}

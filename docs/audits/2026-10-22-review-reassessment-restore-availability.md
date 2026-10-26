@@ -70,6 +70,28 @@ A prior 9,798-test PASS at `314303f9` is historical and cannot qualify this corr
 
 Results belong in the Workroom and PR with their actual source identities. Prototype checks are not deployed feature acceptance. After merge, use the canonical self-upgrade and live-version preflight before genuine parent review receipts and the owning chat's normal plan admission.
 
+### Served verification, 26 October
+
+Governed preview `NPEL-A8123220A2` served clean commit `e643f8ef30cf8036900147444e36e78ee8fdba49` (tree `65529017b0fb3fbec7cf8472480bbd2e1e1c628a`). Native verification sign-in admitted the automation persona on the operator development install, in the Full navigation view and en-US. This persona is separate from the original human review requester. Anonymous navigation reached the welcome page without recovery data. The preview honestly reported an unverified installation identity and no automatic upgrade action; this was not production-install acceptance.
+
+At 1440×900, 390×844 and 320×844, the page showed the unavailable explanation, zero Rollback confirmation fields and zero Restore recovery point buttons. Recovery point status `ok`, `postgres: backed up`, latest run `SUR-235D611D` and Run History remained available. The existing deploy/history disclosure arrived expanded. Skip-to-main focused the main region; Tab reached the disclosure, Enter collapsed and reopened it, and the next Tab reached View changes. No operational action was invoked.
+
+The reason wrapped within its container at both phone widths; document overflow was zero at all three sizes. The existing history table remained clipped inside an `overflow-x: hidden` container (about 551 pixels of table within a 252-pixel container at 320 pixels). This is retained history-layout debt, not a successful table reflow. The new explanation does not introduce a column or widen the table.
+
+The canonical measurement helper, applied to a read-only served DOM serialization with computed-visibility exclusions, reported:
+
+| Viewport | Default-visible words | Reading grade | Primary actions | Visible fields | Maximum choices | Document overflow |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1440×900 | 1,129 | 1.6 | 1 | 0 | 0 | 0 px |
+| 390×844 | 1,079 | 1.6 | 0 | 2 | 7 | 0 px |
+| 320×844 | 1,079 | 1.6 | 0 | 2 | 7 | 0 px |
+
+These are current-state measurements, not a whole-page improvement claim: the earlier canonical capture used a different persona, install state, run history and dynamic content. The task-local comparison is one unusable confirmation field and one unusable Restore button before, versus zero of each and an accurate reason after. Human comprehension and timing remain unmeasured.
+
+Actual dark rendering gave 14.70:1 and 8.12:1 text contrast for the two explanations. Light color-scheme emulation changed the rendered styles and gave 15.53:1 for the owner-card explanation, but only 4.40:1 for the 12-pixel secondary explanation. That failed the 4.5:1 target. The follow-up changes that explanation to the existing theme-aware primary-text token; final served contrast verification is still required. Browser zoom could not be exercised through the available keyboard interface, so 200% zoom remains unverified. Audible screen-reader announcements, restricted-role fixtures and live state transitions also remain unverified; no upgrade or restore was triggered to manufacture those states. Source regressions cover adverse recovery states separately.
+
+The keeper exited normally after interruption; both identified preview containers were absent and the preview lease was absent from the admitted/queued inventory. The browser color-scheme emulation and viewport override were reset, and the temporary QA tab closed. Screenshots, accessibility trees and measurement inputs are retained in the chat's artifact directory; the Workroom records their source and lease identity. This evidence is not a native review receipt, a deployment record or a parent reassessment.
+
 ## Sources
 
 - [Approved original initiative design](../superpowers/specs/2026-10-16-original-initiative-review-settlement-design.md).
