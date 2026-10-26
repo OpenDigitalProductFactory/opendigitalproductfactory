@@ -38,7 +38,7 @@ export type SweepEvaluateDeps = {
   loadCompletionDecision(itemId: string, authorAgentId: string | null): Promise<InitiativeReadinessDecision | null>;
   resolveOwner: OwedAcceptanceOwnerResolver;
   /** Authenticated Small runtime binding; larger lanes never consume this. */
-  loadRetainedSmallCheck?: (itemId: string) => Promise<import("@/lib/runtime-coordination/small-acceptance-binding.server").RetainedSmallCheck>;
+  loadRetainedSmallCheck?: (itemId: string) => Promise<import("@/lib/runtime-coordination/small-acceptance-binding").RetainedSmallCheck>;
 };
 
 /**

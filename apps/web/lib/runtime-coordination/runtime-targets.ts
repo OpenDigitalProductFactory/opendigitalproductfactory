@@ -12,15 +12,12 @@ import {
   type RuntimeVerificationInput,
   type RuntimeVerificationKind,
   type RuntimeVerificationStatus,
+  type RuntimeCoordinationActor,
 } from "./types";
-import { SMALL_ACCEPTANCE_KEY, createSmallAcceptanceBinding, readSmallAcceptanceBinding, sameSmallAcceptanceContext } from "./small-acceptance-binding";
+import { SMALL_ACCEPTANCE_KEY, createSmallAcceptanceBinding, readSmallAcceptanceBinding, sameSmallAcceptanceContext, type SmallAcceptanceContext } from "./small-acceptance-binding";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 
-export type RuntimeCoordinationActor = {
-  userId?: string | null;
-  agentId?: string | null;
-  principalId?: string | null;
-};
+export type { RuntimeCoordinationActor } from "./types";
 
 export type RuntimeCoordinationDb = {
   runtimeTarget: {
@@ -380,6 +377,10 @@ export async function recordRuntimeVerification(args: {
   db: RuntimeCoordinationDb;
   input: RuntimeVerificationInput;
   actor?: RuntimeCoordinationActor;
+  smallAcceptance?: {
+    load(args: { db: RuntimeCoordinationDb; workCapsuleId: string; closureId: string; lock?: boolean }): Promise<SmallAcceptanceContext>;
+    refresh(db: RuntimeCoordinationDb, itemId: string): Promise<void>;
+  };
 }) {
   validateVerificationInput(args.input);
   const smallCheck = args.input.kind === "final-acceptance" && !!args.input.backlogActivityId;
@@ -388,14 +389,14 @@ export async function recordRuntimeVerification(args: {
   }
   if (smallCheck && (!args.db.$transaction || !args.input.workCapsuleId
     || !["passed", "failed"].includes(args.input.status))) throw new Error("Bound Small acceptance requires a transaction, Workroom and terminal check.");
+  if (smallCheck && !args.smallAcceptance) throw new Error("Authoritative Small acceptance service is unavailable.");
   let boundItemId: string | null = null;
   const record = async (tx: RuntimeCoordinationDb) => {
     let result = args.input.result ?? {};
     let bound: ReturnType<typeof createSmallAcceptanceBinding> | null = null;
-    let bindingService: typeof import("./small-acceptance-binding.server") | null = null;
+    const bindingService = args.smallAcceptance;
     if (smallCheck) {
-      bindingService = await import("./small-acceptance-binding.server");
-      const context = await bindingService.loadSmallAcceptanceContext({ db: tx as unknown as import("./small-acceptance-binding.server").SmallAcceptanceDb,
+      const context = await bindingService!.load({ db: tx,
         workCapsuleId: args.input.workCapsuleId!, closureId: args.input.backlogActivityId!, lock: true });
       if (!tx.runtimeVerification.findUnique) throw new Error("Acceptance identity lookup is unavailable.");
       const existing = await tx.runtimeVerification.findUnique({ where: { verificationId: args.input.verificationId } });
@@ -480,7 +481,7 @@ export async function recordRuntimeVerification(args: {
     }
 
     if (bound && bindingService) {
-      const current = await bindingService.loadSmallAcceptanceContext({ db: tx as unknown as import("./small-acceptance-binding.server").SmallAcceptanceDb,
+      const current = await bindingService.load({ db: tx,
         workCapsuleId: args.input.workCapsuleId!, closureId: args.input.backlogActivityId! });
       if (!sameSmallAcceptanceContext(bound, current)) throw new Error("Deployment changed during runtime acceptance.");
     }
@@ -488,9 +489,8 @@ export async function recordRuntimeVerification(args: {
   };
   const verification = await (smallCheck ? args.db.$transaction!(record, { isolationLevel: "Serializable", timeout: 30_000 }) : inTransaction(args.db, record));
   if (boundItemId) {
-    const { refreshSmallAcceptanceSnapshot } = await import("./small-acceptance-binding.server");
     // An interrupted projection leaves the immutable verification intact; same-id retry refreshes it.
-    await refreshSmallAcceptanceSnapshot(args.db as unknown as import("./small-acceptance-binding.server").SmallAcceptanceDb, boundItemId);
+    await args.smallAcceptance!.refresh(args.db, boundItemId);
   }
   return verification;
 }

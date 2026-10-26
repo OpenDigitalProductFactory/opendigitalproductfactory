@@ -7,11 +7,7 @@ import { recordRuntimeVerification, type RuntimeCoordinationDb } from "./runtime
 
 const external = vi.hoisted(() => ({ deployment: vi.fn() }));
 vi.mock("@/lib/backlog/initiative-readiness/deployment-closure", () => ({ resolveBacklogDeploymentClosure: external.deployment }));
-vi.mock("./small-acceptance-binding.server", async original => ({
-  ...await original<typeof import("./small-acceptance-binding.server")>(),
-  // The canonical projection is separately tested and driven live after merge.
-  refreshSmallAcceptanceSnapshot: async () => {},
-}));
+import { loadSmallAcceptanceContext, type SmallAcceptanceDb } from "./small-acceptance-binding.server";
 const url = process.env.DPF_SQL_TEST_DATABASE_URL ?? process.env.DPF_LOCAL_CI_TEST_DATABASE_URL
   ?? (process.env.CI === "true" && process.env.GITHUB_ACTIONS === "true" ? process.env.DATABASE_URL : undefined);
 const schema = `small_acceptance_${randomUUID().replaceAll("-", "")}`;
@@ -63,7 +59,13 @@ describe.skipIf(!url)("Small runtime acceptance PostgreSQL transactions", () => 
     await admin?.end();
   });
   function check(id = "RV-SMALL-FIXTURE") {
-    return { db: db as unknown as RuntimeCoordinationDb, actor, input: {
+    return { db: db as unknown as RuntimeCoordinationDb, actor,
+      smallAcceptance: {
+        load: (args: { db: RuntimeCoordinationDb; workCapsuleId: string; closureId: string; lock?: boolean }) =>
+          loadSmallAcceptanceContext({ ...args, db: args.db as unknown as SmallAcceptanceDb }),
+        // The canonical projection is separately tested and driven live after merge.
+        refresh: async () => {},
+      }, input: {
       verificationId: id, kind: "final-acceptance" as const, status: "passed" as const,
       workCapsuleId: "room", backlogActivityId: "closure", command: "Drive isolated recovery fixture",
       startedAt: new Date(closureAt.getTime() + 1000), completedAt: new Date(closureAt.getTime() + 2000),

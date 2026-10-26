@@ -8,7 +8,7 @@ import { assessDeliverySensitivity } from "@/lib/backlog/initiative-readiness/de
 import { readinessShapeFromWorkShape } from "@/lib/backlog/initiative-readiness/entry-adapter";
 import { effectiveShape } from "@/lib/backlog/initiative-readiness/shape-requirements";
 import { resolveBacklogDeploymentClosure } from "@/lib/backlog/initiative-readiness/deployment-closure";
-import { SMALL_ACCEPTANCE_KEY, readSmallAcceptanceBinding, sameSmallAcceptanceContext, type SmallAcceptanceContext } from "./small-acceptance-binding";
+import { SMALL_ACCEPTANCE_KEY, readSmallAcceptanceBinding, sameSmallAcceptanceContext, type SmallAcceptanceContext, type RetainedSmallCheck } from "./small-acceptance-binding";
 
 export type SmallAcceptanceDb = Prisma.TransactionClient;
 
@@ -52,8 +52,6 @@ export async function loadSmallAcceptanceContext(args: {
     deploymentRunId: deployment.runId, deploymentCompletedAt: deployment.completedAt,
     effectiveShape: "small", closureRecordedAt: closure.recordedAt.toISOString() };
 }
-
-export type RetainedSmallCheck = { state: "pass" | "fail" | "missing"; evidenceRefs: string[] };
 
 /** No history backfill. Only records created by the reserved native writer qualify. */
 export async function readRetainedSmallCheck(db: SmallAcceptanceDb, itemId: string): Promise<RetainedSmallCheck> {
@@ -103,12 +101,20 @@ export async function readRetainedSmallCheck(db: SmallAcceptanceDb, itemId: stri
   return missing;
 }
 
-/** Reuse the sweep's exact evaluator and snapshot after the verification commits. */
+/** Reuse canonical completion and the sweep's retained projector after commit. */
 export async function refreshSmallAcceptanceSnapshot(db: SmallAcceptanceDb, itemId: string): Promise<void> {
-  const item = await db.backlogItem.findUnique({ where: { itemId }, select: { id: true, itemId: true, status: true, agentId: true, claimedByAgentId: true } });
-  if (!item || item.status !== "done") return;
-  const { evaluateOwedAcceptance, productionSweepEvaluateDeps } = await import("@/lib/backlog/acceptance-sweep/acceptance-sweep-evaluate");
+  const item = await db.backlogItem.findUnique({ where: { itemId }, select: BACKLOG_COMPLETION_ITEM_SELECT });
+  if (!item || item.status !== "done" || !isDirectMergePlatformWork(item)) return;
+  const { evaluateBacklogItemCompletion } = await import("@/lib/backlog/initiative-readiness/backlog-completion-evaluation");
+  const { retainedAcceptanceWithoutBinding } = await import("@/lib/backlog/acceptance-sweep/retained-acceptance");
+  const { loadItemDeliveryActorIds } = await import("@/lib/backlog/acceptance-sweep/delivery-actors");
   const { recordOwedAcceptanceSnapshot } = await import("@/lib/backlog/acceptance-sweep/owed-snapshot");
-  const projection = await evaluateOwedAcceptance(item, productionSweepEvaluateDeps(db as unknown as Parameters<typeof productionSweepEvaluateDeps>[0]));
-  if (projection) await recordOwedAcceptanceSnapshot({ db: db as unknown as Parameters<typeof recordOwedAcceptanceSnapshot>[0]["db"], backlogItemId: item.id, projection });
+  const actors = await loadItemDeliveryActorIds(db as unknown as Parameters<typeof loadItemDeliveryActorIds>[0], itemId);
+  if (!actors.ok) throw new Error(`Delivery actors could not be read: ${actors.error}`);
+  const evaluation = await evaluateBacklogItemCompletion({ db: db as unknown as Parameters<typeof evaluateBacklogItemCompletion>[0]["db"],
+    item, rawManifest: undefined, evaluatedAt: new Date().toISOString(),
+    transitionObject: { kind: "backlog-item", id: itemId, expectedVersion: "done", targetState: "completion" } });
+  const projection = retainedAcceptanceWithoutBinding(evaluation.independentAcceptanceDecision, actors.data,
+    await readRetainedSmallCheck(db, itemId));
+  await recordOwedAcceptanceSnapshot({ db: db as unknown as Parameters<typeof recordOwedAcceptanceSnapshot>[0]["db"], backlogItemId: item.id, projection });
 }

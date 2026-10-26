@@ -1,10 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const smallAcceptance = vi.hoisted(() => ({ load: vi.fn(), refresh: vi.fn() }));
-vi.mock("./small-acceptance-binding.server", () => ({
-  loadSmallAcceptanceContext: smallAcceptance.load,
-  refreshSmallAcceptanceSnapshot: smallAcceptance.refresh,
-}));
 
 import {
   canSatisfyFinalAcceptance,
@@ -318,7 +314,7 @@ describe("recordRuntimeVerification", () => {
     expect(db.runtimeVerification.create).not.toHaveBeenCalled();
   });
 
-  it("records exact Small facts once and refreshes the canonical snapshot on same-id retry", async () => {
+  it("recovers an interrupted projection after the freshness window without recording a second check", async () => {
     vi.useFakeTimers();
     try {
       vi.setSystemTime(new Date("2026-10-26T10:04:00Z"));
@@ -327,15 +323,16 @@ describe("recordRuntimeVerification", () => {
         deploymentRunId: "SUR-1", deploymentCompletedAt: "2026-10-26T10:00:00.000Z", effectiveShape: "small",
         closureRecordedAt: "2026-10-26T10:01:00.000Z" };
       smallAcceptance.load.mockResolvedValue(context);
-      smallAcceptance.refresh.mockResolvedValue(undefined);
+      smallAcceptance.refresh.mockRejectedValueOnce(new Error("projection interrupted")).mockResolvedValue(undefined);
       db.runtimeVerification.findUnique.mockResolvedValue(null);
       db.runtimeVerification.create.mockImplementation(async ({ data }) => ({ id: "rv-native", ...data }));
       const input = { verificationId: "RV-SMALL", kind: "final-acceptance" as const, status: "passed" as const,
         workCapsuleId: "room-1", backlogActivityId: "closure-1", command: "drive recovery",
         startedAt: new Date("2026-10-26T10:02:00Z"), completedAt: new Date("2026-10-26T10:03:00Z"),
         result: { observations: ["not dispatched"] } };
-      const args = { db: runtimeDb(), input, actor: { userId: "human", principalId: "principal", agentId: "agent" } };
-      const first = await recordRuntimeVerification(args);
+      const args = { db: runtimeDb(), input, smallAcceptance, actor: { userId: "human", principalId: "principal", agentId: "agent" } };
+      await expect(recordRuntimeVerification(args)).rejects.toThrow("projection interrupted");
+      const first = await db.runtimeVerification.create.mock.results[0]!.value;
       expect(first.result.smallRuntimeAcceptance).toMatchObject({ ...context, actor: args.actor });
       expect(db.$transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: "Serializable", timeout: 30_000 });
       expect(smallAcceptance.load).toHaveBeenCalledTimes(2);
@@ -370,7 +367,7 @@ describe("recordRuntimeVerification", () => {
         closureRecordedAt: "2026-10-26T10:01:00.000Z" };
       smallAcceptance.load.mockResolvedValueOnce(context).mockResolvedValueOnce({ ...context, deploymentRunId: "SUR-2" });
       db.runtimeVerification.findUnique.mockResolvedValue(null);
-      await expect(recordRuntimeVerification({ db: runtimeDb(), actor: { userId: "human", principalId: "principal" }, input: {
+      await expect(recordRuntimeVerification({ db: runtimeDb(), smallAcceptance, actor: { userId: "human", principalId: "principal" }, input: {
         verificationId: "RV-SWAP", kind: "final-acceptance", status: "passed", workCapsuleId: "room-1", backlogActivityId: "closure-1",
         command: "drive recovery", result: { observations: "actual check" }, startedAt: new Date("2026-10-26T10:02:00Z"), completedAt: new Date("2026-10-26T10:03:00Z"),
       } })).rejects.toThrow(/Deployment changed/);

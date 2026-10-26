@@ -1,9 +1,9 @@
 import { isRecord } from "@/lib/shared/coerce";
-import type { RuntimeCoordinationActor } from "./runtime-targets";
-import type { RuntimeVerificationInput } from "./types";
+import type { RuntimeCoordinationActor, RuntimeVerificationInput } from "./types";
 
 /** Reserved to the existing runtime-verification writer; never accepted from result JSON. */
 export const SMALL_ACCEPTANCE_KEY = "smallRuntimeAcceptance";
+export type RetainedSmallCheck = { state: "pass" | "fail" | "missing"; evidenceRefs: string[] };
 export type SmallAcceptanceContext = {
   itemId: string; closureId: string; workCapsuleId: string;
   repositoryFullName: string; headSha: string; mergeCommitSha: string;

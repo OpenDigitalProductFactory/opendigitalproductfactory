@@ -1,6 +1,6 @@
 import type { InitiativeReadinessDecision, ReadinessRequirementResult } from "@/lib/backlog/initiative-readiness/types";
 import type { SweepEvaluation } from "./acceptance-sweep-run";
-import type { RetainedSmallCheck } from "@/lib/runtime-coordination/small-acceptance-binding.server";
+import type { RetainedSmallCheck } from "@/lib/runtime-coordination/small-acceptance-binding";
 
 /**
  * Legacy objective mappings validate the reviewer packet at write time but do
