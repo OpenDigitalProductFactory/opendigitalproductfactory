@@ -124,6 +124,15 @@ depend on an agent manually extending PATH. A missing compatible shell is an
 unavailable prerequisite (exit 88), not a failing product test. The parent
 environment, worker limits, test deadlines and lease fences stay unchanged.
 
+Contributor preview declaration isolation (BI-6B109903) binds a private regular
+host file directly at `/workspace/apps/web/next-env.d.ts`; a host file placed
+under node_modules would be hidden by existing named output volumes. Exact
+Windows/Desktop path matching also applies to this file, with fresh daemon
+qualification. Compose omits `read_only: false` in normalized config; actual
+inspection still requires `RW: true`, and `create_host_path: false` prevents a
+missing file from becoming a directory. A native governed preview must verify
+the bind; a simulated filesystem projection establishes only writer isolation.
+
 ## Literal Windows package-manager arguments (BI-263055E3)
 
 The shared host command resolver launches pnpm/Corepack JavaScript entrypoints
