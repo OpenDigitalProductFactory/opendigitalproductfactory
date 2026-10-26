@@ -58,6 +58,35 @@ The tool stops only its owned test process, then restores Docker with a bounded 
 
 ## Activation, rollback and AI Ops
 
+Managed integration is tracked separately by BI-CD4EB130 / WC-C8326144 and its
+[runtime design](../superpowers/specs/2026-10-26-mac-inference-runtime-design.md)
+and [ordered plan](../superpowers/plans/2026-10-26-mac-inference-runtime-plan.md).
+The candidate combines a separately pinned standalone Docker Model Runner with
+the unchanged corrected engine. It does not replace Docker's files. The reviewed
+runner patch recognizes the upstream binary name, retains the custom engine's
+version without advertising a Docker vendor variant, rejects an unavailable
+explicit engine, and restricts HTTP and TLS listeners to loopback. Container
+reachability, the model-management workflow and supported native convergence
+still require actual qualification before activation.
+
+`runtime.lock.json` pins runner source, Go module/sum and patch identities.
+`build-runtime.mjs` applies the patch to a fresh verified archive, runs the actual
+affected upstream package tests, builds ARM64 without CGO, retains dependency
+notices and embeds the verified engine unchanged. Its output remains unqualified.
+`verifyRuntimePackage` binds the complete composite payload and refuses altered
+or unlisted files and a self-qualified manifest. Neither successful compilation
+nor an artifact hash grants activation. Engine evidence can be reused only with
+the exact model/device/report and unchanged native bytes; it does not qualify
+the new runner or platform workflow.
+
+The stock runner already provides export/load of its OCI model representation;
+its own CLI uses that path to materialize a private store. Prefer that supported
+path to copying mutable Docker store metadata or downloading/repackaging the
+weights under a different identity. Verify the retained OCI digest and tag it
+only within the private managed store. Treat export/load and native service
+qualification as separately admitted effects, not as a consequence of inspecting
+a package.
+
 The package is an isolated candidate, not an installed Docker replacement. Do not overwrite `~/.docker/bin/inference`, modify vendor executable headers, reuse vendor digests, change provider routing or manually build a DPF live image. Integration needs an explicit supported installer/runtime contract, authenticated release artifacts, compatibility evidence and canonical release controls. DPF live advances use `request_self_upgrade`; a package build does not authorize a live advance.
 
 Before activation, rollback consists of stopping the owned test candidate, restoring Docker if the test unloaded it, releasing the test reservation and keeping the package marked unqualified. Preserve failed/incomplete reports. After a future supported activation, rollback must select the previously verified package through the same supported integration path.
@@ -83,3 +112,37 @@ The operator-supplied [video transcript](https://www.youtube.com/watch?v=x_qmqqp
 The admitted, supervised workload-v1 run completed all eight model controls correctly and restored Docker. The package's actual public Metal backend initializer reported successful f16/bfloat tests and tensor capability. The matched 32011-token cold input took 173016.605 ms in Docker's supplied engine and 91380.104 ms in the corrected candidate: an observed 1.893x prefill ratio (about47% less prefill time). Both warm continuations reused32015tokens and finished in about0.7seconds. Short arithmetic latency was higher on the candidate; decode throughput was similar. This is one completed sample per engine under the declared native profile, not a general latency or fleet guarantee.
 
 The current candidate is model-smoke-qualified on this M5 Max. It is not installed, authenticated for distribution or physically qualified on older Macs. The video transcript's approximately40second cold-read claim is still faster than this observed91second result; that remaining gap is not closed by this package test. The subsequent source-only required-library completeness fix does not change any native package bytes, model inputs or measured configuration. Re-verify the same manifest against the stronger file contract and reuse the recorded native run rather than repeat identical inference solely for that verifier change.
+
+## Managed runner candidate — October 26, 2026
+
+BI-CD4EB130 owns activation and rollback. The standalone runner is pinned to Docker Model Runner 1.2.8 source, with a reviewed custom-engine status/listener patch and a finite native experiment fence. `build-runtime.mjs` produced the 186-file `1.2.8-dpf-metal4.2` candidate; archive SHA256 `1f29d710bb6b7c2ce90b47c7925df4cce74bbe6c748a28c29c5acb4cd9420a32`, manifest SHA256 `b1eabac297026ac07d8a3ebfa9542dcc28e75c49050bc423d5b52215a1d577a8`. The embedded engine files are unchanged. Source tests and a successful build do not qualify this new runner or activate it.
+
+`qualify-runtime.mjs` requires the exact active reserved window, package and baseline identities, prior native engine report and physical GPU match. It stages a private copy under an owned LaunchAgent, transfers existing model artifacts through stock export/load/tag APIs, and copies stored per-model configuration. Model tags retain their case; the model-card capacity and configured runtime context are distinct facts. Here the Qwen model advertises 262144 tokens while its stored runtime context is 131072 tokens.
+
+The qualifier exercises matched arithmetic, tool-call and cold/warm prefix controls through both runners' model APIs, plus a candidate embedding shape/finite-value check. It checkpoints the restoration obligation before unloading Docker, verifies candidate shutdown before restoring Docker, preserves failed reports, and never changes the platform provider. The native daemon independently stops when its projected reservation expires or its finite experiment deadline arrives, even if its client disappears. That private expiry projection contains no credentials and grants no platform authority.
+
+Full DPF workflow/under-load proof, the supported existing-install activation entry, protected source publication and older physical Mac qualification remain unfinished. Keep Docker's installed binaries and provider configuration intact until those delivery conditions are met.
+
+
+The first admitted runner API test stopped at a real compatibility failure: dyld could not map the packaged libraries through the Mac `/var` to `/private/var` path alias. Its candidate LaunchAgent and child processes stopped, and Docker restoration completed. The runner patch now canonicalizes only the declared binary/library paths; a real compiled dylib regression accepts the relocated package and still refuses an unrelated executable library. The stock configure endpoint also preloads weights in the background, so configuration writes are deferred until Docker is drained.
+
+The rebuilt `1.2.8-dpf-metal4.3` candidate has archive SHA256 `75abe25af4b125c897e91dc2a12b477b1af5aef19b9bed9d5d0f80f3b1544342` and manifest SHA256 `348deaf2e69dc7c98b2f80aec345d8344dda46db06c39acf20cf23fb8e75ddd6`. All three affected Go packages and 63 Node source tests pass. This candidate still requires a successful native API qualification; the failed earlier test is preserved, not promoted to a pass.
+
+
+## Managed API qualification — October 26, 2026, 15:11 UTC
+
+The admitted `1.2.8-dpf-metal4.3` runner completed all eight chat/tool/prefix controls correctly through the actual model-runner APIs. Both cold requests used 32011 prompt tokens and zero cached tokens. Candidate prefill took 84899.948 ms; the warm continuation reused 32015 tokens and completed in 671.985 ms. The candidate also returned a finite 768-dimensional Nomic embedding. This checks the embedding API shape, not downstream retrieval quality.
+
+The latest Docker baseline prefill took 181016.821 ms. Source guard execution from 15:05:44 through 15:06:52 partly overlapped its startup/cold-read period; do not claim matched host load or treat the 2.132 observed ratio as a guaranteed improvement. The earlier API run's baseline was 160737.112 ms. The candidate's roughly85-second result is about47–53% below those observed baseline times; it still exceeds the video's roughly40-second claim. The earlier controlled native pair remains separate evidence.
+
+Stock export/load/tag preserved the Qwen model/projector artifact and Nomic digest. The saved131072-token context and all other stored model settings matched on readback. A read-only probe from the canonical portal container reached the loopback-only runner's health, version and model-list APIs. Candidate process cleanup was confirmed and Docker restored; its installed binary hash remained unchanged. Report SHA256: `6f6bcd294ff2b5caa58264929f790b9f7bbc09b34959bc5d327ac7ebec9eed56`.
+
+A queued qualification now maintains one fixed reservation and committed source identity, refreshes measured host pressure at a bounded cadence, binds the actual assigned slot and stops on refusal, terminal reservation, cancellation or changed source. A blocked admission is recorded as **unrun**, not a product failure. Experimental daemons retain the independent native expiry fence. This wait handling does not revive an expired reservation or grant permission.
+
+This is **runtime API qualification**, not live activation. The Docker provider configuration remains unchanged. A supported managed native installation/activation path, DPF workflow and under-load acceptance, protected publication and per-target physical qualification are still required. BI-CD4EB130 remains open. Existing AI Ops learning DOC-B39A42F1 references WC-C8326144 for these findings; no duplicate scheduler was created.
+
+### Review correction to the historical API report
+
+Independent review found that the historical report's supervisor event named `released` came from an intentionally empty callback. It is **not** evidence that the platform released the reservation. Actual candidate process shutdown and Docker restoration are separately recorded; the platform's release action has its own outcome. Preserve the original report and hash, and attach this correction rather than editing its history.
+
+The qualifier now records `release-not-attempted` for that callback. It also preserves a definitive fenced verdict after the shared supervisor has settled its final heartbeat/deadline work, even when all model controls finished before a late loss of authority. Injected final-checkpoint, in-flight refusal and in-flight deadline tests cover those paths without loading models. No fence was observed in the historical successful hardware sample; these are source and evidence corrections, not a replacement inference run.

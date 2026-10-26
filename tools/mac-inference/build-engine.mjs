@@ -2,10 +2,10 @@
 import { parseArgs } from 'node:util';
 import { execFileSync } from 'node:child_process';
 import { mkdtemp, mkdir, readdir, readFile, writeFile, lstat, cp, rm, realpath, access } from 'node:fs/promises';
-import { tmpdir, homedir, arch, platform } from 'node:os';
-import { resolve, join, dirname, basename } from 'node:path';
+import { tmpdir, arch, platform } from 'node:os';
+import { join, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ENGINE_LOCK as lock, hashFile, enumerateFiles, fileRecord, contained, verifyPackage, vendorNoticePaths, embeddedMitNotice } from './package.mjs';
+import { ENGINE_LOCK as lock, hashFile, enumerateFiles, fileRecord, verifyPackage, vendorNoticePaths, embeddedMitNotice, unusedOutput } from './package.mjs';
 
 const { values: args } = parseArgs({ options: {
   archive: { type: 'string' }, cmake: { type: 'string' }, sdk: { type: 'string' },
@@ -15,22 +15,6 @@ function run(command, argv, cwd, capture = false) {
   return execFileSync(command, argv, { cwd, timeout: 20 * 60 * 1000,
     stdio: capture ? 'pipe' : 'inherit', encoding: capture ? 'utf8' : undefined,
     env: { ...process.env, ZERO_AR_DATE: '1' } });
-}
-async function unusedOutput(value) {
-  if (!value) throw new Error('--out is required');
-  const path = resolve(value); const parent = await realpath(dirname(path));
-  const actual = join(parent, basename(path));
-  for (const forbidden of [homedir(), '/Applications', '/System', '/usr', '/bin', '/sbin', '/Library', join(homedir(), '.docker')]) {
-    if (actual === forbidden || (forbidden !== homedir() && contained(forbidden, actual))) throw new Error('Protected output path');
-  }
-  for (let p = parent; ; p = dirname(p)) {
-    try { await access(join(p,'.git')); throw new Error('Output must be outside a Git checkout'); }
-    catch (error) { if (error.code !== 'ENOENT') throw error; }
-    if (p === dirname(p)) break;
-  }
-  try { await lstat(actual); throw new Error('Output already exists; no replacement is permitted'); }
-  catch (error) { if (error.code !== 'ENOENT') throw error; }
-  return actual;
 }
 async function main() {
   if (platform() !== 'darwin' || arch() !== 'arm64') throw new Error('Build requires an Apple Silicon Mac');
