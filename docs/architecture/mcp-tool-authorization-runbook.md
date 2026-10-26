@@ -162,7 +162,7 @@ Authorized product surfaces use the six generic `surface_*` MCP tools rather tha
 
 **Acceptance boundary.** Generator and temporary-home rerun tests verify source behavior. Fresh server install, browser consent, restart, refresh and governed reads/writes must still be exercised during the operator's planned reinstall. Configuration written is not that acceptance evidence.
 
-**Gate scripts authenticate headlessly with a `client_credentials` client (BI-78B653D5).** `pnpm run pregate` (`scripts/gate-worktree.mjs`, `scripts/pregate.mjs`) has no browser, so it cannot ride the client's OAuth session; it speaks the same authorization server through the headless grant instead. Resolution order in `scripts/lib/mcp-credential.mjs`: (1) a `client_credentials` client — `DPF_MCP_CLIENT_ID` + `DPF_MCP_CLIENT_SECRET`, or `{"clientId","clientSecret"}` in `~/.dpf/mcp-client-credentials.json` (path override `DPF_MCP_CLIENT_CREDENTIALS_FILE`; it lives outside every checkout so it can never be committed) — minted by an operator in Admin > Platform Development > MCP; the gate re-mints its short-lived access token itself, so a long run never strands on a stale copy; (2) the legacy `DPF_MCP_BEARER_TOKEN` PAT until its retirement horizon; (3) neither: the gate refuses before any lease work with a message naming both paths. An expired PAT therefore no longer forces an `operator-emergency` push override — issue a credentials client once and the gate runs.
+**Gate scripts authenticate headlessly with a `client_credentials` client (BI-78B653D5).** `pnpm run pregate` (`scripts/gate-worktree.mjs`, `scripts/pregate.mjs`) has no browser, so it cannot ride the client's OAuth session; it speaks the same authorization server through the headless grant instead. Resolution order in `scripts/lib/mcp-credential.mjs`: (1) a `client_credentials` client — `DPF_MCP_CLIENT_ID` + `DPF_MCP_CLIENT_SECRET`, or `{"clientId","clientSecret"}` in `~/.dpf/mcp-client-credentials.json` (path override `DPF_MCP_CLIENT_CREDENTIALS_FILE`; it lives outside every checkout so it can never be committed) — issued through the assistant-bound native route below, or manually in Admin > Platform Development > MCP; the gate re-mints its short-lived access token itself, so a long run never strands on a stale copy; (2) the legacy `DPF_MCP_BEARER_TOKEN` PAT until its retirement horizon; (3) neither: the gate refuses before any lease work with a message naming both paths. An expired PAT therefore no longer forces an `operator-emergency` push override — issue a credentials client once and the gate runs.
 
 **The assistant provisions its own source client (BI-10AC904B).** From the working
 native connection, call `issue_source_credentials_client`. The server derives the
@@ -177,7 +177,12 @@ rewrites another assistant's binding or revives a revoked row.
 
 Keep `data.credentialsClient` out of transcripts and tracked files. Write it only
 to `~/.dpf/mcp-client-credentials.json`, or the explicit canonical file override,
-through a private local transfer. Workroom binding and gate scripts share
+through a private local transfer. On a shared host, use a private file for each
+actual assistant binding and select it with `DPF_MCP_CLIENT_CREDENTIALS_FILE`.
+Conversations acting as that same verified assistant may reuse its matching file;
+do not create a duplicate for every conversation or borrow another assistant's
+credential. A different client type retains its actual assistant binding and its
+client-specific credential flows. Workroom binding and gate scripts share
 `scripts/lib/mcp-credential.mjs`: headless credentials take precedence over the
 legacy PAT, and malformed configuration refuses without PAT fallback. Preserve
 the configured endpoint and trusted CA. Verify the shell's actual
