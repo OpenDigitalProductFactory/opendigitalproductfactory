@@ -14,7 +14,7 @@ const end = "2026-10-12T12:00:00Z";
 const receipt: RoutingReceipt = { id: "decision-1", occurredAt: end, actorId: "worker", task: "review", sensitivity: "internal", providerId: "cloud", modelId: "model", endpointId: "endpoint", correlation: "missing", screen: null, exclusions: [{ providerId: "local", modelId: null, hold: "tokens" }], attempts: [], execution: "unknown", selectedExecution: "unknown", shadowMode: false, costUsd: null, tokens: null, costSource: null, sourceIds: [], recipeKey: null, evaluator: null, quality: null };
 const data: RoutingManagementData = { observedAt: end, receipts: [receipt], models: [{ endpointId: "endpoint", providerId: "cloud", modelId: "model", label: "Model", status: "active" }], controls: [] };
 const topology: OperationsMapRoutingTopology = { coworkers: [{ agentId: "worker", label: "Reviewer", stationLabel: null }], providers: [{ providerId: "cloud", label: "Cloud", status: "active", kind: "cloud", providerType: "llm", costUsd: 0, tokenTotal: 0, decisionCount: 1 }], routes: [], activityRouting: null, a2aEdges: [], deliberations: [], markers: [], timeline: [], legend: [], a2aLegend: [] };
-const mount = (value = data) => render(withMessages(<RoutingManagementWorkspace data={value} topology={topology} evidenceEnd={end} windowLabel="Bounded evidence" />));
+const mount = (value = data, routeTopology = topology) => render(withMessages(<RoutingManagementWorkspace data={value} topology={routeTopology} evidenceEnd={end} windowLabel="Bounded evidence" />));
 
 beforeEach(() => {
   navigation.push.mockClear();
@@ -39,6 +39,51 @@ describe("routing workspace investigation", () => {
     expect(url.searchParams.get("routingWindow")).toBe("60");
     fireEvent.click(screen.getByRole("button", { name: "Close routing inspector" }));
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+  it.each([
+    { correlation: "exact", message: "Attempts are joined by an exact request trace." },
+    { correlation: "missing", message: "No request trace was recorded. Attempt and cost correlation is unavailable." },
+    { correlation: "ambiguous", message: "This trace belongs to multiple decisions. Attempts and costs cannot be assigned safely." },
+  ] as const)("defers the selected endpoint without hiding $correlation correlation evidence", ({ correlation, message }) => {
+    const opaqueEndpoint = "endpoint-internal-9f8a7b6c";
+    mount({ ...data, receipts: [{ ...receipt, endpointId: opaqueEndpoint, correlation }] });
+    fireEvent.click(within(screen.getByRole("region", { name: "Recent routing decisions" })).getByRole("button", { name: /review/i }));
+    const dialog = screen.getByRole("dialog", { name: "Routing decision" });
+    const why = within(dialog).getByRole("heading", { name: "Why this path" }).closest("section")!;
+    expect(why.textContent).not.toContain(opaqueEndpoint);
+    expect(why.textContent).not.toContain("Selected endpoint:");
+    expect(why.textContent).toContain(message);
+    expect(within(dialog).getByText("review → cloud")).toBeTruthy();
+    expect(dialog.textContent).toContain("model ·");
+    const sourceSummary = within(dialog).getByText("Source evidence identifiers");
+    const source = sourceSummary.closest("details")!;
+    expect(source.open).toBe(false);
+    expect(within(source).getByText(opaqueEndpoint)).toBeTruthy();
+    fireEvent.click(sourceSummary);
+    expect(source.open).toBe(true);
+    expect(within(source).getByText(opaqueEndpoint)).toBeTruthy();
+  });
+  it.each(["all", "cloud"])("explains no matching providers and restores the %s provider scope after clearing search", provider => {
+    window.history.replaceState(null, "", window.location.pathname + window.location.search + "&routingProvider=" + provider);
+    const originalUrl = window.location.href;
+    const catalogTopology = { ...topology, providers: [...topology.providers, { ...topology.providers[0], providerId: "local", label: "Local" }] };
+    mount({ ...data, models: [...data.models, { endpointId: "local-endpoint", providerId: "local", modelId: "local-model", label: "Local model", status: "active" }] }, catalogTopology);
+    fireEvent.click(screen.getByRole("button", { name: "All 2" }));
+    const dialog = screen.getByRole("dialog", { name: "Provider and model catalog" });
+    const search = within(dialog).getByRole("searchbox", { name: "Search by name, task, model or identifier" });
+    fireEvent.change(search, { target: { value: "unmatched-provider-or-model" } });
+    expect(within(dialog).getByRole("status").textContent).toContain("No matching providers");
+    expect(within(dialog).getByText("Clear the search or try a provider or model name.")).toBeTruthy();
+    expect(within(dialog).getByText("0 results")).toBeTruthy();
+    expect(within(dialog).queryByRole("link", { name: "Settings & overrides" })).toBeNull();
+    fireEvent.change(search, { target: { value: "" } });
+    expect(within(dialog).queryByText("No matching providers")).toBeNull();
+    expect(within(dialog).getByRole("heading", { name: "Cloud" })).toBeTruthy();
+    expect(within(dialog).getByText(provider === "all" ? "2 results" : "1 result")).toBeTruthy();
+    expect(within(dialog).getAllByRole("link", { name: "Settings & overrides" })).toHaveLength(provider === "all" ? 2 : 1);
+    if (provider === "all") expect(within(dialog).getByRole("heading", { name: "Local" })).toBeTruthy();
+    else expect(within(dialog).queryByRole("heading", { name: "Local" })).toBeNull();
+    expect(window.location.href).toBe(originalUrl);
   });
   it("opens the complete searchable provider catalog even without traffic", () => {
     mount({ ...data, receipts: [] });
