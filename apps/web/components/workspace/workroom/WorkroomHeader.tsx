@@ -11,6 +11,7 @@ import type { WorkroomShapeRebindView } from "@/lib/work-management/workroom-sha
 import { AccountabilityStatement } from "./RoomWorkforcePanel";
 import { WorkroomStageDecision } from "./WorkroomStageDecision";
 import { WorkroomShapeRebind } from "./WorkroomShapeRebind";
+import { WorkroomBlockerInspectionLink } from "./NestedRoomCoordinationPanel";
 import { WorkroomDeliveryAgreement } from "./WorkroomDeliveryAgreement";
 
 import {
@@ -153,6 +154,7 @@ export function WorkroomHeader({ room, summary, workforce, stageDecision, shapeR
           <section aria-label="Next action" className="rounded-lg border border-[var(--dpf-accent)] p-3">
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--dpf-muted)]">Next action</p>
             <p className="mt-2 text-sm font-semibold text-[var(--dpf-text)]">{room.work.nextAction}</p>
+            {room.work.recordedBlocker ? <WorkroomBlockerInspectionLink /> : null}
           </section>
           <section aria-label="Accountability" className="rounded-lg border border-[var(--dpf-border)] p-3">
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--dpf-muted)]">Accountable</p>

@@ -7,6 +7,7 @@ import { namespaceMessages } from "@dpf/i18n";
 import { notFound, redirect } from "next/navigation";
 
 import { MessagesProvider } from "@/components/i18n/MessagesProvider";
+import { NestedRoomCoordinationPanel } from "@/components/workspace/workroom/NestedRoomCoordinationPanel";
 import { RoomWorkforcePanel } from "@/components/workspace/workroom/RoomWorkforcePanel";
 import { WorkCaseDetailView } from "@/components/workspace/WorkCaseDetailView";
 import { auth } from "@/lib/auth";
@@ -97,9 +98,15 @@ export default async function WorkspaceCaseDetailPage({ params, searchParams }: 
             matched={workforce.matched}
             partial={workforce.partial}
             coordination={coordination}
+            recordedBlocker={detailOrRoom.room?.work.recordedBlocker}
+            failedHandoffRecovery={detailOrRoom.room?.work.failedHandoffRecovery}
           />
           </MessagesProvider>
         </div>
+      ) : detailOrRoom.room && (detailOrRoom.room.work.recordedBlocker || detailOrRoom.room.work.failedHandoffRecovery) ? (
+        <MessagesProvider locale={locale.language} messages={{ workrooms: namespaceMessages(locale.language, "workrooms") }}>
+          <NestedRoomCoordinationPanel coordination={null} recordedBlocker={detailOrRoom.room.work.recordedBlocker} failedHandoffRecovery={detailOrRoom.room.work.failedHandoffRecovery} />
+        </MessagesProvider>
       ) : null}
     </>
   );

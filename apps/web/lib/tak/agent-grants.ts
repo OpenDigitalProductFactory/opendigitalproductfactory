@@ -227,6 +227,8 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // communication grants (EP-WORKROOM-COMMS, BI-3F21C4D5).
   read_room_messages: ["work_room_read"],
   post_room_message: ["work_room_write"],
+  broadcast_workroom_ask: ["work_room_write"],
+  acknowledge_workroom_broadcast: ["work_room_write"],
   invite_room_participant: ["work_room_write"],
   appoint_room_coordinator: ["work_room_write"],
   plan_account_handover: ["work_room_write"],

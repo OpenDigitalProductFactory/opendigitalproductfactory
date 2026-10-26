@@ -19,6 +19,34 @@ function reviewQueries({ candidates = [], identities = [], failure = null }: {
 }
 
 describe("loadCapsuleLivenessInventory", () => {
+  it.each([
+    ["2026-10-26T01:59:59.900Z", "current", "Recorded prerequisite"],
+    ["2026-10-26T02:00:00.000Z", "expired", null],
+  ])("observes blocker expiry at the inventory snapshot %s, independently of wall time", async (at, state, explanation) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-26T02:00:00.100Z"));
+    try {
+      const now = new Date(at);
+      const db = {
+        workroom: { findMany: vi.fn().mockResolvedValue([{
+          capsuleId: "WC-BLOCKED-SNAPSHOT", status: "blocked", updatedAt: now,
+          repositoryFullName: "owner/repo", headBranch: "fix/readback", worktreePath: "D:/readback",
+          baseSha: "0".repeat(40), headSha: "1".repeat(40), taskRun: null,
+          workspaceState: { statusOverride: { reason: "Recorded prerequisite", until: "2026-10-26T02:00:00.000Z" } },
+        }]) },
+        featureBuild: { findMany: vi.fn() },
+        $queryRaw: reviewQueries(),
+      };
+      const result = await loadCapsuleLivenessInventory(db, { where: {}, take: 1 }, now);
+      expect(result.capsulesAll[0].recovery).toMatchObject({
+        state: "blocked",
+        recordedBlocker: { explanationState: state, explanation, expiresAt: "2026-10-26T02:00:00.000Z" },
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("normalizes repeated row-id backlog links in one bounded batch and never emits unresolved raw ids", async () => {
     const now = new Date("2026-10-16T00:00:00Z");
     const rooms = ["backlog-row", "backlog-row", "missing-row"].map((backlogItemId, index) => ({
