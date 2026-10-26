@@ -350,3 +350,31 @@ regenerates it. `pnpm land` consumes the same data.
 
 The rule behind it: an obligation an agent has to remember does not survive
 context compaction. Put it in the gate's output, or in code, and it survives.
+
+
+## Host reservation settlement
+
+The host-resource runner stops renewing its reservation when supervision ends.
+It performs one read-only `list_nonprod_environment_leases({leaseId})` lookup
+against the exact admitted binding and reports reservation state on stderr,
+separately from the wrapped command's output and exit code. Without `leaseId`,
+the tool retains its existing admitted/queued listing behavior.
+
+An active or queued row is pending. A missing, malformed, mismatched or
+unavailable result is unknown. Only a matching persisted terminal row proves
+reservation settlement. Time elapsed or omission from the active list does not.
+The existing janitor is hourly; the lease's TTL is not a promise of terminal
+readback by that time. Do not poll in a tight loop or promise later monitoring
+unless it has actually been arranged.
+
+Reservation expiry does not prove command success or that all workload processes
+exited. The report deliberately retains `processCleanupVerified: false`. Preserve
+the command's actual success, nonzero exit, cancellation, identity drift or unrun
+result independently. Cleared terminal process fields are expected, not exit
+proof. Existing process supervision and admission fences remain in force.
+
+Immediate release of process-owned host reservations retains its existing
+authority gate. Normal completion does not create a new request for that action.
+Keep any older pending or failed request unchanged; do not substitute another
+identity, raw database write or process termination to execute it. Safe readback
+adds no release authority and does not change local-CI cleanup or grants.
