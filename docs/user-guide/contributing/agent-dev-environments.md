@@ -28,6 +28,30 @@ If you only want the guided experience, use [Build Studio](../build-studio/index
 
 > **One process, five surfaces.** Build Studio, Claude, Codex, Grok, and Antigravity are interchangeable adapters behind one contract wherever each surface's host capabilities are available: the evidence-gated lifecycle (`ideate → plan → build → review → ship`), the DPF MCP coordination plane, documentation impact checks, and the worktree/lease isolation model. Governance reads the *evidence*, never *which surface produced it*. See the [Unified Delivery Surfaces spec](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/specs/2026-06-05-unified-delivery-surfaces-execution-alignment-design.md) and the [Antigravity first-class support design](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/specs/2026-07-17-antigravity-first-class-support-design.md).
 
+### Routine permissions and existing authority
+
+Agents own routine setup and verification for a delegated DEV task. Bootstrap
+uses one shared permission writer for Codex, Claude and Grok, scoped to the
+named source project or governed worktree. It retains explicit restrictive
+settings, deny/ask rules, managed policy, hooks and model/provider choices.
+The installed runtime is an MCP administration context; source coding belongs
+in its separate checkout and worktree.
+
+A configured file proves configuration only. The convergence report separates
+that state from native trust, supported sandbox behavior, restart requirements
+and actual session verification. Check the running session's source roots,
+network access, MCP grants and supported local sign-in route before claiming
+routine work is autonomous. A saved global flag cannot widen a managed chat.
+Older Python without a TOML parser leaves this permission scope explicitly
+unrun while existing skills-and-connector setup continues.
+
+Routine independent review uses the current task's existing delegation; moving
+to review or publication does not create another consent question. External
+provider sign-in, new spend and work outside that delegation retain their owner.
+The client allowlist never supplies DPF server authority. See the
+[installation procedure](../../operations/install.md#routine-development-client-permissions)
+and [worktree procedure](../../architecture/branch-and-worktree-runbook.md#routine-client-permissions).
+
 ### How the pieces fit together
 
 Every surface — the four external agent clients and Build Studio — plugs into the same coordination plane and the same governed lifecycle. The diagram below is the mental model for the rest of this guide:

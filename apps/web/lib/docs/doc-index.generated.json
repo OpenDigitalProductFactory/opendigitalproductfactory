@@ -1169,6 +1169,7 @@
         "privatepublic-change-segregation-is-content-based",
         "creating-a-worktree",
         "seeding-a-new-worktree",
+        "routine-client-permissions",
         "verification-readiness-classification",
         "compose-project-isolation",
         "freshness-a-stale-worktree-base-is-a-landmine",
@@ -12400,6 +12401,7 @@
       "publishedPortal": true,
       "anchors": [
         "agent-development-environments-claude-codex-grok-antigravity",
+        "routine-permissions-and-existing-authority",
         "how-the-pieces-fit-together",
         "why-a-dedicated-agent-client-instead-of-build-studio",
         "prerequisites",

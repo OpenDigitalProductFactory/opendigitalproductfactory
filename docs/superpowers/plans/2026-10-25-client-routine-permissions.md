@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Routine DPF client permissions (BI-F90A822E)
 
 **For agentic workers:** execute this plan one independently reviewable backlog item at a time — one BI, one branch, one PR. Use `dpf-tdd` for red-green implementation, `dpf-local-merge-ci-before-push` before a success claim, and `dpf-pr-with-dco` for publication.
