@@ -31,6 +31,20 @@ at most 100 task node IDs, recorded status, digest binding and current scoped
 remediation verification identity. It excludes raw provider output and diagnostic
 text. A truncated node list cannot establish complete execution settlement.
 
+`recovery.details.authority` reports the original request's current authority
+through fixed categories for human access, saved credential scope, OAuth
+continuity/consent, coworker grants and task assignment. Query or immutable
+request failures remain `unavailable`, not a diagnosed denial. This observation
+contains no credential values, actor identifiers or raw errors. A current allowed
+result is neither a historical cause nor permission to retry. Use the returned
+supported remedy for the failed stage; never replace the saved credential by hand.
+
+The original signed-in human can read the same bounded recovery observation on
+the existing `/api/internal/tasks/<taskId>` task-detail endpoint. Its original
+task admission runs first; another owner's task receives no added authority
+detail even when the signed-in user is an administrator. This existing owner
+surface remains available when the client does not expose protocol Tasks methods.
+
 Failed or inactive tasks do not prove their provider executions have settled.
 `executionSettled` requires a fresh recorded health verification bound to this
 task, request digest and Workroom, covering every unresolved node. Readback uses

@@ -31,6 +31,7 @@ vi.mock("@dpf/db", () => ({
 }));
 
 import { commandDb, hasBoundCommandTransaction, receiptedWorkroomTool } from "./receipted-tool";
+import type { CapsuleDb } from "./work-capsule-store-types";
 
 beforeEach(() => {
   receiptRows.clear(); state.active = false; state.unknownCommit = false; state.unknownRollback = false; state.events = [];
@@ -127,14 +128,42 @@ describe("bound Workroom tool preparation", () => {
     let bounded = false;
     const beforeRoomLock = vi.fn(async () => undefined);
     const tool = receiptedWorkroomTool("reassign", async (input) => {
-      seen = input; bounded = hasBoundCommandTransaction();
+      seen = input; bounded = hasBoundCommandTransaction(commandDb());
       return { success: true, message: "ok" };
     }, { prepare: () => ({ params: normalized, payloadBinding: binding, beforeRoomLock }) });
     await tool(params, "user-1", undefined);
     expect(seen).toEqual(normalized);
     expect(bounded).toBe(true);
-    expect(hasBoundCommandTransaction()).toBe(false);
+    expect(hasBoundCommandTransaction(commandDb())).toBe(false);
     expect(beforeRoomLock).toHaveBeenCalledWith(txClient);
+  });
+  it("refuses its exact active client when the real wrapper has no prepared payload binding", async () => {
+    const tool = receiptedWorkroomTool("reassign", async () => {
+      const active = commandDb();
+      expect(active).toBe(txClient);
+      expect(hasBoundCommandTransaction(active)).toBe(false);
+      return { success: true, message: "legacy command remains unbound" };
+    });
+    await expect(tool(params, "user-1", undefined)).resolves.toMatchObject({ success: true });
+  });
+  it("binds only the exact active receipt client even when it exposes nested transactions", async () => {
+    const nested = vi.fn(async () => { throw new Error("The identity check must not start a nested transaction"); });
+    const savepointClient = { ...txClient, $transaction: nested };
+    transaction.mockImplementationOnce(async (fn: (tx: typeof savepointClient) => Promise<unknown>) => fn(savepointClient));
+    let active: CapsuleDb | undefined;
+    const outside = commandDb();
+    const tool = receiptedWorkroomTool("reassign", async () => {
+      active = commandDb();
+      expect(active).toBe(savepointClient);
+      expect(hasBoundCommandTransaction(active)).toBe(true);
+      expect(hasBoundCommandTransaction(outside)).toBe(false);
+      expect(hasBoundCommandTransaction({ ...active })).toBe(false);
+      return { success: true, message: "pending" };
+    }, { prepare: () => ({ params, payloadBinding: binding }) });
+    await expect(tool(params, "user-1", undefined)).resolves.toMatchObject({ success: true });
+    expect(active).toBeDefined();
+    expect(hasBoundCommandTransaction(active!)).toBe(false);
+    expect(nested).not.toHaveBeenCalled();
   });
 });
 

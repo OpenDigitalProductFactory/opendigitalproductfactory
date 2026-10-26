@@ -267,6 +267,7 @@ export async function resolveAutonomousWorkTools(input: {
   requiredToolNames?: readonly string[];
   /** Server-owned admitted binding. Narrows already-authorized tools before runtime probes. */
   restrictedReviewBinding?: InitiativeReviewBinding;
+  roomAuthorizedGrants?: readonly string[] | null;
 }): Promise<{
   tools: ToolDefinition[];
   toolsForProvider: Array<Record<string, unknown>>;
@@ -284,6 +285,7 @@ export async function resolveAutonomousWorkTools(input: {
     unifiedMode: input.unifiedMode,
     agentId: input.agentId,
     additionalGrants: COWORKER_AUTHORIZED_SURFACE_BASELINE_GRANTS,
+    ...(input.roomAuthorizedGrants ? { roomAuthorizedGrants: input.roomAuthorizedGrants } : {}),
   });
 
   if (input.restrictedReviewBinding) {

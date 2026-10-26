@@ -538,6 +538,10 @@ export async function enforceCoworkerToolAuthority(
     // A lookup failure only loses the shortcut; it falls back to asking.
     const settled = await executedOutcome(decision.approvalBinding).catch(() => null);
     if (settled) return { outcome: "settled", ...settled };
+    if (execution.context?.allowApprovalRequest === false) return {
+      outcome: "reject", rejection: "authority_denied",
+      message: "Scheduled stage authority was withheld. No new approval request was created; reconcile the dispatch or use its existing exact authorization.",
+    };
     try {
       const envelope = await ensureApproval({
         binding: decision.approvalBinding,
@@ -579,6 +583,11 @@ export async function enforceCoworkerToolAuthority(
     }
   }
 
+  if (input.steering === "scheduled-mandate" && execution.toolName === "record_workroom_evidence") {
+    const settled = await executedOutcome(buildCoworkerApprovalBinding(input)).catch(() => undefined);
+    if (settled === undefined) return { outcome: "reject", rejection: "authority_evidence_unavailable", message: "The existing evidence approval outcome could not be read." };
+    if (settled) return { outcome: "settled", ...settled };
+  }
   const approvedEnvelopeId = input.approval?.envelopeId ?? null;
   const reservedAt = approvedEnvelopeId ? new Date() : null;
   if (approvedEnvelopeId && reservedAt && !await reserveApprovedEnvelope(approvedEnvelopeId, reservedAt)) {
