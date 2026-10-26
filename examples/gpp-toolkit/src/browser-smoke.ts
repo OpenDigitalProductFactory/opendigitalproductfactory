@@ -28,13 +28,19 @@ export async function runBrowserSmoke(): Promise<string[]> {
   const findings = runDesignRules(document, await resolveShapeDocument(document, sources()), { policy, ratification: {}, directSites: new Map() });
   assert(!findings.some((finding) => finding.severity === "error"), "supplied routine policy facts pass the implemented checks");
   assert(findings.some((finding) => finding.rule === "C-5" && finding.severity === "not-evaluated"), "whole actor/session capability aggregation remains unassessed");
-  assert(findings.some((finding) => finding.code === "C-7/SANDBOX-CONTAINMENT" && finding.severity === "not-evaluated"), "containment remains unassessed");
+  assert(findings.some((finding) => finding.code === "C-7/SANDBOX-CONTAINMENT" && finding.severity === "info" && finding.message.includes("not applicable")),
+    "no sandbox declaration remains explicitly not applicable, never a containment pass");
+  const sandbox = runDesignRules(document, await resolveShapeDocument(document, sources()), {
+    policy, ratification: {}, directSites: new Map(), sandboxStages: new Set(["read"]),
+  });
+  assert(sandbox.some((finding) => finding.code === "C-7/SANDBOX-CONTAINMENT" && finding.severity === "error"),
+    "a declared sandbox stage without an environment binding fails the model check");
   assert(findings.some((finding) => finding.rule === "C-8" && finding.severity === "not-evaluated"), "absent host mediation declaration remains unassessed");
   const declared = runDesignRules(document, await resolveShapeDocument(document, sources()), {
     policy: { ...policy, singleTransitionPath: "synthetic observation host" }, ratification: {}, directSites: new Map(),
   });
   assert(declared.some((finding) => finding.rule === "C-8" && finding.severity === "info" && finding.message.includes("not verified by this compiler")),
     "a host declaration does not become verified runtime mediation");
-  passed.push("injected facts remain distinct from unevaluated capability/containment and declared-only mediation checks");
+  passed.push("injected facts distinguish unevaluated capabilities, absent sandbox facts, failed declared containment and declared-only mediation");
   return passed;
 }

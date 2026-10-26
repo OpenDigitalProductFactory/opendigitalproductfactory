@@ -156,7 +156,7 @@ describe("C-2 and C-4", () => {
 
 describe("C-7 Mode honesty and D-7 Resolver exists", () => {
   const withBinding = (gate: GppGate) =>
-    documentWith([governed("a", gate, { binding: { id: "unit-binding", version: 1, enforcement: "enforced" } })]);
+    documentWith([governed("a", gate), stage("b", { binding: { id: "unit-binding", version: 1, enforcement: "enforced" } })]);
 
   it("an enforced binding with no GPP_BINDING_ENFORCEMENT entry is C-7, and promoting it in the test seam clears exactly that", async () => {
     const gate = { ...ENFORCED, resolver: RESOLVER };
@@ -186,9 +186,9 @@ describe("C-7 Mode honesty and D-7 Resolver exists", () => {
     expect(actionable(await run(documentWith([governed("a", gate)]), { ratification: ratifiedAs(gate) }))).toEqual([]);
   });
 
-  it("C-7's sandbox clause is reported not-evaluated on every compile", async () => {
+  it("C-7's sandbox clause is not applicable without sandbox stage facts", async () => {
     const findings = await run(documentWith([stage("a")]));
-    expect(findings.filter((finding) => finding.code === "C-7/SANDBOX-CONTAINMENT").map((finding) => finding.severity)).toEqual(["not-evaluated"]);
+    expect(findings.filter((finding) => finding.code === "C-7/SANDBOX-CONTAINMENT").map((finding) => finding.severity)).toEqual(["info"]);
   });
 });
 
@@ -274,5 +274,43 @@ describe("purity", () => {
     expect(runDesignRules(document, resolution, { directSites: new Map() })).toEqual(first);
     const ids = first.map((finding) => finding.elementId);
     expect(ids).toEqual([...ids].sort((left, right) => (left < right ? -1 : left > right ? 1 : 0)));
+  });
+});
+
+
+describe("binding entry ownership and sandbox containment", () => {
+  const binding = { id: "unit-binding", version: 1, enforcement: "shadow" } as const;
+  it("uses the entering gate even when the bound stage exits by status change", async () => {
+    const findings = await run(documentWith([governed("plan", ENFORCED), stage("build", { binding })]), { ratification: ratifiedAs(ENFORCED) });
+    expect(findings.filter((f) => f.rule === "C-3")).toEqual([]);
+  });
+  it("refuses bindings on a start stage or status-change entry despite their outgoing gate", async () => {
+    for (const stages of [[governed("build", ENFORCED, { binding })], [stage("plan"), governed("build", ENFORCED, { binding })]]) {
+      const findings = await run(documentWith(stages), { ratification: ratifiedAs(ENFORCED) });
+      expect(findings.filter((f) => f.rule === "C-3").map((f) => f.elementId)).toEqual(["binding:unit-binding@1"]);
+    }
+  });
+  it("requires environment containment on every declared sandbox stage", async () => {
+    const bindings: Stage["binding"][] = [undefined, binding, { ...binding, enforcement: "environment", egress: [] }];
+    for (const b of bindings) {
+      const document = documentWith([governed("plan", ENFORCED), stage("build", { binding: b })]);
+      const findings = (await run(document, { ratification: ratifiedAs(ENFORCED), sandboxStages: new Set(["build"]) })).filter((f) => f.code === "C-7/SANDBOX-CONTAINMENT");
+      expect(findings.map((f) => [f.elementId, f.severity])).toEqual(b?.enforcement === "environment" ? [] : [["stage:build", "error"]]);
+    }
+  });
+  it("entry findings carry the exact consequential tool set", async () => {
+    const findings = await run(documentWith([stage("act", { tools: ["set_portfolio_owner"] })]));
+    expect(findings.find((f) => f.rule === "C-1")?.tools).toEqual(["set_portfolio_owner"]);
+  });
+  it("requires every joined predecessor to authorize the same binding entry", async () => {
+    const doc = documentWith([governed("left", ENFORCED), governed("right", ENFORCED), stage("build", { binding })], {
+      flow: {
+        nodes: [{ id: "p", type: "parallel-split", pairs: "j" }, { id: "j", type: "parallel-join", pairs: "p" }],
+        edges: [{ from: "p", to: "left" }, { from: "p", to: "right" }, { from: "left", to: "j" }, { from: "right", to: "j" }, { from: "j", to: "build" }, { from: "build", to: "stop:success" }],
+      },
+    });
+    expect((await run(doc, { ratification: ratifiedAs(ENFORCED) })).filter((f) => f.rule === "C-3")).toEqual([]);
+    doc.stages[1]!.advance = { kind: "status-change", condition: "ungated" };
+    expect((await run(doc, { ratification: ratifiedAs(ENFORCED) })).filter((f) => f.rule === "C-3")).toHaveLength(1);
   });
 });

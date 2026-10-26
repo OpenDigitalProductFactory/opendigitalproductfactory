@@ -96,6 +96,8 @@ export type DriveResolutionInput = {
    * cycle-bounded writeback latch.
    */
   stageRun?: StageRunObservation | null;
+  /** Exact primary/parallel-task observations for approval waits on graph tokens. */
+  stageRunsByTask?: Readonly<Record<string, StageRunObservation | null>>;
   /** The failed attempts the last tick recorded for its stage (BI-7C0B2BD6). */
   writebackRetry?: WritebackRetry | null;
   /**

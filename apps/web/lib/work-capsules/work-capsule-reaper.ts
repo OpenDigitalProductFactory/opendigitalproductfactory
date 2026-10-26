@@ -36,6 +36,7 @@ import {
 } from "./liveness";
 import { isReachableFromTrunk, trunkRefExists } from "./git-scanner";
 import { updateWorkCapsuleStatus, type CapsuleDb, type WorkCapsuleActor } from "./work-capsule-store";
+import { authoredHeadSha } from "./authored-head";
 
 /** Capsule statuses the reaper will never touch — already closed out. */
 const TERMINAL_STATUSES = new Set(["complete", "abandoned", "archived"]);
@@ -134,6 +135,8 @@ export type ReaperCapsuleRow = CapsuleLivenessInput & {
   source: string;
   headBranch: string | null;
   headSha: string | null;
+  /** Claim-time base; a headSha equal to it is not an authored head (BI-A7797C2C). */
+  baseSha?: string | null;
   worktreePath: string | null;
   featureBuildId: string | null;
   repositoryFullName: string | null;
@@ -362,9 +365,11 @@ export async function annotateDeliveredSignals(
   const hasTrunk = deps.hasTrunk ?? trunkRefExists;
   const reachable = deps.reachable ?? isReachableFromTrunk;
 
+  // The claim-time base is already on trunk, so its reachability proves
+  // nothing about the room (BI-A7797C2C): only an authored head is probed.
   const withSha = rows.filter(
     (row) =>
-      Boolean(row.headSha) &&
+      Boolean(authoredHeadSha(row)) &&
       !row.deliveredSignal?.merged &&
       !row.pullRequestObservation,
   );
@@ -373,7 +378,7 @@ export async function annotateDeliveredSignals(
 
   for (const row of withSha) {
     try {
-      const merged = await reachable(repoRoot, row.headSha);
+      const merged = await reachable(repoRoot, authoredHeadSha(row));
       if (merged !== null) row.deliveredSignal = { merged };
     } catch {
       // Best-effort: a single git failure never aborts the sweep.
@@ -394,9 +399,11 @@ export async function annotateProviderDeliverySignals(
 ): Promise<void> {
   for (const row of rows) {
     if (!row.repositoryFullName || !row.pullRequestNumber) continue;
-    if (!row.headSha) {
+    const head = authoredHeadSha(row);
+    if (!head) {
       // BI-ED6EA694: a room that never recorded its head is delivered only by its
       // own PR merging from its own branch. An open PR proves nothing about it.
+      // A head still equal to the claim-time base counts as never recorded.
       if (row.headBranch && headlessRoomMerged(payloads, row.repositoryFullName, row.pullRequestNumber, row.headBranch)) {
         row.deliveredSignal = { merged: true };
       }
@@ -405,7 +412,7 @@ export async function annotateProviderDeliverySignals(
     const observation = selectLatestExactPullRequestObservation(payloads, {
       repositoryFullName: row.repositoryFullName,
       pullRequestNumber: row.pullRequestNumber,
-      headSha: row.headSha,
+      headSha: head,
     });
     if (!observation) continue;
     if (observation.state === "merged") {
@@ -548,6 +555,7 @@ export async function reapStaleWorkCapsules(args: {
       repositoryFullName: true,
       headBranch: true,
       headSha: true,
+      baseSha: true,
       worktreePath: true,
       featureBuildId: true,
     },

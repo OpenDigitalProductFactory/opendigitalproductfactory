@@ -7,6 +7,11 @@ checkpoint below. Production data, deployment and DPF2 edits remain excluded.
 The checkpoint verification is historical evidence for its exact revision;
 publication checks and their current verdict belong to the pull request.
 
+The [Iteration 6 takeover guide](ITERATION6-HANDOFF.md) gives the receiving
+implementation its selective adoption order, trusted ports, compatibility floors
+and retirement obligations. It adds no consumer acceptance or test result to the
+historical checkpoints below.
+
 Publication review found and repaired two additional defects: the shared bounded
 JSON guard now rejects arrays with custom prototypes before consumer methods can
 run, and the real customer renewal lane says “Renewal attention” for upcoming as
@@ -240,8 +245,10 @@ The emitter requires safe single-line metadata and comment-only instructions.
 C-8 records a host declaration rather than claiming verified mediation.
 
 Whole actor/session capability aggregation, including combinations spread across
-stages, is unsupported and unqualified. C-5 co-occurrence and C-7 containment
-remain visibly unevaluated. GPP 0.19's actual attributable human decision for the
+stages, is unsupported and unqualified. C-5 co-occurrence remains unevaluated.
+C-7 containment is not applicable without declared sandbox-stage facts; supplied
+stages require an environment binding, which does not verify real containment.
+GPP 0.19's actual attributable human decision for the
 full combination remains required; successful compilation, a validator, a binding
 label or `doctrine-then-human` text supplies no such decision or qualification.
 The examples perform no real effects. Their exact synthetic checkpoint is kept

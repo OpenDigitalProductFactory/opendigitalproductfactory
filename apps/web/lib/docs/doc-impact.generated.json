@@ -505,7 +505,13 @@
     "apps/web/components/workspace/workroom/WorkroomCycles.tsx": [
       "docs/user-guide/workspace/work-rooms.md"
     ],
+    "apps/web/components/workspace/workroom/WorkroomDeliveryAgreement.tsx": [
+      "docs/user-guide/workspace/finite-delivery-agreements.md"
+    ],
     "apps/web/components/workspace/workroom/WorkroomFlowMap.tsx": [
+      "docs/user-guide/workspace/work-rooms.md"
+    ],
+    "apps/web/components/workspace/workroom/WorkroomHeader.tsx": [
       "docs/user-guide/workspace/work-rooms.md"
     ],
     "apps/web/components/workspace/workroom/WorkroomParticipants.tsx": [
@@ -519,7 +525,8 @@
       "docs/testing/ci-evidence.md"
     ],
     "apps/web/lib/actions/agent-task-scheduler.ts": [
-      "docs/architecture/agent-standards-dpf-conformance.md"
+      "docs/architecture/agent-standards-dpf-conformance.md",
+      "docs/user-guide/workroom-approval-recovery.md"
     ],
     "apps/web/lib/actions/build.ts": [
       "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
@@ -883,6 +890,9 @@
       "docs/design/golden-triangle-vector-reference.md",
       "docs/user-guide/ai-workforce/priority-and-outcomes.md"
     ],
+    "apps/web/lib/golden-triangle/index.ts": [
+      "docs/architecture/agent-standards-dpf-conformance.md"
+    ],
     "apps/web/lib/golden-triangle/receipt.ts": [
       "docs/user-guide/ai-workforce/priority-and-outcomes.md"
     ],
@@ -1241,6 +1251,9 @@
     "apps/web/lib/queue/functions/workroom-drive-deadlines.ts": [
       "docs/architecture/gated-permissions-process.md"
     ],
+    "apps/web/lib/queue/functions/workroom-drive-stage-run.ts": [
+      "docs/user-guide/workroom-approval-recovery.md"
+    ],
     "apps/web/lib/queue/functions/workroom-drive.ts": [
       "docs/architecture/work-shapes-and-the-decision-gate.md"
     ],
@@ -1301,9 +1314,7 @@
       "docs/architecture/2026-06-14-ai-cockpit-sysml-architecture-note.md"
     ],
     "apps/web/lib/routing/request-contract.ts": [
-      "docs/architecture/2026-06-14-ai-cockpit-sysml-architecture-note.md",
       "docs/architecture/2026-06-14-odysseus-review-depth-pass.md",
-      "docs/architecture/ai-routing-document-map.md",
       "docs/design/golden-triangle-design.md"
     ],
     "apps/web/lib/routing/task-requirements.email.test.ts": [
@@ -1459,7 +1470,8 @@
       "docs/user-guide/ai-workforce/decision-perspective.md"
     ],
     "apps/web/lib/tak/scheduled-task-runs.ts": [
-      "docs/architecture/gated-permissions-process.md"
+      "docs/architecture/gated-permissions-process.md",
+      "docs/user-guide/workroom-approval-recovery.md"
     ],
     "apps/web/lib/tak/tool-intent.ts": [
       "docs/architecture/agent-standards-dpf-conformance.md"
@@ -1514,6 +1526,9 @@
     ],
     "apps/web/lib/work-capsules.ts": [
       "docs/architecture/work-shapes-and-the-decision-gate.md"
+    ],
+    "apps/web/lib/work-capsules/authored-head.ts": [
+      "docs/architecture/failure-analysis-and-recovery.md"
     ],
     "apps/web/lib/work-capsules/delivery-task-hub.ts": [
       "docs/user-guide/build-studio/index.md"
@@ -1570,8 +1585,12 @@
       "docs/architecture/work-shapes-and-the-decision-gate.md",
       "docs/user-guide/ai-workforce/how-governed-work-runs.md"
     ],
+    "apps/web/lib/work-management/room-stage-mandate.ts": [
+      "docs/user-guide/workroom-approval-recovery.md"
+    ],
     "apps/web/lib/work-management/room-types.ts": [
-      "docs/architecture/work-shapes-and-the-decision-gate.md"
+      "docs/architecture/work-shapes-and-the-decision-gate.md",
+      "docs/user-guide/workspace/finite-delivery-agreements.md"
     ],
     "apps/web/lib/work-management/stage-tool-parity.test.ts": [
       "docs/architecture/gated-permissions-process.md"
@@ -1597,10 +1616,14 @@
       "docs/architecture/gated-permissions-process.md"
     ],
     "apps/web/lib/work-management/workspace-case-loader.ts": [
+      "docs/user-guide/workspace/finite-delivery-agreements.md",
       "docs/user-guide/workspace/work-rooms.md"
     ],
     "apps/web/lib/work-management/workspace-room-access.ts": [
       "docs/user-guide/workspace/work-rooms.md"
+    ],
+    "apps/web/lib/work-management/writeback-latch.ts": [
+      "docs/user-guide/workroom-approval-recovery.md"
     ],
     "apps/web/lib/workbooks/backlog-adapter-mapping.ts": [
       "docs/architecture/backlog-archetype-scope.md"
@@ -2922,7 +2945,6 @@
       "apps/web/lib/ea/ai-routing-architecture-registry.ts",
       "apps/web/lib/marketing/channels/email-postmark/responder.ts",
       "apps/web/lib/routing/request-contract.email.test.ts",
-      "apps/web/lib/routing/request-contract.ts",
       "apps/web/lib/routing/task-requirements.email.test.ts",
       "apps/web/lib/routing/task-requirements.ts",
       "packages/db/src/seed-ea-sysml2.test.ts"
@@ -3008,6 +3030,7 @@
       "apps/web/lib/autonomy/regulatory-ceiling.ts",
       "apps/web/lib/autonomy/trust-graduation.ts",
       "apps/web/lib/coworker/authorized-surface-runtime.ts",
+      "apps/web/lib/golden-triangle/index.ts",
       "apps/web/lib/identity/aidoc-resolver.ts",
       "apps/web/lib/mcp/backlog-recovery-read.ts",
       "apps/web/lib/mcp/load-tools.ts",
@@ -3043,8 +3066,7 @@
       "apps/web/lib/ea/reconcile-ai-routing-architecture.ts",
       "apps/web/lib/govern/data/policy-decision.ts",
       "apps/web/lib/govern/data/policy-enforcement.ts",
-      "apps/web/lib/inference/routed-inference.ts",
-      "apps/web/lib/routing/request-contract.ts"
+      "apps/web/lib/inference/routed-inference.ts"
     ],
     "docs/architecture/application-boundaries.md": [
       "scripts/check-application-boundaries.mjs"
@@ -3307,6 +3329,7 @@
     ],
     "docs/architecture/failure-analysis-and-recovery.md": [
       "apps/web/lib/change-review/failure-analysis.ts",
+      "apps/web/lib/work-capsules/authored-head.ts",
       "scripts/pregate-preflight.mjs"
     ],
     "docs/architecture/field-service-work-item.md": [
@@ -4138,10 +4161,22 @@
     "docs/user-guide/platform/edge-nodes.md": [
       "docker-compose.edge.macvlan.yml"
     ],
+    "docs/user-guide/workroom-approval-recovery.md": [
+      "apps/web/lib/actions/agent-task-scheduler.ts",
+      "apps/web/lib/queue/functions/workroom-drive-stage-run.ts",
+      "apps/web/lib/tak/scheduled-task-runs.ts",
+      "apps/web/lib/work-management/room-stage-mandate.ts",
+      "apps/web/lib/work-management/writeback-latch.ts"
+    ],
     "docs/user-guide/workspace/attention-inbox.md": [
       "apps/web/components/attention/AttentionInbox.tsx",
       "apps/web/components/attention/OwnerDecisionCards.tsx",
       "apps/web/lib/attention/owner-projection.ts"
+    ],
+    "docs/user-guide/workspace/finite-delivery-agreements.md": [
+      "apps/web/components/workspace/workroom/WorkroomDeliveryAgreement.tsx",
+      "apps/web/lib/work-management/room-types.ts",
+      "apps/web/lib/work-management/workspace-case-loader.ts"
     ],
     "docs/user-guide/workspace/supported-file-formats.md": [
       "apps/web/lib/shared/file-parsers.ts",
@@ -4158,6 +4193,7 @@
       "apps/web/components/workspace/WorkCaseDetailView.tsx",
       "apps/web/components/workspace/workroom/WorkroomCycles.tsx",
       "apps/web/components/workspace/workroom/WorkroomFlowMap.tsx",
+      "apps/web/components/workspace/workroom/WorkroomHeader.tsx",
       "apps/web/components/workspace/workroom/WorkroomParticipants.tsx",
       "apps/web/lib/work-management/coworker-engagement-case-projection.ts",
       "apps/web/lib/work-management/room-ai-spend.ts",

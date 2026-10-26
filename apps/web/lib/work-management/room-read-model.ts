@@ -1,3 +1,4 @@
+import { projectDeliveryAgreement } from "./delivery-agreement";
 import type {
   WorkCaseBlockingActorKind,
   WorkCaseDetail,
@@ -58,6 +59,7 @@ export type { WorkroomBoundaryInput } from "./room-boundary";
 
 export interface BuildWorkroomViewInput {
   caseKey: string;
+  deliveryState?: unknown;
   detail: WorkCaseDetail;
   boundary?: Partial<WorkroomBoundaryInput>;
   currentCycle?: WorkroomCycleView | null;
@@ -322,6 +324,7 @@ export function buildWorkroomView(
 
   return {
     roomKey: input.caseKey,
+    delivery: mode === "finite" ? projectDeliveryAgreement({ workspaceState: input.deliveryState, currentObjective: boundary.outcome, terminal: input.detail.summary.terminal }) : null,
     reviewProfile: {
       source: composeRoomReviewProfile(caseRef.sourceType, []),
       applicability: "unknown",

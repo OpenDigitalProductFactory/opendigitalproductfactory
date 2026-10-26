@@ -21,6 +21,9 @@ import { listWorkShapes, type WorkShapeDefinition } from "@/lib/work-management/
 
 import {
   buildGppShapeOutputs,
+  DECLARED_FLOWS_REL,
+  GENERATED_FLOWS_INDEX_REL,
+  listGeneratedFlowModules,
   defaultGppShapesContext,
   GENERATED_INDEX_REL,
   GPP_SHAPE_SCHEMA_REL,
@@ -202,5 +205,93 @@ describe("AC-EMIT-INTEGRITY: the check names every stale file", () => {
       await expect(runGppShapesGenerator({ root, check, context: unavailable })).rejects.toThrow(/REFUSED[\s\S]*C-5/);
       expect(paths.map(path => [path, read(root, path)])).toEqual(before);
     }
+  });
+});
+
+
+describe("declared flows are a separate inert compiler root", () => {
+  const flowRel = () => `${DECLARED_FLOWS_REL}/declared-pilot.gpp.json`;
+  const flowText = () => {
+    const doc = decompile(current).document;
+    doc.key = "declared-pilot";
+    // Renaming a cadence shape removes its key-specific tool-gap exceptions.
+    // A claim-triggered declaration isolates the generator contract from those registry gaps.
+    doc.triggers = ["claim"];
+    return JSON.stringify(doc);
+  };
+  it("generates a separate flow index, leaves the registry index unchanged and checks flow orphans", async () => {
+    const root = await generatedRoot();
+    const index = read(root, GENERATED_INDEX_REL);
+    write(root, flowRel(), flowText());
+    await runGppShapesGenerator({ root, check: false, context });
+    expect(listGeneratedFlowModules(root)).toEqual([`${GENERATED_SHAPES_REL}/declared-pilot.flow.generated.ts`]);
+    expect(read(root, GENERATED_FLOWS_INDEX_REL)).toContain("GENERATED_DECLARED_FLOWS");
+    expect(read(root, GENERATED_FLOWS_INDEX_REL)).toContain("DECLARED_PILOT_1_0_0");
+    expect(read(root, GENERATED_INDEX_REL)).toBe(index);
+    rmSync(join(root, flowRel()));
+    await expect(runGppShapesGenerator({ root, check: true, context })).rejects.toThrow("declared-pilot.flow.generated.ts has no source document");
+    await runGppShapesGenerator({ root, check: false, context });
+    expect(listGeneratedFlowModules(root)).toEqual([]);
+    expect(existsSync(join(root, GENERATED_FLOWS_INDEX_REL))).toBe(true);
+  });
+  it("refuses registered work-shape keys and work-shape finding sidecars", async () => {
+    const root = await generatedRoot();
+    write(root, `${DECLARED_FLOWS_REL}/${current.key}.gpp.json`, documentText(current));
+    expect((await buildGppShapeOutputs(root, context)).refusals.join("\n")).toMatch(/registered work-shape key/);
+    rmSync(join(root, `${DECLARED_FLOWS_REL}/${current.key}.gpp.json`));
+    write(root, `${SHAPE_DOCUMENTS_REL}/${current.key}.known-findings.ts`, "export const KNOWN_FINDINGS = [];");
+    expect((await buildGppShapeOutputs(root, context)).refusals.join("\n")).toMatch(/sidecar.*declared-flows/);
+  });
+  it("a declared-flow host-fact hold refuses both modes without removing prior output", async () => {
+    const root = tempRoot();
+    write(root, flowRel(), flowText());
+    await runGppShapesGenerator({ root, check: false, context });
+    const paths = [GENERATED_INDEX_REL, GENERATED_FLOWS_INDEX_REL, RATIFICATION_REPORT_REL, GPP_SHAPE_SCHEMA_REL, ...listGeneratedFlowModules(root)];
+    const before = paths.map(path => [path, read(root, path)]);
+    const unavailable = { ...context, sources: { ...context.sources,
+      grantsFor: () => { throw new Error("private declared-flow host unavailable"); } } };
+    for (const check of [false, true]) {
+      await expect(runGppShapesGenerator({ root, check, context: unavailable })).rejects.toThrow(/REFUSED[\s\S]*C-5/);
+      expect(paths.map(path => [path, read(root, path)])).toEqual(before);
+    }
+  });
+  it("loads flow sidecars but refuses stale and ineligible findings before any write", async () => {
+    const root = await generatedRoot();
+    write(root, flowRel(), flowText());
+    const sidecar = `${DECLARED_FLOWS_REL}/declared-pilot.known-findings.ts`;
+    write(root, sidecar, 'export const KNOWN_FINDINGS = []; export const SANDBOX_STAGES = new Set();');
+    expect((await buildGppShapeOutputs(root, context)).refusals).toEqual([]);
+    const entry = { rule: "C-3", elementId: "binding:missing@1", reason: "Tracked gap", backlogItemId: "BI-1234" };
+    write(root, sidecar, `export const KNOWN_FINDINGS = [${JSON.stringify(entry)}];`);
+    expect((await buildGppShapeOutputs(root, context)).refusals.join("\n")).toMatch(/stale known finding/i);
+    write(root, sidecar, `export const KNOWN_FINDINGS = [${JSON.stringify({ ...entry, rule: "D-8" })}];`);
+    expect((await buildGppShapeOutputs(root, context)).refusals.join("\n")).toMatch(/not eligible/);
+  });
+  it("is deterministic across shuffled document keys", async () => {
+    const root = tempRoot();
+    const doc = JSON.parse(flowText());
+    write(root, flowRel(), JSON.stringify(doc));
+    const first = await buildGppShapeOutputs(root, context);
+    expect(first.refusals).toEqual([]);
+    expect(first.outputs.has(`${GENERATED_SHAPES_REL}/declared-pilot.flow.generated.ts`)).toBe(true);
+    write(root, flowRel(), JSON.stringify(Object.fromEntries(Object.entries(doc).reverse())));
+    expect(await buildGppShapeOutputs(root, context)).toEqual(first);
+  });
+  it("applies matching findings without hiding additional errors and passes sandbox facts to DRC", async () => {
+    const root = tempRoot();
+    const doc = JSON.parse(flowText());
+    const first = doc.stages[0];
+    first.accountablePrincipalRef = "role:shape-owner";
+    first.tools = ["merge_backlog_items"];
+    write(root, flowRel(), JSON.stringify(doc));
+    const sidecar = `${DECLARED_FLOWS_REL}/declared-pilot.known-findings.ts`;
+    const entry = { rule: "C-1", code: "C-1", elementId: `stage:${first.key}`, tools: first.tools, reason: "Tracked trigger-entry gap", backlogItemId: "BI-1234" };
+    write(root, sidecar, `export const KNOWN_FINDINGS = [${JSON.stringify(entry)}];`);
+    expect((await buildGppShapeOutputs(root, context)).refusals).toEqual([]);
+    write(root, sidecar, `export const KNOWN_FINDINGS = [${JSON.stringify(entry)}]; export const SANDBOX_STAGES = new Set(["${first.key}"]);`);
+    expect((await buildGppShapeOutputs(root, context)).refusals.join("\n")).toContain("C-7/SANDBOX-CONTAINMENT");
+    first.tools.push("set_portfolio_owner");
+    write(root, flowRel(), JSON.stringify(doc));
+    expect((await buildGppShapeOutputs(root, context)).refusals.join("\n")).toContain("C-1");
   });
 });

@@ -72,6 +72,14 @@ function compileFixture(name: string) {
 }
 
 describe("compile refuses a document with any error finding, and emits nothing", () => {
+  it("DPF ignores an injected runtime diagnostic disposition outside its adapter-owned policy", async () => {
+    const result = await compileShapeDocument(readFileSync(join(DRC_DIR, "c-2-unregistered-tool.gpp.json"), "utf8"), sources, {
+      sourcePath: "fixtures/c-2-unregistered-tool.gpp.json", ratification: DRC_RATIFICATION, directSites,
+      ...{ diagnosticDisposition: () => ({ diagnostics: [], blocking: false }) },
+    });
+    expect(result.accepted).toBe(false);
+    expect(result.diagnostics).toContainEqual(expect.objectContaining({ rule: "C-2", severity: "error" }));
+  });
   it.each(VIOLATIONS.filter((name) => !WARNING_RULES.has(EXPECTED[name]?.rule ?? "")))("%s", async (name) => {
     const expected = EXPECTED[name] as Expected;
     const result = await compileFixture(name);

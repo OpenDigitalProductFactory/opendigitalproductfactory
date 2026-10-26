@@ -1,4 +1,4 @@
-import type { WorkShapeDefinition } from "../kernel/gpp/browser.js";
+import { enteringGate, type WorkShapeDefinition } from "../kernel/gpp/browser.js";
 
 /** Additional test facts belong to the host, not to the source schema or binding label. */
 export type SyntheticStageFacts = {
@@ -19,6 +19,7 @@ export type MappedStage = {
   output: SyntheticStageFacts["output"];
   profile: SyntheticStageFacts["profile"];
   binding: SyntheticStageFacts["binding"];
+  bindingEntry: { stageKey: string; decisionScope: string; authority: string; mode: string } | null;
   owningScope: string | null; decisionScope: string | null; humanRequired: boolean; humanRef: string | null;
   boundaryRef: string; effectBound: SyntheticStageFacts["effectBound"]; costCeiling: number;
   qualificationRef: string; qualification: "synthetic-only";
@@ -44,6 +45,8 @@ export function mapGeneratedStage(definition: WorkShapeDefinition, stageKey: str
   if (stage.binding && (!facts.binding || stage.binding.id !== facts.binding.id || stage.binding.version !== facts.binding.version))
     return { mapped: false, reason: "binding-version-mismatch" };
   if (!stage.binding && facts.binding) return { mapped: false, reason: "undeclared-binding" };
+  const entry = stage.binding ? enteringGate(definition, stageKey) : undefined;
+  if (stage.binding && !entry) return { mapped: false, reason: "unresolved-binding-entry" };
   const advance = stage.advance;
   const gate = advance.kind === "governed-decision" ? advance.gate : undefined;
   if (advance.kind === "governed-decision" && (!gate || gate.resolution !== "accountable-human" || !gate.checkpoint?.exactAction
@@ -54,7 +57,8 @@ export function mapGeneratedStage(definition: WorkShapeDefinition, stageKey: str
     actions: [...facts.actions], toolsDeclaration: stage.tools.length === 0 ? "declared-empty" : "declared",
     expectedEvidence: [...stage.evidence], output: { ...facts.output }, profile: { ...facts.profile },
     binding: facts.binding ? { ...facts.binding } : undefined,
-    owningScope: gate?.authority ?? null, decisionScope: advance.kind === "governed-decision" ? advance.decisionScope : null,
+    bindingEntry: entry ? { stageKey: entry.stageKey, decisionScope: entry.decisionScope, authority: entry.gate.authority, mode: entry.gate.mode } : null,
+    owningScope: entry?.gate.authority ?? gate?.authority ?? null, decisionScope: advance.kind === "governed-decision" ? advance.decisionScope : null,
     humanRequired: advance.kind === "governed-decision", humanRef: gate?.checkpoint?.role ?? null, boundaryRef: facts.boundaryRef,
     effectBound: facts.effectBound, costCeiling: facts.costCeiling, qualificationRef: facts.qualificationRef,
     qualification: "synthetic-only", unsupported: ["whole-actor/session-envelope-qualification"],

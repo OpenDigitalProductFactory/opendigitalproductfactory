@@ -178,3 +178,18 @@ is terminated, recovery is a separately authorized, auditable operation.
 ## Tests & CI
 
 The pure verdict (`evaluatePrHealth()`) is unit-tested in [`scripts/pr-health.test.mjs`](../../scripts/pr-health.test.mjs) and runs in CI as the **PR Health Logic** job (`node --test`). The script's GitHub I/O is exercised by running it against live PRs; it is not run in CI (it would be circular).
+
+**Hosted production-build profile**
+
+The BI-07BCDD1E correction aligns PR production builds with the existing
+non-experimental merge-group/release profile. Experimental filesystem-cache
+restoration/enablement is removed from this CI job; the build command,
+selection, required checks, time bounds and exact-tree artifact handoff remain.
+
+A hosted-runner shutdown after compilation leaves production-build completion
+inconclusive. Preserve source SHA, actual checkout/integration SHA, event,
+cache setting and failure history. A successful manual source-branch run does
+not certify a different PR merge candidate. Use the actual protected PR/queue
+results and `pr:health` before claiming green; never create a replacement
+success status for an interrupted run. See the
+[bounded design](../superpowers/specs/2026-07-26-ci-evidence-efficiency-design.md).

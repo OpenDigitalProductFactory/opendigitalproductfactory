@@ -1538,11 +1538,11 @@ def resolve_antigravity_binary() -> str | None:
 
 
 def antigravity_mcp_config_path(home: Path) -> Path:
-    # Antigravity is Windsurf/VS Code-derived; its MCP config is a JSON block
-    # keyed by `mcpServers`. The exact path is not yet pinned in public docs —
-    # this is the documented default; the live install confirms it during the
-    # EP-ANTIGRAVITY-001 evidence gate (BI-ECAE3494 / BI-47A81FEB).
-    return home / ".antigravity" / "mcp_config.json"
+    # The file the `agy` CLI and Antigravity.app both read (BI-4CB3C923).
+    # Pinned on 2026-10-20 against agy 1.4.3: `agy mcp add` writes here, and
+    # both binaries name only this path. The earlier ~/.antigravity/
+    # mcp_config.json guess is read by neither; a copy there is left in place.
+    return home / ".gemini" / "config" / "mcp_config.json"
 
 
 def ensure_antigravity_mcp_config(home: Path, mcp_url: str, dry_run: bool, declarations: Any = None) -> str:
@@ -1556,15 +1556,26 @@ def ensure_antigravity_mcp_config(home: Path, mcp_url: str, dry_run: bool, decla
     if resolve_antigravity_binary() is None:
         return "skipped: Antigravity CLI (agy) not found"
     path = antigravity_mcp_config_path(home)
-    data = read_json(path, {})
+    # agy leaves a 0-byte file behind when no server is configured; that is an
+    # empty config. Unparseable content is the operator's: leave it, and keep
+    # the rest of the update running instead of exiting.
+    try:
+        raw = path.read_text(encoding="utf-8-sig") if path.exists() else ""
+        data = json.loads(raw) if raw.strip() else {}
+    except (OSError, json.JSONDecodeError):
+        return f"skipped: cannot parse {path}; fix or empty it, then rerun"
     if not isinstance(data, dict):
         data = {}
     servers = data.get("mcpServers")
     if not isinstance(servers, dict):
         servers = {}
+    # agy's own schema: what `agy mcp add` writes for an http server. An
+    # operator who disabled the entry keeps it disabled.
+    previous = servers.get("dpf")
+    disabled = isinstance(previous, dict) and previous.get("disabled") is True
     servers["dpf"] = {
-        "type": "http",
-        "url": mcp_url,
+        "serverUrl": mcp_url,
+        "disabled": disabled,
         **({"headers": {"Authorization": f"Bearer ${{{TOKEN_ENV_VAR}}}"}} if mcp_client_bearer_header_required(mcp_url, "antigravity") else {}),
     }
     if declarations is not None:
@@ -2350,7 +2361,9 @@ def hook_reference(skill_pack: Path) -> str:
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="Update DPF Codex/Claude/Grok/Antigravity agent skills and MCP wiring.")
     parser.add_argument("--skill-pack-path", default=str(default_skill_pack_path()))
-    parser.add_argument("--project-root", type=Path, help="Explicit repository whose existing Codex override should converge")
+    parser.add_argument("--project-root", type=Path, help="Explicit DPF source project for client configuration")
+    parser.add_argument("--permissions-only", action="store_true",
+                        help="Converge only routine native permissions for --project-root; no plugin, credential or connector refresh.")
     parser.add_argument("--mcp-url", default=os.environ.get("DPF_MCP_URL") or None)
     parser.add_argument("--auth-mode", choices=("oauth", "legacy"), default=os.environ.get("DPF_MCP_AUTH_MODE", "oauth"))
     parser.add_argument("--codex-only", action="store_true")
@@ -2428,6 +2441,44 @@ def main(argv: list[str]) -> int:
     home = home_dir()
     codex_managed = codex_managed_plugin_path(home)
     shared_managed = shared_managed_plugin_path(home)
+    permission_runtime_unavailable = False
+    if args.project_root and (args.project_root / 'packages/dpf-skill-pack').is_dir():
+        import routine_permissions
+        permission_runtime_unavailable = routine_permissions.tomllib is None
+        if permission_runtime_unavailable:
+            print('Routine permissions UNRUN: Python 3.11+ or tomli is required; no permission configuration changed.')
+    selected_permission_clients = ('codex','grok') if args.codex_only else ('claude-code',) if args.claude_only else ('codex','claude-code','grok')
+    unrun_permission_rows = [{'client': client, 'scope': 'permissions:' + str(args.project_root.resolve()),
+        'action': 'unrun', 'sessionVerified': False, 'restartRequired': False,
+        'detail': 'TOML parser unavailable; existing permissions retained. Use a supported Python runtime.'}
+        for client in selected_permission_clients] if permission_runtime_unavailable else []
+    if args.permissions_only:
+        if permission_runtime_unavailable:
+            if args.report_json:
+                import toolchain_convergence as convergence
+                portal_manifest = read_json(Path(args.portal_manifest), {}) if args.portal_manifest else None
+                report = convergence.ConvergenceReport(home, convergence.Declarations(skill_pack, portal_manifest), portal_manifest)
+                report.add_permissions(unrun_permission_rows)
+                report.write(args.report_json, args.dry_run)
+            return 2
+        if not args.project_root or args.codex_plugin_only or args.grok_client_stdin or args.codex_only or args.claude_only:
+            parser.error("--permissions-only requires --project-root and cannot refresh plugins or credentials")
+        import routine_permissions
+        import toolchain_convergence as convergence
+        try:
+            plan = routine_permissions.plan_permissions(args.project_root, home, skill_pack)
+            rows = routine_permissions.apply_permissions(plan, args.dry_run, native=True)
+        except (OSError, routine_permissions.PermissionPlanError) as error:
+            print(f"Permission convergence failed: {error}", file=sys.stderr)
+            return 1
+        for row in rows:
+            print(f"  {row['client']}: {row['action']} routine permissions; session verification pending")
+        if args.report_json:
+            portal_manifest = read_json(Path(args.portal_manifest), {}) if args.portal_manifest else None
+            report = convergence.ConvergenceReport(home, convergence.Declarations(skill_pack, portal_manifest), portal_manifest)
+            report.add_permissions(rows)
+            report.write(args.report_json, args.dry_run)
+        return 1 if any(row['action'] == 'failed' for row in rows) else 0
 
     if args.codex_plugin_only:
         if args.claude_only or args.codex_only or args.skip_codex_cli_install:
@@ -2600,13 +2651,29 @@ def main(argv: list[str]) -> int:
             )
         print(f"  Claude competitive: {claude_competitive_status}")
 
+    permission_failed = False
+    if args.project_root and (args.project_root / 'packages/dpf-skill-pack').is_dir() and not permission_runtime_unavailable:
+        import routine_permissions
+        try:
+            permission_rows = routine_permissions.apply_permissions(
+                routine_permissions.plan_permissions(args.project_root, home, skill_pack,
+                    clients=('codex','grok') if args.codex_only else ('claude-code',) if args.claude_only else ('codex','claude-code','grok')),
+                args.dry_run, native=True)
+            permission_failed = any(row['action'] == 'failed' for row in permission_rows)
+            if report:
+                report.add_permissions(permission_rows)
+        except (OSError, routine_permissions.PermissionPlanError) as error:
+            permission_failed = True
+            print(f"Permission convergence failed: {error}", file=sys.stderr)
+    if permission_runtime_unavailable and report:
+        report.add_permissions(unrun_permission_rows)
     token_present = bool(os.environ.get(TOKEN_ENV_VAR))
     print("  MCP auth   : OAuth configuration written; sign in and verify through the client. Unverified clients/transports require explicit legacy compatibility." if args.auth_mode == "oauth" else "  MCP auth   : explicit legacy compatibility")
     print(f"  MCP token  : {'present' if token_present else 'missing'} ({TOKEN_ENV_VAR})")
     for line in guard_liveness_advisory():
         print(line)
 
-    exit_code = 1 if codex_install_failed or claude_install_failed else 0
+    exit_code = 1 if codex_install_failed or claude_install_failed or permission_failed else 0
     roster_printed = False
     plugin_plane = codex_plugin_hooks_active(codex_managed, home)
     trust_pending = codex_hook_trust_pending(home, codex_present=codex_present, plugin_plane=plugin_plane)
@@ -2630,6 +2697,8 @@ def main(argv: list[str]) -> int:
             exit_code = exit_code or 1
     if exit_code:
         print("Incomplete: toolchain convergence is unverified; resolve the reported failure before restarting a client.")
+    elif permission_runtime_unavailable:
+        print("Skills and connectors converged; routine permissions remain UNRUN because the Python TOML parser is unavailable.")
     else:
         print("Done. Start a new Codex/Claude/Grok session to load updated skills.")
     return exit_code

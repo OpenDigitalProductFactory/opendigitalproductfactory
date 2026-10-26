@@ -1,4 +1,4 @@
-// apps/web/lib/gpp/shape-language/compile.ts
+// Portable GPP compile pipeline (BI-721C467A).
 //
 // The compile pipeline: shape-document text → generated TypeScript module.
 // Design: docs/superpowers/specs/2026-10-02-gpp-shape-notation-and-compiler-design.md
@@ -12,12 +12,14 @@
 //   4   design rules     runDesignRules (drc.ts), which also runs soundness S-1…S-6
 //   5   lower + emit     lowerToDefinition, emitShapeModule (emit.ts)
 //
-// A document is emitted ONLY when no finding has severity `error`
-// (hasBlockingDiagnostic). A refusal returns every finding and no module, so
+// By default any error finding stops emission (hasBlockingDiagnostic). A trusted
+// host can explicitly supply an assessment/emission disposition for ordinary
+// offline findings. Missing required facts always hold before that port. A refusal
+// returns every finding and no module, so
 // nothing downstream can write a half-checked shape. The result is
 // discriminated on `accepted`, as parseShapeDocument's is: a refusal carries
 // a list of diagnostics, not the single `error` of the server-action
-// ActionResult (lib/shared/action-result.ts), so it is a different contract. Warnings, info and
+// ActionResult (../action-result.ts), so it is a different contract. Warnings, info and
 // standing not-evaluated findings travel with a successful model compile.
 // Missing required tool/child/policy facts instead hold compilation. Neither
 // result qualifies a host, grants permission, nor admits execution.
@@ -65,7 +67,16 @@ function unavailableFacts(resolution: GppResolution): GppDiagnostic[] {
   return diagnostics;
 }
 
+/** Trusted host assessment/emission policy, never permission to execute the model.
+ * It may annotate or retain offline findings. Missing policy, tool and child facts
+ * hold before this port is called, and the ordinary compiler has no disposition. */
+export type CompileDiagnosticDisposition = (diagnostics: readonly GppDiagnostic[]) => {
+  diagnostics: readonly GppDiagnostic[];
+  blocking: boolean;
+};
+
 export type CompileShapeOptions = DesignRuleOptions & {
+  diagnosticDisposition?: CompileDiagnosticDisposition;
   typeImport: string;
   checkInstruction?: string;
   /** The source document, repo-relative with forward slashes; written into the module header. */
@@ -89,7 +100,7 @@ export function shapeDocumentDigest(document: GppShapeDocument): string {
   return `sha256:${createHash("sha256").update(canonicalJson(document), "utf8").digest("hex")}`;
 }
 
-/** Text → module, refusing on any error finding. */
+/** Text → module; strict errors by default, with mandatory host-fact holds. */
 export async function compileShapeDocument(
   text: string,
   sources: GppResolveSources,
@@ -103,10 +114,19 @@ export async function compileShapeDocument(
   let diagnostics: GppDiagnostic[];
   try {
     resolution = await resolveShapeDocument(document, sources);
-    const { sourcePath: _sourcePath, ...ruleOptions } = options;
+    const { sourcePath: _sourcePath, diagnosticDisposition, ...ruleOptions } = options;
     const missing = unavailableFacts(resolution);
     diagnostics = sortDiagnostics([...runDesignRules(document, resolution, ruleOptions), ...missing]);
-    if (!hasDesignRulePolicy(options.policy) || missing.length || hasBlockingDiagnostic(diagnostics)) return { accepted: false, diagnostics };
+    const unresolvedRequiredFacts = resolution.stages.some(stage =>
+      stage.tools?.some(tool => !tool.registered || tool.grantRequirement === null)
+      || (stage.subShape !== undefined && !stage.subShape.exists));
+    if (!hasDesignRulePolicy(options.policy) || missing.length || unresolvedRequiredFacts) return { accepted: false, diagnostics };
+    if (diagnosticDisposition) {
+      const disposition = diagnosticDisposition(diagnostics);
+      if (!disposition || !Array.isArray(disposition.diagnostics) || typeof disposition.blocking !== "boolean") throw new Error("Invalid diagnostic disposition");
+      diagnostics = sortDiagnostics(disposition.diagnostics);
+      if (disposition.blocking) return { accepted: false, diagnostics };
+    } else if (hasBlockingDiagnostic(diagnostics)) return { accepted: false, diagnostics };
   } catch {
     // Host registry and enforcement-policy ports may be temporarily unavailable.
     // Exception text can contain private context and is deliberately not emitted.

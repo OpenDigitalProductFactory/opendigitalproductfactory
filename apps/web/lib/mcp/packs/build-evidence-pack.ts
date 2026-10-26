@@ -49,7 +49,7 @@ function redactFunctionalFailureText(text: string): string {
 const definitions: ToolDefinition[] = [
   {
     name: "record_execution_evidence",
-    description: "Attach typed evidence to a backlog item (tests, production build, UX, migration, source provenance, spec review, manual check, or supporting link). A supplied ToolExecution must belong to the same user. Failed executions may be linked only by failure evidence kinds; these never earn completion credit. Other kinds require successful execution, including manual checks.",
+    description: "Attach typed evidence to a backlog item (tests, production build, UX, migration, source provenance, spec review, manual check, or supporting link). Use manual_fail, not manual_check, for a blocked or failed manual check. manual_fail never earns completion credit. A supplied ToolExecution must belong to the same user. Failed executions may be linked only by failure evidence kinds; these never earn completion credit. Other kinds require successful execution, including manual_check.",
     inputSchema: {
       type: "object",
       properties: {

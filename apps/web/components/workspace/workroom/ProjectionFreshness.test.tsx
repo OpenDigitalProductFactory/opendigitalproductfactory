@@ -2,7 +2,7 @@
 import "@testing-library/jest-dom/vitest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render as renderComponent, screen } from "@testing-library/react";
-import type { ReactElement, ReactNode } from "react";
+import { useState, type ReactElement, type ReactNode } from "react";
 import { DEFAULT_LOCALE, namespaceMessages } from "@dpf/i18n";
 import { MessagesProvider } from "@/components/i18n/MessagesProvider";
 import { ProjectionFreshness } from "./ProjectionFreshness";
@@ -18,7 +18,7 @@ afterEach(() => { cleanup(); vi.useRealTimers(); vi.clearAllMocks(); vi.restoreA
 describe("projection freshness", () => {
   beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date("2026-09-21T12:00:00Z")); });
   it.each([null, "invalid", "2026-09-22T12:00:00Z"])("does not assert freshness for %s", readAt => {
-    render(<ProjectionFreshness readAt={readAt} lastEvidenceAt={null} />);
+    render(<ProjectionFreshness onRefresh={refresh} readAt={readAt} lastEvidenceAt={null} />);
     expect(screen.getByText("Snapshot age unknown.")).toBeInTheDocument();
   });
   it("checks the current clock when a newer server snapshot arrives", () => {
@@ -36,6 +36,13 @@ describe("projection freshness", () => {
   });
 });
 
+function ControlledRefresh() {
+  const [pending, setPending] = useState(false);
+  return <ProjectionFreshness readAt={null} lastEvidenceAt={null} pending={pending} onRefresh={() => {
+    setPending(true); Promise.resolve(refresh()).finally(() => setPending(false));
+  }} />;
+}
+
 function deferredRefresh() {
   let complete!: () => void;
   refresh.mockImplementation(() => new Promise<void>(resolve => { complete = resolve; }));
@@ -45,13 +52,13 @@ function deferredRefresh() {
 describe("Workroom snapshot connectivity", () => {
   it("preserves the two existing freshness paragraphs when there is no connectivity notice", () => {
     vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
-    const { container } = render(<ProjectionFreshness readAt={null} lastEvidenceAt={null} />);
+    const { container } = render(<ProjectionFreshness onRefresh={refresh} readAt={null} lastEvidenceAt={null} />);
     expect(container.querySelectorAll("p")).toHaveLength(2);
   });
 
   it("retains the snapshot and keyboard target when offline, then offers manual retry without refreshing automatically", async () => {
     const online = vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
-    render(<ProjectionFreshness readAt="2026-10-16T03:00:00Z" lastEvidenceAt={null} />);
+    render(<ProjectionFreshness onRefresh={refresh} readAt="2026-10-16T03:00:00Z" lastEvidenceAt={null} />);
     const button = screen.getByRole("button", { name: "Refresh state" });
     button.focus();
     await act(async () => { fireEvent.click(button); });
@@ -69,7 +76,7 @@ describe("Workroom snapshot connectivity", () => {
 
   it("checks connectivity at activation even if the offline event has not arrived", async () => {
     const online = vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
-    render(<ProjectionFreshness readAt={null} lastEvidenceAt={null} />);
+    render(<ProjectionFreshness onRefresh={refresh} readAt={null} lastEvidenceAt={null} />);
     online.mockReturnValue(false);
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Refresh state" })); });
     expect(refresh).not.toHaveBeenCalled();
@@ -78,7 +85,7 @@ describe("Workroom snapshot connectivity", () => {
 
   it("announces an offline event without replacing the snapshot or refreshing", () => {
     vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
-    render(<ProjectionFreshness readAt={null} lastEvidenceAt={null} />);
+    render(<ProjectionFreshness onRefresh={refresh} readAt={null} lastEvidenceAt={null} />);
     fireEvent(window, new Event("offline"));
     expect(screen.getByText(/Browser offline/)).toBeInTheDocument();
     expect(screen.getByText("Snapshot age unknown.")).toBeInTheDocument();
@@ -89,7 +96,7 @@ describe("Workroom snapshot connectivity", () => {
 describe("Workroom snapshot refresh focus", () => {
   it("keeps its keyboard target focusable while pending, guards repeat activation and retains focus on completion", async () => {
     const complete = deferredRefresh();
-    render(<ProjectionFreshness readAt="2026-10-16T03:00:00Z" lastEvidenceAt={null} />);
+    render(<ControlledRefresh />);
     const button = screen.getByRole("button", { name: "Refresh state" });
     button.focus();
     await act(async () => { fireEvent.click(button); });
@@ -107,7 +114,7 @@ describe("Workroom snapshot refresh focus", () => {
 
   it("does not steal focus if the operator moves to another action while the refresh is pending", async () => {
     const complete = deferredRefresh();
-    render(<><ProjectionFreshness readAt={null} lastEvidenceAt={null} /><button>Next action</button></>);
+    render(<><ControlledRefresh /><button>Next action</button></>);
     const refreshButton = screen.getByRole("button", { name: "Refresh state" });
     refreshButton.focus();
     await act(async () => { fireEvent.click(refreshButton); });

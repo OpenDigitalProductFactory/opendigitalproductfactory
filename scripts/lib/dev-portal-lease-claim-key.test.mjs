@@ -2,13 +2,15 @@
 // Node built-in test runner: node --test
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { realpath } from "node:fs/promises";
+import fs, { readFileSync, cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { realpath, mkdtemp, mkdir, writeFile, readFile, link, rm, symlink, unlink, lstat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, dirname, resolve } from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { createServer } from 'node:http';
+import { createRequire, syncBuiltinESMExports } from 'node:module';
+import { createPreviewDeclaration, assertPreviewDeclarationFile, assertPreviewDeclarationMount, previewDeclarationMount, removePreviewDeclaration, reclaimPreviewDeclaration, stopDeclarationWriters, PREVIEW_DECLARATION_TARGET } from './dev-preview-declaration.mjs';
 import { guardShellEnv } from './guard-bash.mjs';
 
 const script = readFileSync(
@@ -83,6 +85,9 @@ test('preview diagnostics distinguish lease failure categories without retaining
     { type: 'authority-deadline', category: 'authority-deadline' });
   assert.deepEqual(previewLeaseEventSummary({ type: 'heartbeat-lost', reason: 'preview_binding_changed' }),
     { type: 'heartbeat-lost', category: 'source-binding' });
+  for (const reason of ['preview_startup_exceeded_budget', 'preview_init_not_running']) {
+    assert.deepEqual(previewLeaseEventSummary({ type: 'heartbeat-lost', reason }), { type: 'heartbeat-lost', category: 'startup-liveness' });
+  }
   assert.deepEqual(previewLeaseEventSummary({ type: 'heartbeat-uncertain', reason: 'mcp timed out after 10000ms diagnostic-secret-must-not-escape' }),
     { type: 'heartbeat-uncertain', category: 'transport-timeout' });
   assert.deepEqual(previewLeaseEventSummary({ type: 'release-failed', reason: 'diagnostic-secret-must-not-escape' }),
@@ -458,4 +463,454 @@ test('admitted child outcomes are retained and untrusted launcher reasons never 
     spawnResumer: () => ({ spawned: false, reason: 'secret-must-not-escape' }) });
   assert.equal(result.reason, 'consumer-unavailable');
   assert.ok(!JSON.stringify(result).includes('secret-must-not-escape'));
+});
+
+// BI-E95458DE: a preview renewed its CI-slot lease for ~86 minutes before any
+// portal container existed. Renewal checked the container only once it was
+// owned, so the whole initialization stage renewed unchecked and unbounded.
+test('startup reports each phase so renewal can tell initializing from serving', async () => {
+  const { runPreviewLifecycle: run } = await import('./dev-preview-runtime.mjs');
+  const calls = [];
+  await run({ compose: async args => calls.push(args[0] === 'run' ? 'init-run' : args[0]), inspect: async () => {},
+    verifySource: async () => {}, stopOwned: async () => {}, ready: async () => calls.push('ready'), wait: async () => {},
+    onPhase: phase => calls.push(`phase:${phase}`), active: { initName: 'unique-init' } });
+  assert.deepEqual(calls, ['stop', 'up', 'phase:init', 'init-run', 'phase:start', 'up', 'ready', 'phase:serving']);
+});
+
+test('renewal refuses a startup that stalls or outlives its budget, and defers to the container once serving', async () => {
+  const { previewStartupLiveness, PREVIEW_STARTUP_BUDGET_MS, PREVIEW_INIT_GRACE_MS } = await import('./dev-preview-runtime.mjs');
+  const base = { startedAtMs: 0, phaseStartedAtMs: 0, initRunning: true };
+  assert.equal(previewStartupLiveness({ ...base, phase: 'init', nowMs: 60_000 }), null);
+  // The init container is gone but the lifecycle has not moved on: nothing is initializing.
+  assert.equal(previewStartupLiveness({ ...base, phase: 'init', initRunning: false, nowMs: PREVIEW_INIT_GRACE_MS + 1 }), 'preview_init_not_running');
+  // Docker may not have created the container yet at the first renewal.
+  assert.equal(previewStartupLiveness({ ...base, phase: 'init', initRunning: false, nowMs: PREVIEW_INIT_GRACE_MS - 1 }), null);
+  for (const phase of ['prepare', 'init', 'start']) {
+    assert.equal(previewStartupLiveness({ ...base, phase, nowMs: PREVIEW_STARTUP_BUDGET_MS + 1 }), 'preview_startup_exceeded_budget');
+  }
+  assert.equal(previewStartupLiveness({ ...base, phase: 'serving', initRunning: false, nowMs: PREVIEW_STARTUP_BUDGET_MS * 10 }), null);
+  assert.equal(PREVIEW_STARTUP_BUDGET_MS, 20 * 60_000);
+});
+
+test('the startup budget is operator-tunable and ignores unusable values', async () => {
+  const { previewStartupBudgetMs, PREVIEW_STARTUP_BUDGET_MS } = await import('./dev-preview-runtime.mjs');
+  assert.equal(previewStartupBudgetMs({ DPF_DEV_PORTAL_STARTUP_BUDGET_MINUTES: '45' }), 45 * 60_000);
+  for (const bad of [undefined, '', '0', '-3', 'soon']) {
+    assert.equal(previewStartupBudgetMs({ DPF_DEV_PORTAL_STARTUP_BUDGET_MINUTES: bad }), PREVIEW_STARTUP_BUDGET_MS);
+  }
+});
+
+// BI-6B109903: generated declaration lifetime and strict source fencing.
+const original = '/// <reference types="next" />\n/// <reference types="next/image-types/global" />\nimport "./.next/types/routes.d.ts";\nimport "./.next/types/root-params.d.ts";\n';
+
+test('the real Next development writer changes only the projected runtime declaration, leaving admitted Git source clean', async t => {
+  const webRequire = createRequire(new URL('../../apps/web/package.json', import.meta.url));
+  try { webRequire.resolve('next/package.json'); } catch (error) {
+    if (error.code !== 'MODULE_NOT_FOUND') throw error;
+    t.skip('UNRUN: Next is not installed in this dependency-free checkout; dependency-present qualification must execute the real writer.');
+    return;
+  }
+  // A present package with a missing or broken writer must fail, not skip.
+  const { writeAppTypeDeclarations } = webRequire('next/dist/lib/typescript/writeAppTypeDeclarations.js');
+  const directory = await mkdtemp(join(tmpdir(), 'dpf-preview-declaration-test-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const source = join(directory, 'source');
+  const app = join(source, 'apps/web');
+  await mkdir(app, { recursive: true });
+  const declaration = join(app, 'next-env.d.ts');
+  await writeFile(declaration, original);
+  const git = args => execFileSync('git', ['-C', source, ...args], { encoding: 'utf8' }).trim();
+  git(['init', '-q']); git(['add', '.']);
+  git(['-c', 'user.name=Preview Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-qm', 'fixture']);
+  const generate = baseDir => writeAppTypeDeclarations({ baseDir, distDir: '.next/dev', imageImportsEnabled: true, hasAppDir: true, hasPagesDir: false });
+
+  // Reproduce the incumbent failure with the installed writer, not a stub.
+  await generate(app);
+  assert.match(git(['status', '--porcelain']), /M apps\/web\/next-env.d.ts/);
+  await writeFile(declaration, original);
+  assert.equal(git(['status', '--porcelain']), '');
+
+  const backing = join(directory, 'owned-next-env.d.ts');
+  await writeFile(backing, original, { mode: 0o600 });
+  const override = previewOverride({ worktree: source, sha: git(['rev-parse', 'HEAD']), leaseId: 'NPEL-FIXTURE', declarationPath: backing });
+  const mount = override.services['dev-portal'].volumes.find(item => item.target === '/workspace/apps/web/next-env.d.ts');
+  assert.ok(mount, 'the preview must project a runtime-owned file over the generated declaration');
+  assert.equal(mount.source, backing);
+  assert.equal(mount.type, 'bind');
+  assert.equal(mount.bind.create_host_path, false);
+  const runtime = join(directory, 'runtime');
+  await mkdir(runtime);
+  // This hardlink models the real writer's direct-write inode behavior only;
+  // a governed preview separately proves native Docker mount behavior.
+  await link(mount.source, join(runtime, 'next-env.d.ts'));
+  await generate(runtime);
+  assert.match(await readFile(backing, 'utf8'), /\.next\/dev\/types\/routes/);
+  assert.equal(await readFile(declaration, 'utf8'), original);
+  assert.equal(git(['status', '--porcelain']), '');
+});
+
+async function fixture(t) {
+  const directory = await mkdtemp(join(tmpdir(), 'dpf-preview-owned-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const worktree = join(directory, 'source');
+  const stateDirectory = join(directory, 'state');
+  await mkdir(join(worktree, 'apps/web'), { recursive: true });
+  await mkdir(stateDirectory);
+  await writeFile(join(worktree, 'apps/web/next-env.d.ts'), original);
+  return { directory, worktree, stateDirectory };
+}
+
+for (const replacement of ['regular', 'symlink']) {
+  test(`seed replacement before the first pathname observation cannot supply backing (${replacement})`, async t => {
+    const input = await fixture(t);
+    const seed = await realpath(join(input.worktree, 'apps/web/next-env.d.ts'));
+    const foreign = join(input.directory, 'foreign-seed');
+    await writeFile(foreign, 'foreign seed bytes');
+    const originalLstat = fs.promises.lstat;
+    const originalOpen = fs.promises.open;
+    let replaced = false, openCalls = 0, readCalls = 0, closeCalls = 0;
+    t.mock.method(fs.promises, 'lstat', async (...args) => {
+      if (args[0] === seed && !replaced) {
+        replaced = true;
+        if (replacement === 'regular') await fs.promises.rename(foreign, seed);
+        else { await unlink(seed); await symlink(foreign, seed); }
+      }
+      return originalLstat(...args);
+    });
+    t.mock.method(fs.promises, 'open', async (...args) => {
+      const handle = await originalOpen(...args);
+      openCalls += 1;
+      const read = handle.readFile.bind(handle);
+      const close = handle.close.bind(handle);
+      t.mock.method(handle, 'readFile', async (...readArgs) => { readCalls += 1; return read(...readArgs); });
+      t.mock.method(handle, 'close', async (...closeArgs) => { closeCalls += 1; return close(...closeArgs); });
+      return handle;
+    });
+    syncBuiltinESMExports();
+    let failure, declaration;
+    try { declaration = await createPreviewDeclaration(input); } catch (error) { failure = error; }
+    finally { t.mock.restoreAll(); syncBuiltinESMExports(); }
+    assert.equal(replaced, true, 'the real pathname was replaced before its first observation');
+    assert.equal(declaration, undefined, 'a replacement must not become the accepted seed or create backing');
+    assert.ok(failure);
+    assert.match(failure.message, /preview_declaration_seed_(invalid|changed)/);
+    assert.equal(readCalls, 0, 'pathname uncertainty must be rejected before reading any seed bytes');
+    assert.equal(closeCalls, openCalls, 'every opened seed descriptor must close on refusal');
+    assert.deepEqual(await fs.promises.readdir(input.stateDirectory), []);
+  });
+}
+
+for (const replacement of ['regular', 'symlink']) {
+  test(`seed path replacement after its regular-file check is refused (${replacement})`, async t => {
+    const input = await fixture(t);
+    const seed = await realpath(join(input.worktree, 'apps/web/next-env.d.ts'));
+    const foreign = join(input.directory, 'foreign-seed');
+    await writeFile(foreign, 'foreign seed bytes');
+    const originalLstat = fs.promises.lstat;
+    let replaced = false;
+    t.mock.method(fs.promises, 'lstat', async (...args) => {
+      const checked = await originalLstat(...args);
+      if (args[0] === seed && !replaced) {
+        replaced = true;
+        if (replacement === 'regular') await fs.promises.rename(foreign, seed);
+        else { await unlink(seed); await symlink(foreign, seed); }
+      }
+      return checked;
+    });
+    syncBuiltinESMExports();
+    let failure;
+    try {
+      await createPreviewDeclaration(input);
+    } catch (error) {
+      failure = error;
+    } finally {
+      t.mock.restoreAll();
+      syncBuiltinESMExports();
+    }
+    assert.equal(replaced, true, 'the real seed pathname changed after its check');
+    assert.ok(failure, 'a raced seed must be refused before foreign bytes can supply backing');
+    assert.match(failure.message, /preview_declaration_seed_(invalid|changed)/);
+    assert.deepEqual(await fs.promises.readdir(input.stateDirectory), [], 'no backing may be created from a raced seed');
+  });
+}
+
+test('a FIFO seed is refused without blocking or creating backing', async t => {
+  if (process.platform === 'win32') { t.skip('UNRUN: POSIX FIFO fixture requires mkfifo'); return; }
+  const input = await fixture(t);
+  const seed = join(input.worktree, 'apps/web/next-env.d.ts');
+  await unlink(seed);
+  const fifo = spawnSync('mkfifo', [seed], { encoding: 'utf8' });
+  assert.equal(fifo.status, 0, fifo.stderr || String(fifo.error || 'mkfifo failed'));
+  const helper = new URL('./dev-preview-declaration.mjs', import.meta.url).href;
+  const script = `import { createPreviewDeclaration } from ${JSON.stringify(helper)};
+    try { await createPreviewDeclaration({ worktree: process.argv[1], stateDirectory: process.argv[2] }); process.exitCode = 1; }
+    catch (error) { if (error.message !== 'preview_declaration_seed_invalid') throw error; }`;
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', script, input.worktree, input.stateDirectory], {
+    encoding: 'utf8', timeout: 2000,
+  });
+  assert.equal(result.status, 0, result.stderr || String(result.error || 'FIFO seed did not refuse'));
+  assert.deepEqual(await fs.promises.readdir(input.stateDirectory), []);
+});
+
+for (const fault of ['open-error', 'stat-error', 'read-error', 'path-swap', 'content-mutation', 'path-missing', 'post-read-stat-error', 'close-error']) {
+  test(`seed descriptor failure refuses backing and closes every opened handle (${fault})`, async t => {
+    const input = await fixture(t);
+    const seed = await realpath(join(input.worktree, 'apps/web/next-env.d.ts'));
+    const foreign = join(input.directory, 'foreign-seed');
+    await writeFile(foreign, 'foreign seed bytes');
+    const originalOpen = fs.promises.open;
+    let opened = false, openCalls = 0, closeCalls = 0, readCalls = 0;
+    t.mock.method(fs.promises, 'open', async (...args) => {
+      openCalls += 1;
+      if (fault === 'open-error') throw Object.assign(new Error('seed-open-fixture-error'), { code: 'EACCES' });
+      const handle = await originalOpen(...args);
+      opened = true;
+      const close = handle.close.bind(handle);
+      t.mock.method(handle, 'close', async (...closeArgs) => {
+        closeCalls += 1;
+        await close(...closeArgs);
+        if (fault === 'close-error') throw new Error('seed-close-fixture-error');
+      });
+      const stat = handle.stat.bind(handle);
+      let statCalls = 0;
+      t.mock.method(handle, 'stat', async (...statArgs) => {
+        statCalls += 1;
+        if (fault === 'stat-error' || (fault === 'post-read-stat-error' && statCalls === 2)) throw new Error('seed-stat-fixture-error');
+        return stat(...statArgs);
+      });
+      const read = handle.readFile.bind(handle);
+      t.mock.method(handle, 'readFile', async (...readArgs) => {
+        readCalls += 1;
+        if (fault === 'read-error') throw new Error('seed-read-fixture-error');
+        const bytes = await read(...readArgs);
+        if (fault === 'path-swap') await fs.promises.rename(foreign, seed);
+        if (fault === 'path-missing') await unlink(seed);
+        if (fault === 'content-mutation') {
+          await writeFile(seed, 'x'.repeat(bytes.length));
+          await fs.promises.utimes(seed, 0, 0);
+        }
+        return bytes;
+      });
+      return handle;
+    });
+    syncBuiltinESMExports();
+    let failure;
+    try { await createPreviewDeclaration(input); } catch (error) { failure = error; }
+    finally { t.mock.restoreAll(); syncBuiltinESMExports(); }
+    assert.ok(failure, 'seed uncertainty must refuse before backing creation');
+    assert.equal(openCalls, 1, 'a refused open is never retried with weaker flags');
+    assert.equal(closeCalls, opened ? 1 : 0, 'every opened seed descriptor closes on failure');
+    assert.equal(readCalls, ['open-error', 'stat-error'].includes(fault) ? 0 : 1);
+    assert.deepEqual(await fs.promises.readdir(input.stateDirectory), []);
+  });
+}
+
+test('the validated seed descriptor closes before backing storage is created', async t => {
+  const input = await fixture(t);
+  const originalOpen = fs.promises.open;
+  let closeCalls = 0;
+  t.mock.method(fs.promises, 'open', async (...args) => {
+    const handle = await originalOpen(...args);
+    const close = handle.close.bind(handle);
+    t.mock.method(handle, 'close', async (...closeArgs) => {
+      const pendingBacking = await fs.promises.readdir(input.stateDirectory);
+      await close(...closeArgs);
+      closeCalls += 1;
+      assert.deepEqual(pendingBacking, []);
+    });
+    return handle;
+  });
+  syncBuiltinESMExports();
+  let declaration;
+  try { declaration = await createPreviewDeclaration(input); }
+  finally { t.mock.restoreAll(); syncBuiltinESMExports(); }
+  assert.equal(closeCalls, 1);
+  assert.equal(await readFile(declaration.path, 'utf8'), original);
+  await removePreviewDeclaration(declaration);
+});
+
+test('owned declaration uses exact seed bytes, private regular files and fresh attempt identity', async t => {
+  const input = await fixture(t);
+  const first = await createPreviewDeclaration(input);
+  const second = await createPreviewDeclaration(input);
+  assert.notEqual(first.path, second.path);
+  assert.equal(await readFile(first.path, 'utf8'), original);
+  if (process.platform !== 'win32') {
+    assert.equal((await lstat(first.directory)).mode & 0o777, 0o700);
+    assert.equal((await lstat(first.path)).mode & 0o777, 0o600);
+  }
+  await writeFile(first.path, 'generated content');
+  await assertPreviewDeclarationFile(first);
+  await removePreviewDeclaration(first);
+  await removePreviewDeclaration(second);
+  await assert.rejects(lstat(first.path), { code: 'ENOENT' });
+});
+
+test('backing inside source, ignored directories and symlinked seeds are refused', async t => {
+  const input = await fixture(t);
+  for (const name of ['node_modules', '..looks-outside']) {
+    const stateDirectory = join(input.worktree, name);
+    await mkdir(stateDirectory);
+    await assert.rejects(createPreviewDeclaration({ ...input, stateDirectory }), /inside_source/);
+  }
+  const seed = join(input.worktree, 'apps/web/next-env.d.ts');
+  await unlink(seed);
+  await symlink(join(input.directory, 'missing'), seed);
+  await assert.rejects(createPreviewDeclaration(input), /seed_invalid/);
+});
+
+test('replacement backing or private directory never authorizes cleanup through a symlink', async t => {
+  const input = await fixture(t);
+  const declaration = await createPreviewDeclaration(input);
+  const foreign = join(input.directory, 'foreign');
+  await writeFile(foreign, 'preserve');
+  await unlink(declaration.path);
+  await symlink(foreign, declaration.path);
+  await assert.rejects(assertPreviewDeclarationFile(declaration), /file_changed/);
+  await assert.rejects(removePreviewDeclaration(declaration), /file_changed/);
+  assert.equal(await readFile(foreign, 'utf8'), 'preserve');
+});
+
+test('config and actual mount checks refuse missing, duplicate, foreign, readonly and shadowed overlays', () => {
+  const declarationPath = '/state/preview-unique/next-env.d.ts';
+  const configured = () => [previewDeclarationMount(declarationPath)];
+  assertPreviewDeclarationMount(configured(), { declarationPath });
+  const normalized = configured(); delete normalized[0].read_only;
+  assertPreviewDeclarationMount(normalized, { declarationPath });
+  const mutations = [
+    () => [], list => [...list, list[0]],
+    list => [{ ...list[0], source: '/foreign/next-env.d.ts' }],
+    list => [{ ...list[0], read_only: true }],
+    list => [{ ...list[0], bind: { create_host_path: true } }],
+    list => [{ ...list[0], target: '/workspace/apps/web' }],
+    list => [...list, { type: 'bind', source: '/foreign', target: '/workspace/apps' }],
+  ];
+  for (const mutate of mutations) assert.throws(() => assertPreviewDeclarationMount(mutate(configured()), { declarationPath }), /mount_mismatch/);
+  const actual = () => [{ Type: 'bind', Source: declarationPath, Destination: PREVIEW_DECLARATION_TARGET, RW: true }];
+  assertPreviewDeclarationMount(actual(), { declarationPath }, true);
+  for (const list of [[], [...actual(), ...actual()], [{ ...actual()[0], RW: false }],
+    [{ ...actual()[0], RW: undefined, Mode: 'rw' }], [{ ...actual()[0], Type: 'volume' }],
+    [{ ...actual()[0], Source: '/foreign' }], [...actual(), { Destination: '/workspace/apps/web' }]]) {
+    assert.throws(() => assertPreviewDeclarationMount(list, { declarationPath }, true), /mount_mismatch/);
+  }
+  assertPreviewDeclarationMount([...actual(), { Destination: '/workspace' }, { Destination: '/workspace/apps/web/node_modules' }], { declarationPath }, true);
+});
+
+test('actual generated file retains exact Windows and qualified Desktop path identity', () => {
+  const target = (Source) => [{ Type: 'bind', Source, Destination: PREVIEW_DECLARATION_TARGET, RW: true }];
+  assertPreviewDeclarationMount(target('/run/desktop/mnt/host/d/state/next-env.d.ts'), { declarationPath: 'D:/state/next-env.d.ts' }, true);
+  assertPreviewDeclarationMount(target('/host_mnt/Users/user/state/next-env.d.ts'), { declarationPath: '/Users/user/state/next-env.d.ts', dockerOperatingSystem: 'Docker Desktop' }, true);
+  assert.throws(() => assertPreviewDeclarationMount(target('/host_mnt/Users/user/state/next-env.d.ts'), { declarationPath: '/Users/user/state/next-env.d.ts' }, true), /mount_mismatch/);
+});
+
+test('the existing preview config and actual-container boundaries both enforce the supplied declaration binding', () => {
+  const identity = { worktree: '/source', sha: 'a'.repeat(40), leaseId: 'NPEL-MINE', declarationPath: '/state/next-env.d.ts' };
+  const config = previewOverride(identity);
+  Object.assign(config.services['dev-init'].environment, { CONTRIBUTOR_PREVIEW_PASSWORD: 'fixture',
+    DATABASE_URL: 'postgresql://fixture@dev-postgres:5432/dpf', PRODUCTION_DATABASE_URL: 'postgresql://fixture@postgres:5432/dpf' });
+  config.services['dev-portal'].environment.DATABASE_URL = config.services['dev-init'].environment.DATABASE_URL;
+  assertPreviewConfig(config, identity);
+  config.services['dev-portal'].volumes.pop();
+  assert.throws(() => assertPreviewConfig(config, identity), /declaration_mount_mismatch/);
+  const container = { Mounts: [{ Type: 'bind', Source: identity.worktree, Destination: '/workspace' },
+    { Type: 'bind', Source: identity.declarationPath, Destination: PREVIEW_DECLARATION_TARGET, RW: true }],
+    Config: { Labels: previewOverride(identity).services['dev-portal'].labels,
+      Env: ['DPF_ENVIRONMENT_CLASS=development', `DPF_PREVIEW_SOURCE_SHA=${identity.sha}`, `DPF_PREVIEW_LEASE_ID=${identity.leaseId}`] } };
+  assertPreviewContainer(container, identity);
+  container.Mounts.pop();
+  assert.throws(() => assertPreviewContainer(container, identity), /declaration_mount_mismatch/);
+});
+
+function writerRunner({ foreign = false, ancestor = false, readonly = false, fail = '', partial = false, partialMount = false } = {}) {
+  const calls = [];
+  let containers = [{ Id: 'owned', Name: '/portal', State: { Running: true },
+    Config: { Labels: { 'dpf.preview.lease': 'NPEL-MINE', 'com.docker.compose.project': 'dpf', 'com.docker.compose.service': 'dev-portal' } },
+    Mounts: [{ Type: 'bind', Source: '/state/next-env.d.ts', Destination: PREVIEW_DECLARATION_TARGET, RW: true }] }];
+  if (foreign) containers.push({ ...containers[0], Id: 'foreign', Config: { Labels: {} },
+    Mounts: [{ ...containers[0].Mounts[0], Source: ancestor ? '/state' : '/state/next-env.d.ts', RW: !readonly }] });
+  if (partialMount) containers.push({ Id: 'foreign', Config: { Labels: {} }, Mounts: [{ Source: '/state/next-env.d.ts', RW: true }] });
+  const runner = { run: async args => {
+    calls.push(args);
+    if (args[0] === fail) throw new Error('unavailable');
+    if (args[0] === 'info') return 'Linux';
+    if (args[0] === 'ps') return containers.map(c => c.Id).join('\n');
+    if (args[0] === 'inspect') return JSON.stringify(partial ? [] : containers.filter(c => args.slice(1).includes(c.Id)));
+    if (args[0] === 'stop') containers.find(c => c.Id === args[1]).State.Running = false;
+    if (args[0] === 'rm') containers = containers.filter(c => c.Id !== args[1]);
+    return '';
+  } };
+  return { runner, calls };
+}
+
+const cleanupIdentity = { declarationPath: '/state/next-env.d.ts', leaseId: 'NPEL-MINE', projectName: 'dpf', initName: 'unique-init' };
+test('owned writers stop and are removed before successful reference-free cleanup', async () => {
+  const { runner, calls } = writerRunner();
+  await stopDeclarationWriters({ runner, ...cleanupIdentity });
+  assert.ok(calls.findIndex(c => c[0] === 'stop') < calls.findIndex(c => c[0] === 'rm'));
+  assert.equal(calls.filter(c => c[0] === 'ps').length, 2);
+});
+
+test('foreign references and uncertain inventory, stop or removal retain backing', async t => {
+  const input = await fixture(t);
+  for (const options of [{ foreign: true }, { foreign: true, readonly: true }, { foreign: true, ancestor: true }, { partial: true }, { partialMount: true }, { fail: 'ps' }, { fail: 'inspect' }, { fail: 'stop' }, { fail: 'rm' }]) {
+    const declaration = await createPreviewDeclaration(input);
+    const { runner, calls } = writerRunner(options);
+    await assert.rejects(async () => {
+      await stopDeclarationWriters({ runner, ...cleanupIdentity });
+      await removePreviewDeclaration(declaration);
+    });
+    assert.equal(await readFile(declaration.path, 'utf8'), original);
+    if (options.foreign || options.partial || options.partialMount || ['ps', 'inspect'].includes(options.fail)) assert.equal(calls.some(c => c[0] === 'stop'), false);
+  }
+});
+
+test('canonical readonly state-directory mounts remain untouched and do not pin the generated child file', async () => {
+  const { runner, calls } = writerRunner({ foreign: true, ancestor: true, readonly: true });
+  await stopDeclarationWriters({ runner, ...cleanupIdentity });
+  assert.equal(calls.some(c => ['stop', 'rm'].includes(c[0]) && c[1] === 'foreign'), false);
+});
+
+test('writable Windows drive-root and POSIX-root binds retain backing even when inspected on another host', async () => {
+  for (const [declarationPath, source] of [['D:/state/next-env.d.ts', '/run/desktop/mnt/host/d/'], ['/state/next-env.d.ts', '/']]) {
+    const foreign = { Id: 'foreign', Config: { Labels: {} }, Mounts: [{ Type: 'bind', Source: source, RW: true }] };
+    const runner = { run: async args => {
+      if (args[0] === 'info') return 'Docker Desktop';
+      if (args[0] === 'ps') return 'foreign';
+      if (args[0] === 'inspect') return JSON.stringify([foreign]);
+      assert.fail('foreign root writer must never be stopped or removed');
+    } };
+    await assert.rejects(stopDeclarationWriters({ runner, ...cleanupIdentity, declarationPath }), /foreign_reference/);
+  }
+});
+
+test('refused prerequisites grant no Docker cleanup authority, while admitted writer cleanup precedes unlink', async t => {
+  const input = await fixture(t);
+  const unpublished = await createPreviewDeclaration(input);
+  await reclaimPreviewDeclaration({ declaration: unpublished, runtimeMayHaveWriters: false,
+    stopOwned: async () => assert.fail('no stop/rm authority before admission and runtime creation') });
+  await assert.rejects(lstat(unpublished.path), { code: 'ENOENT' });
+  const published = await createPreviewDeclaration(input);
+  let stopped = false;
+  await reclaimPreviewDeclaration({ declaration: published, runtimeMayHaveWriters: true,
+    stopOwned: async () => { assert.equal(await readFile(published.path, 'utf8'), original); stopped = true; } });
+  assert.equal(stopped, true);
+  await assert.rejects(lstat(published.path), { code: 'ENOENT' });
+  const uncertain = await createPreviewDeclaration(input);
+  await assert.rejects(reclaimPreviewDeclaration({ declaration: uncertain, runtimeMayHaveWriters: true,
+    stopOwned: async () => { throw new Error('ownership-unproven'); } }), /ownership-unproven/);
+  assert.equal(await readFile(uncertain.path, 'utf8'), original);
+});
+
+test('initializer source mutation still refuses portal startup and cleans up', async t => {
+  const input = await fixture(t);
+  let changed = false;
+  const calls = [];
+  await assert.rejects(runPreviewLifecycle({
+    verifySource: async () => { if (changed) throw new Error('preview_source_changed'); },
+    compose: async args => { calls.push(args); if (args[0] === 'run') { await writeFile(join(input.worktree, 'apps/web/next-env.d.ts'), 'changed by init'); changed = true; } },
+    inspect: async () => assert.fail('must not inspect'), ready: async () => assert.fail('must not serve'), wait: async () => {},
+    stopOwned: async () => calls.push('cleanup'), active: { initName: 'unique-init' },
+  }), /preview_source_changed/);
+  assert.equal(calls.some(c => Array.isArray(c) && c[0] === 'up' && c.at(-1) === 'dev-portal'), false);
+  assert.equal(calls.at(-1), 'cleanup');
 });

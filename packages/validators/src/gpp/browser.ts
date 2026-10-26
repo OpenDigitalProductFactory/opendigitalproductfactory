@@ -8,6 +8,7 @@ export * from "./emit.js";
 export * from "./soundness.js";
 export * from "./decompile.js";
 export * from "./bindings-emit.js";
+export * from "./entering-gate.js";
 export * from "./legacy.js";
 export * from "./interpreter.js";
 export * from "./diagnostics.js";

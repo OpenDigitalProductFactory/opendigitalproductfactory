@@ -131,6 +131,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/gate-worktree-process-identity.test.mjs"),
       node("--test", "scripts/gate-stdin-regression.test.mjs"),
       node("--test", "scripts/lib/gate-execution-checkpoint.test.mjs"),
+      // BI-BFDB98B6: exercise real pnpm.cmd console cancellation on Windows.
+      conformanceTest("scripts/gate-worktree-windows-cancellation.test.mjs"),
       // BI-24D5D7C2: the control-plane watchdog aborts a 13-minute build after
       // two consecutive probe failures, and an inner mcpCall deadline was
       // classified as "request-failed" — an operator reads that as a broken
@@ -144,6 +146,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/lib/durable-wait-resumer.test.mjs"),
       // A resumed gate stays on its source and a cancelled wait stays cancelled.
       node("--test", "scripts/lib/gate-resume-pin.test.mjs"),
+      // BI-EB864226: every queued replacement advances the parent's current pin.
+      node("--test", "scripts/lib/gate-reservation-handoff.test.mjs"),
       node("--test", "scripts/gate-worktree-resume.test.mjs"),
     ]),
     guard("host-port-range-guard", "Host Port Range Guard", [
@@ -298,6 +302,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // BI-31F11C37: the installers' monitoring question.
         "scripts/installer/monitoring-choice.test.mjs",
       ),
+      // BI-0FC727BB: scans the live installer tree for a bare host-wide sync.
+      conformanceTest("scripts/installer/no-bare-host-sync.test.mjs"),
       conformanceTest("scripts/ci-runtime-install-state-fixture.test.mjs"),
       // BI-31F11C37: both installers ask, accept the flag and record the
       // choice before profiles resolve; reads the live installer sources.
@@ -341,6 +347,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // BI-30E3E229: reads repo files by repo-relative literal path, so it
       // asserts live repository state rather than this guard's logic.
       conformanceTest("scripts/publish-image-release-identity.test.mjs"),
+      conformanceTest("scripts/promote-source-identity.test.mjs"),
     ]),
     guard("docs-link-integrity", "Docs Link Integrity", [
       node("scripts/gen-doc-index.mjs", "--check"),
@@ -882,6 +889,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // BI-99395B29 follow-up: liveness comes from the Workroom claim, and an
         // unreadable claim record must fail safe rather than reap on a guess.
         "scripts/lib/worktree-liveness.test.mjs",
+        // CodeQL js/log-injection: one CR/LF strip for the janitor, the preview
+        // runtime, and the auth-only bootstrap.
+        "scripts/lib/safe-log.test.mjs",
         "scripts/lib/worktree-janitor-core.test.mjs",
         "scripts/worktree-janitor.test.mjs",
         "scripts/worktree-janitor-sh.test.mjs",
@@ -1061,7 +1071,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // checked-in routine named, instead of costing an OOM and a retry.
       node("--test", "packages/dpf-skill-pack/hooks/raw-tool-guard.test.mjs"),
       node("--test", "packages/dpf-skill-pack/hooks/portal-image-guard.test.mjs"),
-      node("--test", "packages/dpf-skill-pack/hooks/worktree-create.test.mjs"),
+      conformanceTest("packages/dpf-skill-pack/hooks/worktree-create.test.mjs"),
       // BI-77BE1389: install-folder sessions get the source contract at start.
       node("--test", "packages/dpf-skill-pack/hooks/install-folder-contract.test.mjs"),
       // BI-B1065D41 / BI-1C1483C6: the sixth PreToolUse guard and the

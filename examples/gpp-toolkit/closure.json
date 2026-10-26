@@ -17,6 +17,7 @@
     "packages/validators/src/gpp/drc.ts",
     "packages/validators/src/gpp/element-ids.ts",
     "packages/validators/src/gpp/emit.ts",
+    "packages/validators/src/gpp/entering-gate.ts",
     "packages/validators/src/gpp/executable-constructs.ts",
     "packages/validators/src/gpp/gpp-layout-schema.ts",
     "packages/validators/src/gpp/gpp-shape-schema.ts",

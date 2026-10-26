@@ -1,4 +1,4 @@
-// apps/web/lib/gpp/shape-language/bindings-emit.ts
+// Portable GPP binding-record drafts (BI-721C467A).
 //
 // Binding-record drafts from compiled shape documents. Design:
 // docs/superpowers/specs/2026-10-02-gpp-shape-notation-and-compiler-design.md
@@ -10,7 +10,7 @@
 // authority or irreversible (O / A / I) tool — classifyConsequentialTool's
 // `consequential`, read from the resolve facts — one draft in the GppBinding
 // shape: the binding id and version, the gate key (`gate.gateKey ??
-// decisionScope`) and authority of the stage's typed gate, its resolver when
+// decisionScope`) and authority of the stage's typed entry gate, its resolver when
 // one is named, `admission: "stage-gate-admit"`, `attach: { shapeRef,
 // stageKey }`, and the stage's O / A / I tools as a list, never a predicate.
 //
@@ -26,6 +26,7 @@
 // or adds to GPP_BINDINGS.
 
 import type { DecisionScope as PermitAuthority } from "../decision-scopes.js";
+import { enteringGate } from "./entering-gate.js";
 import type { GppShapeDocument } from "./gpp-shape-schema.js";
 import type { GppResolution } from "./resolve.js";
 
@@ -34,7 +35,7 @@ export type GppBindingRecordDraft = {
   version: number;
   gateKey: string;
   authority: PermitAuthority;
-  /** Present only when the stage's gate names one (D-7 refuses an enforced binding without one). */
+  /** Present only when the entry gate names one (D-7 refuses an enforced binding without one). */
   resolver?: { module: string; exportName: string };
   admission: "stage-gate-admit";
   attach: { shapeRef: string; stageKey: string };
@@ -54,18 +55,19 @@ export function emitBindingRecords(compiled: readonly CompiledShapeForBindings[]
   for (const { document, resolution } of compiled) {
     const resolvedByKey = new Map(resolution.stages.map((stage) => [stage.stageKey, stage]));
     for (const stage of document.stages) {
-      const { binding, advance } = stage;
+      const { binding } = stage;
+      const entry = enteringGate(document, stage.key);
       // No typed gate: the binding has no owning scope (DRC C-3 refuses it), so there is no record.
-      if (!binding || advance.kind !== "governed-decision" || !advance.gate) continue;
+      if (!binding || !entry) continue;
       const tools = (resolvedByKey.get(stage.key)?.tools ?? [])
         .filter((tool) => tool.consequential === true)
         .map((tool) => tool.toolName);
       if (tools.length === 0) continue;
-      const { gate } = advance;
+      const { gate } = entry;
       drafts.push({
         bindingId: binding.id,
         version: binding.version,
-        gateKey: gate.gateKey ?? advance.decisionScope,
+        gateKey: gate.gateKey ?? entry.decisionScope,
         authority: gate.authority,
         ...(gate.resolver ? { resolver: { module: gate.resolver.module, exportName: gate.resolver.exportName } } : {}),
         admission: "stage-gate-admit",

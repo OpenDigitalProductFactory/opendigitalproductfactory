@@ -1,3 +1,4 @@
+import { isNonprodEnvironmentKey } from "@/lib/nonprod/environment-lease-lock";
 // Shared nonproduction environment lease tool pack — BI-ARCH-TOOLPACKS.
 //
 // Drains the self-contained "nonproduction environment lease" domain out of the
@@ -174,7 +175,7 @@ async function claimNonprodEnvironmentLeaseHandler(
       message: `Missing required nonproduction lease field(s): ${missing.join(", ")}`,
     };
   }
-  if (!["active-candidate", "local-integration-ci", "host-heavy-resource"].includes(environmentKey)) {
+  if (!isNonprodEnvironmentKey(environmentKey)) {
     return { success: false, error: "invalid_environment_key", message: `Unsupported environmentKey: ${environmentKey}` };
   }
   const { NONPROD_OWNER_PROVIDERS } = await import("@/lib/nonprod/environment-lease");

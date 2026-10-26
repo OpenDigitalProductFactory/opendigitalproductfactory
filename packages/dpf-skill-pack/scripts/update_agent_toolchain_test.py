@@ -1168,6 +1168,49 @@ class ClaudeUserScopeDpfServerTest(unittest.TestCase):
 
 
 class AntigravityMcpConfigTest(unittest.TestCase):
+    def test_writes_the_file_agy_and_the_ide_read(self) -> None:
+        # agy 1.4.3 and Antigravity.app read ~/.gemini/config/mcp_config.json;
+        # nothing reads ~/.antigravity/mcp_config.json (BI-4CB3C923).
+        home = Path("/tmp/home")
+        self.assertEqual(updater.antigravity_mcp_config_path(home),
+                         home / ".gemini" / "config" / "mcp_config.json")
+
+    def test_an_empty_config_file_is_converged_not_left_empty(self) -> None:
+        # The operator's file was 0 bytes, so agy listed no MCP servers at all.
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            cfg_path = updater.antigravity_mcp_config_path(home)
+            cfg_path.parent.mkdir(parents=True, exist_ok=True)
+            cfg_path.write_text("")
+            with patch.object(updater, "resolve_antigravity_binary", return_value="/fake/agy"):
+                self.assertEqual(updater.ensure_antigravity_mcp_config(home, updater.DEFAULT_MCP_URL, dry_run=False), "converged")
+            dpf = json.loads(cfg_path.read_text())["mcpServers"]["dpf"]
+            self.assertEqual(dpf["serverUrl"], updater.DEFAULT_MCP_URL)
+            self.assertIs(dpf["disabled"], False)
+
+    def test_unparseable_config_is_left_alone_and_does_not_stop_the_update(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            cfg_path = updater.antigravity_mcp_config_path(home)
+            cfg_path.parent.mkdir(parents=True, exist_ok=True)
+            cfg_path.write_text("{not json")
+            with patch.object(updater, "resolve_antigravity_binary", return_value="/fake/agy"):
+                status = updater.ensure_antigravity_mcp_config(home, updater.DEFAULT_MCP_URL, dry_run=False)
+            self.assertTrue(status.startswith("skipped: cannot parse"), status)
+            self.assertEqual(cfg_path.read_text(), "{not json")
+
+    def test_an_operator_disabled_dpf_entry_stays_disabled(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            cfg_path = updater.antigravity_mcp_config_path(home)
+            cfg_path.parent.mkdir(parents=True, exist_ok=True)
+            cfg_path.write_text(json.dumps({"mcpServers": {"dpf": {"serverUrl": "https://old/api/mcp/v1", "disabled": True}}}))
+            with patch.object(updater, "resolve_antigravity_binary", return_value="/fake/agy"):
+                updater.ensure_antigravity_mcp_config(home, updater.DEFAULT_MCP_URL, dry_run=False)
+            dpf = json.loads(cfg_path.read_text())["mcpServers"]["dpf"]
+            self.assertIs(dpf["disabled"], True)
+            self.assertEqual(dpf["serverUrl"], updater.DEFAULT_MCP_URL)
+
     def test_skipped_when_agy_absent(self) -> None:
         with patch.object(updater, "resolve_antigravity_binary", return_value=None):
             status = updater.ensure_antigravity_mcp_config(
@@ -1192,8 +1235,11 @@ class AntigravityMcpConfigTest(unittest.TestCase):
             self.assertEqual(second, "already current")
             cfg = json.loads(updater.antigravity_mcp_config_path(home).read_text())
             dpf = cfg["mcpServers"]["dpf"]
-            self.assertEqual(dpf["type"], "http")
-            self.assertEqual(dpf["url"], http_url)
+            # agy's own schema (what `agy mcp add` writes), BI-4CB3C923.
+            self.assertEqual(dpf["serverUrl"], http_url)
+            self.assertIs(dpf["disabled"], False)
+            self.assertNotIn("url", dpf)
+            self.assertNotIn("type", dpf)
             self.assertEqual(dpf["headers"]["Authorization"], "Bearer ${DPF_MCP_BEARER_TOKEN}")
             # No plaintext secret is ever written.
             self.assertNotIn("dpfmcp_", updater.antigravity_mcp_config_path(home).read_text())
@@ -2228,6 +2274,22 @@ class CodexRegistrationConvergenceTest(unittest.TestCase):
                     self.assertNotIn("--mcp-url", result.stdout)
                 self.assertEqual(result.returncode, 0 if exit_code == 0 else 1)
                 self.assertEqual("PLAN_REACHED" in result.stdout, exit_code == 0)
+
+    def test_shell_bootstrap_does_not_report_saved_permissions_as_an_installed_cli(self):
+        source = Path(__file__).resolve().parents[3] / "scripts/dpf-bootstrap-agent-toolchain.sh"
+        if not source.exists():
+            self.skipTest("Repository adapter is not shipped in standalone packs")
+        text = source.read_text(encoding="utf-8")
+        block = text[text.index("CLAUDE_PRESENT=0"):text.index('if [ -n "${DPF_MCP_BEARER_TOKEN:-}" ]; then')]
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Path(tmp) / "config.toml"
+            config.write_text('[projects."source"]\ntrust_level = "trusted"\n', encoding="utf-8")
+            for binary, expected in (("", "0"), ("/native/codex", "1")):
+                setup = 'maybe_install_agy() { :; }; resolve_claude_bin() { :; }; resolve_grok_bin() { :; }; resolve_agy_bin() { :; }; resolve_codex_bin() { printf "%s" "$DPF_TEST_CODEX_BIN"; };\n'
+                result = subprocess.run([updater.shutil.which("bash") or "bash", "-c", setup + block + '\nprintf "%s" "$CODEX_PRESENT"'],
+                    env={**os.environ, "CODEX_CONFIG_PATH": config.as_posix(), "DPF_TEST_CODEX_BIN": binary},
+                    capture_output=True, text=True, check=True)
+                self.assertEqual(result.stdout, expected, "Saved permissions cannot prove an installed Codex CLI")
 
     def test_registration_only_mode_does_not_write_connectors_or_other_clients(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -1,4 +1,4 @@
-// apps/web/lib/gpp/shape-language/drc.ts
+// Portable GPP design-rule checks (BI-721C467A).
 //
 // Pipeline step 4: design-rule checks. Design: docs/superpowers/specs/
 // 2026-10-02-gpp-shape-notation-and-compiler-design.md §7.2 (the rule table),
@@ -14,7 +14,7 @@
 // not. Nothing here throws, reads the database or the network: every input
 // that is not the document is a resolve fact or an injected option.
 //
-// Each rule reuses the runtime's own rule, never a restatement of it:
+// The host supplies its existing runtime policy through GppDesignRulePolicy:
 // - C-1 clause 1: KNOWN_STAGE_TOOL_GAPS / stageToolGapKey, the
 //   stage-tool-parity.test.ts rule (agent stage of a cadence shape).
 // - C-4: isToolAllowedByGrants over the agent's resolved grants plus
@@ -58,8 +58,8 @@
 //   than one"): the schema already gives a gate exactly one authority and a
 //   stage exactly one advance, so neither half of the plan's wording can fail
 //   on a schema-valid document. The case that can is a stage `binding` whose
-//   stage has no typed gate: the binding record takes its gate key and
-//   authority from that gate (§6.4), so it has no owning scope.
+//   stage has no unambiguous typed entry gate: the binding record takes its
+//   gate key and authority from the authorizing entry gate (DI-7D228A48C022).
 // - D-8 compares a typed gate, field for field, with the ratified entry for
 //   its decision scope; an unratified scope is a mismatch. A governed advance
 //   with no typed gate is not compared: it emits exactly today's advance, and
@@ -69,8 +69,8 @@
 // Standing reports, on every compile, on the shape element:
 // - C-5 is `not-evaluated`: capability tags do not exist on main, so
 //   co-occurrence cannot be computed. It is never reported as a pass.
-// - C-7's build-sandbox containment clause is `not-evaluated`: it applies only
-//   to Build Studio stages (Phase 5).
+// - C-7's build-sandbox clause is info/not applicable without declared sandbox
+//   facts; supplied sandbox stages each need an environment binding.
 // - C-8 records a host-declared single path as info, otherwise not-evaluated;
 //   the compiler does not establish runtime mediation.
 // - C-9 is `not-evaluated` when no direct-site facts are supplied.
@@ -100,7 +100,6 @@
 
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 
-
 import {
   escapeJsonPointerToken,
   sortDiagnostics,
@@ -113,6 +112,7 @@ import {
 import { constructsUsedBy } from "./constructs-used-by.js";
 import { elementIdsOf, gateElementId, shapeElementId } from "./element-ids.js";
 import { copyGate, lowerToDefinition } from "./emit.js";
+import { enteringGate } from "./entering-gate.js";
 import { CONSTRUCT_EXECUTABLE, type GppConstruct } from "./executable-constructs.js";
 import { ratifiedGateFor, type GateRatificationEntry } from "./ratification.js";
 import { hasDesignRulePolicy, type GppDesignRulePolicy } from "./design-rule-policy.js";
@@ -137,6 +137,8 @@ export type DesignRuleOptions = {
   directSites?: ReadonlyMap<string, readonly string[]>;
   /** TEST-ONLY replacement for CONSTRUCT_EXECUTABLE. Production callers omit it. */
   executable?: Readonly<Record<GppConstruct, boolean>>;
+  /** Declared-flow sandbox stages; absent means containment does not apply. */
+  sandboxStages?: ReadonlySet<string>;
 };
 
 type Segment = string | number;
@@ -252,10 +254,10 @@ export function runDesignRules(
     ),
     finding(
       "C-7",
-      "not-evaluated",
+      "info",
       shapeId,
       [],
-      "C-7 build-sandbox containment was not evaluated: it applies only to stages the Build Studio sandbox runs, which are modelled in Phase 5. This is not a pass.",
+      "C-7 build-sandbox containment is not applicable without declared sandbox stages.",
       "C-7/SANDBOX-CONTAINMENT",
     ),
     finding(
@@ -350,16 +352,17 @@ export function runDesignRules(
     // Bindings: C-3, C-7, D-5, D-7.
     const gate = typedGate(stage);
     if (stage.binding) {
+      const entry = enteringGate(document, stage.key);
       const bindingId = facts?.binding?.elementId ?? `binding:${stage.binding.id}@${stage.binding.version}`;
       const bindingPath = [...base, "binding"];
-      if (!gate) {
+      if (!entry) {
         out.push(
           finding(
             "C-3",
             "error",
             bindingId,
             bindingPath,
-            `Binding "${stage.binding.id}" names no owning scope: stage "${stage.key}" has no typed gate to give it an authority and gate key.`,
+            `Binding "${stage.binding.id}" names no owning scope: stage "${stage.key}" has no unambiguous typed entry gate to give it an authority and gate key.`,
           ),
         );
       }
@@ -375,9 +378,9 @@ export function runDesignRules(
           ),
         );
       }
-      if (stage.binding.enforcement === "enforced" && gate && !gate.resolver) {
+      if (stage.binding.enforcement === "enforced" && entry && !entry.gate.resolver) {
         out.push(
-          finding("D-7", "error", bindingId, bindingPath, `Enforced binding "${stage.binding.id}" needs its gate's resolver, and gate:${stage.key} names none.`),
+          finding("D-7", "error", bindingId, bindingPath, `Enforced binding "${stage.binding.id}" needs its entry gate's resolver, and gate:${entry.stageKey} names none.`),
         );
       }
       (facts?.binding?.egress ?? []).forEach((egress, egressIndex) => {
@@ -418,7 +421,8 @@ export function runDesignRules(
             ),
           );
         }
-        if (gate.resolver && facts?.gate?.resolver?.exists === false && (gate.mode === "enforced" || stage.binding)) {
+        const ownsBinding = document.stages.some((bound) => bound.binding && enteringGate(document, bound.key)?.stageKey === stage.key);
+        if (gate.resolver && facts?.gate?.resolver?.exists === false && (gate.mode === "enforced" || ownsBinding)) {
           out.push(
             finding(
               "D-7",
@@ -453,11 +457,12 @@ export function runDesignRules(
     const node = graph.nodes.get(stageId);
     if (!node || node.stageKey !== stage.key) return;
     const names = oai.map((tool) => tool.toolName).join(", ");
+    const entryStart = out.length;
     const predecessors = graph.predecessors.get(stageId) ?? [];
     if (predecessors.length === 0) {
       if (graph.start === stageId) {
         out.push(
-          finding("C-1", "error", stageId, ["stages", node.index, "tools"], `Stage "${stage.key}" holds O/A/I tools (${names}) and is entered by its trigger, so no gate guards entry to it.`),
+          { ...finding("C-1", "error", stageId, ["stages", node.index, "tools"], `Stage "${stage.key}" holds O/A/I tools (${names}) and is entered by its trigger, so no gate guards entry to it.`), tools: oai.map((tool) => tool.toolName) },
         );
       }
       return;
@@ -514,7 +519,22 @@ export function runDesignRules(
         );
       }
     }
+    for (let i = entryStart; i < out.length; i++) {
+      const diagnostic = out[i]!;
+      diagnostic.tools = (diagnostic.rule === "D-3" ? tools.filter(isOutwardOrIrreversible) : oai).map((tool) => tool.toolName);
+    }
   });
+
+  if (options.sandboxStages !== undefined) {
+    const standing = out.findIndex((diagnostic) => diagnostic.code === "C-7/SANDBOX-CONTAINMENT");
+    if (standing !== -1) out.splice(standing, 1);
+    document.stages.forEach((stage, index) => {
+      if (options.sandboxStages!.has(stage.key) && stage.binding?.enforcement !== "environment") {
+        out.push(finding("C-7", "error", `stage:${stage.key}`, ["stages", index, "binding"],
+          `Sandbox stage "${stage.key}" has no environment binding.`, "C-7/SANDBOX-CONTAINMENT"));
+      }
+    });
+  }
 
   // ── gated constructs: E-NOT-EXECUTABLE ────────────────────────────────────
   // One walk over the lowered definition, shared with the drive (Phase 3c,

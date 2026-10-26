@@ -141,6 +141,8 @@ export async function recordInitiativeGateReceipt(args: {
     subject: { kind: "backlog-item", id: item.itemId },
     organizationId: authority.organizationId ?? item.organizationId,
     allowHumanResearchAuthor: authorPolicy && args.gate === "research" && args.requiresIndependentReviewer === false,
+    // BI-6F2872FC: a Build Studio plan review binds the build's plan revision.
+    acceptBuildPlan: args.gate === "plan-review",
   });
   if (!artifact.ok) return artifact;
   if (canonicalPlanProof && artifact.artifact.digest !== canonicalPlanProof.digest) {

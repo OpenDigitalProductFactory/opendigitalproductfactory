@@ -60,6 +60,8 @@ import { Prisma } from "@dpf/db";
  */
 export async function recoverStuckQuiescenceCoordinators(now: Date): Promise<number> {
   const { prisma } = await import("@dpf/db");
+  const { recoverOrphanedUpgradeDrains } = await import("@/lib/self-upgrade/orphaned-drains");
+  const orphanedRecovered = await recoverOrphanedUpgradeDrains(now);
   const STUCK_COORDINATOR_TIMEOUT_MS = 2 * 60 * 1000;
   const stuckCutoff = new Date(now.getTime() - STUCK_COORDINATOR_TIMEOUT_MS);
   const stuckCoordinators = await prisma.quiescenceRun.findMany({
@@ -94,12 +96,12 @@ export async function recoverStuckQuiescenceCoordinators(now: Date): Promise<num
     select: { runId: true, status: true, lastHeartbeatAt: true, startedAt: true },
     take: 10,
   });
-  if (stuckCoordinators.length === 0) return 0;
+  if (stuckCoordinators.length === 0) return orphanedRecovered;
 
   const { transitionState, setQuiescenceLevel } = await import(
     "@/lib/self-upgrade/quiescence"
   );
-  let recovered = 0;
+  let recovered = orphanedRecovered;
   for (const sc of stuckCoordinators) {
     try {
       await transitionState(sc.runId, "failed", {
@@ -107,8 +109,8 @@ export async function recoverStuckQuiescenceCoordinators(now: Date): Promise<num
         completionSource: "watchdog",
         outcomeNotes: `Watchdog reaped stuck coordinator (status=${sc.status}, lastHeartbeat=${sc.lastHeartbeatAt?.toISOString() ?? "never"})`,
         completedAt: now,
-      });
-      await setQuiescenceLevel("normal", null);
+      }, now, { status: sc.status, lastHeartbeatAt: sc.lastHeartbeatAt });
+      await setQuiescenceLevel("normal", null, now, sc.runId);
       await jobs.send({
         name: "platform.quiescence-cleared",
         data: {

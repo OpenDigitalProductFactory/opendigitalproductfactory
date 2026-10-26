@@ -10,6 +10,14 @@ date: 2026-09-10
 
 _Status: draft · BI-19CEC4B4 · EP-0AF96937 · branch `feat/decision-engine-weekly-self-review`_
 
+## Current reconciliation status (2026-10-25)
+
+Sections 1–9 retain the original problem and objectives; section 5 and the corresponding acceptance/phasing references now explicitly supersede the absent proposed tables. They describe design intent, not a verified deployed inventory. Section 10 proposes completion integration. The human-only correction
+assumption changes only after its amendment is approved and a valid delegation exists; current
+controls remain in force.
+
+Original investigation baseline: origin/main afd6723da1f1e20bdfd75e41f975fa81e7c89033. BI-19CEC4B4 remains awaiting-acceptance for its implementation and runtime obligations. That backlog status is separate from the independent spec approval requested for this amendment. Section 5 selects the proposed persistence contract for review; it does not claim that contract is implemented or independently approved. A passing design review would approve the reviewed scope, without completing the BI, establishing runtime acceptance, or replacing required coverage and implementation admission. Existing measures, executor and routing do not prove an end-to-end corrective loop. The historical review-run/disposition models were not found; the selected contract uses existing task/result and proposal stores.
+
 ## 1. Problem
 
 Founder direction, 2026-09-08: the platform must review its own decision engine weekly and present to the right human what may or should change: how many decisions were made, where corpus is missing, where weights need examining.
@@ -53,7 +61,7 @@ Each measure yields zero or more **review lines**: `{ measureKey, scope, ownerRe
 
 ### 4.2 The run
 
-New `taskKind: "decision-engine-review"` in `SCHEDULED_AGENT_TASK_KINDS`, executor `decision/self-review/decision-engine-review-task.ts` mirroring `bookkeeping-cycle-task.ts`: deterministic, idempotent per ISO week (`periodKey`), off the LLM path. It writes one `DecisionEngineReviewRun` row (period, computed measures as JSON, line count, routed count) and posts the digest into the standing governance Workroom the concierge design names. Seeded on every install by the scheduled-task seed with the default cron `0 6 * * 1` (Monday 06:00 UTC), owned by the install's operator principal.
+New `taskKind: "decision-engine-review"` in `SCHEDULED_AGENT_TASK_KINDS`, executor `decision/self-review/decision-engine-review-task.ts` mirroring `bookkeeping-cycle-task.ts`: deterministic, idempotent per ISO week (`periodKey`), off the LLM path. Under the amended persistence contract in section 5, it writes an immutable TaskArtifact result linked to the existing TaskRun (period, measured/routed coverage and evidence references) and posts the digest into the standing governance Workroom the concierge design names. Seeded on every install by the scheduled-task seed with the default cron `0 6 * * 1` (Monday 06:00 UTC), owned by the install's operator principal.
 
 ### 4.3 Routing (the "right human")
 
@@ -67,7 +75,7 @@ A line is never auto-applied. `examine-weight` lines feed `persistWeightAdjustme
 
 - Review page section "This week's engine review": the latest run's lines grouped by scope, each with confirm / reject / snooze; rejected lines carry a reason that the next run reads (a rejected line with the same key and unchanged evidence is not re-raised for 4 weeks).
 - Attention plane: a new `decision-engine-review` source emitting one item per routed line, lane per §4.3.
-- `DecisionEngineReviewRun` is queryable so week-over-week deltas are computed from prior runs, not recomputed history.
+- The authorized TaskRun/TaskArtifact result projection (section 5) supplies prior frozen results for week-over-week deltas, not recomputed history.
 
 ### 4.5 Guardrails
 
@@ -76,11 +84,37 @@ A line is never auto-applied. `examine-weight` lines feed `persistWeightAdjustme
 - Thresholds live in one module with a test per measure over a fixture ledger.
 - The run never writes to any corpus; only the human's confirmation or the specialist's draft-first path does.
 
-## 5. Data model
+## 5. Persistence contract (2026-10-25 amendment)
 
-- `DecisionEngineReviewRun { runId, periodKey, startedAt, completedAt, measures Json, lines Json, routedCount, status }`, unique on `periodKey`.
-- `DecisionEngineReviewLineDisposition { runId, lineKey, disposition (confirmed|rejected|snoozed), reason, byPrincipalId, at }`.
-- No change to `DecisionInteraction`.
+This section replaces the historical proposal for DecisionEngineReviewRun and DecisionEngineReviewLineDisposition tables. Neither table is required. Reuse TaskRun, TaskNode, TaskArtifact, WorkroomActivity and DecisionResolutionProposal. This is a design contract; the current deterministic executor has not yet been connected to this durable result path.
+
+### 5.1 Canonical home and identity
+
+TaskRun owns review execution. Its unique public taskRunId is derived server-side from installation, owner, scheduled task, ISO week and review-definition version. The first admitted creation freezes the measurement cutoff and population/query versions in a2aMetadata. A same-identity dispatch joins that run after checking those bindings; it cannot replace its owner, cutoff or definition. TaskNode holds bounded execution attempts using its existing states. The deterministic dispatcher must enter this task path explicitly: the later LLM scheduler's createTaskRunForScheduledTask call does not currently wrap it.
+
+TaskArtifact owns the measured/routed result. Its taskRunId references TaskRun.id, not the public TR-* value. parts carries the versioned structured result; metadata carries schema version, cutoff, definition/source revisions, content digest and predecessor reference. producerAgentId and producerNodeId identify the producer. TaskRun.progressPayload contains artifact references and coverage summaries only; it is a projection, never a second result ledger. ScheduledAgentTask/ScheduledJob lastStatus/lastRunAt remain scheduling metadata, not review history or correction acceptance.
+
+The result contains period and scope, exact population windows and provenance classes, counts/denominators, page limits/cursors/completeness, line identities and query evidence, per-line routing destinations or failures, and references to existing proposal/correction/effect records. Missing edges stay explicit. Large evidence goes through the existing bounded-output/blob mechanism; do not embed full ledger rows or logs. Read through the existing task-result authorization and retain the owning models' lifecycle and retention policy; this amendment grants no purge or broader access. No change to DecisionInteraction or new persistent model is needed.
+
+### 5.2 Concurrency, retries and late evidence
+
+Use the existing database uniqueness constraints and a transaction, not a text search in backlog activity. Extend the canonical task/artifact writer to accept server-derived deterministic identity and a transaction; its present random-ID createTaskArtifact helper alone is insufficient. Each attempt artifact has a unique artifactId derived from run, attempt node and content digest. Replaying identical content returns that artifact; conflicting content under the same identity is an integrity failure. Freeze a completed result with a unique run/result artifactId and atomically set the run's current result reference. Concurrent contenders read the winner; they never overwrite it.
+
+Before routing an effect, persist its stable finding key (scope, profile/class, measure and target) and intended destination. Reuse the destination's canonical idempotency key or reconcile its existing record on recovery. A transaction cannot promise exactly-once external execution: an uncertain effect remains open for reconciliation before retry. A later attempt appends evidence and references its predecessor. A completed run is not rerun by another tick. Deliberate remeasurement with a changed cutoff/definition creates a separately identified successor with parentTaskRunId referencing the prior row; it must reuse the finding's existing open destination. Late observations append to that correction's evidence and appear in the next review, preserving the original measurement.
+
+Persist partial results before reporting failure. Measurement and routing coverage are separate; routing failure cannot become an empty successful summary. TaskRun may complete when its declared measurement/routing work is complete, even while corrections are open, but the result must report those open corrections and never call them verified. A persistence failure leaves execution failed or unresolved and cannot advance a successful schedule cursor. Readers treat missing, expired or unreadable evidence as unknown coverage.
+
+### 5.3 Dispositions and correction outcomes
+
+DecisionResolutionProposal is the source of truth for an actual owner ruling: its existing status, ruledByUserId, ruledAt, rulingNote, acceptedPayload and replacement chain retain their meaning. Automated correction must never populate human-ruling fields. Review lines reference these records; they do not copy a second mutable disposition.
+
+Delegated correction belongs to its existing Workroom/TaskRun. Append evidence through WorkroomActivity's existing evidence path, binding finding key, review artifact, disposition/hold reason, expected outcome, follow-up due time, applicable authority and effect/outcome references. The current projector derives correction and follow-up state from those records and their existing lifecycle; no parallel status machine is introduced. ExternalEvidenceRecord remains the referenced effect/verification evidence carrier, not a duplicate weekly review store. Preserve observer provenance and distinguish execution from independently observed quality.
+
+Suppression requires the current proposal ruling or attributable correction evidence and its explicit due/expiry time. The original four-week rejection rule remains a policy input, not an unbounded activity-text search. A snooze or no-change disposition is owned evidence with a due time; absence of evidence never suppresses a finding. Changed evidence creates an attributable successor while preserving the prior decision.
+
+### 5.4 Audit and decision
+
+Audited at source 7ac0c84858d819c58f5763477eee106284c9220f: packages/db/prisma/schema/build-delivery.prisma (TaskRun, TaskNode, TaskArtifact, ExternalEvidenceRecord), packages/db/prisma/schema/decision-governance.prisma (DecisionResolutionProposal), apps/web/lib/tak/task-records.ts and autonomous-work-run.ts, and the deterministic scheduler/review executor. Native scope finding IF-5A9AEEE7D45366B2 required this concrete persistence choice. WWMD consult DI-7A2EDCFADAEE recommends task-artifact over telemetry-manifest or dedicated tables. Its feature scores are stated engineering estimates, not measured outcomes or a scope approval. The initial featureless consult DI-1ACFFF508A5C was insufficient signal and confers no recommendation.
 
 ## 6. Objectives
 
@@ -95,7 +129,7 @@ A line is never auto-applied. `examine-weight` lines feed `persistWeightAdjustme
 | AC-ID | Objectives | Statement |
 |---|---|---|
 | AC-1 | OBJ-1 | A fixture ledger reproducing the 2026-09-08 measurements yields lines for craft-fallback (enterprise-architecture, 348), unlearned (kernel-consult, ratio 1.0), empty-question (4 tool names) and starvation (mark-dpf-platform). |
-| AC-2 | OBJ-1 | Running the task twice in one ISO week produces one `DecisionEngineReviewRun`. |
+| AC-2 | OBJ-1 | Concurrent ticks and restart in one ISO week reuse one logical TaskRun for the same definition and one frozen completed TaskArtifact result; partial attempts and deliberate successors remain attributable under section 5. |
 | AC-3 | OBJ-2 | Lines route by scope: WWMD to founder review, WWWD to the owner digest lane, WSID to the registry's accountable coworker; each line carries its query and counts. |
 | AC-4 | OBJ-2 | `examine-weight` lines appear as weight proposals on the review page through the existing proposal store; no run writes to `WikiPage` or `PerspectiveMaterial`. |
 | AC-5 | OBJ-3 | A rejected line with unchanged evidence is not re-emitted for 4 weeks; a confirmed line is not re-emitted while its evidence trends down. |
@@ -103,7 +137,7 @@ A line is never auto-applied. `examine-weight` lines feed `persistWeightAdjustme
 
 ## 8. Phasing
 
-1. Measures module + fixture tests + `DecisionEngineReviewRun` (AC-1, AC-2).
+1. Measures module + fixture tests + existing TaskRun/TaskArtifact persistence contract (AC-1, AC-2).
 2. Task kind, executor, seed, room digest (AC-6).
 3. Routing + attention source + review-page section with dispositions (AC-3, AC-5).
 4. Weight-proposal and corpus-BI wiring (AC-4).
@@ -111,3 +145,149 @@ A line is never auto-applied. `examine-weight` lines feed `persistWeightAdjustme
 ## 9. Non-goals
 
 Per-decision rulings (concierge); golden panels per profession (own item); changing any threshold in the gates themselves.
+
+## 10. Outcome review and corrective action (2026-10-25 proposal)
+
+### 10.1 Evidence and completion boundary
+
+This is the implementation companion to
+[GPP model-to-execution design](2026-10-01-gpp-model-to-execution-design.md). Its prepared purpose-to-outcome amendment is a separate publication; no missing amendment confers runtime authority.
+BI-19CEC4B4 retains measurement/routing. BI-73780C2E owns the independently shippable correction
+lifecycle. Design approval, immutable coverage and implementation admission remain pending.
+
+The 2026-10-25 trust report contained 15 class rows: 1,428 decisions, zero human samples, 31
+agent-reported choices, nine downstream outcome resolutions, 1,186 without a recommendation and
+202 unresolved. Evaluation time: 12:41 UTC. This report population is not every approval; sparse
+linked outcomes do not establish a causal diagnosis.
+
+The inbox snapshot held 26 pending envelopes: 20 blocked-run evidence writes, three handoffs, two
+research receipts with the same visible rationale/missing-binding error, and one backlog merge.
+Ten recent displayed results were authorized; three did not complete. This bounded sample is not
+a historical approval or safety rate.
+
+Source findings at the original snapshot, with delivery reconciliation:
+- The loader selects the trailing seven days, while measureUnlearned selects rows at least seven
+  days old. Normal populations overlap only at the cutoff.
+- measureAgreement reads chosenOptionId without the human/agent provenance used by the trust
+  report, but labels the result human agreement. Reuse canonical denominator rules.
+- Unlearned/no-comparison lines are no-action. Some actionable findings stop at reported or
+  needs-defect-filed. Routing errors can become an empty summary while lastStatus becomes ok.
+- PR #6577 adds look-ahead and completeness disclosure at the 20,000-row limit; this bounds returned rows, not database scan cost. Verify runtime cost before declaring acceptance.
+- The existing owned decision-engine-review-weekly task was located through a bounded metadata read. Its last observed run was healthy, but this is not evidence that correction and follow-up are complete; retain the existing task and cron.
+
+### 10.2 Cadence, populations and outcome quality
+
+Retain the existing weekly task and operator-owned schedule. Use existing operational events for
+material failures between reviews; do not create a second scheduler. Repeated unsuccessful firings
+are distinct from retries within a dispatch. BI-412A2F72 owns bounded holds/relevant-change wakeups;
+thresholds follow job purpose and risk, not a borrowed fixed number.
+
+Separate populations: decisions created in the reporting window, unresolved decisions whose
+outcomes are overdue, and corrections whose follow-up window has matured. Use a separate indexed,
+bounded traversal for overdue work, not a wider capped query. Compare the prior equivalent window
+and retain late observations without rewriting history. Page or record explicit incomplete coverage.
+
+Publish existing GPP M-1–M-7 through BI-FEDD8F45 alongside purpose/constraint violations,
+ineffective/uncertain/duplicated/reversed effects, missing outcome evidence, unnecessary human
+interruptions, repeated blocks, corpus/routing gaps and weight sensitivity. Track corrections
+applied, held, ineffective, verified and still awaiting sufficient evidence.
+
+Keep human concordance, agent-reported choices and independent/system observations separate.
+Agreement is not correctness; a later change is not proof of causality. Preserve observer, expected
+result, provenance and attribution limitations. Retain minimum-sample reporting and representative
+qualitative audits. Zero observed failures with incomplete observation is not a safety result.
+
+### 10.3 Correction through existing authority
+
+Each finding has a stable scope/class identity, accountable owner, evidence/window, proposed action,
+expected outcome, follow-up due time and explicit disposition. Refresh evidence on the same open
+finding; do not duplicate it or silently alter an approval's exact content. Materially changed
+evidence creates an attributable successor.
+
+Use the selected persistence contract in section 5: TaskRun/TaskArtifact for review execution/results, DecisionResolutionProposal for actual owner rulings, and Workroom/TaskRun evidence for delegated correction and follow-up. Persist measured and routed coverage; console output alone is insufficient. No review-run or disposition table is proposed.
+
+Required lifecycle: measured finding -> owned disposition -> permitted correction -> recorded
+effect -> follow-up observation -> verified, ineffective or explicitly insufficient evidence.
+Map this onto existing canonical statuses rather than creating a second lifecycle vocabulary.
+
+Correction delegation names permitted operation classes, target scope, maximum change,
+budget/retry bounds, validity, reviewer requirement and rollback. Collecting evidence, drafting
+corpus and repairing routing follow their existing authority/delivery paths. Weight changes require
+an explicit delegation naming allowed axes, range, versioning and evaluation. Review cannot grant
+itself access, publish governing doctrine, retire controls or promote trust from favorable statistics.
+
+A settled correction inside valid delegation acts through GPP/TAK and normal delivery gates.
+Otherwise send one named decision to the owning scope with the missing authority or policy choice.
+Missing input, denied authority, missing evidence and transport faults have distinct remedies.
+An uncertain effect is reconciled before retry or handled through verified idempotency.
+
+Measurement may finish while correction remains open. Report measured/routed/actioned/verified
+coverage separately. Routing failure or an immature observation window prevents claiming the loop
+complete. Ineffective/harmful tuning follows its declared rollback or bounded hold through the same
+authority path, preserving original failure evidence.
+
+### 10.4 Owner experience
+
+Compose existing attention, owner-decision, report-kit and authorized-surface projections:
+- Separate required judgment from unread information and technical recovery.
+- Show weekly changes, results and coverage; only material owner decisions enter Needs you.
+- Present a genuine inline checkpoint and central inbox using one envelope, with purpose, scope,
+  consequence, governing reason and accountable resolver.
+- Reconstruct pending/resolved state and evidence after refresh/reconnect from durable records.
+- Typed connector/readiness remedies reach the principal able to fix them; an unrelated approval
+  cannot repair missing configuration or authority.
+- Respect user-opened evidence panels and preserve a dismissal for the run.
+
+Verify keyboard and screen-reader flow, meaningful labels, narrow viewports and light/dark themes.
+No new approval control is introduced by this amendment.
+
+### 10.5 Objectives and acceptance
+
+**OBJ-REVIEW-COVERAGE:** Reviews distinguish complete measurement from missing outcome/routing coverage.
+
+**OBJ-REVIEW-PURPOSE:** Corrections preserve versioned purpose, constraints and weighted tradeoffs through GPP action and observed outcome.
+
+**OBJ-REVIEW-CLOSE:** Actionable findings reach an owned disposition and executed corrections receive subsequent result assessment.
+
+| Acceptance | Objectives | Statement | Owning item |
+|---|---|---|---|
+| AC-REVIEW-WINDOW | OBJ-REVIEW-COVERAGE | A decision older than seven days without an outcome is reported; human, agent and observed-result populations remain separate; a window beyond the page limit is traversed or explicitly incomplete. | BI-19CEC4B4 |
+| AC-REVIEW-LINEAGE | OBJ-REVIEW-PURPOSE | A reference case links objective and doctrine/vector versions through judgment, applicable authority/permit, execution, effect and independently evidenced outcome; missing edges are reported. | BI-FEDD8F45, BI-F3C2EC7A |
+| AC-REVIEW-CORRECT | OBJ-REVIEW-CLOSE | Repeated reviews maintain one owned correction per unchanged finding, act only within current delegation, preserve failures and assess results after the observation window. | BI-73780C2E |
+| AC-REVIEW-HOLD | OBJ-REVIEW-CLOSE | Unchanged settled refusals do not redispatch; relevant change revalidates authority and resumes the same work without duplicate effect. | BI-412A2F72 |
+| AC-REVIEW-UI | OBJ-REVIEW-COVERAGE, OBJ-REVIEW-CLOSE | Results and genuine judgment requests share durable state across inline/inbox views and refresh; keyboard, screen-reader, narrow viewport and light/dark checks pass. | BI-73780C2E |
+| AC-REVIEW-HONESTY | OBJ-REVIEW-COVERAGE | Routing failure and incomplete traversal are visible and cannot count as full completion; shadow agreement never changes runtime autonomy. | BI-19CEC4B4, BI-7D1E43DE |
+
+### 10.6 Research and overlap disposition
+
+- [OPA decision logs](https://www.openpolicyagent.org/docs/management-decision-logs): adopt decision
+  identity, evaluated policy revision and masked input/result patterns; retain the DPF monitor/store.
+- OpenBot peer source review at 46642d6c91daa663bccff673595f4e12a419a496:
+  [inline approval](https://github.com/CopilotKit/OpenBot/blob/46642d6c91daa663bccff673595f4e12a419a496/app/src/components/approvals/inline-approval.tsx)
+  and [automatic learning](https://github.com/CopilotKit/OpenBot/blob/46642d6c91daa663bccff673595f4e12a419a496/docs/automatic-learning.md).
+  Adopt one approval record across views and separation of collection, publication and tool authority.
+  This is handed-off source research: OpenBot was not run, visual usability was not verified and
+  this pass could not refetch those pinned files. Reject default-allow, fixed failure thresholds,
+  volatile activity state and hosted dependencies as DPF requirements.
+- [Anthropic](https://www.anthropic.com/research/trustworthy-agents): adopt objective/plan-level
+  oversight with intervention for material exceptions; not unrestricted agency.
+- [OpenAI agent guide](https://cdn.openai.com/business-guides-and-resources/a-practical-guide-to-building-agents.pdf):
+  adopt effect-sensitive intervention and bounded recovery, subject to recorded DPF policy.
+- [DORA](https://dora.dev/capabilities/streamlining-change-approval/): adopt review near the work and
+  automated validation while retaining independence and mandatory controls.
+
+BI-0B8657BD owns proactive-review outcome/citation acceptance, not this weekly correction executor.
+Reuse that boundary and BI-ADAC33D5 outcome reliability rather than redefine correctness.
+BI-E9555B2D owns stage authority, BI-FEDD8F45 efficacy and BI-F3C2EC7A the reference demonstration.
+The correction successor BI-73780C2E differs from BI-19CEC4B4 measurement/routing and BI-31159978
+reviewer-writer schema repair. Component delivery status is not live integration evidence.
+
+### 10.7 Current approval-noise reference case and delivery sequence
+
+The served inbox observed on 2026-10-25 (America/Chicago; observation 2026-10-26T00:32Z) displayed 15 pending approvals and 10 other notices. Visible pending envelopes include ordinary Workroom evidence writes with outcome blocked. Three successive WC-31246E11 requests say the prior evidence request is awaiting approval. The displayed propose boundary requests a separate owner authorization for each write. This observation establishes a repeated interruption path, not permission to approve or replay those requests.
+
+Refactor the existing authority resolver and stage projection to distinguish append-only observability from a gate ruling. A blocked or inconclusive fact may be recorded only for the validated actor, assigned Workroom, current subject and stage; its payload must not mint a receipt, complete a stage, approve a design, publish doctrine, widen a grant or cause an external effect. A stage-bound observation does not turn a proposed implementation into an authorized implementation. Validate required input and exact source bindings before creating an approval envelope. Missing technical context returns a named repair to the agent; it is not a human policy choice. Preserve denials and genuine checkpoint ownership.
+
+The first implementation comparison must reproduce this distinction through the actual governed entry point: ordinary bound blocked evidence, wrong room, missing task/stage binding, attempts to write a pass or completion receipt, explicit human checkpoint, expired or revoked mandate, and changed arguments. Show whether each call executed, was refused, requested input or required judgment, with no historical queue replay. Measure owner interruptions per distinct effect, duplicate unchanged requests and recorded outcome coverage before and after. Do not count hidden cards as reduced approvals.
+
+Publish this review amendment first, then the separate GPP correlation amendment, preserving both original artifacts in aeeafe0ca70a25696a8d077b157611cecb63ee36. Independent approval and live plan coverage are owed by implementation; documentation publication alone grants no new execution authority. BI-73780C2E owns correction-and-follow-up, with the stage/admission owners in section 10.6 retaining their scopes.

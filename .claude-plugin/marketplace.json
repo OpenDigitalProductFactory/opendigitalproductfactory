@@ -5,14 +5,14 @@
   },
   "metadata": {
     "description": "Project-local marketplace for the DPF-native Claude Code plugin: skills, MCP wiring, and governance hooks.",
-    "version": "0.2.16"
+    "version": "0.2.18"
   },
   "plugins": [
     {
       "name": "dpf-platform",
       "source": "./packages/dpf-skill-pack",
       "description": "DPF-native agent plugin for contributor sessions and in-portal coworker seed source.",
-      "version": "0.2.16",
+      "version": "0.2.18",
       "author": {
         "name": "Digital Product Factory"
       },

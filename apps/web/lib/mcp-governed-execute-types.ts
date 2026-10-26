@@ -148,6 +148,8 @@ export type GovernedExecuteContext = {
    * approved-request runner replays (lib/coworker/approval-resume-marker.ts).
    */
   approvalCompletion?: "platform";
+  /** Server-only: reuse exact existing authorization/outcome without minting a new request. */
+  allowApprovalRequest?: false;
   /** The chat message an approval request raised by this call belongs to. */
   chatMessageId?: string;
 };
@@ -169,6 +171,15 @@ export type GovernedExecuteRejection =
   | "authority_denied"
   | "approval_required"
   | "authority_evidence_unavailable"
+  /**
+   * Deterministic authority resolution failed (BI-5FDE148A). The subject is
+   * absent, the review binding does not match, or required scope is missing.
+   * A settled no: the same call cannot succeed on retry. Database, timeout,
+   * and connection failures stay `authority_evidence_unavailable`.
+   */
+  | "authority_subject_not_found"
+  | "authority_binding_mismatch"
+  | "authority_scope_missing"
   | "alignment_denied"
   | "alignment_escalation_required"
   | "alignment_bypass_forbidden"

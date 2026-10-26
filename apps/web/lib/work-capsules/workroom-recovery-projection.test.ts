@@ -131,6 +131,20 @@ describe("metadata-linked semantic review recovery", () => {
     expect(recovery.historicalReviewerExecutions).toEqual([]);
   });
 
+  it("limits incomplete evidence to its identified Workroom", () => {
+    const otherPartial = { ...reviewView([reviewRun()], true), partialCapsuleIds: ["WC-OTHER"] };
+    const recovery = projectWorkroomRecovery(reviewRoom, otherPartial);
+    expect(recovery.state).toBe("working");
+    expect(recovery.blocker).toBeNull();
+    expect(recovery.reviewerExecutionsTruncated).toBe(false);
+    expect(recovery.historicalReviewHistoryTruncated).toBe(false);
+    expect(projectWorkroomRecovery(reviewRoom, { ...otherPartial, runs: [] }).state).toBe("actionable");
+    const ownPartial = projectWorkroomRecovery(reviewRoom, { ...otherPartial, partialCapsuleIds: ["WC-1"] });
+    expect(ownPartial.state).toBe("unknown");
+    expect(ownPartial.blocker?.reason).toBe("review-observation-incomplete");
+    expect(ownPartial.reviewerExecutionsTruncated).toBe(true);
+  });
+
   it("shows a current review even when the direct taskRun relation is empty", () => {
     const recovery = projectWorkroomRecovery(reviewRoom, reviewView([reviewRun()]));
     expect(recovery.state).toBe("working");
@@ -206,5 +220,53 @@ describe("metadata-linked semantic review recovery", () => {
     const recovery = projectWorkroomRecovery(reviewRoom, reviewView([reviewRun({ heartbeat: "stale",
       lastHeartbeatAt: "2026-10-15T23:00:00Z" })]));
     expect(recovery.reviewerExecution).toMatchObject({ status: "working", heartbeat: "stale", lastHeartbeatAt: "2026-10-15T23:00:00Z" });
+  });
+});
+
+
+describe("ordinary initiative review observations", () => {
+  const ordinary = (patch: Partial<ReviewerExecutionObservation> = {}) => reviewRun({
+    reviewKind: "initiative-review", reviewGate: "spec-approval", requestDigest: "a".repeat(64),
+    artifactVersion: "9".repeat(40), executionUncertain: false, identityConflict: false,
+    recoveryWait: false, budget: { deadlineAt: null, recoveryAttempt: null }, ...patch,
+  });
+  it("keeps each current gate and its exact original result action", () => {
+    const recovery = projectWorkroomRecovery(reviewRoom, reviewView([
+      ordinary({ taskRunId: "TR-SPEC", status: "input-required", reason: "missing-terminal-writer" }),
+      ordinary({ taskRunId: "TR-ARCH", reviewGate: "architecture-review" }),
+    ]));
+    expect(recovery.state).toBe("waiting");
+    expect(recovery.reviewerExecution).toBeNull();
+    expect(recovery.blocker?.reason).not.toBe("review-identity-conflict");
+    expect(recovery.reviewerExecutions).toMatchObject([
+      { taskRunId: "TR-SPEC", reviewGate: "spec-approval", artifactVersion: "9".repeat(40),
+        resultAction: { method: "tasks/result", params: { taskId: "TR-SPEC", requestDigest: "a".repeat(64) } } },
+      { taskRunId: "TR-ARCH", reviewGate: "architecture-review" },
+    ]);
+  });
+  it("does not let a current pass hide an unresolved historical original", () => {
+    const recovery = projectWorkroomRecovery(reviewRoom, reviewView([
+      reviewRun({ status: "completed", receipt: { id: "pass", decision: "pass", summary: "Passed" } }),
+      ordinary({ taskRunId: "TR-OLD", identityScope: "historical", sourceHeadSha: "b".repeat(40),
+        status: "input-required", executionUncertain: true }),
+    ]));
+    expect(recovery.state).toBe("unknown");
+    expect(recovery.blocker?.reason).toBe("historical-review-unresolved");
+    expect(recovery.reviewerExecutions).toEqual(expect.arrayContaining([expect.objectContaining({ taskRunId: "TR-OLD" })]));
+  });
+  it.each(["uncertain", "conflicting", "partial"])("keeps %s evidence unknown while preserving originals", cause => {
+    const recovery = projectWorkroomRecovery(reviewRoom, reviewView([
+      ordinary({ executionUncertain: cause === "uncertain", identityConflict: cause === "conflicting" }),
+    ], cause === "partial"));
+    expect(recovery.state).toBe("unknown");
+    expect(recovery.reviewerExecutions).toHaveLength(1);
+  });
+  it("bounds the collection explicitly and never sends a malformed digest", () => {
+    const recovery = projectWorkroomRecovery(reviewRoom, reviewView(Array.from({ length: 21 }, (_, i) =>
+      ordinary({ taskRunId: "TR-" + i, reviewGate: "gate-" + i, requestDigest: "invalid" }))));
+    expect(recovery.state).toBe("unknown");
+    expect(recovery.reviewerExecutions).toHaveLength(20);
+    expect(recovery.reviewerExecutionsTruncated).toBe(true);
+    expect(recovery.reviewerExecutions[0].resultAction?.params).toEqual({ taskId: "TR-0" });
   });
 });

@@ -14,10 +14,10 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import ts from "typescript";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
+import { PROCESS_TIMEOUT_EXIT_CODE, runProcessWithBudget, type BudgetedProcessResult } from "@/lib/shared/run-process-with-budget";
 
 import { WORK_SHAPE_PRIOR_VERSIONS } from "@/lib/work-management/work-shape-prior-versions";
 import { listWorkShapes, type WorkShapeDefinition } from "@/lib/work-management/work-shapes";
@@ -78,20 +78,40 @@ async function compileOk(text: string, sourcePath: string) {
 
 // ── tsc over emitted modules ────────────────────────────────────────────────
 
-function webCompilerOptions(): ts.CompilerOptions {
-  const configPath = join(WEB_ROOT, "tsconfig.json");
-  const read = ts.readConfigFile(configPath, (path) => ts.sys.readFile(path));
-  if (read.error) throw new Error(ts.flattenDiagnosticMessageText(read.error.messageText, "\n"));
-  const parsed = ts.parseJsonConfigFileContent(read.config, ts.sys, WEB_ROOT, undefined, configPath);
-  return { ...parsed.options, noEmit: true, incremental: false, tsBuildInfoFile: undefined, plugins: [] };
+const TYPECHECK_TEST_TIMEOUT_MS = 120_000;
+const REGISTRY_TEST_TIMEOUT_MS = 300_000;
+const COMPILER_CLEANUP_HEADROOM_MS = 2_000;
+const COMPILER_CHILD = join(__dirname, "emit-typecheck-child.test-support.mjs");
+
+function compilerDiagnostics(result: BudgetedProcessResult): string[] {
+  if (result.exitCode === PROCESS_TIMEOUT_EXIT_CODE) {
+    throw new Error(`TS6 compiler child timed out: ${result.stderr.slice(-4_000)}`);
+  }
+  if (result.exitCode !== 0 || result.outputLimitExceeded) {
+    throw new Error(`TS6 compiler child failed (exit ${result.exitCode}, output limit ${result.outputLimitExceeded}): ${result.stderr.slice(-4_000)}`);
+  }
+  let value: unknown;
+  try { value = JSON.parse(result.stdout); }
+  catch { throw new Error("TS6 compiler child returned invalid JSON, not a compiler verdict."); }
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("TS6 compiler child returned an invalid diagnostics packet.");
+  }
+  const packet = value as Record<string, unknown>;
+  if (packet.schemaVersion !== 1 || !Array.isArray(packet.diagnostics)
+    || !packet.diagnostics.every((line): line is string => typeof line === "string")) {
+    throw new Error("TS6 compiler child returned an invalid diagnostics packet.");
+  }
+  return packet.diagnostics;
 }
 
 /**
- * Semantic and syntactic diagnostics for `files` (name → text), written to a
- * temp directory. Each emitted module's "../work-shapes" import is pointed at
- * the real module; nothing else in the text changes.
+ * Keep the real TS6 compiler and root-only diagnostics in one direct Node child
+ * per check, separate from this worker's resolver/runtime graph. Successful
+ * checks return after child close; all checks share the test's original budget.
+ * The existing helper does not await close after timeout/output-limit killing.
+ * Those outcomes throw; the outer governed gate owns descendant cleanup.
  */
-function typecheck(files: Record<string, string>): string[] {
+async function typecheck(files: Record<string, string>, deadlineAt: number): Promise<string[]> {
   const dir = mkdtempSync(join(tmpdir(), "gpp-emit-typecheck-"));
   try {
     const roots: string[] = [];
@@ -102,21 +122,45 @@ function typecheck(files: Record<string, string>): string[] {
       writeFileSync(path, rewritten, "utf8");
       roots.push(path);
     }
-    const program = ts.createProgram(roots, webCompilerOptions());
-    const out: string[] = [];
-    for (const root of roots) {
-      const sourceFile = program.getSourceFile(root);
-      if (!sourceFile) throw new Error(`tsc did not load ${root}`);
-      for (const diagnostic of [...program.getSyntacticDiagnostics(sourceFile), ...program.getSemanticDiagnostics(sourceFile)]) {
-        const at = diagnostic.start === undefined ? "" : `:${sourceFile.getLineAndCharacterOfPosition(diagnostic.start).line + 1}`;
-        out.push(`${root.slice(dir.length + 1)}${at} ${ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n")}`);
-      }
-    }
-    return out;
+    const timeoutMs = deadlineAt - Date.now() - COMPILER_CLEANUP_HEADROOM_MS;
+    if (timeoutMs <= 0) throw new Error("TS6 compiler child has no remaining test budget.");
+    const result = await runProcessWithBudget(process.execPath, [COMPILER_CHILD], {
+      timeoutMs,
+      timeoutLabel: "gpp-emit-typecheck-timeout",
+      maxStdoutBytes: 1_048_576,
+      stdin: Buffer.from(JSON.stringify({ schemaVersion: 1, roots, webRoot: WEB_ROOT, tempDir: dir })),
+    });
+    return compilerDiagnostics(result);
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   }
 }
+
+describe("compiler child result boundary", () => {
+  const result = (stdout: string, patch: Partial<BudgetedProcessResult> = {}): BudgetedProcessResult => ({
+    exitCode: 0, stdout, stdoutBytes: Buffer.from(stdout), stderr: "", outputLimitExceeded: false, ...patch,
+  });
+  const empty = JSON.stringify({ schemaVersion: 1, diagnostics: [] });
+  it("accepts diagnostics only from a successful complete packet", () => {
+    expect(compilerDiagnostics(result(empty))).toEqual([]);
+    expect(compilerDiagnostics(result(JSON.stringify({ schemaVersion: 1, diagnostics: ["probe.ts:1 expected diagnostic"] }))))
+      .toEqual(["probe.ts:1 expected diagnostic"]);
+  });
+  it("does not turn a nonzero child exit into empty diagnostics", () => {
+    expect(() => compilerDiagnostics(result(empty, { exitCode: 1, stderr: "compiler failed" }))).toThrow(/compiler child failed/);
+  });
+  it("does not turn a timeout into empty diagnostics", () => {
+    expect(() => compilerDiagnostics(result(empty, { exitCode: PROCESS_TIMEOUT_EXIT_CODE }))).toThrow(/timed out/);
+  });
+  it("does not accept a truncated output packet", () => {
+    expect(() => compilerDiagnostics(result(empty, { outputLimitExceeded: true }))).toThrow(/output limit true/);
+  });
+  it("rejects missing, malformed or unversioned diagnostics", () => {
+    for (const stdout of ["", "{", "null", "{}", '{"schemaVersion":2,"diagnostics":[]}', '{"schemaVersion":1,"diagnostics":[null]}']) {
+      expect(() => compilerDiagnostics(result(stdout))).toThrow(/invalid/);
+    }
+  });
+});
 
 // ── the module text ─────────────────────────────────────────────────────────
 
@@ -185,6 +229,7 @@ describe("emitShapeModule", () => {
 
 describe("emitted modules type-check against WorkShapeDefinition", () => {
   it("the worked example type-checks; a corrupted copy fails `satisfies`", async () => {
+    const deadlineAt = Date.now() + TYPECHECK_TEST_TIMEOUT_MS;
     const { module } = await compileOk(WORKED_EXAMPLE_TEXT, "apps/web/lib/work-management/shape-documents/inquiry-response-watch.gpp.json");
     const badEvidence = module.replace('"draft-artifact"', '"not-an-evidence-kind"');
     // An undeclared field fails `satisfies`. This used `flow`, which was not a
@@ -196,19 +241,20 @@ describe("emitted modules type-check against WorkShapeDefinition", () => {
     expect(extraField).not.toBe(module);
     expect(badGate).not.toBe(module);
 
-    const diagnostics = typecheck({
+    const diagnostics = await typecheck({
       "good.shape.generated.ts": module,
       "bad-evidence.shape.generated.ts": badEvidence,
       "extra-field.shape.generated.ts": extraField,
       "bad-gate.shape.generated.ts": badGate,
-    });
+    }, deadlineAt);
     expect(diagnostics.filter((line) => line.startsWith("good."))).toEqual([]);
     expect(diagnostics.some((line) => line.startsWith("bad-evidence.") && /not-an-evidence-kind/.test(line))).toBe(true);
     expect(diagnostics.some((line) => line.startsWith("extra-field.") && /notAShapeField/.test(line))).toBe(true);
     expect(diagnostics.some((line) => line.startsWith("bad-gate.") && /advisory/.test(line))).toBe(true);
-  }, 120_000);
+  }, TYPECHECK_TEST_TIMEOUT_MS);
 
   it("`evidence` and `collaborationShape` keep their literal types (checked by tsc through a probe module)", async () => {
+    const deadlineAt = Date.now() + TYPECHECK_TEST_TIMEOUT_MS;
     const { module } = await compileOk(WORKED_EXAMPLE_TEXT, "inquiry-response-watch.gpp.json");
     const probe = (constant: string) =>
       [
@@ -220,17 +266,18 @@ describe("emitted modules type-check against WorkShapeDefinition", () => {
         'export type Gate = AssertTrue<Exactly<(typeof S)["stages"][1]["advance"]["gate"]["mode"], "enforced">>;',
         "",
       ].join("\n");
-    expect(typecheck({ "shape.generated.ts": module, "probe.ts": probe("INQUIRY_RESPONSE_WATCH_1_0_0") })).toEqual([]);
+    expect(await typecheck({ "shape.generated.ts": module, "probe.ts": probe("INQUIRY_RESPONSE_WATCH_1_0_0") }, deadlineAt)).toEqual([]);
 
     // The probe is not vacuous: a JSON-style widened copy fails it.
     const widened = module.replace(" as const satisfies WorkShapeDefinition;", " satisfies WorkShapeDefinition;");
-    const findings = typecheck({ "shape.generated.ts": widened, "probe.ts": probe("INQUIRY_RESPONSE_WATCH_1_0_0") });
+    const findings = await typecheck({ "shape.generated.ts": widened, "probe.ts": probe("INQUIRY_RESPONSE_WATCH_1_0_0") }, deadlineAt);
     expect(findings.some((line) => line.startsWith("probe.ts"))).toBe(true);
-  }, 120_000);
+  }, TYPECHECK_TEST_TIMEOUT_MS);
 });
 
 describe("every clean registry document compiles to a module that type-checks", () => {
   it("decompiled with the real table, and again with every scope test-ratified (typed gates present)", async () => {
+    const deadlineAt = Date.now() + REGISTRY_TEST_TIMEOUT_MS;
     const allRatified: Record<string, GateRatificationEntry> = Object.fromEntries(
       Object.entries(GATE_RATIFICATION).map(([scope, entry]) => [
         scope,
@@ -252,8 +299,8 @@ describe("every clean registry document compiles to a module that type-checks", 
     // Most of the registry is clean (drc-registry.test.ts names the D-4 / C-1 exceptions).
     expect(Object.keys(files).length).toBeGreaterThan(40);
     expect(gated).toBeGreaterThan(0);
-    expect(typecheck(files)).toEqual([]);
-  }, 300_000);
+    expect(await typecheck(files, deadlineAt)).toEqual([]);
+  }, REGISTRY_TEST_TIMEOUT_MS);
 });
 
 // ── L2 ──────────────────────────────────────────────────────────────────────

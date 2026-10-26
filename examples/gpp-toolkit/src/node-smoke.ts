@@ -68,6 +68,18 @@ export async function runNodeSmoke() {
   equal([mapped.stage.actorRef, mapped.stage.actions, mapped.stage.output, mapped.stage.binding, mapped.stage.profile],
     [facts.actorRef, facts.actions, facts.output, facts.binding, facts.profile], "every actor/action/output/profile/binding field is preserved");
   equal(mapped.stage.owningScope, "wwwd", "owning gate authority remains separate from assigned actor");
+  equal(mapped.stage.bindingEntry, { stageKey: "approve", decisionScope: "synthetic-report", authority: "wwwd", mode: "enforced" },
+    "binding owner is the gate entering report, independently of its completion checkpoint");
+  const distinctEntry = governedDocument();
+  const entryAdvance = distinctEntry.stages[0]!.advance;
+  assert(entryAdvance.kind === "governed-decision" && entryAdvance.gate, "entry gate fixture");
+  entryAdvance.gate = { ...entryAdvance.gate, authority: "wsid", mode: "shadow" };
+  const distinctMapping = mapGeneratedStage(distinctEntry, "report", facts);
+  assert(distinctMapping.mapped && distinctMapping.stage.owningScope === "wsid"
+    && distinctMapping.stage.bindingEntry?.mode === "shadow" && distinctMapping.stage.humanRef === "person:synthetic-owner",
+    "entry binding scope/mode and exit human checkpoint remain separate facts");
+  delete entryAdvance.gate;
+  assert(!mapGeneratedStage(distinctEntry, "report", facts).mapped, "an exit gate cannot substitute for a missing binding entry gate");
   equal(mapped.stage.humanRef, "person:synthetic-owner", "exact checkpoint human remains separate from assigned executor");
   assert(mapped.stage.humanRequired && mapped.stage.qualification === "synthetic-only" && mapped.stage.unsupported.includes("whole-actor/session-envelope-qualification"), "typed gate/compile result never claims whole actor/session qualification");
   assert(!mapGeneratedStage(governed.definition, "report").mapped, "missing actor/envelope facts refuse");
@@ -120,11 +132,13 @@ export async function runNodeSmoke() {
     checkpoint: { role: "person:synthetic-owner", exactAction: true } };
   const combination: GppShapeDocument = { ...routineDocument(), key: "synthetic-combination",
     grants: capabilityFacts.map((fact) => fact.grant),
-    stages: capabilityFacts.map((fact, index) => ({ key: fact.stageKey, title: `Synthetic ${fact.capability}`, accountablePrincipalRef: actorRef,
+    stages: [{ key: "review-entry", title: "Declare the synthetic entry checkpoint", accountablePrincipalRef: "person:synthetic-owner",
+      advance: { kind: "governed-decision", condition: "A label is not an actual human admission.", decisionScope: "synthetic-combination", gate: combinationGate },
+      evidence: ["decision-record"], tools: [] }, ...capabilityFacts.map<GppShapeDocument["stages"][number]>((fact, index) => ({ key: fact.stageKey, title: `Synthetic ${fact.capability}`, accountablePrincipalRef: actorRef,
       advance: { kind: "governed-decision", condition: "An attributable decision would still be required for real admission.",
         decisionScope: "synthetic-combination", gate: combinationGate }, evidence: ["decision-record"], tools: [fact.tool],
       binding: { id: `synthetic-combination-${fact.stageKey}`, version: index + 1, enforcement: "shadow",
-        subjectScope: "synthetic-combination-data", validity: { until: "stage-exit" } } })) };
+        subjectScope: "synthetic-combination-data", validity: { until: "stage-exit" } } }))] };
   const combinationSources: GppResolveSources = { ...sources(),
     knownAgents: new Set(["synthetic-combination"]), platformTools: new Set(capabilityFacts.map((fact) => fact.tool)),
     grantsFor: (id) => id === "synthetic-combination" ? capabilityFacts.map((fact) => fact.grant) : [],
@@ -137,16 +151,17 @@ export async function runNodeSmoke() {
   const combinationOptions: CompileShapeOptions = { ...options, policy: combinationPolicy,
     ratification: { "synthetic-combination": { status: "ratified", proposed: combinationGate,
       basis: "Synthetic gate vocabulary fact only; no actual class-admission decision.", decisionId: "DI-000000000001", ratifiedAt: "2026-10-18" } } };
-  for (const stage of combination.stages) {
-    const individual = await compileShapeDocument(text({ ...combination, stages: [stage] }), combinationSources, combinationOptions);
+  const capabilityStages = combination.stages.slice(1);
+  for (const stage of capabilityStages) {
+    const individual = await compileShapeDocument(text({ ...combination, stages: [combination.stages[0]!, stage] }), combinationSources, combinationOptions);
     assert(individual.accepted, `complete synthetic facts compile the individual ${stage.key} stage`);
     assert(individual.diagnostics.some((finding) => finding.rule === "C-5" && finding.severity === "not-evaluated"),
       "individual compilation cannot assess the actor/session combination");
   }
   const combined = await compileShapeDocument(text(combination), combinationSources, combinationOptions);
-  assert(combined.accepted && combined.definition.stages.length === 3 && combined.definition.flow === undefined,
-    "all three stages compile as one structural serial model");
-  equal(combined.definition.stages.map((stage) => stage.accountablePrincipalRef), [actorRef, actorRef, actorRef], "one actor owns all three stages");
+  assert(combined.accepted && combined.definition.stages.length === 4 && combined.definition.flow === undefined,
+    "three capability stages and their entry checkpoint compile as one structural serial model");
+  equal(combined.definition.stages.slice(1).map((stage) => stage.accountablePrincipalRef), [actorRef, actorRef, actorRef], "one actor owns all three capability stages");
   equal(capabilityFacts.map(({ actorRef: actor, sessionRef: session, capability }) => ({ actor, session, capability })),
     ["untrusted-input", "sensitive-read", "state-change"].map((capability) => ({ actor: actorRef, session: sessionRef, capability })),
     "the known full capability combination is spread across three stages in one explicit actor/session");
@@ -159,7 +174,7 @@ export async function runNodeSmoke() {
     qualification: "unsupported/unqualified whole-actor/session assessment", actorRef, sessionRef, claims,
     actualHumanDecision: null,
     requiredAccountableHumanDecision: { accountablePrincipalRef: "person:synthetic-owner", admitting: "the distinct combined capability class",
-      bindings: combination.stages.map((stage) => ({ id: stage.binding!.id, version: stage.binding!.version,
+      bindings: capabilityStages.map((stage) => ({ id: stage.binding!.id, version: stage.binding!.version,
         subjectScope: stage.binding!.subjectScope, validity: stage.binding!.validity })) } });
   const favorableClaims: FavorableFixtureClaims[] = [
     { individualStageChecksFavorable: true, structuralModelAccepted: true },

@@ -4,6 +4,7 @@ import type { GppDesignRulePolicy } from "./design-rule-policy";
 import type { GppResolveSources } from "./resolve";
 import { emitShapeModule } from "./emit";
 import { parseShapeDocument } from "./parse";
+import { hasBlockingDiagnostic } from "./diagnostics";
 
 const document = {
   format: "gpp-shape/0.1", key: "fixture-report", version: "1.0.0", title: "Report", description: "Synthetic read report",
@@ -28,6 +29,10 @@ const sources = (): GppResolveSources => ({
 const options = { sourcePath: "fixture.gpp.json", typeImport: "./consumer-contracts.js", policy };
 
 describe("portable compiler fact boundary", () => {
+  it("keeps a caller-supplied known-finding annotation blocking by default", () => {
+    expect(hasBlockingDiagnostic([{ rule: "D-1", code: "D-1", severity: "error", elementId: "stage:inspect", path: "/stages/0",
+      message: "An error remains an error", knownFinding: { reason: "Untrusted annotation", backlogItemId: "BI-FIXTURE" } }])).toBe(true);
+  });
   it("compiles deterministically for explicit host facts and a consumer-owned destination", async () => {
     const a = await compileShapeDocument(JSON.stringify(document), sources(), options);
     const b = await compileShapeDocument(JSON.stringify(document, null, 2), sources(), options);
@@ -42,6 +47,35 @@ describe("portable compiler fact boundary", () => {
     const result = await compileShapeDocument(JSON.stringify(document), sources(), { ...options, policy: undefined });
     expect(result.accepted).toBe(false);
     expect(result.diagnostics.some(d => d.severity === "not-evaluated")).toBe(true);
+  });
+  it("does not let an explicit diagnostic disposition waive mandatory fact holds", async () => {
+    const child = { ...document, stages: [{ ...document.stages[0], subShape: "fixture-child@1.0.0" }] };
+    const cases = [
+      { label: "policy", document, sources: sources(), policy: undefined },
+      { label: "registration", document, sources: { ...sources(), platformTools: new Set<string>() }, policy },
+      { label: "grant mapping", document, sources: { ...sources(), grantRequirement: () => null }, policy },
+      { label: "classification", document, sources: { ...sources(), classify: () => null }, policy },
+      { label: "unresolved child", document: child, sources: sources(), policy },
+      { label: "direct child", document: child, sources: { ...sources(), shapeVersionExists: () => true }, policy },
+      { label: "transitive child", document: child, sources: { ...sources(), shapeVersionExists: () => true,
+        shapeDefinition: (ref: string) => ref === "fixture-child@1.0.0" ? { grants: [], stages: [{ key: "nested", subShape: "missing-child@1.0.0" }] } : null }, policy },
+      { label: "reference limit", document: child, sources: { ...sources(), shapeVersionExists: () => true,
+        shapeDefinition: (ref: string) => ({ grants: [], stages: [{ key: "nested", tools: [], subShape: `${ref}-next` }] }) }, policy },
+    ];
+    for (const input of cases) {
+      let dispositions = 0;
+      const result = await compileShapeDocument(JSON.stringify(input.document), input.sources, { ...options, policy: input.policy,
+        diagnosticDisposition: () => { dispositions++; return { diagnostics: [], blocking: false }; } });
+      expect(result.accepted, input.label).toBe(false);
+      expect(dispositions, input.label).toBe(0);
+      expect(result.diagnostics.some(finding => finding.severity === "not-evaluated" || finding.severity === "error"), input.label).toBe(true);
+    }
+  });
+  it("holds unavailable diagnostic policy without exposing host exception text", async () => {
+    const result = await compileShapeDocument(JSON.stringify(document), sources(), { ...options,
+      diagnosticDisposition: () => { throw new Error("PRIVATE_HOST_FINDING_POLICY"); } });
+    expect(result.accepted).toBe(false);
+    expect(JSON.stringify(result)).not.toContain("PRIVATE_HOST_FINDING_POLICY");
   });
   it("holds a registered tool whose consequence classification could not be read", async () => {
     const result = await compileShapeDocument(JSON.stringify(document), { ...sources(), classify: () => null }, options);

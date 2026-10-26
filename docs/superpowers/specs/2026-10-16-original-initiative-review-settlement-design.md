@@ -10,6 +10,24 @@ Workroom metrics BI-C684AF45. The operator explicitly requested this repair and
 completion of the original metrics outcome. This document is design evidence,
 not implementation admission, execution settlement or independent approval.
 
+**Spec-approval scope and gate order.** This review assesses the proposed design,
+its marked objectives and acceptance statements, and the adequacy of its proof,
+authority and verification contracts. For the first scope baseline, a passing
+independent spec-approval receipt atomically creates that baseline through the
+governed writer. The baseline is an output of this gate. The author then records
+plan coverage against the genuine baseline and obtains normal implementation
+admission. This order follows the [backlog and planning
+contract](../../architecture/backlog-and-planning-runbook.md); an absent first
+baseline or downstream coverage receipt describes preimplementation state.
+Neither is a substitute for independent design judgment.
+
+Spec approval does not establish original launch membership, capability or
+effect closure, qualify a historical execution, or authorize replay. The
+implementation prerequisites and positive recovery requirements below remain
+mandatory. A substantive defect in their design or feasibility remains grounds
+for a failing review. Approval of the proposed scope cannot waive those later
+checks or turn the dated observations below into completed work.
+
 ## Observed failure and boundary
 
 On served recovery107, original initiative review 75512C999571 remains
@@ -267,7 +285,7 @@ one, lower the work shape, or self-approve a design.
 
 ### P1 — Establish executable evidence adapters
 
-Requirement references: AC-HR-1, AC-HR-2; contract reference: CONTRACT-PROOF;
+Acceptance references: AC-HR-1, AC-HR-2; contract reference: CONTRACT-PROOF;
 flow reference: FLOW-COLLECT; verification reference: VERIFY-PROOF.
 
 Resolve the saved request through `mcp-task-persisted-request.ts`, current actor
@@ -308,7 +326,7 @@ or AC-HR-2 as passed on refusal tests alone.
 
 ### P2 — Consolidate qualification and integrate the writer fence
 
-Requirement references: AC-HR-1, AC-HR-2, AC-HR-3; contract references:
+Acceptance references: AC-HR-1, AC-HR-2, AC-HR-3; contract references:
 CONTRACT-PROOF, CONTRACT-FENCE; flow reference: FLOW-QUALIFY;
 verification reference: VERIFY-FENCE. Depends on P1 and the separately owned
 writer-fence contract becoming qualified on the integration source.
@@ -332,7 +350,7 @@ release or treating its tests as collector qualification.
 
 ### P3 — Admit one same-task continuation
 
-Requirement references: AC-HR-1, AC-HR-3, AC-HR-4; contract references:
+Acceptance references: AC-HR-1, AC-HR-3, AC-HR-4; contract references:
 CONTRACT-FENCE, CONTRACT-RECEIPT; flow reference: FLOW-RECOVER;
 verification reference: VERIFY-RECOVERY. Depends on P2.
 
@@ -354,7 +372,7 @@ creation explicitly. A passing admission test is not an independent review.
 
 ### P4 — Qualify delivery and served behavior
 
-Requirement references: AC-HR-2, AC-HR-4, AC-HR-5; contract references:
+Acceptance references: AC-HR-2, AC-HR-4, AC-HR-5; contract references:
 CONTRACT-PROOF, CONTRACT-RECEIPT; flow reference: FLOW-VERIFY;
 verification reference: VERIFY-SERVED. Depends on P3.
 
@@ -376,14 +394,19 @@ consumer cannot recover a task, and admission without complete adapters must
 remain disabled. The independent writer-fence contribution retains its own
 carrier and release evidence; it is a prerequisite, not duplicate parent work.
 
-| Deliverable | Implementation BI | Depends on | Requirements | Contracts | Flow | Verification |
-| --- | --- | --- | --- | --- | --- | --- |
-| P1 | BI-7906C73E | None | AC-HR-1, AC-HR-2 | CONTRACT-PROOF | FLOW-COLLECT | VERIFY-PROOF |
-| P2 | BI-7906C73E | P1; separately owned writer fence | AC-HR-1, AC-HR-2, AC-HR-3 | CONTRACT-PROOF, CONTRACT-FENCE | FLOW-QUALIFY | VERIFY-FENCE |
-| P3 | BI-7906C73E | P2 | AC-HR-1, AC-HR-3, AC-HR-4 | CONTRACT-FENCE, CONTRACT-RECEIPT | FLOW-RECOVER | VERIFY-RECOVERY |
-| P4 | BI-7906C73E | P3 | AC-HR-2, AC-HR-4, AC-HR-5 | CONTRACT-PROOF, CONTRACT-RECEIPT | FLOW-VERIFY | VERIFY-SERVED |
+| Deliverable | Implementation BI | Depends on | Objectives | Acceptance | Contracts | Flow | Proof checks |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| P1 | BI-7906C73E | None | OBJ-HISTORY, OBJ-RECOVER | AC-HR-1, AC-HR-2 | CONTRACT-PROOF | FLOW-COLLECT | VERIFY-PROOF |
+| P2 | BI-7906C73E | P1; separately owned writer fence | OBJ-HISTORY, OBJ-RECOVER, OBJ-FENCE | AC-HR-1, AC-HR-2, AC-HR-3 | CONTRACT-PROOF, CONTRACT-FENCE | FLOW-QUALIFY | VERIFY-FENCE |
+| P3 | BI-7906C73E | P2 | OBJ-HISTORY, OBJ-RECOVER, OBJ-FENCE | AC-HR-1, AC-HR-3, AC-HR-4 | CONTRACT-FENCE, CONTRACT-RECEIPT | FLOW-RECOVER | VERIFY-RECOVERY |
+| P4 | BI-7906C73E | P3 | OBJ-HISTORY, OBJ-RECOVER, OBJ-FENCE | AC-HR-2, AC-HR-4, AC-HR-5 | CONTRACT-PROOF, CONTRACT-RECEIPT | FLOW-VERIFY | VERIFY-SERVED |
 
-Native coverage receipt: **not recorded**. One request on published commit
+When recording native coverage, map the Objectives column to requirementRefs
+and the Acceptance column to verificationRefs. The VERIFY-* labels name the
+proof checks described in P1–P4; they are not scope-baseline acceptance IDs.
+
+**Historical coverage observation:** the native receipt was not recorded after
+one request on published commit
 `b6980fde56afecec40156f7312d319b3dba0df8c`, blob
 `27ac3cef9bfcacb9f9c90eed03b73d5f92042fb9`, returned
 `traceability-incomplete`: **no initiative scope baseline exists for
@@ -407,10 +430,11 @@ No retained authenticated qualified case has yet been demonstrated. The proof
 owners listed in P1 must supply the actual original records, or the collector
 must return unsupported historical provenance while preserving unknown.
 
-Native Research PASS, plan coverage, implementation admission, collector code,
-qualified recovery and the main BI-5366EF78 handoff remain separate outstanding
-results. This plan makes their order and evidence concrete; it does not claim
-that historical recovery or the thread's desired outcome is delivered.
+At this planning checkpoint, native research acceptance, plan coverage,
+implementation admission, collector code, qualified recovery and the main
+BI-5366EF78 handoff were separate outstanding results. Later dated observations
+record only their specific progress. This plan's sequence is not evidence that
+historical recovery or the thread's desired outcome is delivered.
 
 ## Verification and rollback
 
@@ -513,3 +537,50 @@ omit it and return `proofInventoryUnavailable: "budget"` if that marker fits;
 otherwise return the complete base without the marker. A valid locator three
 characters longer exercises the marker-omission boundary. Base overflow still
 returns the original over-budget refusal. Neither path authorizes replay.
+
+## October 23 bounded recovery: issued review admission
+
+The live implementation claim for BI-7906C73E issued a spec-approval packet
+because plan coverage lacked its objective baseline. Admission rejected that
+exact packet with "This item has no pending review for the requested lane."
+A merged diagnostic contribution had made delivery completion allowed; that
+projection erased the prerequisite the admission selector used. No task was
+created by the refused request.
+
+Keep delivery completion unchanged. Resolve the missing planning prerequisite
+from the complete own and inherited baseline history, and pass that compact
+observation to the existing independent-review selector for both bounded reads
+and request admission. Only input-required implementation with missing plan
+coverage qualifies. An unavailable design observation or any retained baseline
+history suppresses the new route. Read failures remain failures. Explicit null
+means no observed prerequisite; legacy callers without the field retain their
+existing behavior.
+
+The claim-to-admission regression reproduces the native rejection before the
+repair. Verification covers the exact bounded packet, retained/inherited and
+malformed history, changed authority, and unresolved original reviews. The
+change introduces no writer, settlement proof, replay permission or exemption
+from independent review. Historical DED689F4DDF6 remains UNKNOWN; native baseline
+and plan review are unrun. This bounded DEV admission repair follows the existing
+recovery procedure with independent source assessment, normal tests, DCO,
+local gate and protected publication. It does not deliver the full historical
+recovery specification or BI-5366EF78's receiver acknowledgement.
+
+**October 24 spec-review finding and clarification.** The original current-source
+review task ending 1427D0CD59CA completed through supported same-task recovery.
+Its independent spec-approval receipt
+initiative-review-v1-2a7b54f0e844b5295d85c7a3004b2ebf2198cf504be7a3cdb21caaf5dde392fd
+recorded FAIL at 2026-10-24T17:40:13.478Z for source
+4514841246f099c7f3d241326e313577e4bc1027, blob
+1b9692e589595594e0325d9bf4c7a2ff62693223, with finding IF-F99ADDF4DF95A0DD.
+The finding cites the absent baseline and coverage and this design's explicit
+limits on implementation and recovery claims.
+
+This amendment makes the spec gate's input, output and order explicit and
+separates native objective/acceptance identifiers from proof-check labels. The
+OBJ-* and AC-* statements and the required historical proof are unchanged.
+The FAIL and finding remain actual evidence on the reviewed artifact; the author
+does not mark them resolved. Independent review of this amended immutable source
+must judge the clarification and any substantive design or feasibility concerns.
+No prior task, receipt, attempt budget or execution uncertainty is replaced, and
+successful admission or continuation does not supply design acceptance.

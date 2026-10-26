@@ -1,7 +1,10 @@
+import {engagementVisualDeliveryRecorder,type EngagementVisualEvidence} from "./coworker-service-catalog/engagement-visual-evidence";
+import { narrowEngagementTools } from "./coworker-service-catalog/engagement-task-binding";
+import { withInferenceAuthorityCheck } from "./routing/governed-inference-deadline";
+import { sameTaskExecutionFence, captureTaskExecutionFence } from "./shared/task-execution-fence";
 import { EXECUTION_UNCERTAIN_MESSAGE, executionUncertaintyFromError, hasExecutionUncertainty } from "./shared/execution-uncertainty";
 import { reservationIdentity, dispatchIdentity, settleRemoteTask } from "./mcp-task-attempt-state";
-import { captureTaskExecutionFence } from "./shared/task-execution-fence";
-import { projectRemoteTaskReplay } from "./mcp-task-replay-projection";
+import { projectRemoteTaskReplay, optionalString, remoteTaskContent } from "./mcp-task-replay-projection";
 import { TASK_IN_FLIGHT_STATES } from "@/lib/tak/task-states";
 import { remoteTaskConversation } from "./mcp-task-conversation";
 import { coworkerBriefSpans } from "@/lib/tak/coworker-prompt-provenance";
@@ -50,14 +53,6 @@ import {
   terminalWriterEscalationWaitReason,
   terminalWriterRetryIsExhausted,
 } from "./mcp-task-terminal-writer-escalation";
-
-function optionalString(value: unknown): string | null {
-  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
-}
-
-function remoteTaskContent(text: string) {
-  return [{ type: "text", text }];
-}
 
 function approvalRequiredEnvelopeId(value: unknown): string | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
@@ -108,7 +103,7 @@ export async function executeRemoteTaskAttempt(input: {
     || dispatchIdentity(admittedRun.progressPayload) !== dispatchClaim)) {
     return projectRemoteTaskReplay({ existing: { ...admittedRun, taskRunId: run.taskRunId }, requestMatches: true });
   }
-  const taskExecutionFence = parsed.initiativeReviewBinding ? captureTaskExecutionFence(admittedRun.progressPayload,
+  const taskExecutionFence = parsed.initiativeReviewBinding || parsed.engagementBinding ? captureTaskExecutionFence(admittedRun.progressPayload,
     (admittedRun.a2aMetadata as Record<string, unknown> | null)?.requestDigest) : undefined;
   const settle = (args: Prisma.TaskRunUpdateManyArgs & { where: { taskRunId: string } }) =>
     settleRemoteTask(args, reservation, dispatchClaim);
@@ -139,6 +134,18 @@ export async function executeRemoteTaskAttempt(input: {
     return displaced ?? projectRemoteTaskReplay({ existing: { ...admittedRun,
       status: "input-required", taskRunId: run.taskRunId }, requestMatches: true });
   }
+  let visualEvidence:EngagementVisualEvidence|null=null;
+  if (parsed.engagementBinding) {
+    const { validateEngagementTask, reconcileEngagementTaskResult } = await import("./coworker-service-catalog/engagement-fulfillment");
+    try {
+      await reconcileEngagementTaskResult(run.taskRunId);
+      visualEvidence=(await validateEngagementTask({ binding: parsed.engagementBinding, token, taskRunId: run.taskRunId, authorityScope: parsed.authorityScope ?? [], requireAssociation: true, request: parsed })).visualEvidence;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Engagement authority unavailable";
+      const displaced = await settle({ where: { taskRunId: run.taskRunId }, data: { status: "failed", completedAt: new Date(), progressPayload: { summary: message, error: "engagement_execution_refused" } } });
+      return displaced ?? { kind: "result", result: { taskRunId: run.taskRunId, status: "failed", isError: true, content: remoteTaskContent(message) } };
+    }
+  }
   const progress = admittedRun.progressPayload && typeof admittedRun.progressPayload === "object"
     && !Array.isArray(admittedRun.progressPayload) ? admittedRun.progressPayload as Record<string, unknown> : {};
   // Stable authority and immutable windows survive every parked/terminal result;
@@ -166,7 +173,11 @@ export async function executeRemoteTaskAttempt(input: {
     userContext,
   });
   const modelRoutingAgentId = agent.agentId ?? parsed.agentId;
-  const resolvedAgentId = resolveCanonicalAgentId(modelRoutingAgentId);
+  const resolvedAgentId = parsed.engagementBinding ? modelRoutingAgentId : resolveCanonicalAgentId(modelRoutingAgentId);
+  if (parsed.engagementBinding) {
+    const { engagementProviderIdentityRefs } = await import("./coworker-service-catalog/engagement-fulfillment");
+    if (!engagementProviderIdentityRefs(parsed.engagementBinding.providerAgentId).includes(resolvedAgentId)) throw new Error("Engagement provider identity changed during runtime resolution.");
+  }
   const requestedAgentId = parsed.agentId;
   const requestedCanonicalAgentId = resolveCanonicalAgentId(requestedAgentId);
   let routingConfig: {
@@ -232,13 +243,14 @@ export async function executeRemoteTaskAttempt(input: {
   });
   const reviewProfile = parsed.initiativeReviewBinding?.gate === "spec-approval"
     ? await loadReviewerProfile(prisma, parsed.initiativeReviewBinding.itemId) : null;
-  const tools = narrowInitiativeReviewTools(
+  const reviewTools = narrowInitiativeReviewTools(
     resolvedTools,
     exactRequiredToolNames,
     parsed.initiativeReviewBinding,
     parsed.prompt,
     reviewProfile,
   );
+  const tools = parsed.engagementBinding ? narrowEngagementTools(reviewTools, exactRequiredToolNames) : reviewTools;
   const effortWarrant = requiresInitiativeReviewEffort(exactRequiredToolNames)
     ? deriveEffortWarrant({
         reasoningDepth: "high",
@@ -265,6 +277,7 @@ export async function executeRemoteTaskAttempt(input: {
       ? { resumedFromTerminalWriterWait: true }
       : { resumedFromCapacity: true };
   const conversation = remoteTaskConversation({
+    visualInputs: visualEvidence?.inputs,
     systemPrompt: `${agent.systemPrompt}\n${await loadPirEvidenceContext(prisma, parsed.initiativeReviewBinding)}`,
     prompt: parsed.prompt,
     resumeKind: input.resumeKind,
@@ -272,9 +285,13 @@ export async function executeRemoteTaskAttempt(input: {
   });
 
   // BI-2E479619: rows a CLI wrote natively during THIS attempt start here.
+  const readEvidencePolicy = parsed.engagementBinding
+    ? (await import("./coworker-service-catalog/engagement-read-completion")).engagementReadCompletion(run.taskRunId, parsed.engagementBinding) : undefined;
+  if (readEvidencePolicy) readEvidencePolicy.mintReadOnlySession = async () => (await import("./mcp/session-token")).createMcpSessionToken({userId:token.userId,agentId:resolvedAgentId,threadId:input.threadId,routeContext:parsed.routeContext,taskRunId:run.taskRunId,taskExecutionFence,scopes:["file_read","registry_read"],capability:"read"});
+  if(readEvidencePolicy && parsed.engagementBinding)readEvidencePolicy.recordImageInputDelivery=engagementVisualDeliveryRecorder(run.taskRunId,parsed.engagementBinding,taskExecutionFence??null,visualEvidence);
   const attemptStartedMs = Date.now();
   try {
-    const result = await executeAutonomousAgenticLoop({
+    const runLoop = async () => (await import("./tak/read-evidence-policy")).withReadEvidencePolicy(readEvidencePolicy, async () => executeAutonomousAgenticLoop({
       systemPrompt: conversation.systemPrompt,
       systemPromptInstructionSpans: coworkerBriefSpans(agent.systemPrompt),
       chatHistory: conversation.chatHistory,
@@ -298,7 +315,15 @@ export async function executeRemoteTaskAttempt(input: {
       ...(effortWarrant ? { effortWarrant } : {}),
       ...(terminalToolPolicy ? { terminalToolPolicy } : {}),
       ...(modelRequirements ? { modelRequirements } : {}),
-    });
+    }));
+
+    const result = await (parsed.engagementBinding ? withInferenceAuthorityCheck(async () => {
+      const { validateEngagementTask } = await import("./coworker-service-catalog/engagement-fulfillment");
+      await validateEngagementTask({ binding: parsed.engagementBinding!, token, taskRunId: run.taskRunId, authorityScope: parsed.authorityScope ?? [], requireAssociation: true, request: parsed });
+      const current = await prisma.taskRun.findUnique({ where: { taskRunId: run.taskRunId }, select: { status: true, progressPayload: true, a2aMetadata: true } });
+      return current?.status === "working" && !hasExecutionUncertainty(current.progressPayload) && sameTaskExecutionFence(taskExecutionFence,
+        captureTaskExecutionFence(current.progressPayload, (current.a2aMetadata as Record<string, unknown> | null)?.requestDigest));
+    }, runLoop) : runLoop());
 
     // BI-2E479619: a CLI adapter runs the governed tools natively, so the
     // loop's records can miss them. Fold this attempt's native rows (deduped
@@ -375,6 +400,10 @@ export async function executeRemoteTaskAttempt(input: {
         content: remoteTaskContent(EXECUTION_UNCERTAIN_MESSAGE), isError: false,
       } };
     }
+    const readHold = parsed.engagementBinding ? await (await import("./coworker-service-catalog/engagement-read-completion")).engagementIncompleteOutcome({
+      policy:readEvidencePolicy!,taskRunId:run.taskRunId,result,checkpoint:recoveryCheckpoint,flags:resumedFlag,skip:!!preInferenceResourceWait(result),
+    }) : null;
+    if (readHold) return (await settle(readHold.settlement)) ?? readHold.outcome;
     // The loop is not trusted to self-report a missing writer: main enforces this
     // at the completion boundary (#4925, #4930) so a review cannot pass without
     // the governed writer having been attempted. Ported verbatim into the async
