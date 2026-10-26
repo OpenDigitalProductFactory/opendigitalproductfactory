@@ -111,6 +111,7 @@ export async function attachBuildStudioWorkCapsule(args: {
       executorRef: args.build.buildId,
       status: "working",
       backlogItemId: args.backlogItem?.id ?? null,
+      acceptanceSource: args.backlogItem ? { itemId: args.backlogItem.itemId, body: args.backlogItem.body } : undefined,
       epicId: args.backlogItem?.epicId ?? null,
       featureBuildId: args.build.id,
       workspaceState: {

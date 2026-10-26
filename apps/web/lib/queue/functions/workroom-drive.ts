@@ -19,6 +19,7 @@ import { NOT_ASKED_ACCOUNTABILITY, resolveAccountabilityForConclusion } from "./
 import { activeUserIdForHumanPrincipal, MISSING_TASK_OWNER_REASON, settleTickTaskOwner } from "./workroom-drive-task-owner";
 import type { PrismaClient } from "@dpf/db";
 import { jobs } from "@/lib/jobs";
+import { isRecord } from "@/lib/shared/coerce";
 import {
   jsiSchemePresent,
   resolveCoordinatorEligibility,
@@ -199,12 +200,6 @@ export type WorkroomDriveResult = {
 
 // One terminal rule for the drive and the nesting it walks (BI-CFB3FDB7).
 const TERMINAL = TERMINAL_WORKROOM_STATUSES;
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
-}
 
 function postureLevelOf(scopeClaims: unknown): ProactivityLevel | null {
   const declared = readWorkroomPostureClaim(scopeClaims)?.proactivityLevel;
@@ -519,7 +514,7 @@ export async function runWorkroomDriveJob(
       coordinatorEligibility: room.coordinatorEligibility,
       now,
       priorDrive: priorDriveFromStored(stored),
-      writebackRetry: readWritebackRetry(asRecord(room.workspaceState)?.workroomDrive),
+      writebackRetry: readWritebackRetry(isRecord(room.workspaceState) ? room.workspaceState.workroomDrive : undefined),
       ...(room.stageRun !== undefined ? { stageRun: room.stageRun } : {}),
       workspaceState: room.workspaceState,
       recordedEvidence: room.recordedEvidence ?? [],
@@ -530,7 +525,9 @@ export async function runWorkroomDriveJob(
     const resolved = await resolveWithReview(room, driveInput);
     // BI-72679FE0: a room whose item is done, deferred or delivered gets no agent and raises no stall.
     // BI-7C0B2BD6: then the capacity cap, so a stood-down room never takes a dispatch slot.
-    const plan = admit(gateDrivePlanOnWorkItem(resolved.plan, room.workItemStatus));
+    const itemPlan = gateDrivePlanOnWorkItem(resolved.plan, room.workItemStatus);
+    // BI-9CD95438: applyDrivePlan still records the hold; known-held rooms do not spend a slot.
+    const plan = readWorkroomQueueHold(room.workspaceState) ? itemPlan : admit(itemPlan);
     const review = plan === resolved.plan ? resolved.review : null;
     plans.push({
       roomId: room.capsuleId,
@@ -713,7 +710,7 @@ export function createWorkroomDriveEffects(
                 AND: [{ leaseExpiresAt: { gt: clock() } }],
               } : {}),
             },
-            data: { workspaceState: { ...asRecord(current.workspaceState), workroomDrive: snapshot } as object },
+            data: { workspaceState: { ...(isRecord(current.workspaceState) ? current.workspaceState : {}), workroomDrive: snapshot } as object },
           });
           if (updated.count !== 1) return null;
         }

@@ -7,6 +7,7 @@ relatedCode:
   - apps/web/app/(shell)/workspace/cases/[caseKey]/page.tsx
   - apps/web/components/workspace/WorkCaseAttentionLens.tsx
   - apps/web/components/workspace/WorkCaseDetailView.tsx
+  - apps/web/components/workspace/workroom/WorkroomHeader.tsx
   - apps/web/components/workspace/workroom/WorkroomCycles.tsx
   - apps/web/components/workspace/workroom/WorkroomFlowMap.tsx
   - apps/web/components/ops/workrooms/AreaFlowPanel.tsx
@@ -44,6 +45,9 @@ The top of a Workroom answers four questions:
 2. What needs attention now?
 3. Who is accountable and who is participating?
 4. What is the next action?
+
+Long names and source identifiers wrap within the header on narrow screens,
+keeping the full value available.
 
 Below that header, **Room definition** names the reusable room pattern and its version.
 **This room** identifies whether you are seeing one occurrence, a standing stream, or its
@@ -125,15 +129,21 @@ success. The projection check time and latest evidence time are separate; an
 unknown timestamp does not imply a fresh observation.
 
 After a minute, the process snapshot is marked stale. **Refresh state** reads
-the room again while keeping your selected step and filters. The warning clears
-only when a newer server read arrives. Refreshing does not resume work, approve
-a transition, or prove progress. A missing or future read time remains unknown.
+the selected room's process, definition and flow map together. Your selected
+step, filters, layout, open evidence and keyboard focus stay in place. The warning
+clears only when a newer server read arrives. Other room panels retain their own
+snapshot. Refreshing does not resume work, approve a transition, or prove progress.
+A missing or future read time remains unknown.
 
 If your browser reports offline, **Refresh state** keeps the displayed snapshot
 and announces that you need to reconnect. When the browser reports a restored
 connection, refresh manually to check for changes. Reconnecting alone does not
-refresh the page or establish that the server is reachable. A connection lost
-during a request may still require a browser reload after reconnection.
+refresh the page or establish that the server is reachable. If a request fails
+or times out, the saved process snapshot remains available with a manual retry.
+A changed selection asks you to reopen the case. If your session ends or room
+access is removed, the protected process is hidden with a sign-in or My Work
+link. A failed flow-map read is marked partial rather than retaining an old map
+under a new check time.
 
 Native reviews submitted through OAuth use the same current permission checks as other authenticated reviews. Before dispatch or recovery, the worker checks token expiry, token and client revocation, tool grants, and task ownership. A failed authority check pauses the review before a provider call; it does not grant permission or silently switch credentials.
 

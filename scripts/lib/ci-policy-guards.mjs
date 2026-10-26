@@ -302,6 +302,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // BI-31F11C37: the installers' monitoring question.
         "scripts/installer/monitoring-choice.test.mjs",
       ),
+      // BI-0FC727BB: scans the live installer tree for a bare host-wide sync.
+      conformanceTest("scripts/installer/no-bare-host-sync.test.mjs"),
       conformanceTest("scripts/ci-runtime-install-state-fixture.test.mjs"),
       // BI-31F11C37: both installers ask, accept the flag and record the
       // choice before profiles resolve; reads the live installer sources.

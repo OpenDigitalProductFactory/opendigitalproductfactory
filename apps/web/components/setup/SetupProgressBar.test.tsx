@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { SETUP_STEPS } from "@/lib/actions/setup-constants";
+import { visibleSetupSteps } from "@/lib/actions/setup-constants";
 import { SetupProgressBar } from "./SetupProgressBar";
 import { withMessages } from "@/test-support/with-messages";
 
@@ -27,7 +27,8 @@ describe("SetupProgressBar", () => {
 
     const nav = screen.getByRole("navigation", { name: "Setup progress" });
     expect(nav.className).toContain("overflow-x-auto");
-    expect(screen.getAllByRole("button")).toHaveLength(SETUP_STEPS.length);
+    expect(screen.getAllByRole("button")).toHaveLength(visibleSetupSteps(null).length);
+    expect(screen.queryByRole("button", { name: /Monitoring/ })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /AI Providers, current/ }));
     expect(onStepClick).toHaveBeenCalledWith("ai-providers");
   });
