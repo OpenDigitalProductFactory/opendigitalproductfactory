@@ -142,11 +142,24 @@ prerequisites visible; do not consume a candidate to discover known absence.
 
 ### First composition and qualification order
 
-Implement one wire: native OpenAI chat with constrained JSON-schema output and
-its same-engine `/v1/chat/completions/input_tokens` count route. Its pinned
-72874f5 source parses the same chat/template/image inputs for counting; installed
-DMR forwarding and real multimodal behavior still require captured qualification.
-Do not borrow the old Messages/Metal qualification or select a fallback wire.
+Implement one wire: native Messages with real images, its same-body
+`messages/count_tokens` route and one forced response-only function carrying
+the contribution JSON schema. Parse the real function input as the Critic's
+answer; never dispatch it as a platform tool, grant or additional reader.
+The guarded platform readers remain exactly the existing three. Reject multiple,
+wrong or incomplete response calls and retain the first invalid reply/predicate.
+The pinned 72874f5 conversion preserves image blocks and function schemas for
+both count and generation. Installed forwarding and actual multimodal behavior
+still require captured qualification; no old Messages/Metal qualification is reused.
+
+The initially selected OpenAI count design was ruled out before any candidate
+or provider effect. DMR v1.2.9's actual scheduler routeHandlers registers
+Messages and Messages/count_tokens, but omits chat/completions/input_tokens,
+even though the underlying engine implements it. Source evidence:
+https://github.com/docker/model-runner/blob/v1.2.9/pkg/inference/scheduling/http_handler.go
+and https://github.com/ggml-org/llama.cpp/blob/72874f559c598b8f89fbb24864868337cf5afb4c/tools/server/server-chat.cpp.
+This source finding changes the first implemented wire, not the original CE,
+artifact association or allowance. There is no runtime fallback between wires.
 The current local account is inactive. Restore a supported route configuration
 only through its actual native action and verify its eligible normal selection;
 configuration cannot create the absent CE recovery execution contract.

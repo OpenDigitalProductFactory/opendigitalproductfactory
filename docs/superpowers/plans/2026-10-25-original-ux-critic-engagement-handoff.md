@@ -43,7 +43,7 @@ remain the finish line.
    the finite recovery design and its actual compatibility/authority findings.
    Preserve current native delegated/approval/deny behavior; do not invent a
    manual gate. Keep original identity, scope, history and unknown costs intact.
-2. Select native OpenAI chat JSON-schema with its same-engine input_tokens route;
+2. Select native Messages with real images and a response-only JSON function;
    prove the installed strict wire and evidence representation against the
    actual installed runtime and current 20000/8192/180s limits. Reuse registered
    Critic preparation and finite governed preloading. Prove full source/guidance
