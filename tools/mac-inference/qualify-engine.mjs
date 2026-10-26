@@ -33,6 +33,12 @@ export function validLeaseExpiry(value, now=Date.now()) {
   const expiry=typeof value==='string'?Date.parse(value):NaN;
   return Number.isFinite(expiry) && expiry>now+15000;
 }
+export function validatedModelDigest(expected,observed) {
+  if(typeof expected!=='string'||!/^sha256:[a-f0-9]{64}$/.test(expected)
+    ||observed!==expected) fail('Selected model digest changed or invalid');
+  // Persist the validated local expectation, never the response's payload.
+  return expected;
+}
 export function modelLayerBinding(raw, digest, ggufHash, bytes, projector) {
   if(!/^sha256:[a-f0-9]{64}$/.test(digest) || 'sha256:'+sha256(raw)!==digest) fail('OCI manifest digest mismatch');
   const manifest=JSON.parse(raw.toString());
@@ -373,10 +379,10 @@ async function performQualification(root) {
   report.baselineEngine={sha256:a['baseline-engine-sha256'],mode:'Docker-distributed binary in isolated controlled process',
     serviceWorkflowQualification:'unrun'};
   const card=await json(management+'/models/'+a['model-ref'].split('/').map(encodeURIComponent).join('/'),undefined,3000);
-  if(card.id!==a['model-digest']) fail('Selected model digest changed');
+  const modelDigest=validatedModelDigest(a['model-digest'],card.id);
   const projector=a.mmproj?{sha256:await hashFile(a.mmproj),bytes:(await stat(a.mmproj)).size}:undefined;
-  report.model={ociDigest:card.id,ggufSha256:await hashFile(a.model),bytes:(await stat(a.model)).size};
-  report.model.binding=modelLayerBinding(await readFile(a['oci-manifest']),card.id,
+  report.model={ociDigest:modelDigest,ggufSha256:await hashFile(a.model),bytes:(await stat(a.model)).size};
+  report.model.binding=modelLayerBinding(await readFile(a['oci-manifest']),modelDigest,
     report.model.ggufSha256,report.model.bytes,projector);
   await runnersIdle(management);
   let reused;

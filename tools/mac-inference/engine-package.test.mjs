@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import { spawn } from 'node:child_process';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, readFile, rm, symlink } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm, symlink, open, rename, appendFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -76,9 +76,49 @@ test('refuses a manifest that declares its own model qualification', async t => 
   await assert.rejects(verifyPackage(f.root), /qualification/i);
 });
 
+const {readPackageManifest}=await import('./package.mjs');
+test('manifest validation reads the opened file when its pathname is replaced',async t=>{
+  const f=await fixture(t),path=join(f.root,'manifest.json');
+  const original=await readFile(path);
+  const outside=join(f.root,'replacement.json');
+  await writeFile(outside,'untrusted replacement');
+  const bytes=await readPackageManifest(path,async(...args)=>{
+    const handle=await open(...args);
+    await rename(path,join(f.root,'original.json'));
+    await symlink(outside,path);
+    return handle;
+  });
+  assert.deepEqual(bytes,original);
+});
+test('manifest reader refuses a symlink before reading its target',async t=>{
+  const f=await fixture(t),path=join(f.root,'manifest.json');
+  await rename(path,join(f.root,'original.json'));
+  await symlink('original.json',path);
+  await assert.rejects(readPackageManifest(path),/ELOOP|symbolic/i);
+});
+test('manifest reads remain bounded when an opened file grows after its size check',async t=>{
+  const f=await fixture(t),path=join(f.root,'manifest.json');
+  await assert.rejects(readPackageManifest(path,async(...args)=>{
+    const handle=await open(...args);
+    return {stat:async()=>{
+      const before=await handle.stat();
+      await appendFile(path,Buffer.alloc(1024*1024));
+      return before;
+    },read:handle.read.bind(handle),close:handle.close.bind(handle)};
+  }),/manifest.*large|manifest file/i);
+});
+
 // Qualification must accept the observed Docker schema without inventing a
 // loading observation, and must keep the Docker engine recoverable on failure.
 const {runnerActivity,restoreAfterQualification,stopOwnedChild,validLeaseExpiry,modelLayerBinding,unloadWithRestorationObligation,nativeEngineArguments,performanceComparison,runOwnedNative,guardedLeaseAction,authorityAwareSignal,validateBaselineReport,MATCHED_ENGINE_SETTINGS,recordAuthorityFence,validateOwnedLease,parseQualificationOptions}=await import('./qualify-engine.mjs');
+const {validatedModelDigest}=await import('./qualify-engine.mjs');
+test('model report identity uses only the validated expected digest',()=>{
+  const expected='sha256:'+'a'.repeat(64);
+  assert.equal(validatedModelDigest(expected,expected),expected);
+  assert.throws(()=>validatedModelDigest(expected,'sha256:'+'b'.repeat(64)),/digest/i);
+  assert.throws(()=>validatedModelDigest('arbitrary report content','arbitrary report content'),/digest/i);
+  assert.throws(()=>validatedModelDigest(expected,{toString:()=>expected}),/digest/i);
+});
 test('observed Docker runner schema proves idle without claiming loading capture',()=>{
   assert.deepEqual(runnerActivity([{in_use:false}]),{idle:true,loadingFieldObserved:false});
   assert.equal(runnerActivity([{in_use:true}]).idle,false);

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { createReadStream } from 'node:fs';
+import { createReadStream, constants } from 'node:fs';
 import { readFile, readdir, lstat, realpath, readlink, open } from 'node:fs/promises';
 import { resolve, relative, isAbsolute, join, dirname } from 'node:path';
 
@@ -54,12 +54,27 @@ async function assertArm64MachO(path) {
       && header.readUInt32LE(4) === 0x0100000c, 'Required arm64 Mach-O binary: ' + path);
   } finally { await fd.close(); }
 }
+export async function readPackageManifest(path,openFile=open) {
+  const limit=1024*1024;
+  // Validate and read the same no-follow handle, even if the pathname changes.
+  const handle=await openFile(path,constants.O_RDONLY|constants.O_NOFOLLOW|constants.O_NONBLOCK);
+  try {
+    const stat=await handle.stat();
+    requireValue(stat.isFile() && stat.size<=limit,'Invalid manifest file');
+    const bytes=Buffer.alloc(limit+1); let used=0;
+    while(used<bytes.length) {
+      const {bytesRead}=await handle.read(bytes,used,bytes.length-used,used);
+      if(bytesRead===0) break;
+      used+=bytesRead;
+    }
+    requireValue(used<=limit,'Manifest file too large');
+    return bytes.subarray(0,used);
+  } finally {await handle.close();}
+}
 export async function verifyPackage(root) {
   root = await realpath(root);
   const manifestPath = join(root, 'manifest.json');
-  const stat = await lstat(manifestPath);
-  requireValue(stat.isFile() && stat.size <= 1024 * 1024, 'Invalid manifest file');
-  const raw = await readFile(manifestPath);
+  const raw = await readPackageManifest(manifestPath);
   const manifest = JSON.parse(raw);
   requireValue(manifest.schemaVersion === 1, 'Unsupported manifest schema');
   requireValue(manifest.packageName === 'dpf-llama-macos-arm64'
