@@ -34,7 +34,7 @@ node --test tools/mac-inference/engine-package.test.mjs
 node tools/mac-inference/verify-package.mjs /absolute/path/to/candidate
 ```
 
-Verification rejects corrupted or extra payloads, unsupported identities, path escape, unsafe links, missing executables, the pinned ten required runtime-library entry points (including Metal and server/benchmark implementations), and a manifest that self-asserts model qualification. Required libraries must resolve to safe in-package ARM64 payloads, even if someone removes both a library and its manifest row. File/header checks remain distinct from actual native loading and model qualification. Verification proves self-consistency against the pinned package contract; obtain release artifacts through an authenticated distribution channel.
+Verification rejects corrupted or extra payloads, unsupported identities, path escape, unsafe links, missing executables, the pinned 26 required runtime-library files and link names (including Metal and server/benchmark implementations), and a manifest that self-asserts model qualification. Required libraries must resolve to safe in-package ARM64 payloads, even if someone removes both a library and its manifest row. File/header checks remain distinct from actual native loading and model qualification. Verification proves self-consistency against the pinned package contract; obtain release artifacts through an authenticated distribution channel.
 
 ## Qualification and maintenance window
 
