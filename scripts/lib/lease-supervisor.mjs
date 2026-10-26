@@ -98,6 +98,7 @@ export async function superviseLeaseRun({
   renew,
   terminate,
   release,
+  observeReservation,
   schedule = (callback, intervalMs) => setInterval(callback, intervalMs),
   cancelSchedule = (timer) => clearInterval(timer),
   scheduleDeadline = (callback, delayMs) => setTimeout(callback, delayMs),
@@ -241,8 +242,8 @@ export async function superviseLeaseRun({
     if (fencedReason) return { status: "fenced", reason: fencedReason, result };
     return { status: "completed", result };
   } finally {
-    // finally runs once per superviseLeaseRun call — release is always owned here
-    // (idempotent release is the caller's responsibility if they wrap again).
+    // Finalization runs once after supervision. Host callers may observe natural
+    // expiry instead of requesting release; other callers retain their release path.
     cancelSchedule(timer);
     cancelRetryTimer();
     if (deadlineTimer !== null) cancelDeadline(deadlineTimer);
@@ -250,11 +251,20 @@ export async function superviseLeaseRun({
     if (deadlineInFlight) await deadlineInFlight;
     // A failed release must not take the run's verdict with it: the evidence is
     // recorded after this, and an unreleased lease still accepts it.
-    try {
-      await release();
-      onEvent({ type: "released", at: new Date().toISOString() });
-    } catch (error) {
-      onEvent({ type: "release-failed", at: new Date().toISOString(), reason: error?.message || String(error) });
+    if (observeReservation) {
+      try {
+        const observation = await observeReservation();
+        onEvent({ type: "reservation-observed", at: new Date().toISOString(), observation });
+      } catch {
+        onEvent({ type: "reservation-observation-unavailable", at: new Date().toISOString() });
+      }
+    } else {
+      try {
+        await release();
+        onEvent({ type: "released", at: new Date().toISOString() });
+      } catch (error) {
+        onEvent({ type: "release-failed", at: new Date().toISOString(), reason: error?.message || String(error) });
+      }
     }
   }
 }

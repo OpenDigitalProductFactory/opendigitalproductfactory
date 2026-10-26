@@ -494,3 +494,34 @@ test("failed release can retry while concurrent and completed calls are idempote
   await release();
   assert.equal(calls, 2);
 });
+
+
+test("reservation observation stops heartbeat without claiming or executing release", async () => {
+  const events = [];
+  let releases = 0;
+  const observation = { status: "host-reservation", reservationState: "pending" };
+  const result = await superviseLeaseRun({ ttlMs: 60000,
+    run: async () => ({ status: 7 }), renew: async () => ({ success: true }), terminate: async () => {},
+    release: async () => { ++releases; }, observeReservation: async () => observation,
+    schedule: () => "timer", cancelSchedule: () => events.push({ type: "timer-cancelled" }),
+    onEvent: event => events.push(event),
+  });
+  assert.equal(result.result.status, 7);
+  assert.equal(releases, 0);
+  assert.deepEqual(events.map(e => e.type), ["started", "timer-cancelled", "reservation-observed"]);
+  assert.deepEqual(events.at(-1).observation, observation);
+});
+
+test("unavailable reservation observation preserves command outcome and redacts observer errors", async () => {
+  const events = [];
+  const result = await superviseLeaseRun({ ttlMs: 60000,
+    run: async () => ({ status: 0 }), renew: async () => ({ success: true }), terminate: async () => {},
+    release: async () => { throw new Error("must not request release"); },
+    observeReservation: async () => { throw new Error("private observer details"); },
+    schedule: () => "timer", cancelSchedule: () => {}, onEvent: event => events.push(event),
+  });
+  assert.equal(result.result.status, 0);
+  assert.equal(events.at(-1).type, "reservation-observation-unavailable");
+  assert.doesNotMatch(JSON.stringify(events), /private observer details/);
+  assert.ok(!events.some(e => e.type === "released"));
+});

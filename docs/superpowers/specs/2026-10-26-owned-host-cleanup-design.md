@@ -1,5 +1,5 @@
 ---
-status: draft
+status: active
 ---
 
 # Owned host reservation settlement
@@ -90,3 +90,20 @@ cmvplh1mn09ym01mll5vpwsnu. Existing scope-release diagnosis remains separate und
 BI-8D8939E5. Independent architecture assessment was read-only at the baseline;
 it is a client assessment, not a native passing receipt. Tests and live acceptance
 for this new implementation have not run.
+
+
+## Acceptance baseline (verbatim)
+
+- AC-HC-1: Normal and fenced host-runner completion stops renewal and creates no new human cleanup envelope; it does not call generic immediate release.
+- AC-HC-2: Existing lease-list tool accepts one exact lease ID and returns the safe persisted row, including terminal status, under unchanged platform-read authority; invalid IDs never fall back to listing, and the read performs no cleanup mutation.
+- AC-HC-3: Runner validates retained lease ID, claim, environment, provider, session, worktree and branch. Mismatched/unavailable results are unknown; active/queued remains pending; persisted terminal means reservation settlement only, with existing cleared process fields accepted without inferring process exit.
+- AC-HC-4: Nonzero command, cancellation, source drift and uncertain execution verdicts remain distinct. Reservation expiry never proves command success or descendant termination; no time/absence-based cleanup pass or tight polling.
+- AC-HC-5: Foreign/running/process-owned direct release, explicit always-human policy, pending/failed approval history, original local-CI cleanup and locked release checks remain unchanged.
+- AC-HC-6: Affected tool/runner/supervisor tests cover exact/malformed/missing/foreign/pending/terminal safe readback and no-release behavior; shared integration, protected publication and actual canonical live acceptance are separately recorded before completion.
+
+Implementation was admitted by IRD-36FB73BD3914 after the Medium acceptance
+baseline was recorded. First-failing runner, exact-readback and supervisor
+regressions were observed before implementation. Source tests now pass (93 Node
+fixtures and 95 affected Vitest checks). These are source checks, not live
+acceptance or canonical heavy integration. The normal direct-release classifier
+and its process/foreign-owner negatives are unchanged.
