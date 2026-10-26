@@ -157,6 +157,26 @@ own authority/recovery contract. No inference account password is required.
 
 ### Backlog coverage
 
+The coverage writer's requirement references are approved objective IDs; its verification
+references are approved acceptance IDs. V-* labels above identify the concrete test work.
+The following mapping preserves the original criteria as well as the completion amendment:
+
+| Deliverable key | Objective references | Acceptance references | Test work |
+|---|---|---|---|
+| stage-admission | OBJ-REVIEW-CLOSE | AC-REVIEW-HOLD | V-ADMISSION |
+| tool-attachment | OBJ-REVIEW-CLOSE | AC-REVIEW-HOLD | V-ADMISSION |
+| blocker-report | OBJ-REVIEW-CLOSE | AC-REVIEW-HOLD | V-HOLD |
+| refusal-hold | OBJ-REVIEW-CLOSE | AC-REVIEW-HOLD | V-HOLD |
+| delegated-permit | OBJ-REVIEW-PURPOSE | AC-REVIEW-LINEAGE | V-PERMIT |
+| review-measurement | OBJ-1, OBJ-REVIEW-COVERAGE | AC-1, AC-2, AC-6, AC-REVIEW-WINDOW, AC-REVIEW-HONESTY | V-MEASURES, V-PERSISTENCE; fixture, seed and task-list checks in Phases 1–2 |
+| outcome-efficacy | OBJ-REVIEW-PURPOSE | AC-REVIEW-LINEAGE | V-LINEAGE |
+| corrective-action | OBJ-2, OBJ-3, OBJ-REVIEW-CLOSE, OBJ-REVIEW-COVERAGE | AC-3, AC-4, AC-5, AC-REVIEW-CORRECT, AC-REVIEW-UI | V-CORRECT, V-UI; routing, proposal-only learning and suppression checks in Phases 3–4 |
+| reference-demonstration | OBJ-REVIEW-PURPOSE, OBJ-REVIEW-COVERAGE, OBJ-REVIEW-CLOSE | AC-REVIEW-LINEAGE, AC-REVIEW-UI | V-REFERENCE |
+
+Shared criteria describe integration acceptance, not permission for any one component to
+claim the complete criterion. Existing delivered behavior is verified and retained; these
+mappings do not authorize rewriting it or applying weight proposals automatically.
+
 This multi-item integration sequence is proposed, not implementation-ready coverage. All independent
 deliverables map to existing live BIs except the newly captured BI-73780C2E, still triaging.
 No current provider-verified immutable coverage receipt was established for this amendment.
