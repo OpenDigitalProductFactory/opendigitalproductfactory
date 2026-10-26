@@ -13049,7 +13049,8 @@
       "publishedPublic": true,
       "publishedPortal": true,
       "anchors": [
-        "requesting-and-reading-a-coworker-contribution"
+        "requesting-and-reading-a-coworker-contribution",
+        "native-reader-failures"
       ]
     },
     "docs/user-guide/platform/deployment-country-sharing.md": {
