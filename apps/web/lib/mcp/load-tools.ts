@@ -128,7 +128,7 @@ export type LoadToolsStatusFacts = {
 };
 
 const REVIEWER_ROUTE_RECOVERY =
-  "The author dispatches the reviewer route from get_backlog_item; this tool is for the independent reviewer.";
+  "This tool is for the independent reviewer. For design, architecture or plan review, refresh the exact Workroom with claim_backlog_item_for_work (workIntent plan or implementation) and submit recovery.reviewerRoutes[].requestCoworker unchanged. For terminal review, read get_backlog_item recovery. If a large response did not deliver the packet, call get_backlog_item with itemId and recoveryGate for one exact bounded request or finite recovery. Research belongs to its author.";
 
 function grantList(grants: readonly string[]): string {
   return grants.length === 0 ? "no grant is mapped" : grants.length === 1 ? grants[0] : `any one of ${grants.join(", ")}`;
@@ -269,8 +269,10 @@ export function buildLoadToolsResult(
       ...noMatch,
       ...(noMatch.reason === "reviewer-route-required"
         ? {
-          supportedEntryPoint: { toolName: "get_backlog_item" },
-          nextStep: "Call get_backlog_item for the initiative and use its server-issued reviewerRoutes packet. The author must not invoke the reviewer writer directly.",
+          supportedEntryPoint: { toolName: noMatch.requestedNames?.some((name) =>
+            ["record_initiative_design_review", "record_initiative_architecture_review", "record_initiative_archetype_review"].includes(name))
+            ? "claim_backlog_item_for_work" : "get_backlog_item" },
+          nextStep: REVIEWER_ROUTE_RECOVERY,
         }
         : {
           nextStep: noMatch.reason === "unknown-tool-name"

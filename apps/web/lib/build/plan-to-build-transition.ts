@@ -313,6 +313,15 @@ export async function performPlanToBuildTransition(params: {
   }
   const tracker = readPlanAdvanceTracker(build.buildExecState);
   const planRec = (build.plan as Record<string, unknown> | null) ?? {};
+
+  // BI-6F2872FC: a reviewed plan's coverage is recorded by the platform before
+  // readiness judges it — no Build Studio writer could ever record it, so a
+  // large build stayed refused on PLAN_REQUIRED forever. Never throws; an
+  // untraceable plan stays uncovered and the readiness refusal below stands.
+  if ((build.planReview as { decision?: string } | null)?.decision === "pass" && !tracker?.escalatedAt) {
+    const { ensureBuildPlanCoverage } = await import("@/lib/build/record-build-plan-coverage");
+    await ensureBuildPlanCoverage(buildId);
+  }
   let decisionOutcome: DecisionOutcomeType = "recommend";
   let executionProfileRef: AutonomousBuildExecutionProfileRefV1 | null = null;
   let autonomousMode: AutonomousPlaybookMode = "off";

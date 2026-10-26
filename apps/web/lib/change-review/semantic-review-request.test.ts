@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { createSemanticReviewRequest, parseSemanticReviewRequest } from "./semantic-review-request";
+import { createSemanticReviewRequest, isSemanticReviewRequestRoleBinding, parseSemanticReviewRequest } from "./semantic-review-request";
 import type { SemanticChangeReviewOperationInput } from "./semantic-change-review-operation";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 
@@ -16,6 +16,15 @@ const input: SemanticChangeReviewOperationInput = {
 const actor = { userId: "user-1", agentId: null, apiTokenId: "token-1", authSource: "pat" };
 
 describe("durable semantic review request", () => {
+  it.each([
+    [1, "code-change", undefined, true], [2, "code-change", "code-change", true],
+    [3, "code-change", "code-change", false], ["2", "code-change", "code-change", false],
+    [2, "code-change", undefined, false], [2, "code-change", "spec", false],
+    [1, "code-change", "code-change", false], [1, "code-change", null, false],
+    [2, "unsupported", "unsupported", false],
+  ])("shares version %s and role %s binding with bounded readers", (version, role, identityRole, expected) => {
+    expect(isSemanticReviewRequestRoleBinding(version, role, identityRole)).toBe(expected);
+  });
   it("writes an explicit role-bound contract by default", () => {
     const packet = createSemanticReviewRequest(input, actor, now);
     expect(packet.schemaVersion).toBe(2);

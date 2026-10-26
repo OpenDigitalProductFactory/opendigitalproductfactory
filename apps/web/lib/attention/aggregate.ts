@@ -95,6 +95,8 @@ export function filterAttentionForAudience(
 /** Options every caller resolves from the authenticated session. Both ids are
  *  the READING user: attention is projected for one person at a time. */
 export type AttentionLoadOptions = {
+  /** Inbox supplies its bounded envelope page separately, with total and cursor. */
+  includeCoworkerEnvelopes?: boolean;
   aiReadinessUserId?: string;
   /** The reader's user id, used to scope CoworkerActionEnvelope proposals to
    *  their delegating user. Omitted → the envelope source is not registered at
@@ -166,7 +168,7 @@ export function attentionSourceLoaders(
         ),
     });
   }
-  if (opts.delegatingUserId) {
+  if (opts.delegatingUserId && opts.includeCoworkerEnvelopes !== false) {
     loaders.push({
       source: "coworker-envelope",
       load: () => loadCoworkerEnvelopeItems(db, opts.delegatingUserId),

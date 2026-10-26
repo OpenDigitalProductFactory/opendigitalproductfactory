@@ -7,6 +7,14 @@ function account(overrides: Partial<ProviderAccountIdentity> = {}): ProviderAcco
 }
 
 describe("provider account overview and selection", () => {
+  it("keeps untouched optional local engines in the catalog while retaining configured local engines", () => {
+    const ollama = account({ providerId: "ollama", connectionId: "provider-default-ollama" });
+    expect(isProviderAccountVisible(ollama, { firstRun: false })).toBe(false);
+    expect(isProviderAccountVisible(ollama, { firstRun: true })).toBe(true);
+    for (const status of ["active", "paused", "disabled", "degraded"]) {
+      expect(isProviderAccountVisible({ ...ollama, status }, { firstRun: false })).toBe(true);
+    }
+  });
   it("hides untouched default catalog entries after setup without reopening onboarding", () => {
     expect(isProviderAccountVisible(account(), { firstRun: false })).toBe(false);
     expect(isProviderAccountVisible(account({ status: "disabled" }), { firstRun: false })).toBe(false);

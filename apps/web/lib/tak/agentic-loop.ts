@@ -29,6 +29,7 @@ import { isGovernedToolRefusal } from "@/lib/govern/authority/governed-rejection
 import { sanitizeForLog } from "@/lib/security/safe-log";
 import { recordCoworkerTurnMetric } from "@/lib/operate/coworker-turn-metrics";
 import type { ChatMessage, ToolCallEntry } from "@/lib/routing/chat-message-types";
+import { transferLocalNativeContinuation, withLocalNativeContinuation } from "@/lib/routing/local-native-continuation";
 import { prisma } from "@dpf/db";
 import { interceptToolCallAsProposal } from "@/lib/proactivity/propose-interception";
 import { agentEventBus } from "./agent-event-bus";
@@ -73,6 +74,7 @@ import {
   resolveTerminalTextExit,
   resolveTerminalToolCall,
   selectTerminalToolSurface,
+  canonicalDesignRefusalMessage,
   type TerminalToolPolicy,
 } from "./terminal-tool-policy";
 import { rotateTerminalWriterRoute } from "./terminal-writer-route";
@@ -910,7 +912,7 @@ export function buildToolSessionHintMessage(
   );
 }
 
-export type RunAgenticLoopParams = {
+export type RunAgenticLoopParams = Pick<LoopToolContextInput, "taskExecutionFence"> & {
 
   chatHistory: ChatMessage[];
   systemPrompt: string;
@@ -1063,7 +1065,7 @@ export async function runAgenticLoop(params: RunAgenticLoopParams): Promise<Agen
   const tracker = { activeSkillId: params.activeSkillId ?? null };
   let isSuccess = false;
   try {
-    const result = await _runAgenticLoop(params, tracker);
+    const result = await withLocalNativeContinuation(() => _runAgenticLoop(params, tracker));
     isSuccess = true;
     return result;
   } finally {
@@ -1200,7 +1202,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     // `mcp__dpf__*` tools instead of text-described prompt content. Other
     // adapters ignore the field. The agentic loop is the only place with
     // both userId and threadId in scope, so it is the natural source.
-    mcpSession: { userId, agentId, threadId, routeContext, taskRunId: taskRunId ?? null },
+    mcpSession: { userId, agentId, threadId, routeContext, taskRunId: taskRunId ?? null, taskExecutionFence: params.taskExecutionFence },
   };
 
   // BI-2AC48661: persistent execution plan. When enabled, expose the two
@@ -1582,9 +1584,9 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       console.warn(`[agentic-loop] routeAndCall threw: ${msg}`);
       logTurnSummary("unknown", "unknown");
       if (params.terminalToolPolicy) {
-        // BI-8B8731EE. A THROW from routeAndCall means the model never ran, so
-        // this is not the reviewer declining its writer contract. `failure`
-        // already classifies why. An adapter capability refusal is preserved on
+        // A thrown native execution may have committed effects. Preserve that
+        // uncertainty instead of converting it into a resumable writer wait.
+        // An adapter capability refusal is also preserved on
         // every required-writer call. A RESOURCE wait is preserved as-is only
         // before any tool work, mirroring `preInferenceResourceWait`, which
         // projects a `provider-capacity` wait on the same TaskRun (rewriting it
@@ -1592,7 +1594,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         // that were correct). Once a reader runs its work is banked and the
         // resumable writer wait is kept, but BI-50B0C471: it still names the
         // deferral, so the caller waits instead of spending writer attempts.
-        if (failure.kind === "required-terminal-writer-not-enforceable" || ((failure.kind === "capacity" || failure.kind === "busy") && executedTools.length === 0)) {
+        if (failure.kind === "execution-uncertain" || failure.kind === "required-terminal-writer-not-enforceable" || ((failure.kind === "capacity" || failure.kind === "busy") && executedTools.length === 0)) {
           return completeResult(failure.message, null, { failure });
         }
         const deferred = describeBankedReaderDeferral(failure.kind, executedTools.length, params.terminalToolPolicy.writerToolName, msg);
@@ -1648,7 +1650,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     }
     totalInputTokens += result.inputTokens;
     totalOutputTokens += result.outputTokens;
-    if (params.terminalToolPolicy) await (await import("./native-mcp-executions")).foldNativeMcpExecutions({ taskRunId, providerId: result.providerId, sinceMs: startTime, records: executedTools }); // BI-2E479619: CLI-native MCP calls are this turn's tool records too.
+    if (params.terminalToolPolicy) { await (await import("./native-mcp-executions")).foldNativeMcpExecutions({ taskRunId, providerId: result.providerId, sinceMs: startTime, records: executedTools }); const refused = canonicalDesignRefusalMessage(params.terminalToolPolicy, executedTools); if (refused) { logTurnSummary(result.providerId, result.modelId); return terminalFailure(refused, result); } } // BI-2E479619: CLI-native MCP calls are this turn's tool records too.
     // No tool calls — check if agent stalled with intent to continue
     if (!result.toolCalls || result.toolCalls.length === 0) {
       const trimmed = result.content.trim();
@@ -1670,13 +1672,13 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           const message = terminalTruncationMessage(params.terminalToolPolicy, executedTools, exhausted);
           if (exhausted) return terminalFailure(message, result);
           truncationContinues++;
-          messages = [...messages, { role: "assistant", content: result.content }, { role: "user", content: message }];
+          messages = [...messages, transferLocalNativeContinuation(result, { role: "assistant" as const, content: result.content }), { role: "user", content: message }];
           continue;
         }
         if (exit.kind === "nudge") {
           terminalToolNudges++;
           terminalToolSurfaceOverride = exit.allowedToolNames;
-          messages = [...messages, { role: "assistant", content: result.content }, { role: "user", content: exit.message }];
+          messages = [...messages, transferLocalNativeContinuation(result, { role: "assistant" as const, content: result.content }), { role: "user", content: exit.message }];
           await rotateTerminalWriterRoute({ policy: params.terminalToolPolicy, records: executedTools, options: routeOptions, providerId: result.providerId, messages, systemPrompt: params.systemPrompt, sensitivity: params.sensitivity });
           continue;
         }
@@ -1698,7 +1700,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         );
         messages = [
           ...messages,
-          { role: "assistant" as const, content: result.content },
+          transferLocalNativeContinuation(result, { role: "assistant" as const, content: result.content }),
           {
             role: "user" as const,
             content:
@@ -1835,7 +1837,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           console.warn(`[agentic-loop] evidence-required turn, zero authoritative tools; nudging. route=${JSON.stringify(routeContext)}`);
           messages = [
             ...messages,
-            { role: "assistant" as const, content: result.content },
+            transferLocalNativeContinuation(result, { role: "assistant" as const, content: result.content }),
             { role: "user" as const, content: recovery.nudgeMessage },
           ];
           continue;
@@ -1869,7 +1871,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         continuationNudges++;
         messages = [
           ...messages,
-          { role: "assistant" as const, content: result.content },
+          transferLocalNativeContinuation(result, { role: "assistant" as const, content: result.content }),
           {
             role: "user" as const,
             content:
@@ -1882,7 +1884,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         continuationNudges++;
         messages = [
           ...messages,
-          { role: "assistant" as const, content: result.content },
+          transferLocalNativeContinuation(result, { role: "assistant" as const, content: result.content }),
           {
             role: "user" as const,
             content:
@@ -1906,7 +1908,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           continuationNudges++;
           messages = [
             ...messages,
-            { role: "assistant" as const, content: result.content },
+            transferLocalNativeContinuation(result, { role: "assistant" as const, content: result.content }),
             {
               role: "user" as const,
               content: buildRepeatedQuestionNudge({
@@ -1957,7 +1959,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
             );
             messages = [
               ...messages,
-              { role: "assistant" as const, content: result.content },
+              transferLocalNativeContinuation(result, { role: "assistant" as const, content: result.content }),
               {
                 role: "user" as const,
                 content: buildFabricationRecoveryNudge({
@@ -1999,7 +2001,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           );
           messages = [
             ...messages,
-            { role: "assistant" as const, content: result.content },
+            transferLocalNativeContinuation(result, { role: "assistant" as const, content: result.content }),
             {
               role: "user" as const,
               content: buildFabricationRecoveryNudge({
@@ -2098,7 +2100,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           console.log(`[agentic-loop] permission-seeking nudge (${continuationNudges}/3): ${trimmed.slice(0, 100)}`);
           messages = [
             ...messages,
-            { role: "assistant" as const, content: result.content },
+            transferLocalNativeContinuation(result, { role: "assistant" as const, content: result.content }),
             {
               role: "user" as const,
               content: "Do not ask for permission. Proceed with the next step. You only need user approval at phase transitions (ideate→plan→build→review→ship), not within a phase. Act now.",
@@ -2129,7 +2131,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         messages = [
           ...messages,
           ...(trimmed.length > 0
-            ? [{ role: "assistant" as const, content: result.content }]
+            ? [transferLocalNativeContinuation(result, { role: "assistant" as const, content: result.content })]
             : []),
           {
             role: "user" as const,
@@ -2154,7 +2156,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
         const phaseTools = getPhaseSpecificNudge(executedTools);
         messages = [
           ...messages,
-          { role: "assistant" as const, content: result.content },
+          transferLocalNativeContinuation(result, { role: "assistant" as const, content: result.content }),
           {
             role: "user" as const,
             content: `STOP apologizing and hedging. You have tools — use them. ${phaseTools} If a previous tool call failed, try a DIFFERENT approach. Do not repeat the same failing call.`,
@@ -2177,7 +2179,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
           if (trimmed.length > bestPreNudgeContent.length) bestPreNudgeContent = trimmed;
           messages = [
             ...messages,
-            ...(trimmed.length > 0 ? [{ role: "assistant" as const, content: result.content }] : []),
+            ...(trimmed.length > 0 ? [transferLocalNativeContinuation(result, { role: "assistant" as const, content: result.content })] : []),
             { role: "user" as const, content: gate.nudge },
           ];
           continue;
@@ -2360,7 +2362,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       // side-effecting non-artifact tool is raised as an approval request through
       // the monitor for the owner to decide (null = execute normally; BI-7BCC87BB).
       const contextInput: LoopToolContextInput = {
-        routeContext, agentId, threadId, taskRunId, apiTokenId, interactionMode, chatHistory,
+        routeContext, agentId, threadId, taskRunId, taskExecutionFence: params.taskExecutionFence, apiTokenId, interactionMode, chatHistory,
         tokenScope: params.tokenScope, tokenGrantScopes: params.tokenGrantScopes, skillId: tracker.activeSkillId,
         workroomId: params.workroomId ?? null, externalAccessEnabled: params.externalAccessEnabled,
         requiresExternalAccess: toolDef.requiresExternalAccess, roomAuthority: params.roomAuthority,
@@ -2475,7 +2477,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       if (raisedId) { chatApprovalIds.push(raisedId); break; }
       // Also bound a batch from one inference; varying arguments evade the
       // exact-call repetition detector. Keep all completed calls in the result.
-      if (refusalStreak >= 3) return stopRefusedTurn();
+      { const refused = canonicalDesignRefusalMessage(params.terminalToolPolicy, executedTools); if (refused) { logTurnSummary(result.providerId, result.modelId); return terminalFailure(refused, result); } if (refusalStreak >= 3) return stopRefusedTurn(); }
     }
 
     // BI-7BCC87BB (spec D2 S1): a declared proposal in chat ends the turn on the request(s) it raised.
@@ -2491,16 +2493,14 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
       };
     }
 
-    // Append ONE assistant message (with toolCalls preserved) + N tool result messages.
-    // This gives the model its own tool-call history in the native structured format
-    // that callProvider will serialize correctly per provider.
+    // Preserve native history only when the executed call snapshot still agrees.
     messages = [
       ...messages,
-      {
+      transferLocalNativeContinuation(result, {
         role: "assistant" as const,
         content: result.content,
         toolCalls: iterationResults.map(({ tc }) => tc.gemini ? result.toolCalls!.find((original) => original.id === tc.id) ?? tc : tc),
-      },
+      }),
       ...iterationResults.map(({ tc, toolResult }) => ({
         role: "tool" as const,
         // G1/P6 (context-engineering-standards.md): bound the model-facing

@@ -170,11 +170,12 @@ test("the marker is set on the spawned resumer's environment", () => {
   spawnDurableWaitResumer({
     runnerPath: "/runner.mjs",
     gateArgv: GATE_ARGV,
-    env: { EXISTING: "kept" },
+    env: { EXISTING: "kept", DPF_LOCAL_CI_TEST_WORKERS: "2" },
     spawnFn: (_command, _args, options) => { seen = options.env; return stubChild(); },
   });
   assert.equal(seen[RESUME_MARKER_ENV], "1");
   assert.equal(seen.EXISTING, "kept");
+  assert.equal(seen.DPF_LOCAL_CI_TEST_WORKERS, "2");
 });
 
 // A resumer that cannot start must not take the gate down with it: the claim is

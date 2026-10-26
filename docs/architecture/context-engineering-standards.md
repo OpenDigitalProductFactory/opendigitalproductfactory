@@ -1,5 +1,10 @@
 # Context Engineering & Tool Efficiency Standards
 
+Host gates resolve saved authorized trust and probe TLS before expensive guards,
+so a stale desktop environment does not consume a full preflight before exposing
+a certificate failure. Use the shared [host trust contract](../install/platform-support-watchlist.md#saved-host-ca-trust-and-stale-clients)
+instead of repeating per-command CA diagnosis or embedding a host-specific path.
+
 **Status:** Active standard (advisory + eval-backed; specific items are CI-enforced — see "Enforcement").
 **Owner:** Enterprise Architect persona / `dpf-platform:dpf-architecture-review`.
 **Rationale of record:** `docs/superpowers/specs/2026-06-20-context-engineering-tool-efficiency-design.md` (research, current-state evaluation, and the full principle derivation).
@@ -17,6 +22,15 @@ DPF is **local-first by founder strategy**: cloud frontier models are disabled b
 - **The cheapest token is the one we never process.** Every reduction (just-in-time loading, in-environment filtering, concise results) compounds with caching and tiering.
 
 ## The three laws
+
+Account-aware fallback preserves the request's context and governed account
+constraints. A selected-account change before dispatch triggers a fresh route;
+an uncertain native execution stops replay rather than sending the same action
+to another account. Saved response identifiers are reused only with their
+originating account; a different account receives the retained message context.
+The [account routing guide](../user-guide/ai-workforce/provider-account-routing.md)
+and [delivery plan](../superpowers/plans/2026-10-14-provider-account-capacity-refactor.md)
+record the contract and qualification boundary.
 
 1. **Context is a finite resource with diminishing returns.** Recall degrades as tokens grow ("context rot"). Default to *removing*, not adding.
 2. **Smallest high-signal set.** Optimize signal-to-token ratio in every block: system prompt, tool definitions, examples, history, results.

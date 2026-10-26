@@ -19,12 +19,14 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileS
 import { dirname, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mcpCall } from "./lib/mcp-client.mjs";
+import { leaseRequestTiming } from "./lib/nonprod-lease-request.mjs";
 import { leaseQueueCallOptions } from "./lib/lease-queue-call-options.mjs";
 export { leaseQueueCallOptions } from "./lib/lease-queue-call-options.mjs";
 import { loadEvidencePolicy } from "./lib/ci-evidence-plan.mjs";
 import { resolveMcpCredential } from "./lib/mcp-credential.mjs";
 import { readQuiescenceStatus, quiescenceBlocksWrites, quiescenceWait } from "./lib/gate-quiescence.mjs";
 import { readFailureEvidenceBinding } from "./lib/semantic-review-gate.mjs";
+import { sandboxDecisionForHead } from "./derived-artifacts-gate.mjs";
 
 // BI-46B03CAE — the lease-queue MCP calls cost more than mcpCall's 10s default.
 //
@@ -62,7 +64,7 @@ export function describeLeaseCallFailure(error) {
     + "if this box regularly runs several gates at once";
 }
 import { summarizeLocalCiOutput } from "./lib/local-ci-failure-summary.mjs";
-import { classifyGateOutcome, EXIT_CANDIDATE_MERGE_CONFLICT, EXIT_CHILD_SIGNAL_DEATH, EXIT_SLOT_SUBSTRATE_UNAVAILABLE, EXIT_SOURCE_DRIFT, EXIT_USAGE, EXIT_WAIT_CANCELLED } from "./lib/sandbox-freshness.mjs";
+import { classifyGateOutcome, EXIT_CANDIDATE_MERGE_CONFLICT, EXIT_CHILD_SIGNAL_DEATH, EXIT_SLOT_SUBSTRATE_UNAVAILABLE, EXIT_SOURCE_DRIFT, EXIT_USAGE, EXIT_WAIT_CANCELLED, mergeConflictRemedy } from "./lib/sandbox-freshness.mjs";
 import { SLOT_SUBSTRATE_UNAVAILABLE_STATUS, assessSlotSubstrate, ensureSlotPostgres } from "./lib/local-ci-slot-substrate.mjs";
 import { GATE_CLIENT_REVISION } from "./lib/gate-client-revision.mjs";
 import { buildIsDelegated, defaultBuildStrategy, metadataMergeConflictForRun } from "./lib/local-integration-ci.mjs";
@@ -83,6 +85,7 @@ import {
 import {
   createGateObserverIdentity,
   findDeadLocalQueueObservers,
+  findQueueWaiter,
   registerLocalQueueObserver,
   releaseDeadLocalQueueObserversForGate,
   releaseLocalQueueObserver,
@@ -94,7 +97,7 @@ import {
   resolveLocalCiRootClone,
 } from "./lib/local-ci-slot-manifest.mjs";
 import { classifyBaseResilience } from "./lib/local-ci-base-freshness.mjs";
-import { runPreAdmissionDocumentationLane } from "./lib/documentation-evidence-lane.mjs";
+import { preAdmissionDisposition, runPreAdmissionDocumentationLane } from "./lib/documentation-evidence-lane.mjs";
 import {
   createLocalCiPassEvidenceValidity,
   projectReusedPassMetadata,
@@ -116,6 +119,7 @@ import {
   isVerboseGateConsole,
 } from "./lib/pregate-console.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
+import { runWithHostMcpTrust } from "./lib/mcp-host-trust.mjs";
 import { spawnDurableWaitResumer } from "./lib/durable-wait-resumer.mjs";
 import { decideTerminalClaim, isResumedGateRun, resumeClaimFields, verifyPinnedSource } from "./lib/gate-resume-pin.mjs";
 
@@ -1681,10 +1685,56 @@ async function main() {
       );
       process.exit(documentationResult.status);
     }
-    preAdmissionGateIdentity = documentationResult.gateIdentity ?? null;
+    // BI-45553400 / BI-1F11D17A: a merge conflict used to come back as an empty
+    // integration ref, and a resumed gate then stopped as gate-identity-unavailable.
+    // Say conflict, for every invocation, before that source-drift check.
+    const disposition = preAdmissionDisposition(documentationResult, { resumed });
+    if (disposition.action === "conflict") {
+      const mergeConflict = disposition.mergeConflict;
+      writeState(stateFile, {
+        branch,
+        sha,
+        gatePassed: false,
+        leaseId: "",
+        evidenceId: "",
+        status: "conflict",
+        expiresAt: "",
+        resilience: null,
+        leaseEvents: [{ type: "pre-admission-merge-conflict", at: new Date().toISOString() }],
+        failureReason: mergeConflictRemedy(mergeConflict),
+        mergeConflict,
+      });
+      process.stderr.write(`${JSON.stringify({
+        status: "conflict",
+        code: "local_ci_candidate_merge_conflict",
+        mergeConflict,
+        nextAction: mergeConflictRemedy(mergeConflict),
+      })}\n`);
+      process.exit(disposition.exitCode);
+    }
+    preAdmissionGateIdentity = disposition.gateIdentity ?? null;
     // Never fall back to the legacy claim key on resume: that minted a second
-    // queue row for the same candidate.
-    if (resumed && !preAdmissionGateIdentity) stopOnSourceDrift(["gate-identity-unavailable"]);
+    // queue row for the same candidate. A non-conflict identity loss stays
+    // source drift.
+    if (disposition.action === "source-drift") stopOnSourceDrift(disposition.reasons);
+  }
+
+  // BI-A254A94C: a docs-only diff the pre-push gate would exempt must not take
+  // the single sandbox slot. A resumed claim already holds a place in line.
+  if (!options.finalizeEvidence && !options.resumeLeaseId) {
+    const sandbox = sandboxDecisionForHead({
+      cwd: worktreePath,
+      git: (args) => {
+        const result = git(gitBin, args, worktreePath);
+        return result.status === 0 ? result.stdout.trim() : null;
+      },
+    });
+    if (sandbox) {
+      process.stdout.write(`gate-worktree: ${sandbox.message}\n`);
+      if (!sandbox.claim) {
+        process.exit(0); // exit-0: docs-only diff; no lease claimed
+      }
+    }
   }
 
   if (!options.finalizeEvidence && !commandSpec && !allowStub) {
@@ -1803,13 +1853,14 @@ async function main() {
       });
       nextQueueReconciliationAt = Date.now() + DEAD_QUEUE_RECONCILIATION_INTERVAL_MS;
     }
-    expiresAt = new Date(Date.now() + leaseTtlMs).toISOString();
     const hostPressure = await observeLocalCiHostPressure({
       rootClone,
       gitCommonDir,
       candidateGitDir,
     });
     hostPressureSamples.push(hostPressure);
+    const requestTiming = leaseRequestTiming({ now: new Date(), durationMs: leaseTtlMs, deadline });
+    expiresAt = requestTiming.expiresAt;
     let claimResponse;
     try {
       claimResponse = await mcpCall("claim_nonprod_environment_lease", {
@@ -1822,8 +1873,7 @@ async function main() {
         purpose: `Pre-PR local-CI gate for ${branch} @ ${sha}`,
         url,
         ports: [slotManifest.portal.port, slotManifest.postgres.hostPort],
-        expiresAt,
-        waitDeadlineAt: new Date(deadline).toISOString(),
+        ...requestTiming,
         worktreePath,
         gateClientRevision: GATE_CLIENT_REVISION,
         branchName: branch,
@@ -2065,17 +2115,28 @@ async function main() {
         // remember to re-run me" - 13 of 41 did. Hand the claim to a detached
         // resumer FIRST and drop this process's observer record second, in that
         // order, so the queued row is never left unbacked between the two.
-        const resume = spawnDurableWaitResumer({
-          runnerPath: resolvePath(SCRIPT_DIR, "local-ci-durable-wait-resumer.mjs"),
-          gateArgv: process.argv,
-          observerDirectory: queueObserverDirectory,
+        // BI-F63D8202: a later pregate must not spawn a second resumer for the
+        // same branch+sha. Exclude this process: its own observer is still
+        // registered, and counting it would skip the first resumer.
+        const waiter = findQueueWaiter({
+          directory: queueObserverDirectory,
           branch,
           sha,
-          ownerSessionId,
-          // AC-DW-03: the resumer re-runs THIS candidate, owner and lease.
-          pin: { branch, sha, worktree: worktreePath, ownerProvider, ownerSessionId, resumeLeaseId: leaseId },
-          cwd: worktreePath,
+          excludePids: [process.pid],
         });
+        const resume = waiter.alive
+          ? { spawned: false, reason: "waiter-already-alive", pid: null, survivesSession: true }
+          : spawnDurableWaitResumer({
+            runnerPath: resolvePath(SCRIPT_DIR, "local-ci-durable-wait-resumer.mjs"),
+            gateArgv: process.argv,
+            observerDirectory: queueObserverDirectory,
+            branch,
+            sha,
+            ownerSessionId,
+            // AC-DW-03: the resumer re-runs THIS candidate, owner and lease.
+            pin: { branch, sha, worktree: worktreePath, ownerProvider, ownerSessionId, resumeLeaseId: leaseId },
+            cwd: worktreePath,
+          });
         if (queueObserverPath) {
           releaseLocalQueueObserver({ path: queueObserverPath, token: gateObserverIdentity.token });
           queueObserverPath = "";
@@ -2114,10 +2175,14 @@ async function main() {
           // knows it must keep polling; one reading "detached-resumer" knows it
           // must not. Leaving that to inference is what BI-D35B85BF "Wanted"
           // item 1 asked to end.
-          resumeOwner: resume.spawned ? "detached-resumer" : "caller",
+          resumeOwner: resume.spawned || resume.reason === "waiter-already-alive" ? "detached-resumer" : "caller",
           resumerPid: resume.pid,
           // BI-27A37D27: false means the waiter dies with this client session.
-          resumerSurvivesSession: resume.spawned ? resume.survivesSession !== false : false,
+          // An already-live waiter is that detached resumer, so the caller
+          // must not start polling.
+          resumerSurvivesSession: resume.reason === "waiter-already-alive"
+            ? true
+            : (resume.spawned ? resume.survivesSession !== false : false),
           ...(resume.spawned ? {} : { resumeUnavailableReason: resume.reason }),
           ...(closedReason ? { poolClosedReason: closedReason } : {}),
         }) + "\n");
@@ -2611,8 +2676,12 @@ async function main() {
   } : classifyGateOutcome({
     freshnessVerdict: freshnessReport ? freshnessReport.verdict : "",
     gateExitCode: runResult.status,
+    // Only this owner's signal handlers establish an observed interruption.
+    receivedSignal,
     // BI-FCC1DCB2: the conflicting paths, quoted only from THIS run's metadata.
     mergeConflict: metadataMergeConflictForRun(contentMetadata, { leaseId, sha }),
+    // BI-B62A6686: P1001 on prisma migrate deploy is read from this run's log.
+    gateOutput,
   });
   const freshness = freshnessReport
     ? {
@@ -2934,7 +3003,6 @@ async function main() {
   }
   if (outcome.status === "blocked_child_signal_death") {
     process.stderr.write(`gate-worktree: BLOCKED (child signal death): ${outcome.summary}\n`);
-    process.stderr.write("gate-worktree: this is infrastructure evidence, not a product failure; retry on a quieter host\n");
     process.exit(EXIT_CHILD_SIGNAL_DEATH);
   }
   die("gate failed");
@@ -3005,7 +3073,11 @@ function writeState(stateFile, {
 // check must survive symlinked invocation paths (macOS /var tmpdir, symlinked
 // checkouts) where argv[1] and import.meta.url spell the same file differently.
 if (isEntryModule(import.meta.url)) {
-  main().catch((error) => {
+  runWithHostMcpTrust(main).then(code => { if (typeof code === "number") process.exit(code); }).catch((error) => {
+    if (error?.hostTrustPrerequisite) {
+      process.stderr.write(`gate-worktree: ${error.message}\n`);
+      process.exit(88);
+    }
     die(error?.stack || String(error));
   });
 }

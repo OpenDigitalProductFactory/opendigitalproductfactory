@@ -17,6 +17,7 @@
 import type { LocalChangesResult } from "@/lib/self-upgrade/local-changes-ledger";
 import { describeSkipReason } from "@/lib/self-upgrade/skip-reason";
 import { describeFailureReason } from "@/lib/self-upgrade/failure-reason";
+import { isLandedSwapFalseFailureReason } from "@/lib/self-upgrade/landed-swap-identity";
 
 /** The release state an owner cares about — deliberately coarser than the run status machine. */
 export type OwnerReleaseState =
@@ -115,6 +116,8 @@ export interface OwnerReleaseInput {
     status: string;
     reason: string | null;
     targetSha: string | null;
+    /** Expected install identity; upstream lineage may differ from the deployed merge. */
+    deployedSha?: string | null;
   } | null;
   latestRunImpact: {
     // Only `breaking` and `total` are read here, so the shape stays permissive:
@@ -170,7 +173,13 @@ export function buildOwnerReleaseSummary(
 ): OwnerReleaseSummary {
   const runStatus = input.latestRun?.status ?? null;
   const inFlight = runStatus != null && IN_FLIGHT.has(runStatus);
-  const failed = runStatus === "failed";
+  const expectedDeployedSha = input.latestRun?.deployedSha ?? input.latestRun?.targetSha;
+  const runTargetIsRunning = Boolean(input.deployedSha && expectedDeployedSha
+    && input.deployedSha.toLowerCase() === expectedDeployedSha.toLowerCase());
+  // A completed swap can be reported failed by its retry. Only that known
+  // error plus the actual running identity overrides the recorded failure.
+  const replayedLandedSwap = runTargetIsRunning && isLandedSwapFalseFailureReason(input.latestRun?.reason);
+  const failed = runStatus === "failed" && !replayedLandedSwap;
 
   const state: OwnerReleaseState = !input.support.supported
     ? "unavailable"
@@ -292,7 +301,9 @@ export function buildOwnerReleaseSummary(
     // existed, which is how two multi-day outages stayed invisible.
     const why = describeFailureReason(input.latestRun?.reason);
     whatCouldGoWrong.push(
-      why
+      runTargetIsRunning
+        ? `${why?.title ?? "The update reported a problem"}. Its version is running, but the failure still needs review.`
+        : why
         ? `${why.title}. ${why.detail}`
         : "The previous attempt didn't finish — check the details below before you retry.",
     );
@@ -387,15 +398,18 @@ export function buildOwnerReleaseSummary(
         headline = why ? `The last update didn't finish — ${why.title.toLowerCase()}` : "The last update didn't finish";
         recommendedAction = {
           label: why && !why.retryable ? "Needs a decision" : "Review and recover",
-          detail: rollbackAvailable
+          detail: runTargetIsRunning
+            ? "The update's version is running. Review the reported problem below before deciding what to do next."
+            : rollbackAvailable
             ? "Restore the previous version below if the platform isn't behaving, then try the update again."
             : why && !why.retryable
               ? "This one won't fix itself on a retry — someone needs to look at the details below."
               : "Check the details below, then try the update again.",
         };
       }
-      ifYouDoNothing =
-        "The platform stays on the previous version. Nothing else changes until you retry.";
+      ifYouDoNothing = runTargetIsRunning
+        ? "The update's version keeps running. The reported failure still needs review."
+        : "The current version keeps running. Check the reported failure before trying the update again.";
       break;
   }
 

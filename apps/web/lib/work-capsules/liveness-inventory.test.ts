@@ -2,7 +2,78 @@ import { describe, expect, it, vi } from "vitest";
 
 import { loadCapsuleLivenessInventory } from "./liveness-inventory";
 
+function reviewQueries({ candidates = [], identities = [], failure = null }: {
+  candidates?: Array<Record<string, unknown>>; identities?: Array<Record<string, unknown>>; failure?: Error | null;
+} = {}) {
+  const queryRaw = vi.fn();
+  queryRaw.mockImplementation(async (strings: TemplateStringsArray, ..._values: unknown[]) => {
+    const sql = strings.join("");
+    if (sql.includes("candidates AS MATERIALIZED")) {
+      if (failure) throw failure;
+      return candidates;
+    }
+    if (sql.includes('AS "rowId"')) return identities;
+    throw new Error("Unexpected review query");
+  });
+  return queryRaw;
+}
+
 describe("loadCapsuleLivenessInventory", () => {
+  it("normalizes repeated row-id backlog links in one bounded batch and never emits unresolved raw ids", async () => {
+    const now = new Date("2026-10-16T00:00:00Z");
+    const rooms = ["backlog-row", "backlog-row", "missing-row"].map((backlogItemId, index) => ({
+      capsuleId: `WC-${index}`, backlogItemId, status: "working", updatedAt: now,
+      repositoryFullName: "owner/repo", headBranch: "fix/readback", worktreePath: "D:/readback",
+      baseSha: "0".repeat(40), headSha: "1".repeat(40), taskRun: null }));
+    const findMany = vi.fn().mockResolvedValue([{ id: "backlog-row", itemId: "BI-EXISTING" }]);
+    const db = { workroom: { findMany: vi.fn().mockResolvedValue(rooms) }, featureBuild: { findMany: vi.fn() },
+      backlogItem: { findMany }, $queryRaw: reviewQueries({ failure: new Error("review unavailable") }) };
+    const result = await loadCapsuleLivenessInventory(db, { where: {}, take: 10 }, now);
+    expect(findMany).toHaveBeenCalledTimes(1);
+    expect(findMany).toHaveBeenCalledWith({ where: { id: { in: ["backlog-row", "missing-row"] } },
+      select: { id: true, itemId: true }, take: 2 });
+    for (const row of result.capsulesAll.slice(0, 2)) expect(row.recovery).toMatchObject({ blocker: {
+      action: { toolName: "get_backlog_item", args: { itemId: "BI-EXISTING" } } } });
+    expect(result.capsulesAll[2].recovery).toMatchObject({ blocker: { action: null } });
+    expect(db.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(db.$queryRaw.mock.calls[0][1]).toEqual(["WC-0", "WC-1", "WC-2"]);
+  });
+  it("batches metadata-linked reviews and uses the same current-source recovery view", async () => {
+    const now = new Date("2026-10-16T00:00:00Z");
+    const rooms = ["WC-1", "WC-2"].map(capsuleId => ({ capsuleId, status: "working", updatedAt: now,
+      repositoryFullName: "owner/repo", headBranch: "fix/readback", worktreePath: "D:/readback",
+      baseSha: "0".repeat(40), headSha: "1".repeat(40), taskRun: null }));
+    const candidate = { id: "review-row", taskRunId: "TR-REVIEW", userId: "requester-1",
+      status: "working", createdAt: now, updatedAt: now, lastHeartbeatAt: now, progressPayload: {}, nodes: [],
+      capsuleId: "WC-1", reviewKind: "semantic-review", candidatePosition: 1, roomMissing: false,
+      ambiguousReviewKind: false, scalarTruncated: false, bindingTruncated: false, progressTruncated: false,
+      nodeFieldsTruncated: false, initiativeBinding: null, requestDigest: null, requesterAgentId: null,
+      metadataTrigger: null, roomRepositoryFullName: "owner/repo", roomHeadBranch: "fix/readback",
+      roomHeadSha: "1".repeat(40), roomBacklogItemId: null, user: null };
+    const db = { workroom: { findMany: vi.fn().mockResolvedValue(rooms) }, featureBuild: { findMany: vi.fn() },
+      $queryRaw: reviewQueries({ candidates: [candidate], identities: [{ rowId: "review-row", capsuleId: "WC-1",
+        requestBound: true, requestSchemaVersion: 2, requestArtifactType: "code-change",
+        identityArtifactType: "code-change", identityArtifactTypePresent: true,
+        sourceHeadSha: "1".repeat(40), currentHeadSha: "1".repeat(40), issuedAt: "2026-10-15T23:59:00Z" }] }) };
+    const result = await loadCapsuleLivenessInventory(db, { where: {}, take: 10 }, now);
+    expect(db.$queryRaw).toHaveBeenCalledTimes(2);
+    expect(db.$queryRaw.mock.calls[0][0].join("")).toContain("candidates AS MATERIALIZED");
+    expect(db.$queryRaw.mock.calls[0][1]).toEqual(["WC-1", "WC-2"]);
+    expect(db.$queryRaw.mock.calls[1][0].join("")).toContain('AS "rowId"');
+    expect(result.capsulesAll[0].recovery).toMatchObject({ state: "working", reviewerExecution: { taskRunId: "TR-REVIEW" } });
+    expect(result.capsulesAll[1].recovery).toMatchObject({ state: "actionable", reviewerExecution: null });
+  });
+
+  it("does not label an unreadable review source actionable", async () => {
+    const now = new Date("2026-10-16T00:00:00Z");
+    const db = { workroom: { findMany: vi.fn().mockResolvedValue([{ capsuleId: "WC-1", status: "working", updatedAt: now,
+      repositoryFullName: "owner/repo", headBranch: "fix/readback", worktreePath: "D:/readback",
+      baseSha: "0".repeat(40), headSha: "1".repeat(40), taskRun: null }]) }, featureBuild: { findMany: vi.fn() },
+      $queryRaw: reviewQueries({ failure: new Error("unavailable") }) };
+    const result = await loadCapsuleLivenessInventory(db, { where: {}, take: 10 }, now);
+    expect(result.capsulesAll[0].recovery).toMatchObject({ state: "unknown", blocker: { reason: "review-observation-incomplete" } });
+    expect(db.$queryRaw).toHaveBeenCalledTimes(1);
+  });
   it("uses a bounded portal read without fetching scope or activity history and preserves hold facts", async () => {
     const now = new Date("2026-10-13T00:00:00Z");
     const db = { workroom: { findMany: vi.fn().mockResolvedValue([{
@@ -79,6 +150,7 @@ describe("loadCapsuleLivenessInventory", () => {
         updatedAt: now, featureBuildId: null,
         taskRun: { taskRunId: "TR-TERMINAL", status: "completed", updatedAt: new Date("2026-08-24T17:55:00.000Z") },
       }]) },
+      $queryRaw: reviewQueries(),
       featureBuild: { findMany: vi.fn().mockResolvedValue([]) },
       nonProductionEnvironmentLease: { findMany: vi.fn().mockResolvedValue([]) },
     };
@@ -99,6 +171,8 @@ describe("loadCapsuleLivenessInventory", () => {
         },
       },
     });
+    expect(db.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(db.$queryRaw.mock.calls[0][1]).toEqual(["WC-TERMINAL-TURN"]);
     expect(db.workroom.findMany).toHaveBeenCalledWith(expect.objectContaining({
       select: expect.objectContaining({ taskRun: { select: expect.objectContaining({ taskRunId: true, status: true, updatedAt: true, initiatingAgentId: true, currentAgentId: true, parentTaskRunId: true }) } }),
     }));

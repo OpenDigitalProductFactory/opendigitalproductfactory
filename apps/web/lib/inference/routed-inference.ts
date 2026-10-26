@@ -10,6 +10,7 @@
 
 import { resolveLocalRoutingRuntime } from "@/lib/inference/local-model-context-reconcile";
 import { currentInferenceSignal } from "./inference-admission";
+import { transferLocalNativeContinuation } from "@/lib/routing/local-native-continuation";
 import type { ChatMessage, ToolCallEntry } from "@/lib/routing/chat-message-types";
 import type {
   RouteDecision,
@@ -28,11 +29,17 @@ import {
   persistFailedRouteDecision,
 } from "@/lib/routing/loader";
 import { withProviderReconciliationRetry } from "@/lib/inference/provider-reconciliation";
+import { NoEligibleEndpointsError } from "@/lib/routing/inference-error";
+export { NoEligibleEndpointsError } from "@/lib/routing/inference-error";
+import { routingEligibilitySummary } from "./routing-exclusion-buckets";
 import { routeEndpointV2 } from "@/lib/routing/pipeline-v2";
 import {
   loadApprovedActivityHarnessOverrides,
 } from "@/lib/routing/activity-harness-approval-source";
 import { callWithFallbackChain } from "@/lib/routing/fallback";
+import { bindProviderAccountSuitability } from "@/lib/routing/provider-account-candidates";
+import { accountAffinityKey } from "@/lib/routing/provider-account-allocation";
+import { conservativeQuotaScope } from "@/lib/routing/provider-capacity/scopes";
 import { prisma } from "@dpf/db";
 import { getLocalOnlyInference } from "@/lib/inference/local-only";
 import { resolveDispatchPosture, type DispatchPosture } from "@/lib/golden-triangle/dispatch";
@@ -41,7 +48,7 @@ import {
   buildInitialRouteContext,
 } from "@/lib/inference/route-contract-builder";
 import { assertDurableExecutionConstraint } from "./durable-execution-constraint";
-import { persistRoutedTokenUsage, routedContextKey } from "./routed-token-usage";
+import { persistAcceptedRoutedTokenUsage, persistRoutedTokenUsage, routedContextKey } from "./routed-token-usage";
 import type { RouteAndCallOptions } from "./routed-inference-options";
 import { applyCallerExecutionPlanOverrides } from "./routed-inference-plan-overrides";
 import {
@@ -72,6 +79,8 @@ export type { RouteAndCallOptions } from "./routed-inference-options";
 /** Unified inference result — flat token fields, V2 metadata included. */
 export interface RoutedInferenceResult {
   providerId: string;
+  providerConnectionId?: string;
+  quotaScopeKey?: string;
   modelId: string;
   content: string;
   toolCalls: ToolCallEntry[];
@@ -112,23 +121,6 @@ export interface RoutedInferenceResult {
 }
 // ─── Error ──────────────────────────────────────────────────────────────────
 
-export class NoEligibleEndpointsError extends Error {
-  constructor(
-    public readonly taskType: string,
-    public readonly reason: string,
-    public readonly excludedCount: number,
-    /** EP-AGENT-CAP-002: Which capability the agent required but no endpoint satisfied. */
-    public readonly missingCapability?: string,
-    /** EP-AGENT-CAP-002: The agent that triggered the error (for admin UI correlation). */
-    public readonly agentId?: string,
-  ) {
-    super(
-      `No eligible endpoints for task '${taskType}': ${reason}` +
-      (excludedCount > 0 ? ` (${excludedCount} endpoint(s) excluded)` : ""),
-    );
-    this.name = "NoEligibleEndpointsError";
-  }
-}
 
 // ─── Options ────────────────────────────────────────────────────────────────
 
@@ -256,17 +248,18 @@ async function prepareRoute(
     },
   });
 
-  const [manifests, policies, overrides] = await Promise.all([
+  const [loadedManifests, policies, overrides] = await Promise.all([
     loadEndpointManifests(Date.now(), resolveLocalRoutingRuntime),
     loadPolicyRules(),
     loadOverrides(taskType),
   ]);
 
-  if (manifests.length === 0) {
+  if (loadedManifests.length === 0) {
     throw new NoEligibleEndpointsError(
       taskType,
       "No active endpoint manifests found. Configure at least one AI provider with a profiled model.",
       0,
+      undefined, options?.agentId, routingEligibilitySummary(contract.sensitivity, contract.residencyPolicy, 0, []),
     );
   }
 
@@ -280,6 +273,9 @@ async function prepareRoute(
     contract = preparedSuitability.contract;
     suitability = preparedSuitability.suitability;
   }
+  const manifests = suitability?.mode === "enforced"
+    ? bindProviderAccountSuitability(loadedManifests, contract.sensitivity, suitability.policy.allowedProviderConnectionIds)
+    : loadedManifests;
 
   const activityHarnessConfidenceOverrides =
     options?.activityContract && !prep?.skipRecipe
@@ -292,6 +288,7 @@ async function prepareRoute(
     activityContract: options?.activityContract,
     activityHarnessConfidenceOverrides,
     preferences: endpointPreferencesFromOptions(options),
+    accountAffinityKey: accountAffinityKey(options?.agentId, options?.threadId),
   });
   decision.inferenceDataScreenReceipt = screen.receipt;
   if (!decision.policyRulesApplied.includes("inference-dispatch")) {
@@ -372,10 +369,18 @@ export async function routeAndCall(
   sensitivity: RouteSensitivity = "internal",
   options?: RouteAndCallOptions,
 ): Promise<RoutedInferenceResult> {
-  return withProviderReconciliationRetry(
-    () => routeAndCallAttempt(messages, systemPrompt, sensitivity, options),
-    invalidateRoutingLoaderCache,
-  );
+  let reconciled = false;
+  let dispatchStarted = false;
+  try {
+    return await withProviderReconciliationRetry(
+      () => routeAndCallAttempt(messages, systemPrompt, sensitivity, options, () => { dispatchStarted = true; }),
+      () => { reconciled = true; invalidateRoutingLoaderCache(); },
+    );
+  } catch (error) {
+    // A preceding reconciliation attempt may already have called a provider.
+    if (error instanceof NoEligibleEndpointsError) error.providerDispatch = !reconciled && !dispatchStarted ? "not-started" : "unknown";
+    throw error;
+  }
 }
 
 async function routeAndCallAttempt(
@@ -383,6 +388,7 @@ async function routeAndCallAttempt(
   systemPrompt: string,
   sensitivity: RouteSensitivity,
   options: RouteAndCallOptions | undefined,
+  onDispatch: () => void,
 ): Promise<RoutedInferenceResult> {
   // 1-3. Contract inference, routing-data load, and V2 endpoint selection —
   // shared with previewRoute() via prepareRoute() so a model-selection
@@ -418,6 +424,9 @@ async function routeAndCallAttempt(
   // BI-F4D3B9E9(c): persist the failed route decision BEFORE throwing so the
   // excludedTrace survives for diagnosis (see persistFailedRouteDecision).
   const persistFailedDecision = () => persistFailedRouteDecision(decision, options);
+  const noEligible = (reason: string, missingCapability?: string) => new NoEligibleEndpointsError(
+    taskType, reason, decision.excludedCount, missingCapability, options?.agentId,
+    routingEligibilitySummary(contract.sensitivity, contract.residencyPolicy, decision.excludedCount, decision.excludedReasons));
 
   // EP-AGENT-CAP-002: Agent capability floor — hard block, no graceful degradation.
   // Only throw if the routing evidence shows the capability floor was the ACTUAL cause
@@ -429,14 +438,11 @@ async function routeAndCallAttempt(
     if (floorFailure) {
       const missingCap = floorFailure.missingCapability;
       persistFailedDecision();
-      throw new NoEligibleEndpointsError(
-        taskType,
+      throw noEligible(
         `No endpoint satisfies agent capability floor (EP-AGENT-CAP-002). ` +
         `Missing: ${missingCap ?? "unknown"}. ` +
         `Configure a capable provider at Platform > AI > Model Assignment.`,
-        decision.excludedCount,
         missingCap,
-        options?.agentId,
       );
     }
   }
@@ -456,10 +462,8 @@ async function routeAndCallAttempt(
           `or turn off local-only inference in Admin > AI > Providers & Routing.`
         : `Configure a tool-capable provider (OpenAI, Anthropic, Gemini) or check that existing providers are active.`;
       persistFailedDecision();
-      throw new NoEligibleEndpointsError(
-        taskType,
+      throw noEligible(
         `No tool-capable endpoint available. Build Studio requires tool support — cannot fall back to generic chat. ${fix}`,
-        decision.excludedCount,
       );
     }
     const allToolExclusions = decision.candidates.every(
@@ -473,7 +477,7 @@ async function routeAndCallAttempt(
         relaxedContract,
         policies,
         overrides,
-        { preferences: endpointPreferencesFromOptions(options) },
+        { preferences: endpointPreferencesFromOptions(options), accountAffinityKey: accountAffinityKey(options?.agentId, options?.threadId) },
       );
       const strippedScreen = rescreenRoutedInferenceWithoutTools(prepared.screenInput);
       dispatchScreenInput = strippedScreen.screenInput;
@@ -500,22 +504,16 @@ async function routeAndCallAttempt(
     // no local model qualified for this task's tier/capability/context).
     if (contract.residencyPolicy === "local_only") {
       const screenedBlockReason = screenedLocalOnlyBlockReason(decision, taskType);
-      throw new NoEligibleEndpointsError(
-        taskType,
+      throw noEligible(
         screenedBlockReason ??
           `No eligible LOCAL model for task '${taskType}' (sensitivity '${sensitivity}'). ` +
           `Local-only inference is ON, so cloud providers are excluded and routing will NOT silently fall back to cloud. ` +
           `Pull or enable a local model that meets this task's requirements (tool support, context window, quality tier), ` +
           `raise the model's context window in Build Runtime, or turn off local-only inference in Admin > AI > Providers & Routing. ` +
           `Router detail: ${decisionReason}`,
-        decision.excludedCount,
       );
     }
-    throw new NoEligibleEndpointsError(
-      taskType,
-      decisionReason,
-      decision.excludedCount,
-    );
+    throw noEligible(decisionReason);
   }
 
   // 3a. When tools are stripped, REPLACE the system prompt entirely.
@@ -618,6 +616,7 @@ async function routeAndCallAttempt(
   if (expectedExecution) assertDurableExecutionConstraint(decision, expectedExecution);
   if (options?.interactionMode === "background") {
     if (routeUsesDurableAsyncAdapter(decision)) {
+      onDispatch();
       const admitted = await admitRoutedAsyncOperation({
         decision,
         messages,
@@ -627,19 +626,17 @@ async function routeAndCallAttempt(
         options,
         traceId,
       });
-      await persistRoutedTokenUsage({
+      await persistAcceptedRoutedTokenUsage({
         traceId,
         agentId: options.agentId ?? "unknown",
         providerId: admitted.providerId,
+        providerConnectionId: decision.executionPlan?.providerConnectionId,
         contextKey: routedContextKey(options),
-        inputTokens: 0,
-        outputTokens: 0,
-        inferenceMs: 0,
-        recordZeroUsage: true,
-        requirePersistence: true,
       });
       return {
         providerId: admitted.providerId,
+        providerConnectionId: decision.executionPlan?.providerConnectionId,
+        quotaScopeKey: decision.executionPlan?.providerConnectionId ? conservativeQuotaScope(admitted.providerId) : undefined,
         modelId: admitted.modelId,
         content: "",
         toolCalls: [],
@@ -656,6 +653,7 @@ async function routeAndCallAttempt(
     }
 
     // EP-INF-009d: Start async operation, return immediately
+    onDispatch();
     const result = await callWithFallbackChain(
       decision,
       messages,
@@ -664,7 +662,7 @@ async function routeAndCallAttempt(
       decision.executionPlan,
       options?.previousResponseId,
       options?.mcpSession,
-      { traceId, agentId: options?.agentId ?? null, agentMessageId: options?.agentMessageId ?? null, buildId: options?.buildId ?? null, threadId: options?.threadId ?? null },
+      { traceId, agentId: options?.agentId ?? null, agentMessageId: options?.agentMessageId ?? null, buildId: options?.buildId ?? null, threadId: options?.threadId ?? null, previousResponseProviderConnectionId: options?.previousResponseProviderConnectionId },
       dispatchScreenInput,
       ...(cancellation ? [cancellation] as [AbortSignal] : [] as []),
     );
@@ -676,13 +674,16 @@ async function routeAndCallAttempt(
       agentId: options?.agentId ?? "unknown",
       providerId: result.providerId,
       contextKey: routedContextKey(options),
+      ...(result.providerConnectionId ? { providerConnectionId: result.providerConnectionId, quotaScopeKey: result.quotaScopeKey } : {}),
       inputTokens: result.tokenUsage?.inputTokens ?? 0,
       outputTokens: result.tokenUsage?.outputTokens ?? 0,
       inferenceMs: result.inferenceMs,
     });
 
-    return {
+    return transferLocalNativeContinuation<RoutedInferenceResult>(result, {
       providerId: result.providerId,
+      providerConnectionId: result.providerConnectionId,
+      quotaScopeKey: result.quotaScopeKey,
       modelId: result.modelId,
       content: result.content,
       toolCalls: result.toolCalls,
@@ -697,10 +698,11 @@ async function routeAndCallAttempt(
       truncated: result.truncated ?? false,
       routeDecision: decision,
       ...routedRehydrationHandle(prepared.rehydrationHandle),
-    };
+    });
   }
 
   // 5b. Foreground: standard sync dispatch via fallback chain
+  onDispatch();
   const result = await callWithFallbackChain(
     decision,
     messages,
@@ -709,7 +711,7 @@ async function routeAndCallAttempt(
     decision.executionPlan,
     options?.previousResponseId,
     options?.mcpSession,
-    { traceId, agentId: options?.agentId ?? null, agentMessageId: options?.agentMessageId ?? null, buildId: options?.buildId ?? null, threadId: options?.threadId ?? null },
+    { traceId, agentId: options?.agentId ?? null, agentMessageId: options?.agentMessageId ?? null, buildId: options?.buildId ?? null, threadId: options?.threadId ?? null, previousResponseProviderConnectionId: options?.previousResponseProviderConnectionId },
     dispatchScreenInput,
     ...(cancellation ? [cancellation] as [AbortSignal] : [] as []),
   );
@@ -752,6 +754,7 @@ async function routeAndCallAttempt(
     traceId,
     agentId: options?.agentId ?? "unknown",
     providerId: result.providerId,
+    ...(result.providerConnectionId ? { providerConnectionId: result.providerConnectionId, quotaScopeKey: result.quotaScopeKey } : {}),
     contextKey: routedContextKey(options),
     inputTokens: result.tokenUsage?.inputTokens ?? 0,
     outputTokens: result.tokenUsage?.outputTokens ?? 0,
@@ -759,8 +762,10 @@ async function routeAndCallAttempt(
   });
 
   // 7. Normalize result to RoutedInferenceResult
-  return {
+  return transferLocalNativeContinuation<RoutedInferenceResult>(result, {
     providerId: result.providerId,
+    providerConnectionId: result.providerConnectionId,
+    quotaScopeKey: result.quotaScopeKey,
     modelId: result.modelId,
     content: result.content,
     toolCalls: result.toolCalls,
@@ -782,5 +787,5 @@ async function routeAndCallAttempt(
     responseId: result.responseId,
     resolvedMaxContextTokens: selectedManifest?.maxContextTokens ?? null,
     ...routedRehydrationHandle(prepared.rehydrationHandle),
-  };
+  });
 }

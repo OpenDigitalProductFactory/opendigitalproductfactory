@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   __resetInferenceAdmissionForTest,
   acquireInferenceSlot,
@@ -40,6 +40,16 @@ afterEach(() => {
 const tick = () => new Promise<void>(r => setTimeout(r, 0));
 
 describe("caller-scoped admission evidence", () => {
+  it("shares only caller observation across separately evaluated module caches", async () => {
+    vi.resetModules();
+    const duplicate = await import("./inference-admission");
+    const phases: string[] = [];
+    await withInferenceAdmissionObserver(e => phases.push(e.phase), async () => {
+      const release = await duplicate.acquireInferenceSlot("remote", "interactive");
+      release();
+    });
+    expect(phases).toEqual(["acquired", "released"]);
+  });
   it("records real waiting and release in caller order without sharing observers", async () => {
     process.env.DPF_INFERENCE_MAX_CONCURRENCY_LOCAL = "1";
     const events: Array<{ caller: string; phase: string }> = [];

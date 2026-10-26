@@ -1,4 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+// @vitest-environment jsdom
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { triggerDimensionEval } from "@/lib/actions/endpoint-performance";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import type { DiscoveredModelRow, ModelProfileRow } from "@/lib/ai-provider-types";
@@ -63,6 +66,17 @@ const routingProfile = {
 };
 
 describe("ModelCard", () => {
+  afterEach(() => { cleanup(); vi.useRealTimers(); });
+  it("acknowledges a queued evaluation without claiming it is still running", async () => {
+    vi.useFakeTimers();
+    vi.mocked(triggerDimensionEval).mockResolvedValueOnce({ queued: true, message: "Eval running in background..." } as Awaited<ReturnType<typeof triggerDimensionEval>>);
+    render(<ModelCard model={model} profile={profile} isStale={false} profilingFailed={false}
+      canWrite hasActiveProvider onProfile={vi.fn()} routingProfile={routingProfile}
+      endpointId="zai" showDiagnostics />);
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Run Eval" })); });
+    expect(screen.getByText("Evaluation requested. See Test Runs for its status and results.")).toBeTruthy();
+    expect(screen.queryByText("Eval running in background...")).toBeNull();
+  });
   it("hides routing scores, eval, and tier override in the default operator view", () => {
     const html = renderToStaticMarkup(
       <ModelCard

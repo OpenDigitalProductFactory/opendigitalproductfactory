@@ -40,6 +40,25 @@ TOKEN_ENV_VAR = "DPF_MCP_BEARER_TOKEN"
 DEFAULT_MCP_URL = "https://localhost/api/mcp/v1"
 
 
+def normalize_mcp_endpoint(endpoint: str) -> str:
+    """Treat an explicit portal origin as the canonical MCP path, never a root resource."""
+    try:
+        parsed = urlsplit(endpoint)
+        credential_keys = {"access_token", "accesstoken", "refresh_token", "refreshtoken", "token", "api_key", "apikey", "key",
+                           "authorization", "client_secret", "clientsecret", "secret", "password"}
+        if (parsed.scheme not in ("http", "https") or not parsed.hostname or "\\" in endpoint
+                or parsed.username or parsed.password or any(char.isspace() for char in endpoint)
+                or any(key.lower().replace("-", "_") in credential_keys for key, _ in parse_qsl(parsed.query))):
+            raise ValueError("Unsafe endpoint")
+        _ = parsed.port  # Validate the port before any configuration is written.
+        if parsed.path in ("", "/"):
+            return urlunsplit((parsed.scheme, parsed.netloc, "/api/mcp/v1", parsed.query, parsed.fragment))
+        return endpoint
+    except ValueError:
+        # Never include an input that may contain credentials in diagnostics.
+        raise ValueError("MCP endpoint must be a credential-free HTTP(S) URL") from None
+
+
 def with_mcp_catalog_tier(mcp_url: str, tier: str) -> str:
     """Set DPF's explicit catalog tier while preserving other query state."""
     if tier not in {"core", "full"}:
@@ -715,13 +734,7 @@ def existing_codex_mcp_endpoint(text: str) -> Optional[str]:
         quoted = match.group(1)
         try:
             endpoint = json.loads(quoted) if quoted.startswith('"') else quoted[1:-1]
-            parsed = urlsplit(endpoint)
-            credential_keys = {"access_token", "accesstoken", "refresh_token", "refreshtoken", "token", "api_key", "apikey", "key",
-                               "authorization", "client_secret", "clientsecret", "secret", "password"}
-            if (parsed.scheme not in ("http", "https") or not parsed.hostname
-                    or parsed.username or parsed.password or any(char.isspace() for char in endpoint)
-                    or any(key.lower().replace("-", "_") in credential_keys for key, _ in parse_qsl(parsed.query))):
-                raise ValueError("Saved URL is not a credential-free HTTP endpoint")
+            normalize_mcp_endpoint(endpoint)
             return endpoint
         except ValueError as error:
             raise ValueError("Cannot preserve saved Codex URL; select an explicit MCP endpoint to repair it") from error
@@ -763,7 +776,7 @@ def codex_mcp_body(text: str, endpoint: Optional[str], declaration_header: Optio
             retained.append(line)
     # An implicit plugin refresh must not change the resource an OAuth login
     # names. Only an explicitly supplied CLI/environment URL replaces it.
-    endpoint = with_mcp_catalog_tier(endpoint or existing_endpoint or DEFAULT_MCP_URL, "full")
+    endpoint = with_mcp_catalog_tier(normalize_mcp_endpoint(endpoint) if endpoint else existing_endpoint or DEFAULT_MCP_URL, "full")
     body = [f'url = {json.dumps(endpoint)}', "enabled = true", *retained]
     if not custom_bearer and mcp_client_bearer_header_required(endpoint, "codex"):
         body.append(f'bearer_token_env_var = "{TOKEN_ENV_VAR}"')
@@ -818,6 +831,22 @@ def ensure_codex_config(
     if dry_run:
         return True
     return write_text_if_changed(path, text)
+
+
+def converge_codex_project_config(project_root: Path, mcp_url: str, dry_run: bool) -> str:
+    """Run the optional project-override repair; a refusal is a status, not an abort.
+
+    BI-CEDE5B55: ensure_codex_project_config refuses (ValueError) whenever it
+    cannot validate the TOML, including on stock macOS python3 3.9 with no
+    tomli. Uncaught, that refusal ended main() before Grok, Claude and the
+    shared copy converged, leaving every client stale. The file is already
+    left unchanged on refusal, so report it and carry on.
+    """
+    try:
+        changed = ensure_codex_project_config(project_root, mcp_url, dry_run)
+    except ValueError as error:
+        return f"unchanged ({error})"
+    return "converged" if changed else "current"
 
 
 def ensure_codex_project_config(project_root: Path, mcp_url: str, dry_run: bool) -> bool:
@@ -1000,6 +1029,9 @@ def install_claude_plugin(home: Path, dry_run: bool) -> str:
         result = subprocess.run(command, cwd=str(marketplace_root), capture_output=True, text=True)
         if result.returncode != 0:
             return f"failed: {' '.join(command[:3])} exited {result.returncode}"
+    records = [entry for entry in claude_plugin_records(home) if entry.get("scope") == "local"]
+    if not records or not all(claude_record_content_matches(home, entry) for entry in records):
+        return "failed: Claude local cache content remains unverified after supported update; client-owned cache retained"
     return "installed and refreshed"
 
 
@@ -1013,8 +1045,25 @@ def claude_plugin_records(home: Path) -> list[dict[str, Any]]:
     return [entry for entry in entries if isinstance(entry, dict)] if isinstance(entries, list) else []
 
 
+def claude_record_content_matches(home: Path, entry: dict[str, Any]) -> bool:
+    """Verify installed bytes with the existing delivered-content comparator."""
+    from installed_copy_freshness import delivered_digest, pack_version
+
+    install = entry.get("installPath")
+    source = shared_managed_plugin_path(home)
+    if not isinstance(install, str) or not source.is_dir() or not Path(install).is_dir():
+        return False
+    try:
+        expected_version = pack_version(source)
+        return bool(expected_version and entry.get("version") == expected_version
+                    and pack_version(Path(install)) == expected_version
+                    and delivered_digest(Path(install)) == delivered_digest(source))
+    except (OSError, ValueError):
+        return False
+
+
 def converge_claude_project_plugins(home: Path, version: str, dry_run: bool) -> dict[str, list[str]]:
-    """Update every project-scope record still pinned to an older version.
+    """Update project records whose version or delivered content is stale.
 
     `install_claude_plugin` refreshes only the local-scope record. Claude Code
     keeps one project-scope record per checkout the plugin was ever installed
@@ -1037,7 +1086,7 @@ def converge_claude_project_plugins(home: Path, version: str, dry_run: bool) -> 
         if not Path(project).is_dir():
             result["pruned"].append(project)
             continue
-        if entry.get("version") == version:
+        if entry.get("version") == version and claude_record_content_matches(home, entry):
             result["current"].append(project)
             continue
         if dry_run:
@@ -1048,7 +1097,12 @@ def converge_claude_project_plugins(home: Path, version: str, dry_run: bool) -> 
             continue
         command = [claude, "plugin", "update", CLAUDE_PLUGIN_ID, "--scope", "project"]
         completed = subprocess.run(command, cwd=project, capture_output=True, text=True)
-        result["updated" if completed.returncode == 0 else "failed"].append(project)
+        refreshed = [record for record in claude_plugin_records(home)
+                     if record.get("scope") == "project" and record.get("projectPath") == project]
+        verified = (completed.returncode == 0 and len(refreshed) == 1
+                    and refreshed[0].get("version") == version
+                    and claude_record_content_matches(home, refreshed[0]))
+        result["updated" if verified else "failed"].append(project)
     return result
 
 
@@ -1157,7 +1211,8 @@ def converge_claude_project_connectors(
              f"current {len(plugins['current'])}, failed {len(plugins['failed'])}, "
              f"prunable {len(plugins['pruned'])}"]
     lines += [f"    {verb} to {version}: {project}" for project in plugins["updated"]]
-    lines += [f"    FAILED to update: {project}" for project in plugins["failed"]]
+    lines += [f"    FAILED to verify updated content: {project}; supported update did not establish the expected digest; client-owned cache retained"
+              for project in plugins["failed"]]
     lines += [f"    prunable (projectPath gone): {project}" for project in plugins["pruned"]]
     projects = {
         entry["projectPath"]
@@ -1483,11 +1538,11 @@ def resolve_antigravity_binary() -> str | None:
 
 
 def antigravity_mcp_config_path(home: Path) -> Path:
-    # Antigravity is Windsurf/VS Code-derived; its MCP config is a JSON block
-    # keyed by `mcpServers`. The exact path is not yet pinned in public docs —
-    # this is the documented default; the live install confirms it during the
-    # EP-ANTIGRAVITY-001 evidence gate (BI-ECAE3494 / BI-47A81FEB).
-    return home / ".antigravity" / "mcp_config.json"
+    # The file the `agy` CLI and Antigravity.app both read (BI-4CB3C923).
+    # Pinned on 2026-10-20 against agy 1.4.3: `agy mcp add` writes here, and
+    # both binaries name only this path. The earlier ~/.antigravity/
+    # mcp_config.json guess is read by neither; a copy there is left in place.
+    return home / ".gemini" / "config" / "mcp_config.json"
 
 
 def ensure_antigravity_mcp_config(home: Path, mcp_url: str, dry_run: bool, declarations: Any = None) -> str:
@@ -1501,15 +1556,26 @@ def ensure_antigravity_mcp_config(home: Path, mcp_url: str, dry_run: bool, decla
     if resolve_antigravity_binary() is None:
         return "skipped: Antigravity CLI (agy) not found"
     path = antigravity_mcp_config_path(home)
-    data = read_json(path, {})
+    # agy leaves a 0-byte file behind when no server is configured; that is an
+    # empty config. Unparseable content is the operator's: leave it, and keep
+    # the rest of the update running instead of exiting.
+    try:
+        raw = path.read_text(encoding="utf-8-sig") if path.exists() else ""
+        data = json.loads(raw) if raw.strip() else {}
+    except (OSError, json.JSONDecodeError):
+        return f"skipped: cannot parse {path}; fix or empty it, then rerun"
     if not isinstance(data, dict):
         data = {}
     servers = data.get("mcpServers")
     if not isinstance(servers, dict):
         servers = {}
+    # agy's own schema: what `agy mcp add` writes for an http server. An
+    # operator who disabled the entry keeps it disabled.
+    previous = servers.get("dpf")
+    disabled = isinstance(previous, dict) and previous.get("disabled") is True
     servers["dpf"] = {
-        "type": "http",
-        "url": mcp_url,
+        "serverUrl": mcp_url,
+        "disabled": disabled,
         **({"headers": {"Authorization": f"Bearer ${{{TOKEN_ENV_VAR}}}"}} if mcp_client_bearer_header_required(mcp_url, "antigravity") else {}),
     }
     if declarations is not None:
@@ -2343,6 +2409,8 @@ def main(argv: list[str]) -> int:
         text = path.read_text(encoding="utf-8-sig") if path.exists() else ""
         print(existing_codex_mcp_endpoint(text) or "")
         return 0
+    if args.mcp_url:
+        args.mcp_url = normalize_mcp_endpoint(args.mcp_url)
     if args.from_portal:
         import portal_source
 
@@ -2448,7 +2516,8 @@ def main(argv: list[str]) -> int:
             global_config = codex_config_path(home)
             saved = global_config.read_text(encoding="utf-8-sig") if global_config.exists() else ""
             endpoint = args.mcp_url or existing_codex_mcp_endpoint(saved) or DEFAULT_MCP_URL
-            ensure_codex_project_config(args.project_root, endpoint, args.dry_run)
+            project_status = converge_codex_project_config(args.project_root, endpoint, args.dry_run)
+            print(f"  Codex project override : {project_status}")
         codex_hooks_status = install_codex_hooks(codex_managed, home, args.dry_run)
         print(
             f"  Codex      : marketplace + config converged; plugin {codex_status}; "
@@ -2500,6 +2569,7 @@ def main(argv: list[str]) -> int:
         if report:
             report.add("antigravity", "user", antigravity_status)
 
+    claude_install_failed = False
     if not args.codex_only:
         ensure_claude_marketplace(home, version, args.dry_run)
         ensure_claude_repo_mcp_config(
@@ -2511,11 +2581,13 @@ def main(argv: list[str]) -> int:
         status = "skipped by flag"
         if not args.skip_claude_cli_install:
             status = install_claude_plugin(home, args.dry_run)
+            claude_install_failed = status.startswith("failed:")
         print(f"  Claude     : marketplace converged; plugin install {status}")
         if not args.skip_claude_cli_install:
             project_outcome: dict[str, Any] = {}
             for line in converge_claude_project_connectors(home, version, args.dry_run, project_outcome):
                 print(line)
+            claude_install_failed = claude_install_failed or bool((project_outcome.get("plugins") or {}).get("failed"))
             user_scope_status = retire_user_scope_dpf_server(home, args.dry_run)
             if user_scope_status:
                 print(f"  Claude user-scope dpf duplicate: {user_scope_status}")
@@ -2545,7 +2617,7 @@ def main(argv: list[str]) -> int:
     for line in guard_liveness_advisory():
         print(line)
 
-    exit_code = 1 if codex_install_failed else 0
+    exit_code = 1 if codex_install_failed or claude_install_failed else 0
     roster_printed = False
     plugin_plane = codex_plugin_hooks_active(codex_managed, home)
     trust_pending = codex_hook_trust_pending(home, codex_present=codex_present, plugin_plane=plugin_plane)
@@ -2565,8 +2637,10 @@ def main(argv: list[str]) -> int:
     if report:
         written = report.write(args.report_json, args.dry_run)
         print(f"  Report     : {args.report_json} ({written['result']})")
-    if codex_install_failed:
-        print("Incomplete: Codex plugin refresh failed; resolve the error above and rerun the updater.")
+        if written["result"] == "failed" and not args.dry_run:
+            exit_code = exit_code or 1
+    if exit_code:
+        print("Incomplete: toolchain convergence is unverified; resolve the reported failure before restarting a client.")
     else:
         print("Done. Start a new Codex/Claude/Grok session to load updated skills.")
     return exit_code

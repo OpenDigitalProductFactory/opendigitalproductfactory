@@ -830,7 +830,9 @@ class ClaudeInstallTest(unittest.TestCase):
             stdout = ""
             stderr = ""
 
-        with patch.object(updater, "resolve_claude_binary", return_value="/fake/claude"), patch(
+        with patch.object(updater, "resolve_claude_binary", return_value="/fake/claude"), patch.object(
+            updater, "claude_plugin_records", return_value=[{"scope": "local"}]
+        ), patch.object(updater, "claude_record_content_matches", return_value=True), patch(
             "subprocess.run", return_value=_Result()
         ) as run:
             status = updater.install_claude_plugin(Path("/tmp/home"), dry_run=False)
@@ -856,6 +858,15 @@ class ClaudeProjectScopeConvergenceTest(unittest.TestCase):
 
     def _home(self, root: Path, entries: list[dict]) -> Path:
         home = root / "home"
+        source = updater.shared_managed_plugin_path(home)
+        updater.write_json(source / ".claude-plugin" / "plugin.json", {"name": "dpf-platform", "version": "0.2.8"})
+        (source / "hook.mjs").write_text("new hook")
+        for index, entry in enumerate(entries):
+            if "installPath" not in entry:
+                cache = root / f"cache-{index}"
+                updater.write_json(cache / ".claude-plugin" / "plugin.json", {"name": "dpf-platform", "version": entry.get("version")})
+                (cache / "hook.mjs").write_text("new hook")
+                entry["installPath"] = str(cache)
         path = updater.claude_installed_plugins_path(home)
         path.parent.mkdir(parents=True)
         path.write_text(json.dumps({"version": 2, "plugins": {updater.CLAUDE_PLUGIN_ID: entries}}))
@@ -865,6 +876,31 @@ class ClaudeProjectScopeConvergenceTest(unittest.TestCase):
         project = root / name
         project.mkdir()
         return project
+
+    def test_equal_version_stale_bytes_are_not_current_after_successful_noop_update(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = self._project(root, "project")
+            cache = root / "cache"
+            cache.mkdir()
+            (cache / "hook.mjs").write_text("old hook")
+            home = self._home(root, [{"scope": "project", "projectPath": str(project),
+                "version": "0.2.8", "installPath": str(cache)}])
+            source = updater.shared_managed_plugin_path(home)
+            source.mkdir(parents=True, exist_ok=True)
+            (source / "hook.mjs").write_text("new hook")
+            for pack in (source, cache):
+                updater.write_json(pack / ".claude-plugin" / "plugin.json",
+                                   {"name": "dpf-platform", "version": "0.2.8"})
+            with patch.object(updater, "resolve_claude_binary", return_value="/fake/claude"), patch(
+                "subprocess.run", return_value=self._Result()
+            ) as run:
+                result = updater.converge_claude_project_plugins(home, "0.2.8", dry_run=False)
+            self.assertEqual(result["current"], [])
+            self.assertEqual(result["updated"], [])
+            self.assertEqual(result["failed"], [str(project)])
+            self.assertEqual(run.call_count, 1)
+            self.assertEqual((cache / "hook.mjs").read_text(), "old hook")
 
     def test_stale_project_records_are_updated_in_their_project(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -876,8 +912,18 @@ class ClaudeProjectScopeConvergenceTest(unittest.TestCase):
                 {"scope": "project", "projectPath": str(stale), "version": "0.2.5"},
                 {"scope": "project", "projectPath": str(current), "version": "0.2.8"},
             ])
+            def refresh(*args, **kwargs):
+                records = updater.claude_plugin_records(home)
+                for entry in records:
+                    if entry.get("scope") == "project" and entry.get("projectPath") == str(stale):
+                        entry["version"] = "0.2.8"
+                        updater.write_json(Path(entry["installPath"]) / ".claude-plugin" / "plugin.json",
+                                           {"name": "dpf-platform", "version": "0.2.8"})
+                updater.write_json(updater.claude_installed_plugins_path(home),
+                                   {"version": 2, "plugins": {updater.CLAUDE_PLUGIN_ID: records}})
+                return self._Result()
             with patch.object(updater, "resolve_claude_binary", return_value="/fake/claude"), patch(
-                "subprocess.run", return_value=self._Result()
+                "subprocess.run", side_effect=refresh
             ) as run:
                 result = updater.converge_claude_project_plugins(home, "0.2.8", dry_run=False)
         self.assertEqual(result["updated"], [str(stale)])
@@ -888,6 +934,39 @@ class ClaudeProjectScopeConvergenceTest(unittest.TestCase):
             ["/fake/claude", "plugin", "update", "dpf-platform@dpf-platform-local", "--scope", "project"],
         )
         self.assertEqual(run.call_args[1]["cwd"], str(stale))
+
+    def test_equal_version_refresh_requires_observed_new_bytes(self) -> None:
+        import shutil
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = self._project(root, "project")
+            home = self._home(root, [{"scope": "project", "projectPath": str(project), "version": "0.2.8"}])
+            record = updater.claude_plugin_records(home)[0]
+            cache = Path(record["installPath"])
+            (cache / "hook.mjs").write_text("stale")
+            def refresh(*args, **kwargs):
+                shutil.copytree(updater.shared_managed_plugin_path(home), cache, dirs_exist_ok=True)
+                return self._Result()
+            with patch.object(updater, "resolve_claude_binary", return_value="/fake/claude"), patch(
+                "subprocess.run", side_effect=refresh
+            ) as run:
+                first = updater.converge_claude_project_plugins(home, "0.2.8", False)
+                second = updater.converge_claude_project_plugins(home, "0.2.8", False)
+            self.assertEqual(first["updated"], [str(project)])
+            self.assertEqual(second["current"], [str(project)])
+            self.assertEqual(run.call_count, 1)
+
+    def test_missing_cache_and_unreadable_digest_cannot_pass(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = self._project(root, "project")
+            home = self._home(root, [{"scope": "project", "projectPath": str(project),
+                "version": "0.2.8", "installPath": str(root / "missing")}])
+            record = updater.claude_plugin_records(home)[0]
+            self.assertFalse(updater.claude_record_content_matches(home, record))
+            record["installPath"] = str(updater.shared_managed_plugin_path(home))
+            with patch("installed_copy_freshness.delivered_digest", side_effect=PermissionError("unreadable")):
+                self.assertFalse(updater.claude_record_content_matches(home, record))
 
     def test_build_metadata_on_the_pack_version_does_not_mark_current_records_stale(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1089,6 +1168,49 @@ class ClaudeUserScopeDpfServerTest(unittest.TestCase):
 
 
 class AntigravityMcpConfigTest(unittest.TestCase):
+    def test_writes_the_file_agy_and_the_ide_read(self) -> None:
+        # agy 1.4.3 and Antigravity.app read ~/.gemini/config/mcp_config.json;
+        # nothing reads ~/.antigravity/mcp_config.json (BI-4CB3C923).
+        home = Path("/tmp/home")
+        self.assertEqual(updater.antigravity_mcp_config_path(home),
+                         home / ".gemini" / "config" / "mcp_config.json")
+
+    def test_an_empty_config_file_is_converged_not_left_empty(self) -> None:
+        # The operator's file was 0 bytes, so agy listed no MCP servers at all.
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            cfg_path = updater.antigravity_mcp_config_path(home)
+            cfg_path.parent.mkdir(parents=True, exist_ok=True)
+            cfg_path.write_text("")
+            with patch.object(updater, "resolve_antigravity_binary", return_value="/fake/agy"):
+                self.assertEqual(updater.ensure_antigravity_mcp_config(home, updater.DEFAULT_MCP_URL, dry_run=False), "converged")
+            dpf = json.loads(cfg_path.read_text())["mcpServers"]["dpf"]
+            self.assertEqual(dpf["serverUrl"], updater.DEFAULT_MCP_URL)
+            self.assertIs(dpf["disabled"], False)
+
+    def test_unparseable_config_is_left_alone_and_does_not_stop_the_update(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            cfg_path = updater.antigravity_mcp_config_path(home)
+            cfg_path.parent.mkdir(parents=True, exist_ok=True)
+            cfg_path.write_text("{not json")
+            with patch.object(updater, "resolve_antigravity_binary", return_value="/fake/agy"):
+                status = updater.ensure_antigravity_mcp_config(home, updater.DEFAULT_MCP_URL, dry_run=False)
+            self.assertTrue(status.startswith("skipped: cannot parse"), status)
+            self.assertEqual(cfg_path.read_text(), "{not json")
+
+    def test_an_operator_disabled_dpf_entry_stays_disabled(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            cfg_path = updater.antigravity_mcp_config_path(home)
+            cfg_path.parent.mkdir(parents=True, exist_ok=True)
+            cfg_path.write_text(json.dumps({"mcpServers": {"dpf": {"serverUrl": "https://old/api/mcp/v1", "disabled": True}}}))
+            with patch.object(updater, "resolve_antigravity_binary", return_value="/fake/agy"):
+                updater.ensure_antigravity_mcp_config(home, updater.DEFAULT_MCP_URL, dry_run=False)
+            dpf = json.loads(cfg_path.read_text())["mcpServers"]["dpf"]
+            self.assertIs(dpf["disabled"], True)
+            self.assertEqual(dpf["serverUrl"], updater.DEFAULT_MCP_URL)
+
     def test_skipped_when_agy_absent(self) -> None:
         with patch.object(updater, "resolve_antigravity_binary", return_value=None):
             status = updater.ensure_antigravity_mcp_config(
@@ -1113,8 +1235,11 @@ class AntigravityMcpConfigTest(unittest.TestCase):
             self.assertEqual(second, "already current")
             cfg = json.loads(updater.antigravity_mcp_config_path(home).read_text())
             dpf = cfg["mcpServers"]["dpf"]
-            self.assertEqual(dpf["type"], "http")
-            self.assertEqual(dpf["url"], http_url)
+            # agy's own schema (what `agy mcp add` writes), BI-4CB3C923.
+            self.assertEqual(dpf["serverUrl"], http_url)
+            self.assertIs(dpf["disabled"], False)
+            self.assertNotIn("url", dpf)
+            self.assertNotIn("type", dpf)
             self.assertEqual(dpf["headers"]["Authorization"], "Bearer ${DPF_MCP_BEARER_TOKEN}")
             # No plaintext secret is ever written.
             self.assertNotIn("dpfmcp_", updater.antigravity_mcp_config_path(home).read_text())
@@ -1726,6 +1851,45 @@ class OnePluginOwnedConnectorTest(unittest.TestCase):
 
 
 class OAuthDefaultTest(unittest.TestCase):
+    def test_explicit_portal_origin_keeps_the_canonical_mcp_path(self):
+        for endpoint in ("https://localhost", "https://localhost/", "http://127.0.0.1:3000?tenant=demo"):
+            with self.subTest(endpoint=endpoint), tempfile.TemporaryDirectory() as tmp:
+                home = Path(tmp)
+                path = updater.codex_config_path(home)
+                path.parent.mkdir(parents=True)
+                path.write_text('[mcp_servers.dpf]\nurl="https://localhost/api/mcp/v1?tier=full"\nstartup_timeout_sec=45\n')
+                updater.ensure_codex_config(home, endpoint, False)
+                value = updater.existing_codex_mcp_endpoint(path.read_text())
+                self.assertEqual(updater.urlsplit(value).path, "/api/mcp/v1")
+                self.assertIn("startup_timeout_sec=45", path.read_text())
+                if "tenant=demo" in endpoint:
+                    self.assertIn("tenant=demo", value)
+
+    def test_explicit_proxy_endpoint_preserves_path_and_query(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            updater.ensure_codex_config(home, "https://proxy.example/tenant/mcp/?tenant=demo&empty=", False)
+            self.assertEqual(updater.existing_codex_mcp_endpoint(updater.codex_config_path(home).read_text()),
+                             "https://proxy.example/tenant/mcp/?tenant=demo&empty=&tier=full")
+
+    def test_unsafe_explicit_endpoint_refuses_before_any_host_write(self):
+        for endpoint in ("not-an-endpoint", "ftp://localhost", "https:localhost", "https:///localhost", "https://localhost\\evil",
+                         "https://localhost:invalid", "https://u:p@example.test", "https://localhost?api_key=synthetic-secret"):
+            with self.subTest(endpoint=endpoint), tempfile.TemporaryDirectory() as tmp:
+                home = Path(tmp)
+                path = updater.codex_config_path(home)
+                path.parent.mkdir(parents=True)
+                original = '[mcp_servers.dpf]\nurl="https://localhost/api/mcp/v1"\n'
+                path.write_text(original)
+                with patch.dict(os.environ, {"DPF_AGENT_TOOLCHAIN_HOME": tmp}), patch("builtins.print") as output, \
+                        patch.object(updater, "resolve_codex_binary", return_value=None):
+                    with self.assertRaisesRegex(ValueError, "MCP endpoint"):
+                        updater.main(["--mcp-url", endpoint, "--codex-only", "--skip-codex-cli-install",
+                                      "--skip-grok-cli-install", "--skip-antigravity-cli-install"])
+                output.assert_not_called()
+                self.assertEqual(path.read_text(), original)
+                self.assertFalse(updater.codex_managed_plugin_path(home).exists())
+
     def test_saved_endpoint_read_mode_does_not_echo_query_credentials(self):
         for key in ("access_token", "api_key", "API-Key", "client_secret"):
             with self.subTest(key=key), tempfile.TemporaryDirectory() as tmp:
@@ -2172,6 +2336,29 @@ class CodexRegistrationConvergenceTest(unittest.TestCase):
 
 
 class CodexProjectConfigTest(unittest.TestCase):
+    def test_refusal_is_reported_not_raised(self):
+        # BI-CEDE5B55: on python3 3.9 without tomli the step refuses; the
+        # updater must report that and keep converging the other clients.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config = root / ".codex" / "config.toml"
+            config.parent.mkdir()
+            original = '[mcp_servers.dpf]\nurl="http://127.0.0.1:3000/api/mcp/v1"\n'
+            config.write_text(original)
+            refusal = ValueError("Project Codex TOML requires Python 3.11+ or tomli; configuration unchanged")
+            with patch.object(updater, "ensure_codex_project_config", side_effect=refusal):
+                status = updater.converge_codex_project_config(root, "https://localhost/api/mcp/v1", False)
+            self.assertTrue(status.startswith("unchanged ("), status)
+            self.assertIn("Python 3.11+", status)
+            self.assertEqual(config.read_text(), original)
+
+    def test_status_without_override_is_current(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.assertEqual(
+                updater.converge_codex_project_config(Path(directory), "https://localhost/api/mcp/v1", False),
+                "current",
+            )
+
     def test_missing_file_stays_missing(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

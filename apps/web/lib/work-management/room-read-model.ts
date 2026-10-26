@@ -1,3 +1,4 @@
+import { projectDeliveryAgreement } from "./delivery-agreement";
 import type {
   WorkCaseBlockingActorKind,
   WorkCaseDetail,
@@ -58,6 +59,7 @@ export type { WorkroomBoundaryInput } from "./room-boundary";
 
 export interface BuildWorkroomViewInput {
   caseKey: string;
+  deliveryState?: unknown;
   detail: WorkCaseDetail;
   boundary?: Partial<WorkroomBoundaryInput>;
   currentCycle?: WorkroomCycleView | null;
@@ -322,6 +324,7 @@ export function buildWorkroomView(
 
   return {
     roomKey: input.caseKey,
+    delivery: mode === "finite" ? projectDeliveryAgreement({ workspaceState: input.deliveryState, currentObjective: boundary.outcome, terminal: input.detail.summary.terminal }) : null,
     reviewProfile: {
       source: composeRoomReviewProfile(caseRef.sourceType, []),
       applicability: "unknown",
@@ -365,6 +368,10 @@ export function buildWorkroomView(
         ? driveAttention
         : standingIdle
         ? "Open next cycle"
+        : input.detail.summary.state === "triage"
+          && input.detail.summary.nextAction === "Assign owner"
+          && boundary.accountablePrincipalRef
+        ? "Review the next step with the accountable owner"
         : input.detail.summary.nextAction,
       attentionRequired: processNeedsAttention || Boolean(input.executionAttentionReason) || Boolean(driveAttention) || input.detail.summary.attention.required,
       attentionReason: [processAttention, input.executionAttentionReason, driveAttention, input.detail.summary.attention.reason].filter(Boolean).join(" · ") || null,

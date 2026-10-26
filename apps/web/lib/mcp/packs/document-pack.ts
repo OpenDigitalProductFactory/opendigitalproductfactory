@@ -11,11 +11,14 @@
 //
 // create_presentation (BI-543819B1) produces a branded deck from an outline on
 // the document generation facility and stores it here as a managed document.
+// The report, letter, sheet and drawing tools (BI-012487AA) are composed in
+// from document-family-tools.ts.
 
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import type { PresentationOutline } from "@/lib/documents/generation/create-presentation";
+import { DOCUMENT_FAMILY_TOOL_DEFINITIONS, DOCUMENT_FAMILY_TOOL_GRANTS, documentFamilyToolHandlers } from "./document-family-tools";
 
 // Local coercion helpers — copies of the mcp-tools.ts module helpers so the pack
 // owns its inputs without depending on that module's internals.
@@ -147,6 +150,7 @@ const definitions: ToolDefinition[] = [
     sideEffect: true,
   },
   CREATE_PRESENTATION_DEFINITION,
+  ...DOCUMENT_FAMILY_TOOL_DEFINITIONS,
   {
     name: "doc_load",
     description: "Load a managed document by stable document id, optionally pinned to a version. Pass exportFormat to also export that version as a Word (docx), OpenDocument (odt) or PDF file through the document engine; the export is kept as a rendition, so asking again is cheap.",
@@ -499,9 +503,11 @@ export const documentPack: ToolPack = {
     doc_state_change: (params, userId, context) => docStateChange(params, userId, context),
     doc_list_references: (params) => docListReferences(params),
     create_presentation: (params, userId, context) => createPresentationTool(params, userId, context),
+    ...documentFamilyToolHandlers(resolveDocumentActorPrincipalId),
   },
   grants: {
     create_presentation: ["document_write"],
+    ...DOCUMENT_FAMILY_TOOL_GRANTS,
     doc_save: ["document_write", "registry_write"],
     doc_load: ["document_read", "registry_read"],
     doc_search: ["document_read", "registry_read"],

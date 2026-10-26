@@ -4,6 +4,7 @@ import {
   boundLargeStrings,
   excerptText,
   offloadEvidenceOutput,
+  projectLocalCiObservationTails,
   sha256Hex,
   utf8ByteLength,
   EVIDENCE_EXCERPT_HEAD_BYTES,
@@ -12,6 +13,66 @@ import {
 } from "./bounded-evidence-output";
 
 const big = (bytes: number, fill = "x") => fill.repeat(bytes);
+
+describe("projectLocalCiObservationTails", () => {
+  const refFor = (text: string): OffloadedTextReference => ({
+    sha256: sha256Hex(text), storageKey: `fixture/${sha256Hex(text)}`,
+    sizeBytes: utf8ByteLength(text), mimeType: "text/plain",
+  });
+
+  it("keeps ordinary tails and arbitrary bound content unchanged by reference", async () => {
+    const signed = { signature: "unaltered", outputTail: "arbitrary\u0000signed content" };
+    const input = { content: { execution: { vitest: { observations: [
+      { outputTail: "ordinary\nlog\ttext", signed },
+    ] } } }, signed };
+    const writes: string[] = [];
+    const result = await projectLocalCiObservationTails(input, { writeBlob: async text => {
+      writes.push(text); return refFor(text);
+    } });
+    expect(result).toBe(input);
+    expect(writes).toEqual([]);
+  });
+
+  it("retains exact raw bytes, bounds a NUL-heavy preview and is idempotent", async () => {
+    const raw = `head\\0literal\n${"\u0000".repeat(66_382)}\ntail`;
+    const other = { outputTail: "unchanged" };
+    const signed = { outputTail: "signed\u0000bytes", signature: "unchanged" };
+    const input = { content: { execution: { vitest: { observations: [null, other, { outputTail: raw, signed }] } } }, signed };
+    const writes: string[] = [];
+    const writeBlob = async (text: string) => { writes.push(text); return refFor(text); };
+    const result = await projectLocalCiObservationTails(input, { writeBlob });
+    const row = result.content.execution.vitest.observations[2] as unknown as {
+      outputTail: string; outputTailProjection: { encoding: string; nulCount: number; original: OffloadedTextReference }; signed: typeof signed;
+    };
+    expect(writes).toEqual([raw]);
+    expect(row.outputTail).not.toContain("\u0000");
+    expect(utf8ByteLength(row.outputTail)).toBeLessThan(64 * 1024);
+    expect(row.outputTail).toContain("head\\0literal");
+    expect(row.outputTail.endsWith("\ntail")).toBe(true);
+    expect(row.outputTailProjection).toEqual({ encoding: "nul-visible-v1", nulCount: 66_382, original: refFor(raw) });
+    expect(result.signed).toBe(signed);
+    expect(row.signed).toBe(signed);
+    expect(result.content.execution.vitest.observations[1]).toBe(other);
+    expect(input.content.execution.vitest.observations[2]?.outputTail).toBe(raw);
+    expect(await projectLocalCiObservationTails(result, { writeBlob })).toBe(result);
+    const bounded = await offloadEvidenceOutput(result, { writeBlob });
+    expect(bounded).toBe(result);
+    expect(writes).toEqual([raw]);
+  });
+
+  it("refuses a provenance collision anywhere in the batch before any blob write", async () => {
+    let writes = 0;
+    const input = { content: { execution: { vitest: { observations: [
+      { outputTail: "first\u0000" },
+      { outputTail: "second\u0000", outputTailProjection: null },
+    ] } } } };
+    await expect(projectLocalCiObservationTails(input, { writeBlob: async text => {
+      writes++; return refFor(text);
+    } })).rejects.toThrow(/collides/);
+    expect(writes).toBe(0);
+    expect(input.content.execution.vitest.observations[1].outputTailProjection).toBeNull();
+  });
+});
 
 describe("boundLargeStrings (pure, ledger side)", () => {
   it("returns the same reference when nothing exceeds the ceiling", () => {

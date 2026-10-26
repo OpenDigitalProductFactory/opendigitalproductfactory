@@ -11,6 +11,7 @@ import { StatusBadge } from "@/components/ui/report-kit";
 import { LocalTime } from "@/components/ui/LocalTime";
 import { TIER_LABELS, tierForRow } from "@/lib/wiki/decision-audit";
 import { buildDecisionHelp } from "@/lib/wiki/decision-help";
+import { decisionInteractionRowToEvaluation } from "@/lib/decision-perspective/persistence";
 import { isWithdrawnHumanOutcome } from "@/lib/quality/decision-residue-staleness";
 import {
   buildDecisionOriginCopy,
@@ -364,6 +365,11 @@ export default async function DecisionRecordPage({ params }: { params: Params })
           (() => {
             const help = buildDecisionHelp({
               outcomeType: row.outcomeType,
+              escalationRoute: row.escalationRoute,
+              escalationReason: row.escalationReason,
+              escalationFollowOn: row.escalationFollowOn,
+              permissionEvaluation: row.escalationRoute === "independent_review"
+                ? decisionInteractionRowToEvaluation(row) : undefined,
               tier,
               riskTier: row.riskTier,
               principleConflict: row.principleConflict,

@@ -2,8 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // BI-763D6E01: a Workroom tool call with commandId runs once; without it, unchanged.
 
-const { receiptRows, txClient } = vi.hoisted(() => {
+const { receiptRows, txClient, transaction, state } = vi.hoisted(() => {
   const receiptRows = new Map<string, Record<string, unknown>>();
+  const state = { active: false, unknownCommit: false, unknownRollback: false, events: [] as string[] };
+  const transaction = vi.fn();
   const txClient = {
     $queryRaw: async (strings: TemplateStringsArray) => {
       if (strings.join("?").includes("pg_advisory_xact_lock")) {
@@ -16,21 +18,36 @@ const { receiptRows, txClient } = vi.hoisted(() => {
       findFirst: async ({ where }: { where: { commandScopeKey: string; commandKey: string } }) =>
         receiptRows.get(`${where.commandScopeKey}#${where.commandKey}`) ?? null,
       create: async ({ data }: { data: Record<string, unknown> }) => {
-        receiptRows.set(`${data.commandScopeKey}#${data.commandKey}`, { kind: data.kind, payload: data.payload });
+        receiptRows.set(`${data.commandScopeKey}#${data.commandKey}`, { id: "receipt-" + receiptRows.size, workCapsuleId: data.workCapsuleId, kind: data.kind, payload: data.payload });
         return data;
       },
     },
   };
-  return { receiptRows, txClient };
+  return { receiptRows, txClient, transaction, state };
 });
 
 vi.mock("@dpf/db", () => ({
-  prisma: { ...txClient, $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(txClient) },
+  prisma: { ...txClient, $transaction: transaction },
 }));
 
-import { commandDb, receiptedWorkroomTool } from "./receipted-tool";
+import { commandDb, hasBoundCommandTransaction, receiptedWorkroomTool } from "./receipted-tool";
 
-beforeEach(() => receiptRows.clear());
+beforeEach(() => {
+  receiptRows.clear(); state.active = false; state.unknownCommit = false; state.unknownRollback = false; state.events = [];
+  transaction.mockImplementation(async (fn: (tx: typeof txClient) => Promise<unknown>) => {
+    const prior = new Map(receiptRows); state.active = true; state.events.push("begin");
+    let result: unknown;
+    try { result = await fn(txClient); }
+    catch (error) {
+      state.active = false; receiptRows.clear(); for (const [key, row] of prior) receiptRows.set(key, row); state.events.push("rollback");
+      if (state.unknownRollback) throw new Error("Rollback outcome unknown");
+      throw error;
+    }
+    state.active = false;
+    if (state.unknownCommit) throw new Error("Commit outcome unknown");
+    state.events.push("commit"); return result;
+  });
+});
 
 describe("receiptedWorkroomTool", () => {
   it("passes a call without commandId straight through", async () => {
@@ -81,5 +98,104 @@ describe("receiptedWorkroomTool", () => {
     const tool = receiptedWorkroomTool("heartbeat", async () => ({ success: true, message: "ok" }));
     await expect(tool({ capsuleId: "WC-1", commandId: "x".repeat(201) }, "user-1", undefined))
       .resolves.toMatchObject({ success: false, error: "invalid_input" });
+  });
+});
+
+
+describe("bound Workroom tool preparation", () => {
+  const binding = { version: 1 as const, digest: "a".repeat(64) };
+  const params = { capsuleId: "WC-1", commandId: "bound", phase: "request" };
+  it("validates before returning a cached receipt", async () => {
+    const handler = vi.fn(async () => ({ success: true, message: "ok" }));
+    const prepare = vi.fn(() => ({ params, payloadBinding: binding }));
+    const tool = receiptedWorkroomTool("reassign", handler, { prepare });
+    await tool(params, "user-1", undefined);
+    prepare.mockReturnValue({ refusal: { success: false, error: "invalid_input", message: "unknown field" } } as never);
+    await expect(tool({ ...params, unsupported: true }, "user-1", undefined))
+      .resolves.toMatchObject({ error: "invalid_input" });
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+  it("requires commandId for a prepared bound call", async () => {
+    const handler = vi.fn(async () => ({ success: true, message: "ok" }));
+    const tool = receiptedWorkroomTool("reassign", handler, { prepare: () => ({ params: { capsuleId: "WC-1" }, payloadBinding: binding }) });
+    await expect(tool({ capsuleId: "WC-1" }, "user-1", undefined)).resolves.toMatchObject({ error: "invalid_input" });
+    expect(handler).not.toHaveBeenCalled();
+  });
+  it("passes normalized parameters and exposes only the active bound transaction", async () => {
+    const normalized = { ...params, reason: "normalized" };
+    let seen: unknown;
+    let bounded = false;
+    const beforeRoomLock = vi.fn(async () => undefined);
+    const tool = receiptedWorkroomTool("reassign", async (input) => {
+      seen = input; bounded = hasBoundCommandTransaction();
+      return { success: true, message: "ok" };
+    }, { prepare: () => ({ params: normalized, payloadBinding: binding, beforeRoomLock }) });
+    await tool(params, "user-1", undefined);
+    expect(seen).toEqual(normalized);
+    expect(bounded).toBe(true);
+    expect(hasBoundCommandTransaction()).toBe(false);
+    expect(beforeRoomLock).toHaveBeenCalledWith(txClient);
+  });
+});
+
+
+describe("bound command post-commit notification", () => {
+  const params = { capsuleId: "WC-1", commandId: "notify", phase: "request" };
+  const payloadBinding = { version: 1 as const, digest: "a".repeat(64) };
+  it("publishes the canonical accepted receipt only after commit and reuses it on retry", async () => {
+    const afterCommit = vi.fn(async () => { expect(state.active).toBe(false); state.events.push("notify"); });
+    const handler = vi.fn(async () => ({ success: true, message: "pending" }));
+    const tool = receiptedWorkroomTool("reassign", handler, { prepare: () => ({ params, payloadBinding, afterCommit }) });
+    await expect(tool(params, "user-1", undefined)).resolves.toMatchObject({ success: true });
+    expect(state.events).toEqual(["begin", "commit", "notify"]);
+    expect(afterCommit).toHaveBeenCalledWith({ id: "receipt-0", workCapsuleId: "row-1" }, { success: true, message: "pending" });
+    await tool(params, "user-1", undefined);
+    expect(afterCommit).toHaveBeenCalledTimes(2); expect(handler).toHaveBeenCalledTimes(1); expect(receiptRows.size).toBe(1);
+  });
+  it("publishes only the durable rejection after the effect transaction rolls back", async () => {
+    const afterCommit = vi.fn(async () => { expect(state.active).toBe(false); state.events.push("notify"); });
+    const tool = receiptedWorkroomTool("reassign", async () => ({ success: false, error: "stale", message: "changed" }), { prepare: () => ({ params, payloadBinding, afterCommit }) });
+    await expect(tool(params, "user-1", undefined)).resolves.toMatchObject({ error: "stale" });
+    expect(state.events).toEqual(["begin", "rollback", "begin", "commit", "notify"]);
+    expect(afterCommit).toHaveBeenCalledWith({ id: "receipt-0", workCapsuleId: "row-1" }, expect.objectContaining({ success: false }));
+    expect([...receiptRows.values()][0].kind).toBe("command-rejected");
+  });
+  it.each(["commit", "rollback"])("never publishes an unknown %s outcome", async (failure) => {
+    state.unknownCommit = failure === "commit"; state.unknownRollback = failure === "rollback";
+    const afterCommit = vi.fn(); const handler = vi.fn(async () => ({ success: failure === "commit", message: "attempt" }));
+    const tool = receiptedWorkroomTool("reassign", handler, { prepare: () => ({ params, payloadBinding, afterCommit }) });
+    await expect(tool(params, "user-1", undefined)).rejects.toThrow(/outcome unknown/); expect(afterCommit).not.toHaveBeenCalled();
+    if (failure === "commit") { state.unknownCommit = false; await tool(params, "user-1", undefined); expect(handler).toHaveBeenCalledTimes(1); expect(afterCommit).toHaveBeenCalledTimes(1); }
+  });
+  it("does not notify for an unreceipted handler failure", async () => {
+    const afterCommit = vi.fn(); const handler = vi.fn(async () => { throw new Error("connection lost"); });
+    const tool = receiptedWorkroomTool("reassign", handler, { prepare: () => ({ params, payloadBinding, afterCommit }) });
+    await expect(tool(params, "user-1", undefined)).rejects.toThrow("connection lost"); expect(afterCommit).not.toHaveBeenCalled();
+  });
+  it("keeps committed success when the wake-up transport fails", async () => {
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const afterCommit = vi.fn(async () => { throw new Error("notification unavailable"); });
+    const tool = receiptedWorkroomTool("reassign", async () => ({ success: true, message: "done" }), { prepare: () => ({ params, payloadBinding, afterCommit }) });
+    try { await expect(tool(params, "user-1", undefined)).resolves.toMatchObject({ success: true }); expect(afterCommit).toHaveBeenCalledTimes(1); expect(warning).toHaveBeenCalled(); }
+    finally { warning.mockRestore(); }
+  });
+
+  it("does not notify an identity conflict or invalid preparation", async () => {
+    const afterCommit = vi.fn(); let binding = payloadBinding;
+    const handler = vi.fn(async () => ({ success: true, message: "done" }));
+    const tool = receiptedWorkroomTool("reassign", handler, { prepare: () => ({ params, payloadBinding: binding, afterCommit }) });
+    await tool(params, "user-1", undefined); afterCommit.mockClear(); binding = { ...payloadBinding, digest: "b".repeat(64) };
+    expect(await tool(params, "user-1", undefined)).toMatchObject({ error: "command_id_conflict" }); expect(afterCommit).not.toHaveBeenCalled(); expect(handler).toHaveBeenCalledTimes(1);
+    const invalid = receiptedWorkroomTool("reassign", handler, { prepare: () => ({ refusal: { success: false, error: "invalid_input", message: "unknown phase field" } }) });
+    expect(await invalid(params, "user-1", undefined)).toMatchObject({ error: "invalid_input" }); expect(afterCommit).not.toHaveBeenCalled();
+  });
+  it("keeps durable success without notification if the post-commit receipt cannot be read", async () => {
+    const read = txClient.workroomActivity.findFirst;
+    const spy = vi.spyOn(txClient.workroomActivity, "findFirst").mockImplementation(async (args) => { if (!state.active) throw new Error("read unavailable"); return read(args); });
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const afterCommit = vi.fn();
+    const tool = receiptedWorkroomTool("reassign", async () => ({ success: true, message: "done" }), { prepare: () => ({ params, payloadBinding, afterCommit }) });
+    try { expect(await tool(params, "user-1", undefined)).toMatchObject({ success: true }); expect(afterCommit).not.toHaveBeenCalled(); expect(receiptRows.size).toBe(1); }
+    finally { spy.mockRestore(); warning.mockRestore(); }
   });
 });

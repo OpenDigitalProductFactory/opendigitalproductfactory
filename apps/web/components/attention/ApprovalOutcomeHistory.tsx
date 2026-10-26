@@ -1,9 +1,10 @@
 import { Surface } from "@/components/ui/Surface";
+import { ButtonLink } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/report-kit";
 import type { ApprovalOutcome } from "@/lib/coworker/approval-outcome";
 import { SOURCE_CATALOG } from "@dpf/i18n";
 
-type Copy = Record<"result" | "recent" | "unavailable" | "details" | "open", string>;
+type Copy = Record<"result" | "recent" | "unavailable" | "details" | "open", string> & { inspectRoom?: string; roomUnavailable?: string; evidence?: string };
 
 /** Read-only history; these are not fresh decisions and do not enter the queue. */
 /** `onBehalfText`: "Decided by ADMIN on behalf of OWNER: REASON", formatted by the page (BI-7BCC87BB). */
@@ -19,12 +20,19 @@ export function ApprovalOutcomeHistory({ outcomes, exact = false, copy = SOURCE_
         {outcomes.map((outcome) => (
           <Surface key={outcome.envelopeId} padding="sm" rounded="md">
             <StatusBadge label={outcome.label} intent={outcome.state === "executed" ? "success" : "neutral"} />
+            {outcome.failureExplanation ? <p className="mt-2 text-dpf-body text-dpf-text">{outcome.failureExplanation}</p> : null}
             <p className="mt-2 text-dpf-body text-dpf-text">{outcome.nextAction}</p>
+            {outcome.failureEvidence?.state === "available" ? outcome.failureEvidence.roomHref
+              ? <ButtonLink variant="ghost" className="mt-2 min-h-11" href={outcome.failureEvidence.roomHref}>{copy.inspectRoom ?? SOURCE_CATALOG.approvals.failure.inspectRoom}</ButtonLink>
+              : <p className="mt-2 text-dpf-caption text-dpf-muted">{copy.roomUnavailable ?? SOURCE_CATALOG.approvals.failure.roomUnavailable}</p> : null}
             {outcome.onBehalfText ? <p className="mt-1 text-dpf-body text-dpf-muted">{outcome.onBehalfText}</p> : null}
             <details className="mt-2 text-dpf-caption text-dpf-muted">
               <summary className="cursor-pointer py-2">{copy.details}</summary>
               <p className="break-all">{outcome.envelopeId}</p>
               <time dateTime={outcome.createdAtIso}>{outcome.createdAtIso}</time>
+              {outcome.failureEvidence?.state === "available" ? <p className="mt-2 break-words">
+                {copy.evidence ?? SOURCE_CATALOG.approvals.failure.evidence}: {outcome.failureEvidence.executionId} · {outcome.failureEvidence.code} · {outcome.failureEvidence.executedAtIso}
+              </p> : null}
               <p><a className="underline" href={outcome.inboxHref}>{copy.open}</a></p>
             </details>
           </Surface>

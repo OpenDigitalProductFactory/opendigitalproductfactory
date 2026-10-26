@@ -10,12 +10,14 @@
 // Exit codes: 0 = clean (environment-skipped guards are warnings), 1 = at
 // least one guard reported a genuine violation.
 
+import { runGit } from "./lib/git.mjs";
 import {
   PREFLIGHT_SKIP_ENV,
   planPreflight,
   runPreflight,
   createDefaultExecute,
 } from "./lib/pregate-preflight.mjs";
+import { readPullRequestBody } from "./lib/pull-request-body.mjs";
 import { classifyChangedFiles } from "./ci-change-scope.mjs";
 import { checkStaleRootClone } from "./lib/stale-root-clone.mjs";
 import { isEntryModule } from "./lib/entry-module.mjs";
@@ -161,16 +163,25 @@ export async function main() {
   const cancel = () => controller.abort();
   process.once("SIGINT", cancel);
   process.once("SIGTERM", cancel);
+  // BI-E2669F37: CI Policy Guards read PR_BODY. The local guard must see the
+  // same text. A missing gh or no open PR skips the body and does not fail.
+  const branchResult = runGit(["rev-parse", "--abbrev-ref", "HEAD"], { cwd: process.cwd() });
+  const branchName = branchResult.ok ? branchResult.stdout.trim() : "";
+  const prBody = readPullRequestBody({ branch: branchName, cwd: process.cwd() });
+  const guardEnv = prBody.included ? { ...process.env, PR_BODY: prBody.body } : process.env;
+  process.stdout.write(prBody.included
+    ? "[pregate-preflight] included the open pull request body so convergence-impact sees the same text CI does\n"
+    : `[pregate-preflight] skipped pull request body (${prBody.reason}); convergence-impact sees commit messages only\n`);
   let execution;
   try { execution = await runWithGuardReceipt({
     directory: guardReceiptDirectory(),
     stage: "pregate-preflight",
-    identify: () => process.env[PREFLIGHT_SKIP_ENV] ? null : identifyGuardExecution({ plan: planned.entries }),
+    identify: () => process.env[PREFLIGHT_SKIP_ENV] ? null : identifyGuardExecution({ plan: planned.entries, env: guardEnv }),
     passed: result => !result.skipped && result.entries.length === planned.entries.length && result.entries.every(entry => entry.status === "passed"),
     execute: ({ progress }) => runPreflight({
     plan: planned.entries,
     signal: controller.signal,
-    execute: createDefaultExecute(process.env, { signal: controller.signal, progress(event) {
+    execute: createDefaultExecute(guardEnv, { signal: controller.signal, progress(event) {
       progress(event);
       if (event.phase) process.stdout.write(`[pregate-preflight] ${event.guardId ?? "guard"}: ${event.phase}\n`);
       else process.stdout.write(`[pregate-preflight] ${event.guardId ?? "guard"}: running (pid ${event.childPid ?? "unknown"})\n`);

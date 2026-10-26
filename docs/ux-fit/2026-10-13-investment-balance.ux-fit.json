@@ -1,0 +1,17 @@
+{
+  "version": "1",
+  "decidedOption": "existing-funding-home",
+  "decisionInteractionId": "DI-F49FE778CDEC",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/ops/installation/page.tsx",
+      "apps/web/components/ops/PortfolioTieOutPanel.tsx",
+      "apps/web/components/ops/InvestmentBalance.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["existing-funding-home", "standalone-allocation-page"],
+    "rationale": "WWMD recommended the existing funding disclosure with high confidence and no autonomy blockers. The agent recorded that choice. Installation settings links to the same editor; owner targets, measured coverage and unknown usage share the same read model used by agents. Prototype: docs/prototypes/2026-10-13-investment-balance.html. UX engagement CE-193CF67B is requested, not completed. This decision is route-fit evidence, not a claim of served accessibility or runtime verification."
+  }
+}

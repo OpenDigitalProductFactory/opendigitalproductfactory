@@ -1,3 +1,4 @@
+import { projectVitestCoverage, resolveVitestExhaustiveReason } from "./local-ci-vitest-selection.mjs";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -85,6 +86,17 @@ export const HOST_BUILD_NODE_ENV = "NODE_ENV=production";
 export const HOST_TEST_NODE_OPTIONS = "NODE_OPTIONS=--no-experimental-webstorage";
 export const HOST_TEST_INITIAL_WORKERS = "4";
 export const HOST_TEST_RETRY_WORKERS = "2";
+
+export function resolveLocalCiTestProfile(env = process.env) {
+  const requested = env?.DPF_LOCAL_CI_TEST_WORKERS;
+  if (requested !== undefined && !/^[1-4]$/.test(requested)) {
+    throw new Error("DPF_LOCAL_CI_TEST_WORKERS must be an integer from 1 to 4");
+  }
+  const initialWorkers = Number(requested ?? HOST_TEST_INITIAL_WORKERS);
+  const exhaustiveReason = resolveVitestExhaustiveReason(env);
+  return { initialWorkers, retryWorkers: Math.min(Number(HOST_TEST_RETRY_WORKERS), initialWorkers),
+    ...(exhaustiveReason ? { exhaustiveReason } : {}) };
+}
 
 export function resolveCommandInvocation(command, baseEnv = process.env) {
   if (command[0] !== "env") {
@@ -337,6 +349,9 @@ export function createToolchainFingerprint(input) {
     nodeOptions: input.nodeOptions ?? "",
     testNodeOptions: input.testNodeOptions ?? "",
   };
+  if (input.testProfile && (input.testProfile.initialWorkers !== Number(HOST_TEST_INITIAL_WORKERS) || input.testProfile.exhaustiveReason)) {
+    toolchain.testProfile = input.testProfile;
+  }
   return {
     toolchain,
     toolchainFingerprint: createHash("sha256").update(stableJson(toolchain)).digest("hex"),
@@ -387,8 +402,10 @@ function fileSha256(path) {
   }
 }
 
-export function collectToolchainFingerprint({ buildStrategy, cwd = process.cwd() } = {}) {
+export function collectToolchainFingerprint({ buildStrategy, cwd = process.cwd(), env = process.env } = {}) {
+  const testProfile = resolveLocalCiTestProfile(env);
   return createToolchainFingerprint({
+    testProfile,
     buildStrategy,
     nodeVersion: process.version,
     pnpmVersion: commandOutput("pnpm", ["--version"]),
@@ -403,6 +420,7 @@ export function collectToolchainFingerprint({ buildStrategy, cwd = process.cwd()
 }
 
 export function createLocalIntegrationPlan(input) {
+  const testProfile = resolveLocalCiTestProfile(input.env ?? process.env);
   const branch = integrationBranchName(input.candidateBranch, input.slotKey);
   const baseRef = input.baseRef ?? "origin/main";
   const buildStrategy = input.buildStrategy ?? defaultBuildStrategy(input.hostPlatform, input.env);
@@ -483,7 +501,7 @@ export function createLocalIntegrationPlan(input) {
     // Fast PR guard parity runs before the expensive test/build gates.
     ...guardCommands,
     // Fail fast on the definitive compile/type-generation proof before spending
-    // the shared sandbox on the exhaustive suite. A red typecheck cannot become
+    // the shared sandbox on the selected local suite. A red typecheck cannot become
     // green after tests, while successful candidates still execute every gate.
     // Typecheck needs the same heap headroom as the host-next build: with the
     // node 24 default heap, `tsc --noEmit` over apps/web SIGABRTs (exit 134)
@@ -502,9 +520,9 @@ export function createLocalIntegrationPlan(input) {
       "node",
       "scripts/local-ci-vitest-runner.mjs",
       "--initial-workers",
-      HOST_TEST_INITIAL_WORKERS,
+      String(testProfile.initialWorkers),
       "--retry-workers",
-      HOST_TEST_RETRY_WORKERS,
+      String(testProfile.retryWorkers),
       // The integration base, so the stage can narrow to the tests this
       // candidate can reach (BI-2227C37C). Absent or unreadable => exhaustive.
       "--base",
@@ -523,6 +541,20 @@ export function createLocalIntegrationPlan(input) {
     baseRef,
     buildStrategy,
     executionLane,
+    testProfile,
     commands,
+  };
+}
+
+export function projectLocalCiEvidence({ evidencePlan, evidencePlanPath, vitestReceipt, ...input }) {
+  return {
+    plannedExecutionLane: evidencePlan?.executionLane ?? null,
+    evidencePlan: evidencePlan ? {
+      path: evidencePlanPath, digest: evidencePlan.digest,
+      plannerVersion: evidencePlan.plannerVersion, policyVersion: evidencePlan.policyVersion,
+      evidenceTier: evidencePlan.evidenceTier, executionLane: evidencePlan.executionLane,
+      fullSuite: evidencePlan.fullSuite, basis: "planned-policy",
+    } : null,
+    vitestCoverage: projectVitestCoverage({ receipt: vitestReceipt, ...input }),
   };
 }

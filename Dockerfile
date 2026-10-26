@@ -72,6 +72,8 @@ COPY scripts/capability-service-catalog.generated.json ./scripts/
 COPY scripts/lib/capability-service-projection.mjs ./scripts/lib/
 COPY scripts/lib/capability-state-hash.mjs ./scripts/lib/
 COPY scripts/lib/transition-signing.mjs ./scripts/lib/
+COPY scripts/lib/maintenance-epoch-receipt.mjs ./scripts/lib/
+COPY scripts/lib/canonical-json.mjs ./scripts/lib/
 # The local-CI status set is shared by the gate scripts and the MCP evidence
 # handler, so the build stage needs it too (BI-C59AC8AF).
 COPY scripts/lib/local-integration-status.mjs ./scripts/lib/
@@ -118,6 +120,7 @@ COPY scripts/lib/capability-state-hash.mjs ./scripts/lib/
 # the sandbox's `next dev` exits with "Module not found".
 COPY scripts/lib/capability-service-projection.mjs ./scripts/lib/
 COPY scripts/lib/transition-signing.mjs ./scripts/lib/
+COPY scripts/lib/maintenance-epoch-receipt.mjs ./scripts/lib/
 COPY scripts/installer/resolve-host-identity.mjs ./scripts/installer/
 COPY scripts/installer/local-model-policy.json ./scripts/installer/
 COPY scripts/capability-service-catalog.generated.json ./scripts/
@@ -198,6 +201,10 @@ COPY scripts/lib/worktree-liveness.mjs ./scripts/lib/
 # claims through the shared MCP client (plan 2026-09-08 §10.5 S8).
 COPY scripts/lib/mcp-client.mjs ./scripts/lib/
 COPY scripts/lib/mcp-credential.mjs ./scripts/lib/
+COPY scripts/lib/mcp-host-trust.mjs ./scripts/lib/
+COPY scripts/lib/foreground-gate-process.mjs ./scripts/lib/
+COPY scripts/lib/resolve-compose-install-context.mjs ./scripts/lib/
+COPY scripts/installer/lib/mcp-client-env.sh ./scripts/installer/lib/
 # mcp-credential.mjs re-exports the client_credentials exchange from the skill pack (BI-84C1F526).
 COPY packages/dpf-skill-pack/scripts/lib/client-credentials-exchange.mjs ./packages/dpf-skill-pack/scripts/lib/
 COPY scripts/lib/junction-safe-worktree-remove.mjs ./scripts/lib/
@@ -376,7 +383,8 @@ WORKDIR /app
 # publish path materializes LFS via `actions/checkout` with `lfs: true`; this
 # is the same guarantee for the path that has no GitHub Actions runner.
 # Dockerfile.sandbox installs it for the same class of reason.
-RUN apk add --no-cache docker-cli docker-cli-buildx docker-cli-compose postgresql16-client git git-lfs curl nmap
+# Shared HTTPS tooling consumes the installer-owned Bash environment resolver.
+RUN apk add --no-cache docker-cli docker-cli-buildx docker-cli-compose postgresql16-client git git-lfs curl nmap bash
 ENV NODE_ENV=production
 ENV HOSTNAME=0.0.0.0
 ENV PORT=3000
@@ -518,6 +526,8 @@ COPY scripts/lib/entry-module.mjs /promoter/scripts/lib/entry-module.mjs
 COPY scripts/rotate-runtime-transition-secret.mjs /promoter/scripts/rotate-runtime-transition-secret.mjs
 COPY scripts/lib/transition-signing.mjs /promoter/scripts/lib/transition-signing.mjs
 COPY scripts/promoter-migration-envelope.mjs /promoter/scripts/promoter-migration-envelope.mjs
+COPY scripts/promoter-epoch-evidence.mjs /promoter/scripts/promoter-epoch-evidence.mjs
+COPY scripts/lib/maintenance-epoch-receipt.mjs /promoter/scripts/lib/maintenance-epoch-receipt.mjs
 COPY scripts/installer/validate-install-state.mjs /promoter/scripts/installer/validate-install-state.mjs
 COPY scripts/installer/install-state-transaction.mjs /promoter/scripts/installer/install-state-transaction.mjs
 COPY scripts/installer/install-release-assets.mjs /promoter/scripts/installer/install-release-assets.mjs

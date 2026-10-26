@@ -4,6 +4,8 @@ status: draft
 
 # MSP customer setup and delegated support
 
+**Program reference (2026-10-19):** [Company connectivity, customer registry and relationship-governed support](2026-10-19-company-connectivity-registry-support-design.md), EP-58240092, is the overarching integration and reconciliation reference. It adds third-party connectivity, relationship-scoped registration, MSP-exclusive visibility, signup decisions and growth triggers. This design retains delegated support authority, lifecycle and UX ownership; its D1-D5 items remain canonical rather than being recreated.
+
 **Date:** 2026-10-12
 **Status:** Researched design; independent approval and implementation pending.
 **Scope owner:** DPF platform for reusable authority/edge hardening; IT Managed Services for the provider operating experience. Customer organizations own their support consent and business policy.

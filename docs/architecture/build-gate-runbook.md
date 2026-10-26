@@ -1,6 +1,19 @@
 # Build gate runbook
 
+The supported host launch resolves existing saved CA trust before Node starts
+gate work, propagates it to children and verifies TLS before expensive checks.
+Transport prerequisites return unrun exit 88; authentication, authorization and
+quiescence retain separate diagnostics. See [saved host trust](../install/platform-support-watchlist.md#saved-host-ca-trust-and-stale-clients)
+for precedence and recovery. No trust-store or credential change occurs at launch.
+
 ## Recovering an interrupted gate publication
+
+The pre-admission documentation exemption classifies the requested candidate
+worktree, even when the gate runner is launched from another checkout. Git
+merge-base/diff reads and derived-artifact checks use that candidate directory.
+An unavailable Git identity continues through ordinary admission; it is not a
+documentation exemption. The shared classifier and artifact registry determine
+the same exemption as the pre-push hook.
 
 The controller retains `<full-log>.<lease-id>.execution.json` before descendant
 cleanup. It binds the observed command result to its original owner, lease, gate,
@@ -152,6 +165,8 @@ TypeScript errors only surface in `next build`, not in `vitest` or IDE checks. R
 
 **Step zero for live-install functional verification.** Before driving any feature's happy path on the live install (gate #3 above for a runtime-bound change), run the preflight — `pnpm verify:preflight [-- --feature-sha <sha>] [-- --portal-url <url>]` — and follow its verdict via the `dpf-verify-on-live-install` skill. The preflight returns one deterministic verdict (`CAN-TEST` / `MUST-ADVANCE` / `BLOCKED`) and one next action, replacing the hand-rolled `git rev-parse` + `curl /api/platform/version` skew check. **The BLOCKED stop-rule is binding:** when the governed advance is blocked by an unrelated defect (e.g. main does not build in Docker), file a BI for that blocker and STOP the verification task — do not let it silently become a multi-hour build-infra fix. Single source of truth: [`docs/superpowers/specs/2026-06-06-procedural-functional-verification-design.md`](../superpowers/specs/2026-06-06-procedural-functional-verification-design.md).
 
+**A Contributor preview yields the CI slot to waiting gates (BI-995E9530).** The `:3001` preview shares the `local-integration-ci` slot with pre-PR gates (spec 2026-06-05, decision #5). After a preview has held the slot for 20 minutes, the lease service refuses its renewal with `lease_lost` / `yielded` whenever a live `gate:` claim is queued. The keeper stops the preview and releases the slot, and the preview can re-claim behind the gates. With no gate waiting, the preview keeps its slot, and gate runs never yield. If a preview stops after a long session, check whether gates were queued before you treat it as a fault. Rule: `apps/web/lib/nonprod/environment-lease-preview-yield.ts`.
+
 **Waiting for a queued gate: resume its durable identity.** A queue admission is pending evidence. Exit 75 hands the same lease, candidate SHA, worktree and owner session to the canonical detached resumer when available. Observe the recorded task and `pregate:status`; do not loop over fresh `pregate` claims. If the resumer could not start, retain the recorded resume identity and report recovery unavailable instead of abandoning the request or making a new claim. Terminal claims stop. A new attempt follows reconciliation and has its own explicit identity. The current wrapper exits 7 for abandoned admission or an uncorroborated zero runner exit; only a SHA-bound PASS is a pass. A killed test child or missing failure receipt is inconclusive: read the slot log and stage receipt before calling it a product failure.
 
 **Local pre-commit gates.** Pre-commit hook at `.githooks/pre-commit` runs a staged Gitleaks secret scan before bytes enter Git history, then runs `pnpm --filter <affected> typecheck` on `.ts`/`.tsx`/`.mts`/`.cts` commits and rejects on failure. For `apps/web` that script checks the **production program** (`tsconfig.json`, which excludes `*.test.ts(x)`, `e2e/`, `tests/`, `test-support/` and the vitest setup files); the test files are their own program, `tsconfig.test.json`, checked by `pnpm --filter web typecheck:tests` and by the required `Typecheck (web tests)` CI job. **Staging a web test file runs `typecheck:all`** (both programs), and the local-CI gate always runs `typecheck:all` — a gate that checked only the production program let three test-only type errors through to CI on PR #5285. Splitting them keeps the gate every push pays at the size of the shipped code, not the shipped code plus 3,300 test files (plan 2026-09-08 M11). Set once: `git config core.hooksPath .githooks` (auto for new clones via `postinstall`). Manual scans: `pnpm security:secrets:staged` for staged content and `pnpm security:secrets` for the current tree. Emergency bypasses exist for verified false positives only: `DPF_SKIP_SECRET_SCAN=1` and `DPF_SKIP_TYPECHECK=1`; CI still gates the PR.
@@ -166,11 +181,11 @@ TypeScript errors only surface in `next build`, not in `vitest` or IDE checks. R
 
 **How to invoke `pregate`, and how to read a red one (BI-E6EF0B2C session, 2026-08-27/28).** The gate's policy is above; this is its *invocation contract*, which existed only in the tool's own stderr and cost one session six wasted runs on a fourteen-line change.
 
-1. **Run it foreground, unpiped, as the SOLE command.** `pnpm run pregate > file` exits 1 with no output; chaining it (`git rebase && pnpm run pregate`) lets the harness kill it at timeout instead of backgrounding it. Redirecting or chaining is the single most common way to lose a run.
-2. **Never interrupt it.** A killed run writes a canonical FAIL evidence record with **no recorded reason**, and every subsequent run *replays that cached fail* — the same tree can never pass again. `pregate:status` says so explicitly ("gate record status failed with NO recorded reason for THIS run … this is not evidence that the diff is bad"). The only escape is a **fresh SHA**, and a plain rebase is not always enough: the gate key is content-derived, so a rebase that preserves the tree replays the same evidence. A real content change is required.
+1. **Run it foreground, unpiped, as the SOLE command.** A captured or wrapped `pnpm run pregate` — stdout is not a terminal, and `DPF_PREGATE_ALLOW_CAPTURE` is unset — stops immediately with exit 11 and says it is not the sole foreground command. It does not occupy the pool (BI-4BCD269B). `pnpm gate:wait` sets `DPF_PREGATE_ALLOW_CAPTURE=1` and is the sanctioned wrapper; `CI=true` and `GITHUB_ACTIONS=true` are too. `--help` and `--dry-run` still run when their output is captured. On Windows, `gate:wait` launches `pnpm.cmd` rather than `pnpm`, because the bare name does not spawn and used to be reported as `gate failed (exit null)` (BI-2FFDBE62). Chaining (`git rebase && pnpm run pregate`) still lets a harness kill the run at timeout instead of backgrounding it.
+2. **Never interrupt it.** A killed run writes a canonical FAIL evidence record with **no recorded reason**, and every subsequent run *replays that cached fail* — the same tree can never pass again. `pregate:status` says so explicitly ("gate record status failed with NO recorded reason for THIS run … this is not evidence that the diff is bad"). When the gate log did name a failing test or check, status quotes that line from `failureSummary` instead of saying no reason was recorded (BI-C1121FFB). The only escape from a genuine cached FAIL is a **fresh SHA**, and a plain rebase is not always enough: the gate key is content-derived, so a rebase that preserves the tree replays the same evidence. A real content change is required. `prisma migrate deploy` failing with P1001 is not that cache: it is recorded as control-plane starvation, without product evidence (BI-B62A6686).
 3. **`pregate:status` is the verdict, not the console text.** The command's own tail says this; believe it.
 4. **Exit 5 / `blocked_control_plane_starvation` is infrastructure, not your diff.** The gate labels it that way itself. It fires when the portal, MCP, Docker or Postgres degrades mid-build — most often because the install self-upgraded underneath the run, which drains the control plane. Re-run once the stack is settled; do not "fix" the diff.
-   **Exit 10 / status `conflict` is your branch, not infrastructure (BI-FCC1DCB2).** The runner's first step merges the candidate onto `origin/main`. When that merge stops on conflicts, the runner names the unmerged paths, aborts the merge and exits 10. The gate records `conflict`, and `pregate:status` reports FAIL with `next merge origin/main into your branch and resolve: <paths>`. Re-running cannot change it. Merge main, resolve, commit, and gate the new SHA. Before this, the stopped run was rewritten to `blocked_control_plane_starvation`, and authors retried it for hours.
+   **Exit 10 / status `conflict` is your branch, not infrastructure (BI-FCC1DCB2, BI-45553400).** The runner's first step merges the candidate onto `origin/main`. When that merge stops on conflicts, the runner names the unmerged paths, aborts the merge and exits 10. The same exit is written before admission when `git merge-tree` reports a conflict, instead of labelling the resume `gate-identity-unavailable` (BI-1F11D17A). The gate records `conflict`, and `pregate:status` reports FAIL with `next merge origin/main into your branch and resolve: <paths>`. Re-running cannot change it. Merge main, resolve, commit, and gate the new SHA. Before this, the stopped run was rewritten to `blocked_control_plane_starvation` or source drift, and authors retried it for hours.
 5. **A preflight where *every* guard fails at once is the clone, not the change.** On a shallow clone whose `origin/main` has advanced past the shallow boundary, `git diff origin/main...HEAD` returns `fatal: no merge base` and each guard fails on the same missing diff. Fix with `git fetch --deepen=300`.
 6. **A red suite of filesystem-walking or DB-touching tests, all timing out, is host load.** Timeouts and mass-failures are load; assertion failures are code. One session saw 27 failed files / 1 failed test under memory pressure, and 165 files / 2086 tests green on a quiet re-run.
 
@@ -213,12 +228,17 @@ reproduce the named failure, obtain independent review of changed code, and leav
 final main+PR integration to required GitHub checks and the protected merge queue.
 Never relabel an earlier full local PASS as covering a changed tree.
 
-The current pre-push hook supports exact PASS or an audited override, not a
-native cloud-delegation receipt. Where explicit scoped operator recovery
-authorization exists, use the documented override route above and record local
-integration as **unrun/delegated**, not passed. This is not a blanket override,
-an authorization grant, or permission to disable protected checks. The native
-post-publication delegation policy remains tracked in BI-25CB699C.
+The pre-push hook and readiness command automatically verify eligible published
+corrections under BI-25CB699C. They require an initial qualified publication
+anchor, a current open PR, and actual required checks and merge-queue protection.
+Changed bytes execute the existing affected-test plan; unchanged bytes execute
+no source suite. Fresh metadata guards still run. Failed, skipped, stale or
+unbound proof refuses publication without restarting full local integration.
+The emitted `published-correction` attestation records full local integration
+as **unrun/delegated**, never as a canonical PASS. Initial publication retains
+its existing gate. See [PR health](../testing/pr-health.md#corrections-after-publication)
+for commands, proof identity and freshness requirements. Scoped operator
+recovery remains a separate audited route when its conditions apply.
 
 `pregate:preflight` and `pr:ready` reuse wholly successful local guard results
 for at most one hour when the clean worktree, HEAD/tree, main, command plan,
