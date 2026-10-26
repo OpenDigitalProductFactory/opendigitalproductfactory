@@ -1,3 +1,4 @@
+import { unknownRoomReviewSubject, type RoomReviewSubjectLoader } from "./room-review-subject";
 import type {
   WorkCaseA2aStatus,
   WorkCaseSourceRef,
@@ -516,6 +517,7 @@ export async function loadWorkspaceWorkCaseDetail({
   participantLoader,
   structureLoader,
   postureContextLoader,
+  reviewSubjectLoader,
   now = new Date(),
 }: {
   prismaClient: WorkspaceCasePrismaClient;
@@ -532,6 +534,8 @@ export async function loadWorkspaceWorkCaseDetail({
    * behaves exactly as it did before this slice.
    */
   postureContextLoader?: WorkroomPostureContextLoader;
+  /** Source facts are read only after room content admission and exact selection. */
+  reviewSubjectLoader?: RoomReviewSubjectLoader;
   now?: Date;
 }): Promise<WorkspaceWorkCaseDetailView | null> {
   const decoded = decodeWorkCaseKey(caseKey);
@@ -699,9 +703,16 @@ export async function loadWorkspaceWorkCaseDetail({
       }
     : null;
   const boundaryClaim = readWorkroomBoundaryClaim(anchoredCapsule?.scopeClaims);
+  const reviewSubject = !item.sourceId
+    ? unknownRoomReviewSubject("source-missing")
+    : reviewSubjectLoader
+      ? await reviewSubjectLoader({ sourceType: item.sourceType, sourceId: item.sourceId })
+        .catch(() => unknownRoomReviewSubject("source-unavailable"))
+      : unknownRoomReviewSubject("reader-unavailable");
 
   const room = buildWorkroomView({
     deliveryState: anchoredCapsule?.workspaceState,
+    reviewSubject,
     executionAttentionReason: execution.attentionReason,
     caseKey: resolvedCaseKey,
     sourceHealth: execution.partial ? "partial" : undefined,

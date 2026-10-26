@@ -11,6 +11,14 @@
     "openQueue": "Return to My Work"
   },
   "reviewProfile": {
+    "subjectScope": "Organization context",
+    "subjectFound": "Identified from the source record. Review applicability remains unresolved.",
+    "subjectUnavailable": "The source record's organization context is unavailable.",
+    "subjectOrganization": "Source organization",
+    "subjectArchetype": "Primary archetype",
+    "subjectComposition": "Composition coverage",
+    "subjectCompositionCounts": "{$unresolved :number} unresolved; {$excluded :number} excluded",
+    "subjectFingerprint": "Context fingerprint",
     "section": "Review and learning",
     "requirements": "Review requirements",
     "notAssessed": "Not yet assessed",

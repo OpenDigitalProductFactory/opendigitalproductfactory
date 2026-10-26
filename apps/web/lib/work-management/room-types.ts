@@ -224,6 +224,7 @@ export interface WorkroomView {
    * They do not establish organization applicability or qualification. */
   reviewProfile?: {
     source: ReturnType<typeof import("./room-review-profile").composeRoomReviewProfile>;
+    subject?: import("./room-review-subject").RoomReviewSubject;
     applicability: "unknown";
     assessment: "not-exercised";
   };

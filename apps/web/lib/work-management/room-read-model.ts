@@ -6,6 +6,7 @@ import type {
 } from "./case-types";
 import type { ReceiptEnvelope } from "./receipt-envelope";
 import { composeRoomReviewProfile } from "./room-review-profile";
+import { unknownRoomReviewSubject, type RoomReviewSubject } from "./room-review-subject";
 import {
   normalizeWorkroomActivities,
   type WorkroomActivityInput,
@@ -60,6 +61,7 @@ export type { WorkroomBoundaryInput } from "./room-boundary";
 export interface BuildWorkroomViewInput {
   caseKey: string;
   deliveryState?: unknown;
+  reviewSubject?: RoomReviewSubject;
   detail: WorkCaseDetail;
   boundary?: Partial<WorkroomBoundaryInput>;
   currentCycle?: WorkroomCycleView | null;
@@ -327,6 +329,7 @@ export function buildWorkroomView(
     delivery: mode === "finite" ? projectDeliveryAgreement({ workspaceState: input.deliveryState, currentObjective: boundary.outcome, terminal: input.detail.summary.terminal }) : null,
     reviewProfile: {
       source: composeRoomReviewProfile(caseRef.sourceType, []),
+      subject: input.reviewSubject ?? unknownRoomReviewSubject("reader-unavailable"),
       applicability: "unknown",
       assessment: "not-exercised",
     },

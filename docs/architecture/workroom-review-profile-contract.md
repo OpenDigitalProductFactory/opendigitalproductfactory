@@ -355,3 +355,36 @@ The relevant refactoring remains shared identity, normalization, provenance and
 server-to-pure-reader composition. Existing PROV-DM and decision-log comparisons
 above explain the choice: keep the selecting authority and exact inputs with
 the outcome, while using existing DPF owners rather than adopting another engine.
+
+**First occurrence-context slice.**
+
+The first runtime slice reads subject facts, not inherited business obligations.
+The shared authorized case loader first applies room-content and exact-selection
+checks. For a booking or its registered alias, the source reader additionally
+requires the existing workforce `view_storefront` capability used by the
+storefront activity surface. Customer, partner and agent populations are not
+admitted by this first adapter; unsupported surfaces keep explicit unknown scope.
+A room participant does not gain this source capability through membership.
+
+One exact `bookingRef` query selects only organization/storefront identity,
+primary archetype identity and revisions, and at most 33 composition rows to
+detect the 32-row ceiling. The pure projection rejects organization, storefront,
+archetype-FK and source-reference conflicts. Removed/inactive entries stay
+excluded; active declarations and product-line bindings remain unverified.
+The primary slug and category are source facts, not proof that a representative
+review layer is adopted. No business context, policy, processing activity, worker,
+funding or global storefront fallback enters this projection.
+
+The existing compliance classifier provides a useful three-state applicability
+contract, but its installation-wide context loader cannot establish this subject.
+Regulation version lineage, confirmed organization-scoped DataProcessingActivity
+records and BusinessContext compliance scope may supply future governed inputs.
+Their existence alone does not map a booking to an obligation. This slice neither
+changes those owners nor treats retention's conservative null-scope fallback as
+review qualification.
+
+The subject fingerprint binds source/config/archetype/composition revisions and
+selection facts independently of the requirements fingerprint. Reads are
+mutation-free and do not create a historical cycle snapshot. The shared identity
+disclosure may show these facts with organization applicability still unresolved;
+a resolved subject is never a passed review or a complete AC-02 result.

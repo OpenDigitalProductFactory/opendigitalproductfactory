@@ -105,4 +105,34 @@ describe("shared authorized case and process loader", () => {
   it.each(["%", "not-a-case"])("rejects malformed identity %s before any source read", async caseKey => {
     setup(); expect(await loadAuthorizedWorkspaceCase({ caseKey, user })).toBeNull(); expect(state.effective).not.toHaveBeenCalled();
   });
+
+  it("connects the canonical anchored booking to the scoped source reader after room and source authorization", async () => {
+    setup();
+    state.effective.mockResolvedValue(buildEffectiveAuthContext({ user, grantedCapabilities: ["view_storefront"],
+      principal: { principalId: "PRN-OWNER", kind: "human", sensitivityClearance: ["public", "internal"] } }));
+    const updatedAt = new Date("2026-10-25T00:00:00.000Z");
+    const findUnique = vi.fn(async () => ({ bookingRef: "BK-1", organizationId: "org-subject",
+      storefrontId: "sf-subject", updatedAt, storefront: { id: "sf-subject", organizationId: "org-subject",
+        archetypeId: "arch-row", updatedAt, archetype: { id: "arch-row", archetypeId: "campground",
+          category: "hospitality", isActive: true, updatedAt }, archetypeCompositions: [] } }));
+    state.db.storefrontBooking = { findUnique };
+    const result = await loadAuthorizedWorkspaceCase({ caseKey: "work-capsule:WC-SELECTED", user });
+    expect(findUnique).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ where: { bookingRef: "BK-1" } }));
+    expect(result?.detail.room?.reviewProfile).toMatchObject({ applicability: "unknown", assessment: "not-exercised",
+      subject: { status: "resolved", organizationId: "org-subject", source: { sourceKey: "booking", sourceId: "BK-1" } } });
+  });
+
+  it("does not let room membership grant source access, or source capability grant room access", async () => {
+    const db = setup();
+    const findUnique = vi.fn();
+    state.db.storefrontBooking = { findUnique };
+    const result = await loadAuthorizedWorkspaceCase({ caseKey: "booking:BK-1", user });
+    expect(result?.detail.room?.reviewProfile?.subject).toEqual({ status: "unknown", reason: "source-denied" });
+    expect(findUnique).not.toHaveBeenCalled();
+    state.effective.mockResolvedValue(buildEffectiveAuthContext({ user, grantedCapabilities: ["view_storefront"],
+      principal: { principalId: "PRN-OWNER", kind: "human", sensitivityClearance: ["public", "internal"] } }));
+    db.workItem.findFirst = vi.fn(async () => ({ ...baseItem, assignedToUserId: "other-user" }));
+    expect(await loadAuthorizedWorkspaceCase({ caseKey: "booking:BK-1", user })).toBeNull();
+    expect(findUnique).not.toHaveBeenCalled();
+  });
 });

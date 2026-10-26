@@ -6,6 +6,7 @@ import { loadPrismaWorkroomParticipants } from "./room-participation-prisma.serv
 import { loadWorkroomPostureContext } from "./room-posture.server";
 import { resolveWorkroomStructureForCase } from "./room-structure.server";
 import { decodeWorkCaseKey } from "./case-key";
+import { loadRoomReviewSubject, type ReviewSubjectClient } from "./room-review-subject.server";
 import { loadWorkspaceWorkCaseDetail, type WorkspaceCasePrismaClient } from "./workspace-case-loader";
 import { loadWorkroomOnlyCaseDetail } from "./workroom-only-case-projection";
 import { loadWorkroomFlowMap } from "./workroom-flow-map.server";
@@ -14,7 +15,7 @@ import { createWorkroomProcessSnapshot, normalizeProcessCaseKey, type WorkroomRe
 
 export type AuthorizedCaseInput = { caseKey: string; selectedWorkroomId?: string; user: DpfSession["user"] };
 type DetailOptions = Parameters<typeof loadWorkspaceWorkCaseDetail>[0];
-type Dependencies = Pick<DetailOptions, "prismaClient" | "participantLoader" | "structureLoader" | "postureContextLoader">;
+type Dependencies = Pick<DetailOptions, "prismaClient" | "participantLoader" | "structureLoader" | "postureContextLoader" | "reviewSubjectLoader">;
 const defaults: Dependencies = { prismaClient: prisma, participantLoader: loadPrismaWorkroomParticipants,
   structureLoader: resolveWorkroomStructureForCase, postureContextLoader: loadWorkroomPostureContext };
 
@@ -30,7 +31,10 @@ export async function loadAuthorizedWorkspaceCase(input: AuthorizedCaseInput, de
   const authContext = { principalId: effectiveAuth.principalId, sensitivityClearance: effectiveAuth.sensitivityClearance,
     isSuperuser: effectiveAuth.isSuperuser };
   const detail = await loadWorkspaceWorkCaseDetail({ ...dependencies, caseKey, selectedWorkroomId: input.selectedWorkroomId,
-    userId: input.user.id, authContext }) ?? (ref.sourceType === "work-capsule" ? await loadWorkroomOnlyCaseDetail({
+    userId: input.user.id, authContext,
+    reviewSubjectLoader: dependencies.reviewSubjectLoader ?? (source =>
+      loadRoomReviewSubject(dependencies.prismaClient as unknown as ReviewSubjectClient, source, effectiveAuth)),
+  }) ?? (ref.sourceType === "work-capsule" ? await loadWorkroomOnlyCaseDetail({
       prismaClient: dependencies.prismaClient as never, sourceId: ref.sourceId, caseKey, now: new Date(), authContext,
     }) : null);
   if (!detail) return null;

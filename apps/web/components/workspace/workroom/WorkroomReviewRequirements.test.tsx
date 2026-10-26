@@ -64,4 +64,38 @@ describe("Workroom review requirements", () => {
     expect(html).not.toContain("100%");
     expect(html).not.toContain("<details open");
   });
+
+  it("shows source context inside the existing identity disclosure without presenting applicability as passed", () => {
+    const source = composeRoomReviewProfile("booking", []);
+    const subject = { status: "resolved" as const, organizationId: "org-example", storefrontId: "sf-example",
+      storefrontRevision: "2026-10-25T00:00:00.000Z",
+      source: { sourceKey: "booking" as const, sourceId: "BK-example", revision: "2026-10-25T00:00:00.000Z" },
+      primary: { ref: "arch-example", slug: "campground", category: "hospitality", revision: "2026-10-25T00:00:00.000Z" },
+      compositions: [], fingerprint: "context-identity" };
+    const previous = renderToStaticMarkup(<WorkroomReviewRequirements profile={{ source, applicability: "unknown", assessment: "not-exercised" }} />);
+    const html = renderToStaticMarkup(<WorkroomReviewRequirements profile={{ source, subject, applicability: "unknown", assessment: "not-exercised" }} />);
+    expect(html).toContain("Organization context");
+    expect(html).toContain("org-example");
+    expect(html).toContain("campground");
+    expect(html).toContain("Review applicability remains unresolved.");
+    expect(html).toContain("context-identity");
+    expect(html).not.toContain("Review passed");
+    expect(html.match(/<summary/g)?.length).toBe(previous.match(/<summary/g)?.length);
+    expect(html).not.toContain("<details open");
+    const pseudo = renderToStaticMarkup(<WorkroomReviewRequirements profile={{ source, subject, applicability: "unknown", assessment: "not-exercised" }} />, "ar-XB");
+    expect(pseudo).toContain("org-example");
+    expect(pseudo).not.toContain(">Organization context</dt>");
+  });
+
+  it("uses the same safe context message for denied and unavailable source details", () => {
+    const source = composeRoomReviewProfile("booking", []);
+    const denied = renderToStaticMarkup(<WorkroomReviewRequirements profile={{ source,
+      subject: { status: "unknown", reason: "source-denied" }, applicability: "unknown", assessment: "not-exercised" }} />);
+    const unavailable = renderToStaticMarkup(<WorkroomReviewRequirements profile={{ source,
+      subject: { status: "unknown", reason: "source-unavailable" }, applicability: "unknown", assessment: "not-exercised" }} />);
+    expect(denied).toContain("The source record");
+    expect(denied).toContain("organization context is unavailable.");
+    expect(denied).toBe(unavailable);
+    expect(denied).not.toContain("source-denied");
+  });
 });

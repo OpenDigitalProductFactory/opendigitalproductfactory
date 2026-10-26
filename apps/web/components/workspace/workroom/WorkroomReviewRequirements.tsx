@@ -9,6 +9,7 @@ const disclosureClass = "min-h-11 cursor-pointer px-4 py-3 text-sm font-semibold
 /** Present the authorized profile; composing requirements never assesses them. */
 export function WorkroomReviewRequirements({ profile }: { profile?: WorkroomView["reviewProfile"] }) {
   const source = profile?.source;
+  const subject = profile?.subject?.status === "resolved" ? profile.subject : null;
   const t = useT("workrooms");
 
   return (
@@ -58,6 +59,19 @@ export function WorkroomReviewRequirements({ profile }: { profile?: WorkroomView
                 <dl className="space-y-2 break-all text-sm text-dpf-muted">
                   <div><dt>{t("reviewProfile.definition")}</dt><dd>{source.identity
                     ? t("reviewProfile.definitionVersion", { source: source.identity.sourceKey, version: source.identity.definitionVersion }) : t("reviewProfile.unavailable")}</dd></div>
+                  <div><dt>{t("reviewProfile.subjectScope")}</dt><dd>{t(subject ? "reviewProfile.subjectFound" : "reviewProfile.subjectUnavailable")}</dd></div>
+                  {subject ? (
+                    <>
+                      <div><dt>{t("reviewProfile.subjectOrganization")}</dt><dd>{subject.organizationId}</dd></div>
+                      <div><dt>{t("reviewProfile.subjectArchetype")}</dt><dd>{subject.primary.slug} · {subject.primary.category}</dd></div>
+                      <div><dt>{t("reviewProfile.subjectComposition")}</dt><dd>{t("reviewProfile.subjectCompositionCounts", {
+                        unresolved: subject.compositions.filter(row => row.applicability === "unknown").length,
+                        excluded: subject.compositions.filter(row => row.applicability === "excluded").length,
+                      })}</dd></div>
+                      <div><dt>{t("reviewProfile.subjectFingerprint")}</dt><dd>{subject.fingerprint}</dd></div>
+                    </>
+                  ) : null}
+
                   <div><dt>{t("reviewProfile.fingerprint")}</dt><dd>{source.fingerprint ?? t("reviewProfile.unresolved")}</dd></div>
                   <div><dt>{t("reviewProfile.sources")}</dt><dd>{source.provenance.join(", ")}</dd></div>
                   <div><dt>{t("reviewProfile.references")}</dt><dd>{source.conflicts.join(", ") || t("reviewProfile.noConflicts")}</dd></div>
