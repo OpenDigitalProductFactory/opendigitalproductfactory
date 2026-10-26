@@ -13,6 +13,8 @@ import {
   type RuntimeVerificationKind,
   type RuntimeVerificationStatus,
 } from "./types";
+import { SMALL_ACCEPTANCE_KEY, createSmallAcceptanceBinding, sameSmallAcceptanceContext } from "./small-acceptance-binding";
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 
 export type RuntimeCoordinationActor = {
   userId?: string | null;
@@ -29,6 +31,7 @@ export type RuntimeCoordinationDb = {
   };
   runtimeVerification: {
     create(args: unknown): Promise<any>;
+    findUnique?(args: unknown): Promise<Record<string, unknown> | null>;
   };
   buildActivity?: {
     create(args: unknown): Promise<any>;
@@ -36,7 +39,7 @@ export type RuntimeCoordinationDb = {
   workroomActivity?: {
     create(args: unknown): Promise<any>;
   };
-  $transaction?<T>(fn: (tx: RuntimeCoordinationDb) => Promise<T>): Promise<T>;
+  $transaction?<T>(fn: (tx: RuntimeCoordinationDb) => Promise<T>, options?: { isolationLevel: "Serializable"; timeout: number }): Promise<T>;
 };
 
 const TARGET_KIND_SET = new Set<string>(RUNTIME_TARGET_KINDS);
@@ -364,6 +367,7 @@ function primaryAttachPointCount(input: RuntimeVerificationInput): number {
 }
 
 function validateVerificationInput(input: RuntimeVerificationInput) {
+  if (input.result && Object.hasOwn(input.result, SMALL_ACCEPTANCE_KEY)) throw new Error("Small acceptance result namespace is reserved to the server.");
   if (!input.verificationId?.trim()) throw new Error("verificationId is required");
   if (!isRuntimeVerificationKind(input.kind)) throw new Error("Invalid runtime verification kind");
   if (!isRuntimeVerificationStatus(input.status)) throw new Error("Invalid runtime verification status");
@@ -378,7 +382,40 @@ export async function recordRuntimeVerification(args: {
   actor?: RuntimeCoordinationActor;
 }) {
   validateVerificationInput(args.input);
-  return inTransaction(args.db, async (tx) => {
+  const smallCheck = args.input.kind === "final-acceptance" && !!args.input.backlogActivityId;
+  if (smallCheck && (!args.db.$transaction || !args.input.workCapsuleId
+    || !["passed", "failed"].includes(args.input.status))) throw new Error("Bound Small acceptance requires a transaction, Workroom and terminal check.");
+  let boundItemId: string | null = null;
+  const record = async (tx: RuntimeCoordinationDb) => {
+    let result = args.input.result ?? {};
+    let bound: ReturnType<typeof createSmallAcceptanceBinding> | null = null;
+    let bindingService: typeof import("./small-acceptance-binding.server") | null = null;
+    if (smallCheck) {
+      bindingService = await import("./small-acceptance-binding.server");
+      const context = await bindingService.loadSmallAcceptanceContext({ db: tx as unknown as import("./small-acceptance-binding.server").SmallAcceptanceDb,
+        workCapsuleId: args.input.workCapsuleId!, closureId: args.input.backlogActivityId!, lock: true });
+      bound = createSmallAcceptanceBinding({ context, input: args.input, actor: args.actor ?? {}, now: new Date() });
+      boundItemId = context.itemId;
+      result = { ...result, [SMALL_ACCEPTANCE_KEY]: bound };
+      if (!tx.runtimeVerification.findUnique) throw new Error("Acceptance identity lookup is unavailable.");
+      const existing = await tx.runtimeVerification.findUnique({ where: { verificationId: args.input.verificationId } });
+      if (existing) {
+        const expected = { ...result, [SMALL_ACCEPTANCE_KEY]: { ...bound, recordedAt: null } };
+        const oldResult = existing.result && typeof existing.result === "object" ? existing.result as Record<string, unknown> : {};
+        const oldBinding = oldResult[SMALL_ACCEPTANCE_KEY];
+        const comparable = { ...oldResult, [SMALL_ACCEPTANCE_KEY]: {
+          ...(oldBinding && typeof oldBinding === "object" ? oldBinding : {}), recordedAt: null,
+        } };
+        if (existing.kind !== args.input.kind || existing.status !== args.input.status
+          || existing.workCapsuleId !== args.input.workCapsuleId || existing.backlogActivityId !== args.input.backlogActivityId
+          || ["command", "url", "evidenceUrl", "screenshotUrl", "toolExecutionId"].some(key =>
+            existing[key] !== (args.input[key as keyof RuntimeVerificationInput] ?? null))
+          || canonicalJson(comparable) !== canonicalJson(expected)) {
+          throw new Error("Verification identity already records a different immutable check.");
+        }
+        return existing;
+      }
+    }
     let buildActivityId = args.input.buildActivityId ?? null;
     if (!buildActivityId && args.input.buildId && tx.buildActivity) {
       const activity = await tx.buildActivity.create({
@@ -410,7 +447,8 @@ export async function recordRuntimeVerification(args: {
         capsuleActivityId: args.input.capsuleActivityId ?? null,
         startedAt: args.input.startedAt ?? null,
         completedAt: args.input.completedAt ?? null,
-        result: args.input.result ?? {},
+        result,
+        ...(bound ? { createdAt: new Date(bound.recordedAt) } : {}),
       },
     });
 
@@ -434,8 +472,20 @@ export async function recordRuntimeVerification(args: {
       });
     }
 
+    if (bound && bindingService) {
+      const current = await bindingService.loadSmallAcceptanceContext({ db: tx as unknown as import("./small-acceptance-binding.server").SmallAcceptanceDb,
+        workCapsuleId: args.input.workCapsuleId!, closureId: args.input.backlogActivityId! });
+      if (!sameSmallAcceptanceContext(bound, current)) throw new Error("Deployment changed during runtime acceptance.");
+    }
     return verification;
-  });
+  };
+  const verification = await (smallCheck ? args.db.$transaction!(record, { isolationLevel: "Serializable", timeout: 30_000 }) : inTransaction(args.db, record));
+  if (boundItemId) {
+    const { refreshSmallAcceptanceSnapshot } = await import("./small-acceptance-binding.server");
+    // An interrupted projection leaves the immutable verification intact; same-id retry refreshes it.
+    await refreshSmallAcceptanceSnapshot(args.db as unknown as import("./small-acceptance-binding.server").SmallAcceptanceDb, boundItemId);
+  }
+  return verification;
 }
 
 export { RUNTIME_TARGET_KINDS, RUNTIME_TARGET_STATUSES, RUNTIME_VERIFICATION_KINDS, RUNTIME_VERIFICATION_STATUSES };

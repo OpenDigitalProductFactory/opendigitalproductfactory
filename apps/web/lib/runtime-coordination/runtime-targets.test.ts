@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const smallAcceptance = vi.hoisted(() => ({ load: vi.fn(), refresh: vi.fn() }));
+vi.mock("./small-acceptance-binding.server", () => ({
+  loadSmallAcceptanceContext: smallAcceptance.load,
+  refreshSmallAcceptanceSnapshot: smallAcceptance.refresh,
+}));
+
 import {
   canSatisfyFinalAcceptance,
   deriveAcceptanceRole,
@@ -26,6 +32,7 @@ const db = {
   },
   runtimeVerification: {
     create: vi.fn(),
+    findUnique: vi.fn(),
   },
   buildActivity: {
     create: vi.fn(),
@@ -42,6 +49,9 @@ function resetDb() {
   db.runtimeTarget.findUnique.mockReset();
   db.runtimeTarget.update.mockReset();
   db.runtimeVerification.create.mockReset();
+  db.runtimeVerification.findUnique.mockReset();
+  smallAcceptance.load.mockReset();
+  smallAcceptance.refresh.mockReset();
   db.buildActivity.create.mockReset();
   db.workroomActivity.create.mockReset();
   db.$transaction.mockReset();
@@ -299,6 +309,64 @@ describe("registerRuntimeTarget", () => {
 
 describe("recordRuntimeVerification", () => {
   beforeEach(() => resetDb());
+
+  it("rejects caller-supplied authoritative Small acceptance binding", async () => {
+    await expect(recordRuntimeVerification({ db: runtimeDb(), input: {
+      verificationId: "RV-FORGED", kind: "ux", status: "passed", workCapsuleId: "room-1",
+      result: { smallRuntimeAcceptance: { schemaVersion: 1, passed: true } },
+    } })).rejects.toThrow(/reserved/i);
+    expect(db.runtimeVerification.create).not.toHaveBeenCalled();
+  });
+
+  it("records exact Small facts once and refreshes the canonical snapshot on same-id retry", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-10-26T10:04:00Z"));
+      const context = { itemId: "BI-ONE", closureId: "closure-1", workCapsuleId: "room-1",
+        repositoryFullName: "owner/repo", headSha: "a".repeat(40), mergeCommitSha: "b".repeat(40), servedSha: "c".repeat(40),
+        deploymentRunId: "SUR-1", deploymentCompletedAt: "2026-10-26T10:00:00.000Z", effectiveShape: "small",
+        closureRecordedAt: "2026-10-26T10:01:00.000Z" };
+      smallAcceptance.load.mockResolvedValue(context);
+      smallAcceptance.refresh.mockResolvedValue(undefined);
+      db.runtimeVerification.findUnique.mockResolvedValue(null);
+      db.runtimeVerification.create.mockImplementation(async ({ data }) => ({ id: "rv-native", ...data }));
+      const input = { verificationId: "RV-SMALL", kind: "final-acceptance" as const, status: "passed" as const,
+        workCapsuleId: "room-1", backlogActivityId: "closure-1", command: "drive recovery",
+        startedAt: new Date("2026-10-26T10:02:00Z"), completedAt: new Date("2026-10-26T10:03:00Z"),
+        result: { observations: ["not dispatched"] } };
+      const args = { db: runtimeDb(), input, actor: { userId: "human", principalId: "principal", agentId: "agent" } };
+      const first = await recordRuntimeVerification(args);
+      expect(first.result.smallRuntimeAcceptance).toMatchObject({ ...context, actor: args.actor });
+      expect(db.$transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: "Serializable", timeout: 30_000 });
+      expect(smallAcceptance.load).toHaveBeenCalledTimes(2);
+      expect(smallAcceptance.refresh).toHaveBeenCalledWith(db, "BI-ONE");
+      db.runtimeVerification.findUnique.mockResolvedValue(first);
+      vi.setSystemTime(new Date("2026-10-26T10:05:00Z"));
+      expect(await recordRuntimeVerification(args)).toEqual(first);
+      expect(db.runtimeVerification.create).toHaveBeenCalledTimes(1);
+      expect(smallAcceptance.refresh).toHaveBeenCalledTimes(2);
+      await expect(recordRuntimeVerification({ ...args, input: { ...input, result: { observations: ["different check"] } } })).rejects.toThrow(/immutable/);
+      expect(db.runtimeVerification.create).toHaveBeenCalledTimes(1);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("refuses a generation change between observation and commit", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-10-26T10:04:00Z"));
+      const context = { itemId: "BI-ONE", closureId: "closure-1", workCapsuleId: "room-1",
+        repositoryFullName: "owner/repo", headSha: "a".repeat(40), mergeCommitSha: "b".repeat(40), servedSha: "c".repeat(40),
+        deploymentRunId: "SUR-1", deploymentCompletedAt: "2026-10-26T10:00:00.000Z", effectiveShape: "small",
+        closureRecordedAt: "2026-10-26T10:01:00.000Z" };
+      smallAcceptance.load.mockResolvedValueOnce(context).mockResolvedValueOnce({ ...context, deploymentRunId: "SUR-2" });
+      db.runtimeVerification.findUnique.mockResolvedValue(null);
+      await expect(recordRuntimeVerification({ db: runtimeDb(), actor: { userId: "human", principalId: "principal" }, input: {
+        verificationId: "RV-SWAP", kind: "final-acceptance", status: "passed", workCapsuleId: "room-1", backlogActivityId: "closure-1",
+        command: "drive recovery", result: { observations: "actual check" }, startedAt: new Date("2026-10-26T10:02:00Z"), completedAt: new Date("2026-10-26T10:03:00Z"),
+      } })).rejects.toThrow(/Deployment changed/);
+      expect(smallAcceptance.refresh).not.toHaveBeenCalled();
+    } finally { vi.useRealTimers(); }
+  });
 
   it("requires exactly one primary attach point", async () => {
     await expect(recordRuntimeVerification({
