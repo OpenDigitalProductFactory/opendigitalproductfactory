@@ -189,7 +189,9 @@ transport. It never silently converts pixels into text or changes provider healt
 After an actual adapter response the provider boundary reports the image hashes,
 provider/model and adapter to a server-bound callback. The exact active TaskRun
 fence, request digest and engagement binding must still match before an atomic
-metadata update. A receipt write failure holds specialist completion and cannot
+metadata update under the existing TaskRun row-lock pattern. Read fresh metadata
+after locking and preserve unrelated read provenance; heartbeat timestamps are
+not an execution fence. A receipt write failure holds specialist completion and cannot
 cause another provider call. This is input-delivery provenance, not native closure
 or effect proof and not authorization to retry an unknown execution. Both loop
 completion and final result persistence require this receipt for visual bindings,

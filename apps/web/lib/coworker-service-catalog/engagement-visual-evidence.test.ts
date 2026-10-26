@@ -1,8 +1,12 @@
 import {describe,it,expect,vi} from "vitest";
 import {createHash} from "node:crypto";
 import {loadEngagementVisualEvidence,assertEngagementVisualReadGrants,hasEngagementVisualDelivery,engagementVisualDeliveryRecorder} from "./engagement-visual-evidence";
-const state=vi.hoisted(()=>({task:null as any,write:vi.fn()}));
-vi.mock("@dpf/db",()=>({prisma:{taskRun:{findUnique:async()=>state.task,updateMany:state.write}}}));
+const state=vi.hoisted(()=>({task:null as any,write:vi.fn(),locked:false,race:null as (()=>void)|null}));
+vi.mock("@dpf/db",()=>{
+ const taskRun={findUnique:async()=>{const snapshot=structuredClone(state.task);if(!state.locked)state.race?.();return snapshot;},updateMany:state.write,update:state.write};
+ const tx={$queryRaw:async()=>{state.locked=true;return [];},taskRun};
+ return {prisma:{taskRun,$transaction:async(fn:(tx:unknown)=>Promise<unknown>)=>{try{return await fn(tx);}finally{state.locked=false;state.race?.();}}}};
+});
 const sha=(b:string|Buffer)=>createHash("sha256").update(b).digest("hex");
 const pixels=Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aHNcAAAAASUVORK5CYII=","base64");
 function fixture(){
@@ -50,7 +54,7 @@ describe("provided visual engagement inputs",()=>{
 it("records only matching successful input hashes under the exact active task fence",async()=>{
  const f=fixture(),visual=await loadEngagementVisualEvidence(f.binding,f.deps);
  const fence={schemaVersion:1 as const,reservation:null,dispatchClaim:"attempt-1",authorityDigest:null,requestDigest:"d".repeat(64)};
- state.task={status:"working",updatedAt:new Date(),progressPayload:{dispatch:{claimedAt:"attempt-1"}},a2aMetadata:{engagementBinding:f.binding,requestDigest:fence.requestDigest}};
+ state.task={id:"task-row",status:"working",updatedAt:new Date(),progressPayload:{dispatch:{claimedAt:"attempt-1"}},a2aMetadata:{engagementBinding:f.binding,requestDigest:fence.requestDigest}};
  state.write.mockReset();state.write.mockResolvedValue({count:1});
  const record=engagementVisualDeliveryRecorder("TR-original",f.binding,fence,visual);
  const delivery={sha256:[sha(pixels)],providerId:"codex",modelId:"actual",adapterKind:"codex-cli"};
@@ -63,6 +67,25 @@ it("records only matching successful input hashes under the exact active task fe
  state.write.mockClear();await expect(record({...delivery,sha256:["e".repeat(64)]})).rejects.toThrow(/mismatch/);expect(state.write).not.toHaveBeenCalled();
  state.task.progressPayload.dispatch.claimedAt="attempt-2";
  await expect(record(delivery)).rejects.toThrow(/displaced/);expect(state.write).not.toHaveBeenCalled();
- state.task.progressPayload.dispatch.claimedAt="attempt-1";state.write.mockResolvedValue({count:0});
- await expect(record(delivery)).rejects.toThrow(/displaced/);
+ state.task.progressPayload.dispatch.claimedAt="attempt-1";state.task.status="canceled";state.write.mockClear();
+ await expect(record(delivery)).rejects.toThrow(/displaced/);expect(state.write).not.toHaveBeenCalled();
+ state.task.status="working";state.task.a2aMetadata.engagementBinding={...f.binding,actorAgentId:"other"};
+ await expect(record(delivery)).rejects.toThrow(/displaced/);expect(state.write).not.toHaveBeenCalled();
+});
+
+it("preserves delivery across a benign heartbeat and concurrent provenance append without repeating inference",async()=>{
+ const f=fixture(),visual=await loadEngagementVisualEvidence(f.binding,f.deps);
+ const fence={schemaVersion:1 as const,reservation:null,dispatchClaim:"attempt-1",authorityDigest:null,requestDigest:"d".repeat(64)};
+ state.task={id:"task-row",status:"working",updatedAt:new Date(1000),progressPayload:{dispatch:{claimedAt:"attempt-1"}},a2aMetadata:{engagementBinding:f.binding,requestDigest:fence.requestDigest,unrelated:"retained",engagementReadEvidence:[{executionId:"prior-read"}]}};
+ state.locked=false;
+ state.race=()=>{state.task.updatedAt=new Date(2000);state.task.lastHeartbeatAt=new Date(2000);state.task.a2aMetadata={...state.task.a2aMetadata,engagementReadEvidence:[{executionId:"prior-read"},{executionId:"concurrent-read"}]};};
+ state.write.mockReset();state.write.mockImplementation(async args=>{
+  if(args.where.updatedAt && args.where.updatedAt.getTime()!==state.task.updatedAt.getTime())return {count:0};
+  state.task.a2aMetadata=args.data.a2aMetadata;return {count:1};
+ });
+ try{
+  await expect(engagementVisualDeliveryRecorder("TR-original",f.binding,fence,visual)({sha256:[sha(pixels)],providerId:"codex",modelId:"actual",adapterKind:"codex-cli"})).resolves.toBeUndefined();
+  expect(state.task.a2aMetadata).toMatchObject({unrelated:"retained",engagementReadEvidence:[{executionId:"prior-read"},{executionId:"concurrent-read"}],engagementVisualDelivery:{manifestRef:f.binding.visualEvidenceRef,providerId:"codex"}});
+  expect(state.task.lastHeartbeatAt).toEqual(new Date(2000));expect(state.write).toHaveBeenCalledOnce();
+ }finally{state.race=null;state.locked=false;}
 });

@@ -76,9 +76,13 @@ export function engagementVisualDeliveryRecorder(taskRunId:string,binding:Engage
   if(!visual)return;
   if(canonicalJson(delivery.sha256)!==canonicalJson(visual.provenance.captures.map(c=>c.sha256)))throw new Error("engagement_visual_delivery_mismatch");
   const {prisma}=await import("@dpf/db");
-  const task=await prisma.taskRun.findUnique({where:{taskRunId},select:{status:true,updatedAt:true,progressPayload:true,a2aMetadata:true}}),metadata=record(task?.a2aMetadata);
-  if(!task||task.status!=="working"||!sameTaskExecutionFence(fence,captureTaskExecutionFence(task.progressPayload,metadata.requestDigest))||canonicalJson(metadata.engagementBinding)!==canonicalJson(binding))throw new Error("engagement_visual_delivery_displaced");
-  const saved=await prisma.taskRun.updateMany({where:{taskRunId,status:"working",updatedAt:task.updatedAt},data:{a2aMetadata:{...metadata,engagementVisualDelivery:{version:1,...visual.provenance,deliveredAt:new Date().toISOString(),providerId:delivery.providerId,modelId:delivery.modelId,adapterKind:delivery.adapterKind,dispatchFence:fence}} as Prisma.InputJsonValue}});
-  if(saved.count!==1)throw new Error("engagement_visual_delivery_displaced");
+  // Serialize with the existing source-provenance writer and heartbeats. Read
+  // metadata only after acquiring the TaskRun lock; updatedAt is not an attempt fence.
+  await prisma.$transaction(async tx=>{
+    await tx.$queryRaw`SELECT "id" FROM "TaskRun" WHERE "taskRunId" = ${taskRunId} FOR UPDATE`;
+    const task=await tx.taskRun.findUnique({where:{taskRunId},select:{id:true,status:true,progressPayload:true,a2aMetadata:true}}),metadata=record(task?.a2aMetadata);
+    if(!task||task.status!=="working"||!sameTaskExecutionFence(fence,captureTaskExecutionFence(task.progressPayload,metadata.requestDigest))||canonicalJson(metadata.engagementBinding)!==canonicalJson(binding))throw new Error("engagement_visual_delivery_displaced");
+    await tx.taskRun.update({where:{id:task.id},data:{a2aMetadata:{...metadata,engagementVisualDelivery:{version:1,...visual.provenance,deliveredAt:new Date().toISOString(),providerId:delivery.providerId,modelId:delivery.modelId,adapterKind:delivery.adapterKind,dispatchFence:fence}} as Prisma.InputJsonValue}});
+  });
  };
 }

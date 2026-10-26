@@ -222,3 +222,14 @@ No gate lease was admitted for 01c7; its preclaim quiescence wait is superseded 
 by this corrected frozen candidate. Run affected tests/types/guards and the normal
 canonical integrated gate, protected PR/release and served happy path. Completion
 still requires an actual persisted Critic result and attributable routing disposition.
+
+
+Independent source review found that an updatedAt receipt CAS could mistake a
+benign heartbeat/provenance append for attempt displacement after successful
+inference. Reuse the existing source-provenance transaction and TaskRun FOR UPDATE
+pattern: lock, read fresh metadata, check actual status/fence/binding, and update
+only metadata by the locked row identity. Preserve unrelated provenance and
+heartbeats; cancellation or a real fence/binding change still refuses. The real
+interleaving regression failed against the old code, then passed with this change.
+This also removes the metadata predicate that the heartbeat guard misclassified;
+no guard exception, heartbeat/status write or provider retry is added.
