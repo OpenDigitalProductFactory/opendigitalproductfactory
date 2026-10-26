@@ -21,12 +21,13 @@ vi.mock("@dpf/db", () => ({ prisma: {} }));
 // CI reads retained bytes, never Git history. Updating a fixture requires a new
 // reviewed publication identity and digest; a hand-written old decoder is no proof.
 const historicalSources = {
+  capacity: { path: "../test-support/reassessment-legacy-capacity-contract-v1.txt",
+    sha256: "d8030655237aa34499e6c055594d9c8ca6216027c611ffb36ae1d9ebaa1e945f" },
   review: { path: "../test-support/reassessment-legacy-review-contract-v1.txt",
     sha256: "79a2cdadc7a50623df29d8b7cf3d9f6713d072bddbdd6a4c89048ff1596dd73b" },
   persisted: { path: "../test-support/reassessment-legacy-persisted-request-v1.txt",
     sha256: "b9c91d159c01f5b31d79632f4b1b0deeff3e3aecafe093226a873bb72c9b4cf2" },
 };
-const publishedDigestOwnerSha256 = "d8030655237aa34499e6c055594d9c8ca6216027c611ffb36ae1d9ebaa1e945f";
 
 function publishedModule<T>(source: { path: string; sha256: string }, ports: Record<string, unknown>): T {
   const filename = fileURLToPath(new URL(source.path, import.meta.url));
@@ -50,7 +51,12 @@ function publishedModule<T>(source: { path: string; sha256: string }, ports: Rec
   return module.exports as T;
 }
 
-function legacyOwners(matcher = remoteTaskRequestMatches) {
+function legacyDigestOwner() {
+  return publishedModule<Pick<typeof import("./mcp-task-capacity-contract"), "remoteTaskRequestDigest" | "remoteTaskRequestMatches">>(
+    historicalSources.capacity, { "node:crypto": { createHash } });
+}
+
+function legacyOwners(matcher = legacyDigestOwner().remoteTaskRequestMatches) {
   const review = publishedModule<Pick<typeof import("./mcp-task-review-contract"), "parseInitiativeReviewBinding">>(
     historicalSources.review, {
       "./source-page-lines": sourcePageLines,
@@ -106,9 +112,14 @@ function continueOnlyAcceptedRequest(result: ReturnType<typeof reconstructPersis
 }
 
 describe("published old-worker request integrity", () => {
-  it("uses the unchanged real published request-digest owner", () => {
-    const source = readFileSync(new URL("./mcp-task-capacity-contract.ts", import.meta.url));
-    expect(createHash("sha256").update(source).digest("hex")).toBe(publishedDigestOwnerSha256);
+  it.each([false, true])("preserves published digest behavior for a review with present relation %s", present => {
+    const historical = legacyDigestOwner(), { parsed, row } = storedPacket("design-spec", present);
+    expect(historical.remoteTaskRequestDigest(parsed)).toBe(remoteTaskRequestDigest(parsed));
+    expect(historical.remoteTaskRequestMatches(row.a2aMetadata, parsed)).toBe(true);
+    expect(remoteTaskRequestMatches(row.a2aMetadata, parsed)).toBe(true);
+    const changed = { ...parsed, prompt: `${parsed.prompt} Changed.` };
+    expect(historical.remoteTaskRequestMatches(row.a2aMetadata, changed)).toBe(false);
+    expect(remoteTaskRequestMatches(row.a2aMetadata, changed)).toBe(false);
   });
 
   it.each(["design-spec", "spec-approval"] as const)("refuses a present %s request before preparation, qualification GET or inference", gate => {
