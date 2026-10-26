@@ -4,7 +4,7 @@ import { sameTaskExecutionFence } from "./shared/task-execution-fence";
 import { EXECUTION_UNCERTAIN_MESSAGE, executionUncertaintyFromError, hasExecutionUncertainty } from "./shared/execution-uncertainty";
 import { reservationIdentity, dispatchIdentity, settleRemoteTask } from "./mcp-task-attempt-state";
 import { captureTaskExecutionFence } from "./shared/task-execution-fence";
-import { projectRemoteTaskReplay } from "./mcp-task-replay-projection";
+import { projectRemoteTaskReplay, optionalString, remoteTaskContent } from "./mcp-task-replay-projection";
 import { TASK_IN_FLIGHT_STATES } from "@/lib/tak/task-states";
 import { remoteTaskConversation } from "./mcp-task-conversation";
 import { coworkerBriefSpans } from "@/lib/tak/coworker-prompt-provenance";
@@ -53,14 +53,6 @@ import {
   terminalWriterEscalationWaitReason,
   terminalWriterRetryIsExhausted,
 } from "./mcp-task-terminal-writer-escalation";
-
-function optionalString(value: unknown): string | null {
-  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
-}
-
-function remoteTaskContent(text: string) {
-  return [{ type: "text", text }];
-}
 
 function approvalRequiredEnvelopeId(value: unknown): string | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
@@ -291,9 +283,11 @@ export async function executeRemoteTaskAttempt(input: {
   });
 
   // BI-2E479619: rows a CLI wrote natively during THIS attempt start here.
+  const readEvidencePolicy = parsed.engagementBinding
+    ? (await import("./coworker-service-catalog/engagement-read-completion")).engagementReadCompletion(run.taskRunId, parsed.engagementBinding) : undefined;
   const attemptStartedMs = Date.now();
   try {
-    const runLoop = async () => executeAutonomousAgenticLoop({
+    const runLoop = async () => (await import("./tak/read-evidence-policy")).withReadEvidencePolicy(readEvidencePolicy, async () => executeAutonomousAgenticLoop({
       systemPrompt: conversation.systemPrompt,
       systemPromptInstructionSpans: coworkerBriefSpans(agent.systemPrompt),
       chatHistory: conversation.chatHistory,
@@ -317,7 +311,7 @@ export async function executeRemoteTaskAttempt(input: {
       ...(effortWarrant ? { effortWarrant } : {}),
       ...(terminalToolPolicy ? { terminalToolPolicy } : {}),
       ...(modelRequirements ? { modelRequirements } : {}),
-    });
+    }));
 
     const result = await (parsed.engagementBinding ? withInferenceAuthorityCheck(async () => {
       const { validateEngagementTask } = await import("./coworker-service-catalog/engagement-fulfillment");
@@ -402,6 +396,10 @@ export async function executeRemoteTaskAttempt(input: {
         content: remoteTaskContent(EXECUTION_UNCERTAIN_MESSAGE), isError: false,
       } };
     }
+    const readHold = parsed.engagementBinding ? await (await import("./coworker-service-catalog/engagement-read-completion")).engagementIncompleteOutcome({
+      policy:readEvidencePolicy!,taskRunId:run.taskRunId,result,checkpoint:recoveryCheckpoint,flags:resumedFlag,skip:!!preInferenceResourceWait(result),
+    }) : null;
+    if (readHold) return (await settle(readHold.settlement)) ?? readHold.outcome;
     // The loop is not trusted to self-report a missing writer: main enforces this
     // at the completion boundary (#4925, #4930) so a review cannot pass without
     // the governed writer having been attempted. Ported verbatim into the async

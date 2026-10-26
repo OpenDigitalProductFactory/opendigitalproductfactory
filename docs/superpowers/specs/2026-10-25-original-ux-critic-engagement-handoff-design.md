@@ -123,3 +123,31 @@ Rollback disables new fulfillment admission while retaining compatible readers,
 provenance, identity bindings and fences. Never deploy an older writer capable
 of producing unfenced effects while a task is unresolved. No new table, service,
 provider dependency, grant, identity or runtime configuration is proposed.
+
+
+## Deployed native reader boundary (2026-10-26 correction)
+
+The original attempt reached Codex but declined the textual tool-call protocol
+with no actual source/corpus executions. Tool schemas were present; the native
+MCP transport was missing from that adapter. Add an opt-in exact read-only lane
+using the existing internal user/coworker/task-fenced MCP session. Stage private
+per-child configuration over stdin; require startup, restrict the MCP allowlist
+to the three existing readers, disable shell, use the read-only sandbox, and
+retain the existing owned-child lifetime and private cleanup. No persistent
+credential, new identity, tool grant or operator account configuration is added.
+
+Bind a typed read-evidence completion policy to the server execution lifetime.
+Keep the first immutable request packet complete; use the existing actual page,
+wiki, calibration and result validator. Fold native audit rows once and never
+parse native calls back into duplicate dispatch. Preserve the verified Critic
+JSON before unrelated conversational editing. Exhausted evidence budgets refuse
+further governed readers. Incomplete source/corpus work is unavailable with an
+explicit held, nonresumable missing-proof next action. No initiative writer or
+gating authority is invented.
+
+Neither zero governed DB effects nor an ordinary model reply proves absence of
+historical unrestricted native effects. Generic proof producers remain owned by
+BI-7906C73E. This repair does not manufacture attestation or repeat an unattested
+native execution. Original CE724 remains open for a supported finite recovery
+disposition and real attributable result; a new revision's review must be
+associated separately and cannot silently satisfy the original f52 request.

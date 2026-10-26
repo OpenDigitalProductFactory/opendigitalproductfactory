@@ -130,3 +130,44 @@ profile refresh then makes actual capability evidence available to routing.
 No coworker requirement, clearance, credential or grant is weakened. Related
 catalog BI-59E37E39 remains with its existing ownership; this narrow extractor
 correction is necessary to execute the original CE and is coordinated with E27.
+
+
+## Native read transport correction (2026-10-26)
+
+DEV v2026.10.26 / 966b served verification passed. Same-task dispatch 3 completed
+with zero actual ToolExecution rows. Both known settled Codex turns refused the
+text-described tool protocol even though the private prompt archive contained
+all three schemas. The evidence guard correctly withheld the unverified draft;
+CE-724328D6 is unavailable, not a critique. This is no longer a provider-capacity
+failure. No completed attempt has been replayed.
+
+Reuse the existing internal MCP session transport for a server-bound read-only
+Codex lane: exact three enabled readers, same user/coworker/task execution fence,
+original OAuth and current grant intersection revalidated by every governed
+call, private per-child configuration streamed over stdin, required startup,
+read-only sandbox with shell disabled, owned-child closure and private cleanup.
+No native calls are extracted or dispatched a second time. Fold this attempt's
+native executions once before the evidence guard. Add a read-evidence completion
+policy using existing immutable traversal/profession/calibration provenance;
+bounded in-turn correction must not invent a writer or accept prose as evidence.
+
+A completed legacy INV5 attempt is NOT resumable from zero governed DB calls
+alone: its unrestricted native shell/descendant/credential effects were not
+captured. Preserve that uncertainty; the new restrictive transport is never
+retroactive proof. The existing recovery owner must supply a supported finite
+disposition before CE724 can proceed. No legacy replay has occurred.
+
+Prospective incomplete contributions remain held and nonresumable too unless
+the existing execution-proof producer supplies qualified actual dispatch/native
+closure/effect evidence. No caller-applied profile string authorizes a retry.
+BI-7906C73E retains generic proof-producer ownership. This bounded repair attaches
+native readers, accounts real governed calls once, validates full source/corpus
+contributions, and exposes a truthful missing-proof next action; it adds no
+generic attestation subsystem, writer or unsupported retry. Existing known
+pre-inference capacity recovery and completed-result idempotent observation
+remain intact. Verify source, regression coverage, canonical publication and
+actual served behavior; original f52 critique remains open until the existing
+recovery owner supplies a supported finite disposition and the real result runs.
+
+Official CLI contract: https://learn.chatgpt.com/docs/extend/mcp?surface=cli and
+https://learn.chatgpt.com/docs/config-file/config-reference (2026-10-26).

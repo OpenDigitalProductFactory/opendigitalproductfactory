@@ -41,6 +41,16 @@ describe("bounded advisory engagement fulfillment", () => {
     const result = await fulfillCoworkerEngagement(binding.engagementId, { workroomId: binding.workroomId, stageKey: binding.stageKey, artifactRef }, binding.userId, context as never, fakeDb as never);
     expect(result).toMatchObject({ success: true, data: { status: "completed", fulfillment: { taskRunId: "TR-ORIGINAL" }, result: { summary: "Actual persisted result" } } });
   });
+  it("refuses legacy INV5 with zero governed rows and unknown native capability/closure without dispatch", async () => {
+    const currentBinding={...binding,roomHeadSha:artifactRef.commitSha};
+    const engagement={...snapshot().engagement,status:"unavailable",metadata:{fulfillment:{binding:currentBinding,taskRunId:"TR-ORIGINAL"}}};
+    const observe=vi.fn();const fakeDb={coworkerEngagement:{findFirst:async()=>engagement},workroom:{findUnique:async()=>snapshot().room},taskRun:{findUnique:observe}};
+    const context={agentId:binding.actorAgentId,apiTokenId:"original-oauth",authSource:"oauth",tokenScope:"write",userContext:{userId:binding.userId}};
+    capacityWake.mockClear();
+    const result=await fulfillCoworkerEngagement(binding.engagementId,{workroomId:binding.workroomId,stageKey:binding.stageKey,artifactRef},binding.userId,context as never,fakeDb as never);
+    expect(result).toMatchObject({success:false,error:"engagement_execution_proof_required",data:{engagementId:binding.engagementId,taskRunId:"TR-ORIGINAL",executionRequested:false,resumable:false}});
+    expect(observe).not.toHaveBeenCalled();expect(capacityWake).not.toHaveBeenCalled();
+  });
   it("uses the registered canonical/runtime provider pair and no unrelated aliases", () => {
     expect(engagementProviderIdentityRefs("AGT-906")).toEqual(["AGT-906", "ux-design-critic"]);
     expect(engagementProviderIdentityRefs("ux-design-critic")).toEqual(["AGT-906", "ux-design-critic"]);

@@ -57,3 +57,27 @@ and exhausted attempts do not dispatch. Prior continuation audit history stays
 attached through later waits and terminal results. A provider refusal is not a
 Critic contribution: a completed critique still requires the coworker's actual
 source reads, WSID evidence and persisted result returned to the Workroom.
+
+
+### Native reader failures
+
+The Critic's bounded read lane attaches the authorized source, profession wiki
+and calibrated critique readers directly to Codex through DPF MCP. It preserves
+the original coworker, user, artifact and task fence. A restricted read profile
+cannot run shell commands or write files. It must obtain complete immutable
+artifact pages and actual corpus evidence before its contribution can complete.
+An empty calibration corpus remains an explicit advisory limitation.
+
+Missing evidence produces a held, nonresumable outcome with the missing source
+or corpus requirement. Native closure/effect proof belongs to the existing
+execution-proof producer; this reader repair does not manufacture that proof or
+repeat provider calls to turn missing evidence into a passing contribution.
+The earlier pre-inference capacity wait and completed-result observation paths
+retain their existing bounded, idempotent recovery contracts.
+
+Historical unrestricted CLI attempts without native capability, descendant
+closure and effect evidence remain unavailable for replay even if they returned
+normal text and recorded no governed tools. Their next action names the existing
+recovery owner's supported finite disposition. A newer restricted transport does
+not supply retrospective proof for an earlier attempt. Unknown outcomes and
+unattested native attempts remain held without replacement requests.

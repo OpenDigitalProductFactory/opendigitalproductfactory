@@ -266,7 +266,11 @@ export async function fulfillCoworkerEngagement(engagementId: string, locator: u
   const existing = record(record(engagement.metadata).fulfillment);
   if (existing.taskRunId) {
     if (canonicalJson(existing.binding) !== canonicalJson(binding)) return { success: false, error: "engagement_already_bound", message: "Read the original engagementId without fulfillment to observe its existing task; do not submit a different revision or stage." };
-    if (engagement.status === "failed") {
+    if (engagement.status === "unavailable") {
+      return {success:false,error:"engagement_execution_proof_required",entityId:engagementId,
+        message:"No execution was requested. The original specialist contribution is incomplete and native capability/closure/effect proof is unavailable. Obtain the existing recovery owner's supported finite disposition; do not replay this task or create a replacement request.",
+        data:{engagementId,taskRunId:existing.taskRunId,executionRequested:false,resumable:false}};
+    } else if (engagement.status === "failed") {
     const { resumeUnstartedEngagementTask } = await import("@/lib/coworker-service-catalog/engagement-pre-admission-recovery");
     await resumeUnstartedEngagementTask({ taskRunId: String(existing.taskRunId), binding,
       token: { tokenId: context.apiTokenId, userId, capability: context.tokenScope === "write" || context.tokenScope === "admin" ? "write" : "read", source: context.authSource } });

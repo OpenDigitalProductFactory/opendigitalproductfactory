@@ -171,7 +171,7 @@ async function reconcileEngagementTaskResultInTransaction(taskRunId: string, db:
   const binding = parseEngagementTaskBinding(record(task?.a2aMetadata).engagementBinding);
   if (!task || !binding) return;
   const engagement = await db.coworkerEngagement.findUnique({ where: { engagementId: binding.engagementId } });
-  if (!engagement || !["accepted", "in-progress", "unknown"].includes(engagement.status)) return;
+  if (!engagement || !["accepted", "in-progress", "unknown", "unavailable"].includes(engagement.status)) return;
   const metadata = record(engagement.metadata), association = record(metadata.fulfillment);
   if (association.taskRunId !== taskRunId || canonicalJson(association.binding) !== canonicalJson(binding)) return;
   let status: string = "accepted";
@@ -188,15 +188,17 @@ async function reconcileEngagementTaskResultInTransaction(taskRunId: string, db:
     result = family && !record(task.a2aMetadata).engagementReadFailure && engagementInputDigest(engagement.requestedOutcome, engagement.inputPayload) === binding.inputDigest
       ? validateEngagementContribution(binding, record(task.progressPayload).summary, executions, family.professionKey, engagementReadEvidence(record(task.a2aMetadata).engagementReadEvidence)) : null;
     status = result ? "completed" : "unavailable";
-  } else if (["input-required", "auth-required"].includes(task.status)) status = "unknown";
+  } else if (task.status === "input-required" && record(record(task.progressPayload).engagementEvidenceWait).kind === "incomplete-read-evidence") status = "unavailable";
+  else if (["input-required", "auth-required"].includes(task.status)) status = "unknown";
   const capacityWait = status === "accepted" && task.status === "submitted" ? parseResourceWaitProjection(task.progressPayload) : null;
-  if (status === engagement.status && !result
-    && canonicalJson(association.resourceWait ?? null) === canonicalJson(capacityWait)) return;
   const { waitReason: _priorWait, resourceWait: _priorResourceWait, ...stableAssociation } = association;
+  const incompleteReadAction = "Native capability, descendant closure and effects lack qualified execution proof. Do not replay this execution. Obtain the existing recovery owner's supported finite disposition preserving this engagement and task history.";
   const nextAction = capacityWait ? capacityWait.attempt < RESOURCE_WAIT_MAX_ATTEMPTS
     ? "After inspecting provider routing/availability, repeat the identical fulfillment packet after the recorded retry time to wake this same task; do not create another request."
     : "Capacity retry budget is exhausted. Inspect the original task failure; do not submit a replacement request."
-    : status === "unknown" ? "Reconcile the original execution; do not replay." : status === "unavailable" ? "Inspect actual source/corpus provenance on the original task." : status === "failed" ? "Inspect the original failure and its supported recovery; do not create a replacement request." : status === "completed" ? "Request attributable author disposition in the original Workroom." : "Observe this same engagement and task.";
+    : status === "unknown" ? "Reconcile the original execution; do not replay." : status === "unavailable" ? incompleteReadAction : status === "failed" ? "Inspect the original failure and its supported recovery; do not create a replacement request." : status === "completed" ? "Request attributable author disposition in the original Workroom." : "Observe this same engagement and task.";
+  if (status === engagement.status && !result && (status !== "unavailable" || association.nextAction === nextAction)
+    && canonicalJson(association.resourceWait ?? null) === canonicalJson(capacityWait)) return;
   const written = await db.coworkerEngagement.updateMany({ where: { id: engagement.id, updatedAt: engagement.updatedAt, status: engagement.status }, data: {
     status, completedAt: status === "completed" ? task.completedAt ?? new Date() : null,
     metadata: { ...metadata, fulfillment: { ...stableAssociation, state: status, taskStatus: task.status, nextAction,

@@ -20,6 +20,8 @@ export interface ResolvedProvider {
  * read this. Other adapters ignore it.
  */
 export interface AdapterMcpSession {
+  /** Server-owned exact native read lane; original task authority still gates every call. */
+  readOnlyToolNames?: readonly string[];
   userId: string;
   agentId?: string | null;
   threadId?: string | null;
