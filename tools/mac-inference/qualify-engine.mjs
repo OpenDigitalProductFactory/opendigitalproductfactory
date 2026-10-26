@@ -72,8 +72,14 @@ function metric(response, elapsedMs) {
     cachedTokens:number(usage.prompt_tokens_details?.cached_tokens??t.cache_n),
     prefillMs:number(t.prompt_ms),decodeMs:number(t.predicted_ms),finishReason:response.choices?.[0]?.finish_reason??null};
 }
+export async function guardedLeaseAction({read=ownedLease,act,restore=false,
+  signal=abort.signal,isAuthorityLost=()=>authorityLost}) {
+  await read();
+  if(isAuthorityLost() || (!restore && signal.aborted)) fail('Qualification fenced after authority read');
+  return act();
+}
 async function complete(base, messages, tools, recovery=false) {
-  await ownedLease();
+  return guardedLeaseAction({restore:recovery,act:async()=>{
   const body={model:a['model-ref'],messages,max_tokens:256,temperature:0,seed:476,
     chat_template_kwargs:{enable_thinking:false,preserve_thinking:true},
     ...(tools?{tools,tool_choice:{type:'function',function:{name:'record_result'}}}:{})};
@@ -81,6 +87,7 @@ async function complete(base, messages, tools, recovery=false) {
   const response=await json(base+'/v1/chat/completions',body,recovery?30000:240000,
     recovery?new AbortController().signal:abort.signal);
   return {response,metric:metric(response,performance.now()-start)};
+  }});
 }
 async function testEndpoint(label, base, context) {
   console.log(JSON.stringify({phase:label+'-model-checks'}));
@@ -197,13 +204,14 @@ export function nativeEngineArguments({model,modelRef,port,mmproj}) {
 }
 async function startOwnedEngine(binary,label) {
   if(abort.signal.aborted) fail('Qualification cancelled before engine launch');
-  await ownedLease();
   const port=lease.ports?.[0];let startup='';
   if(!Number.isInteger(port)||port<1024||port>65535) fail('Qualification lease did not reserve a usable native port');
+  await guardedLeaseAction({act:()=>{
   child=spawn(binary,nativeEngineArguments({model:a.model,modelRef:a['model-ref'],port,mmproj:a.mmproj}),
     {stdio:['ignore','pipe','pipe']});
   child.on('error',()=>abort.abort());
   for(const stream of [child.stdout,child.stderr]) stream.on('data',b=>{startup=(startup+b.toString()).slice(-65536);});
+  }});
   const endpoint='http://127.0.0.1:'+port;const readyUntil=Math.min(deadline,Date.now()+120000);
   let ready=false;
   while(Date.now()<readyUntil&&!ready) {
@@ -329,7 +337,6 @@ async function performQualification(root) {
   if(!cache) report.failures.push('Warm-prefix reuse not established on both engines');
 }
 async function restoreDockerBaseline() {
-  await ownedLease();
   const baseline=a['dmr-root'].replace(/\/$/,'')+'/engines/llama.cpp';
   const restore=await complete(baseline,[{role:'user',content:'Reply with OK.'}],undefined,true);
   report.baselineRestored=restore.metric.finishReason==='stop';

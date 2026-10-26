@@ -77,7 +77,7 @@ test('refuses a manifest that declares its own model qualification', async t => 
 
 // Qualification must accept the observed Docker schema without inventing a
 // loading observation, and must keep the Docker engine recoverable on failure.
-const {runnerActivity,restoreAfterQualification,stopOwnedChild,validLeaseExpiry,modelLayerBinding,unloadWithRestorationObligation,nativeEngineArguments,performanceComparison,runOwnedNative}=await import('./qualify-engine.mjs');
+const {runnerActivity,restoreAfterQualification,stopOwnedChild,validLeaseExpiry,modelLayerBinding,unloadWithRestorationObligation,nativeEngineArguments,performanceComparison,runOwnedNative,guardedLeaseAction}=await import('./qualify-engine.mjs');
 test('observed Docker runner schema proves idle without claiming loading capture',()=>{
   assert.deepEqual(runnerActivity([{in_use:false}]),{idle:true,loadingFieldObserved:false});
   assert.equal(runnerActivity([{in_use:true}]).idle,false);
@@ -168,4 +168,19 @@ test('cancelled native helper closes its owned child before returning',async()=>
 test('already-fenced native helper never launches',async()=>{
   const controller=new AbortController();controller.abort();
   await assert.rejects(runOwnedNative('/does-not-exist',[],{},controller.signal),/before launch/);
+});
+
+for(const restore of [false,true]) test('fencing during ownership read prevents '+(restore?'restoration dispatch':'engine launch'),async()=>{
+  let acknowledge,lost=false,acted=false;
+  const result=guardedLeaseAction({read:()=>new Promise(r=>{acknowledge=r;}),restore,
+    isAuthorityLost:()=>lost,signal:new AbortController().signal,act:()=>{acted=true;}});
+  lost=true;acknowledge();
+  await assert.rejects(result,/fenced after authority read/);
+  assert.equal(acted,false);
+});
+test('user cancellation still permits restoration while authority remains valid',async()=>{
+  const controller=new AbortController();controller.abort();let acted=false;
+  await guardedLeaseAction({read:async()=>{},restore:true,isAuthorityLost:()=>false,
+    signal:controller.signal,act:()=>{acted=true;}});
+  assert.equal(acted,true);
 });
