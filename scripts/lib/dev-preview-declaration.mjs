@@ -1,10 +1,35 @@
-import { lstat, realpath, mkdtemp, readFile, writeFile, unlink, rmdir } from 'node:fs/promises';
+import { lstat, realpath, mkdtemp, open, writeFile, unlink, rmdir } from 'node:fs/promises';
+import { constants } from 'node:fs';
 import { join, relative, isAbsolute, sep, posix, win32 } from 'node:path';
 import { previewMountMatches } from '../../packages/integration-shared/src/preview-mount-identity.cjs';
 
 export const PREVIEW_DECLARATION_TARGET = '/workspace/apps/web/next-env.d.ts';
 const sameFile = (left, right) => left.dev === right.dev && left.ino === right.ino;
 const regular = stat => stat.isFile() && !stat.isSymbolicLink();
+const sameSeed = (stat, expected) => regular(stat) && sameFile(stat, expected)
+  && ['size', 'mtimeNs', 'ctimeNs', 'mtimeMs', 'ctimeMs'].every(key => stat[key] === expected[key]);
+
+async function readPreviewSeed(path) {
+  const checked = await lstat(path, { bigint: true });
+  if (!regular(checked)) throw new Error('preview_declaration_seed_invalid');
+  let handle;
+  try {
+    handle = await open(path, constants.O_RDONLY | (constants.O_NONBLOCK ?? 0) | (constants.O_NOFOLLOW ?? 0));
+    const opened = await handle.stat({ bigint: true });
+    if (!sameSeed(opened, checked)) throw new Error('preview_declaration_seed_changed');
+    const bytes = await handle.readFile();
+    const [after, current] = await Promise.all([handle.stat({ bigint: true }), lstat(path, { bigint: true })]);
+    if (!sameSeed(after, opened) || !sameSeed(current, opened) || BigInt(bytes.length) !== opened.size) {
+      throw new Error('preview_declaration_seed_changed');
+    }
+    return bytes;
+  } catch (error) {
+    if (error.code === 'ELOOP') throw new Error('preview_declaration_seed_invalid');
+    throw error;
+  } finally {
+    if (handle) await handle.close();
+  }
+}
 
 export async function createPreviewDeclaration({ worktree, stateDirectory }) {
   const [source, parent] = await Promise.all([realpath(worktree), realpath(stateDirectory)]);
@@ -12,8 +37,7 @@ export async function createPreviewDeclaration({ worktree, stateDirectory }) {
   const outside = isAbsolute(distance) || distance === '..' || distance.startsWith(`..${sep}`);
   if (!outside) throw new Error('preview_declaration_inside_source');
   const seedPath = join(source, 'apps/web/next-env.d.ts');
-  if (!regular(await lstat(seedPath))) throw new Error('preview_declaration_seed_invalid');
-  const bytes = await readFile(seedPath);
+  const bytes = await readPreviewSeed(seedPath);
   const directory = await mkdtemp(join(parent, 'preview-declaration-'));
   const path = join(directory, 'next-env.d.ts');
   try {

@@ -2,14 +2,14 @@
 // Node built-in test runner: node --test
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import fs, { readFileSync, cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { realpath, mkdtemp, mkdir, writeFile, readFile, link, rm, symlink, unlink, lstat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, dirname, resolve } from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { createServer } from 'node:http';
-import { createRequire } from 'node:module';
+import { createRequire, syncBuiltinESMExports } from 'node:module';
 import { createPreviewDeclaration, assertPreviewDeclarationFile, assertPreviewDeclarationMount, previewDeclarationMount, removePreviewDeclaration, reclaimPreviewDeclaration, stopDeclarationWriters, PREVIEW_DECLARATION_TARGET } from './dev-preview-declaration.mjs';
 import { guardShellEnv } from './guard-bash.mjs';
 
@@ -559,6 +559,117 @@ async function fixture(t) {
   await writeFile(join(worktree, 'apps/web/next-env.d.ts'), original);
   return { directory, worktree, stateDirectory };
 }
+
+for (const replacement of ['regular', 'symlink']) {
+  test(`seed path replacement after its regular-file check is refused (${replacement})`, async t => {
+    const input = await fixture(t);
+    const seed = await realpath(join(input.worktree, 'apps/web/next-env.d.ts'));
+    const foreign = join(input.directory, 'foreign-seed');
+    await writeFile(foreign, 'foreign seed bytes');
+    const originalLstat = fs.promises.lstat;
+    let replaced = false;
+    t.mock.method(fs.promises, 'lstat', async (...args) => {
+      const checked = await originalLstat(...args);
+      if (args[0] === seed && !replaced) {
+        replaced = true;
+        if (replacement === 'regular') await fs.promises.rename(foreign, seed);
+        else { await unlink(seed); await symlink(foreign, seed); }
+      }
+      return checked;
+    });
+    syncBuiltinESMExports();
+    let failure;
+    try {
+      await createPreviewDeclaration(input);
+    } catch (error) {
+      failure = error;
+    } finally {
+      t.mock.restoreAll();
+      syncBuiltinESMExports();
+    }
+    assert.equal(replaced, true, 'the real seed pathname changed after its check');
+    assert.ok(failure, 'a raced seed must be refused before foreign bytes can supply backing');
+    assert.match(failure.message, /preview_declaration_seed_(invalid|changed)/);
+    assert.deepEqual(await fs.promises.readdir(input.stateDirectory), [], 'no backing may be created from a raced seed');
+  });
+}
+
+for (const fault of ['open-error', 'stat-error', 'read-error', 'path-swap', 'content-mutation', 'path-missing', 'post-read-stat-error', 'close-error']) {
+  test(`seed descriptor failure refuses backing and closes every opened handle (${fault})`, async t => {
+    const input = await fixture(t);
+    const seed = await realpath(join(input.worktree, 'apps/web/next-env.d.ts'));
+    const foreign = join(input.directory, 'foreign-seed');
+    await writeFile(foreign, 'foreign seed bytes');
+    const originalOpen = fs.promises.open;
+    let opened = false, openCalls = 0, closeCalls = 0, readCalls = 0;
+    t.mock.method(fs.promises, 'open', async (...args) => {
+      openCalls += 1;
+      if (fault === 'open-error') throw Object.assign(new Error('seed-open-fixture-error'), { code: 'EACCES' });
+      const handle = await originalOpen(...args);
+      opened = true;
+      const close = handle.close.bind(handle);
+      t.mock.method(handle, 'close', async (...closeArgs) => {
+        closeCalls += 1;
+        await close(...closeArgs);
+        if (fault === 'close-error') throw new Error('seed-close-fixture-error');
+      });
+      const stat = handle.stat.bind(handle);
+      let statCalls = 0;
+      t.mock.method(handle, 'stat', async (...statArgs) => {
+        statCalls += 1;
+        if (fault === 'stat-error' || (fault === 'post-read-stat-error' && statCalls === 2)) throw new Error('seed-stat-fixture-error');
+        return stat(...statArgs);
+      });
+      const read = handle.readFile.bind(handle);
+      t.mock.method(handle, 'readFile', async (...readArgs) => {
+        readCalls += 1;
+        if (fault === 'read-error') throw new Error('seed-read-fixture-error');
+        const bytes = await read(...readArgs);
+        if (fault === 'path-swap') await fs.promises.rename(foreign, seed);
+        if (fault === 'path-missing') await unlink(seed);
+        if (fault === 'content-mutation') {
+          await writeFile(seed, 'x'.repeat(bytes.length));
+          await fs.promises.utimes(seed, 0, 0);
+        }
+        return bytes;
+      });
+      return handle;
+    });
+    syncBuiltinESMExports();
+    let failure;
+    try { await createPreviewDeclaration(input); } catch (error) { failure = error; }
+    finally { t.mock.restoreAll(); syncBuiltinESMExports(); }
+    assert.ok(failure, 'seed uncertainty must refuse before backing creation');
+    assert.equal(openCalls, 1, 'a refused open is never retried with weaker flags');
+    assert.equal(closeCalls, opened ? 1 : 0, 'every opened seed descriptor closes on failure');
+    assert.equal(readCalls, ['open-error', 'stat-error'].includes(fault) ? 0 : 1);
+    assert.deepEqual(await fs.promises.readdir(input.stateDirectory), []);
+  });
+}
+
+test('the validated seed descriptor closes before backing storage is created', async t => {
+  const input = await fixture(t);
+  const originalOpen = fs.promises.open;
+  let closeCalls = 0;
+  t.mock.method(fs.promises, 'open', async (...args) => {
+    const handle = await originalOpen(...args);
+    const close = handle.close.bind(handle);
+    t.mock.method(handle, 'close', async (...closeArgs) => {
+      const pendingBacking = await fs.promises.readdir(input.stateDirectory);
+      await close(...closeArgs);
+      closeCalls += 1;
+      assert.deepEqual(pendingBacking, []);
+    });
+    return handle;
+  });
+  syncBuiltinESMExports();
+  let declaration;
+  try { declaration = await createPreviewDeclaration(input); }
+  finally { t.mock.restoreAll(); syncBuiltinESMExports(); }
+  assert.equal(closeCalls, 1);
+  assert.equal(await readFile(declaration.path, 'utf8'), original);
+  await removePreviewDeclaration(declaration);
+});
 
 test('owned declaration uses exact seed bytes, private regular files and fresh attempt identity', async t => {
   const input = await fixture(t);
