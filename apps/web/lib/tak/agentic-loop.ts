@@ -1530,8 +1530,8 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     }
     if (readEvidencePolicy) {
       if (!result.toolCalls?.length) {
-        const {readEvidenceExit} = await import("./read-evidence-policy");
-        const exit = readEvidenceExit(await readEvidencePolicy.inspect(result.content));
+        const {readEvidenceExit,inspectReadEvidenceContribution} = await import("./read-evidence-policy");
+        const exit = readEvidenceExit(await inspectReadEvidenceContribution(result.content));
         if (exit.kind === "blocked") return completeResult(exit.message, result, {failure:{kind:"policy-or-capability",message:exit.message}});
         acceptReadEvidenceContribution(result.content);
         // Immutable specialist evidence owns this typed contribution. Generic

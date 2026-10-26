@@ -314,6 +314,8 @@ export async function executeRemoteTaskAttempt(input: {
         executedToolCount: result.executedTools?.length ?? 0,
         capacityAttempt: input.capacityAttempt,
         ...(persistedOutcome ? { reviewOutcome: persistedOutcome } : {}),
+        ...(parsed.engagementBinding&&result.readEvidenceInspection&&!result.readEvidenceInspection.check.complete
+          ?{engagementContributionAttempt:{version:1,validated:false,...result.readEvidenceInspection}}:{}),
       },
     });
 
