@@ -77,7 +77,7 @@ test('refuses a manifest that declares its own model qualification', async t => 
 
 // Qualification must accept the observed Docker schema without inventing a
 // loading observation, and must keep the Docker engine recoverable on failure.
-const {runnerActivity,restoreAfterQualification,stopOwnedChild,validLeaseExpiry,modelLayerBinding,unloadWithRestorationObligation,nativeEngineArguments,performanceComparison,runOwnedNative,guardedLeaseAction,authorityAwareSignal}=await import('./qualify-engine.mjs');
+const {runnerActivity,restoreAfterQualification,stopOwnedChild,validLeaseExpiry,modelLayerBinding,unloadWithRestorationObligation,nativeEngineArguments,performanceComparison,runOwnedNative,guardedLeaseAction,authorityAwareSignal,validateBaselineReport,MATCHED_ENGINE_SETTINGS,recordAuthorityFence,validateOwnedLease}=await import('./qualify-engine.mjs');
 test('observed Docker runner schema proves idle without claiming loading capture',()=>{
   assert.deepEqual(runnerActivity([{in_use:false}]),{idle:true,loadingFieldObserved:false});
   assert.equal(runnerActivity([{in_use:true}]).idle,false);
@@ -194,4 +194,37 @@ test('authority fence aborts an in-flight recovery request independently of user
   authority.abort();
   await assert.rejects(pending,/request aborted/);
   assert.equal(signal.aborted,true);
+});
+
+function baselineFixture() {
+  const current={package:{manifestSha256:'package'},model:{ociDigest:'model',ggufSha256:'weights',binding:{projectorLayerDigest:'projector'}},tensorControls:{device:'device'}};
+  const previous=structuredClone({...current,schemaVersion:1,baselineRestored:true,
+    baselineEngine:{sha256:'binary'},finishedAt:new Date().toISOString(),
+    runtimeConfiguration:[{engine:'docker-baseline',settings:MATCHED_ENGINE_SETTINGS,effectiveContext:131072,effectiveSlots:4}],
+    results:['arithmetic','tool-call-format','long-cold','long-warm'].map(c=>({engine:'docker-baseline',case:c,correct:true,promptTokens:32011,cachedTokens:c==='long-warm'?32000:0,prefillMs:100,finishReason:c==='tool-call-format'?'tool_calls':'stop'}))});
+  return {previous,current};
+}
+test('reuse accepts only a restored, completed and matching recent baseline',()=>{
+  const {previous,current}=baselineFixture();
+  assert.equal(validateBaselineReport(previous,current,'binary').rows.length,4);
+  for(const mutate of [p=>p.model.ggufSha256='other',p=>p.baselineRestored=false,p=>p.results[0].correct=false,p=>p.results[2].promptTokens=null,p=>p.results[3].cachedTokens=0,p=>p.runtimeConfiguration[0].settings.slots=2,p=>p.finishedAt='not-a-date']) {
+    const copy=structuredClone(previous);mutate(copy);
+    assert.throws(()=>validateBaselineReport(copy,current,'binary'));
+  }
+});
+test('fence evidence survives a supervised run rejecting during cancellation',async()=>{
+  const {superviseLeaseRun}=await import('../../scripts/lib/lease-supervisor.mjs');
+  const target={};let rejectRun;
+  const running=new Promise((resolve,reject)=>{rejectRun=reject;});
+  await assert.rejects(superviseLeaseRun({ttlMs:300,expiresAt:new Date(Date.now()+30).toISOString(),safetyMarginMs:1,
+    run:()=>running,renew:async()=>({success:false,error:'lease_lost'}),release:async()=>{},
+    terminate:async()=>{recordAuthorityFence(target);rejectRun(Error('fenced request'));}}),/fenced request/);
+  assert.match(target.backendEffectSettlement,/unknown after authority fence/);
+});
+
+test('qualification refuses unbound, queued and foreign reservations',()=>{
+  const v={leaseId:'own',status:'active',phase:'running',slotManifestVersion:1,environmentKey:'local-integration-ci',ownerSessionId:'session',branchName:'codex/mac-metal-engine-package',expiresAt:new Date(Date.now()+60000).toISOString()};
+  const expected={id:'own',owner:'session'};
+  assert.equal(validateOwnedLease(v,expected).leaseId,'own');
+  for(const change of [{phase:'admitted-unbound'},{status:'queued'},{ownerSessionId:'other'},{branchName:'other'},{expiresAt:'invalid'}]) assert.throws(()=>validateOwnedLease({...v,...change},expected),/not proven/);
 });

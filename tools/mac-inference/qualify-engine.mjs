@@ -14,7 +14,7 @@ import { superviseLeaseRun,admittedLeaseTtlMs } from '../../scripts/lib/lease-su
 const exec = promisify(execFile);
 let a = {};
 function argumentsFromCLI() { return parseArgs({ options: Object.fromEntries(
-  ['package','sdk','out','lease-id','owner-session','model','model-ref','model-digest','oci-manifest','mmproj','baseline-engine','baseline-engine-sha256','dmr-root'].map(k=>[k,{type:'string'}])) }).values; }
+  ['package','sdk','out','lease-id','owner-session','model','model-ref','model-digest','oci-manifest','mmproj','baseline-engine','baseline-engine-sha256','baseline-report','dmr-root'].map(k=>[k,{type:'string'}])) }).values; }
 const report = { schemaVersion:1, status:'incomplete', runtimeFilesChanged:false, providerConfigurationChanged:false,
   physicalOlderMacCoverage:'unrun', platformWorkflowIntegration:'unrun', results:[], failures:[] };
 let child, workspace, lease, deadline, connection;
@@ -47,16 +47,27 @@ export async function unloadWithRestorationObligation(report, unload) {
   await unload();
   report.baselineUnloadAcknowledged=true;
 }
-async function ownedLease() {
-  const r = await mcpCall('list_nonprod_environment_leases', {}, connection);
-  if (r?.success !== true) fail('Lease ownership unavailable');
-  const matches=(r.data?.leases??[]).filter(x=>x.leaseId===a['lease-id']);
-  const v=matches[0];
-  if (matches.length!==1 || v.status!=='active' || v.environmentKey!=='local-integration-ci'
-    || v.ownerSessionId!==a['owner-session'] || v.branchName!=='codex/mac-metal-engine-package'
-    || !validLeaseExpiry(v.expiresAt)) fail('Exact active qualification lease not proven');
-  lease=v;
+export function validateOwnedLease(v,expected) {
+  if(!v || v.leaseId!==expected.id || v.status!=='active' || v.phase!=='running'
+    ||v.slotManifestVersion!==1||v.environmentKey!=='local-integration-ci'
+    ||v.ownerSessionId!==expected.owner||v.branchName!=='codex/mac-metal-engine-package'
+    ||!validLeaseExpiry(v.expiresAt)) fail('Exact active bound qualification lease not proven');
   return v;
+}
+async function ownedLease() {
+  // The supervisor refreshes this exact authority through real renewals.
+  // Do not poll the environment inventory on every model request/drain check.
+  if(!lease) {
+    const r=await mcpCall('list_nonprod_environment_leases',{},connection);
+    if(r?.success!==true) fail('Lease ownership unavailable');
+    const matches=(r.data?.leases??[]).filter(x=>x.leaseId===a['lease-id']);
+    if(matches.length!==1) fail('Exact qualification lease not found');
+    lease=matches[0];
+  }
+  return validateOwnedLease(lease,{id:a['lease-id'],owner:a['owner-session']});
+}
+export function recordAuthorityFence(target) {
+  target.backendEffectSettlement='unknown after authority fence; HTTP abort is not effect settlement';
 }
 export function authorityAwareSignal(cancellation,authority,timeoutMs) {
   return AbortSignal.any([cancellation,authority,AbortSignal.timeout(timeoutMs)]);
@@ -230,8 +241,8 @@ async function startOwnedEngine(binary,label) {
   if(!ready) fail('Owned '+label+' readiness timed out');
   const evidenceLines=[...startupEvidence].slice(-40);
   (report.nativeStartupEvidence??=[]).push({engine:label,lines:evidenceLines});
-  if(label==='corrected-candidate' && (!evidenceLines.some(x=>/has tensor\s*=\s*true/.test(x))
-    || evidenceLines.some(x=>/tensor API is not supported/.test(x)))) fail('Loaded candidate did not establish tensor support');
+  if(label==='corrected-candidate' && (evidenceLines.some(x=>/has tensor\s*=\s*false|tensor API is not supported/.test(x))
+    ||!report.packageBackendControl?.backendInitialized)) fail('Loaded candidate rejected verified tensor support');
   const props=await json(endpoint+'/props',undefined,3000);
   if(props.default_generation_settings?.n_ctx!==MATCHED_ENGINE_SETTINGS.context
     || props.total_slots!==MATCHED_ENGINE_SETTINGS.slots
@@ -254,7 +265,7 @@ export function performanceComparison(before,after,configurationCount) {
     scope:'Same immutable model/projector, explicit shared native engine arguments and verified effective context/slots; one cold sample per engine, not live service or fleet performance'};
 }
 async function main() {
-  for (const key of ['package','sdk','out','lease-id','owner-session','model','model-ref','model-digest','oci-manifest','baseline-engine','baseline-engine-sha256','dmr-root']) {
+  for (const key of ['package','sdk','out','lease-id','owner-session','model','model-ref','model-digest','oci-manifest','baseline-engine','baseline-engine-sha256','baseline-report','dmr-root']) {
     if (!a[key]) fail('--'+key+' is required');
   }
   if(platform()!=='darwin'||arch()!=='arm64') fail('Native qualification requires an Apple Silicon Mac');
@@ -271,24 +282,48 @@ async function main() {
         leaseId:lease.leaseId,ownerSessionId:a['owner-session'],ttlMinutes:2},connection);
       if(r?.success===true) {
         const v=r.data?.lease;
-        if(v?.leaseId!==lease.leaseId || v.ownerSessionId!==a['owner-session']
-          || v.status!=='active' || !validLeaseExpiry(v.expiresAt))
-          return {success:false,error:'qualification_lease_renewal_unproven'};
+        try {validateOwnedLease(v,{id:a['lease-id'],owner:a['owner-session']});}
+        catch {return {success:false,error:'qualification_lease_renewal_unproven'};}
         lease=v;
       }
       return r;
     },
-    terminate:async()=>{authorityLost=true;authorityAbort.abort();abort.abort();await stopAllOwnedProcesses();},
+    terminate:async()=>{recordAuthorityFence(report);authorityLost=true;authorityAbort.abort();abort.abort();await stopAllOwnedProcesses();},
     // Cleanup/restoration and the native release remain visible to the owning agent.
     release:async()=>{},
     onEvent:event=>{if(event.type!=='released') (report.leaseEvents??=[]).push(event);},
   });
   if(supervision.status==='fenced') {report.backendEffectSettlement='unknown after authority fence; HTTP abort is not effect settlement';fail('Qualification fenced: '+supervision.reason);}
 }
+export function validateBaselineReport(previous,current,expectedBinarySha) {
+  if(previous.schemaVersion!==1 || previous.baselineRestored!==true
+    || previous.baselineEngine?.sha256!==expectedBinarySha
+    || previous.package?.manifestSha256!==current.package.manifestSha256
+    || previous.model?.ociDigest!==current.model.ociDigest
+    || previous.model?.ggufSha256!==current.model.ggufSha256
+    || previous.model?.binding?.projectorLayerDigest!==current.model.binding?.projectorLayerDigest
+    || previous.tensorControls?.device!==current.tensorControls.device) fail('Baseline report identity mismatch');
+  const age=Date.now()-Date.parse(previous.finishedAt);
+  if(!Number.isFinite(age)||age<0||age>60*60000) fail('Baseline report outside one-hour comparison window');
+  const configs=previous.runtimeConfiguration?.filter(x=>x.engine==='docker-baseline')??[];
+  if(configs.length!==1 || JSON.stringify(configs[0].settings)!==JSON.stringify(MATCHED_ENGINE_SETTINGS)
+    ||configs[0].effectiveContext!==MATCHED_ENGINE_SETTINGS.context
+    ||configs[0].effectiveSlots!==MATCHED_ENGINE_SETTINGS.slots) fail('Baseline report configuration mismatch');
+  const rows=previous.results?.filter(x=>x.engine==='docker-baseline')??[];
+  const cases=['arithmetic','tool-call-format','long-cold','long-warm'];
+  if(rows.length!==4||cases.some(c=>rows.filter(x=>x.case===c&&x.correct===true).length!==1)
+    ||rows.some(x=>!Number.isSafeInteger(x.promptTokens)||x.promptTokens<=0||!['stop','tool_calls'].includes(x.finishReason))
+    ||rows.find(x=>x.case==='long-cold').cachedTokens!==0
+    ||!(rows.find(x=>x.case==='long-cold').prefillMs>0)
+    ||!(rows.find(x=>x.case==='long-warm').cachedTokens>0)) fail('Baseline report completion/cache evidence missing');
+  return {rows,configuration:configs[0]};
+}
 async function performQualification(root) {
   const verified=await verifyPackage(a.package);
   report.package={version:verified.version,manifestSha256:verified.manifestSha256,fileCount:verified.fileCount};
   report.leaseId=lease.leaseId;report.startedAt=new Date().toISOString();
+  report.qualifierSource={sha256:await hashFile(fileURLToPath(import.meta.url)),
+    probeSha256:await hashFile(fileURLToPath(new URL('./metal-language-probe.m',import.meta.url)))};
   const management=root.href.replace(/\/$/,'');
   await runnersIdle(management);
   workspace=await mkdtemp(join(tmpdir(),'dpf-metal-qualification-'));
@@ -298,6 +333,12 @@ async function performQualification(root) {
   report.tensorControls=JSON.parse((await runOwnedNative(probe,[],{timeout:30000})).stdout);
   const control=report.tensorControls.controls;
   if (!control.find(x=>x.mode==='tensor')?.pipelineOK||!control.find(x=>x.mode==='fallback')?.fallbackUnchanged) fail('Tensor/fallback control failed');
+  const backendControl=await runOwnedNative(probe,[join(a.package,'bin/libggml-metal.dylib')],{timeout:60000});
+  report.packageBackendControl={...JSON.parse(backendControl.stdout),
+    evidence:backendControl.stderr.split('\n').filter(x=>/has tensor|tensor API|error compiling source/.test(x))};
+  if(!report.packageBackendControl.backendInitialized
+    ||!report.packageBackendControl.evidence.some(x=>/has tensor\s*=\s*true/.test(x))
+    ||report.packageBackendControl.evidence.some(x=>/tensor API is not supported/.test(x))) fail('Packaged backend tensor self-test failed');
   const version=await runOwnedNative(join(a.package,'bin/llama-server'),['--version'],{timeout:30000,maxBuffer:1024*1024});
   report.engineVersion=(version.stdout+version.stderr).split('\n').filter(x=>/version:|build =|built with/.test(x));
   if (!report.engineVersion.some(x=>x.includes('72874f5-dpf-metal4.1'))) fail('Candidate build identity missing');
@@ -318,18 +359,31 @@ async function performQualification(root) {
   report.model.binding=modelLayerBinding(await readFile(a['oci-manifest']),card.id,
     report.model.ggufSha256,report.model.bytes,projector);
   await runnersIdle(management);
+  let reused;
+  if(a['baseline-report']) {
+    if((await stat(a['baseline-report'])).size>1024*1024) fail('Baseline report too large');
+    const raw=await readFile(a['baseline-report']);
+    reused=validateBaselineReport(JSON.parse(raw),report,a['baseline-engine-sha256']);
+    report.baselineReuse={reportSha256:sha256(raw),comparisonWindow:'separate coordinated windows within one hour; not simultaneous A/B',
+      validation:'same package manifest, native engine binary, model, device and explicit profile; completed/cache controls and Docker restoration'};
+    report.results.push(...reused.rows);
+    (report.runtimeConfiguration??=[]).push(reused.configuration);
+  }
   await unloadWithRestorationObligation(report,()=>exec('docker',['model','unload',a['model-ref']],{timeout:30000}));
-  const baseline=await startOwnedEngine(a['baseline-engine'],'docker-baseline');
+  const first=await startOwnedEngine(reused?join(a.package,'bin/llama-server'):a['baseline-engine'],
+    reused?'corrected-candidate':'docker-baseline');
   let lines=2500;
   const makeContext=n=>'DPF_MAC_ENGINE_QUALIFICATION_V1\n'+Array.from({length:n},(_,i)=>'Record '+String(i).padStart(4,'0')+' is archived.').join('\n')+'\nThe benchmark marker is MATCH731.';
-  const initial=await json(baseline+'/tokenize',{model:a['model-ref'],content:makeContext(lines)},30000);
+  const initial=await json(first+'/tokenize',{model:a['model-ref'],content:makeContext(lines)},30000);
   if(!Array.isArray(initial.tokens)||initial.tokens.length===0) fail('Exact tokenizer count unavailable');
   lines=Math.max(1,Math.min(6000,Math.floor(lines*32000/initial.tokens.length)));
   const context=makeContext(lines);
-  await testEndpoint('docker-baseline',baseline,context);
-  await stopCandidate();
-  const candidate=await startOwnedEngine(join(a.package,'bin/llama-server'),'corrected-candidate');
-  await testEndpoint('corrected-candidate',candidate,context);
+  if(!reused) {
+    await testEndpoint('docker-baseline',first,context);
+    await stopCandidate();
+    const candidate=await startOwnedEngine(join(a.package,'bin/llama-server'),'corrected-candidate');
+    await testEndpoint('corrected-candidate',candidate,context);
+  } else await testEndpoint('corrected-candidate',first,context);
   await stopCandidate();
   // Restore the same Docker model with a bounded synthetic completion before releasing the window.
   await restoreDockerBaseline();
