@@ -18,6 +18,7 @@ import { runArchitectureParitySteward } from "@/lib/ea/architecture-parity-stewa
 import { runConsolidationParitySteward } from "@/lib/ea/consolidation-parity-steward";
 import { computeNextCronRun, isOneShotCron } from "@/lib/operate/cron-next-run";
 import { extractScheduledTaskSummary } from "./agent-task-scheduler-summary";
+import { readWorkroomStageTaskConfig } from "@/lib/scheduling/workroom-stage-task-config";
 import { formatScheduledTurnPrompt } from "./scheduled-turn-prompt";
 import {
   classifyScheduledRequiredTools, scheduledToolsNeedingPin, scheduledRunLastStatus,
@@ -442,6 +443,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       proactivity,
       delegatedPosture,
     });
+    await prisma.scheduledAgentTask.update({ where: { taskId }, data: { taskRunId: taskRunRef.taskRunId } });
 
     await createTaskMessage({
       taskRunId: taskRunRef.taskRunId,
@@ -486,7 +488,6 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
     const externalAccess = await resolveScheduledTurnExternalAccess(task.agentId);
     const roomStage = task.taskId.startsWith("workroom-")
       ? await (await import("@/lib/work-management/room-stage-mandate")).loadScheduledRoomAuthorityLive({ taskRunId: taskRunRef.taskRunId, agentId: task.agentId }) : null;
-    if (roomStage?.withheldBecause) throw new Error(`Scheduled room authority withheld: ${roomStage.withheldBecause}`);
     const roomTurn = roomStage?.roomTurn;
     // BI-CAP-F2D39F8F budgets attachment to the serving model. A prompt that NAMES
     // a governed writer declares a dependency on it, so it is pinned inside the
@@ -550,7 +551,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       agentId: task.agentId,
       threadId: thread.id,
       taskRunId: taskRunRef.taskRunId,
-      proposeSideEffects: boundary === "propose" || Boolean(roomTurn),
+      proposeSideEffects: boundary === "propose" || Boolean(roomTurn) || Boolean(roomStage?.withheldBecause),
       ...(roomTurn ? { roomTurn } : {}),
       ...(Object.keys(modelRequirements).length > 0 ? { modelRequirements } : {}),
     };
@@ -615,10 +616,10 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
     // records status=failed and the BI-754C9E82 retry cadence takes over,
     // instead of completing quietly with a healthy lastStatus. BI-D48B3B0F: judge what the run PERSISTED too.
     const verdictTools = withPersistedExecutions(executedTools, await prisma.toolExecution.findMany({ where: { taskRunId: taskRunRef.taskRunId, success: true }, select: { toolName: true, result: true } }));
+    const requiredTools = classifyScheduledRequiredTools({ prompt: task.prompt, authorizedTools: [...tools, ...deferredTools], executedTools: verdictTools, preservePendingApprovals: Boolean(readWorkroomStageTaskConfig(task.taskConfig)) });
     const runFailure = detectScheduledRunFailure({ prompt: task.prompt, authorizedTools: [...tools, ...deferredTools], executedTools: verdictTools, content: result.content, attachedToolNames });
-    if (runFailure) throw new Error(`Scheduled run produced no governed work (${runFailure}). ${result.content ?? ""}`.trim());
+    if (runFailure && requiredTools.kind !== "proposed") throw new Error(`Scheduled run produced no governed work (${runFailure}). ${result.content ?? ""}`.trim());
 
-    const requiredTools = classifyScheduledRequiredTools({ prompt: task.prompt, authorizedTools: [...tools, ...deferredTools], executedTools: verdictTools });
     const scheduledSummary = extractScheduledTaskSummary(executedTools);
     const taskMessageContent = scheduledSummary?.compactStatus ?? result.content ?? "(No response)";
     const playbookRunStatus =
@@ -672,10 +673,8 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       });
     }
 
-    // Update task status and schedule next run. A one-shot ("Once") task
-    // deactivates after firing instead of re-arming a year later (BI-D72CC945).
     const oneShot = isOneShotCron(task.schedule);
-    const nextRunAt = oneShot ? null : computeNextCronRun(task.schedule, now);
+    const nextRunAt = oneShot || requiredTools.kind === "proposed" && readWorkroomStageTaskConfig(task.taskConfig) ? null : computeNextCronRun(task.schedule, now);
     await prisma.scheduledAgentTask.update({
       where: { taskId },
       data: {

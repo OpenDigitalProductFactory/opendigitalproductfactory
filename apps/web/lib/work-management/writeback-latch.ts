@@ -16,6 +16,7 @@
 // protection is kept (a 96x reduction); the deadlock is not.
 
 import { isRecord } from "@/lib/shared/coerce";
+import type { ApprovalOutcomeState } from "@/lib/coworker/approval-outcome";
 
 import { WORKROOM_DRIVE_STALL_TICKS } from "./workroom-drive-hold";
 import { EXECUTOR_WRITEBACK_UNAVAILABLE_REASON } from "./workroom-drive-receipts";
@@ -102,6 +103,8 @@ export type StageRunObservation = {
   lastRunAt: string | null;
   lastStatus: string | null;
   lastError: string | null;
+  /** Exact recorded outcome(s) for this task's last proposed run. Missing stays held. */
+  approvalOutcome?: ApprovalOutcomeState;
 };
 
 /** Failed attempts at one stage in one cycle, carried on the drive snapshot. */
@@ -120,7 +123,8 @@ export type WritebackLatchDecision =
   | { hold: true; why: "outstanding"; keepTaskActive: true; retry: WritebackRetry | null }
   | { hold: true; why: "backoff"; retryAt: string; retry: WritebackRetry }
   | { hold: true; why: "exhausted"; retry: WritebackRetry }
-  | { hold: true; why: "cycle"; retry: WritebackRetry | null };
+  | { hold: true; why: "cycle"; retry: WritebackRetry | null }
+  | { hold: true; why: "approval"; outcome: ApprovalOutcomeState; retry: WritebackRetry | null };
 
 const time = (value: string | null | undefined): number => (typeof value === "string" ? Date.parse(value) : Number.NaN);
 
@@ -144,6 +148,11 @@ export function decideWritebackLatch(input: {
     return writebackLatchHolds({ prior, stageKey, currentCycleKey, blocked: input.blocked })
       ? { hold: true, why: "cycle", retry }
       : { hold: false, retry };
+  }
+  // The task's recorded proposal is sufficient to retain the wait, even when
+  // an older dispatch has no checkpoint or the calendar has rolled over.
+  if (run?.stageKey === stageKey && run.lastStatus === "proposed" && run.approvalOutcome !== "executed") {
+    return { hold: true, why: "approval", outcome: run.approvalOutcome ?? "unknown", retry };
   }
   const tried = prior
     ? prior.stageKey === stageKey

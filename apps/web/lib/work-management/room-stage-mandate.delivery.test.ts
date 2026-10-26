@@ -17,6 +17,7 @@ const denied: Array<[string, (f: Fixture) => void]> = [
   ["foreign room effect", f => { f.input.params.capsuleId = "WC-OTHER"; }],
   ["foreign stage effect", f => { f.input.params.stageKey = "reproduce"; }],
   ["undeclared evidence kind", f => { f.input.params.kind = "acceptance-receipt"; }],
+  ["blank evidence summary", f => { f.input.params.summary = "  "; }],
   ["invalid outcome", f => { f.input.params.outcome = "approved"; }],
   ["different calling actor", f => { f.input.agentIds = ["other-agent"]; }],
   ["changed run actor", f => { f.run.currentAgentId = "other-agent"; }],

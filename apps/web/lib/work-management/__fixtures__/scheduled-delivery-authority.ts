@@ -23,10 +23,10 @@ export function scheduledDeliveryFixture(runStatus = "working") {
   });
   const room = {
     id: "room-row", capsuleId: CAPSULE, status: "working", archivedAt: null as Date | null,
-    backlogItemId: "BI-TEST", scopeClaims: [buildWorkShapeClaim("delivery-small@1.0.0")] as unknown,
+    backlogItemId: "BI-TEST", ownerUserId: "owner", scopeClaims: [buildWorkShapeClaim("delivery-small@1.0.0")] as unknown,
     workspaceState: { workroomDispatchCheckpoint: checkpoint, workroomDrive: { stageKey: "repair", runKey: "cycle-1" } },
   };
-  const task = { taskId: TASK, agentId: AGENT, ownerUserId: "owner", isActive: true,
+  const task = { taskId: TASK, taskRunId: "TR-SCHED-DELIVERY", agentId: AGENT, ownerUserId: "owner", isActive: true,
     taskConfig: { workroomStage: stage, workroomDispatchCheckpoint: checkpoint } };
   const run = { taskRunId: "TR-SCHED-DELIVERY", currentAgentId: AGENT, userId: "owner",
     status: runStatus, archivedAt: null as Date | null, startedAt: new Date(NOW.getTime() - 500),
@@ -38,7 +38,8 @@ export function scheduledDeliveryFixture(runStatus = "working") {
       shapeActionBoundary: null, participants: [{ principalId: "agent", roles: ["author"] }], agentPrincipalId: "agent" },
     agentGrants: ["workroom_evidence_write"], platformDefaultActionBoundary: "preauthorized",
   });
-  const db = { taskRun: { findUnique: vi.fn(async () => run) },
+  const agent = { id: "agent-row", agentId: "AGT-BUILD-SPECIALIST", slugId: AGENT, governanceProfile: null as { hitlPolicy: string } | null };
+  const db = { agent: { findFirst: vi.fn(async () => agent) }, taskRun: { findUnique: vi.fn(async () => run) },
     scheduledAgentTask: { findUnique: vi.fn(async () => task) },
     workroom: { findMany: vi.fn(async () => [room]) } };
   room.workspaceState.workroomDispatchCheckpoint = structuredClone(checkpoint);
@@ -52,8 +53,8 @@ export function scheduledDeliveryFixture(runStatus = "working") {
   };
   const input = { taskRunId: run.taskRunId, agentIds: [AGENT],
     toolName: "record_workroom_evidence",
-    params: { capsuleId: CAPSULE, stageKey: "repair", kind: "passing-test", outcome: "completed" } };
-  return { db, deps, input, room, run, task, checkpoint, roomTurn };
+    params: { capsuleId: CAPSULE, stageKey: "repair", kind: "passing-test", outcome: "completed", summary: "The repair passes its focused acceptance test" } };
+  return { db, deps, input, room, run, task, checkpoint, roomTurn, agent };
 }
 
 export { NOW as SCHEDULED_DELIVERY_NOW };

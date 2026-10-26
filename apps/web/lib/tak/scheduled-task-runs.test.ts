@@ -107,6 +107,20 @@ describe("classifyScheduledRequiredTools (BI-4F64C5D3)", () => {
   const REQUIRED = [{ name: "run_hive_scout_ingest", sideEffect: true }];
   const PROMPT = "Invoke run_hive_scout_ingest once before writing any summary.";
 
+  it.each(["proposal", "envelope"])("retains a Workroom's pending %s beside a successful same-tool call and an absent different write", async (kind) => {
+    const { classifyScheduledRequiredTools } = await import("./scheduled-task-runs");
+    const input = { prompt: "Call record_workroom_evidence and create_backlog_item.",
+      authorizedTools: [{ name: "create_backlog_item", sideEffect: true }, { name: "record_workroom_evidence", sideEffect: true }],
+      executedTools: [
+        { name: "record_workroom_evidence", result: kind === "proposal"
+          ? { success: true, data: { status: "proposed" } } : { success: false, error: "approval_required" } },
+        { name: "record_workroom_evidence", result: { success: true } },
+      ] };
+    expect(classifyScheduledRequiredTools({ ...input, preservePendingApprovals: true }))
+      .toEqual({ kind: "proposed", toolName: "record_workroom_evidence" });
+    expect(classifyScheduledRequiredTools(input)).toEqual({ kind: "absent", toolName: "create_backlog_item" });
+  });
+
   it("calls a landed mutation executed", async () => {
     const { classifyScheduledRequiredTools } = await import("./scheduled-task-runs");
     expect(

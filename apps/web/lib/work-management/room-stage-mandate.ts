@@ -6,7 +6,7 @@ import { coworkerAuthorityAgentId } from "@/lib/coworker-identity";
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 import { readWorkroomStageTaskConfig } from "@/lib/scheduling/workroom-stage-task-config";
 import { isRecord } from "@/lib/shared/coerce";
-import { boundStagePrincipal, parseAccountablePrincipalRef, workroomDriveTaskId } from "./drive-resolution";
+import { boundStagePrincipal, parseAccountablePrincipalRef, workroomDriveTaskId, workroomDriveBranchTaskId } from "./drive-resolution";
 import { isDeliveryShapeKey, DELIVERY_XLARGE_SHAPE_KEY, DELIVERY_AUTHOR_ROLE, DELIVERY_AUTHOR_EVIDENCE_TOOL as EVIDENCE_WRITER } from "./delivery-shapes";
 import type { AuthorStageAutonomyFor } from "./author-stage-autonomy-live";
 import type { RoomTurnAuthority } from "./room-turn-authority";
@@ -18,28 +18,52 @@ import { TERMINAL_WORKROOM_STATUSES } from "./standing-room-nesting";
 import { listWorkShapes } from "./work-shapes";
 import { readWorkShapeRoleBindings, resolveWorkShapeClaim } from "./workroom-shape-claim";
 
+type ReportCall = {
+  toolName?: string;
+  params?: Readonly<Record<string, unknown>>;
+  allowBlockedReport?: boolean;
+};
+
 export const SCHEDULED_RUN_PREFIX = "TR-SCHED-";
 
 export type MandateRoom = {
   capsuleId: string; status: string; archivedAt: Date | null; scopeClaims: unknown;
-  id?: string; backlogItemId?: string | null; workspaceState?: unknown;
+  id?: string; backlogItemId?: string | null; ownerUserId?: string | null; workspaceState?: unknown;
 };
 
-/** Existing standing-stage declaration reader; delivery execution uses the live loader below. */
+/** The declared writes the room grants one of `agentIds` on its own drive task. Pure. */
 export function roomStageMandatedTools(input: {
-  scheduledTaskId: string; room: MandateRoom; agentIds: readonly string[];
-}): string[] {
+  scheduledTaskId: string;
+  room: MandateRoom;
+  agentIds: readonly string[];
+  /** Server-read task assignment for a role stage the drive assigned dynamically. */
+  assignedStageKey?: string | null;
+} & ReportCall): string[] {
   const { room } = input;
   if (room.archivedAt !== null || TERMINAL_WORKROOM_STATUSES.has(room.status)) return [];
   const shape = resolveWorkShapeClaim(room.scopeClaims);
-  if (!shape || input.scheduledTaskId !== workroomDriveTaskId(room.capsuleId, shape.key)) return [];
+  if (!shape) return [];
   const bindings = readWorkShapeRoleBindings(room.scopeClaims);
   const tools = new Set<string>();
   for (const stage of shape.stages) {
-    if (!stage.mandatedTools?.length || stage.advance.kind === "governed-decision") continue;
+    if (input.scheduledTaskId !== workroomDriveTaskId(room.capsuleId, shape.key)
+      && input.scheduledTaskId !== workroomDriveBranchTaskId(room.capsuleId, shape.key, stage.key)) continue;
+    if (stage.advance.kind === "governed-decision") continue;
     const principal = parseAccountablePrincipalRef(boundStagePrincipal(stage.accountablePrincipalRef, false, bindings));
-    if (principal.kind === "agent" && input.agentIds.includes(principal.value)) {
-      for (const tool of stage.mandatedTools) tools.add(tool);
+    // Delivery completion also requires current funding and dispatch provenance below.
+    if (!isDeliveryShapeKey(shape.key) && principal.kind === "agent" && input.agentIds.includes(principal.value)) {
+      for (const tool of stage.mandatedTools ?? []) tools.add(tool);
+    }
+    // Reporting failure does not authorize success or the stage's business act.
+    // The run, room, assignment and declared evidence kind constrain this call.
+    const assigned = input.assignedStageKey === stage.key
+      && (principal.kind === "role" || principal.kind === "agent" && input.agentIds.includes(principal.value));
+    const p = input.params;
+    if (assigned && input.allowBlockedReport !== false && input.toolName === "record_workroom_evidence"
+      && p?.capsuleId === room.capsuleId && p.stageKey === stage.key && p.outcome === "blocked"
+      && typeof p.summary === "string" && p.summary.trim().length > 0
+      && typeof p.kind === "string" && stage.evidence.some((kind) => kind === p.kind)) {
+      tools.add("record_workroom_evidence");
     }
   }
   return [...tools].sort();
@@ -50,7 +74,7 @@ type RunSnapshot = {
   userId?: string; startedAt?: Date; archivedAt?: Date | null;
 };
 type TaskSnapshot = {
-  taskId: string; taskConfig: unknown; agentId: string; ownerUserId: string; isActive: boolean;
+  taskId?: string; taskConfig: unknown; agentId: string; taskRunId?: string | null; ownerUserId?: string; isActive?: boolean;
 };
 export type RoomMandateDb = {
   taskRun: { findUnique(args: unknown): Promise<RunSnapshot | null> };
@@ -59,8 +83,7 @@ export type RoomMandateDb = {
 };
 export type ScheduledRoomMandateInput = {
   taskRunId: string | null | undefined; agentIds: readonly string[]; a2aMetadata?: unknown;
-  toolName?: string; params?: Record<string, unknown>;
-};
+} & ReportCall;
 export type ScheduledRoomAuthority = {
   mandatedTools: string[]; roomTurn: RoomTurnAuthority | null; withheldBecause: string | null;
   deliveryStage: { capsuleId: string; stageKey: string; evidenceKinds: readonly string[] } | null;
@@ -81,10 +104,11 @@ function candidateCapsuleIds(taskId: string): string[] {
   if (!taskId.startsWith("workroom-")) return [];
   const ids = new Set<string>();
   for (const shape of listWorkShapes()) {
-    if (!isDeliveryShapeKey(shape.key) && !shape.stages.some((stage) => stage.mandatedTools?.length)) continue;
-    const suffix = `-${shape.key}`;
-    if (taskId.endsWith(suffix) && taskId.length > "workroom-".length + suffix.length) {
-      ids.add(taskId.slice("workroom-".length, -suffix.length));
+    if (!shape.stages.some((stage) => stage.mandatedTools?.length || stage.advance.kind !== "governed-decision")) continue;
+    for (const suffix of [`-${shape.key}`, ...shape.stages.map((stage) => `-${shape.key}--${stage.key}`)]) {
+      if (taskId.endsWith(suffix) && taskId.length > "workroom-".length + suffix.length) {
+        ids.add(taskId.slice("workroom-".length, -suffix.length));
+      }
     }
   }
   return [...ids];
@@ -113,21 +137,33 @@ export async function loadScheduledRoomAuthority(
   const capsuleIds = taskId ? candidateCapsuleIds(taskId) : [];
   if (!taskId || capsuleIds.length === 0) return EMPTY;
   const rooms = await db.workroom.findMany({ where: { capsuleId: { in: capsuleIds } },
-    select: { id: true, capsuleId: true, status: true, archivedAt: true, scopeClaims: true, backlogItemId: true, workspaceState: true } });
+    select: { id: true, capsuleId: true, status: true, archivedAt: true, scopeClaims: true, backlogItemId: true, ownerUserId: true, workspaceState: true } });
   for (const room of rooms) {
     const shape = resolveWorkShapeClaim(room.scopeClaims);
-    if (!shape || taskId !== workroomDriveTaskId(room.capsuleId, shape.key)) continue;
-    if (!isDeliveryShapeKey(shape.key)) return { ...EMPTY,
-      mandatedTools: roomStageMandatedTools({ scheduledTaskId: taskId, room, agentIds: input.agentIds }) };
+    if (!shape || (taskId !== workroomDriveTaskId(room.capsuleId, shape.key)
+      && !shape.stages.some(stage => taskId === workroomDriveBranchTaskId(room.capsuleId, shape.key, stage.key)))) continue;
+    const task = await db.scheduledAgentTask?.findUnique({ where: { taskId },
+      select: { taskId: true, taskConfig: true, agentId: true, taskRunId: true, ownerUserId: true, isActive: true } });
+    const assignment = task?.taskRunId === input.taskRunId && input.agentIds.some(id => sameActor(id, task.agentId))
+      ? readWorkroomStageTaskConfig(task.taskConfig) : null;
+    const assignedStageKey = assignment?.shapeKey === shape.key && assignment?.shapeVersion === shape.version ? assignment.stageKey : null;
+    const declared = roomStageMandatedTools({ ...input, scheduledTaskId: taskId, room, assignedStageKey });
+    const declaration = readWorkroomPostureClaim(room.scopeClaims);
+    // BI-E458A9CB: an exact blocked report survives lost completion authority.
+    if (!isDeliveryShapeKey(shape.key) || (input.params?.outcome === "blocked" && declared.includes(EVIDENCE_WRITER)
+      && declaration?.actionBoundary !== "advise" && declaration?.actionBoundary !== "propose")) {
+      return { ...EMPTY, mandatedTools: declared };
+    }
+    // This server-derived legacy flag also preserves always-review for the new completion mandate.
+    if (input.allowBlockedReport === false) return EMPTY;
     try {
       if (room.archivedAt !== null || TERMINAL_WORKROOM_STATUSES.has(room.status)
         || shape.key === DELIVERY_XLARGE_SHAPE_KEY) return withheld("The delivery room is not active for author execution.");
       run ??= await db.taskRun.findUnique({ where: { taskRunId: input.taskRunId },
         select: { a2aMetadata: true, status: true, currentAgentId: true, userId: true, startedAt: true, archivedAt: true } });
-      const task = await db.scheduledAgentTask?.findUnique({ where: { taskId },
-        select: { taskId: true, taskConfig: true, agentId: true, ownerUserId: true, isActive: true } });
       if (!run || run.status !== "working" || run.archivedAt != null || !run.currentAgentId
-        || !task?.isActive || task.taskId !== taskId || run.userId !== task.ownerUserId
+        || !task?.isActive || task.taskId !== taskId || task.taskRunId !== input.taskRunId
+        || run.userId !== task.ownerUserId || room.ownerUserId !== task.ownerUserId
         || !sameActor(run.currentAgentId, task.agentId)
         || !input.agentIds.some((id) => sameActor(id, task.agentId))) return withheld("The scheduled run no longer owns this delivery dispatch.");
       const stageConfig = readWorkroomStageTaskConfig(task.taskConfig);
@@ -162,7 +198,6 @@ export async function loadScheduledRoomAuthority(
         || stage.accountablePrincipalRef !== `role:${DELIVERY_AUTHOR_ROLE}`
         || !stage.mandatedTools?.includes(EVIDENCE_WRITER)) return withheld("This is not an admitted non-governed author stage.");
       const agentId = coworkerAuthorityAgentId(task.agentId);
-      const declaration = readWorkroomPostureClaim(room.scopeClaims);
       if (declaration?.actionBoundary === "advise" || declaration?.actionBoundary === "propose") {
         const turn = await (deps.loadRoomTurnAuthority ?? (await import("./room-turn-authority.server")).loadRoomTurnAuthority)({ agentId, capsuleId: room.capsuleId });
         // Explicit posture still admits read/advice and exact proposals, never an automatic stage write.
@@ -193,6 +228,7 @@ export async function loadScheduledRoomAuthority(
       if (input.toolName !== EVIDENCE_WRITER) return { ...authority, mandatedTools: [] };
       const args = input.params;
       if (!args || args.capsuleId !== room.capsuleId || args.stageKey !== stage.key
+        || typeof args.summary !== "string" || args.summary.trim().length === 0
         || typeof args.kind !== "string" || !(stage.evidence.some((kind) => kind === args.kind)
           || (args.outcome === "blocked" && args.kind === "note"))
         || (args.outcome !== "completed" && args.outcome !== "blocked")) {
@@ -215,16 +251,21 @@ export async function loadScheduledRoomMandate(
 }
 
 export async function loadScheduledRoomAuthorityLive(input: {
-  taskRunId: string | null; agentId: string; toolName?: string; params?: Record<string, unknown>;
-}): Promise<ScheduledRoomAuthority> {
+  taskRunId: string | null; agentId: string;
+} & ReportCall): Promise<ScheduledRoomAuthority> {
   if (!input.taskRunId?.startsWith(SCHEDULED_RUN_PREFIX)) return EMPTY;
   const { prisma } = await import("@dpf/db");
-  return loadScheduledRoomAuthority(prisma as unknown as RoomMandateDb, { ...input, agentIds: [input.agentId] });
+  const agent = await prisma.agent.findFirst({ where: { OR: [{ id: input.agentId }, { agentId: input.agentId }, { slugId: input.agentId }], status: "active", archived: false },
+    select: { id: true, agentId: true, slugId: true, governanceProfile: { select: { hitlPolicy: true } } } });
+  if (!agent) return EMPTY;
+  return loadScheduledRoomAuthority(prisma as unknown as RoomMandateDb, { ...input,
+    agentIds: [agent.id, agent.agentId, agent.slugId].filter((id): id is string => Boolean(id)),
+    allowBlockedReport: input.allowBlockedReport !== false && agent.governanceProfile?.hitlPolicy.trim().toLowerCase() !== "always" });
 }
 
 export async function loadScheduledRoomMandateLive(input: {
-  taskRunId: string | null; agentId: string; toolName?: string; params?: Record<string, unknown>;
-}): Promise<string[]> {
+  taskRunId: string | null; agentId: string;
+} & ReportCall): Promise<string[]> {
   const authority = await loadScheduledRoomAuthorityLive(input);
   return authority.deliveryStage && (!input.toolName || !input.params) ? [] : authority.mandatedTools;
 }

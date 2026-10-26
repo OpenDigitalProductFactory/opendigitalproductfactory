@@ -148,6 +148,8 @@ export type GovernedExecuteContext = {
    * approved-request runner replays (lib/coworker/approval-resume-marker.ts).
    */
   approvalCompletion?: "platform";
+  /** Server-only: reuse exact existing authorization/outcome without minting a new request. */
+  allowApprovalRequest?: false;
   /** The chat message an approval request raised by this call belongs to. */
   chatMessageId?: string;
 };
