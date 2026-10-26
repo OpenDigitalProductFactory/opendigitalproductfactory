@@ -341,13 +341,23 @@ describe("recordRuntimeVerification", () => {
       expect(smallAcceptance.load).toHaveBeenCalledTimes(2);
       expect(smallAcceptance.refresh).toHaveBeenCalledWith(db, "BI-ONE");
       db.runtimeVerification.findUnique.mockResolvedValue(first);
-      vi.setSystemTime(new Date("2026-10-26T10:05:00Z"));
+      // Projection recovery must remain possible after the new-write freshness window.
+      vi.setSystemTime(new Date("2026-10-26T11:05:00Z"));
       expect(await recordRuntimeVerification(args)).toEqual(first);
       expect(db.runtimeVerification.create).toHaveBeenCalledTimes(1);
       expect(smallAcceptance.refresh).toHaveBeenCalledTimes(2);
       await expect(recordRuntimeVerification({ ...args, input: { ...input, result: { observations: ["different check"] } } })).rejects.toThrow(/immutable/);
+      await expect(recordRuntimeVerification({ ...args, actor: { ...args.actor, principalId: "another-principal" } })).rejects.toThrow(/immutable/);
       expect(db.runtimeVerification.create).toHaveBeenCalledTimes(1);
     } finally { vi.useRealTimers(); }
+  });
+
+  it("refuses another primary runtime target on a closure-bound Workroom check", async () => {
+    await expect(recordRuntimeVerification({ db: runtimeDb(), input: {
+      verificationId: "RV-RETARGET", kind: "final-acceptance", status: "passed",
+      workCapsuleId: "room-1", backlogActivityId: "closure-1", runtimeTargetId: "preview-target",
+    } })).rejects.toThrow(/Workroom-only/);
+    expect(smallAcceptance.load).not.toHaveBeenCalled();
   });
 
   it("refuses a generation change between observation and commit", async () => {

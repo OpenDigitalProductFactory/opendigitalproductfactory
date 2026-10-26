@@ -13,7 +13,7 @@ import {
   type RuntimeVerificationKind,
   type RuntimeVerificationStatus,
 } from "./types";
-import { SMALL_ACCEPTANCE_KEY, createSmallAcceptanceBinding, sameSmallAcceptanceContext } from "./small-acceptance-binding";
+import { SMALL_ACCEPTANCE_KEY, createSmallAcceptanceBinding, readSmallAcceptanceBinding, sameSmallAcceptanceContext } from "./small-acceptance-binding";
 import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 
 export type RuntimeCoordinationActor = {
@@ -383,6 +383,9 @@ export async function recordRuntimeVerification(args: {
 }) {
   validateVerificationInput(args.input);
   const smallCheck = args.input.kind === "final-acceptance" && !!args.input.backlogActivityId;
+  if (smallCheck && [args.input.runtimeTargetId, args.input.featureBuildId, args.input.gitPromotionCandidateId, args.input.buildId].some(Boolean)) {
+    throw new Error("Bound Small acceptance requires a Workroom-only attach point.");
+  }
   if (smallCheck && (!args.db.$transaction || !args.input.workCapsuleId
     || !["passed", "failed"].includes(args.input.status))) throw new Error("Bound Small acceptance requires a transaction, Workroom and terminal check.");
   let boundItemId: string | null = null;
@@ -394,23 +397,27 @@ export async function recordRuntimeVerification(args: {
       bindingService = await import("./small-acceptance-binding.server");
       const context = await bindingService.loadSmallAcceptanceContext({ db: tx as unknown as import("./small-acceptance-binding.server").SmallAcceptanceDb,
         workCapsuleId: args.input.workCapsuleId!, closureId: args.input.backlogActivityId!, lock: true });
-      bound = createSmallAcceptanceBinding({ context, input: args.input, actor: args.actor ?? {}, now: new Date() });
-      boundItemId = context.itemId;
-      result = { ...result, [SMALL_ACCEPTANCE_KEY]: bound };
       if (!tx.runtimeVerification.findUnique) throw new Error("Acceptance identity lookup is unavailable.");
       const existing = await tx.runtimeVerification.findUnique({ where: { verificationId: args.input.verificationId } });
+      const oldResult = existing?.result && typeof existing.result === "object" ? existing.result as Record<string, unknown> : {};
+      const oldBinding = readSmallAcceptanceBinding(oldResult[SMALL_ACCEPTANCE_KEY]);
+      if (existing && !oldBinding) throw new Error("Verification identity already records a different immutable check.");
+      // Exact recovery compares the original recording time. Only a new check
+      // owes freshness now; this never renews its deployment or closure binding.
+      bound = createSmallAcceptanceBinding({ context, input: args.input, actor: args.actor ?? {},
+        now: oldBinding ? new Date(oldBinding.recordedAt) : new Date() });
+      boundItemId = context.itemId;
+      result = { ...result, [SMALL_ACCEPTANCE_KEY]: bound };
       if (existing) {
-        const expected = { ...result, [SMALL_ACCEPTANCE_KEY]: { ...bound, recordedAt: null } };
-        const oldResult = existing.result && typeof existing.result === "object" ? existing.result as Record<string, unknown> : {};
-        const oldBinding = oldResult[SMALL_ACCEPTANCE_KEY];
-        const comparable = { ...oldResult, [SMALL_ACCEPTANCE_KEY]: {
-          ...(oldBinding && typeof oldBinding === "object" ? oldBinding : {}), recordedAt: null,
-        } };
+        const dateValue = (value: unknown) => value instanceof Date ? value.toISOString() : value ?? null;
         if (existing.kind !== args.input.kind || existing.status !== args.input.status
           || existing.workCapsuleId !== args.input.workCapsuleId || existing.backlogActivityId !== args.input.backlogActivityId
-          || ["command", "url", "evidenceUrl", "screenshotUrl", "toolExecutionId"].some(key =>
+          || ["command", "url", "evidenceUrl", "screenshotUrl", "toolExecutionId", "runtimeTargetId", "featureBuildId",
+            "gitPromotionCandidateId", "buildActivityId", "capsuleActivityId"].some(key =>
             existing[key] !== (args.input[key as keyof RuntimeVerificationInput] ?? null))
-          || canonicalJson(comparable) !== canonicalJson(expected)) {
+          || dateValue(existing.startedAt) !== dateValue(args.input.startedAt)
+          || dateValue(existing.completedAt) !== dateValue(args.input.completedAt)
+          || canonicalJson(oldResult) !== canonicalJson(result)) {
           throw new Error("Verification identity already records a different immutable check.");
         }
         return existing;
