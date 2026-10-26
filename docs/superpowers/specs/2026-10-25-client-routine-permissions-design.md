@@ -30,6 +30,10 @@ Use the existing standalone signed updater as the one permission-configuration w
 
 Compared prose alone, unconditional global bypass and scoped native configuration. Choose scoped native configuration: prose cannot change enforcement, and global bypass would affect unrelated work. The allowlist is an ergonomic exception list; it never proves DPF authority or substitutes for server gates, IAM, hooks, branch protection or an actual host refusal.
 
+## Routine review delegation
+
+The canonical AGENTS.md will explicitly direct routine independent agent review within the existing DEV task delegation, budget and grants, reusing the existing task and consent. A phase change must not create another consent question. Client Agent-tool allow rules may support that bounded delegation while retaining existing denials. This grants no new provider, account, spend, production authority or cross-chat messaging permission.
+
 ## Configuration contract
 
 The caller names one existing DPF project. Reject drive roots, home directories, unrelated paths, linked configuration targets and malformed/unsupported documents. Resolve the project path canonically and plan every write before applying. Use existing TOML helpers only with whole-document semantic validation; do not accept regex edits that discard unrelated data.
