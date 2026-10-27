@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import { Upload } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { InlineBusy } from "@/components/ui/InlineBusy";
+import { Surface } from "@/components/ui/Surface";
 
 type Props = {
   accept: string;
@@ -56,7 +57,8 @@ export function DocumentUploadZone({ accept, limitMb, collectionId, collectionTi
 
   const busy = state.kind === "uploading";
   return (
-    <div
+    <Surface
+      level={dragging ? 2 : 1}
       onDragOver={(event) => {
         event.preventDefault();
         setDragging(true);
@@ -65,8 +67,8 @@ export function DocumentUploadZone({ accept, limitMb, collectionId, collectionTi
       onDrop={onDrop}
       aria-busy={busy}
       className={[
-        "flex flex-col gap-3 rounded-lg border border-dashed p-4 sm:flex-row sm:items-center sm:justify-between",
-        dragging ? "border-[var(--dpf-accent)] bg-[var(--dpf-surface-2)]" : "border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]",
+        "flex flex-col gap-3 border-dashed sm:flex-row sm:items-center sm:justify-between",
+        dragging ? "outline outline-2 outline-[var(--dpf-accent)]" : "",
       ].join(" ")}
     >
       <div className="flex min-w-0 items-center gap-3">
@@ -108,6 +110,6 @@ export function DocumentUploadZone({ accept, limitMb, collectionId, collectionTi
           Choose file
         </Button>
       </div>
-    </div>
+    </Surface>
   );
 }

@@ -6,6 +6,7 @@
 import Link from "next/link";
 import { FolderOpen, FolderPlus } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { Surface } from "@/components/ui/Surface";
 import { createCollectionAction } from "./actions";
 
 type Props = {
@@ -47,7 +48,8 @@ export function DocumentCollectionsNav({ collections, activeCollectionId }: Prop
           <FolderPlus className="h-3.5 w-3.5" aria-hidden="true" />
           New collection
         </summary>
-        <form action={createCollectionAction} className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3">
+        <Surface padding="sm" className="mt-2">
+        <form action={createCollectionAction} className="flex flex-wrap items-center gap-2">
           <label className="sr-only" htmlFor="collection-title">Collection name</label>
           <input
             id="collection-title"
@@ -63,6 +65,7 @@ export function DocumentCollectionsNav({ collections, activeCollectionId }: Prop
           </label>
           <Button type="submit" size="sm">Create</Button>
         </form>
+        </Surface>
       </details>
     </nav>
   );
