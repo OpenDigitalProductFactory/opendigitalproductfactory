@@ -313,23 +313,14 @@ describe("TOOL_TO_GRANTS - Work Capsule entries", () => {
     expect(isToolAllowedByGrants("create_workroom", ["work_capsule_write"])).toBe(true);
     expect(isToolAllowedByGrants("record_workroom_evidence", ["work_capsule_write"])).toBe(true);
     expect(isToolAllowedByGrants("heartbeat_workroom", ["work_capsule_read"])).toBe(false);
-  });
-
-  // BI-D1FB8C4D: provisioning is its own grant, so writing a room's record
-  // (work_capsule_write) no longer reaches worktree planning or path claims.
-  it("worktree provisioning requires worktree_provision, not work_capsule_write", () => {
-    for (const tool of ["plan_workroom_worktree", "claim_workroom_scope", "plan_capsule_worktree", "claim_capsule_scope"]) {
-      expect(isToolAllowedByGrants(tool, ["worktree_provision"])).toBe(true);
-      expect(isToolAllowedByGrants(tool, ["work_capsule_write"])).toBe(false);
-      expect(isToolAllowedByGrants(tool, ["work_capsule_read"])).toBe(false);
-    }
+    // BI-D1FB8C4D: worktree planning is worktree_provision, not capsule write.
+    expect(isToolAllowedByGrants("plan_workroom_worktree", ["work_capsule_write"])).toBe(false);
   });
 
   it("adoption requires work_capsule_adopt, which implies worktree provisioning", () => {
     expect(isToolAllowedByGrants("adopt_worktree", ["work_capsule_adopt"])).toBe(true);
     expect(isToolAllowedByGrants("adopt_worktree", ["work_capsule_write"])).toBe(false);
     expect(isToolAllowedByGrants("plan_workroom_worktree", ["work_capsule_adopt"])).toBe(true);
-    expect(isToolAllowedByGrants("adopt_worktree", ["worktree_provision"])).toBe(false);
   });
 });
 

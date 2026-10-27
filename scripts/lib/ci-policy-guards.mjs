@@ -941,6 +941,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         // created, and the branches that predate that are reconciled. Binding
         // coverage was stuck at 65% for as long as the rule relied on memory.
         "scripts/lib/workroom-bind.test.mjs",
+        "scripts/lib/worktree-provision.test.mjs",
         "scripts/reconcile-workroom-bindings.test.mjs",
         "scripts/lib/agent-identity.test.mjs",
         "tests/release/local-ci-gate-contract.test.mjs",

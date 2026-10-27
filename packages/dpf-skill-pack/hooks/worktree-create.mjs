@@ -213,12 +213,20 @@ export async function runWorktreeCreate({ mainRoot, worktreeName, env = process.
 
   const libraryPath = provisionLibraryPath(mainRoot);
   if (!deps.exists(libraryPath)) {
+    let created;
     try {
-      return { exitCode: 0, stdout: deps.addWorktree(mainRoot, plan.target, plan.branch), stderr };
+      created = deps.addWorktree(mainRoot, plan.target, plan.branch);
     } catch (err) {
       stderr.push(`[worktree-create] git worktree add failed: ${err instanceof Error ? err.message : String(err)}`);
       return { exitCode: 1, stdout: "", stderr };
     }
+    // A DPF checkout older than the provisioning library still binds after
+    // creation, as before, so a plugin that updates ahead of the root clone
+    // never stops binding. In any other repository the verified-source
+    // binder finds no DPF source and nothing is said.
+    const after = deps.afterCreate ? await deps.afterCreate({ worktreePath: created, branch: plan.branch }) : null;
+    if (after?.status === "bound") stderr.push(`[worktree-create] Workroom ${after.capsuleId} bound after creation (this checkout predates governed provisioning).`);
+    return { exitCode: 0, stdout: created, stderr };
   }
 
   let provisionWorktree;

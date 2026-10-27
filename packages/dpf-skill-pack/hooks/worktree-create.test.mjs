@@ -334,3 +334,13 @@ test("provisioning receives the hook's git add and its verified-source re-bind",
   assert.equal(effects.addWorktree, d.addWorktree);
   assert.equal(effects.afterCreate, d.afterCreate);
 });
+
+test("a DPF checkout older than the library still binds after creation", async () => {
+  const { seen, deps: d } = deps({ libraryExists: false, provision: async () => assert.fail("must not provision") });
+  d.afterCreate = async () => ({ status: "bound", capsuleId: "WC-OLD" });
+  const out = await runWorktreeCreate({ mainRoot: "D:/DPF", worktreeName: "feat-x", deps: d });
+  assert.equal(out.exitCode, 0);
+  assert.equal(out.stdout, "D:/DPF-worktrees/feat-x");
+  assert.equal(seen.plainAdd, 1);
+  assert.match(out.stderr.join("\n"), /WC-OLD bound after creation/);
+});
