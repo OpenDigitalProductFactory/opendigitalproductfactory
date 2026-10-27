@@ -172,6 +172,11 @@ export async function resolveMergeSignalFromRefs(input: {
    */
   attestedPullRequests?: readonly number[];
   item?: { itemId: string; workType: string | null };
+  /**
+   * The item's latest move back into the coding pool (BI-D9DC902E). A trunk
+   * commit from before it cannot close the reopened work. Read only with `item`.
+   */
+  deliveredAfter?: Date | null;
   roots: readonly string[];
   /** Injectable for tests; defaults to the real clock. */
   now?: Date;
@@ -182,10 +187,11 @@ export async function resolveMergeSignalFromRefs(input: {
   const attested = input.item ? [...new Set(input.attestedPullRequests ?? [])] : [];
   const now = input.now ?? new Date();
   const readTrunkCommittedAt = input.readTrunkCommittedAt ?? ((root: string) => trunkRefCommittedAt(root));
-  // Nothing to look up: no room recorded a head and no PR is linked. That is a
-  // real measurement about THIS item — there is no branch identity to find on
-  // the trunk — not a broken probe, so it stays a negative.
-  if (heads.length === 0 && pullRequests.length === 0 && attested.length === 0) return "not-merged";
+  // Nothing to look up: no room recorded a head and no PR is linked, and no item
+  // identity to search the trunk for. That is a real measurement about THIS
+  // call — there is no identity to find on the trunk — so it stays a negative.
+  // With an item, the trunk itself is still searched below (BI-D9DC902E).
+  if (heads.length === 0 && pullRequests.length === 0 && attested.length === 0 && !input.item) return "not-merged";
   for (const root of roots) {
     if (!(await trunkRefExists(root))) continue;
     // A root answered. Distinguish "git said no" from "git could not say":
@@ -211,6 +217,14 @@ export async function resolveMergeSignalFromRefs(input: {
       // git answered, and the answer is that this PR is not the item's merge.
       sawDefiniteNegative = true;
     }
+    // BI-D9DC902E: no recorded identity found the merge. The trunk itself is
+    // evidence — a commit on it that DELIVERS the item under the actuator's rule
+    // is the item's merge, whether or not any PR was recorded against it.
+    if (input.item) {
+      const delivered = await trunkHasDeliveringCommit(root, input.item, { after: input.deliveredAfter ?? null });
+      if (delivered === true) return "merged";
+      if (delivered === false) sawDefiniteNegative = true;
+    }
     if (!sawDefiniteNegative) return "signal-unavailable";
     // A negative is only a measurement if the trunk it was measured against is
     // current. An unfetched trunk reports merged work as unmerged, confidently.
@@ -225,7 +239,7 @@ export async function resolveMergeSignalFromRefs(input: {
 
 type MergeDeliveryDb = {
   workroom: { findMany(args: unknown): Promise<{ headSha: string | null; pullRequestNumber: number | null }[]> };
-  backlogItemActivity: { findMany(args: unknown): Promise<{ kind: string; payload: unknown }[]> };
+  backlogItemActivity: { findMany(args: unknown): Promise<{ kind: string; payload: unknown; recordedAt?: Date | null }[]> };
 };
 
 /**
@@ -262,7 +276,7 @@ export async function resolveMergeDeliveryFromDb(
     const transitions = await db.backlogItemActivity.findMany({
       where: { backlogItemId: itemRowId, kind: "status_change" },
       orderBy: [{ recordedAt: "desc" }, { id: "desc" }],
-      select: { kind: true, payload: true },
+      select: { kind: true, payload: true, recordedAt: true },
       take: 200,
     });
     return await resolveMergeSignalFromRefs({
@@ -270,6 +284,7 @@ export async function resolveMergeDeliveryFromDb(
       pullRequests,
       attestedPullRequests: deliveryAttemptPullRequests(transitions),
       item: { itemId, workType: workType ?? null },
+      deliveredAfter: latestReopenAt(transitions),
       roots: options.roots ?? mergeSignalRoots(),
       ...(options.now ? { now: options.now } : {}),
       ...(options.readTrunkCommittedAt ? { readTrunkCommittedAt: options.readTrunkCommittedAt } : {}),
@@ -315,6 +330,25 @@ export function deliveryAttemptPullRequests(
 }
 
 /**
+ * BI-D9DC902E. When the item's newest delivery attempt began: the recordedAt of
+ * the newest status row that moved it back into the coding pool, or null when
+ * it never went back. Rows must be NEWEST FIRST — the order the resolver reads.
+ * Same boundary `deliveryAttemptPullRequests` stops at.
+ */
+export function latestReopenAt(
+  transitions: readonly { kind: string; payload: unknown; recordedAt?: Date | null }[],
+): Date | null {
+  for (const row of transitions) {
+    if (row.kind !== "status_change") continue;
+    const to = (row.payload as { to?: unknown } | null)?.to;
+    if (typeof to === "string" && REOPENED_TO.has(to)) {
+      return row.recordedAt instanceof Date && !Number.isNaN(row.recordedAt.getTime()) ? row.recordedAt : null;
+    }
+  }
+  return null;
+}
+
+/**
  * Whether a squash commit on the trunk delivers the item, by the actuator's
  * CURRENT rule (BI-A0020FAC): ids in the title, or body ids after a delivery
  * keyword or on a Backlog line — a mere citation does not deliver. Before that
@@ -357,4 +391,72 @@ export async function readTrunkPullRequestCommit(
   } catch {
     return null;
   }
+}
+
+const TRUNK_SEARCH_LIMIT = 50;
+
+/**
+ * BI-D9DC902E. Whether the trunk carries a commit that DELIVERS the item, found
+ * by the item id itself rather than by a recorded PR. Measured 2026-10-27: 51
+ * awaiting-acceptance items had such a commit on main and no record the signal
+ * read pointed at it (42 had no PR-submit row; others recorded a different or
+ * earlier PR, e.g. BI-1281A164 recorded docs PR #5301 and shipped in
+ * #5529/#5530).
+ *
+ * The rule is not widened: a commit counts only when `trunkCommitDeliversItem`
+ * says so (id in the title, or after a delivery keyword / on a Backlog line; a
+ * doc commit only for a doc item), it was committed after `after` (the item's
+ * latest reopen), and the trunk carries no revert of it. One bounded
+ * `git log --grep` per item, local and procedural.
+ *
+ * `true`/`false` are measurements; `null` means git could not answer.
+ */
+export async function trunkHasDeliveringCommit(
+  root: string,
+  item: { itemId: string; workType: string | null },
+  options: { after?: Date | null; trunkRef?: string } = {},
+): Promise<boolean | null> {
+  if (!/^BI-[A-Z0-9]+(?:-[A-Z0-9]+)*$/.test(item.itemId)) return false;
+  const trunkRef = options.trunkRef ?? "origin/main";
+  try {
+    const candidates = (await readTrunkCommits(root, trunkRef, [item.itemId], TRUNK_SEARCH_LIMIT))
+      .filter((c) => !c.subject.startsWith("Revert "))
+      .filter((c) => !options.after || c.committedAt.getTime() > options.after.getTime())
+      .filter((c) => trunkCommitDeliversItem(c, item));
+    for (const candidate of candidates) {
+      if (!(await trunkHasRevertOf(root, trunkRef, candidate))) return true;
+    }
+    return false;
+  } catch {
+    return null;
+  }
+}
+
+type TrunkCommit = { sha: string; subject: string; body: string; committedAt: Date };
+
+async function readTrunkCommits(root: string, trunkRef: string, patterns: readonly string[], limit: number): Promise<TrunkCommit[]> {
+  const { stdout } = await execFileAsync(
+    "git",
+    trustedGitArgs(root, [
+      "log", trunkRef, "--fixed-strings", ...patterns.map((p) => `--grep=${p}`), "-n", String(limit),
+      "--format=%H%x1f%cI%x1f%s%x1f%b%x1e",
+    ]),
+    { timeout: 5000, windowsHide: true, maxBuffer: 4 * 1024 * 1024 },
+  );
+  return stdout.split("\x1e").map((entry) => entry.replace(/^\n/, "")).filter(Boolean).map((entry) => {
+    const [sha = "", date = "", subject = "", body = ""] = entry.split("\x1f");
+    return { sha: sha.trim(), committedAt: new Date(date.trim()), subject: subject.trim(), body };
+  });
+}
+
+/**
+ * A revert on the trunk names the commit it undoes: GitHub's revert PR carries
+ * the original squash subject's `(#N)` marker, and `git revert` writes
+ * "This reverts commit <sha>". Either one means the commit is not delivery.
+ */
+async function trunkHasRevertOf(root: string, trunkRef: string, commit: TrunkCommit): Promise<boolean> {
+  const marker = commit.subject.match(/\(#\d+\)$/)?.[0];
+  const patterns = [commit.sha, ...(marker ? [marker] : [])];
+  const reverts = (await readTrunkCommits(root, trunkRef, patterns, 20)).filter((c) => c.subject.startsWith("Revert "));
+  return reverts.some((r) => (marker && r.subject.includes(marker)) || r.body.includes(`This reverts commit ${commit.sha}`));
 }
