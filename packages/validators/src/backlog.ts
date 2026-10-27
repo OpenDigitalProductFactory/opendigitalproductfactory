@@ -35,6 +35,10 @@ export const updateEpicSchema = z.object({
 export const createBacklogItemSchema = z.object({
   title: z.string().min(1).max(200),
   body: z.string().max(10000).optional(),
+  // BI-B1B44777: what will be true, for whom, once done; and how we will know
+  // only when that is not obvious. Both optional — intake prompts, never refuses.
+  outcome: z.string().max(2000).optional(),
+  howWeKnow: z.string().max(2000).optional(),
   type: z.enum(["product", "portfolio"]),
   epicId: z.string().optional(),
   priority: z.number().int().min(0).max(999).optional(),
