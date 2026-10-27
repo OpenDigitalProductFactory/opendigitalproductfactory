@@ -25,7 +25,7 @@ operator revocations, human capabilities, consent and action gates remain bindin
 
 ## Research and existing substrate
 
-Research base: f607ddab1bf on origin/main, October 26, 2026. Verify the full
+Research base: f607ddab1bf0b74cc4c0280f6a3526e8a2561c38 on origin/main, October 26, 2026. Verify the full
 immutable commit when recording the research receipt.
 
 - `packages/db/src/coworker-grants.ts` projects canonical external profiles
@@ -53,6 +53,22 @@ Related delivered work BI-516F63F7 documents source-owned credential setup;
 it does not provision more grants. BI-B22C8E02 classifies authorized maintenance;
 it does not widen roles or OAuth consent. This feature supplies the missing
 provisioning step and does not duplicate either mechanism.
+
+## Research & Benchmarking
+
+Two comparable implementations inform the lifecycle, without adding either as
+an external dependency:
+
+| Implementation | Observed approach | Adopt | Reject or adapt |
+|---|---|---|---|
+| [Kubernetes RBAC bootstrapping](https://kubernetes.io/docs/reference/access-authn-authz/rbac/#auto-reconciliation) | Startup repairs default role/binding omissions and supports explicit opt-out. | Versioned baseline, provenance and startup reconciliation. | Do not resurrect an operator revocation; DPF already has durable per-grant tombstones. |
+| [Keycloak client registration policies](https://www.keycloak.org/securing-apps/client-registration) | Allowed client scopes and a separate full-scope policy constrain registration. | Distinguish role provisioning from credential scopes and approved client capabilities. | Do not turn DEV into a full-scope switch or apply broader scopes without consent. |
+
+Follow [OAuth 2.0 RFC 6749 section 6](https://www.rfc-editor.org/rfc/rfc6749#section-6):
+a refresh request cannot request scopes absent from the original approval. DPF
+therefore uses its existing consent/reconnect route for scope expansion. The
+project-specific deviation from Kubernetes auto-repair is intentional: saved
+revocations outrank baseline repair, including on subsequent upgrades.
 
 ## Architecture decision
 
