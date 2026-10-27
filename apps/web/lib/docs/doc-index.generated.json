@@ -1195,7 +1195,8 @@
         "a-merged-pull-request-is-delivered-not-discovered-bi-a6e4d205",
         "reaping-the-worktree-when-the-pr-merges-bi-848360ef",
         "task-specific-operating-rules",
-        "a-refusal-carries-its-own-remedy"
+        "a-refusal-carries-its-own-remedy",
+        "host-reservation-settlement"
       ]
     },
     "docs/architecture/build-studio-namespace.md": {

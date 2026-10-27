@@ -619,3 +619,51 @@ describe("nonprod-lease pack — handler behavior (delegation preserved)", () =>
     expect(lease.releaseNonprodEnvironmentLease).toHaveBeenCalledWith({ leaseId: "L1" });
   });
 });
+
+
+describe("exact persisted reservation readback", () => {
+  beforeEach(() => {
+    lease.listActiveNonprodEnvironmentLeases.mockResolvedValue([]);
+    lease.listQueuedNonprodEnvironmentLeases.mockResolvedValue([]);
+    cleanup.readLease.mockReset();
+  });
+  it("reads a realistically expired row safely without listing or mutation", async () => {
+    cleanup.readLease.mockResolvedValueOnce({ leaseId: "NPEL-EXPIRED", status: "expired", activeKey: null,
+      ownerPid: null, ownerProcessIdentity: null, expectedMemoryBytes: 8192n });
+    const result = await nonprodLeasePack.handlers.list_nonprod_environment_leases({ leaseId: "NPEL-EXPIRED" }, "u1");
+    expect(result).toMatchObject({ success: true, entityId: "NPEL-EXPIRED", data: { lease: {
+      leaseId: "NPEL-EXPIRED", status: "expired", activeKey: null, ownerPid: null, expectedMemoryBytes: 8192,
+    } } });
+    expect(result.data?.lease).not.toHaveProperty("ownerProcessIdentity");
+    expect(cleanup.readLease).toHaveBeenCalledWith({ where: { leaseId: "NPEL-EXPIRED" } });
+    expect(lease.listActiveNonprodEnvironmentLeases).not.toHaveBeenCalled();
+    expect(lease.listQueuedNonprodEnvironmentLeases).not.toHaveBeenCalled();
+    expect(lease.releaseNonprodEnvironmentLease).not.toHaveBeenCalled();
+  });
+  it.each([null, "", "   ", 3, "NPEL-invalid\nvalue"])("does not turn invalid exact ID %j into a list", async leaseId => {
+    const result = await nonprodLeasePack.handlers.list_nonprod_environment_leases({ leaseId }, "u1");
+    expect(result).toMatchObject({ success: false, error: "invalid_lease_id" });
+    expect(cleanup.readLease).not.toHaveBeenCalled();
+    expect(lease.listActiveNonprodEnvironmentLeases).not.toHaveBeenCalled();
+  });
+  it("reports a missing exact row without inferring expiry", async () => {
+    cleanup.readLease.mockResolvedValueOnce(null);
+    const result = await nonprodLeasePack.handlers.list_nonprod_environment_leases({ leaseId: "NPEL-MISSING" }, "u1");
+    expect(result).toMatchObject({ success: false, error: "not_found" });
+    expect(result.data ?? {}).not.toHaveProperty("lease");
+    expect(lease.listActiveNonprodEnvironmentLeases).not.toHaveBeenCalled();
+  });
+  it("does not expose an unrelated returned row", async () => {
+    cleanup.readLease.mockResolvedValueOnce({ leaseId: "NPEL-FOREIGN", ownerProcessIdentity: "private" });
+    const result = await nonprodLeasePack.handlers.list_nonprod_environment_leases({ leaseId: "NPEL-OWN" }, "u1");
+    expect(result).toMatchObject({ success: false, error: "lease_readback_mismatch" });
+    expect(result.data ?? {}).not.toHaveProperty("lease");
+  });
+  it("redacts an unavailable reader and does not infer terminal state", async () => {
+    cleanup.readLease.mockRejectedValueOnce(new Error("private reader details"));
+    const result = await nonprodLeasePack.handlers.list_nonprod_environment_leases({ leaseId: "NPEL-OWN" }, "u1");
+    expect(result).toMatchObject({ success: false, error: "lease_readback_unavailable" });
+    expect(JSON.stringify(result)).not.toContain("private reader details");
+    expect(result.data ?? {}).not.toHaveProperty("lease");
+  });
+});

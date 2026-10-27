@@ -21,6 +21,7 @@ import { isRecord } from "@/lib/shared/coerce";
 import { resolveLeaseRequestTiming } from "@/lib/nonprod/environment-lease-timing";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { nonprodLeaseDefinitions as definitions } from "./nonprod-lease-definitions";
+import { listNonprodEnvironmentLeases, toolSafeLease } from "@/lib/nonprod/lease-queries";
 
 // Per-key trimmed string coercer — a copy of the inline helper the former switch
 // cases used, so the pack owns its inputs without depending on mcp-tools.ts
@@ -59,15 +60,6 @@ function nonnegativeNumber(value: unknown): number | undefined {
   return Number.isFinite(number) && number >= 0 ? number : undefined;
 }
 
-function toolSafeLease(lease: Record<string, unknown>): Record<string, unknown> {
-  const { ownerProcessIdentity: _sensitiveProcessIdentity, ...visibleLease } = lease;
-  return {
-    ...visibleLease,
-    expectedMemoryBytes: typeof lease.expectedMemoryBytes === "bigint"
-      ? Number(lease.expectedMemoryBytes)
-      : lease.expectedMemoryBytes,
-  };
-}
 
 function normalizedSlotBinding(value: unknown): {
   manifestVersion: 1;
@@ -99,24 +91,6 @@ function normalizedSlotBinding(value: unknown): {
   };
 }
 
-async function listNonprodEnvironmentLeases(): Promise<ToolResult> {
-  const {
-    listActiveNonprodEnvironmentLeases,
-    listQueuedNonprodEnvironmentLeases,
-  } = await import("@/lib/nonprod/environment-lease");
-  const [leases, queued] = await Promise.all([
-    listActiveNonprodEnvironmentLeases({}),
-    listQueuedNonprodEnvironmentLeases({}),
-  ]);
-  return {
-    success: true,
-    message: `Found ${leases.length} admitted and ${queued.length} queued nonproduction environment lease(s).`,
-    data: {
-      leases: leases.map((lease) => toolSafeLease(lease as Record<string, unknown>)),
-      queued: queued.map((lease) => toolSafeLease(lease as Record<string, unknown>)),
-    },
-  };
-}
 
 async function lookupChangeOriginHandler(params: Record<string, unknown>): Promise<ToolResult> {
   const { lookupChangeOrigin } = await import("@/lib/contributor-change-lanes/origin-lookup");
@@ -584,7 +558,7 @@ async function renewNonprodEnvironmentLeaseHandler(params: Record<string, unknow
 }
 
 const handlers: Record<string, ToolPackHandler> = {
-  list_nonprod_environment_leases: () => listNonprodEnvironmentLeases(),
+  list_nonprod_environment_leases: (params) => listNonprodEnvironmentLeases(params),
   lookup_change_origin: (params) => lookupChangeOriginHandler(params),
   claim_nonprod_environment_lease: (params, userId) => claimNonprodEnvironmentLeaseHandler(params, userId),
   release_nonprod_environment_lease: (params) => releaseNonprodEnvironmentLeaseHandler(params),
