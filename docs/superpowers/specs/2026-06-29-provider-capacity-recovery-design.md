@@ -1,7 +1,7 @@
 ---
 title: Provider Capacity Recovery
 date: 2026-06-29
-status: Draft
+status: draft
 owner: Platform AI
 related:
   - docs/superpowers/specs/2026-05-19-ai-cost-governance.md
@@ -181,6 +181,18 @@ Expected classification:
   "isHumanActionRequired": true
 }
 ```
+
+### Anthropic Usage-Limit Classifier
+
+Anthropic reports an exhausted workspace spend limit as HTTP `400` `invalid_request_error`, not `429`. The reset time is only in the message text, for example "You have reached your specified API usage limits. You will regain access on 2026-11-01 at 00:00 UTC." (live, 2026-10-27).
+
+| Anthropic signal | Canonical state | Action | Notes |
+| --- | --- | --- | --- |
+| usage-limit message with "regain access on YYYY-MM-DD at HH:MM UTC" | `quota_resets_at` | `retry_at` | `retryAt` is the stated time. Routing soft-excludes the provider until then. |
+| usage-limit message with no reset time | `rate_limited` | `switch_provider` | Uses the bounded stale-snapshot window. |
+| any other `invalid_request_error` | `unknown` | `none` | A request defect, not capacity. |
+
+The `InferenceError` code stays `provider_error`, so the fallback chain does not wait on the pinned endpoint as it would for a `429`. Before this mapping, the body classified as `unknown`. Routing kept choosing Anthropic for ten days, about 17,000 calls all failed, and Build Studio plan reviews ended "0 of 2 reviewers returned a usable verdict".
 
 ## 7. Persistence
 

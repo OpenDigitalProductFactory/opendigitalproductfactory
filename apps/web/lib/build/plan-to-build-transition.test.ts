@@ -105,6 +105,16 @@ describe("plan-advance pure helpers (BI-05208DE5)", () => {
     expect(second.lastError).toBe("boom again");
   });
 
+  it("recordPlanAdvanceFailure keeps the tail of a long error, where a failed command puts its stderr", () => {
+    // Live: three builds escalated with only the echoed `docker exec … sh -c '…` head
+    // stored, so the escalation never said why the branch could not start.
+    const command = `Command failed: docker exec 'dpf-sandbox-1' sh -c '${"x".repeat(400)}'`;
+    const tracker = recordPlanAdvanceFailure(null, `startBuildBranch failed: ${command}\nfatal: could not lock ref`, new Date());
+    expect(tracker.lastError!.length).toBeLessThanOrEqual(360);
+    expect(tracker.lastError).toContain("startBuildBranch failed");
+    expect(tracker.lastError).toContain("fatal: could not lock ref");
+  });
+
   it("recordPlanAdvanceFailure preserves a prior escalatedAt stamp", () => {
     const now = new Date("2026-07-22T00:00:00Z");
     const prev = { failures: 3, escalatedAt: "2026-07-21T00:00:00Z" };
