@@ -106,8 +106,13 @@ author) or `no-in-platform-coworker` (only external agents hold it).
 ## How the portal knows work was merged
 
 Merged platform work closes on the merge signal: the portal checks whether the
-item's branch head, or its linked pull request, is on `origin/main`. On an
-install it reads the Build Studio workspace clone (`/sandbox-workspace`); a
+item's branch head, or its linked pull request, is on `origin/main`. When no
+recorded pull request is found there, it searches `origin/main` for a commit
+that delivers the item: the item id in the commit title, or after a delivery
+word such as "Fixes" (a bare mention or a `Refs:` line does not count). A
+reverted commit, a commit made before the item was last reopened, and a docs
+commit for an item that is not documentation work do not count (BI-D9DC902E).
+On an install it reads the Build Studio workspace clone (`/sandbox-workspace`); a
 host with a source checkout can point `DPF_HOST_SOURCE_ROOT` at it instead.
 
 - **Kept current:** the code-graph job fetches `origin/main` into that clone
