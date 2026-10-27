@@ -1185,13 +1185,73 @@ class ClaudeUserScopeDpfServerTest(unittest.TestCase):
         self.assertEqual(status, "failed: Claude CLI not found")
 
 
+class _FakeAgy:
+    """`agy mcp add` / `agy mcp disable` as agy 1.4.4 does them (probed 2026-10-27).
+
+    `add` replaces the whole entry (so it resets `disabled`) and keeps other
+    servers. `honest=False` exits 0 and writes nothing: the read-back case.
+    """
+
+    def __init__(self, honest: bool = True) -> None:
+        self.honest = honest
+        self.calls: list[list[str]] = []
+
+    def __call__(self, command: list[str], **kwargs: Any) -> Any:
+        self.calls.append(command)
+        path = updater.antigravity_mcp_config_path(Path(kwargs["env"]["HOME"]))
+        if self.honest:
+            raw = path.read_text() if path.exists() else ""
+            data = json.loads(raw) if raw.strip() else {}
+            servers = data.setdefault("mcpServers", {})
+            if command[1:3] == ["mcp", "add"]:
+                headers = dict(item.split(": ", 1) for item in command[4:-2:2])
+                servers[command[-2]] = {"disabled": False, **({"headers": headers} if headers else {}),
+                                        "serverUrl": command[-1]}
+            elif command[1:3] == ["mcp", "disable"]:
+                servers[command[-1]]["disabled"] = True
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(data))
+        return type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+
+
 class AntigravityMcpConfigTest(unittest.TestCase):
+    """agy owns its MCP config: DPF converges it through `agy mcp` (BI-1DCF9F23, spec M4)."""
+
+    def _converge(self, home: Path, url: str = updater.DEFAULT_MCP_URL, agy: Any = None, **kwargs: Any) -> str:
+        with patch.object(updater, "resolve_antigravity_binary", return_value="/fake/agy"):
+            return updater.ensure_antigravity_mcp_config(home, url, runner=agy or _FakeAgy(), **{"dry_run": False, **kwargs})
+
     def test_writes_the_file_agy_and_the_ide_read(self) -> None:
         # agy 1.4.3 and Antigravity.app read ~/.gemini/config/mcp_config.json;
         # nothing reads ~/.antigravity/mcp_config.json (BI-4CB3C923).
         home = Path("/tmp/home")
         self.assertEqual(updater.antigravity_mcp_config_path(home),
                          home / ".gemini" / "config" / "mcp_config.json")
+
+    def test_adds_the_server_through_agy_and_reads_it_back(self) -> None:
+        # Plain http: the header is the only credential path there.
+        http_url = "http://127.0.0.1:3000/api/mcp/v1"
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            agy = _FakeAgy()
+            self.assertEqual(self._converge(home, http_url, agy), "converged")
+            self.assertEqual(agy.calls, [["/fake/agy", "mcp", "add", "--header",
+                                          "Authorization: Bearer ${DPF_MCP_BEARER_TOKEN}", "dpf", http_url]])
+            dpf = json.loads(updater.antigravity_mcp_config_path(home).read_text())["mcpServers"]["dpf"]
+            self.assertEqual(dpf["serverUrl"], http_url)
+            self.assertIs(dpf["disabled"], False)
+            # No plaintext secret is ever written.
+            self.assertNotIn("dpfmcp_", updater.antigravity_mcp_config_path(home).read_text())
+            second = _FakeAgy()
+            self.assertEqual(self._converge(home, http_url, second), "already current")
+            self.assertEqual(second.calls, [])
+
+    def test_the_declaration_rides_a_header(self) -> None:
+        declared = __import__("toolchain_convergence").Declarations.of("0.3.0", "ab" * 32)
+        with tempfile.TemporaryDirectory() as tmp:
+            agy = _FakeAgy()
+            self._converge(Path(tmp), agy=agy, declarations=declared)
+            self.assertIn("X-DPF-Toolchain: pack=0.3.0;digest=abababababababab;client=antigravity", agy.calls[0])
 
     def test_an_empty_config_file_is_converged_not_left_empty(self) -> None:
         # The operator's file was 0 bytes, so agy listed no MCP servers at all.
@@ -1200,11 +1260,8 @@ class AntigravityMcpConfigTest(unittest.TestCase):
             cfg_path = updater.antigravity_mcp_config_path(home)
             cfg_path.parent.mkdir(parents=True, exist_ok=True)
             cfg_path.write_text("")
-            with patch.object(updater, "resolve_antigravity_binary", return_value="/fake/agy"):
-                self.assertEqual(updater.ensure_antigravity_mcp_config(home, updater.DEFAULT_MCP_URL, dry_run=False), "converged")
-            dpf = json.loads(cfg_path.read_text())["mcpServers"]["dpf"]
-            self.assertEqual(dpf["serverUrl"], updater.DEFAULT_MCP_URL)
-            self.assertIs(dpf["disabled"], False)
+            self.assertEqual(self._converge(home), "converged")
+            self.assertEqual(json.loads(cfg_path.read_text())["mcpServers"]["dpf"]["serverUrl"], updater.DEFAULT_MCP_URL)
 
     def test_unparseable_config_is_left_alone_and_does_not_stop_the_update(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1212,55 +1269,35 @@ class AntigravityMcpConfigTest(unittest.TestCase):
             cfg_path = updater.antigravity_mcp_config_path(home)
             cfg_path.parent.mkdir(parents=True, exist_ok=True)
             cfg_path.write_text("{not json")
-            with patch.object(updater, "resolve_antigravity_binary", return_value="/fake/agy"):
-                status = updater.ensure_antigravity_mcp_config(home, updater.DEFAULT_MCP_URL, dry_run=False)
+            agy = _FakeAgy()
+            status = self._converge(home, agy=agy)
             self.assertTrue(status.startswith("skipped: cannot parse"), status)
             self.assertEqual(cfg_path.read_text(), "{not json")
+            self.assertEqual(agy.calls, [])
 
     def test_an_operator_disabled_dpf_entry_stays_disabled(self) -> None:
+        # `agy mcp add` re-enables the entry, so the adapter disables it again.
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
             cfg_path = updater.antigravity_mcp_config_path(home)
             cfg_path.parent.mkdir(parents=True, exist_ok=True)
             cfg_path.write_text(json.dumps({"mcpServers": {"dpf": {"serverUrl": "https://old/api/mcp/v1", "disabled": True}}}))
-            with patch.object(updater, "resolve_antigravity_binary", return_value="/fake/agy"):
-                updater.ensure_antigravity_mcp_config(home, updater.DEFAULT_MCP_URL, dry_run=False)
+            agy = _FakeAgy()
+            self.assertEqual(self._converge(home, agy=agy), "converged")
+            self.assertEqual(agy.calls[-1], ["/fake/agy", "mcp", "disable", "dpf"])
             dpf = json.loads(cfg_path.read_text())["mcpServers"]["dpf"]
             self.assertIs(dpf["disabled"], True)
             self.assertEqual(dpf["serverUrl"], updater.DEFAULT_MCP_URL)
 
-    def test_skipped_when_agy_absent(self) -> None:
-        with patch.object(updater, "resolve_antigravity_binary", return_value=None):
-            status = updater.ensure_antigravity_mcp_config(
-                Path("/tmp/home"), updater.DEFAULT_MCP_URL, dry_run=False
-            )
-        self.assertEqual(status, "skipped: Antigravity CLI (agy) not found")
-
-    def test_upserts_dpf_server_env_backed_and_idempotent(self) -> None:
-        # Plain http: the header is the only credential path there. The https
-        # default carries no header (OnePluginOwnedConnectorTest).
-        http_url = "http://127.0.0.1:3000/api/mcp/v1"
+    def test_agy_succeeding_without_recording_the_server_fails(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            home = Path(tmp)
-            with patch.object(updater, "resolve_antigravity_binary", return_value="/fake/agy"):
-                first = updater.ensure_antigravity_mcp_config(
-                    home, http_url, dry_run=False
-                )
-                second = updater.ensure_antigravity_mcp_config(
-                    home, http_url, dry_run=False
-                )
-            self.assertEqual(first, "converged")
-            self.assertEqual(second, "already current")
-            cfg = json.loads(updater.antigravity_mcp_config_path(home).read_text())
-            dpf = cfg["mcpServers"]["dpf"]
-            # agy's own schema (what `agy mcp add` writes), BI-4CB3C923.
-            self.assertEqual(dpf["serverUrl"], http_url)
-            self.assertIs(dpf["disabled"], False)
-            self.assertNotIn("url", dpf)
-            self.assertNotIn("type", dpf)
-            self.assertEqual(dpf["headers"]["Authorization"], "Bearer ${DPF_MCP_BEARER_TOKEN}")
-            # No plaintext secret is ever written.
-            self.assertNotIn("dpfmcp_", updater.antigravity_mcp_config_path(home).read_text())
+            status = self._converge(Path(tmp), agy=_FakeAgy(honest=False))
+        self.assertTrue(status.startswith("failed:"), status)
+
+    def test_absent_when_agy_is_missing(self) -> None:
+        with patch.object(updater, "resolve_antigravity_binary", return_value=None):
+            status = updater.ensure_antigravity_mcp_config(Path("/tmp/home"), updater.DEFAULT_MCP_URL, dry_run=False)
+        self.assertEqual(status, "absent: Antigravity CLI (agy) not found")
 
     def test_merges_without_clobbering_other_servers(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1268,20 +1305,18 @@ class AntigravityMcpConfigTest(unittest.TestCase):
             cfg_path = updater.antigravity_mcp_config_path(home)
             cfg_path.parent.mkdir(parents=True, exist_ok=True)
             cfg_path.write_text(json.dumps({"mcpServers": {"other": {"url": "x"}}}))
-            with patch.object(updater, "resolve_antigravity_binary", return_value="/fake/agy"):
-                updater.ensure_antigravity_mcp_config(home, updater.DEFAULT_MCP_URL, dry_run=False)
+            self._converge(home)
             cfg = json.loads(cfg_path.read_text())
             self.assertIn("other", cfg["mcpServers"])
             self.assertIn("dpf", cfg["mcpServers"])
 
-    def test_dry_run_writes_nothing(self) -> None:
+    def test_dry_run_runs_nothing_and_says_would(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
-            with patch.object(updater, "resolve_antigravity_binary", return_value="/fake/agy"):
-                status = updater.ensure_antigravity_mcp_config(
-                    home, updater.DEFAULT_MCP_URL, dry_run=True
-                )
-            self.assertIn("dry-run", status)
+            agy = _FakeAgy()
+            status = self._converge(home, agy=agy, dry_run=True)
+            self.assertTrue(status.startswith("dry-run: would"), status)
+            self.assertEqual(agy.calls, [])
             self.assertFalse(updater.antigravity_mcp_config_path(home).exists())
 
 

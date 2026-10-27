@@ -61,6 +61,12 @@ export const SCALAR_FIELDS = Object.freeze([
 
 /** The credential-policy client keys, in the fixture's order. */
 export const POLICY_CLIENTS = Object.freeze(["codex", "claude", "vscode", "grok", "antigravity"]);
+// What each adapter writes (BI-1DCF9F23, spec M4): the client CLI is the
+// single writer of whatever it covers. scripts/single_writer_test.py runs the
+// updater against fixture homes and fails on a write this list does not allow.
+export const WRITE_OWNERS = Object.freeze(["dpf", "client"]);
+export const WRITE_FORMATS = Object.freeze(["json", "toml", "tree", "text"]);
+export const WRITE_WRITERS = Object.freeze(["direct", "cli"]);
 /** The endpoints the fixture covers: https, each loopback spelling, remote http, unparseable. */
 export const CASE_ENDPOINTS = Object.freeze([
   "https://dpf.example/api/mcp/v1",
@@ -111,6 +117,24 @@ function checkHookHost(problems, where, host, knownProbes) {
   }
 }
 
+function checkWrites(problems, kind, row) {
+  if (!row.loadsPack) return;
+  if (!Array.isArray(row.writes) || row.writes.length === 0) {
+    problems.push(`${kind}: writes[] must declare every file the adapter writes`);
+    return;
+  }
+  row.writes.forEach((entry, index) => {
+    const where = `${kind}.writes[${index}]`;
+    if (typeof entry?.path !== "string" || !/^(~|<project>)\//.test(entry.path)) problems.push(`${where}: path must start with ~/ or <project>/`);
+    if (!WRITE_OWNERS.includes(entry?.owner)) problems.push(`${where}: owner must be one of ${WRITE_OWNERS.join(", ")}`);
+    if (!WRITE_FORMATS.includes(entry?.format)) problems.push(`${where}: format must be one of ${WRITE_FORMATS.join(", ")}`);
+    if (!WRITE_WRITERS.includes(entry?.writer)) problems.push(`${where}: writer must be one of ${WRITE_WRITERS.join(", ")}`);
+    if (entry?.writer === "cli" && (typeof entry.cli !== "string" || !entry.cli)) problems.push(`${where}: a cli writer must name the CLI`);
+    if (entry?.writer === "direct" && entry.cli !== null) problems.push(`${where}: a direct writer names no CLI; set writer "cli" when one covers the file`);
+    if (typeof entry?.reason !== "string" || !entry.reason) problems.push(`${where}: reason is required`);
+  });
+}
+
 /** Every problem with the profile; empty when it is valid. */
 export function validateProfile(profile, { knownProbes = new Set() } = {}) {
   const problems = [];
@@ -133,6 +157,7 @@ export function validateProfile(profile, { knownProbes = new Set() } = {}) {
     }
     for (const field of SCALAR_FIELDS) checkField(problems, `${kind}.${field}`, row.capabilities?.[field]);
     for (const host of HOOK_HOSTS) checkHookHost(problems, `${kind}.hookPlane.${host}`, row.capabilities?.hookPlane?.[host], knownProbes);
+    checkWrites(problems, kind, row);
   }
   return problems;
 }
