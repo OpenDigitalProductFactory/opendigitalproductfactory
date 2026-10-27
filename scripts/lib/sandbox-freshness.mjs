@@ -547,7 +547,22 @@ export function exitCodeForVerdict(verdict) {
  * evidence. `freshnessVerdict` is the verdict that applied when the product
  * command ran (or the preflight verdict when the product command never ran).
  */
-export function classifyGateOutcome({ freshnessVerdict, gateExitCode, mergeConflict = null }) {
+/**
+ * BI-B62A6686. `prisma migrate deploy` exits 1 with P1001 when the slot
+ * database is not listening. That used to be stored as a reusable product
+ * FAIL. A log that merely mentions P1001, without the migrate command, is
+ * not this case.
+ */
+export function isSlotDatabaseUnreachable(output) {
+  const text = String(output ?? "");
+  if (!/prisma migrate deploy/i.test(text)) return false;
+  return /\bP1001\b/.test(text)
+    || /can't reach database server/i.test(text)
+    || /\bECONNREFUSED\b/.test(text)
+    || /\bETIMEDOUT\b/.test(text);
+}
+
+export function classifyGateOutcome({ freshnessVerdict, gateExitCode, mergeConflict = null, gateOutput = "", receivedSignal = "" }) {
   // BI-FCC1DCB2: decided before freshness. The merge is the first thing the
   // runner does and freshness runs after it, so any freshness report beside a
   // merge conflict belongs to an earlier run.
@@ -611,7 +626,9 @@ export function classifyGateOutcome({ freshnessVerdict, gateExitCode, mergeConfl
       status: "blocked_child_signal_death",
       gatePassed: false,
       productEvidence: false,
-      summary: "local-CI gate could not produce a verdict: the build child was killed by a signal rather than exiting. This is infrastructure evidence, NOT a product build failure — most often the host running out of memory under concurrent gate load. Re-run when the box is quieter; check the recorded signal and host pressure before treating any of it as a code defect.",
+      summary: receivedSignal === "SIGINT" || receivedSignal === "SIGTERM"
+        ? `local-CI gate stopped: the gate owner received ${receivedSignal} and terminated its owned build command. This is interruption evidence, NOT a product build failure. Inspect the recorded interruption before starting another governed gate.`
+        : "local-CI gate could not produce a verdict: the build child was killed by a signal and the cause is unknown. This is infrastructure evidence, NOT a product build failure. Inspect the recorded signal, owner events and host pressure before choosing a recovery action.",
     };
   }
   if (gateExitCode === 75) {
@@ -634,6 +651,14 @@ export function classifyGateOutcome({ freshnessVerdict, gateExitCode, mergeConfl
   }
   if (gateExitCode === 0) {
     return { status: "passed", gatePassed: true, productEvidence: true, summary: "local-CI lease gate passed." };
+  }
+  if (isSlotDatabaseUnreachable(gateOutput)) {
+    return {
+      status: "blocked_control_plane_starvation",
+      gatePassed: false,
+      productEvidence: false,
+      summary: "local-CI gate blocked: prisma migrate deploy could not reach the slot database (P1001). This is infrastructure evidence, NOT a product build failure. Re-run on the same SHA once the slot database answers.",
+    };
   }
   return { status: "failed", gatePassed: false, productEvidence: true, summary: "local-CI lease gate failed." };
 }

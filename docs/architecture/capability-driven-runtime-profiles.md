@@ -60,6 +60,8 @@ Enabling resolves the full dependency closure, persists the desired catalog/stat
 
 The transition protocol uses an HMAC-signed, expiring envelope containing the transition identifier, prior and desired keys, hashes, profiles, and services. The promoter has the only read-write `/dpf-state` mount. The host apply script serializes transitions, writes the install snapshot atomically, reconciles explicit service deltas, observes the Compose project, and writes a signed receipt. Its journal permits a crash-safe retry. A failed reconcile or required-health check restores the previous install snapshot and service closure; an unverifiable rollback is reported as `rollback_failed`, never as success. Startup reconciliation completes or compensates pending database receipts before admitting another transition.
 
+Host apply can recreate the portal before it writes its receipt. A process-owned observer checks for late signed receipts every 30 seconds, independently of optional job infrastructure. This observer never launches or compensates host work when a receipt is absent. Startup and live completion share the transactional envelope, database-baseline and audit fences; identical completion is idempotent. Serialization contention leaves the existing transition available for the next pass. Admission still checks durable active and recovery-required rows, and background observation cannot reopen a failed startup barrier.
+
 Health is an observation of the desired state, not permission to enable or disable a capability.
 
 ### Retiring a capability

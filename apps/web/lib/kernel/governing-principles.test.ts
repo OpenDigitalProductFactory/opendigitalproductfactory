@@ -44,7 +44,7 @@ const PROFESSIONS_DIR = join(REPO_ROOT, "docs", "professions");
  * code; never raise it. A new gate code either cites a page or is added here
  * knowingly, as a visible unwritten rule.
  */
-const UNWRITTEN_RULE_CEILING = 20;
+const UNWRITTEN_RULE_CEILING = 16;
 
 function walkMarkdown(dir: string): string[] {
   if (!existsSync(dir)) return [];

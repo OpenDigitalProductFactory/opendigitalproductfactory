@@ -5,7 +5,10 @@ import { ContextualDocsButton } from "@/components/docs/ContextualDocsButton";
 import { HeaderFeedbackButton } from "@/components/feedback/HeaderFeedbackButton";
 import { PlatformHealthIndicator } from "@/components/monitoring/PlatformHealthIndicator";
 import { ShellSignOut } from "@/components/shell/ShellSignOut";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { EllipsisVertical } from "lucide-react";
+import { Surface } from "@/components/ui/Surface";
+import { useT } from "@/lib/i18n/use-t";
 import Link from "next/link";
 import type { PortalAudienceMode } from "@/lib/navigation/portal-navigation-model";
 import { isSimpleNavMode } from "@/lib/navigation/nav-mode";
@@ -36,6 +39,7 @@ type Props = {
 };
 
 export function Header({ platformRole, brandName, brandLogoUrl, brandLogoUrlLight, userId, navMode = "operator", installationBadge = null, installationHref = "/ops/installation" }: Props) {
+  const t = useT("shell");
   // Common Shell Action-Result Contract (BI-9C0954D0) C6 + Simple-mode delta:
   // in Simple (worker) view the header sheds builder-flavored chrome (the
   // "Internal cockpit" badge and the specialist-team tagline) so the owner sees a
@@ -47,6 +51,29 @@ export function Header({ platformRole, brandName, brandLogoUrl, brandLogoUrlLigh
   const logoLight = brandLogoUrlLight?.trim() ?? "";
   const hasLightLogo = logoLight.length > 0;
   const [logoFailed, setLogoFailed] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const accountButton = useRef<HTMLButtonElement>(null);
+  const accountPanel = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!accountOpen) return;
+    const dismiss = (event: KeyboardEvent | PointerEvent) => {
+      if (event instanceof KeyboardEvent) {
+        if (event.key !== "Escape") return;
+        if (accountPanel.current?.querySelector('[role="dialog"]')) return;
+        setAccountOpen(false);
+        accountButton.current?.focus();
+      } else if (!accountPanel.current?.contains(event.target as Node) && !accountButton.current?.contains(event.target as Node)) {
+        setAccountOpen(false);
+      }
+    };
+    document.addEventListener("keydown", dismiss);
+    document.addEventListener("pointerdown", dismiss);
+    return () => {
+      document.removeEventListener("keydown", dismiss);
+      document.removeEventListener("pointerdown", dismiss);
+    };
+  }, [accountOpen]);
 
   useEffect(() => {
     setLogoFailed(false);
@@ -74,7 +101,7 @@ export function Header({ platformRole, brandName, brandLogoUrl, brandLogoUrlLigh
         <Link
           href="/workspace"
           aria-label={`${companyName} home`}
-          className="flex min-w-0 items-center gap-2 sm:gap-3"
+          className="flex shrink-0 items-center gap-2 sm:gap-3"
         >
           {hasLogo && !logoFailed ? (
             <div className="flex h-10 items-center sm:h-14">
@@ -83,13 +110,13 @@ export function Header({ platformRole, brandName, brandLogoUrl, brandLogoUrlLigh
                   <img
                     src={logoLight}
                     alt={`${companyName} logo`}
-                    className="logo-light block h-full w-auto max-w-[120px] object-contain sm:max-w-[220px]"
+                    className="logo-light block h-full w-auto max-w-20 object-contain sm:max-w-[220px]"
                     onError={() => { setLogoFailed(true); }}
                   />
                   <img
                     src={logoSource}
                     alt={`${companyName} logo`}
-                    className="logo-dark block h-full w-auto max-w-[120px] object-contain sm:max-w-[220px]"
+                    className="logo-dark block h-full w-auto max-w-20 object-contain sm:max-w-[220px]"
                     onError={() => { setLogoFailed(true); }}
                   />
                 </>
@@ -97,7 +124,7 @@ export function Header({ platformRole, brandName, brandLogoUrl, brandLogoUrlLigh
                 <img
                   src={logoSource}
                   alt={`${companyName} logo`}
-                  className="block h-full w-auto max-w-[120px] object-contain sm:max-w-[220px]"
+                  className="block h-full w-auto max-w-20 object-contain sm:max-w-[220px]"
                   onError={() => {
                     console.warn(`[Header] Logo failed to load: ${logoSource}`);
                     setLogoFailed(true);
@@ -113,7 +140,7 @@ export function Header({ platformRole, brandName, brandLogoUrl, brandLogoUrlLigh
           <div className="hidden min-w-0 sm:block">
             <div className="flex items-center gap-2">
               {(!hasLogo || logoFailed) && (
-                <span className="font-extrabold tracking-tight text-sm text-[var(--dpf-accent)]">
+                <span className="block max-w-48 truncate font-extrabold tracking-tight text-sm text-[var(--dpf-accent)] lg:max-w-64">
                   {companyName}
                 </span>
               )}
@@ -123,11 +150,6 @@ export function Header({ platformRole, brandName, brandLogoUrl, brandLogoUrlLigh
                 </span>
               )}
             </div>
-            {!simpleMode && (
-              <p className="mt-0.5 hidden truncate text-xs text-[var(--dpf-muted)] lg:block">
-                Small employee team, AI coworkers filling in specialist expertise
-              </p>
-            )}
           </div>
         </Link>
 
@@ -140,16 +162,22 @@ export function Header({ platformRole, brandName, brandLogoUrl, brandLogoUrlLigh
             href={installationHref}
             data-testid="installation-badge"
             title={`${installationBadge} installation — open the details`}
-            className="shrink-0 rounded-full border border-[var(--dpf-warning)] px-2 py-0.5 text-dpf-caption font-bold uppercase tracking-wider text-[var(--dpf-warning)]"
+            className="min-w-0 break-words rounded-full border border-[var(--dpf-warning)] px-2 py-0.5 text-dpf-caption font-bold uppercase tracking-wider text-[var(--dpf-warning)]"
           >
             {installationBadge}
           </Link>
         ) : null}
         </div>
 
-        <div className="flex items-center gap-1 sm:gap-2">
-          <ContextualDocsButton compact />
+        <div className="relative flex shrink-0 items-center gap-1 sm:gap-2">
           <PlatformHealthIndicator />
+          <span data-agent-launcher-slot="true" className="inline-flex shrink-0 empty:hidden" />
+          <button ref={accountButton} type="button" aria-label={t("nav.accountHelp")} aria-expanded={accountOpen} aria-controls="header-account-actions" onClick={() => setAccountOpen(open => !open)} className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md border border-[var(--dpf-border)] text-[var(--dpf-text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--dpf-accent)] lg:hidden">
+            <EllipsisVertical aria-hidden className="h-5 w-5" />
+          </button>
+          <div ref={accountPanel} className={`${accountOpen ? "block" : "hidden lg:block"} absolute end-0 top-full z-50 mt-2 w-60 max-w-[calc(100vw-2rem)] lg:static lg:mt-0 lg:w-auto lg:max-w-none`}>
+          <Surface id="header-account-actions" role="group" aria-label={t("nav.accountHelp")} padding="sm" className="flex flex-col gap-2 shadow-lg lg:flex-row lg:items-center lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
+          <ContextualDocsButton compact />
           <HeaderFeedbackButton userId={userId ?? null} />
           {platformRole !== null && (
             <span className="hidden text-xs text-[var(--dpf-muted)] sm:inline">
@@ -157,6 +185,8 @@ export function Header({ platformRole, brandName, brandLogoUrl, brandLogoUrlLigh
             </span>
           )}
           <ShellSignOut />
+          </Surface>
+          </div>
         </div>
       </div>
     </header>

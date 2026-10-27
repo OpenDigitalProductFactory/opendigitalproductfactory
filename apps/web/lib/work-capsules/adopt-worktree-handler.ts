@@ -16,6 +16,7 @@ import { adoptWorktreeCapsule } from "./work-capsule-store";
 import type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
 import { describeRoomOwnership, establishRoomOwnership, resolveRoomOwnershipPrincipals } from "./room-ownership";
 import { projectWorkroomIdentityRepair } from "./workroom-recovery-projection";
+import { invalidSourceCommitField } from "./work-capsule-branch-identity";
 
 type ToolContext = { agentId?: string; threadId?: string; taskRunId?: string; routeContext?: string } | undefined;
 
@@ -57,6 +58,10 @@ export async function adoptWorktree(args: {
       error: "invalid_input",
       message: "title, objective, repositoryFullName, headBranch, and worktreePath are required.",
     };
+  }
+  const invalidCommitField = invalidSourceCommitField(params);
+  if (invalidCommitField) {
+    return { success: false, error: "invalid_input", message: `${invalidCommitField} must be a full 40-character commit SHA. Omit it only for source-less design or planning; capture the actual local Git identity before implementation.` };
   }
   if (executorKind && !isWorkCapsuleExecutorKind(executorKind)) {
     return {

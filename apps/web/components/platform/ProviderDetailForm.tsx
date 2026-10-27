@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useEffect, useId } from "react";
+import { useState, useTransition, useEffect, useId, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -45,9 +45,10 @@ type Props = {
   hasActiveProvider: boolean;
   // EP-INF-006: Routing profiles merged into model cards
   routingProfiles?: RoutingProfile[];
+  executionRecipes?: ReactNode;
 };
 
-export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActiveProvider, routingProfiles, sharedAuthRecovery, defaultConnectionId }: Props) {
+export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActiveProvider, routingProfiles, sharedAuthRecovery, defaultConnectionId, executionRecipes }: Props) {
   const t = useT("setup");
   const { provider, credential } = pw;
   const router = useRouter();
@@ -631,7 +632,7 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
           onClick={() => setShowDiagnostics((value) => !value)}
           style={{ background: "transparent", border: "1px solid var(--dpf-border)", color: "var(--dpf-muted)", fontSize: 12, padding: "6px 10px", borderRadius: 4, cursor: "pointer" }}
         >
-          {showDiagnostics ? "Hide diagnostics" : "Advanced diagnostics"}
+          {t("providerConnection.modelsExecution")}
         </button>
       </div>
 
@@ -697,6 +698,8 @@ export function ProviderDetailForm({ pw, canWrite, models, profiles, hasActivePr
           />
         </div>
       )}
+      {showDiagnostics && models.length === 0 && <p className="mt-3 text-sm text-[var(--dpf-muted)]">{t("providerConnection.modelsEmpty")}</p>}
+      {showDiagnostics && executionRecipes}
     </div>
   );
 }

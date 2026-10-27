@@ -61,6 +61,25 @@ function completeBoundary(): BuildWorkroomViewInput["boundary"] {
 }
 
 describe("Work Room read model", () => {
+  it("does not ask to assign an owner when the room has recorded accountability", () => {
+    const detail = caseDetail({ state: "triage", nextAction: "Assign owner", assignedToUserId: null });
+    const owned = buildWorkroomView({ caseKey: "booking%3ABK-100", detail, boundary: completeBoundary() });
+    expect(owned.boundary.accountablePrincipalRef).toBe("prn-user-1");
+    expect(owned.work.nextAction).toBe("Review the next step with the accountable owner");
+    const unowned = buildWorkroomView({ caseKey: "booking%3ABK-100", detail });
+    expect(unowned.work.nextAction).toBe("Assign owner");
+    const waiting = buildWorkroomView({ caseKey: "booking%3ABK-100",
+      detail: caseDetail({ state: "waiting-on-system", nextAction: "Wait for system recovery" }),
+      boundary: completeBoundary() });
+    expect(waiting.work.nextAction).toBe("Wait for system recovery");
+    const held = buildWorkroomView({ caseKey: "booking%3ABK-100", detail,
+      boundary: completeBoundary(), processOverseerObservation: { attentionReason: "Wait for the recorded dependency" } });
+    expect(held.work.nextAction).toBe("Wait for the recorded dependency");
+    const specific = buildWorkroomView({ caseKey: "booking%3ABK-100",
+      detail: caseDetail({ state: "triage", nextAction: "Classify the customer request" }), boundary: completeBoundary() });
+    expect(specific.work.nextAction).toBe("Classify the customer request");
+  });
+
   it("projects inherited requirements without treating source resolution as domain qualification", () => {
     const room = buildWorkroomView({ caseKey: "booking%3ABK-100", detail: caseDetail() });
     expect(room.reviewProfile).toMatchObject({
@@ -473,4 +492,22 @@ describe("Work Room read model", () => {
     expect(room.outcome.packet).toBeNull();
     expect(room.activity[0]?.kind).toBe("message");
   });
+});
+
+
+it("replaces a generic wait with read-only blocker inspection while preserving stronger execution and drive directions", () => {
+  const recordedBlocker = { reason: "workroom-blocked" as const, explanation: "Unverified reported cause",
+    explanationState: "current" as const, expiresAt: "2026-10-27T00:00:00.000Z",
+    source: { kind: "workroom-status-override" as const, capsuleId: "WC-ONE" }, coordinationOnly: true as const };
+  const input = { caseKey: "booking%3ABK-100", detail: caseDetail({ state: "waiting-on-system", nextAction: "Wait for system recovery" }),
+    boundary: completeBoundary(), recordedBlocker };
+  const view = buildWorkroomView(input);
+  expect(view.work).toMatchObject({ nextAction: "Inspect the recorded blocker before continuing.", attentionRequired: true, recordedBlocker });
+  expect(view.work.attentionReason).toBe("Work is blocked.");
+  expect(view.boundary.accountablePrincipalRef).toBe("prn-user-1");
+  expect(buildWorkroomView({ ...input, executionAttentionReason: "Original reviewer is unsettled" }).work.nextAction)
+    .toBe("Inspect Observed execution for the reviewer status and required action.");
+  expect(buildWorkroomView({ ...input, processOverseerObservation: { attentionReason: "Wait for the recorded dependency" } }).work.nextAction)
+    .toBe("Wait for the recorded dependency");
+  expect(buildWorkroomView({ ...input, detail: caseDetail({ state: "resolved", terminal: true }) }).work.recordedBlocker).toBeNull();
 });

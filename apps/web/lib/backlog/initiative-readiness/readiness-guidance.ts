@@ -211,6 +211,12 @@ const GENERIC_REMEDIES: Record<ReadinessCode, string | null> = {
  * the item body and the live install, not the reviewer lane.
  */
 const SHAPE_REMEDIES: Partial<Record<ReadinessShape, Partial<Record<ReadinessCode, string>>>> = {
+  xlarge: {
+    PLAN_COVERAGE_REQUIRED:
+      "Use the initiative's current governed decomposition covering at least two distinct existing children. Repair the named coverage issue; do not create duplicate children or change the initiative's shape to close it.",
+    DELIVERY_EVIDENCE_REQUIRED:
+      "Complete every required child in the existing decomposition. The parent's PR merge or deployment cannot substitute for child delivery.",
+  },
   small: {
     RESEARCH_REQUIRED:
       "For a small item, research is the reproduction: the defect or gap confirmed on a named ref and a failing-to-passing proof. For a small fix, record both with record_execution_evidence (kind \"source_verified\" with the source URL, and kind \"test_pass\"); that satisfies research at claim. Otherwise record it with record_initiative_evidence(gate: \"research\").",
@@ -232,6 +238,7 @@ function definitionSentence(definition: ReadinessRequirementDefinition): string 
 }
 
 export type RequirementGuidanceInput = {
+  accountableRole?: string;
   code: ReadinessCode;
   profile: ReadinessProfile;
   /** v3: the delivery shape, when the item carries one. */
@@ -284,7 +291,10 @@ export function requirementNextAction(input: RequirementGuidanceInput): string |
     parts.push(input.reasons.map(endWithStop).join(" "));
   }
 
-  const shapeRemedy = input.shape ? SHAPE_REMEDIES[input.shape]?.[input.code] : undefined;
+  const shapeRemedy = input.shape === "medium" && input.code === "OBJECTIVE_BASELINE_REQUIRED"
+    && input.accountableRole === "design-checklist-reviewer"
+    ? "The retained independently approved scope requires an independent spec-approval amendment against the current immutable design and existing baseline. Preserve the prior approval; use the server-issued review packet. Body criteria cannot replace it."
+    : input.shape ? SHAPE_REMEDIES[input.shape]?.[input.code] : undefined;
   const definition = requirementDefinition(input.code, input.profile);
   if (shapeRemedy) {
     parts.push(shapeRemedy);
@@ -342,6 +352,7 @@ export function readinessRequirement(input: {
     unreadEvidenceRefs,
     nextAction: requirementNextAction({
       code: input.code,
+      accountableRole: input.accountableRole,
       // Without a profile the profile-specific definitions do not apply and the
       // generic remedy is used, which is correct rather than merely tolerable.
       profile: input.profile ?? "doc-only",

@@ -55,8 +55,10 @@ export function projectProviderRoutingControl(input: {
     authMethod: p.authMethod, hasCredential: credential?.hasUsableMaterial ?? false,
     credentialExpired: Boolean(credential?.tokenExpiresAt && Date.parse(credential.tokenExpiresAt) < input.now),
     discoveredModelCount: input.modelCount, cliPoolExhausted: input.pool?.isExhausted,
+    sensitivityClearance: p.sensitivityClearance,
   });
-  if (!eligibility.eligible && !restrictions.some(r => r.key === "operator" || r.key === "connection") && eligibility.state !== "rate_limited" && (eligibility.state !== "disabled" || !restrictions.length)) add("setup", eligibility.state === "disabled" ? "Provider unavailable. Review its account and health details." : eligibility.reason);
+  if (eligibility.state === "public_only") add("clearance", eligibility.reason);
+  else if (!eligibility.eligible && !restrictions.some(r => r.key === "operator" || r.key === "connection") && eligibility.state !== "rate_limited" && (eligibility.state !== "disabled" || !restrictions.length)) add("setup", eligibility.state === "disabled" ? "Provider unavailable. Review its account and health details." : eligibility.reason);
   const effectiveEligibility = p.operatorPause || p.defaultConnectionStatus === "paused"
       ? { ...eligibility, eligible: false, recommendedAction: null, label: "Paused", reason: "Paused by an operator; other restrictions may also apply." }
       : restrictions.length && (eligibility.eligible || eligibility.state === "disabled")

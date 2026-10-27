@@ -40,6 +40,17 @@ function legacyRouteOnly(r: OwnerRulingCandidate): boolean {
 }
 
 describe("owner ruling queue selects on ownership, not route (BI-EB5E9BE3)", () => {
+  it("excludes a new independent-review result from the owner's queue", () => {
+    expect(isOwnerRulingQueueRow({ ...row({ outcomeType: "escalate" }), escalationRoute: "independent_review" }, ORG_PROFILES)).toBe(false);
+  });
+
+  it("includes a routed human decision even if the evaluator recommended proceeding", () => {
+    expect(isOwnerRulingQueueRow({ ...row({ outcomeType: "recommend" }), escalationRoute: "human" }, ORG_PROFILES)).toBe(true);
+  });
+
+  it("a human route never bypasses the owning organization boundary", () => {
+    expect(isOwnerRulingQueueRow({ ...row({ outcomeType: "recommend", profileId: "wwwd-other-org" }), escalationRoute: "human" }, ORG_PROFILES)).toBe(false);
+  });
   it("includes an /ops/demand decision scored against the organization profile", () => {
     const demand = row({ routeContext: "/ops/demand" });
     // The defect, stated as an assertion: the old rule dropped this row.

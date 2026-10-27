@@ -27,6 +27,7 @@ import type { DriveMarking, DriveRework, DriveTokenPlan } from "./drive-marking"
 import type { DueDeadline } from "./drive-deadlines";
 import type { SubShapeChildObservation, SubShapeEffects } from "./drive-child-rooms";
 import type { RecordedEvidence } from "./stage-evidence-receipts";
+import type { StageRunObservation, WritebackRetry } from "./writeback-latch";
 import { usesGraphConstructs } from "./drive-marking";
 import { workShapeRecurs } from "./work-shapes";
 import { cycleCompleted, emptyPlan, ledgerFrom, planStage, projectDriveCycle, runConcluded } from "./drive-plan-stage";
@@ -89,6 +90,16 @@ export type DriveResolutionInput = {
   proposedStageKey?: string | null;
   /** Last persisted drive tick. Used to fail closed when a dispatch produced no writeback. */
   priorDrive?: PriorWorkroomDrive | null;
+  /**
+   * Sequential path only (BI-7C0B2BD6): what the room's scheduled task shows
+   * about the run the drive queued; null when no task exists. Absent keeps the
+   * cycle-bounded writeback latch.
+   */
+  stageRun?: StageRunObservation | null;
+  /** Exact primary/parallel-task observations for approval waits on graph tokens. */
+  stageRunsByTask?: Readonly<Record<string, StageRunObservation | null>>;
+  /** The failed attempts the last tick recorded for its stage (BI-7C0B2BD6). */
+  writebackRetry?: WritebackRetry | null;
   /**
    * The room's stored `workspaceState`. Read only by the graph path (GPP Phase
    * 3c), which keeps its marking there; the sequential path never reads it.
@@ -171,6 +182,12 @@ export type DrivePlan = {
    * capsule id or state into the marking only once its effect committed.
    */
   subShapes?: SubShapeEffects;
+  /** BI-7C0B2BD6: a latch pause for a run still outstanding; the runner leaves the room's task active. */
+  keepTaskActive?: boolean;
+  /** BI-7C0B2BD6: the failed attempts for this stage in this cycle, stored on the snapshot. */
+  writebackRetry?: WritebackRetry | null;
+  /** BI-7C0B2BD6: the retry number of this dispatch in its cycle; the dispatch scope's iteration. */
+  dispatchAttempt?: number;
 };
 
 export { boundStagePrincipal, parseAccountablePrincipalRef, workroomDriveBranchTaskId, workroomDriveTaskId } from "./drive-plan-stage";
@@ -310,5 +327,6 @@ export function resolveDrivePlan(input: DriveResolutionInput): DrivePlan {
     });
   }
 
-  return planStage({ input, definition: input.definition, stage, conformance, cycle, prior: input.priorDrive ?? null });
+  return planStage({ input, definition: input.definition, stage, conformance, cycle, prior: input.priorDrive ?? null,
+    ...(input.stageRun !== undefined ? { run: input.stageRun } : {}) });
 }

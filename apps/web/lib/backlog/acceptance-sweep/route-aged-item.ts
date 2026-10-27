@@ -175,7 +175,7 @@ function runtimeCheckLines(itemId: string, codes: readonly string[]): string[] {
   if (codes.includes("DELIVERY_EVIDENCE_REQUIRED")) {
     lines.push(`- DELIVERY_EVIDENCE_REQUIRED: kind "test_pass" for the failing-to-passing test you ran (with its URL when there is one), or kind "manual_check" for the delivered change observed on the live install.`);
   }
-  lines.push(`Where the check fails, record that with kind "test_fail" or "ux_fail" instead. Evidence is all you record: whoever closes the item cites it.`);
+  lines.push(`Where a manual check is blocked or fails, record kind "manual_fail", not "manual_check". manual_fail never earns completion credit. A failing test is kind "test_fail"; a failing visible check is kind "ux_fail". Evidence is all you record: whoever closes the item cites it.`);
   return lines;
 }
 

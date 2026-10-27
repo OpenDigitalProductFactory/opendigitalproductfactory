@@ -153,3 +153,7 @@ describe("Work Case status projection", () => {
     });
   });
 });
+
+it.each(["failed", "unavailable", "unknown"])("shows actionable nonterminal engagement state %s", status => {
+  expect(projectWorkCaseState({ coworkerEngagement: { engagementId: "CE-ORIGINAL", status } })).toMatchObject({ state: "waiting-on-system", terminal: false, reason: expect.stringMatching(/original|provenance|reconcile/i) });
+});

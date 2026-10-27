@@ -6,6 +6,8 @@ import { BUILD_PHASE_ROUTE_OPTIONS } from "@/lib/build/build-phase-route-options
 import { resolveCredentialProviderId } from "@/lib/inference/ai-provider-internals";
 import { loadProviderHealthBatch } from "@/lib/routing/provider-health-loader";
 import { cliAdapterTypeForProvider } from "@/lib/routing/provider-routing-eligibility";
+import { capacityProviderIds, indexProviderCapacityByProvider } from "@/lib/routing/provider-capacity/store";
+import { indexCliPoolResetTimes } from "@/lib/routing/cli-pool-status";
 import type { SensitivityLevel } from "@/lib/routing/types";
 import {
   qualifyBuildEngineCandidates,
@@ -142,11 +144,11 @@ export async function resolveBuildEngineSelection(
       select: { engineId: true, state: { select: { present: true } } },
     }),
     prisma.providerCapacityStatus.findMany({
-      where: { providerId: { in: providerIds } },
+      where: { providerId: { in: capacityProviderIds(providerIds) } },
       select: { providerId: true, state: true, retryAt: true, lastObservedAt: true },
     }),
     prisma.cliPoolStatus.findMany({
-      select: { adapterType: true, resetAt: true },
+      select: { adapterType: true, adapterKind: true, resetAt: true },
     }),
     loadProviderHealthBatch(providerIds, { now: nowMs }),
     getLocalOnlyInference(),
@@ -158,8 +160,8 @@ export async function resolveBuildEngineSelection(
 
   const credentialById = new Map(credentials.map((row) => [row.providerId, row]));
   const engineById = new Map(engines.map((row) => [row.engineId, row]));
-  const capacityByProvider = new Map(capacities.map((row) => [row.providerId, row]));
-  const cliRetryByAdapter = new Map(cliPools.map((row) => [row.adapterType, row.resetAt?.getTime() ?? null]));
+  const capacityByProvider = indexProviderCapacityByProvider(capacities, nowMs);
+  const cliRetryByAdapter = indexCliPoolResetTimes(cliPools);
   const localConnectionByProvider = new Map(localConnections.map(row => [row.providerId, row.status]));
 
   const candidates: BuildEngineCandidate[] = structuralProviders.flatMap((provider) => {

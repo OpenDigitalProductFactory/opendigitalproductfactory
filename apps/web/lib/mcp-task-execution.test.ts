@@ -75,6 +75,9 @@ const parsed = {
   },
 };
 
+const reviewTaskIdentity = { userId: "user-1", currentAgentId: parsed.agentId,
+  a2aMetadata: { requestDigest: "9".repeat(64), initiativeReviewBinding: parsed.initiativeReviewBinding } };
+
 describe("remote task terminal-writer postcondition", () => {
   it.each([undefined, "capacity"] as const)("revalidates activity classification without replacing the task on %s", async (resumeKind) => {
     sensitivity.mockResolvedValueOnce("development");
@@ -110,7 +113,7 @@ describe("remote task terminal-writer postcondition", () => {
     expect(JSON.stringify(outcome)).not.toContain("start implementation");
   });
   it("BI-31159978 does not invent approval after a successful writer with stale input-required state", async () => {
-    db.findTaskRun.mockResolvedValue({ status: "input-required", progressPayload: {} });
+    db.findTaskRun.mockResolvedValue({ ...reviewTaskIdentity, status: "input-required", progressPayload: {} });
     autonomous.execute.mockResolvedValue({
       content: "Blocked: no receipt exists; request human approval.",
       executedTools: [{ name: writerToolName, result: {
@@ -132,7 +135,7 @@ describe("remote task terminal-writer postcondition", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     db.findModelConfig.mockResolvedValue(null);
-    db.findTaskRun.mockResolvedValue({ status: "working" });
+    db.findTaskRun.mockResolvedValue({ ...reviewTaskIdentity, status: "working" });
     db.updateTaskRun.mockResolvedValue({ count: 1 });
     autonomous.resolveAgent.mockResolvedValue({
       agentId: "AGT-WS-PORTFOLIO",
@@ -300,11 +303,12 @@ describe("remote task terminal-writer postcondition", () => {
   });
 
   it("parks an approval-required terminal writer even when the tool did not project TaskRun state", async () => {
-    db.findTaskRun.mockResolvedValue({
-      status: "input-required",
+    db.findTaskRun.mockResolvedValueOnce({ ...reviewTaskIdentity, status: "working", progressPayload: {} }).mockResolvedValue({ ...reviewTaskIdentity,
+      status: "working",
       progressPayload: {
         auditMarker: "preserve-me",
-        terminalWriterWait: { kind: "missing-terminal-writer", observedAt: "2026-09-06T02:00:00.000Z" },
+        terminalWriterWait: { schemaVersion: 1, kind: "missing-terminal-writer", resumeMode: "same-taskrun",
+          writerToolName, attempt: 1, dispatchContract: "required-tool-call", observedAt: "2026-09-06T02:00:00.000Z" },
         terminalWriterDispatchFailure: { code: "required-terminal-writer-not-enforceable", observedAt: "2026-09-06T02:00:00.000Z" },
         terminalWriterEscalation: { kind: "manual-recovery-required" },
         terminalWriterContextFailure: { code: "terminal_writer_context_unavailable" },
@@ -338,7 +342,7 @@ describe("remote task terminal-writer postcondition", () => {
     });
 
     expect(db.updateTaskRun).toHaveBeenCalledWith({
-      where: expect.objectContaining({ taskRunId: "TR-MCP-APPROVAL-PROJECTION", status: "input-required" }),
+      where: expect.objectContaining({ taskRunId: "TR-MCP-APPROVAL-PROJECTION", status: "working" }),
       data: expect.objectContaining({
         status: "input-required",
         completedAt: null,
@@ -377,7 +381,7 @@ describe("remote task terminal-writer postcondition", () => {
         taskRunId: "TR-MCP-APPROVAL-PROJECTION",
         status: "input-required",
         progressPayload,
-        a2aMetadata: {},
+        a2aMetadata: reviewTaskIdentity.a2aMetadata,
       },
       requestMatches: true,
     })).toMatchObject({
@@ -596,7 +600,7 @@ describe("a resource wait is not a missing terminal writer (BI-8B8731EE)", () =>
   beforeEach(() => {
     vi.clearAllMocks();
     db.findModelConfig.mockResolvedValue(null);
-    db.findTaskRun.mockResolvedValue({ status: "working" });
+    db.findTaskRun.mockResolvedValue({ ...reviewTaskIdentity, status: "working" });
     db.updateTaskRun.mockResolvedValue({ count: 1 });
     autonomous.resolveAgent.mockResolvedValue({
       agentId: "AGT-WS-PORTFOLIO",
@@ -725,7 +729,7 @@ describe("a resource wait is not a missing terminal writer (BI-8B8731EE)", () =>
 describe("agent residency policy is read, never inferred from a pin", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    db.findTaskRun.mockResolvedValue({ status: "working" });
+    db.findTaskRun.mockResolvedValue({ ...reviewTaskIdentity, status: "working" });
     db.updateTaskRun.mockResolvedValue({ count: 1 });
     autonomous.resolveAgent.mockResolvedValue({
       agentId: "AGT-WS-PORTFOLIO",

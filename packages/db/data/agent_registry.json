@@ -2816,7 +2816,8 @@
           "file_read",
           "registry_read",
           "web_search",
-          "approval_probe_read"
+          "approval_probe_read",
+          "document_write"
         ]
       }
     },
@@ -4363,7 +4364,8 @@
           "backlog_read",
           "portfolio_read",
           "workroom_evidence_write",
-          "payables_read"
+          "payables_read",
+          "document_write"
         ]
       }
     },

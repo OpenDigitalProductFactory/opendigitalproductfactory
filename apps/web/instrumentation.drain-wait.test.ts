@@ -1,10 +1,11 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+vi.mock("@/lib/self-upgrade/landed-swap", () => ({ healLandedSwapFalseFailures: vi.fn(async () => 0) }));
 /**
  * BI-F9EE05E5 — the periodic self-upgrade reconciler must never fail a run
  * whose drain is still heartbeating. An upgrade now waits up to an hour (or
  * longer, awaiting the operator) for work, so 30 minutes since startedAt is no
  * longer evidence that the orchestrator died.
  */
-import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const m = vi.hoisted(() => ({
   getDeployedSha: vi.fn(),

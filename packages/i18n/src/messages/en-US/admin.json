@@ -1,6 +1,48 @@
 {
   "scheduledWork": {
-    "lastResult": "Last result"
+    "lastResult": "Last result",
+    "intakeController": {
+      "title": "Issue intake controller",
+      "intro": "This installation reads and triages issues on the platform repository only after an owner commissions it. Every check below must pass first.",
+      "loading": "Checking…",
+      "loadFailed": "Could not check issue intake",
+      "retry": "Try again",
+      "commissioned": "Commissioned",
+      "notCommissioned": "Not commissioned",
+      "lapsed": "The commission no longer holds",
+      "commissionDetail": "{$room} for {$repository}, by {$by}:",
+      "room": "Controller room: {$room} for {$repository}",
+      "noRoom": "No issue-triage room exists yet, so there is nothing to commission.",
+      "checklist": "Commissioning checklist",
+      "status": {
+        "pass": "Pass",
+        "fail": "Fail",
+        "unchecked": "Not checked"
+      },
+      "clause": {
+        "commission": "A controller room is recorded",
+        "room-found": "The controller room exists",
+        "room-live": "The room is open",
+        "work-shape": "The room watches issues (issue-triage-watch)",
+        "locally-owned": "The room belongs to this installation",
+        "upstream-configured": "Upstream GitHub repository is set",
+        "room-repository": "The room is for that repository",
+        "commission-repository": "The commission names that repository",
+        "room-owner": "The room has an owner here",
+        "commissioner-owns": "You own the room",
+        "production-install": "This is a production installation",
+        "operating-intent": "The installation purpose is confirmed",
+        "purpose": "Developing the platform is its main or another job"
+      },
+      "readOnly": "Only someone who can manage the platform can commission issue intake.",
+      "becomeOwner": "Become the room's owner",
+      "ownerConfirmTitle": "Take ownership of the room?",
+      "ownerConfirm": "You become the owner of {$room}. This is recorded on the room.",
+      "ownerConfirmHandover": "You become the owner of {$room}. {$names} stays in the room but is no longer its owner. This is recorded on the room.",
+      "commission": "Commission",
+      "working": "Working…",
+      "blockedBy": "Blocked by: {$clause}"
+    }
   },
   "accountableOwner": {
     "label": "Accountable owner:",
@@ -133,6 +175,14 @@
       "explanation": "Optional inactivity: no health penalty.",
       "empty": "No capability-owned service requirements are configured.",
       "authorityUnavailable": "Capability authority is unavailable, so service requirements cannot be classified safely.",
+      "disagreement": "{$count :integer} capabilities disagree with the installation. Service health cannot be classified safely.",
+      "disagreementSummary": "View disagreements ({$count :integer})",
+      "disagreementStates": "Installation: {$installation}; recorded state: {$recorded}.",
+      "installEnabled": "enabled",
+      "installDisabled": "disabled",
+      "stateMissing": "not recorded",
+      "stateActive": "active",
+      "reconcileAdvice": "Reconcile recorded state and installation through the governed capability transition.",
       "inactiveSummary": "Inactive services ({$count :integer})",
       "aggregateLabel": "Platform capability health: {$value}",
       "requiredAdvice": "Recovery: {$action}",
@@ -150,6 +200,49 @@
     "unresolvedTitle": "{$unresolved} of {$total} phases unresolved",
     "attentionTitle": "Phase routing needs attention",
     "resolvedSummary": "{$resolved} resolved: {$local} local, {$cloud} cloud."
+  },
+  "managedRepository": {
+    "heading": "Managed repository",
+    "repositoryLabel": "GitHub repository",
+    "repositoriesLabel": "Repositories",
+    "save": "Save",
+    "cancel": "Cancel",
+    "notNow": "Not now",
+    "notSet": "Not set",
+    "setRepository": "Set repository",
+    "change": "Change",
+    "connect": "Connect GitHub",
+    "newCode": "Get a new code",
+    "checkAgain": "Check again",
+    "enterCode": "Enter this code on GitHub:",
+    "copyCode": "Copy code",
+    "copied": "Copied",
+    "openGitHub": "Open GitHub",
+    "lastChecked": "Last checked:",
+    "status": {
+      "connected": "Connected",
+      "read-only": "Read only",
+      "no-access": "No access",
+      "login-expired": "Login expired",
+      "not-connected": "Not connected",
+      "check-failed": "Couldn't check"
+    },
+    "hint": {
+      "read-only": "This login can read but not label issues. Use an account with triage access.",
+      "no-access": "This login cannot see the repository. Log in with an account that can.",
+      "login-expired": "Log in again.",
+      "not-connected": "Log in so the platform can read and label its issues.",
+      "check-failed": "GitHub did not answer. Try again shortly."
+    },
+    "live": {
+      "status": "Status: {$status}",
+      "waiting": "Waiting for you to approve on GitHub.",
+      "loggedIn": "Logged in. Checking the repository.",
+      "expired": "The code expired."
+    },
+    "error": {
+      "unreachable": "Could not reach GitHub."
+    }
   },
   "monitoringSettings": {
     "title": "Monitoring",

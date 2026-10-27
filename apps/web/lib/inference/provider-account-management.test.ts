@@ -1,17 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const db = vi.hoisted(() => ({
-  credentialEntry: { update: vi.fn() },
+  credentialEntry: { create: vi.fn(), update: vi.fn() },
   complianceEvidence: { updateMany: vi.fn() },
-  modelProvider: { update: vi.fn() },
-  aiProviderConnection: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
+  modelProvider: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
+  aiProviderConnection: { create: vi.fn(), findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
   $transaction: vi.fn(),
 }));
 vi.mock("@dpf/db", async (importOriginal) => ({
   ...await importOriginal<typeof import("@dpf/db")>(), prisma: db,
   setProviderStatusWithDefaultConnection: (await import("../../../../packages/db/src/provider-connection")).setProviderStatusWithDefaultConnection,
 }));
-import { configureProviderAccount, setProviderAccountEnabled } from "./provider-account-management";
+import { ACCOUNT_ACCESS_RESET, addProviderAccount, configureProviderAccount, setProviderAccountEnabled } from "./provider-account-management";
 import { reconcileProviderConnectionState } from "./provider-connection-reconcile";
 const pause = vi.hoisted(() => ({ resumeLocalProvider: vi.fn() }));
 vi.mock("./provider-operator-pause", () => pause);
@@ -38,6 +38,9 @@ describe("explicit Anthropic workspace configuration", () => {
 });
 
 describe("local account operator intent", () => {
+  it("clears capacity ownership when replacement credentials invalidate account proof", () => {
+    expect(ACCOUNT_ACCESS_RESET).toMatchObject({ capacityStatusId: null, quotaStatusId: null });
+  });
   let providerId: string;
   let connectionId: string;
   let providerStatus: string;
@@ -91,5 +94,22 @@ describe("local account operator intent", () => {
     await reconcileProviderConnectionState();
     expect(connectionStatus).toBe("disabled");
     expect(providerStatus).toBe("active");
+  });
+  it("activates a first configured account only across the provider's unconfigured boundary", async () => {
+    db.aiProviderConnection.findUnique.mockResolvedValue({ connectionId: "account-a", providerId: "openai", status: "unconfigured", credentialEntry: { status: "ok" } });
+    db.modelProvider.updateMany.mockResolvedValue({ count: 1 });
+    await setProviderAccountEnabled("account-a", true);
+    expect(db.modelProvider.updateMany).toHaveBeenCalledWith({ where: { providerId: "openai", status: "unconfigured" }, data: { status: "active" } });
+  });
+  it.each([
+    ["chatgpt", "oauth2_authorization_code", "direct-api", "direct-api"],
+    ["codex", "api_key", "subscription-cli", "subscription-cli"],
+    ["anthropic-sub", "api_key", "subscription-cli", "direct-api"],
+  ])("uses the supported execution channel for %s %s rather than inferring it from OAuth", async (id, method, defaultChannel, expectedChannel) => {
+    db.modelProvider.findUnique.mockResolvedValue({ providerId: id, supportedAuthMethods: [method] });
+    db.aiProviderConnection.findUnique.mockResolvedValue({ executionChannel: defaultChannel });
+    db.credentialEntry.create.mockResolvedValue({ id: "private-credential" });
+    await addProviderAccount({ providerId: id, label: "Second account", authMethod: method });
+    expect(db.aiProviderConnection.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ executionChannel: expectedChannel }) }));
   });
 });

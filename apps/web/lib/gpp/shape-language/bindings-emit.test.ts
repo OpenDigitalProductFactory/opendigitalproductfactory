@@ -26,13 +26,15 @@ beforeAll(() => {
   sources = defaultResolveSources();
 }, 120_000);
 
-/** The passing fixture with its gated `decide` stage given tools and, optionally, a binding. */
+/** The passing fixture with its gate-entered `act` stage given tools and, optionally, a binding. */
 function documentWith(patch: { tools?: string[]; binding?: boolean; gateKey?: string; resolver?: boolean }): GppShapeDocument {
   const document = structuredClone(BASE);
   const decide = document.stages[1];
+  const act = document.stages[2];
+  if (!act) throw new Error("fixture changed");
   if (!decide || decide.advance.kind !== "governed-decision" || !decide.advance.gate) throw new Error("fixture changed");
-  if (patch.tools) decide.tools = patch.tools;
-  if (patch.binding) decide.binding = { id: "decide-binding", version: 2, enforcement: "shadow" };
+  if (patch.tools) act.tools = patch.tools;
+  if (patch.binding) act.binding = { id: "decide-binding", version: 2, enforcement: "shadow" };
   if (patch.gateKey) decide.advance.gate.gateKey = patch.gateKey;
   if (patch.resolver) decide.advance.gate.resolver = { module: "lib/gpp/binding-enforcement", exportName: "bindingEnforcementEntry" };
   return document;
@@ -56,7 +58,7 @@ describe("emitBindingRecords", () => {
         gateKey: "drc-exact-checkpoint-scope",
         authority: "wwmd",
         admission: "stage-gate-admit",
-        attach: { shapeRef: "drc-pass-gated-irreversible-stage@1.0.0", stageKey: "decide" },
+        attach: { shapeRef: "drc-pass-gated-irreversible-stage@1.0.0", stageKey: "act" },
         tools: [IRREVERSIBLE_TOOL],
         reason: "oai",
       },
@@ -80,9 +82,10 @@ describe("emitBindingRecords", () => {
 
   it("a binding on a stage with no typed gate yields none (it has no owning scope: DRC C-3)", async () => {
     const document = structuredClone(BASE);
-    const act = document.stages[2];
+    const act = document.stages[0];
     if (!act) throw new Error("fixture changed");
     act.binding = { id: "act-binding", version: 1, enforcement: "shadow" };
+    act.tools = [IRREVERSIBLE_TOOL];
     expect(await drafts(document)).toEqual([]);
   });
 

@@ -7,6 +7,7 @@ import { loadBaselineSourceForItem, type BaselineSourceDb } from "./baseline-sou
 import type { BacklogCompletionItem } from "./backlog-completion-evaluation";
 import type { TerminalActor, TerminalAuthority } from "./terminal-transition-repository";
 import type { ReadinessProfile } from "./types";
+import { resolveBodyBaselineAuthorRoom } from "./body-baseline-author-room";
 
 /** Called only inside the existing authorized, serialized subject mutation. */
 export async function ensureItemBodyBaseline(tx: Prisma.TransactionClient, args: {
@@ -37,14 +38,8 @@ export async function ensureItemBodyBaseline(tx: Prisma.TransactionClient, args:
   if (head && (head.schemaVersion !== 1 || !Array.isArray(head.acceptanceStatements) || head.acceptanceStatements.length === 0
     || typeof head.artifactDigest !== "string" || !isRecord(head.artifactRef) || head.artifactRef.kind !== "document-version"
     || !isRecord(head.subject) || head.subject.id !== args.item.itemId)) return;
-  const rooms = await tx.workroom.findMany({
-    where: { backlogItemId: { in: [args.item.id, args.item.itemId] }, archivedAt: null,
-      status: { notIn: ["abandoned", "archived", "superseded"] } },
-    select: { capsuleId: true, repositoryFullName: true, headSha: true, createdByPrincipalId: true },
-    take: 2,
-  });
-  if (rooms.length !== 1) return;
-  const room = rooms[0]!;
+  const room = await resolveBodyBaselineAuthorRoom(tx, args.item);
+  if (!room) return;
   if (!room.repositoryFullName || !room.headSha || !/^[a-f0-9]{40}$/i.test(room.headSha)) return;
   const identity = { repositoryFullName: room.repositoryFullName, headSha: room.headSha };
   if (head?.criteriaDigest === criteria.criteriaDigest && isRecord(head.sourceIdentity)

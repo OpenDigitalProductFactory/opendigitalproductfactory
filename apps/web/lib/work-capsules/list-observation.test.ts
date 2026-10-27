@@ -23,6 +23,36 @@ describe("Workroom observation loading and transport", () => {
       { OR: [{ leaseHolderPrincipalId: "assistant" }, { createdByPrincipalId: "assistant" }, { requestedByPrincipalId: "assistant" }] },
     ] } }));
   });
+  it("finds the person's room by PR or branch even when another assistant created it, disclosing only the handover (BI-679D2BF6)", async () => {
+    const own = { ...fixture()[0], capsuleId: "WC-OWN", createdByPrincipalId: "assistant", requestedByPrincipalId: "human-u", pullRequestNumber: 6275 };
+    const other = { ...fixture()[1], capsuleId: "WC-CODEX", title: "Secret title", worktreePath: "/private/path",
+      leaseHolderPrincipalId: "human-u", createdByPrincipalId: "codex-assistant", requestedByPrincipalId: "human-u", pullRequestNumber: 6275 };
+    const tx = { $executeRawUnsafe: vi.fn(), workroom: { findMany: vi.fn().mockResolvedValue([own, other]) }, featureBuild: { findMany: vi.fn().mockResolvedValue([]) } };
+    const db = { $transaction: vi.fn(async (fn: (arg: typeof tx) => Promise<unknown>) => fn(tx)) };
+    const result = await listWorkroomObservation(db as never, { pullRequestNumber: 6275 }, "u",
+      { ...context, authSource: "oauth", agentId: "AGT-EXT-CLAUDE" }, new WorkroomObservations());
+    expect(tx.workroom.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { pullRequestNumber: 6275, AND: [
+      { OR: [{ leaseHolderPrincipalId: "human-u" }, { createdByPrincipalId: "human-u" }, { requestedByPrincipalId: "human-u" }] },
+    ] } }));
+    const rows = (result.data as any).capsules;
+    expect(rows.find((r: any) => r.capsuleId === "WC-OWN")).not.toHaveProperty("admission");
+    const handover = rows.find((r: any) => r.capsuleId === "WC-CODEX");
+    expect(handover).toMatchObject({ capsuleId: "WC-CODEX", status: "ready", admission: "handover-required", pullRequestNumber: 6275,
+      handover: { tool: "reassign_workroom_executor", arguments: { capsuleId: "WC-CODEX", toExecutorKind: "claude-desktop" } } });
+    expect(JSON.stringify(handover)).not.toMatch(/Secret title|\/private\/path/);
+  });
+
+  it("filters by branch and keeps both principals for an unfiltered OAuth listing", async () => {
+    const tx = { $executeRawUnsafe: vi.fn(), workroom: { findMany: vi.fn().mockResolvedValue([]) }, featureBuild: { findMany: vi.fn().mockResolvedValue([]) } };
+    const db = { $transaction: vi.fn(async (fn: (arg: typeof tx) => Promise<unknown>) => fn(tx)) };
+    await listWorkroomObservation(db as never, { headBranch: "codex/external-client-verification" }, "u", { ...context, authSource: "oauth", agentId: "claude" }, new WorkroomObservations());
+    expect(tx.workroom.findMany.mock.calls[0][0].where).toMatchObject({ headBranch: "codex/external-client-verification" });
+    expect(tx.workroom.findMany.mock.calls[0][0].where.AND).toHaveLength(1);
+    await listWorkroomObservation(db as never, { pullRequestNumber: -1, headBranch: " " }, "u", { ...context, authSource: "oauth", agentId: "claude" }, new WorkroomObservations());
+    expect(tx.workroom.findMany.mock.calls[1][0].where).not.toHaveProperty("pullRequestNumber");
+    expect(tx.workroom.findMany.mock.calls[1][0].where.AND).toHaveLength(2);
+  });
+
   it("filters stale rooms before paging and takes one read-only consistent observation", async () => {
     const source = fixture();
     const tx = { $executeRawUnsafe: vi.fn(), workroom: { findMany: vi.fn().mockResolvedValue(source) }, featureBuild: { findMany: vi.fn().mockResolvedValue([]) } };

@@ -23,6 +23,26 @@ afterEach(() => {
 });
 
 describe("createMcpSessionToken", () => {
+  it("round-trips only a signed admitted task execution fence", async () => {
+    const taskExecutionFence = { schemaVersion: 1 as const, reservation: "admitted", dispatchClaim: "dispatch-1", authorityDigest: null, requestDigest: "9".repeat(64) };
+    const token = await createMcpSessionToken({ userId: "user-1", taskRunId: "TR-BOUND", scopes: ["backlog_read"], capability: "write", taskExecutionFence });
+    expect(await verifyMcpSessionToken(token)).toMatchObject({ taskRunId: "TR-BOUND", taskExecutionFence });
+  });
+
+  it("refuses an execution fence with no bound task", async () => {
+    const payload = { userId: "user-1", scopes: ["backlog_read"], capability: "write" as const,
+      taskExecutionFence: { schemaVersion: 1 as const, reservation: null, dispatchClaim: null, authorityDigest: null, requestDigest: "9".repeat(64) } };
+    await expect(createMcpSessionToken(payload)).rejects.toThrow(/task/i);
+  });
+
+  it("refuses a correctly signed but malformed execution fence", async () => {
+    const token = await new SignJWT({ scopes: ["backlog_read"], capability: "write", taskRunId: "TR-BOUND",
+      taskExecutionFence: { schemaVersion: 99, reservation: null, dispatchClaim: null, authorityDigest: null, requestDigest: "9".repeat(64) } })
+      .setProtectedHeader({ alg: "HS256" }).setIssuer("dpf-mcp-internal").setAudience("dpf-mcp-server")
+      .setSubject("user-1").setIssuedAt().setExpirationTime("300s").sign(new TextEncoder().encode(TEST_SECRET));
+    expect(await verifyMcpSessionToken(token)).toBeNull();
+  });
+
   it("rejects missing userId", async () => {
     await expect(
       createMcpSessionToken({

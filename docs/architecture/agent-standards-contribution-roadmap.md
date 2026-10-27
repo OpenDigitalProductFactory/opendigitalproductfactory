@@ -15,8 +15,7 @@ work remains in
 remain in the standards identified by
 [Trustworthy AI Agent Standards Family](agent-standards-family.md).
 
-Venue and process information was verified against primary sources on 2026-07-26. It must be
-rechecked before an external contribution is filed.
+The original venue allocation was verified on 2026-07-26. The [LF/TBM discussion packet](../publications/trusted-agent-tbm/README.md) refreshes the November 9–11, 2026 meeting context and AAIF/JDF contribution options as of 2026-10-16. This refresh does not supersede venue ownership or establish IP terms; recheck the receiving venue before any authorized contribution is filed.
 
 ## 1. Purpose
 

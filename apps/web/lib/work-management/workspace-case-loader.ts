@@ -4,6 +4,7 @@ import type {
   WorkCaseState,
   WorkCaseTimelineEvent,
 } from "./case-types";
+import { loadContentAuthorizedWorkroomRecovery, type WorkroomHandoffRecoveryLoader, type WorkroomBlockerContentAuthorizer } from "@/lib/work-capsules/workroom-recovery-projection";
 import { decodeWorkCaseKey, encodeWorkCaseKey } from "./case-key";
 import type { ReviewerRoomClient } from "./semantic-review-room-projection";
 import { loadWorkroomExecutionEvidence, type WorkroomExecutionClient } from "./workroom-execution-evidence";
@@ -511,6 +512,8 @@ export async function loadWorkspaceWorkCaseDetail({
   prismaClient,
   caseKey,
   selectedWorkroomId,
+  canReadWorkroomContent,
+  handoffRecoveryLoader,
   userId,
   authContext,
   participantLoader,
@@ -521,6 +524,9 @@ export async function loadWorkspaceWorkCaseDetail({
   prismaClient: WorkspaceCasePrismaClient;
   caseKey: string;
   selectedWorkroomId?: string;
+  /** Supplied by the authenticated server adapter using canonical exact-room access. */
+  canReadWorkroomContent?: WorkroomBlockerContentAuthorizer;
+  handoffRecoveryLoader?: WorkroomHandoffRecoveryLoader;
   userId: string;
   authContext?: WorkspaceRoomAuthContext;
   participantLoader?: WorkspaceRoomParticipantLoader;
@@ -701,6 +707,8 @@ export async function loadWorkspaceWorkCaseDetail({
   const boundaryClaim = readWorkroomBoundaryClaim(anchoredCapsule?.scopeClaims);
 
   const room = buildWorkroomView({
+    deliveryState: anchoredCapsule?.workspaceState,
+    ...await loadContentAuthorizedWorkroomRecovery(anchoredCapsule, now, canReadWorkroomContent, handoffRecoveryLoader),
     executionAttentionReason: execution.attentionReason,
     caseKey: resolvedCaseKey,
     sourceHealth: execution.partial ? "partial" : undefined,

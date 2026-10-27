@@ -88,3 +88,37 @@ export function checkVerificationDepthRequirement(
   const { evaluable: _evaluable, ...result } = checkVerificationDepthSatisfied(evidence);
   return result;
 }
+
+const TYPECHECK_DID_NOT_RUN = new Set([
+  "not_run",
+  "not_executed",
+  "did_not_run",
+  "skipped",
+  "skip",
+  "pending",
+  "unrun",
+  "not_started",
+  "blocked",
+]);
+
+function typecheckDidNotRun(status: unknown): boolean {
+  if (typeof status !== "string") return false;
+  const normalized = status.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  return TYPECHECK_DID_NOT_RUN.has(normalized);
+}
+
+/** BI-E4E70B9A: a stored pass beside typecheck "not_run" is not a pass. */
+export function checkTypecheckPassed(
+  evidence: Record<string, unknown>,
+): { allowed: true } | { allowed: false; reason: string } {
+  const verification = evidence.verificationOut as {
+    typecheckPassed?: boolean;
+    typecheck?: unknown;
+  } | null | undefined;
+  if (!verification) return { allowed: false, reason: "A verification run (tests + typecheck) is required before review." };
+  if (typecheckDidNotRun(verification.typecheck)) {
+    return { allowed: false, reason: "Typecheck did not run, so the boolean is not a pass." };
+  }
+  if (!verification.typecheckPassed) return { allowed: false, reason: "Typecheck must pass before review." };
+  return { allowed: true };
+}

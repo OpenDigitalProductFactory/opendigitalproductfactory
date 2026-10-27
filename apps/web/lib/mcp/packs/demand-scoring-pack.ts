@@ -259,7 +259,7 @@ const definitions: ToolDefinition[] = [
   {
     name: "approve_demand_for_funding",
     description:
-      "Route a scored demand item's funding decision through the organization's own WWWD stance (governed, audited) and, if approved, advance it to the 'ready' funnel stage so it can be promoted to build. This is the investment-approval gate: the decision is recorded to the decision ledger and surfaces in the decision-review workspace. When the org's stance escalates or defers, the item stays at its current stage for a human call. Funding reserves the item's points against its portfolio's budget for the quarter; past the allocation an autonomous caller is refused and a person must give overrideReason.",
+      "Evaluate a scored demand item's funding against the organization's stance and advance it to ready only when the decision gate allows the step. Damaging decisions remain held for a person; independent review follows the current interim policy. The decision is audited in the ledger. Funding reserves points against the portfolio's quarterly budget; autonomous callers cannot exceed the allocation, and a person must provide overrideReason. Points are not a currency funding threshold.",
     inputSchema: {
       type: "object",
       properties: {

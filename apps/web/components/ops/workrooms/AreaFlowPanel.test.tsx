@@ -38,9 +38,10 @@ const flow = (key: PortfolioFlowWithCost["key"], overrides: Partial<PortfolioFlo
   weeklyFlowLoad: [9, 9, 8, 8, 8, 7, 7, 7],
   weeklyFlowEfficiency: [0.05, 0.06, null, 0.08, 0.09, 0.1, 0.11, 0.12],
   weeklyThroughput: [1, 1, 2, 2, 2, 3, 2, 3],
+  weeklyVersionChanges: [[], [], [], [], ["delivery-small@1.1.0"], [], [], []],
   flowLoadPrior: 8,
   distribution: { feature: 4, defect: 2, risk: 1, debt: 0 },
-  shapes: [{ shapeKey: "delivery-small", shapeRef: "delivery-small@1.0.0", roomsInFlow: 5, flowTimeP50Ms: 20 * H, runs: 6, bottleneck: { stageKey: "merge", roomsHeld: 3, cause: "awaiting-person" } }],
+  shapes: [{ shapeKey: "delivery-small", shapeRef: "delivery-small@1.0.0", roomsInFlow: 5, flowTimeP50Ms: 20 * H, runs: 6, bottleneck: { stageKey: "merge", roomsHeld: 3, cause: "awaiting-person" }, held: [{ stageKey: "merge", roomsHeld: 3, cause: "awaiting-person" }] }],
   points: { inFlight: 34, delivered: 21 },
   ai: { runs: 4, tokens: 12_000, recordedUsd: 1.5, subscriptionTokens: 0, durationMs: 0 },
   ...overrides,
@@ -63,6 +64,8 @@ describe("PortfolioFlowTiles", () => {
     expect(screen.getByRole("img", { name: /Flow efficiency per week/ })).toBeInTheDocument();
     expect(screen.getByRole("img", { name: /Runs finished per week/ })).toBeInTheDocument();
     expect(screen.queryByText(/−1 vs prior 28 days/)).toBeNull();
+    // The week a shape version replaced an earlier one is marked on each trend, in its accessible name too.
+    expect(screen.getByRole("img", { name: /Flow efficiency per week.*New shape version: delivery-small@1\.1\.0/ })).toBeInTheDocument();
   });
 
   it("names subscription AI use as tokens, never as $0", () => {
@@ -111,6 +114,17 @@ describe("ShapeFlowDrillIn", () => {
     versions: [definition.version, "0.9.0"],
     roomsAtStep: [{ capsuleId: "WC-1", title: "Fix login", href: "/workspace/cases/x", state: "blocked", cause: "conformance_pause" }],
     stepMeasures,
+    reviews: {
+      baselineFrom: "2026-07-01",
+      baselineTo: "2026-07-29",
+      baseline: { exits: 20, stepDwellMs: 10 * H, flowEfficiency: 0.1 },
+      firstReviewOn: "2026-07-29",
+      receipts: [
+        { reviewedOn: "2026-08-26", current: { exits: 12, stepDwellMs: 4 * H, flowEfficiency: 0.25 }, bottleneck: { stageKey: "merge", title: "Merge", roomsHeld: 3, waitMs: 48 * H, cause: "awaiting-person" } },
+        { reviewedOn: "2026-07-29", current: { exits: 2, stepDwellMs: null, flowEfficiency: null }, bottleneck: null },
+      ],
+    },
+    reviewEveryDays: 28,
   };
 
   it("draws the shape across its rooms with queue counts, a version picker and the rooms at a step", () => {
@@ -136,6 +150,48 @@ describe("ShapeFlowDrillIn", () => {
     expect(within(steps).getByRole("list", { name: /Timeline: process time above/ })).toBeInTheDocument();
     expect(within(steps).getByText(/Process 2h · wait 8h · flow efficiency 20%\./)).toBeInTheDocument();
     expect(within(steps).getByText(/step\(s\) left out: too few exits to measure/)).toBeInTheDocument();
+  });
+});
+
+describe("FlowReviews in the drill-in", () => {
+  const H = 3_600_000;
+  it("lists each review against the version's baseline and names where the most waiting accrued", () => {
+    const definition = getWorkShape("delivery-small")!;
+    const model = buildShapeFlowMap({ definition, snapshots: [], liveCounts: new Map(), now: new Date() });
+    const view: ShapeFlowView = {
+      model, versions: [definition.version], roomsAtStep: null,
+      stepMeasures: { steps: [], ladder: null },
+      reviews: {
+        baselineFrom: "2026-07-01", baselineTo: "2026-07-29",
+        baseline: { exits: 20, stepDwellMs: 10 * H, flowEfficiency: 0.1 },
+        firstReviewOn: "2026-07-29",
+        receipts: [
+          { reviewedOn: "2026-08-26", current: { exits: 12, stepDwellMs: 4 * H, flowEfficiency: 0.25 }, bottleneck: { stageKey: "merge", title: "Merge", roomsHeld: 3, waitMs: 48 * H, cause: "awaiting-person" } },
+          { reviewedOn: "2026-07-29", current: { exits: 2, stepDwellMs: null, flowEfficiency: null }, bottleneck: null },
+        ],
+      },
+      reviewEveryDays: 28,
+    };
+    render(<ShapeFlowDrillIn view={view} backHref="/a" baseHref="/a" stageKey={null} t={t} />);
+    const reviews = screen.getByRole("region", { name: "Flow reviews, every 28 days" });
+    // Snapshots are per shape version, so the panel says its reviews span every area.
+    expect(within(reviews).getByText(/Reviews cover every room on this shape version, in every area/)).toBeInTheDocument();
+    expect(within(reviews).getByText(/Baseline, 2026-07-01 to 2026-07-29: a step typically takes 10h, flow efficiency 10%, 20 steps finished\./)).toBeInTheDocument();
+    expect(within(reviews).getByText(/A step typically takes 4h \(baseline 10h\); flow efficiency 25% \(baseline 10%\)\./)).toBeInTheDocument();
+    expect(within(reviews).getByText(/Most waiting: Merge, 3 held, typically waiting 2d\. Held because: waiting on a person\./)).toBeInTheDocument();
+    expect(within(reviews).getByText(/Too few steps finished in the last 28 days to compare \(2 of 5\)\./)).toBeInTheDocument();
+    expect(within(reviews).getByText("Nothing was held at this review.")).toBeInTheDocument();
+  });
+
+  it("says when the first review is due before the baseline is complete", () => {
+    const definition = getWorkShape("delivery-small")!;
+    const model = buildShapeFlowMap({ definition, snapshots: [], liveCounts: new Map(), now: new Date() });
+    const base = { model, versions: [definition.version], roomsAtStep: null, stepMeasures: { steps: [], ladder: null }, reviewEveryDays: 7 };
+    const { unmount } = render(<ShapeFlowDrillIn view={{ ...base, reviews: { baselineFrom: "2026-10-01", baselineTo: "2026-10-29", baseline: { exits: 1, stepDwellMs: null, flowEfficiency: null }, firstReviewOn: "2026-10-29", receipts: [] } }} backHref="/a" baseHref="/a" stageKey={null} t={t} />);
+    expect(screen.getByText("The first review is on 2026-10-29, once the four-week baseline is complete.")).toBeInTheDocument();
+    unmount();
+    render(<ShapeFlowDrillIn view={{ ...base, reviews: null }} backHref="/a" baseHref="/a" stageKey={null} t={t} />);
+    expect(screen.getByText("No review yet: this version has no step data.")).toBeInTheDocument();
   });
 });
 

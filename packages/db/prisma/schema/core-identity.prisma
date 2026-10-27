@@ -216,6 +216,7 @@ model TeamMembership {
 }
 
 model Principal {
+  investmentAttempts                  AdapterRunTelemetry[]               @relation("InvestmentAttemptPrincipal")
   id                                  String                              @id @default(cuid())
   principalId                         String                              @unique
   kind                                String
@@ -459,6 +460,7 @@ model AuthorizationDecisionLog {
 }
 
 model Organization {
+  investmentAttempts                  AdapterRunTelemetry[]               @relation("InvestmentAttemptOrganization")
   id                                String                             @id @default(cuid())
   orgId                             String                             @unique
   name                              String

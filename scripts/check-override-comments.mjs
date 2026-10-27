@@ -33,6 +33,10 @@ const EXEMPT_DEDUP = new Set([
   "lodash",
   "uuid",
   "ip-address",
+  // c12@3.3.4 declares dotenv ^17 while the catalog is 18. parse() and
+  // config() are unchanged; preload and .env.vault (removed in 18) are unused.
+  // Qualified so the catalog: specifier on our own declarations stays put.
+  "dotenv@<18",
   // Types-only major unification: @inngest/ai, @types/net-snmp and docx each
   // pinned an older @types/node major, four copies of one types package
   // (plan 2026-09-08 M7, BI-5265CAD0). Not a CVE floor.

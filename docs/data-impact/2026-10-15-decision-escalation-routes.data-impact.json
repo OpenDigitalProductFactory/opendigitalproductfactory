@@ -1,0 +1,27 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "affectedCopies": ["Decision evaluation persistence", "Decision review queues", "Idempotent decision replay"],
+  "migration": {
+    "name": "20261016025500_decision_escalation_routes",
+    "backfill": "None. Existing rows retain NULL route, reason and follow-on; their existing visibility and replay semantics remain.",
+    "observedAt": "2026-10-16T03:19:34.074Z",
+    "observedRows": { "DecisionInteraction": 2515, "sealedRows": 360, "unresolvedOutcomeRows": 1370 },
+    "observationMethod": "Authenticated read-only admin_query_db aggregate on the DEV installation. No row contents exported and this migration has not been applied.",
+    "rollback": "Revert code as one delivery; retain nullable columns, enum and all observations. Do not drop populated fields or infer historical routes."
+  },
+  "tests": ["apps/web/lib/decision-perspective/persistence.escalation.test.ts", "apps/web/lib/govern/authority/escalation-gate.conformance.test.ts", "apps/web/lib/decision/decision-chain.test.ts"],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:decision-interaction",
+      "prismaModel": "DecisionInteraction",
+      "lifecycleDisposition": "Keep the existing decision evidence lifecycle and ownership. Three nullable additive fields record new evaluations only. Historical rows remain NULL, with no inferred route or backfill. Code rollback retains the columns and evidence; it never deletes a decision.",
+      "fields": [
+        { "fieldId": "data:decision-interaction#escalationRoute", "resolution": "governed", "reason": "Canonical closed Prisma enum distinguishes decided, human and independent_review while NULL explicitly means legacy.", "provenance": "BI-74B2A8CD; 20261016025500_decision_escalation_routes; resolveDecisionEscalation" },
+        { "fieldId": "data:decision-interaction#escalationReason", "resolution": "governed", "reason": "Persist the actual rule-table reason; reject malformed non-legacy route evidence on replay rather than granting a step.", "provenance": "DECISION_ESCALATION_REASON_CODES and the existing persistence adapter" },
+        { "fieldId": "data:decision-interaction#escalationFollowOn", "resolution": "governed", "reason": "Independent review records the closed optimization basis. This is evidence, not a proven root cause or a second queue.", "provenance": "DECISION_BASES; original scope baseline AC-6" }
+      ]
+    }
+  ]
+}

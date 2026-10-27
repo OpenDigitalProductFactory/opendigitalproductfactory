@@ -1,6 +1,6 @@
 // Direct JSON import — bundler resolves this at build time, works in both dev and Docker standalone
 import agentRegistryData from "../../../../packages/db/data/agent_registry.json";
-import { coworkerAuthorityWhere } from "@/lib/coworker-identity";
+import { coworkerAuthorityAgentId, coworkerAuthorityWhere } from "@/lib/coworker-identity";
 import { AUTHORIZED_SURFACE_TOOL_GRANTS } from "@/lib/coworker/authorized-surface-coworker-contract";
 import { PRODUCT_MANAGEMENT_TOOL_GRANTS } from "./product-management-tool-grants";
 import { INITIATIVE_READINESS_TOOL_GRANTS } from "./initiative-readiness-tool-grants";
@@ -12,6 +12,7 @@ import { CONTRIBUTOR_INVENTORY_TOOL_GRANTS } from "./contributor-inventory-tool-
 import { PAYABLES_TOOL_GRANTS } from "./payables-tool-grants";
 import { PROVIDER_MANAGEMENT_TOOL_GRANTS } from "./provider-management-tool-grants";
 import { PLATFORM_UPDATE_TOOL_GRANTS } from "./platform-update-tool-grants";
+import { SURFACE_READINESS_TOOL_GRANTS } from "./surface-readiness-tool-grants";
 const agentRegistry = agentRegistryData as { agents: Array<Record<string, unknown>> };
 /**
  * Implications between agent grant categories. A grant on the left of the
@@ -177,6 +178,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   propose_portfolio_budgets: ["backlog_read"],
   set_portfolio_budget: ["backlog_write"],
   set_portfolio_owner: ["backlog_write"],
+  get_investment_balance: ["backlog_read"], set_investment_balance: ["backlog_write"], bind_investment_funding: ["backlog_write"],
   query_backlog: ["backlog_read"],
   report_quality_issue: ["backlog_write"],
   escalate_feedback_upstream: ["backlog_write"],
@@ -217,6 +219,8 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // communication grants (EP-WORKROOM-COMMS, BI-3F21C4D5).
   read_room_messages: ["work_room_read"],
   post_room_message: ["work_room_write"],
+  broadcast_workroom_ask: ["work_room_write"],
+  acknowledge_workroom_broadcast: ["work_room_write"],
   invite_room_participant: ["work_room_write"],
   appoint_room_coordinator: ["work_room_write"],
   plan_account_handover: ["work_room_write"],
@@ -260,11 +264,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // tool above.
   get_queue_status: ["work_capsule_read"],
   list_at_risk_queues: ["work_capsule_read"],
-  // Surface readiness (G9, multi-client governance parity, BI-6AC65187): a
-  // client surface's self-reported heartbeat rides the same tier as the other
-  // heartbeats; the fleet rollup is an ops read like the coordination map.
-  record_surface_readiness: ["work_capsule_write"], get_fleet_readiness: ["work_capsule_read"],
-  issue_grok_credentials_client: ["sandbox_execute"], // BI-84C1F526: Grok credential carries dpf.build
+  ...SURFACE_READINESS_TOOL_GRANTS,
   register_runtime_target: ["work_capsule_write"],
   verify_archetype_projection: ["sandbox_execute"],
   heartbeat_runtime_target: ["work_capsule_write"],
@@ -881,12 +881,19 @@ export function getAgentToolGrants(agentId: string): string[] | null {
   return grants;
 }
 
+/** Shared persisted-state filter for runtime checks and authority projections. */
+export function persistedAgentToolGrants(agent: {
+  toolGrants: ReadonlyArray<{ grantKey: string }>;
+  toolGrantRevocations: ReadonlyArray<{ grantKey: string }>;
+} | null | undefined): string[] {
+  if (!agent) return [];
+  const revoked = new Set(agent.toolGrantRevocations.map(grant => grant.grantKey));
+  return agent.toolGrants.map(grant => grant.grantKey).filter(key => !revoked.has(key));
+}
+
 /**
- * EP-AI-WORKFORCE-001: Async DB-backed grant resolution.
- * Reads current AgentToolGrant rows on every lookup, including an empty set.
- * Missing authoritative records grant nothing; registry defaults are not authority.
- * Failed authoritative reads grant nothing and recover on the next lookup.
- * Use this in async contexts (API routes, server actions).
+ * Reads current canonical grants on every lookup, including an empty set.
+ * Missing or unavailable authority grants nothing; seed defaults are not authority.
  */
 export async function getAgentToolGrantsAsync(agentId: string): Promise<string[]> {
   try {
@@ -895,17 +902,11 @@ export async function getAgentToolGrantsAsync(agentId: string): Promise<string[]
       where: coworkerAuthorityWhere(agentId),
       include: { toolGrants: true, toolGrantRevocations: true },
     });
-    if (agent) {
-      const revoked = new Set(agent.toolGrantRevocations.map((g) => g.grantKey));
-      return agent.toolGrants.map((g) => g.grantKey).filter((key) => !revoked.has(key));
-    }
+    return persistedAgentToolGrants(agent);
   } catch {
     // An unavailable authority cannot establish permission, even from defaults.
     return [];
   }
-
-  // Missing persisted authority cannot establish access from seed defaults.
-  return [];
 }
 
 /** Check if a tool is allowed by an agent's grants (expanded, so a coarse legacy grant such as
@@ -942,7 +943,8 @@ export function getToolGrantMapping(): Record<string, string[]> {
 
 /**
  * EP-AI-WORKFORCE-001: Get agent grant summaries from DB (unified model).
- * Falls back to JSON registry if DB query fails.
+ * Aliases retain their metadata but share the canonical persisted grant owner.
+ * An unavailable read surfaces as an error; seed defaults are not live state.
  */
 export async function getAgentGrantSummaries(): Promise<Array<{
   agentId: string;
@@ -957,40 +959,26 @@ export async function getAgentGrantSummaries(): Promise<Array<{
   delegatesTo: string[];
 }>> {
   const TIER_LABELS: Record<number, string> = { 1: "orchestrator", 2: "specialist", 3: "cross-cutting" };
-  try {
-    const { prisma } = await import("@dpf/db");
-    const agents = await prisma.agent.findMany({
-      where: { archived: false },
-      orderBy: [{ tier: "asc" }, { name: "asc" }],
-      include: { toolGrants: true },
-    });
-    return agents.map((a) => ({
+  const { prisma } = await import("@dpf/db");
+  const agents = await prisma.agent.findMany({
+    where: { archived: false },
+    orderBy: [{ tier: "asc" }, { name: "asc" }],
+    include: { toolGrants: true, toolGrantRevocations: true },
+  });
+  const byId = new Map(agents.map(agent => [agent.agentId, agent]));
+  return agents.map(a => {
+    const grants = persistedAgentToolGrants(byId.get(coworkerAuthorityAgentId(a.agentId)));
+    return {
       agentId: a.agentId,
       agentName: a.name,
       tier: TIER_LABELS[a.tier] ?? "specialist",
       valueStream: a.valueStream ?? "cross-cutting",
-      grantCount: a.toolGrants.length,
-      grants: a.toolGrants.map((g) => g.grantKey),
+      grantCount: grants.length,
+      grants,
       supervisorId: a.humanSupervisorId ?? "",
       hitlTier: a.hitlTierDefault,
       escalatesTo: a.escalatesTo ?? "",
       delegatesTo: a.delegatesTo,
-    }));
-  } catch {
-    // Fallback to JSON registry
-    return (agentRegistry.agents as AgentEntry[]).map(
-      (a) => ({
-        agentId: a.agent_id,
-        agentName: a.agent_name,
-        tier: a.tier,
-        valueStream: a.value_stream,
-        grantCount: a.config_profile.tool_grants.length,
-        grants: a.config_profile.tool_grants as string[],
-        supervisorId: a.human_supervisor_id,
-        hitlTier: a.hitl_tier_default,
-        escalatesTo: a.escalates_to,
-        delegatesTo: a.delegates_to,
-      }),
-    );
-  }
+    };
+  });
 }

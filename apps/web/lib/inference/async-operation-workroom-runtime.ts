@@ -47,6 +47,7 @@ async function resolvePrismaAuthorizedWorkroom(
     target: input.request,
     actor: input.actor,
     db: authorityDatabase(),
+    requested: "action",
   });
   if (authority.kind !== "workroom") {
     throw new Error("DURABLE_INFERENCE_WORKROOM_AUTHORITY_MISMATCH");
@@ -94,6 +95,12 @@ async function createOrReplayPrismaWorkroomDurableTaskRun(
   input: WorkroomDurableTaskRunInput,
 ): Promise<{ id: string; taskRunId: string; replayed: boolean }> {
   const attempt = () => prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT "id" FROM "WorkCapsule" WHERE "id" = ${input.workroom.id} FOR UPDATE`;
+    const authority = await resolveServerOwnedAsyncOperationAuthority({
+      target: { kind: "workroom", workroomId: input.workroom.capsuleId }, actor: input.actor,
+      db: tx as unknown as AsyncOperationAuthorityDatabase, requested: "action",
+    });
+    if (authority.kind !== "workroom" || authority.workroomId !== input.workroom.id) throw new Error("DURABLE_INFERENCE_WORKROOM_AUTHORITY_MISMATCH");
     const workroom = await tx.workroom.findUnique({
       where: { id: input.workroom.id },
       select: { id: true, capsuleId: true, taskRunId: true, archivedAt: true },

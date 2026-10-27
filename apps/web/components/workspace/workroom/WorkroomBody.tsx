@@ -1,4 +1,5 @@
 "use client";
+import type { WorkroomProcessSnapshot, WorkroomRefreshTarget } from "@/lib/work-management/workroom-process-snapshot";
 
 import {
   Activity,
@@ -23,6 +24,7 @@ import {
   roomLabel,
 } from "./presentation";
 import { WorkroomCycles } from "./WorkroomCycles";
+import { WorkroomReviewRequirements } from "./WorkroomReviewRequirements";
 import { WorkroomShapeSection } from "./WorkroomShapeSection";
 import { WorkroomParticipants } from "./WorkroomParticipants";
 import { WorkroomPosture } from "./WorkroomPosture";
@@ -39,6 +41,8 @@ type Props = {
   room: WorkroomView;
   /** EP-B70E718D F3: the room's flow map, when its shape resolves. */
   flowMap?: WorkroomFlowMapModel | null;
+  refreshTarget?: WorkroomRefreshTarget;
+  processSnapshot?: WorkroomProcessSnapshot;
 };
 
 const BOUNDARY_GAP_LABEL: Record<WorkroomBoundaryGap, string> = {
@@ -275,6 +279,7 @@ function WorkroomDetailsContent({ detail, room }: Props) {
   return (
     <>
       <WorkroomCycles room={room} />
+      <WorkroomReviewRequirements profile={room.reviewProfile} />
 
       <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.65fr)_minmax(18rem,0.75fr)]">
         <section
@@ -344,6 +349,8 @@ export function WorkroomBodyContent({
   detail,
   room,
   flowMap,
+  refreshTarget,
+  processSnapshot,
   mode,
   onModeChange,
 }: Props & {
@@ -358,6 +365,8 @@ export function WorkroomBodyContent({
         graph={projectRoomShape(room)}
         room={room}
         flowMap={flowMap ?? null}
+        refreshTarget={refreshTarget}
+        processSnapshot={processSnapshot}
         mode={mode}
         onModeChange={onModeChange}
       />
@@ -369,13 +378,15 @@ export function WorkroomBodyContent({
   );
 }
 
-export function WorkroomBody({ detail, room, flowMap }: Props) {
+export function WorkroomBody({ detail, room, flowMap, refreshTarget, processSnapshot }: Props) {
   const [mode, setMode] = useWorkroomViewMode();
   return (
     <WorkroomBodyContent
       detail={detail}
       room={room}
       flowMap={flowMap}
+      refreshTarget={refreshTarget}
+      processSnapshot={processSnapshot}
       mode={mode}
       onModeChange={setMode}
     />

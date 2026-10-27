@@ -1,4 +1,5 @@
 import type { ToolDefinition } from "@/lib/mcp-tool-types";
+import { RECOVERY_READ_GATES } from "../backlog-recovery-read";
 import {
   backlogScopeCreateProperties,
   backlogScopeFilterProperties,
@@ -269,12 +270,15 @@ export const backlogPackDefinitions: ToolDefinition[] = [
     name: "get_backlog_item",
     description:
       "Fetch ONE backlog item by semantic id with body, demand activation readiness, evidence links, linked epic, active build, and recent activity. Read-only. " +
+      "For one complete immutable review request within an 8000-character result budget, pass recoveryGate. This omits unrelated body/history and other packets, preserves exact issuer bytes and returns finite recovery if unavailable or oversized. Research is author-owned, never a self-review route. " +
       "Do NOT poll this tool in a loop for many IDs — use list_backlog_items (filters + total/truncated) for scanning, then get_backlog_item only for the few items you will actually open — avoid N+1 status polling. " +
       "Not a webhook; there is no push for status changes — re-list with filters instead of thrashing get.",
     inputSchema: {
       type: "object",
       properties: {
         itemId: { type: "string", description: "Semantic backlog item id (e.g. BI-PORT-005)" },
+        recoveryGate: { type: "string", enum: RECOVERY_READ_GATES, description: "Return only this gate's exact current recovery request or explicit issuer escalation, without large body/history. Re-read unchanged identity for the same request; never reconstruct a packet." },
+        reassessmentAuthorizationItemId: { type: "string", description: "Optional immutable approved policy item locator for a separately authorized present design-spec or spec-approval reassessment. Selects evidence only; cannot grant execution, replay an original task or replenish an allowance." },
       },
       required: ["itemId"],
     },
