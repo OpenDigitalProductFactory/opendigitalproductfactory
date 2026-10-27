@@ -10,6 +10,7 @@ import { loadEscalationItems } from "./sources/escalation";
 import { loadAiDecisionItems } from "./sources/ai-decision";
 import { loadPausedAiItems } from "./sources/paused-ai";
 import { loadWorkroomStallItems } from "./sources/workroom-stall";
+import { loadWorkroomOverseerItems } from "./sources/workroom-overseer";
 import { loadWorkroomRebindItems } from "./sources/workroom-rebind";
 import { loadScheduledTaskItems } from "./sources/scheduled-task";
 import { loadScheduledJobAttentionItems, type ScheduledJobAttentionDb } from "./sources/scheduled-job";
@@ -120,6 +121,8 @@ export function attentionSourceLoaders(
     { source: "ai-decision", load: () => loadAiDecisionItems(db) },
     { source: "paused-ai", load: () => loadPausedAiItems(db) },
     { source: "workroom-stall", load: () => loadWorkroomStallItems(db) },
+    // What the drive's per-room overseer duty could not resolve itself (BI-8E1486FA).
+    { source: "workroom-stall", load: () => loadWorkroomOverseerItems(db) },
     { source: "workroom-rebind", load: () => loadWorkroomRebindItems(db) },
     { source: "scheduled-task", load: () => loadScheduledTaskItems(db) },
     // Cron-backed ScheduledJob failures and an uncommissioned issue intake (BI-FD40397B).

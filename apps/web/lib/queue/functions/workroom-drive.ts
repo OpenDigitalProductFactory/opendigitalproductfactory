@@ -85,6 +85,8 @@ import {
 import { WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND } from "@/lib/work-management/workroom-drive-receipts";
 import { mergeWorkroomDriveSnapshot } from "@/lib/work-management/workroom-drive-snapshot-merge";
 import { scheduleWorkroomAgentTask } from "./workroom-drive-scheduling";
+import { runDriveOverseer } from "./workroom-overseer-run";
+import type { OverseerCycleSummary } from "@/lib/work-management/workroom-overseer-duty";
 export { mergeWorkroomDriveSnapshot } from "@/lib/work-management/workroom-drive-snapshot-merge";
 import { loadHandedOverUserIds, repairUnownedDeliveryRooms, ROOM_OWNER_USER_INCLUDE, roomOwnerUserId } from "@/lib/work-management/delivery-room-ownership";
 
@@ -195,6 +197,8 @@ export type WorkroomDriveResult = {
    * zero. Read persisted relations to establish hierarchy coverage. */
   nestedRelations: number;
   plans: Array<{ roomId: string; action: string; reason: string; taskId: string | null }>;
+  /** BI-8E1486FA: what the per-room overseer duty did this tick; null when it did not run. */
+  overseer?: OverseerCycleSummary | null;
 };
 
 // One terminal rule for the drive and the nesting it walks (BI-CFB3FDB7).
@@ -417,6 +421,8 @@ export async function runWorkroomDriveJob(
     reviewStages?: ReviewStageDeps | null;
     /** BI-7C0B2BD6: this tick's agent dispatch capacity. Defaults to the live pools; caller-supplied rooms are uncapped. */
     dispatchCapacity?: () => Promise<DriveDispatchCapacity>;
+    /** BI-8E1486FA: the overseer duty over this tick's room ids. Defaults to the live duty; caller-supplied rooms skip it. */
+    overseer?: (roomIds: readonly string[], now: Date) => Promise<OverseerCycleSummary>;
   },
 ): Promise<WorkroomDriveResult> {
   // Materialize the declared nesting before driving. The tree is declared in
@@ -459,6 +465,10 @@ export async function runWorkroomDriveJob(
     // BI-7C0B2BD6: the writeback latch reads each room's task, so it holds only while a run is outstanding.
     rooms = await withStageRuns(rooms);
   }
+  // BI-8E1486FA: the room's overseer closes finished rooms and routes stuck ones before the drive plans them.
+  const overseerRun = deps?.overseer ?? (deps?.listRooms ? null : undefined);
+  const overseer = overseerRun === null ? null : await runDriveOverseer(rooms, now, overseerRun);
+  if (overseer) rooms = rooms.filter((room) => !overseer.closedRoomIds.includes(room.id));
   const effects = deps?.effects ?? createWorkroomDriveEffects();
   // BI-7C0B2BD6 / DI-7109D22D4812: dispatch no more than agent capacity allows; the rest wait, oldest first.
   rooms = orderRoomsOldestWaitingFirst(rooms);
@@ -571,6 +581,7 @@ export async function runWorkroomDriveJob(
     stopped,
     skipped,
     plans,
+    overseer,
   };
 }
 

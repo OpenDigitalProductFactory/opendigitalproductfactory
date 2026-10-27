@@ -445,7 +445,7 @@ function headlessRoomMerged(
   });
 }
 
-type ProviderObservationBatch = {
+export type ProviderObservationBatch = {
   payloads: unknown[];
   confirmedAt: Date | null;
 };
@@ -460,7 +460,8 @@ function githubInventoryWasUnchanged(perSourceResult: unknown): boolean {
   );
 }
 
-async function loadLatestSuccessfulProviderPayloads(
+/** Also read by the drive's overseer duty (BI-8E1486FA), so both decide merge state from one source. */
+export async function loadLatestSuccessfulProviderPayloads(
   db: ReaperDb,
 ): Promise<ProviderObservationBatch> {
   if (!db.contributorInventorySyncRun) return { payloads: [], confirmedAt: null };

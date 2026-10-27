@@ -734,8 +734,8 @@ route it, so a merged duplicate is closed rather than reported:
 | Rule | Fires when | Effect |
 | --- | --- | --- |
 | R1 | item `done` or `retired`, and the PR merged or no PR is open | close the room, release its scope claims |
-| R2 | lease expired past the 24-hour resume grace, and the branch merged | close the room |
-| R5 | another live delivery room exists for the same item, and this room's branch merged | close this room |
+| R2 | lease expired past the 24-hour resume grace, and the branch merged | close the room, release its scope claims |
+| R5 | another live delivery room exists for the same item, and this room's branch merged | close this room, release its scope claims |
 | R3 | lease expired past the grace, and the branch carries authored commits that are not merged | mark the room `needs resume`; raise one overseer Attention item |
 | R4 | the same drive hold has lasted 48 ticks (12 hours) or more | conclude the hold with a recorded outcome; raise one overseer Attention item |
 
