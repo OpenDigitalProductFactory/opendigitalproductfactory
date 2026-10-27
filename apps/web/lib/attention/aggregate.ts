@@ -18,6 +18,7 @@ import { loadSkillProposalItems } from "./sources/skill-proposal";
 import { loadCoworkerEnvelopeItems } from "./sources/coworker-envelope";
 import { loadOrphanedApprovalItems } from "./sources/orphaned-approval";
 import { loadPlatformHealthItems } from "./sources/platform-health";
+import { loadAgentToolchainItems } from "./sources/agent-toolchain";
 import {
   loadCoworkerMemoryItems,
   type CoworkerMemoryAttentionDb,
@@ -134,6 +135,7 @@ export function attentionSourceLoaders(
     { source: "research-proposal", load: () => loadResearchItems(db) },
     { source: "coworker-memory", load: () => loadCoworkerMemoryItems(db as unknown as CoworkerMemoryAttentionDb) },
     { source: "platform-health", load: () => loadPlatformHealthItems(db) },
+    { source: "agent-toolchain", load: () => loadAgentToolchainItems(db) },
     { source: "business-journey", load: () => loadBusinessJourneyItems(db) },
     { source: "reservation-exception", load: () => loadReservationExceptionItems(db) },
     {

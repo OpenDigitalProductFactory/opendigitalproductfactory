@@ -2668,6 +2668,7 @@ def _main(argv: list[str]) -> int:
 
     portal_manifest = read_json(Path(args.portal_manifest), {}) if args.portal_manifest else None
     pack_identity = convergence.Declarations(skill_pack, portal_manifest)
+    pack_identity.converge = convergence.agent_converge_token(home)
     # A connector declares only a well-formed pack version (design §5.2).
     declarations = pack_identity if pack_identity.enabled() else None
     report = convergence.ConvergenceReport(home, pack_identity, portal_manifest) if args.report_json else None
