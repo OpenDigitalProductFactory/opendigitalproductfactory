@@ -8,6 +8,9 @@ import { COLLECTION_DOCUMENT_KIND, listCollections } from "@/lib/documents/docum
 import { DOCUMENT_UPLOAD_ACCEPT, DOCUMENT_UPLOAD_LIMIT_BYTES } from "@/lib/documents/document-upload";
 import { DocumentCollectionsNav } from "./DocumentCollectionsNav";
 import { DocumentUploadZone } from "./DocumentUploadZone";
+import { namespaceMessages } from "@dpf/i18n";
+import { MessagesProvider } from "@/components/i18n/MessagesProvider";
+import { getLocaleContext } from "@/lib/i18n/locale-context.server";
 import { prisma } from "@dpf/db";
 import { LocalTime } from "@/components/ui/LocalTime";
 
@@ -47,6 +50,7 @@ export default async function DocumentsPage({ searchParams }: Props) {
   // are offered as a filter (BI-957915CB).
   const viewer = await resolveDocumentViewer(session.user.id);
   const collectionId = sp.collection?.trim() || null;
+  const { language } = await getLocaleContext();
   const [documents, owners, collections] = await Promise.all([
     searchManagedDocuments({
       viewer,
@@ -104,12 +108,14 @@ export default async function DocumentsPage({ searchParams }: Props) {
         activeCollectionId={activeCollection?.documentId ?? null}
       />
 
-      <DocumentUploadZone
-        accept={DOCUMENT_UPLOAD_ACCEPT}
-        limitMb={DOCUMENT_UPLOAD_LIMIT_BYTES / (1024 * 1024)}
-        collectionId={activeCollection?.documentId ?? null}
-        collectionTitle={activeCollection?.title ?? null}
-      />
+      <MessagesProvider locale={language} messages={{ documents: namespaceMessages(language, "documents") }}>
+        <DocumentUploadZone
+          accept={DOCUMENT_UPLOAD_ACCEPT}
+          limitMb={DOCUMENT_UPLOAD_LIMIT_BYTES / (1024 * 1024)}
+          collectionId={activeCollection?.documentId ?? null}
+          collectionTitle={activeCollection?.title ?? null}
+        />
+      </MessagesProvider>
 
       <form className="grid gap-2 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3 md:grid-cols-[minmax(0,1fr)_140px_140px_180px_auto]">
         {activeCollection && <input type="hidden" name="collection" value={activeCollection.documentId} />}

@@ -11,6 +11,7 @@ import { Upload } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { InlineBusy } from "@/components/ui/InlineBusy";
 import { Surface } from "@/components/ui/Surface";
+import { useT } from "@/lib/i18n/use-t";
 
 type Props = {
   accept: string;
@@ -24,6 +25,7 @@ type UploadState = { kind: "idle" } | { kind: "uploading"; fileName: string } | 
 
 export function DocumentUploadZone({ accept, limitMb, collectionId, collectionTitle }: Props) {
   const router = useRouter();
+  const t = useT("documents");
   const inputRef = useRef<HTMLInputElement>(null);
   const [state, setState] = useState<UploadState>({ kind: "idle" });
   const [dragging, setDragging] = useState(false);
@@ -39,12 +41,12 @@ export function DocumentUploadZone({ accept, limitMb, collectionId, collectionTi
       const response = await fetch("/api/documents", { method: "POST", body });
       const payload = (await response.json().catch(() => null)) as { route?: string; message?: string } | null;
       if (!response.ok || !payload?.route) {
-        setState({ kind: "error", message: payload?.message ?? "The file could not be uploaded. Try again." });
+        setState({ kind: "error", message: payload?.message ?? t("upload.failed") });
         return;
       }
       router.push(payload.route);
     } catch {
-      setState({ kind: "error", message: "The file could not be uploaded. Check your connection and try again." });
+      setState({ kind: "error", message: t("upload.offline") });
     }
   }
 
@@ -75,13 +77,13 @@ export function DocumentUploadZone({ accept, limitMb, collectionId, collectionTi
         <Upload className="h-5 w-5 shrink-0 text-[var(--dpf-muted)]" aria-hidden="true" />
         <div className="min-w-0 text-sm">
           {busy ? (
-            <InlineBusy label={`Uploading ${state.fileName}…`} />
+            <InlineBusy label={t("upload.uploading", { fileName: state.fileName })} />
           ) : (
             <p className="text-[var(--dpf-text)]">
-              Drop a file here to add it{collectionTitle ? ` to ${collectionTitle}` : ""}.
+              {collectionTitle ? t("upload.promptInCollection", { collection: collectionTitle }) : t("upload.prompt")}
             </p>
           )}
-          <p className="text-xs text-[var(--dpf-muted)]">Word, Excel, PowerPoint, OpenDocument, RTF, PDF, text or markdown, up to {limitMb} MB.</p>
+          <p className="text-xs text-[var(--dpf-muted)]">{t("upload.formats", { limitMb })}</p>
           {state.kind === "error" && (
             <p role="alert" className="mt-1 text-xs text-[var(--dpf-error)]">
               {state.message}
@@ -92,14 +94,14 @@ export function DocumentUploadZone({ accept, limitMb, collectionId, collectionTi
       <div className="flex flex-wrap items-center gap-3">
         <label className="flex items-center gap-2 text-xs text-[var(--dpf-muted)]">
           <input type="checkbox" checked={restricted} onChange={(event) => setRestricted(event.target.checked)} disabled={busy} />
-          Only me
+          {t("upload.onlyMe")}
         </label>
         <input
           ref={inputRef}
           type="file"
           accept={accept}
           className="sr-only"
-          aria-label="Choose a file to upload"
+          aria-label={t("upload.chooseFileLabel")}
           onChange={(event) => {
             const file = event.target.files?.[0];
             event.target.value = "";
@@ -107,7 +109,7 @@ export function DocumentUploadZone({ accept, limitMb, collectionId, collectionTi
           }}
         />
         <Button type="button" variant="secondary" size="sm" disabled={busy} onClick={() => inputRef.current?.click()}>
-          Choose file
+          {t("upload.chooseFile")}
         </Button>
       </div>
     </Surface>

@@ -2375,29 +2375,13 @@
     "longSentences": 0,
     "textMass": 6
   },
-  "apps/web/app/(shell)/workspace/documents/DocumentCollectionsNav.tsx": {
-    "vocabulary": 0,
-    "retiredVocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 8
-  },
-  "apps/web/app/(shell)/workspace/documents/DocumentUploadZone.tsx": {
-    "vocabulary": 0,
-    "retiredVocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 19
-  },
   "apps/web/app/(shell)/workspace/documents/page.tsx": {
     "vocabulary": 0,
     "retiredVocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 27
+    "textMass": 33
   },
   "apps/web/app/(shell)/workspace/inbox/page.tsx": {
     "vocabulary": 0,
