@@ -207,6 +207,13 @@ export const KNOWN_UNCLASSIFIED_SIDE_EFFECT_TOOLS: readonly string[] = [
   "update_security_case",
   "update_workroom_status",
   "wiki_ingest",
+  // Internal writes (BI-FE8DF004): creating a workbook, table, column or view
+  // stays inside the install, is owned by the acting person and is undone by
+  // deleting it in the Workbooks UI. Nothing outward, nothing destroyed.
+  "workbook_add_column",
+  "workbook_create",
   "workbook_create_row",
+  "workbook_create_table",
+  "workbook_create_view",
   "workbook_update_cells",
 ];

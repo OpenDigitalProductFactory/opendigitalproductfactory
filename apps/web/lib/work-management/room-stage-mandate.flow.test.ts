@@ -14,6 +14,11 @@ vi.mock("@/lib/tak/agent-grants", async importOriginal => ({
   ...await importOriginal<Record<string, unknown>>(),
   getAgentToolGrantsAsync: (...args: unknown[]) => state.fixture!.deps.loadAgentGrants(...args as []),
 }));
+vi.mock("@/lib/queue/functions/workroom-drive-task-owner", async importOriginal => ({
+  ...await importOriginal<Record<string, unknown>>(),
+  // The live owner rule is exercised in its own suite; here the room's recorded user owns the task.
+  resolveRoomDriveTaskOwnerUserId: async (room: { recordedOwnerUserId: string | null }) => room.recordedOwnerUserId,
+}));
 vi.mock("@/lib/identity/load-effective-auth-context", () => ({
   loadEffectiveAuthContext: async () => ({ actingHumanUserId: "owner",
     actingAgentId: coworkerAuthorityAgentId(state.fixture!.task.agentId) }),

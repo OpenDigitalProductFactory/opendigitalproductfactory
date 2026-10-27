@@ -302,9 +302,9 @@
         "irreversible": 21,
         "authority": 29
       },
-      "sideEffectingTools": 198,
+      "sideEffectingTools": 202,
       "gateClassified": 68,
-      "ungated": 130,
+      "ungated": 134,
       "coveragePct": 34,
       "classifiedTools": [
         "abandon_stalled_build",
@@ -9693,7 +9693,7 @@
           "level": 3,
           "missingGrants": [],
           "escalatesTo": "AGT-ORCH-000",
-          "reachableSideEffectingTools": 18,
+          "reachableSideEffectingTools": 24,
           "reachableGatedTools": 1,
           "ungatedConsequenceNote": null,
           "detail": "principle_decide reachable; escalates to AGT-ORCH-000",
@@ -9719,18 +9719,20 @@
           "level": 3,
           "directSkills": 7,
           "wildcardSkills": 10,
-          "reachableTools": 77,
+          "reachableTools": 86,
           "heldGrants": [
             "file_read",
             "registry_read",
             "portfolio_read",
             "document_read",
             "document_write",
-            "document_publish"
+            "document_publish",
+            "workbook_read",
+            "workbook_write"
           ],
           "services": 0,
           "unbackedSkillIds": [],
-          "detail": "7 skill(s), 77 tool(s), all service backings resolve",
+          "detail": "7 skill(s), 86 tool(s), all service backings resolve",
           "levelKey": "proven",
           "ceiling": 3,
           "atCeiling": true

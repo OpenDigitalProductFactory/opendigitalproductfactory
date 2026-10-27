@@ -3,10 +3,17 @@
 // Fourth domain pack (third lazy one), and the last clean lazy domain. Handlers
 // live in @/lib/workbooks/mcp-handlers and were dynamically imported per switch
 // case; each handler here is a thin wrapper that lazy-imports the module only
-// when the tool is called (all five take params + userId). Definitions moved
-// verbatim out of the inline PLATFORM_TOOLS array; grants mirror TOOL_TO_GRANTS.
+// when the tool is called (all take params + userId). Definitions moved
+// verbatim out of the inline PLATFORM_TOOLS array.
+//
+// Schema authoring (BI-FE8DF004): workbook_create, workbook_create_table,
+// workbook_add_column and workbook_create_view mirror the UI's create actions
+// one-for-one over the same service, so a coworker builds a tracker the way a
+// person does. `grants` IS the TOOL_TO_GRANTS source (workbook-tool-grants.ts).
 
 import type { ToolDefinition } from "@/lib/mcp-tool-types";
+import { WORKBOOK_TOOL_GRANTS } from "@/lib/tak/workbook-tool-grants";
+import { FIELD_TYPES } from "@/lib/workbooks/types";
 import type { ToolPack } from "../tool-pack";
 
 const definitions: ToolDefinition[] = [
@@ -96,9 +103,79 @@ const definitions: ToolDefinition[] = [
     executionMode: "immediate",
     sideEffect: true,
   },
+  {
+    name: "workbook_create",
+    description: "Create a Workbook owned by the person you act for. Returns its id (WB-*) and the page where they can open it. Add tables with workbook_create_table.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Workbook name (1-200 characters)." },
+        description: { type: "string", description: "Optional description shown under the name." },
+      },
+      required: ["name"],
+    },
+    requiredCapability: "manage_workbooks",
+    executionMode: "immediate",
+    sideEffect: true,
+  },
+  {
+    name: "workbook_create_table",
+    description: "Create an empty table in a Workbook you can edit. Returns its id (TBL-*). Add typed columns with workbook_add_column.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        workbookId: { type: "string", description: "Semantic workbook id (WB-*)." },
+        name: { type: "string", description: "Table name (1-200 characters)." },
+      },
+      required: ["workbookId", "name"],
+    },
+    requiredCapability: "manage_workbooks",
+    executionMode: "immediate",
+    sideEffect: true,
+  },
+  {
+    name: "workbook_add_column",
+    description:
+      "Add a typed column to a Workbook table you can edit. config depends on fieldType: select/multi_select need options [{key,label}]; reference needs referenceType; link needs link {cardinality one|many, referenceType}; formula needs formula over other column names (e.g. \"[Estimate] - [Spent]\") and optional resultType; lookup needs lookup {referenceColumnId, targetField}; rollup needs rollup {linkColumnId, op count}. Number-like types accept precision, currencySymbol, durationUnit or max. Invalid targets, unknown column names and duplicate names are refused with the reason.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tableId: { type: "string", description: "Semantic table id (TBL-*)." },
+        name: { type: "string", description: "Column name, unique on the table." },
+        fieldType: { type: "string", enum: [...FIELD_TYPES], description: "The column's type." },
+        config: { type: "object", description: "Type-specific configuration (see description).", additionalProperties: true },
+        required: { type: "boolean", description: "Whether a value is required on new rows." },
+      },
+      required: ["tableId", "name", "fieldType"],
+    },
+    requiredCapability: "manage_workbooks",
+    executionMode: "immediate",
+    sideEffect: true,
+  },
+  {
+    name: "workbook_create_view",
+    description:
+      "Create a named view on a Workbook table you can edit: grid, or kanban grouped by a select column (one lane per option). Returns the link a person opens to see it. A name already used on the table is refused.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tableId: { type: "string", description: "Semantic table id (TBL-*)." },
+        name: { type: "string", description: "View name, unique on the table." },
+        viewType: { type: "string", enum: ["grid", "kanban"], description: "grid or kanban." },
+        groupByColumnId: { type: "string", description: "kanban: the select column (COL-*) whose options become lanes." },
+        cardFields: { type: "array", items: { type: "string" }, description: "kanban: column ids (COL-*) shown on each card; defaults to the title and up to three more." },
+        isDefault: { type: "boolean", description: "Open this view by default for the table." },
+      },
+      required: ["tableId", "name", "viewType"],
+    },
+    requiredCapability: "manage_workbooks",
+    executionMode: "immediate",
+    sideEffect: true,
+  },
 ];
 
 const HANDLERS = () => import("@/lib/workbooks/mcp-handlers");
+const AUTHORING = () => import("@/lib/workbooks/mcp-authoring-handlers");
 
 export const workbooksPack: ToolPack = {
   packId: "workbooks",
@@ -109,12 +186,10 @@ export const workbooksPack: ToolPack = {
     workbook_query_rows: (params, userId) => HANDLERS().then((m) => m.workbookQueryRowsTool(params, userId)),
     workbook_create_row: (params, userId) => HANDLERS().then((m) => m.workbookCreateRowTool(params, userId)),
     workbook_update_cells: (params, userId) => HANDLERS().then((m) => m.workbookUpdateCellsTool(params, userId)),
+    workbook_create: (params, userId) => AUTHORING().then((m) => m.workbookCreateTool(params, userId)),
+    workbook_create_table: (params, userId) => AUTHORING().then((m) => m.workbookCreateTableTool(params, userId)),
+    workbook_add_column: (params, userId) => AUTHORING().then((m) => m.workbookAddColumnTool(params, userId)),
+    workbook_create_view: (params, userId) => AUTHORING().then((m) => m.workbookCreateViewTool(params, userId)),
   },
-  grants: {
-    workbook_list_tables: ["workbook_read"],
-    workbook_get_schema: ["workbook_read"],
-    workbook_query_rows: ["workbook_read"],
-    workbook_create_row: ["workbook_write"],
-    workbook_update_cells: ["workbook_write"],
-  },
+  grants: WORKBOOK_TOOL_GRANTS,
 };
