@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Cross-Install A2A Coordination — DPF Testing and MSP Operations Spine
 
 **Original date:** 2026-08-11

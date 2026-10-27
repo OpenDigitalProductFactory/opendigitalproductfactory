@@ -1,3 +1,7 @@
+---
+status: draft
+---
+
 # Cross-Network Peer Validation Tasking — Implementation Plan
 
 **Date:** 2026-10-21
