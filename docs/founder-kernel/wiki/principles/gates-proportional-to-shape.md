@@ -3,7 +3,7 @@ title: Gates are proportional to the shape of the work
 slug: gates-proportional-to-shape
 pageKind: principle
 status: published
-abstract: Governance asks a unit of work only for the artifacts it naturally produces. The delivery shape (break-fix, small, medium, large, xlarge) plus sensitivity decides which gates it owes; no artifact is produced solely to satisfy a gate.
+abstract: Governance asks a unit of work only for the artifacts it naturally produces. The delivery shape (break-fix, small, medium, large, xlarge) plus sensitivity decides which gates it owes before delivery; delivery evidence closes every shape, and no artifact is produced solely to satisfy a gate.
 principleTier: core
 principleDirection: Select the delivery shape at the claim, declared or derived and never guessed; gate by (shape, sensitivity, target); raise for sensitivity and never lower silently; treat a demand for an artifact the work would not otherwise produce as a defect in the gate table, not in the work.
 principleDimensionVector: {"governance_compliance": 0.7, "speed_to_value": 0.7, "human_cognitive_load": -0.5, "evidence_density": 0.5, "legibility_of_consequence": 0.6, "long_term_maintainability": 0.4}
@@ -37,9 +37,8 @@ work owes and who signs them.
   derivable shape is refused with the pick list; the agent puts the list to a
   person and re-claims. Nobody guesses a shape.
 - **Gates follow the shape.** A small fix owes a reproduction, the PR gate, a
-  merged SHA on main and a runtime check. A medium item owes a design note and
-  acceptance criteria in the item body and an independent acceptance receipt.
-  A large item owes an approved spec, a plan with live backlog coverage and
+  merged SHA on main. A medium item owes a design note and acceptance criteria
+  in the item body. A large item owes an approved spec, a plan with live backlog coverage and
   architecture review. An xlarge initiative only ever decomposes. A break-fix
   skips pre-authorisation and owes a post-implementation review within 48
   hours by someone other than the declarer.
@@ -64,9 +63,16 @@ work owes and who signs them.
   behavior-preserving refactor, is raised at most to medium; the part of a
   raise that would owe a gate with no reachable route is refused on the
   record, never owed.
-- **Delivery evidence is the trunk.** A SHA reachable from main with green
-  required checks is delivery for every shape; no manifest is built to prove
-  what git already knows.
+- **Delivery evidence is the trunk, and it closes the work.** A SHA reachable
+  from main with green required checks is delivery for every shape; no
+  manifest is built to prove what git already knows. Once delivery passes,
+  no shape owes an acceptance receipt, an objective baseline or a
+  reconciliation to close. Only recorded failure evidence holds it open
+  (operator direction 2026-10-27).
+- **Post-delivery verification is automated or a customer question.** A check
+  declared at filing and run by the platform may hold a delivered item until
+  it runs. Customer-reported work gets one question to its submitter, with a
+  bounded window. Nothing else waits for a person after delivery.
 - **No artifact is produced solely to satisfy a gate.** When a gate asks for a
   document the work did not naturally produce, the gate table is wrong, not
   the work. Writing a plan after the fact to placate a projector converts a
@@ -80,4 +86,7 @@ Registry: `apps/web/lib/work-management/delivery-shapes.ts`. Policy:
 (`initiative-readiness.v3`). Kernel rulings 2026-09-03 and DI-C0989B8514AF.
 Sensitivity source: `apps/web/lib/backlog/initiative-readiness/delivery-sensitivity.ts`
 (`docs/superpowers/specs/2026-09-25-shape-raise-reads-the-change-design.md`,
-DI-52BAAB9E6835, DI-B9DCC3F456F9).
+DI-52BAAB9E6835, DI-B9DCC3F456F9). Closure on delivery:
+`apps/web/lib/backlog/initiative-readiness/deployment-closure.ts`
+(`projectDeliveryClosure`) and
+`docs/superpowers/specs/2026-09-24-acceptance-accountability-design.md` §9.
