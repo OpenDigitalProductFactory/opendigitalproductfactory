@@ -490,6 +490,9 @@
     "apps/web/components/workbooks/GridExportMenu.tsx": [
       "docs/user-guide/workspace/workbooks.md"
     ],
+    "apps/web/components/workbooks/WorkbookViewTabs.tsx": [
+      "docs/user-guide/workspace/workbooks.md"
+    ],
     "apps/web/components/workbooks/grid-office-export.ts": [
       "docs/user-guide/workspace/workbooks.md"
     ],
@@ -1098,7 +1101,8 @@
       "docs/maintenance/staleness-report.md"
     ],
     "apps/web/lib/mcp/packs/workbooks-pack.ts": [
-      "docs/architecture/mcp-tool-packs.md"
+      "docs/architecture/mcp-tool-packs.md",
+      "docs/user-guide/workspace/workbooks.md"
     ],
     "apps/web/lib/mcp/protocol-versions.ts": [
       "docs/architecture/mcp-tool-authorization-runbook.md"
@@ -1654,6 +1658,9 @@
     ],
     "apps/web/lib/workbooks/sheet-import.ts": [
       "docs/user-guide/workspace/supported-file-formats.md"
+    ],
+    "apps/web/lib/workbooks/workbook-authoring.ts": [
+      "docs/user-guide/workspace/workbooks.md"
     ],
     "apps/web/lib/workforce/oversight-copy.ts": [
       "docs/platform-usability-standards.md"
@@ -4189,9 +4196,12 @@
     ],
     "docs/user-guide/workspace/workbooks.md": [
       "apps/web/components/workbooks/GridExportMenu.tsx",
+      "apps/web/components/workbooks/WorkbookViewTabs.tsx",
       "apps/web/components/workbooks/grid-office-export.ts",
+      "apps/web/lib/mcp/packs/workbooks-pack.ts",
       "apps/web/lib/workbooks/export-fods.ts",
-      "apps/web/lib/workbooks/export-workbook.ts"
+      "apps/web/lib/workbooks/export-workbook.ts",
+      "apps/web/lib/workbooks/workbook-authoring.ts"
     ]
   }
 }

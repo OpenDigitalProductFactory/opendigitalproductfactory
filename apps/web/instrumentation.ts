@@ -632,20 +632,9 @@ export async function resumeStrandedBuildsOnBoot(
         void (async () => {
           const { resumePreBuildPhase } = await import("@/lib/build/resume-pre-build-phase");
           const outcome = await resumePreBuildPhase(args);
-          if (outcome.kind === "skipped" && outcome.quiet) return; // BI-6F2872FC: unchanged refusal, nothing to record
-          await prisma.buildActivity
-            .create({
-              data: {
-                buildId: args.buildId,
-                tool: "resumeStrandedBuildsOnBoot",
-                summary: `Pre-build resume (${args.phase}): ${outcome.kind}${
-                  "via" in outcome ? ` via ${outcome.via} — ${outcome.detail}` : ""
-                }${"reason" in outcome ? ` — ${outcome.reason}` : ""}${
-                  "error" in outcome ? ` — ${outcome.error}` : ""
-                }`,
-              },
-            })
-            .catch(() => {});
+          // BI-6F2872FC quiet skips write nothing; other skips only when the reason changed.
+          const { recordResumeOutcomeActivity } = await import("@/lib/build/resume-outcome-activity");
+          await recordResumeOutcomeActivity(prisma, { buildId: args.buildId, phase: args.phase, outcome }).catch(() => {});
         })().catch((err) =>
           logger.error(
             "[build-resume] pre-build resume failed for %s: %s",
