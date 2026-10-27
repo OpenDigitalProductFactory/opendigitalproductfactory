@@ -13,6 +13,11 @@ import type { CapsuleDb } from "./work-capsule-store-types";
  * grants and standing delegation, and the writer repeats the proof under locks. */
 export async function boundedHandoffConsequenceForCall(call: ToolCallConsequenceInput): Promise<ToolCallConsequence> {
   const authority = { consequence: "authority" as const, reason: "handoff-boundary-unproven" };
+  // A batched handover's dry run only reads the set and its plan digest; the
+  // apply that changes executors keeps authority (BI-D4144471).
+  if (call.toolName === "reassign_workroom_executor" && Object.hasOwn(call.params, "capsuleIds") && call.params.dryRun !== false) {
+    return { consequence: null, reason: "batch-handover-dry-run" };
+  }
   if (call.toolName !== "reassign_workroom_executor" || call.context?.authSource !== "oauth" || !call.context.agentId) return authority;
   try {
     const command = parseBoundedHandoffCommand(call.params);

@@ -187,6 +187,22 @@ already discloses, plus the `reassign_workroom_executor` call. An unfiltered
 listing keeps the person-and-assistant scope. The design is the executor
 takeover design under BI-E2871BDE.
 
+`workroom_assistant_not_admitted` also returns the room's stored executor
+`checkpoint`, its bound `pullRequest` and `leaseExpiresAt`, so the assistant
+can decide on a takeover without reading the room's history (BI-D4144471).
+`reassign_workroom_executor` accepts `capsuleIds` (1 to 20) instead of
+`capsuleId` to hand over a set of rooms. The call is a dry run by default: it
+returns each room's executor, lease holder and checkpoint, plus a `planDigest`
+over the sorted (room, executor, lease holder) tuples. A dry run changes
+nothing, so it needs no approval. Applying (`dryRun: false`) needs that digest,
+and the approval fingerprint covers the set and the digest. If any room changed
+since the dry run, the whole call is refused. Otherwise each room goes through
+the single-room handover with its planned lease holder. A room taken in between
+is skipped and reported, and each handed-over room records its own
+`executor-changed` activity with its checkpoint. The governed OAuth check
+applies the single-room handover rule to every listed room and refuses the
+whole call if any room fails it.
+
 `work-capsules-pack` shares one `scopeProperties` block across `create_workroom` and
 `adopt_worktree`, so a field added there reaches both convene paths at once. That is how
 `workroomShape` landed ⟦runtime: 2026-08-23⟧ — the room's collaboration

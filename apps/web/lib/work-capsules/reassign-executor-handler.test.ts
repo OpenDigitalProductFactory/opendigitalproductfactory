@@ -103,3 +103,28 @@ describe("reassignCapsuleExecutor", () => {
     expect(db.workroom.update).not.toHaveBeenCalled();
   });
 });
+
+// BI-D4144471 — a set of rooms goes through the same single-room handover, room by room.
+describe("reassignCapsuleExecutor with capsuleIds", () => {
+  it("applies a planned set through the single-room handover, admitting the assistant per room", async () => {
+    const db = fakeDb();
+    Object.assign(db.workroom, {
+      findMany: vi.fn(async () => [{ capsuleId: "WC-1", executorKind: "codex-desktop", leaseHolderPrincipalId: "human-alice", workspaceState: {} }]),
+    });
+    const set = { capsuleIds: ["WC-1"], toExecutorKind: "claude-desktop" };
+    const plan = await reassignCapsuleExecutor({ params: set, db: db as unknown as CapsuleDb, resolveActor: async () => oauthActor });
+    expect(plan).toMatchObject({ success: true, data: { dryRun: true } });
+    expect(db.workroom.update).not.toHaveBeenCalled();
+
+    const applied = await reassignCapsuleExecutor({
+      params: { ...set, dryRun: false, planDigest: plan.data?.planDigest },
+      db: db as unknown as CapsuleDb, resolveActor: async () => oauthActor,
+    });
+    expect(applied).toMatchObject({ success: true, data: { handedOver: 1, skipped: 0 } });
+    expect(db.workroom.update).toHaveBeenCalledTimes(1);
+    expect(db.workroomParticipant.create).toHaveBeenCalledTimes(1);
+    expect(db.workroomActivity.create).toHaveBeenCalledWith({ data: expect.objectContaining({
+      kind: "executor-changed", payload: expect.objectContaining({ handoffManifest: { checkpoint: null } }),
+    }) });
+  });
+});
