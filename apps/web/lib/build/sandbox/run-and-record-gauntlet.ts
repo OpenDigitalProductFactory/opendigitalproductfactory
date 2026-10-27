@@ -158,6 +158,8 @@ export async function recordScopedTestsEvidence(input: {
   const { recordLocalIntegrationResult } = await import("@/lib/nonprod/local-integration");
   const { IN_PLATFORM_EVIDENCE_VALIDITY_MS } = await import("./guard-gauntlet-evidence");
   const passed = input.result.passed && input.result.typeCheckPassed;
+  const { classifyScopedTestResult, SCOPED_TEST_RUNNER_IDENTITY } = await import("../scoped-test-failure");
+  const verdict = classifyScopedTestResult(input.result);
   const completedAt = new Date();
   const ran = scopedTestsRunDescription(input.changedFiles, input.result);
   const record = await recordLocalIntegrationResult({
@@ -180,6 +182,10 @@ export async function recordScopedTestsEvidence(input: {
       evidenceValidity: { expiresAt: new Date(completedAt.getTime() + IN_PLATFORM_EVIDENCE_VALIDITY_MS).toISOString() },
       passed,
       gatePassed: passed,
+      // BI-33B54E4B: what the run concluded, so an unchanged tree reuses it.
+      runner: SCOPED_TEST_RUNNER_IDENTITY,
+      failure: verdict.kind,
+      failingTests: "failingTests" in verdict ? verdict.failingTests : [],
     },
   });
   return (record as { id?: string } | null)?.id ?? null;
