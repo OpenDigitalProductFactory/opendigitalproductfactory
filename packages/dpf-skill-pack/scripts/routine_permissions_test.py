@@ -12,11 +12,21 @@ import routine_permissions as permissions
 
 PACK = Path(__file__).resolve().parents[1]
 
+
+# BI-90C9478D: these cases exercise Codex settings writes, which need a TOML
+# parser (Python 3.11+, tomli, or the Codex CLI). The stock-macOS CI runner has
+# none, so they skip there and run everywhere a parser exists.
+NEEDS_ANY_TOML = unittest.skipUnless(
+    __import__("codex_toml").available(),
+    "needs a TOML parser: Python 3.11+, tomli or the Codex CLI (BI-90C9478D)",
+)
+
 class RoutinePermissionsTest(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.home = Path(self.temp.name) / 'home'
+        # Resolved: macOS temp folders sit under /var, a symlink the linked-path guard refuses.
+        self.home = Path(self.temp.name).resolve() / 'home'
         self.root = self.home / 'source'
         self.root.mkdir(parents=True)
         (self.root / '.git').mkdir()
@@ -24,12 +34,14 @@ class RoutinePermissionsTest(unittest.TestCase):
         (self.root / 'packages/dpf-skill-pack').mkdir(parents=True)
     def plan(self):
         return permissions.plan_permissions(self.root, self.home, PACK)
+    @NEEDS_ANY_TOML
     def test_dry_run_changes_nothing_and_has_three_client_scopes(self):
         plan = self.plan()
         result = permissions.apply_permissions(plan, dry_run=True)
         self.assertEqual({'codex','claude-code','grok'}, {x['client'] for x in result})
         self.assertFalse((self.root / '.codex').exists())
         self.assertTrue(all(row['sessionVerified'] is False for row in result))
+    @NEEDS_ANY_TOML
     def test_apply_then_replan_is_noop_and_never_sets_model(self):
         permissions.apply_permissions(self.plan(), dry_run=False)
         plan = self.plan()
@@ -43,6 +55,7 @@ class RoutinePermissionsTest(unittest.TestCase):
         self.assertIn('git', rules)
         self.assertNotIn('["powershell"]', rules)
         self.assertNotIn('["bash"]', rules)
+    @NEEDS_ANY_TOML
     def test_preserves_explicit_modes_denies_models_and_unknown_tables(self):
         (self.root / '.claude').mkdir()
         claude={'model':'chosen', 'hooks':{'Stop':[]},'permissions':{'defaultMode':'plan','deny':['Bash(rm *)'],'ask':['Bash(git push *)'],'allow':['Read']}}
@@ -62,6 +75,7 @@ class RoutinePermissionsTest(unittest.TestCase):
         self.assertEqual('read-only',codex['sandbox_mode'])
         self.assertEqual([{'name':'x','active':True}],codex['unrelated']['items'])
         self.assertEqual('always-approve',permissions.read_toml(self.home / '.grok/config.toml')['ui']['permission_mode'])
+    @NEEDS_ANY_TOML
     def test_explicit_untrusted_project_is_preserved(self):
         (self.home / '.codex').mkdir()
         original={'projects':{str(self.root.resolve()):{'trust_level':'untrusted'}}}
@@ -73,6 +87,7 @@ class RoutinePermissionsTest(unittest.TestCase):
         (self.root / '.grok/config.toml').write_text('[broken',encoding='utf-8')
         with self.assertRaises(permissions.PermissionPlanError): self.plan()
         self.assertFalse((self.root / '.codex').exists())
+    @NEEDS_ANY_TOML
     def test_concurrent_edit_refuses_before_any_write(self):
         plan=self.plan()
         (self.root / '.claude').mkdir()
@@ -83,6 +98,7 @@ class RoutinePermissionsTest(unittest.TestCase):
         for root in [self.home, Path(self.root.anchor),self.home/'other']:
             with self.subTest(root=root),self.assertRaises(permissions.PermissionPlanError):
                 permissions.plan_permissions(root,self.home,PACK)
+    @NEEDS_ANY_TOML
     def test_backups_keep_original_bytes_and_no_raw_rules_in_report(self):
         (self.root / '.claude').mkdir()
         path=self.root / '.claude/settings.local.json'
@@ -92,6 +108,7 @@ class RoutinePermissionsTest(unittest.TestCase):
         backup=next(self.root.glob('.claude/settings.local.json.dpf-permissions-*.bak'))
         self.assertEqual(raw,backup.read_bytes())
         self.assertNotIn('secret-history',json.dumps(result))
+    @NEEDS_ANY_TOML
     def test_toml_roundtrip_preserves_native_values(self):
         data={'title':'a\\b\nquoted"', 'values':[1,True,{'name':'x'}], 'a.b':{'key.with.dot':'ok'}}
         self.assertEqual(data,permissions.tomllib.loads(permissions.dump_toml(data)))
@@ -102,6 +119,7 @@ class RoutinePermissionsTest(unittest.TestCase):
         with self.assertRaises(permissions.PermissionPlanError): self.plan()
         self.assertIn('forbidden',path.read_text(encoding='utf-8'))
 
+    @NEEDS_ANY_TOML
     def test_global_restrictive_choices_and_native_mcp_policy_are_preserved(self):
         (self.home/'.codex').mkdir()
         (self.home/'.codex/config.toml').write_text(permissions.dump_toml({
@@ -122,6 +140,7 @@ class RoutinePermissionsTest(unittest.TestCase):
         self.assertEqual('plan',local['permissions']['defaultMode'])
         self.assertNotIn('history-secret',json.dumps(local))
         self.assertNotIn('history-secret',json.dumps(rows))
+    @NEEDS_ANY_TOML
     def test_native_grok_trust_is_bounded_and_never_starts_a_model(self):
         calls=[]
         def run(command,**kwargs):
@@ -132,6 +151,7 @@ class RoutinePermissionsTest(unittest.TestCase):
         self.assertEqual('trusted',result['trust'])
         self.assertTrue(result['managedSettingsActive'])
         self.assertEqual([['grok.exe','inspect','--json'],['grok.exe','--trust','inspect','--json']],calls)
+    @NEEDS_ANY_TOML
     def test_native_dry_run_and_explicit_untrusted_do_not_change_trust(self):
         (self.home/'.grok').mkdir()
         (self.home/'.grok/trusted_folders.toml').write_text(permissions.dump_toml({'folders':{str(self.root):{'trusted':False}}}),encoding='utf-8')
@@ -147,6 +167,7 @@ class RoutinePermissionsTest(unittest.TestCase):
         os.link(path,self.root/'.claude/settings.local.json')
         with self.assertRaises(permissions.PermissionPlanError): self.plan()
 
+    @NEEDS_ANY_TOML
     def test_selected_client_does_not_read_or_write_other_clients(self):
         (self.root/'.grok').mkdir()
         (self.root/'.grok/config.toml').write_text('[malformed',encoding='utf-8')
@@ -155,6 +176,7 @@ class RoutinePermissionsTest(unittest.TestCase):
         self.assertEqual(['claude-code'],[x['client'] for x in rows])
         self.assertFalse((self.home/'.codex').exists())
         self.assertFalse((self.root/'.codex').exists())
+    @NEEDS_ANY_TOML
     def test_permissions_only_updater_cannot_refresh_plugins_or_credentials(self):
         import update_agent_toolchain as updater
         import toolchain_convergence
@@ -168,6 +190,7 @@ class RoutinePermissionsTest(unittest.TestCase):
         self.assertEqual({'permissions:'+str(self.root.resolve())},{x['scope'] for x in result['clients']})
         self.assertTrue(all(x['sessionVerified'] is False for x in result['clients']))
         self.assertFalse((self.home/'.agents/plugins').exists())
+    @NEEDS_ANY_TOML
     def test_failed_native_inspection_is_reported_separately(self):
         with patch.object(permissions,'_grok_trust',return_value={'trust':'native-inspection-failed','action':'failed'}):
             rows=permissions.apply_permissions(self.plan(),dry_run=False,native=True)
@@ -175,6 +198,7 @@ class RoutinePermissionsTest(unittest.TestCase):
         self.assertTrue((self.root/'.codex/config.toml').exists())
         self.assertFalse(any(x['sessionVerified'] for x in rows))
 
+    @NEEDS_ANY_TOML
     def test_named_codex_permissions_are_not_shadowed_by_legacy_sandbox_defaults(self):
         (self.home/'.codex').mkdir()
         path=self.home/'.codex/config.toml'
@@ -185,6 +209,7 @@ class RoutinePermissionsTest(unittest.TestCase):
         self.assertNotIn('sandbox_workspace_write',local)
         self.assertEqual(':read-only',permissions.read_toml(path)['default_permissions'])
 
+    @NEEDS_ANY_TOML
     def test_owned_rules_keep_added_deny_and_rerun_is_noop(self):
         permissions.apply_permissions(self.plan(),dry_run=False)
         path=self.root/'.codex/rules/dpf-routine.rules'
@@ -201,6 +226,7 @@ class RoutinePermissionsTest(unittest.TestCase):
         (self.root/'.codex/rules/dpf-routine.rules').write_text(permissions.MARKER+'prefix_rule(\n',encoding='utf-8')
         with self.assertRaises(permissions.PermissionPlanError): self.plan()
 
+    @NEEDS_ANY_TOML
     def test_malformed_or_foreign_native_inspection_returns_failed_row(self):
         for value in [None,[],{'projectRoot':str(self.root),'projectTrusted':False,'permissions':None}, {'projectRoot':str(self.home),'projectTrusted':True,'permissions':{}}]:
             with self.subTest(value=value),patch.object(permissions.shutil,'which',return_value='grok.exe'),patch.object(permissions.subprocess,'run',return_value=SimpleNamespace(returncode=0,stdout=json.dumps(value))):
@@ -212,6 +238,8 @@ class RoutinePermissionsTest(unittest.TestCase):
         with self.assertRaises(permissions.PermissionPlanError): self.plan()
         self.assertFalse((self.root/'.codex').exists())
 
+    @unittest.skipIf(__import__("codex_toml")._stdlib_parser() is None,
+                     "Codex 0.165 rejects the legacy `profile =` key this fixture uses; CI runs it with tomllib (BI-90C9478D)")
     def test_selected_codex_config_profile_keeps_approval_and_reviewer_policy(self):
         (self.home/'.codex').mkdir()
         (self.home/'.codex/config.toml').write_text('profile="careful"\n',encoding='utf-8')
@@ -227,7 +255,8 @@ class RoutinePermissionsTest(unittest.TestCase):
         name='_dpf_permissions_no_parser'
         spec=importlib.util.spec_from_file_location(name,permissions.__file__)
         module=importlib.util.module_from_spec(spec)
-        with patch.dict(sys.modules,{'tomllib':None,'tomli':None,name:module}):
+        import codex_toml
+        with patch.dict(sys.modules,{'tomllib':None,'tomli':None,name:module}),patch.object(codex_toml,'_codex_binary',return_value=None):
             spec.loader.exec_module(module)
             self.assertIsNone(module.tomllib)
             with self.assertRaises(module.PermissionPlanError): module.plan_permissions(self.root,self.home,PACK)
@@ -250,6 +279,7 @@ class RoutinePermissionsTest(unittest.TestCase):
             self.assertTrue(all(x['action']=='unrun' for x in rows))
             self.assertFalse((self.root/'.claude').exists())
 
+    @NEEDS_ANY_TOML
     def test_existing_global_full_access_is_not_combined_with_a_new_non_escalating_sandbox(self):
         (self.home/'.codex').mkdir()
         path=self.home/'.codex/config.toml'
@@ -264,6 +294,7 @@ class RoutinePermissionsTest(unittest.TestCase):
         self.assertEqual('user',row['reviewer'])
         self.assertEqual('danger-full-access',permissions.read_toml(path)['sandbox_mode'])
 
+    @NEEDS_ANY_TOML
     def test_permission_apply_then_core_updater_and_repeat_preserves_global_config(self):
         import update_agent_toolchain as updater
         path = self.home / '.codex/config.toml'

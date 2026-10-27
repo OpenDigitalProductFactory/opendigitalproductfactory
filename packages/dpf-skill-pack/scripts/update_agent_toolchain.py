@@ -101,17 +101,19 @@ def write_json(path: Path, data: Any) -> bool:
     return write_text_if_changed(path, content)
 
 
-def validate_toml(content: str) -> None:
-    """Refuse an unparseable candidate before touching any client configuration."""
+def validate_toml(content: str, context_dir: Optional[Path] = None) -> None:
+    """Refuse an unparseable candidate before touching any client configuration.
+
+    tomllib, tomli or, on stock Python 3.9, Codex's own parser (BI-90C9478D).
+    """
+    import codex_toml
+
     try:
-        import tomllib as parser
-    except ImportError:
-        try:
-            import tomli as parser
-        except ImportError:
-            raise ValueError("TOML updates require Python 3.11+ or tomli; configuration unchanged") from None
-    try:
-        parser.loads(content)
+        codex_toml.loads_any(content, context_dir=context_dir)
+    except codex_toml.CodexTomlUnavailable:
+        raise ValueError("TOML updates require Python 3.11+, tomli or the Codex CLI; configuration unchanged") from None
+    except codex_toml.UnsupportedToml as error:
+        raise ValueError(str(error)) from None
     except ValueError:
         # Parser diagnostics can echo operator credentials. Keep this bounded.
         raise ValueError("Invalid TOML candidate; configuration unchanged") from None
@@ -119,7 +121,7 @@ def validate_toml(content: str) -> None:
 
 def write_text_if_changed(path: Path, content: str) -> bool:
     if path.suffix == ".toml":
-        validate_toml(content)
+        validate_toml(content, context_dir=path.parent)
         before = path.read_bytes() if path.exists() else None
         after = content.encode("utf-8")
         if before == after:
@@ -913,16 +915,15 @@ def ensure_codex_project_config(project_root: Path, mcp_url: str, dry_run: bool)
     path = project_root / ".codex" / "config.toml"
     if not path.exists():
         return False
-    try:
-        import tomllib as toml_parser
-    except ImportError:
-        try:
-            import tomli as toml_parser
-        except ImportError:
-            raise ValueError("Project Codex TOML requires Python 3.11+ or tomli; configuration unchanged") from None
+    import codex_toml
+
     text = path.read_text(encoding="utf-8-sig")
     try:
-        parsed = toml_parser.loads(text)
+        parsed = codex_toml.loads_any(text, context_dir=path.parent)
+    except codex_toml.CodexTomlUnavailable:
+        raise ValueError("Project Codex TOML requires Python 3.11+, tomli or the Codex CLI; configuration unchanged") from None
+    except codex_toml.UnsupportedToml as error:
+        raise ValueError(str(error)) from None
     except ValueError:
         raise ValueError("Invalid project Codex TOML; configuration unchanged") from None
     servers = parsed.get("mcp_servers", {})
@@ -948,7 +949,7 @@ def ensure_codex_project_config(project_root: Path, mcp_url: str, dry_run: bool)
     updated = upsert_toml_table(text, "[mcp_servers.dpf]", body)
     servers["dpf"] = expected
     try:
-        verified = toml_parser.loads(updated) == parsed
+        verified = codex_toml.loads_any(updated, context_dir=path.parent) == parsed
     except ValueError:
         verified = False
     if not verified:
@@ -1416,6 +1417,12 @@ def disable_competitive_claude_plugins(
     return "; ".join(parts) if parts else "no competitive plugins present"
 
 
+# macOS app folders that may bundle a Codex CLI (BI-90C9478D): the ChatGPT app
+# ships one at Contents/Resources/codex-cli/bin/codex, and a host with only the
+# app has no `codex` on PATH, so the updater used to report Codex as absent.
+MACOS_APP_DIRS = (Path("/Applications"), Path.home() / "Applications")
+
+
 def resolve_codex_binary() -> str | None:
     home = home_dir()
     candidates: list[str] = []
@@ -1444,6 +1451,9 @@ def resolve_codex_binary() -> str | None:
             "/usr/local/bin/codex",
             str(home / ".local" / "bin" / "codex"),
         ])
+        if platform.system() == "Darwin":
+            candidates.extend(str(folder / "ChatGPT.app" / "Contents" / "Resources" / "codex-cli" / "bin" / "codex")
+                              for folder in MACOS_APP_DIRS)
     found = shutil.which("codex")
     if found:
         candidates.append(found)
@@ -2638,8 +2648,14 @@ def main(argv: list[str]) -> int:
                 f"hooks {codex_hooks_status}"
             )
         except ValueError as error:
-            codex_status = f"failed: {error}"
-            codex_install_failed = True
+            if not codex_present and "require Python 3.11+, tomli or the Codex CLI" in str(error):
+                # No Codex binary and no TOML parser: nothing on this host reads
+                # Codex settings, so leaving them unchanged is not a failure
+                # (BI-90C9478D, spec row X11).
+                codex_status = "absent: no Codex CLI found and no TOML parser; Codex settings left unchanged"
+            else:
+                codex_status = f"failed: {error}"
+                codex_install_failed = True
             print(f"  Codex      : {codex_status}")
         grok_status = "skipped by flag"
         if not args.skip_grok_cli_install:
