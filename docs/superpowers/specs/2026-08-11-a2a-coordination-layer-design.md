@@ -1,14 +1,19 @@
+---
+status: active
+---
+
 # Cross-Install A2A Coordination — DPF Testing and MSP Operations Spine
 
 **Original date:** 2026-08-11
 
-**Revised:** 2026-08-15
+**Revised:** 2026-08-15; 2026-10-21 (cross-network, prod/non-prod trust, disconnected operation, validation recipes — §18–§24)
 
-**Status:** Architecture-reviewed design of record; implementation incomplete
+**Status:** Architecture-reviewed design of record (2026-08-15); the 2026-10-21 revision awaits independent spec approval; implementation incomplete
 
-**Backlog:** `BI-AD9ABD38` under `EP-E1F1DB58`
+**Backlog:** `BI-AD9ABD38` under `EP-E1F1DB58`; first proof `BI-BCF474E7`
 
 **Decision:** `DI-5ACBF7782FF2` — extend the existing federated-A2A substrate; do not move collaboration into Edge or create an MSP-specific transport
+**Decisions (2026-10-21):** `DI-656436759566` — cross-network transport (§18); `DI-13CEFD0A8156` — prod/non-prod trust (§19); `DI-259D82329EF4` — receiver execution through validation recipes (§20)
 **Builds on:** [Federated A2A Coordination with GAID](2026-08-08-federated-a2a-gaid-coordination-design.md), [Work Room multi-agent communication](2026-08-12-work-room-multi-agent-communication-substrate-design.md), [Federated Demand Network](2026-07-19-federated-demand-network-design.md), and [RemoteAction Edge dispatch](2026-06-26-remote-action-edge-auth-and-dispatch-design.md)
 
 ## 1. Executive decision
@@ -288,11 +293,11 @@ No operator should need to know CloudEvents, GAID, certificates, MCP, or A2A to 
 
 ### 13.3 Explicitly out of scope
 
-- arbitrary remote shell or script execution;
+- arbitrary remote shell or script execution (the validation recipes of §20 are receiver-catalogued procedures; a sender names one, it never supplies a command);
 - direct writes into a peer/customer database;
 - public anonymous A2A or a global agent registry;
 - cross-org standing mutation authority;
-- hosted relay implementation or full Internet reachability;
+- building a hosted relay or full Internet reachability (the §18 envelope is relay-ready; `BI-D43D3D76` builds a relay only on the §18.4 evidence trigger);
 - replacing MCP, Work Rooms, federation, or Edge with a new transport;
 - autonomously merging peer backlog items merely because an AI detects overlap.
 
@@ -354,3 +359,305 @@ This objective is complete only when:
 8. Runtime verification is recorded against both canonical installations and the relevant backlog items are closed with evidence.
 
 Until all eight are true, DPF has useful A2A and federation substrate, but not the cross-install collaboration and MSP operations spine promised by this design.
+
+---
+
+# Revision 2026-10-21 — cross-network tasking between a production and a non-production install
+
+Sections 1–17 assumed the two installations could reach each other and were peers of equal standing. Neither holds for the real first topology, and the first proof (`BI-BCF474E7`) needs work the earlier sections forbade in general terms. This revision keeps every decision above and adds what the topology requires. Where it narrows an earlier section, it says so.
+
+## 18. Cross-network reachability and disconnected operation
+
+### 18.1 The topology this must survive
+
+| Install | Identity | Network | Availability |
+| --- | --- | --- | --- |
+| Operator PROD | macOS laptop, environment class `production`, purpose `operate-organization` | Roams: home LAN, hotel and mobile Wi-Fi; always behind NAT; never accepts inbound | Online when the laptop is awake and connected |
+| Operator DEV | Windows workstation, environment class non-production (not yet verified from PROD; §21.1) | Residential NAT in another state; no port forwarding | Usually on, but may be off or asleep for days |
+
+The two are never on one LAN. Neither can accept a connection from the other without help. Today the work-sync pull from PROD fails every five minutes with `Peer responded 0: fetch failed`. That is `getFromPeer`'s network-error status (`apps/web/lib/federation/client.ts`), surfaced through `work-sync.ts`.
+
+### 18.2 Decision — overlay now, relay only on evidence (`DI-656436759566`)
+
+Five options were scored. The recommendation was **T3**: composite 12.39, margin 1.76, high confidence, no commandment conflict.
+
+| Option | Composite | Disposition |
+| --- | --- | --- |
+| T3 — private WireGuard overlay now; envelope designed so the deferred relay can carry it later | 12.39 | **Adopted** |
+| T1 — overlay only, envelope not designed for a relay | 10.63 | Subsumed by T3 |
+| T2 — build a DPF store-and-forward relay now | 7.33 | Deferred to `BI-D43D3D76` (§18.4) |
+| T5 — a public TLS-terminating tunnel per install | 4.48 | Rejected: it exposes DEV publicly, which DI-D96FB0FE7C1F already rejected |
+| T4 — GitHub as the mailbox | 2.85 | Rejected: vendor lock-in, and test output would sit in a forge outside both installs |
+
+The overlay is the one already decided for operator access (`BI-CAF86466`, `DI-D96FB0FE7C1F`): Tailscale-style WireGuard, with a coordination server that can be swapped for self-hosted Headscale. This revision extends its purpose from operator-to-portal access to **installation-to-installation federation ingress**. That extension carries three constraints:
+
+- Overlay ACLs are deny-by-default and tag-scoped. The PROD tag may reach only DEV's federation ingress port, and the DEV tag only PROD's. MCP, the portal UI and the database are not reachable from the peer tag.
+- The overlay is reachability, never authority (NIST SP 800-207A, §15). Every request still passes link, device-signature, organization, environment and TAK checks. Possessing an overlay address grants nothing.
+- `FederationLink.peerAuthorityUrl` points at the peer's overlay hostname. The SSRF guard in `client.ts` must allow exactly that hostname, not the overlay's address range.
+
+Overlay relays (DERP) carry WireGuard-encrypted packets when direct hole-punching fails across the two NATs. They cannot read the payload. They do not store anything, so the overlay delivers only while **both** installs are online at the same time.
+
+### 18.3 Disconnected operation — the contract
+
+Disconnection is the normal case. The contract assumes either side can be offline for days, and that the two online windows may overlap only occasionally.
+
+**Sender (outbox).** A peer task is a new record type on the existing `FederatedRecordMirror` outbox (`FEDERATION_OUTBOX_RECORD_TYPES`, `demand-delivery.ts:294`). It inherits behaviour that is already built and tested:
+
+- An unreachable peer is held and retried with widening backoff. It never spends the dead-letter budget (`demand-delivery.ts:490-512`).
+- A 401/403 quarantines the link.
+- Other failures dead-letter after `MAX_ATTEMPTS = 8` (`demand-delivery.ts:248`).
+
+**Envelope fields.** These are signed (§19.4) and fixed when the request is created, never at send time:
+
+| Field | Meaning |
+| --- | --- |
+| `requestId` | Sender-minted ULID. The receiver's idempotency key. Never reused. |
+| `createdAt` | When the requester asked |
+| `notAfter` | The latest moment the receiver may *start* the work. The sender proposes it (default 72 h for validation recipes). The receiver may shorten it, never lengthen it. |
+| `resultRetention` | How long the receiver keeps the result available for re-delivery (default 14 days) |
+| `sourceInstallation` / `targetInstallation` | Installation DIDs |
+| `organizationRef` | The organization the request is for. Must equal the link's bound organization. |
+| `requesterEnvironmentClass` | The sender's attested environment class (§19.2) |
+| `skill` | Exactly one declared receiver skill, e.g. `validation.recipe.run` |
+| `parameters` | Validated by the receiver against that skill's schema |
+| `delegation` | Requesting human Principal, requesting coworker GAID, and the approval receipt id from PROD |
+
+**Receiver (inbox).** Ingress records `requestId` in an inbox row in the same transaction that creates the receiver-owned `TaskRun`.
+
+- A duplicate returns the existing task's current state and never starts a second run.
+- A request that arrives after `notAfter` is answered `rejected: expired`, and nothing runs.
+- A cancel that arrives before work starts prevents the start. A cancel that arrives after work starts is recorded, and the recipe's own timeout governs.
+
+**The 15-minute window.** The existing CloudEvent guard rejects events older than a 15-minute window (`cloud-event-guard.ts:1`). Held items pass today only because `time` is re-stamped at send. Under this revision, the replay defence for peer tasks is the inbox's durable `requestId` record, kept for at least `notAfter` + `resultRetention`, together with the signature over `createdAt`/`notAfter`. The send-time stamp remains a transport freshness hint only.
+
+**Return path.** Results, status changes and artifacts travel the same way in reverse, on DEV's own outbox. When PROD is offline, DEV holds the result and delivers it on PROD's return. PROD correlates on `requestId` and on the receiver's task id echoed in every return event.
+
+**Operator truth.** The sender's `TaskRun` shows `submitted-undelivered` until the receiver acknowledges. After acknowledgement it shows the receiver's A2A state (`submitted`, `working`, `input-required`, `completed`, `failed`, `rejected`, `canceled`). Past `notAfter` with no acknowledgement it shows `expired-undelivered`. Each state names the peer, the last successful contact, and the next retry.
+
+### 18.4 When a relay is built
+
+`BI-D43D3D76` remains deferred. It is promoted only when recorded evidence shows that overlay delivery leaves peer tasks undelivered past `notAfter` because the two installs' online windows did not overlap. The evidence is the count of `expired-undelivered` tasks over a rolling 30 days.
+
+The envelope above is already transport-independent: signed end to end, idempotent, and expiring. A relay therefore stores ciphertext against `targetInstallation` and needs no change to the contract. The relay design must keep:
+
+- separate mailboxes per organization and per environment class;
+- payloads encrypted to the recipient installation key;
+- delivery receipts and per-mailbox sequence numbers, so that a relay withholding messages is detectable.
+
+Hosting a relay is an organization decision (§22).
+
+## 19. Production and non-production trust
+
+### 19.1 What the platform does today (verified on `origin/main` `ff4494cd31`)
+
+These findings change the first-slice scope. Each is a defect to file, not a design preference.
+
+| # | Finding | Evidence |
+| --- | --- | --- |
+| F1 | The peer-write stance says "Both installations are production" whenever the *local* class is production. The peer's class is never read. | `packages/db/src/installation-instance-stance.ts:164-168` |
+| F2 | The peer's environment class exists only as an admin-typed `FederationLink.metadata.environmentClass` label (`apps/web/lib/actions/federation-links.ts:757`). It is not attested at enrollment, and only the founder demand portfolio reads it. | `federation-links.ts:757`; `FederationLink` has no class column (`edge-federation.prisma:379`) |
+| F3 | An install that never declared its class is treated as production. A non-production install that skipped the declaration therefore presents itself as production. | `packages/db/src/installation-operating-intent.ts:365` |
+| F4 | The `peerWrite` stance is advisory. Its readers are presentation and change-impact code; no write path enforces it. | survey of `installation-journey/identity-presentation.ts`, `identity-change-impact.ts` |
+| F5 | "Paired installation: &lt;organization&gt;" shows the peer's *organization* reference, not a peer installation or DID. | `apps/web/lib/install/instance-stance.ts:199` |
+| F6 | A same-organization membership link is created already trusted on both sides, with no human approver. Membership means a matching CA root plus a matching organization string. | `apps/web/lib/federation/organization-membership.ts:191` |
+| F7 | Work sync serves every owned BacklogItem that is not confidential or restricted. It does no organization filtering, and the receiver writes rows without an organization check. A DEV install hosting other organizations would serve their `internal`/`public` items to PROD. | `apps/web/lib/federation/work-page.ts:130`; `work-sync.ts` contains no `organizationId`; `work/route.ts:46` checks only the link role |
+| F8 | First-hop delegation passes on the origin's full authority. The comment says intersection. | `apps/web/lib/tak/delegation-authority.ts:71` |
+| F9 | Every installation issues private GAIDs under the same issuer, `dpf.internal`, so the same agent id collides across installs. | `apps/web/lib/identity/principal-linking.ts:48` |
+| F10 | Agent Cards are unsigned and declare A2A 0.3.0. | `apps/web/lib/a2a/agent-card.ts:121` |
+| F11 | Federation routes authenticate a bearer `dpflink_` token. Bootstrap enrollment stores a *claimed* `peerDeviceId`, and no route checks a message signature. | `apps/web/lib/auth/federation-link-token.ts:36`; `apps/web/lib/federation/enrollment.ts:157` |
+| F12 | The coworker-offer POST skips the session check for the `partner-a2a`/`external-a2a` profile, which the caller selects by query string. It creates an engagement from self-asserted GAID strings. Offer availability still limits which offers answer. Whether a proxy layer adds protection was not verified. | `apps/web/app/api/a2a/coworkers/[agentId]/offers/[offerId]/route.ts:66-69,133` |
+| F13 | The development waivers of #6216 (`semantic-review-policy-exemption.ts`) trust a locally self-declared `development` class. They do not involve federation or any production authority, and they are unrelated to peer trust. | survey of commit `f881fcb84d` |
+
+Already usable: the installation DID is the SHA-256 of the install's Ed25519 public key (`apps/web/lib/federation/instance-identity.ts:57`). A peer that has recorded the DID can therefore check any key presented later without a separate pinning store, provided the DID was obtained through an attested path rather than a claim (F11).
+
+### 19.2 Decision — asymmetric, attested trust (`DI-13CEFD0A8156`)
+
+The recommendation was **A1**: composite 12.91, margin 3.37, high confidence, no commandment conflict.
+
+| Option | Composite |
+| --- | --- |
+| A1 — asymmetric rules; peer environment class attested by the organization CA | **12.91** |
+| A4 — refuse to federate with any DEV install that hosts other organizations | 9.55 |
+| A3 — asymmetric rules on a self-declared class | 9.01 |
+| A2 — keep today's symmetric "both production" trust | 3.95 |
+
+**Attested environment class.** The organization CA issues each installation's membership certificate. The certificate (or the signed membership statement bound to it) carries the installation's DID and environment class as attested fields. Both are recorded on `FederationLink` as typed columns, `peerEnvironmentClass` and `peerEnvironmentAttestedAt`, replacing the metadata label (F2). The attested class rules:
+
+- The stance resolver reads the peer's attested class (fixes F1).
+- An undeclared local class blocks issuing a membership certificate. It is not treated as production (closes the F3 hole for federation).
+- Changing a class requires re-issuing the certificate. The peer sees the change as a new attestation and re-evaluates every open request.
+- A link whose peer class is unattested accepts no peer tasks in either direction.
+
+### 19.3 What each side may ask of the other
+
+| Direction | Allowed | Never allowed |
+| --- | --- | --- |
+| PROD → DEV | Run a **read-only validation recipe** (§20) against a commit PROD names. Run a **host-mutating recipe** only after a DEV-local human approves it on DEV. Ask a DEV coworker an advisory question about DEV's own state (version, posture, Edge readiness). | Read or move any record DEV holds for another organization; read secrets or credentials; change DEV configuration, upgrade or tear down DEV (that is control-plane Slice 4, `BI-67219237`, blocked on the WWWD control-scope stance); supply a command line. |
+| DEV → PROD | Return results, status and artifacts for tasks PROD sent. Send a **proposal** (e.g. "file this Windows defect"), which arrives as a pending item that a PROD human or authorized coworker accepts. Send advisory messages in a room PROD admitted it to. | Ask PROD to run any recipe or action; write or mutate any PROD record directly; have its evidence counted as canonical production runtime evidence (§19.5). |
+
+These are platform defaults. Each installation may narrow them. Widening needs a new design revision.
+
+### 19.4 Signed envelopes and identity
+
+- Every peer-task event is a CloudEvent, signed with the sending installation's Ed25519 key over the canonical envelope (JWS, RFC 7515, `EdDSA`). The receiver verifies that the key hashes to the link's attested peer DID. HTTP-level RFC 9421 signing (§7) remains the target for all federation routes and is tracked with plan slice S2 (device pinning / signed events). The envelope signature is what makes a stored result attributable after the fact, and it is required in the first slice.
+- The requesting agent identity is carried as an attributed claim inside the signed envelope: requesting human Principal, coworker GAID, and PROD approval receipt id. The receiver records it as provenance. It is never authority, because the GAID namespace is not yet unique per installation (F9; plan slice S1 (GAID namespace)).
+- On the receiver, an inbound request runs as the link's `federated-peer` Principal (`packages/db/src/federation-link-types.ts:75`). Today that Principal has no grants, and `FederationLink.authorityBindingId` is never written. This revision gives it exactly one capability, `peer_validation_request`, through the link's `AuthorityBinding`. It grants nothing else.
+
+### 19.5 Authority across the boundary
+
+The §9 intersection holds, made concrete for this flow:
+
+```text
+PROD human approval at dispatch (sees target install, class, recipe, data crossing)
+  ∩ PROD coworker grant: peer_task_submit
+  ∩ link trusted ∧ peer DID attested ∧ peer class attested ∧ organizationRef = link org
+  ∩ DEV federated-peer Principal grant: peer_validation_request
+  ∩ DEV recipe catalog: recipe enabled, mutation class, repository allow-list
+  ∩ DEV local approval when mutation class = host-mutating
+  ∩ DEV Edge node scope policy: validation.recipe.run allowed on this node
+```
+
+The intersection has to be real in code. F8, where the first hop passes full origin authority, is fixed before any peer task is admitted.
+
+**Evidence classification.** A result from DEV carries `producedBy: {installationDid, environmentClass: "development"|"test", edgeNodeId, recipeId, recipeDigest, commitSha}`. PROD accepts it as **peer validation evidence** on a backlog item PROD owns. It never satisfies a gate that requires canonical *production* runtime evidence. For `BI-BCF474E7` that is the right class: the item asks for evidence from the DEV install.
+
+### 19.6 Keeping other organizations' test data on DEV
+
+DEV hosts other organizations and archetypes for testing. Nothing they own may cross the operator organization's link. That takes four fail-closed checks, one at each place data could leak:
+
+1. **Egress filter on every peer projection.** Anything DEV sends over the link must carry an `organizationId` equal to the link's bound organization. A row with a null or different organization is excluded, not defaulted. This fixes F7 for work sync and applies identically to peer-task results.
+2. **Ingress re-check.** PROD re-checks the organization on every inbound projection and rejects mismatches, recording a safe audit entry. A mismatch is a defect on the sender, never data to keep.
+3. **Results are built from recipe output only.** A validation recipe's artifact is its declared output (TAP summary, exit code, capped and redacted stdout/stderr) plus provenance. Recipes run in an ephemeral checkout of a public repository commit. They do not read DEV's database, other organizations' data or credentials. Output redaction strips environment values, tokens and user-profile paths before the artifact is written.
+4. **No inventory leakage.** DEV's Agent Card projection and coworker discovery for the operator organization's link list only skills exposed to the operator organization. They never list coworkers, offers or organizations that belong to other tenants on DEV.
+
+Option A4 (refuse to federate any multi-tenant DEV) scored second. It remains the fallback if the egress and ingress checks cannot be made provably fail-closed.
+
+## 20. Receiver execution — validation recipes (`DI-259D82329EF4`)
+
+### 20.1 Decision
+
+The recommendation was **E1**: composite 12.66, margin 4.36, high confidence, no commandment conflict.
+
+| Option | Composite | Reason |
+| --- | --- | --- |
+| E1 — one Edge action family, `validation.recipe.run`, over a receiver-owned recipe catalog, run by DEV's native Windows Edge node | **12.66** | Adopted |
+| E3 — DEV's Linux sandbox container | 8.30 | Rejected: it cannot exercise Windows PowerShell or the Windows User environment, which is exactly what `BI-BCF474E7` must prove |
+| E2 — a coding-agent client on DEV claims the task | 8.04 | Rejected as the primary path: DEV is unattended while the operator travels, and platform function must not depend on a client. It stays a manual fallback. |
+| E4 — a generic `script.run` action | 3.25 | Rejected; contradicts §13.3 |
+
+### 20.2 Recipe contract
+
+A recipe is a versioned, receiver-owned entry. The sender may name `recipeId` and supply `commitSha` and `repository`, and nothing else.
+
+| Field | Rule |
+| --- | --- |
+| `recipeId`, `version`, `digest` | The digest covers the full entry. The result reports the digest that ran. |
+| `repository` | Must be on DEV's repository allow-list. Default: the platform repository only. |
+| `commitSha` | Full 40-character SHA. DEV fetches it from the repository's origin (GitHub), never from PROD, so no source bytes cross the link. The SHA must be reachable from a ref on origin. |
+| `argv` | Fixed in the catalog, e.g. `["node", "--test", "scripts/installer/mcp-client-env.test.mjs"]`. No interpolation of sender input. |
+| `shell` | Windows recipes declare the PowerShell host they require (`powershell.exe` 5.1 and/or `pwsh`). The executor refuses to run if it is absent and reports that, rather than skipping. |
+| `mutationClass` | `read-only` (the ephemeral checkout plus a temp directory) or `host-mutating` (for example writes the User environment) |
+| `timeout`, `outputCap` | Enforced by the Edge executor |
+| `expectations` | Machine-checkable pass criteria, e.g. TAP `# fail 0` and `# skip 0` |
+
+The catalog ships with the release DEV runs, as reviewed source under `config/`. A DEV administrator can disable any entry locally. The Edge Go executor gains one action type whose parameters are exactly `{recipeId, version, repository, commitSha}`. Its allow-list stays closed (`packages/db/src/remote-action-dispatch.ts:30`; `services/edge-node-go/internal/action/executor.go:53-71`).
+
+### 20.3 First catalog for `BI-BCF474E7`
+
+| Recipe | Command | Class | Proves |
+| --- | --- | --- | --- |
+| `win.mcp-client-env.tests` | `node --test scripts/installer/mcp-client-env.test.mjs` | read-only | AC-1: the PowerShell cases run, with 0 skipped and 0 failed. The skip guard is at `scripts/installer/mcp-client-env.test.mjs:38`. |
+| `win.mcp-health.tests` | `node --test scripts/hooks/mcp-health.test.mjs` | read-only | AC-2, test half |
+| `win.bootstrap-toolchain.apply` | `powershell.exe -NoProfile -File scripts/dpf-bootstrap-agent-toolchain.ps1`, then report `DPF_CLAUDE_MCP_URL`/`DPF_MCP_URL` from the User environment | host-mutating | AC-3, environment half; AC-2, `mcp-health.ps1` half |
+
+Two parts of `BI-BCF474E7` cannot be recipes:
+
+- **"Claude desktop's dpf connector connects"** is a GUI observation. It returns as a human-attested artifact: a DEV person records it on DEV, and it travels back as evidence attributed to that person and installation.
+- **Grok credential creation on a portal image containing `5960094`** depends on which image DEV is running. DEV reports its served version through the existing operational-posture projection, and the result records it.
+
+### 20.4 Evidence back into the asking thread
+
+When a result is accepted, PROD:
+
+1. updates its initiating `TaskRun`, posting the result to the parent thread through the delivered child-result path (`apps/web/lib/tak/child-result-message.ts`), generalized to a peer-executed child;
+2. records the artifacts as execution evidence on the named backlog item, with the §19.5 `producedBy` provenance and the result's signature;
+3. files every failure as its own backlog item with the Windows output attached, which is `BI-BCF474E7` AC-4. The item is filed on PROD, by PROD, from DEV's signed result; DEV never writes to PROD.
+
+Evidence is attached on PROD to PROD-owned items. It is never written onto a mirrored item, because mirrors are overwritten from their origin on the next sync.
+
+## 21. What is built, specified and missing (2026-10-21)
+
+### 21.1 Unverified
+
+- DEV's own declared environment class, its served version, whether its native Edge node is running (`BI-0C326236` is open), and whether PowerShell 5.1 and `pwsh` are present. DEV was unreachable from PROD during this revision.
+- Six slices of the federated-A2A plan (plan slice S1 (GAID namespace), plan slice S2 (device pinning / signed events), plan slice S3 (signed Agent Cards), plan slice S4 (task ingress), plan slice S5 (authority/privacy), plan slice S6 (operator UX)) are named in the 2026-08-08 plan, but are not in the live backlog (doc-anchor check, 2026-10-21) and their epic `EP-MSP-FEDERATION` does not exist. Plan coverage must reconcile with them when they can be read; this revision does not create duplicates of them.
+- Whether a proxy layer protects `/api/a2a/coworkers/*/offers/*` (F12).
+
+### 21.2 Built, specified, missing
+
+| Capability | State | Evidence |
+| --- | --- | --- |
+| Pairing: join files, organization CA, `dpflink_` tokens, dual approval | Built | `federation-membership-pack.ts`, `organization-membership.ts`, `federation-link-token.ts:36` |
+| Installation DID derived from its Ed25519 key | Built | `instance-identity.ts:57` |
+| Durable outbox with hold-while-unreachable | Built (demand, posture, declarations only) | `demand-delivery.ts:294,490-512` |
+| Read-only same-org work sync (pull) | Built; no organization filter (F7) | `work-page.ts:130`, `work/route.ts:46` |
+| Cross-install operational posture (visibility) | Built | `dpf.operational-posture.reported` on the outbox |
+| Federated Work Room admit and mirror | Built, never called; flag off | `federated-room.server.ts:10,26` |
+| Single-install child delegation with result to parent (#6300) | Built | `apps/web/lib/tak/child-result-message.ts` |
+| MCP Tasks lifecycle over `TaskRun` (read side) | Built | `apps/web/lib/mcp/tasks-lifecycle.ts` |
+| Edge RemoteAction signed dispatch | Built; Go runs only `inventory.collect`, Docker VM restart and organization join | `executor.go:53-71`, `remote-action-dispatch.ts:30` |
+| Peer environment class attested | Missing (F1–F3) | — |
+| Peer task event types, ingress route `/api/v1/federation/a2a`, sender tool | Specified (§7) | The route directory has no `a2a` entry |
+| `TaskRun` peer link and remote task id | Missing | `build-delivery.prisma:1050` |
+| Envelope signatures and HTTP message signatures | Specified (plan slice S2 (device pinning / signed events)) | F11 |
+| Signed Agent Cards | Specified (plan slice S3 (signed Agent Cards), `BI-40648BBF`) | F10 |
+| Per-installation GAID namespace | Specified (plan slice S1 (GAID namespace)) | F9 |
+| Validation recipes | Specified here | — |
+| Overlay reachability | Decided (`BI-CAF86466`), not built | — |
+| Relay | Deferred (`BI-D43D3D76`) | — |
+
+## 22. What the operator must decide or provide
+
+| # | Item | Scope | Why it is the operator's |
+| --- | --- | --- | --- |
+| D1 | **Overlay account and control plane:** Tailscale SaaS account, or a self-hosted Headscale server with a publicly reachable host. With Tailscale, decide whether to enable Tailnet Lock so the vendor cannot add nodes. | Organization (WWWD) | Vendor relationship, cost and who can admit devices |
+| D2 | **Enrol both machines** in the overlay (one sign-in each). DEV has to be enrolled at the machine or through remote access the operator already has. | Operator | Credentials are operator-only on a production install |
+| D3 | **A DEV-local approver** for host-mutating recipes, or explicit acceptance that `win.bootstrap-toolchain.apply` waits until the operator is back at DEV | Organization | Human gate on a mutating action |
+| D4 | **Whether to host a relay** if §18.4's trigger fires, and where | Organization | Always-on public infrastructure and its cost |
+| D5 | **Control-scope stance** for `BI-67219237` (control-plane Slice 4, its review date has passed). This revision does not need it; it keeps PROD from upgrading or reconfiguring DEV. | Organization (WWWD) | Already recorded as an organization decision |
+| D6 | Optional and faster: AC-1 and AC-2 of `BI-BCF474E7` can be proven today on a GitHub-hosted `windows-latest` runner, independent of this design. AC-3 still needs a real install. Choosing this unblocks the Windows defect hunt sooner. It proves nothing about cross-install tasking. | Operator | Choice of priority |
+
+## 23. Delivery slices (summary; the plan holds the detail)
+
+1. **Trust repairs:** attested peer environment class and the stance fix (F1–F3, F5); organization filter on work sync egress and ingress (F7); intersection on first-hop delegation (F8); offer-route credential (F12).
+2. **Reachability:** both installs on the overlay, with `peerAuthorityUrl` on overlay hostnames. The existing work sync recovers, which is the first observable proof.
+3. **Peer task contract:** signed envelope, outbox record type, inbox idempotency, `/api/v1/federation/a2a` ingress, `TaskRun` peer correlation, and the sender tool `request_peer_validation`.
+4. **DEV execution:** recipe catalog and the Edge `validation.recipe.run` executor on Windows. Depends on `BI-0C326236`.
+5. **First proof:** `BI-BCF474E7` driven from a PROD thread, with results on that item.
+6. **Afterwards**, unchanged from §13: signed Agent Cards and discovery, Work Room mirroring, the general reverse direction, Edge inspection composition, MCP Tasks (`BI-06B66FFD`), and the relay on evidence.
+
+## 24. Objectives and acceptance for this revision
+
+**OBJ-XN1:** A thread on one operator-organization installation can ask the other installation to run a named validation recipe at an exact commit and receive an attributable, signed result in that thread and as evidence on a backlog item it owns, across two NATs, without a remote shell.
+
+**OBJ-XN2:** Requests and results survive either installation being offline for days without loss, duplicate execution or silent expiry.
+
+**OBJ-XN3:** Trust between a production and a non-production installation is asymmetric, attested, and expressed as an intersection of authority. No data owned by another organization on the non-production install can cross the link.
+
+| ID | Objectives | Statement |
+| --- | --- | --- |
+| AC-XN-01 | OBJ-XN1 | From a PROD thread, a request for `win.mcp-client-env.tests` at a named SHA runs once on DEV's Edge node and returns TAP output, exit code and provenance into that thread. |
+| AC-XN-02 | OBJ-XN1 | The returned result is recorded as peer validation evidence on `BI-BCF474E7`, with installation DID, environment class, Edge node, recipe digest, commit SHA and a verifiable signature. |
+| AC-XN-03 | OBJ-XN1 | A request naming an unknown recipe, an unlisted repository, a short SHA or any extra parameter is rejected before any `TaskRun` or `RemoteAction` is created on DEV. |
+| AC-XN-04 | OBJ-XN1 | A host-mutating recipe does not start until a DEV-local human approves it, and PROD shows it as `input-required` meanwhile. |
+| AC-XN-05 | OBJ-XN2 | With DEV offline at dispatch, the request is held and delivered when DEV returns, and PROD shows `submitted-undelivered` with last contact until acknowledgement. |
+| AC-XN-06 | OBJ-XN2 | With PROD offline when the run finishes, DEV holds the result and PROD receives it on return, correlated to the original request. |
+| AC-XN-07 | OBJ-XN2 | Re-delivering the same `requestId` any number of times creates one `TaskRun`, one `RemoteAction` and one result. |
+| AC-XN-08 | OBJ-XN2 | A request that reaches DEV after `notAfter` is rejected as expired and does not run; PROD shows `expired-undelivered` or `rejected: expired`. |
+| AC-XN-09 | OBJ-XN3 | PROD's stance reports DEV's attested environment class; a link whose peer class is unattested accepts no peer task in either direction. |
+| AC-XN-10 | OBJ-XN3 | A DEV row owned by another organization, or with no organization, never appears in PROD's work sync, peer results or Agent Card projection, and PROD rejects one injected at ingress. |
+| AC-XN-11 | OBJ-XN3 | DEV cannot cause any recipe, action or record mutation on PROD; a DEV-originated request to do so is rejected and audited. |
+| AC-XN-12 | OBJ-XN3 | A delegated peer task carries no authority beyond the intersection in §19.5; the first-hop delegation test proves the delegated scope is narrower than the origin's. |
+| AC-XN-13 | OBJ-XN3 | Overlay ACLs allow the peer tag to reach only the peer's federation ingress port; MCP and the portal UI are unreachable from it. |
+
+Acceptance is functional, on the two canonical installations, per §14. Unit and contract tests are prerequisites, not evidence of completion.
