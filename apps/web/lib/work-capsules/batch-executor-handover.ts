@@ -14,6 +14,7 @@
 import { createHash } from "node:crypto";
 
 import type { ToolResult } from "@/lib/mcp-tool-types";
+import { isRecord } from "@/lib/shared/coerce";
 import type { CapsuleDb } from "./work-capsule-store-types";
 
 export const BATCH_HANDOVER_MAX_ROOMS = 20;
@@ -24,8 +25,6 @@ export type BatchHandoverPlanRow = {
   expectedLeaseHolderPrincipalId: string | null;
 };
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  Boolean(value) && typeof value === "object" && !Array.isArray(value);
 
 /**
  * The room's last executor checkpoint (`workspaceState.executorCheckpoint`),
