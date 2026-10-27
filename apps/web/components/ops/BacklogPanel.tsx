@@ -4,6 +4,7 @@
 import { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { LocalTime } from "@/components/ui/LocalTime";
+import { useT } from "@/lib/i18n/use-t";
 import {
   FormField,
   FormStatus,
@@ -54,6 +55,7 @@ export function BacklogPanel({
   epics,
 }: Props) {
   const router = useRouter();
+  const t = useT("backlog");
   const [form, setForm] = useState<BacklogItemInput>(() => emptyForm(defaultType, defaultEpicId));
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -334,17 +336,15 @@ export function BacklogPanel({
           {/* Outcome — create only; afterwards it lives in the body (BI-B1B44777) */}
           {!item && (
             <label className="flex flex-col gap-1">
-              <span className="text-[10px] uppercase tracking-widest text-[var(--dpf-muted)]">Outcome</span>
+              <span className="text-dpf-caption uppercase tracking-widest text-[var(--dpf-muted)]">{t("intake.outcomeLabel")}</span>
               <textarea
                 value={form.outcome ?? ""}
                 onChange={(e) => set("outcome", e.target.value)}
                 rows={2}
-                className="bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-sm text-[var(--dpf-text)] placeholder:text-[var(--dpf-muted)] focus:outline-none focus:border-[var(--dpf-accent)] resize-none"
-                placeholder="What will be true, and for whom, when this is done?"
+                className="bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded px-3 py-2 text-dpf-body text-[var(--dpf-text)] placeholder:text-[var(--dpf-muted)] focus:outline-none focus:border-[var(--dpf-accent)] resize-none"
+                placeholder={t("intake.outcomePlaceholder")}
               />
-              <span className="text-[10px] text-[var(--dpf-muted)]">
-                Optional. Delivery closes the item.
-              </span>
+              <span className="text-dpf-caption text-[var(--dpf-muted)]">{t("intake.outcomeHint")}</span>
             </label>
           )}
 
