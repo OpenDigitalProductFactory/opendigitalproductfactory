@@ -55,7 +55,8 @@ export async function loadWorkroomFlowMap(
         occurredAt: { gte: new Date(now.getTime() - 90 * DAY_MS) },
       },
       select: { queueKey: true, itemKind: true, itemId: true, transition: true, outcome: true, occurredAt: true, laneKey: true },
-      orderBy: { occurredAt: "asc" },
+      // Events sharing a timestamp keep the order they were recorded in.
+      orderBy: [{ occurredAt: "asc" }, { createdAt: "asc" }],
       take: 5000,
     }),
     db.queueMetricSnapshot.findMany({
