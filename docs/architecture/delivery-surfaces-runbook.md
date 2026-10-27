@@ -46,6 +46,32 @@
 - **`:3001` and every shared singleton are lease-gated** ⟦runtime: install-local port — the lease rule is doctrine, the number is not⟧ via `claim_nonprod_environment_lease`. No per-branch CI images, no silent re-bind, no ad-hoc `docker run`/`compose up` from a surface. Hook-refused, so §1's refusal rule governs what to do when one fires.
 - **A built image carries the identity of its bytes** — stamp == built HEAD == target, asserted pre-swap.
 
+### Taking over another executor's work
+
+An executor often reaches its capacity limit before its PR merges, and the
+operator asks another assistant to finish. The operator usually names only PR
+numbers. Design: [executor takeover](../superpowers/specs/2026-10-21-executor-takeover-design.md)
+(BI-E2871BDE).
+
+1. **Find each room from the PR.**
+   - Call `list_workrooms` with `pullRequestNumber` or `headBranch`. For your person, this matches rooms another assistant created too.
+   - Rooms you have not joined come back with `admission: "handover-required"` and the exact `reassign_workroom_executor` call.
+   - Do not probe `adopt_worktree` for `branch_occupied`.
+2. **Read the previous executor's checkpoint before taking anything over.** The `workroom_assistant_not_admitted` result shows:
+   - the latest heartbeat `checkpoint`: next action, the checks being addressed, uncommitted paths, head SHA and whether it was pushed, open risks;
+   - the bound PR and `leaseExpiresAt`.
+
+   A checkpoint is the previous executor's claim, not evidence. Check it against git and CI.
+3. **Take over the whole set with one approval.**
+   - Call `reassign_workroom_executor` with `capsuleIds` as a dry run.
+   - Then apply with the returned `planDigest`. The person approves once for exactly that set.
+   - A room whose lease holder changed in between is skipped and reported, never overwritten.
+4. **Reconcile the worktree before editing.** Account for every uncommitted path against the checkpoint. Commit, discard or ask; never let a stray file ride along.
+5. **Merge current main and re-run the exact-head gate.** Merging moves HEAD, so earlier gate evidence no longer applies. Update the PR body's `Local-CI-Evidence:` and add a short handover note.
+6. **Close out through the merge.** A merged room is archived, not completed. Its stage tasks stop with it (BI-1DDCE164).
+
+While you work, send a `checkpoint` with `heartbeat_workroom` at each stage boundary, so the next executor can start from step 2.
+
 ### Contributor preview binding and cleanup
 
 Preview startup resolves the canonical install settings and overlays, then binds

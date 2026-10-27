@@ -1508,6 +1508,7 @@
       "anchors": [
         "delivery-surfaces-runbook",
         "task-specific-operating-rules",
+        "taking-over-another-executors-work",
         "contributor-preview-binding-and-cleanup"
       ]
     },
