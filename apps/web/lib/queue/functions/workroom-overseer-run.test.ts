@@ -113,6 +113,11 @@ describe("reading a room", () => {
     expect(room.authoredHead).toBe(false);
   });
 
+  it("reads an open PR observation as an open pull request", () => {
+    const observedAt = NOW;
+    expect(toOverseerRoom(row, null, { deliveredSignal: null, pullRequestObservation: { state: "open", observedAt } }, true).openPullRequest).toBe(true);
+  });
+
   it("reads unknown merge state as unknown, never as unmerged", () => {
     expect(toOverseerRoom(row, null, { deliveredSignal: null, pullRequestObservation: null }, true).merged).toBeNull();
   });

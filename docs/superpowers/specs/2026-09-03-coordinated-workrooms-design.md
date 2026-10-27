@@ -746,10 +746,16 @@ completion-readiness transition, which needs evidence the overseer does not own.
 Scope is released through `releaseWorkCapsuleScope`. Both writers record their
 own activity rows; the overseer row adds the rule and the facts it read.
 
-Merge state comes from the reaper's existing sources: the latest verified
-GitHub pull-request observation from the contributor inventory sync, then local
-trunk reachability where the runtime has a checkout. An unknown merge state
-never closes a room.
+Merge state comes from the reaper's existing sources, and the overseer and the
+reaper share one predicate. A room is merged when the verified GitHub
+observation for its exact head is merged; or, because a squash or rebase merge
+leaves the recorded head off main and many rooms never had their PR bound
+(WC-A2D58814, WC-B9703CBC, WC-EC0E4382), when its bound PR, or with none bound
+the newest PR observed for its repository and branch, merged after the room
+last recorded its head; or when its head is reachable from main in a runtime
+with a checkout. A newest PR that is open keeps the room open. A head recorded
+after the merge, or no observation at all, leaves the state unknown, and an
+unknown merge state never closes a room.
 
 R4 derives what it can. When the item has no size and the room declares a
 delivery shape, the size the shape implies (`DELIVERY_SHAPE_SIZE`) is recorded
