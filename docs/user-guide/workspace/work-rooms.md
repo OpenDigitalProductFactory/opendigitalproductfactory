@@ -280,7 +280,7 @@ The panel shows four things:
 
 - **One sentence** naming where the most waiting builds up right now, and why. It weighs how many rooms are held at a step by how long work typically waits there, so two rooms stuck for days outrank five that clear in an hour. For example: *2 rooms are held at review in Small change, typically waiting 2d (waiting on a person).* A step with too few finished passes to measure is only named when no held step can be measured.
 - **Four numbers**: in flow now, flow time, flow efficiency, and finished per week.
-- **The busiest work shape**, drawn live.
+- **A work shape, drawn live.** It is the busiest of the shapes your business type puts at its delivery stage, or the busiest shape if none of those is in flow. Delivery shapes sit at the delivery stage when your business type builds and deploys on the IT4IT value streams. A software platform does; most other business types do not, so the home draws their busiest shape.
 
 Choose a step on the map to open that step in the area's Work view, where you can see the rooms waiting there.
 

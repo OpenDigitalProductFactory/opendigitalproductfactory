@@ -15,12 +15,16 @@
 // DPF is single-org-per-deployment: "the org" is the one `StorefrontConfig` row.
 
 import {
+  deriveOperationalValueStream,
   deriveTwinProfile,
   deriveTwinValueStreamBinding,
   type TwinProfile,
 } from "@dpf/storefront-templates";
 
+import { loadWorkroomStageLiveCounts } from "@/lib/work-management/workroom-stage-telemetry";
+
 import { buildStageFlow, type StageDemand } from "./stage-flow";
+import { bindWorkroomStageQueues, boundDeliveryShapeRefs, workroomQueuesByStage } from "./workroom-stage-binding";
 import {
   daysBetween,
   humanizeWait,
@@ -410,6 +414,8 @@ export interface LivingBusinessLoadOptions {
   db?: LivingBusinessClient;
   now?: Date;
   clock?: () => number;
+  /** Rooms at each Workroom stage queue; defaults to the live rooms (BI-B32D8C16). */
+  loadWorkroomStageCounts?: () => Promise<Map<string, { wip: number; depth: number }>>;
 }
 
 /**
@@ -693,7 +699,13 @@ export async function loadLivingBusinessProjection(
   // Value-stream flow lane (workstream C): live demand grouped by its stage.
   // Waiting (pending / unassigned) demand sits at the primary stage; work in
   // progress has moved to Deliver.
-  const binding = deriveTwinValueStreamBinding(def);
+  // Delivery-shape Workroom stages on the archetype's IT4IT streams join its
+  // Deliver stage, so platform work lights the stream too (BI-B32D8C16).
+  const binding = bindWorkroomStageQueues(
+    deriveTwinValueStreamBinding(def),
+    deriveOperationalValueStream(def).it4itStageBinding,
+    boundDeliveryShapeRefs(),
+  );
   const deliverStage = binding.stages.some((s) => s.stageKey === "deliver")
     ? "deliver"
     : binding.primaryStageKey;
@@ -710,6 +722,17 @@ export async function loadLivingBusinessProjection(
     cur.count += 1;
     cur.longestWaitMs = Math.max(cur.longestWaitMs ?? 0, waitMs);
     stageDemand[stage] = cur;
+  }
+  const workroomQueues = workroomQueuesByStage(binding);
+  if (workroomQueues.size > 0) {
+    const counts = await (opts?.loadWorkroomStageCounts ?? loadWorkroomStageLiveCounts)().catch(() => new Map<string, { wip: number }>());
+    for (const [stage, keys] of workroomQueues) {
+      const rooms = keys.reduce((sum, key) => sum + (counts.get(key)?.wip ?? 0), 0);
+      if (rooms === 0) continue;
+      const cur = stageDemand[stage] ?? { count: 0, longestWaitMs: 0 };
+      cur.count += rooms;
+      stageDemand[stage] = cur;
+    }
   }
   const stageFlow = buildStageFlow(binding, stageDemand);
 

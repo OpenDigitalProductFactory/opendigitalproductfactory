@@ -384,6 +384,17 @@ export async function emitStageTelemetryForDriveWrite(input: {
 }
 
 
+/** Rooms at each Workroom stage queue now, from every live room: wip at the stage, depth not being worked. */
+export async function loadWorkroomStageLiveCounts(): Promise<Map<string, { wip: number; depth: number }>> {
+  const { prisma } = await import("@dpf/db");
+  const { TERMINAL_WORKROOM_STATUSES } = await import("./standing-room-nesting");
+  const rooms = await prisma.workroom.findMany({
+    where: { archivedAt: null, status: { notIn: [...TERMINAL_WORKROOM_STATUSES] } },
+    select: { scopeClaims: true, workspaceState: true },
+  });
+  return workroomStageLiveCounts(rooms);
+}
+
 /** Close the open steps of one room that has just ended (BI-C9F1DE01). Never throws. */
 export async function closeStageTelemetryForEndedRoom(capsuleId: string, at: Date): Promise<number> {
   try {

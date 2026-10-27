@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { namespaceMessages } from "@dpf/i18n";
-import { ALL_ARCHETYPES } from "@dpf/storefront-templates";
+import { ALL_ARCHETYPES, deriveOperationalValueStream, deriveTwinValueStreamBinding } from "@dpf/storefront-templates";
 
 import { MessagesProvider } from "@/components/i18n/MessagesProvider";
 import { Surface } from "@/components/ui/Surface";
@@ -12,6 +12,7 @@ import { getWorkShape } from "@/lib/work-management/work-shapes";
 import { workroomStageQueueKey } from "@/lib/work-management/workroom-stage-telemetry";
 import { formatDuration } from "@/lib/datetime";
 import { getT } from "@/lib/i18n/t.server";
+import { bindWorkroomStageQueues, boundDeliveryShapeRefs, boundShapeRefs } from "@/lib/twin/workroom-stage-binding";
 import { getLocaleContext } from "@/lib/i18n/locale-context.server";
 
 /**
@@ -29,7 +30,15 @@ export async function MainStreamHero({ archetypeId }: { archetypeId: string | nu
   const section = AREA_SECTIONS.find((candidate) => candidate.portfolioRole === role);
   if (!flow || !section) return null;
   const workHref = `/area/${section.key}?view=work`;
-  const shape = heroShape(flow);
+  // The shapes the archetype binds to its delivery stage through IT4IT (BI-B32D8C16).
+  const bound = archetype
+    ? boundShapeRefs(bindWorkroomStageQueues(
+        deriveTwinValueStreamBinding(archetype),
+        deriveOperationalValueStream(archetype).it4itStageBinding,
+        boundDeliveryShapeRefs(),
+      ))
+    : new Set<string>();
+  const shape = heroShape(flow, bound);
   const view = shape ? await loadShapeFlowView({ shapeKey: shape.shapeKey, portfolioRole: role }).catch(() => null) : null;
   const waits = await loadStageWaits(flow.shapes.filter((row) => row.held.length > 0).map((row) => row.shapeRef)).catch(() => new Map<string, number | null>());
   const sentence = bottleneckSentence(flow, (key) => getWorkShape(key)?.title ?? key, (shapeRef, stageKey) => waits.get(workroomStageQueueKey(shapeRef, stageKey)) ?? null);
