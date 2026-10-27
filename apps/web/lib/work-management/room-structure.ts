@@ -22,22 +22,39 @@ import {
   BOOKKEEPING_ROOM_GRAMMAR,
   CUSTOMER_ACCOUNT_GRAMMAR,
   OPPORTUNITY_GRAMMAR,
+  PLATFORM_DELIVERY_GRAMMAR,
   resolveBookkeepingRoomPoint,
   resolveCustomerAccountPoint,
   resolveOpportunityPoint,
+  resolvePlatformDeliveryPoint,
 } from "@/lib/lifecycle-grammars";
 import type { OperationalValueStreamStageKey } from "@dpf/storefront-templates";
+
+/** An IT4IT stage as the reference model names it; the server binding reads it for a delivery room. */
+export interface It4itStageDescriptor {
+  participationReference: string;
+  stageName: string;
+  streamName: string;
+}
 
 /** The room subject descriptor the loader builds from the subject's stored row. */
 export type WorkroomStructureSubject =
   | { kind: "opportunity"; stage: string }
   | { kind: "customer-account"; status: string }
-  | { kind: "bookkeeping-period"; status: string };
+  | { kind: "bookkeeping-period"; status: string }
+  // A platform delivery room at the IT4IT stage its work-shape stage sits at (BI-B8B3FB70).
+  | { kind: "platform-delivery"; stage: It4itStageDescriptor };
 
-export interface WorkroomValueStream {
-  stage: OperationalValueStreamStageKey;
-  label: string;
-}
+export type WorkroomValueStream =
+  | { stage: OperationalValueStreamStageKey; label: string }
+  | {
+      reference: "it4it-3.0.1";
+      stream: string;
+      stage: string;
+      /** The IT4IT stage number Edge 2 joins on, e.g. "5.3.4". */
+      participationReference: string;
+      label: string;
+    };
 
 export interface WorkroomLifecycleGate {
   toStage: string;
@@ -87,8 +104,8 @@ function buildLifecycle(grammar: LifecycleGrammar, point: LifecyclePoint): Workr
 
 /**
  * Resolve the value-stream + lifecycle structure for a room's subject. Returns null
- * when the subject has no value-stream/lifecycle binding (e.g. a platform-development
- * subject that is not on the customer OVSM — a paved follow-up).
+ * when the subject has no value-stream/lifecycle binding. A platform delivery room
+ * resolves on the IT4IT value streams rather than the customer OVSM.
  */
 export function resolveWorkroomStructure(subject: WorkroomStructureSubject | null): WorkroomStructure | null {
   if (!subject) return null;
@@ -116,6 +133,20 @@ export function resolveWorkroomStructure(subject: WorkroomStructureSubject | nul
         lifecycle: buildLifecycle(BOOKKEEPING_ROOM_GRAMMAR, resolveBookkeepingRoomPoint(subject.status)),
       };
     }
+    case "platform-delivery": {
+      const { participationReference, stageName, streamName } = subject.stage;
+      const point = resolvePlatformDeliveryPoint(participationReference);
+      return {
+        valueStream: {
+          reference: "it4it-3.0.1",
+          stream: streamName,
+          stage: stageName,
+          participationReference,
+          label: `${streamName} · ${stageName}`,
+        },
+        lifecycle: point ? buildLifecycle(PLATFORM_DELIVERY_GRAMMAR, point) : null,
+      };
+    }
     default:
       return null;
   }
@@ -123,15 +154,18 @@ export function resolveWorkroomStructure(subject: WorkroomStructureSubject | nul
 
 /**
  * Map a room source to its subject descriptor from the source's stored fields.
- * Returns null for sources without a value-stream/lifecycle subject (platform
- * development, workflow) — those fold onto the platform's own delivery stream in a
- * follow-up. `opportunityStage` / `accountStatus` are supplied by the loader.
+ * Returns null for sources without a value-stream/lifecycle subject. A backlog-item
+ * or work-capsule room is a platform delivery room when the server binding found
+ * the IT4IT stage its current shape stage sits at. `opportunityStage`,
+ * `accountStatus` and `deliveryStage` are supplied by the loader.
  */
 export function workroomStructureSubjectFor(input: {
   sourceType: string;
   opportunityStage?: string | null;
   accountStatus?: string | null;
   bookkeepingPeriodStatus?: string | null;
+  /** The IT4IT stage a delivery room's current shape stage sits at, resolved by the server binding. */
+  deliveryStage?: It4itStageDescriptor | null;
 }): WorkroomStructureSubject | null {
   if (input.sourceType === "opportunity" && input.opportunityStage) {
     return { kind: "opportunity", stage: input.opportunityStage };
@@ -147,6 +181,9 @@ export function workroomStructureSubjectFor(input: {
   }
   if (input.sourceType === "bookkeeping-period" && input.bookkeepingPeriodStatus) {
     return { kind: "bookkeeping-period", status: input.bookkeepingPeriodStatus };
+  }
+  if ((input.sourceType === "backlog-item" || input.sourceType === "work-capsule") && input.deliveryStage) {
+    return { kind: "platform-delivery", stage: input.deliveryStage };
   }
   return null;
 }

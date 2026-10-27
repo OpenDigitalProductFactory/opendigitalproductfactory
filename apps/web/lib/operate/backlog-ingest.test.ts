@@ -174,6 +174,21 @@ describe("ingestBacklogItem", () => {
     expect(indexKnowledge).toHaveBeenCalledOnce();
   });
 
+  // BI-B146AB6B slice (BI-3EC4722F): a recurring miss carries its routing answer from filing.
+  it("records a recurring miss's routing answer on its intake activity, and refuses a malformed one", async () => {
+    const routing = { kind: "gate" as const, question: 1 as const, bindsTo: "work-shape:delivery-small#stage:repair", reason: "Decidable at the stage." };
+    const { store, activities } = makeStore();
+    await ingestBacklogItem(
+      { title: "Work keeps piling up", workType: "bug", source: "automated-detection", origin: { kind: "flow-bottleneck", id: "wr:x|y" }, routing },
+      { store, indexKnowledge: () => {} },
+    );
+    expect(activities[0]).toMatchObject({ kind: "intake_origin", payload: { routing } });
+    await expect(ingestBacklogItem(
+      { title: "Bad", workType: "bug", source: "automated-detection", routing: { ...routing, question: 3 } },
+      { store: makeStore().store, indexKnowledge: () => {} },
+    )).rejects.toThrow(/routing.question must be 1/);
+  });
+
   it("dedupes on the origin marker — bumps occurrence + writes a recurrence activity, no duplicate", async () => {
     const { store, created, activities } = makeStore({
       backlogItem: {
