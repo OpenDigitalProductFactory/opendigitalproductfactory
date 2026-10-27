@@ -39,6 +39,7 @@ import {
   type ImplementationCandidate,
 } from "@/lib/operate/implementation-scan";
 import { listRepoSourceFiles } from "@/lib/operate/repo-file-inventory";
+import { routingAnswerProblem, type RoutingAnswer } from "@/lib/improvement-flywheel/routing-answer";
 import {
   backlogOriginMarker,
   reconcileOrigin,
@@ -103,6 +104,12 @@ export interface BacklogIngestInput {
    * semantics (non-terminal dedupe + occurrence bump) are unchanged.
    */
   reconcile?: OriginReconciliation;
+  /**
+   * For a recurring miss: which kind of control fixes it and what it binds to
+   * (BI-B146AB6B rule). Recorded on the intake_origin activity, so the item
+   * carries its answer from the moment it is filed.
+   */
+  routing?: RoutingAnswer;
 }
 
 export interface BacklogIngestResult {
@@ -395,6 +402,8 @@ export async function ingestBacklogItem(
   if (validationError) {
     throw new Error(`[backlog-ingest] ${validationError}`);
   }
+  const routingProblem = input.routing ? routingAnswerProblem(input.routing) : null;
+  if (routingProblem) throw new Error(`[backlog-ingest] ${routingProblem}`);
 
   const marker = input.origin ? backlogOriginMarker(input.origin.kind, input.origin.id) : null;
 
@@ -413,6 +422,7 @@ export async function ingestBacklogItem(
           created,
           createdBy: "backlog-ingest",
           ...(input.reconcile ? { source: sourceSnapshot(input.reconcile) } : {}),
+          ...(input.routing ? { routing: input.routing } : {}),
         },
         ...(input.submittedById ? { recordedById: input.submittedById } : {}),
         ...(input.agentId ? { recordedByAgentId: input.agentId } : {}),

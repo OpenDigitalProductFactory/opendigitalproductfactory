@@ -36,6 +36,11 @@ export type CreateOrTouchImprovementSignalInput = {
   toolName?: string | null;
   suspectedRootCause?: string | null;
   objectiveImpactHypothesis?: string | null;
+  /**
+   * The source id names one observation, so a repeat delivery only touches it:
+   * no recurrence, never filed. platform_issue_report is always immutable.
+   */
+  immutable?: boolean;
 };
 
 export type CreateOrTouchImprovementSignalResult = {
@@ -98,7 +103,7 @@ export async function createOrTouchImprovementSignal(
   deps?: ImprovementSignalDeps,
 ): Promise<CreateOrTouchImprovementSignalResult> {
   const signalId = `IS-${randomUUID().slice(0, 8).toUpperCase()}`;
-  const immutableSource = input.sourceType === "platform_issue_report";
+  const immutableSource = input.immutable === true || input.sourceType === "platform_issue_report";
   const where = { sourceType_sourceId: { sourceType: input.sourceType, sourceId: input.sourceId } };
   const update = {
     lastSeenAt: new Date(),
