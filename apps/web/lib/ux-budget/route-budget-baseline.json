@@ -2217,12 +2217,12 @@
       "defaultVisibleWords": 118,
       "leadBandWords": 0,
       "primaryActions": 2,
-      "visibleFields": 4,
+      "visibleFields": 5,
       "maxChoicesPerControl": 1,
       "subLegibleControls": 0,
       "buriedPrimaryAction": 0,
       "axeViolations": 3,
-      "ariaSnapshot": "- link\n- banner\n  - link\n    - text\n  - button\n  - button\n    - text\n  - group\n    - link\n    - button\n    - text\n    - button\n- complementary\n  - navigation\n    - group\n      - button\n      - button [pressed]\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - link\n    - link\n      - text\n    - paragraph\n      - link\n    - link\n      - text\n    - paragraph\n      - link\n    - link\n      - text\n    - paragraph\n      - link\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n- main\n  - navigation\n    - link\n    - text\n  - paragraph\n    - text\n  - heading [level=1]\n  - paragraph\n    - text\n  - textbox\n  - combobox\n    - option [selected]\n  - button\n  - link\n  - text"
+      "ariaSnapshot": "- link\n- banner\n  - link\n    - text\n  - button\n  - button\n    - text\n  - group\n    - link\n    - button\n    - text\n    - button\n- complementary\n  - navigation\n    - group\n      - button\n      - button [pressed]\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - link\n    - link\n      - text\n    - paragraph\n      - link\n    - link\n      - text\n    - paragraph\n      - link\n    - link\n      - text\n    - paragraph\n      - link\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n- main\n  - navigation\n    - link\n    - text\n  - paragraph\n    - text\n  - heading [level=1]\n  - paragraph\n    - text\n  - navigation\n    - link\n    - group\n      - button\n      - text\n      - textbox\n      - checkbox\n      - text\n      - button\n  - paragraph\n    - text\n  - textbox\n  - button\n  - textbox\n  - combobox\n    - option [selected]\n  - button\n  - link\n  - text"
     },
     "/workspace/inbox": {
       "defaultVisibleWords": 428,
