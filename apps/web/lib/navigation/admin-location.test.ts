@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import { ADMIN_FAMILIES } from "./admin-nav";
 import { adminPageLocation, adminPageLocationLabel } from "./admin-location";
-import { AREA_VIEW_LABELS, getAreaSetupEntries, PORTAL_SHELL_SECTIONS } from "./portal-navigation-model";
+import { getAreaSetupEntries } from "./portal-navigation-model";
+import { AREA_VIEW_LABELS, PORTAL_SHELL_SECTIONS } from "./portal-shell-sections";
 
 // BI-DB506554: messages named "Admin › Platform Development › MCP", which no
 // menu shows. A location an operator is told to follow is read from the nav

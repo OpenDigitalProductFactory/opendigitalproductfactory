@@ -28,6 +28,7 @@ const SLOW = { timeout: 5000 };
 function adminView(overrides: Partial<AccountAgentAccess> = {}): AccountAgentAccess {
   return {
     account: { userId: "u-admin", email: "admin@dpf.local", isActive: true, workHandedOverAt: "2026-10-01T02:00:00.000Z", isYou: false },
+    // clock-bomb-guard: allow display-only fixture; the panel compares no dates and expiresAt is null.
     personalTokens: [{ id: "t1", name: "laptop", prefix: "dpfmcp_GRV0B", tokenSuffix: "a1b2", kind: "operator", lastUsedAt: null, expiresAt: null, createdAt: "2026-09-01T00:00:00.000Z" }],
     clientGrants: [{ clientId: "dpfoc_codex", clientName: "Codex", liveAccessTokens: 1, liveRefreshGrants: 1, lastUsedAt: null }],
     ownedCredentialsClients: [{ clientId: "dpfoc_grok", clientName: "DPF Grok connection", lastUsedAt: "2026-10-27T10:00:00.000Z", createdAt: "2026-10-01T00:00:00.000Z" }],
