@@ -26,11 +26,13 @@
 // One entry point for every path that creates a DPF worktree: the WorktreeCreate
 // hook and scripts/new-dev-worktree.sh both call provisionWorktree.
 
-import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { parseArgs } from "node:util";
 
 import { isEntryModule } from "./entry-module.mjs";
+import { gitText, gitTextOrNull } from "./git.mjs";
+import { scriptArgv } from "./script-argv.mjs";
 import { bindWorktreeToWorkroom, toPosixPath, writeClaimMarker } from "./workroom-bind.mjs";
 
 export const BREAK_GLASS_ENV = "DPF_WORKTREE_BREAK_GLASS";
@@ -45,17 +47,8 @@ export function breakGlassReason(env = process.env) {
 
 // ── default effects (replaced in tests) ──────────────────────────────────────
 
-function git(root, args) {
-  return execFileSync("git", ["-C", root, ...args], { encoding: "utf8" }).trim();
-}
-
-function gitOrNull(root, args) {
-  try {
-    return git(root, args);
-  } catch {
-    return null;
-  }
-}
+const git = (root, args) => gitText(["-C", root, ...args]);
+const gitOrNull = (root, args) => gitTextOrNull(["-C", root, ...args]);
 
 /** Create (or reuse) the worktree: the existing branch, or a new one off origin/main. */
 export function addWorktree(mainRoot, target, branch) {
@@ -202,18 +195,18 @@ export async function provisionWorktree({ mainRoot, plan, env = process.env, eff
 // Prints the created path on stdout; exits 0 created/break-glass, 1 otherwise.
 
 export function parseCliArgs(argv) {
-  const out = {};
-  for (let i = 0; i < argv.length; i += 1) {
-    const key = argv[i];
-    if (key === "--main-root") out.mainRoot = argv[++i];
-    else if (key === "--target") out.target = argv[++i];
-    else if (key === "--branch") out.branch = argv[++i];
-  }
+  const { values } = parseArgs({
+    args: scriptArgv(argv),
+    strict: true,
+    options: { "main-root": { type: "string" }, target: { type: "string" }, branch: { type: "string" } },
+  });
+  const out = { mainRoot: values["main-root"], target: values.target, branch: values.branch };
   return out.mainRoot && out.target && out.branch ? out : null;
 }
 
 if (isEntryModule(import.meta.url)) {
-  const args = parseCliArgs(process.argv.slice(2));
+  let args = null;
+  try { args = parseCliArgs(process.argv.slice(2)); } catch { /* unknown option: usage below */ }
   if (!args) {
     process.stderr.write("usage: worktree-provision.mjs --main-root <root> --target <path> --branch <branch>\n");
     process.exit(2);
