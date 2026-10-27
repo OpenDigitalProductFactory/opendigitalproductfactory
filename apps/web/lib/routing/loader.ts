@@ -3,6 +3,7 @@
  * Converts Prisma rows into the routing pipeline's type system.
  */
 import { prisma } from "@dpf/db";
+import { inCapturedProviderTransportScope, isCapturedNativeImageInputEvidence } from "../shared/captured-effect-store";
 import { providerHasConfiguredCredential } from "@/lib/ai-provider-internals";
 import { loadActiveRiskAcceptedClearances } from "@/lib/govern/clearance-overrides";
 import type {
@@ -49,7 +50,8 @@ interface LoaderCacheEntry<T> {
 export type LocalContextReader = (
   fetchImpl: typeof fetch | undefined,
   selected: { modelId: string; provider: { providerId: string; baseUrl: string | null; endpoint: string | null } },
-) => Promise<number | null | { contextTokens: number | null; thinkingBudgetEvidence?: import("./types").LocalThinkingBudgetEvidence }>;
+) => Promise<number | null | { contextTokens: number | null; thinkingBudgetEvidence?: import("./types").LocalThinkingBudgetEvidence;
+  imageInputEvidence?: import("../shared/captured-effect-store").CapturedNativeImageInputEvidence }>;
 const unknownLocalContext: LocalContextReader = async () => null;
 let manifestsCache = new WeakMap<LocalContextReader, LoaderCacheEntry<EndpointManifest[]>>();
 let policyRulesCache: LoaderCacheEntry<PolicyRuleEval[]> | null = null;
@@ -165,6 +167,8 @@ export async function loadEndpointManifests(
   now: number = Date.now(),
   readLocalContext: LocalContextReader = unknownLocalContext,
 ): Promise<EndpointManifest[]> {
+  // Captured observations are request-bound facts, never a process cache entry.
+  if (inCapturedProviderTransportScope()) return queryEndpointManifests(readLocalContext);
   const cached = manifestsCache.get(readLocalContext);
   if (cached && now - cached.at < ROUTING_LOADER_TTL_MS) {
     return cached.value;
@@ -247,10 +251,12 @@ async function profileToManifest(
   let maxContextTokens = mp.maxContextTokens ?? mp.provider.maxContextTokens;
   let maxOutputTokens = mp.maxOutputTokens ?? mp.provider.maxOutputTokens;
   let localThinkingBudgetEvidence: EndpointManifest["localThinkingBudgetEvidence"];
+  let imageInputEvidence: unknown;
   if (mp.providerId === "local" && ["chat", "reasoning", "code"].includes(mp.modelClass ?? "chat")) {
     const observation = await readLocalContext(undefined, {
       modelId: mp.modelId, provider: mp.provider,
     });
+    imageInputEvidence = typeof observation === "object" && observation !== null ? observation.imageInputEvidence : undefined;
     const served = typeof observation === "object" && observation !== null ? observation.contextTokens : observation;
     localThinkingBudgetEvidence = typeof observation === "object" && observation !== null ? observation.thinkingBudgetEvidence : undefined;
     maxContextTokens = served !== null && Number.isSafeInteger(served) && served > 0 ? served : null;
@@ -260,6 +266,12 @@ async function profileToManifest(
       ? maxContextTokens : Math.min(maxOutputTokens, maxContextTokens);
   }
 
+  const capabilities = (mp.capabilities as unknown as ModelCardCapabilities) ?? EMPTY_CAPABILITIES;
+  const imageOverride = (mp.capabilityOverrides as Record<string, unknown> | null)?.imageInput;
+  const explicitlyFalse = (value: unknown) => value === false || value !== null && typeof value === "object"
+    && "support" in value && value.support === false;
+  const observedImage = mp.providerId === "local" && !explicitlyFalse(capabilities.imageInput) && !explicitlyFalse(imageOverride)
+    && isCapturedNativeImageInputEvidence(imageInputEvidence, mp.modelId);
   return {
     id: mp.id,
     providerId: mp.providerId,
@@ -303,9 +315,9 @@ async function profileToManifest(
     // EP-INF-003: ModelCard fields
     modelClass: mp.modelClass ?? "chat",
     modelFamily: mp.modelFamily ?? null,
-    inputModalities: (mp.inputModalities as string[]) ?? ["text"],
+    inputModalities: observedImage ? [...new Set([...(mp.inputModalities as string[] ?? ["text"]), "image"])] : (mp.inputModalities as string[]) ?? ["text"],
     outputModalities: (mp.outputModalities as string[]) ?? ["text"],
-    capabilities: (mp.capabilities as unknown as ModelCardCapabilities) ?? EMPTY_CAPABILITIES,
+    capabilities: observedImage ? { ...capabilities, imageInput: true } : capabilities,
     pricing: (mp.pricing as unknown as ModelCardPricing) ?? EMPTY_PRICING,
     supportedParameters: (mp.supportedParameters as string[]) ?? [],
     ...(localThinkingBudgetEvidence ? { localThinkingBudgetEvidence } : {}),

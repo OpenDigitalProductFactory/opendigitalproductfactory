@@ -267,6 +267,8 @@ export async function resolveAutonomousWorkTools(input: {
   requiredToolNames?: readonly string[];
   /** Server-owned admitted binding. Narrows already-authorized tools before runtime probes. */
   restrictedReviewBinding?: InitiativeReviewBinding;
+  /** Server-owned finite CE preparation; resolves only its registered readers without ambient runtime probes. */
+  restrictedEngagementBinding?: import("../coworker-service-catalog/engagement-task-binding").EngagementTaskBinding;
   roomAuthorizedGrants?: readonly string[] | null;
 }): Promise<{
   tools: ToolDefinition[];
@@ -288,6 +290,16 @@ export async function resolveAutonomousWorkTools(input: {
     ...(input.roomAuthorizedGrants ? { roomAuthorizedGrants: input.roomAuthorizedGrants } : {}),
   });
 
+  if (input.restrictedEngagementBinding) {
+    const { parseEngagementTaskBinding, ENGAGEMENT_READ_TOOLS } = await import("../coworker-service-catalog/engagement-task-binding");
+    const binding = parseEngagementTaskBinding(input.restrictedEngagementBinding), names = new Set(input.requiredToolNames ?? []);
+    if (!binding?.presentAssessment || names.size !== ENGAGEMENT_READ_TOOLS.length
+      || ENGAGEMENT_READ_TOOLS.some(name => !names.has(name) || !authorized.some(tool => tool.name === name))) {
+      throw new Error("engagement-present-tool-surface-unavailable");
+    }
+    const tools = authorized.filter(tool => names.has(tool.name));
+    return { tools, toolsForProvider: toolsToOpenAIFormat(tools), deferredTools: [] };
+  }
   if (input.restrictedReviewBinding) {
     const binding = input.restrictedReviewBinding;
     const names = [immutablePageReaderForArtifact(binding.artifactRef), binding.writerToolName];

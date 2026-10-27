@@ -231,7 +231,8 @@ export async function submitRemoteCoworkerTask(input: {
       return { kind: "result", result: { isError: true, content: remoteTaskContent(error instanceof Error ? error.message : "Engagement authority unavailable"), structuredContent: { error: "engagement_admission_refused" } } };
     }
   }
-  const durableInitialDispatch = parsed.recipeId || parsed.engagementBinding
+  const engagementPresent = Boolean(parsed.engagementBinding?.presentAssessment);
+  const durableInitialDispatch = !engagementPresent && (parsed.recipeId || parsed.engagementBinding)
     ? initialRemoteTaskDispatchProjection(taskRunId, new Date())
     : null;
   const existingQuery: Prisma.TaskRunFindFirstArgs = {
@@ -308,7 +309,7 @@ export async function submitRemoteCoworkerTask(input: {
     // The immutable present allocation is consumed in every state. A replay
     // can read its verdict above, but cannot reopen Q, extend its window or
     // obtain a fresh worker generation through ordinary recovery paths.
-    if (parsed.initiativeReviewBinding?.presentReassessment) return requestMatches ? {
+    if (engagementPresent || parsed.initiativeReviewBinding?.presentReassessment) return requestMatches ? {
       ...replay, result: { ...replay.result, resumable: false, requiresApproval: false },
     } : presentReassessmentRefusal(new Error("reassessment-packet-changed"));
     if (existing.progressPayload && typeof existing.progressPayload === "object"
@@ -555,6 +556,8 @@ export async function submitRemoteCoworkerTask(input: {
     }
   }
 
+  const engagementPresentAdmission = engagementPresent ? await (await import("./coworker-service-catalog/engagement-present-assessment"))
+    .prepareEngagementPresentAdmission({ parsed, token, taskRunId, requestDigest, threadId: thread.id }) : null;
   const sourceKind = token.source === "session-jwt" ? "mcp-session" : "mcp-token";
   let run!: Awaited<ReturnType<typeof createAutonomousWorkRun>>;
   for (let admissionAttempt = 0; admissionAttempt < 3; admissionAttempt++) {
@@ -591,7 +594,7 @@ export async function submitRemoteCoworkerTask(input: {
         ...(parsed.engagementBinding ? { engagementBinding: parsed.engagementBinding } : {}),
         ...(parsed.recipeId ? { durableInference: durableInferenceTaskMetadata(parsed.recipeId) } : {}),
       },
-      ...((parsed.recipeId || parsed.engagementBinding) && durableInitialDispatch ? {
+      ...(!engagementPresentAdmission && (parsed.recipeId || parsed.engagementBinding) && durableInitialDispatch ? {
         deferredSubmission: {
           content: parsed.prompt,
           metadata: {
@@ -605,7 +608,7 @@ export async function submitRemoteCoworkerTask(input: {
         },
       } : {}),
       ...(objectiveMappingAdmission.data.admission ?? {}),
-      ...(presentAdmission ? { admissionGuard: presentAdmission.admissionGuard, afterTaskCreated: presentAdmission.afterTaskCreated,
+      ...(engagementPresentAdmission ? { ...engagementPresentAdmission, transactionIsolationLevel: Prisma.TransactionIsolationLevel.Serializable } : presentAdmission ? { admissionGuard: presentAdmission.admissionGuard, afterTaskCreated: presentAdmission.afterTaskCreated,
         transactionIsolationLevel: "ReadCommitted" } : parsed.engagementBinding ? {
         transactionIsolationLevel: Prisma.TransactionIsolationLevel.Serializable,
         admissionGuard: (db: Prisma.TransactionClient) => admitEngagementTask({ binding: parsed.engagementBinding!, token, taskRunId, authorityScope: parsed.authorityScope ?? [], request: parsed, db }),
@@ -646,6 +649,7 @@ export async function submitRemoteCoworkerTask(input: {
    }
   }
 
+  if (engagementPresentAdmission) (await import("./coworker-service-catalog/engagement-present-assessment")).activateEngagementPresentAdmission(run.taskRunId);
   if (!parsed.recipeId && !parsed.engagementBinding && !presentAdmission) {
     await createTaskMessage({
       taskRunId: run.taskRunId,
@@ -689,7 +693,7 @@ export async function submitRemoteCoworkerTask(input: {
     };
   }
 
-  if (!presentAdmission && (parsed.recipeId || parsed.engagementBinding || externalMcpTaskAsyncEnabled())) {
+  if (!engagementPresentAdmission && !presentAdmission && (parsed.recipeId || parsed.engagementBinding || externalMcpTaskAsyncEnabled())) {
     return {
       kind: "result",
       result: await enqueuePersistedRemoteTaskSubmission(run.taskRunId, {

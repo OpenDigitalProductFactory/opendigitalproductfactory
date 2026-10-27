@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const restricted = vi.hoisted(() => ({ active: false, request: vi.fn(), fetch: vi.fn() }));
 const platform = vi.hoisted(() => ({ readFile: vi.fn(), spawnSync: vi.fn() }));
@@ -264,7 +265,7 @@ describe("captured capacity preserves ordinary unknown telemetry policy", () => 
     const observations = captureRunners();
     await expect(inspectLocalGpuAdmission({ nowMs: NOW, modelId: "hf.co/ggml-org/Qwen3.8-27B-GGUF:Q4_K_M" })).resolves.toEqual({ defer: null, unloadIdle: false });
     expect(observations).toEqual([expect.objectContaining({ snapshot: null, runners: [], decision: { defer: null, unloadIdle: false },
-      provenance: expect.objectContaining({ source: "published-file", path: "/fixture-state/host-gpu.json", unknownReason: `published-snapshot-${state}` }) })]);
+      provenance: expect.objectContaining({ source: "published-file", path: resolve("/fixture-state/host-gpu.json"), unknownReason: `published-snapshot-${state}` }) })]);
     if (state === "absent") expect(observations[0]!.provenance).toEqual(expect.objectContaining({ readOutcome: "absent", errorCode: "ENOENT" }));
     else expect(observations[0]!.provenance).toEqual(expect.objectContaining({ readOutcome: "complete", bodyEncoding: "base64", bodyBase64: raw.toString("base64") }));
     expect(platform.spawnSync).not.toHaveBeenCalled(); expect(restricted.fetch).not.toHaveBeenCalled();
@@ -306,4 +307,14 @@ describe("captured capacity preserves ordinary unknown telemetry policy", () => 
     await expect(inspectLocalGpuAdmission({ nowMs: NOW })).rejects.toThrow(/capacity-response-invalid/);
     expect(observations[0]).toMatchObject({ snapshot: null, parseStatus: "invalid", provenance: { errorCode: "ENOENT" } });
   });
+});
+
+it("reads only the published GPU observation without invoking a shell or native runner", async () => {
+  platform.readFile.mockResolvedValue(Buffer.from(JSON.stringify({ observedAtMs: 1000, memoryUsedMiB: 100, memoryTotalMiB: 24000, utilizationPercent: 2 })));
+  const { readPublishedHostGpuObservation } = await import("./host-gpu-admission");
+  const observation = await readPublishedHostGpuObservation({ nowMs: 1000 });
+  expect(observation.snapshot).toMatchObject({ memoryUsedMiB: 100 });
+  expect(observation.provenance).toMatchObject({ source: "published-file", readOutcome: "complete" });
+  expect(platform.spawnSync).not.toHaveBeenCalled();
+  expect(restricted.request).not.toHaveBeenCalled();
 });

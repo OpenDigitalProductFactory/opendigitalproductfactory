@@ -222,6 +222,31 @@ describe("routing-loader cache (BI-OPT-ROUTING-CACHE)", () => {
       baseUrl: null, endpoint: "http://model-runner.docker.internal/v1", maxOutputTokens: null },
   });
 
+
+  it("uses a live captured native image observation only for an unknown local capability and never carries it across frames", async () => {
+    const { withCapturedProviderTransportOnly, createCapturedNativeImageInputEvidence } = await import("../shared/captured-effect-store");
+    const profile = { ...localProfile(), capabilities: { imageInput: null }, inputModalities: ["text"] };
+    mockPrisma.modelProfile.findMany.mockResolvedValue([profile]);
+    let heldReader!: Parameters<typeof readEndpointManifests>[1];
+    await withCapturedProviderTransportOnly(async () => {
+      const evidence = createCapturedNativeImageInputEvidence({ modelId: profile.modelId, modelDigest: "sha256:" + "a".repeat(64), observationDigest: "b".repeat(64) });
+      heldReader = async () => ({ contextTokens: 40960, imageInputEvidence: evidence });
+      const [manifest] = await readEndpointManifests(100000, heldReader);
+      expect(manifest).toMatchObject({ capabilities: { imageInput: true }, inputModalities: ["text", "image"] });
+      expect(profile.capabilities.imageInput).toBeNull(); expect(profile.inputModalities).toEqual(["text"]);
+      const [copy] = await readEndpointManifests(100001, async () => ({ contextTokens: 40960, imageInputEvidence: JSON.parse(JSON.stringify(evidence)) }));
+      expect(copy?.capabilities.imageInput).not.toBe(true);
+      for (const changed of [{ ...profile, capabilities: { imageInput: false } }, { ...profile, capabilityOverrides: { imageInput: false } }]) {
+        mockPrisma.modelProfile.findMany.mockResolvedValue([changed]);
+        const [vetoed] = await readEndpointManifests(100002, async () => ({ contextTokens: 40960, imageInputEvidence: evidence }));
+        expect(vetoed?.capabilities.imageInput).not.toBe(true);
+      }
+      mockPrisma.modelProfile.findMany.mockResolvedValue([profile]);
+    });
+    const [expired] = await readEndpointManifests(100003, heldReader);
+    expect(expired?.capabilities.imageInput).not.toBe(true);
+  });
+
   it("bounds local completion by the observed shared window instead of rejecting absent output metadata", async () => {
     mockPrisma.modelProfile.findMany.mockResolvedValue([localProfile()]);
     mockServedContext.mockResolvedValue(40960);

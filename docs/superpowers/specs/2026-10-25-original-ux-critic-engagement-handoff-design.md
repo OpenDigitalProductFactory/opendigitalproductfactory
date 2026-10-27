@@ -416,3 +416,58 @@ validated JSON after generic processing is insufficient: it cannot undo an extra
 provider call, and a held result must not initiate one. Unscoped conversations
 retain their normal posture-driven review/debate behavior. This does not attest
 which historical calls used that path or change native execution-proof ownership.
+
+## Same-call implementation and accounting boundary
+
+The present adapter finishes within its actual governed request. It reuses a real
+still-approved reserved envelope only while that same handler owns it, or uses
+the current native automated/delegated allow decision. It never changes an
+executed envelope back to approved. Every effect and publication rechecks current
+consent, grants, human capability, original material, task fence and deadline.
+A serialized policy cannot rebuild the live server context.
+
+TaskRun → CE locks and Serializable admission atomically commit the one candidate,
+server policy/start artifacts and immutable input. The mode is derived before
+dispatch projection. Submission, queueing, reconciliation and worker admission
+all suppress background execution for this mode. An interrupted caller observes
+the same engagement; an expired window becomes a visible hold without a replay.
+Cancellation remains cancellation.
+
+Ordinary provider transport and ordinary routed inference are refused inside
+this captured workflow. Refusals latch even if a library catches the exception.
+The registered tool preparation selects its three authorized readers before
+ambient runtime probes. The existing Postgres lexical wiki search is exposed
+through wiki_query's retrievalMode and selected explicitly, so corpus preparation
+does not invoke an embedding model. Vector/PPR defaults remain unchanged.
+
+The normal router receives current native capacity and a request-bound image
+observation through its existing server reader. The Critic adapter produces it
+only after validating the audited model, engine and template. The shared container
+enforces identity and lifetime, not independent capability proof. JSON copies, different models,
+closed or different capture frames and process caches cannot reuse it. Explicit
+negative model capability or operator overrides still win; no ModelProfile row
+is changed. Normal quality, account, clearance, role, pin and residency checks
+remain in force.
+
+Unresolved generation reservations count under the canonical coworker budget
+owner across aliases and UTC days. Reads are bounded and malformed or overflowing
+ledgers refuse. Reservation and settlement use the same Agent lock, after the
+TaskRun/CE locks. Actual metering is written only for validated observed usage;
+an upper bound is never fabricated as TokenUsage. These checks cover recorded
+usage and retained new reservations. Original D170 spend remains UNKNOWN, so
+they do not prove complete daily headroom. A current native decision permitting
+the separately bounded assessment is still required; a denial cannot be bypassed.
+
+The pinned DMR/llama.cpp source explains the response label: DMR forwards the
+request body unchanged, launches the selected content-addressed model bundle
+with --model and no --alias, and llama.cpp reports that model path. Reply
+validation accepts the exact requested digest or the same manifest's absolute
+bundles/sha256/<digest>/model/<GGUF> path. It rejects other digests, bare aliases,
+projectors, traversal and conflicting model identities. The qualified catalog,
+wire hash, actual reported label and identity relation remain separate evidence.
+
+Relevant primary source:
+- [DMR scheduling](https://github.com/docker/model-runner/blob/v1.2.9/pkg/inference/scheduling/http_handler.go)
+- [DMR native arguments](https://github.com/docker/model-runner/blob/v1.2.9/pkg/inference/backends/llamacpp/llamacpp_config.go)
+- [DMR bundle identity](https://github.com/docker/model-runner/blob/v1.2.9/pkg/distribution/internal/store/bundles.go)
+- [llama.cpp response model](https://github.com/ggml-org/llama.cpp/blob/72874f559c598b8f89fbb24864868337cf5afb4c/tools/server/server-context.cpp)
