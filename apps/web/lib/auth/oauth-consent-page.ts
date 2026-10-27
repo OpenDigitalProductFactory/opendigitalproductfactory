@@ -94,6 +94,21 @@ export function renderConsentRefusal(title: string, detail: string): string {
   );
 }
 
+/**
+ * The browser is signed in as the platform automation persona, which never
+ * binds a person's interactive client (BI-F586F8A5). Name the account so the
+ * person sees why, and offer the one way forward: sign in as themself.
+ */
+export function renderAutomationAccountRefusal(account: string, signInUrl: string): string {
+  return shell(
+    "Sign in as yourself to connect",
+    `<h1>Sign in as yourself to connect</h1>
+<p>This browser is signed in as <strong>${esc(account)}</strong>, the platform automation account. A connection made here would act as that account, not as you.</p>
+<p><a href="${esc(signInUrl)}">Sign in as yourself</a> and you will come straight back to this request.</p>
+<p class="foot">Nothing was connected and no permission was granted.</p>`,
+  );
+}
+
 export type ConsentView = {
   clientName: string;
   selfAsserted: boolean;

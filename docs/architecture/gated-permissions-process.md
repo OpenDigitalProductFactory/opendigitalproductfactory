@@ -672,6 +672,8 @@ demote a binding, revert its promotion PR. In an emergency the operator sets
 
 Scheduled Workroom recovery (BI-E458A9CB) keeps a pending required approval visible even when the same tool also records a successful blocked report or another required write is absent. An exact **Ask again** replacement can supersede its expired unanswered ancestor without retiring independent requests. These are existing scheduled-run and envelope contracts, not new permissions. The bounded reporting mandate, approval wait, lineage checks and unchanged completion rules are described in [Workroom cycle continuity](workroom-cycle-continuity.md).
 
+A later scheduled run that raises an unchanged propose-boundary request joins the earlier run's open card instead of minting another (BI-AB0CF766). The join requires the same agent, person, tool, arguments and binding apart from the run, and an unanswered, unexpired card. A request that pauses its run keeps one card per run so that run can be resumed, and an approved, expired or settled card is never joined. One decision therefore reaches a person once, however often the cadence fires.
+
 ## Annex B (informative): proposed assertions
 
 | ID | Assertion |

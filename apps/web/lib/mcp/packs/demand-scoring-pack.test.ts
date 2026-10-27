@@ -275,3 +275,43 @@ describe("score_demand_item value-input provenance (BI-00C68162)", () => {
     expect(stampValueInputSource({ reach: 3 }, { userId: "u" })?.demandInputSource).toBe("human");
   });
 });
+
+describe("merge_backlog_items records what it changed (BI-EAFD2D09)", () => {
+  const merge = demandScoringPack.handlers["merge_backlog_items"]!;
+
+  it("writes a duplicate_merge activity carrying both rows' prior state", async () => {
+    const closedAt = new Date("2026-10-01T00:00:00Z");
+    db.backlogItemFindUnique.mockImplementation(async ({ where }: { where: { itemId: string } }) =>
+      where.itemId === "BI-C"
+        ? { id: "row-c", occurrenceCount: 3 }
+        : { id: "row-d", occurrenceCount: 2, status: "triaging", triageOutcome: null, duplicateOfId: null, completedAt: closedAt },
+    );
+    db.backlogItemUpdate.mockResolvedValue({});
+    db.activityCreate.mockResolvedValue({});
+
+    const result = await merge({ canonicalItemId: "BI-C", duplicateItemId: "BI-D", rationale: "same tool" }, "user-1", { agentId: "AGT-EXT-CLAUDE" });
+
+    expect(result.success).toBe(true);
+    expect(db.activityCreate).toHaveBeenCalledWith({
+      data: {
+        backlogItemId: "row-d",
+        kind: "duplicate_merge",
+        summary: "Merged into BI-C",
+        payload: {
+          role: "duplicate",
+          canonicalItemId: "BI-C",
+          duplicateItemId: "BI-D",
+          rationale: "same tool",
+          priorStatus: "triaging",
+          priorTriageOutcome: null,
+          priorDuplicateOfId: null,
+          priorCompletedAt: closedAt.toISOString(),
+          canonicalPriorOccurrenceCount: 3,
+          mergedOccurrenceCount: 5,
+        },
+        recordedById: "user-1",
+        recordedByAgentId: "AGT-EXT-CLAUDE",
+      },
+    });
+  });
+});

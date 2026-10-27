@@ -84,6 +84,26 @@ Worktree janitor — dry-run (grace=14d, policy=all)
   PINNED       /Users/you/dpf-worktrees/keep-me  (.worktree-pinned present)
 ```
 
+## Who owns a worktree (BI-83345811)
+
+Before classifying anything, the janitor asks the platform which worktrees an
+active Workroom claims. It reads every page of one `list_workrooms`
+observation. A row whose page omits or shortens its `worktreePath` is resolved
+through that row's own `get_workroom` detail read. If the observation expires
+mid-read, the janitor starts a new one (at most twice) and keeps nothing from
+the expired one.
+
+If any part of that read does not complete, it treats ownership as unknown and
+keeps every worktree it would otherwise judge on ownership. A missing path is
+never read as "no owner". The `--json` report states which happened:
+
+```json
+"claims": { "available": false, "reason": "workroom query failed: workroom observation expired" }
+```
+
+`available: true` with a reason like `66 workroom(s) read` means ownership was
+proven for the whole population.
+
 ## Checking it ran
 
 ```bash

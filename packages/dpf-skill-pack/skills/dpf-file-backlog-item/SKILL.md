@@ -83,10 +83,15 @@ When a piece of work needs to enter the DPF queue — feature gap, bug, tool gap
    - Otherwise create a proportional canonical design before claiming capture is complete. Even a small defect may use a short design, but it must name the authority/data/runtime boundary, objectives, acceptance criteria, non-goals, migration/compatibility posture, and research where AGENTS.md requires it.
    - If the current surface cannot write source, leave the BI `triaging`, record the missing design as the explicit next handoff, and report **partially captured — design pending**. Never advance it to `build` or present it as ready.
 
-8. **Write the body.** Markdown. Include:
+8. **State the outcome, then write the body.** Pass `outcome` to `create_backlog_item`: what will be true, and for whom, once the work is done. The outcome is how anyone can tell the item is done (BI-B1B44777).
+   - A merge through CI and the merge queue closes the item. If something is still wrong after that, whoever uses the change reports it and a new item is opened.
+   - Add `howWeKnow` only when the outcome is not obvious from the change.
+   - Add the lifecycle tag `contractual` only when a customer commitment needs a separate acceptance step. This is rare.
+
+   The body is Markdown. Include:
    - Problem statement (1-2 sentences naming the gap).
    - Scope (what's in, what's out).
-   - Acceptance criteria (bullet list of observable outcomes).
+   - Acceptance criteria (bullet list of observable outcomes), when the outcome alone does not make them obvious.
    - Dependencies (`Blocks:` / `Blocked by:` references to other BI ids if applicable).
    - Link to full context (memo, spec, audit, or PR if available).
 

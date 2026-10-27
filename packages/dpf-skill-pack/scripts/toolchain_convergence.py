@@ -78,6 +78,14 @@ class Declarations:
         self.digest = delivered_digest(skill_pack)
         self.manifest = manifest or {}
 
+    @property
+    def delivered(self) -> str:
+        """The version a delivery stamps into client manifests (BI-4F9E3221).
+
+        Connectors still declare the base `pack`: the floor compares it.
+        """
+        return f"{self.pack}+c.{self.digest[:12]}"
+
     @classmethod
     def of(cls, pack: str, digest: str, manifest: Optional[Mapping[str, Any]] = None) -> "Declarations":
         """A declaration for a known pack version and digest, without reading a pack tree."""
@@ -377,7 +385,7 @@ class ConvergenceReport:
                               and entry["scope"].startswith(("project:", "local:"))
                               and action != "prunable"
                               and (key not in after or now.get("digest") != self.declarations.digest
-                                   or now.get("version") != self.declarations.pack))
+                                   or now.get("version") != self.declarations.delivered))
             if content_failed:
                 action = "failed"
             row: dict[str, Any] = {

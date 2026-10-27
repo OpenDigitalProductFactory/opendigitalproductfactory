@@ -7,16 +7,24 @@ vi.mock("server-only", () => ({}));
 const prismaMock = vi.hoisted(() => ({
   workroom: { findMany: vi.fn() },
   backlogItem: { findMany: vi.fn() },
-  workroomActivity: { findFirst: vi.fn(), create: vi.fn() },
+  workroomActivity: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
 }));
 vi.mock("@dpf/db", () => ({ prisma: prismaMock }));
 const recoveryMock = vi.hoisted(() => ({ getBacklogItem: vi.fn(), resolveTerminalInitiativeRecovery: vi.fn() }));
 vi.mock("@/lib/mcp/packs/backlog-pack-read-tools", () => ({ getBacklogItem: recoveryMock.getBacklogItem }));
 vi.mock("./terminal-recovery", () => ({ resolveTerminalInitiativeRecovery: recoveryMock.resolveTerminalInitiativeRecovery }));
 
-import { dispatchOwedIndependentReviews, dispatchReviewerRequest, REVIEW_DISPATCH_ACTIVITY_KIND } from "./server-reviewer-dispatch";
+import {
+  dispatchOwedIndependentReviews,
+  dispatchReviewerRequest,
+  REVIEW_DISPATCH_ACTIVITY_KIND,
+  REVIEW_DISPATCH_COOLDOWN_MS,
+  REVIEW_DISPATCH_MAX_BACKOFF_MS,
+} from "./server-reviewer-dispatch";
 
 const NOW = new Date("2026-09-24T02:00:00.000Z");
+/** A dispatch recorded inside the cooldown window. */
+const RECENT_DISPATCH = { id: "recent", recordedAt: new Date(NOW.getTime() - 60_000), payload: { outcome: "dispatched" } };
 const alias = (kind: string, value: string) => ({ kind, aliases: [{ aliasValue: value }] });
 
 function room(overrides: Record<string, unknown> = {}) {
@@ -55,6 +63,7 @@ beforeEach(() => {
   prismaMock.backlogItem.findMany.mockResolvedValue([{ itemId: "BI-1", status: "awaiting-acceptance" }]);
   prismaMock.workroomActivity.findFirst.mockResolvedValue(null);
   prismaMock.workroomActivity.create.mockResolvedValue({ id: "act" });
+  prismaMock.workroomActivity.update.mockResolvedValue({ id: "act" });
 });
 
 function deps(overrides: Record<string, unknown> = {}) {
@@ -106,7 +115,7 @@ describe("dispatchOwedIndependentReviews", () => {
   });
 
   it("does not send the same request again inside the window", async () => {
-    prismaMock.workroomActivity.findFirst.mockResolvedValue({ id: "recent" });
+    prismaMock.workroomActivity.findFirst.mockResolvedValue(RECENT_DISPATCH);
     const d = deps();
     await expect(dispatchOwedIndependentReviews(d)).resolves.toEqual([expect.objectContaining({ outcome: "cooling-down" })]);
     expect(d.execute).not.toHaveBeenCalled();
@@ -247,7 +256,7 @@ describe("dispatchOwedIndependentReviews — Build Studio builds in plan (BI-926
   });
 
   it("keeps the cooldown: the same design yields the same key and is not re-requested inside the window (AC-4)", async () => {
-    prismaMock.workroomActivity.findFirst.mockResolvedValue({ id: "recent" });
+    prismaMock.workroomActivity.findFirst.mockResolvedValue(RECENT_DISPATCH);
     const d = deps({ owedRoutes: vi.fn(async () => [{ workroomId: "WC-BS", requestCoworker: revisionPacket }]), findUserConnection: vi.fn(async () => userConnection as never) });
     await expect(dispatchOwedIndependentReviews(d)).resolves.toEqual([expect.objectContaining({ outcome: "cooling-down" })]);
     expect(d.execute).not.toHaveBeenCalled();
@@ -275,7 +284,7 @@ describe("dispatchReviewerRequest (the drive's review-stage dispatch)", () => {
   });
 
   it("is idempotent on the request key within the cooldown", async () => {
-    prismaMock.workroomActivity.findFirst.mockResolvedValue({ id: "recent" });
+    prismaMock.workroomActivity.findFirst.mockResolvedValue(RECENT_DISPATCH);
     const d = deps({ findUserConnection: vi.fn(async () => connection as never) });
     const outcome = await dispatchReviewerRequest({ room: personRoom, itemId: "BI-1", requestCoworker: packet, carrier: "requesting-user", now: NOW, deps: d });
     expect(outcome.outcome).toBe("cooling-down");
@@ -290,5 +299,105 @@ describe("dispatchReviewerRequest (the drive's review-stage dispatch)", () => {
     expect(outcome.outcome).toBe("no-author-connection");
     expect(prismaMock.workroomActivity.create).toHaveBeenCalledWith({ data: expect.objectContaining({ summary: expect.stringContaining("no live authorized connection") }) });
     expect(d.execute).not.toHaveBeenCalled();
+  });
+});
+
+// BI-CD53F5F5 AC-2: a refusal for one request is recorded once, then re-attempted
+// on a growing back-off instead of writing a new room row every tick (1,879 rows
+// for 79 requests in three days on the dev install, 2026-10-27).
+describe("dispatchReviewerRequest — a standing refusal is recorded once, with back-off (BI-CD53F5F5)", () => {
+  const personRoom = { roomId: "row-1", capsuleId: "WC-1", userId: "user-1", agentId: null };
+  const at = (ms: number) => new Date(NOW.getTime() + ms);
+  const send = (now: Date, d = deps()) =>
+    dispatchReviewerRequest({ room: personRoom, itemId: "BI-1", requestCoworker: packet, carrier: "requesting-user", now, deps: d });
+  const standing = (attempts: number, lastAttemptAt: Date, nextAttemptAt: Date, extra: Record<string, unknown> = {}) => ({
+    id: "act-standing",
+    recordedAt: new Date(NOW.getTime() - 5 * 60 * 60 * 1000),
+    payload: {
+      itemId: "BI-1", capsuleId: "WC-1", requestKey: packet.requestKey, outcome: "no-author-connection", source: "platform-reviewer-dispatch",
+      attempts, lastAttemptAt: lastAttemptAt.toISOString(), nextAttemptAt: nextAttemptAt.toISOString(), ...extra,
+    },
+  });
+
+  it("records the first refusal once, with its next attempt one cooldown away", async () => {
+    await expect(send(NOW)).resolves.toMatchObject({ outcome: "no-author-connection" });
+    expect(prismaMock.workroomActivity.create).toHaveBeenCalledTimes(1);
+    expect(prismaMock.workroomActivity.create).toHaveBeenCalledWith({ data: expect.objectContaining({
+      payload: expect.objectContaining({ attempts: 1, nextAttemptAt: at(REVIEW_DISPATCH_COOLDOWN_MS).toISOString() }),
+    }) });
+  });
+
+  it("does not re-attempt before the standing refusal's next attempt is due", async () => {
+    prismaMock.workroomActivity.findFirst.mockResolvedValue(standing(3, at(-60_000), at(60_000)));
+    const d = deps();
+    await expect(send(NOW, d)).resolves.toMatchObject({ outcome: "cooling-down" });
+    expect(d.findUserConnection).not.toHaveBeenCalled();
+    expect(prismaMock.workroomActivity.create).not.toHaveBeenCalled();
+    expect(prismaMock.workroomActivity.update).not.toHaveBeenCalled();
+  });
+
+  it("re-attempts when due and, refused the same way again, updates the one row with a doubled back-off instead of writing another", async () => {
+    prismaMock.workroomActivity.findFirst.mockResolvedValue(standing(2, at(-REVIEW_DISPATCH_COOLDOWN_MS * 2), at(-1)));
+    const d = deps();
+    await expect(send(NOW, d)).resolves.toMatchObject({ outcome: "no-author-connection" });
+    expect(d.findUserConnection).toHaveBeenCalledWith("user-1");
+    expect(prismaMock.workroomActivity.create).not.toHaveBeenCalled();
+    expect(prismaMock.workroomActivity.update).toHaveBeenCalledWith({
+      where: { id: "act-standing" },
+      data: { payload: expect.objectContaining({
+        outcome: "no-author-connection", attempts: 3,
+        lastAttemptAt: NOW.toISOString(), nextAttemptAt: at(REVIEW_DISPATCH_COOLDOWN_MS * 4).toISOString(),
+      }) },
+    });
+  });
+
+  it("caps the back-off", async () => {
+    prismaMock.workroomActivity.findFirst.mockResolvedValue(standing(40, at(-REVIEW_DISPATCH_MAX_BACKOFF_MS), at(-1)));
+    await send(NOW);
+    expect(prismaMock.workroomActivity.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: { payload: expect.objectContaining({ attempts: 41, nextAttemptAt: at(REVIEW_DISPATCH_MAX_BACKOFF_MS).toISOString() }) },
+    }));
+  });
+
+  it("treats a pre-back-off refusal row as one attempt, due one cooldown after it was recorded", async () => {
+    const legacy = { id: "act-legacy", recordedAt: at(-REVIEW_DISPATCH_COOLDOWN_MS - 1),
+      payload: { requestKey: packet.requestKey, outcome: "no-author-connection", source: "platform-reviewer-dispatch" } };
+    prismaMock.workroomActivity.findFirst.mockResolvedValue(legacy);
+    await send(NOW);
+    expect(prismaMock.workroomActivity.create).not.toHaveBeenCalled();
+    expect(prismaMock.workroomActivity.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: "act-legacy" }, data: { payload: expect.objectContaining({ attempts: 2 }) },
+    }));
+  });
+
+  it("records a new row when the outcome changes: the request is finally sent", async () => {
+    prismaMock.workroomActivity.findFirst.mockResolvedValue(standing(4, at(-REVIEW_DISPATCH_COOLDOWN_MS * 8), at(-1)));
+    const d = deps({ findUserConnection: vi.fn(async () => connection as never) });
+    await expect(send(NOW, d)).resolves.toMatchObject({ outcome: "dispatched" });
+    expect(prismaMock.workroomActivity.update).not.toHaveBeenCalled();
+    expect(prismaMock.workroomActivity.create).toHaveBeenCalledWith({ data: expect.objectContaining({
+      payload: expect.objectContaining({ outcome: "dispatched" }),
+    }) });
+  });
+
+  it("records a new row when a different refusal replaces the standing one", async () => {
+    prismaMock.workroomActivity.findFirst.mockResolvedValue(standing(2, at(-REVIEW_DISPATCH_COOLDOWN_MS * 2), at(-1)));
+    const d = deps({
+      findUserConnection: vi.fn(async () => connection as never),
+      execute: vi.fn(async () => ({ success: false, error: "independent_review_request_denied" })),
+    });
+    await expect(send(NOW, d)).resolves.toMatchObject({ outcome: "refused" });
+    expect(prismaMock.workroomActivity.update).not.toHaveBeenCalled();
+    expect(prismaMock.workroomActivity.create).toHaveBeenCalledWith({ data: expect.objectContaining({
+      payload: expect.objectContaining({ outcome: "refused", attempts: 1 }),
+    }) });
+  });
+
+  it("reads only this room's newest record for this request key", async () => {
+    await send(NOW);
+    expect(prismaMock.workroomActivity.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: { workCapsuleId: "row-1", kind: REVIEW_DISPATCH_ACTIVITY_KIND, payload: { path: ["requestKey"], equals: packet.requestKey } },
+      orderBy: [{ recordedAt: "desc" }, { id: "desc" }],
+    }));
   });
 });

@@ -50,6 +50,8 @@ const GLOBAL_NAMESPACES = (language: string) => ({
   setup: namespaceMessages(language, "setup"),
   // BI-E8D91AF6: section navs (server and client) read "More tools" from the shell catalog.
   shell: namespaceMessages(language, "shell"),
+  // BI-B1B44777: the backlog intake form (Outcome field) renders under /ops.
+  backlog: namespaceMessages(language, "backlog"),
 });
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
