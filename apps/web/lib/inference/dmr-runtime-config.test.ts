@@ -17,8 +17,13 @@ describe("selected runtime thinking budget evidence", () => {
   it("binds the numeric dialect to the selected digest, runtime and template", async () => {
     expect(await getLocalThinkingBudgetEvidence(API_ROOT, "ai/test", probe())).toMatchObject({ dialect: "llama.cpp-b9879", modelDigest: digest });
   });
+  it("keeps the evidence when the runner is pinned resident (keep_alive is lifecycle, not parsing)", async () => {
+    expect(await getLocalThinkingBudgetEvidence(API_ROOT, "ai/test", probe({ config: { "context-size": 131072, keep_alive: "-1" } })))
+      .toMatchObject({ dialect: "llama.cpp-b9879", modelDigest: digest });
+  });
   it.each([
     { template: "ordinary answer template" }, { config: { "context-size": 131072, "raw-runtime-flags": "--chat-template custom" } },
+    { config: { "context-size": 131072, keep_alive: -1 } },
     { engine: "Running: llama.cpp b7000-metal" }, { digest: `sha256:${"b".repeat(64)}` }, { duplicate: true },
   ])("leaves unsupported, overridden or ambiguous evidence unknown: %j", async overrides => {
     expect(await getLocalThinkingBudgetEvidence(API_ROOT, "ai/test", probe(overrides))).toBeUndefined();
@@ -54,6 +59,15 @@ describe("getServedContextTokens", () => {
     const res = await getServedContextTokens(API_ROOT, "qwen3-coder", fetchImpl);
     expect(res.supported).toBe(true);
     expect(res.contextTokens).toBe(32768);
+    expect(res.keepAlive).toBeNull();
+  });
+
+  it("reads the per-model keep_alive DMR stores beside context-size", async () => {
+    const fetchImpl = (async () => ({ ok: true, status: 200,
+      json: async () => [{ Config: { "context-size": 40960, keep_alive: "-1" } }],
+    })) as unknown as typeof fetch;
+    const res = await getServedContextTokens(API_ROOT, "qwen3-coder", fetchImpl);
+    expect(res).toMatchObject({ supported: true, contextTokens: 40960, keepAlive: "-1" });
   });
 
   it("reports supported=true, contextTokens=null when no runtime override is set", async () => {
@@ -79,7 +93,7 @@ describe("getServedContextTokens", () => {
 });
 
 describe("setServedContextTokens", () => {
-  it("POSTs the model + context-size and verifies by read-back", async () => {
+  it("POSTs the model + context-size + resident keep_alive and verifies by read-back", async () => {
     const calls: Array<{ method?: string; body?: string }> = [];
     const fetchImpl = (async (url: string, init?: RequestInit) => {
       calls.push({ method: init?.method, body: init?.body as string | undefined });
@@ -94,7 +108,9 @@ describe("setServedContextTokens", () => {
     expect(res.ok).toBe(true);
     expect(res.contextTokens).toBe(32768);
     const post = calls.find((c) => c.method === "POST");
-    expect(post?.body).toBe(JSON.stringify({ model: "qwen3-coder", "context-size": 32768 }));
+    // DMR's configure REPLACES the stored per-model config, so every write must
+    // carry keep_alive too or a context write would restore the 5-minute unload.
+    expect(post?.body).toBe(JSON.stringify({ model: "qwen3-coder", "context-size": 32768, keep_alive: "-1" }));
   });
 
   it("surfaces a 404 as an unsupported-runtime reason", async () => {

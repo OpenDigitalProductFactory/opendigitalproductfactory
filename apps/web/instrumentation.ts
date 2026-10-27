@@ -1074,6 +1074,8 @@ export async function register() {
             console.log(
               `[local-model-context] raised ${r.modelId} ${r.before ?? "unset"} → ${r.after} tokens`,
             );
+          } else if (r.status === "pinned") {
+            console.log(`[local-model-context] pinned ${r.modelId} resident (keep_alive -1, BI-34F71E9D)`);
           } else if (r.status === "deferred") {
             console.warn(
               `[local-model-context] raise deferred (${r.reason ?? "unknown"}); applies on next model load`,

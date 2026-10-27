@@ -37,12 +37,28 @@ type DmrConfigureEntry = {
   Model?: string;
   ModelID?: string;
   Mode?: string;
-  Config?: { "context-size"?: number } & Record<string, unknown>;
+  Config?: { "context-size"?: number; keep_alive?: string } & Record<string, unknown>;
 };
+
+/**
+ * Keep the local generation runner resident (BI-34F71E9D). DMR honours
+ * keep-alive only as stored per-model configuration (`keep_alive`, Go duration
+ * or "-1" = never idle-evict); the `keep_alive` field DPF puts in OpenAI chat
+ * bodies is ignored on that route. Without this, DMR's 5-minute default
+ * unloads the model on every idle gap: the next turn re-reads the whole GGUF
+ * from disk and re-prefills from a cold prompt cache. DMR still evicts an
+ * unused resident runner under memory pressure, so this never strands VRAM.
+ */
+export const LOCAL_RUNNER_KEEP_ALIVE = "-1";
+
+/** Config keys that set runner lifecycle only and cannot alter the template or parser. */
+const LIFECYCLE_ONLY_CONFIG_KEYS = new Set(["context-size", "keep_alive"]);
 
 export type ServedContextResult = {
   /** The served context window in tokens, or null when DMR doesn't report one. */
   contextTokens: number | null;
+  /** The stored per-model keep_alive, or null when DMR applies its default. */
+  keepAlive: string | null;
   /** False when configuration is unreachable, unsupported, or invalid. */
   supported: boolean;
   /** Human-readable detail when supported === false. */
@@ -84,7 +100,8 @@ export async function getLocalThinkingBudgetEvidence(
         !/^sha256:[a-f0-9]{64}$/.test(entry.ModelID ?? "")) return undefined;
     // Unknown flags may override the template/parser. A narrow observed config
     // is preferable to silently claiming support for an unverified override.
-    if (!entry.Config || Object.keys(entry.Config).some(key => key !== "context-size")) return undefined;
+    if (!entry.Config || Object.keys(entry.Config).some(key => !LIFECYCLE_ONLY_CONFIG_KEYS.has(key))) return undefined;
+    if (entry.Config.keep_alive !== undefined && typeof entry.Config.keep_alive !== "string") return undefined;
     const context = entry.Config["context-size"];
     if (context !== undefined && (typeof context !== "number" || !Number.isSafeInteger(context) || context <= 0)) return undefined;
     const statuses = engines as Record<string, unknown>;
@@ -122,10 +139,10 @@ export async function getServedContextTokens(
   try {
     const res = await fetchImpl(url, { method: "GET" });
     if (res.status === 404) {
-      return { contextTokens: null, supported: false, reason: "Local runtime does not expose a context-size configuration API." };
+      return { contextTokens: null, keepAlive: null, supported: false, reason: "Local runtime does not expose a context-size configuration API." };
     }
     if (!res.ok) {
-      return { contextTokens: null, supported: false, reason: `Configure endpoint returned HTTP ${res.status}.` };
+      return { contextTokens: null, keepAlive: null, supported: false, reason: `Configure endpoint returned HTTP ${res.status}.` };
     }
     const body = (await res.json()) as DmrConfigureEntry[] | DmrConfigureEntry;
     const entries = Array.isArray(body) ? body : [body];
@@ -133,20 +150,22 @@ export async function getServedContextTokens(
       const size = entry?.Config?.["context-size"];
       if (entry?.Config && Object.hasOwn(entry.Config, "context-size")) {
         if (typeof size !== "number" || !Number.isSafeInteger(size) || size <= 0) {
-          return { contextTokens: null, supported: false, reason: "Configure endpoint returned invalid context capacity." };
+          return { contextTokens: null, keepAlive: null, supported: false, reason: "Configure endpoint returned invalid context capacity." };
         }
-        return { contextTokens: size, supported: true, reason: null };
+        const keepAlive = typeof entry.Config.keep_alive === "string" ? entry.Config.keep_alive : null;
+        return { contextTokens: size, keepAlive, supported: true, reason: null };
       }
     }
     // Endpoint exists but no runtime override is set for this model.
-    return { contextTokens: null, supported: true, reason: null };
+    return { contextTokens: null, keepAlive: null, supported: true, reason: null };
   } catch (err) {
-    return { contextTokens: null, supported: false, reason: `Configure endpoint unreachable: ${(err as Error).message}` };
+    return { contextTokens: null, keepAlive: null, supported: false, reason: `Configure endpoint unreachable: ${(err as Error).message}` };
   }
 }
 
 /**
- * Set the served context window for a local model via DMR's configure API.
+ * Set the served context window for a local model via DMR's configure API,
+ * keeping the runner resident (`LOCAL_RUNNER_KEEP_ALIVE`).
  *
  * The runtime config persists across model loads (it is stored by DMR, not the
  * loaded runner). A change takes effect the next time the model is loaded; DMR
@@ -165,7 +184,9 @@ export async function setServedContextTokens(
     const res = await fetchImpl(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model, "context-size": contextTokens }),
+      // DMR replaces the stored per-model config on every configure, so the
+      // residency setting travels with each context write or is lost.
+      body: JSON.stringify({ model, "context-size": contextTokens, keep_alive: LOCAL_RUNNER_KEEP_ALIVE }),
     });
     if (res.status === 404) {
       return { ok: false, contextTokens: null, reason: "Local runtime does not expose a context-size configuration API (Docker Model Runner update may be required)." };
