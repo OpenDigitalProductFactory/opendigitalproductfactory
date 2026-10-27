@@ -2,6 +2,7 @@
 // Legacy standing stages use their declared bindings. Delivery author stages
 // additionally revalidate the immutable dispatch, current author authorization,
 // funding, membership and the exact evidence effect. Nothing here grants tools.
+import type { Prisma } from "@dpf/db";
 import { coworkerAuthorityAgentId } from "@/lib/coworker-identity";
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 import { readWorkroomStageTaskConfig } from "@/lib/scheduling/workroom-stage-task-config";
@@ -17,6 +18,7 @@ import { driveRunKeyOf, readStoredWorkroomDriveState } from "./workroom-drive-st
 import { TERMINAL_WORKROOM_STATUSES } from "./standing-room-nesting";
 import { listWorkShapes } from "./work-shapes";
 import { readWorkShapeRoleBindings, resolveWorkShapeClaim } from "./workroom-shape-claim";
+import { loadHandedOverUserIds, ROOM_OWNER_USER_INCLUDE, roomOwnerUserId } from "./delivery-room-ownership";
 
 type ReportCall = {
   toolName?: string;
@@ -28,8 +30,27 @@ export const SCHEDULED_RUN_PREFIX = "TR-SCHED-";
 
 export type MandateRoom = {
   capsuleId: string; status: string; archivedAt: Date | null; scopeClaims: unknown;
-  id?: string; backlogItemId?: string | null; ownerUserId?: string | null; workspaceState?: unknown;
+  id?: string; backlogItemId?: string | null; workspaceState?: unknown;
 };
+
+// BI-17238133: each select is checked against the generated Prisma types, so a
+// field the model does not have fails typecheck instead of every scheduled run.
+// Workroom has no owner column; its task owner is derived exactly as the drive
+// derives it (requester/creator user, else the accountable person).
+const RUN_SELECT = {
+  a2aMetadata: true, status: true, currentAgentId: true, userId: true, startedAt: true, archivedAt: true,
+} as const satisfies Prisma.TaskRunSelect;
+const ROOM_SELECT = {
+  id: true, capsuleId: true, status: true, archivedAt: true, scopeClaims: true, backlogItemId: true, workspaceState: true,
+  requestedByPrincipal: ROOM_OWNER_USER_INCLUDE.requestedByPrincipal,
+  createdByPrincipal: ROOM_OWNER_USER_INCLUDE.createdByPrincipal,
+} as const satisfies Prisma.WorkroomSelect;
+const TASK_SELECT = {
+  taskId: true, taskConfig: true, agentId: true, taskRunId: true, ownerUserId: true, isActive: true,
+} as const satisfies Prisma.ScheduledAgentTaskSelect;
+
+type OwnerAliases = { aliases: Array<{ aliasValue: string }> } | null;
+export type MandateRoomRow = MandateRoom & { requestedByPrincipal?: OwnerAliases; createdByPrincipal?: OwnerAliases };
 
 /** The declared writes the room grants one of `agentIds` on its own drive task. Pure. */
 export function roomStageMandatedTools(input: {
@@ -77,9 +98,9 @@ type TaskSnapshot = {
   taskId?: string; taskConfig: unknown; agentId: string; taskRunId?: string | null; ownerUserId?: string; isActive?: boolean;
 };
 export type RoomMandateDb = {
-  taskRun: { findUnique(args: unknown): Promise<RunSnapshot | null> };
-  workroom: { findMany(args: unknown): Promise<MandateRoom[]> };
-  scheduledAgentTask?: { findUnique(args: unknown): Promise<TaskSnapshot | null> };
+  taskRun: { findUnique(args: { where: { taskRunId: string }; select: typeof RUN_SELECT }): Promise<RunSnapshot | null> };
+  workroom: { findMany(args: { where: { capsuleId: { in: string[] } }; select: typeof ROOM_SELECT }): Promise<MandateRoomRow[]> };
+  scheduledAgentTask?: { findUnique(args: { where: { taskId: string }; select: typeof TASK_SELECT }): Promise<TaskSnapshot | null> };
 };
 export type ScheduledRoomMandateInput = {
   taskRunId: string | null | undefined; agentIds: readonly string[]; a2aMetadata?: unknown;
@@ -93,6 +114,8 @@ export type ScheduledRoomAuthorityDeps = {
   loadAuthorStageAutonomy?: (rooms: readonly MandateRoom[], now: Date) => Promise<AuthorStageAutonomyFor>;
   loadRoomTurnAuthority?: (input: { agentId: string; capsuleId: string }) => Promise<RoomTurnAuthority>;
   loadAgentGrants?: (agentId: string) => Promise<string[]>;
+  /** The user the room's drive task runs for (recorded owner, else accountable person). */
+  resolveRoomTaskOwnerUserId?: (room: MandateRoomRow) => Promise<string | null>;
 };
 const EMPTY: ScheduledRoomAuthority = {
   mandatedTools: [], roomTurn: null, withheldBecause: null, deliveryStage: null,
@@ -131,19 +154,19 @@ export async function loadScheduledRoomAuthority(
   let run: RunSnapshot | null = null;
   const metadata = input.a2aMetadata !== undefined ? input.a2aMetadata
     : (run = await db.taskRun.findUnique({ where: { taskRunId: input.taskRunId },
-        select: { a2aMetadata: true, status: true, currentAgentId: true, userId: true, startedAt: true, archivedAt: true } }))?.a2aMetadata;
+        select: RUN_SELECT }))?.a2aMetadata;
   const source = isRecord(metadata) && isRecord(metadata.sourceRef) ? metadata.sourceRef : null;
   const taskId = source?.kind === "scheduled-task" && typeof source.id === "string" ? source.id : null;
   const capsuleIds = taskId ? candidateCapsuleIds(taskId) : [];
   if (!taskId || capsuleIds.length === 0) return EMPTY;
   const rooms = await db.workroom.findMany({ where: { capsuleId: { in: capsuleIds } },
-    select: { id: true, capsuleId: true, status: true, archivedAt: true, scopeClaims: true, backlogItemId: true, ownerUserId: true, workspaceState: true } });
+    select: ROOM_SELECT });
   for (const room of rooms) {
     const shape = resolveWorkShapeClaim(room.scopeClaims);
     if (!shape || (taskId !== workroomDriveTaskId(room.capsuleId, shape.key)
       && !shape.stages.some(stage => taskId === workroomDriveBranchTaskId(room.capsuleId, shape.key, stage.key)))) continue;
     const task = await db.scheduledAgentTask?.findUnique({ where: { taskId },
-      select: { taskId: true, taskConfig: true, agentId: true, taskRunId: true, ownerUserId: true, isActive: true } });
+      select: TASK_SELECT });
     const assignment = task?.taskRunId === input.taskRunId && input.agentIds.some(id => sameActor(id, task.agentId))
       ? readWorkroomStageTaskConfig(task.taskConfig) : null;
     const assignedStageKey = assignment?.shapeKey === shape.key && assignment?.shapeVersion === shape.version ? assignment.stageKey : null;
@@ -160,10 +183,10 @@ export async function loadScheduledRoomAuthority(
       if (room.archivedAt !== null || TERMINAL_WORKROOM_STATUSES.has(room.status)
         || shape.key === DELIVERY_XLARGE_SHAPE_KEY) return withheld("The delivery room is not active for author execution.");
       run ??= await db.taskRun.findUnique({ where: { taskRunId: input.taskRunId },
-        select: { a2aMetadata: true, status: true, currentAgentId: true, userId: true, startedAt: true, archivedAt: true } });
+        select: RUN_SELECT });
       if (!run || run.status !== "working" || run.archivedAt != null || !run.currentAgentId
         || !task?.isActive || task.taskId !== taskId || task.taskRunId !== input.taskRunId
-        || run.userId !== task.ownerUserId || room.ownerUserId !== task.ownerUserId
+        || run.userId !== task.ownerUserId
         || !sameActor(run.currentAgentId, task.agentId)
         || !input.agentIds.some((id) => sameActor(id, task.agentId))) return withheld("The scheduled run no longer owns this delivery dispatch.");
       const stageConfig = readWorkroomStageTaskConfig(task.taskConfig);
@@ -174,6 +197,8 @@ export async function loadScheduledRoomAuthority(
       if (runState.trigger !== "scheduled" || recordedSource?.kind !== "scheduled-task" || recordedSource.id !== taskId) {
         return withheld("The run no longer names this scheduled dispatch.");
       }
+      const roomOwner = await (deps.resolveRoomTaskOwnerUserId ?? liveRoomTaskOwnerUserId)(room);
+      if (!roomOwner || roomOwner !== task.ownerUserId) return withheld("The scheduled run no longer owns this delivery dispatch.");
       const checkpoint = readDispatchCheckpoint(runState.workroomDispatchCheckpoint);
       const taskCheckpoint = readDispatchCheckpoint(taskState.workroomDispatchCheckpoint);
       const roomCheckpoint = readDispatchCheckpoint(workspace.workroomDispatchCheckpoint);
@@ -240,6 +265,17 @@ export async function loadScheduledRoomAuthority(
     }
   }
   return EMPTY;
+}
+
+/** The drive's own owner rule (BI-D13FA12A), re-read live; never an invented room field. */
+async function liveRoomTaskOwnerUserId(room: MandateRoomRow): Promise<string | null> {
+  if (!room.id) return null;
+  const [{ prisma }, owner] = await Promise.all([
+    import("@dpf/db"), import("@/lib/queue/functions/workroom-drive-task-owner"),
+  ]);
+  const recordedOwnerUserId = roomOwnerUserId(room, await loadHandedOverUserIds(prisma));
+  return owner.resolveRoomDriveTaskOwnerUserId({ id: room.id, recordedOwnerUserId },
+    owner.liveDriveTaskOwnerEffects(async () => prisma));
 }
 
 /** Call authorization requires effect parameters for delivery; old callers cannot widen it. */
