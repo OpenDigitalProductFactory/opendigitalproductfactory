@@ -13,11 +13,17 @@
  * package has no access to work shapes, and its stages partition the twin
  * profile's own queues.
  */
-import type { It4ItStage, OperationalValueStreamStageKey, TwinValueStreamBinding } from "@dpf/storefront-templates";
+import {
+  deriveOperationalValueStream,
+  type ArchetypeDefinition,
+  type It4ItStage,
+  type OperationalValueStreamStageKey,
+  type TwinValueStreamBinding,
+} from "@dpf/storefront-templates";
 
 import { getWorkShape } from "@/lib/work-management/work-shapes";
 import { WORK_SHAPE_STAGE_IT4IT } from "@/lib/work-management/workroom-stage-it4it";
-import { WORKROOM_STAGE_QUEUE_PREFIX, workroomStageQueueKey } from "@/lib/work-management/workroom-stage-telemetry";
+import { loadWorkroomStageLiveCounts, WORKROOM_STAGE_QUEUE_PREFIX, workroomStageQueueKey } from "@/lib/work-management/workroom-stage-telemetry";
 
 /** IT4IT 3.0.1 streams by the section number their stage references start with. */
 const IT4IT_STREAM_BY_SECTION: Readonly<Record<string, string>> = {
@@ -99,4 +105,27 @@ export function boundDeliveryShapeRefs(): string[] {
 export function boundShapeRefs(binding: TwinValueStreamBinding): Set<string> {
   return new Set([...workroomQueuesByStage(binding).values()].flat()
     .map((queueKey) => queueKey.slice(WORKROOM_STAGE_QUEUE_PREFIX.length, queueKey.lastIndexOf(":"))));
+}
+
+/** An archetype's twin binding with the current delivery shapes' stage queues its IT4IT binding covers. */
+export function bindArchetypeWorkroomStages(archetype: ArchetypeDefinition, binding: TwinValueStreamBinding): TwinValueStreamBinding {
+  return bindWorkroomStageQueues(binding, deriveOperationalValueStream(archetype).it4itStageBinding, boundDeliveryShapeRefs());
+}
+
+/** Count rooms at a binding's Workroom stage queues into each twin stage's demand. Fail-soft. */
+export async function addWorkroomStageDemand(
+  binding: TwinValueStreamBinding,
+  demand: Record<string, { count: number; longestWaitMs?: number }>,
+  loadCounts: () => Promise<Map<string, { wip: number }>> = loadWorkroomStageLiveCounts,
+): Promise<void> {
+  const byStage = workroomQueuesByStage(binding);
+  if (byStage.size === 0) return;
+  const counts = await loadCounts().catch(() => new Map<string, { wip: number }>());
+  for (const [stage, keys] of byStage) {
+    const rooms = keys.reduce((sum, key) => sum + (counts.get(key)?.wip ?? 0), 0);
+    if (rooms === 0) continue;
+    const current = demand[stage] ?? { count: 0, longestWaitMs: 0 };
+    current.count += rooms;
+    demand[stage] = current;
+  }
 }

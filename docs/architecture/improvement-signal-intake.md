@@ -48,6 +48,13 @@ writer takes a transaction-scoped advisory lock on the signal id, re-reads the
 backlink, and files only when it is still empty. The others return the link
 the first one wrote. A failed filing leaves the link empty for a later touch.
 
+A caller whose source id names one observation passes `immutable: true`
+(BI-3EC4722F). Like `platform_issue_report`, a repeat delivery then only
+touches the signal: it never recurs and is never filed. The daily flow review
+uses this to record each work shape's review once, under the shape version
+and review day. It files a sustained bottleneck itself, through the shared
+intake, with a routing answer on the intake activity.
+
 ## Remaining learning qualification
 
 This bounded repair is part of BI-64E86574 and the approved
