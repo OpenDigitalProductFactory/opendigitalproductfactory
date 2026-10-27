@@ -95,6 +95,28 @@ describe("reassessment candidate compatibility", () => {
       expect(await runReassessmentCandidatePreflight({ ...p, release })).toMatchObject({ ok: false, reason: "reassessment-compatibility-unproven" });
       expect(p.recordCompatibility).not.toHaveBeenCalled();
     });
+
+    // BI-578131A3: SUR-F2A0D477's run row said only "reassessment-compatibility-unproven";
+    // Docker's "No such image" was discarded and the cause took a manual repro.
+    it("names every reference it tried and Docker's answer in the run's failure log", async () => {
+      const p = engine({ [`ghcr.io/owner/dpf-portal@${channelDigest}`]: `sha256:${"9".repeat(64)}` });
+      await runReassessmentCandidatePreflight({ ...p, release });
+      const [, log, reason] = p.failRun.mock.calls[0]!;
+      expect(reason).toBe("reassessment-compatibility-unproven: release-image-unresolved");
+      expect(log).toContain(`${configDigest} -> No such image`);
+      expect(log).toContain(`ghcr.io/owner/dpf-portal@${channelDigest} -> foreign id sha256:${"9".repeat(64)}`);
+    });
+
+    it("carries the probe's exit code and stderr when the image will not run", async () => {
+      const p = engine({ [configDigest]: configDigest });
+      p.runDocker.mockImplementation(async (args: string[]) => args[0] === "image"
+        ? { exitCode: 0, stdout: configDigest, stderr: "" }
+        : { exitCode: 125, stdout: "", stderr: `docker: Error response from daemon: No such image: ${configDigest}` });
+      await runReassessmentCandidatePreflight({ ...p, release });
+      const [, log, reason] = p.failRun.mock.calls[0]!;
+      expect(reason).toBe("reassessment-compatibility-unproven: probe-exit-125");
+      expect(log).toContain("No such image");
+    });
   });
 
   it("refuses a release missing its frozen digest instead of falling back to a source image", async () => {
@@ -103,21 +125,25 @@ describe("reassessment candidate compatibility", () => {
     expect(p.runDocker).not.toHaveBeenCalled(); expect(p.recordCompatibility).not.toHaveBeenCalled();
   });
   it.each([
-    ["missing image identity", { inspection: "" }], ["mutable image identity", { inspection: "latest" }],
-    ["failed observation", { exitCode: 1 }], ["different source", { probe: { ...info, sourceSha: "f".repeat(40) } }],
-    ["missing owner", { probe: { ...info, owners: {} } }],
-    ["old worker", { probe: { ...info, owners: { ...info.owners, worker: { version: 1, sourceSha256: "e".repeat(64) } } } }],
-  ])("refuses %s before recording proof", async (_name, override) => {
+    ["missing image identity", { inspection: "" }, "source-image-unresolved"],
+    ["mutable image identity", { inspection: "latest" }, "source-image-unresolved"],
+    ["failed observation", { exitCode: 1 }, "source-image-unresolved"],
+    ["different source", { probe: { ...info, sourceSha: "f".repeat(40) } }, "probe-source-mismatch"],
+    ["missing owner", { probe: { ...info, owners: {} } }, "probe-output-invalid"],
+    ["old worker", { probe: { ...info, owners: { ...info.owners, worker: { version: 1, sourceSha256: "e".repeat(64) } } } }, "probe-output-invalid"],
+  ])("refuses %s before recording proof, naming the cause", async (_name, override, subcode) => {
     const p = ports(override);
     expect(await runReassessmentCandidatePreflight(p)).toEqual({ ok: false, reason: "reassessment-compatibility-unproven" });
     expect(p.recordCompatibility).not.toHaveBeenCalled();
-    expect(p.failRun).toHaveBeenCalledWith("SUR-COMPAT", "reassessment-compatibility-unproven");
+    expect(p.failRun).toHaveBeenCalledWith("SUR-COMPAT", expect.stringMatching(new RegExp(`^reassessment-compatibility-unproven: ${subcode}`)),
+      `reassessment-compatibility-unproven: ${subcode}`);
     expect(p.emitFailure).toHaveBeenCalledWith("SUR-COMPAT");
   });
   it("refuses unavailable evidence persistence instead of admitting an unrecorded candidate", async () => {
     const p = ports(); p.recordCompatibility.mockRejectedValueOnce(new Error("unavailable"));
     expect(await runReassessmentCandidatePreflight(p)).toMatchObject({ ok: false });
-    expect(p.failRun).toHaveBeenCalledOnce();
+    expect(p.failRun).toHaveBeenCalledExactlyOnceWith("SUR-COMPAT", "reassessment-compatibility-unproven: proof-unrecorded: unavailable",
+      "reassessment-compatibility-unproven: proof-unrecorded");
   });
   it("dry run performs no image or proof effects", async () => {
     const p = ports(); expect(await runReassessmentCandidatePreflight({ ...p, dryRun: true })).toEqual({ ok: true, data: {} });
