@@ -469,6 +469,11 @@ The order of precedence, strongest first:
 Your default sits below what the work is on purpose. A blanket preference about rooms
 should not overrule the shape of the job in front of you.
 
+One exception: **Build Studio rooms**. A Build Studio change is already checked by the build
+gates (tests, the merge queue and review) before it lands, so "asks first" there would mean
+asking the gates, not you. In those rooms your default decides whether work may act alone,
+and the business being closed does not slow them down. A room's own declaration still wins.
+
 ## Giving a Room Its Shape
 
 A room can be opened **with a shape** — a short statement of how decisions inside it are
