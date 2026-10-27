@@ -16,8 +16,8 @@ Each slice is one PR. Each is written test-first: the failing test lands with th
 |---|---|---|---|
 | S1 Content-stamped delivery version | BI-4F9E3221 | M1 | AC-CONTENT-VERSION |
 | S2 Read-back for every adapter; client CLI is the single writer | BI-1DCF9F23 | M3, M4 | AC-READBACK, AC-SINGLE-WRITER |
-| S3 Host convergence service | BI-65C17737 | M2 | AC-NO-HUMAN |
-| S4 Session backstop, declaration status, escalation | BI-3E66F76F | M8, M9 | AC-ESCALATE |
+| S3 Host convergence service and session backstop | BI-65C17737 | M2, M8 | AC-NO-HUMAN |
+| S4 Declaration status, card reasons, escalation | BI-3E66F76F | M9 | AC-ESCALATE |
 | S5 Runtime floor and interpreter discovery | BI-90C9478D (closes BI-6763D09E) | M5, M4 TOML | AC-PY39 |
 | S6 Discovery, adapter contract, drift canary, pruning | BI-D43723D7 | M6, M7, M10 | AC-FAILURE-MATRIX |
 
@@ -105,7 +105,8 @@ Each row of spec §4 is covered by a test in the slice named. Where marked, it i
 | F5, F9, F10, F13, F14, F15, F16, F22 | S2 read-back fixtures |
 | F3, F8, F21, X14 | S2 single-writer conformance |
 | X1, X2, X3, X9, X10, X13 | S3 runner tests |
-| X4, X12 | S4 backstop tests |
+| X4, X12 | S3 session-backstop tests |
+| X15 | S3 precedence tests (checkout ahead of the served release) |
 | F2, F20, X11 | S5 CI on 3.9 and discovery tests |
 | F1, X5, X6, X7 | S6 discovery, canary and pruning tests |
 | F4 | The existing guard self-test, plus S4 escalation for Codex trust (operator step, reported once) |
