@@ -404,6 +404,11 @@ services:
       # per-install operator opt-in via .env.
       DPF_WORKCAPSULE_REAPER_ENABLED: ${DPF_WORKCAPSULE_REAPER_ENABLED:-1}
       DPF_WORKCAPSULE_REAPER_AUTO_REAP: ${DPF_WORKCAPSULE_REAPER_AUTO_REAP:-0}
+      # Per-room overseer duty on the Workroom drive (BI-8E1486FA): closes rooms whose
+      # item is finished or whose merged branch has no session, and routes stuck rooms
+      # to their Process Overseer. Default 0 = acting. Set 1 to keep the per-cycle
+      # summary and write nothing.
+      DPF_WORKROOM_OVERSEER_DRY_RUN: ${DPF_WORKROOM_OVERSEER_DRY_RUN:-0}
       # Runtime-artifact janitor (BI-DBF3F426 / BI-A55BE432): reaps orphaned
       # per-branch CI images + stray compose projects INCLUDING their named
       # volumes — the dominant local-disk leak (dead dpf-<topic> dev stacks

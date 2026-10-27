@@ -242,3 +242,24 @@ export async function runDriveOverseer(
     return null;
   }
 }
+
+export type DriveOverseerDeps = {
+  /** BI-8E1486FA: the overseer duty over a tick's room ids. Defaults to the live duty; caller-supplied rooms skip it. */
+  overseer?: (roomIds: readonly string[], now: Date) => Promise<OverseerCycleSummary>;
+};
+
+export type DriveOverseerResult = {
+  /** BI-8E1486FA: what the per-room overseer duty did this tick; null when it did not run. */
+  overseer?: OverseerCycleSummary | null;
+};
+
+/** The drive's rooms minus those the duty closed, so a closed room is not planned in the same tick. */
+export async function overseeDriveRooms<R extends { id: string }>(
+  rooms: R[],
+  now: Date,
+  deps: (DriveOverseerDeps & { listRooms?: unknown }) | undefined,
+): Promise<{ rooms: R[]; overseer: OverseerCycleSummary | null }> {
+  if (deps && !deps.overseer && deps.listRooms) return { rooms, overseer: null };
+  const overseer = await runDriveOverseer(rooms, now, deps?.overseer);
+  return { rooms: overseer ? rooms.filter((room) => !overseer.closedRoomIds.includes(room.id)) : rooms, overseer };
+}

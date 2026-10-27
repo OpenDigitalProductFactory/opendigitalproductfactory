@@ -107,6 +107,18 @@ A delivery room gets its shape at the claim (`claim_backlog_item_for_work`, BI-0
 unarchived rooms **that carry a work-shape claim**, ordered, and bounded by
 `STANDING_ROOM_SCAN_LIMIT`.
 
+Before it plans those rooms, each tick runs the **per-room overseer duty** (BI-8E1486FA,
+`workroom-overseer-duty.ts` rules, `workroom-overseer-run.ts` reads and writes). For every
+non-standing delivery room it closes the room as delivered (`archived`, scope released) when
+its item is done or retired, when its lease is past the 24-hour resume grace on a merged
+branch, or when it is a merged duplicate of another live room for the same item. A room whose
+session is gone with unmerged commits, or whose drive hold has lasted 48 ticks, is routed to
+its Process Overseer as one Attention item (`workroom-overseer:<capsuleId>`, listed by the
+workroom-stall source) and the hold is concluded with a recorded outcome. Each change writes a
+`workroom-overseer` activity naming the rule; `DPF_WORKROOM_OVERSEER_DRY_RUN=1` logs the
+cycle summary and writes nothing. Design: the October 27 amendment of
+[Coordinated Workrooms](../superpowers/specs/2026-09-03-coordinated-workrooms-design.md).
+
 That same standing drive performs a bounded, best-effort notification reconciliation for
 Workroom-owned facts such as approval, review, lease expiry, and terminal state. Durable async
 inference transitions do not wait for that cadence: the event-only Task Hub consumer re-reads the
