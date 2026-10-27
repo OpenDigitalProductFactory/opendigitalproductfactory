@@ -37,6 +37,8 @@ export type SweepEvaluateDeps = {
   loadDeliveryActorIds(item: AcceptanceSweepPageItem): Promise<ActionResult<string[]>>;
   loadCompletionDecision(itemId: string, authorAgentId: string | null): Promise<InitiativeReadinessDecision | null>;
   resolveOwner: OwedAcceptanceOwnerResolver;
+  /** Authenticated Small runtime binding; larger lanes never consume this. */
+  loadRetainedSmallCheck?: (itemId: string) => Promise<import("@/lib/runtime-coordination/small-acceptance-binding").RetainedSmallCheck>;
 };
 
 /**
@@ -127,7 +129,8 @@ export async function evaluateOwedAcceptance(
   if (!actors.ok) throw new Error(`The delivery actors of ${item.itemId} could not be read: ${actors.error}`);
   // The completion read can observe a closure newer than the page snapshot.
   if (item.status === "done" || decision.transitionObject.expectedVersion === "done") {
-    return retainedAcceptanceWithoutBinding(decision, excludedAgentSet(authorAgentId, actors.data));
+    const smallCheck = decision.shapeDecision?.effective === "small" ? await deps.loadRetainedSmallCheck?.(item.itemId) : undefined;
+    return retainedAcceptanceWithoutBinding(decision, excludedAgentSet(authorAgentId, actors.data), smallCheck);
   }
   // The decision travels with the projection so a closure (BI-45D3BBF4) cites the gate it acted on.
   return {
@@ -139,6 +142,11 @@ export async function evaluateOwedAcceptance(
 /** Production bindings. Lazy imports keep the read tools off the scheduler's import graph. */
 export function productionSweepEvaluateDeps(db: InPlatformOwnerDb & DeliveryActorDb): SweepEvaluateDeps {
   return {
+    loadRetainedSmallCheck: async itemId => {
+      const { prisma } = await import("@dpf/db");
+      const { readRetainedSmallCheck } = await import("@/lib/runtime-coordination/small-acceptance-binding.server");
+      return readRetainedSmallCheck(prisma, itemId);
+    },
     loadDeliveryActorIds: (item) => loadItemDeliveryActorIds(db, item.itemId),
     loadAuthorAgentId: async (item) => {
       const { loadRoomAuthors } = await import("@/lib/backlog/initiative-readiness/server-reviewer-dispatch");

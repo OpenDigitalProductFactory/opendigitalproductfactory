@@ -8,11 +8,14 @@ import { Prisma } from "@dpf/db";
 import type { prisma } from "@dpf/db";
 import { isFounderActionable, normalizeFounderReviewQuestion } from "@/lib/founder-review/queue";
 import { retractionOf } from "@/lib/decision-perspective/retract-superseded";
+import { humanEscalationWhere, isHumanEscalation, type HumanEscalationRow } from "@/lib/decision-perspective/human-escalation";
+import { humanDecisionReviewMessage } from "@/lib/decision-perspective/decision-escalation";
 import type { AttentionItem, AttentionRiskClass, ResidueReason } from "../types";
 
 type Db = typeof prisma;
 
-export type DecisionInteractionRow = {
+export type DecisionInteractionRow = HumanEscalationRow & {
+  escalationReason?: string | null;
   interactionId: string;
   question: string;
   outcomeType: string;
@@ -94,6 +97,7 @@ export function aiDecisionToAttentionItem(
     source: "ai-decision",
     title: clip(row.question),
     context: [
+      row.escalationRoute === "human" ? humanDecisionReviewMessage(row.escalationReason) : null,
       proposal?.summary ?? row.rationale ?? "The governed scopes could not resolve this decision.",
       occurrences > 1 ? `Asked ${occurrences} times and still unresolved.` : null,
     ]
@@ -171,13 +175,15 @@ async function buildsPastPlan(db: Db, rows: Array<{ buildId: string | null; doma
 export async function loadAiDecisionItems(db: Db): Promise<AttentionItem[]> {
   const rows = await db.decisionInteraction.findMany({
     // humanOutcome IS NULL == still unresolved residue (Json? → DB NULL).
-    where: { outcomeType: { in: ["escalate", "defer"] }, humanOutcome: { equals: Prisma.DbNull } },
+    where: humanEscalationWhere({ humanOutcome: { equals: Prisma.DbNull } }),
     orderBy: { createdAt: "desc" },
     take: DECISION_SCAN_LIMIT,
     select: {
       interactionId: true,
       question: true,
       outcomeType: true,
+      escalationRoute: true,
+      escalationReason: true,
       riskTier: true,
       principleConflict: true,
       rationale: true,
@@ -210,7 +216,8 @@ export async function loadAiDecisionItems(db: Db): Promise<AttentionItem[]> {
   // escalation whose build has already left plan (or was abandoned).
   const mootBuildIds = await buildsPastPlan(db, rows);
   const actionable = rows.filter((row) =>
-    isFounderActionable(row)
+    isHumanEscalation(row)
+    && isFounderActionable(row)
     && !retractionOf(row.outcomePayload)
     && !isShadowVerdict(row.outcomePayload)
     && !(row.domainClass === "plan-readiness" && row.buildId !== null && mootBuildIds.has(row.buildId)));

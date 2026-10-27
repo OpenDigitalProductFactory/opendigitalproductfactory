@@ -25,16 +25,19 @@
 // Setting an owner is a governed write: a person, a reason, and a timestamp are
 // recorded with it, and a coworker cannot be made accountable.
 
-import { findInstallWorkOwnerUserId } from "@dpf/db/install-work-owner";
+import {
+  activeUserOf,
+  FOUNDATIONAL_PORTFOLIO_SLUG,
+  PORTFOLIO_OWNER_SELECT as PORTFOLIO_SELECT,
+  resolveWorkOwner,
+  type WorkOwner,
+  type WorkOwnerSource,
+} from "@dpf/db/install-work-owner";
 
 import { ok, type ActionFailure, type ActionSuccess } from "@/lib/shared/action-result";
 
-/** The Foundational portfolio holds the platform's own work. */
-export const FOUNDATIONAL_PORTFOLIO_SLUG = "foundational";
-
-export type WorkOwnerSource = "portfolio" | "foundational" | "organization" | "fallback";
-
-export type WorkOwner = { userId: string; source: WorkOwnerSource };
+// The owner walk has one home, shared with the task seeds (BI-F0E946D2).
+export { FOUNDATIONAL_PORTFOLIO_SLUG, resolveWorkOwner, type WorkOwner, type WorkOwnerSource };
 
 type PrincipalRow = { id: string; kind: string; status: string; displayName: string };
 
@@ -48,55 +51,6 @@ export type AccountableOwnerDb = {
   principalAlias: { findFirst(args: unknown): Promise<{ aliasValue: string } | null> };
   user: { findFirst(args: unknown): Promise<{ id: string } | null> };
 };
-
-const PORTFOLIO_SELECT = { id: true, slug: true, accountablePrincipalId: true } as const;
-
-/** The active account of an active person, or null. */
-async function activeUserOf(db: AccountableOwnerDb, principalId: string | null | undefined): Promise<string | null> {
-  if (!principalId) return null;
-  const alias = await db.principalAlias.findFirst({
-    where: { principalId, aliasType: "user", principal: { kind: "human", status: "active" } },
-    select: { aliasValue: true },
-  });
-  if (!alias) return null;
-  const user = await db.user.findFirst({ where: { id: alias.aliasValue, isActive: true }, select: { id: true } });
-  return user?.id ?? null;
-}
-
-/**
- * The User that owns a piece of automatic work. Pass the work's portfolio when
- * it has one; platform jobs pass nothing and land on Foundational.
- */
-export async function resolveWorkOwner(
-  db: AccountableOwnerDb,
-  input: { portfolioId?: string | null },
-): Promise<WorkOwner> {
-  if (input.portfolioId) {
-    const portfolio = await db.portfolio.findUnique({ where: { id: input.portfolioId }, select: PORTFOLIO_SELECT });
-    const userId = await activeUserOf(db, portfolio?.accountablePrincipalId);
-    if (userId) return { userId, source: "portfolio" };
-  }
-
-  const foundational = await db.portfolio.findUnique({
-    where: { slug: FOUNDATIONAL_PORTFOLIO_SLUG },
-    select: PORTFOLIO_SELECT,
-  });
-  const foundationalOwner = await activeUserOf(db, foundational?.accountablePrincipalId);
-  if (foundationalOwner) return { userId: foundationalOwner, source: "foundational" };
-
-  const org = await db.organization.findFirst({ select: { topAccountablePrincipalId: true } });
-  const orgOwner = await activeUserOf(db, org?.topAccountablePrincipalId);
-  if (orgOwner) return { userId: orgOwner, source: "organization" };
-
-  // Nothing is recorded. Keep work running under the install owner the platform
-  // used before, but say so: callers and surfaces report `fallback` as a gap.
-  // The same install-owner rule as the task seeds: a handed-over account is
-  // skipped unless it is the only active superuser left (BI-858FDE5A).
-  const guess = await findInstallWorkOwnerUserId(db as never);
-  if (guess) return { userId: guess, source: "fallback" };
-
-  throw new Error("No accountable owner is recorded and no active superuser exists to own automatic work.");
-}
 
 export type SetPortfolioOwnerInput = {
   portfolioId: string;

@@ -47,7 +47,7 @@ describe("production reconciliation protocol admission", () => {
   function explicitRequest() {
     const states = Object.fromEntries(catalog.capabilities.map(entry => [entry.capabilityId, entry.capabilityId === "runtime:core" || entry.capabilityId === "runtime:build" ? "active" : entry.capabilityId === "runtime:external-ai" ? "operator-paused" : "disabled"]));
     const reconciliation: RuntimeReconciliationIntent = {
-      observedHost: { schemaVersion: 2, installerVersion: "fixture", platform: "linux", arch: "amd64", capabilityCatalogHash: catalog.catalogHash, capabilityStateVersion: hostHash(catalog.catalogHash, ["runtime:core"], catalog.capabilities.map(entry => entry.capabilityId)), enabledRuntimeCapabilities: ["runtime:core"] },
+      observedHost: { schemaVersion: 2, installerVersion: "fixture", platform: "win32", arch: "amd64", capabilityCatalogHash: catalog.catalogHash, capabilityStateVersion: hostHash(catalog.catalogHash, ["runtime:core"], catalog.capabilities.map(entry => entry.capabilityId)), enabledRuntimeCapabilities: ["runtime:core"] },
       observedDatabaseStates: states, desiredDatabaseStates: { ...states, "runtime:build": "disabled" }, desiredHostEnabledKeys: ["runtime:core"], touchedKeys: ["runtime:build"],
     };
     mocks.rows.mockResolvedValue(Object.entries(states).map(([capabilityId, state]) => ({ capabilityId, state, manifest: {} })));
@@ -72,6 +72,87 @@ describe("production reconciliation protocol admission", () => {
     expect(preview.observedDatabaseStates["runtime:external-ai"]).toBe("operator-paused");
     expect(mocks.promoter).not.toHaveBeenCalled(); expect(mocks.coordinate).not.toHaveBeenCalled();
     expect(mocks.readFile).not.toHaveBeenCalledWith("/dpf-state/runtime-transition.secret", "utf8");
+  });
+
+  it.each(["consumer", "customer"])("probes the installed immutable release promoter on a %s install", async (installMode) => {
+    const explicit = explicitRequest();
+    vi.stubEnv("GHCR_OWNER", "Fixture-Owner");
+    vi.stubEnv("DPF_IMAGE_CHANNEL_TAG", "latest");
+    vi.stubEnv("DPF_IMAGE_TAG", "v2026.10.14-dev-recovery.1");
+    Object.assign(explicit.reconciliation.observedHost, { installMode, imageTag: "v2026.10.15-dev-recovery.96", installPath: "C:/fixture/install" });
+    await readProductionRuntimeCapabilityReconciliationPreview();
+    const reference = "ghcr.io/fixture-owner/dpf-promoter:v2026.10.15-dev-recovery.96";
+    expect(mocks.resolveArtifact).toHaveBeenCalledWith({ targetSha: "a".repeat(40), promoterImage: reference, candidateReference: reference });
+    expect(mocks.probe).toHaveBeenCalledWith(expect.objectContaining({ artifact: expect.objectContaining({ digest: `sha256:${"b".repeat(64)}` }) }));
+    expect(mocks.promoter).not.toHaveBeenCalled();
+    expect(mocks.coordinate).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { tag: "latest", owner: "fixture-owner" },
+    { tag: "v2026.10.15-dev-recovery.96", owner: "" },
+    { tag: "v2026.10.15-dev-recovery.96", owner: "other/namespace" },
+  ])("refuses ambiguous release identity without a source-image fallback: %j", async ({ tag, owner }) => {
+    const explicit = explicitRequest();
+    vi.stubEnv("GHCR_OWNER", owner);
+    Object.assign(explicit.reconciliation.observedHost, { installMode: "consumer", imageTag: tag, installPath: "C:/fixture/install" });
+    await expect(readProductionRuntimeCapabilityReconciliationPreview()).rejects.toThrow("runtime_protocol_release_identity_missing");
+    expect(mocks.resolveArtifact).not.toHaveBeenCalled();
+    expect(mocks.probe).not.toHaveBeenCalled();
+    expect(mocks.promoter).not.toHaveBeenCalled();
+    expect(mocks.coordinate).not.toHaveBeenCalled();
+  });
+
+  it("keeps the verified release digest pinned through authority reservation and application", async () => {
+    const explicit = explicitRequest();
+    vi.stubEnv("GHCR_OWNER", "fixture-owner");
+    Object.assign(explicit.reconciliation.observedHost, { installMode: "consumer", imageTag: "v2026.10.15-dev-recovery.96", installPath: "C:/fixture/install" });
+    await expect(executeProductionRuntimeCapabilityTransition(explicit)).resolves.toEqual({ status: "succeeded" });
+    expect(mocks.resolveArtifact).toHaveBeenCalledWith(expect.objectContaining({ candidateReference: "ghcr.io/fixture-owner/dpf-promoter:v2026.10.15-dev-recovery.96" }));
+    expect(mocks.promoter.mock.calls.length).toBeGreaterThan(0);
+    for (const [params] of mocks.promoter.mock.calls) expect(params.promoterImage).toBe(`sha256:${"b".repeat(64)}`);
+    expect(mocks.coordinate).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({
+      reconciliationPromoterDigest: `sha256:${"b".repeat(64)}`,
+      promoterParams: expect.objectContaining({ promoterImage: `sha256:${"b".repeat(64)}` }),
+    }));
+  });
+
+  it("carries the recorded release overlays and canonical env into reconciliation", async () => {
+    const explicit = explicitRequest();
+    vi.stubEnv("GHCR_OWNER", "fixture-owner");
+    vi.stubEnv("DPF_SELF_UPGRADE_COMPOSE_FILES", "");
+    Object.assign(explicit.reconciliation.observedHost, { installMode: "consumer", imageTag: "v2026.10.15-dev-recovery.96", installPath: "C:/fixture/install", platform: "win32", composeFiles: ["docker-compose.yml", "docker-compose.release.yml"] });
+    await executeProductionRuntimeCapabilityTransition(explicit);
+    expect(mocks.coordinate).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({ promoterParams: expect.objectContaining({
+      composeFiles: ["docker-compose.yml", "docker-compose.release.yml"], composeEnvFileHostPath: "C:/fixture/install/.env",
+    }) }));
+  });
+
+  it.each(["win32", "darwin", "linux"])("projects external AI services for the observed %s host", async platform => {
+    const explicit = explicitRequest();
+    explicit.desiredKeys = ["runtime:core", "runtime:external-ai"];
+    explicit.reconciliation.desiredHostEnabledKeys = [...explicit.desiredKeys];
+    explicit.reconciliation.observedDatabaseStates = { ...explicit.reconciliation.observedDatabaseStates, "runtime:external-ai": "disabled" };
+    explicit.reconciliation.desiredDatabaseStates = { ...explicit.reconciliation.desiredDatabaseStates, "runtime:external-ai": "active" };
+    explicit.reconciliation.touchedKeys = [...explicit.reconciliation.touchedKeys, "runtime:external-ai"];
+    explicit.reconciliation.observedHost.platform = platform;
+    mocks.rows.mockResolvedValue(Object.entries(explicit.reconciliation.observedDatabaseStates).map(([capabilityId, state]) => ({ capabilityId, state, manifest: {} })));
+    await expect(executeProductionRuntimeCapabilityTransition(explicit)).resolves.toEqual({ status: "succeeded" });
+    const projection = mocks.coordinate.mock.calls[0][1];
+    const desired = await projection.resolveProjection(explicit.desiredKeys);
+    expect(desired.requiredServices.includes("ollama")).toBe(platform === "linux");
+    expect(desired.composeProfiles.includes("runtime-external-ai")).toBe(platform === "linux");
+  });
+
+  it("retains release contract/source refusal before probing or reserving host authority", async () => {
+    const explicit = explicitRequest();
+    vi.stubEnv("GHCR_OWNER", "fixture-owner");
+    Object.assign(explicit.reconciliation.observedHost, { installMode: "consumer", imageTag: "v2026.10.15-dev-recovery.96", installPath: "C:/fixture/install" });
+    mocks.resolveArtifact.mockRejectedValue(new Error("promoter_source_sha_mismatch"));
+    await expect(executeProductionRuntimeCapabilityTransition(explicit)).resolves.toEqual({ status: "failed", failure: "runtime_reconciliation_protocol_unavailable" });
+    expect(mocks.probe).not.toHaveBeenCalled();
+    expect(mocks.promoter).not.toHaveBeenCalled();
+    expect(mocks.coordinate).not.toHaveBeenCalled();
   });
 
   it("refuses an intervening database writer before host authority reservation", async () => {

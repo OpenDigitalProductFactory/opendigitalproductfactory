@@ -5,6 +5,8 @@ import {
   dominantExclusion,
   explainExclusion,
   stripEndpointPrefix,
+  routingEligibilitySummary,
+  readRoutingEligibility,
 } from "./routing-exclusion-buckets";
 
 // The reason strings below are the verbatim shapes emitted by
@@ -19,6 +21,26 @@ const CONTEXT = "cmq5kqdu409jy5nr0akjo4au1: Context window too small: 8192 < 320
 const STATUS = "cmq5kqdu209jw5nr0o5hhupmw: Status is 'unconfigured'";
 const MODEL_CLASS =
   'cmq5kqdvo09k35nr0xixftj36: modelClass "embedding" is not eligible for general-purpose text tasks';
+
+describe("safe durable eligibility diagnostics", () => {
+  it("recognizes the router's structured-output capability exclusion", () => {
+    expect(bucketExclusionReason("Missing required capability: structuredOutput")).toBe("capability-floor");
+  });
+  it("retains all bounded constraint families without private endpoint or reason text", () => {
+    const safe = routingEligibilitySummary("restricted", "local_only", 3, [CLEARANCE,
+      "private-endpoint: Activity completion allowance exceeds known model output capacity", "secret-unrecognized-policy"]);
+    expect(safe.exclusions).toEqual([{ bucket: "sensitivity-clearance", count: 1 },
+      { bucket: "output-capacity", count: 1 }, { bucket: "other", count: 1 }]);
+    expect(readRoutingEligibility({ ...safe, rawPrompt: "private prompt" })).toEqual(safe);
+    expect(JSON.stringify(safe)).not.toMatch(/private|secret|cmrx/);
+  });
+  it("rejects unrecognized persisted classifications instead of displaying arbitrary text", () => {
+    const safe = routingEligibilitySummary("restricted", "local_only", 1, [CLEARANCE]);
+    expect(readRoutingEligibility({ ...safe, sensitivity: "private prompt" })).toBeNull();
+    expect(readRoutingEligibility({ ...safe, exclusions: [{ bucket: "private endpoint detail", count: 1 }] })).toBeNull();
+    expect(readRoutingEligibility({ ...safe, excludedCount: -1 })).toBeNull();
+  });
+});
 
 describe("stripEndpointPrefix", () => {
   it("removes the endpoint id prefix", () => {

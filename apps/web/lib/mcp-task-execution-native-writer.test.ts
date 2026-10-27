@@ -151,6 +151,9 @@ function settledData() {
   return (call?.[0] as { data: { status: string; progressPayload: Record<string, unknown> } } | undefined)?.data;
 }
 
+const reviewTaskIdentity = { userId: "user-1", currentAgentId: parsed.agentId,
+  a2aMetadata: { requestDigest: "9".repeat(64), initiativeReviewBinding: parsed.initiativeReviewBinding } };
+
 beforeEach(() => {
   vi.clearAllMocks();
   seq = 0;
@@ -161,11 +164,65 @@ beforeEach(() => {
     activities: [{ id: RECEIPT_ID, kind: "initiative_gate_receipt", gateKey: "design_spec", recordedAt: new Date(), payload: receipt }],
   };
   db.findModelConfig.mockResolvedValue(null);
-  db.findTaskRun.mockResolvedValue({ status: "working", progressPayload: {}, updatedAt: new Date() });
+  db.findTaskRun.mockResolvedValue({ ...reviewTaskIdentity, status: "working", progressPayload: {}, updatedAt: new Date() });
   db.updateTaskRun.mockResolvedValue({ count: 1 });
   autonomous.resolveAgent.mockResolvedValue({ agentId: "AGT-WS-REVIEW", displayName: "Change Reviewer",
     systemPrompt: "Review independently.", sensitivity: "internal" });
   autonomous.resolveTools.mockResolvedValue({ tools: [], toolsForProvider: [], deferredTools: [] });
+});
+
+it("holds an uncertain native execution without creating a writer retry or losing prior evidence", async () => {
+  db.item = { activities: [] };
+  db.findTaskRun.mockResolvedValue({ ...reviewTaskIdentity, status: "working", progressPayload: { originalEvidence: "retained" }, updatedAt: new Date() });
+  autonomous.execute.mockResolvedValue({ ...liveCliLoopResult(), failure: {
+    kind: "execution-uncertain", message: "Existing execution needs reconciliation.",
+    executionUncertainty: { schemaVersion: 1, kind: "execution-uncertain", settlement: "unknown", providerId: "anthropic-sub",
+      rawOutput: "fake-private-output-that-must-not-persist" },
+  } });
+  const outcome = await run();
+  expect(outcome).toMatchObject({ kind: "result", result: { taskRunId: TASK_RUN_ID,
+    status: "input-required", resumable: false, requiresApproval: false, waitReason: "execution-uncertain",
+    structuredContent: { error: "execution_uncertain", executionUncertainty: { settlement: "unknown", providerId: "anthropic-sub" } } } });
+  expect(settledData()).toMatchObject({ status: "input-required", completedAt: null,
+    progressPayload: { originalEvidence: "retained", executionUncertainty: {
+      settlement: "unknown", providerId: "anthropic-sub", observedAt: expect.any(String) } } });
+  expect(settledData()?.progressPayload).not.toHaveProperty("terminalWriterWait");
+  expect(JSON.stringify(settledData())).not.toContain("fake-private-output");
+  expect(autonomous.execute).toHaveBeenCalledTimes(1);
+});
+
+it("refuses a queued attempt whose admitted generation already contains uncertainty", async () => {
+  db.item = { activities: [] };
+  db.findTaskRun.mockResolvedValue({ ...reviewTaskIdentity, status: "working", progressPayload: {
+    executionUncertainty: { schemaVersion: 1, settlement: "unknown" },
+  }, updatedAt: new Date() });
+  autonomous.execute.mockResolvedValue(liveCliLoopResult());
+  expect(await run()).toMatchObject({ result: { status: "working", resumable: false, waitReason: "execution-uncertain",
+    progressPayload: { executionUncertainty: { settlement: "unknown" } } } });
+  expect(autonomous.execute).not.toHaveBeenCalled();
+  expect(db.updateTaskRun).not.toHaveBeenCalled();
+});
+
+it("retains admitted read-risk progress when the native execution becomes uncertain", async () => {
+  db.item = { activities: [] };
+  db.findTaskRun.mockResolvedValue({ ...reviewTaskIdentity, status: "working", progressPayload: { originalEvidence: "read-checkpoint" } });
+  autonomous.execute.mockResolvedValue({ ...liveCliLoopResult(), failure: { kind: "execution-uncertain", message: "Unknown effects." } });
+  await executeRemoteTaskAttempt({ run: { id: "run-internal", taskRunId: TASK_RUN_ID, contextId: "thread-1" },
+    threadId: "thread-1", token: { tokenId: "PAT", userId: "user-1", capability: "write", source: "pat" },
+    userContext: { platformRole: "developer", isSuperuser: false } as never,
+    parsed: { ...parsed, riskClass: "read" }, idempotentReplay: false, capacityAttempt: 1 });
+  expect(settledData()?.progressPayload).toMatchObject({ originalEvidence: "read-checkpoint",
+    executionUncertainty: { settlement: "unknown" } });
+});
+
+it("does not overwrite cancellation when parking a queued uncertain execution", async () => {
+  db.item = { activities: [] };
+  const progressPayload = { executionUncertainty: { schemaVersion: 1, settlement: "unknown" } };
+  db.findTaskRun.mockResolvedValueOnce({ ...reviewTaskIdentity, status: "working", progressPayload })
+    .mockResolvedValue({ ...reviewTaskIdentity, status: "canceled", progressPayload });
+  db.updateTaskRun.mockResolvedValue({ count: 0 });
+  expect(await run()).toMatchObject({ result: { status: "canceled", resumable: false } });
+  expect(autonomous.execute).not.toHaveBeenCalled();
 });
 
 describe("BI-2E479619 executor recognises a natively executed terminal writer", () => {

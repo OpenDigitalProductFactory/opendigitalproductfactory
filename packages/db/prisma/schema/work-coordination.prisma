@@ -123,6 +123,7 @@ enum BacklogTriageAssessmentOutcome {
 }
 
 model BacklogItem {
+  investmentAttempts      AdapterRunTelemetry[] @relation("InvestmentAttemptItem")
   id                      String                        @id @default(cuid())
   itemId                  String                        @unique
   title                   String

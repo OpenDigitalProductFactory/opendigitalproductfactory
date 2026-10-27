@@ -84,6 +84,14 @@ describe("coworker pack — registration", () => {
     expect(approvalStatus.read).toHaveBeenCalledWith("e1", "u1", "a1");
     expect(result.success).toBe(true);
   });
+  it("keeps original action evidence separate from the envelope state", async () => {
+    const outcome = { state: "executed", label: "Authorized and completed", nextAction: "Continue",
+      actionEvidence: { state: "missing", reason: "execution-missing" } };
+    approvalStatus.read.mockResolvedValue(outcome);
+    const result = await coworkerPack.handlers.get_my_approval_status({ envelopeId: "e1" }, "u1", { agentId: "a1" });
+    expect(result.data).toEqual(outcome);
+    expect(approvalStatus.list).not.toHaveBeenCalled();
+  });
   it("discloses review requests to evidence authors without granting general summons or review receipts", () => {
     const grants = ["initiative_evidence_write"];
     expect(isToolAllowedByGrants("request_coworker", grants)).toBe(true);
@@ -173,6 +181,13 @@ describe("coworker pack — handler behavior (delegation preserved)", () => {
     await coworkerPack.handlers.request_coworker({ targetAgent: "reviewer", objective: "review" }, "u1", { threadId: "portal" });
     expect(external.dispatch).toHaveBeenCalledOnce();
     expect(collab.requestCoworker).not.toHaveBeenCalled();
+  });
+  it("passes a review-request notice to the author with the dispatched task (BI-4592CF69)", async () => {
+    authority.authorize.mockResolvedValue({ bounded: true, notice: "This design is 70,000 characters." });
+    external.dispatch.mockResolvedValue({ success: true, message: "Task submitted.", data: { taskRunId: "TR-1" } });
+    const result = await coworkerPack.handlers.request_coworker({ targetAgent: "reviewer", objective: "review" }, "u1", {});
+    expect(result).toMatchObject({ success: true, message: "Task submitted. This design is 70,000 characters.",
+      data: { taskRunId: "TR-1", reviewDocumentNotice: "This design is 70,000 characters." } });
   });
   it("returns the authority refusal without dispatching on either surface", async () => {
     const refusal = { success: false, error: "independent_review_request_denied", message: "Not admitted" };

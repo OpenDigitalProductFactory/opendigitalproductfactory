@@ -12,13 +12,12 @@ import {
   type RuntimeVerificationInput,
   type RuntimeVerificationKind,
   type RuntimeVerificationStatus,
+  type RuntimeCoordinationActor,
 } from "./types";
+import { SMALL_ACCEPTANCE_KEY, createSmallAcceptanceBinding, readSmallAcceptanceBinding, sameSmallAcceptanceContext, type SmallAcceptanceContext } from "./small-acceptance-binding";
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 
-export type RuntimeCoordinationActor = {
-  userId?: string | null;
-  agentId?: string | null;
-  principalId?: string | null;
-};
+export type { RuntimeCoordinationActor } from "./types";
 
 export type RuntimeCoordinationDb = {
   runtimeTarget: {
@@ -29,6 +28,7 @@ export type RuntimeCoordinationDb = {
   };
   runtimeVerification: {
     create(args: unknown): Promise<any>;
+    findUnique?(args: unknown): Promise<Record<string, unknown> | null>;
   };
   buildActivity?: {
     create(args: unknown): Promise<any>;
@@ -36,7 +36,7 @@ export type RuntimeCoordinationDb = {
   workroomActivity?: {
     create(args: unknown): Promise<any>;
   };
-  $transaction?<T>(fn: (tx: RuntimeCoordinationDb) => Promise<T>): Promise<T>;
+  $transaction?<T>(fn: (tx: RuntimeCoordinationDb) => Promise<T>, options?: { isolationLevel: "Serializable"; timeout: number }): Promise<T>;
 };
 
 const TARGET_KIND_SET = new Set<string>(RUNTIME_TARGET_KINDS);
@@ -364,6 +364,7 @@ function primaryAttachPointCount(input: RuntimeVerificationInput): number {
 }
 
 function validateVerificationInput(input: RuntimeVerificationInput) {
+  if (input.result && Object.hasOwn(input.result, SMALL_ACCEPTANCE_KEY)) throw new Error("Small acceptance result namespace is reserved to the server.");
   if (!input.verificationId?.trim()) throw new Error("verificationId is required");
   if (!isRuntimeVerificationKind(input.kind)) throw new Error("Invalid runtime verification kind");
   if (!isRuntimeVerificationStatus(input.status)) throw new Error("Invalid runtime verification status");
@@ -376,9 +377,53 @@ export async function recordRuntimeVerification(args: {
   db: RuntimeCoordinationDb;
   input: RuntimeVerificationInput;
   actor?: RuntimeCoordinationActor;
+  smallAcceptance?: {
+    load(args: { db: RuntimeCoordinationDb; workCapsuleId: string; closureId: string; lock?: boolean }): Promise<SmallAcceptanceContext>;
+    refresh(db: RuntimeCoordinationDb, itemId: string): Promise<void>;
+  };
 }) {
   validateVerificationInput(args.input);
-  return inTransaction(args.db, async (tx) => {
+  const smallCheck = args.input.kind === "final-acceptance" && !!args.input.backlogActivityId;
+  if (smallCheck && [args.input.runtimeTargetId, args.input.featureBuildId, args.input.gitPromotionCandidateId, args.input.buildId].some(Boolean)) {
+    throw new Error("Bound Small acceptance requires a Workroom-only attach point.");
+  }
+  if (smallCheck && (!args.db.$transaction || !args.input.workCapsuleId
+    || !["passed", "failed"].includes(args.input.status))) throw new Error("Bound Small acceptance requires a transaction, Workroom and terminal check.");
+  if (smallCheck && !args.smallAcceptance) throw new Error("Authoritative Small acceptance service is unavailable.");
+  let boundItemId: string | null = null;
+  const record = async (tx: RuntimeCoordinationDb) => {
+    let result = args.input.result ?? {};
+    let bound: ReturnType<typeof createSmallAcceptanceBinding> | null = null;
+    const bindingService = args.smallAcceptance;
+    if (smallCheck) {
+      const context = await bindingService!.load({ db: tx,
+        workCapsuleId: args.input.workCapsuleId!, closureId: args.input.backlogActivityId!, lock: true });
+      if (!tx.runtimeVerification.findUnique) throw new Error("Acceptance identity lookup is unavailable.");
+      const existing = await tx.runtimeVerification.findUnique({ where: { verificationId: args.input.verificationId } });
+      const oldResult = existing?.result && typeof existing.result === "object" ? existing.result as Record<string, unknown> : {};
+      const oldBinding = readSmallAcceptanceBinding(oldResult[SMALL_ACCEPTANCE_KEY]);
+      if (existing && !oldBinding) throw new Error("Verification identity already records a different immutable check.");
+      // Exact recovery compares the original recording time. Only a new check
+      // owes freshness now; this never renews its deployment or closure binding.
+      bound = createSmallAcceptanceBinding({ context, input: args.input, actor: args.actor ?? {},
+        now: oldBinding ? new Date(oldBinding.recordedAt) : new Date() });
+      boundItemId = context.itemId;
+      result = { ...result, [SMALL_ACCEPTANCE_KEY]: bound };
+      if (existing) {
+        const dateValue = (value: unknown) => value instanceof Date ? value.toISOString() : value ?? null;
+        if (existing.kind !== args.input.kind || existing.status !== args.input.status
+          || existing.workCapsuleId !== args.input.workCapsuleId || existing.backlogActivityId !== args.input.backlogActivityId
+          || ["command", "url", "evidenceUrl", "screenshotUrl", "toolExecutionId", "runtimeTargetId", "featureBuildId",
+            "gitPromotionCandidateId", "buildActivityId", "capsuleActivityId"].some(key =>
+            existing[key] !== (args.input[key as keyof RuntimeVerificationInput] ?? null))
+          || dateValue(existing.startedAt) !== dateValue(args.input.startedAt)
+          || dateValue(existing.completedAt) !== dateValue(args.input.completedAt)
+          || canonicalJson(oldResult) !== canonicalJson(result)) {
+          throw new Error("Verification identity already records a different immutable check.");
+        }
+        return existing;
+      }
+    }
     let buildActivityId = args.input.buildActivityId ?? null;
     if (!buildActivityId && args.input.buildId && tx.buildActivity) {
       const activity = await tx.buildActivity.create({
@@ -410,7 +455,8 @@ export async function recordRuntimeVerification(args: {
         capsuleActivityId: args.input.capsuleActivityId ?? null,
         startedAt: args.input.startedAt ?? null,
         completedAt: args.input.completedAt ?? null,
-        result: args.input.result ?? {},
+        result,
+        ...(bound ? { createdAt: new Date(bound.recordedAt) } : {}),
       },
     });
 
@@ -434,8 +480,19 @@ export async function recordRuntimeVerification(args: {
       });
     }
 
+    if (bound && bindingService) {
+      const current = await bindingService.load({ db: tx,
+        workCapsuleId: args.input.workCapsuleId!, closureId: args.input.backlogActivityId! });
+      if (!sameSmallAcceptanceContext(bound, current)) throw new Error("Deployment changed during runtime acceptance.");
+    }
     return verification;
-  });
+  };
+  const verification = await (smallCheck ? args.db.$transaction!(record, { isolationLevel: "Serializable", timeout: 30_000 }) : inTransaction(args.db, record));
+  if (boundItemId) {
+    // An interrupted projection leaves the immutable verification intact; same-id retry refreshes it.
+    await args.smallAcceptance!.refresh(args.db, boundItemId);
+  }
+  return verification;
 }
 
 export { RUNTIME_TARGET_KINDS, RUNTIME_TARGET_STATUSES, RUNTIME_VERIFICATION_KINDS, RUNTIME_VERIFICATION_STATUSES };

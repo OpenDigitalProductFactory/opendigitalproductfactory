@@ -109,7 +109,11 @@ test("rejects altered envelope bytes before interpreting them", () => {
   assert.throws(() => verifyOfflineRecoveryAuthority(f.args), /offline_recovery_signature/);
 });
 test("rejects duplicate JSON keys despite valid signatures", () => {
-  const f = fixture(); f.args.envelopeBytes = Buffer.from(f.args.envelopeBytes.toString().replace('{', '{"version":1,'));
+  const f = fixture();
+  const text = f.args.envelopeBytes.toString("utf8");
+  assert.equal(text[0], "{");
+  // Insert one extra root key; preserve every nested object and original byte.
+  f.args.envelopeBytes = Buffer.from('{"version":1,' + text.slice(1));
   f.args.envelopeSignatures = signBoth(f.args.envelopeBytes);
   assert.throws(() => verifyOfflineRecoveryAuthority(f.args), /offline_recovery_encoding/);
 });

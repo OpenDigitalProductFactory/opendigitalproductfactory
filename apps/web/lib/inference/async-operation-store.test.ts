@@ -116,6 +116,25 @@ function database(existing: ReturnType<typeof row> | null = null) {
 }
 
 describe("PrismaAsyncOperationStore", () => {
+  it.each([false, true])("rechecks admission on the actual transaction before create or replay: %s", async existing => {
+    const mocks = database(existing ? row() : null);
+    const beforeAdmission = vi.fn(async (tx) => { expect(tx).toBe(mocks.db); throw new Error("authority revoked"); });
+    const store = new PrismaAsyncOperationStore(mocks.db, { beforeAdmission });
+    await expect(store.createOrReplay(createInput)).rejects.toThrow("authority revoked");
+    expect(mocks.db.$transaction).toHaveBeenCalledOnce();
+    expect(mocks.op.findUnique).not.toHaveBeenCalled();
+    expect(mocks.op.create).not.toHaveBeenCalled();
+    expect(mocks.transitionCreate).not.toHaveBeenCalled();
+  });
+  it("rechecks authority again before returning a concurrent unique winner", async () => {
+    const mocks = database(row());
+    mocks.op.findUnique.mockResolvedValueOnce(null);
+    mocks.op.create.mockRejectedValueOnce({ code: "P2002" });
+    const beforeAdmission = vi.fn().mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error("authority revoked"));
+    await expect(new PrismaAsyncOperationStore(mocks.db, { beforeAdmission }).createOrReplay(createInput)).rejects.toThrow("authority revoked");
+    expect(beforeAdmission).toHaveBeenCalledTimes(2);
+    expect(mocks.db.$transaction).toHaveBeenCalledTimes(2);
+  });
   it("atomically creates identityVersion 1 and its initial outbox transition", async () => {
     const mocks = database();
     const store = new PrismaAsyncOperationStore(mocks.db);

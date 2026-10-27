@@ -6,6 +6,9 @@ import {
   fingerprintCoworkerApprovalBinding,
 } from "@/lib/govern/authority/coworker-authority-decision";
 import { approvalLifetimeMs } from "@/lib/coworker/approval-lifetime";
+import { TASK_EXECUTION_FENCE_AUDIT_KEY } from "./attention/coworker-envelope-decision";
+import { isBoundReviewTask, taskExecutionEligible } from "./shared/task-execution-fence";
+import { validBoundReviewTaskMetadata } from "./mcp-task-review-recovery";
 import type { ClassifyApprovalCall } from "@/lib/coworker/approval-classification";
 import {
   type ApprovalRecoveryDb,
@@ -192,6 +195,10 @@ export async function recoverStaleApprovedRemoteTask(
         || proposal.success
         || !objectRecord(proposal.parameters)
       ) return null;
+      if (isBoundReviewTask(run.a2aMetadata) && (!validBoundReviewTaskMetadata(run.a2aMetadata) || !taskExecutionEligible({ status: run.status,
+        progressPayload: run.progressPayload, requestDigest: storedRequestDigest(run),
+        executionFence: objectRecord(proposal.parameters)?.[TASK_EXECUTION_FENCE_AUDIT_KEY],
+        phase: "approval-renewal" }))) return null;
 
       const observedAt = now.toISOString();
       if (envelope.expiresAt.getTime() > now.getTime()) {

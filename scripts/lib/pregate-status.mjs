@@ -168,6 +168,11 @@ function describeFailure(state, metadata) {
     || state?.error
     || (metadataIsForThisRun ? metadata?.execution?.failedCommand : null);
   if (stated) return `gate record status ${status} — ${typeof stated === "string" ? stated : "see the gate record"}`;
+  // BI-C1121FFB: the wrapper stores the failing test on failureSummary even
+  // when failureReason, error, and failedCommand are empty. Quote that before
+  // admitting the record has no reason.
+  const namedFailure = quotedFailureSummary(state);
+  if (namedFailure) return `gate record status ${status} — ${namedFailure}`;
   if (!metadataIsForThisRun) {
     return `gate record status ${status} with NO recorded reason for THIS run — the metadata file on disk describes a previous run, so it is not evidence about this one. Stop this attempt and reconcile its durable task; do not treat missing evidence as a verdict on the diff.`;
   }
@@ -211,6 +216,13 @@ function describeFailure(state, metadata) {
  * lease at all) so this never reports a false mismatch on a record that simply
  * cannot answer.
  */
+function quotedFailureSummary(state) {
+  const summary = state?.failureSummary;
+  if (!summary || typeof summary !== "object") return "";
+  const named = summary.failedTests?.[0]?.text || summary.failedChecks?.[0]?.text;
+  return typeof named === "string" ? named.trim() : "";
+}
+
 function metadataDescribesAnotherRun(state, metadata) {
   if (state?.executionLane === "documentation") return true;
   const boundLease = String(state?.leaseId || "");

@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { BASH_COMMAND, BASH_OK, makeFakeBin, shellQuote, toBashPath } from "./promote-script-functional.test-support";
+import { BASH_COMMAND, BASH_OK, makeFakeBin, reassessmentCapabilityFixture, shellQuote, toBashPath } from "./promote-script-functional.test-support";
 
 const roots: string[] = [];
 afterEach(() => {
@@ -44,6 +44,19 @@ function fixture() {
 }
 
 describe.skipIf(!BASH_OK)("promoter fake Docker argv dispatch", () => {
+  it("keeps timed probes inside the companion fake Docker regardless of PATH", () => {
+    const { root } = fixture();
+    const report = reassessmentCapabilityFixture("a".repeat(40));
+    const result = spawnSync(BASH_COMMAND, ["-lc", `exec ${[toBashPath(join(root, "bin", "timeout")), "-k", "5", "60", "docker", "run", "/app/scripts/reassessment-capability-probe.mjs"].map(shellQuote).join(" ")}`], {
+      encoding: "utf8", env: { ...process.env, DPF_TEST_REASSESSMENT_REPORT: report, DOCKER_LOG: toBashPath(join(root, "docker.log")) },
+    });
+    expect(result.status, result.stderr).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual(JSON.parse(report));
+  });
+  it("refuses probe calls when no explicit fixture evidence was supplied", () => {
+    const { invoke } = fixture();
+    expect(invoke(["run", "/app/scripts/reassessment-capability-probe.mjs"], { DPF_TEST_REASSESSMENT_REPORT: "" }).status).toBe(78);
+  });
   it.each(["IdXXXX", "OsXXXX", "ArchitectureXXXX", "safeXXXX"])("copies assets to a spaced destination ending .%s", (suffix) => {
     const { root, invoke, content, checksum } = fixture();
     const destination = join(root, `destination with spaces.${suffix}`);

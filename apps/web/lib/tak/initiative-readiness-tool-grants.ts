@@ -293,8 +293,11 @@ export async function resolveInitiativeReviewerRecovery(input: {
   planArtifact?: InitiativeRecoveryCanonicalArtifact | null;
   expectedCurrentBaselineId?: string | null;
   eligibleEvidenceActivityIds?: readonly string[];
-  /** Server-owned history predicate; never a caller-supplied exclusion list. */
-  isPlanReviewExhausted?: (packet: ReturnType<typeof requestCoworkerPacket>) => Promise<boolean>;
+  /** Server-owned independent-review history predicate; the original name is retained for compatibility. */
+  isPlanReviewExhausted?: ((packet: ReturnType<typeof requestCoworkerPacket>) => Promise<boolean>) & {
+    /** Preserve an exact owned legacy task's identity before checking its budget. */
+    resolvePacket?: (packet: ReturnType<typeof requestCoworkerPacket>) => Promise<ReturnType<typeof requestCoworkerPacket>>;
+  };
   isReviewerEligible?: (agentId: string) => Promise<boolean>;
 }): Promise<InitiativeReviewerRecovery> {
   const requirements = [...input.decision.blockers, ...input.decision.unmet];
@@ -419,7 +422,8 @@ export async function resolveInitiativeReviewerRecovery(input: {
         continue;
       }
       const dispatch = input.dispatchContext;
-      const preparePacket = (targetAgentId: string) => requestCoworkerPacket({
+      const preparePacket = async (targetAgentId: string) => {
+        const packet = requestCoworkerPacket({
         decision: input.decision,
         gate: entry.gate,
         toolName: entry.route.toolName,
@@ -429,11 +433,20 @@ export async function resolveInitiativeReviewerRecovery(input: {
         artifact: bindable && artifact?.resolved ? artifact : null,
         expectedCurrentBaselineId: input.expectedCurrentBaselineId ?? null,
         eligibleEvidenceActivityIds,
-      });
-      let packet = preparePacket(candidate.agent.agentId);
-      if (entry.gate === "plan-review" && input.isPlanReviewExhausted) {
+        });
+        // Identity belongs to the target, never its position in a mutable roster.
+        // Plan packets already bind their target. Owned legacy tasks keep their
+        // recorded identity so refresh joins them without resetting the budget.
+        const scoped = input.isPlanReviewExhausted && ["design-spec", "spec-approval", "architecture-review"].includes(entry.gate)
+          ? { ...packet, requestKey: `${packet.requestKey}:reviewer:${createHash("sha256").update(targetAgentId).digest("hex")}` }
+          : packet;
+        return input.isPlanReviewExhausted?.resolvePacket
+          ? input.isPlanReviewExhausted.resolvePacket(scoped) : scoped;
+      };
+      let packet = await preparePacket(candidate.agent.agentId);
+      if (["design-spec", "spec-approval", "architecture-review", "plan-review"].includes(entry.gate) && input.isPlanReviewExhausted) {
         for (const next of candidates) {
-          const nextPacket = preparePacket(next.agent.agentId);
+          const nextPacket = await preparePacket(next.agent.agentId);
           if (await input.isPlanReviewExhausted(nextPacket)) { candidate = undefined; continue; }
           candidate = next;
           packet = nextPacket;
@@ -442,7 +455,7 @@ export async function resolveInitiativeReviewerRecovery(input: {
         if (!candidate) {
           escalations.push({ accountableRole: entry.role, toolName: entry.route.toolName,
             grant: entry.route.lane.grant, reason: "no-eligible-reviewer",
-            nextAction: "All currently eligible independent plan reviewers exhausted this exact packet. Select another eligible reviewer/provider through recorded authority; do not replay exhausted tasks or reset their attempts." });
+            nextAction: "All currently eligible independent reviewers exhausted this exact packet. Select another eligible reviewer/provider through recorded authority; do not replay exhausted tasks or reset their attempts." });
           continue;
         }
       }

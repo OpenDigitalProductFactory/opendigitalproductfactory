@@ -19,6 +19,7 @@
 
 import { createHash } from "crypto";
 import { evaluatePerspectiveGate } from "./evaluator";
+import type { DecisionDeclarations } from "@/lib/govern/authority/escalation-gate";
 import type { DecisionGateCaller } from "./evaluator";
 import { resolveProfileMaterialForOrg } from "./material";
 import type {
@@ -124,8 +125,15 @@ export async function evaluateOrgBusinessDecisionGate(input: {
    * recorded (BI-6DCF772F).
    */
   scoredOptions?: DecisionScoredOption[];
+  /**
+   * The calling coworker's own proposal (BI-AE416D75), recorded beside the
+   * kernel's pick so the trust ledger can measure the coworker. Omit when the
+   * coworker proposed nothing.
+   */
+  proposedOptionId?: string | null;
   domainClass: DecisionDomainClass;
   riskTier: DecisionRiskTier;
+  declarations?: DecisionDeclarations;
   /** Where the decision originated, e.g. "/coworker-business". Recorded on the ledger. */
   routeContext: string;
   phaseFrom?: string | null;
@@ -152,8 +160,10 @@ export async function evaluateOrgBusinessDecisionGate(input: {
     question: input.question,
     options: input.options,
     scoredOptions: input.scoredOptions,
+    proposedOptionId: input.proposedOptionId ?? null,
     domainClass: input.domainClass,
     riskTier: input.riskTier,
+    declarations: input.declarations,
     routeContext: input.routeContext,
     phaseFrom: input.phaseFrom,
     phaseTo: input.phaseTo,

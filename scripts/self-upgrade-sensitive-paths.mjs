@@ -3,6 +3,7 @@ import { pathToFileURL } from "node:url";
 const rule = (id, family, pattern) => Object.freeze({ id, family, pattern });
 
 export const SELF_UPGRADE_SENSITIVE_PATH_RULES = Object.freeze([
+  rule("maintenance-epoch-evidence", "promoterClosure", /^scripts\/(?:promoter-epoch-evidence|lib\/maintenance-epoch-receipt)\.mjs$/),
   rule("promoter-artifacts", "promoter", /^(?:Dockerfile\.promoter|scripts\/(?:promote\.|build-promoter|repair-promoter).*)/),
   rule("self-upgrade-runtime", "selfUpgrade", /^apps\/web\/(?:lib|app\/api\/ops)\/self-upgrade(?:\/|\.|$)/),
   rule("self-upgrade-queue-actions", "selfUpgrade", /^apps\/web\/(?:lib\/queue\/functions\/self-upgrade|lib\/actions\/(?:self-upgrade|promotions))/),

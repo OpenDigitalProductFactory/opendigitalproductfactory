@@ -27,14 +27,7 @@
 import { bindWorktreeToWorkroom } from "./lib/workroom-bind.mjs";
 import { gitTextOrNull } from "./lib/git.mjs";
 
-const DEFAULT_REPO = "OpenDigitalProductFactory/opendigitalproductfactory";
-
 const git = (cwd, args) => gitTextOrNull(["-C", cwd, ...args], { cwd: process.cwd(), timeout: 10_000 });
-
-function repoFullNameFrom(remoteUrl) {
-  const m = String(remoteUrl ?? "").match(/[:/]([^/:]+\/[^/]+?)(?:\.git)?$/);
-  return m ? m[1] : DEFAULT_REPO;
-}
 
 async function main() {
   const worktreePath = process.argv[2];
@@ -52,8 +45,7 @@ async function main() {
     branch,
     worktreePath,
     gitDir: git(worktreePath, ["rev-parse", "--path-format=absolute", "--git-dir"]),
-    repositoryFullName: repoFullNameFrom(git(worktreePath, ["config", "--get", "remote.origin.url"])),
-    headSha: git(worktreePath, ["rev-parse", "HEAD"]),
+    captureSourceIdentity: true,
   });
 
   if (result.status === "bound") {

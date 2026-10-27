@@ -1,0 +1,13 @@
+{
+  "version": "1",
+  "decidedOption": "existing-body-token",
+  "decisionInteractionId": "DI-38F5BEC97693",
+  "scope": {
+    "files": ["apps/web/components/ops/InvestmentBalance.tsx"]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["existing-body-token", "global-palette-change"],
+    "rationale": "BI-7F5481B3 corrects explanatory normal text on the existing secondary surface. Actual served light palette and canonical contrastRatio measured muted at 4.401148710322524 and existing body text at 15.528524746421933. WWMD recommended the existing body token with high confidence and no autonomy blockers. Existing route placement, layout, copy, actions and funding policy remain unchanged. The same body token keeps inactive-policy warnings, stale-editor alerts and unavailable-scope titles readable; the existing solid neutral badge pairs muted with surface1, whose contrast the branding suite verifies. Alert/status roles, handlers and labels remain unchanged. This is a source contrast correction; narrow viewport and light visual checks remain unrun because browser control refused them. Original route-fit decision DI-F49FE778CDEC remains applicable."
+  }
+}

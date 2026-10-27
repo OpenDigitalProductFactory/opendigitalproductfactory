@@ -24,6 +24,7 @@ import { parseAllowBuilds } from "../check-build-script-policy.mjs";
 import { resolveHostCommandInvocation } from "./host-command-invocation.mjs";
 import { isEntryModule } from "./entry-module.mjs";
 import { parseRepositoryPnpmVersion, resolvePinnedPnpmInvocation } from "./pinned-pnpm.mjs";
+import { beginManagedInstallProof, completeManagedInstallProof, hasManagedInstallProof } from "./bootstrap-managed-install-proof.mjs";
 
 export { resolvePinnedPnpmInvocation } from "./pinned-pnpm.mjs";
 
@@ -424,8 +425,11 @@ export function probeWorktreeReadiness(worktreePath, opts = {}) {
   // from a node_modules pnpm did not write. When THIS call just completed a
   // successful install, the missing record is the former, and failing on it made
   // the documented `--force` recovery unable to recover.
+  const packageManagerVersion = runner?.pinnedVersion ?? runner?.currentVersion ?? null;
+  const managedInstallProof = ignoredBuilds.indeterminate && ignoredBuilds.packages.length === 0
+    && hasManagedInstallProof(worktreePath, packageManagerVersion);
   const buildRecordOk = ignoredBuilds.ok
-    || (opts.buildRecordOptional === true && ignoredBuilds.indeterminate && ignoredBuilds.packages.length === 0);
+    || ((opts.buildRecordOptional === true || managedInstallProof) && ignoredBuilds.indeterminate && ignoredBuilds.packages.length === 0);
   const gateOk = depProbeOk && buildRecordOk && linkCheck.ok && missing.length === 0 && !installStale;
   return {
     status: classifyReadiness({ hasNodeModules, depProbeOk, gateOk }),
@@ -457,7 +461,8 @@ export function probeWorktreeReadiness(worktreePath, opts = {}) {
       depProbeOk,
       gateOk,
       installStale,
-      packageManagerVersion: runner?.pinnedVersion ?? runner?.currentVersion ?? null,
+      packageManagerVersion,
+      managedInstallProof: Boolean(managedInstallProof),
       ignoredBuilds: ignoredBuilds.packages,
       dependencyPolicyReviewKeys,
       staleWorkspaceLinks: linkCheck.stale,
@@ -586,6 +591,8 @@ export function bootstrapWorktreeDeps(worktreePath, opts = {}) {
   const pkgMgr = opts.packageManager ?? "pnpm";
   const execute = opts.execute ?? executeCommand;
   let installed = false;
+  let installProof = null;
+  let packageManagerVersion = null;
   try {
     // Gate the install on MEASURED READINESS, not on the bare existence of
     // node_modules (BI-705AE7E3). This function's own header says presence is
@@ -602,6 +609,19 @@ export function bootstrapWorktreeDeps(worktreePath, opts = {}) {
     // healthy sibling had 1133 entries and reported compile-ready.
     const before = probeWorktreeReadiness(worktreePath, opts);
     if (opts.force || before.status !== "compile-ready") {
+      // A junction or symlink is another tree. Running pnpm here either aborts
+      // with ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY (no TTY) or purges the
+      // target. Name that and do not install (BI-C61C8ADD, BI-7DD16424).
+      if (nodeModulesIsLinked(worktreePath, opts)) {
+        return {
+          status: "source-only",
+          reason: "node_modules_junction",
+          failure: {
+            phase: "install",
+            message: "node_modules is a symlink or junction into another tree. The install was not run, so a purge cannot empty the target. Remove the link, then run node scripts/lib/bootstrap-worktree-deps.mjs .",
+          },
+        };
+      }
       // Managed install via the shared store; --frozen-lockfile keeps it honest
       // to the worktree's lockfile (a worktree off main carries main's lockfile).
       //
@@ -619,6 +639,8 @@ export function bootstrapWorktreeDeps(worktreePath, opts = {}) {
         const { ok: _ok, ...failure } = runner.failure;
         return { status: "source-only", reason: "package_manager_probe_failed", failure: { phase: "version", ...failure } };
       }
+      packageManagerVersion = runner.pinnedVersion ?? runner.currentVersion;
+      installProof = beginManagedInstallProof(worktreePath, packageManagerVersion);
       const install = runner.run(managedInstallArgs(worktreePath, opts));
       if (!install.ok) {
         const { ok: _ok, ...failure } = install;
@@ -626,10 +648,16 @@ export function bootstrapWorktreeDeps(worktreePath, opts = {}) {
       }
       installed = true;
     }
-    // BI-5DF74F0D: after a successful install, a missing build record means pnpm
-    // linked nothing new — not that this node_modules is foreign. Forgiving it
-    // only on this path keeps the untouched-tree probe strict.
-    return probeWorktreeReadiness(worktreePath, installed ? { ...opts, buildRecordOptional: true } : opts);
+    // A missing pnpm build record is qualified only by a successful managed
+    // install. Preserve that qualification across calls while its inputs match.
+    const result = probeWorktreeReadiness(worktreePath, installed ? { ...opts, buildRecordOptional: true } : opts);
+    // Unsupported cache inputs keep the preexisting one-call install semantics.
+    // A captured identity that changes during installation still fails closed.
+    if (installed && result.status === "compile-ready" && installProof?.inputs
+      && !completeManagedInstallProof(installProof, worktreePath, packageManagerVersion)) {
+      return { ...result, status: "source-only", reason: "managed_install_proof_unverified", checks: { ...result.checks, gateOk: false } };
+    }
+    return result;
   } catch {
     return { status: "source-only", reason: "bootstrap_threw" };
   }

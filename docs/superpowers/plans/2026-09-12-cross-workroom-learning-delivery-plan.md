@@ -111,7 +111,75 @@ Verify keyboard/screen-reader, focus retention, 44px actions, narrow/mobile, lig
 
 Refactoring: unify status/recovery/learning projection and existing shared UI primitives. Rollback removes added presentation while leaving canonical evidence accessible.
 
+### October 16 operator disclosure continuation
+
+Continue the same operator-view deliverable, BI-9DC43E17 / WC-042C344C, after
+PR 6415's receipt-window repair. The older design-only WC-D3228FA3 is superseded;
+its branch, prototype and blocked history remain preserved. This is implementation
+detail for Phase 4, not another delivery plan or an acceptance waiver.
+
+The canonical Workroom read model already returns the composed source review
+profile, but the current Details view does not render it. Expose that existing
+authorized data through the existing Workroom detail route and shared primitives.
+Kernel comparison DI-400324AB0F36 recommends existing Details disclosures over a
+separate evidence route; its recommendation is advisory, not design approval.
+Reuse the existing operator prototype's Review requirements and Did the improvement
+help disclosures. Keep the outcome, current owner and safe next action in the
+compact lead; do not add another dashboard, tab row, writer or lifecycle store.
+
+First reproduce the missing disclosure and the 36px Overview/Details target.
+Resolve related tests before RED. The component must distinguish composed
+requirements from assessed evidence: a resolved source profile is not a passed
+review, applicability stays unknown, and not-exercised never becomes qualified.
+Show requirement outcomes, denominators and provenance with technical identities
+behind secondary disclosure. Unsupported, conflicting or absent profiles retain
+their explicit reason. Render supplied text safely rather than interpreting it
+as instructions or markup.
+
+For learning, consume an existing attributable assessment only when the canonical
+read contract supplies it. Where no assessment is supplied, state that no
+independent assessment is available; do not infer benefit from receipt counts,
+cycle closure, merge, replay or deployment. Do not invent an evaluator carrier
+to fill a panel. Keep the existing source confidence, partial/unavailable state
+and recovery freshness visible through their current projections.
+
+Consolidate profile presentation in one shared Workroom component rather than
+copying composition or qualification rules into the browser. Retain at least 20%
+of this slice for that shared refactoring and existing primitive convergence.
+Use theme tokens, 44px actions, labelled disclosure, keyboard activation and
+stable focus. Tests cover resolved, unsupported, conflicting and missing data,
+hostile text, no false pass/benefit and unchanged read-only action boundaries.
+While a snapshot refresh is pending, announce its busy state and refuse repeat
+activation without removing the focused keyboard target. Completion must not
+steal focus if the operator has moved to another action.
+Run affected Workroom component/read-model suites and both web typechecks, then
+the measured UX-fit guard, independent source review and protected CI/queue.
+
+After the sole coordinator's containing release and CAN-TEST, verify the actual
+receipt journey, requirements and assessment explanation, 375px layout, themes,
+keyboard/focus and empty/partial/stale/error/reconnect states. Full UX engagement
+CE-D5126472 remains governed by its existing capability remedy; no client note
+or source test replaces that result. PR 6415, this UI continuation and a generic
+allowed readiness projection do not alone satisfy full AC-09 or the parent.
+
 ## Phase 5 — domain assurance and standards
+
+### AC-09 known-offline refresh correction
+
+The live recovery.100 keyboard refresh failed with an RSC fetch error followed
+by a full document fallback to Chrome's offline error page. This is browser
+connectivity evidence, not a server error. Preserve that failed verification and
+the separate focus-only pass. Reuse the existing freshness control and transport:
+when the browser reports offline, retain the snapshot, announce the condition
+and refuse refresh activation. On reconnection announce a manual retry; do not
+refresh automatically or move focus. Recheck the hint at activation in case the
+offline event has not arrived. Keep snapshot age independent from connectivity.
+DI-376075678C78 selected this bounded option over custom transport and a global
+experimental framework flag. The hint does not establish server reachability,
+handle arbitrary server errors, or guarantee a connection will survive a request.
+Add regression evidence before source changes, preserve the seven existing tests,
+then verify offline Enter, reconnect/manual retry and focus on the containing
+canonical release. Full AC-09 still requires its other error and assistive cases.
 
 Use BI-3AA4A997's existing baseline map for `contract:domain-opportunity-window` and `flow:profile-to-observed-outcome`. Reconcile the current catalog and all source definitions; the earlier 107-leaf count is a dated snapshot. Every archetype receives common defaults and explicit extension/exclusion state. Do not claim all archetypes exercised from catalog coverage.
 

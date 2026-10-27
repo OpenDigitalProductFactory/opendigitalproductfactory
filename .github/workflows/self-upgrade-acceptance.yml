@@ -94,7 +94,7 @@ jobs:
       - name: Fast harness invariants
         run: |
           test "$(node -p "require('./promoter-contract.json').readinessProtocolFloorSha")" = "$DPF_PROMOTER_READINESS_PROTOCOL_FLOOR_SHA"
-          node --test scripts/self-upgrade-sensitive-paths.test.mjs scripts/test-n-minus-one-upgrade.test.mjs
+          node --test scripts/self-upgrade-sensitive-paths.test.mjs scripts/test-n-minus-one-upgrade.test.mjs scripts/promote-source-identity.test.mjs
       - name: Build candidate promoter with immutable contract identity
         run: |
           contract_digest="sha256:$(sha256sum promoter-contract.json | cut -d' ' -f1)"
@@ -106,6 +106,14 @@ jobs:
           image_digest="$(docker image inspect "$image" --format '{{.Id}}')"
           test "$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$GITHUB_SHA"
           test "$(docker image inspect "$image" --format '{{index .Config.Labels "org.opendpf.promoter.contract-digest"}}')" = "$contract_digest"
+          # The artifact must read materialized source with the same LFS
+          # filters as the portal, independent of caller/global Git config.
+          docker run --rm --read-only --network none --entrypoint sh "$image" -ec '
+            git lfs version
+            test "$(git config --system --get filter.lfs.process)" = "git-lfs filter-process"
+            test "$(git config --system --get filter.lfs.required)" = "true"
+          '
+          DPF_PROMOTE_IDENTITY_TEST_IMAGE="$image" node --test scripts/promote-source-identity.test.mjs
           mkdir -p "$DPF_N1_EVIDENCE" "$RUNNER_TEMP/dpf-state" "$RUNNER_TEMP/dpf-backups"
           printf '%s\n' "{\"candidateSha\":\"${GITHUB_SHA}\",\"candidateDigest\":\"${image_digest}\",\"contractDigest\":\"${contract_digest}\"}" > "$DPF_N1_EVIDENCE/artifact.json"
           echo "DPF_ACCEPTANCE_IMAGE=$image" >> "$GITHUB_ENV"

@@ -341,8 +341,20 @@ model DeviceCodeSession {
   createdAt  DateTime @default(now())
   createdBy  String
   consumed   Boolean  @default(false)
+  /// Which credential slot the released token is stored in (BI-985F4EC9).
+  /// Recorded at initiation so poll routes by the session, never by the caller.
+  /// NULL = a session minted before this column: hive contribution.
+  purpose    GitHubDeviceFlowPurpose?
 
   @@index([expiresAt])
+}
+
+/// Purpose of a GitHub device-flow login (BI-985F4EC9). Each value names one
+/// CredentialEntry slot: hive-contribution, or github-repository-controller for
+/// the install's managed repositories.
+enum GitHubDeviceFlowPurpose {
+  hive_contribution     @map("hive-contribution")
+  repository_controller @map("repository-controller")
 }
 
 model CommunicationChannelBinding {

@@ -5,6 +5,7 @@ import {
   type DecisionInteractionGateView,
   type DecisionOutcomeType,
 } from "./types";
+import type { HumanEscalationRow } from "./human-escalation";
 
 export const DECISION_INTERACTION_GATE_SELECT = {
   interactionId: true,
@@ -12,6 +13,9 @@ export const DECISION_INTERACTION_GATE_SELECT = {
   profileVersionId: true,
   domainClass: true,
   outcomeType: true,
+  escalationRoute: true,
+  escalationReason: true,
+  escalationFollowOn: true,
   confidenceBefore: true,
   confidenceAfter: true,
   principleConflict: true,
@@ -29,7 +33,9 @@ export const DECISION_INTERACTION_GATE_SELECT = {
   deferralCapture: { select: { id: true } },
 } as const;
 
-export type DecisionInteractionGateRow = {
+export type DecisionInteractionGateRow = HumanEscalationRow & {
+  escalationReason?: string | null;
+  escalationFollowOn?: string | null;
   interactionId: string;
   profileId: string;
   profileVersionId: string;
@@ -137,6 +143,11 @@ export function decisionInteractionRowToGateView(
     profileVersionId: row.profileVersionId,
     domainClass: normalizeDomainClass(row.domainClass ?? outcomePayload.domainClass),
     outcomeType: normalizeOutcomeType(row.outcomeType),
+    ...(row.escalationRoute != null ? {
+      escalationRoute: row.escalationRoute,
+      escalationReason: row.escalationReason ?? null,
+      escalationFollowOn: row.escalationFollowOn ?? null,
+    } : {}),
     confidenceBefore,
     confidenceAfter,
     confidenceScore,

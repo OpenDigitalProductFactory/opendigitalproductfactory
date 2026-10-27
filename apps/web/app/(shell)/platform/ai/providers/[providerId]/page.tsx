@@ -344,19 +344,23 @@ export default async function ProviderDetailPage({ params, searchParams }: Props
           )}
           {additionalAccount ? <div className="my-3 space-y-2">
             <ProviderAccountConnectionForm key={additionalAccount.connectionId} account={additionalAccount} canWrite={canWrite} copy={copy} />
-            <ProviderDetailSections sections={[{ key: "models", title: copy.models, content: <>
+            <ProviderDetailSections sections={[{ key: "models", title: copy.modelsExecution, content: <>
               <p className="text-xs text-[var(--dpf-muted)]">{copy.accountAccessHint}</p>
               {additionalAccount.modelsVerifiedAt ? <ModelSection providerId={providerId}
                 models={models.filter(model => accessibleModelIds.has(model.modelId))}
                 profiles={profiles.filter(profile => accessibleModelIds.has(profile.modelId))}
                 routingProfiles={routingProfiles.filter((profile: { modelId: string }) => accessibleModelIds.has(profile.modelId))} canWrite={false} hasActiveProvider={hasActiveProvider}
                 latestDiscovery={new Date(additionalAccount.modelsVerifiedAt)} /> : <p>{copy.notVerified}</p>}
+              <Suspense fallback={<Notice>{copy.loadingRecipes}</Notice>}>
+                <ProviderExecutionRecipes providerId={providerId} additional copy={copy} />
+              </Suspense>
             </> }, { key: "settings", title: copy.providerSettings, content: <>
               <p className="text-xs text-[var(--dpf-muted)]">{copy.providerSettingsHint}</p>
               <Link href={`/platform/ai/providers/${encodeURIComponent(providerId)}`} className="inline-block py-2 text-sm text-[var(--dpf-accent)]">{copy.providerSettings}</Link>
             </> }]} />
           </div> : <div style={{ background: "var(--dpf-surface-1)", border: "1px solid var(--dpf-border)", borderRadius: 8, padding: 12 }}>
-            <ProviderDetailForm key={`provider-default-${providerId}`} pw={pw} canWrite={canWrite} models={models} profiles={profiles} hasActiveProvider={hasActiveProvider} routingProfiles={routingProfiles} defaultConnectionId={providerId === "chatgpt" ? selectedConnectionId : undefined} />
+            <ProviderDetailForm key={`provider-default-${providerId}`} pw={pw} canWrite={canWrite} models={models} profiles={profiles} hasActiveProvider={hasActiveProvider} routingProfiles={routingProfiles} defaultConnectionId={providerId === "chatgpt" ? selectedConnectionId : undefined}
+              executionRecipes={<Suspense fallback={<Notice>{copy.loadingRecipes}</Notice>}><ProviderExecutionRecipes providerId={providerId} copy={copy} /></Suspense>} />
           </div>}
           <Suspense fallback={<Notice>{copy.loadingUsage}</Notice>}>
             <ProviderUsageDetails provider={pw.provider} additional={Boolean(additionalAccount)} now={now} copy={copy} />
@@ -366,7 +370,8 @@ export default async function ProviderDetailPage({ params, searchParams }: Props
         <>
           <ProviderDetailSections sections={[{ key: "settings", title: copy.providerSettings, content:
             <ProviderDetailForm key={`provider-default-${providerId}`} pw={pw} canWrite={canWrite}
-              models={models} profiles={profiles} hasActiveProvider={hasActiveProvider} routingProfiles={routingProfiles} />,
+              models={models} profiles={profiles} hasActiveProvider={hasActiveProvider} routingProfiles={routingProfiles}
+              executionRecipes={<Suspense fallback={<Notice>{copy.loadingRecipes}</Notice>}><ProviderExecutionRecipes providerId={providerId} copy={copy} /></Suspense>} />,
           }]} />
           <Suspense fallback={<Notice>{copy.loadingUsage}</Notice>}>
             <ProviderUsageDetails provider={pw.provider} additional={false} now={now} copy={copy} />
@@ -381,16 +386,26 @@ export default async function ProviderDetailPage({ params, searchParams }: Props
   );
 }
 
+async function ProviderExecutionRecipes({ providerId, additional = false, copy }: {
+  providerId: string; additional?: boolean; copy: Record<string, string>;
+}) {
+  try {
+    const recipes = await getRecipesForProvider(providerId);
+    if (recipes.length === 0) return null;
+    return <>{additional && <p className="text-xs text-[var(--dpf-muted)]">{copy.sharedRecipes}</p>}<RecipePanel recipes={recipes} /></>;
+  } catch { return <Notice variant="warn">{copy.recipesUnavailable}</Notice>; }
+}
+
 async function ProviderUsageDetails({ provider, additional, now, copy }: {
   provider: import("@/lib/ai-provider-types").ProviderRow; additional: boolean; now: Date; copy: Record<string, string>;
 }) {
   try {
-    const [finance, spend, recipes] = await Promise.all([getAiProviderFinanceDetail(provider.providerId),
-      getTokenSpendByProvider({ year: now.getUTCFullYear(), month: now.getUTCMonth() + 1 }), getRecipesForProvider(provider.providerId)]);
+    const [finance, spend] = await Promise.all([getAiProviderFinanceDetail(provider.providerId),
+      getTokenSpendByProvider({ year: now.getUTCFullYear(), month: now.getUTCMonth() + 1 })]);
     const costView = buildProviderCostView({ provider, financeProfile: finance, internalUsage: spend.find(row => row.providerId === provider.providerId) ?? null });
     return <div className="mt-3"><ProviderDetailSections sections={[{ key: "usage", title: copy.usage, content: <>
       {additional && <p className="text-xs text-[var(--dpf-muted)]">{copy.sharedUsage}</p>}
-      <ProviderCostSourcePanel view={costView} /><AiProviderFinancePanel detail={finance} /><RecipePanel recipes={recipes} />
+      <ProviderCostSourcePanel view={costView} /><AiProviderFinancePanel detail={finance} />
     </> }]} /></div>;
   } catch { return <Notice variant="warn">{copy.usageUnavailable}</Notice>; }
 }

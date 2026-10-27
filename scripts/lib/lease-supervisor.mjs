@@ -98,6 +98,7 @@ export async function superviseLeaseRun({
   renew,
   terminate,
   release,
+  observeReservation,
   schedule = (callback, intervalMs) => setInterval(callback, intervalMs),
   cancelSchedule = (timer) => clearInterval(timer),
   scheduleDeadline = (callback, delayMs) => setTimeout(callback, delayMs),
@@ -110,6 +111,8 @@ export async function superviseLeaseRun({
 }) {
   const startedAt = new Date().toISOString();
   let fencedReason = "";
+  let finalizing = false;
+  let authorityClosed = false;
   let heartbeatInFlight = null;
   let deadlineInFlight = null;
   let deadlineTimer = null;
@@ -120,7 +123,7 @@ export async function superviseLeaseRun({
   onEvent({ type: "started", at: startedAt });
 
   const fence = async (reason, eventType, detail = {}) => {
-    if (fencedReason) return;
+    if (fencedReason || (finalizing && (observeReservation || authorityClosed))) return;
     fencedReason = reason;
     onEvent({
       type: eventType,
@@ -140,6 +143,7 @@ export async function superviseLeaseRun({
   };
 
   const armAuthorityDeadline = () => {
+    if (finalizing) return;
     if (deadlineTimer !== null) cancelDeadline(deadlineTimer);
     const delayMs = Math.max(0, knownExpiryMs - safetyMarginMs - now());
     deadlineTimer = scheduleDeadline(() => {
@@ -161,7 +165,7 @@ export async function superviseLeaseRun({
   };
 
   const scheduleUncertainRetry = () => {
-    if (fencedReason) return;
+    if (finalizing || fencedReason) return;
     cancelRetryTimer();
     const delayMs = uncertainRetryDelayMs(ttlMs, uncertainStreak);
     onEvent({
@@ -177,12 +181,13 @@ export async function superviseLeaseRun({
   };
 
   const heartbeat = async () => {
-    if (fencedReason || heartbeatInFlight) return heartbeatInFlight;
+    if (finalizing || fencedReason || heartbeatInFlight) return heartbeatInFlight;
     heartbeatInFlight = (async () => {
       let response;
       try {
         response = await renew();
       } catch (error) {
+        if (finalizing) return;
         // Unreachable, not lost. Retry soon instead of surrendering a third of
         // the authority budget to a transport hiccup (BI-ECAE03F7).
         uncertainStreak += 1;
@@ -194,6 +199,14 @@ export async function superviseLeaseRun({
           attempt: uncertainStreak,
         });
         scheduleUncertainRetry();
+        return;
+      }
+      if (finalizing) {
+        // Legacy qualifiers still consume authority loss until their outstanding
+        // renewal settles. Host observation closes command authority immediately.
+        if (!observeReservation && isAuthoritativeRefusal(response)) {
+          await fence(response?.error || "lease-renewal-failed", "heartbeat-lost");
+        }
         return;
       }
       if (response?.success === true) {
@@ -236,25 +249,45 @@ export async function superviseLeaseRun({
   };
 
   const timer = schedule(heartbeat, heartbeatIntervalMs(ttlMs));
+  let result;
   try {
-    const result = await run();
-    if (fencedReason) return { status: "fenced", reason: fencedReason, result };
-    return { status: "completed", result };
+    result = await run();
   } finally {
-    // finally runs once per superviseLeaseRun call — release is always owned here
-    // (idempotent release is the caller's responsibility if they wrap again).
+    // Finalization runs once after supervision. Host callers may observe natural
+    // expiry instead of requesting release; other callers retain their release path.
+    // A renewal already on the wire may finish, but cannot restart supervision.
+    finalizing = true;
     cancelSchedule(timer);
     cancelRetryTimer();
-    if (deadlineTimer !== null) cancelDeadline(deadlineTimer);
+    // Keep a legacy qualifier's existing deadline through its final renewal;
+    // this is authority evidence, not permission to restart supervision.
+    if (observeReservation && deadlineTimer !== null) cancelDeadline(deadlineTimer);
     if (heartbeatInFlight) await heartbeatInFlight;
     if (deadlineInFlight) await deadlineInFlight;
+    authorityClosed = true;
+    cancelRetryTimer();
+    if (deadlineTimer !== null) cancelDeadline(deadlineTimer);
+    deadlineTimer = null;
     // A failed release must not take the run's verdict with it: the evidence is
     // recorded after this, and an unreleased lease still accepts it.
-    try {
-      await release();
-      onEvent({ type: "released", at: new Date().toISOString() });
-    } catch (error) {
-      onEvent({ type: "release-failed", at: new Date().toISOString(), reason: error?.message || String(error) });
+    if (observeReservation) {
+      try {
+        const observation = await observeReservation();
+        onEvent({ type: "reservation-observed", at: new Date().toISOString(), observation });
+      } catch {
+        onEvent({ type: "reservation-observation-unavailable", at: new Date().toISOString() });
+      }
+    } else {
+      try {
+        await release();
+        onEvent({ type: "released", at: new Date().toISOString() });
+      } catch (error) {
+        onEvent({ type: "release-failed", at: new Date().toISOString(), reason: error?.message || String(error) });
+      }
     }
   }
+  // Classify only after final authority evidence has settled. A thrown command
+  // still propagates through finally rather than becoming a completed result.
+  if (fencedReason) return { status: "fenced", reason: fencedReason, result };
+  return { status: "completed", result };
 }

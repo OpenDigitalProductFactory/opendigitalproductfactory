@@ -153,10 +153,61 @@ function waitPayload(existing: unknown, wait: NonprodLeaseWaitProjection) {
       : wait.state === "capacity-available"
         ? `Capacity may be available for ${wait.environmentKey}; re-read this task and make one fresh claim.`
         : wait.state === "admitted"
-          ? `Lease ${wait.leaseId} was admitted after durable waiting.`
+          ? `Lease ${wait.leaseId} was admitted.`
           : `Lease ${wait.leaseId} reached a terminal state.`,
     nonprodLeaseWait: wait,
   };
+}
+
+function leaseWaitProjection(input: {
+  lease: WaitLease; waitDeadlineAt: Date; now: Date;
+  state: "waiting" | "admitted"; queuePosition: number | null;
+}): NonprodLeaseWaitProjection {
+  return {
+    schemaVersion: NONPROD_WAIT_SCHEMA_VERSION, kind: "nonprod-lease-wait",
+    state: input.state, leaseId: input.lease.leaseId, claimKey: input.lease.claimKey,
+    environmentKey: input.lease.environmentKey, ownerProvider: input.lease.ownerProvider,
+    ownerSessionId: input.lease.ownerSessionId, worktreePath: input.lease.worktreePath,
+    branchName: input.lease.branchName, queuePosition: input.queuePosition,
+    waitDeadlineAt: input.waitDeadlineAt.toISOString(), lastTransitionAt: input.now.toISOString(),
+    eventId: null, eventConsumed: input.state === "admitted",
+  };
+}
+
+/** Only the fresh admission transaction may establish immediate owner provenance.
+ * Never backfill an old active lease or overwrite a caller's existing Task. */
+export async function checkpointImmediateNonprodLeaseAdmission(input: {
+  db: Pick<DurableWaitDb, "nonProductionEnvironmentLease"> & {
+    taskRun: Pick<NonNullable<DurableWaitDb["taskRun"]>, "upsert">;
+  };
+  userId: string; lease: WaitLease; waitDeadlineAt: Date; now: Date;
+}): Promise<string> {
+  if (!input.userId.trim() || input.lease.taskRunId) throw new Error("nonprod_immediate_admission_identity_invalid");
+  const taskRunId = deterministicNonprodWaitTaskRunId(input.userId, input.lease.leaseId);
+  const wait = leaseWaitProjection({ ...input, state: "admitted", queuePosition: null });
+  const task = record(await input.db.taskRun.upsert({
+    where: { taskRunId },
+    create: {
+      taskRunId, userId: input.userId, title: `Admission to ${input.lease.environmentKey}`,
+      objective: `Retain authenticated ownership of lease ${input.lease.leaseId}.`,
+      source: "proactive", status: "completed", completedAt: input.now,
+      initiatingAgentId: input.lease.ownerProvider,
+      repeatedPatternKey: `nonprod-wait:${input.lease.leaseId}`,
+      a2aMetadata: { kind: "nonprod-lease-wait", leaseId: input.lease.leaseId, claimKey: input.lease.claimKey },
+      progressPayload: waitPayload(null, wait), lastHeartbeatAt: null,
+    },
+    update: {},
+  }));
+  const storedWait = parseNonprodLeaseWait(task?.["progressPayload"]);
+  if (!task || task["taskRunId"] !== taskRunId || task["userId"] !== input.userId
+    || !storedWait || Object.entries(wait).some(([key, value]) => storedWait[key as keyof NonprodLeaseWaitProjection] !== value)) {
+    throw new Error("nonprod_immediate_admission_provenance_conflict");
+  }
+  const linked = record(await input.db.nonProductionEnvironmentLease.updateMany({
+    where: { id: input.lease.id, status: "active", taskRunId: null }, data: { taskRunId },
+  }));
+  if (linked?.["count"] !== 1) throw new Error("nonprod_immediate_admission_link_conflict");
+  return taskRunId;
 }
 
 export async function checkpointNonprodLeaseWait(input: {
@@ -169,23 +220,7 @@ export async function checkpointNonprodLeaseWait(input: {
 }): Promise<{ taskRunId: string; wait: NonprodLeaseWaitProjection }> {
   const now = input.now ?? new Date();
   const taskRunId = deterministicNonprodWaitTaskRunId(input.userId, input.lease.leaseId);
-  const wait: NonprodLeaseWaitProjection = {
-    schemaVersion: NONPROD_WAIT_SCHEMA_VERSION,
-    kind: "nonprod-lease-wait",
-    state: "waiting",
-    leaseId: input.lease.leaseId,
-    claimKey: input.lease.claimKey,
-    environmentKey: input.lease.environmentKey,
-    ownerProvider: input.lease.ownerProvider,
-    ownerSessionId: input.lease.ownerSessionId,
-    worktreePath: input.lease.worktreePath,
-    branchName: input.lease.branchName,
-    queuePosition: input.queuePosition,
-    waitDeadlineAt: input.waitDeadlineAt.toISOString(),
-    lastTransitionAt: now.toISOString(),
-    eventId: null,
-    eventConsumed: false,
-  };
+  const wait = leaseWaitProjection({ ...input, now, state: "waiting" });
   await input.db.taskRun.upsert({
     where: { taskRunId },
     create: {

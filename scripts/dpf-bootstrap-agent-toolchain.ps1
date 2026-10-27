@@ -318,8 +318,12 @@ if node -e "require.resolve(\"tsx\")" >/dev/null 2>&1; then exec node --import t
 echo "issue-grok-credentials-client: no tsx runtime found in the portal image" >&2
 exit 127
 '@ -replace "`r`n", "`n"
-                $clientOut = & docker exec $portal sh -c $grokIssuer issuer 2>$grokErr
-                if ($LASTEXITCODE -eq 0) {
+                # Feed the script on stdin (sh -s), as the link step above does.
+                # Passed as a native `sh -c` argument it arrived truncated, the
+                # issuer never ran, docker exited 0 with no output, and
+                # write-client failed on empty input (BI-8D152751).
+                $clientOut = ($grokIssuer | & docker exec -i $portal sh -s 2>$grokErr)
+                if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace("$clientOut")) {
                     $clientOut | & node (Join-Path $RepoRoot "packages\dpf-skill-pack\scripts\refresh-grok-mcp-credential.mjs") write-client --config $GrokConfigPath
                     if ($LASTEXITCODE -eq 0) {
                         & node (Join-Path $RepoRoot "packages\dpf-skill-pack\scripts\refresh-grok-mcp-credential.mjs") refresh --mcp-url $McpEndpoint --config $GrokConfigPath
@@ -363,6 +367,11 @@ if ($LASTEXITCODE -ne 0) {
     Write-Fail2 "Plugin refresh failed; configuration planning stopped."
     exit $LASTEXITCODE
 }
+
+# One shared writer owns routine permissions, separate from plugin refresh.
+& $PluginUpdater -PermissionsOnly -ProjectRoot $RepoRoot -SkillPackPath (Join-Path $RepoRoot "packages\dpf-skill-pack") -DryRun:$DryRun
+if ($LASTEXITCODE -eq 2) { Write-Warn2 "Routine permissions unrun: use Python 3.11+ or an available tomli parser. Existing client setup continues." }
+elseif ($LASTEXITCODE -ne 0) { Write-Fail2 "Routine permission convergence failed."; exit $LASTEXITCODE }
 
 # --- Compute plan via Node bridge --------------------------------------------
 $BootstrapCli = Join-Path $RepoRoot "packages\dpf-bootstrap\src\agent-toolchain\cli\compute-plan.ts"

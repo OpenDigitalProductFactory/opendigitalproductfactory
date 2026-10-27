@@ -18,25 +18,25 @@ packages:
 # below, so the deployed service trees carry plain ranges. How to add one:
 # docs/architecture/dependency-reduction-routine.md.
 catalog:
-  "@axe-core/playwright": ^4.13.0
-  "@types/node": ^26.6.4
+  "@axe-core/playwright": ^4.14.0
+  "@types/node": ^26.6.5
   "@types/pg": ^8.23.1
-  "@vitest/coverage-v8": ^5.0.1
+  "@vitest/coverage-v8": ^5.0.4
   bcryptjs: ^3.0.3
-  dotenv: ^17.4.2
-  net-snmp: ^3.26.3
+  dotenv: ^18.0.5
+  net-snmp: ^3.29.2
   pg: ^8.23.1
   prom-client: ^15.1.3
   tsx: ^4.23.15
   typescript: ^6.0.3
-  undici: ^8.10.0
-  vite: ^8.2.0
-  vitest: ^5.0.1
+  undici: ^8.12.2
+  vite: ^8.3.5
+  vitest: ^5.0.4
   # yaml is the platform frontmatter parser (apps/web user guide and the
   # integration-test harness). One catalog range so the two declarations
   # cannot drift (plan 2026-09-08 S11).
   yaml: ^2.9.1
-  zod: ^4.6.5
+  zod: ^4.6.7
 overrides:
   # One React for the platform tree. apps/web declares ^19.2.8; the Prisma CLI's
   # studio-core would otherwise pull a second copy (19.3.0), a dual-package
@@ -46,6 +46,11 @@ overrides:
   # Move to 19.3 as its own change, with the web build and UX sweep as proof.
   react: 19.2.8
   react-dom: 19.2.8
+  # c12@3.3.4 (transitive) still declares dotenv ^17.3.1. The catalog is 18.
+  # dotenv 18 keeps config() and parse(); it removed preload and .env.vault,
+  # which this repo does not use. c12 only calls dotenv.parse(). The selector
+  # stays below 18 so the catalog: specifier on our own declarations is preserved.
+  'dotenv@<18': '^18.0.5'
   # brace-expansion <= 5.0.8: GHSA-mh99-v99m-4gvg / CVE-2026-14257, then
   # GHSA-rgw5-rvv9-x895 / CVE-2026-69152 (unbounded intermediate arrays,
   # bypassing the 5.0.8 mitigation — found on PR #3893's OSV scan). Floor
@@ -76,10 +81,17 @@ overrides:
   # leaks plaintext credentials (high, BI-6B317EFA). Optional transitive of prisma;
   # this workspace runs PostgreSQL, but the package is in the tree. Floor to 3.24.3.
   mysql2: '>=3.24.3'
-  # fast-uri >= 3.0.0 < 3.1.8: GHSA-hrr3-gc8f-f4qj / Dependabot #211 (medium).
-  # Percent-encoded host octets normalize to a different case than the raw host.
-  # ajv@8.20.0 resolved 3.1.7. Stay on the 3.x line; 4.x is a separate major.
-  'fast-uri@>=3.0.0 <3.1.8': '3.1.8'
+  # fast-uri >= 3.0.0 < 3.1.9: GHSA-hrr3-gc8f-f4qj / Dependabot #211 (medium),
+  # then GHSA-w74x-v6f9-j3xg / CVE-2026-110306 (#237), GHSA-xhq7-xmqj-769h /
+  # CVE-2026-110095 (#236), GHSA-wjr9-j795-jxcr / CVE-2026-110180 (#235), and
+  # GHSA-333x-w4r6-6crp / CVE-2026-110725 (#234). Percent-encoded scheme, host,
+  # and suffix-reference parsing. ajv resolved 3.1.8. Stay on the 3.x line.
+  'fast-uri@>=3.0.0 <3.1.9': '3.1.9'
+  # hono >= 4.12.4 < 4.13.11: GHSA-5r4p-p66f-jhc7 / CVE-2026-111757
+  # (Dependabot #231, medium). serveStatic decodes the request path a second
+  # time. inngest peers hono >=4.2.7 and resolved 4.13.7. 4.13.13 is the newest
+  # patched 4.13 release outside the one-day resolution-age floor.
+  'hono@<4.13.11': '4.13.13'
   # source-map-js >= 1.0.0 < 1.2.2: GHSA-68fv-2mgg-jv7q / CVE-2026-93749
   # (Dependabot #221, high). Indexed source-map section offsets can stall the
   # event loop. css-tree and @tailwindcss/node resolve 1.2.1. Patch floor.

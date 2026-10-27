@@ -1,4 +1,15 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+const restricted = vi.hoisted(() => ({ active: false, request: vi.fn(), fetch: vi.fn() }));
+const platform = vi.hoisted(() => ({ readFile: vi.fn(), spawnSync: vi.fn() }));
+vi.mock("node:fs", () => ({ default: { promises: { readFile: platform.readFile } } }));
+vi.mock("node:child_process", () => ({ spawnSync: platform.spawnSync }));
+vi.mock("../routing/reassessment-execution-scope", async load => ({
+  ...await load<typeof import("../routing/reassessment-execution-scope")>(),
+  currentReassessmentExecution: () => restricted.active ? { qualification: { finiteTokenProof: { apiRoot: "http://dmr.invalid" } } } : null,
+}));
+vi.mock("./reassessment-http-capture", () => ({ currentReassessmentHttpTransport: () => ({ fetchImpl: restricted.fetch, assertCurrent: async () => {} }),
+  captureReassessmentHttpRequest: restricted.request }));
+import { ReassessmentExecutionError } from "../routing/reassessment-execution-scope";
 
 import {
   assertLocalGpuFree,
@@ -13,6 +24,11 @@ import {
 } from "./host-gpu-admission";
 
 const NOW = 1_700_000_000_000;
+beforeEach(() => {
+  restricted.active = false; restricted.request.mockReset(); restricted.fetch.mockReset(); platform.spawnSync.mockReset();
+  platform.readFile.mockReset().mockRejectedValue(Object.assign(new Error("Snapshot absent"), { code: "ENOENT" }));
+});
+afterEach(() => vi.unstubAllEnvs());
 
 function snap(overrides: Partial<HostGpuSnapshot> = {}): HostGpuSnapshot {
   return {
@@ -159,6 +175,31 @@ describe("host GPU snapshot parsing", () => {
 });
 
 describe("assertLocalGpuFree", () => {
+  it("captures the exact capacity GET with its published snapshot and decision", async () => {
+    restricted.active = true;
+    let captured: unknown;
+    restricted.request.mockImplementation(async (input: { captureAdditional(response: Response): Promise<unknown> }) => {
+      const response = new Response("[]", { status: 200 }); captured = await input.captureAdditional(response.clone()); return response;
+    });
+    await expect(inspectLocalGpuAdmission({ nowMs: NOW, readSnapshot: async () => snap() })).resolves.toEqual({ defer: null, unloadIdle: false });
+    expect(restricted.request).toHaveBeenCalledWith(expect.objectContaining({ url: "http://dmr.invalid/engines/ps", method: "GET", operation: "configuration" }));
+    expect(captured).toMatchObject({ snapshot: snap(), decision: { defer: null, unloadIdle: false }, runners: [] });
+    expect(restricted.fetch).not.toHaveBeenCalled();
+  });
+  it("propagates a captured capacity refusal through the ordinary best-effort catch", async () => {
+    const refusal = new ReassessmentExecutionError("reassessment-capture-unavailable");
+    await expect(assertLocalGpuFree({ providerId: "local", inspectGpu: async () => { throw refusal; } })).rejects.toBe(refusal);
+    await expect(inspectLocalGpuAdmission({ nowMs: NOW, readSnapshot: async () => snap(),
+      listRunners: async () => { throw refusal; } })).rejects.toBe(refusal);
+  });
+  it("refuses automatic unload in a restricted composition while retaining capacity deferral", async () => {
+    restricted.active = true;
+    const unloadIdleRunners = vi.fn();
+    await expect(assertLocalGpuFree({ providerId: "local",
+      inspectGpu: async () => ({ defer: "host-gpu-busy", unloadIdle: true }), unloadIdleRunners,
+    })).rejects.toMatchObject({ reason: "host-gpu-busy" });
+    expect(unloadIdleRunners).not.toHaveBeenCalled();
+  });
   it("does not read the live GPU from a unit test", async () => {
     await expect(assertLocalGpuFree({ providerId: "local", modelId: "qwen" })).resolves.toBeUndefined();
   });
@@ -203,5 +244,66 @@ describe("assertLocalGpuFree", () => {
       inspectGpu: async () => ({ defer: "host-gpu-busy", unloadIdle: true }),
       unloadIdleRunners: async () => { throw new Error("unload failed"); },
     })).rejects.toMatchObject({ reason: "host-gpu-busy" });
+  });
+});
+
+describe("captured capacity preserves ordinary unknown telemetry policy", () => {
+  function captureRunners(rows: unknown = []) {
+    const observations: Array<Record<string, unknown>> = [];
+    restricted.request.mockImplementation(async (input: { captureAdditional(response: Response): Promise<unknown> }) => {
+      const response = new Response(JSON.stringify(rows), { status: 200 });
+      observations.push(await input.captureAdditional(response.clone()) as Record<string, unknown>);
+      return response;
+    });
+    return observations;
+  }
+  it.each(["absent", "stale", "future"])("captures %s telemetry as unknown and uses the normal decision without inventing idle metrics", async state => {
+    restricted.active = true; vi.stubEnv("DPF_HOST_GPU_SNAPSHOT_FILE", "/fixture-state/host-gpu.json");
+    const raw = Buffer.from(JSON.stringify(snap({ observedAtMs: state === "stale" ? NOW - 21_000 : NOW + 61_000, utilizationPercent: 99 })));
+    if (state !== "absent") platform.readFile.mockResolvedValue(raw);
+    const observations = captureRunners();
+    await expect(inspectLocalGpuAdmission({ nowMs: NOW, modelId: "hf.co/ggml-org/Qwen3.8-27B-GGUF:Q4_K_M" })).resolves.toEqual({ defer: null, unloadIdle: false });
+    expect(observations).toEqual([expect.objectContaining({ snapshot: null, runners: [], decision: { defer: null, unloadIdle: false },
+      provenance: expect.objectContaining({ source: "published-file", path: "/fixture-state/host-gpu.json", unknownReason: `published-snapshot-${state}` }) })]);
+    if (state === "absent") expect(observations[0]!.provenance).toEqual(expect.objectContaining({ readOutcome: "absent", errorCode: "ENOENT" }));
+    else expect(observations[0]!.provenance).toEqual(expect.objectContaining({ readOutcome: "complete", bodyEncoding: "base64", bodyBase64: raw.toString("base64") }));
+    expect(platform.spawnSync).not.toHaveBeenCalled(); expect(restricted.fetch).not.toHaveBeenCalled();
+    expect(restricted.request).toHaveBeenCalledWith(expect.objectContaining({ url: "http://dmr.invalid/engines/ps", method: "GET", operation: "configuration" }));
+  });
+  it.each(["in_use", "loading"])("still defers on a captured %s runner when host telemetry is absent", async busyField => {
+    restricted.active = true;
+    const observations = captureRunners([{ model_name: "qwen", mode: "completion", in_use: false, loading: false, [busyField]: true }]);
+    await expect(assertLocalGpuFree({ providerId: "local" })).rejects.toMatchObject({ reason: "local-runner-busy" });
+    expect(observations[0]).toMatchObject({ snapshot: null, decision: { defer: "local-runner-busy", unloadIdle: false } });
+    expect(platform.spawnSync).not.toHaveBeenCalled();
+  });
+  it("still defers a fresh busy snapshot and never unloads the idle runner", async () => {
+    restricted.active = true; platform.readFile.mockResolvedValue(Buffer.from(JSON.stringify(snap({ observedAtMs: Date.now(), utilizationPercent: 80 }))));
+    const observations = captureRunners([{ model_name: "qwen", mode: "completion", in_use: false, loading: false }]), unloadIdleRunners = vi.fn();
+    await expect(assertLocalGpuFree({ providerId: "local", unloadIdleRunners })).rejects.toMatchObject({ reason: "host-gpu-busy" });
+    expect(observations[0]).toMatchObject({ decision: { defer: "host-gpu-busy", unloadIdle: true } });
+    expect(unloadIdleRunners).not.toHaveBeenCalled(); expect(platform.spawnSync).not.toHaveBeenCalled();
+  });
+  it.each(["EACCES", "EIO"])("refuses %s rather than treating a failed read as absent telemetry", async code => {
+    restricted.active = true; platform.readFile.mockRejectedValue(Object.assign(new Error("Read failed"), { code })); captureRunners();
+    await expect(inspectLocalGpuAdmission({ nowMs: NOW })).rejects.toThrow(/capacity-evidence-unavailable/);
+    expect(restricted.request).not.toHaveBeenCalled(); expect(platform.spawnSync).not.toHaveBeenCalled();
+  });
+  it.each(["invalid-json", "conflicting-time", "duplicate-key", "invalid-utf8", "coerced-metric", "out-of-range"])("refuses malformed published evidence: %s", async problem => {
+    restricted.active = true;
+    let raw = JSON.stringify(snap());
+    if (problem === "invalid-json") raw = "not json";
+    if (problem === "conflicting-time") raw = JSON.stringify({ ...snap(), observedAt: new Date(NOW - 1_000).toISOString() });
+    if (problem === "duplicate-key") raw = raw.replace('"memoryUsedMiB":800', '"memoryUsedMiB":900,"memoryUsedMiB":800');
+    if (problem === "coerced-metric") raw = JSON.stringify({ ...snap(), memoryUsedMiB: null });
+    if (problem === "out-of-range") raw = JSON.stringify(snap({ utilizationPercent: 101 }));
+    platform.readFile.mockResolvedValue(problem === "invalid-utf8" ? Buffer.from([0xff]) : Buffer.from(raw)); captureRunners();
+    await expect(inspectLocalGpuAdmission({ nowMs: NOW })).rejects.toThrow(/capacity-evidence-(?:invalid|unavailable)/);
+    expect(restricted.request).not.toHaveBeenCalled(); expect(platform.spawnSync).not.toHaveBeenCalled();
+  });
+  it("refuses an invalid capacity response even when absence was genuinely observed", async () => {
+    restricted.active = true; const observations = captureRunners({ unavailable: true });
+    await expect(inspectLocalGpuAdmission({ nowMs: NOW })).rejects.toThrow(/capacity-response-invalid/);
+    expect(observations[0]).toMatchObject({ snapshot: null, parseStatus: "invalid", provenance: { errorCode: "ENOENT" } });
   });
 });

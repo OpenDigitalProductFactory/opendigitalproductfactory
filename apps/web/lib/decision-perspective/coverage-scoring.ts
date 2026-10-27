@@ -6,6 +6,7 @@
 import { isMaterialApplicable, scorePerspectiveMaterial } from "./material";
 import type {
   DecisionDomainClass,
+  DecisionAutonomyPolicy,
   DecisionPerspectiveProfile,
   DecisionRiskTier,
   PerspectiveMaterial,
@@ -33,6 +34,14 @@ export function roundConfidence(value: number): number {
 
 export function riskWithin(candidate: DecisionRiskTier, max: DecisionRiskTier): boolean {
   return RISK_RANK[candidate] <= RISK_RANK[max];
+}
+
+/** The existing delegated policy, shared by both evaluator ladders. */
+export function delegatedRiskLimit(policy: Pick<DecisionAutonomyPolicy,
+  "allowArbitration" | "maxRiskForArbitration" | "maxRiskForRecommendation">): DecisionRiskTier {
+  const recommendation = policy.maxRiskForRecommendation ?? "medium";
+  return policy.allowArbitration && !riskWithin(policy.maxRiskForArbitration, recommendation)
+    ? policy.maxRiskForArbitration : recommendation;
 }
 
 export function orderedProfileChain(

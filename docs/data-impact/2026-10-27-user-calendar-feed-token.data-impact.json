@@ -12,7 +12,7 @@
     "reviewDisposition": "Credential hash on the account row; same access as the User row. No new personal content."
   },
   "migration": {
-    "name": "20261015000000_user_calendar_feed_token",
+    "name": "20261027170000_user_calendar_feed_token",
     "backfill": "None. Every existing row gets NULL (no subscription link), which the feed treats as refuse. Verified against a throwaway postgres:16-alpine: empty table applied twice (idempotent), 500-row table applied with 0 hashes set, unique index enforced.",
     "rollback": "Forward-only and additive. Older code never reads the columns; under older code the feed is id-only again, so do not roll back the route without the columns."
   },

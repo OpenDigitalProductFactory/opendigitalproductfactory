@@ -67,6 +67,14 @@ describe("coworker seed invariants", () => {
     expect(HARDCODED_COWORKER_GRANTS["marketing-specialist"]).toContain("document_write");
   });
 
+  // BI-012487AA: the render-family tools (create_report, create_letter,
+  // create_sheet) reach the finance controller and the admin assistant through
+  // document_write; neither may publish.
+  it.each(["finance-controller", "admin-assistant"])("grants %s document_write but not document_publish", (slug) => {
+    expect(HARDCODED_COWORKER_GRANTS[slug]).toContain("document_write");
+    expect(HARDCODED_COWORKER_GRANTS[slug]).not.toContain("document_publish");
+  });
+
   it("grants customer-advisor the CRM grants it operates with — not backlog_write", () => {
     // The Customer Success Manager resolves its runtime grants from THIS map (the
     // slug agent row), so the CRM grants must be here. Regression guard for the

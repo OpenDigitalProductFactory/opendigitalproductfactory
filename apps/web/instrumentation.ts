@@ -162,11 +162,8 @@ export async function reconcileSelfUpgradeRunsOnBoot(
       logger.log(`[self-upgrade-reconcile] ${run.runId} -> failed (orphaned)`);
     }
 
-    // In PERIODIC mode, also fail runs stuck "queued"/"pending" that never
-    // started — the dispatch event was dropped (e.g. the job engine was down),
-    // so they can never run, yet requestPortalSelfUpgradeAction silently no-ops
-    // on a queued/pending row and blocks every future upgrade (SUR-B26DF3E4).
-    // Boot mode leaves these alone — a freshly-queued run may be mid-dispatch.
+    // PERIODIC: fail stale never-dispatched queued/pending rows (SUR-B26DF3E4).
+    // Boot leaves these alone because a fresh request may be mid-dispatch.
     if (staleAfterMs > 0) {
       const staleQueued = await prisma.selfUpgradeRun.findMany({
         where: {
@@ -187,6 +184,8 @@ export async function reconcileSelfUpgradeRunsOnBoot(
       }
     }
 
+    // BI-0E216B0E: reconcile known replay failures from independent deployment proof.
+    succeeded += await (await import("@/lib/self-upgrade/landed-swap")).healLandedSwapFalseFailures({ deployedSha, logger });
     if (succeeded || failed) {
       logger.log(`[self-upgrade-reconcile] resolved ${succeeded} succeeded, ${failed} failed`);
     }
@@ -982,16 +981,16 @@ export async function register() {
       await assertDbContinuityOnBoot();
     }
 
-    // Runtime capability recovery is a boot barrier, not background cleanup:
-    // no authenticated mutation may be admitted until durable host/DB state is
+    // Runtime recovery is a boot barrier: no mutation is admitted until state is
     // reconciled or explicitly marked recovery_required.
     {
-      const { createProductionRuntimeTransitionHost, reconcileRuntimeCapabilityTransitionsOnStartup } = await import("@/lib/platform-runtime/transition-recovery");
+      const { createProductionRuntimeTransitionHost, reconcileRuntimeCapabilityTransitionsOnStartup, startRuntimeCapabilityReceiptSettlement } = await import("@/lib/platform-runtime/transition-recovery");
       try {
         await reconcileRuntimeCapabilityTransitionsOnStartup(await createProductionRuntimeTransitionHost());
       } catch (error) {
         console.error("[runtime-capabilities] Startup reconciliation requires recovery:", error);
       }
+      if (!measurementRuntime) startRuntimeCapabilityReceiptSettlement();
     }
 
     // Graph-mirror projections with no indexer of their own (BI-FEDFABF6). Boot is

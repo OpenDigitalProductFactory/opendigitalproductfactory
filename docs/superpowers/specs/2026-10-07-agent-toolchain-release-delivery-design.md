@@ -310,6 +310,7 @@ The floor is a **conformance control, not a security boundary**:
 - **Refresh.** The refresher ships in the skill pack. Grok's SessionStart entry refreshes the token when it is missing or near expiry. The token lifetime is finite.
 - **Repair.** A missing or expired credential gets a 401 whose `error.data.repair` names the manifest, the same repair as the `TOOLCHAIN:` line.
 - **PAT switch.** Grok's OAuth tokens are not PATs, so `DPF_MCP_PAT_RESOLUTION_DISABLED` needs no exemption.
+- **Acts as `AGT-EXT-GROK` (BI-8D152751).** The token endpoint carries the client's agent into each token, and `workCapsuleActor` refuses an OAuth workroom write without one. An unbound client could read but never claim, adopt or heartbeat a Workroom. `ensureGrokCredentialsClient` therefore creates the client with `OAuthClient.agentId` set, and binds an existing unbound client on the next setup run. It binds only when that agent is active, unarchived and holds `work_room_write`, and never rewrites a client bound to another agent (`apps/web/lib/auth/grok-agent-binding.ts`). The source-checkout bootstrap feeds the container issuer on stdin (`sh -s`): passed as a `sh -c` argument, the script arrived truncated and never ran.
 
 ### 5.3 Converge: the agent runs the updater, pulled from the portal
 

@@ -17,6 +17,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -38,6 +39,25 @@ TOKEN_ENV_VAR = "DPF_MCP_BEARER_TOKEN"
 # The shipped plugin descriptors are generated from it, so a client with no
 # DPF_MCP_URL still lands on the one origin OAuth tokens are issued for.
 DEFAULT_MCP_URL = "https://localhost/api/mcp/v1"
+
+
+def normalize_mcp_endpoint(endpoint: str) -> str:
+    """Treat an explicit portal origin as the canonical MCP path, never a root resource."""
+    try:
+        parsed = urlsplit(endpoint)
+        credential_keys = {"access_token", "accesstoken", "refresh_token", "refreshtoken", "token", "api_key", "apikey", "key",
+                           "authorization", "client_secret", "clientsecret", "secret", "password"}
+        if (parsed.scheme not in ("http", "https") or not parsed.hostname or "\\" in endpoint
+                or parsed.username or parsed.password or any(char.isspace() for char in endpoint)
+                or any(key.lower().replace("-", "_") in credential_keys for key, _ in parse_qsl(parsed.query))):
+            raise ValueError("Unsafe endpoint")
+        _ = parsed.port  # Validate the port before any configuration is written.
+        if parsed.path in ("", "/"):
+            return urlunsplit((parsed.scheme, parsed.netloc, "/api/mcp/v1", parsed.query, parsed.fragment))
+        return endpoint
+    except ValueError:
+        # Never include an input that may contain credentials in diagnostics.
+        raise ValueError("MCP endpoint must be a credential-free HTTP(S) URL") from None
 
 
 def with_mcp_catalog_tier(mcp_url: str, tier: str) -> str:
@@ -81,13 +101,52 @@ def write_json(path: Path, data: Any) -> bool:
     return write_text_if_changed(path, content)
 
 
+def validate_toml(content: str) -> None:
+    """Refuse an unparseable candidate before touching any client configuration."""
+    try:
+        import tomllib as parser
+    except ImportError:
+        try:
+            import tomli as parser
+        except ImportError:
+            raise ValueError("TOML updates require Python 3.11+ or tomli; configuration unchanged") from None
+    try:
+        parser.loads(content)
+    except ValueError:
+        # Parser diagnostics can echo operator credentials. Keep this bounded.
+        raise ValueError("Invalid TOML candidate; configuration unchanged") from None
+
+
 def write_text_if_changed(path: Path, content: str) -> bool:
+    if path.suffix == ".toml":
+        validate_toml(content)
+        before = path.read_bytes() if path.exists() else None
+        after = content.encode("utf-8")
+        if before == after:
+            return False
+        path.parent.mkdir(parents=True, exist_ok=True)
+        # Same-directory replacement leaves the previous file intact if staging
+        # fails. Never truncate the only working client configuration.
+        descriptor, staged = tempfile.mkstemp(prefix="." + path.name + ".", dir=path.parent)
+        temporary = Path(staged)
+        try:
+            with os.fdopen(descriptor, "wb") as stream:
+                stream.write(after)
+                stream.flush()
+                os.fsync(stream.fileno())
+            if before is not None:
+                shutil.copymode(path, temporary)
+            current = path.read_bytes() if path.exists() else None
+            if current != before:
+                raise ValueError("Concurrent TOML edit; configuration unchanged, retry from current state")
+            os.replace(temporary, path)
+        finally:
+            temporary.unlink(missing_ok=True)
+        return True
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.exists() and path.read_text(encoding="utf-8") == content:
         return False
-    # Path.write_text() only grew its newline= kwarg in Python 3.10; the
-    # bootstrap runs this script with the system python3, which is 3.9 on
-    # stock macOS. Write bytes so LF endings survive on every platform.
+    # Write bytes so LF endings survive on Python 3.9 and every platform.
     path.write_bytes(content.encode("utf-8"))
     return True
 
@@ -541,50 +600,46 @@ def ensure_claude_marketplace(home: Path, version: str, dry_run: bool) -> bool:
 
 
 def split_toml_dotted_key(key: str) -> list[str] | None:
+    """Decode TOML bare, basic-quoted and literal-quoted key components."""
     parts: list[str] = []
-    current: list[str] = []
-    quoted = False
-    escape = False
+    token = re.compile(r"\s*(\"(?:[^\"\\]|\\.)*\"|'[^']*'|[A-Za-z0-9_-]+)\s*")
+    remaining = key.strip()
+    while remaining:
+        match = token.match(remaining)
+        if not match:
+            return None
+        spelling = match.group(1)
+        try:
+            part = json.loads(spelling) if spelling.startswith('"') else spelling[1:-1] if spelling.startswith("'") else spelling
+        except ValueError:
+            return None
+        parts.append(part)
+        remaining = remaining[match.end():]
+        if not remaining:
+            return parts
+        if not remaining.startswith("."):
+            return None
+        remaining = remaining[1:].lstrip()
+        if not remaining:
+            return None
+    return None
 
-    for char in key.strip():
-        if quoted:
-            if escape:
-                current.append(char)
-                escape = False
-            elif char == "\\":
-                escape = True
-            elif char == '"':
-                quoted = False
-            else:
-                current.append(char)
-        elif char == '"':
-            quoted = True
-        elif char == ".":
-            part = "".join(current).strip()
-            if not part:
-                return None
-            parts.append(part)
-            current = []
-        else:
-            current.append(char)
 
-    if quoted or escape:
-        return None
-    part = "".join(current).strip()
-    if not part:
-        return None
-    parts.append(part)
-    return parts
+def toml_assignment(line: str) -> tuple[str | None, str]:
+    """Recognize one scalar key without confusing quoted spelling with identity."""
+    match = re.match(r"^\s*(\"(?:[^\"\\]|\\.)*\"|'[^']*'|[A-Za-z0-9_-]+)\s*=(.*)$", line)
+    if not match:
+        return None, ""
+    parts = split_toml_dotted_key(match.group(1))
+    return (parts[0] if parts and len(parts) == 1 else None), match.group(2)
 
 
 def canonical_toml_table_header(line: str) -> str | None:
-    stripped = line.strip()
-    if not stripped.startswith("[") or not stripped.endswith("]") or stripped.startswith("[["):
+    match = re.fullmatch(r"\s*\[(?!\[)(.+)\]\s*(?:#.*)?", line)
+    if not match:
         return None
-    parts = split_toml_dotted_key(stripped[1:-1])
-    if parts is None:
-        return None
-    return ".".join(parts)
+    parts = split_toml_dotted_key(match.group(1))
+    return ".".join(parts) if parts is not None else None
 
 
 def _is_table_boundary(line: str) -> bool:
@@ -661,7 +716,8 @@ def toml_table_enabled(text: str, canonical_key: str) -> Optional[bool]:
             continue
         end = index + 1
         while end < len(lines) and not _is_table_boundary(lines[end]):
-            match = re.match(r"^\s*enabled\s*=\s*(true|false)\s*(?:#.*)?$", lines[end], re.IGNORECASE)
+            key, value = toml_assignment(lines[end])
+            match = re.fullmatch(r"\s*(true|false)\s*(?:#.*)?", value) if key == "enabled" else None
             if match:
                 return match.group(1).lower() == "true"
             end += 1
@@ -677,7 +733,7 @@ def set_codex_plugin_enabled(text: str, plugin_id: str, enabled: bool) -> str:
         if _is_table_boundary(line):
             active = not seen and canonical_toml_table_header(line) == f"plugins.{plugin_id}"
             seen = seen or active
-        elif active and line.partition("=")[0].strip() != "enabled":
+        elif active and toml_assignment(line)[0] != "enabled":
             retained.append(line)
     while retained and not retained[-1].strip():
         retained.pop()
@@ -706,8 +762,8 @@ def existing_codex_mcp_endpoint(text: str) -> Optional[str]:
                 return None
             active = canonical_toml_table_header(line) == "mcp_servers.dpf"
             continue
-        key, separator, value = line.partition("=")
-        if not active or not separator or key.strip() != "url":
+        key, value = toml_assignment(line)
+        if not active or key != "url":
             continue
         match = re.fullmatch(r'''\s*("(?:[^"\\]|\\.)*"|'[^']*')\s*(?:#.*)?''', value)
         if not match:
@@ -715,13 +771,7 @@ def existing_codex_mcp_endpoint(text: str) -> Optional[str]:
         quoted = match.group(1)
         try:
             endpoint = json.loads(quoted) if quoted.startswith('"') else quoted[1:-1]
-            parsed = urlsplit(endpoint)
-            credential_keys = {"access_token", "accesstoken", "refresh_token", "refreshtoken", "token", "api_key", "apikey", "key",
-                               "authorization", "client_secret", "clientsecret", "secret", "password"}
-            if (parsed.scheme not in ("http", "https") or not parsed.hostname
-                    or parsed.username or parsed.password or any(char.isspace() for char in endpoint)
-                    or any(key.lower().replace("-", "_") in credential_keys for key, _ in parse_qsl(parsed.query))):
-                raise ValueError("Saved URL is not a credential-free HTTP endpoint")
+            normalize_mcp_endpoint(endpoint)
             return endpoint
         except ValueError as error:
             raise ValueError("Cannot preserve saved Codex URL; select an explicit MCP endpoint to repair it") from error
@@ -746,14 +796,14 @@ def codex_mcp_body(text: str, endpoint: Optional[str], declaration_header: Optio
             continue
         if not active:
             continue
-        key, separator, value = line.partition("=")
-        if separator and key.strip() in ("url", "enabled"):
+        key, value = toml_assignment(line)
+        if key in ("url", "enabled"):
             continue
-        if separator and key.strip() == "bearer_token_env_var":
+        if key == "bearer_token_env_var":
             if value.strip().strip('"').strip("'") == TOKEN_ENV_VAR:
                 continue
             custom_bearer = True
-        if separator and key.strip() == "http_headers":
+        if key == "http_headers":
             # The toolchain declaration (BI-DE1E6485) is the one header line
             # the updater owns; an operator's own headers table is kept as is.
             if "X-DPF-Toolchain" in value:
@@ -763,7 +813,7 @@ def codex_mcp_body(text: str, endpoint: Optional[str], declaration_header: Optio
             retained.append(line)
     # An implicit plugin refresh must not change the resource an OAuth login
     # names. Only an explicitly supplied CLI/environment URL replaces it.
-    endpoint = with_mcp_catalog_tier(endpoint or existing_endpoint or DEFAULT_MCP_URL, "full")
+    endpoint = with_mcp_catalog_tier(normalize_mcp_endpoint(endpoint) if endpoint else existing_endpoint or DEFAULT_MCP_URL, "full")
     body = [f'url = {json.dumps(endpoint)}', "enabled = true", *retained]
     if not custom_bearer and mcp_client_bearer_header_required(endpoint, "codex"):
         body.append(f'bearer_token_env_var = "{TOKEN_ENV_VAR}"')
@@ -815,9 +865,26 @@ def ensure_codex_config(
         "[mcp_servers.dpf]",
         codex_mcp_body(text, mcp_url, declaration_header),
     )
+    validate_toml(text)
     if dry_run:
         return True
     return write_text_if_changed(path, text)
+
+
+def converge_codex_project_config(project_root: Path, mcp_url: str, dry_run: bool) -> str:
+    """Run the optional project-override repair; a refusal is a status, not an abort.
+
+    BI-CEDE5B55: ensure_codex_project_config refuses (ValueError) whenever it
+    cannot validate the TOML, including on stock macOS python3 3.9 with no
+    tomli. Uncaught, that refusal ended main() before Grok, Claude and the
+    shared copy converged, leaving every client stale. The file is already
+    left unchanged on refusal, so report it and carry on.
+    """
+    try:
+        changed = ensure_codex_project_config(project_root, mcp_url, dry_run)
+    except ValueError as error:
+        return f"unchanged ({error})"
+    return "converged" if changed else "current"
 
 
 def ensure_codex_project_config(project_root: Path, mcp_url: str, dry_run: bool) -> bool:
@@ -1000,6 +1067,9 @@ def install_claude_plugin(home: Path, dry_run: bool) -> str:
         result = subprocess.run(command, cwd=str(marketplace_root), capture_output=True, text=True)
         if result.returncode != 0:
             return f"failed: {' '.join(command[:3])} exited {result.returncode}"
+    records = [entry for entry in claude_plugin_records(home) if entry.get("scope") == "local"]
+    if not records or not all(claude_record_content_matches(home, entry) for entry in records):
+        return "failed: Claude local cache content remains unverified after supported update; client-owned cache retained"
     return "installed and refreshed"
 
 
@@ -1013,8 +1083,25 @@ def claude_plugin_records(home: Path) -> list[dict[str, Any]]:
     return [entry for entry in entries if isinstance(entry, dict)] if isinstance(entries, list) else []
 
 
+def claude_record_content_matches(home: Path, entry: dict[str, Any]) -> bool:
+    """Verify installed bytes with the existing delivered-content comparator."""
+    from installed_copy_freshness import delivered_digest, pack_version
+
+    install = entry.get("installPath")
+    source = shared_managed_plugin_path(home)
+    if not isinstance(install, str) or not source.is_dir() or not Path(install).is_dir():
+        return False
+    try:
+        expected_version = pack_version(source)
+        return bool(expected_version and entry.get("version") == expected_version
+                    and pack_version(Path(install)) == expected_version
+                    and delivered_digest(Path(install)) == delivered_digest(source))
+    except (OSError, ValueError):
+        return False
+
+
 def converge_claude_project_plugins(home: Path, version: str, dry_run: bool) -> dict[str, list[str]]:
-    """Update every project-scope record still pinned to an older version.
+    """Update project records whose version or delivered content is stale.
 
     `install_claude_plugin` refreshes only the local-scope record. Claude Code
     keeps one project-scope record per checkout the plugin was ever installed
@@ -1037,7 +1124,7 @@ def converge_claude_project_plugins(home: Path, version: str, dry_run: bool) -> 
         if not Path(project).is_dir():
             result["pruned"].append(project)
             continue
-        if entry.get("version") == version:
+        if entry.get("version") == version and claude_record_content_matches(home, entry):
             result["current"].append(project)
             continue
         if dry_run:
@@ -1048,7 +1135,12 @@ def converge_claude_project_plugins(home: Path, version: str, dry_run: bool) -> 
             continue
         command = [claude, "plugin", "update", CLAUDE_PLUGIN_ID, "--scope", "project"]
         completed = subprocess.run(command, cwd=project, capture_output=True, text=True)
-        result["updated" if completed.returncode == 0 else "failed"].append(project)
+        refreshed = [record for record in claude_plugin_records(home)
+                     if record.get("scope") == "project" and record.get("projectPath") == project]
+        verified = (completed.returncode == 0 and len(refreshed) == 1
+                    and refreshed[0].get("version") == version
+                    and claude_record_content_matches(home, refreshed[0]))
+        result["updated" if verified else "failed"].append(project)
     return result
 
 
@@ -1157,7 +1249,8 @@ def converge_claude_project_connectors(
              f"current {len(plugins['current'])}, failed {len(plugins['failed'])}, "
              f"prunable {len(plugins['pruned'])}"]
     lines += [f"    {verb} to {version}: {project}" for project in plugins["updated"]]
-    lines += [f"    FAILED to update: {project}" for project in plugins["failed"]]
+    lines += [f"    FAILED to verify updated content: {project}; supported update did not establish the expected digest; client-owned cache retained"
+              for project in plugins["failed"]]
     lines += [f"    prunable (projectPath gone): {project}" for project in plugins["pruned"]]
     projects = {
         entry["projectPath"]
@@ -1483,11 +1576,11 @@ def resolve_antigravity_binary() -> str | None:
 
 
 def antigravity_mcp_config_path(home: Path) -> Path:
-    # Antigravity is Windsurf/VS Code-derived; its MCP config is a JSON block
-    # keyed by `mcpServers`. The exact path is not yet pinned in public docs —
-    # this is the documented default; the live install confirms it during the
-    # EP-ANTIGRAVITY-001 evidence gate (BI-ECAE3494 / BI-47A81FEB).
-    return home / ".antigravity" / "mcp_config.json"
+    # The file the `agy` CLI and Antigravity.app both read (BI-4CB3C923).
+    # Pinned on 2026-10-20 against agy 1.4.3: `agy mcp add` writes here, and
+    # both binaries name only this path. The earlier ~/.antigravity/
+    # mcp_config.json guess is read by neither; a copy there is left in place.
+    return home / ".gemini" / "config" / "mcp_config.json"
 
 
 def ensure_antigravity_mcp_config(home: Path, mcp_url: str, dry_run: bool, declarations: Any = None) -> str:
@@ -1501,15 +1594,26 @@ def ensure_antigravity_mcp_config(home: Path, mcp_url: str, dry_run: bool, decla
     if resolve_antigravity_binary() is None:
         return "skipped: Antigravity CLI (agy) not found"
     path = antigravity_mcp_config_path(home)
-    data = read_json(path, {})
+    # agy leaves a 0-byte file behind when no server is configured; that is an
+    # empty config. Unparseable content is the operator's: leave it, and keep
+    # the rest of the update running instead of exiting.
+    try:
+        raw = path.read_text(encoding="utf-8-sig") if path.exists() else ""
+        data = json.loads(raw) if raw.strip() else {}
+    except (OSError, json.JSONDecodeError):
+        return f"skipped: cannot parse {path}; fix or empty it, then rerun"
     if not isinstance(data, dict):
         data = {}
     servers = data.get("mcpServers")
     if not isinstance(servers, dict):
         servers = {}
+    # agy's own schema: what `agy mcp add` writes for an http server. An
+    # operator who disabled the entry keeps it disabled.
+    previous = servers.get("dpf")
+    disabled = isinstance(previous, dict) and previous.get("disabled") is True
     servers["dpf"] = {
-        "type": "http",
-        "url": mcp_url,
+        "serverUrl": mcp_url,
+        "disabled": disabled,
         **({"headers": {"Authorization": f"Bearer ${{{TOKEN_ENV_VAR}}}"}} if mcp_client_bearer_header_required(mcp_url, "antigravity") else {}),
     }
     if declarations is not None:
@@ -2295,7 +2399,9 @@ def hook_reference(skill_pack: Path) -> str:
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="Update DPF Codex/Claude/Grok/Antigravity agent skills and MCP wiring.")
     parser.add_argument("--skill-pack-path", default=str(default_skill_pack_path()))
-    parser.add_argument("--project-root", type=Path, help="Explicit repository whose existing Codex override should converge")
+    parser.add_argument("--project-root", type=Path, help="Explicit DPF source project for client configuration")
+    parser.add_argument("--permissions-only", action="store_true",
+                        help="Converge only routine native permissions for --project-root; no plugin, credential or connector refresh.")
     parser.add_argument("--mcp-url", default=os.environ.get("DPF_MCP_URL") or None)
     parser.add_argument("--auth-mode", choices=("oauth", "legacy"), default=os.environ.get("DPF_MCP_AUTH_MODE", "oauth"))
     parser.add_argument("--codex-only", action="store_true")
@@ -2343,6 +2449,8 @@ def main(argv: list[str]) -> int:
         text = path.read_text(encoding="utf-8-sig") if path.exists() else ""
         print(existing_codex_mcp_endpoint(text) or "")
         return 0
+    if args.mcp_url:
+        args.mcp_url = normalize_mcp_endpoint(args.mcp_url)
     if args.from_portal:
         import portal_source
 
@@ -2371,6 +2479,44 @@ def main(argv: list[str]) -> int:
     home = home_dir()
     codex_managed = codex_managed_plugin_path(home)
     shared_managed = shared_managed_plugin_path(home)
+    permission_runtime_unavailable = False
+    if args.project_root and (args.project_root / 'packages/dpf-skill-pack').is_dir():
+        import routine_permissions
+        permission_runtime_unavailable = routine_permissions.tomllib is None
+        if permission_runtime_unavailable:
+            print('Routine permissions UNRUN: Python 3.11+ or tomli is required; no permission configuration changed.')
+    selected_permission_clients = ('codex','grok') if args.codex_only else ('claude-code',) if args.claude_only else ('codex','claude-code','grok')
+    unrun_permission_rows = [{'client': client, 'scope': 'permissions:' + str(args.project_root.resolve()),
+        'action': 'unrun', 'sessionVerified': False, 'restartRequired': False,
+        'detail': 'TOML parser unavailable; existing permissions retained. Use a supported Python runtime.'}
+        for client in selected_permission_clients] if permission_runtime_unavailable else []
+    if args.permissions_only:
+        if permission_runtime_unavailable:
+            if args.report_json:
+                import toolchain_convergence as convergence
+                portal_manifest = read_json(Path(args.portal_manifest), {}) if args.portal_manifest else None
+                report = convergence.ConvergenceReport(home, convergence.Declarations(skill_pack, portal_manifest), portal_manifest)
+                report.add_permissions(unrun_permission_rows)
+                report.write(args.report_json, args.dry_run)
+            return 2
+        if not args.project_root or args.codex_plugin_only or args.grok_client_stdin or args.codex_only or args.claude_only:
+            parser.error("--permissions-only requires --project-root and cannot refresh plugins or credentials")
+        import routine_permissions
+        import toolchain_convergence as convergence
+        try:
+            plan = routine_permissions.plan_permissions(args.project_root, home, skill_pack)
+            rows = routine_permissions.apply_permissions(plan, args.dry_run, native=True)
+        except (OSError, routine_permissions.PermissionPlanError) as error:
+            print(f"Permission convergence failed: {error}", file=sys.stderr)
+            return 1
+        for row in rows:
+            print(f"  {row['client']}: {row['action']} routine permissions; session verification pending")
+        if args.report_json:
+            portal_manifest = read_json(Path(args.portal_manifest), {}) if args.portal_manifest else None
+            report = convergence.ConvergenceReport(home, convergence.Declarations(skill_pack, portal_manifest), portal_manifest)
+            report.add_permissions(rows)
+            report.write(args.report_json, args.dry_run)
+        return 1 if any(row['action'] == 'failed' for row in rows) else 0
 
     if args.codex_plugin_only:
         if args.claude_only or args.codex_only or args.skip_codex_cli_install:
@@ -2434,26 +2580,33 @@ def main(argv: list[str]) -> int:
 
     if not args.claude_only:
         ensure_codex_marketplace(home, codex_version, args.dry_run)
-        ensure_codex_config(home, args.mcp_url, args.dry_run, process_spine_root, codex_header)
         codex_status = "skipped by flag"
-        if not args.skip_codex_cli_install:
-            codex_status = install_codex_plugin(home, args.dry_run)
-            codex_install_failed = codex_status.startswith("failed:")
-            # Codex currently writes a legacy `[plugins."<name>"]` alias while
-            # installing a qualified registry id. Converge again after the CLI
-            # mutation so the next process does not warn that `dpf-platform`
-            # lacks its `@marketplace` qualifier.
+        try:
             ensure_codex_config(home, args.mcp_url, args.dry_run, process_spine_root, codex_header)
-        if args.project_root and args.project_root.resolve() != home.resolve():
-            global_config = codex_config_path(home)
-            saved = global_config.read_text(encoding="utf-8-sig") if global_config.exists() else ""
-            endpoint = args.mcp_url or existing_codex_mcp_endpoint(saved) or DEFAULT_MCP_URL
-            ensure_codex_project_config(args.project_root, endpoint, args.dry_run)
-        codex_hooks_status = install_codex_hooks(codex_managed, home, args.dry_run)
-        print(
-            f"  Codex      : marketplace + config converged; plugin {codex_status}; "
-            f"hooks {codex_hooks_status}"
-        )
+            codex_status = "skipped by flag"
+            if not args.skip_codex_cli_install:
+                codex_status = install_codex_plugin(home, args.dry_run)
+                codex_install_failed = codex_status.startswith("failed:")
+                # Codex currently writes a legacy `[plugins."<name>"]` alias while
+                # installing a qualified registry id. Converge again after the CLI
+                # mutation so the next process does not warn that `dpf-platform`
+                # lacks its `@marketplace` qualifier.
+                ensure_codex_config(home, args.mcp_url, args.dry_run, process_spine_root, codex_header)
+            if args.project_root and args.project_root.resolve() != home.resolve():
+                global_config = codex_config_path(home)
+                saved = global_config.read_text(encoding="utf-8-sig") if global_config.exists() else ""
+                endpoint = args.mcp_url or existing_codex_mcp_endpoint(saved) or DEFAULT_MCP_URL
+                project_status = converge_codex_project_config(args.project_root, endpoint, args.dry_run)
+                print(f"  Codex project override : {project_status}")
+            codex_hooks_status = install_codex_hooks(codex_managed, home, args.dry_run)
+            print(
+                f"  Codex      : marketplace + config converged; plugin {codex_status}; "
+                f"hooks {codex_hooks_status}"
+            )
+        except ValueError as error:
+            codex_status = f"failed: {error}"
+            codex_install_failed = True
+            print(f"  Codex      : {codex_status}")
         grok_status = "skipped by flag"
         if not args.skip_grok_cli_install:
             grok_status = install_grok_plugin(shared_managed, args.dry_run)
@@ -2500,6 +2653,7 @@ def main(argv: list[str]) -> int:
         if report:
             report.add("antigravity", "user", antigravity_status)
 
+    claude_install_failed = False
     if not args.codex_only:
         ensure_claude_marketplace(home, version, args.dry_run)
         ensure_claude_repo_mcp_config(
@@ -2511,11 +2665,13 @@ def main(argv: list[str]) -> int:
         status = "skipped by flag"
         if not args.skip_claude_cli_install:
             status = install_claude_plugin(home, args.dry_run)
+            claude_install_failed = status.startswith("failed:")
         print(f"  Claude     : marketplace converged; plugin install {status}")
         if not args.skip_claude_cli_install:
             project_outcome: dict[str, Any] = {}
             for line in converge_claude_project_connectors(home, version, args.dry_run, project_outcome):
                 print(line)
+            claude_install_failed = claude_install_failed or bool((project_outcome.get("plugins") or {}).get("failed"))
             user_scope_status = retire_user_scope_dpf_server(home, args.dry_run)
             if user_scope_status:
                 print(f"  Claude user-scope dpf duplicate: {user_scope_status}")
@@ -2539,13 +2695,29 @@ def main(argv: list[str]) -> int:
             )
         print(f"  Claude competitive: {claude_competitive_status}")
 
+    permission_failed = False
+    if args.project_root and (args.project_root / 'packages/dpf-skill-pack').is_dir() and not permission_runtime_unavailable:
+        import routine_permissions
+        try:
+            permission_rows = routine_permissions.apply_permissions(
+                routine_permissions.plan_permissions(args.project_root, home, skill_pack,
+                    clients=('codex','grok') if args.codex_only else ('claude-code',) if args.claude_only else ('codex','claude-code','grok')),
+                args.dry_run, native=True)
+            permission_failed = any(row['action'] == 'failed' for row in permission_rows)
+            if report:
+                report.add_permissions(permission_rows)
+        except (OSError, routine_permissions.PermissionPlanError) as error:
+            permission_failed = True
+            print(f"Permission convergence failed: {error}", file=sys.stderr)
+    if permission_runtime_unavailable and report:
+        report.add_permissions(unrun_permission_rows)
     token_present = bool(os.environ.get(TOKEN_ENV_VAR))
     print("  MCP auth   : OAuth configuration written; sign in and verify through the client. Unverified clients/transports require explicit legacy compatibility." if args.auth_mode == "oauth" else "  MCP auth   : explicit legacy compatibility")
     print(f"  MCP token  : {'present' if token_present else 'missing'} ({TOKEN_ENV_VAR})")
     for line in guard_liveness_advisory():
         print(line)
 
-    exit_code = 1 if codex_install_failed else 0
+    exit_code = 1 if codex_install_failed or claude_install_failed or permission_failed else 0
     roster_printed = False
     plugin_plane = codex_plugin_hooks_active(codex_managed, home)
     trust_pending = codex_hook_trust_pending(home, codex_present=codex_present, plugin_plane=plugin_plane)
@@ -2565,8 +2737,12 @@ def main(argv: list[str]) -> int:
     if report:
         written = report.write(args.report_json, args.dry_run)
         print(f"  Report     : {args.report_json} ({written['result']})")
-    if codex_install_failed:
-        print("Incomplete: Codex plugin refresh failed; resolve the error above and rerun the updater.")
+        if written["result"] == "failed" and not args.dry_run:
+            exit_code = exit_code or 1
+    if exit_code:
+        print("Incomplete: toolchain convergence is unverified; resolve the reported failure before restarting a client.")
+    elif permission_runtime_unavailable:
+        print("Skills and connectors converged; routine permissions remain UNRUN because the Python TOML parser is unavailable.")
     else:
         print("Done. Start a new Codex/Claude/Grok session to load updated skills.")
     return exit_code

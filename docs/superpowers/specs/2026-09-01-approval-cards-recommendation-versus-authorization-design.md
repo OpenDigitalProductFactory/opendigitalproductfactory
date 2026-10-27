@@ -131,6 +131,15 @@ Design §3 above says replay looks back over "the existing 15-minute window". Th
 
 So "after the window, the coworker may ask again" refers to the replay window. A request that closes unanswered no longer disappears. It shows as **Expired unanswered**, and the delegating person can choose **Ask again** (`POST /api/agent/envelope/:id/reraise`). Deep links now open the request's own card instead of the outcome panel. The original text above is unchanged.
 
+BI-130120F1 repairs the remaining status-read projection of this contract: a
+`waiting` outcome returned by exact lookup or pending discovery uses the shared
+`envelopeInboxRoute`, so the link opens that request's actionable card among
+unrelated requests. Other outcomes keep `envelopeResultRoute`. The shared
+projector remains read-only; identity checks, decision state, expiry, authorization
+and execution are unchanged. Regression coverage joins the projected link to the
+rendered card and preserves result-panel links for every non-waiting state.
+
+
 ## As built — the chat card raises approval requests (BI-7BCC87BB, 2026-10-07)
 
 Approval convergence PR-B (spec `2026-10-07-approval-convergence-on-envelope-design.md`, D2 S1) moved the chat card from the AgentActionProposal to the CoworkerActionEnvelope. A coworker's proposal-mode call in chat now goes to the governed executor, which raises an approval request bound to the exact call; the assistant message lists the requests it raised, each with the shared Authorize / Decline (`EnvelopeDecisionButtons`, extracted from the Needs-you card). The same request is the Needs-you card. Authorize runs the call once through the monitor and the chat sends the "Result: <id>" follow-up. The recommendation/authorization split this spec set stays: the card names what the coworker recommends and what the person authorizes. An admin who is not the person asked can decide on their behalf with a recorded reason (plan B8, AC-OVERRIDE).
