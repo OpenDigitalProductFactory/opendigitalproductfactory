@@ -23,12 +23,20 @@ export { COLLECTION_DOCUMENT_KIND, COLLECTION_MEMBER_REF_TYPE };
 
 type CollectionDb = Pick<typeof prisma, "document" | "documentReference">;
 
-export async function isReadableCollection(collectionId: string, viewer: DocumentViewer, db: CollectionDb = prisma): Promise<boolean> {
-  const row = await db.document.findFirst({
+/** A collection the viewer may read, with its scope, or null (missing and unreadable look the same). */
+export async function findReadableCollection(
+  collectionId: string,
+  viewer: DocumentViewer,
+  db: CollectionDb = prisma,
+): Promise<{ accessScope: string } | null> {
+  return db.document.findFirst({
     where: { AND: [{ documentId: collectionId, documentKind: COLLECTION_DOCUMENT_KIND }, readableDocumentWhere(viewer)] },
-    select: { id: true },
+    select: { accessScope: true },
   });
-  return row !== null;
+}
+
+export async function isReadableCollection(collectionId: string, viewer: DocumentViewer, db: CollectionDb = prisma): Promise<boolean> {
+  return (await findReadableCollection(collectionId, viewer, db)) !== null;
 }
 
 /** The collections this viewer may read, newest first. */

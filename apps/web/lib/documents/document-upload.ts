@@ -9,7 +9,7 @@ import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import { DOCUMENT_TEXT_INLINE_LIMIT_BYTES, storeDocumentBlob } from "./blob-storage";
 import { normalizeMimeType, officeSourceExtension, textOnlySourceExtension } from "./conversion/formats";
 import { ORGANIZATION_ACCESS_SCOPE, RESTRICTED_ACCESS_SCOPE, type DocumentViewer } from "./document-access";
-import { fileIntoCollection, isReadableCollection } from "./document-collections";
+import { fileIntoCollection, findReadableCollection } from "./document-collections";
 import { saveManagedDocument } from "./document-store";
 
 /** Largest file the documents page accepts, the same limit as a coworker's binary save. */
@@ -88,11 +88,13 @@ export async function uploadManagedDocument(input: DocumentUploadInput): Promise
   if (!contentFormat) {
     return err("This kind of file cannot be stored here. Upload a Word, Excel, PowerPoint, OpenDocument, RTF, PDF, text or markdown file.");
   }
-  const accessScope = input.accessScope === RESTRICTED_ACCESS_SCOPE ? RESTRICTED_ACCESS_SCOPE : ORGANIZATION_ACCESS_SCOPE;
   const collectionId = input.collectionId?.trim() || null;
-  if (collectionId && !(await isReadableCollection(collectionId, input.viewer))) {
-    return err("That collection was not found.");
-  }
+  const collection = collectionId ? await findReadableCollection(collectionId, input.viewer) : null;
+  if (collectionId && !collection) return err("That collection was not found.");
+  // A named scope wins; otherwise a file dropped into a restricted collection
+  // is restricted too, and anything else is visible to the organization.
+  const requestedScope = input.accessScope === RESTRICTED_ACCESS_SCOPE || input.accessScope === ORGANIZATION_ACCESS_SCOPE ? input.accessScope : null;
+  const accessScope = requestedScope ?? (collection && collection.accessScope !== ORGANIZATION_ACCESS_SCOPE ? RESTRICTED_ACCESS_SCOPE : ORGANIZATION_ACCESS_SCOPE);
 
   const isText = contentFormat === "text/markdown" || contentFormat === "text/plain";
   const inlineText = isText && input.bytes.byteLength <= DOCUMENT_TEXT_INLINE_LIMIT_BYTES ? input.bytes.toString("utf-8") : null;

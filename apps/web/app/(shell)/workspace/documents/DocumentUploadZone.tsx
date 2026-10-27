@@ -29,13 +29,11 @@ export function DocumentUploadZone({ accept, limitMb, collectionId, collectionTi
   const inputRef = useRef<HTMLInputElement>(null);
   const [state, setState] = useState<UploadState>({ kind: "idle" });
   const [dragging, setDragging] = useState(false);
-  const [restricted, setRestricted] = useState(false);
 
   async function upload(file: File) {
     setState({ kind: "uploading", fileName: file.name });
     const body = new FormData();
     body.set("file", file);
-    body.set("accessScope", restricted ? "restricted" : "organization");
     if (collectionId) body.set("collectionId", collectionId);
     try {
       const response = await fetch("/api/documents", { method: "POST", body });
@@ -83,7 +81,6 @@ export function DocumentUploadZone({ accept, limitMb, collectionId, collectionTi
               {collectionTitle ? t("upload.promptInCollection", { collection: collectionTitle }) : t("upload.prompt")}
             </p>
           )}
-          <p className="text-xs text-[var(--dpf-muted)]">{t("upload.formats", { limitMb })}</p>
           {state.kind === "error" && (
             <p role="alert" className="mt-1 text-xs text-[var(--dpf-error)]">
               {state.message}
@@ -92,10 +89,6 @@ export function DocumentUploadZone({ accept, limitMb, collectionId, collectionTi
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-3">
-        <label className="flex items-center gap-2 text-xs text-[var(--dpf-muted)]">
-          <input type="checkbox" checked={restricted} onChange={(event) => setRestricted(event.target.checked)} disabled={busy} />
-          {t("upload.onlyMe")}
-        </label>
         <input
           ref={inputRef}
           type="file"
@@ -108,7 +101,7 @@ export function DocumentUploadZone({ accept, limitMb, collectionId, collectionTi
             if (file) void upload(file);
           }}
         />
-        <Button type="button" variant="secondary" size="sm" disabled={busy} onClick={() => inputRef.current?.click()}>
+        <Button type="button" variant="secondary" size="sm" disabled={busy} title={t("upload.formats", { limitMb })} onClick={() => inputRef.current?.click()}>
           {t("upload.chooseFile")}
         </Button>
       </div>

@@ -99,6 +99,16 @@ describe("collections (AC-DPF-5)", () => {
     expect(forStranger.map((doc) => doc.documentId).sort()).toEqual(["DOC-PUBLIC", uploaded.data.documentId].sort());
   });
 
+  it("a file dropped into a restricted collection is restricted too, unless a scope is named", async () => {
+    const collection = await createCollection({ title: "Private", accessScope: "restricted", viewer: owner, actorPrincipalId: "p-owner" });
+    const uploaded = await upload({ collectionId: collection.documentId });
+    if (!uploaded.ok) throw new Error(uploaded.error);
+    expect(current.documents.find((doc) => doc.documentId === uploaded.data.documentId)).toMatchObject({ accessScope: "restricted" });
+    const open = await upload({ collectionId: collection.documentId, accessScope: "organization" });
+    if (!open.ok) throw new Error(open.error);
+    expect(current.documents.find((doc) => doc.documentId === open.data.documentId)).toMatchObject({ accessScope: "organization" });
+  });
+
   it("hides a restricted collection, and its members, from a viewer who may not read it", async () => {
     const collection = await createCollection({ title: "Private", accessScope: "restricted", viewer: owner, actorPrincipalId: "p-owner" });
     current.references.push({ id: "c3", sourceDocumentId: current.documents.find((d) => d.documentId === collection.documentId)!.id, targetDocumentId: "db-public", refType: "contains", createdAt: new Date() });

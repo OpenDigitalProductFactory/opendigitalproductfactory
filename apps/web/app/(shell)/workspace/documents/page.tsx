@@ -84,7 +84,7 @@ export default async function DocumentsPage({ searchParams }: Props) {
           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--dpf-muted)]">Workspace</p>
           <h1 className="mt-1 text-2xl font-semibold text-[var(--dpf-text)]">Documents</h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--dpf-muted)]">
-            Managed briefs, policies, plans, and other coworker outputs with stable IDs, lifecycle state, references, and independent versions.
+            Files, briefs and plans your team and coworkers keep, with versions and history.
           </p>
         </div>
         <div className="grid grid-cols-3 gap-2 text-right">

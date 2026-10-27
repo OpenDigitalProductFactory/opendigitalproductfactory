@@ -4,7 +4,6 @@
     "promptInCollection": "Drop a file here to add it to {$collection}.",
     "formats": "Word, Excel, PowerPoint, OpenDocument, RTF, PDF, text or markdown, up to {$limitMb} MB.",
     "uploading": "Uploading {$fileName}…",
-    "onlyMe": "Only me",
     "chooseFile": "Choose file",
     "chooseFileLabel": "Choose a file to upload",
     "failed": "The file could not be uploaded. Try again.",

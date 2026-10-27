@@ -20,9 +20,9 @@ order: 2
 
 ## Add a File
 
-Drop a file on the box at the top of Managed Documents, or select **Choose file**. Word, Excel, PowerPoint, OpenDocument, RTF, PDF, text and markdown files up to 20 MB are accepted. The file becomes a managed document that you own, and the page opens it. Its PDF, searchable text and previews appear as soon as the background conversion finishes, exactly as for a file a coworker saved.
+Drop a file on the box at the top of Managed Documents, or select **Choose file**. Word, Excel, PowerPoint, OpenDocument, RTF, PDF, text and markdown files up to 20 MB are accepted (hover over **Choose file** to see the list). The file becomes a managed document that you own, and the page opens it. Its PDF, searchable text and previews appear as soon as the background conversion finishes, exactly as for a file a coworker saved.
 
-Tick **Only me** before you drop the file to make it a restricted document (see below). Otherwise everyone who can open Managed Documents can read it.
+A file you drop while a collection marked **Only me** is open is a restricted document too (see below). Otherwise everyone who can open Managed Documents can read it.
 
 ## Collections
 
