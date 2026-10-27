@@ -135,7 +135,16 @@ describe("current assignment and explicit approval policy", () => {
     expect(await loadScheduledRoomMandate(f.db, f.input, f.deps)).toEqual([]);
   });
   it("withholds completion after the room owner changes", async () => {
-    const f = scheduledDeliveryFixture(); Object.assign(f.room, { ownerUserId: "new-owner" });
+    const f = scheduledDeliveryFixture(); f.room.requestedByPrincipal = { aliases: [{ aliasValue: "new-owner" }] };
     expect(await loadScheduledRoomMandate(f.db, f.input, f.deps)).toEqual([]);
+  });
+  it("withholds completion when no task owner can be named for the room", async () => {
+    const f = scheduledDeliveryFixture(); f.deps.resolveRoomTaskOwnerUserId.mockResolvedValue(null);
+    expect(await loadScheduledRoomMandate(f.db, f.input, f.deps)).toEqual([]);
+  });
+  it("admits a room the drive dispatched for its accountable person (BI-D13FA12A)", async () => {
+    const f = scheduledDeliveryFixture(); f.room.requestedByPrincipal = null;
+    f.deps.resolveRoomTaskOwnerUserId.mockResolvedValue("owner");
+    expect(await loadScheduledRoomMandate(f.db, f.input, f.deps)).toEqual(["record_workroom_evidence"]);
   });
 });

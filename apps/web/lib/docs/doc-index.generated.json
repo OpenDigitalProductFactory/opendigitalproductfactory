@@ -13536,7 +13536,9 @@
       "publishedPortal": true,
       "anchors": [
         "use-this-doc-for",
-        "export"
+        "export",
+        "boards",
+        "ask-a-coworker-to-build-a-tracker"
       ]
     },
     "docs/ux-fit/2026-07-31-build-studio-owner-brief-proof-design-grounding.md": {
