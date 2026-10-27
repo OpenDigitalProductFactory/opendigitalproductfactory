@@ -184,7 +184,7 @@ Anti-patterns avoided:
 
 Each item is filed under BI-B3D87B06 once the design is approved. The UX-fit and `principle_decide` (`human_cognitive_load`) gates apply to A2 and A3.
 
-## 8. Open questions for the owner
+## 8. Owner decisions and open questions
 
-1. Where does the Atlas lead: `/ops/workrooms` (recommended) or the `/workspace` home for the owner role?
-2. Does Build Studio's `/build` fleet rail fold into the Atlas as a filter, retiring a separate home, or stay as a delivery-only view?
+1. **Decided (owner, 2026-10-27):** the Atlas leads `/ops/workrooms`. The `/workspace` home keeps its existing L0 callout, which links into the Atlas.
+2. **Open:** does Build Studio's `/build` fleet rail fold into the Atlas as a filter, retiring a separate home, or stay as a delivery-only view?
