@@ -45,8 +45,6 @@ status: active
 
 Live verification (2026-10-14) found the flow-load history overstated: 119 open runs against 23 rooms in flow. Rooms that end without a recorded drive stop never close their run. The tile therefore shows no flow-load trend or change until a room ending closes its run (BI-B0E285FB). Flow time, efficiency and throughput use only finished work and keep their trends.
 
-Restored 2026-10-27 (BI-C9F1DE01). A room's open steps are closed when it ends: right after `updateWorkCapsuleStatus` commits a terminal status, and hourly in the queue metrics aggregator for rooms ended inside a caller's transaction or before the close existed. A week's flow load also leaves out a run parked in an idle hold (`IDLE_HOLD_LANES`: the drive's awaiting-trigger reasons), which is the rule live load already follows. The QueueMetricSnapshot depth and wip were never inflated, because they are read from live, non-terminal rooms.
-
 AC-F5-3 and AC-F5-4 shipped after #6151, which drew a trend only on flow time. The series come from the stage telemetry the tiles already read; no new store. The tiles use the existing token-styled `Trend` sparkline rather than report-kit `Chart`, which is sized for full charts, not 96-pixel inline trends.
 - **AC-F4-1:** a shape renders across every room on it, with each step's queue. Versions with data can be compared. Choosing a step lists the rooms at that step.
 - **AC-F4-2:** each step has a data box: its queue (an inventory triangle for rooms not being worked), typical dwell, process time and first-pass yield, or "too few to measure" below 5 exits.
