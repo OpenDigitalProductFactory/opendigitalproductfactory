@@ -10,6 +10,7 @@ import { PortfolioActivityTree } from "@/components/ops/workrooms/PortfolioActiv
 import { WorkroomInventory, type WorkroomInventoryRow } from "@/components/ops/workrooms/WorkroomInventory";
 import { Surface } from "@/components/ui/Surface";
 import type { WorkPortfolioRoleKey } from "@/lib/navigation/area-portfolio";
+import { loadCooSupervision, type CooSupervisionDb } from "@/lib/operate/coo-surface.server";
 import { loadCapsuleLivenessInventory } from "@/lib/work-capsules/liveness-inventory";
 import { countOperatorAttention, projectWorkroomOperatorSummary } from "@/lib/work-capsules/workroom-operator-summary";
 import { loadRoomAccountabilityBatch } from "@/lib/work-management/room-workforce.server";
@@ -57,10 +58,27 @@ export async function WorkroomActivitySection({ portfolioRole, scopeLabel, child
   const roomReadBounded = inventory.capsulesAll.length >= WORKROOM_READ_LIMIT;
   const owners = await loadRoomAccountabilityBatch(prisma, inventory.capsulesAll
     .flatMap(room => typeof room.id === "string" ? [room.id] : []));
+  const driveOf = (room: Record<string, unknown>) => room.drive as
+    { action: string | null; reason: string | null; lastCycleKey?: string | null; attentionRecorded?: boolean } | undefined;
+  const supervisionRooms = inventory.capsulesAll.map((room) => {
+    const owner = owners.get(String(room.id));
+    const display = room as unknown as WorkroomInventoryRow;
+    return {
+      capsuleId: display.capsuleId,
+      title: display.title,
+      liveness: display.liveness,
+      accountability: owner?.accountability,
+      accountableDisplayName: owner?.accountableDisplayName ?? null,
+      drive: driveOf(room) ?? null,
+    };
+  });
+  const supervision = await loadCooSupervision(prisma as CooSupervisionDb, { rooms: supervisionRooms });
+  const cooById = new Map(supervision.rooms.map((row) => [row.roomId, row]));
   // The client receives display fields only, never scope, outcome or recovery packets.
   const workrooms = inventory.capsulesAll.map((room) => {
     const owner = owners.get(String(room.id));
     const display = room as unknown as WorkroomInventoryRow;
+    const coo = cooById.get(display.capsuleId) ?? null;
     return {
       capsuleId: display.capsuleId, backlogItemId: display.backlogItemId,
       title: display.title, status: display.status, source: display.source,
@@ -73,7 +91,15 @@ export async function WorkroomActivitySection({ portfolioRole, scopeLabel, child
       accountableName: owner?.accountableDisplayName ?? null,
       operator: projectWorkroomOperatorSummary({ ...display,
         accountability: owner?.accountability,
-        drive: room.drive as { action: string | null; reason: string | null; attentionRecorded?: boolean } | undefined }),
+        drive: driveOf(room) }),
+      coo: coo ? {
+        lastCycleKey: coo.lastCycleKey, lastAction: coo.lastAction, lastReason: coo.lastReason,
+        ticksSinceAdvance: coo.ticksSinceAdvance, nextWakeAt: coo.nextWakeAt,
+        spanOfControl: coo.spanOfControl, overSpan: coo.overSpan, unowned: coo.unowned,
+        paused: coo.paused, ownerIsSuggestion: coo.ownerIsSuggestion,
+        escalationLabel: coo.escalationLabel, missingAckCount: coo.missingAckCount,
+        actionHref: coo.actionHref,
+      } : null,
     };
   });
 
@@ -89,7 +115,7 @@ export async function WorkroomActivitySection({ portfolioRole, scopeLabel, child
     branchId: room.portfolioRole ?? "unplaced",
     href: `/workspace/cases/${encodeWorkCaseKey({ sourceType: "work-capsule", sourceId: room.capsuleId })}`,
     status: room.status,
-    latestAction: null,
+    latestAction: room.coo?.lastAction ?? null,
     blocker: room.status === "blocked" ? room.livenessReason : null,
     evidenceAt: room.trueLivenessAt ?? null,
   }));
@@ -124,7 +150,13 @@ export async function WorkroomActivitySection({ portfolioRole, scopeLabel, child
       </Surface>
       <div className="mt-6">
         <WorkroomInventory workrooms={workrooms} summary={inventory.livenessSummary}
-          heldCapsuleIds={sharedRecoveryIds} attentionContent={children} />
+          heldCapsuleIds={sharedRecoveryIds} attentionContent={children}
+          supervision={{
+            unownedCount: supervision.unowned.length,
+            pausedCount: supervision.paused.length,
+            overSpanOwners: supervision.overSpanOwners,
+            missingAckCount: supervision.missingAcks.length,
+          }} />
       </div>
       {!portfolioRole && (
         <details className="mt-6 rounded-dpf-xl border border-dpf-border p-4">

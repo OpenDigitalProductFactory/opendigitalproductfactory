@@ -29,6 +29,7 @@ vi.mock("@/lib/inference/ai-provider-internals", () => ({
 vi.mock("./execution-adapter-registry", () => ({
   registerExecutionAdapter: vi.fn(),
 }));
+vi.mock("./cli-pool-status", () => ({ recordCliRateLimit: vi.fn(), clearCliRateLimit: vi.fn() }));
 
 vi.mock("./extract-tool-calls", () => ({
   extractToolCalls: vi.fn().mockReturnValue([]),
@@ -60,6 +61,7 @@ function makeMockProcess(): MockProcess {
   proc.kill = vi.fn();
   return proc;
 }
+
 
 const mockSpawn = vi.fn();
 const mockExecAsync = vi.fn();
@@ -273,7 +275,7 @@ describe("codexCliAdapter — E2BIG spawn error classification", () => {
     mockSpawn.mockImplementation(() => {
       spawnCallCount++;
       const proc = makeMockProcess();
-      if (spawnCallCount <= 2) {
+      if (spawnCallCount <= 3) {
         // Prompt + runner file writes — succeed synchronously on nextTick
         process.nextTick(() => proc.emit("close", 0));
       } else {
@@ -312,7 +314,69 @@ describe("codexCliAdapter — E2BIG spawn error classification", () => {
   });
 });
 
+describe("Codex native effect replay fence", () => {
+  it.each(["close", "error", "structured-error", "empty-result"])("holds an effect-first execution followed by %s", async (event) => {
+    vi.clearAllMocks();
+    const { getDecryptedCredential } = await import("@/lib/inference/ai-provider-internals");
+    vi.mocked(getDecryptedCredential).mockResolvedValue({ secretRef: "fake-test-key", cachedToken: null } as never);
+    mockExecAsync.mockResolvedValue({ stdout: "", stderr: "" });
+    let calls = 0, effects = 0;
+    mockSpawn.mockImplementation(() => {
+      const proc = makeMockProcess();
+      const isExecution = ++calls === 4;
+      process.nextTick(() => {
+        if (!isExecution) { proc.emit("close", 0); return; }
+        effects++;
+        proc.emit("spawn");
+        if (event === "empty-result") { proc.emit("close", 0); return; }
+        if (event === "structured-error") {
+          proc.stdout.emit("data", Buffer.from("Invalid API key · Fix external API key"));
+          proc.emit("close", 0); return;
+        }
+        proc.stderr.emit("data", Buffer.from("ERROR: authentication failed after native effect"));
+        if (event === "close") proc.emit("close", 1);
+        else proc.emit("error", new Error("kill ESRCH"));
+      });
+      return proc;
+    });
+    const { codexCliAdapter } = await import("./codex-cli-adapter");
+    await expect(codexCliAdapter.execute(makeRequest())).rejects.toMatchObject({ name: "NativeCliExecutionUncertainError" });
+    expect(effects).toBe(1);
+    expect(calls).toBe(4);
+  });
+});
+
 describe("Codex inference context isolation", () => {
+  it("keeps simultaneous account credentials in distinct private homes", async () => {
+    vi.clearAllMocks();
+    const { getDecryptedCredential } = await import("@/lib/inference/ai-provider-internals");
+    vi.mocked(getDecryptedCredential).mockImplementation(async (_provider, connectionId) => ({ secretRef: connectionId === "account-a" ? "test-key-a" : "test-key-b", cachedToken: null } as never));
+    mockExecAsync.mockResolvedValue({ stdout: "", stderr: "" });
+    const writes: Array<{ path: string; content: string }> = [];
+    mockSpawn.mockImplementation((_command: string, args: string[]) => {
+      const proc = makeMockProcess();
+      if (args.includes("-i")) {
+        proc.stdin.write.mockImplementation((data: string, cb?: () => void) => {
+          writes.push({ path: args.at(-1)!, content: Buffer.from(data, "base64").toString("utf8") }); cb?.(); return true;
+        });
+        proc.stdin.end.mockImplementation(() => process.nextTick(() => proc.emit("close", 0)));
+      } else {
+        process.nextTick(() => { proc.stdout.emit("data", Buffer.from("Completed")); proc.emit("close", 0); });
+      }
+      return proc;
+    });
+    const { codexCliAdapter } = await import("./codex-cli-adapter");
+    await Promise.all(["account-a", "account-b"].map(providerConnectionId => codexCliAdapter.execute(makeRequest({ plan: makePlan({ providerConnectionId }) }))));
+    expect(getDecryptedCredential).toHaveBeenCalledWith("codex", "account-a");
+    expect(getDecryptedCredential).toHaveBeenCalledWith("codex", "account-b");
+    const homes = writes.filter(write => write.content.includes("const config =")).map(write => JSON.parse(write.content.match(/const config = (.+);/)![1]!).env.CODEX_HOME as string);
+    expect(new Set(homes).size).toBe(2);
+    for (const key of ["test-key-a", "test-key-b"]) {
+      const staged = writes.find(write => write.path.endsWith("auth.json") && JSON.parse(write.content).OPENAI_API_KEY === key)!;
+      expect(homes.some(home => staged.path.includes(`${home}/auth.json`))).toBe(true);
+      expect(mockExecAsync.mock.calls.some(([command]) => command.includes(key))).toBe(false);
+    }
+  });
   it("runs outside the shared checkout and cleans up its own context directory", async () => {
     vi.clearAllMocks();
     const { getDecryptedCredential } = await import("@/lib/inference/ai-provider-internals");
@@ -338,12 +402,13 @@ describe("Codex inference context isolation", () => {
     });
     const { codexCliAdapter } = await import("./codex-cli-adapter");
     await codexCliAdapter.execute(makeRequest());
-    const runner = writes.find(value => value.startsWith("#!/bin/sh"))!;
-    const directory = runner.match(/cd (\/tmp\/codex-cwd-[\w-]+) \|\| exit 1/)?.[1];
-    expect(directory).toBeDefined();
-    expect(runner).not.toContain("cd /workspace");
-    expect(runner).toContain(`mkdir -p ${directory} || exit 1`);
-    expect(mockExecAsync.mock.calls.some(([command]) => command.includes(`rmdir ${directory}`))).toBe(true);
+    const runner = writes.find(value => value.includes("const config ="))!;
+    const config = JSON.parse(runner.match(/const config = (.+);/)![1]!);
+    expect(config.env.CODEX_HOME).toMatch(/^\/tmp\/dpf-codex-auth-/);
+    expect(runner).not.toContain("sk-test");
+    expect(config.cwd).toBe(config.env.CODEX_HOME);
+    expect(config.cwd).not.toContain("/workspace");
+    expect(mockSpawn.mock.calls.some(([, args]) => args.includes("node"))).toBe(true);
   });
 });
 
@@ -472,5 +537,59 @@ describe("cliFailureSignal — classify the CLI's own error, not the echoed prom
     const text = "x".repeat(10_000) + "\nnot logged in";
     expect(cliFailureSignal(text)).toContain("not logged in");
     expect(cliFailureSignal(text).length).toBeLessThanOrEqual(2_000);
+  });
+});
+
+
+describe("governed read-only Codex MCP transport", () => {
+  it("attaches only the bound native readers, never the bearer in argv or the archived prompt", async () => {
+    vi.clearAllMocks();
+    const { getDecryptedCredential } = await import("@/lib/inference/ai-provider-internals");
+    vi.mocked(getDecryptedCredential).mockResolvedValue({ secretRef: "test-provider-key", cachedToken: null } as never);
+    mockExecAsync.mockResolvedValue({ stdout: "", stderr: "" });
+    const writes: Array<{path: string; content: string}> = [];
+    mockSpawn.mockImplementation((_command: string, args: string[]) => {
+      const proc = makeMockProcess();
+      if (args.includes("-i")) {
+        proc.stdin.write.mockImplementation((data: string, cb?: () => void) => {
+          writes.push({path: args.at(-1)!, content: Buffer.from(data,"base64").toString("utf8")}); cb?.(); return true;
+        });
+        proc.stdin.end.mockImplementation(() => process.nextTick(() => proc.emit("close",0)));
+      } else process.nextTick(() => {proc.stdout.emit("data",Buffer.from('{"summary":"real native result"}'));proc.emit("close",0);});
+      return proc;
+    });
+    const names = ["read_source_at_version", "wiki_query", "search_ux_critique_corpus"];
+    const mintReadOnlySession = vi.fn(async()=>"test-session-secret");
+    const { codexCliAdapter } = await import("./codex-cli-adapter");
+    const result = await codexCliAdapter.execute(makeRequest({
+      messages:[{role:"user",content:[{type:"text",text:"Inspect rendered input"},{type:"image_url",image_url:{url:"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aHNcAAAAASUVORK5CYII="}}]}],
+      tools: names.map(name => ({type:"function",function:{name,parameters:{type:"object",properties:{}}}})),
+      mcpSession: {userId:"human",agentId:"ux-design-critic",threadId:"thread",taskRunId:"TR-original",
+        taskExecutionFence:{schemaVersion:1,reservation:"reserved",dispatchClaim:"claimed",authorityDigest:null,requestDigest:"a".repeat(64)},
+        readOnlyToolNames:names,mintReadOnlySession},
+    }));
+    expect(mintReadOnlySession).toHaveBeenCalledExactlyOnceWith();
+    const config = writes.find(w=>w.path.endsWith("/config.toml"));
+    expect(config?.content).toContain('[mcp_servers.dpf]');
+    expect(config?.content).toContain('required = true');
+    expect(config?.content).toContain('enabled_tools = ["read_source_at_version","wiki_query","search_ux_critique_corpus"]');
+    expect(config?.content).toContain('shell_tool = false');
+    expect(config?.content).toContain('multi_agent = false');
+    expect(config?.content).toContain('apps = false');
+    expect(config?.content).toContain('test-session-secret');
+    const prompt = writes.find(w=>w.path.endsWith("-prompt.txt"))!.content;
+    expect(prompt).not.toContain('test-session-secret');
+    expect(prompt).not.toContain('Available tools. To invoke a tool, output ONE JSON');
+    const runner = writes.find(w=>w.content.includes("const config ="))!.content;
+    expect(runner).not.toContain("test-session-secret");
+    expect(runner).not.toContain("--dangerously-bypass-approvals-and-sandbox");
+    expect(runner).toContain('read-only');
+    expect(runner).toContain('--image');
+    expect(writes.find(w=>w.path.endsWith('/image-1.png'))).toBeDefined();
+    expect(prompt).not.toContain('iVBORw0KGgo');
+    expect(prompt).toContain('[Attached image 1]');
+    expect(runner).toContain("fs.rmSync(config.home, { recursive: true, force: true })");
+    expect(result.toolCalls).toEqual([]);
+    expect(mockExecAsync.mock.calls.some(([cmd])=>cmd.includes("test-session-secret"))).toBe(false);
   });
 });

@@ -1,0 +1,15 @@
+{
+  "version": "1",
+  "decisionInteractionId": "DI-BE040C114168",
+  "decidedOption": "explicit-existing-assistant",
+  "scope": { "files": ["apps/web/components/admin/McpOAuthClientManager.tsx"] },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["explicit-existing-assistant", "implicit-client-name", "separate-credential-wizard"],
+    "source": "Recorded kernel option comparison; high-confidence proceed with usable signal. This records a design choice, not a human approval or live credential qualification.",
+    "prototype": "docs/superpowers/prototypes/2026-10-16-headless-coworker-binding.html",
+    "advisoryEngagementId": "CE-7FFF5D1E",
+    "advisoryStatus": "requested",
+    "rationale": "Reuse one existing admin form with an eligible assistant selector, explicit account-only consequence and saved server identity. Preserve the current permission boundary and shorten repeated copy."
+  }
+}

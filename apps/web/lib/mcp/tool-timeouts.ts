@@ -27,6 +27,9 @@
  * runtime + killable, which is the right posture for the common case.
  */
 
+import { resolveAcquireTimeoutMs } from "@/lib/inference/inference-admission";
+import { LOCAL_INFERENCE_TIMEOUT_CEILING_MS } from "@/lib/routing/local-inference-runtime-policy";
+
 export type ToolWaitBudget = {
   /** Typical execution time in normal operation. Used for ETA hints. */
   typicalMs: number;
@@ -77,7 +80,12 @@ export const TOOL_WAIT_BUDGETS: Record<string, ToolWaitBudget> = {
   // ─── AI inference / probes / evals ───────────────────────────────────
 
   // Endpoint probes — read-only HTTP calls to provider /v1/models etc.
-  run_endpoint_tests: { typicalMs: 60_000, maxMs: 300_000, killable: true },
+  // The drain knows the tool name, not its mode. Conservatively cover one
+  // patient local checkpoint step; this estimate grants no execution authority.
+  run_endpoint_tests: { typicalMs: 60_000, get maxMs() {
+    return Math.min(2_147_483_647, Math.max(300_000, LOCAL_INFERENCE_TIMEOUT_CEILING_MS
+      + Math.max(resolveAcquireTimeoutMs("interactive"), resolveAcquireTimeoutMs("autonomous"))));
+  }, killable: true },
 
   // Dimension eval — multi-prompt judge over a model.
   // Bounded but long; killable safely (eval results aren't committed

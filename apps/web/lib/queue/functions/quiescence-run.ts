@@ -243,7 +243,7 @@ export const quiescenceRun = jobs.createFunction(
           actualWaitMs,
         }),
       );
-      await step.run("flip-level-normal-abort-draining", () => setQuiescenceLevel("normal", null));
+      await step.run("flip-level-normal-abort-draining", () => setQuiescenceLevel("normal", null, new Date(), runId));
       await step.run("emit-cleared-aborted-draining", () =>
         emitCleared({ runId, outcome: "aborted", triggerRefId, reason: abortedBy }),
       );
@@ -262,7 +262,7 @@ export const quiescenceRun = jobs.createFunction(
           actualWaitMs,
         }),
       );
-      await step.run("flip-level-normal-exhausted", () => setQuiescenceLevel("normal", null));
+      await step.run("flip-level-normal-exhausted", () => setQuiescenceLevel("normal", null, new Date(), runId));
       await step.run("emit-cleared-failed-exhausted", () =>
         emitCleared({ runId, outcome: "failed", triggerRefId, reason: "wait-exhausted" }),
       );
@@ -283,7 +283,7 @@ export const quiescenceRun = jobs.createFunction(
           actualWaitMs,
         }),
       );
-      await step.run("flip-level-normal-defer", () => setQuiescenceLevel("normal", null));
+      await step.run("flip-level-normal-defer", () => setQuiescenceLevel("normal", null, new Date(), runId));
       await step.run("emit-cleared-deferred", () =>
         emitCleared({ runId, outcome: "deferred", triggerRefId, deferSurface: blockingSurface }),
       );
@@ -327,7 +327,7 @@ export const quiescenceRun = jobs.createFunction(
           completedAt: new Date(),
         }),
       );
-      await step.run("flip-level-normal-no-signal", () => setQuiescenceLevel("normal", null));
+      await step.run("flip-level-normal-no-signal", () => setQuiescenceLevel("normal", null, new Date(), runId));
       await step.run("emit-cleared-failed-no-signal", () =>
         emitCleared({ runId, outcome: "failed", triggerRefId, reason: "no-signal" }),
       );
@@ -369,7 +369,7 @@ export const quiescenceRun = jobs.createFunction(
           completionSource: "caller",
         }),
       );
-      await step.run("flip-level-normal-success", () => setQuiescenceLevel("normal", null));
+      await step.run("flip-level-normal-success", () => setQuiescenceLevel("normal", null, new Date(), runId));
       await step.run("emit-cleared-success", () =>
         emitCleared({ runId, outcome: "succeeded", triggerRefId }),
       );
@@ -386,7 +386,7 @@ export const quiescenceRun = jobs.createFunction(
           completedAt: new Date(),
         }),
       );
-      await step.run("flip-level-normal-abort", () => setQuiescenceLevel("normal", null));
+      await step.run("flip-level-normal-abort", () => setQuiescenceLevel("normal", null, new Date(), runId));
       await step.run("emit-cleared-aborted", () =>
         emitCleared({ runId, outcome: "aborted", triggerRefId, reason: operatorUserId }),
       );
@@ -403,7 +403,7 @@ export const quiescenceRun = jobs.createFunction(
         completedAt: new Date(),
       }),
     );
-    await step.run("flip-level-normal-fail", () => setQuiescenceLevel("normal", null));
+    await step.run("flip-level-normal-fail", () => setQuiescenceLevel("normal", null, new Date(), runId));
     await step.run("emit-cleared-failed-swap", () =>
       emitCleared({ runId, outcome: "failed", triggerRefId, reason }),
     );

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { Archive, FileText, Search } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { searchManagedDocuments } from "@/lib/documents/document-store";
+import { readableDocumentWhere, resolveDocumentViewer } from "@/lib/documents/document-access";
 import { prisma } from "@dpf/db";
 import { LocalTime } from "@/components/ui/LocalTime";
 
@@ -37,8 +38,12 @@ export default async function DocumentsPage({ searchParams }: Props) {
   if (!session?.user) redirect("/login");
 
   const sp = await searchParams;
+  // Only documents this person may read are listed, and only their owners
+  // are offered as a filter (BI-957915CB).
+  const viewer = await resolveDocumentViewer(session.user.id);
   const [documents, owners] = await Promise.all([
     searchManagedDocuments({
+      viewer,
       query: sp.q ?? null,
       currentState: sp.state || null,
       documentKind: sp.kind || null,
@@ -47,7 +52,7 @@ export default async function DocumentsPage({ searchParams }: Props) {
       limit: 50,
     }),
     prisma.principal.findMany({
-      where: { ownedDocuments: { some: {} } },
+      where: { ownedDocuments: { some: readableDocumentWhere(viewer) } },
       orderBy: { displayName: "asc" },
       select: { id: true, displayName: true },
       take: 100,

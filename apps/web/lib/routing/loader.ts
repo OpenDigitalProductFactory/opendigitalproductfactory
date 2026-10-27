@@ -90,6 +90,7 @@ import {
 import { MODEL_ROUTING_ENDPOINT_TYPES } from "./provider-eligibility";
 import { serializeActivityHarnessAudit } from "./activity-harness-audit";
 import { authEligibilityExclusionReason } from "./model-auth-eligibility";
+import { expandProviderAccountCandidates } from "./provider-account-candidates";
 
 /**
  * EP-MODEL-CAP-001-B: Source-priority tool use resolution.
@@ -203,9 +204,17 @@ async function queryEndpointManifests(readLocalContext: LocalContextReader): Pro
   // explicitly created one, so this is inert on a default install.
   const riskAcceptedByProvider = await loadActiveRiskAcceptedClearances();
 
-  return Promise.all(profiles
-    .filter((profile) => readiness.get(profile.providerId) === true)
-    .map((profile) => profileToManifest(profile, readLocalContext, undefined, riskAcceptedByProvider)));
+  const accounts = await prisma.aiProviderConnection.findMany({
+    where: { providerId: { in: [...providers.keys()] } },
+    select: { connectionId: true, providerId: true, status: true, authMethod: true, executionChannel: true,
+      credentialEntryId: true, updatedAt: true, credentialEntry: { select: { status: true, updatedAt: true } },
+      accessibleModelIds: true, modelsVerifiedAt: true, evidenceStatus: true, accountClass: true, supplierContractId: true, lastReviewedAt: true },
+  });
+  const candidates = await Promise.all(profiles.map(async profile => expandProviderAccountCandidates(
+    await profileToManifest(profile, readLocalContext, undefined, riskAcceptedByProvider),
+    accounts, readiness.get(profile.providerId) === true, profile.capabilityOverrides,
+  )));
+  return candidates.flat();
 }
 
 type ProfileWithProvider = Awaited<

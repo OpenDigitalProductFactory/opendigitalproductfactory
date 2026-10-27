@@ -98,6 +98,16 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
   },
   // Build Studio owner proof. Missing, stale, failed, and not-applicable stay
   // visually distinct so absence is never mistaken for a pass.
+  // Managed repository login status (BI-985F4EC9, spec §3.4). Anything short
+  // of Connected needs the operator, so only Connected is success.
+  managedRepository: {
+    connected: "success",
+    "read-only": "warning",
+    "no-access": "danger",
+    "login-expired": "warning",
+    "not-connected": "neutral",
+    "check-failed": "warning",
+  },
   ownerProof: {
     passed: "success",
     failed: "danger",
@@ -594,6 +604,7 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     rate_limited: "warning",
     needs_credentials: "warning",
     no_models: "warning",
+    public_only: "warning",
     disabled: "neutral",
     unconfigured: "neutral",
     not_routable: "neutral",

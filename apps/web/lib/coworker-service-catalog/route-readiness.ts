@@ -149,20 +149,14 @@ export async function loadCoworkerRoutingReadinessSnapshot(
       policyRules,
       overrides: overridesByTaskType.get("conversation") ?? [],
       capacityByProvider: new Map(
-        capacityRows.map(
-          (row: {
-            providerId: string;
-            state: string;
-            retryAt: Date | null;
-            lastObservedAt: Date | null;
-          }) => [
+        capacityRows.flatMap((row) => row.providerId ? [[
           row.providerId,
           {
             state: row.state,
             retryAtMs: row.retryAt?.getTime() ?? null,
             observedAtMs: row.lastObservedAt?.getTime() ?? null,
           },
-        ]),
+        ] as const] : []),
       ),
       localOnlyInference,
       postureByAgent,

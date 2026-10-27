@@ -31,6 +31,18 @@ type OAuthCapsuleTarget = {
   params: Record<string, unknown>; userId: string; agentId?: string; authSource?: string; action: boolean; toolName?: string;
 };
 
+/** The exact call that hands the person's room to this assistant. */
+export function workroomHandoverCall(capsuleId: string, toExecutorKind: WorkCapsuleExecutorKind) {
+  return {
+    tool: WORKROOM_HANDOVER_TOOL,
+    arguments: {
+      capsuleId,
+      toExecutorKind,
+      reason: "A new assistant is taking over this work for the room's owner.",
+    },
+  };
+}
+
 /**
  * The person owns the room but this assistant has never worked in it, which is
  * what a replacement session looks like. Name the handover instead of sending
@@ -44,16 +56,7 @@ function assistantNotAdmitted(capsuleId: string, toExecutorKind: WorkCapsuleExec
       "The person you act for owns this workroom, but you have not been admitted to it. " +
       `Take it over with ${WORKROOM_HANDOVER_TOOL} (the exact call is in data.handover). They may be asked to approve it, unless an operator has already graduated you for this kind of action. ` +
       "After that, get_workroom shows where the work stands and what to do next.",
-    data: {
-      handover: {
-        tool: WORKROOM_HANDOVER_TOOL,
-        arguments: {
-          capsuleId,
-          toExecutorKind,
-          reason: "A new assistant is taking over this work for the room's owner.",
-        },
-      },
-    },
+    data: { handover: workroomHandoverCall(capsuleId, toExecutorKind) },
   };
 }
 type HandoverAccess = { decision: { level: string; reason?: string }; handoverRefusal?: HandoverRefusal };
@@ -80,6 +83,26 @@ const workroomAccessDenied = () => ({
   error: "workroom_access_denied",
   message: "You or your assistant are not admitted to this workroom. Ask its owner to invite you.",
 });
+
+/**
+ * The plain refusal, naming the account this connection acts as (BI-F586F8A5).
+ * A connection made in a browser signed in as someone else (the automation
+ * persona, a colleague) gets this refusal on the person's own rooms, and
+ * "ask its owner" sent the owner to themself. The caller's own account is
+ * theirs to see; the room's owner is not named, since the caller is not admitted.
+ */
+async function workroomAccessDeniedFor(userId: string) {
+  const { prisma } = await import("@dpf/db");
+  const user = userId ? await prisma.user.findUnique({ where: { id: userId }, select: { email: true } }) : null;
+  if (!user?.email) return workroomAccessDenied();
+  return {
+    success: false as const,
+    error: "workroom_access_denied",
+    message: `This connection acts as ${user.email}, which is not admitted to this workroom. `
+      + "If the room is yours, reconnect your assistant while signed in as the room's owner. Otherwise ask its owner to invite you.",
+    data: { connectedAs: user.email },
+  };
+}
 
 const workroomDataAccessRequired = () => ({
   success: false as const,
@@ -148,10 +171,10 @@ export async function workroomTargetAccessRefusal(input: OAuthCapsuleTarget) {
       agentId: input.agentId,
     });
   }
-  const notAdmitted = workroomAccessDenied();
   const { prisma } = await import("@dpf/db");
   const room = await prisma.workroom.findUnique({ where: { capsuleId: input.params.capsuleId }, select: { id: true } });
-  if (!room || !input.agentId) return notAdmitted;
+  // A missing room is refused in the same words, so the refusal is no existence oracle.
+  if (!room || !input.agentId) return workroomAccessDeniedFor(input.userId);
   const { resolveAgentWorkroomAccess } = await import("@/lib/work-management/workroom-agent-access.server");
   const requested = input.action ? "action" : "content";
   const handover = input.toolName === WORKROOM_HANDOVER_TOOL;
@@ -168,7 +191,7 @@ export async function workroomTargetAccessRefusal(input: OAuthCapsuleTarget) {
     const { providerToExecutorKind } = await import("./external-session-capture");
     return assistantNotAdmitted(input.params.capsuleId, providerToExecutorKind(input.agentId));
   }
-  return asHandover.handoverRefusal ? handoverRefused(asHandover.handoverRefusal) : notAdmitted;
+  return asHandover.handoverRefusal ? handoverRefused(asHandover.handoverRefusal) : workroomAccessDeniedFor(input.userId);
 }
 
 export async function authorizeOAuthCapsuleTarget(input: OAuthCapsuleTarget): Promise<boolean> {

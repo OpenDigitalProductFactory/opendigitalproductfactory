@@ -74,7 +74,7 @@ export async function runEndpointConcurrencyDiagnostic(
           try {
             signal.throwIfAborted();
             const answer = await awaitInferenceCancellation(call({ providerId, modelId, traceId }), signal);
-            const reason = finishReason(answer.raw);
+            const reason = answer.finishReason ?? finishReason(answer.raw);
             const contentCaptured = answer.content.length <= 4096;
             const incomplete = answer.truncated === true || reason !== "stop" || !contentCaptured;
             const empty = !answer.content.trim() || (answer.toolCalls?.length ?? 0) > 0;
@@ -101,7 +101,9 @@ export async function runEndpointConcurrencyDiagnostic(
         const holder = 1 - waiting;
         const acquired = position(holder, "acquired"), queued = position(waiting, "queued");
         const released = position(holder, "released"), handedOff = position(waiting, "acquired");
-        return acquired >= 0 && acquired < queued && queued < released && released < handedOff;
+        // Entries can enqueue before the lane's scheduled pump starts. The
+        // observed wait and ownership intervals must overlap before handoff.
+        return acquired >= 0 && queued >= 0 && Math.max(acquired, queued) < released && released < handedOff;
       });
       const failed = callers.some(c => c.outcome === "failed");
       const complete = callers.every(c => c.outcome === "passed" && c.released);

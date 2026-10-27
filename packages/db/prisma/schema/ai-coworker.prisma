@@ -694,7 +694,17 @@ model AdapterCapabilityProfile {
 // quota pool, status, refusal/error class, tool-call validity, capability
 // usage, and schema-drift detection. Supports single/shadow/race execution
 // modes via raceCohortId grouping. Feeds nightly outcome scoring (§6.4).
-/// One row per LLM inference (probes, evals, coworker reasoning, builds). Cost/quality telemetry; running aggregates live elsewhere, so raw rows are disposable past 6 months.
+enum InvestmentWorkPurpose {
+  sharedPlatform
+  archetype
+}
+
+enum InvestmentWorkClass {
+  refactor
+  new
+}
+
+/// One immutable inference attempt, including its funding attribution at dispatch.
 /// @dpf lifecycle=telemetry-bounded retention=180d categories=telemetry timeAxis=startedAt
 model AdapterRunTelemetry {
   id             String  @id @default(cuid())
@@ -741,12 +751,28 @@ model AdapterRunTelemetry {
 
   rawEventDigest String? // sha256 of normalized event log, for cross-adapter equivalence checks
 
+  // Nullable for legacy/unassigned attempts; never reconstructed from today's owner.
+  investmentPrincipalId     String?
+  investmentOrganizationId  String?
+  investmentItemId          String?
+  investmentPurpose         InvestmentWorkPurpose?
+  investmentClass           InvestmentWorkClass?
+  investmentPolicyRef       String? // serialized policy revision/default and optional classification provenance references
+  investmentInstallationRef String? // canonical federation device id captured at dispatch
+  investmentCapturedAt      DateTime?
+  investmentPrincipal       Principal?    @relation("InvestmentAttemptPrincipal", fields: [investmentPrincipalId], references: [id], onDelete: Restrict)
+  investmentOrganization    Organization? @relation("InvestmentAttemptOrganization", fields: [investmentOrganizationId], references: [id], onDelete: Restrict)
+  investmentItem            BacklogItem?  @relation("InvestmentAttemptItem", fields: [investmentItemId], references: [id], onDelete: Restrict)
+
   @@index([adapterKind, startedAt])
   @@index([raceCohortId])
   @@index([threadId, startedAt])
   @@index([agentId, startedAt])
   @@index([startedAt])
   @@index([traceId])
+  @@index([investmentPrincipalId, investmentOrganizationId, investmentPurpose, startedAt], map: "AdapterRunTelemetry_investment_scope_startedAt_idx")
+  @@index([investmentOrganizationId])
+  @@index([investmentItemId])
 }
 
 // EP-COST Phase 2 prerequisite — one row per budget event so the

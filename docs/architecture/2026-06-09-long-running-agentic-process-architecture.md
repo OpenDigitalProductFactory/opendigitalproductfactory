@@ -20,6 +20,20 @@ execution wait separately from completed individual verdicts. Retry only after
 reviewer execution recovers; original execution records remain intact. See the
 [MCP recovery contract](mcp-tool-authorization-runbook.md).
 
+**Restricted present reassessment (R2 source):** the
+[review settlement amendment](../superpowers/specs/2026-10-16-original-initiative-review-settlement-design.md)
+preserves uncertain original outcomes and defines a separate bounded current
+assessment. Its worker opens a sealed manifest before preparing the loop, binds
+the task/request, actor, generation, exact reader/writer and current provider
+configuration, and rejects callbacks outside that execution scope. The loop
+omits auxiliary grounding, draft reviews and asynchronous learning writers.
+Capture failure before an effect permits zero starts; failure after a start
+holds further effects and preserves unknown consumption. Readback reconciles a
+genuine committed writer receipt before reporting uncertainty. Neither a retry
+nor a new current verdict settles an unknown historical effect. Atomic admission,
+finite total-token qualification and canonical served positive/refusal acceptance
+remain required before this work is complete; this source note records no release.
+
 **Date:** 2026-06-09
 **Status:** Assessment / direction-setting. Not a build spec. The phased recommendations in §8 become backlog items, each promoted through Build Studio in the normal way.
 **Audience:** Operator (Mark), platform architects, the Build Studio sub-agents, and any coworker that owns a process which runs longer than a single request.
@@ -57,7 +71,7 @@ We have spent months hardening it and it remains fragile. The concrete, observed
 | Symptom | Mechanism in the code today | Memory / PR trail |
 |---|---|---|
 | **No task-level resume on restart** | Task results stored by **title**, matched on resume by string equality (`getCompletedTaskTitles()` [`build-orchestrator.ts:712`](../../apps/web/lib/build/build-orchestrator.ts)); a re-plan that renames/reorders tasks breaks the match → duplicate or skipped work. No per-step journal. | known limitation |
-| **Stranded builds** | `autoExecuteBuild()` is fire-and-forget in the portal process; a portal recycle kills it mid-flight. Recovery is a *boot hook* (`resumeStrandedBuildsOnBoot` [`instrumentation.ts:305`](../../apps/web/instrumentation.ts)) that re-dispatches stale rows — i.e. crash recovery is bolted on outside the execution model. | — |
+| **Stranded builds** | `autoExecuteBuild()` is fire-and-forget in the portal process; a portal recycle kills it mid-flight. Recovery is a *boot hook* (`resumeStrandedBuildsOnBoot` [`instrumentation.ts:305`](../../apps/web/instrumentation.ts)) that re-dispatches stale rows — i.e. crash recovery is bolted on outside the execution model. The hook runs every tick, so it records a skipped resume only when the skip reason changed since that build's previous resume row (`lib/build/resume-outcome-activity.ts`, BI-13971A7C). | — |
 | **Contradictory checkpoint states** | `buildExecState` can land in self-contradictory shapes (missing-step, error-without-fail, complete-no-verify); a second boot hook `recoverContradictoryBuildExecStatesOnBoot` [`instrumentation.ts:214`](../../apps/web/instrumentation.ts) classifies and clears them. | — |
 | **Self-upgrade kills in-session work** | A bundle-hash change recycles the portal container; the in-portal orchestrator dies. Quiescence + boot reconciliation (`reconcileSelfUpgradeRunsOnBoot` [`instrumentation.ts:119`](../../apps/web/instrumentation.ts)) patch around it. | self-upgrade-kills-in-session-ux |
 | **Lost task evidence** | `taskResults` write uses optimistic locking with `MAX_MERGE_RETRIES = 1` ([`build-orchestrator.ts`](../../apps/web/lib/build/build-orchestrator.ts)); on a second collision the write is **silently dropped** and the build proceeds as if it succeeded. | — |

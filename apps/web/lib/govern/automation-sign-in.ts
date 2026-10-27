@@ -40,9 +40,10 @@ import {
 } from "@/lib/install/environment-class";
 import { isRecord } from "@/lib/shared/coerce";
 import type { FixtureActor, FixtureRequest } from "./automation-fixture";
+import { AUTOMATION_PERSONA_EMAIL, AUTOMATION_PERSONA_DISPLAY_NAME } from "./automation-persona-identity";
+import { automationOAuthConsentFor, type AutomationOAuthConsent } from "@/lib/auth/oauth-automation-consent";
 
-export const AUTOMATION_PERSONA_EMAIL = "automation@dpf.local";
-export const AUTOMATION_PERSONA_DISPLAY_NAME = "Platform automation";
+export { AUTOMATION_PERSONA_EMAIL, AUTOMATION_PERSONA_DISPLAY_NAME } from "./automation-persona-identity";
 export const AUTOMATION_SIGN_IN_PATH = "/api/automation/sign-in";
 export const AUTOMATION_SIGN_IN_GRANT_KEY = "automation.signIn.enabled";
 export const AUTOMATION_SIGN_IN_CONSUMED_KEY = "automation.signIn.consumed";
@@ -231,6 +232,8 @@ export interface AutomationSessionClaims {
   accountId: null;
   accountName: null;
   contactId: null;
+  /** The one OAuth request this session may approve as the persona (BI-F586F8A5). */
+  automationOAuthConsent?: AutomationOAuthConsent;
 }
 
 /**
@@ -319,10 +322,12 @@ export async function consumeAutomationSignIn(
   }
 
   console.info("[automation-sign-in] consumed", { persona: user.email, requestedBy: payload["requestedBy"] ?? null, next: payload["next"] ?? "/" });
+  const nextPath = sanitizeNextPath(typeof payload["next"] === "string" ? payload["next"] : undefined);
+  const oauthConsent = automationOAuthConsentFor(nextPath);
   return {
     accepted: true,
     ...(fixtureExpiry ? { maxAge: Math.max(0, Math.floor((fixtureExpiry.getTime() - Date.now()) / 1000)) } : {}),
-    nextPath: sanitizeNextPath(typeof payload["next"] === "string" ? payload["next"] : undefined),
+    nextPath,
     claims: {
       sub: user.id,
       id: user.id,
@@ -334,6 +339,7 @@ export async function consumeAutomationSignIn(
       accountId: null,
       accountName: null,
       contactId: null,
+      ...(oauthConsent ? { automationOAuthConsent: oauthConsent } : {}),
     },
   };
 }

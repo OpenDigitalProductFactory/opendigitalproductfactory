@@ -35,6 +35,13 @@ function makeRow(overrides: Partial<DecisionAuditRowInput> = {}): DecisionAuditR
   };
 }
 
+it("derives human attention from the recorded route while retaining the audit outcome", () => {
+  const human = toAuditRow(makeRow({ outcomeType: "recommend", escalationRoute: "human" }));
+  expect(human.awaitingHuman).toBe(true);
+  expect(human.outcomeType).toBe("recommend");
+  expect(toAuditRow(makeRow({ outcomeType: "escalate", escalationRoute: "independent_review" })).awaitingHuman).toBe(false);
+});
+
 describe("tierForProfileKind", () => {
   it("maps profile kinds onto the three governance tiers", () => {
     expect(tierForProfileKind("platform")).toBe("wwmd");

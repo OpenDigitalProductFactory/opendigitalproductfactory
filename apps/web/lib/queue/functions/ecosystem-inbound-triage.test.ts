@@ -40,11 +40,22 @@ describe("ecosystem intake job reporting", () => {
     expect(mocks.upsert).toHaveBeenCalledWith(expect.objectContaining({
       where: { jobId: "ecosystem-inbound-issue-triage" },
       update: expect.objectContaining({ lastStatus: "failed", lastError: expect.stringContaining("GitHub unavailable"),
-        lastRunSummary: expect.stringContaining("1 new"), nextRunAt: expect.any(Date) }),
+        lastRunSummary: expect.stringContaining("1 created"), nextRunAt: expect.any(Date) }),
     }));
     const heartbeat = mocks.upsert.mock.calls[0][0].update;
     expect(deriveHealth({ kind: "recurring", enabled: true, schedule: "17 6 * * 1",
       reportsRunData: true, ...heartbeat }, new Date()).health).toBe("error");
+  });
+
+  it("refreshes a stale stored schedule to the code trigger's cadence (BI-78C6646C)", async () => {
+    mocks.run.mockResolvedValue({ ran: false, reason: "not commissioned: test" });
+    const before = Date.now();
+    await invoke();
+    const { update, create } = mocks.upsert.mock.calls[0][0];
+    expect(update.schedule).toBe("17 */4 * * *");
+    expect(create.schedule).toBe("17 */4 * * *");
+    // Projected from the four-hourly trigger, not the old weekly value.
+    expect(update.nextRunAt.getTime() - before).toBeLessThanOrEqual(4 * 60 * 60 * 1000);
   });
 
   it("clears an old error after a complete scan", async () => {
@@ -70,6 +81,18 @@ describe("ecosystem intake job reporting", () => {
     await expect(handler(context)).resolves.toMatchObject({ ingested: 1 });
     expect(mocks.run).toHaveBeenCalledOnce();
     expect(mocks.upsert).toHaveBeenCalledTimes(2);
+  });
+
+  it("reports created, unchanged, changed and needs-review counts in the run summary (BI-952F08BA)", async () => {
+    mocks.run.mockResolvedValue({ ran: true, complete: true, ingested: 1, deduped: 3, unchanged: 2, changed: 1, needsReview: 1,
+      failed: 0, itemIds: ["BI-NEW"], reviews: [{ origin: "ecosystem-upstream-issue:a/b#1", candidates: ["BI-A", "BI-B"] }], sourceErrors: [] });
+    await invoke();
+    const summary = mocks.upsert.mock.calls[0][0].update.lastRunSummary as string;
+    expect(summary).toContain("1 created");
+    expect(summary).toContain("2 unchanged");
+    expect(summary).toContain("1 changed");
+    expect(summary).toContain("1 needs review");
+    expect(summary).toContain("a/b#1");
   });
 
   it("allows only one scan of the inbound queue at a time", () => {

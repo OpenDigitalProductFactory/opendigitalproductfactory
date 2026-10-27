@@ -4,6 +4,8 @@ import type {
   WorkCaseState,
   WorkCaseTimelineEvent,
 } from "./case-types";
+import { loadContentAuthorizedWorkroomRecovery, type WorkroomHandoffRecoveryLoader, type WorkroomBlockerContentAuthorizer } from "@/lib/work-capsules/workroom-recovery-projection";
+import { isGateGovernedExecutor } from "@/lib/work-posture/gate-governed";
 import { decodeWorkCaseKey, encodeWorkCaseKey } from "./case-key";
 import type { ReviewerRoomClient } from "./semantic-review-room-projection";
 import { loadWorkroomExecutionEvidence, type WorkroomExecutionClient } from "./workroom-execution-evidence";
@@ -123,6 +125,8 @@ export type WorkspaceWorkCapsuleRecord = {
   // without them simply yields no shape and no declared posture.
   scopeClaims?: unknown;
   activityKind?: string | null;
+  /** Workroom.executorKind — a Build Studio room is gate-governed (BI-D0DFE502). */
+  executorKind?: string | null;
   decisionScope?: string | null;
   workspaceState?: unknown;
   /** What the room was created to achieve. Required on the row, and supplied by
@@ -511,6 +515,8 @@ export async function loadWorkspaceWorkCaseDetail({
   prismaClient,
   caseKey,
   selectedWorkroomId,
+  canReadWorkroomContent,
+  handoffRecoveryLoader,
   userId,
   authContext,
   participantLoader,
@@ -521,6 +527,9 @@ export async function loadWorkspaceWorkCaseDetail({
   prismaClient: WorkspaceCasePrismaClient;
   caseKey: string;
   selectedWorkroomId?: string;
+  /** Supplied by the authenticated server adapter using canonical exact-room access. */
+  canReadWorkroomContent?: WorkroomBlockerContentAuthorizer;
+  handoffRecoveryLoader?: WorkroomHandoffRecoveryLoader;
   userId: string;
   authContext?: WorkspaceRoomAuthContext;
   participantLoader?: WorkspaceRoomParticipantLoader;
@@ -605,6 +614,7 @@ export async function loadWorkspaceWorkCaseDetail({
         scopeClaims: true,
         activityKind: true,
         decisionScope: true,
+        executorKind: true,
         workspaceState: true,
       },
       orderBy: [{ updatedAt: "desc" }, { capsuleId: "asc" }],
@@ -701,6 +711,8 @@ export async function loadWorkspaceWorkCaseDetail({
   const boundaryClaim = readWorkroomBoundaryClaim(anchoredCapsule?.scopeClaims);
 
   const room = buildWorkroomView({
+    deliveryState: anchoredCapsule?.workspaceState,
+    ...await loadContentAuthorizedWorkroomRecovery(anchoredCapsule, now, canReadWorkroomContent, handoffRecoveryLoader),
     executionAttentionReason: execution.attentionReason,
     caseKey: resolvedCaseKey,
     sourceHealth: execution.partial ? "partial" : undefined,
@@ -720,6 +732,7 @@ export async function loadWorkspaceWorkCaseDetail({
       })?.shape
       ?? null,
     activityKind: anchoredCapsule?.activityKind ?? null,
+    gateGoverned: isGateGovernedExecutor(anchoredCapsule?.executorKind),
     scopeClaims: anchoredCapsule?.scopeClaims,
     now,
     processOverseerObservation: projectStoredWorkroomDriveObservation(anchoredCapsule?.workspaceState),

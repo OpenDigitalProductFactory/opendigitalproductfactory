@@ -9,6 +9,7 @@ import { InferenceError, classifyHttpError } from "./inference-error";
 import { formatMessageForResponses } from "./provider-message-format";
 import { registerExecutionAdapter } from "./execution-adapter-registry";
 import { buildResponsesUrl, isChatGptBackend } from "./responses-contract";
+import { isReassessmentExecutionError } from "./reassessment-execution-scope";
 
 type ResponsesOutputItem =
   | {
@@ -299,6 +300,7 @@ export const responsesAdapter: ExecutionAdapterHandler = {
           signal: AbortSignal.timeout(180_000),
         });
       } catch (e) {
+        if (isReassessmentExecutionError(e)) throw e;
         throw new InferenceError(
           `Network error calling ${providerId}: ${e instanceof Error ? e.message : String(e)}`,
           "network",

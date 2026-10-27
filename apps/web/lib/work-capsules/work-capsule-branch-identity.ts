@@ -6,9 +6,22 @@ import {
 } from "@/lib/work-capsules";
 import type { WorkCapsuleActor } from "./work-capsule-store-types";
 
+/** Syntax only: a full supplied or persisted SHA is not proof of observed Git state. */
+export function isFullSourceCommitSha(value: unknown): value is string {
+  return typeof value === "string" && /^[0-9a-f]{40}$/i.test(value);
+}
+
+/** Omission permits source-less planning; a supplied unusable value is refused. */
+export function invalidSourceCommitField(input: { baseSha?: unknown; headSha?: unknown }) {
+  return (["baseSha", "headSha"] as const).find(field => input[field] != null
+    && !isFullSourceCommitSha(typeof input[field] === "string" ? input[field].trim() : input[field])) ?? null;
+}
+
 export type CapsuleAdoptionInput = {
   title: string;
   objective: string;
+  /** Server-read acceptance source; never supplied by an MCP caller. */
+  acceptanceSource?: import("./delivery-agreement-capture").DeliveryAcceptanceSource;
   repositoryFullName: string;
   headBranch: string;
   worktreePath: string;

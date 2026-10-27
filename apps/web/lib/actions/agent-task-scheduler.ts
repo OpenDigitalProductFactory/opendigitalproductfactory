@@ -18,11 +18,12 @@ import { runArchitectureParitySteward } from "@/lib/ea/architecture-parity-stewa
 import { runConsolidationParitySteward } from "@/lib/ea/consolidation-parity-steward";
 import { computeNextCronRun, isOneShotCron } from "@/lib/operate/cron-next-run";
 import { extractScheduledTaskSummary } from "./agent-task-scheduler-summary";
+import { readWorkroomStageTaskConfig } from "@/lib/scheduling/workroom-stage-task-config";
 import { formatScheduledTurnPrompt } from "./scheduled-turn-prompt";
 import {
   classifyScheduledRequiredTools, scheduledToolsNeedingPin, scheduledRunLastStatus,
   createTaskRunForScheduledTask,
-  detectScheduledRunFailure, withPersistedExecutions,
+  detectScheduledRunFailure, withPersistedExecutions, scheduledMandatoryToolGap, scheduledRequiredToolCorrection,
   type ScheduledTaskRunRef,
 } from "@/lib/tak/scheduled-task-runs";
 import { createTaskMessage } from "@/lib/tak/task-records";
@@ -438,9 +439,11 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       routeContext: task.routeContext,
       title: task.title,
       prompt: executionPrompt,
+      taskConfig: task.taskConfig,
       proactivity,
       delegatedPosture,
     });
+    await prisma.scheduledAgentTask.update({ where: { taskId }, data: { taskRunId: taskRunRef.taskRunId } });
 
     await createTaskMessage({
       taskRunId: taskRunRef.taskRunId,
@@ -479,26 +482,22 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       },
     ];
 
-    // The proactivity plan's actionBoundary is ENFORCED here, not just displayed
-    // (BI-754C9E82). Three rungs:
-    //   advise  — side-effecting tools stripped from the run (recommend only)
-    //   propose — side-effecting NON-artifact tool calls are diverted to
-    //             AgentActionProposal for the owner to approve (BI-80532D5C);
-    //             curated artifact writes still run directly
-    //   act     — side-effecting tools run directly
-    // Tools are resolved in "act" mode for propose so the model can still CALL
-    // them; the loop's propose-interception captures the call as a proposal.
+    // Advise strips writes; propose diverts unmandated writes through the monitor.
     const boundary = proactivity.actionBoundary;
     // BI-0A59F936: unattended turns resolve external access from standing grants.
     const externalAccess = await resolveScheduledTurnExternalAccess(task.agentId);
+    const roomStage = task.taskId.startsWith("workroom-")
+      ? await (await import("@/lib/work-management/room-stage-mandate")).loadScheduledRoomAuthorityLive({ taskRunId: taskRunRef.taskRunId, agentId: task.agentId }) : null;
+    const roomTurn = roomStage?.roomTurn;
     // BI-CAP-F2D39F8F budgets attachment to the serving model. A prompt that NAMES
     // a governed writer declares a dependency on it, so it is pinned inside the
     // budget rather than left to runtime discovery (BI-4A394B21).
     const toolArgs = {
       userContext,
-      mode: (boundary === "advise" ? "advise" : "act") as "advise" | "act",
+      mode: (boundary === "advise" || roomTurn?.actionBoundary === "advise" ? "advise" : "act") as "advise" | "act",
       agentId: task.agentId,
-      externalAccessEnabled: externalAccess.enabled,
+      externalAccessEnabled: externalAccess.enabled && (roomTurn?.externalAccess.enabled ?? true),
+      ...(roomTurn ? { roomAuthorizedGrants: roomTurn.authorizedGrants } : {}),
       routeContext: task.routeContext,
       intentQuery: task.prompt,
     };
@@ -516,6 +515,9 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       taskKind: task.taskKind, prompt: task.prompt, agentId: task.agentId,
       tools: [...tools, ...deferredTools], externalAccess,
     });
+    // BI-62DB6C03: a Workroom stage is never dispatched without its evidence writer.
+    const writerGap = scheduledMandatoryToolGap({ prompt: task.prompt, taskConfig: task.taskConfig, mode: toolArgs.mode, attached: tools, deferred: deferredTools });
+    if (writerGap) throw new Error(`Scheduled run not dispatched (${writerGap}).`);
 
     // Mirror the interactive coworker path (agent-coworker.sendMessage): carry the
     // coworker's configured model requirements into the scheduled run. Without
@@ -536,7 +538,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       task.routeContext,
     );
 
-    const result = await executeAutonomousAgenticLoop({
+    const loopInput = {
       systemPrompt: agentInfo.systemPrompt,
       systemPromptInstructionSpans: coworkerBriefSpans(agentInfo.systemPrompt),
       chatHistory,
@@ -549,9 +551,18 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       agentId: task.agentId,
       threadId: thread.id,
       taskRunId: taskRunRef.taskRunId,
-      proposeSideEffects: boundary === "propose",
+      proposeSideEffects: boundary === "propose" || Boolean(roomTurn) || Boolean(roomStage?.withheldBecause),
+      ...(roomTurn ? { roomTurn } : {}),
       ...(Object.keys(modelRequirements).length > 0 ? { modelRequirements } : {}),
-    });
+    };
+    let result = await executeAutonomousAgenticLoop(loopInput);
+    // BI-62DB6C03: one correction turn when the writer was handed over and not called.
+    const attachedToolNames = tools.map((tool) => tool.name);
+    const correction = scheduledRequiredToolCorrection({ prompt: task.prompt, authorizedTools: [...tools, ...deferredTools], attachedToolNames, executedTools: result.executedTools ?? [] });
+    if (correction && !(await prisma.toolExecution.findFirst({ where: { taskRunId: taskRunRef.taskRunId, toolName: correction.toolName, success: true }, select: { id: true } }))) {
+      const retry = await executeAutonomousAgenticLoop({ ...loopInput, chatHistory: [...chatHistory, { role: "assistant" as const, content: result.content ?? "" }, { role: "user" as const, content: correction.message }] });
+      result = { ...retry, executedTools: [...(result.executedTools ?? []), ...(retry.executedTools ?? [])] };
+    }
     const executedTools = [...(result.executedTools ?? [])];
 
     const requiredTool = getRequiredProceduralToolForScheduledTask(task.taskId, task.agentId);
@@ -605,10 +616,10 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
     // records status=failed and the BI-754C9E82 retry cadence takes over,
     // instead of completing quietly with a healthy lastStatus. BI-D48B3B0F: judge what the run PERSISTED too.
     const verdictTools = withPersistedExecutions(executedTools, await prisma.toolExecution.findMany({ where: { taskRunId: taskRunRef.taskRunId, success: true }, select: { toolName: true, result: true } }));
-    const runFailure = detectScheduledRunFailure({ prompt: task.prompt, authorizedTools: [...tools, ...deferredTools], executedTools: verdictTools, content: result.content });
-    if (runFailure) throw new Error(`Scheduled run produced no governed work (${runFailure}). ${result.content ?? ""}`.trim());
+    const requiredTools = classifyScheduledRequiredTools({ prompt: task.prompt, authorizedTools: [...tools, ...deferredTools], executedTools: verdictTools, preservePendingApprovals: Boolean(readWorkroomStageTaskConfig(task.taskConfig)) });
+    const runFailure = detectScheduledRunFailure({ prompt: task.prompt, authorizedTools: [...tools, ...deferredTools], executedTools: verdictTools, content: result.content, attachedToolNames });
+    if (runFailure && requiredTools.kind !== "proposed") throw new Error(`Scheduled run produced no governed work (${runFailure}). ${result.content ?? ""}`.trim());
 
-    const requiredTools = classifyScheduledRequiredTools({ prompt: task.prompt, authorizedTools: [...tools, ...deferredTools], executedTools: verdictTools });
     const scheduledSummary = extractScheduledTaskSummary(executedTools);
     const taskMessageContent = scheduledSummary?.compactStatus ?? result.content ?? "(No response)";
     const playbookRunStatus =
@@ -662,10 +673,8 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       });
     }
 
-    // Update task status and schedule next run. A one-shot ("Once") task
-    // deactivates after firing instead of re-arming a year later (BI-D72CC945).
     const oneShot = isOneShotCron(task.schedule);
-    const nextRunAt = oneShot ? null : computeNextCronRun(task.schedule, now);
+    const nextRunAt = oneShot || requiredTools.kind === "proposed" && readWorkroomStageTaskConfig(task.taskConfig) ? null : computeNextCronRun(task.schedule, now);
     await prisma.scheduledAgentTask.update({
       where: { taskId },
       data: {

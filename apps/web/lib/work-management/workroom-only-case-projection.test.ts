@@ -10,8 +10,18 @@ const AUTH = { principalId: "PRN-OWNER", sensitivityClearance: ["internal"], isS
 
 const NOW = new Date("2026-09-07T12:00:00.000Z");
 
+function reviewQueries(candidates: Record<string, unknown>[] = []) {
+  return vi.fn().mockImplementation(async (parts: TemplateStringsArray) => {
+    const sql = parts.join("");
+    if (sql.includes("WITH rooms AS")) return candidates;
+    if (sql.includes('LEFT JOIN "TaskArtifact"')) return [];
+    throw new Error("Unexpected reviewer query in standalone room fixture");
+  });
+}
+
 function client(room: WorkroomOnlyRecord | null): WorkroomOnlyPrismaClient {
   return {
+    $queryRaw: reviewQueries(),
     workroom: {
       async findFirst(args: any) {
         return room && room.capsuleId === args.where.capsuleId ? room : null;
@@ -47,12 +57,14 @@ describe("loadWorkroomOnlyCaseDetail", () => {
     { label: "missing caller", authContext: undefined },
   ])("does not read execution for a caller who is $label", async ({ authContext }) => {
     const findMany = vi.fn();
+    const queryRaw = reviewQueries();
     const detail = await loadWorkroomOnlyCaseDetail({ authContext,
-      prismaClient: { ...client(room()), workroomActivity: { findMany }, taskRun: { findMany } },
+      prismaClient: { ...client(room()), workroomActivity: { findMany }, $queryRaw: queryRaw },
       sourceId: "WC-ALPHA", caseKey: "work-capsule%3AWC-ALPHA", now: NOW,
     });
     expect(detail).toBeNull();
     expect(findMany).not.toHaveBeenCalled();
+    expect(queryRaw).not.toHaveBeenCalled();
   });
 
   it("admits the selected active participant using canonical principal identity", async () => {
@@ -65,13 +77,15 @@ describe("loadWorkroomOnlyCaseDetail", () => {
 
   it("applies the declared sensitivity ceiling even to the creator", async () => {
     const findMany = vi.fn();
+    const queryRaw = reviewQueries();
     const detail = await loadWorkroomOnlyCaseDetail({ authContext: AUTH,
       prismaClient: { ...client(room({ scopeClaims: [{ workroomBoundary: { sensitivityCeiling: "restricted" } }] })),
-        workroomActivity: { findMany }, taskRun: { findMany } },
+        workroomActivity: { findMany }, $queryRaw: queryRaw },
       sourceId: "WC-ALPHA", caseKey: "work-capsule%3AWC-ALPHA", now: NOW,
     });
     expect(detail).toBeNull();
     expect(findMany).not.toHaveBeenCalled();
+    expect(queryRaw).not.toHaveBeenCalled();
   });
 
   it("retains the standalone room's execution evidence and versioned shape", async () => {
@@ -84,7 +98,6 @@ describe("loadWorkroomOnlyCaseDetail", () => {
         workspaceState: { workroomDrive: { action: "attention", stageKey: "implement",
           pendingAttention: { stageKey: "implement", principalRef: "role:author" } } } })),
       workroomActivity: { findMany },
-      taskRun: { findMany: vi.fn().mockResolvedValue([]) },
     };
     const detail = await loadWorkroomOnlyCaseDetail({ authContext: AUTH, prismaClient: db,
       sourceId: "WC-ALPHA", caseKey: "work-capsule%3AWC-ALPHA", now: NOW });
@@ -110,16 +123,27 @@ describe("loadWorkroomOnlyCaseDetail", () => {
   });
 
   it("keeps a failed reviewer visible in both the case summary and room", async () => {
+    const queryRaw = reviewQueries([{
+      id: "run-row", taskRunId: "TR-REVIEW", userId: null, status: "failed",
+      createdAt: NOW, updatedAt: NOW, lastHeartbeatAt: NOW, nodes: [],
+      capsuleId: "WC-ALPHA", reviewKind: "semantic-review", candidatePosition: 1,
+      roomMissing: false, scalarTruncated: false, ambiguousReviewKind: false,
+      bindingTruncated: false, progressTruncated: false, nodeFieldsTruncated: false,
+      progressPayload: { semanticReview: { reason: "provider-unavailable" } },
+    }]);
     const detail = await loadWorkroomOnlyCaseDetail({ authContext: AUTH,
       prismaClient: { ...client(room({ id: "row-1" })),
-        workroomActivity: { findMany: vi.fn().mockResolvedValue([]) },
-        taskRun: { findMany: vi.fn().mockResolvedValue([{
-          id: "run-row", taskRunId: "TR-REVIEW", userId: null, status: "failed",
-          updatedAt: NOW, lastHeartbeatAt: NOW, nodes: [],
-          progressPayload: { semanticReview: { reason: "provider-unavailable" } },
-        }]) } },
+        workroomActivity: { findMany: vi.fn().mockResolvedValue([]) }, $queryRaw: queryRaw },
       sourceId: "WC-ALPHA", caseKey: "work-capsule%3AWC-ALPHA", now: NOW,
     });
+    expect(queryRaw).toHaveBeenCalledTimes(2);
+    const candidateQuery = queryRaw.mock.calls.find(([parts]) => parts.join("").includes("WITH rooms AS"));
+    const identityQuery = queryRaw.mock.calls.find(([parts]) => parts.join("").includes('LEFT JOIN "TaskArtifact"'));
+    expect(candidateQuery?.slice(1)).toEqual([["WC-ALPHA"]]);
+    expect(identityQuery?.at(-1)).toEqual(["run-row"]);
+    // An absent canonical request remains unknown while its failure stays visible.
+    expect(detail!.room!.reviewerRuns).toContainEqual(expect.objectContaining({ taskRunId: "TR-REVIEW", identityScope: "unknown" }));
+    expect(detail!.room!.projection.sourceHealth).toBe("partial");
     expect(detail!.summary.attentionRequired).toBe(true);
     expect(detail!.summary.attentionReason).toContain("provider-unavailable");
     expect(detail!.room!.work.attentionReason).toBe(detail!.summary.attentionReason);
@@ -190,4 +214,30 @@ describe("loadWorkroomOnlyCaseDetail", () => {
     expect(detail!.summary.dueAt).toBeNull();
     expect(() => JSON.stringify(detail)).not.toThrow();
   });
+});
+
+
+it("shares bounded blocker normalization after standalone content admission", async () => {
+  const blocked = room({ id: "standalone", status: "blocked", workspaceState: { statusOverride: {
+    reason: "Standalone prerequisite", until: "2026-09-08T12:00:00.000Z",
+  } } });
+  const result = await loadWorkroomOnlyCaseDetail({ authContext: AUTH, prismaClient: client(blocked), sourceId: "WC-ALPHA",
+    caseKey: "work-capsule%3AWC-ALPHA", now: NOW, canReadWorkroomContent: async rowId => rowId === "standalone" });
+  expect(result?.room?.work).toMatchObject({ recordedBlocker: {
+    explanation: "Standalone prerequisite", explanationState: "current", source: { capsuleId: "WC-ALPHA" },
+  } });
+  const denied = await loadWorkroomOnlyCaseDetail({ authContext: { ...AUTH, principalId: "PRN-OTHER" },
+    prismaClient: client(blocked), sourceId: "WC-ALPHA", caseKey: "work-capsule%3AWC-ALPHA", now: NOW });
+  expect(denied).toBeNull();
+});
+
+it("withholds a standalone explanation when historical room creation does not establish current exact-room clearance", async () => {
+  const blocked = room({ id: "standalone", status: "blocked", workspaceState: { statusOverride: {
+    reason: "Backlog-sensitive explanation", until: "2026-09-08T12:00:00.000Z",
+  } } });
+  const result = await loadWorkroomOnlyCaseDetail({ authContext: AUTH, prismaClient: client(blocked), sourceId: "WC-ALPHA",
+    caseKey: "work-capsule%3AWC-ALPHA", now: NOW, canReadWorkroomContent: async () => false });
+  expect(result).not.toBeNull();
+  expect(result?.room?.work.recordedBlocker).toBeNull();
+  expect(JSON.stringify(result)).not.toContain("Backlog-sensitive explanation");
 });

@@ -37,6 +37,7 @@ import {
   isWorktreeSessionLive,
   heartbeatTtlMs,
 } from "./lib/worktree-session-heartbeat.mjs";
+import { sanitizeForLog } from "./lib/safe-log.mjs";
 import {
   loadActiveWorkroomPaths,
   pathHasActiveClaim,
@@ -306,7 +307,7 @@ async function main(argv = process.argv.slice(2)) {
   const claims = await loadActiveWorkroomPaths();
   if (!claims.available) {
     console.error(
-      `[worktree-janitor] Workroom claims UNREADABLE (${claims.reason}) — every worktree will be ` +
+      `[worktree-janitor] Workroom claims UNREADABLE (${sanitizeForLog(claims.reason)}) — every worktree will be ` +
         "kept. A reaper that cannot ask who is working must not decide that nobody is.",
     );
   }
@@ -365,6 +366,8 @@ async function main(argv = process.argv.slice(2)) {
     root,
     graceDays: args.graceDays,
     policy,
+    // Why every claim-dependent tree was kept, or how ownership was proven (BI-83345811).
+    claims: { available: claims.available, reason: claims.reason },
     decisions,
     summary,
     removals: args.dryRun ? [] : removals,
@@ -379,7 +382,7 @@ async function main(argv = process.argv.slice(2)) {
     `\nWorktree janitor — ${report.mode} (grace=${args.graceDays}d, policy=${policy})\n`,
   );
   for (const d of decisions) {
-    console.log(`  ${d.verdict.padEnd(12)} ${d.path}  (${d.reason})`);
+    console.log(`  ${d.verdict.padEnd(12)} ${sanitizeForLog(d.path)}  (${sanitizeForLog(d.reason)})`);
   }
   for (const p of summary.flaggedPaths ?? []) {
     console.log(`  [flag]  abandoned mid-merge (MERGE_HEAD, no live session): ${p} — quarantined, never auto-reaped`);

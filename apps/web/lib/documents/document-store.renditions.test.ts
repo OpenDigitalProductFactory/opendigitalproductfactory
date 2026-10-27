@@ -13,6 +13,7 @@ vi.mock("@dpf/db", () => ({ prisma: {} }));
 
 import { loadManagedDocument, saveManagedDocument, searchManagedDocuments } from "./document-store";
 
+const VIEWER = { principalId: "p-reader" };
 const DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 type Row = Record<string, unknown>;
 
@@ -72,7 +73,7 @@ function fakeDb(row: Row) {
     $transaction: vi.fn(async (work: (t: typeof tx) => Promise<unknown>) => work(tx)),
     document: {
       update: vi.fn(async () => ({})),
-      findUnique: vi.fn(async () => row),
+      findFirst: vi.fn(async () => row),
       findMany: vi.fn(async () => [row]),
     },
     documentReference: { findMany: vi.fn(async () => []) },
@@ -105,25 +106,25 @@ describe("saveManagedDocument requests renditions (BI-9D43CBEF)", () => {
 describe("renditions in load and search (BI-9D43CBEF)", () => {
   it("projects each version's renditions without their text", async () => {
     const db = fakeDb(savedRow(DOCX, "blob-1"));
-    const document = await loadManagedDocument({ documentId: "DOC-1" }, db as never);
+    const document = await loadManagedDocument({ documentId: "DOC-1", viewer: VIEWER }, db as never);
     expect(document?.currentVersion?.renditions).toEqual([
       { id: "r1", kind: "pdf", mimeType: "application/pdf", blobId: "pdf-blob", createdAt: new Date("2026-09-25T06:00:00Z") },
     ]);
-    const include = ((db.document.findUnique.mock.calls as unknown as unknown[][])[0]![0] as unknown as Row).include as Row;
+    const include = ((db.document.findFirst.mock.calls as unknown as unknown[][])[0]![0] as unknown as Row).include as Row;
     expect(JSON.stringify(include)).toContain("renditions");
     expect(JSON.stringify(include)).not.toContain("contentText");
   });
 
   it("full-text search also matches plain-text rendition text", async () => {
     const db = fakeDb(savedRow(DOCX, "blob-1"));
-    await searchManagedDocuments({ query: "adoption figures", mode: "full-text" }, db as never);
+    await searchManagedDocuments({ query: "adoption figures", mode: "full-text", viewer: VIEWER }, db as never);
     const sql = String((db.$queryRawUnsafe.mock.calls as unknown as unknown[][])[0]![0]);
     expect(sql).toContain(`JOIN "DocumentRendition" r`);
     expect(sql).toContain(`r."renditionKind" = 'plain_text'`);
     expect(sql).toContain(`r."searchVector" @@ websearch_to_tsquery('english', $1)`);
 
-    const where = ((db.document.findMany.mock.calls as unknown as unknown[][])[0]![0] as unknown as Row).where as { OR: Row[] };
-    expect(where.OR).toContainEqual({
+    const where = ((db.document.findMany.mock.calls as unknown as unknown[][])[0]![0] as unknown as Row).where as { AND: Array<{ OR: Row[] }> };
+    expect(where.AND[0]!.OR).toContainEqual({
       versions: { some: { renditions: { some: { renditionKind: "plain_text", contentText: { contains: "adoption figures", mode: "insensitive" } } } } },
     });
   });

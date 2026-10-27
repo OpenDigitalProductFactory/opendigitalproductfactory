@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { prisma } from "@dpf/db";
 
 import { renderBuildDesignText } from "./render-build-design-text";
+import { renderBuildPlanText } from "./render-build-plan-text";
 
 import { readDocumentBlob } from "@/lib/documents/blob-storage";
 import { resolveRepositoryArtifact } from "./repository-artifact";
@@ -25,7 +26,7 @@ type BuildRevisionRecord = {
     originator?: { itemId: string } | null;
     parentEpicId?: string | null;
     abandonedAt: Date | null;
-    artifactRevisions?: Array<{ id: string }>;
+    artifactRevisions?: Array<{ id: string; field?: string }>;
   };
 };
 
@@ -97,7 +98,9 @@ export function initiativeTextFromBuildValue(value: unknown): string | null {
   // baseline and artifact author. Render it here rather than at save time so
   // existing revisions resolve without rewriting stored artifacts and the
   // pinned valueDigest keeps covering exactly what the author saved.
-  return renderBuildDesignText(value);
+  // BI-6F2872FC: a stored implementation plan is reviewable text too. A design
+  // document carries no tasks, so the two renderings never compete.
+  return renderBuildPlanText(value) ?? renderBuildDesignText(value);
 }
 
 function externalLocatorMatchesSubject(locator: unknown, subject: InitiativeSubject): boolean {
@@ -125,6 +128,12 @@ export async function resolveInitiativeArtifact(args: {
   organizationId?: string | null;
   /** Server-only non-independent research lane; unknown agent stays unknown. */
   allowHumanResearchAuthor?: boolean;
+  /**
+   * BI-6F2872FC: a plan review binds the build's accepted implementation plan
+   * revision. Only the plan-review lane passes this; every other gate binds
+   * the design and still refuses a plan.
+   */
+  acceptBuildPlan?: boolean;
   resolveRepositoryBlob?: (locator: Extract<InitiativeArtifactRef, { kind: "repo-blob-at-commit" }>) => Promise<ProviderResolvedBlob | null>;
 }): Promise<InitiativeArtifactResolution> {
   const db = args.db ?? (prisma as unknown as InitiativeArtifactResolverDb);
@@ -147,18 +156,20 @@ export async function resolveInitiativeArtifact(args: {
             parentEpicId: true,
             abandonedAt: true,
             artifactRevisions: {
-              where: { field: "designDoc", status: "accepted" },
+              where: { field: { in: ["designDoc", "buildPlan"] }, status: "accepted" },
               orderBy: [{ revisionNumber: "desc" }, { createdAt: "desc" }],
-              take: 1,
-              select: { id: true },
+              select: { id: true, field: true },
             },
           },
         },
       },
     });
     const content = revision ? initiativeTextFromBuildValue(revision.value) : null;
-    if (!revision || revision.field !== "designDoc" || revision.status !== "accepted" || !content) {
-      return { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: "Build artifact revision is not an accepted canonical initiative design." };
+    const reviewable = revision?.field === "designDoc" || (args.acceptBuildPlan === true && revision?.field === "buildPlan");
+    if (!revision || !reviewable || revision.status !== "accepted" || !content) {
+      return { ok: false, code: "CANONICAL_DESIGN_REQUIRED", error: args.acceptBuildPlan
+        ? "Build artifact revision is not an accepted Build Studio implementation plan or design."
+        : "Build artifact revision is not an accepted canonical initiative design." };
     }
     const aliases = await db.principalAlias.findMany({
       where: { aliasType: "user", aliasValue: revision.savedByUserId, issuer: "" },
@@ -172,8 +183,12 @@ export async function resolveInitiativeArtifact(args: {
     if (!subjectOwnsBuild(args.subject, revision.build)) {
       return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS", error: "Build artifact does not belong to the governed subject." };
     }
-    if (revision.build.artifactRevisions?.[0]?.id !== revision.id) {
-      return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS", error: "Build artifact revision is not the current accepted design revision." };
+    // Newest first; a row with no field is a design (the pre-BI-6F2872FC select).
+    const current = revision.build.artifactRevisions?.find((row) => (row.field ?? "designDoc") === revision.field);
+    if (current?.id !== revision.id) {
+      return { ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS", error: revision.field === "buildPlan"
+        ? "Build artifact revision is not the current accepted plan revision."
+        : "Build artifact revision is not the current accepted design revision." };
     }
     return {
       ok: true,

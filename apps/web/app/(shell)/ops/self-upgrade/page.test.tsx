@@ -106,11 +106,13 @@ vi.mock("@/components/ops/SelfUpgradeLiveProvider", () => ({
 // page-level tests can assert the trigger control is co-located INSIDE the
 // card, not merely passed as a prop nobody renders.
 vi.mock("@/components/ops/OwnerReleaseCard", () => ({
-  OwnerReleaseCard: (props: { summary: { state: string; availableVersion: string | null }; primaryAction?: React.ReactNode }) => (
+  OwnerReleaseCard: (props: { summary: { state: string; availableVersion: string | null; rollback: { available: boolean; detail: string } }; primaryAction?: React.ReactNode }) => (
     <div
       data-testid="owner-release-card"
       data-release-state={props.summary.state}
       data-available-version={props.summary.availableVersion ?? ""}
+      data-rollback-available={String(props.summary.rollback.available)}
+      data-rollback-detail={props.summary.rollback.detail}
     >
       {props.primaryAction}
     </div>
@@ -251,6 +253,25 @@ const baseStatus = {
 };
 
 describe("SelfUpgradePage", () => {
+  it("projects saved backup evidence as unavailable restoration on the owner card", async () => {
+    vi.mocked(getSelfUpgradeStatus).mockResolvedValue({ ...baseStatus, latestRun: {
+      id: "run-row", runId: "SUR-BACKUP", status: "succeeded", trigger: "manual:user", currentSha: "before",
+      targetSha: "after", deployedSha: "after", reason: null, startedAt: new Date(), completedAt: new Date(),
+      promoterContainerName: null, updatedAt: new Date(), recoveryOfRunId: null, targetTag: null,
+      requestedForce: false, dryRun: false, routine: false, admissionFingerprint: null, dispatchStatus: null,
+      dispatchAttemptCount: 0, dispatchLeaseToken: null, dispatchLeaseExpiresAt: null, dispatchEventIds: [],
+      dispatchAttemptedAt: null, dispatchAcknowledgedAt: null, dispatchError: null, impactSummaryId: null,
+      changeRequestId: null,
+      createdAt: new Date(), failureLog: null, completionEvidence: { recoveryPoint: {
+        schemaVersion: 1, trigger: "pre-upgrade-recovery", status: "ok",
+        members: [{ target: "postgres", runId: "BR-PG", status: "ok" }],
+      } },
+    } });
+    vi.mocked(listSelfUpgradeRuns).mockResolvedValue({ runs: [], nextCursor: null });
+    const html = renderToStaticMarkup(await SelfUpgradePage());
+    expect(html).toContain('data-rollback-available="false"');
+    expect(html).toContain("Database restoration is unavailable until review history can be preserved safely.");
+  });
   it("renders page title and platform tab nav", async () => {
     vi.mocked(getSelfUpgradeStatus).mockResolvedValue(baseStatus);
     vi.mocked(listSelfUpgradeRuns).mockResolvedValue({ runs: [], nextCursor: null });
@@ -476,6 +497,28 @@ describe("SelfUpgradePage", () => {
     );
   });
 
+  it("passes the expected deployed merge identity to the owner summary", async () => {
+    vi.mocked(getSelfUpgradeStatus).mockResolvedValue({
+      ...baseStatus,
+      isFresh: true,
+      targetAvailability: "resolved",
+      targetSha: "a".repeat(40),
+      deployedSha: "b".repeat(40),
+      latestRun: {
+        runId: "SUR-landed-merge",
+        status: "failed",
+        reason: "admission-reopened-before-swap: the drain already ended (completed)",
+        targetSha: "a".repeat(40),
+        deployedSha: "b".repeat(40),
+        completionEvidence: null,
+      },
+    } as never);
+    vi.mocked(listSelfUpgradeRuns).mockResolvedValue({ runs: [], nextCursor: null });
+
+    const html = renderToStaticMarkup(await SelfUpgradePage());
+    expect(html).toContain('data-release-state="up-to-date"');
+    expect(html).not.toContain('data-release-state="failed"');
+  });
   it("keeps retry available after a failed attempt when the release is still newer", async () => {
     vi.mocked(getSelfUpgradeStatus).mockResolvedValue({
       ...baseStatus,

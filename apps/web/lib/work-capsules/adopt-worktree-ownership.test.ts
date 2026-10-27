@@ -18,6 +18,9 @@ function database() {
       update: vi.fn(),
     },
     workroomActivity: { create: vi.fn(async () => ({ id: "act" })) },
+    // No account here was handed over (BI-C66B6076 reads these before appointing).
+    principalAlias: { findFirst: vi.fn(async () => null) },
+    user: { findFirst: vi.fn(async () => null) },
     workroomParticipant: {
       findMany: vi.fn(async () => []),
       create: vi.fn(async () => ({})),
@@ -41,6 +44,20 @@ const oauthActor = async () => ({ userId: "user-1", agentId: "AGT-EXT-CLAUDE", p
 const bindingReader = { backlogItem: { findFirst: vi.fn(async () => ({ itemId: "BI-X" })) } };
 
 describe("adopt_worktree for backlog work", () => {
+  it.each(["baseSha", "headSha"])("rejects malformed supplied %s before creating or changing a room", async field => {
+    for (const value of ["abc123", "", "  ", "z".repeat(40), 123]) {
+      const db = database();
+      const result = await adoptWorktree({ db: db as unknown as CapsuleDb, userId: "user-1", context: undefined,
+        bindingReader, resolveActor: oauthActor, params: { ...params, baseSha: "3".repeat(40), headSha: "1".repeat(40), [field]: value } });
+      expect(result.success).toBe(false);
+      expect(result.error).toBe("invalid_input");
+      expect(result.message).toContain(field);
+      expect(db.workroom.create).not.toHaveBeenCalled();
+      expect(db.workroom.update).not.toHaveBeenCalled();
+      expect(db.workroomParticipant.create).not.toHaveBeenCalled();
+    }
+  });
+
   it("makes the person the owner, admits the assistant, and asks for the missing SHAs", async () => {
     const db = database();
     const result = await adoptWorktree({

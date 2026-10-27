@@ -93,6 +93,21 @@ export function renderConsentRefusal(title: string, detail: string): string {
   );
 }
 
+/**
+ * The browser is signed in as the platform automation persona, which never
+ * binds a person's interactive client (BI-F586F8A5). Name the account so the
+ * person sees why, and offer the one way forward: sign in as themself.
+ */
+export function renderAutomationAccountRefusal(account: string, signInUrl: string): string {
+  return shell(
+    "Sign in as yourself to connect",
+    `<h1>Sign in as yourself to connect</h1>
+<p>This browser is signed in as <strong>${esc(account)}</strong>, the platform automation account. A connection made here would act as that account, not as you.</p>
+<p><a href="${esc(signInUrl)}">Sign in as yourself</a> and you will come straight back to this request.</p>
+<p class="foot">Nothing was connected and no permission was granted.</p>`,
+  );
+}
+
 export type ConsentView = {
   clientName: string;
   selfAsserted: boolean;
@@ -117,6 +132,10 @@ export type ConsentView = {
   choiceNotice?: boolean;
   /** Set when Connect arrived without the account confirmed, or confirmed for a different session. */
   accountNotice?: boolean;
+  /** When the signed-in account's work was handed over (ISO). Connect then needs an acknowledgement (BI-9D2199D4). */
+  workHandedOverAt?: string | null;
+  /** Set when Connect arrived under a handed-over account without that acknowledgement. */
+  handoverNotice?: boolean;
 };
 
 export type ConsentAssistant = {
@@ -150,7 +169,9 @@ export function renderConsentPage(view: ConsentView): string {
   const permissionList = view.scopes
     .map((s) => `<li><strong>${esc(PUBLIC_SCOPE_COPY[s].title)}</strong> — ${esc(PUBLIC_SCOPE_COPY[s].detail)}</li>`)
     .join("");
-  const driftNotice = view.accountNotice
+  const driftNotice = view.handoverNotice
+    ? `<p class="warn">Confirm you mean to connect under an account whose work was handed over. Nothing was connected.</p>`
+    : view.accountNotice
     ? `<p class="warn">Confirm the account this connection works under. Nothing was connected.</p>`
     : view.driftNotice
     ? `<p class="warn">What this connection is allowed to act as changed while this page was open. Nothing was connected. Check the details below and connect again.</p>`
@@ -204,8 +225,24 @@ function renderAccount(view: ConsentView): string {
 <label class="scope"><input type="checkbox" name="confirm_account" value="${esc(view.actingUserId)}" required>
 <span><span class="scope-title">${esc(view.actingUser)}</span>
 <span class="scope-detail">It acts under this account, and its approval requests will come to this account's inbox.</span></span></label>
-<p class="choice">Not the account you meant? <a href="${esc(view.switchAccountUrl)}">Use a different account</a></p>
+${renderHandover(view)}<p class="choice">Not the account you meant? <a href="${esc(view.switchAccountUrl)}">Use a different account</a></p>
 </fieldset>`;
+}
+
+/**
+ * A handover moves an account's work, not its access (BI-9D2199D4). On the live
+ * install an operator connected Codex under admin@dpf.local a day after that
+ * account's work was handed over, and new work went back to it. The page says
+ * so and asks the person to confirm; the POST refuses a Connect without it.
+ */
+function renderHandover(view: ConsentView): string {
+  if (!view.workHandedOverAt) return "";
+  const day = view.workHandedOverAt.slice(0, 10);
+  return `<p class="warn">This account's work was handed over on ${esc(day)}. A connection under it brings new work back to it.</p>
+<label class="scope"><input type="checkbox" name="acknowledge_handover" value="${esc(view.actingUserId)}" required>
+<span><span class="scope-title">Connect under this account anyway</span>
+<span class="scope-detail">Its approval requests and new work will come to this account again.</span></span></label>
+`;
 }
 
 function truncate(value: string, max: number): string {

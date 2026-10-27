@@ -45,6 +45,10 @@ describe("TOOL_WAIT_BUDGETS registry", () => {
 });
 
 describe("getToolBudget", () => {
+  it("allows the existing patient admission plus canonical local execution window during a drain", () => {
+    expect(getToolBudget("run_endpoint_tests").maxMs).toBeGreaterThanOrEqual(2_400_000);
+    expect(getToolBudget("run_endpoint_tests").killable).toBe(true);
+  });
   it("returns the registered budget for known tools", () => {
     expect(getToolBudget("start_build")).toEqual(TOOL_WAIT_BUDGETS.start_build);
   });
