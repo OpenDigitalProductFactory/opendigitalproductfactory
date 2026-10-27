@@ -28,6 +28,15 @@ route, but the defect belongs to the tool. When the signal's evidence carries
 capability-need path uses the same origin. Every coworker's observation then
 becomes an occurrence of one item instead of a new item.
 
+Items filed before a shared origin existed can be folded late with
+`merge_backlog_items`. The tool is declared `irreversible`, but a call needs no
+person when both items are this installation's own, carry the same
+`[origin:…]` marker, and the duplicate is open with no claim or live Workroom
+(`apps/web/lib/demand/duplicate-merge-consequence.ts`, BI-EAFD2D09). That is the
+same fold intake performs. Every merge writes a `duplicate_merge` activity on
+the retired item with both rows' prior state, so it can be undone from the
+record. Any other merge still reaches a person.
+
 Those observer counts still describe repeated calls, not independently
 identified observations. Retry-safe observation identity for those callers is
 remaining work under BI-64E86574. It must preserve legitimate automatic filing
