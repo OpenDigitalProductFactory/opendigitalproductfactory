@@ -106,7 +106,17 @@ and receives every approval its assistant asks for. The POST binds only if
 the ticked account is still the session's account. `Use a different
 account` signs in again and returns to the same request. If a connection
 was made under the wrong account, revoke it and reconnect; approvals never
-follow the connection to another person. An administrator ends one person's
+follow the connection to another person. The platform automation persona
+(`automation@dpf.local`) is never offered there (BI-F586F8A5): a browser
+still holding its session gets a page naming that account with a link to
+sign in as yourself, and the POST issues no code. The governed acceptance
+flow keeps its path: mint `issue_ux_verification_sign_in` with `nextPath`
+set to the exact `/api/oauth/authorize?...` request (its `client_id` and
+`code_challenge`); that session may consent to that one request only.
+Fixture verification users are ordinary accounts and are unaffected. A
+connection refused `workroom_access_denied` is told which account it acts
+as (`data.connectedAs`) and to reconnect while signed in as the room's
+owner; the owner is not named to a caller who is not admitted. An administrator ends one person's
 grants under a shared client registration with People > Revoke this person's
 access on Admin > Platform Development (BI-0A724798); the whole-client revoke
 stays the larger control. The default flow is one Connect action;
