@@ -228,15 +228,30 @@ Install records whose project path no longer exists (38 today) are removed throu
 - It handles no credentials. It writes only client-owned plugin and config locations already in scope for the updater.
 - It refuses rather than repairs on any identity mismatch (X2).
 
-## 8. Acceptance
+## 8. Objectives and acceptance
 
-- **AC-CONTENT-VERSION:** a pack change merged with no `packVersion` edit reaches the Claude CLI, local and project scope, within one interval. Its cache directory carries the new `+c.<digest>` and its digest matches the manifest. Tested with a fixture, then verified live on macOS.
-- **AC-NO-HUMAN:** on a host where the service is installed, a new portal release converges every installed client with no operator or agent action. The only notice is the restart line (M8).
-- **AC-READBACK:** every adapter reports success only after reading back the client's own view. A fixture where the write succeeds but the read-back differs reports `failed` for each of the five clients.
-- **AC-SINGLE-WRITER:** the conformance test fails when an adapter writes a CLI-covered file.
-- **AC-PY39:** CI runs the pack's Python suites on 3.9. Codex refresh works on stock macOS Python 3.9 without tomli, or reports `unsupported-setting` with the setting named.
-- **AC-ESCALATE:** a host stuck in `needs-operator` or `failed` for more than 24 hours produces exactly one attention item naming the cause and the action. A healthy host produces none.
-- **AC-FAILURE-MATRIX:** each row F1–F22 and X1–X14 in §4 has an automated test, or an explicit live-verification record, linked from the plan.
+**OBJ-CONTENT:** A change to delivered pack content reaches every version-keyed client cache with no manual version bump.
+
+**OBJ-UNATTENDED:** Every installed client on a paired host converges to what the portal serves with no human step except restarting a client that is already running.
+
+**OBJ-TRUTH:** Every adapter reports success only from the client's own read-back, every report is honest (including dry runs), and the client CLI is the single writer of its own configuration.
+
+**OBJ-RUNTIME:** The toolchain converges on the stock runtime of every supported OS, including stock macOS Python 3.9.
+
+**OBJ-ESCALATE:** What automation cannot fix reaches the operator once, in plain words, with the single action needed; nothing else does.
+
+**OBJ-COVERAGE:** Every catalogued failure (F1–F22, X1–X15) has a detecting and a remediating mechanism, each proven by a test or a live record.
+
+| Acceptance | Objectives | Statement |
+| --- | --- | --- |
+| AC-CONTENT-VERSION | OBJ-CONTENT | A pack change merged with no `packVersion` edit reaches the Claude CLI, local and project scope, within one interval; its cache directory carries the new `+c.<digest>` and its digest matches the manifest; tested with a fixture, then verified live on macOS. |
+| AC-NO-HUMAN | OBJ-UNATTENDED | On a host where the service is installed, a new portal release converges every installed client with no operator or agent action; the only notice is the restart line (M8). |
+| AC-PRECEDENCE | OBJ-UNATTENDED | A copy a source checkout delivered that contains the served release is never overwritten by the agent, which reports `ahead-of-portal` (X15). |
+| AC-READBACK | OBJ-TRUTH | Every adapter reports success only after reading back the client's own view; a fixture where the write succeeds but the read-back differs reports `failed` for each of the five clients; a dry run reports `preview`. |
+| AC-SINGLE-WRITER | OBJ-TRUTH | The conformance test fails when an adapter writes a CLI-covered file. |
+| AC-PY39 | OBJ-RUNTIME | CI runs the pack's Python suites on stock macOS Python 3.9; Codex converges there without tomli, or the run reports `absent` or `unsupported-setting` with the setting named. |
+| AC-ESCALATE | OBJ-ESCALATE | A host stuck in `needs-operator` or `failed` for more than 24 hours produces exactly one attention item naming the cause and the action; a healthy host produces none. |
+| AC-FAILURE-MATRIX | OBJ-COVERAGE | Each row F1–F22 and X1–X15 in §4 has an automated test, or an explicit live-verification record, linked from the plan. |
 
 ## 9. Delivery
 
