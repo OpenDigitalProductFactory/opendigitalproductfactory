@@ -521,8 +521,8 @@ export async function heartbeatCapsuleTool(
   if (params.checkpoint !== undefined) {
     const { parseExecutorCheckpoint } = await import("./executor-checkpoint");
     const parsed = parseExecutorCheckpoint(params.checkpoint);
-    if (!parsed.ok) return { success: false, error: "invalid_checkpoint", message: `${parsed.message} The lease was not renewed.` };
-    checkpoint = parsed.checkpoint;
+    if (!parsed.ok) return { success: false, error: "invalid_checkpoint", message: `${parsed.error} The lease was not renewed.` };
+    checkpoint = parsed.data;
   }
 
   let capsule;

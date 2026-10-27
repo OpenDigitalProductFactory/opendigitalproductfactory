@@ -15,11 +15,11 @@ const valid = {
 describe("parseExecutorCheckpoint", () => {
   it("accepts a complete checkpoint and returns only known fields", () => {
     const result = parseExecutorCheckpoint({ ...valid, extra: "dropped" });
-    expect(result).toEqual({ ok: true, checkpoint: valid });
+    expect(result).toEqual({ ok: true, data: valid });
   });
 
   it("accepts a checkpoint with only a next action", () => {
-    expect(parseExecutorCheckpoint({ nextAction: "Resume CI repair." })).toEqual({ ok: true, checkpoint: { nextAction: "Resume CI repair." } });
+    expect(parseExecutorCheckpoint({ nextAction: "Resume CI repair." })).toEqual({ ok: true, data: { nextAction: "Resume CI repair." } });
   });
 
   it.each([
