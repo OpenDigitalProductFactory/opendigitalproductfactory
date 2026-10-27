@@ -319,6 +319,11 @@ A connector can declare the pack it loaded, with `dpf_pack`, `dpf_digest` (the f
 - **Records the copy.** It goes in `AgentToolchainObservation`, keyed by the server-derived credential (`oauth:<OAuthClient.id>` or `token:<McpApiToken.id>`) and the loaded digest, with writes coalesced to one per five minutes. `initialize` also records `clientInfo`.
 - **Tells the agent.** A `TOOLCHAIN:` line is added to the `initialize` instructions, naming what is stale, the portal repair and the full installation id the updater must expect (`--expect-installation`). It is addressed to the agent and never hands the user a command.
 
+**How the host's agent last fared (BI-3E66F76F).** The declaration also carries `converge=status[:code][@epochSeconds]`, or `dpf_converge` on the query, read from the host agent's own `~/.dpf/toolchain-agent/state.json`. The status vocabulary is `ok`, `failed`, `needs-operator`, `opted-out`, `offline`, `ahead-of-portal` and `busy`. The code is a machine code such as `exit-1` or `identity_changed`, never free text. The time is when the host first failed. The value reflects the agent's last completed run, so it lags one run behind the run in progress.
+- The server stores it on the observation (`convergeStatus`, `convergeCode`, `convergeSince`).
+- The Connected Agent Clients card on `/ops/self-upgrade` shows it next to each client's reasons for being behind.
+- A host that has been `failed` or `needs-operator` for more than a day raises one `agent-toolchain` attention item per credential, with the single operator action for its code. Healthy, opted-out, ahead-of-portal and week-silent hosts raise nothing.
+
 `get_fleet_readiness` returns a `toolchain` section: every credential with the copies it was seen loading and their verdicts, one page at a time. `record_surface_readiness` now keys an MCP caller's row by its own credential, so one token cannot overwrite another host's readiness.
 
 The floor's rules (pack below `minPackVersion`, a stored token where the credential policy says OAuth is available, Grok on anything but its own credentials client) apply only once a release sets a floor in `toolchain-version.json`.

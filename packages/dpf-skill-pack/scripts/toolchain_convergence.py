@@ -33,7 +33,7 @@ from typing import Any, Mapping, Optional
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 DECLARATION_HEADER = "X-DPF-Toolchain"
-DECLARATION_QUERY_KEYS = ("dpf_pack", "dpf_digest", "dpf_client")
+DECLARATION_QUERY_KEYS = ("dpf_pack", "dpf_digest", "dpf_client", "dpf_converge")
 DEFAULT_CARRIERS = {"claude-code": "header", "codex": "header", "grok": "query", "antigravity": "header"}
 CANONICAL_MCP_URL = "https://localhost/api/mcp/v1?tier=full"
 # Current copies template DPF_CLAUDE_MCP_URL, legacy ones DPF_MCP_URL (BI-D6A6462A).
@@ -95,13 +95,19 @@ class Declarations:
         chosen = shape.get("declarationCarrier") if isinstance(shape, Mapping) else None
         return chosen if chosen in ("query", "header") else DEFAULT_CARRIERS.get(client, "header")
 
+    #: `status[:code][@epochSeconds]` from the host agent's state (BI-3E66F76F), or None.
+    converge: Optional[str] = None
+
     def header_value(self, client: str) -> str:
-        return f"pack={self.pack};digest={self.digest[:16]};client={client}"
+        value = f"pack={self.pack};digest={self.digest[:16]};client={client}"
+        return f"{value};converge={self.converge}" if self.converge else value
 
     def query_url(self, url: str, client: str) -> str:
         parts = urlsplit(url)
         query = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if k not in DECLARATION_QUERY_KEYS]
         query += [("dpf_pack", self.pack), ("dpf_digest", self.digest[:16]), ("dpf_client", client)]
+        if self.converge:
+            query.append(("dpf_converge", self.converge))
         return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
 
     def declare_server(self, server: dict[str, Any], client: str) -> dict[str, Any]:
@@ -117,6 +123,31 @@ class Declarations:
         headers[DECLARATION_HEADER] = self.header_value(client)
         declared["headers"] = headers
         return declared
+
+
+_CONVERGE_STATUSES = {"ok", "failed", "needs-operator", "opted-out", "offline", "ahead-of-portal", "busy"}
+_CONVERGE_CODE = re.compile(r"^[a-z0-9_.-]{1,48}$")
+
+
+def agent_converge_token(home: Path) -> Optional[str]:
+    """How the host agent last fared, as `status[:code][@epochSeconds]` (BI-3E66F76F).
+
+    Read from ~/.dpf/toolchain-agent/state.json, the agent's own file. Each
+    connector carries it so the portal can show why a client is behind and
+    escalate a host that has failed for a day. It reflects the agent's last
+    completed run, so it lags one run behind the current one by design.
+    """
+    state = _read_json(home / ".dpf" / "toolchain-agent" / "state.json")
+    if not isinstance(state, dict) or state.get("status") not in _CONVERGE_STATUSES:
+        return None
+    token = str(state["status"])
+    code = state.get("code")
+    if isinstance(code, str) and _CONVERGE_CODE.match(code):
+        token += f":{code}"
+    since = state.get("failureSince")
+    if token.split(":", 1)[0] in ("failed", "needs-operator") and isinstance(since, (int, float)) and since > 0:
+        token += f"@{int(since)}"
+    return token
 
 
 def declare_grok_descriptor(managed: Path, declarations: Declarations, dry_run: bool) -> bool:

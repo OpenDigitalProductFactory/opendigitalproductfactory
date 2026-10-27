@@ -548,9 +548,26 @@ model AgentToolchainObservation {
   clientInfoVersion String?
   firstObservedAt   DateTime               @default(now())
   lastObservedAt    DateTime               @default(now())
+  // How the host's convergence agent last fared, as the connector declared it
+  // (BI-3E66F76F): status, machine code, and when the host first failed. Null
+  // when the connection carries no report.
+  convergeStatus    AgentToolchainConvergeStatus?
+  convergeCode      String?
+  convergeSince     DateTime?
 
   @@unique([credentialRef, loadedDigest])
   @@index([lastObservedAt(sort: Desc)])
+}
+
+/// The host agent's status vocabulary (packages/dpf-skill-pack/scripts/toolchain_agent.py).
+enum AgentToolchainConvergeStatus {
+  ok
+  failed
+  needs_operator
+  opted_out
+  offline
+  ahead_of_portal
+  busy
 }
 
 enum AgentToolchainAuthMode {
