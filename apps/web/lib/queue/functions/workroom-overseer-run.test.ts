@@ -222,7 +222,8 @@ describe("the drive cycle runs the duty first", () => {
 
   it("skips the duty for caller-supplied rooms unless one is given, and survives a failing duty", async () => {
     const result = await runWorkroomDriveJob(NOW, { listRooms: async () => [driveRoom("a")], effects: effects() });
-    expect(result.overseer).toBeNull();
+    // Absent, not null: a tick the duty did not run reads byte-identical to one before it existed (AC-3C-SEQ-IDENTICAL).
+    expect("overseer" in result).toBe(false);
     await expect(runDriveOverseer([{ id: "a" }], NOW, async () => { throw new Error("db down"); })).resolves.toBeNull();
   });
 });

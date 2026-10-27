@@ -249,7 +249,7 @@ export type DriveOverseerDeps = {
 };
 
 export type DriveOverseerResult = {
-  /** BI-8E1486FA: what the per-room overseer duty did this tick; null when it did not run. */
+  /** BI-8E1486FA: what the per-room overseer duty did this tick; absent when it did not run. */
   overseer?: OverseerCycleSummary | null;
 };
 

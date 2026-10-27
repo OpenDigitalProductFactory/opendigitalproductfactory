@@ -572,7 +572,7 @@ export async function runWorkroomDriveJob(
     attention,
     stopped,
     skipped,
-    plans, overseer: overseen.overseer,
+    plans, ...(overseen.overseer ? { overseer: overseen.overseer } : {}), // absent when the duty did not run, so caller-supplied ticks are unchanged
   };
 }
 
