@@ -24,6 +24,8 @@ export const backlogPackDefinitions: ToolDefinition[] = [
       "Create a new backlog item in the ops backlog. Use this tool to add new items — do NOT use update_backlog_item for items that do not exist yet. " +
       "New items default to status=triaging; supply status+triageOutcome together only when explicitly skipping triage (e.g. Build Studio brief intake). When triageOutcome=build, effortSize is required. " +
       "Before creating: list_backlog_items or search_knowledge for an existing BI on the same defect. " +
+      "State the outcome the item delivers (what will be true, for whom) in `outcome`: delivery closes the item when its change merges, and a regression found in use becomes a new item. " +
+      "Add `howWeKnow` only when that outcome is not obvious from the change. Tag lifecycleTags with `contractual` only when a customer commitment needs a separate acceptance step; that is rare. " +
       "Do not create-then-recreate on transient errors; read the error and fix the payload once.",
     inputSchema: {
       type: "object",
@@ -40,6 +42,8 @@ export const backlogPackDefinitions: ToolDefinition[] = [
         ...backlogScopeCreateProperties,
         ...backlogProductScopeCreateProperties,
         body: { type: "string", description: "Detailed description" },
+        outcome: { type: "string", description: "The outcome this item delivers: what will be true, and for whom, once it is done. Stored as the body's \"## Outcome\" section. Optional, but an item filed without one is prompted for it." },
+        howWeKnow: { type: "string", description: "How we will know the outcome is reached. Only when it is not obvious from the change; stored as \"## How we'll know\"." },
         epicId: { type: "string", description: "Epic ID to link to (optional)" },
         itemId: { type: "string", description: "Optional custom item ID (e.g. BI-PORT-005). Auto-generated if omitted." },
       },
