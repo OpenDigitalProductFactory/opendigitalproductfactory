@@ -23,6 +23,7 @@ import {
   ensureFederationDeliveryQueue,
   claimFederationDeliveryJob,
   finishFederationDeliveryJob,
+  holdFederationDeliveryJob,
   scheduleFederationDeliveryJob,
   type FederationDeliveryQueueDb,
 } from "./delivery-queue";
@@ -62,6 +63,9 @@ export interface DemandDeliveryDb extends FederationDeliveryQueueDb {
       peerAuthorityUrl: string;
       peerTokenEnc: string | null;
       role: string;
+      linkState?: string;
+      revokedAt?: Date | null;
+      quarantinedAt?: Date | null;
     }>>;
     /** Quarantine a link the peer itself is refusing (see quarantineRejectedLink). */
     updateMany?(args: unknown): Promise<{ count: number }>;
@@ -407,6 +411,50 @@ export async function dispatchDueDemand(db: DemandDeliveryDb, options: {
   const quarantinedLinks: string[] = [];
   let deferred = 0;
   let deadLettered = 0;
+  let withdrawn = 0;
+
+  // BI-26E3B9C9: every due job this sweep selected must leave the due window,
+  // delivered or not. A job whose link was not deliverable used to be skipped
+  // without being finished, so it stayed `queued` and due and was selected again
+  // by every later sweep. Once the oldest-first window filled with revoked-link
+  // jobs, no trusted-link job was ever attempted (observed 2026-10-27: 3,493
+  // queued jobs, nothing attempted since 2026-09-03).
+  const rowByMirrorId = new Map(rows.map((row) => [row.mirrorId, row]));
+  const heldLinkIds = [...new Set(rows
+    .filter((row) => !linkById.has(row.federationLinkId))
+    .map((row) => row.federationLinkId))];
+  const heldLinks = heldLinkIds.length === 0 ? [] : await db.federationLink.findMany({
+    where: { linkId: { in: heldLinkIds } },
+    select: { linkId: true, linkState: true, revokedAt: true, quarantinedAt: true },
+  });
+  const heldLinkById = new Map(heldLinks.map((link) => [link.linkId, link]));
+  for (const job of jobs) {
+    const row = job.sourceId ? rowByMirrorId.get(job.sourceId) : undefined;
+    if (row && linkById.has(row.federationLinkId)) continue;
+    if (row) {
+      const held = heldLinkById.get(row.federationLinkId);
+      const revoked = !held || held.linkState === "revoked" || Boolean(held.revokedAt);
+      if (!revoked) {
+        // Quarantined or not yet trusted: the envelope stays pending for the
+        // day the link is usable again; only the job's turn moves back.
+        deferred++;
+        await holdFederationDeliveryJob(db, {
+          itemId: job.itemId,
+          nextAttemptAt: new Date(now.getTime() + retryDelayMs(job.attemptCount + 1, options.random)),
+        });
+        continue;
+      }
+      await db.federatedRecordMirror.update({ where: { mirrorId: row.mirrorId }, data: { syncStatus: "withdrawn" } });
+    }
+    withdrawn++;
+    await finishFederationDeliveryJob(db, {
+      itemId: job.itemId,
+      attemptCount: job.attemptCount,
+      outcome: "withdrawn",
+      error: row ? "federation link revoked" : "envelope no longer pending",
+      now,
+    });
+  }
   for (const row of deliverableRows) {
     const job = jobByMirrorId.get(row.mirrorId);
     if (!job) continue;
@@ -548,6 +596,6 @@ export async function dispatchDueDemand(db: DemandDeliveryDb, options: {
   }
   return {
     attempted: deliverableRows.length, delivered, deferred, deadLettered, unreachable,
-    quarantinedLinks, withdrawn: 0,
+    quarantinedLinks, withdrawn,
   };
 }
