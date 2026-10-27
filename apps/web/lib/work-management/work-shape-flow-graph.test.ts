@@ -29,9 +29,9 @@ describe("work-shape-flow-graph.ts", () => {
   });
 
   it("imports only element-ids, whose runtime dependencies are plain constants: no schema, resolver or design rule", () => {
-    expect(runtimeImports("workroom/flow-graph.ts")).toEqual(["../gpp/element-ids.js"]);
-    expect(runtimeImports("gpp/element-ids.ts")).toEqual(["./diagnostics.js"]);
-    expect(runtimeImports("gpp/diagnostics.ts")).toEqual(["./executable-constructs.js"]);
+    expect(runtimeImports("workroom/flow-graph.ts")).toEqual(["../gpp/element-ids.ts"]);
+    expect(runtimeImports("gpp/element-ids.ts")).toEqual(["./diagnostics.ts"]);
+    expect(runtimeImports("gpp/diagnostics.ts")).toEqual(["./executable-constructs.ts"]);
     expect(runtimeImports("gpp/executable-constructs.ts")).toEqual([]);
   });
 });
