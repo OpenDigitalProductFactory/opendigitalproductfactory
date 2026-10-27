@@ -20,6 +20,7 @@ import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { readDocumentBlob, storeDocumentBlob } from "./blob-storage";
 import { convertDocument, type ConversionFailureReason } from "./conversion/convert";
 import { CONVERTER_TARGET_MIME, normalizeMimeType, officeSourceExtension } from "./conversion/formats";
+import { readableDocumentWhere, type DocumentViewer } from "./document-access";
 import { contentFilename } from "./document-content";
 import { markdownToHtmlDocument, plainTextToHtmlDocument } from "./markdown-to-html";
 
@@ -160,15 +161,16 @@ async function exportSource(
  * the result as a rendition and returns it.
  */
 export async function exportDocumentVersion(
-  input: { documentId: string; version?: number | null; format: DocumentExportFormat },
+  input: { documentId: string; version?: number | null; format: DocumentExportFormat; viewer: DocumentViewer },
   overrides: Partial<DocumentExportDeps> = {},
 ): Promise<DocumentExportResult> {
   const deps: DocumentExportDeps = { ...defaultDeps(), ...overrides };
   const kind = KIND_BY_FORMAT[input.format];
   const pinned = typeof input.version === "number" && Number.isInteger(input.version);
   const select = versionSelect(kind);
-  const document = (await deps.db.document.findUnique({
-    where: { documentId: input.documentId },
+  // A document the viewer may not read is not-found (BI-957915CB).
+  const document = (await deps.db.document.findFirst({
+    where: { AND: [{ documentId: input.documentId }, readableDocumentWhere(input.viewer)] },
     select: pinned
       ? { title: true, versions: { where: { version: input.version! }, take: 1, select } }
       : { title: true, currentVersion: { select } },
