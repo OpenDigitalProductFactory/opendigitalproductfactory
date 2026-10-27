@@ -151,7 +151,56 @@ Rendering is plain SVG/HTML on `--dpf-*` tokens. Status colours go through `stat
 - **Stage P50 per shape** needs a workroom emitter into queue telemetry (the flow-map F-items). Until that exists, the stage lens falls back to absolute age with no bands and says so.
 - **Collaboration shape** (BI-EA6B9A77) is a different axis from delivery shape. The Atlas groups by delivery shape only.
 
-## 6. Research and benchmarking
+## 6. One home per question: refactoring the existing surfaces
+
+The owner's concern (2026-10-27): a new view that leaves the old ones in place creates contradictory pictures of the same work. The Atlas only succeeds if it replaces things as well as adding them. Every surface listed in §1 therefore gets an explicit outcome, and the delivery item that replaces something retires it in the same PR.
+
+**Rule 1 — one vocabulary.** The atlas health states are defined once, next to `workroom-flow-state.ts`:
+
+- needs a person
+- stuck or held
+- working
+- waiting its turn
+- no recent signal
+- finished
+
+Today, `workroom-operator-summary.ts` (attention / working / waiting / history), Build Studio's rail ("Needs you / Working / Waiting / Parked") and `DeliveryTaskHub` (needs-attention / working / waiting / ready / complete) each have their own grouping. All three become adapters over the one definition. A guard test fails any new local grouping of rooms by health.
+
+**Rule 2 — one projection.** Every room-level count and list reads from the atlas projection (§4) or from `buildWorkroomFlowMap` for a single room. No surface computes "rooms needing attention" on its own.
+
+**Rule 3 — one home for each question.** Other surfaces answer their own question and then link into the Atlas, using a URL filter such as `?portfolio=…&state=…&shape=…`, instead of drawing their own room lists.
+
+| Surface | Outcome | What changes |
+|---|---|---|
+| `/ops/workrooms` lead band, operator groups, `WorkroomInventory` | **Replaced** | Becomes the triage counts and the glyph map. The text inventory becomes the paged group rows |
+| `PortfolioActivityTree` | **Absorbed** | Its projection (`projectPortfolioActivityPage`) feeds the group rows and the inspector. The separate tree component is retired |
+| `HeldWorkroomsList` ("Shared recovery issues") | **Absorbed** | Becomes the "Stuck or held" filter plus the inspector's cause and recovery callout. The separate section is retired |
+| `/area/[key]` Work view | **Kept, narrowed** | Keeps the five flow tiles and the shape map (L2, the destination of "Show in flow map"). Its room-per-step lists link to the Atlas filtered by portfolio and stage instead of listing rooms itself |
+| `/workspace/cases/[caseKey]` | **Kept as destination** | L3 detail. The inspector and this page share `buildWorkroomFlowMap`, so the checklist cannot disagree with the detail |
+| `/workspace` home L0 callout | **Kept, shared** | Uses the same question component as the Atlas header and links into it. It is not a second computation |
+| `/build` fleet rail and `FleetDensityBar` | **Converged** (owner decision pending, §10) | Its counts adopt the shared vocabulary. Recommendation: the build list becomes the Atlas filtered to Build Studio rooms; build detail, ProcessGraph and the live feed stay |
+| `/build/work` `DeliveryTaskHub` | **Converged** | Its grouping adopts the shared vocabulary and its room list becomes an Atlas filter. `WorkCapsuleLaunchPanel` (launching work) stays |
+| `/ea/workrooms` | **Kept, narrowed** | Definitions and architecture only, per the portfolio-convergence plan. Open-room counts link to the Atlas |
+| `/portfolio` | **Kept** | Budgets, health and flow comparison. Room counts link to the Atlas |
+| `/workspace/my-queue` | **Kept as a lens** | The same projection filtered to "needs a person" and assigned to the viewer |
+| `/platform/ai/operations-map`, `/ops/dev-loop`, `/workforce` | **Kept** | These cover different subjects: AI routing, runtime targets, roster. They link to rooms where relevant |
+| MCP `list_workrooms` | **Extended** | `view: "atlas"` returns the same projection, so agents and people see one picture |
+
+Navigation keeps its existing `work_activity` entry. Any route that is retired redirects to the matching Atlas filter, so bookmarks and agent links keep working. The user guide for Work in progress is updated in the same PR as each change, following the AGENTS.md §4 requirement that docs change in the same branch.
+
+## 7. UX design authority
+
+The platform's own UX coworkers take part in this work, not only the generic design guidance used so far:
+
+| Party | Role here | State today |
+|---|---|---|
+| **UX Design Critic** (`ux-design-critic`, offer `offer-ux-design-critique`) | Advisory critique of the prototype and later the served page, covering hierarchy, density and cognitive load | In its curation stage, with no gating authority. The critique corpus has **0 calibrated entries** and 0 for `/ops/workrooms` (queried 2026-10-27), so any critique it gives now is ungrounded |
+| **UX Accessibility** (`ux-accessibility-agent`, AGT-903) | WCAG 2.2 AA, keyboard, contrast and token review on A2/A3 | Available at code review |
+| `dpf-ux-fit-review` skill + `principle_decide` (`human_cognitive_load`) | Measured UX-fit evidence before the PR is handed off | Required gate for A2/A3 |
+
+**Is engaging the critic useful, too late, or obsolete?** It is useful, and now is the right point, but its first contribution is calibration rather than verdicts. Because the corpus is empty, the best use is to have the critic draft findings on this prototype and have the owner give each one a verdict (agree, disagree, or reword). Those verdicts become the first calibrated entries for `/ops/workrooms`, so the critique at A2/A3 is grounded in the owner's own judgement. It is not too late, because nothing has been built yet. It is not obsolete, because without a calibrated corpus every later UX gate on this page falls back to generic rubric advice.
+
+## 8. Research and benchmarking
 
 | Source | Adopted | Rejected |
 |---|---|---|
@@ -173,8 +222,9 @@ Anti-patterns avoided:
 - horizon charts for a non-technical operator;
 - yet another separate dashboard.
 
-## 7. Delivery outline (the plan follows approval)
+## 9. Delivery outline (the plan follows approval)
 
+0. **A0 Shared vocabulary and calibration.** Define the atlas health states once and turn the three existing groupings into adapters over them, with a guard test against local health groupings. In the same item, engage the UX Design Critic on the prototype and record the owner's verdicts as the first calibrated entries for `/ops/workrooms`.
 1. **A1 Atlas projection.** The loader, plus MCP `view: "atlas"` on `list_workrooms`. Unit tests cover the health collapse and the bounded size.
 2. **A2 Glyph map and triage filters** as the lead of `/ops/workrooms`. Needs UX-fit evidence (`docs/ux-fit/`).
 3. **A3 Room inspector checklist.** Restyle the PWA-03 inspector with the stage list and the live line.
@@ -182,9 +232,9 @@ Anti-patterns avoided:
 5. **A5 Stage lens.** Depends on the workroom queue emitter. Falls back to absolute age until it exists.
 6. **A6 Archetype bindings and the Just now feed.**
 
-Each item is filed under BI-B3D87B06 once the design is approved. The UX-fit and `principle_decide` (`human_cognitive_load`) gates apply to A2 and A3.
+Each item is filed under BI-B3D87B06 once the design is approved. Every item that replaces something in §6 retires or redirects it in the same PR and updates the user guide; an item is not done while the old view still draws its own copy. The UX-fit, accessibility and `principle_decide` (`human_cognitive_load`) gates apply to A2 and A3, and the critic's findings on the served page are recorded against the calibrated corpus.
 
-## 8. Owner decisions and open questions
+## 10. Owner decisions and open questions
 
 1. **Decided (owner, 2026-10-27):** the Atlas leads `/ops/workrooms`. The `/workspace` home keeps its existing L0 callout, which links into the Atlas.
 2. **Open:** does Build Studio's `/build` fleet rail fold into the Atlas as a filter, retiring a separate home, or stay as a delivery-only view?
