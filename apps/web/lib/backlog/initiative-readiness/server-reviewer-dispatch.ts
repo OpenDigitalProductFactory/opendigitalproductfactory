@@ -24,7 +24,8 @@ import "server-only";
 //   dispatch of the same review are one TaskRun.
 //
 // A room with no live consent-bound connection is left for its author, and the
-// reason is recorded on the room.
+// reason is recorded on the room once per request, re-attempted on a growing
+// back-off (BI-CD53F5F5).
 
 import { prisma } from "@dpf/db";
 import { EXECUTION_UNCERTAIN_MESSAGE } from "@/lib/shared/execution-uncertainty";
@@ -37,6 +38,11 @@ import type { ReadinessReviewRoute } from "@/lib/work-management/readiness-revie
 
 /** A dispatch for the same request is not repeated within this window. */
 export const REVIEW_DISPATCH_COOLDOWN_MS = 30 * 60 * 1000;
+/**
+ * BI-CD53F5F5: a refusal that keeps recurring is re-attempted on a doubling
+ * back-off from the cooldown, never further apart than this.
+ */
+export const REVIEW_DISPATCH_MAX_BACKOFF_MS = 6 * 60 * 60 * 1000;
 export const REVIEW_DISPATCH_ACTIVITY_KIND = "reviewer-dispatch";
 
 type RoomAuthor = {
@@ -262,27 +268,65 @@ async function designPhaseOwedRecoveryRoutes(itemId: string, authorAgentId: stri
   return recovery.reviewerRoutes.filter((route) => route.independent);
 }
 
-async function recentlyDispatched(roomId: string, requestKey: string, now: Date): Promise<boolean> {
-  const recent = await prisma.workroomActivity.findFirst({
-    where: {
-      workCapsuleId: roomId,
-      kind: REVIEW_DISPATCH_ACTIVITY_KIND,
-      recordedAt: { gte: new Date(now.getTime() - REVIEW_DISPATCH_COOLDOWN_MS) },
-      payload: { path: ["requestKey"], equals: requestKey },
-    },
-    select: { id: true },
+type DispatchRecord = { id: string; recordedAt: Date; payload: Record<string, unknown> };
+
+/** Outcomes that leave the request unsent, so it is attempted again later. */
+const STANDING_REFUSALS: ReadonlySet<RouteOutcome["outcome"]> = new Set(["no-author-connection", "refused"]);
+
+/** The newest dispatch record of this request in this room. */
+async function latestDispatchRecord(roomId: string, requestKey: string): Promise<DispatchRecord | null> {
+  const row = await prisma.workroomActivity.findFirst({
+    where: { workCapsuleId: roomId, kind: REVIEW_DISPATCH_ACTIVITY_KIND, payload: { path: ["requestKey"], equals: requestKey } },
+    orderBy: [{ recordedAt: "desc" }, { id: "desc" }],
+    select: { id: true, recordedAt: true, payload: true },
   });
-  return Boolean(recent);
+  if (!row) return null;
+  const payload = row.payload && typeof row.payload === "object" && !Array.isArray(row.payload) ? row.payload as Record<string, unknown> : {};
+  return { id: row.id, recordedAt: row.recordedAt, payload };
 }
 
-async function record(room: RoomAuthor, outcome: RouteOutcome, summary: string): Promise<void> {
+/** Rows written before the back-off carry no attempt count: each was one attempt. */
+function attemptsOf(record: DispatchRecord): number {
+  const attempts = record.payload.attempts;
+  return typeof attempts === "number" && Number.isInteger(attempts) && attempts > 0 ? attempts : 1;
+}
+
+/** When this request may be attempted again: a standing refusal's next attempt, else one cooldown after the record. */
+function nextAttemptDue(record: DispatchRecord): number {
+  const next = typeof record.payload.nextAttemptAt === "string" ? Date.parse(record.payload.nextAttemptAt) : NaN;
+  return Number.isFinite(next) ? next : record.recordedAt.getTime() + REVIEW_DISPATCH_COOLDOWN_MS;
+}
+
+/** Wait before attempt `attempts + 1`: the cooldown, doubled per repeated refusal, capped. */
+export function reviewDispatchBackoffMs(attempts: number): number {
+  return Math.min(REVIEW_DISPATCH_COOLDOWN_MS * 2 ** Math.min(Math.max(attempts - 1, 0), 30), REVIEW_DISPATCH_MAX_BACKOFF_MS);
+}
+
+/**
+ * Record what happened to the request on the room. A refusal that repeats the
+ * standing one (same outcome, same reason) is the same fact: its one row
+ * carries the attempt count and the next attempt (BI-CD53F5F5), so a
+ * connection that stays lost for days leaves one row, not one per tick. Any
+ * change of outcome is a new row.
+ */
+async function record(room: RoomAuthor, outcome: RouteOutcome, summary: string, previous: DispatchRecord | null, now: Date): Promise<void> {
+  const base = { ...outcome, source: "platform-reviewer-dispatch" };
+  const refused = STANDING_REFUSALS.has(outcome.outcome);
+  const repeats = refused && previous !== null
+    && previous.payload.outcome === outcome.outcome && (previous.payload.detail ?? null) === (outcome.detail ?? null);
+  const attempts = repeats ? attemptsOf(previous!) + 1 : 1;
+  const payload = {
+    ...base,
+    attempts,
+    lastAttemptAt: now.toISOString(),
+    ...(refused ? { nextAttemptAt: new Date(now.getTime() + reviewDispatchBackoffMs(attempts)).toISOString() } : {}),
+  };
+  if (repeats) {
+    await prisma.workroomActivity.update({ where: { id: previous!.id }, data: { payload } });
+    return;
+  }
   await prisma.workroomActivity.create({
-    data: {
-      workCapsuleId: room.roomId,
-      kind: REVIEW_DISPATCH_ACTIVITY_KIND,
-      summary,
-      payload: { ...outcome, source: "platform-reviewer-dispatch" },
-    },
+    data: { workCapsuleId: room.roomId, kind: REVIEW_DISPATCH_ACTIVITY_KIND, summary, payload },
   });
 }
 
@@ -316,7 +360,8 @@ export async function dispatchReviewerRequest(args: {
   const at = { itemId: args.itemId, capsuleId: args.workroomId ?? room.capsuleId, requestKey };
   if (!requestKey) return { ...at, outcome: "refused", detail: "The reviewer packet carries no request key." };
   if (!room.userId || (args.carrier === "author-assistant" && !room.agentId)) return { ...at, outcome: "no-author" };
-  if (await recentlyDispatched(room.roomId, requestKey, now)) return { ...at, outcome: "cooling-down" };
+  const previous = await latestDispatchRecord(room.roomId, requestKey);
+  if (previous && now.getTime() < nextAttemptDue(previous)) return { ...at, outcome: "cooling-down" };
   const findConnection = args.deps?.findConnection
     ?? ((userId: string, agentId: string) => findStandingConnection(userId, agentId, "request_coworker", "platform-reviewer-dispatch"));
   const findUserConnection = args.deps?.findUserConnection
@@ -330,7 +375,7 @@ export async function dispatchReviewerRequest(args: {
     const outcome: RouteOutcome = { ...at, outcome: "no-author-connection" };
     await record(room, outcome, args.noConnectionSummary ?? (args.carrier === "requesting-user"
       ? "An independent review of this work is owed, but the person it is for has no live authorized connection the platform may send on. Reconnect an assistant (Claude Code or Codex) to let the platform request it."
-      : "An independent review is owed, but the author's assistant has no live authorized connection. The author can request it, or reconnect the assistant."));
+      : "An independent review is owed, but the author's assistant has no live authorized connection. The author can request it, or reconnect the assistant."), previous, now);
     return outcome;
   }
   const execute = args.deps?.execute ?? (await import("@/lib/mcp-governed-execute")).governedExecuteTool;
@@ -353,7 +398,7 @@ export async function dispatchReviewerRequest(args: {
   };
   await record(room, outcome, dispatched
     ? `The platform asked ${String(requestCoworker.targetAgent)} for the independent review this work owes, on the author's connection.`
-    : `The platform could not request the independent review this work owes: ${detail ?? "refused"}.`);
+    : `The platform could not request the independent review this work owes: ${detail ?? "refused"}.`, previous, now);
   return outcome;
 }
 

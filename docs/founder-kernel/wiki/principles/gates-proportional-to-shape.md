@@ -67,6 +67,13 @@ work owes and who signs them.
 - **Delivery evidence is the trunk.** A SHA reachable from main with green
   required checks is delivery for every shape; no manifest is built to prove
   what git already knows.
+- **Delivery closes the item by default** (founder direction 2026-10-27,
+  BI-B1B44777). For an item not tagged `contractual`, the merge through the
+  gates also satisfies the acceptance and reconciliation lanes above, and no
+  design or review gate is owed after the change has landed. A recorded
+  failure still blocks. A regression found in use becomes a new item. The
+  independent acceptance receipt is owed only by contractual work
+  (`submitting-work-is-not-accepting-it`).
 - **No artifact is produced solely to satisfy a gate.** When a gate asks for a
   document the work did not naturally produce, the gate table is wrong, not
   the work. Writing a plan after the fact to placate a projector converts a

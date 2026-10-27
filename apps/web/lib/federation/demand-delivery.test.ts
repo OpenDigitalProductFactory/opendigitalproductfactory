@@ -270,7 +270,7 @@ describe("dispatchDueDemand", () => {
 
     expect(result).toEqual({
       attempted: 1, delivered: 1, deferred: 0, deadLettered: 0,
-      unreachable: 0, quarantinedLinks: [],
+      unreachable: 0, quarantinedLinks: [], withdrawn: 0,
     });
     expect(update).toHaveBeenCalledWith({ where: { mirrorId: "fdmo_1" }, data: expect.objectContaining({
       syncStatus: "synced", acknowledgedVersion: 7,
@@ -457,5 +457,105 @@ describe("dispatchDueDemand queue churn (BI-5993AE7F)", () => {
     expect(workItemUpsert).toHaveBeenCalledWith(expect.objectContaining({
       where: { sourceKey: "federation-demand:m2" },
     }));
+  });
+});
+
+describe("dispatchDueDemand head-of-line (BI-26E3B9C9)", () => {
+  // The sweep reads the 50 oldest due jobs and then drops every row whose link
+  // is not deliverable — without finishing the job. A job for a revoked link was
+  // therefore left `queued` and due, and the next sweep selected it again. On the
+  // operator's install (2026-10-27) the whole 50-job window was revoked-link
+  // jobs, so the one trusted link's 2,534 pending envelopes had never been
+  // attempted since 2026-09-03.
+  const now = new Date("2026-10-27T18:00:00.000Z");
+  const due = (sourceId: string) => ({
+    itemId: `job-${sourceId}`, sourceId, attemptCount: 1,
+    createdAt: new Date("2026-09-01T00:00:00.000Z"), claimedAt: null,
+  });
+  const pending = (mirrorId: string, federationLinkId: string) => ({
+    mirrorId, federationLinkId, recordType: "demand-envelope", version: 7, deliveryAttempts: 1,
+    payload: { activity: "dpf.demand.updated", eventId: `evt_${mirrorId}`, queuedAt: "2026-09-01T00:00:00.000Z", envelope: { originVersion: 7 } },
+  });
+  const links = [
+    { linkId: "link_live", peerAuthorityUrl: "https://peer.example", peerTokenEnc: "enc", role: "same-org-peer", linkState: "trusted", revokedAt: null, quarantinedAt: null },
+    { linkId: "link_gone", peerAuthorityUrl: "https://old.example", peerTokenEnc: "enc", role: "same-org-peer", linkState: "revoked", revokedAt: new Date("2026-09-06T00:00:00.000Z"), quarantinedAt: null },
+    { linkId: "link_fenced", peerAuthorityUrl: "https://fenced.example", peerTokenEnc: "enc", role: "same-org-peer", linkState: "trusted", revokedAt: null, quarantinedAt: new Date("2026-10-01T00:00:00.000Z") },
+  ];
+
+  function hol(jobs: ReturnType<typeof due>[], rows: ReturnType<typeof pending>[]) {
+    const mirrorUpdate = vi.fn().mockResolvedValue({});
+    const workItemUpdate = vi.fn().mockResolvedValue({});
+    const db = {
+      workQueue: { upsert: vi.fn().mockResolvedValue({ id: "queue-db-id" }) },
+      workItem: {
+        upsert: vi.fn(), update: workItemUpdate,
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        findMany: vi.fn()
+          .mockResolvedValueOnce(jobs.map((job) => ({ ...job })))
+          .mockResolvedValueOnce(jobs),
+      },
+      federationLink: {
+        findMany: vi.fn().mockImplementation(async (args: { where: { linkState?: string; linkId: { in: string[] } } }) => {
+          const wanted = links.filter((candidate) => args.where.linkId.in.includes(candidate.linkId));
+          return args.where.linkState === "trusted"
+            ? wanted.filter((candidate) => candidate.linkState === "trusted" && !candidate.revokedAt && !candidate.quarantinedAt)
+            : wanted;
+        }),
+      },
+      federatedRecordMirror: {
+        findMany: vi.fn()
+          .mockResolvedValueOnce(rows.map((row) => ({ mirrorId: row.mirrorId })))
+          .mockResolvedValueOnce(rows),
+        update: mirrorUpdate, findUnique: vi.fn(), create: vi.fn(),
+      },
+    } as unknown as DemandDeliveryDb;
+    return { db, mirrorUpdate, workItemUpdate };
+  }
+
+  it("withdraws a revoked link's job instead of leaving it at the head of the queue", async () => {
+    const { db, mirrorUpdate, workItemUpdate } = hol([due("m_gone")], [pending("m_gone", "link_gone")]);
+
+    const result = await dispatchDueDemand(db, { now, decryptToken: () => "dpflink_token", send: vi.fn() });
+
+    expect(result.withdrawn).toBe(1);
+    expect(mirrorUpdate).toHaveBeenCalledWith({ where: { mirrorId: "m_gone" }, data: expect.objectContaining({ syncStatus: "withdrawn" }) });
+    expect(workItemUpdate).toHaveBeenCalledWith({ where: { itemId: "job-m_gone" }, data: expect.objectContaining({ status: "cancelled", nextAttemptAt: null }) });
+  });
+
+  it("still delivers the trusted link's job that sits behind revoked-link jobs", async () => {
+    const { db } = hol(
+      [due("m_gone"), due("m_live")],
+      [pending("m_gone", "link_gone"), pending("m_live", "link_live")],
+    );
+    const send = vi.fn().mockResolvedValue({ ok: true, status: 202, body: { ok: true, originVersion: 7 } });
+
+    const result = await dispatchDueDemand(db, { now, decryptToken: () => "dpflink_token", send });
+
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(result.delivered).toBe(1);
+    expect(result.withdrawn).toBe(1);
+  });
+
+  it("cancels a job whose mirror is no longer pending", async () => {
+    const { db, workItemUpdate } = hol([due("m_done")], []);
+
+    const result = await dispatchDueDemand(db, { now, decryptToken: () => "dpflink_token", send: vi.fn() });
+
+    expect(result.withdrawn).toBe(1);
+    expect(workItemUpdate).toHaveBeenCalledWith({ where: { itemId: "job-m_done" }, data: expect.objectContaining({ status: "cancelled" }) });
+  });
+
+  it("holds a quarantined link's job with backoff, without withdrawing its envelope", async () => {
+    const { db, mirrorUpdate, workItemUpdate } = hol([due("m_fenced")], [pending("m_fenced", "link_fenced")]);
+
+    const result = await dispatchDueDemand(db, { now, decryptToken: () => "dpflink_token", send: vi.fn(), random: () => 0.5 });
+
+    expect(result.withdrawn).toBe(0);
+    expect(mirrorUpdate).not.toHaveBeenCalled();
+    expect(workItemUpdate).toHaveBeenCalledWith({ where: { itemId: "job-m_fenced" }, data: expect.objectContaining({
+      status: "queued", nextAttemptAt: expect.any(Date),
+    }) });
+    const scheduled = workItemUpdate.mock.calls[0][0].data.nextAttemptAt as Date;
+    expect(scheduled.getTime()).toBeGreaterThan(now.getTime());
   });
 });

@@ -1,6 +1,7 @@
 "use server";
 
 import * as crypto from "crypto";
+import { composeIntakeBody } from "@/lib/backlog/intake-outcome";
 import { prisma, attributeBacklogPortfolio } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { requireCapability } from "@/lib/actions/shared/guards";
@@ -133,7 +134,10 @@ export async function createBacklogItem(input: BacklogItemInput): Promise<void> 
     archetypeIds:        cleanStringArray(input.archetypeIds),
     scopeRationale:      input.scopeRationale?.trim() || null,
     lifecycleTags:       cleanStringArray(input.lifecycleTags),
-    ...(input.body !== undefined && { body: input.body.trim() || null }),
+    // BI-B1B44777: the outcome leads the body; an item without one is still filed.
+    ...(input.body !== undefined || input.outcome?.trim()
+      ? { body: composeIntakeBody({ body: input.body?.trim() || null, outcome: input.outcome }) || null }
+      : {}),
     ...deferralProjection,
   };
   const created = await prisma.$transaction(async (tx) => {

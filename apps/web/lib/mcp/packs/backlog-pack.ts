@@ -20,6 +20,7 @@ import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { handleUpdateBacklogItem } from "./backlog-update-item-handler";
 import { updateBuildHappyPathState } from "@/lib/mcp/build-tool-helpers";
 import { optionalStringParam, stringArrayParam, validScopeKind } from "./backlog-scope-metadata";
+import { OUTCOME_INTAKE_PROMPT } from "@/lib/backlog/intake-outcome";
 import {
   getBacklogItem,
   getNextRecommendedWork,
@@ -110,6 +111,8 @@ async function createBacklogItem(
     effortSize: typeof params["effortSize"] === "string" ? params["effortSize"] : undefined,
     priority: typeof params["priority"] === "number" ? params["priority"] : undefined,
     body: typeof params["body"] === "string" ? params["body"] : undefined,
+    outcome: optionalStringParam(params, "outcome"),
+    howWeKnow: optionalStringParam(params, "howWeKnow"),
     scopeKind: validScopeKind(params["scopeKind"]),
     archetypeCategories: stringArrayParam(params, "archetypeCategories"),
     archetypeIds: stringArrayParam(params, "archetypeIds"),
@@ -153,7 +156,11 @@ async function createBacklogItem(
       result.duplicateCandidates ?? [],
       result.duplicateSemanticUnavailable ?? null,
     );
-    const message = duplicateAdvisory ? `${scanned}\n\n${duplicateAdvisory}` : scanned;
+    const withDuplicates = duplicateAdvisory ? `${scanned}\n\n${duplicateAdvisory}` : scanned;
+    // BI-B1B44777: a soft prompt for the outcome, never a refusal.
+    const message = result.outcomeStated === false
+      ? `${withDuplicates}\n\n${OUTCOME_INTAKE_PROMPT}`
+      : withDuplicates;
     return { success: true, entityId: result.itemId, message };
   } catch (err) {
     const msg =
