@@ -16,6 +16,7 @@
 // Design: docs/superpowers/specs/2026-08-26-mcp-client-self-authentication-design.md §4.6
 
 import { PUBLIC_SCOPE_COPY, type PublicScope } from "@/lib/auth/oauth-scope-map";
+import { agentAccessLocationLabel } from "@/lib/navigation/admin-location";
 
 /** Escape for HTML text and double-quoted attribute contexts. Every dynamic
  *  value below is attacker-influenced — a DCR client picks its own name, and
@@ -193,7 +194,7 @@ ${scopeRows}
 <button class="secondary" type="submit" name="decision" value="deny" formnovalidate>Cancel</button>
 </div>
 </form>
-<p class="foot">You can revoke this at any time in Admin &rsaquo; Platform Development &rsaquo; MCP.</p>`,
+<p class="foot">An administrator can end this connection at any time in ${esc(agentAccessLocationLabel())}.</p>`,
   );
 }
 

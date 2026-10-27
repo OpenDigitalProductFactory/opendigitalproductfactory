@@ -39,6 +39,8 @@ vi.mock("@/lib/actions/oauth-clients", () => ({
   listOAuthCredentialsAssistants: async () => ({ ok: true, data: [{ agentId: "AGT-EXT-CODEX", displayName: "Codex" }] }),
   createOAuthCredentialsClient: vi.fn(),
   revokeOAuthClient: vi.fn(),
+  listAccountAgentAccessAction: vi.fn(async () => ({ ok: false, error: "No account matches admin@dpf.local." })),
+  endAccountAgentAccessAction: vi.fn(),
 }));
 
 afterEach(cleanup);
@@ -59,4 +61,17 @@ it("keeps client setup messages available through the page's local admin provide
   expect(screen.queryByText(/setup\.sourceCredentials\./)).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
   expect(screen.queryByRole("form", { name: "Add a client" })).toBeNull();
+});
+
+// BI-DB506554: the handover plan links ?account=<email>#agent-access.
+it("opens the agent access panel on the account a link names", async () => {
+  const { default: Page } = await import("./page");
+  render(
+    <MessagesProvider locale="en-US" messages={{ setup: namespaceMessages("en-US", "setup") }}>
+      {await Page({ searchParams: Promise.resolve({ account: "admin@dpf.local" }) })}
+    </MessagesProvider>,
+  );
+  expect(screen.getByRole("heading", { name: "Agent access for one account" }).closest("section")?.id).toBe("agent-access");
+  expect((screen.getByLabelText(/Account email/) as HTMLInputElement).value).toBe("admin@dpf.local");
+  expect(await screen.findByText("No account matches admin@dpf.local.")).toBeTruthy();
 });

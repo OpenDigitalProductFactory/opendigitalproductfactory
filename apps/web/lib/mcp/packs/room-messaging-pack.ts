@@ -319,15 +319,12 @@ async function requirePlatformManager(userId: string): Promise<ToolResult | null
 async function planAccountHandoverHandler(params: Record<string, unknown>, userId: string): Promise<ToolResult> {
   const refusal = await requirePlatformManager(userId);
   if (refusal) return refusal;
-  const { planAccountHandover } = await import("@/lib/work-management/account-handover");
+  const { liveAgentAccessNote, planAccountHandover } = await import("@/lib/work-management/account-handover");
   const plan = await planAccountHandover(prisma as never, { sourceAccount: str(params, "sourceAccount") ?? "" });
   if (!plan.ok) return { success: false, error: "handover_refused", message: plan.error };
   const count = (kind: string) => plan.data.items.filter((i) => i.kind === kind).length;
-  // The handover moves work, not access (BI-9D2199D4): say what stays live.
-  const { accessTokens, refreshGrants } = plan.data.liveAgentCredentials;
-  const access = accessTokens + refreshGrants > 0
-    ? ` The account keeps its access: ${accessTokens} live agent token(s) and ${refreshGrants} refresh grant(s) stay live unless ended under Admin > Platform Development > MCP.`
-    : "";
+  // The handover moves work, not access (BI-9D2199D4): say what stays live and where to end it.
+  const access = liveAgentAccessNote(plan.data.sourceEmail, plan.data.liveAgentCredentials);
   return {
     success: true,
     message: `${plan.data.items.length} item(s) would move from ${plan.data.sourceEmail}: ${count("room")} room(s), ${count("build")} build(s), ${count("scheduled-task")} scheduled task(s). ${plan.data.refused.length} refused.${access}`,

@@ -5,7 +5,9 @@ vi.mock("./execute-coordinator-appointment.server", () => ({ executeCoordinatorA
 const resolveWorkOwner = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/portfolio/accountable-owner", () => ({ resolveWorkOwner }));
 
-import { applyAccountHandover, handoverDigest, planAccountHandover, type AccountHandoverDb } from "./account-handover";
+import { adminPageLocationLabel } from "@/lib/navigation/admin-location";
+
+import { applyAccountHandover, handoverDigest, liveAgentAccessNote, planAccountHandover, type AccountHandoverDb } from "./account-handover";
 
 const ADMIN = { userId: "u-admin", principalRowId: "p-admin", principalRef: "PRN-admin" };
 const MARK = { userId: "u-mark", principalRowId: "p-mark", principalRef: "PRN-mark", displayName: "Mark" };
@@ -32,6 +34,7 @@ function fakeDb(overrides: Partial<{ rooms: unknown[]; builds: unknown[]; tasks:
     agent: { findMany: vi.fn(async () => [{ agentId: "AGT-1", portfolioId: "pf-found" }]) },
     mcpApiToken: { count: vi.fn(async () => 4) },
     oAuthRefreshToken: { count: vi.fn(async () => 1) },
+    oAuthClient: { count: vi.fn(async () => 1) },
     scheduledAgentTask: {
       // Like Prisma: ScheduledAgentTask has no `agent` relation, only the agentId string.
       findMany: vi.fn(async ({ select }: { select: Record<string, unknown> }) => {
@@ -72,7 +75,10 @@ describe("planAccountHandover", () => {
     const now = new Date("2026-10-14T00:00:00Z");
     const plan = await planAccountHandover(db, { sourceAccount: "admin@dpf.local", now });
     if (!plan.ok) throw new Error("expected a plan");
-    expect(plan.data.liveAgentCredentials).toEqual({ accessTokens: 4, refreshGrants: 1 });
+    expect(plan.data.liveAgentCredentials).toEqual({ accessTokens: 4, refreshGrants: 1, credentialsClients: 1 });
+    // BI-DB506554: a headless client it owns mints tokens with no consent screen.
+    expect(db.oAuthClient.count).toHaveBeenCalledWith({ where: {
+      ownerUserId: "u-admin", registrationKind: "credentials", revokedAt: null } });
     expect(db.mcpApiToken.count).toHaveBeenCalledWith({ where: {
       userId: "u-admin", revokedAt: null, OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] } });
     expect(db.oAuthRefreshToken.count).toHaveBeenCalledWith({ where: {
@@ -169,5 +175,21 @@ describe("applyAccountHandover", () => {
     if (!plan.ok) throw new Error("expected a plan");
     const result = await applyAccountHandover(db, { sourceAccount: "admin@dpf.local", digest: plan.data.digest, reason: "r", actor });
     expect(result).toMatchObject({ ok: true, data: { rooms: 0, builds: 1, scheduledTasks: 1, failed: [{ ref: "WC-1" }] } });
+  });
+});
+
+// BI-DB506554: the note named "Admin > Platform Development > MCP", a path no
+// menu shows. It now names the nav model's path and links the account's panel.
+describe("liveAgentAccessNote", () => {
+  it("says what stays live and links the panel for that account", () => {
+    const note = liveAgentAccessNote("admin@dpf.local", { accessTokens: 4, refreshGrants: 1, credentialsClients: 1 });
+    expect(note).toContain("4 agent token(s), 1 refresh grant(s) and 1 headless client(s) it owns stay live");
+    expect(note).toContain(`${adminPageLocationLabel("/admin/platform-development")} › Agent access for one account`);
+    expect(note).toContain("/admin/platform-development?account=admin%40dpf.local#agent-access");
+    expect(note).not.toContain("Platform Development > MCP");
+  });
+
+  it("says nothing when nothing is live", () => {
+    expect(liveAgentAccessNote("a@b.c", { accessTokens: 0, refreshGrants: 0, credentialsClients: 0 })).toBe("");
   });
 });

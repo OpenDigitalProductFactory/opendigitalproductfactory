@@ -1,0 +1,21 @@
+{
+  "version": "1",
+  "decidedOption": "account-panel-on-page",
+  "decisionInteractionId": "DI-3BC30F5A26CE",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/admin/platform-development/page.tsx",
+      "apps/web/app/(shell)/area/[key]/page.tsx",
+      "apps/web/components/admin/AccountAgentAccessPanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "account-panel-on-page",
+      "owner-filter-on-token-list",
+      "new-admin-route"
+    ]
+  },
+  "notes": "BI-DB506554 UX fit: fits-with-guardrails. Owning area Run the platform (Admin > Contributing & GitHub, /admin/platform-development). Persona: non-technical operator ending a handed-over account's agent access. Layer: local page section only, no new route, tab or nav record; deep-linked by ?account=<email>#agent-access from plan_account_handover. Reuse: report-kit DataTable and Notice, form TextField, Dialog promptDialog (same pattern as the per-client People panel). Source truth: McpApiToken, OAuthRefreshToken, OAuthClient via lib/auth/account-agent-access.ts. Empty state: tables render only when non-empty; 'holds no live agent access' when nothing is live; an unknown account shows a plain error. One danger action with a required reason; none on the operator's own account. No AI/prompt send. The area page change only reads its tab labels from AREA_VIEW_LABELS (no visible change)."
+}

@@ -8,6 +8,7 @@ import { AREA_HOME_ROUTES, AREA_UPKEEP_AND_SETUP_ROUTES } from "./area-nav-route
 import { BUSINESS_VIEW_ROUTES } from "./business-view-routes";
 
 export {
+  AREA_VIEW_LABELS,
   PORTAL_SHELL_SECTIONS,
   type PortalShellSectionDefinition,
   type PortalShellSectionKey,
