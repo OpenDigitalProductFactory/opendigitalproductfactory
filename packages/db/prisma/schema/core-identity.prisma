@@ -30,6 +30,14 @@ model User {
   /// Tells an operator that approvals routed to this account have no reader
   /// (BI-61DE8177). Not a security signal; sessions outlive it.
   lastSeenAt                       DateTime?
+  /// SHA-256 (hex) of this person's private calendar subscription token
+  /// (BI-051A74CE). The .ics feed serves only a request that presents the
+  /// matching token for this user id; the plaintext is shown once at issue and
+  /// never stored. Rotating overwrites it (the old link dies at once); null =
+  /// no subscription link, so the feed refuses every request for this user.
+  calendarFeedTokenHash            String?                             @unique
+  /// When the current calendar feed token was issued. Null when none is.
+  calendarFeedTokenIssuedAt        DateTime?
   /// When this account's live work was handed over (BI-F25A5FC7) and who
   /// approved it. Null = never. Rules that name an owner for NEW work (the
   /// workroom drive's task owner, the scheduled-task seeds, the install-owner

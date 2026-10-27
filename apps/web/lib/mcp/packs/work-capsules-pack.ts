@@ -277,6 +277,18 @@ const definitions: ToolDefinition[] = [
       properties: {
         commandId: COMMAND_ID_PROPERTY,
         capsuleId: { type: "string", description: "Semantic Workroom id (WC-*)." },
+        checkpoint: {
+          type: "object",
+          description: "Optional note for whoever takes this room over; the latest one is kept.",
+          properties: {
+            nextAction: { type: "string" },
+            addressing: { type: "array", items: { type: "string" }, maxItems: 20 },
+            uncommittedPaths: { type: "array", items: { type: "string" }, maxItems: 50 },
+            headSha: { type: "string", pattern: "^[0-9a-f]{40}$" },
+            pushed: { type: "boolean" },
+            openRisks: { type: "array", items: { type: "string" }, maxItems: 20 },
+          },
+        },
       },
       required: ["capsuleId"],
     },

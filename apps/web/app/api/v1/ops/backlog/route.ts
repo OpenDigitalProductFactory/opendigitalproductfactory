@@ -5,6 +5,7 @@ import * as crypto from "crypto";
 import { NextResponse } from "next/server";
 import { prisma } from "@dpf/db";
 import { createBacklogItemSchema } from "@dpf/validators";
+import { composeIntakeBody } from "@/lib/backlog/intake-outcome";
 import { authenticateRequest } from "@/lib/api/auth-middleware";
 import { ApiError } from "@/lib/api/error";
 import { apiSuccess } from "@/lib/api/response";
@@ -107,6 +108,8 @@ export async function POST(request: Request) {
     const {
       title,
       body: itemBody,
+      outcome,
+      howWeKnow,
       type,
       epicId,
       priority,
@@ -131,7 +134,10 @@ export async function POST(request: Request) {
         scopeRationale: scopeRationale?.trim() || null,
         lifecycleTags: lifecycleTags ?? [],
         submittedById: user.id,
-        ...(itemBody !== undefined && { body: itemBody.trim() || null }),
+        // BI-B1B44777: the outcome leads the body when one is given.
+        ...(itemBody !== undefined || outcome?.trim()
+          ? { body: composeIntakeBody({ body: itemBody?.trim() || null, outcome, howWeKnow }) || null }
+          : {}),
       },
     });
 

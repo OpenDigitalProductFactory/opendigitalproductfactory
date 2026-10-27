@@ -275,11 +275,33 @@ test('startup checks the whole shared delivery contract and both permission laye
 });
 
 test('protected live-service identity detects recreation, restart or volume substitution', () => {
-  const container = { Id: 'live-db', Config: { Labels: { 'com.docker.compose.service': 'postgres' } }, State: { Running: true, StartedAt: 'before' }, Mounts: [{ Type: 'volume', Name: 'live-data', Destination: '/var/lib/postgresql/data' }] };
+  const container = { Id: 'live-db', Config: { Labels: { 'com.docker.compose.service': 'postgres', 'com.docker.compose.oneoff': 'False' } }, State: { Running: true, StartedAt: 'before' }, Mounts: [{ Type: 'volume', Name: 'live-data', Destination: '/var/lib/postgresql/data' }] };
   const before = protectedServiceIdentity([container]);
   assert.notDeepEqual(protectedServiceIdentity([{ ...container, Id: 'recreated-db' }]), before);
   assert.notDeepEqual(protectedServiceIdentity([{ ...container, State: { ...container.State, StartedAt: 'after' } }]), before);
   assert.notDeepEqual(protectedServiceIdentity([{ ...container, Mounts: [{ ...container.Mounts[0], Name: 'wrong-data' }] }]), before);
+});
+
+// BI-5DF11E81: compose stamps project/service labels onto the images it builds, so a bare
+// `docker run dpf-portal:latest` and a `compose run` one-off look like the service by label.
+const liveService = { Id: 'live-portal', Config: { Labels: { 'com.docker.compose.project': 'dpf', 'com.docker.compose.service': 'portal', 'com.docker.compose.oneoff': 'False', 'com.docker.compose.container-number': '1' } }, State: { Running: true, StartedAt: 'before' }, Mounts: [] };
+
+test('protected identity ignores a transient image-run container that inherits compose labels from the image', () => {
+  const imageRun = { Id: 'hardcore_dhawan', Config: { Labels: { 'com.docker.compose.project': 'dpf', 'com.docker.compose.service': 'portal' } }, State: { Running: true, StartedAt: 'transient' }, Mounts: [] };
+  assert.deepEqual(protectedServiceIdentity([liveService, imageRun]), protectedServiceIdentity([liveService]));
+});
+
+test('protected identity ignores compose run one-off containers', () => {
+  const oneOff = { Id: 'dpf-portal-run-abc', Config: { Labels: { 'com.docker.compose.project': 'dpf', 'com.docker.compose.service': 'portal', 'com.docker.compose.oneoff': 'True' } }, State: { Running: true, StartedAt: 'transient' }, Mounts: [] };
+  assert.deepEqual(protectedServiceIdentity([oneOff, liveService]), protectedServiceIdentity([liveService]));
+});
+
+test('protected identity still detects a real compose service recreated alongside transient containers', () => {
+  const before = protectedServiceIdentity([liveService]);
+  assert.equal(before.length, 1);
+  assert.notDeepEqual(protectedServiceIdentity([{ ...liveService, Id: 'recreated-portal', State: { ...liveService.State, StartedAt: 'after' } }]), before);
+  const devService = { ...liveService, Id: 'dev', Config: { Labels: { ...liveService.Config.Labels, 'com.docker.compose.service': 'dev-portal' } } };
+  assert.deepEqual(protectedServiceIdentity([liveService, devService]), before);
 });
 
 test('preserved feature initialization takes the bounded clone from the canonical image', () => {

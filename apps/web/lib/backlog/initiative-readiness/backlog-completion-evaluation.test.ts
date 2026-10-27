@@ -18,7 +18,8 @@ const NOW = "2026-10-06T12:00:00.000Z";
 describe("independent body acceptance survives source-author archival", () => {
   it.each([true, false])("reconciles only the current exact verified delivered source (valid=%s)", async valid => {
     const body = "## Acceptance\n- Verify independently accepted repair.";
-    const { item, client } = fixture({ body, digitalProductId: "product-1" });
+    // A contractual item keeps the independent acceptance this case proves (BI-B1B44777).
+    const { item, client } = fixture({ body, digitalProductId: "product-1", lifecycleTags: ["contractual"] });
     const room = { id: "room-row", capsuleId: "WC-1", backlogItemId: item.itemId, repositoryFullName: "owner/repo",
       headBranch: "fix/accepted", headSha: "a".repeat(40), baseSha: "b".repeat(40), createdByPrincipalId: "author",
       status: "archived", pullRequestNumber: 6265, archivedAt: null,
@@ -256,8 +257,8 @@ describe("the read projection evaluates completion as the completion gate does (
     expect(delivery?.nextAction).toContain("UNKNOWN here");
   });
 
-  it("merged customer feature work is not waved through: the gate and the read both refuse it", async () => {
-    const { gate, read } = await bothViews("merged", { digitalProductId: "DP-1", workType: "feature" });
+  it("merged contractual work is not waved through: the gate and the read both refuse it", async () => {
+    const { gate, read } = await bothViews("merged", { digitalProductId: "DP-1", workType: "feature", lifecycleTags: ["contractual"] });
     expect(gate.ok).toBe(false);
     if (gate.ok) return;
     expect(read?.decision.verdict).toBe(gate.decision.verdict);

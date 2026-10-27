@@ -1,9 +1,9 @@
 import { beforeEach, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   room: vi.fn(), workItem: vi.fn(), actor: vi.fn(), access: vi.fn(),
-  currentUser: vi.fn(), can: vi.fn(),
+  currentUser: vi.fn(), can: vi.fn(), user: vi.fn(),
 }));
-vi.mock("@dpf/db", () => ({ prisma: { workroom: { findUnique: mocks.room }, workItem: { findUnique: mocks.workItem } } }));
+vi.mock("@dpf/db", () => ({ prisma: { workroom: { findUnique: mocks.room }, workItem: { findUnique: mocks.workItem }, user: { findUnique: mocks.user } } }));
 vi.mock("./handler-actor", () => ({ workCapsuleActor: mocks.actor }));
 vi.mock("@/lib/work-management/workroom-agent-access.server", () => ({ resolveAgentWorkroomAccess: mocks.access }));
 vi.mock("@/lib/govern/current-user-context", () => ({ currentUserContext: mocks.currentUser }));
@@ -233,4 +233,27 @@ it("checks a capsuleId sent alongside a batch too", async () => {
     : { decision: { level: "action", reason: "authorized" } });
   const batch = { ...input, toolName: "reassign_workroom_executor", params: { capsuleIds: ["WC-ONE"], capsuleId: "WC-EXTRA" } };
   expect(await workroomTargetAccessRefusal(batch)).toMatchObject({ success: false, error: "workroom_access_denied" });
+});
+
+// BI-F586F8A5 — the refusal says which account the connection acts as.
+it("names the account the connection acts as and the reconnect remedy", async () => {
+  mocks.user.mockResolvedValue({ email: "automation@dpf.local" });
+  mocks.access.mockResolvedValue({ decision: { level: "none", reason: "not-admitted" } });
+  const refusal = await workroomTargetAccessRefusal({ ...input, toolName: "get_workroom" });
+  expect(refusal).toMatchObject({ error: "workroom_access_denied", data: { connectedAs: "automation@dpf.local" } });
+  expect(refusal?.message).toContain("automation@dpf.local");
+  expect(refusal?.message).toMatch(/signed in as the room's owner/);
+  expect(mocks.user).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "alice" } }));
+});
+it("names the account for a connection with no assistant too", async () => {
+  mocks.user.mockResolvedValue({ email: "alice@example.test" });
+  const refusal = await workroomTargetAccessRefusal({ ...input, agentId: undefined, toolName: "get_workroom" });
+  expect(refusal).toMatchObject({ error: "workroom_access_denied", data: { connectedAs: "alice@example.test" } });
+});
+it("refuses a missing room in the same words as an existing one", async () => {
+  mocks.user.mockResolvedValue({ email: "alice@example.test" });
+  mocks.access.mockResolvedValue({ decision: { level: "none", reason: "not-admitted" } });
+  const existing = await workroomTargetAccessRefusal({ ...input, toolName: "get_workroom" });
+  mocks.room.mockResolvedValue(null);
+  expect(await workroomTargetAccessRefusal({ ...input, toolName: "get_workroom" })).toEqual(existing);
 });

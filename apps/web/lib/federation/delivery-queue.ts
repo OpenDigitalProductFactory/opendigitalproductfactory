@@ -162,13 +162,35 @@ export async function finishFederationDeliveryJob(
   input: {
     itemId: string;
     attemptCount: number;
-    outcome: "success" | "retry" | "dead-letter";
+    /** `withdrawn`: nothing is left to deliver (link revoked, envelope no longer
+     *  pending). No attempt was made, so the attempt count is not advanced. */
+    outcome: "success" | "retry" | "dead-letter" | "withdrawn";
     error?: string | null;
     now: Date;
     nextAttemptAt?: Date | null;
   },
   telemetry: TelemetryWriter = recordQueueTransition,
 ): Promise<void> {
+  if (input.outcome === "withdrawn") {
+    await db.workItem.update({
+      where: { itemId: input.itemId },
+      data: {
+        status: "cancelled",
+        nextAttemptAt: null,
+        lastError: input.error?.slice(0, 1_000) ?? null,
+        completedAt: input.now,
+      },
+    });
+    await telemetry({
+      queueKey: FEDERATION_DELIVERY_QUEUE_KEY,
+      itemKind: "federation-demand",
+      itemId: input.itemId,
+      transition: "cancelled",
+      actorType: "system",
+      occurredAt: input.now,
+    });
+    return;
+  }
   const attempts = input.attemptCount + 1;
   const retry = input.outcome === "retry";
   await db.workItem.update({
@@ -190,5 +212,20 @@ export async function finishFederationDeliveryJob(
     outcome: input.outcome === "success" ? "success" : "failed",
     actorType: "system",
     occurredAt: input.now,
+  });
+}
+
+/**
+ * Push a job that cannot be attempted yet (its link is quarantined or not yet
+ * trusted) out of the due window without spending an attempt. Counting it as an
+ * attempt would carry a dead-letter budget the peer never consumed.
+ */
+export async function holdFederationDeliveryJob(
+  db: FederationDeliveryQueueDb,
+  input: { itemId: string; nextAttemptAt: Date },
+): Promise<void> {
+  await db.workItem.update({
+    where: { itemId: input.itemId },
+    data: { status: "queued", nextAttemptAt: input.nextAttemptAt },
   });
 }

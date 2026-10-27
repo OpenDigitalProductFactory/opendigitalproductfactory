@@ -438,9 +438,9 @@ export function projectBacklogItemReadiness(args: {
    * artifact author, architecture review, plan, plan-review, plan-coverage,
    * traceability) are recognized as satisfied because the item's PR merged
    * through the code gates (CI + the merge queue + PR review) — the governance
-   * appropriate to direct-merge platform work. The CALLER is responsible for the
-   * predicate (merged + platform/common + no build/product/objective + a design
-   * spec); this projector only applies the coercion. Kernel-ratified DI-54AECB341524.
+   * appropriate to direct-merge work. The CALLER is responsible for the
+   * predicate (merged + not contractual + not an aggregate, BI-B1B44777); this
+   * projector only applies the coercion. Kernel-ratified DI-54AECB341524.
    */
   recognizeMergeThroughGates?: boolean;
   /**
@@ -556,6 +556,11 @@ export function projectBacklogItemReadiness(args: {
   // The caller owns the predicate; here it is a pure state coercion.
   const recognizeMerge = args.recognizeMergeThroughGates === true;
   const pass = (s: ReadinessEvidenceState): ReadinessEvidenceState => (recognizeMerge ? "pass" : s);
+  // BI-B1B44777: once delivered, a specialist review or archetype check is not
+  // owed retroactively — but a review that was recorded and FAILED is a finding
+  // about the work, and the merge does not answer it.
+  const passUnlessFailed = (s: ReadinessEvidenceState): ReadinessEvidenceState =>
+    recognizeMerge && s !== "fail" ? "pass" : s;
   const missingObjectiveMarkers = !inherited
     && args.currentDesign?.state === "verified"
     && args.currentDesign.scopeManifestError === NO_MARKED_OBJECTIVE_STATEMENTS;
@@ -621,11 +626,11 @@ export function projectBacklogItemReadiness(args: {
       : specApprovalState(state(evidence, "spec-approval"), designAmended))),
     specialistReviews: {
       architecture: pass(state(evidence, "architecture-review")),
-      data: state(evidence, "data-review"),
-      ux: state(evidence, "ux-fit-review"),
-      security: state(evidence, "security-review"),
-      compliance: state(evidence, "compliance-review"),
-      domain: state(evidence, "domain-review"),
+      data: passUnlessFailed(state(evidence, "data-review")),
+      ux: passUnlessFailed(state(evidence, "ux-fit-review")),
+      security: passUnlessFailed(state(evidence, "security-review")),
+      compliance: passUnlessFailed(state(evidence, "compliance-review")),
+      domain: passUnlessFailed(state(evidence, "domain-review")),
     },
     plan: pass(coverage),
     planReview: pass(state(evidence, "plan-review")),
@@ -650,12 +655,12 @@ export function projectBacklogItemReadiness(args: {
     objectiveBaselineConflict: args.completion?.objectiveBaselineConflict,
     objectiveReconciliation: args.completion?.objectiveReconciliation ?? "missing",
     archetypeProvisioning: {
-      templateSubstrate: archetypeProvisioning,
-      professionCorpus: archetypeProvisioning,
-      coworkerDefinition: archetypeProvisioning,
-      skillsAndTools: archetypeProvisioning,
+      templateSubstrate: passUnlessFailed(archetypeProvisioning),
+      professionCorpus: passUnlessFailed(archetypeProvisioning),
+      coworkerDefinition: passUnlessFailed(archetypeProvisioning),
+      skillsAndTools: passUnlessFailed(archetypeProvisioning),
     },
-    archetypeCompleteness: state(evidence, "archetype-completeness"),
+    archetypeCompleteness: passUnlessFailed(state(evidence, "archetype-completeness")),
     postImplementationReview: postImplementationReviewState(args.activities, evidence, args.evaluatedAt),
     projectionError: baseline.malformed || receipts.malformed || args.completion?.projectionError,
     evidenceRefs: args.completion?.evidenceRefs,
