@@ -23,16 +23,6 @@ export type HookHostRecord = {
   probes: string[];
 };
 
-/** One file an adapter writes, and who writes it (BI-1DCF9F23, spec M4). */
-export type ClientWrite = {
-  path: string;
-  owner: "dpf" | "client";
-  format: "json" | "toml" | "tree" | "text";
-  writer: "direct" | "cli";
-  cli: string | null;
-  reason: string;
-};
-
 export type ClientCapabilityRow = {
   displayName: string;
   policyClient: string;
@@ -40,7 +30,6 @@ export type ClientCapabilityRow = {
   verifiedVersion: string | null;
   verifiedRange: { min: string; max: string } | null;
   sources: string[];
-  writes?: ClientWrite[];
   capabilities: {
     oauthHttps: CapabilityField<boolean>;
     oauthLoopbackHttp: CapabilityField<boolean>;

@@ -208,7 +208,10 @@ export function renderPolicyCases(profile) {
 
 /** The TypeScript copy of the profile that runtime rules import. */
 export function renderProfileModule(profile) {
-  const data = { schemaVersion: profile.schemaVersion, clients: profile.clients };
+  // `writes` is the Python updater's single-writer contract; no TypeScript
+  // rule reads it, so the portal module carries the capabilities only.
+  const clients = Object.fromEntries(Object.entries(profile.clients).map(([kind, { writes, ...row }]) => [kind, row]));
+  const data = { schemaVersion: profile.schemaVersion, clients };
   return `// GENERATED FILE — do not edit. Source: ${PROFILE_PATH}
 // Regenerate: node packages/dpf-skill-pack/scripts/gen-client-capabilities.mjs (BI-64795FD0)
 
