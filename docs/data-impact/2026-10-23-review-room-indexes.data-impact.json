@@ -1,0 +1,31 @@
+{
+  "version": "1",
+  "accountableOwner": "WC-062B8D41 / BI-CAP-21C511CA",
+  "affectedCopies": [],
+  "migration": {
+    "name": "20261023233000_review_room_candidate_indexes",
+    "backfill": "None. Two partial expression indexes over existing TaskRun immutable request metadata; no data values changed.",
+    "rollback": "Old reader can coexist with these indexes; later index removal affects performance only.",
+    "rowCountRequirement": "All existing rows retained; no cardinality-dependent data transformation."
+  },
+  "tests": [
+    "apps/web/lib/work-management/review-room-candidates.postgres.test.ts",
+    "apps/web/lib/work-management/semantic-review-room-projection.postgres.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "prisma:TaskRun",
+      "prismaModel": "TaskRun",
+      "lifecycleDisposition": "Existing operational lifecycle unchanged; archived runs excluded.",
+      "fields": [
+        {
+          "fieldId": "prisma:TaskRun#a2aMetadata",
+          "resolution": "inherited",
+          "reason": "Index the existing canonical review-request room binding; no new JSON property or writer. Read projection validates the existing binding and preserves current room/requester authorization.",
+          "provenance": "apps/web/lib/mcp-task-submit.ts and apps/web/lib/mcp-task-review-contract.ts"
+        }
+      ]
+    }
+  ]
+}

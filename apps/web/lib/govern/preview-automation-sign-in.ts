@@ -5,6 +5,7 @@ import { mintAutomationSignIn, type AutomationSignInDb } from "./automation-sign
 import { syncUserPrincipal } from "@/lib/identity/principal-linking";
 import { isTerminalCapsuleStatus } from "@/lib/work-capsules/work-capsule-branch-identity";
 import { workCapsuleActor } from "@/lib/work-capsules/handler-actor";
+import { previewMountMatches } from "../../../../packages/integration-shared/src/preview-mount-identity.cjs";
 
 const exec = promisify(execFile);
 export type PreviewAdmission = {
@@ -23,14 +24,14 @@ export function assertPreviewIssuerContainer(container: {
   Mounts?: Array<{ Type: string; Source: string; Destination: string }>;
   State?: { Running?: boolean };
   NetworkSettings?: { Ports?: Record<string, Array<{ HostIp: string; HostPort: string }> | null> };
-}, lease: PreviewAdmission, sha: string) {
+}, lease: PreviewAdmission, sha: string, dockerOperatingSystem?: string) {
   const labels = container.Config?.Labels;
   const ports = container.NetworkSettings?.Ports?.["3000/tcp"];
   const mount = container.Mounts?.find(item => item.Destination === "/workspace");
   if (!ports?.length || ports.some(port => port.HostPort !== "3001" || !["127.0.0.1", "::1"].includes(port.HostIp))
       || !container.State?.Running || labels?.["com.docker.compose.service"] !== "dev-portal"
       || labels?.["dpf.preview.lease"] !== lease.leaseId || labels?.["dpf.preview.sha"] !== sha
-      || mount?.Type !== "bind" || mount.Source !== lease.worktreePath
+      || mount?.Type !== "bind" || !previewMountMatches(mount.Source, lease.worktreePath, dockerOperatingSystem)
       || !container.Config?.Env?.includes("DPF_ENVIRONMENT_CLASS=development")) throw new Error("preview_issuer_binding_mismatch");
 }
 
@@ -67,7 +68,11 @@ export async function issuePreviewAutomationSignIn(input: {
   if (ids.length !== 1 || !/^[a-f0-9]{12,64}$/.test(ids[0]!)) throw new Error("preview_issuer_unavailable");
   const inspected = await exec("docker", ["inspect", ids[0]!], { timeout: 10000, maxBuffer: 1024 * 1024 });
   const [container] = JSON.parse(inspected.stdout);
-  assertPreviewIssuerContainer(container, lease, room.headSha);
+  // Daemon metadata, not the Linux process or a Mac-looking path, establishes
+  // Desktop alias authority. An unavailable fact leaves the new alias held.
+  const dockerOperatingSystem = await exec("docker", ["info", "--format", "{{.OperatingSystem}}"], { timeout: 10000, maxBuffer: 1024 })
+    .then(result => result.stdout.trim(), () => undefined);
+  assertPreviewIssuerContainer(container, lease, room.headSha, dockerOperatingSystem);
   // The canonical platform owns issuance. It uses the inspected preview's
   // disposable DB and signing identity, so an older preserved feature tree
   // needs no new bootstrap script or source changes to obtain a session.

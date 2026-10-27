@@ -26,6 +26,11 @@ afterEach(() => {
 });
 
 describe("writeAdapterTelemetry", () => {
+  it.each(["success", "error"])("keeps the dispatch funding snapshot on %s attempts", async (status) => {
+    const investment = { investmentPrincipalId: "p1", investmentOrganizationId: "org1", investmentItemId: "item1", investmentPurpose: "sharedPlatform" as const, investmentClass: "refactor" as const, investmentPolicyRef: "revision-1", investmentInstallationRef: "install-1", investmentCapturedAt: new Date("2026-10-13T00:00:00Z") };
+    await writeAdapterTelemetry({ adapterKind: "http", adapterVersion: "1", providerId: "test", modelId: "test", executionMode: "single", startedAt: investment.investmentCapturedAt, status, investment });
+    expect(writeOverride).toHaveBeenCalledWith(expect.objectContaining(investment));
+  });
   it("writes a row with all required fields", async () => {
     const startedAt = new Date("2026-05-16T10:00:00.000Z");
     await writeAdapterTelemetry({

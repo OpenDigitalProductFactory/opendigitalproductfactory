@@ -224,15 +224,19 @@ describe("routeAndCall thread attribution", () => {
     });
   });
 
-  it("forwards options.threadId into the fallback-chain attribution", async () => {
+  it("forwards thread attribution and the server-bound native session through routing", async () => {
+    const mintReadOnlySession=vi.fn(async()=>"test-session");
+    const mcpSession={userId:"human",mintReadOnlySession};
     await routeAndCall(
       [{ role: "user", content: "Summarize this transcript." }],
       "You summarize.",
       "internal",
-      { taskType: "summarization", budgetClass: "minimize_cost", persistDecision: false, agentId: "agt_1", threadId: "thread-42" },
+      { taskType: "summarization", budgetClass: "minimize_cost", persistDecision: false, agentId: "agt_1", threadId: "thread-42", mcpSession },
     );
 
     expect(mocks.callWithFallbackChain).toHaveBeenCalledTimes(1);
+    expect(mocks.callWithFallbackChain.mock.calls[0]?.[6]).toBe(mcpSession);
+    expect(mintReadOnlySession).not.toHaveBeenCalled();
     // callWithFallbackChain(decision, messages, systemPrompt, tools, plan, previousResponseId, mcpSession, attribution)
     expect(mocks.callWithFallbackChain.mock.calls[0]?.[7]).toMatchObject({ agentId: "agt_1", threadId: "thread-42" });
   });

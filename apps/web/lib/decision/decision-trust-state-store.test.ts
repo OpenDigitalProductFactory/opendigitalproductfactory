@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { reviewedArtifactDigest } from "@/lib/build/architecture-advisory-outcome";
+
 import { decisionShadowLedgerId } from "./decision-shadow-ledger-mapping";
 import { DECISION_TRUST_MIN_SAMPLES, REPORT_ONLY_RECOMMENDATION } from "./decision-trust-state";
 import {
@@ -138,6 +140,201 @@ describe("backfillDecisionShadowLedger", () => {
     const { db } = fakeDb([decision("DI-1"), decision("DI-2"), decision("DI-3")]);
     const result = await backfillDecisionShadowLedger(db, { maxWrites: 2 });
     expect(result).toMatchObject({ written: 2, deferred: 1 });
+  });
+});
+
+describe("backfill of a coworker's own proposal (BI-AE416D75)", () => {
+  const takMenu = [
+    { id: "proceed", features: { gtm_fit: 1, market_fit: 1, mission_fit: 1, product_fit: 1 }, description: "Proceed" },
+    { id: "decline", features: { blast_radius: 0, reversibility: 1 }, description: "Decline" },
+  ];
+  function takDecision(id: string, over: Row = {}): Row {
+    return decision(id, {
+      agentId: "AGT-WS-SCOUT",
+      domainClass: "plan-readiness",
+      riskTier: "medium",
+      outcomeType: "escalate",
+      recommendedOptionId: null,
+      options: ["Proceed", "Decline"],
+      gateKey: "org-business",
+      scoredOptions: takMenu,
+      outcomePayload: { outcomeType: "escalate" },
+      ...over,
+    });
+  }
+  const answered = {
+    chosenOptionId: "proceed",
+    humanOutcome: {
+      type: "escalation",
+      answer: "Proceed — always.",
+      resolverUserId: "user-1",
+      capturedAt: "2026-09-15T22:54:10.753Z",
+      clearsGate: true,
+      chosenOptionId: "proceed",
+    },
+  };
+  // The row the BI-6082C235 backfill wrote before the proposal was readable.
+  function legacyLedgerRow(id: string): Row {
+    return {
+      ledgerId: decisionShadowLedgerId(id),
+      decisionInteractionId: id,
+      agentId: "AGT-WS-SCOUT",
+      activityType: "governed_decision_plan_readiness",
+      riskClass: "internal-irreversible",
+      sourceKind: "governed-decision",
+      observedAt: new Date("2026-09-15T00:00:00.000Z"),
+      proposedDecision: { outcomeType: "escalate", recommendedOptionId: null, options: ["Proceed", "Decline"] },
+      metadata: { resolvedBy: null },
+      agreement: null,
+      reconciledAt: null,
+    };
+  }
+
+  it("rewrites a legacy TAK-gate row with the coworker's 'proceed' and counts a person's answer as a sample", async () => {
+    const { db, ledger, trust } = fakeDb(
+      [takDecision("DI-T1", answered), takDecision("DI-T2")],
+      [legacyLedgerRow("DI-T1"), legacyLedgerRow("DI-T2")],
+    );
+    const result = await backfillDecisionShadowLedger(db);
+    expect(result).toMatchObject({ written: 2, alreadyCurrent: 0 });
+    expect(ledger.get(decisionShadowLedgerId("DI-T1"))).toMatchObject({
+      proposedDecision: { recommendedOptionId: "proceed", recommendedBy: "coworker" },
+      agreement: true,
+      metadata: { resolvedBy: "human" },
+    });
+    expect(ledger.get(decisionShadowLedgerId("DI-T2"))).toMatchObject({
+      proposedDecision: { recommendedOptionId: "proceed", recommendedBy: "coworker" },
+      agreement: null,
+    });
+
+    await recomputeDecisionTrustStates(db, new Date("2026-10-21T00:00:00.000Z"));
+    expect([...trust.values()][0]).toMatchObject({ agentId: "AGT-WS-SCOUT", sampleCount: 1, agreementCount: 1 });
+
+    const again = await backfillDecisionShadowLedger(db);
+    expect(again).toMatchObject({ written: 0, alreadyCurrent: 2 });
+  });
+
+  it("leaves an architecture advisory whose verdict was never stored without a recommendation", async () => {
+    const ea = decision("DI-EA", {
+      agentId: "AGT-WS-EA",
+      domainClass: "architecture-tradeoff",
+      riskTier: "medium",
+      outcomeType: "escalate",
+      recommendedOptionId: null,
+      options: ["aligned", "revise-before-building"],
+      gateKey: "profession",
+      scoredOptions: null,
+      outcomePayload: { outcomeType: "escalate" },
+    });
+    const { db, ledger } = fakeDb([ea]);
+    await backfillDecisionShadowLedger(db);
+    expect(ledger.get(decisionShadowLedgerId("DI-EA"))).toMatchObject({
+      proposedDecision: { recommendedOptionId: null, recommendedBy: null },
+    });
+    const again = await backfillDecisionShadowLedger(db);
+    expect(again).toMatchObject({ written: 0, alreadyCurrent: 1 });
+  });
+
+  it("carries a proposal the gate recorded on a new architecture advisory", async () => {
+    const ea = decision("DI-EA2", {
+      agentId: "AGT-WS-EA",
+      domainClass: "architecture-tradeoff",
+      outcomeType: "escalate",
+      recommendedOptionId: null,
+      options: ["aligned", "revise-before-building"],
+      gateKey: "profession",
+      scoredOptions: null,
+      outcomePayload: { outcomeType: "escalate", proposedOptionId: "aligned" },
+    });
+    const { db, ledger } = fakeDb([ea]);
+    await backfillDecisionShadowLedger(db);
+    expect(ledger.get(decisionShadowLedgerId("DI-EA2"))).toMatchObject({
+      proposedDecision: { recommendedOptionId: "aligned", recommendedBy: "coworker" },
+    });
+  });
+});
+
+describe("an architecture advisory resolved from what happened downstream (BI-22601A38)", () => {
+  const design = { problemStatement: "one" };
+  function advisory(id: string, over: Row = {}): Row {
+    return decision(id, {
+      agentId: "AGT-WS-EA",
+      domainClass: "architecture-tradeoff",
+      riskTier: "medium",
+      outcomeType: "escalate",
+      recommendedOptionId: null,
+      options: ["aligned", "revise-before-building"],
+      gateKey: "profession",
+      scoredOptions: null,
+      routeContext: "reviewDesignDoc",
+      buildId: "FB-1",
+      outcomePayload: {
+        outcomeType: "escalate",
+        proposedOptionId: "aligned",
+        reviewedArtifact: { buildId: "FB-1", kind: "design", digest: reviewedArtifactDigest(design) },
+      },
+      ...over,
+    });
+  }
+  function withBuilds(db: DecisionTrustDb, ledger: Map<string, Row>, builds: Row[]) {
+    const extended = db as unknown as Record<string, unknown> & { decisionShadowLedger: Record<string, unknown> };
+    extended.featureBuild = { findMany: vi.fn(async () => builds) };
+    extended.decisionShadowLedger.findMany = vi.fn(async (args?: { where?: { ledgerId?: { in: string[] } } }) => {
+      const wanted = args?.where?.ledgerId?.in;
+      return [...ledger.values()].filter((r) =>
+        wanted ? wanted.includes(String(r.ledgerId)) && r.reconciledAt == null : r.sourceKind === "governed-decision");
+    });
+    extended.decisionShadowLedger.updateMany = vi.fn(async (args: { where: { ledgerId: string }; data: Row }) => {
+      const existing = ledger.get(args.where.ledgerId);
+      if (existing && existing.reconciledAt == null) ledger.set(args.where.ledgerId, { ...existing, ...args.data });
+      return { count: existing ? 1 : 0 };
+    });
+    return db;
+  }
+
+  it("is counted beside the human samples, never inside them", async () => {
+    const { db, ledger, trust } = fakeDb([advisory("DI-EA")]);
+    withBuilds(db, ledger, [{ buildId: "FB-1", phase: "build", designDoc: design, buildPlan: null }]);
+    const now = new Date("2026-10-21T12:00:00.000Z");
+    const result = await runDecisionTrustRecompute(db, now);
+    expect(result.advisoryOutcomes).toMatchObject({ examined: 1, resolved: 1, written: 1 });
+    expect(ledger.get(decisionShadowLedgerId("DI-EA"))).toMatchObject({
+      agreement: true,
+      metadata: { resolvedBy: "outcome" },
+    });
+    expect([...trust.values()][0]).toMatchObject({ agentId: "AGT-WS-EA", sampleCount: 0, agreementCount: 0 });
+    const report = await loadDecisionTrustReport(db);
+    expect(report.rows[0]).toMatchObject({ sampleCount: 0, outcomeResolvedCount: 1, outcomeAgreementCount: 1 });
+  });
+
+  it("gives way to a person's answer that arrives later", async () => {
+    const { db, ledger } = fakeDb([advisory("DI-EA")]);
+    withBuilds(db, ledger, [{ buildId: "FB-1", phase: "build", designDoc: design, buildPlan: null }]);
+    await runDecisionTrustRecompute(db, new Date("2026-10-21T12:00:00.000Z"));
+
+    const answered = advisory("DI-EA", {
+      chosenOptionId: "revise-before-building",
+      humanOutcome: {
+        type: "escalation",
+        resolverUserId: "user-1",
+        capturedAt: "2026-10-22T09:00:00.000Z",
+        chosenOptionId: "revise-before-building",
+      },
+    });
+    (db.decisionInteraction.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([answered]);
+    const result = await backfillDecisionShadowLedger(db);
+    expect(result.written).toBe(1);
+    expect(ledger.get(decisionShadowLedgerId("DI-EA"))).toMatchObject({
+      agreement: false,
+      metadata: { resolvedBy: "human" },
+    });
+  });
+
+  it("is skipped on a client that cannot read builds, rather than failing the recompute", async () => {
+    const { db } = fakeDb([advisory("DI-EA")]);
+    const result = await runDecisionTrustRecompute(db, new Date("2026-10-21T12:00:00.000Z"));
+    expect(result.advisoryOutcomes).toBeNull();
+    expect(result.recompute.failed).toBe(0);
   });
 });
 

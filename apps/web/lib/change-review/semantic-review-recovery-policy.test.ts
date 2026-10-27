@@ -33,6 +33,18 @@ describe("recorded reviewer recovery budget", () => {
 
 
 describe("review recovery status", () => {
+  it("names eligibility remediation instead of recommending an unchanged inference retry", () => {
+    const view = semanticReviewRecoveryObservation("input-required", { semanticReview: {
+      schemaVersion: 1, deadlineAt: future, reason: "review-endpoint-ineligible", recoveryAttempt: 0,
+      routingEligibility: [{ sensitivity: "restricted", residencyPolicy: "local_only", excludedCount: 2,
+        exclusions: [{ bucket: "output-capacity", count: 2 }] }],
+    } }, now);
+    expect(view.classification).toBe("routing-blocked");
+    expect(view.nextAction).toContain("eligibility");
+    expect(view.nextAction).not.toContain("then confirm retry");
+    expect(view.pollUseful).toBe(false);
+    expect(view.eligibility).toHaveLength(1);
+  });
   it.each([
     ["submitted", "active-execution", true], ["working", "active-execution", true],
     ["auth-required", "authorization-required", false], ["completed", "completed", false],

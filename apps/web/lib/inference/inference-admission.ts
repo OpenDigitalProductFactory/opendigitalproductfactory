@@ -45,14 +45,20 @@ export type InferenceAdmissionEvent = Readonly<{
   at: number;
 }>;
 type AdmissionObserver = (event: InferenceAdmissionEvent) => void;
-const admissionObservers = new AsyncLocalStorage<AdmissionObserver>();
+// Next may evaluate handlers and instrumentation in distinct module caches.
+// The caller context must follow the process-wide resource lane across them.
+const OBSERVERS_KEY = Symbol.for("dpf.inference-admission.observers.v1");
+const observerGlobal = globalThis as typeof globalThis & {
+  [OBSERVERS_KEY]?: AsyncLocalStorage<AdmissionObserver>;
+};
+const admissionObservers = observerGlobal[OBSERVERS_KEY] ??= new AsyncLocalStorage<AdmissionObserver>();
 
 /** Observe this caller's existing semaphore; never creates or reserves a slot. */
 export function withInferenceAdmissionObserver<T>(observer: AdmissionObserver, execute: () => T): T {
   return admissionObservers.run(observer, execute);
 }
 
-function admissionObservation(engineKey: EngineKey, origin: InferenceOrigin) {
+export function admissionObservation(engineKey: EngineKey, origin: InferenceOrigin) {
   // Capture the caller, rather than the async context of whoever releases it.
   const observer = admissionObservers.getStore();
   return (phase: InferenceAdmissionEvent["phase"]) => {

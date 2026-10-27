@@ -169,6 +169,16 @@ export default async function ShellLayout({ children }: { children: React.ReactN
         where: { completedAt: null, userId: user.id },
         select: { id: true, currentStep: true, steps: true, context: true },
       });
+  // A recorded monitoring choice completes that step; a missing decision hides
+  // it. The settings page already persists the decision, so this only moves setup.
+  let setupOverlay = activeSetup;
+  let monitoringCapabilityDecision: "enabled" | "disabled" | "undecided" | null = null;
+  if (activeSetup) {
+    const { reconcileMonitoringSetupStep } = await import("@/lib/actions/setup-progress");
+    const reconciled = await reconcileMonitoringSetupStep(activeSetup);
+    setupOverlay = reconciled.progress;
+    monitoringCapabilityDecision = reconciled.monitoringCapabilityDecision;
+  }
 
   const brandingCss = buildBrandingStyleTag(activeBranding?.tokens ?? null);
   // Worker/operator rail mode (EP-NAV-COHERENCE P4 / BI-655418A7). Default
@@ -189,7 +199,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
     customer: customerSurface.shellLabel,
     ...(financeShellLabel ? { finance: financeShellLabel } : {}),
   };
-  const shellNavSections = (activeSetup
+  const shellNavSections = (setupOverlay
     ? []
     : getShellNavSections(userContext, { activeOrgCapabilities, mode: navMode })).map((section) => ({
       ...section,
@@ -224,14 +234,17 @@ export default async function ShellLayout({ children }: { children: React.ReactN
         >
           Skip to main content
         </a>
-        {activeSetup && (
+        {setupOverlay && (
           <SetupOverlay
-            progressId={activeSetup.id}
-            currentStep={activeSetup.currentStep}
-            steps={activeSetup.steps as Record<string, "pending" | "completed" | "skipped">}
-            setupContext={(activeSetup.context ?? {}) as Record<string, string>}
+            progressId={setupOverlay.id}
+            currentStep={setupOverlay.currentStep}
+            steps={setupOverlay.steps as Record<string, "pending" | "completed" | "skipped">}
+            setupContext={{
+              ...((setupOverlay.context ?? {}) as Record<string, string>),
+              ...(monitoringCapabilityDecision ? { monitoringCapabilityDecision } : {}),
+            }}
             triggeredSteps={
-              ((activeSetup.context ?? {}) as { triggeredSteps?: string[] }).triggeredSteps ?? []
+              ((setupOverlay.context ?? {}) as { triggeredSteps?: string[] }).triggeredSteps ?? []
             }
           />
         )}

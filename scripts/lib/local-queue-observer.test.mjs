@@ -634,3 +634,26 @@ test("findQueueWaiter ignores waiters for other claims and reports none", () => 
     { checked: true, alive: false, pids: [] },
   );
 });
+
+// BI-F63D8202: the gate's own observer is still registered when it decides
+// whether to spawn. Excluding that pid is what lets the first claim spawn.
+test("findQueueWaiter excludePids ignores the caller and still sees another live waiter", () => {
+  const directory = mkdtempSync(join(tmpdir(), "dpf-waiter-"));
+  const self = createGateObserverIdentity({ pid: 4242, token: "a1b2c3d4-0000-4000-8000-000000000042" });
+  const other = createGateObserverIdentity({ pid: 4343, token: "a1b2c3d4-0000-4000-8000-000000000043" });
+  registerLocalQueueObserver({ directory, identity: self, branch: "fix/x", sha: "abc", startedAt: undefined });
+  const onlySelf = findQueueWaiter({
+    directory, branch: "fix/x", sha: "abc",
+    observerAlive: () => ({ alive: true }),
+    excludePids: [4242],
+  });
+  assert.deepEqual(onlySelf, { checked: true, alive: false, pids: [] });
+  registerLocalQueueObserver({ directory, identity: other, branch: "fix/x", sha: "abc", startedAt: undefined });
+  const otherAlive = findQueueWaiter({
+    directory, branch: "fix/x", sha: "abc",
+    observerAlive: () => ({ alive: true }),
+    excludePids: [4242],
+  });
+  assert.equal(otherAlive.alive, true);
+  assert.deepEqual(otherAlive.pids, [4343]);
+});

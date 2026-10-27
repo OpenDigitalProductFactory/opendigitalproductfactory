@@ -223,6 +223,8 @@ test("real repository identity changes on metadata, main, plan, environment and 
   const first = identifyGuardExecution(input);
   assert.ok(first, "the real pinned pnpm/Git environment must be identifiable");
   assert.deepEqual(identifyGuardExecution(input), first);
+  assert.deepEqual(identifyGuardExecution({ ...input, env: { ...input.env, CODEX_TOOL_CALL_ID: "another-observability-call" } }), first,
+    "a per-call tracing identifier does not change executed guard inputs");
   assert.notDeepEqual(identifyGuardExecution({ ...input, plan: ["other-command"] }), first);
   assert.notDeepEqual(identifyGuardExecution({ ...input, env: { ...input.env, CI: "receipt-fixture" } }), first);
   git(["-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "--allow-empty", "-m", "metadata"]);
@@ -249,4 +251,50 @@ test("real hook diagnostic allocation is unique and cleans its own files", () =>
   assert.ok(first.stdout.endsWith("fixture"));
   const gone = spawnSync(bash, ["-c", 'test ! -e "$1" && test ! -e "$2"', "fixture", first.stdout.split("\n")[0], second.stdout.split("\n")[0]], { encoding: "utf8" });
   assert.equal(gone.status, 0, gone.stderr);
+});
+
+test("pinned readiness source survives shared-main movement but never candidate or environment drift", async t => {
+  const f = fixture(t);
+  const cwd = f.options.directory;
+  const git = args => {
+    const result = spawnSync("git", args, { cwd, encoding: "utf8", windowsHide: true });
+    assert.equal(result.status, 0, result.stderr);
+    return result.stdout.trim();
+  };
+  const commit = message => git(["-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "--allow-empty", "-m", message]);
+  git(["init", "-b", "main"]);
+  commit("base");
+  const baseSha = git(["rev-parse", "HEAD"]);
+  git(["update-ref", "refs/remotes/origin/main", baseSha]);
+  commit("candidate");
+  const headSha = git(["rev-parse", "HEAD"]);
+  const source = { baseSha, headSha };
+  let env = { ...process.env };
+  f.options.directory = join(cwd, ".git", "receipts");
+  f.options.identify = () => identifyGuardExecution({ cwd, plan: ["guard"], source, env });
+  let calls = 0;
+  f.options.execute = async () => {
+    calls++;
+    git(["update-ref", "refs/remotes/origin/main", headSha]);
+    return { ok: true, entries: [{ status: "passed" }] };
+  };
+  const result = await runWithGuardReceipt(f.options);
+  assert.equal(result.identityVerified, true, "unrelated shared-ref motion must not discard checks of the pinned pair");
+  assert.equal(f.options.identify().base, baseSha);
+  assert.equal((await runWithGuardReceipt(f.options)).reused, true);
+  assert.equal(calls, 1);
+  const originalIdentify = f.options.identify;
+  f.options.identify = () => identifyGuardExecution({ cwd, plan: ["guard"], source: { baseSha: headSha, headSha }, env });
+  assert.equal((await runWithGuardReceipt(f.options)).reused, false, "a newly selected main never inherits checks of the old base");
+  f.options.identify = originalIdentify;
+  assert.equal((await runWithGuardReceipt(f.options)).reused, false, "restore a receipt for the original source pair");
+  assert.equal((await runWithGuardReceipt(f.options)).reused, true, "confirm that exact source and environment can reuse before changing only environment");
+  env = { ...env, DPF_FIXTURE_INPUT: "changed" };
+  assert.equal((await runWithGuardReceipt(f.options)).reused, false, "environment still invalidates reuse");
+  writeFileSync(join(cwd, "untracked"), "changed");
+  assert.equal(f.options.identify(), null, "dirty source cannot inherit a pass");
+  rmSync(join(cwd, "untracked"));
+  commit("metadata changed with identical tree");
+  assert.equal(f.options.identify(), null, "even same-tree commit metadata differs from the admitted candidate");
+  assert.equal((await runWithGuardReceipt(f.options)).identityVerified, false);
 });

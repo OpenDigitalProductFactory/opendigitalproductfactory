@@ -8,13 +8,16 @@
 //     one either (spec D2 S2, "No pause").
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@dpf/db", () => ({ prisma: {} }));
+const live = vi.hoisted(() => ({ task: vi.fn(), update: vi.fn(), guard: vi.fn() }));
+vi.mock("@dpf/db", () => ({ prisma: { taskRun: { findUnique: live.task, updateMany: live.update } } }));
+vi.mock("@/lib/mcp-task-review-recovery", () => ({ reviewRecoveryToolRefusal: live.guard }));
 
 import type { GovernedExecuteArgs } from "@/lib/mcp-governed-execute-types";
 import type { ToolDefinition } from "@/lib/mcp-tool-types";
 
 import { buildCoworkerApprovalBinding, type CoworkerAuthorityInput } from "./coworker-authority-decision";
 import { enforceCoworkerToolAuthority, setCoworkerToolAuthorityOverridesForTests } from "./coworker-tool-authority-gate";
+import { GOVERNED_REJECTION_DISPOSITION, rejectionMessage } from "./governed-rejection-disposition";
 
 const TOOL = { name: "run_discovery_triage", sideEffect: true, executionMode: "immediate" } as unknown as ToolDefinition;
 
@@ -74,14 +77,37 @@ function arrange(input: CoworkerAuthorityInput) {
   });
 }
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => { vi.clearAllMocks(); live.task.mockResolvedValue(null); live.guard.mockResolvedValue(null); live.update.mockResolvedValue({ count: 1 }); });
 afterEach(() => setCoworkerToolAuthorityOverridesForTests({
   resolveCoworkerAuthorityInput: null, authorizationDecisionCreate: null, authorityApprovalEnvelopeCreate: null,
   authorityApprovalTaskResume: null, policyAuthorityProjectionAttempt: null, policyAuthorityEnvelopeReserve: null,
   authorityExecutedOutcome: null,
+  authorityApprovalEnvelopeFinalize: null,
 }));
 
 describe("coworker tool authority gate — the propose boundary", () => {
+  it("resumes a current bound approval with its captured identity and one atomic working transition", async () => {
+    const input = { ...authorityInput(false), steering: "none" as const };
+    arrange({ ...input, approval: { envelopeId: "ENV-CURRENT", status: "approved", expiresAt: new Date(Date.now() + 60_000), binding: buildCoworkerApprovalBinding(input) } });
+    setCoworkerToolAuthorityOverridesForTests({ authorityApprovalTaskResume: null });
+    const updatedAt = new Date(), taskExecutionFence = { schemaVersion: 1 as const, reservation: null, dispatchClaim: null, authorityDigest: null, requestDigest: "a".repeat(64) };
+    live.task.mockResolvedValue({ status: "input-required", updatedAt, progressPayload: {}, a2aMetadata: { initiativeReviewBinding: {} } });
+    expect(await enforceCoworkerToolAuthority(execution({ taskExecutionFence }), TOOL, true)).toMatchObject({ outcome: "allow" });
+    expect(live.guard).toHaveBeenCalledWith(expect.objectContaining({ executionFence: taskExecutionFence, phase: "approval-resume", actingAgentId: "AGT-OPS" }));
+    expect(live.update).toHaveBeenCalledWith(expect.objectContaining({ where: { taskRunId: "TR-SCHED-1", status: "input-required", updatedAt },
+      data: expect.objectContaining({ status: "working", lastHeartbeatAt: expect.any(Date) }) }));
+  });
+  it("does not mark a held bound review working before the callback fence can refuse it", async () => {
+    const input = { ...authorityInput(false), steering: "none" as const };
+    arrange({ ...input, approval: { envelopeId: "ENV-OLD", status: "approved", expiresAt: new Date(Date.now() + 60_000), binding: buildCoworkerApprovalBinding(input) } });
+    const finalize = vi.fn();
+    setCoworkerToolAuthorityOverridesForTests({ authorityApprovalTaskResume: null, authorityApprovalEnvelopeFinalize: finalize });
+    live.task.mockResolvedValue({ status: "input-required", progressPayload: { executionUncertainty: {} }, a2aMetadata: { initiativeReviewBinding: {} } });
+    live.guard.mockResolvedValue({ success: false, error: "review_execution_authority_refused", message: "Held original" });
+    expect(await enforceCoworkerToolAuthority(execution(), TOOL, true)).toMatchObject({ outcome: "reject", rejection: "authority_denied" });
+    expect(live.update).not.toHaveBeenCalled();
+    expect(finalize).toHaveBeenCalledWith("ENV-OLD", false);
+  });
   it("mints through the one path, carrying the boundary flag and the chat message", async () => {
     arrange(authorityInput(true));
     const result = await enforceCoworkerToolAuthority(
@@ -130,4 +156,113 @@ describe("coworker tool authority gate — the propose boundary", () => {
     await enforceCoworkerToolAuthority(execution(), TOOL, true);
     expect(resume).toHaveBeenCalledWith("TR-SCHED-1");
   });
+});
+
+describe("deterministic authority resolution refusals (BI-5FDE148A)", () => {
+  const tool = { name: "get_backlog_item", sideEffect: false, executionMode: "immediate" } as unknown as ToolDefinition;
+
+  function missingItemCall(): GovernedExecuteArgs {
+    return {
+      toolName: "get_backlog_item",
+      rawParams: { itemId: "BI-MISSING" },
+      userId: "user-1",
+      userContext: { userId: "user-1", platformRole: "HR-000", isSuperuser: true },
+      context: { agentId: "AGT-OPS" },
+      source: "external-jsonrpc",
+    };
+  }
+
+  function throwResolution(error: unknown) {
+    setCoworkerToolAuthorityOverridesForTests({
+      resolveCoworkerAuthorityInput: async () => {
+        throw error;
+      },
+    });
+  }
+
+  function callerMessage(result: Awaited<ReturnType<typeof enforceCoworkerToolAuthority>>, toolName: string): string {
+    if (result.outcome !== "reject") throw new Error(`expected a rejection, got ${result.outcome}`);
+    return rejectionMessage(toolName, result.message, GOVERNED_REJECTION_DISPOSITION[result.rejection]);
+  }
+
+  it("refuses an unknown item on a non-create tool instead of reporting the check unavailable", async () => {
+    throwResolution(new Error("The governed backlog item does not exist."));
+    const result = await enforceCoworkerToolAuthority(missingItemCall(), tool, true);
+    expect(result).toMatchObject({
+      outcome: "reject",
+      rejection: "authority_subject_not_found",
+      message: "The governed backlog item does not exist.",
+    });
+    const caller = callerMessage(result, "get_backlog_item");
+    expect(GOVERNED_REJECTION_DISPOSITION.authority_subject_not_found).toBe("refused");
+    expect(caller).toContain("The governed backlog item does not exist.");
+    expect(caller).not.toMatch(/unavailable/i);
+    expect(caller).not.toMatch(/retried unchanged/);
+  });
+
+  it("refuses a writer-tool binding mismatch instead of asking for an unchanged retry", async () => {
+    const reason = "The immutable initiative review writer tool does not match the executing tool.";
+    throwResolution(new Error(reason));
+    const result = await enforceCoworkerToolAuthority(missingItemCall(), tool, true);
+    expect(result).toMatchObject({ outcome: "reject", rejection: "authority_binding_mismatch", message: reason });
+    const caller = callerMessage(result, "record_initiative_design_review");
+    expect(caller).toContain("writer tool does not match");
+    expect(GOVERNED_REJECTION_DISPOSITION.authority_binding_mismatch).toBe("refused");
+    expect(caller).not.toMatch(/unavailable|retried unchanged/);
+  });
+
+  it.each([
+    ["connect ETIMEDOUT", "connect ETIMEDOUT"],
+    ["pool timeout", "Timed out fetching a new connection from the connection pool"],
+    ["missing relation", 'relation "BacklogItem" does not exist'],
+  ])("keeps a %s failure inconclusive", async (_label, reason) => {
+    throwResolution(new Error(reason));
+    const result = await enforceCoworkerToolAuthority(missingItemCall(), tool, true);
+    expect(result).toMatchObject({
+      outcome: "reject",
+      rejection: "authority_evidence_unavailable",
+      message: reason,
+    });
+    expect(GOVERNED_REJECTION_DISPOSITION.authority_evidence_unavailable).toBe("inconclusive");
+    const caller = callerMessage(result, "get_backlog_item");
+    expect(caller).toContain(reason);
+    expect(caller).toMatch(/retried unchanged/);
+    expect(caller).toMatch(/unavailable/);
+  });
+});
+
+
+describe("withheld scheduled authority reuses exact approvals (BI-D95FD249)", () => {
+  const existingOnly = () => execution({ proposeBoundary: true, approvalCompletion: "platform", allowApprovalRequest: false });
+  it("does not mint a new request when automatic dispatch authority was withheld", async () => {
+    arrange(authorityInput(true));
+    expect(await enforceCoworkerToolAuthority(existingOnly(), TOOL, true))
+      .toMatchObject({ outcome: "reject", rejection: "authority_denied" });
+    expect(ensure).not.toHaveBeenCalled();
+    expect(reserve).not.toHaveBeenCalled();
+  });
+  it("still reserves a current exact approval once", async () => {
+    const input = authorityInput(true);
+    arrange({ ...input, approval: { envelopeId: "ENV-APPROVED", status: "approved",
+      expiresAt: new Date(Date.now() + 60_000), binding: buildCoworkerApprovalBinding(input), proposeBoundary: true } });
+    expect(await enforceCoworkerToolAuthority(existingOnly(), TOOL, true)).toMatchObject({ outcome: "allow", approvedEnvelopeId: "ENV-APPROVED" });
+    expect(reserve).toHaveBeenCalledOnce(); expect(ensure).not.toHaveBeenCalled();
+  });
+  it("returns a stored outcome after automatic evidence authority becomes available", async () => {
+    const input = authorityInput(false); input.action.toolName = "record_workroom_evidence";
+    arrange(input);
+    const settled = { envelopeId: "ENV-EXECUTED", status: "executed" as const, result: { success: true, entityId: "EV-EXISTING" } };
+    setCoworkerToolAuthorityOverridesForTests({ authorityExecutedOutcome: async () => settled });
+    expect(await enforceCoworkerToolAuthority({ ...execution(), toolName: "record_workroom_evidence" }, TOOL, true))
+      .toMatchObject({ outcome: "settled", ...settled });
+    expect(reserve).not.toHaveBeenCalled(); expect(ensure).not.toHaveBeenCalled();
+  });
+  it("does not repeat evidence when its existing approval outcome cannot be read", async () => {
+    const input = authorityInput(false); input.action.toolName = "record_workroom_evidence"; arrange(input);
+    setCoworkerToolAuthorityOverridesForTests({ authorityExecutedOutcome: async () => { throw new Error("database unavailable"); } });
+    expect(await enforceCoworkerToolAuthority({ ...execution(), toolName: "record_workroom_evidence" }, TOOL, true))
+      .toMatchObject({ outcome: "reject", rejection: "authority_evidence_unavailable" });
+    expect(ensure).not.toHaveBeenCalled(); expect(reserve).not.toHaveBeenCalled();
+  });
+
 });

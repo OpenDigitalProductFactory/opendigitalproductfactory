@@ -18,6 +18,11 @@ const completeBuildPhaseRunMock = vi.fn();
 const dispatchBuildMock = vi.fn();
 const enforceInitiativeReadinessMock = vi.fn();
 
+const ensureCoverageMock = vi.fn(async () => ({ recorded: false, reason: "already-covered" }));
+vi.mock("@/lib/build/record-build-plan-coverage", () => ({
+  ensureBuildPlanCoverage: (...a: unknown[]) => ensureCoverageMock(...(a as [])),
+}));
+
 vi.mock("@dpf/db", () => {
   const prisma = {
     featureBuild: {
@@ -292,5 +297,23 @@ describe("performPlanToBuildTransition (BI-05208DE5)", () => {
     expect(updateMock).not.toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ phase: "abandoned" }) }),
     );
+  });
+});
+
+describe("plan coverage before the readiness gate (BI-6F2872FC)", () => {
+  it("records the reviewed plan's coverage before judging the transition", async () => {
+    ensureCoverageMock.mockClear();
+    findUniqueMock.mockResolvedValueOnce(planBuild());
+    await performPlanToBuildTransition({ buildId: "FB-X", userId: "u1" });
+    expect(ensureCoverageMock).toHaveBeenCalledWith("FB-X");
+  });
+
+  it("does not cover a plan whose review did not pass, nor an escalated build", async () => {
+    ensureCoverageMock.mockClear();
+    findUniqueMock.mockResolvedValueOnce(planBuild({ planReview: { decision: "fail" } }));
+    await performPlanToBuildTransition({ buildId: "FB-X", userId: "u1" });
+    findUniqueMock.mockResolvedValueOnce(planBuild({ buildExecState: { planAdvance: { failures: 3, escalatedAt: "2026-09-23T00:00:00Z" } } }));
+    await performPlanToBuildTransition({ buildId: "FB-X", userId: "u1" });
+    expect(ensureCoverageMock).not.toHaveBeenCalled();
   });
 });

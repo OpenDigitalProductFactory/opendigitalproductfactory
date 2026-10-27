@@ -1,8 +1,18 @@
 import type { semanticReviewRecoveryBudget } from "./semantic-review-recovery-policy";
+import { explainExclusion, type RoutingEligibility } from "../inference/routing-exclusion-buckets";
+
+export const SEMANTIC_REVIEW_ELIGIBILITY_ACTION = "Verify an eligible model for the complete review within the required data boundary. Record fresh scoped verification before resuming; an unchanged retry will not help.";
+export function semanticReviewEligibilityLabels(eligibility: readonly RoutingEligibility[]) {
+  return [...new Set(eligibility.flatMap(entry => [
+    `Effective data class: ${entry.sensitivity}. Residency: ${entry.residencyPolicy}. Excluded endpoints: ${entry.excludedCount}.`,
+    ...entry.exclusions.map(item => explainExclusion({ ...item, total: entry.excludedCount,
+      sampleReason: "", breakdown: entry.exclusions }, { sensitivity: entry.sensitivity }).message),
+  ]))];
+}
 
 /** Shared explanations; availability never establishes the caller's authority. */
-export function semanticReviewRecoveryPresentation(state: ReturnType<typeof semanticReviewRecoveryBudget>) {
-  const title = { available: "Review awaiting recovery", expired: "Review window expired",
+export function semanticReviewRecoveryPresentation(state: ReturnType<typeof semanticReviewRecoveryBudget>, eligibilityBlocked = false) {
+  const title = { available: eligibilityBlocked ? "Review needs an eligible endpoint" : "Review awaiting recovery", expired: "Review window expired",
     exhausted: "Recovery limit reached", unknown: "Recovery availability unknown" }[state];
   const nextAction = state === "available"
     ? "The original requester can confirm recovery; authority is checked again when submitted."
@@ -11,7 +21,7 @@ export function semanticReviewRecoveryPresentation(state: ReturnType<typeof sema
     : state === "unknown"
       ? "Recovery limits could not be read. Inspect the request history before further action."
       : "This request cannot resume. Its deadline and recovery limit stay unchanged; inspect history with the requester.";
-  return { title, nextAction };
+  return { title, nextAction: eligibilityBlocked ? `${SEMANTIC_REVIEW_ELIGIBILITY_ACTION}${state !== "available" ? ` ${nextAction}` : ""}` : nextAction };
 }
 
 const REASONS: Record<string, string> = {
@@ -19,6 +29,15 @@ const REASONS: Record<string, string> = {
   "review-response-truncated": "The provider stopped before the review response was complete.",
   "provider-outcome-uncertain": "The provider outcome is uncertain. Inspect the recorded execution before replacing it.",
   "review-capacity-deferred": "Review could not start because provider capacity was unavailable. No verdict was produced.",
+  "local-ci-active-capacity-reservation": "Review is waiting while a verification run uses the host.",
+  "local-ci-queued-capacity-reservation": "Review is waiting for a queued verification run to use the host.",
+  "local-ci-capacity-reservation-unavailable": "Host capacity could not be checked. The review remains paused.",
+  "host-gpu-busy": "Review is waiting for the graphics processor to become available.",
+  "local-runner-busy": "Review is waiting for the local model runner to become available.",
+  "portal-quiescing": "Review is paused while the platform upgrade finishes.",
+  "review-authority-unavailable": "The submitting access could not be checked. The review remains paused.",
+  "review-capacity-observation-unavailable": "Host capacity could not be checked. The review remains paused.",
+  "review-endpoint-ineligible": "No endpoint met the review requirements. The affected branches stopped before provider dispatch; no verdict was produced.",
   "provider-outcome-uncertain-after-restart": "Execution restarted before a provider outcome was recorded.",
   "submitting-authority-no-longer-valid": "The original request no longer has valid authority.",
   "failure-analysis-evidence-changed": "The request's verification evidence is no longer current.",

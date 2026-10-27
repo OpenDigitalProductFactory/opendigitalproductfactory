@@ -301,6 +301,8 @@ const MAX_DISPATCH_ATTEMPTS = 5;
  * the TaskRun CAS still permits only one execution winner.
  */
 export async function reconcilePersistedRemoteTaskDispatches(input?: {
+  /** Server-owned exact task after current caller and immutable scope validation. */
+  taskRunId?: string;
   now?: Date;
   limit?: number;
   includeOrdinary?: boolean;
@@ -348,6 +350,7 @@ export async function reconcilePersistedRemoteTaskDispatches(input?: {
   const rows = await prisma.taskRun.findMany({
     where: {
       updatedAt: { lt: cutoff },
+      ...(input?.taskRunId ? { taskRunId: input.taskRunId } : {}),
       OR: [
         durableSubmitted,
         durableAdmitting,

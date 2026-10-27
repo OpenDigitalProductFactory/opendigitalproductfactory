@@ -4,6 +4,22 @@ status: active
 
 # The Attention Surface — a kernels-first "Needs you" inbox, separate from the work backlog
 
+## October 18 repair: bounded queue progress (BI-372D6E2E)
+
+The Inbox count names displayed items, not the full pending population. The
+owner-scoped approval source separately counts live pending requests and renders
+at most 25, with one lookahead row for bounded Older requests navigation. Latest
+requests resets the window. The cursor is a validated createdAt/id position,
+not an authority token or a lookup of another owner's row. Equal timestamps use
+the id tie-breaker; deleting or deciding the anchor does not skip older rows.
+All queries retain delegating-user and unexpired-proposal predicates.
+
+Exact result readback remains above the queue after a decision. A cleared card
+may reveal an older request; total/shown copy makes that progress visible.
+Other notices are counted separately. Failed totals/pages say unavailable and
+never claim zero pending or all caught up. Count and list are live observations,
+not an atomic snapshot or permission to execute. No approval policy changes.
+
 ## September 27 repair: the result survives the decision
 
 BI-AFEAAA76 extends the BI-7CB2CCDE projection below. Excluding settled requests

@@ -14,6 +14,7 @@ import {
   resolveVitestMaxDurationMs,
   selectVitestRecoveryPlan,
 } from "./local-ci-vitest-runner.mjs";
+import { resolveHostCommandInvocation } from "./lib/host-command-invocation.mjs";
 import {
   createObservedProcessRunner,
   terminateProcessTree,
@@ -54,6 +55,29 @@ function fakeChild(pid = 4123) {
   child.stderr = new PassThrough();
   return child;
 }
+
+test("Windows observation preserves literal argv and never enables a shell", async () => {
+  const root = mkdtempSync(join(tmpdir(), "dpf-observer-pnpm-"));
+  writeFileSync(join(root, "pnpm.cmd"), "");
+  const script = join(root, "pnpm.cjs");
+  writeFileSync(script, "");
+  const child = fakeChild();
+  let invocation;
+  const run = createObservedProcessRunner({
+    platform: "win32", sampleHost: () => ({}),
+    spawnImpl(command, args, options) { invocation = { command, args, options }; return child; },
+    stdout: { write() {} }, stderr: { write() {} },
+  });
+  try {
+    const args = ["exec", "%PATH%", "a&b", ""];
+    const pending = run({ command: "pnpm", args, env: { PATH: root }, shell: true });
+    child.emit("close", 0, null);
+    assert.equal((await pending).status, 0);
+    assert.equal(invocation.command, process.execPath);
+    assert.deepEqual(invocation.args, [script, ...args]);
+    assert.equal(invocation.options.shell, false);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
 
 test("observer cancellation stops the owned tree and cannot turn a late zero exit into success", async () => {
   const child = fakeChild();
@@ -465,6 +489,9 @@ test("the executable runner refuses a persisted exhausted profile before spawn",
     assert.equal(result.status, 86, `${result.stdout}\n${result.stderr}`);
     assert.match(result.stderr, /without another child/);
     assert.equal(JSON.parse(readFileSync(diagnosticsPath, "utf8")).retryExhausted, true);
+    assert.deepEqual(JSON.parse(readFileSync(diagnosticsPath, "utf8")).selection, {
+      mode: "exhaustive", stage: "exhaustive-vitest", extraArgs: [], reason: "no-base-ref",
+    }, "even an unrun exhausted attempt persists its intended selection separately");
   } finally {
     rmSync(temp, { recursive: true, force: true });
   }
@@ -495,7 +522,7 @@ test("attempt runner streams output and retains progress plus host evidence on o
 
   const result = await runAttempt({ workers: 4, attempt: 1 });
 
-  assert.equal(invocation.command, "pnpm");
+  assert.equal(invocation.command, resolveHostCommandInvocation("pnpm", []).command);
   assert.ok(invocation.args.includes("--maxWorkers=4"));
   assert.ok(invocation.args.includes("--reporter=verbose"));
   assert.match(streamed.stdout, /last\.test\.ts/);

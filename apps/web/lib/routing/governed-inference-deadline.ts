@@ -2,7 +2,8 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { createOffThreadpoolFetchTransport, type OffThreadpoolFetchTransport } from "@/lib/network/off-threadpool-fetch";
 
 export type InferenceOrigin = "interactive" | "autonomous";
-const originStore = new AsyncLocalStorage<{ origin?: InferenceOrigin; signal?: AbortSignal }>();
+const originStore = new AsyncLocalStorage<{ origin?: InferenceOrigin; signal?: AbortSignal;
+  authorityChecks?: readonly (() => Promise<boolean>)[] }>();
 
 /** Shared caller context lives below admission and provider adapters. */
 export function withInferenceOrigin<T>(origin: InferenceOrigin, fn: () => T): T {
@@ -25,6 +26,14 @@ export function currentInferenceSignal(parentSignal?: AbortSignal): AbortSignal 
   const callerSignal = originStore.getStore()?.signal;
   return callerSignal && parentSignal && callerSignal !== parentSignal
     ? AbortSignal.any([callerSignal, parentSignal]) : callerSignal ?? parentSignal;
+}
+
+/** Narrow an accepted caller's authority at the existing dispatch choke point.
+ * This supplies neither a parent deadline nor permission; inherited checks stay. */
+export function withInferenceAuthorityCheck<T>(verify: () => Promise<boolean>, execute: () => T): T {
+  const inherited = originStore.getStore();
+  return originStore.run({ ...inherited,
+    authorityChecks: [...(inherited?.authorityChecks ?? []), verify] }, execute);
 }
 
 type DeadlineScope = Readonly<{
@@ -125,7 +134,18 @@ export function currentGovernedInferenceDeadline(): DeadlineScope | undefined {
 
 /** Called at the common provider choke point, including every fallback. */
 export async function assertGovernedInferenceAuthority(callerSignal?: AbortSignal): Promise<void> {
-  callerSignal?.throwIfAborted();
+  const signal = currentInferenceSignal(callerSignal);
+  signal?.throwIfAborted();
   const checking = deadlines.getStore()?.assertAuthority();
-  if (checking) await (callerSignal ? awaitInferenceCancellation(checking, callerSignal) : checking);
+  if (checking) await (signal ? awaitInferenceCancellation(checking, signal) : checking);
+  for (const verify of originStore.getStore()?.authorityChecks ?? []) {
+    signal?.throwIfAborted();
+    const checked = Promise.resolve().then(verify).catch(error => {
+      if (signal?.aborted && error === signal.reason) throw error;
+      throw new GovernedInferenceDeadlineError("authority-unavailable");
+    });
+    const authorized = await (signal ? awaitInferenceCancellation(checked, signal) : checked);
+    signal?.throwIfAborted();
+    if (!authorized) throw new GovernedInferenceDeadlineError("authority-lost");
+  }
 }

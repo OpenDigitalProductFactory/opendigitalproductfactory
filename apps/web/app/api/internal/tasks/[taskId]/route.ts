@@ -1,5 +1,7 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@dpf/db";
+import { readSemanticReviewRecovery } from "@/lib/change-review/semantic-review-recovery-readback";
+import { isRecord } from "@/lib/shared/coerce";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +24,8 @@ export async function GET(_request: Request, context: RouteContext): Promise<Res
       ...(session.user.isSuperuser ? {} : { userId: session.user.id }),
     },
     select: {
+      id: true,
+      userId: true,
       taskRunId: true,
       contextId: true,
       status: true,
@@ -90,6 +94,8 @@ export async function GET(_request: Request, context: RouteContext): Promise<Res
       completedAt: task.completedAt,
       createdAt: task.createdAt,
       updatedAt: task.updatedAt,
+      ...(task.userId === session.user.id && isRecord(task.a2aMetadata) && task.a2aMetadata.gateKind === "semantic-review"
+        ? { recovery: await readSemanticReviewRecovery(task, session.user.id) } : {}),
       messages: task.messages,
       artifacts: task.artifacts,
     },

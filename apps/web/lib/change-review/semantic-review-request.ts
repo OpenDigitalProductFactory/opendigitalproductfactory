@@ -17,17 +17,18 @@ export const ROLE_BOUND_SEMANTIC_REVIEW_DISPATCH_CONTRACT_VERSION = "routed-sema
 const MAX_PACKET_BYTES = 2 * 1024 * 1024;
 const ref = z.string().min(1).max(256);
 const sha256 = z.string().regex(/^[a-f0-9]{64}$/);
+const artifactTypeSchema = z.enum(REVIEW_ARTIFACT_TYPES);
 const actorSchema = z.object({ userId: ref, agentId: ref.nullable(), apiTokenId: ref.nullable(), authSource: ref.nullable() }).strict();
 const inputSchema = z.object({
   surface: z.enum(["external", "build-studio"]), authorSurface: ref,
-  artifactType: z.enum(REVIEW_ARTIFACT_TYPES), title: z.string().min(1).max(2_000),
+  artifactType: artifactTypeSchema, title: z.string().min(1).max(2_000),
   artifact: z.string().min(1), verificationEvidence: z.string().min(1),
   failureAnalysis: failureAnalysisSchema.optional(),
   resolvedFailureEvidence: z.array(z.object({ id: ref, capsuleId: ref, headTreeHash: ref, diffDigest: sha256,
     status: ref, expected: z.string(), observed: z.string(), completedAt: ref }).strict()).optional(),
   changedFiles: z.array(z.string().min(1).max(2_000)).min(1).max(10_000),
   identity: z.object({ capsuleId: ref, baseTreeHash: z.string().regex(/^[a-f0-9]{40}$/),
-    artifactType: z.enum(REVIEW_ARTIFACT_TYPES).optional(),
+    artifactType: artifactTypeSchema.optional(),
     headTreeHash: z.string().regex(/^[a-f0-9]{40}$/), diffDigest: sha256,
     policyVersion: ref, reviewerVersion: ref, specialistIds: z.array(ref).max(20), failureAnalysisDigest: sha256.optional(), sourceHeadSha: ref.optional() }).strict(),
   repairRound: z.number().int().min(0).max(100).optional(), risk: z.enum(REVIEW_RISKS),
@@ -38,6 +39,14 @@ const packetSchema = z.object({ schemaVersion: z.union([z.literal(1), z.literal(
   repository: ref, gateKey: sha256 }).strict();
 export type SemanticReviewRequestActor = z.infer<typeof actorSchema>;
 export type SemanticReviewRequest = z.infer<typeof packetSchema>;
+
+/** Shared bounded read-model contract; this does not authenticate a full packet. */
+export function isSemanticReviewRequestRoleBinding(schemaVersion: unknown, artifactType: unknown,
+  identityArtifactType: unknown): boolean {
+  if (!artifactTypeSchema.safeParse(artifactType).success) return false;
+  return (schemaVersion === 1 && identityArtifactType === undefined)
+    || (schemaVersion === 2 && identityArtifactType === artifactType);
+}
 
 function digest(value: unknown): string {
   return createHash("sha256").update(canonicalJson(value), "utf8").digest("hex");
@@ -69,8 +78,7 @@ export function parseSemanticReviewRequest(value: unknown): SemanticReviewReques
   try {
     if (Buffer.byteLength(canonicalJson(value), "utf8") > MAX_PACKET_BYTES) return null;
     const packet = packetSchema.parse(value);
-    if (packet.schemaVersion === 2 && packet.input.identity.artifactType !== packet.input.artifactType) return null;
-    if (packet.schemaVersion === 1 && packet.input.identity.artifactType !== undefined) return null;
+    if (!isSemanticReviewRequestRoleBinding(packet.schemaVersion, packet.input.artifactType, packet.input.identity.artifactType)) return null;
     const { digest: expected, ...body } = packet;
     if (digest(body) !== expected || Date.parse(packet.deadlineAt) - Date.parse(packet.issuedAt) !== SEMANTIC_REVIEW_DEADLINE_MS) return null;
     if (createHash("sha256").update(packet.input.artifact, "utf8").digest("hex") !== packet.input.identity.diffDigest) return null;

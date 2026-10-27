@@ -68,4 +68,30 @@ describe("operator Workrooms inventory", () => {
     renderInventory(<WorkroomInventory workrooms={[blocked]} summary={summary} heldCapsuleIds={["WC-BLOCK"]} />);
     expect(screen.getByRole("link", { name: "Retained review" })).toBeVisible();
   });
+  it("keeps COO cycle, wake, span and escalation inside details and routes the action to the room case", () => {
+    const coo = {
+      lastCycleKey: "shape@1:2026-10-26", lastAction: "dispatch_agent", lastReason: "agent_stage",
+      ticksSinceAdvance: 3, nextWakeAt: "2026-10-26T13:15:00.000Z", spanOfControl: 8, overSpan: true,
+      unowned: false, paused: false, ownerIsSuggestion: true, escalationLabel: "PRN-human",
+      missingAckCount: 1, actionHref: "/workspace/cases/work-capsule%3AWC-NOW",
+    };
+    renderInventory(<WorkroomInventory workrooms={[{ ...row("WC-NOW", "live", "Prepare adoption event"), coo }]}
+      summary={summary} supervision={{ unownedCount: 1, pausedCount: 2, missingAckCount: 1,
+        overSpanOwners: [{ principalId: "PRN-busy", displayName: "Busy", roomCount: 8 }] }} />);
+    expect(screen.getByText("Last action: dispatch_agent")).not.toBeVisible();
+    expect(screen.getByText("Last cycle: shape@1:2026-10-26")).not.toBeVisible();
+    expect(screen.getByText("Supervision")).toBeVisible();
+    const technical = screen.getByText("Technical evidence").closest("details")!;
+    technical.open = true; fireEvent(technical, new Event("toggle"));
+    expect(screen.getByText("Last action: dispatch_agent")).toBeVisible();
+    expect(screen.getByText("3 ticks since advance")).toBeVisible();
+    expect(screen.getByText("Next wake 2026-10-26T13:15:00.000Z")).toBeVisible();
+    expect(screen.getByText("Over span of control")).toBeVisible();
+    expect(screen.getByText("Escalation: PRN-human")).toBeVisible();
+    expect(screen.queryByRole("link", { name: "Open room" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Prepare adoption event" })).toHaveAttribute("href", "/workspace/cases/work-capsule%3AWC-NOW");
+    const supervision = screen.getByText("Supervision").closest("details")!;
+    supervision.open = true; fireEvent(supervision, new Event("toggle"));
+    expect(screen.getByText("Busy · 8")).toBeVisible();
+  });
 });

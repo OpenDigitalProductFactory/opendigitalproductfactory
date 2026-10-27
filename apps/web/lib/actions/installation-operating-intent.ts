@@ -58,6 +58,11 @@ export interface InstallationIdentityInput {
   primaryPurpose: string;
   environmentClass: string;
   pairedProductionInstallationRef?: string | null;
+  /**
+   * Other jobs this installation also does (DI-A6148958CADB). Omitted keeps the
+   * stored list; the primary purpose and duplicates are dropped.
+   */
+  secondaryPurposes?: string[];
 }
 
 export interface InstallationIdentityPreview {
@@ -95,7 +100,12 @@ export type DeclareInstallationIdentityResult = ActionResult<DeclareInstallation
 const MAX_PAIRED_REF_LENGTH = 200;
 
 type ValidatedInput =
-  | { valid: true; declaration: InstallationIdentityDeclaration }
+  | {
+      valid: true;
+      declaration: InstallationIdentityDeclaration;
+      /** Null when the form sent none, so the stored list is kept. */
+      secondaryPurposes: InstallationOperatingPurpose[] | null;
+    }
   | { valid: false; error: string };
 
 function validate(input: InstallationIdentityInput): ValidatedInput {
@@ -115,8 +125,16 @@ function validate(input: InstallationIdentityInput): ValidatedInput {
   if (ref.length > MAX_PAIRED_REF_LENGTH) {
     return { valid: false, error: "The paired installation name is too long." };
   }
+  const secondary = input.secondaryPurposes;
+  if (secondary !== undefined && (!Array.isArray(secondary) || !secondary.every(isInstallationOperatingPurpose))) {
+    return {
+      valid: false,
+      error: `Choose other jobs from: ${INSTALLATION_OPERATING_PURPOSES.join(", ")}.`,
+    };
+  }
   return {
     valid: true,
+    secondaryPurposes: secondary === undefined ? null : (secondary as InstallationOperatingPurpose[]),
     declaration: normalizeIdentityDeclaration({
       primaryPurpose: input.primaryPurpose,
       environmentClass: input.environmentClass,
@@ -266,6 +284,11 @@ export async function declareInstallationIdentity(
   const context = await readIdentityContext();
   const next = validated.declaration;
   const impact = impactFor(context, next);
+  const secondaryPurposes = normalizeSecondaryPurposes(
+    validated.secondaryPurposes ?? context.intent.secondaryPurposes,
+    next.primaryPurpose,
+  );
+  const secondaryUnchanged = sameMembers(secondaryPurposes, context.intent.secondaryPurposes);
 
   if (impact.material && previewToken !== impact.previewToken) {
     return ok({
@@ -294,6 +317,7 @@ export async function declareInstallationIdentity(
     && context.intent.confirmation.status === "confirmed"
     && environmentTakesEffect
     && context.environmentNow.portalDeclaration?.environmentClass === next.environmentClass
+    && secondaryUnchanged
   ) {
     return ok({
       kind: "saved",
@@ -316,14 +340,13 @@ export async function declareInstallationIdentity(
     impact,
     environmentTakesEffect,
     environmentInForce: environmentAfter.environmentClass,
+    secondaryPurposes: secondaryUnchanged ? null : secondaryPurposes,
   })];
 
   const value: InstallationOperatingIntentV1 = {
     schemaVersion: 1,
     primaryPurpose: next.primaryPurpose,
-    secondaryPurposes: context.intent.secondaryPurposes.filter(
-      (purpose) => purpose !== next.primaryPurpose,
-    ),
+    secondaryPurposes,
     relationshipIntents: context.intent.relationshipIntents,
     ...(next.pairedProductionInstallationRef
       ? { pairedProductionInstallationRef: next.pairedProductionInstallationRef }
@@ -373,6 +396,8 @@ function buildEvidence(input: {
   impact: InstallationIdentityImpact;
   environmentTakesEffect: boolean;
   environmentInForce: InstallationEnvironmentClass;
+  /** The new list when the operator changed it; null when it is unchanged. */
+  secondaryPurposes: InstallationOperatingPurpose[] | null;
 }) {
   const changed = input.impact.changes.map((change) => change.label).join(", ");
   const claim = input.impact.material
@@ -380,6 +405,16 @@ function buildEvidence(input: {
     : `The operator confirmed this installation: ${input.next.primaryPurpose} in ${input.next.environmentClass}.`;
 
   const entries = [{ source: "human" as const, claim, observedAt: input.now }];
+
+  if (input.secondaryPurposes) {
+    entries.push({
+      source: "human" as const,
+      claim: input.secondaryPurposes.length > 0
+        ? `The operator declared its other jobs: ${input.secondaryPurposes.join(", ")}.`
+        : "The operator cleared its other jobs.",
+      observedAt: input.now,
+    });
+  }
 
   if (!input.environmentTakesEffect) {
     entries.push({
@@ -390,4 +425,18 @@ function buildEvidence(input: {
   }
 
   return entries;
+}
+
+/** Distinct secondary purposes in declared order, never repeating the primary. */
+function normalizeSecondaryPurposes(
+  purposes: readonly InstallationOperatingPurpose[],
+  primary: InstallationOperatingPurpose,
+): InstallationOperatingPurpose[] {
+  return [...new Set(purposes)].filter((purpose) => purpose !== primary);
+}
+
+function sameMembers(a: readonly string[], b: readonly string[]): boolean {
+  const left = new Set(a);
+  const right = new Set(b);
+  return left.size === right.size && [...left].every((item) => right.has(item));
 }

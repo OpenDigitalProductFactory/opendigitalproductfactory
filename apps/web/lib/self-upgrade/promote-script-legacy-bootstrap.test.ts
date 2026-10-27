@@ -16,6 +16,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { PROMOTE_TEST_TIMEOUT_MS, reassessmentCapabilityFixture } from "./promote-script-functional.test-support";
 
 const REPO_ROOT = resolve(__dirname, "../../../..");
 const SCRIPT = join(REPO_ROOT, "scripts", "promote.sh");
@@ -27,7 +28,9 @@ const BASH_OK = spawnSync(BASH, ["--version"]).status === 0;
 const TARGET_SHA = "b".repeat(40);
 const RELEASE_TAG = "v2.0.0";
 const OWNER = "opendigitalproductfactory";
-const TEST_TIMEOUT_MS = 30_000;
+// This executes real Git Bash and candidate bootstrap; use the shared hang
+// budget rather than treating the observed 38-second Windows run as a failure.
+const TEST_TIMEOUT_MS = PROMOTE_TEST_TIMEOUT_MS;
 
 let bashDrivePrefix: string | undefined;
 function bashPath(value: string): string {
@@ -64,6 +67,7 @@ function writeFakeTools(root: string): string {
   writeFileSync(join(bin, "docker"), `#!/bin/sh
 [ -n "\${DOCKER_LOG:-}" ] && printf '%s\\n' "$*" >> "$DOCKER_LOG"
 case "$*" in
+  *"/app/scripts/reassessment-capability-probe.mjs"*) [ -n "$DPF_TEST_REASSESSMENT_REPORT" ] || exit 78; printf '%s' "$DPF_TEST_REASSESSMENT_REPORT" ;;
   *".Id"*) printf "%s" "$DPF_TEST_RELEASE_CONFIG_DIGEST" ;;
   *"org.opencontainers.image.version"*) printf "%s" "$DPF_TEST_RELEASE_TAG" ;;
   *"org.opencontainers.image.revision"*) printf "%s" "$DPF_TEST_RELEASE_SHA" ;;
@@ -72,6 +76,8 @@ case "$*" in
     for destination in "$@"; do :; done
     cp -R "$DPF_TEST_RELEASE_ASSETS"/. "$destination"
     ;;
+  *"recover-workroom-activity-migration.mjs --verify-rolled-back"*) printf "verified" ;;
+  *"recover-workroom-activity-migration.mjs"*) printf "not-needed" ;;
   *"recover-human-principal-backfill-migration.mjs --verify-rolled-back"*) printf "verified" ;;
   *"recover-human-principal-backfill-migration.mjs"*) printf "not-needed" ;;
   *"recover-inventory-snapshot-migration.mjs --verify-rolled-back"*) printf "verified" ;;
@@ -89,7 +95,8 @@ else
 fi
 `);
   writeFileSync(join(bin, "git"), '#!/bin/sh\nprintf "git invoked: %s\\n" "$*" >> "$GIT_LOG"\nexit 97\n');
-  for (const name of ["docker", "curl", "jq", "git"]) chmodSync(join(bin, name), 0o755);
+  writeFileSync(join(bin, "timeout"), '#!/bin/sh\n[ "$1" = "-k" ] || exit 64\nshift 3\n[ "$1" = "docker" ] || exit 64\nshift\nexec "$(dirname "$0")/docker" "$@"\n');
+  for (const name of ["docker", "curl", "jq", "git", "timeout"]) chmodSync(join(bin, name), 0o755);
   return bin;
 }
 
@@ -191,6 +198,7 @@ function runCandidate(fixture: Fixture, options: {
     `export PROMOTE_SOURCE=${quote(bashPath(fixture.source))}`,
     `export PROMOTE_INSTALL_ROOT=${quote(bashPath(fixture.source))}`,
     `export PROMOTE_TARGET_SHA=${TARGET_SHA}`,
+    `export DPF_TEST_REASSESSMENT_REPORT=${quote(reassessmentCapabilityFixture(TARGET_SHA))}`,
     `export PROMOTE_BACKUP_PATH=${quote(bashPath(fixture.backup))}`,
     `export DPF_PROMOTER_STATE_DIR=${quote(bashPath(stateDir))}`,
     `export DPF_RUNTIME_TRANSITION_SECRET_FILE=${quote(bashPath(join(stateDir, "runtime-transition.secret")))}`,

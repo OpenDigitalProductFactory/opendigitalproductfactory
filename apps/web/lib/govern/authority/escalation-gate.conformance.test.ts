@@ -28,10 +28,65 @@ import { describe, expect, it } from "vitest";
 import {
   DAMAGING_SENSITIVITIES,
   describeEscalationRule,
+  describeDecisionEscalationRule,
   ESCALATION_STEERING,
   resolveEscalation,
+  resolveDecisionEscalation,
+  DECISION_BASES,
+  DAMAGING_CONSEQUENCES,
   type EscalationInput,
 } from "./escalation-gate";
+
+describe("decision routing conformance (BI-74B2A8CD)", () => {
+  it("walks all 384 shapes: a person if and only if damage is declared", () => {
+    let checked = 0;
+    for (const basis of ["decided", "corpus-gap", "vector-gap", "capability-gap", "policy-limit", "evaluation-fault"] as const) {
+      for (const riskTier of ["low", "medium", "high", "critical"] as const) {
+        for (const consequence of [null, "outward", "irreversible", "authority"] as const) {
+          for (const thresholdExceeded of [false, true]) {
+            for (const regulated of [false, true]) {
+              const damage = riskTier === "critical" || consequence !== null || thresholdExceeded || regulated;
+              const result = resolveDecisionEscalation({ basis, riskTier, declarations: { consequence, thresholdExceeded, regulated } });
+              expect(result.damaging).toBe(damage);
+              expect(result.route === "human").toBe(damage);
+              if (!damage) {
+                expect(result.route).toBe(basis === "decided" ? "decided" : "independent-review");
+                expect(result.followOn).toBe(basis === "decided" ? null : basis);
+              }
+              checked += 1;
+            }
+          }
+        }
+      }
+    }
+    expect(checked).toBe(384);
+  });
+
+  it("keeps the closed six bases and shared damaging vocabulary", () => {
+    expect(DECISION_BASES).toEqual(["decided", "corpus-gap", "vector-gap", "capability-gap", "policy-limit", "evaluation-fault"]);
+    expect(DAMAGING_CONSEQUENCES).toEqual(["outward", "irreversible", "authority"]);
+  });
+
+  it.each([
+    ["critical", "authority", true, true, "damaging-critical-risk"],
+    ["high", "authority", true, true, "damaging-consequence"],
+    ["high", null, true, true, "damaging-threshold"],
+    ["high", null, false, true, "damaging-regulated"],
+  ] as const)("damage wins over a decided corpus with an attributable reason (%s/%s)", (riskTier, consequence, thresholdExceeded, regulated, reasonCode) => {
+    expect(resolveDecisionEscalation({ basis: "decided", riskTier, declarations: { consequence, thresholdExceeded, regulated } }))
+      .toMatchObject({ route: "human", damaging: true, reasonCode });
+  });
+
+  it("with no declarations, only removes the legacy human escalations", () => {
+    for (const basis of ["decided", "corpus-gap", "vector-gap", "capability-gap", "policy-limit", "evaluation-fault"] as const) {
+      for (const riskTier of ["low", "medium", "high", "critical"] as const) {
+        const legacyUnresolved = basis !== "decided" || riskTier === "critical";
+        const result = resolveDecisionEscalation({ basis, riskTier, declarations: {} });
+        if (result.route === "human") expect(legacyUnresolved).toBe(true);
+      }
+    }
+  });
+});
 
 // `new URL(...).pathname` returns "/D:/..." on Windows and breaks readFileSync.
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -41,6 +96,41 @@ const PRINCIPLE_PATH = join(
   "docs/founder-kernel/wiki/principles/escalation-is-a-gate-not-a-trust-tier.md",
 );
 const EVALUATOR_PATH = join(HERE, "coworker-authority-decision.ts");
+
+// These surfaces select or accept a HUMAN answer. Raw outcomes remain valid
+// elsewhere for uncertainty/craft demand (craft-consult-demand,
+// acumen-gap-nomination), historical policy evidence (policy-authority-projector),
+// and cleanup of old unresolved rows (retract-superseded, escalation-hygiene).
+// Those readers do not infer new owner permission and are intentionally outside
+// this guard. Canvas uncertainty labels likewise retain their raw outcome;
+// its owner action is covered by the canvas behavior tests.
+const HUMAN_REVIEW_READERS = [
+  "lib/decision-perspective/owner-ruling-queue.ts",
+  "lib/attention/sources/ai-decision.ts",
+  "lib/decision/concierge-sweep-runner.ts",
+  "lib/decision/triage-conductor.ts",
+  "lib/mcp/packs/founder-review-pack.ts",
+  "lib/tak/decision-governance-route-context.ts",
+  "lib/wiki/decision-audit.ts",
+  "lib/wiki/decision-help.ts",
+  "lib/actions/decision-perspective.ts",
+  "lib/actions/org-decision-capture.ts",
+  "app/(shell)/platform/ai/founder-review/page.tsx",
+  "app/(shell)/coworker-decisions/page.tsx",
+  "app/(shell)/coworker-decisions/decisions/page.tsx",
+  "app/(shell)/coworker-decisions/review/page.tsx",
+  "app/(shell)/coworker-decisions/review/actions.ts",
+  "components/build/DecisionPerspectiveGatePanel.tsx",
+];
+
+describe("human review has one route predicate", () => {
+  it.each(HUMAN_REVIEW_READERS)("keeps legacy outcome filters out of %s", (path) => {
+    const source = readFileSync(join(REPO_ROOT, "apps/web", path), "utf8");
+    expect(source).toMatch(/humanEscalationWhere|isHumanEscalation|humanCaptureOutcome/);
+    expect(source).not.toMatch(/outcomeType:\s*\{\s*in:\s*(?:\[[^\]]*["'](?:defer|escalate)["']|(?:UNRESOLVED|WIKI_UNRESOLVED))/);
+    expect(source).not.toMatch(/(?:row|subject|interaction)\.outcomeType\s*!==\s*["']escalate["']\s*&&\s*(?:row|subject|interaction)\.outcomeType\s*!==\s*["']defer["']/);
+  });
+});
 
 const CONSEQUENCES = [null, "outward", "irreversible", "authority"] as const;
 const SENSITIVITIES = ["public", "internal", "confidential", "restricted"] as const;
@@ -209,6 +299,11 @@ describe("escalation gate conformance — wiring", () => {
 });
 
 describe("escalation gate conformance — the principle follows the process", () => {
+  it("states every decision-routing rule without the retired guard name", () => {
+    const principle = readFileSync(PRINCIPLE_PATH, "utf8");
+    expect(describeDecisionEscalationRule().filter((rule) => !principle.includes(rule))).toEqual([]);
+    expect(principle).not.toContain("check-escalation-gate.ts");
+  });
   it("states every rule the gate enforces, verbatim", () => {
     const principle = readFileSync(PRINCIPLE_PATH, "utf8");
     const missing = describeEscalationRule().filter((rule) => !principle.includes(rule));

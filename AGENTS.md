@@ -1,6 +1,6 @@
 # DPF — Agent Rulebook
 
-This is the canonical operating contract for DPF agents. Read this core, then only the task references that apply. Nested generated instructions may add framework constraints; they do not replace this contract. ⟦model: task routing and disclosure are measured, not assumed — BI-3CC35D24⟧
+Canonical operating contract for DPF agents. Read this core and applicable references. Nested instructions add framework constraints; this contract governs. Verify routing and disclosure.
 
 Tool-specific files (`CLAUDE.md`, `.cursor/rules/`, `.clinerules/`, `.github/copilot-instructions.md`, `CONVENTIONS.md`, `.continue/rules/`) are pointers to this file. Do not duplicate rules into them.
 
@@ -47,7 +47,7 @@ Before changing this surface, read [orientation](docs/architecture/orientation.m
 
 All changes land through a DCO-signed PR against `main`; never push directly to `main`. One thread = one branch + one worktree in the dedicated sibling base. Keep the root clone read-only for feature work. Refresh `origin/main`; never use bare rebase on a shallow clone. Commit from a named topic branch and push it. Open a PR only when ready, never draft; merge through the queue and verify with `pnpm pr:health`.
 
-Procedure and domain rules: [branch and worktree runbook](docs/architecture/branch-and-worktree-runbook.md). Read before this phase.
+Procedure: [branch and worktree runbook](docs/architecture/branch-and-worktree-runbook.md). Read before this phase.
 
 ---
 
@@ -55,7 +55,7 @@ Procedure and domain rules: [branch and worktree runbook](docs/architecture/bran
 
 Run affected unit tests and package typecheck locally; heavy build runs in cloud/shared governed runtime, never a hand-built live image. Exercise UI/agent/workflow changes against the served target; apply added migrations. Docs need lint only. Reuse valid evidence. Infrastructure failure is inconclusive/unrun, never a product failure or pass. Update affected docs in the same branch. Recovery uses the task route above.
 
-Procedure and domain rules: [build gate runbook](docs/architecture/build-gate-runbook.md). Read before this phase.
+Procedure: [build gate runbook](docs/architecture/build-gate-runbook.md). Read before this phase.
 
 ---
 
@@ -63,7 +63,7 @@ Procedure and domain rules: [build gate runbook](docs/architecture/build-gate-ru
 
 Normal work enters the live PostgreSQL backlog and has a plan before implementation. Use MCP first; state any authorized direct-DB fallback. Reuse an existing spec and give plans live backlog coverage. Declare the delivery shape when claiming a workroom. Record canonical evidence and update completed status promptly.
 
-Procedure and domain rules: [backlog and planning runbook](docs/architecture/backlog-and-planning-runbook.md). Read before this phase.
+Procedure: [backlog and planning runbook](docs/architecture/backlog-and-planning-runbook.md). Read before this phase.
 
 ---
 
@@ -71,7 +71,7 @@ Procedure and domain rules: [backlog and planning runbook](docs/architecture/bac
 
 Discover before fallback: Codex/Claude use a full catalog with host-side lazy attachment; other clients default to core. Use `load_tools` by name/query, then refresh or use the programmatic catalog. Discovery cannot grant access. External agents use `/api/mcp/v1`; keep credentials local and uncommitted. Effective authority intersects token scope, coworker grants and user capabilities. A permission refusal stops the denied operation.
 
-Procedure and domain rules: [mcp tool authorization runbook](docs/architecture/mcp-tool-authorization-runbook.md). Read before this phase.
+Procedure: [mcp tool authorization runbook](docs/architecture/mcp-tool-authorization-runbook.md). Read before this phase.
 
 ---
 
@@ -97,7 +97,7 @@ Before changing this surface, read [theme aware styling runbook](docs/architectu
 
 Report results faithfully; name failed, skipped and unrun checks. Never claim incomplete work is done. Before stopping, state why, what remains and who must do what to resume; ask any required question after consulting WWMD/WWWD/WSID. Continue authorized work while waiting. Run commands for the user; keep coordination backstage.
 
-Procedure and domain rules: [contributor procedure runbook](docs/architecture/contributor-procedure-runbook.md). Read before this phase.
+Procedure: [contributor procedure runbook](docs/architecture/contributor-procedure-runbook.md). Read before this phase.
 
 ---
 
@@ -107,16 +107,16 @@ Read the [skill index](docs/architecture/agent-skill-index.md) only to find an a
 
 - **Kernel principles (Surface C) are the durable doctrine store.** `wiki_query` for lookup, `principle_decide` for decisions.
 
-Reuse settled WWMD platform direction; WWWD business and WSID profession decisions stay in their owning scope. `principle_decide` scores magnitudes, not goodness: on the five **cost** axes (`blast_radius`, `human_cognitive_load`, `vendor_lock_in`, `business_disruption`, `operator_effort`) **higher is worse**.
+Use WWMD for platform, WWWD for business and WSID for craft; [funding is owner-scoped](docs/user-guide/investment-allocation.md). `principle_decide` scores magnitude: on the five **cost** axes (`blast_radius`, `human_cognitive_load`, `vendor_lock_in`, `business_disruption`, `operator_effort`) **higher is worse**.
 
-Procedure and domain rules: [skill surfaces runbook](docs/architecture/skill-surfaces-runbook.md). Read before this phase.
+Procedure: [skill surfaces runbook](docs/architecture/skill-surfaces-runbook.md). Read before this phase.
 
 ---
 
 ## 12. Delivery Surfaces & Execution Alignment
 
-Claude, Codex, Grok and Build Studio are peer execution surfaces; none is mandatory. Normal work claims a Workroom through MCP and follows one gated process. Reuse authorization and evidence across phases; no new consent solely for a phase change. Shared singleton runtimes require the canonical lease. Live advances: `request_self_upgrade`; image identity must match its bytes. Recovery follows the independent task route above, without weakening production integrity.
+Claude, Codex, Grok and Build Studio are peer execution surfaces; none is mandatory. Normal work claims a Workroom through MCP and follows one gated process. Reuse authorization and evidence across phases; no new consent solely for a phase change. Routine independent review uses the task's existing DEV scope, budget, grants and consent; this adds no provider, spend or cross-chat authority. Shared singleton runtimes require the canonical lease. Live advances: `request_self_upgrade`; image identity must match its bytes. Recovery follows the independent task route above, without weakening production integrity.
 
-Procedure and domain rules: [delivery surfaces runbook](docs/architecture/delivery-surfaces-runbook.md). Read before this phase.
+Procedure: [delivery surfaces runbook](docs/architecture/delivery-surfaces-runbook.md). Read before this phase.
 
 ---

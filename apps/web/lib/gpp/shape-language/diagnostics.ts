@@ -96,8 +96,7 @@ export type GppSchemaCode = (typeof GPP_SCHEMA_CODES)[number];
 /**
  * C-7 Mode honesty refinements (spec §7.2): an enforced binding with no entry
  * in GPP_BINDING_ENFORCEMENT; an enforced doctrine gate that names no
- * resolver; and the build-sandbox containment clause, which is always
- * `not-evaluated` until Build Studio is modelled (Phase 5). Closed.
+ * resolver; and the declared-flow sandbox containment clause. Closed.
  */
 export const GPP_C7_CODES = ["C-7/ENFORCEMENT-ENTRY", "C-7/RESOLVER", "C-7/SANDBOX-CONTAINMENT"] as const;
 export type GppC7Code = (typeof GPP_C7_CODES)[number];
@@ -130,6 +129,9 @@ export type GppDiagnostic = {
   /** RFC 6901 JSON Pointer into the document; "" is the whole document. */
   path: string;
   message: string;
+  /** Exact triggering O/A/I tool set for shrink-only declared-flow findings. */
+  tools?: readonly string[];
+  knownFinding?: { reason: string; backlogItemId: `BI-${string}` };
 };
 
 /** Escape one reference token per RFC 6901 §3 ("~" → "~0", "/" → "~1"). */
@@ -167,5 +169,5 @@ export function sortDiagnostics(diagnostics: readonly GppDiagnostic[]): GppDiagn
 
 /** True when any finding stops emission (spec §7.2: errors stop emission). */
 export function hasBlockingDiagnostic(diagnostics: readonly GppDiagnostic[]): boolean {
-  return diagnostics.some((diagnostic) => diagnostic.severity === "error");
+  return diagnostics.some((diagnostic) => diagnostic.severity === "error" && !diagnostic.knownFinding);
 }

@@ -9,6 +9,7 @@ export const ACCOUNT_ACCESS_RESET = {
   accessibleModelIds: [] as string[], modelsVerifiedAt: null,
   accountClass: "unknown", evidenceStatus: "unreviewed", lastReviewedAt: null,
   supplierContractId: null, contractEvidence: {}, entitlements: {},
+  capacityStatusId: null, quotaStatusId: null,
 };
 
 /** Credential replacement can select a different upstream account. Preserve evidence history, but require fresh proof. */
@@ -62,7 +63,9 @@ export async function addProviderAccount(input: {
       connectionId, providerId: input.providerId, label,
       organizationId: defaultConnection?.organizationId ?? null,
       credentialEntryId: credential.id,
-      executionChannel: input.authMethod === "oauth2_authorization_code" ? "subscription-cli" : defaultConnection?.executionChannel === "subscription-cli" ? "direct-api" : defaultConnection?.executionChannel ?? "direct-api",
+      executionChannel: input.providerId === "codex" ? "subscription-cli"
+        : input.authMethod === "api_key" && defaultConnection?.executionChannel === "subscription-cli" ? "direct-api"
+          : defaultConnection?.executionChannel ?? "direct-api",
       authMethod: input.authMethod === "api_key" ? "api-key" : input.authMethod === "oauth2_authorization_code" ? "oauth" : "workload-identity",
       status: "unconfigured", accountClass: "unknown", evidenceStatus: "unreviewed",
     } });
@@ -129,6 +132,13 @@ export async function setProviderAccountEnabled(connectionId: string, enabled: b
     });
     return ok();
   }
-  await prisma.aiProviderConnection.update({ where: { connectionId }, data: { status: enabled ? connection.credentialEntry?.status === "ok" ? "active" : "unconfigured" : "disabled" } });
+  await prisma.$transaction(async tx => {
+    await tx.aiProviderConnection.update({ where: { connectionId }, data: { status: enabled ? connection.credentialEntry?.status === "ok" ? "active" : "unconfigured" : "disabled" } });
+    if (enabled && connection.credentialEntry?.status === "ok" && connectionId !== `provider-default-${connection.providerId}`) {
+      // Cold setup may advertise its first configured account. An operator's
+      // inactive/disabled provider remains an independent routing veto.
+      await tx.modelProvider.updateMany({ where: { providerId: connection.providerId, status: "unconfigured" }, data: { status: "active" } });
+    }
+  });
   return ok();
 }

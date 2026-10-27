@@ -261,7 +261,9 @@ test("Windows: explicit process endpoint survives an HTTPS install origin withou
 });
 
 function powershell(script) {
-  const result = spawnSync(shell, ["-NoProfile", "-NonInteractive", "-Command", script], { encoding: "utf8" });
+  const result = spawnSync(shell, ["-NoProfile", "-NonInteractive", "-Command", script], {
+    encoding: "utf8", env: { ...process.env, DPF_MCP_URL: "", DPF_MCP_CA_FILE: "", DPF_PKI_TRUST_BUNDLE: "", NODE_EXTRA_CA_CERTS: "" },
+  });
   assert.equal(result.status, 0, `${result.stderr}${result.stdout}`);
   return result.stdout.trim();
 }

@@ -91,6 +91,7 @@ function remoteTaskRequestPacket(parsed: RemoteTaskSubmitParams, version: 1 | 2)
       ? { initiativeReviewBinding: parsed.initiativeReviewBinding }
       : {}),
     ...(parsed.recipeId ? { recipeId: parsed.recipeId } : {}),
+      ...(parsed.engagementBinding ? { engagementBinding: parsed.engagementBinding } : {}),
   };
   return packet;
 }

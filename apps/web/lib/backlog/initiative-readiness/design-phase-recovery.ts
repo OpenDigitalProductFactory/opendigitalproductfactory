@@ -7,7 +7,8 @@ import type {
 } from "@/lib/tak/initiative-readiness-tool-grants";
 
 import type { TerminalRecoveryPorts } from "./terminal-recovery";
-import type { InitiativeReadinessDecision } from "./types";
+import type { InitiativeReadinessDecision, ReadinessRequirementResult } from "./types";
+import { owesPlanCoverage } from "./plan-baseline-prerequisite";
 
 /**
  * BI-817556D8: the independent design reviews (design-spec, spec-approval,
@@ -88,6 +89,7 @@ export function isArchetypePhaseReview(decision: InitiativeReadinessDecision): b
 export function decisionForIndependentReview(
   writerToolName: string,
   decisions: Partial<Record<"plan" | "implementation" | "completion", InitiativeReadinessDecision>>,
+  planBaselinePrerequisite?: ReadinessRequirementResult | null,
 ): InitiativeReadinessDecision | null {
   if (writerToolName === "record_initiative_design_review"
     || writerToolName === "record_initiative_architecture_review") {
@@ -95,16 +97,45 @@ export function decisionForIndependentReview(
     if (!decision) return null;
     const owed = designPhaseReviewDecision(decision);
     if (owed) return owed;
+    // BI-C56AE9A2: a decomposed parent cannot implement, but can still owe
+    // review of its covered plan at completion. Match that issuer's lane only;
+    // never revive unrelated design gates or change implementation admission.
+    const terminal = decisions.completion;
+    const isOwedPlanReview = (entry: InitiativeReadinessDecision["unmet"][number]) =>
+      entry.code === "PLAN_REVIEW_REQUIRED" && entry.accountableRole === "plan-reviewer"
+      && (entry.state === "missing" || entry.state === "fail");
+    if (writerToolName === "record_initiative_design_review" && terminal && terminal.verdict !== "allowed") {
+      const blockers = terminal.blockers.filter(isOwedPlanReview);
+      const unmet = terminal.unmet.filter(isOwedPlanReview);
+      if (blockers.length || unmet.length) return { ...terminal, blockers, unmet };
+      // BI-7531B73C: retained plan coverage can still pass while the current
+      // design owes amendment approval. Match the completion issuer's stale
+      // scope obligation without requiring missing coverage or reviving a
+      // missing/product-owned baseline as an amendment.
+      const isOwedAmendment = (entry: InitiativeReadinessDecision["unmet"][number]) =>
+        entry.code === "OBJECTIVE_BASELINE_REQUIRED" && entry.state === "stale"
+        && entry.accountableRole === "design-checklist-reviewer";
+      const amendmentBlockers = terminal.blockers.filter(isOwedAmendment);
+      const amendmentUnmet = terminal.unmet.filter(isOwedAmendment);
+      if (amendmentBlockers.length || amendmentUnmet.length) {
+        return { ...terminal, blockers: amendmentBlockers, unmet: amendmentUnmet };
+      }
+    }
     // BI-EE99767C: the claim issuer sequences spec approval before plan coverage
     // when coverage needs a baseline. A fix carries only PLAN_REQUIRED here;
     // completion names its baseline owner. Route that prerequisite, not every
     // completion review, and never revive it once coverage is no longer owed.
-    const needsCoverage = [...decision.blockers, ...decision.unmet].some((entry) =>
-      entry.code === "PLAN_REQUIRED" && entry.state === "missing");
+    const needsCoverage = owesPlanCoverage(decision);
     if (writerToolName !== "record_initiative_design_review" || !needsCoverage) return null;
     const isMissingReviewBaseline = (entry: InitiativeReadinessDecision["unmet"][number]) =>
       entry.code === "OBJECTIVE_BASELINE_REQUIRED" && entry.state === "missing"
       && entry.accountableRole === "design-checklist-reviewer";
+    // An explicit null is authoritative; only older callers without the field
+    // may use the legacy completion projection as their prerequisite source.
+    if (planBaselinePrerequisite !== undefined) {
+      return planBaselinePrerequisite && isMissingReviewBaseline(planBaselinePrerequisite)
+        ? { ...decision, blockers: [], unmet: [planBaselinePrerequisite] } : null;
+    }
     const blockers = decisions.completion?.blockers.filter(isMissingReviewBaseline) ?? [];
     const unmet = decisions.completion?.unmet.filter(isMissingReviewBaseline) ?? [];
     return blockers.length || unmet.length ? { ...decision, blockers, unmet } : null;
@@ -130,13 +161,17 @@ export async function routeDesignReviewsBeforeBaseline(args: {
   currentAgentId: string | null;
   baseSha: string;
   dispatchContext: InitiativeRecoveryDispatchContext;
-  ports: Pick<TerminalRecoveryPorts, "discoverArtifact" | "resolveRecovery" | "loadPlanArtifact">;
+  ports: Pick<TerminalRecoveryPorts, "discoverArtifact" | "resolveRecovery" | "loadPlanArtifact" | "loadBacklogBody">;
 }): Promise<InitiativeReviewerRecovery> {
   const { dispatchContext: room, ports } = args;
+  // Match the claim issuer's live declaration. An unchanged branch need not
+  // edit its already-canonical design just to survive exact packet validation.
+  const backlogBody = await ports.loadBacklogBody?.(args.designPhase.subject.id);
   const discovered = await ports.discoverArtifact({
     repositoryFullName: room.repositoryFullName,
     baseSha: args.baseSha,
     headSha: room.headSha,
+    ...(backlogBody ? { backlogBody } : {}),
   });
   return ports.resolveRecovery({
     decision: args.designPhase,

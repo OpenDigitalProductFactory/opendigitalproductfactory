@@ -47,6 +47,32 @@ This proves the user-visible delay is not a single slow model call. It is a chai
 
 ### 1.2 Current Repo Truth
 
+Account-aware routing adds an explicit credential owner to eligible candidates
+and attempts. Authentication, billing and model-access failures stay with that
+account; provider-wide failures and quota of uncertain ownership remain shared.
+Current health is a revision-fenced mutable projection, while usage and outcome
+`recordedProviderConnectionRef` values are immutable attribution snapshots that
+outlive account deletion. Native execution with uncertain side effects stops
+fallback and redispatch. The [capacity refactor plan](../superpowers/plans/2026-10-14-provider-account-capacity-refactor.md)
+records source qualification and served acceptance separately.
+
+The R2 source for [restricted present reassessment](../superpowers/specs/2026-10-16-original-initiative-review-settlement-design.md)
+adds a stricter execution mode. It binds one qualified in-process HTTP
+composition under normal routing, sensitivity and account constraints. A changed
+account, configuration, tool surface or required bound refuses further execution;
+it cannot select another provider, native adapter or textual tool fallback.
+Credential reads cannot renew credentials or mutate the account. Ordinary
+fallback behavior below is unchanged.
+
+Each actual HTTP request, including an adapter retry, requires a captured
+reservation and consumes the immutable start and time limits. Each tool effect
+uses the same pre-effect capture boundary. Failed observation after a start
+retains uncertain consumption and holds subsequent effects, while a genuine
+committed writer receipt takes precedence. These source controls neither settle
+historical effects nor prove served acceptance. Finite total-token execution
+still requires a qualified input-bound producer; the normal 50,000-token
+positive case remains incomplete.
+
 The material repo anchors are:
 
 - `apps/web/lib/routing/fallback.ts`

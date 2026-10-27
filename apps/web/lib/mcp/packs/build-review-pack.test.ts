@@ -274,6 +274,94 @@ describe("saveBuildEvidence", () => {
     expect(typeof result.data?.length).toBe("number");
   });
 
+  it("does not invent typecheckPassed true when the field is omitted or null", async () => {
+    const { executeTool } = await import("@/lib/mcp-tools");
+
+    const omitted = await executeTool(
+      "saveBuildEvidence",
+      {
+        field: "verificationOut",
+        value: { tests: { passed: 1, failed: 0 }, typecheck: "pass" },
+      },
+      "user-1",
+      { threadId: "thread-1", routeContext: "/build" },
+    );
+    expect(omitted.success).toBe(true);
+    expect(mockPrisma.featureBuild.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          verificationOut: { tests: { passed: 1, failed: 0 }, typecheck: "pass" },
+        }),
+      }),
+    );
+
+    mockPrisma.featureBuild.update.mockClear();
+    const nulled = await executeTool(
+      "saveBuildEvidence",
+      {
+        field: "verificationOut",
+        value: { typecheckPassed: null, testsPassed: 1 },
+      },
+      "user-1",
+      { threadId: "thread-1", routeContext: "/build" },
+    );
+    expect(nulled.success).toBe(true);
+    expect(mockPrisma.featureBuild.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          verificationOut: { typecheckPassed: null, testsPassed: 1 },
+        }),
+      }),
+    );
+  });
+
+  it("keeps an explicit typecheckPassed true when nothing contradicts it", async () => {
+    const { executeTool } = await import("@/lib/mcp-tools");
+
+    const result = await executeTool(
+      "saveBuildEvidence",
+      {
+        field: "verificationOut",
+        value: { typecheckPassed: true, testsFailed: 0 },
+      },
+      "user-1",
+      { threadId: "thread-1", routeContext: "/build" },
+    );
+    expect(result.success).toBe(true);
+    expect(mockPrisma.featureBuild.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          verificationOut: { typecheckPassed: true, testsFailed: 0 },
+        }),
+      }),
+    );
+  });
+
+  it("persists typecheckPassed false when typecheck is not_run (FB-041879CD)", async () => {
+    const { executeTool } = await import("@/lib/mcp-tools");
+    const value = {
+      typecheckPassed: true,
+      typecheck: "not_run",
+      tests: { failed: 0, passed: 0, note: "Sandbox command execution blocked" },
+      errors: ["Sandbox tools returned 'No active build'"],
+    };
+
+    const result = await executeTool(
+      "saveBuildEvidence",
+      { field: "verificationOut", value },
+      "user-1",
+      { threadId: "thread-1", routeContext: "/build" },
+    );
+    expect(result.success).toBe(true);
+    expect(mockPrisma.featureBuild.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          verificationOut: { ...value, typecheckPassed: false },
+        }),
+      }),
+    );
+  });
+
   it("accepts taskResults summary writes that omit the tasks array", async () => {
     const { executeTool } = await import("@/lib/mcp-tools");
 
