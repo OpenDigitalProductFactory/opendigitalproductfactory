@@ -51,8 +51,7 @@ the operator PROD install is the authority for its estate. The Windows install b
 
 Related live items to reconcile, not duplicate:
 - `BI-2641F34A`, claim integrity;
-- `BI-636A11B3`, auto-claim;
-- `BI-6B02FEE5`, lease-guard parity;
+- the auto-claim and lease-guard parity items cited by the 2026-06-20 design, which are not present in the live backlog;
 - `BI-4CA4FCE5`, room primitives (delivered);
 - `BI-3F21C4D5`, local room mechanics;
 - `BI-7245485A`, federated MCP identity challenge;
