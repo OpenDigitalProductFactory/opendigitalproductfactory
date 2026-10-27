@@ -6749,7 +6749,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 27
+    "textMass": 43
   },
   "apps/web/components/ops/BuildStamps.tsx": {
     "vocabulary": 0,

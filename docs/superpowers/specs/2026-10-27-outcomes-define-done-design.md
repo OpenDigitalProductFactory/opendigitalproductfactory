@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Outcomes define done: delivery closes an item by default
 
 **Backlog item:** BI-B1B44777 (medium). **Authority:** founder direction, 2026-10-27. **Kernel decision:** DI-1263D968DC26.

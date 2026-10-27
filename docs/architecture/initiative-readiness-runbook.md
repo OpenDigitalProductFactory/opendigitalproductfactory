@@ -22,6 +22,26 @@ an action, and generic test success supplies neither a Responses verification
 receipt nor a selected-quota transaction receipt. It cannot settle an uncertain
 initiative review or substitute for the gate's independent writer.
 
+### Delivery closes non-contractual work (BI-B1B44777)
+
+Founder direction, 2026-10-27: outcomes define done. A merge through CI and the
+merge queue closes every item that is not an aggregate (xlarge) and is not
+tagged `contractual`. The tag lives in `BacklogItem.lifecycleTags` (kernel
+decision DI-1263D968DC26). For these items the merge satisfies delivery,
+acceptance and objective reconciliation, and design, plan and specialist-review
+lanes are not owed after the change has landed.
+
+These still block:
+
+- a recorded failed review;
+- the newest `ux` or `manual` evidence being a failure;
+- a conflicting or malformed objective reconciliation.
+
+The predicate is `deliveryClosesItem` in `backlog-completion-evaluation.ts`.
+The acceptance sweep reads the same evaluation, so it closes these items under
+its recorded pre-authorisation. The independent-acceptance lanes below apply
+to contractual items. A regression found in use becomes a new item.
+
 ### Medium body criteria and independent acceptance
 
 Effective medium work, including product-linked work, can satisfy its objective
