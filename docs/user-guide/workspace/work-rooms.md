@@ -239,7 +239,7 @@ Each area's **Work** view opens with the same five measures, so the four portfol
 | **Finished per week** | Runs that reached a success stop. |
 | **Cost** | Points in flight, points delivered this quarter, and the AI used by this area's rooms over the last four weeks. AI use is counted only from conversations and dispatched work that name a room, so it is never guessed. Recorded dollars are shown when a provider records a cost. Work on a subscription records no per-call cost, so it shows as subscription tokens (for example *subscription: $0 recorded, 832.3k tokens*) and never as a bare $0. |
 
-**Flow time**, **flow efficiency** and **finished per week** each have a small trend line for the last eight weeks, and their change against the four weeks before. A dashed mark on a trend line shows the week a new version of a work shape started running in this area, so you can read a change in the line against the change that may have caused it. **In flow now** shows today's count only, with no trend yet: a room that ends without a recorded stop does not yet close its history, so a past count would overstate it.
+All four measures, **in flow now**, **flow time**, **flow efficiency** and **finished per week**, have a small trend line for the last eight weeks and their change against the four weeks before. A dashed mark on a trend line shows the week a new version of a work shape started running in this area, so you can read a change in the line against the change that may have caused it. A week's **in flow** count follows the same rule as today's: a room that has ended is out of flow from when it ended, and a room parked with nothing to do (its work item inactive, or a quiet posture) is out of flow while it is parked.
 
 Below the measures:
 

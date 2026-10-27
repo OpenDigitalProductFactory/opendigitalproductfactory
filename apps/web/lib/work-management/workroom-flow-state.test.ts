@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { everyDriveOutcome } from "./drive-conclusion";
 import {
+  IDLE_HOLD_LANES,
   WORKROOM_FLOW_STATES,
   classifyDriveSegment,
   countsTowardFlowTime,
@@ -76,5 +77,14 @@ describe("standing rooms between cycles are not waiting work (spec §5.3)", () =
 
   it("counts working, waiting on a person and blocked; not done", () => {
     expect(WORKROOM_FLOW_STATES.filter(countsTowardFlowTime)).toEqual(["working", "awaiting-person", "blocked"]);
+  });
+});
+
+describe("IDLE_HOLD_LANES", () => {
+  it("names every reason that leaves a room with no demand, and no reason that is waiting work", () => {
+    expect([...IDLE_HOLD_LANES].sort()).toEqual(["cycle_complete", "empty_read", "idle", "quiet", "work_item_inactive"]);
+    for (const { action, reason } of everyDriveOutcome()) {
+      if (IDLE_HOLD_LANES.has(reason)) expect(classifyDriveSegment({ action, reason })?.state).toBe("awaiting-trigger");
+    }
   });
 });
