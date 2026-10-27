@@ -1,7 +1,7 @@
 ---
 title: Provider Capacity Recovery
 date: 2026-06-29
-status: Draft
+status: draft
 owner: Platform AI
 related:
   - docs/superpowers/specs/2026-05-19-ai-cost-governance.md
