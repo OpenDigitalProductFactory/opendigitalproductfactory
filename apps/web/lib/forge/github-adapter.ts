@@ -3,6 +3,8 @@ import type {
   CloseIssueInput,
   CloseIssueOutcome,
   CloseIssueResult,
+  CommentOnIssueInput,
+  CommentOnIssueResult,
   CreateIssueInput,
   ForgeCapabilities,
   ForgeFailure,
@@ -16,6 +18,8 @@ export type {
   CloseIssueOutcome,
   CloseIssueReason,
   CloseIssueResult,
+  CommentOnIssueInput,
+  CommentOnIssueResult,
   CreateIssueInput,
   EgressClass,
   ForgeCapabilities,
@@ -286,6 +290,39 @@ export class GitHubForgeAdapter {
       number: data.number,
       url: data.html_url,
     });
+  }
+
+  /**
+   * Posts one comment on an existing issue, and nothing else: no state change.
+   * Not idempotent on its own; the caller keys it (the acceptance sweep records
+   * a submitter_confirmation activity and never asks twice).
+   */
+  async commentOnIssue(input: CommentOnIssueInput): Promise<CommentOnIssueResult> {
+    const pathOwner = encodeURIComponent(input.repository.owner);
+    const pathRepo = encodeURIComponent(input.repository.repo);
+    const url = `https://${GITHUB_API_HOST}/repos/${pathOwner}/${pathRepo}/issues/${input.number}/comments`;
+    assertSafeOutboundUrl(url, { allowedHosts: [GITHUB_API_HOST] });
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: "POST",
+        headers: { ...githubHeaders(this.config.token), "Content-Type": "application/json" },
+        body: JSON.stringify({ body: input.body }),
+      });
+    } catch (err) {
+      return classifyGitHubFailure(err);
+    }
+    let data: { id?: unknown; html_url?: unknown };
+    try {
+      data = (await response.json()) as { id?: unknown; html_url?: unknown };
+    } catch {
+      return classifyGitHubFailure(response, { message: "GitHub returned an unparseable comment response" });
+    }
+    if (!response.ok) return classifyGitHubFailure(response, data);
+    if ((typeof data.id !== "number" && typeof data.id !== "string") || typeof data.html_url !== "string") {
+      return invalidResponse(response.status, "GitHub comment response missing id/html_url");
+    }
+    return { ok: true, adapter: "github", issueNumber: input.number, commentId: String(data.id), url: data.html_url };
   }
 
   /**

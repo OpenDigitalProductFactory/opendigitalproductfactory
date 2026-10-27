@@ -1,8 +1,8 @@
 # Backlog & planning runbook
 
 **Closure follows delivery (operator direction 2026-10-27, BI-C899BB40).**
-Delivery evidence closes every shape: a merge through the gates, a canonical
-deployment, or a passing completion manifest. At completion,
+Delivery evidence closes every shape: a merge through the gates or a
+canonical deployment. At completion,
 `ACCEPTANCE_EVIDENCE_REQUIRED`, `OBJECTIVE_BASELINE_REQUIRED` and
 `OBJECTIVE_RECONCILIATION_REQUIRED` are not applicable once delivery passes.
 Only a current failure blocks the close. The terminal transition records

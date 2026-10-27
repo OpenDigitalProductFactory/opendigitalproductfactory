@@ -323,8 +323,9 @@ could discharge.
 ### 9.2 The rule
 
 1. **Delivery evidence closes every shape.** A merge through CI, the merge
-   queue and PR review (a SHA reachable from `origin/main`), a canonical
-   deployment, or a passing completion manifest is delivery. When delivery
+   queue and PR review (a SHA reachable from `origin/main`) or a canonical
+   deployment is delivery. A hand-built completion manifest keeps its own
+   lanes (operational, documentation, small-shape acceptance). When delivery
    passes, `ACCEPTANCE_EVIDENCE_REQUIRED`, `OBJECTIVE_BASELINE_REQUIRED` and
    `OBJECTIVE_RECONCILIATION_REQUIRED` are `not-applicable` at completion
    (`projectDeliveryClosure`, `deployment-closure.ts`). This holds for small,

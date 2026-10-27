@@ -24,6 +24,7 @@ import {
 import { type BoundWorkShapeDb, readBoundEditPaths, readBoundWorkShapeRef } from "./bound-work-shape";
 import { assessDeliverySensitivity } from "./delivery-sensitivity";
 import {
+  projectDeliveryClosure,
   projectDeploymentClosure,
   resolveBacklogDeploymentClosure,
   type DeploymentClosureProof,
@@ -70,6 +71,7 @@ export type BacklogCompletionItem = {
   digitalProductId: string | null;
   activeBuild: { kind: string; verificationOut: unknown; uxVerificationStatus: string | null } | null;
   productObjectiveWork?: { id: string }[];
+  lifecycleTags?: string[];
 };
 
 /** The item columns the evaluation reads; both callers select exactly these. */
@@ -79,6 +81,7 @@ export const BACKLOG_COMPLETION_ITEM_SELECT = {
   epicId: true, claimedAt: true, createdAt: true, digitalProductId: true,
   activeBuild: { select: { kind: true, verificationOut: true, uxVerificationStatus: true } },
   productObjectiveWork: { select: { id: true }, take: 1 },
+  lifecycleTags: true,
 } as const;
 
 /** The activity kinds the completion evaluation reads. */
@@ -128,6 +131,13 @@ export type BacklogCompletionEvaluation = {
   acceptanceState: string;
   hasDesignSpec: boolean;
   deliveryEvidenceRefs: string[];
+  /**
+   * BI-C899BB40: delivery passed with no recorded failure, so acceptance,
+   * baseline and reconciliation were not applicable at completion.
+   */
+  closureFollowsDelivery: boolean;
+  /** BI-C899BB40: a customer reported this work, so its submitter is asked once. */
+  customerReported: boolean;
 };
 
 /**
@@ -225,6 +235,42 @@ export function isDirectMergePlatformWork(item: {
   const noProduct = item.digitalProductId == null;
   const noObjective = (item.productObjectiveWork?.length ?? 0) === 0;
   return platformScoped && noBuild && noProduct && noObjective;
+}
+
+/**
+ * Origin markers that mean a customer, not the platform, reported the work
+ * (BI-C899BB40). Each is written by an existing intake path:
+ * ecosystem/inbound-issue-triage.ts (upstream issue, peer demand),
+ * federation/demand-exchange.ts (adopted federated demand) and
+ * federation/founder-portfolio.ts (a founder demand cluster).
+ */
+const CUSTOMER_ORIGIN_MARKERS = [
+  "[origin:ecosystem-upstream-issue:",
+  "[origin:ecosystem-peer-demand:",
+  "[origin:federatedDemand:",
+  "[origin:founderDemandCluster:",
+] as const;
+
+/**
+ * Whether a customer reported this item, read from provenance that already
+ * exists; there is no persisted flag. A customer-reported item still closes on
+ * delivery; its submitter is then asked one question (acceptance sweep §9).
+ *
+ * `upstreamIssueNumber` is deliberately not a signal: the issue bridge sets it
+ * when THIS install files its own item upstream, and already comments on that
+ * issue when the item closes.
+ */
+export function isCustomerReported(item: {
+  itemId: string;
+  body?: string | null;
+  lifecycleTags?: readonly string[] | null;
+}): boolean {
+  if (item.lifecycleTags?.includes("ecosystem-inbound")) return true;
+  // A product quality report (actions/quality.ts): the BI-PIR- id and its source line.
+  if (item.itemId.startsWith("BI-PIR-")) return true;
+  const body = item.body ?? "";
+  if (/^Source report: \S+/m.test(body)) return true;
+  return CUSTOMER_ORIGIN_MARKERS.some((marker) => body.includes(marker));
 }
 
 /**
@@ -443,6 +489,19 @@ export async function evaluateBacklogItemCompletion(args: {
     };
   }
   const projected = project(projectionInput);
+  // BI-C899BB40 (operator direction 2026-10-27): delivery evidence closes
+  // every shape. With delivery passed and nothing failed, acceptance, baseline
+  // and reconciliation are not applicable at completion. A recorded failure, a
+  // failed/conflicting/malformed reconciliation and an xlarge aggregate (whose
+  // own PR proves nothing about its children) are never closed this way.
+  // Delivery here is the trunk: a merge through the gates or a canonical
+  // deployment. A hand-built manifest keeps its own lanes (operational,
+  // documentation, small-shape acceptance).
+  const closureFollowsDelivery = !aggregate && delivery === "pass" && (mergedThroughGates === "merged" || deployment !== null)
+    && acceptanceFailures.length === 0
+    && reconciliation.state !== "fail" && reconciliation.state !== "conflict" && reconciliation.state !== "malformed";
+  const deliveryBasis = deployment ? `deployed on ${deployment.runId}` : "merged through the gates";
+  const deploymentDecision = deployment ? projectDeploymentClosure(projected.decision, deployment) : projected.decision;
   const independent = project({ ...projectionInput, completion: {
     ...projectionInput.completion!,
     acceptanceEvidence: acceptanceFailures.length === 0
@@ -453,7 +512,7 @@ export async function evaluateBacklogItemCompletion(args: {
   } });
   return {
     governed: projected.governed,
-    decision: deployment ? projectDeploymentClosure(projected.decision, deployment) : projected.decision,
+    decision: closureFollowsDelivery ? projectDeliveryClosure(deploymentDecision, deliveryBasis) : deploymentDecision,
     independentAcceptanceDecision: independent.decision,
     reconciliation,
     delivery,
@@ -462,6 +521,8 @@ export async function evaluateBacklogItemCompletion(args: {
     acceptanceState,
     hasDesignSpec,
     deliveryEvidenceRefs,
+    closureFollowsDelivery,
+    customerReported: isCustomerReported(item),
   };
 }
 

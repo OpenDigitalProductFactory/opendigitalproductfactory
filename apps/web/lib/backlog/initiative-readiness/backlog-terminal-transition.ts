@@ -74,6 +74,8 @@ export async function completeBacklogItemTransition(args: {
   let lockedItem: BacklogCompletionItem | null = null;
   let deployment: DeploymentClosureProof | null = null;
   let acceptanceState = "missing";
+  let closureFollowsDelivery = false;
+  let customerReported = false;
   // BI-DC2758DE: refresh the trunk the merge signal reads before the
   // transaction opens; the signal itself never touches the network.
   if (!args.dependencies?.resolveMergeDelivery) await refreshMergeSignalTrunk();
@@ -129,6 +131,8 @@ export async function completeBacklogItemTransition(args: {
       }
       deployment = evaluated.deployment;
       acceptanceState = evaluated.acceptanceState;
+      closureFollowsDelivery = evaluated.closureFollowsDelivery;
+      customerReported = evaluated.customerReported;
       return {
         governed: evaluated.governed,
         decision: evaluated.decision,
@@ -156,8 +160,9 @@ export async function completeBacklogItemTransition(args: {
     mutate: async (genericTx) => {
       const tx = genericTx as unknown as BacklogTerminalClient;
       if (!lockedItem) throw new Error("Terminal readiness did not resolve a backlog item.");
-      const resolution = deployment
-        ? `${args.resolution}\nDelivery closed on ${deployment.runId}; acceptance ${acceptanceState}. Acceptance remains a separate verification obligation.`
+      const closure = deliveryClosureRecord({ deployment, closureFollowsDelivery, acceptanceState, customerReported });
+      const resolution = closure
+        ? `${args.resolution}\n${closure.summary}`
         : args.resolution;
       const updated = await tx.backlogItem.updateMany({
         where: { id: lockedItem.id, status: args.expectedStatus },
@@ -173,11 +178,8 @@ export async function completeBacklogItemTransition(args: {
         await tx.backlogItemActivity.create({ data: {
           backlogItemId: lockedItem.id,
           kind: "status_change",
-          summary: `${args.expectedStatus} → done${deployment ? ` (deployed; acceptance ${acceptanceState})` : ""}`,
-          payload: { from: args.expectedStatus, to: "done", resolution,
-            ...(deployment ? { closureBasis: "canonical-deployment", deployment, acceptanceState,
-              acceptanceObligation: acceptanceState === "pass" ? "satisfied" : acceptanceState === "fail" ? "corrective-work-required" : "pending-independent-verification" } : {}),
-          },
+          summary: `${args.expectedStatus} → done${closure ? ` (${closure.payload.closureBasis}; acceptance ${closure.payload.acceptanceObligation})` : ""}`,
+          payload: { from: args.expectedStatus, to: "done", resolution, ...(closure?.payload ?? {}) },
           recordedById: args.actor.humanContextRef,
           recordedByAgentId: args.actor.agentContextRef,
         } });
@@ -185,4 +187,39 @@ export async function completeBacklogItemTransition(args: {
       return updated.count;
     },
   });
+}
+
+/**
+ * What a delivery closure records on its status_change (BI-C899BB40). Every
+ * obligation is bounded: `not-owed` ends it, `pending-submitter-confirmation`
+ * is one question with a window (acceptance-sweep/submitter-confirmation.ts).
+ * `pending-independent-verification` is no longer written.
+ */
+export type AcceptanceObligation = "satisfied" | "corrective-work-required" | "not-owed" | "pending-submitter-confirmation";
+
+export function deliveryClosureRecord(input: {
+  deployment: DeploymentClosureProof | null;
+  closureFollowsDelivery: boolean;
+  acceptanceState: string;
+  customerReported: boolean;
+}): { summary: string; payload: Record<string, unknown> & { closureBasis: string; acceptanceObligation: AcceptanceObligation } } | null {
+  if (!input.deployment && !input.closureFollowsDelivery) return null;
+  const acceptanceObligation: AcceptanceObligation = input.acceptanceState === "pass" ? "satisfied"
+    : input.acceptanceState === "fail" ? "corrective-work-required"
+      : input.customerReported ? "pending-submitter-confirmation" : "not-owed";
+  const closureBasis = input.deployment ? "canonical-deployment" : "delivery-evidence";
+  const on = input.deployment ? `Delivery closed on ${input.deployment.runId}` : "Delivery closed on merged delivery evidence";
+  const next = acceptanceObligation === "pending-submitter-confirmation"
+    ? " The submitter is asked once whether it is fixed."
+    : acceptanceObligation === "not-owed" ? " No further acceptance is owed." : "";
+  return {
+    summary: `${on}; acceptance ${acceptanceObligation}.${next}`,
+    payload: {
+      closureBasis,
+      ...(input.deployment ? { deployment: input.deployment } : {}),
+      acceptanceState: input.acceptanceState,
+      acceptanceObligation,
+      customerReported: input.customerReported,
+    },
+  };
 }

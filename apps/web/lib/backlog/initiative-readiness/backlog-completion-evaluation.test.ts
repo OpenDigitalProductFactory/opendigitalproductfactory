@@ -47,7 +47,9 @@ describe("independent body acceptance survives source-author archival", () => {
       dependencies: { ...deps("merged"), resolveCompletionEvidence: async () => ({ kind: "not-provided" }) as never } });
     const acceptance = [...result.decision.satisfied, ...result.decision.unmet, ...result.decision.blockers]
       .find(entry => entry.code === "ACCEPTANCE_EVIDENCE_REQUIRED");
-    expect(acceptance?.state).toBe(valid ? "pass" : "missing");
+    // BI-C899BB40: the merge closes it either way. A verified body acceptance
+    // still reads pass; an unverifiable one is not applicable, never passed.
+    expect(acceptance?.state).toBe(valid ? "pass" : "not-applicable");
   });
 });
 
