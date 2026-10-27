@@ -338,6 +338,8 @@ export async function dispatchDueDemand(db: DemandDeliveryDb, options: {
   unreachable: number;
   /** Links quarantined this cycle because the peer itself refused us. */
   quarantinedLinks: string[];
+  /** Jobs closed because their link is revoked or their envelope is no longer pending. */
+  withdrawn: number;
 }> {
   const now = options.now ?? new Date();
   if (!db.workItem.findMany) throw new Error("Federation delivery queue reader is unavailable.");
@@ -546,6 +548,6 @@ export async function dispatchDueDemand(db: DemandDeliveryDb, options: {
   }
   return {
     attempted: deliverableRows.length, delivered, deferred, deadLettered, unreachable,
-    quarantinedLinks,
+    quarantinedLinks, withdrawn: 0,
   };
 }
