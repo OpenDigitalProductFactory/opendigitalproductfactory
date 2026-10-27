@@ -17,7 +17,9 @@ It adds no new trust and no new update logic. Each run:
 4. runs the same signed updater (`--from-portal ... --expect-installation ...`)
    only when something changed: a new release, a changed client binary, a
    retry after failure once its backoff elapsed, or a daily re-verification;
-5. writes `~/.dpf/toolchain-agent/state.json` atomically. That file is this
+5. leaves alone a copy a contributor's source checkout delivered when that
+   checkout contains the served release (spec row X15: `ahead-of-portal`);
+6. writes `~/.dpf/toolchain-agent/state.json` atomically. That file is this
    job's own: the bootstrap's readiness record (`agent-toolchain-state.json`)
    has a different writer and is never touched here.
 
@@ -221,6 +223,60 @@ def _fetch_manifest(origin: str, expected: str, home: Path, env: Mapping[str, st
     return manifest
 
 
+def _git_is_ancestor(root: str, older: str, newer: str) -> Optional[bool]:
+    """True when `older` is contained in `newer` in the checkout at `root`; None when git cannot tell."""
+    try:
+        completed = subprocess.run(["git", "-C", root, "merge-base", "--is-ancestor", older, newer],
+                                   capture_output=True, text=True, timeout=15)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if completed.returncode == 0:
+        return True
+    if completed.returncode == 1:
+        return False
+    return None  # 128: an unknown commit, or not a repository
+
+
+def _base_key(version: Any) -> Optional[tuple[int, ...]]:
+    try:
+        return tuple(int(part) for part in str(version).split("+", 1)[0].split("-", 1)[0].split("."))
+    except ValueError:
+        return None
+
+
+def checkout_precedence(home: Path, manifest: Mapping[str, Any],
+                        is_ancestor: Callable[[str, str, str], Optional[bool]]) -> Optional[str]:
+    """Spec row X15: why a checkout-delivered copy must be left alone, or None to follow the portal.
+
+    A contributor host's session bootstrap installs the pack from its source
+    checkout. Reinstalling an older portal pack over it every hour would fight
+    that writer, so a checkout that contains the served release wins.
+    """
+    import update_agent_toolchain as updater
+
+    shared = updater.shared_managed_plugin_path(home)
+    record = _read_json(shared / ".dpf-delivery.json")
+    if not isinstance(record, dict) or record.get("source") != "checkout":
+        return None
+    release, commit, root = manifest.get("releaseId"), record.get("commit"), record.get("root")
+    if isinstance(release, str) and isinstance(commit, str) and isinstance(root, str):
+        verdict = is_ancestor(root, release, commit)
+        if verdict is True:
+            return "checkout contains the served release"
+        if verdict is False:
+            return None
+    manifest_version = _read_json(shared / ".claude-plugin" / "plugin.json")
+    installed = _base_key(manifest_version.get("version") if isinstance(manifest_version, dict) else None)
+    served = _base_key(manifest.get("packVersion"))
+    if installed is None or served is None:
+        return None
+    if installed > served:
+        return "checkout base version is ahead of the served release"
+    if installed == served:
+        return "checkout order unverified at the same base version; the checkout keeps precedence"
+    return None
+
+
 def _client_versions() -> dict[str, Optional[str]]:
     import toolchain_convergence
 
@@ -252,6 +308,7 @@ def run_once(
     fetch_manifest: Callable[..., dict[str, Any]] = _fetch_manifest,
     runner: Callable[..., Any] = subprocess.run,
     client_versions: Callable[[], dict[str, Optional[str]]] = _client_versions,
+    is_ancestor: Callable[[str, str, str], Optional[bool]] = _git_is_ancestor,
 ) -> dict[str, Any]:
     """One convergence pass. Returns, and persists, this host's state."""
     import update_agent_toolchain as updater
@@ -290,6 +347,9 @@ def run_once(
         except Exception as error:  # PortalRefusal and malformed manifests
             code = getattr(error, "code", "manifest-refused")
             return finish("needs-operator", str(code), str(getattr(error, "message", error))[:200])
+        ahead = checkout_precedence(home, manifest, is_ancestor)
+        if ahead:
+            return finish("ahead-of-portal", None, ahead, "checkout-precedence")
         digest = str(manifest.get("packDigest") or "")
         versions = client_versions()
         decision = decide(state, digest, versions, now)
@@ -459,7 +519,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     if command == "run":
         state = run_once(home, os.environ)
         print(json.dumps({key: state.get(key) for key in ("status", "code", "lastDecision", "detail")}))
-        return 0 if state.get("status") in ("ok", "busy", "opted-out", "offline") else 1
+        return 0 if state.get("status") in ("ok", "busy", "opted-out", "offline", "ahead-of-portal") else 1
     if command == "install":
         print(ensure_schedule(home, sys.executable, str(Path(__file__).resolve()), os.environ))
         return 0

@@ -274,6 +274,60 @@ class RunOnceTest(unittest.TestCase):
             self.assertEqual(seen.get("PATH"), "/bin")
 
 
+class PrecedenceTest(unittest.TestCase):
+    """Spec row X15: a source checkout ahead of the portal's release wins."""
+
+    def _provenance(self, home: Path, record: dict[str, Any], base: str = "0.2.18") -> None:
+        shared = updater.shared_managed_plugin_path(home)
+        updater.write_json(shared / ".dpf-delivery.json", record)
+        updater.write_json(shared / ".claude-plugin" / "plugin.json", {"name": "dpf-platform", "version": f"{base}+c.x"})
+
+    def _run(self, home: Path, ancestor: Optional[bool], served_version: str = "0.2.18") -> tuple[dict[str, Any], Fakes]:
+        fakes = Fakes()
+        manifest = lambda *a, **k: {"packDigest": "1" * 64, "packVersion": served_version, "releaseId": "r" * 40}
+        state = agent.run_once(home, {}, now=1000.0, fetch_manifest=manifest, runner=fakes.runner,
+                               client_versions=lambda: {}, is_ancestor=lambda root, older, newer: ancestor)
+        return state, fakes
+
+    def test_a_checkout_that_contains_the_served_release_is_left_alone(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = _home(Path(tmp))
+            self._provenance(home, {"source": "checkout", "root": "/repo", "commit": "c" * 40})
+            state, fakes = self._run(home, ancestor=True)
+            self.assertEqual(state["status"], "ahead-of-portal")
+            self.assertEqual(fakes.runs, [])
+
+    def test_a_checkout_behind_the_served_release_converges_from_the_portal(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = _home(Path(tmp))
+            self._provenance(home, {"source": "checkout", "root": "/repo", "commit": "c" * 40})
+            state, fakes = self._run(home, ancestor=False)
+            self.assertEqual(state["status"], "ok")
+            self.assertEqual(len(fakes.runs), 1)
+
+    def test_without_git_a_newer_base_version_still_wins(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = _home(Path(tmp))
+            self._provenance(home, {"source": "checkout", "root": "/repo", "commit": "c" * 40}, base="0.2.19")
+            state, fakes = self._run(home, ancestor=None, served_version="0.2.18")
+            self.assertEqual(state["status"], "ahead-of-portal")
+            self.assertEqual(fakes.runs, [])
+
+    def test_without_git_an_older_base_version_converges(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = _home(Path(tmp))
+            self._provenance(home, {"source": "checkout", "root": "/repo", "commit": "c" * 40}, base="0.2.17")
+            state, fakes = self._run(home, ancestor=None, served_version="0.2.18")
+            self.assertEqual(len(fakes.runs), 1)
+
+    def test_a_portal_delivery_follows_the_portal(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = _home(Path(tmp))
+            self._provenance(home, {"source": "portal", "releaseId": "q" * 40})
+            state, fakes = self._run(home, ancestor=True)
+            self.assertEqual(len(fakes.runs), 1)
+
+
 class ScheduleTest(unittest.TestCase):
     """The schedule is per user, idempotent, and never touched from inside the agent."""
 
