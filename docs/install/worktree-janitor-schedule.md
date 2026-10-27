@@ -39,6 +39,10 @@ Tier B (stale but unmerged) is observe-and-propose. Scheduling a `--live` run
 without `--tier-a-only` makes Tier B removable — deliberate, and rarely what you
 want from an unattended job.
 
+When Tier B is removed live, a branch whose commits are on no remote is first
+saved at `refs/janitor-backup/<YYYY-MM-DD>/<branch>` (logged); if that ref cannot
+be written the worktree is kept instead (BI-EBBBDF40).
+
 The janitor's own protections still apply and are not negotiable by this script:
 `.worktree-pinned` is always honoured, dirty worktrees are refused, the root
 clone is skipped, and removals go through the junction-safe helper.
