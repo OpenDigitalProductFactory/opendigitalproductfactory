@@ -55,7 +55,24 @@ export async function runReassessmentCandidatePreflight(params: {
       if (result.exitCode !== 0 || !/^sha256:[a-f0-9]{64}$/.test(value)) throw new Error("reassessment-compatibility-unproven");
       return value;
     };
-    const configDigest = releaseDigest ?? await inspect();
+    const release = params.release;
+    // BI-A9BA9583: the engine names a pulled release by its config digest on
+    // the classic image store but by its index (channel) digest on the
+    // containerd store. Resolve it through the release's immutable references
+    // only — never the tag — and accept the id only when it is one of the
+    // frozen digests, the rule promote.sh applies to the same image.
+    const resolveRelease = async (): Promise<{ ref: string; id: string }> => {
+      const repository = `ghcr.io/${release!.ghcrOwner}/dpf-portal`;
+      const frozen = new Set([release!.configDigest, release!.channelDigest, release!.platformManifestDigest]);
+      for (const ref of [release!.configDigest, `${repository}@${release!.channelDigest}`, `${repository}@${release!.platformManifestDigest}`]) {
+        const result = await runDocker(["image", "inspect", "--format", "{{.Id}}", ref]);
+        const id = result.stdout.trim();
+        if (result.exitCode === 0 && frozen.has(id)) return { ref, id };
+      }
+      throw new Error("reassessment-compatibility-unproven");
+    };
+    const resolved = release ? await resolveRelease() : null;
+    const configDigest = resolved?.id ?? await inspect();
     const proof = await readReassessmentImageContract(configDigest, targetSha, runDocker);
     if (!releaseDigest && await inspect() !== configDigest) throw new Error("reassessment-compatibility-unproven");
     await params.recordCompatibility(params.runId, { stage: params.stage, observedAt: new Date().toISOString(), proof });

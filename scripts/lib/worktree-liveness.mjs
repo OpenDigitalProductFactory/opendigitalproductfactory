@@ -53,15 +53,49 @@ export function normalizePath(value) {
 const unavailable = (reason) => ({ available: false, activePaths: new Set(), reason });
 const MAX_ROOMS = 10_000;
 const READ_BUDGET_MS = 120_000;
+/** Fresh observations after an expired one. Each restart discards every claim read so far. */
+const MAX_RESTARTS = 2;
+/** Server codes meaning "this observation is gone, start a new one" — not an outage. */
+const RESTART_CODES = new Set(["snapshot_expired", "snapshot_unavailable"]);
 const ROOM_STATUSES = new Set([...ACTIVE_WORKROOM_STATUSES, "complete", "abandoned", "archived"]);
 
-/** Read only known envelopes. Arbitrary nested path objects are not an inventory. */
-function readObservation(raw) {
+class ObservationExpired extends Error {}
+
+function readToolResult(raw) {
   if (typeof raw !== "string" || !raw.trim()) throw new Error("empty response");
   const dataLine = raw.split(/\r?\n/).find(line => line.startsWith("data:"));
   const rpc = JSON.parse(dataLine ? dataLine.slice(5).trim() : raw);
-  if (rpc.error || rpc.result?.isError) throw new Error("MCP error response");
+  // A JSON-RPC error is an object; a bare tool failure carries a string code.
+  if (rpc.error && typeof rpc.error === "object") throw new Error("MCP error response");
   const result = extractToolResult(rpc);
+  if (RESTART_CODES.has(result?.error)) {
+    throw new ObservationExpired(`workroom observation ${result.error === "snapshot_expired" ? "expired" : "evicted"}`);
+  }
+  if (rpc.result?.isError) throw new Error("MCP error response");
+  return result;
+}
+
+/** A path the row itself proves: present, not shortened, and null or non-empty. */
+function rowCarriesPath(row) {
+  return Object.hasOwn(row, "worktreePath")
+    && (row.worktreePath === null || (typeof row.worktreePath === "string" && row.worktreePath.trim() !== ""))
+    && !row.shortenedFields?.includes("worktreePath");
+}
+
+/** The governed detail read named by the row itself, and only for that row. */
+function detailArguments(row) {
+  const detail = row.detail;
+  return detail?.toolName === "get_workroom" && detail.arguments?.capsuleId === row.capsuleId
+    ? { capsuleId: row.capsuleId } : null;
+}
+
+/**
+ * Read only known envelopes. Arbitrary nested path objects are not an inventory.
+ * A compact row without a provable path is accepted only when `allowDetail` and
+ * the row names its own detail read; the caller must then resolve it.
+ */
+function readObservation(raw, { allowDetail = false } = {}) {
+  const result = readToolResult(raw);
   const data = result?.data ?? result;
   if (!data || result.success === false || result.isError || data._truncated || data.truncated) {
     throw new Error("failed or truncated workroom observation");
@@ -69,10 +103,10 @@ function readObservation(raw) {
   const rooms = data.capsules ?? data.workrooms;
   if (!Array.isArray(rooms)) throw new Error("no workroom list in response");
   for (const row of rooms) {
-    if (!row || typeof row.capsuleId !== "string" || !row.capsuleId
-      || !ROOM_STATUSES.has(row.status)
-      || !(row.worktreePath === null || (typeof row.worktreePath === "string" && row.worktreePath.trim()))
-      || row.shortenedFields?.includes("worktreePath")) {
+    if (!row || typeof row.capsuleId !== "string" || !row.capsuleId || !ROOM_STATUSES.has(row.status)) {
+      throw new Error("missing workroom ownership identity");
+    }
+    if (!rowCarriesPath(row) && !(allowDetail && detailArguments(row))) {
       throw new Error("missing or shortened workroom ownership identity");
     }
   }
@@ -92,14 +126,33 @@ function readObservation(raw) {
   return { rooms, page };
 }
 
+/** Adds proven paths; returns active rows whose path only their detail read can prove. */
 function addOwners(rooms, paths, ids) {
+  const unresolved = [];
   for (const row of rooms) {
     if (ids.has(row.capsuleId)) throw new Error("duplicate workroom in observation");
     ids.add(row.capsuleId);
-    if (ACTIVE_WORKROOM_STATUSES.includes(row.status) && row.worktreePath !== null) {
-      paths.add(normalizePath(row.worktreePath));
-    }
+    if (!ACTIVE_WORKROOM_STATUSES.includes(row.status)) continue;
+    if (!rowCarriesPath(row)) unresolved.push(row);
+    else if (row.worktreePath !== null) paths.add(normalizePath(row.worktreePath));
   }
+  return unresolved;
+}
+
+/**
+ * The detail must be the same room and carry a definite path. A room that was
+ * active when observed keeps its claim even if the detail now reads terminal:
+ * the protective reading, since the two reads are not one snapshot.
+ */
+function readDetailPath(raw, row) {
+  const result = readToolResult(raw);
+  const data = result?.data ?? result;
+  const capsule = data?.capsule ?? data?.workroom;
+  if (!capsule || result.success === false || capsule.capsuleId !== row.capsuleId
+    || !ROOM_STATUSES.has(capsule.status) || !rowCarriesPath(capsule)) {
+    throw new Error(`workroom detail for ${row.capsuleId} has no ownership identity`);
+  }
+  return capsule.worktreePath;
 }
 
 export function parseActiveWorktreePaths(raw) {
@@ -114,8 +167,39 @@ export function parseActiveWorktreePaths(raw) {
   } catch (error) { return unavailable(error.message); }
 }
 
+/** Every page of ONE observation, or a throw. Never returns a partial population. */
+async function traverseObservation(callTool) {
+  const paths = new Set(), ids = new Set(), cursors = new Set(), unresolved = [];
+  let cursor, observation;
+  for (let pages = 0; pages <= MAX_ROOMS; pages++) {
+    const text = await callTool("list_workrooms", { limit: 100, ...(cursor ? { cursor } : {}) });
+    const { rooms, page } = readObservation(text, { allowDetail: true });
+    if (cursor && !page) throw new Error("workroom continuation lost its observation");
+    if (page) {
+      const identity = JSON.stringify([page.observationId, page.observedAt, page.populationCount]);
+      if (observation && observation !== identity) throw new Error("workroom observation changed during traversal");
+      observation = identity;
+    }
+    unresolved.push(...addOwners(rooms, paths, ids));
+    if (ids.size > MAX_ROOMS || (page && ids.size > page.populationCount)) throw new Error("workroom count exceeded observation");
+    if (!page || page.disposition === "complete") {
+      if (page && ids.size !== page.populationCount) throw new Error("incomplete workroom observation");
+      return { paths, unresolved, count: ids.size };
+    }
+    if (cursors.has(page.nextCursor)) throw new Error("workroom cursor loop");
+    cursors.add(page.nextCursor);
+    cursor = page.nextCursor;
+  }
+  throw new Error("workroom observation page budget exceeded");
+}
+
 /**
  * Ask the platform which worktrees are claimed. Never rejects.
+ *
+ * Traverses every page of one observation; an expired observation restarts the
+ * traversal (bounded). Rows whose page omits or shortens the path are resolved
+ * through the row's own `get_workroom` detail read (BI-83345811). Any read that
+ * does not complete returns `available: false`.
  *
  * `fetchImpl` is the test seam; production goes through the shared MCP client
  * (scripts/lib/mcp-client.mjs) over node:http, with no curl dependency.
@@ -128,14 +212,10 @@ export async function loadActiveWorkroomPaths(options = {}) {
   try {
     const credential = (options.resolveCredential ?? resolveMcpCredential)({ mcpUrl: url, env });
     const deadline = Date.now() + READ_BUDGET_MS;
-    const paths = new Set(), ids = new Set(), cursors = new Set();
-    let cursor, observation;
-    for (let pages = 0; pages <= MAX_ROOMS; pages++) {
+    const callTool = async (name, args) => {
       const remaining = deadline - Date.now();
       if (remaining <= 0) throw new Error("workroom observation read budget exceeded");
-      const reply = await mcpPost("tools/call", { name: "list_workrooms", arguments: {
-        limit: 100, ...(cursor ? { cursor } : {}),
-      } }, {
+      const reply = await mcpPost("tools/call", { name, arguments: args }, {
         mcpUrl: url,
         bearerToken: credential.bearer,
         timeoutMs: Math.min(20_000, remaining),
@@ -145,25 +225,27 @@ export async function loadActiveWorkroomPaths(options = {}) {
         // client's own process.env check cannot see it.
         allowNonLoopbackEndpoint: Boolean(env.DPF_MCP_URL),
       });
-      if (reply.status < 200 || reply.status >= 300) throw new Error(`workroom query returned HTTP ${reply.status}`);
-      const { rooms, page } = readObservation(reply.text);
-      if (cursor && !page) throw new Error("workroom continuation lost its observation");
-      if (page) {
-        const identity = JSON.stringify([page.observationId, page.observedAt, page.populationCount]);
-        if (observation && observation !== identity) throw new Error("workroom observation changed during traversal");
-        observation = identity;
+      if (reply.status < 200 || reply.status >= 300) throw new Error(`${name} returned HTTP ${reply.status}`);
+      return reply.text;
+    };
+
+    let traversal;
+    for (let attempt = 0; !traversal; attempt++) {
+      try {
+        traversal = await traverseObservation(callTool);
+      } catch (err) {
+        // An expired observation is restarted from nothing; claims read from it
+        // are dropped with it, so no mixed population is ever returned.
+        if (!(err instanceof ObservationExpired) || attempt >= MAX_RESTARTS) throw err;
       }
-      addOwners(rooms, paths, ids);
-      if (ids.size > MAX_ROOMS || (page && ids.size > page.populationCount)) throw new Error("workroom count exceeded observation");
-      if (!page || page.disposition === "complete") {
-        if (page && ids.size !== page.populationCount) throw new Error("incomplete workroom observation");
-        return { available: true, activePaths: paths, reason: `${ids.size} workroom(s) read` };
-      }
-      if (cursors.has(page.nextCursor)) throw new Error("workroom cursor loop");
-      cursors.add(page.nextCursor);
-      cursor = page.nextCursor;
     }
-    throw new Error("workroom observation page budget exceeded");
+    // Detail reads run after the listing so they cannot outlive its cursor.
+    for (const row of traversal.unresolved) {
+      const worktreePath = readDetailPath(await callTool("get_workroom", detailArguments(row)), row);
+      if (worktreePath !== null) traversal.paths.add(normalizePath(worktreePath));
+    }
+    const resolved = traversal.unresolved.length ? `, ${traversal.unresolved.length} resolved by detail` : "";
+    return { available: true, activePaths: traversal.paths, reason: `${traversal.count} workroom(s) read${resolved}` };
   } catch (err) {
     return {
       available: false,

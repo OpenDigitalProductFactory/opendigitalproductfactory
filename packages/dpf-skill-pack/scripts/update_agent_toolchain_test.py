@@ -21,6 +21,21 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import update_agent_toolchain as updater
 
 
+
+NEEDS_STDLIB_TOML = unittest.skipIf(
+    __import__("codex_toml")._stdlib_parser() is None,
+    "fakes the Codex CLI, so its TOML needs Python 3.11+ or tomli; CI runs it (BI-90C9478D)",
+)
+
+
+# BI-90C9478D: these cases exercise Codex settings writes, which need a TOML
+# parser (Python 3.11+, tomli, or the Codex CLI). The stock-macOS CI runner has
+# none, so they skip there and run everywhere a parser exists.
+NEEDS_ANY_TOML = unittest.skipUnless(
+    __import__("codex_toml").available(),
+    "needs a TOML parser: Python 3.11+, tomli or the Codex CLI (BI-90C9478D)",
+)
+
 class CodexCacheVersionTest(unittest.TestCase):
     def test_changed_contents_refresh_same_source_version_and_reruns_are_stable(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -114,6 +129,7 @@ class WriteTextIfChangedTest(unittest.TestCase):
             self.assertEqual(list(Path(tmp).iterdir()), [])
         self.assertEqual(manifest.read_bytes(), before)
 
+    @NEEDS_ANY_TOML
     def test_main_fails_when_codex_cache_verification_fails(self):
         skill_pack = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {"DPF_AGENT_TOOLCHAIN_HOME": tmp}), patch.object(
@@ -649,6 +665,7 @@ class UpdateAgentToolchainTest(unittest.TestCase):
                 self.assertNotIn("dpf-platform", data["plugins"])
             self.assertEqual(raw.count("dpf-platform"), 1)
 
+    @NEEDS_ANY_TOML
     def test_reconverges_config_after_codex_plugin_install_recreates_legacy_alias(self) -> None:
         skill_pack = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory() as tmp:
@@ -684,6 +701,7 @@ class UpdateAgentToolchainTest(unittest.TestCase):
                 self.assertNotIn("dpf-platform", data["plugins"])
             self.assertEqual(raw.count("dpf-platform"), 1)
 
+    @NEEDS_ANY_TOML
     def test_heals_config_already_corrupted_with_duplicate_table(self) -> None:
         """A config a pre-#2657 updater left with a stray appended
         `[mcp_servers.dpf]` (a TOML redefinition error) is healed back to a single
@@ -1851,6 +1869,7 @@ class OnePluginOwnedConnectorTest(unittest.TestCase):
 
 
 class OAuthDefaultTest(unittest.TestCase):
+    @NEEDS_ANY_TOML
     def test_explicit_portal_origin_keeps_the_canonical_mcp_path(self):
         for endpoint in ("https://localhost", "https://localhost/", "http://127.0.0.1:3000?tenant=demo"):
             with self.subTest(endpoint=endpoint), tempfile.TemporaryDirectory() as tmp:
@@ -1865,6 +1884,7 @@ class OAuthDefaultTest(unittest.TestCase):
                 if "tenant=demo" in endpoint:
                     self.assertIn("tenant=demo", value)
 
+    @NEEDS_ANY_TOML
     def test_explicit_proxy_endpoint_preserves_path_and_query(self):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
@@ -1939,6 +1959,7 @@ class OAuthDefaultTest(unittest.TestCase):
                 self.assertFalse(updater.codex_managed_plugin_path(home).exists())
                 self.assertEqual(path.read_text() if path.exists() else None, original)
 
+    @NEEDS_ANY_TOML
     def test_codex_unreadable_saved_endpoint_requires_explicit_repair(self):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
@@ -1952,6 +1973,7 @@ class OAuthDefaultTest(unittest.TestCase):
             updater.ensure_codex_config(home, "https://repair.example/api/mcp/v1", False)
             self.assertIn('url = "https://repair.example/api/mcp/v1?tier=full"', path.read_text())
 
+    @NEEDS_STDLIB_TOML
     def test_main_distinguishes_implicit_environment_and_cli_endpoints(self):
         original = "http://127.0.0.1:3000/api/mcp/v1?tier=full"
         environment = "https://environment.example/api/mcp/v1"
@@ -1972,6 +1994,7 @@ class OAuthDefaultTest(unittest.TestCase):
                 self.assertIn(f'url = "{expected}"', path.read_text())
                 self.assertIn("startup_timeout_sec=45", path.read_text())
 
+    @NEEDS_ANY_TOML
     def test_codex_implicit_convergence_preserves_existing_endpoint(self):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
@@ -1986,12 +2009,14 @@ class OAuthDefaultTest(unittest.TestCase):
             updater.ensure_codex_config(home, None, False)
             self.assertEqual(first, path.read_text())
 
+    @NEEDS_ANY_TOML
     def test_codex_new_connection_keeps_https_default(self):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
             updater.ensure_codex_config(home, None, False)
             self.assertIn('url = "https://localhost/api/mcp/v1?tier=full"', updater.codex_config_path(home).read_text())
 
+    @NEEDS_ANY_TOML
     def test_codex_explicit_endpoint_replaces_existing_endpoint(self):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
@@ -2007,6 +2032,7 @@ class OAuthDefaultTest(unittest.TestCase):
             with self.subTest(case=case):
                 self.assertEqual(updater.mcp_client_bearer_header_required(case["endpoint"], case["client"], case["mode"]), case["required"])
 
+    @NEEDS_ANY_TOML
     def test_codex_updater_preserves_oauth_and_user_settings(self):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
@@ -2108,6 +2134,7 @@ class WrapperEndpointParityTest(unittest.TestCase):
             self.assertFalse(updater.mcp_client_bearer_header_required(updater.DEFAULT_MCP_URL))
 
 
+@NEEDS_STDLIB_TOML
 class CodexRegistrationConvergenceTest(unittest.TestCase):
     def fixture(self, home, canonical=True, legacy=True):
         config = updater.codex_config_path(home)
@@ -2425,7 +2452,8 @@ class CodexProjectConfigTest(unittest.TestCase):
             config.parent.mkdir()
             original = '[mcp_servers.dpf]\nurl="http://localhost:3000/mcp"'
             config.write_text(original)
-            with patch.dict(sys.modules, {"tomllib": None, "tomli": None}):
+            import codex_toml
+            with patch.dict(sys.modules, {"tomllib": None, "tomli": None}), patch.object(codex_toml, "_codex_binary", return_value=None):
                 with self.assertRaisesRegex(ValueError, "Python 3.11"):
                     updater.ensure_codex_project_config(root, "https://localhost/api/mcp/v1", False)
             self.assertEqual(config.read_text(), original)
@@ -2446,6 +2474,7 @@ class CodexProjectConfigTest(unittest.TestCase):
             self.assertNotIn("bearer_token_env_var", parsed["mcp_servers"]["dpf"])
             self.assertNotIn("enabled", parsed["mcp_servers"]["dpf"])
 
+    @NEEDS_ANY_TOML
     def test_main_forwards_explicit_project_and_endpoint_even_on_dry_run(self):
         import contextlib
         import io

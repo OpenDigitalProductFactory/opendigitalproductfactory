@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "inline-panel-show-once",
+  "decisionInteractionId": "DI-13A3937155D6",
+  "scope": {
+    "files": [
+      "apps/web/components/workspace/CalendarFeedSubscribePanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["inline-panel-show-once", "separate-settings-page", "always-visible-url"]
+  },
+  "sourceDecision": {
+    "owningProfile": "mark-dpf-platform",
+    "evidenceClass": "BI-051A74CE security fix. Workspace > business calendar (/workspace/calendar), contextual actions only: one compact panel beside the existing External Calendar panel, reusing its styling, --dpf-* tokens and confirmDialog (awaited outside the transition). Three plain choices (Create link / Replace link / Turn off); Replace and Turn off confirm in danger tone. The link is shown once because only its hash is stored; always-visible-url would need a reversible secret and was rejected on data_privacy. A separate settings route was rejected as a new navigation home for one control. No coworker prompt is sent. Composite 9.65 vs 6.45 / 6.17, margin 3.20, confidence high."
+  }
+}
