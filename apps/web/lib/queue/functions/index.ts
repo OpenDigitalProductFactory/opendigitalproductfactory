@@ -32,6 +32,7 @@ import { preBuildReviewRepair } from "./pre-build-review-repair";
 import { buildResumeAfterUpgradePause } from "./build-resume-after-upgrade-pause";
 import { buildGauntletRepair } from "./build-gauntlet-repair";
 import { agentChildThreadRun } from "./agent-child-thread-run";
+import { workroomQueueHoldRelease } from "./workroom-queue-hold-release";
 import { assuranceBomGenerate } from "./assurance-bom";
 import { assuranceScanRun } from "./assurance-scan";
 import { deliberationRun } from "./deliberation-run";
@@ -169,6 +170,7 @@ import {
 import { asyncOperationTaskHub } from "./async-operation-task-hub";
 
 export const scheduledFunctions = [
+  workroomQueueHoldRelease, // BI-95638941: provider-held Workrooms release themselves
   providerPauseReconcile,
   decisionConciergeSweepScheduled, // EP-0AF96937: drafts what the owner should do about decisions waiting on them, every 4h
   decisionTrustRecomputeScheduled, // BI-7D1E43DE: governed-decision TrustState from the shadow ledger, report only, every 6h
