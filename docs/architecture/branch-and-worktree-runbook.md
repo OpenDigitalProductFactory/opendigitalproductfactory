@@ -140,7 +140,7 @@ Three paths remove a worktree, and all three end at the same classifier so they 
 2. **Merge event** (`build/pr-merged-reap`, BI-848360EF) — runs the janitor scoped to the merged branch with `--branch`. This is the path that covers the gap above.
 3. **Daily fleet sweep** (`worktreeJanitor`, 05:40) — the backstop for leftovers after a crash, and for clients that write no heartbeat.
 
-Every one of them calls `classifyWorktree`, so a live session heartbeat, an active Workroom claim, `.worktree-pinned`, an active lease, an open PR or a dirty tree refuses the reap regardless of which path asked.
+Every one of them calls `classifyWorktree`, so a live session heartbeat, an active Workroom claim, `.worktree-pinned`, an active lease, an open PR or a dirty tree refuses the reap regardless of which path asked. A Workroom claim counts only while the room is non-terminal and the server's liveness verdict does not mark it reapable (`isReapable` on `list_workrooms`); a missing or shortened verdict keeps the claim (BI-CAA84E43).
 
 Removal always goes through the junction-safe helper. A worktree here carries roughly 28 junctions into the root clone's `node_modules` and `apps/web/node_modules/*`; a recursive delete that follows one destroys the root clone's dependencies, which is what happened on 2026-08-15. Unlink each reparse point first, verify none remain, and only then remove the tree.
 

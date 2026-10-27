@@ -61,6 +61,8 @@ const ROOM_STATUSES = new Set([...ACTIVE_WORKROOM_STATUSES, "complete", "abandon
 
 class ObservationExpired extends Error {}
 
+const releasedNote = released => (released.count ? `, ${released.count} non-live claim(s) released` : "");
+
 function readToolResult(raw) {
   if (typeof raw !== "string" || !raw.trim()) throw new Error("empty response");
   const dataLine = raw.split(/\r?\n/).find(line => line.startsWith("data:"));
@@ -126,13 +128,28 @@ function readObservation(raw, { allowDetail = false } = {}) {
   return { rooms, page };
 }
 
+/**
+ * The server's own verdict that this room is dead (lease expired past the pause
+ * grace, build or execution terminal, idle past the floor, or delivered) —
+ * computed once, in apps/web/lib/work-capsules/liveness.ts. A non-terminal
+ * status alone kept 391 lease-expired rooms' trees on 2026-10-27 (BI-CAA84E43).
+ * Only a plain, unshortened `true` releases: anything else keeps the claim.
+ */
+function serverSaysReapable(row) {
+  return row.isReapable === true && !row.shortenedFields?.includes("isReapable");
+}
+
 /** Adds proven paths; returns active rows whose path only their detail read can prove. */
-function addOwners(rooms, paths, ids) {
+function addOwners(rooms, paths, ids, released = { count: 0 }) {
   const unresolved = [];
   for (const row of rooms) {
     if (ids.has(row.capsuleId)) throw new Error("duplicate workroom in observation");
     ids.add(row.capsuleId);
     if (!ACTIVE_WORKROOM_STATUSES.includes(row.status)) continue;
+    if (serverSaysReapable(row)) {
+      released.count++;
+      continue;
+    }
     if (!rowCarriesPath(row)) unresolved.push(row);
     else if (row.worktreePath !== null) paths.add(normalizePath(row.worktreePath));
   }
@@ -161,15 +178,15 @@ export function parseActiveWorktreePaths(raw) {
     if (page && (page.disposition !== "complete" || page.populationCount !== rooms.length)) {
       throw new Error("incomplete workroom observation");
     }
-    const activePaths = new Set();
-    addOwners(rooms, activePaths, new Set());
-    return { available: true, activePaths, reason: `${rooms.length} workroom(s) read` };
+    const activePaths = new Set(), released = { count: 0 };
+    addOwners(rooms, activePaths, new Set(), released);
+    return { available: true, activePaths, reason: `${rooms.length} workroom(s) read${releasedNote(released)}` };
   } catch (error) { return unavailable(error.message); }
 }
 
 /** Every page of ONE observation, or a throw. Never returns a partial population. */
 async function traverseObservation(callTool) {
-  const paths = new Set(), ids = new Set(), cursors = new Set(), unresolved = [];
+  const paths = new Set(), ids = new Set(), cursors = new Set(), unresolved = [], released = { count: 0 };
   let cursor, observation;
   for (let pages = 0; pages <= MAX_ROOMS; pages++) {
     const text = await callTool("list_workrooms", { limit: 100, ...(cursor ? { cursor } : {}) });
@@ -180,11 +197,11 @@ async function traverseObservation(callTool) {
       if (observation && observation !== identity) throw new Error("workroom observation changed during traversal");
       observation = identity;
     }
-    unresolved.push(...addOwners(rooms, paths, ids));
+    unresolved.push(...addOwners(rooms, paths, ids, released));
     if (ids.size > MAX_ROOMS || (page && ids.size > page.populationCount)) throw new Error("workroom count exceeded observation");
     if (!page || page.disposition === "complete") {
       if (page && ids.size !== page.populationCount) throw new Error("incomplete workroom observation");
-      return { paths, unresolved, count: ids.size };
+      return { paths, unresolved, count: ids.size, released };
     }
     if (cursors.has(page.nextCursor)) throw new Error("workroom cursor loop");
     cursors.add(page.nextCursor);
@@ -245,7 +262,11 @@ export async function loadActiveWorkroomPaths(options = {}) {
       if (worktreePath !== null) traversal.paths.add(normalizePath(worktreePath));
     }
     const resolved = traversal.unresolved.length ? `, ${traversal.unresolved.length} resolved by detail` : "";
-    return { available: true, activePaths: traversal.paths, reason: `${traversal.count} workroom(s) read${resolved}` };
+    return {
+      available: true,
+      activePaths: traversal.paths,
+      reason: `${traversal.count} workroom(s) read${resolved}${releasedNote(traversal.released)}`,
+    };
   } catch (err) {
     return {
       available: false,
