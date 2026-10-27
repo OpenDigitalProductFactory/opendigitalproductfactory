@@ -204,7 +204,8 @@ class ReportJsonTest(unittest.TestCase):
     def test_explicit_updated_action_cannot_override_stale_observed_content(self) -> None:
         declared = _Declared()
         key = ("claude-code", "project:fixture")
-        stale = {"version": declared.pack, "digest": "old", "authMode": "oauth"}
+        # A converged Claude record carries the stamped delivered version (BI-4F9E3221).
+        stale = {"version": declared.delivered, "digest": "old", "authMode": "oauth"}
         current = {**stale, "digest": declared.digest}
         for after, expected in ((stale, "failed"), (current, "converged")):
             with self.subTest(expected=expected), patch.object(convergence, "snapshot", side_effect=[{key: stale}, {key: after}]), patch.object(convergence, "cli_versions", return_value={}):

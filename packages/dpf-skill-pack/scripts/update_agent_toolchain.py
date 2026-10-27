@@ -201,6 +201,27 @@ def codex_content_version(skill_pack: Path) -> str:
     return f"{base_version}+codex.{digest.hexdigest()[:24]}"
 
 
+def stamp_delivered_version(pack: Path, version: str) -> None:
+    """Write the delivered version into every stamped client manifest of a copy.
+
+    BI-4F9E3221: Claude Code keys its plugin cache by version string and never
+    refreshes a cache whose version is unchanged, so content merged without a
+    manual bump stayed stale. Only the version value is replaced; every other
+    byte is preserved, which is what lets `delivered_digest` hash it blank.
+    """
+    from installed_copy_freshness import STAMPED_MANIFESTS, _VERSION_VALUE
+
+    replacement = version.encode("utf-8")
+    for relative in sorted(STAMPED_MANIFESTS):
+        path = pack / relative
+        if not path.is_file():
+            continue
+        content = path.read_bytes()
+        stamped = _VERSION_VALUE.sub(lambda match: match.group(1) + replacement + match.group(2), content, count=1)
+        if stamped != content:
+            path.write_bytes(stamped)
+
+
 def codex_marketplace_path(home: Path) -> Path:
     return home / ".agents" / "plugins" / "marketplace.json"
 
@@ -1085,16 +1106,18 @@ def claude_plugin_records(home: Path) -> list[dict[str, Any]]:
 
 def claude_record_content_matches(home: Path, entry: dict[str, Any]) -> bool:
     """Verify installed bytes with the existing delivered-content comparator."""
-    from installed_copy_freshness import delivered_digest, pack_version
+    from installed_copy_freshness import delivered_digest, installed_version
 
     install = entry.get("installPath")
     source = shared_managed_plugin_path(home)
     if not isinstance(install, str) or not source.is_dir() or not Path(install).is_dir():
         return False
     try:
-        expected_version = pack_version(source)
+        # The full string, stamp included (BI-4F9E3221): Claude Code keys the
+        # cache by it, so an unstamped record at the same base is stale.
+        expected_version = installed_version(source)
         return bool(expected_version and entry.get("version") == expected_version
-                    and pack_version(Path(install)) == expected_version
+                    and installed_version(Path(install)) == expected_version
                     and delivered_digest(Path(install)) == delivered_digest(source))
     except (OSError, ValueError):
         return False
@@ -1112,10 +1135,14 @@ def converge_claude_project_plugins(home: Path, version: str, dry_run: bool) -> 
     A record whose projectPath is gone is reported as prunable and left alone:
     Claude Code owns the file and drops it on its own uninstall.
     """
+    from installed_copy_freshness import installed_version
+
     result: dict[str, list[str]] = {"updated": [], "current": [], "pruned": [], "failed": []}
-    # Claude Code records the marketplace version without build metadata; the
-    # pack manifest may carry a `+codex.<stamp>` suffix (codex_content_version).
-    version = version.split("+", 1)[0]
+    # Claude Code records the version from the plugin manifest, which the
+    # delivery stamps with `+c.<digest>` (BI-4F9E3221). The shared copy is what
+    # `plugin update` installs, so its manifest is the expected version; a
+    # `+codex.<stamp>` on the argument is Codex's and is dropped.
+    version = installed_version(shared_managed_plugin_path(home)) or version.split("+", 1)[0]
     claude = resolve_claude_binary()
     for entry in claude_plugin_records(home):
         project = entry.get("projectPath")
@@ -1239,7 +1266,9 @@ def converge_claude_project_connectors(
 
     `outcome`, when given, receives the structured result for --report-json.
     """
-    version = version.split("+", 1)[0]
+    from installed_copy_freshness import installed_version
+
+    version = installed_version(shared_managed_plugin_path(home)) or version.split("+", 1)[0]
     plugins = converge_claude_project_plugins(home, version, dry_run)
     if outcome is not None:
         outcome["plugins"] = plugins
@@ -2552,6 +2581,11 @@ def main(argv: list[str]) -> int:
 
     copy_skill_pack(skill_pack, codex_managed, args.dry_run)
     copy_skill_pack(skill_pack, shared_managed, args.dry_run)
+    from installed_copy_freshness import delivered_version as _delivered_version
+
+    delivered = _delivered_version(skill_pack) or version
+    if not args.dry_run:
+        stamp_delivered_version(shared_managed, delivered)
     codex_version = codex_content_version(skill_pack)
     if not args.dry_run:
         write_json(codex_managed / ".codex-plugin" / "plugin.json", {**manifest, "version": codex_version})
@@ -2655,7 +2689,7 @@ def main(argv: list[str]) -> int:
 
     claude_install_failed = False
     if not args.codex_only:
-        ensure_claude_marketplace(home, version, args.dry_run)
+        ensure_claude_marketplace(home, delivered, args.dry_run)
         ensure_claude_repo_mcp_config(
             shared_managed if not args.dry_run else skill_pack,
             mcp_url,
