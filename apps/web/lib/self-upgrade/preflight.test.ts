@@ -46,9 +46,57 @@ describe("reassessment candidate compatibility", () => {
     const release = { tag: "v2.0.0", ghcrOwner: "owner", channelDigest: `sha256:${"1".repeat(64)}`, platformManifestDigest: `sha256:${"2".repeat(64)}`, configDigest,
       platformOs: "linux" as const, platformArchitecture: "amd64" };
     expect(await runReassessmentCandidatePreflight({ ...p, stage: "swap", release })).toMatchObject({ ok: true });
-    expect(p.runDocker).toHaveBeenCalledOnce();
+    expect(p.runDocker.mock.calls.flatMap(([args]) => args)).not.toContain("actual-project-portal");
+    expect(p.runDocker.mock.calls.flatMap(([args]) => args)).not.toContain("ghcr.io/owner/dpf-portal:v2.0.0");
     expect(p.recordCompatibility).toHaveBeenCalledWith("SUR-COMPAT", expect.objectContaining({ stage: "swap" }));
   });
+  // BI-A9BA9583: Docker's containerd image store names a pulled image by its
+  // index (channel) digest, so `--pull never <configDigest>` finds nothing and
+  // every release upgrade was refused. Resolve the engine's id through the
+  // release's immutable references, exactly as promote.sh accepts it.
+  describe("a release on either Docker image store", () => {
+    const channelDigest = `sha256:${"1".repeat(64)}`, platformManifestDigest = `sha256:${"2".repeat(64)}`;
+    const release = { tag: "v2.0.0", ghcrOwner: "owner", channelDigest, platformManifestDigest, configDigest,
+      platformOs: "linux" as const, platformArchitecture: "amd64" };
+    const engine = (known: Record<string, string>, probe: unknown = info) => {
+      const runDocker = vi.fn(async (args: string[]) => {
+        if (args[0] === "image") {
+          const id = known[args[4]!];
+          return id ? { exitCode: 0, stdout: `${id}
+`, stderr: "" } : { exitCode: 1, stdout: "", stderr: "No such image" };
+        }
+        return { exitCode: 0, stdout: JSON.stringify(probe), stderr: "" };
+      });
+      return { ...ports(), runDocker };
+    };
+
+    it("probes by the channel digest the containerd store names the image by", async () => {
+      const p = engine({ [`ghcr.io/owner/dpf-portal@${channelDigest}`]: channelDigest });
+      expect(await runReassessmentCandidatePreflight({ ...p, release })).toEqual({ ok: true, data: { proof: { ...info, configDigest: channelDigest } } });
+      const command = p.runDocker.mock.calls.find(([args]) => args[0] === "run")![0];
+      expect(command).toEqual(expect.arrayContaining(["--pull", "never", channelDigest]));
+      expect(p.runDocker.mock.calls.flatMap(([args]) => args)).not.toContain("ghcr.io/owner/dpf-portal:v2.0.0");
+    });
+
+    it("probes by the config digest the classic store names the image by", async () => {
+      const p = engine({ [configDigest]: configDigest });
+      expect(await runReassessmentCandidatePreflight({ ...p, release })).toEqual({ ok: true, data: { proof: { ...info, configDigest } } });
+    });
+
+    it("refuses an engine id that is none of the release's frozen digests", async () => {
+      const p = engine({ [`ghcr.io/owner/dpf-portal@${channelDigest}`]: `sha256:${"9".repeat(64)}` });
+      expect(await runReassessmentCandidatePreflight({ ...p, release })).toMatchObject({ ok: false, reason: "reassessment-compatibility-unproven" });
+      expect(p.runDocker.mock.calls.some(([args]) => args[0] === "run")).toBe(false);
+      expect(p.recordCompatibility).not.toHaveBeenCalled();
+    });
+
+    it("refuses a release image that is not present locally", async () => {
+      const p = engine({});
+      expect(await runReassessmentCandidatePreflight({ ...p, release })).toMatchObject({ ok: false, reason: "reassessment-compatibility-unproven" });
+      expect(p.recordCompatibility).not.toHaveBeenCalled();
+    });
+  });
+
   it("refuses a release missing its frozen digest instead of falling back to a source image", async () => {
     const p = ports();
     expect(await runReassessmentCandidatePreflight({ ...p, release: {} as never })).toMatchObject({ ok: false });
