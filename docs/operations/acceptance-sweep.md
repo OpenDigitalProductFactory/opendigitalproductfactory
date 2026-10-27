@@ -32,8 +32,9 @@ for you, but only after you allow it.
   needs a decision is closed.
 - **How many:** at most 100 per run by default (you can set 1 to 100). The rest
   wait for the next run. An authorisation recorded before 2026-10-27 kept its
-  own number, which was 25 unless you changed it. Raise it on the card if the
-  pool should drain faster.
+  own number, which was 25 unless you changed it. The card shows the number.
+  To raise it, choose **Stop closing**, then **Allow closing** again and set
+  the new number under **Change how many it closes per run**.
 - **Who it acts as:** the Portfolio Advisor, on your behalf. Each closure
   records you as the person who allowed it, when, and your reason.
 
@@ -69,6 +70,8 @@ demand cluster, or a product quality report.
   reporter to reopen it if the change did not fix it. It posts as the
   managed-repository login (Admin > Platform Development). Without that login,
   nothing is posted and the summary says `no-credential`. The item still closes.
+  If GitHub is briefly unavailable, the sweep tries again on later runs, up to
+  three attempts in all. A refusal (no access, issue not found) is not retried.
 - **Founder demand cluster:** the reporting installations get one notice
   through the federation link.
 - **Anything else:** nothing is sent (`no-channel`).

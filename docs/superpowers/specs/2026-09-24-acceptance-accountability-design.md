@@ -365,6 +365,12 @@ could discharge.
      authenticated with the managed-repository controller credential. With no
      controller credential it records `question-not-sent` (`no-credential`)
      and the clock still runs. The item is never held.
+   - A transient send failure (network, 5xx, rate limit) is recorded as
+     `question-attempt-failed` and retried on later runs, at most three
+     attempts in all (`SUBMITTER_QUESTION_MAX_ATTEMPTS`). A permanent one (no
+     credential, 403, 404) is recorded once as `question-not-sent` and not
+     retried. After the last attempt the sweep records `question-not-sent`
+     and stops.
    - Founder demand cluster: one disposition notice through
      `queueFounderDispositionNotices`, under its own notice identity so the
      peer does not dedupe it against the original acceptance notice.
@@ -385,7 +391,9 @@ could discharge.
    without it stay where they are. The default per-run bound rises from 25 to
    100 (`DEFAULT_CLOSE_LIMIT`, the existing maximum), so the measured pool
    drains in about four daily runs. A recorded authorisation that names its
-   own bound keeps it: the operator raises it on the Admin card.
+   own bound keeps it (the live record says 25). The Admin card shows the
+   bound; to raise it, the operator stops closing and allows it again with
+   the higher number.
 
 ### 9.3 Research
 

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   SUBMITTER_CONFIRMATION_WINDOW_DAYS,
+  SUBMITTER_QUESTION_MAX_ATTEMPTS,
   advanceSubmitterConfirmation,
   confirmationChannelFor,
   submitterQuestion,
@@ -146,5 +147,67 @@ describe("advanceSubmitterConfirmation", () => {
     expect(await advanceSubmitterConfirmation(item, p)).toMatchObject({ step: "corrective-filed", correctiveItemId: "BI-ACC-1" });
     expect(p.fileCorrective).toHaveBeenCalledWith(expect.objectContaining({ servedSha: "d".repeat(40) }));
     expect(recorded[0]).toMatchObject({ outcome: "corrective-filed", resolved: true });
+  });
+});
+
+// Coordinator decision 2026-10-27: a transient send failure (network, 5xx,
+// rate limit) is retried on later runs, at most SUBMITTER_QUESTION_MAX_ATTEMPTS
+// attempts in total, each attempt recorded; a permanent one (no credential,
+// 404, 403) is recorded once and never retried. The item stays closed.
+describe("sending the question across sweep runs", () => {
+  type Outcome = { sent: true; url: string } | { sent: false; reason: "no-credential" | "permanent" | "transient"; message: string };
+  function runs(outcomes: Outcome[]) {
+    const s = state();
+    const recorded: Array<Record<string, unknown>> = [];
+    let clock = CLOSED_AT.getTime();
+    const postIssueComment = vi.fn(async () => outcomes.shift() ?? { sent: false as const, reason: "transient" as const, message: "unexpected extra attempt" });
+    const run = async () => {
+      clock += DAY;
+      const p: SubmitterConfirmationPorts = {
+        now: new Date(clock),
+        loadState: async () => ({ ...s, records: [...s.records] }),
+        postIssueComment,
+        notifyCluster: vi.fn(),
+        fileCorrective: vi.fn(),
+        record: async (_item, payload) => {
+          recorded.push(payload);
+          s.records.push({ recordedAt: new Date(clock), payload });
+        },
+      };
+      return advanceSubmitterConfirmation(item, p);
+    };
+    return { run, recorded, postIssueComment };
+  }
+  const transient = { sent: false as const, reason: "transient" as const, message: "retryable: 502" };
+
+  it("retries a transient failure and sends exactly one comment", async () => {
+    const h = runs([transient, transient, { sent: true, url: "https://github.com/acme/portal/issues/42#issuecomment-9" }]);
+    expect(await h.run()).toMatchObject({ step: "question-retry", attempt: 1 });
+    expect(await h.run()).toMatchObject({ step: "question-retry", attempt: 2 });
+    expect(await h.run()).toMatchObject({ step: "question-sent" });
+    expect(await h.run()).toMatchObject({ step: "waiting" });
+    expect(h.postIssueComment).toHaveBeenCalledTimes(3);
+    expect(h.recorded.filter(row => row.outcome === "question-sent")).toHaveLength(1);
+    expect(h.recorded.filter(row => row.outcome === "question-attempt-failed")).toHaveLength(2);
+  });
+
+  it("stops after three transient failures and records question-not-sent", async () => {
+    expect(SUBMITTER_QUESTION_MAX_ATTEMPTS).toBe(3);
+    const h = runs([transient, transient, transient]);
+    await h.run(); await h.run();
+    expect(await h.run()).toMatchObject({ step: "question-not-sent", reason: "transient" });
+    expect(await h.run()).toMatchObject({ step: "waiting" });
+    expect(h.postIssueComment).toHaveBeenCalledTimes(3);
+    expect(h.recorded.filter(row => row.outcome === "question-not-sent")).toEqual([
+      expect.objectContaining({ reason: "transient", attempts: 3, resolved: false }),
+    ]);
+  });
+
+  it.each(["permanent", "no-credential"] as const)("a %s failure is recorded once and never retried", async (reason) => {
+    const h = runs([{ sent: false, reason, message: "not-found: Not Found" }]);
+    expect(await h.run()).toMatchObject({ step: "question-not-sent", reason });
+    expect(await h.run()).toMatchObject({ step: "waiting" });
+    expect(h.postIssueComment).toHaveBeenCalledTimes(1);
+    expect(h.recorded).toEqual([expect.objectContaining({ outcome: "question-not-sent", reason, attempts: 1 })]);
   });
 });

@@ -22,6 +22,17 @@ export { SUBMITTER_CONFIRMATION_ACTIVITY_KIND } from "./acceptance-sweep-page";
 /** How long silence after the question means "fixed" (Zendesk/Intercom solved -> closed). */
 export const SUBMITTER_CONFIRMATION_WINDOW_DAYS = 14;
 
+/**
+ * Attempts to send the question when sending fails for a transient reason
+ * (network, 5xx, rate limit), across sweep runs. A permanent reason (no
+ * controller login, 404, 403) is recorded once and never retried. Either way
+ * the item stays closed; the window runs from the final not-sent row.
+ */
+export const SUBMITTER_QUESTION_MAX_ATTEMPTS = 3;
+
+/** Why a send failed: transient is retried, the others are not. */
+export type QuestionSendFailure = "no-credential" | "permanent" | "transient";
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export type ConfirmationChannel =
@@ -70,9 +81,9 @@ export type SubmitterConfirmationPorts = {
   now: Date;
   loadState(item: ConfirmationItem): Promise<ConfirmationState | null>;
   postIssueComment(repository: ForgeRepository, number: number, body: string):
-    Promise<{ sent: true; url: string } | { sent: false; reason: "no-credential" | "error"; message: string }>;
+    Promise<{ sent: true; url: string } | { sent: false; reason: QuestionSendFailure; message: string }>;
   notifyCluster(clusterId: string, message: string):
-    Promise<{ sent: true; queued: number } | { sent: false; reason: "error"; message: string }>;
+    Promise<{ sent: true; queued: number } | { sent: false; reason: QuestionSendFailure; message: string }>;
   fileCorrective(args: { originalItemId: string; servedSha: string; fingerprint: string; title: string; body: string }):
     Promise<{ action: "created" | "updated" | "skipped"; itemId: string | null; reason?: string }>;
   record(item: ConfirmationItem, payload: Record<string, unknown>, summary: string): Promise<void>;
@@ -81,6 +92,7 @@ export type SubmitterConfirmationPorts = {
 export type ConfirmationStep =
   | { step: "question-sent"; channel: ConfirmationChannel["kind"] }
   | { step: "question-not-sent"; reason: string }
+  | { step: "question-retry"; attempt: number; reason: string }
   | { step: "waiting"; askedAt: string }
   | { step: "not-fixed"; correctiveItemId: string | null }
   | { step: "confirmed" }
@@ -142,7 +154,10 @@ export async function advanceSubmitterConfirmation(
     const outcome = payloadOf(row.payload).outcome;
     return outcome === "question-sent" || outcome === "question-not-sent";
   });
-  if (!question) return ask(item, state, base, ports);
+  if (!question) {
+    const failedAttempts = records.filter((row) => payloadOf(row.payload).outcome === "question-attempt-failed").length;
+    return ask(item, state, base, ports, failedAttempts);
+  }
 
   const askedAt = question.recordedAt.getTime();
   const answers = state.sourceChanges
@@ -182,13 +197,22 @@ async function ask(
   state: ConfirmationState,
   base: Record<string, unknown>,
   ports: SubmitterConfirmationPorts,
+  failedAttempts: number,
 ): Promise<ConfirmationStep> {
   const channel = confirmationChannelFor(state.body);
+  const attempt = failedAttempts + 1;
   const question = submitterQuestion(state.itemId);
   const notSent = async (reason: string, message?: string): Promise<ConfirmationStep> => {
-    // Never hold the item: the window still runs from here.
+    // A transient failure with attempts left is recorded and retried next run.
+    if (reason === "transient" && attempt < SUBMITTER_QUESTION_MAX_ATTEMPTS) {
+      await ports.record(item, { ...base, outcome: "question-attempt-failed", resolved: false, channel: channel.kind, reason,
+        attempt, ...(message ? { message: message.slice(0, 300) } : {}) },
+        `Question to the submitter of ${state.itemId} failed (attempt ${attempt} of ${SUBMITTER_QUESTION_MAX_ATTEMPTS}); retried next run`);
+      return { step: "question-retry", attempt, reason };
+    }
+    // Final: never hold the item; the window still runs from here.
     await ports.record(item, { ...base, outcome: "question-not-sent", resolved: false, channel: channel.kind, reason,
-      ...(message ? { message: message.slice(0, 300) } : {}) },
+      attempts: attempt, ...(message ? { message: message.slice(0, 300) } : {}) },
       `Question to the submitter of ${state.itemId} not sent: ${reason}`);
     return { step: "question-not-sent", reason };
   };

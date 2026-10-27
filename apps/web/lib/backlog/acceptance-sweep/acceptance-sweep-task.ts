@@ -310,7 +310,10 @@ export function productionSubmitterConfirmationPorts(
       if (!token) return { sent: false, reason: "no-credential", message: "No managed-repository controller login is connected." };
       const { GitHubForgeAdapter } = await import("@/lib/forge/github-adapter");
       const posted = await new GitHubForgeAdapter({ token }).commentOnIssue({ repository, number, body, egressClass: "own-repo" });
-      return posted.ok ? { sent: true, url: posted.commentUrl } : { sent: false, reason: "error", message: `${posted.category}: ${posted.message}` };
+      if (posted.ok) return { sent: true, url: posted.commentUrl };
+      // Network, 5xx and rate limits are retryable; 401/403/404/422 are not.
+      return { sent: false, reason: posted.retryable || posted.category === "retryable" ? "transient" : "permanent",
+        message: `${posted.category}: ${posted.message}` };
     },
     notifyCluster: async (clusterId, message) => {
       try {
@@ -327,7 +330,8 @@ export function productionSubmitterConfirmationPorts(
         });
         return { sent: true, queued: result.queued };
       } catch (error) {
-        return { sent: false, reason: "error", message: error instanceof Error ? error.message : "unknown error" };
+        // A database or delivery-queue error is not a property of the cluster: retry.
+        return { sent: false, reason: "transient", message: error instanceof Error ? error.message : "unknown error" };
       }
     },
     fileCorrective: async (args) => {
