@@ -26,14 +26,23 @@ The reason is the squash-merge above. Every merged PR gets a fresh SHA on `main`
 
 Reference: [`apps/web/lib/self-upgrade/local-changes-ledger.ts`](../../apps/web/lib/self-upgrade/local-changes-ledger.ts) (BI-75C4A412).
 
+## Read-only work needs no worktree
+
+Review, diagnosis, research and answering a question about the source change nothing, so they get no working copy. Create the room on the read-only shape (`create_workroom` with `workShape: "source-inquiry@1.0.0"`) and read through `read_source_at_version`, `search_source_at_version`, `list_source_directory` and `read_project_file`, or `git show origin/main:<path>` against the root clone. A `source-inquiry` room cannot reach worktree provisioning: `plan_workroom_worktree`, `claim_workroom_scope` and `adopt_worktree` refuse it with `worktree_provision_not_admitted`, and so does the WorktreeCreate hook while the session holds such a room. When the inquiry turns out to need a change, claim the item with a delivery shape; that claim is the route to a worktree ([design](../superpowers/specs/2026-10-14-worktree-provisioning-under-gpp-design.md), BI-D1FB8C4D).
+
 ## Creating a worktree
 
+Create worktrees through the governed path, which admits and binds the Workroom **before** the worktree exists:
+
 ```
-git worktree add D:/DPF-worktrees/<topic> -b <prefix>/<topic>     # Windows
-git worktree add ~/dpf-worktrees/<topic>  -b <prefix>/<topic>     # macOS / Linux
+bash scripts/new-dev-worktree.sh <topic> [<prefix>]          # manual path
 ```
 
-⟦runtime: install-local paths — the `D:/` form is the Windows install shape⟧ The dedicated sibling base is canonical for **all three** host CLI surfaces (Claude Code, Codex, Grok) per the 2026-06-05 unified-delivery-surfaces decision #1 — not Claude Code's default `.claude/worktrees/<random>` nesting, and not the older `D:/DPF-<topic>` alongside-the-clone form.
+Claude Code's auto-created worktrees go through the WorktreeCreate hook, which runs the same library (`scripts/lib/worktree-provision.mjs`). Both refuse, and create nothing, when the platform refuses or cannot be reached. Raw `git worktree add` bypasses the admission; a guard for it is BI-25A45D5C.
+
+**Break-glass.** When the platform is down and an operator authorizes recovery (AGENTS.md §1), set `DPF_WORKTREE_BREAK_GLASS="<operator: reason>"` for that one command. The worktree is created unbound with a `dpf-workroom-pending.json` marker in its git dir; bind it with `adopt_worktree` once the platform is back. Break-glass never overrides a refusal: a refusal is an authorization answer, not an outage.
+
+⟦runtime: install-local paths — the `D:/` form is the Windows install shape⟧ The dedicated sibling base (`<root>-worktrees/<topic>`) is canonical for **all three** host CLI surfaces (Claude Code, Codex, Grok) per the 2026-06-05 unified-delivery-surfaces decision #1 — not Claude Code's default `.claude/worktrees/<random>` nesting, and not the older `D:/DPF-<topic>` alongside-the-clone form.
 
 Never share a working tree across sessions: it causes index/HEAD collisions and cross-thread file sweeps.
 

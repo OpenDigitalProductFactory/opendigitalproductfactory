@@ -17,10 +17,17 @@
 // `git worktree add`. It receives {base_path, worktree_name, ...} on stdin, must
 // create the worktree itself, and prints the resulting absolute path to stdout
 // (the form scripts/hooks/run-hook.mjs documents: "a WorktreeCreate script can
-// still print its path"). There is no built-in fallback — a non-zero exit or no
-// output aborts worktree creation — so this hook FAILS SAFE: on any error it
-// falls back to creating at the default nested location (now protected by the
-// merged root-clone delete-guard) so worktree creation is never broken.
+// still print its path"). A non-zero exit or no output aborts worktree creation.
+//
+// GOVERNED PROVISIONING (BI-D1FB8C4D). In a DPF source repository this hook no
+// longer creates first and binds afterwards. It runs the repository's
+// provisioning library (scripts/lib/worktree-provision.mjs): the platform admits
+// and binds the Workroom BEFORE the worktree exists, and a refusal or an
+// unreachable platform creates nothing. The old fail-safe fallback to the nested
+// .claude/worktrees location is gone: it was the path by which an unbound tree
+// was always created. The only override is the operator break-glass,
+// DPF_WORKTREE_BREAK_GLASS=<reason>, for a platform that cannot be asked.
+// Other repositories get a plain `git worktree add` at the sibling base.
 //
 // Cross-platform Node (the one runtime guaranteed for Claude Code hooks); a
 // single .mjs avoids needing both a .ps1 and a .sh. Wired directly under the
@@ -94,7 +101,7 @@ function originMainAvailable(root) {
 
 /** Create (or reuse) a worktree at `target` on `branch`, off origin/main when
  *  available. Idempotent: an existing target dir is treated as already-created. */
-function addWorktree(root, target, branch) {
+export function addWorktree(root, target, branch) {
   if (existsSync(target)) return target; // already there — reuse (new-dev-worktree's skip)
   const parent = target.slice(0, target.lastIndexOf("/"));
   if (parent) mkdirSync(parent, { recursive: true });
@@ -125,8 +132,10 @@ function addWorktree(root, target, branch) {
  *    the read-only main checkout may be older. Foreign or unsupported source
  *    cannot become a claim. Keep this dynamic so absent source is fail-soft.
  *
- * Binding NEVER blocks worktree creation. A tree that could not be bound is
- * still a usable tree; it is just one the claim guard will flag.
+ * This runs AFTER governed provisioning has already admitted and bound the
+ * room: it re-adopts with the observed source identity and caches the claim
+ * marker. The claim already exists, so a failure here is reported, not fatal.
+ * Returns the binder's result (or an unavailable result) for the caller.
  */
 async function bindAtBirth({ mainRoot, worktreePath, branch }) {
   let bind;
@@ -139,24 +148,18 @@ async function bindAtBirth({ mainRoot, worktreePath, branch }) {
     }
     bind = module.bindWorktreeToWorkroom;
   } catch (error) {
-    process.stderr.write(`[worktree-create] workroom binding unavailable (${error?.message ?? "source helper unavailable"}) — claim a Workroom manually with adopt_worktree.\n`);
-    return;
+    return { status: "unavailable", reason: error?.message ?? "source helper unavailable" };
   }
   try {
     const gitDir = git(worktreePath, ["rev-parse", "--path-format=absolute", "--git-dir"], { timeout: 3000 });
-    const result = await bind({
+    return await bind({
       branch,
       worktreePath,
       gitDir,
       captureSourceIdentity: true,
     });
-    if (result.status === "bound") {
-      process.stderr.write(`[worktree-create] Workroom claimed for ${branch}: ${result.capsuleId}\n`);
-    } else {
-      process.stderr.write(`[worktree-create] NOT bound to a Workroom (${result.status}: ${result.reason}) — AGENTS.md 12 still requires a claim; call adopt_worktree before you work.\n`);
-    }
   } catch (err) {
-    process.stderr.write(`[worktree-create] workroom binding failed: ${err?.message ?? err}\n`);
+    return { status: "unavailable", reason: `workroom binding failed: ${err?.message ?? err}` };
   }
 }
 
@@ -186,6 +189,66 @@ export function verifiedBindingSource({ mainRoot, worktreePath, branch, headSha 
   return source;
 }
 
+// ── governed provisioning (BI-D1FB8C4D) ──────────────────────────────────────
+
+/** Where the governed provisioning library lives in the repository being provisioned. */
+export function provisionLibraryPath(mainRoot) {
+  return `${String(mainRoot).replace(/\\/g, "/").replace(/\/+$/g, "")}/scripts/lib/worktree-provision.mjs`;
+}
+
+/**
+ * Decide and run. A DPF source repository (one that carries the provisioning
+ * library) is admitted and bound BEFORE creation, and refused or unreachable
+ * means no worktree. Any other repository gets a plain `git worktree add`.
+ * There is no nested `.claude/worktrees` fallback. `deps` is injected by tests.
+ * @returns {Promise<{ exitCode: number, stdout: string, stderr: string[] }>}
+ */
+export async function runWorktreeCreate({ mainRoot, worktreeName, env = process.env, deps }) {
+  const stderr = [];
+  const plan = planWorktree({ mainRoot, worktreeName });
+  if (!plan) {
+    stderr.push(`[worktree-create] cannot plan a worktree for name=${JSON.stringify(worktreeName)} root=${mainRoot}; nothing was created.`);
+    return { exitCode: 1, stdout: "", stderr };
+  }
+
+  const libraryPath = provisionLibraryPath(mainRoot);
+  if (!deps.exists(libraryPath)) {
+    try {
+      return { exitCode: 0, stdout: deps.addWorktree(mainRoot, plan.target, plan.branch), stderr };
+    } catch (err) {
+      stderr.push(`[worktree-create] git worktree add failed: ${err instanceof Error ? err.message : String(err)}`);
+      return { exitCode: 1, stdout: "", stderr };
+    }
+  }
+
+  let provisionWorktree;
+  try {
+    ({ provisionWorktree } = await deps.importLibrary(libraryPath));
+    if (typeof provisionWorktree !== "function") throw new Error("library lacks provisionWorktree");
+  } catch (err) {
+    stderr.push(`[worktree-create] cannot load ${libraryPath} (${err instanceof Error ? err.message : String(err)}); nothing was created.`);
+    return { exitCode: 1, stdout: "", stderr };
+  }
+
+  const out = await provisionWorktree({
+    mainRoot,
+    plan,
+    env,
+    effects: { addWorktree: deps.addWorktree, afterCreate: deps.afterCreate },
+  });
+  if (out.status === "created") {
+    stderr.push(`[worktree-create] Workroom ${out.capsuleId} admitted and bound before creation: ${out.path}`);
+    if (out.warning) stderr.push(`[worktree-create] ${out.warning}`);
+    return { exitCode: 0, stdout: out.path, stderr };
+  }
+  if (out.status === "break-glass") {
+    stderr.push(`[worktree-create] BREAK-GLASS: created ${out.path} UNBOUND (reason: ${out.reason}). A pending marker records it; bind it with adopt_worktree once the platform is back.`);
+    return { exitCode: 0, stdout: out.path, stderr };
+  }
+  stderr.push(out.message);
+  return { exitCode: 1, stdout: "", stderr };
+}
+
 // ── runtime entry ────────────────────────────────────────────────────────────
 
 async function main() {
@@ -198,41 +261,24 @@ async function main() {
   }
 
   const basePath = String(payload?.base_path ?? payload?.cwd ?? process.cwd()).replace(/\\/g, "/");
-  const worktreeName = payload?.worktree_name ?? "";
+  const mainRoot = resolveMainRoot(basePath) ?? basePath;
+  git(mainRoot, ["fetch", "origin", "--quiet"], { allowFail: true }); // freshen origin/main, best-effort
 
-  // Preferred path: canonical sibling base off origin/main.
-  try {
-    const mainRoot = resolveMainRoot(basePath) ?? basePath;
-    git(mainRoot, ["fetch", "origin", "--quiet"], { allowFail: true }); // freshen origin/main, best-effort
-    const plan = planWorktree({ mainRoot, worktreeName });
-    if (!plan) throw new Error(`cannot plan a worktree for name=${JSON.stringify(worktreeName)} root=${mainRoot}`);
-    const created = addWorktree(mainRoot, plan.target, plan.branch);
-    // Bind BEFORE returning the path: the claim is part of creating the
-    // worktree, not a follow-up someone remembers. Bounded and fail-soft.
-    await bindAtBirth({ mainRoot, worktreePath: created, branch: plan.branch });
-    process.stdout.write(created);
-    process.exit(0);
-  } catch (err) {
-    process.stderr.write(
-      `[worktree-create] canonical placement failed (${err instanceof Error ? err.message : String(err)}); ` +
-        `falling back to the default nested location — still protected by root-clone-guard.\n`,
-    );
-  }
-
-  // Fail-safe: reproduce Claude's default so worktree creation is NEVER broken.
-  try {
-    const mainRoot = resolveMainRoot(basePath) ?? basePath;
-    const safe = safeWorktreeName(worktreeName) || `wt-${process.pid}`;
-    const target = `${mainRoot}/.claude/worktrees/${safe}`;
-    const created = addWorktree(mainRoot, target, safe);
-    process.stdout.write(created);
-    process.exit(0);
-  } catch (err) {
-    process.stderr.write(
-      `[worktree-create] fallback placement also failed: ${err instanceof Error ? err.message : String(err)}\n`,
-    );
-    process.exit(1);
-  }
+  const result = await runWorktreeCreate({
+    mainRoot,
+    worktreeName: payload?.worktree_name ?? "",
+    deps: {
+      exists: existsSync,
+      importLibrary: (libraryPath) => import(pathToFileURL(libraryPath).href),
+      addWorktree,
+      // After creation, re-adopt through the binder of the checkout just
+      // created, verified and with its source identity (BI-0B292D84).
+      afterCreate: ({ worktreePath, branch }) => bindAtBirth({ mainRoot, worktreePath, branch }),
+    },
+  });
+  for (const line of result.stderr) process.stderr.write(`${line}\n`);
+  if (result.stdout) process.stdout.write(result.stdout);
+  process.exit(result.exitCode);
 }
 
 // Run only when invoked directly (not when imported by the test).
