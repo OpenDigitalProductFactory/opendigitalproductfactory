@@ -31,8 +31,8 @@ function ports(s: ConfirmationState, now = new Date(CLOSED_AT.getTime() + DAY)) 
   const p = {
     now,
     loadState: vi.fn(async () => s),
-    postIssueComment: vi.fn(async () => ({ ok: true as const, url: "https://github.com/acme/portal/issues/42#issuecomment-1" })),
-    notifyCluster: vi.fn(async () => ({ ok: true as const, queued: 1 })),
+    postIssueComment: vi.fn(async () => ({ sent: true as const, url: "https://github.com/acme/portal/issues/42#issuecomment-1" })),
+    notifyCluster: vi.fn(async () => ({ sent: true as const, queued: 1 })),
     fileCorrective: vi.fn(async () => ({ action: "created" as const, itemId: "BI-ACC-1" })),
     record: vi.fn(async (_item: unknown, payload: Record<string, unknown>) => { recorded.push(payload); }),
   } satisfies SubmitterConfirmationPorts;
@@ -68,7 +68,7 @@ describe("advanceSubmitterConfirmation", () => {
 
   it("records question-not-sent with no controller credential and still runs the clock", async () => {
     const { p, recorded } = ports(state());
-    p.postIssueComment.mockResolvedValueOnce({ ok: false, reason: "no-credential", message: "no controller login" } as never);
+    p.postIssueComment.mockResolvedValueOnce({ sent: false, reason: "no-credential", message: "no controller login" } as never);
     expect(await advanceSubmitterConfirmation(item, p)).toMatchObject({ step: "question-not-sent", reason: "no-credential" });
     expect(recorded[0]).toMatchObject({ outcome: "question-not-sent", reason: "no-credential", resolved: false });
   });

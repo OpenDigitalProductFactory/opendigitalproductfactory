@@ -322,7 +322,12 @@ export class GitHubForgeAdapter {
     if ((typeof data.id !== "number" && typeof data.id !== "string") || typeof data.html_url !== "string") {
       return invalidResponse(response.status, "GitHub comment response missing id/html_url");
     }
-    return { ok: true, adapter: "github", issueNumber: input.number, commentId: String(data.id), url: data.html_url };
+    const issueUrl = data.html_url.replace(/#.*$/, "");
+    return {
+      ...issueSuccess({ adapter: "github", id: String(input.number), number: input.number, url: issueUrl }),
+      commentId: String(data.id),
+      commentUrl: data.html_url,
+    };
   }
 
   /**

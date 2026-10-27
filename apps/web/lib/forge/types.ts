@@ -98,5 +98,5 @@ export interface CommentOnIssueInput {
 }
 
 export type CommentOnIssueResult =
-  | { ok: true; adapter: ForgeAdapterId; issueNumber: number; commentId: string; url: string }
+  | (Exclude<RemoteIssueResult, ForgeFailure> & { commentId: string; commentUrl: string })
   | ForgeFailure;

@@ -202,8 +202,9 @@ describe("GitHubForgeAdapter.commentOnIssue", () => {
     }));
     const adapter = new GitHubForgeAdapter({ token: "ghp_test" });
     const result = await adapter.commentOnIssue({ repository, number: 42, body: "Is this fixed for you?", egressClass: "own-repo" });
-    expect(result).toEqual({ ok: true, adapter: "github", issueNumber: 42, commentId: "991",
-      url: "https://github.com/acme/portal/issues/42#issuecomment-991" });
+    expect(result.ok).toBe(true);
+    expect(result).toMatchObject({ remote: { number: 42, url: "https://github.com/acme/portal/issues/42" }, commentId: "991",
+      commentUrl: "https://github.com/acme/portal/issues/42#issuecomment-991" });
     expect(calls).toEqual([{ url: "https://api.github.com/repos/acme/portal/issues/42/comments", method: "POST",
       body: { body: "Is this fixed for you?" } }]);
   });

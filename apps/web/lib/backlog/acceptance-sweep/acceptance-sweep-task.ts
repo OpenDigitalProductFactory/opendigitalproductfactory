@@ -307,16 +307,16 @@ export function productionSubmitterConfirmationPorts(
     postIssueComment: async (repository, number, body) => {
       const { resolveRepositoryControllerToken } = await import("@/lib/contributor-change-lanes/github-rest-reader");
       const token = await resolveRepositoryControllerToken(db as never);
-      if (!token) return { ok: false, reason: "no-credential", message: "No managed-repository controller login is connected." };
+      if (!token) return { sent: false, reason: "no-credential", message: "No managed-repository controller login is connected." };
       const { GitHubForgeAdapter } = await import("@/lib/forge/github-adapter");
       const posted = await new GitHubForgeAdapter({ token }).commentOnIssue({ repository, number, body, egressClass: "own-repo" });
-      return posted.ok ? { ok: true, url: posted.url } : { ok: false, reason: "error", message: `${posted.category}: ${posted.message}` };
+      return posted.ok ? { sent: true, url: posted.commentUrl } : { sent: false, reason: "error", message: `${posted.category}: ${posted.message}` };
     },
     notifyCluster: async (clusterId, message) => {
       try {
         const { prisma: client } = await import("@dpf/db");
         const cluster = await client.founderDemandCluster.findUnique({ where: { clusterId }, include: { members: true } });
-        if (!cluster) return { ok: true, queued: 0 };
+        if (!cluster) return { sent: true, queued: 0 };
         const { queueFounderDispositionNotices } = await import("@/lib/federation/demand-disposition");
         // Its own notice identity, so the peer does not dedupe it against the
         // cluster's original acceptance notice.
@@ -325,9 +325,9 @@ export function productionSubmitterConfirmationPorts(
           members: cluster.members.map((member) => ({ originInstallationId: member.originInstallationId,
             envelopeId: member.envelopeId, mirrorRefs: member.mirrorRefs })),
         });
-        return { ok: true, queued: result.queued };
+        return { sent: true, queued: result.queued };
       } catch (error) {
-        return { ok: false, reason: "error", message: error instanceof Error ? error.message : "unknown error" };
+        return { sent: false, reason: "error", message: error instanceof Error ? error.message : "unknown error" };
       }
     },
     fileCorrective: async (args) => {

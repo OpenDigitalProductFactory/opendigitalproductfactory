@@ -70,9 +70,9 @@ export type SubmitterConfirmationPorts = {
   now: Date;
   loadState(item: ConfirmationItem): Promise<ConfirmationState | null>;
   postIssueComment(repository: ForgeRepository, number: number, body: string):
-    Promise<{ ok: true; url: string } | { ok: false; reason: "no-credential" | "error"; message: string }>;
+    Promise<{ sent: true; url: string } | { sent: false; reason: "no-credential" | "error"; message: string }>;
   notifyCluster(clusterId: string, message: string):
-    Promise<{ ok: true; queued: number } | { ok: false; reason: "error"; message: string }>;
+    Promise<{ sent: true; queued: number } | { sent: false; reason: "error"; message: string }>;
   fileCorrective(args: { originalItemId: string; servedSha: string; fingerprint: string; title: string; body: string }):
     Promise<{ action: "created" | "updated" | "skipped"; itemId: string | null; reason?: string }>;
   record(item: ConfirmationItem, payload: Record<string, unknown>, summary: string): Promise<void>;
@@ -194,7 +194,7 @@ async function ask(
   };
   if (channel.kind === "github-issue") {
     const posted = await ports.postIssueComment(channel.repository, channel.number, question);
-    if (!posted.ok) return notSent(posted.reason, posted.message);
+    if (!posted.sent) return notSent(posted.reason, posted.message);
     await ports.record(item, { ...base, outcome: "question-sent", resolved: false, channel: channel.kind,
       issue: `${channel.repository.owner}/${channel.repository.repo}#${channel.number}`, commentUrl: posted.url },
       `Asked the submitter of ${state.itemId} whether it is fixed`);
@@ -202,7 +202,7 @@ async function ask(
   }
   if (channel.kind === "founder-demand-cluster") {
     const sent = await ports.notifyCluster(channel.clusterId, question);
-    if (!sent.ok) return notSent(sent.reason, sent.message);
+    if (!sent.sent) return notSent(sent.reason, sent.message);
     if (sent.queued === 0) return notSent("no-channel", "No reporting installation is reachable for this cluster.");
     await ports.record(item, { ...base, outcome: "question-sent", resolved: false, channel: channel.kind,
       clusterId: channel.clusterId, queued: sent.queued },
