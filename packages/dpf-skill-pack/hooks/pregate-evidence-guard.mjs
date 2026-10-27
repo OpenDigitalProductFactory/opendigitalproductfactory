@@ -162,6 +162,14 @@ export function evaluateGateVerdict(head, opts = {}) {
     return { ok: true };
   }
 
+  const correctionReader = head.topLevel ? join(head.topLevel, "scripts", "published-correction.mjs") : "";
+  if (correctionReader && existsSync(correctionReader)) {
+    const result = (opts.spawnImpl || spawnSync)(process.execPath, [correctionReader, "--status"], {
+      cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 15_000, windowsHide: true,
+    });
+    if (result.status === 0) return { ok: true, kind: "override" };
+  }
+
   const files = listSlotStateFiles(head.statePath);
   if (files.length === 0) {
     return evaluateGateRecord(head.statePath, head.sha, head.branch);
@@ -234,6 +242,9 @@ export function evaluateGateRecord(statePath, headSha, headBranch = "") {
   if (rec.skipped && rec.skipReason) {
     const c = classifyLocalCiOverride(rec.skipReason);
     if (!c.ok) return { ok: false, reason: c.reason };
+    if (c.code === "published-correction") {
+      return { ok: false, reason: "Published correction must pass fresh stage inspection; raw slot fields cannot substitute for it." };
+    }
     if (c.code === GATE_INFRASTRUCTURE_UNAVAILABLE_CODE) {
       // BI-02E5F2A1: evidence-gated — the record must carry the probe's capture.
       const e = classifyGateInfrastructureEvidence(rec.infrastructureEvidence);
@@ -275,7 +286,8 @@ export function decide(command, env = {}, opts = {}) {
       env.DPF_SKIP_PREPUSH_GATE_REASON ||
       "";
     const c = classifyLocalCiOverride(reason);
-    if (c.ok) return { block: false };
+    if (c.ok && c.code !== "published-correction") return { block: false };
+    if (c.code === "published-correction") return { block: true, reason: "Published correction needs machine proof in the existing record; an environment reason alone is insufficient." };
     return {
       block: true,
       reason:
@@ -295,6 +307,15 @@ export function decide(command, env = {}, opts = {}) {
 
   const gate = evaluateGateVerdict(head, { cwd: head.topLevel || cwd });
   if (gate.ok) return { block: false };
+  // Only a Git push may defer execution to its mandatory Git hook. A PR
+  // creation still needs completed proof; eligibility is not a passing check.
+  const correction = head.topLevel ? join(head.topLevel, "scripts", "published-correction.mjs") : "";
+  if (/^git\s+push\b/.test(execText.trim()) && correction && existsSync(correction)) {
+    const result = spawnSync(process.execPath, [correction, "--eligible"], {
+      cwd: head.topLevel, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 15_000, windowsHide: true,
+    });
+    if (result.status === 0) return { block: false };
+  }
   // A cloud agent session cannot run pregate; the git pre-push hook records
   // the push under the same allowlisted code instead of refusing it.
   if (cloudAgentSessionOverride(env)) return { block: false };

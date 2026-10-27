@@ -12,7 +12,9 @@ import {
   COORDINATION_SCOPE_TYPE,
 } from "@/lib/work-management/coordinator-eligibility";
 import type { RecordedEvidence } from "@/lib/work-management/stage-evidence-receipts";
-import { planContainmentRelations, terminalStandingRoomIds } from "@/lib/work-management/standing-room-nesting";
+import { workroomDriveTaskId } from "@/lib/work-management/drive-plan-stage";
+import { readDispatchCheckpoint } from "@/lib/work-management/workroom-drive-checkpoint";
+import { planContainmentRelations, TERMINAL_WORKROOM_STATUSES, terminalStandingRoomIds } from "@/lib/work-management/standing-room-nesting";
 
 /**
  * Write the declared standing-room tree, returning how many relations were newly
@@ -390,4 +392,108 @@ export async function loadStandingRoomIds(db: {
     LIMIT ${STANDING_ROOM_SCAN_LIMIT}
   `;
   return rows.map((row) => row.id);
+}
+
+/**
+ * Each bound room's backlog item status, by the stored key (BI-72679FE0). A
+ * room stores its item as the semantic BI-* key or the row id, so both are
+ * mapped. The drive stands a room down when its item is no longer live work
+ * (drive-work-item-gate.ts).
+ *
+ * A failed read returns an empty map: every room then reads as active and is
+ * driven exactly as before this check existed. That fails toward the prior
+ * behaviour rather than silently parking live work.
+ */
+export async function loadWorkItemStatuses(
+  storedItemKeys: readonly string[],
+  db?: Pick<PrismaClient, "$queryRaw">,
+): Promise<Map<string, string>> {
+  const byKey = new Map<string, string>();
+  const keys = [...new Set(storedItemKeys.filter(Boolean))];
+  if (keys.length === 0) return byKey;
+  try {
+    const source = db ?? (await import("@dpf/db")).prisma;
+    const rows = await source.$queryRaw<Array<{ id: string; itemId: string; status: string }>>`
+      SELECT "id", "itemId", "status" FROM "BacklogItem"
+      WHERE "id" = ANY(${keys}::text[]) OR "itemId" = ANY(${keys}::text[])
+    `;
+    for (const row of rows) {
+      byKey.set(row.id, row.status);
+      byKey.set(row.itemId, row.status);
+    }
+  } catch (error) {
+    console.warn("[workroom-drive] work item status read failed; rooms are driven as active:", error);
+  }
+  return byKey;
+}
+
+/**
+ * The semantic id (BI-*) of the item a room delivers, for its stage brief
+ * (BI-1DDCE164). A room stores either the semantic key or the row id; a row id
+ * means nothing to the coworker, so the workspace's recorded item is used
+ * instead, and no key is better than a row id.
+ */
+export function workItemKeyOf(room: { backlogItemId: string | null; workspaceState: unknown }): string | null {
+  const semantic = (value: unknown): value is string => typeof value === "string" && /^BI-[A-Z0-9-]+$/.test(value);
+  if (semantic(room.backlogItemId)) return room.backlogItemId;
+  const workspace = room.workspaceState && typeof room.workspaceState === "object" ? room.workspaceState as Record<string, unknown> : {};
+  const item = workspace.backlogItem && typeof workspace.backlogItem === "object" ? workspace.backlogItem as Record<string, unknown> : {};
+  return semantic(item.itemId) ? item.itemId : null;
+}
+
+/**
+ * Stop the stage tasks of rooms the drive no longer selects (BI-1DDCE164).
+ *
+ * loadStandingRoomIds leaves out archived and terminal rooms, and Build Studio
+ * rooms since #6391 (WWMD DI-80078CF9CB11). A room it leaves out is never
+ * visited again, so the 15-minute task the drive enqueued for it before kept firing:
+ * live, 41 Build Studio and 3 archived rooms ran build-specialist every 15
+ * minutes, recording evidence the drive would never read. The drive owns the
+ * stop (WWMD DI-6DB14CC7C8E9), so each tick ends those tasks here.
+ *
+ * Matches the same exclusions as loadStandingRoomIds. A failed write is logged
+ * and reported as zero: the tick still drives every selected room.
+ */
+export async function deactivateUndrivenRoomTasks(db?: {
+  $executeRaw: (q: TemplateStringsArray, ...v: unknown[]) => Promise<number>;
+}): Promise<number> {
+  try {
+    const source = db ?? (await import("@dpf/db")).prisma;
+    return await source.$executeRaw`
+      UPDATE "ScheduledAgentTask" AS t
+      SET "isActive" = false, "updatedAt" = NOW()
+      FROM "WorkCapsule" AS c
+      WHERE t."isActive" = true
+        AND t."taskId" LIKE 'workroom-' || c."capsuleId" || '-%'
+        AND (
+          c."archivedAt" IS NOT NULL
+          OR c."status" = ANY(${[...TERMINAL_WORKROOM_STATUSES]}::text[])
+          OR c."executorKind" = 'build-studio'
+        )
+    `;
+  } catch (error) {
+    console.warn("[workroom-drive] undriven room task stop skipped:", error);
+    return 0;
+  }
+}
+
+/**
+ * The room's sequential stage task, when an attention tick has moved the room
+ * off the stage that task was last enqueued for (BI-1DDCE164). That task is
+ * then working a stage nobody will read again, so the drive stops it.
+ *
+ * Attention on the SAME stage returns null and leaves the task alone: a later
+ * same-stage dispatch replays the recorded enqueue without reactivating its
+ * task (workroom-drive-scheduling.ts), so stopping it here could strand a stage
+ * the drive still wants run.
+ */
+export function taskLeftBehind(
+  room: { capsuleId: string; workspaceState: unknown },
+  plan: { shapeKey?: string | null; stageKey?: string | null },
+): string | null {
+  if (!plan.shapeKey) return null;
+  const workspace = room.workspaceState && typeof room.workspaceState === "object" ? room.workspaceState as Record<string, unknown> : {};
+  const enqueued = readDispatchCheckpoint(workspace.workroomDispatchCheckpoint ?? null);
+  const taskId = workroomDriveTaskId(room.capsuleId, plan.shapeKey);
+  return enqueued && enqueued.confirmedEffect.taskId === taskId && enqueued.stage.stageKey !== plan.stageKey ? taskId : null;
 }

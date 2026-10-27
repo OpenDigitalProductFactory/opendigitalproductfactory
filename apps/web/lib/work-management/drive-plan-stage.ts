@@ -27,7 +27,7 @@ import {
 } from "./work-shapes";
 import type { WorkroomShapeConformance } from "./workroom-shape-conformance";
 import { DELIVERY_AUTHOR_ROLE } from "./delivery-shapes";
-import { writebackLatchHolds, type PriorDriveForLatch } from "./writeback-latch";
+import { decideWritebackLatch, WRITEBACK_RUN_DEADLINE_MS, type PriorDriveForLatch, type StageRunObservation, type WritebackLatchDecision } from "./writeback-latch";
 import {
   EXECUTOR_WRITEBACK_UNAVAILABLE_REASON,
   WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND,
@@ -181,6 +181,8 @@ export function planStage(args: {
   iteration?: number;
   /** Given only by the graph drive (BI-086DC167): the run, so a run-scoped receipt counts only within it. */
   runKey?: string;
+  /** Given only by the sequential drive (BI-7C0B2BD6): what the room's task shows; null when none exists. */
+  run?: StageRunObservation | null;
 }): DrivePlan {
   const { input, stage, conformance, cycle, prior } = args;
   const definition = args.definition;
@@ -245,18 +247,21 @@ export function planStage(args: {
       receipt.stageKey === stage.key && receipt.kind === WORKROOM_DRIVE_BLOCKED_RECEIPT_KIND
       && (iteration === undefined || ((receipt.iteration ?? 0) === iteration && receiptInRun(receipt, runKey))),
   );
-  // Bounded, not permanent: the latch holds within a cycle and releases on the
-  // next, so a deployed fix can reach a room that previously failed closed.
-  // Without this the pause reason re-triggers the pause and the room is locked
-  // forever (12 of 24 rooms on this install were).
-  const alreadyTriedWriteback = !completing
-    && writebackLatchHolds({
-      prior: prior ?? null,
-      stageKey: stage.key,
-      currentCycleKey: cycle?.cycleKey ?? null,
-      blocked,
-    });
-  if (alreadyTriedWriteback) {
+  // Bounded, not permanent: with the room's task in view the latch holds only
+  // while the dispatched run is outstanding (BI-7C0B2BD6); without it, within a
+  // cycle, so a deployed fix can reach a room that previously failed closed.
+  const latch = completing ? null : decideWritebackLatch({
+    prior: prior ?? null,
+    stageKey: stage.key,
+    currentCycleKey: cycle?.cycleKey ?? null,
+    blocked,
+    run: args.run,
+    retry: input.writebackRetry ?? null,
+    now: input.now ?? new Date(0),
+  });
+  // Only a sequential tick that can see the task carries the retry record, so every other plan is unchanged.
+  const retryFields = args.run !== undefined ? { writebackRetry: latch?.retry ?? null } : {};
+  if (latch?.hold) {
     return {
       action: "pause",
       reason: EXECUTOR_WRITEBACK_UNAVAILABLE_REASON,
@@ -272,9 +277,9 @@ export function planStage(args: {
       conformance,
       cycle,
       deviations: [],
-      ledger: [
-        `Stage ${stage.key} already dispatched without a completing receipt; pause until writeback exists.`,
-      ],
+      ledger: [latchLedger(stage.key, latch)],
+      ...retryFields,
+      ...(latch.why === "outstanding" ? { keepTaskActive: true } : {}),
     };
   }
 
@@ -294,5 +299,24 @@ export function planStage(args: {
     cycle,
     deviations: [],
     ledger: [`Dispatch agent:${parsed.value} for stage ${stage.key}.`],
+    ...retryFields,
+    // A retry is a new dispatch in the same cycle, so the scheduler re-queues it rather than replaying the last one.
+    ...(args.run !== undefined && latch?.retry ? { dispatchAttempt: latch.retry.failures } : {}),
   };
+}
+
+/** The ledger line for a held latch: what is outstanding, or what failed and when it is retried. */
+function latchLedger(stageKey: string, latch: Extract<WritebackLatchDecision, { hold: true }>): string {
+  switch (latch.why) {
+    case "approval":
+      return `Stage ${stageKey} already requested a decision (${latch.outcome}); no new attempt is scheduled. Reconcile that request's outcome before continuing.`;
+    case "outstanding":
+      return `Stage ${stageKey} was dispatched and its run has not finished; holding until it does, for up to ${Math.round(WRITEBACK_RUN_DEADLINE_MS / 3_600_000)}h.`;
+    case "backoff":
+      return `Stage ${stageKey} failed ${latch.retry.failures} time(s) this cycle without a completing receipt (${latch.retry.lastError ?? "no message"}); retrying after ${latch.retryAt}.`;
+    case "exhausted":
+      return `Stage ${stageKey} failed ${latch.retry.failures} times this cycle without a completing receipt; last error: ${latch.retry.lastError ?? "no message"}. Paused until the executor records evidence or the next cycle starts.`;
+    default:
+      return `Stage ${stageKey} already dispatched without a completing receipt; pause until writeback exists.`;
+  }
 }

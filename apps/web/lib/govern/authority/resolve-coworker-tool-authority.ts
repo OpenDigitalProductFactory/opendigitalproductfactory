@@ -43,6 +43,7 @@ type AuthorityDb = {
     findFirst(args: unknown): Promise<{
       id: string;
       agentId: string;
+      slugId?: string | null;
       sensitivity: string;
       hitlTierDefault: number;
       governanceProfile: {
@@ -76,7 +77,10 @@ function asString(value: unknown): string | null {
 
 export function deriveCoworkerAuthoritySubject(
   params: Record<string, unknown>,
+  toolName?: string,
 ): CoworkerAuthoritySubject {
+  // create_backlog_item mints params.itemId. That id is not an existing item.
+  const skipMintedItemId = toolName === "create_backlog_item";
   const candidates: Array<
     [keyof Record<string, unknown>, CoworkerAuthoritySubject["kind"]]
   > = [
@@ -89,6 +93,7 @@ export function deriveCoworkerAuthoritySubject(
     ["teamId", "team"],
   ];
   for (const [key, kind] of candidates) {
+    if (skipMintedItemId && key === "itemId") continue;
     const id = asString(params[key]);
     if (id) return { kind, id };
   }
@@ -197,9 +202,15 @@ export function resolveBoundInitiativeReviewItem(
 }
 
 /** Resolve initiative subject and organization from the canonical item. Caller
- * organization fields are ignored; authenticated context can only narrow. */
+ * organization fields are ignored; authenticated context can only narrow.
+ *
+ * create_backlog_item ignores params.itemId: that id is being minted, so the
+ * subject is the parent (authenticated organization, or the platform). Tools
+ * that address an existing item still fail closed when it is absent.
+ */
 export async function resolveInitiativeAuthorityContext(input: {
   params: Record<string, unknown>;
+  toolName?: string;
   trustedBoundItemId?: string | null;
   authenticatedOrganizationId?: string | null;
   db: InitiativeAuthorityDb;
@@ -209,7 +220,7 @@ export async function resolveInitiativeAuthorityContext(input: {
 }> {
   const subject: CoworkerAuthoritySubject = input.trustedBoundItemId
     ? { kind: "backlog-item", id: input.trustedBoundItemId }
-    : deriveCoworkerAuthoritySubject(input.params);
+    : deriveCoworkerAuthoritySubject(input.params, input.toolName);
   if (subject.kind !== "backlog-item") {
     return {
       subject,
@@ -389,6 +400,7 @@ export const resolveCoworkerToolAuthorityInput =
         select: {
           id: true,
           agentId: true,
+          slugId: true,
           sensitivity: true,
           hitlTierDefault: true,
           governanceProfile: {
@@ -424,6 +436,20 @@ export const resolveCoworkerToolAuthorityInput =
       task,
       execution.toolName,
     );
+    const engagementMetadata = objectRecord(task?.a2aMetadata);
+    if (engagementMetadata?.engagementBinding != null) {
+      const { parseEngagementTaskBinding, engagementToolAllowed, validateEngagementTask, engagementProviderIdentityRefs } = await import("@/lib/coworker-service-catalog/engagement-fulfillment");
+      const binding = parseEngagementTaskBinding(engagementMetadata.engagementBinding);
+      const tokenId = asString(engagementMetadata.apiTokenId);
+      const source = engagementMetadata.tokenSource;
+      const sourceRef = objectRecord(engagementMetadata.sourceRef);
+      if (!task || !binding || engagementMetadata.engagementReadFailure || !tokenId || (source !== "oauth" && source !== "pat")
+        || engagementMetadata.trigger !== "external-mcp" || sourceRef?.kind !== "mcp-token" || sourceRef.id !== tokenId
+        || !engagementProviderIdentityRefs(binding.providerAgentId).includes(actingAgentId) || execution.userId !== binding.userId
+        || !engagementToolAllowed(binding, execution.toolName, execution.rawParams)) throw new Error("Engagement tool is outside its immutable advisory binding.");
+      await validateEngagementTask({ binding, token: { tokenId, userId: execution.userId, capability: "write", source },
+        taskRunId: task.taskRunId, requireAssociation: true, authorityScope: Array.isArray(task.authorityScope) ? task.authorityScope.filter((scope): scope is string => typeof scope === "string") : [] });
+    }
     const trustedBoundItemId = await resolveTrustedInitiativeItemId({
       task,
       toolName: execution.toolName,
@@ -435,6 +461,7 @@ export const resolveCoworkerToolAuthorityInput =
       delegationPromise,
       resolveInitiativeAuthorityContext({
         params: execution.rawParams,
+        toolName: execution.toolName,
         trustedBoundItemId,
         authenticatedOrganizationId: execution.context?.organizationId,
         db,
@@ -530,7 +557,10 @@ export const resolveCoworkerToolAuthorityInput =
           ? await loadScheduledRoomMandate(db as unknown as RoomMandateDb, {
               taskRunId: task.taskRunId,
               a2aMetadata: task.a2aMetadata,
-              agentIds: [agent.agentId, actingAgentId],
+              agentIds: [agent.agentId, actingAgentId, ...(agent.slugId ? [agent.slugId] : [])],
+              toolName: execution.toolName,
+              params: execution.rawParams,
+              allowBlockedReport: agent.governanceProfile?.hitlPolicy.trim().toLowerCase() !== "always",
             })
           : null,
       }),

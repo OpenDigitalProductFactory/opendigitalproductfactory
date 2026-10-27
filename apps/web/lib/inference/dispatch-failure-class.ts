@@ -29,11 +29,12 @@ export type DispatchFailureCode =
   | "context-overflow"
   | "no-eligible-endpoint"
   | "sensitivity-unsatisfiable"
+  | "execution-uncertain"
   | "transient";
 
 export interface DispatchFailureVerdict {
   code: DispatchFailureCode;
-  /** False only when retrying is provably pointless. */
+  /** False when retrying is provably pointless or risks repeating committed effects. */
   retryable: boolean;
   /** Whether the caller should re-dispatch: retryable AND under the ceiling. */
   shouldRedispatch: boolean;
@@ -92,6 +93,11 @@ export function classifyDispatchFailure(
     summary,
     ...(capability ? { missingCapability: capability } : {}),
   });
+
+  if (name === "NativeCliExecutionUncertainError"
+    || /^Native CLI execution on .+ did not return a settled result\./.test(message)) {
+    return structural("execution-uncertain", "The native execution may already have changed data. Inspect its existing run and effects before authorizing another execution.");
+  }
 
   if (CONTEXT_OVERFLOW.test(message)) {
     return structural(

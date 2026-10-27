@@ -12,11 +12,28 @@ records.
 | What code chooses and dispatches a route? | `apps/web/lib/inference/routed-inference.ts`, `apps/web/lib/routing/request-contract.ts`, and `apps/web/lib/routing/pipeline-v2.ts` |
 | What policy decides whether governed data may leave the install? | `apps/web/lib/govern/data/policy-decision.ts` and `apps/web/lib/govern/data/policy-enforcement.ts` |
 | How is provider/account suitability compiled into route constraints? | [AI provider suitability routing design](../superpowers/specs/2026-07-19-ai-provider-suitability-routing-design.md) and its implemented contracts |
+| How does routing distinguish multiple accounts of one provider? | [Provider account identity](provider-accounts.md), [account routing guide](../user-guide/ai-workforce/provider-account-routing.md), and [capacity refactor delivery plan](../superpowers/plans/2026-10-14-provider-account-capacity-refactor.md). The delivery plan distinguishes source qualification from served acceptance. |
 | How is the designed route projected into EA? | `apps/web/lib/ea/ai-routing-architecture-registry.ts`, `apps/web/lib/ea/ai-routing-architecture-extract.ts`, and `apps/web/lib/ea/reconcile-ai-routing-architecture.ts`; one versioned registry projects synchronized BPMN, SysML, and ArchiMate model kinds |
 | What happened operationally? | Route decisions, adapter attempts, inference outcomes, token usage, capacity state, and safe screen/suitability receipts in the live install, correlated by request-scoped `traceId` for new traffic |
 
 Current implementation truth comes from code plus live evidence. A diagram, design
 document, or seeded row does not override those sources.
+
+## Restricted present reassessment
+
+The [review settlement amendment](../superpowers/specs/2026-10-16-original-initiative-review-settlement-design.md)
+defines a separate, restricted path for a new assessment of an exact immutable
+artifact. Its R2 source binds an existing in-process HTTP provider/account/model
+composition and exposes only `read_source_at_version` and the bound canonical
+writer. It disables native execution, provider fallback, tool-free inference and
+auxiliary grounding or reflection. Ordinary routing retains its existing behavior.
+
+Qualification records the actual current budget configuration and execution
+bounds, then rechecks them before each provider start. This source work does not
+establish release or served acceptance. In particular, finite total-token
+qualification still refuses without an authenticated input-bound producer; the
+normal 50,000-token case has not yet passed positive qualification. New task
+admission and genuine current review receipts remain separate required evidence.
 
 ## Streaming versus result delivery
 

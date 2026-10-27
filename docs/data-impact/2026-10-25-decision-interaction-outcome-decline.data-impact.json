@@ -1,0 +1,34 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "affectedCopies": [
+    "DecisionInteraction audit ledger written by kernel consult",
+    "Decision log read model keyed by outcomeType"
+  ],
+  "migration": {
+    "name": "20261025120000_widen_decision_interaction_outcome_type",
+    "backfill": "None. The check is dropped and re-added as a strict superset: recommend, arbitrate, escalate, defer, and decline. No row is rewritten, deleted, or reclassified. Every value already stored remains allowed.",
+    "rollback": "Forward-only. Reverting the writer without a later narrowing migration leaves the wider check in place. Older code never wrote decline, so it tolerates the extra allowed value. Narrowing the check again would reject the decline rows this migration exists to store."
+  },
+  "tests": [
+    "apps/web/lib/decision/kernel-consult-ledger.test.ts",
+    "packages/db/test/decision-interaction-outcome-decline-migration.test.ts",
+    "packages/db/scripts/migration-safety-guard.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:decision-interaction",
+      "prismaModel": "DecisionInteraction",
+      "lifecycleDisposition": "DecisionInteraction stays an append-only decision record. This change only widens the outcomeType check so an already-written decline verdict can persist. No row is rewritten, deleted, or reclassified, and historical recommend, arbitrate, escalate, and defer rows stay valid.",
+      "fields": [
+        {
+          "fieldId": "data:decision-interaction#outcomeType",
+          "resolution": "governed",
+          "reason": "The column stays an unconstrained Prisma String. Only the Postgres check gains decline beside recommend, arbitrate, escalate, and defer. The new set is a strict superset, so no stored value changes and no existing row can violate it.",
+          "provenance": "BI-835F9A12; apps/web/lib/decision/kernel-consult-ledger.ts maps verdict decline to outcomeType decline; 20260517230000_add_decision_perspective froze the four-value check"
+        }
+      ]
+    }
+  ]
+}

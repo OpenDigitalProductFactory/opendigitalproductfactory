@@ -160,6 +160,7 @@ function result(
     unreadEvidenceRefs,
     nextAction: requirementNextAction({
       code,
+      accountableRole,
       profile: facts.profile,
       shape: appliedShape,
       state,

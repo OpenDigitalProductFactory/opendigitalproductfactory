@@ -1,22 +1,26 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/ai-inference", () => ({ callProvider: vi.fn() }));
+vi.mock("@/lib/inference/host-gpu-admission", () => ({ assertLocalGpuFree: vi.fn() }));
+vi.mock("@/lib/routing/local-provider-capacity", async importOriginal => ({
+  ...await importOriginal<typeof import("@/lib/routing/local-provider-capacity")>(),
+  assertLocalProviderCapacityAvailable: vi.fn(),
+}));
 import { runEndpointConcurrencyDiagnostic } from "./endpoint-concurrency-diagnostic";
-import { acquireInferenceSlot, __resetInferenceAdmissionForTest, currentInferenceSignal, withInferenceCancellation,
+import { __resetInferenceAdmissionForTest, currentInferenceSignal, withInferenceCancellation,
   currentInferenceOrigin, withInferenceOrigin } from "@/lib/inference/inference-admission";
+import { withLocalInferenceLock } from "@/lib/queue/resource-lane";
 import { LocalProviderCapacityDeferredError } from "@/lib/routing/local-provider-capacity";
 
 const answer = { content: "READY", inputTokens: 2, outputTokens: 1, inferenceMs: 1,
-  truncated: false, raw: { choices: [{ finish_reason: "stop" }] } };
+  truncated: false, finishReason: "stop" };
 beforeEach(() => { __resetInferenceAdmissionForTest(); vi.stubEnv("DPF_INFERENCE_MAX_CONCURRENCY_LOCAL", "1"); });
 afterEach(() => { __resetInferenceAdmissionForTest(); vi.unstubAllEnvs(); vi.useRealTimers(); });
 
 describe("two ordinary caller evidence", () => {
   it("passes only actual queued/handoff/release events and two complete answers", async () => {
-    const call = vi.fn(async () => {
-      const release = await acquireInferenceSlot("local", "interactive");
-      try { await new Promise(resolve => setTimeout(resolve, 5)); return answer; }
-      finally { release(); }
-    });
+    const call = vi.fn(() => withLocalInferenceLock(async () => {
+      await new Promise(resolve => setTimeout(resolve, 5)); return answer;
+    }));
     const result = await runEndpointConcurrencyDiagnostic("local", "test-model", call);
     expect(call).toHaveBeenCalledTimes(2);
     expect(result.outcome).toBe("passed");
@@ -24,7 +28,7 @@ describe("two ordinary caller evidence", () => {
     expect(result.callers.map(c => c.content)).toEqual(["READY", "READY"]);
     expect(result.callers.map(c => c.finishReason)).toEqual(["stop", "stop"]);
     expect(result.callers.every(c => c.released)).toBe(true);
-    expect(result.events.filter(e => e.phase === "queued")).toHaveLength(1);
+    expect(result.events.filter(e => e.phase === "queued")).toHaveLength(2);
   });
 
   it("does not infer contention from two successful promises without actual admission events", async () => {
@@ -35,8 +39,8 @@ describe("two ordinary caller evidence", () => {
 
   it.each([
     { ...answer, truncated: true },
-    { ...answer, raw: { choices: [{ finish_reason: "length" }] } },
-    { ...answer, raw: undefined },
+    { ...answer, finishReason: "length" },
+    { ...answer, finishReason: undefined },
   ])("preserves incomplete answer evidence without passing it", async incomplete => {
     const result = await runEndpointConcurrencyDiagnostic("local", "test-model", async () => incomplete);
     expect(result.outcome).toBe("deferred");
@@ -46,7 +50,7 @@ describe("two ordinary caller evidence", () => {
 
   it("rejects reasoning-only output even if the provider reports stop", async () => {
     const result = await runEndpointConcurrencyDiagnostic("local", "test-model", async () => ({
-      ...answer, content: "", raw: { choices: [{ finish_reason: "stop", message: { reasoning_content: "READY" } }] },
+      ...answer, content: "",
     }));
     expect(result.outcome).toBe("failed");
     expect(result.callers[0]?.content).toBe("");
@@ -98,9 +102,9 @@ describe("two ordinary caller evidence", () => {
       runEndpointConcurrencyDiagnostic("local", "test-model", async () => {
         const origin = currentInferenceOrigin();
         origins.push(origin);
-        const release = await acquireInferenceSlot("local", origin);
-        try { await new Promise(resolve => setTimeout(resolve, 5)); return answer; }
-        finally { release(); }
+        return withLocalInferenceLock(async () => {
+          await new Promise(resolve => setTimeout(resolve, 5)); return answer;
+        }, { origin });
       }));
     expect(origins).toEqual(["autonomous", "autonomous"]);
     expect(result.outcome).toBe("passed");

@@ -138,6 +138,31 @@ test("probe: a successful claim is released and the override is REFUSED", async 
   assert.equal(result.details.released, "released");
 });
 
+test("probe: a queued claim on a closed pool is infrastructure evidence and the probe lease is released", async () => {
+  const calls = [];
+  const call = async (tool, args) => {
+    calls.push({ tool, args });
+    if (tool === PROBE_TOOL) {
+      return {
+        success: true,
+        data: {
+          admission: { status: "queued" },
+          lease: { leaseId: "NPEL-CLOSED" },
+          poolPolicy: { effectiveCapacity: 0, rollbackReason: "host-stage-headroom-low" },
+        },
+      };
+    }
+    return { success: true };
+  };
+  const result = await probeGateInfrastructure(baseProbeInput({ call }));
+  assert.equal(result.ok, true);
+  assert.equal(result.evidence.kind, "pool-closed");
+  assert.match(result.evidence.message, /effective capacity is 0|capacity is 0|not a runnable gate/);
+  assert.equal(classifyGateInfrastructureEvidence(result.evidence).ok, true);
+  assert.equal(calls[1].tool, PROBE_RELEASE_TOOL);
+  assert.equal(calls[1].args.leaseId, "NPEL-CLOSED");
+});
+
 test("probe: a queued claim still means the pool answers — refused, nothing left behind silently", async () => {
   const calls = [];
   const call = async (tool) => {

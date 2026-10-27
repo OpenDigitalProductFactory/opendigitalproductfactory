@@ -136,7 +136,7 @@ describe("terminal writer correction resumption", () => {
           schemaVersion: 1,
           kind: "missing-terminal-writer",
           writerToolName: "record_initiative_evidence",
-          resumeMode: "same-taskrun",
+          resumeMode: "same-taskrun", dispatchContract: "required-tool-call",
           attempt: 1,
           observedAt: "2026-09-06T15:50:56.679Z",
         },
@@ -168,7 +168,10 @@ describe("terminal writer correction resumption", () => {
         parameters: { profile: "fix" },
       };
     });
-    db.findUnique.mockResolvedValue({ status: "working" });
+    db.findUnique.mockResolvedValue({
+      status: "working", updatedAt, userId: "user-1", currentAgentId: params.agentId,
+      a2aMetadata: metadata,
+    });
     autonomous.executeTool.mockResolvedValue({
       success: true,
       message: "Read design.md lines 1-3 of 3.",

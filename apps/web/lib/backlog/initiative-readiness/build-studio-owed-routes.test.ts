@@ -74,3 +74,31 @@ describe("buildStudioOwedRoutes (BI-926A7E90 PR-3)", () => {
       .toEqual({ routed: false, reason: "implementation-decision-unavailable" });
   });
 });
+
+describe("the router reads the gate's own decision (BI-6F2872FC AC-6)", () => {
+  const gateRow = (recordedAt: string, overrides: Record<string, unknown> = {}) => ({
+    recordedAt: new Date(recordedAt),
+    payload: { ...decision, schemaVersion: 1, stableCodes: ["PLAN_REVIEW_REQUIRED"],
+      transitionObject: { kind: "feature-build", id: "FB-1", expectedVersion: "plan", targetState: "build" }, ...overrides },
+  });
+
+  it("uses the plan -> build gate's decision when no readiness input landed after it", async () => {
+    const { currentGateImplementationDecision } = await import("./build-studio-owed-routes");
+    const chosen = currentGateImplementationDecision(gateRow("2026-10-21T01:00:00Z"), new Date("2026-10-21T00:00:00Z"));
+    expect(chosen).toMatchObject({ target: "implementation", verdict: "input-required" });
+  });
+
+  it("falls back once a receipt, baseline or coverage landed after the gate last judged the build", async () => {
+    const { currentGateImplementationDecision } = await import("./build-studio-owed-routes");
+    expect(currentGateImplementationDecision(gateRow("2026-10-21T01:00:00Z"), new Date("2026-10-21T02:00:00Z"))).toBeNull();
+  });
+
+  it("ignores a decision that is not an implementation judgment of a build entering build", async () => {
+    const { currentGateImplementationDecision } = await import("./build-studio-owed-routes");
+    expect(currentGateImplementationDecision(gateRow("2026-10-21T01:00:00Z", { target: "completion" }), null)).toBeNull();
+    expect(currentGateImplementationDecision(gateRow("2026-10-21T01:00:00Z", {
+      transitionObject: { kind: "feature-build", id: "FB-1", targetState: "ship" } }), null)).toBeNull();
+    expect(currentGateImplementationDecision(gateRow("2026-10-21T01:00:00Z", { unmet: "x" }), null)).toBeNull();
+    expect(currentGateImplementationDecision(null, null)).toBeNull();
+  });
+});

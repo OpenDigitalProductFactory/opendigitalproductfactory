@@ -8,6 +8,7 @@ vi.mock("@dpf/db", () => ({
     },
     agent: {
       upsert: vi.fn(),
+      findUnique: vi.fn().mockResolvedValue(null),
     },
     agentModelConfig: {
       upsert: vi.fn(),
@@ -63,6 +64,24 @@ describe("bootstrap-first-run", () => {
   });
 
   describe("seedOnboardingAgent", () => {
+    it("does not fill canonical defaults while previous authority awaits approval", async () => {
+      vi.mocked(prisma.agent.upsert).mockResolvedValueOnce({ id: "alias-id", agentId: "onboarding-coo" } as never)
+        .mockResolvedValueOnce({ id: "owner-id", agentId: "AGT-WS-ONBOARD" } as never);
+      vi.mocked(prisma.agent.findUnique).mockResolvedValueOnce({ _count: { toolGrants: 1, toolGrantRevocations: 0 } } as never);
+      await seedOnboardingAgent();
+      expect(prisma.agentToolGrant.createMany).not.toHaveBeenCalled();
+      expect(syncAgentPrincipal).toHaveBeenCalledWith("AGT-WS-ONBOARD");
+    });
+    it("keeps the execution alias but grants and checks revocations only on canonical authority", async () => {
+      vi.mocked(prisma.agent.upsert).mockResolvedValueOnce({ id: "alias-id", agentId: "onboarding-coo" } as never)
+        .mockResolvedValueOnce({ id: "owner-id", agentId: "AGT-WS-ONBOARD" } as never);
+      await seedOnboardingAgent();
+      expect(prisma.agent.upsert).toHaveBeenCalledWith(expect.objectContaining({ where: { agentId: "AGT-WS-ONBOARD" }, update: {} }));
+      expect(prisma.agentToolGrantRevocation.findMany).toHaveBeenCalledWith({ where: { agentId: "owner-id" }, select: { grantKey: true } });
+      expect(vi.mocked(prisma.agentToolGrant.createMany).mock.calls[0][0]?.data).toEqual(
+        expect.arrayContaining([expect.objectContaining({ agentId: "owner-id" })]));
+      expect(syncAgentPrincipal).toHaveBeenCalledWith("AGT-WS-ONBOARD");
+    });
     it("upserts the onboarding-coo agent and configures capability-based routing", async () => {
       (prisma.agent.upsert as any).mockResolvedValue({
         id: "cuid-onboarding-coo",

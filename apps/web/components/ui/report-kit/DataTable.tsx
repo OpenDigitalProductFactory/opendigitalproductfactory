@@ -27,6 +27,8 @@ export interface Column<T> {
   /** Render cell content in a monospace font (ID/reference columns). */
   mono?: boolean;
   width?: string;
+  mobileFullWidth?: boolean;
+  hideMobileLabel?: boolean;
 }
 
 export interface DataTableProps<T> {
@@ -45,6 +47,8 @@ export interface DataTableProps<T> {
   className?: string;
   /** Accessible name for the underlying table element. */
   ariaLabel?: string;
+  /** Reflow the same semantic rows below lg; other callers retain their layout. */
+  responsive?: boolean;
 }
 
 export type SortDir = "asc" | "desc";
@@ -108,6 +112,7 @@ export function DataTable<T>({
   dense = false,
   className = "",
   ariaLabel,
+  responsive = false,
 }: DataTableProps<T>) {
   const [sort, setSort] = useState<{ key: string; dir: SortDir } | null>(
     initialSort ?? null,
@@ -140,48 +145,48 @@ export function DataTable<T>({
   }
 
   return (
-    <div className={className}>
+    <div className={responsive ? `min-w-0 max-w-full ${className}` : className}>
       <table
+        role={responsive ? "table" : undefined}
         aria-label={ariaLabel}
-        className="w-full border-collapse text-xs"
+        className={responsive ? "w-full border-collapse text-xs max-lg:block max-lg:max-w-full" : "w-full border-collapse text-xs"}
       >
-        <thead>
-          <tr className="border-b border-[var(--dpf-border)] text-left">
+        <thead role={responsive ? "rowgroup" : undefined} className={responsive ? "max-lg:block" : undefined}>
+          <tr role={responsive ? "row" : undefined} className={`border-b border-[var(--dpf-border)] text-left${responsive ? " max-lg:block" : ""}`}>
             {columns.map((col) => {
               const sortable = Boolean(col.sortAccessor);
               const active = sort?.key === col.key;
+              const heading = <span className="inline-flex items-center gap-1">{col.header}
+                {sortable && <span aria-hidden="true" className="text-[8px]">{active ? (sort?.dir === "asc" ? "▲" : "▼") : "↕"}</span>}
+              </span>;
               return (
                 <th
                   key={col.key}
                   scope="col"
+                  role={responsive ? "columnheader" : undefined}
                   style={col.width ? { width: col.width } : undefined}
                   className={[
                     cellPad,
                     "font-medium uppercase tracking-wide text-[var(--dpf-muted)]",
                     ALIGN_CLASS[col.align ?? "left"],
                     sortable ? "cursor-pointer select-none" : "",
+                    responsive ? sortable ? "max-lg:block" : "max-lg:sr-only" : "",
                   ]
                     .filter(Boolean)
                     .join(" ")}
-                  onClick={sortable ? () => toggleSort(col) : undefined}
+                  onClick={sortable && !responsive ? () => toggleSort(col) : undefined}
                   aria-sort={
                     active ? (sort?.dir === "asc" ? "ascending" : "descending") : undefined
                   }
                 >
-                  <span className="inline-flex items-center gap-1">
-                    {col.header}
-                    {sortable ? (
-                      <span aria-hidden="true" className="text-[8px]">
-                        {active ? (sort?.dir === "asc" ? "▲" : "▼") : "↕"}
-                      </span>
-                    ) : null}
-                  </span>
+                  {responsive && sortable ? <button type="button" onClick={() => toggleSort(col)}
+                    className="min-h-8 rounded-sm text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dpf-accent)]">{heading}</button> : heading}
                 </th>
               );
             })}
           </tr>
         </thead>
-        <tbody>
+        <tbody role={responsive ? "rowgroup" : undefined} className={responsive ? "max-lg:block max-lg:space-y-2" : undefined}>
           {loading ? (
             Array.from({ length: pageSize ?? 3 }).map((_, i) => (
               <tr key={`skeleton-${i}`} className="border-b border-[var(--dpf-border)]">
@@ -207,28 +212,27 @@ export function DataTable<T>({
               return (
                 <tr
                   key={getRowKey(row)}
-                  className="border-b border-[var(--dpf-border)] hover:bg-[var(--dpf-surface-2)]"
+                  role={responsive ? "row" : undefined}
+                  className={`border-b border-[var(--dpf-border)] hover:bg-[var(--dpf-surface-2)]${responsive ? " max-lg:grid max-lg:grid-cols-2 max-lg:gap-x-2 max-lg:rounded max-lg:border max-lg:p-2" : ""}`}
                 >
                   {columns.map((col) => {
                     const content = col.cell(row);
+                    const cellContent = href ? <Link href={href} className="block">{content}</Link> : content;
                     return (
                       <td
                         key={col.key}
+                        role={responsive ? "cell" : undefined}
                         className={[
                           cellPad,
                           ALIGN_CLASS[col.align ?? "left"],
                           col.mono ? "font-mono text-[var(--dpf-text-secondary)]" : "",
+                          responsive ? `max-lg:block max-lg:min-w-0${col.mobileFullWidth ? " max-lg:col-span-2" : ""}` : "",
                         ]
                           .filter(Boolean)
                           .join(" ")}
                       >
-                        {href ? (
-                          <Link href={href} className="block">
-                            {content}
-                          </Link>
-                        ) : (
-                          content
-                        )}
+                        {responsive && !col.hideMobileLabel && <span aria-hidden="true" className="mb-1 block text-[var(--dpf-muted)] lg:hidden">{col.header}</span>}
+                        {responsive ? <div className="min-w-0" style={{ overflowWrap: "anywhere" }}>{cellContent}</div> : cellContent}
                       </td>
                     );
                   })}

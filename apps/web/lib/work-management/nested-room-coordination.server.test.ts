@@ -26,6 +26,17 @@ describe("internal drive recipient binding", () => {
     expect(await resolveNestedRoomStallRecipient(db, { roomId: "child" })).toBeNull();
     expect(humanAccess).toHaveBeenCalledWith({ userId: "recorded-user", workroomId: "child", requested: "content" }, db);
   });
+  it("delivers an unowned stalled child to the parent human, not a guessed owner", async () => {
+    const db = { ...database(), principalAlias: { findMany: vi.fn().mockResolvedValue([{ aliasValue: "recorded-user" }]) } };
+    db.workroomParticipant.findMany.mockResolvedValue([
+      { workroomId: "parent", roles: ["coordinator"], principal: { id: "p-human", kind: "human", status: "active", displayName: "Recorded human", aliases: [] } },
+    ]);
+    db.user.findUnique.mockResolvedValue({ isActive: true, isSuperuser: false, groups: [] });
+    expect(await resolveNestedRoomStallRecipient(db, { roomId: "child" })).toBe("recorded-user");
+    expect(db.principalAlias.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ principalId: "p-human", aliasType: "user", issuer: "" }), take: 2,
+    }));
+  });
   it("uses the terminal person's unique current user binding", async () => {
     const db = { ...database(), principalAlias: { findMany: vi.fn().mockResolvedValue([{ aliasValue: "recorded-user" }]) } };
     db.user.findUnique.mockResolvedValue({ isActive: true, isSuperuser: false, groups: [] });

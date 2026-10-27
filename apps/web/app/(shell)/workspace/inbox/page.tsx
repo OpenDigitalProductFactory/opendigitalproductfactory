@@ -14,26 +14,30 @@ import { runEscalationHygiene } from "@/lib/quality/escalation-hygiene-runner";
 import { AttentionInbox } from "@/components/attention/AttentionInbox";
 import { ApprovalOutcomeHistory } from "@/components/attention/ApprovalOutcomeHistory";
 import { loadApprovalOutcomes } from "@/lib/coworker/approval-outcome-store";
-import { loadCoworkerEnvelopeItems, loadOnBehalfEnvelopeItem } from "@/lib/attention/sources/coworker-envelope";
+import { loadCoworkerEnvelopeItems, loadCoworkerEnvelopePage, loadOnBehalfEnvelopeItem } from "@/lib/attention/sources/coworker-envelope";
 import { can } from "@/lib/permissions";
 import { envelopeAttentionItemId } from "@/lib/coworker/envelope-routes";
 import { getT } from "@/lib/i18n/t.server";
 
 export const dynamic = "force-dynamic";
 
-export default async function WorkspaceInboxPage({ searchParams }: { searchParams: Promise<{ approval?: string }> }) {
+export default async function WorkspaceInboxPage({ searchParams }: { searchParams: Promise<{ approval?: string; approvalsBefore?: string }> }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  const requested = (await searchParams).approval;
+  const params = await searchParams;
+  const requested = params.approval;
+  const before = typeof params.approvalsBefore === "string" ? params.approvalsBefore : undefined;
   const approvalId = typeof requested === "string" && requested.length <= 128 ? requested : undefined;
   const t = await getT("approvals");
   const outcomes = (await loadApprovalOutcomes(session.user.id, approvalId)).map((outcome) => ({
     ...outcome, label: t(`states.${outcome.state}.label`), nextAction: t(outcome.nextActionKey),
+    ...(outcome.failureExplanationKey ? { failureExplanation: t(outcome.failureExplanationKey) } : {}),
     ...(outcome.decidedOnBehalf ? { onBehalfText: t("card.decidedOnBehalf", {
       by: outcome.decidedOnBehalf.by, owner: outcome.decidedOnBehalf.onBehalfOf, reason: outcome.decidedOnBehalf.reason,
     }) } : {}),
   }));
-  const outcomeCopy = { result: t("result"), recent: t("recent"), unavailable: t("unavailable"), details: t("details"), open: t("open") };
+  const outcomeCopy = { result: t("result"), recent: t("recent"), unavailable: t("unavailable"), details: t("details"), open: t("open"),
+    inspectRoom: t("failure.inspectRoom"), roomUnavailable: t("failure.roomUnavailable"), evidence: t("failure.evidence") };
 
   // Best-effort auto-resolve so settled escalations clear when the inbox is viewed
   // (re-homed from /ops with the band; the 15-min cron still covers it). Idempotent,
@@ -44,7 +48,11 @@ export default async function WorkspaceInboxPage({ searchParams }: { searchParam
     aiReadinessUserId: session.user.id,
     delegatingUserId: session.user.id,
     readerIsSuperuser: session.user.isSuperuser === true,
+    includeCoworkerEnvelopes: false,
   });
+  const approvalPage = await loadCoworkerEnvelopePage(prisma, session.user.id, Date.now(), before).catch(() => null);
+  if (approvalPage) items.push(...approvalPage.items);
+  else failedSources.push("coworker-envelope");
   // An exact approval link remains usable even outside the most recent 25.
   const focusItemId = approvalId ? envelopeAttentionItemId(approvalId) : undefined;
   if (approvalId && !items.some((item) => item.id === focusItemId)) {
@@ -91,6 +99,19 @@ export default async function WorkspaceInboxPage({ searchParams }: { searchParam
         nowMs={nowMs}
         digestDisposition={digestDisposition}
         focusItemId={focusItemId}
+        approvalCopy={{
+          displayedCount: t("queue.displayedCount", { count: projection.count }),
+          summary: t("queue.summary", { count: approvalPage?.total ?? 0, shown: projection.needsYouNow.filter(entry => entry.item.envelope?.actionable && entry.item.envelope.delegatingUserId === session.user.id).length }),
+          explanation: t("queue.explanation", { count: projection.needsYouNow.filter(entry => !entry.item.envelope).length }),
+          latest: t("queue.latest"), older: t("queue.older"), unavailable: t("queue.unavailable"),
+        }}
+        approvalQueue={approvalPage ? {
+          total: approvalPage.total,
+          shown: projection.needsYouNow.filter(entry => entry.item.envelope?.actionable
+            && entry.item.envelope.delegatingUserId === session.user.id).length,
+          nextCursor: approvalPage.nextCursor,
+          browsingOlder: before !== undefined,
+        } : null}
       />
       {!approvalId ? <ApprovalOutcomeHistory outcomes={outcomes} copy={outcomeCopy} /> : null}
     </main>

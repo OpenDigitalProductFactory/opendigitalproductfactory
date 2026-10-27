@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Capability-Driven Runtime Profiles Implementation Plan
 
 > **For agentic workers:** REQUIRED: Use `dpf-tdd` while implementing, `dpf-local-merge-ci-before-push` for the completion gate, and `dpf-pr-with-dco` for delivery. Steps use checkbox (`- [ ]`) syntax for tracking.
@@ -7,6 +11,16 @@
 **Architecture:** Preserve the spec's split authorities: `PlatformSubstrateManifest` owns service topology facts, while `PlatformCapability.manifest` owns product capability identity, dependencies, and live state. A compiler joins those authorities by stable capability key into a versioned service catalog; each install resolves that catalog using persisted enabled keys plus the live PostgreSQL capability state. One lifecycle service owns enable/disable, drain enforcement, persistence, and rollback; install, upgrade, restart, backup, diagnostics, and both health surfaces consume its resolved projection rather than rebuilding service lists.
 
 **Tech Stack:** Node.js ESM, JSON manifests, Docker Compose profiles, Next.js 16/React, TypeScript, Vitest, Node test runner, PowerShell 5.1+, POSIX shell.
+
+## Recovery.93 bind-path failure checkpoint
+
+### Recovery.95 late-receipt settlement checkpoint (BI-5ACBAC50)
+
+The qualified recovery.95 upgrade succeeded and its single linked reconciliation produced an applied host receipt after the recreated portal had booted. The durable transition remained pending. Preserve that transition and the terminal failed predecessor; do not reapply or restart to manufacture settlement. Extend the existing recovery adapter with a receipt-only background pass: verify historical signatures and immutable envelopes, commit capability state through the existing database baseline fence, and never launch, compensate or expire a receipt-less transition from this pass. Share completion logic and make concurrent completion idempotent. Keep startup recovery and admission barriers intact. Test delayed receipt arrival, absent receipts, invalid identity, concurrent completion and intervening database changes before publication; verify actual durable settlement on the next canonical containing deployment. Source tests do not close live acceptance.
+
+The first live reconciliation reached the host and failed on a Loki bind rooted at the promoter's `/host-source`; rollback also failed, leaving the portal Created. Preserve RCT-BI5-91-20261015, its failed approvals, signed receipt and journal. No retry or lock clearing is authorized by this repair. The existing daemon-visible mount mapping in `govern-capability-compose-args.mjs` is the behavioral reference. The actuator must render and validate mounts before install-state mutation, carry the translated override through apply, observation and rollback, preserve named volumes and literal dollars, and refuse unresolved sources without launching a mutation. Its signed actuator identity must continue to cover the runtime implementation; avoid an unbound helper dependency. Verify realistic Windows and POSIX mappings, missing mount/render failures, unchanged state on preflight refusal, and existing protocol/replay/rollback tests. Source checks do not establish live recovery. Independent restoration currently has no executable Windows procedure; an exact bounded operator exception is pending.
+
+Readiness uses Compose `up --wait --wait-timeout 180` for apply and rollback before the existing signed health observation. This bounds each readiness wait; legacy stop/remove calls retain their own timeouts, so no total ten-minute guarantee is claimed. [Docker documents the readiness options](https://docs.docker.com/reference/cli/docker/compose/up/); its [start implementation](https://github.com/docker/compose/blob/main/pkg/compose/start.go) preserves successful one-shot dependency semantics. Actual source verification: unmapped-bind regression RED before the repair, two wait-argument regressions RED before adding the wait, then 79 affected Node tests passed. Native/full-runtime gates and repaired live reconciliation remain unrun.
 
 ---
 
@@ -52,6 +66,10 @@
 - [ ] **Step 7: Commit** with `git commit -s -m "feat(substrate): compile capability service catalog"`.
 
 ### Task 3: Protect capability deactivation with a drain decision
+
+**Admission repair checkpoint (2026-10-15, BI-5ACBAC50):** The served request bundle folded the module-local boot flag into an unconditional reconciliation refusal while instrumentation retained its own mutable copy. Share the boot status across module caches in the same Node process using a versioned global symbol, following the resource-lane registry. Every admission still checks durable active and recovery-required transitions. Uninitialized or failed startup stays closed; a generation check prevents an older startup from reopening admission after a newer failure. Module-reset regressions cover readiness, failure visibility and concurrent startup, alongside durable-blocker checks. This does not initialize another process or repair a failed host reconciliation. Preserve the original failed request and verify recovery only after a canonical containing deployment; source tests are not live acceptance. No operator UI or install procedure changes are required.
+
+**Host context repair checkpoint (2026-10-15, BI-5ACBAC50):** Explicit v2 reconciliation must preserve the validated installation's Compose chain, canonical environment file and host identity on both initial execution and signed restart/compensation. A shared server context builder reuses the release-install parser and host-identity resolver. Both server and packaged actuator filter services by the observed host platform, so Linux-only inference is not activated on Windows or macOS. Existing v1 replay projections remain unchanged. The actuator reads its packaged catalog and still verifies the signed catalog hash; no new code import extends its signed closure. Regression fixtures cover the dropped release overlay/environment, Windows/macOS exclusions and Linux control, signed compensation context and source-free packaged catalog. Canonical host application remains unverified until a containing release is deployed; preserve the original failed request throughout recovery.
 
 **Execution checkpoint (2026-07-18):** The pure transition and durable-receipt foundation is implemented. The signed host envelope now binds both profile and exact service projections; the host applies an explicit stop/remove/start delta, verifies required and forbidden services, reverses the delta on failure, supports bounded signed-expiry stale-claim recovery, and the installer state contract requires capability fields with legacy-safe null defaults. The coordinator persists before availability checks and verifies the signed receipt even on nonzero host exit. Production action/authentication, installer secret generation/rotation, boot-time concrete adapters, complete transactional audit integration, and canonical-runtime crash/rollback verification remain incomplete. Steps 7-9 remain deliberately unchecked and capability mutation must not be exposed yet.
 

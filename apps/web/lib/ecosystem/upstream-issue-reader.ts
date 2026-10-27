@@ -104,7 +104,7 @@ export async function readUpstreamIssues(
   deps: UpstreamIssueReaderDeps = {},
 ): Promise<UpstreamIssueReadResult> {
   const prisma = deps.prisma ?? ((await import("@dpf/db")).prisma as unknown as PrismaLike);
-  const token = deps.token !== undefined ? deps.token : await resolveGithubToken(prisma);
+  const token = deps.token !== undefined ? deps.token : await resolveGithubToken(prisma, { preferRepositoryController: true });
   if (!token) {
     return {
       ok: false,

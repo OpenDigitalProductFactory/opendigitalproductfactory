@@ -19,6 +19,7 @@ import {
   type DecisionVerdictCause,
 } from "@/lib/decision/option-scoring";
 import type { DecisionCallerContext } from "@/lib/decision/caller-context";
+import { withDecisionEscalation } from "@/lib/decision-perspective/decision-escalation";
 import {
   persistDecisionInteraction,
 } from "@/lib/decision-perspective/persistence";
@@ -380,7 +381,7 @@ export async function recordKernelConsultInteraction(input: {
     const { interactionId, shadowLedger } = await persistDecisionInteraction({
       db: input.db,
       build: null,
-      evaluation,
+      evaluation: withDecisionEscalation(evaluation),
       agentId,
       taskRunId: input.taskRunId ?? null,
       triggeredByUserId: input.triggeredByUserId ?? null,

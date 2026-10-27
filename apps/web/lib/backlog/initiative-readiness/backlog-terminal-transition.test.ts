@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
+vi.mock("./canonical-artifact-discovery", () => ({ prepareCurrentDesignObservation: vi.fn(async () => ({
+  evidence: { state: "not-applicable" }, admissionGuard: async () => ({ state: "not-applicable" }),
+})) }));
+
 import type { InitiativeReadinessDecision } from "./types";
 import { completeBacklogItemTransition } from "./backlog-terminal-transition";
 import { readinessRequirement } from "@/lib/backlog/initiative-readiness/readiness-guidance";

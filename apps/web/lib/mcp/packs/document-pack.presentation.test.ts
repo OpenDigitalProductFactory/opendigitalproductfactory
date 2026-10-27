@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const presentation = vi.hoisted(() => ({ createPresentation: vi.fn() }));
 vi.mock("@/lib/documents/generation/create-presentation", () => presentation);
+const families = vi.hoisted(() => ({ createReport: vi.fn(), createLetter: vi.fn(), createSheet: vi.fn(), createDrawing: vi.fn() }));
+vi.mock("@/lib/documents/generation/create-family-documents", () => families);
 
 const principalLinking = vi.hoisted(() => ({
   ensureAgentPrincipalIdentity: vi.fn(),
@@ -97,6 +99,19 @@ describe("create_presentation", () => {
     );
     expect(embed).toMatchObject({ success: false, error: "Document not found: DOC-SECRET-IMG." });
     expect(presentation.createPresentation).not.toHaveBeenCalled();
+  });
+
+  it("refuses a render-family tool that revises or embeds a document the person may not read (BI-957915CB)", async () => {
+    const revise = await documentPack.handlers.create_report!({ title: "Q3", documentId: "DOC-SECRET", sections: [] }, "user-1", {});
+    expect(revise).toMatchObject({ success: false, error: "Document not found: DOC-SECRET." });
+    const embed = await documentPack.handlers.create_letter!(
+      { title: "Hello", body: [{ image: { documentId: "DOC-SECRET-IMG", alt: "x" } }] },
+      "user-1",
+      {},
+    );
+    expect(embed).toMatchObject({ success: false, error: "Document not found: DOC-SECRET-IMG." });
+    expect(families.createReport).not.toHaveBeenCalled();
+    expect(families.createLetter).not.toHaveBeenCalled();
   });
 
   it("returns the failure the coworker must act on, without throwing", async () => {

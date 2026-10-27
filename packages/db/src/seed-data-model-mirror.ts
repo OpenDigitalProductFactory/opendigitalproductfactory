@@ -15,9 +15,9 @@ import {
   DATA_MODEL_MIRROR_TASK_ID,
   DATA_MODEL_MIRROR_TASK_TITLE,
 } from "./data-model-mirror-config";
-import { findInstallWorkOwnerUserId } from "./install-work-owner";
+import { findTaskOwnerUserId } from "./install-work-owner";
 
-type ScheduledTaskSeedClient = Pick<PrismaClient, "user" | "scheduledAgentTask" | "scheduledJob">;
+type ScheduledTaskSeedClient = Pick<PrismaClient, "user" | "portfolio" | "organization" | "principalAlias" | "scheduledAgentTask" | "scheduledJob">;
 
 function computeNextCronRun(cronExpr: string, from: Date): Date {
   const parts = cronExpr.trim().split(/\s+/);
@@ -41,7 +41,7 @@ export async function ensureDataModelMirrorScheduledTask(
   prisma: ScheduledTaskSeedClient,
   now: Date = new Date(),
 ): Promise<{ created: boolean }> {
-  const ownerId = await findInstallWorkOwnerUserId(prisma);
+  const ownerId = await findTaskOwnerUserId(prisma);
   if (!ownerId) {
     throw new Error("seed: no superuser found - cannot seed data-model mirror scheduled task");
   }

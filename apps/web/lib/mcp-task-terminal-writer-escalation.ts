@@ -1,3 +1,5 @@
+import { hasExecutionUncertainty } from "./shared/execution-uncertainty";
+
 export const TERMINAL_WRITER_MAX_ATTEMPTS = 3;
 
 export type TerminalWriterEscalation = {
@@ -110,6 +112,9 @@ export function parseTerminalWriterEscalation(value: unknown): TerminalWriterEsc
 }
 
 export function recoverTerminalWriterEscalation(value: unknown): TerminalWriterEscalation | null {
+  // Exhaustion is historical evidence, never permission to replace an execution
+  // whose effects remain unknown. All issuers share this actionable projection.
+  if (hasExecutionUncertainty(value)) return null;
   const explicit = parseTerminalWriterEscalation(value);
   if (explicit) return explicit;
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;

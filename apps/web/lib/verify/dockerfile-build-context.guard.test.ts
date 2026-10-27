@@ -142,13 +142,20 @@ function escapingImportViolations(
   allow: { dirPrefixes: string[]; exactFiles: string[] },
 ): string[] {
   const violations: string[] = [];
-  for (const file of files) {
+  const pending = [...files];
+  const visited = new Set<string>();
+  for (const file of pending) {
+    if (visited.has(file)) continue;
+    visited.add(file);
     const specs = extractStaticImports(readFileSync(file, "utf8"));
     for (const spec of specs) {
       if (!spec.startsWith(".")) continue;
       const resolved = resolve(join(file, ".."), spec);
       const repoRel = relative(REPO_ROOT, resolved);
       if (repoRel.startsWith("..")) continue;
+      // Copying an escaping script alone is insufficient: its static script
+      // dependencies must survive the same narrow Docker stage allowlist.
+      if (!resolved.startsWith(`${APPS_WEB}${sep}`) && /\.[cm]?js$/.test(resolved)) pending.push(resolved);
       if (isCovered(repoRel, allow)) continue;
       violations.push(
         `${relative(REPO_ROOT, file)} imports "${spec}" → ${repoRel} (not COPYed into the stage)`,

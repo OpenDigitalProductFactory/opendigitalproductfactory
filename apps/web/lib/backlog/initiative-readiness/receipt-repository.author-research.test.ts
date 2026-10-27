@@ -77,3 +77,12 @@ describe("author research publication transaction", () => {
     expect(io.append).not.toHaveBeenCalled();
   });
 });
+
+describe("which build revision a gate may bind (BI-6F2872FC)", () => {
+  it("lets only a plan review resolve the build's plan revision", async () => {
+    await recordInitiativeGateReceipt({ ...args, gate: "plan-review" as never });
+    expect(io.artifact).toHaveBeenLastCalledWith(expect.objectContaining({ acceptBuildPlan: true }));
+    await recordInitiativeGateReceipt(args);
+    expect(io.artifact).toHaveBeenLastCalledWith(expect.objectContaining({ acceptBuildPlan: false }));
+  });
+});

@@ -105,3 +105,22 @@ describe("readUpstreamIssues", () => {
     expect(String(fetchImpl.mock.calls[0][0])).toContain("since=2026-09-01T00%3A00%3A00.000Z");
   });
 });
+
+// BI-985F4EC9: intake reads with the managed-repository login first.
+describe("readUpstreamIssues credential resolution", () => {
+  it("uses the repository-controller credential ahead of the existing chain", async () => {
+    const findUnique = vi.fn(async ({ where }: { where: { providerId: string } }) =>
+      where.providerId === "github-repository-controller" || where.providerId === "hive-contribution"
+        ? { secretRef: `${where.providerId}-token`, status: "active" }
+        : null);
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse([]));
+    await readUpstreamIssues({
+      prisma: { credentialEntry: { findUnique } } as never,
+      repo: { owner: "o", name: "r" },
+      fetchImpl,
+    });
+    expect(findUnique.mock.calls[0]![0].where.providerId).toBe("github-repository-controller");
+    const init = fetchImpl.mock.calls[0]![1] as { headers: Record<string, string> };
+    expect(JSON.stringify(init.headers)).toContain("github-repository-controller-token");
+  });
+});

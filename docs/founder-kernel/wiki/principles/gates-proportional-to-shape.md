@@ -43,6 +43,11 @@ work owes and who signs them.
   architecture review. An xlarge initiative only ever decomposes. A break-fix
   skips pre-authorisation and owes a post-implementation review within 48
   hours by someone other than the declarer.
+- **Existing scope keeps its authority.** A medium repair retaining an
+  independently approved repository baseline does not turn that scope into
+  author-owned body criteria. A changed design uses its existing independent
+  amendment writer and preserves the prior baseline. Body-only medium work
+  gains no spec requirement, and inherited scope stays owned by its parent.
 - **Sensitivity raises, never lowers.** High sensitivity takes a small or
   medium item to the large gates; elevated raises one step. Lowering a shape
   is a recorded override, visible on the item and in the gate decision.

@@ -116,7 +116,7 @@ describe("build-evidence pack — handler behavior (delegation preserved)", () =
     expect(db.activityCreate).not.toHaveBeenCalled();
   });
 
-  describe.each(["test_fail", "build_fail", "ux_fail", "migration_fail"])("negative evidence %s", (kind) => {
+  describe.each(["test_fail", "build_fail", "ux_fail", "migration_fail", "manual_fail"])("negative evidence %s", (kind) => {
     it.each([false, true])("retains the owned source when execution success=%s", async (success) => {
       db.backlogItemFindUnique.mockResolvedValue({ id: "row-1" });
       db.toolExecutionFindUnique.mockResolvedValue({ id: "te-1", success, userId: "u1" });
@@ -168,7 +168,10 @@ describe("build-evidence pack — handler behavior (delegation preserved)", () =
       | undefined;
     expect(properties?.kind.enum).toContain("migration_pass");
     expect(properties?.kind.enum).toContain("ux_fail");
+    expect(properties?.kind.enum).toContain("manual_fail");
     expect(properties?.kind.enum).toContain("source_verified");
+    expect(definition?.description).toContain("Use manual_fail, not manual_check, for a blocked or failed manual check.");
+    expect(definition?.description).toContain("manual_fail never earns completion credit.");
   });
 
   it("exposes every governed coding surface for local-integration evidence", () => {

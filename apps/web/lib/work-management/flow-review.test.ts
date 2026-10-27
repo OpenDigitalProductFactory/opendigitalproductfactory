@@ -5,6 +5,7 @@ import { FLOW_BOTTLENECK_SOURCE, MIN_ROOMS_HELD, bottleneckSignal, findFlowBottl
 const shape = (shapeRef: string, roomsHeld: number, cause: string) => ({
   shapeKey: shapeRef.split("@")[0]!, shapeRef, roomsInFlow: roomsHeld + 1, flowTimeP50Ms: null, runs: 0,
   bottleneck: { stageKey: "merge", roomsHeld, cause },
+  held: [{ stageKey: "merge", roomsHeld, cause }],
 });
 
 describe("findFlowBottlenecks", () => {

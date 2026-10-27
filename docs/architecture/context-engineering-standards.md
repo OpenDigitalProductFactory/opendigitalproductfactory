@@ -1,5 +1,10 @@
 # Context Engineering & Tool Efficiency Standards
 
+Host gates resolve saved authorized trust and probe TLS before expensive guards,
+so a stale desktop environment does not consume a full preflight before exposing
+a certificate failure. Use the shared [host trust contract](../install/platform-support-watchlist.md#saved-host-ca-trust-and-stale-clients)
+instead of repeating per-command CA diagnosis or embedding a host-specific path.
+
 **Status:** Active standard (advisory + eval-backed; specific items are CI-enforced — see "Enforcement").
 **Owner:** Enterprise Architect persona / `dpf-platform:dpf-architecture-review`.
 **Rationale of record:** `docs/superpowers/specs/2026-06-20-context-engineering-tool-efficiency-design.md` (research, current-state evaluation, and the full principle derivation).
@@ -17,6 +22,15 @@ DPF is **local-first by founder strategy**: cloud frontier models are disabled b
 - **The cheapest token is the one we never process.** Every reduction (just-in-time loading, in-environment filtering, concise results) compounds with caching and tiering.
 
 ## The three laws
+
+Account-aware fallback preserves the request's context and governed account
+constraints. A selected-account change before dispatch triggers a fresh route;
+an uncertain native execution stops replay rather than sending the same action
+to another account. Saved response identifiers are reused only with their
+originating account; a different account receives the retained message context.
+The [account routing guide](../user-guide/ai-workforce/provider-account-routing.md)
+and [delivery plan](../superpowers/plans/2026-10-14-provider-account-capacity-refactor.md)
+record the contract and qualification boundary.
 
 1. **Context is a finite resource with diminishing returns.** Recall degrades as tokens grow ("context rot"). Default to *removing*, not adding.
 2. **Smallest high-signal set.** Optimize signal-to-token ratio in every block: system prompt, tool definitions, examples, history, results.
@@ -52,6 +66,24 @@ The criteria apply to future changes automatically, not by memory:
 4. **Review tie-in.** `docs/architecture/agent-standards-dpf-conformance.md` carries a Context Economy control area so spec/architecture reviews check P1–P13.
 5. **Attachment budget on every model path.** The per-turn tool-attachment budget (`apps/web/lib/actions/coworker-tool-budget.ts` — window-fit + local selection-cliff cap, `load_tools` deferral) applies to interactive chat AND to every autonomous run: scheduled tasks, dispatcher child threads, and remote MCP task submission all budget through `resolveAutonomousWorkTools` (BI-CAP-F2D39F8F). A coworker whose grants expand past the cap keeps full authority; the long tail loads on demand. **A run's REQUIRED tools rank above the generic surface inside that cap** (BI-EC82C48B): a governed review is dispatched with an exact required set, and `narrowInitiativeReviewTools` then filters the ATTACHED tools to exactly those names — dropping `load_tools` too, since it is not one — so a required tool the budget defers does not degrade the run, it empties it, and the model can only answer in prose. Required names therefore take a priority tier of their own; they are still NOT cap-exempt, because exemption put a floor under the attached surface and disqualified local serving (BI-95D74DE9).
 6. **Admission follows authoritative evidence scope and identity.** `scripts/gate-worktree.mjs` lets an exact, clean, up-to-date documentation tree complete doc-index, link, and repository-guard evidence before the scarce `local-integration-ci` lease. For runtime trees, the planner's integration tree, evidence-plan digest, and toolchain fingerprint form the server-derived claim identity. The executor alone owns the lease; subscribers observe the canonical run, and only fresh identity-matched terminal evidence is reusable. The CI evidence planner is authoritative; any stale base, non-documentation path, workspace-required document, planner uncertainty, or evidence mismatch routes to exhaustive verification or fails closed.
+
+### Restricted review surface
+
+The R2 source for [present reassessment](../superpowers/specs/2026-10-16-original-initiative-review-settlement-design.md)
+uses a closed surface after normal grant checks: the immutable source reader and
+the exact canonical writer must both be authorized. Their complete ordered tool
+definitions are sealed, and dispatch checks the names, reader arguments, writer
+binding and captured task identity. `load_tools`, deferred tools and tool-free
+inference cannot expand that surface. The restricted loop skips optional
+profession/surface grounding, auxiliary draft reviews and asynchronous learning
+writers; ordinary autonomous loops retain those behaviors.
+
+Capture reserves each actual HTTP request and tool effect before execution and
+retains complete JSON payloads separately from model-facing result truncation.
+A missing bound or pre-effect capture refuses execution. Post-start capture
+failure holds further effects and retains unknown consumption. This is a source
+contract under qualification, not evidence of a deployed reassessment or a
+qualified finite total-token allowance.
 
 ## How to apply (quick checklist when changing a model-facing surface)
 

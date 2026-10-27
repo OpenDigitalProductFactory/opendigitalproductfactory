@@ -11,6 +11,8 @@
 //
 // create_presentation (BI-543819B1) produces a branded deck from an outline on
 // the document generation facility and stores it here as a managed document.
+// The report, letter, sheet and drawing tools (BI-012487AA) are composed in
+// from document-family-tools.ts.
 //
 // Access (BI-957915CB): every handler resolves the document viewer from the
 // ACTING USER, never from the coworker's own principal, and passes it to the
@@ -21,6 +23,7 @@ import type { ToolDefinition, ToolResult } from "@/lib/mcp-tool-types";
 import type { ToolPack } from "../tool-pack";
 import { err, ok, type ActionResult } from "@/lib/shared/action-result";
 import type { PresentationOutline } from "@/lib/documents/generation/create-presentation";
+import { DOCUMENT_FAMILY_TOOL_DEFINITIONS, DOCUMENT_FAMILY_TOOL_GRANTS, documentFamilyToolHandlers } from "./document-family-tools";
 
 // Local coercion helpers — copies of the mcp-tools.ts module helpers so the pack
 // owns its inputs without depending on that module's internals.
@@ -158,6 +161,7 @@ const definitions: ToolDefinition[] = [
     sideEffect: true,
   },
   CREATE_PRESENTATION_DEFINITION,
+  ...DOCUMENT_FAMILY_TOOL_DEFINITIONS,
   {
     name: "doc_load",
     description: "Load a managed document by stable document id, optionally pinned to a version. Pass exportFormat to also export that version as a Word (docx), OpenDocument (odt) or PDF file through the document engine; the export is kept as a rendition, so asking again is cheap.",
@@ -347,11 +351,8 @@ async function createPresentationTool(
   context?: { agentId?: string },
 ): Promise<ToolResult> {
   const { createPresentation } = await import("@/lib/documents/generation/create-presentation");
-  const refused = await unreadablePresentationReference(params, userId);
-  if (refused) {
-    const error = `Document not found: ${refused}.`;
-    return { success: false, message: error, error };
-  }
+  const refused = await refuseUnreadableOutlineReference(params, userId);
+  if (refused) return refused;
   const actorPrincipalId = await resolveDocumentActorPrincipalId(userId, context?.agentId);
   const result = await createPresentation({
     outline: params as unknown as PresentationOutline,
@@ -377,17 +378,46 @@ async function createPresentationTool(
  * The first document a presentation outline names (the deck it revises, or a
  * stored slide image) that the acting person may not read, or null.
  */
-async function unreadablePresentationReference(params: Record<string, unknown>, userId: string): Promise<string | null> {
-  const named = [
-    optionalString(params["documentId"]),
-    ...(Array.isArray(params["slides"]) ? params["slides"] : []).map((slide) =>
-      optionalString((slide as { image?: { documentId?: unknown } } | null)?.image?.documentId),
-    ),
-  ].filter((id): id is string => id !== null);
+/** Every `documentId` an outline names, at any depth: the deck or document it revises and each stored image. */
+function outlineDocumentIds(value: unknown, found: string[] = [], depth = 0): string[] {
+  if (depth > 8 || value === null || typeof value !== "object") return found;
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    if (key === "documentId") {
+      const id = optionalString(child);
+      if (id) found.push(id);
+    } else {
+      outlineDocumentIds(child, found, depth + 1);
+    }
+  }
+  return found;
+}
+
+/**
+ * The refusal for an outline that names a document the acting person may not
+ * read (revising it, or embedding its image), or null. Answers like a missing
+ * document, so a refusal never confirms one exists.
+ */
+async function refuseUnreadableOutlineReference(params: Record<string, unknown>, userId: string): Promise<ToolResult | null> {
+  const named = outlineDocumentIds(params);
   if (named.length === 0) return null;
   const { readableDocumentIds } = await import("@/lib/documents/document-store");
   const readable = await readableDocumentIds(named, await documentViewerFor(userId));
-  return named.find((id) => !readable.has(id)) ?? null;
+  const refused = named.find((id) => !readable.has(id));
+  if (!refused) return null;
+  const error = `Document not found: ${refused}.`;
+  return { success: false, message: error, error };
+}
+
+type DocumentToolHandler = (params: Record<string, unknown>, userId: string, context?: { agentId?: string }) => Promise<ToolResult>;
+
+/** The render-family tools revise and embed documents too, so they pass the same check first. */
+function withOutlineReferenceCheck<T extends Record<string, DocumentToolHandler>>(handlers: T): T {
+  return Object.fromEntries(
+    Object.entries(handlers).map(([name, handler]) => [
+      name,
+      (async (params, userId, context) => (await refuseUnreadableOutlineReference(params, userId)) ?? handler(params, userId, context)) as DocumentToolHandler,
+    ]),
+  ) as T;
 }
 
 async function docLoad(params: Record<string, unknown>, userId: string): Promise<ToolResult> {
@@ -542,9 +572,11 @@ export const documentPack: ToolPack = {
     doc_state_change: (params, userId, context) => docStateChange(params, userId, context),
     doc_list_references: (params, userId) => docListReferences(params, userId),
     create_presentation: (params, userId, context) => createPresentationTool(params, userId, context),
+    ...withOutlineReferenceCheck(documentFamilyToolHandlers(resolveDocumentActorPrincipalId)),
   },
   grants: {
     create_presentation: ["document_write"],
+    ...DOCUMENT_FAMILY_TOOL_GRANTS,
     doc_save: ["document_write", "registry_write"],
     doc_load: ["document_read", "registry_read"],
     doc_search: ["document_read", "registry_read"],

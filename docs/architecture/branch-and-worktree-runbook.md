@@ -47,6 +47,21 @@ The legacy `scripts/seed-worktree-mcp.{ps1,sh}` and `scripts/ensure-dpf-skill-pa
 
 Restart Claude Code in the worktree afterwards so `/mcp` picks up the `dpf` connector. See [`docs/operations/install.md`](../operations/install.md) for the readiness states and what each one means.
 
+## Routine client permissions
+
+Bootstrap also converges routine Codex, Claude and Grok permissions for the
+explicitly named source worktree through the signed updater's shared
+`--permissions-only` writer. Use that worktree as the client's actual workspace;
+the installed runtime remains an MCP administration context. Existing restrictive
+profiles, deny/ask rules and managed requirements keep their authority. A saved
+configuration does not widen an already-running managed chat.
+
+Routine independent review reuses the DEV task's existing scope, budget, grants
+and consent. No new approval is needed solely for a delivery phase. Source tests,
+protected publication and actual authority refusals still apply. See
+[routine development client permissions](../operations/install.md#routine-development-client-permissions)
+for backups, native diagnostics, parser compatibility and effective-session proof.
+
 ## Verification readiness classification
 
 The MCP seed scripts write `.dpf-worktree-readiness.json` with `compile-ready` or `source-only`.
@@ -60,6 +75,16 @@ any unclassified install script keeps the tree `source-only` and emits a stable
 `dependencyPolicyReviewKey` keyed by base SHA, package/version, and reason. Use
 that key as the backlog intake origin so the canonical ingester increments one
 occurrence instead of filing one review per worktree.
+
+A successful managed install can retain qualified dependency evidence in this
+worktree's Git metadata when pnpm omits its build record after a no-op install.
+Ordinary probes still check current artifacts, dependency resolution, workspace
+links, staleness and unclassified scripts. Changed install inputs or metadata,
+failed installs and missing or invalid evidence prevent reuse. This evidence is
+not a build/test result and grants no build-script permission.
+Each probe rediscovers workspace manifests, so editing, adding or removing a
+package invalidates prior evidence. Custom hooks, patches and unsupported
+workspace formats keep the normal managed-install path.
 
 ## Compose project isolation
 

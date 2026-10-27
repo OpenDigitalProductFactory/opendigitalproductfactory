@@ -1,3 +1,5 @@
+import type { Prisma } from "@dpf/db";
+import { resolveCanonicalWorkroomActorAccess } from "@/lib/work-management/workroom-agent-access.server";
 import type { AsyncOperationBinding } from "./async-operation-contract";
 
 type QueryArgs = Record<string, unknown>;
@@ -92,12 +94,14 @@ export async function resolveServerOwnedAsyncOperationBinding(input: {
   request: AsyncOperationAuthorityRequest;
   actor: AsyncOperationAuthorityActor;
   db: AsyncOperationAuthorityDatabase;
+  requested?: "content" | "action";
 }): Promise<AsyncOperationBinding> {
   const identity = validateRequestIdentity(input.request);
   const authority = await resolveServerOwnedAsyncOperationAuthority({
     target: input.request,
     actor: input.actor,
     db: input.db,
+    requested: input.requested ?? "action",
   });
   return { ...authority, ...identity };
 }
@@ -106,6 +110,7 @@ export async function resolveServerOwnedAsyncOperationAuthority(input: {
   target: AsyncOperationAuthorityTarget;
   actor: AsyncOperationAuthorityActor;
   db: AsyncOperationAuthorityDatabase;
+  requested?: "content" | "action";
 }): Promise<ResolvedAsyncOperationAuthority> {
   const refs = actorRefs(input.actor);
 
@@ -139,25 +144,13 @@ export async function resolveServerOwnedAsyncOperationAuthority(input: {
     select: {
       id: true,
       capsuleId: true,
-      executorRef: true,
-      leaseHolderPrincipalId: true,
-      participants: {
-        where: { lifecycle: "active" },
-        select: { principalId: true, lifecycle: true },
-      },
     },
   });
   if (!row) throw new AsyncOperationAuthorizationError("NOT_FOUND");
-  const authorized = hasHumanSuperuserAuthority(input.actor)
-    || (typeof row.executorRef === "string" && refs.has(row.executorRef))
-    || (typeof row.leaseHolderPrincipalId === "string" && refs.has(row.leaseHolderPrincipalId))
-    || (Array.isArray(row.participants)
-      && row.participants.some((participant: any) =>
-        participant?.lifecycle === "active"
-        && typeof participant.principalId === "string"
-        && refs.has(participant.principalId),
-      ));
-  if (!authorized) throw new AsyncOperationAuthorizationError("DENIED");
+  const requested = input.requested ?? "action";
+  const access = await resolveCanonicalWorkroomActorAccess({ actor: input.actor, workroomId: row.id, requested },
+    input.db as unknown as Prisma.TransactionClient);
+  if (access.decision.level !== requested) throw new AsyncOperationAuthorizationError("DENIED");
   return {
     kind: "workroom",
     workroomId: row.id,

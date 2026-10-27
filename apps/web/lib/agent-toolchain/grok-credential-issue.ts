@@ -17,9 +17,9 @@ import {
   type GrokClientCreate,
   type GrokClientRow,
 } from "@/lib/auth/grok-credentials-client";
-import { grantsForPublicScopes } from "@/lib/auth/oauth-scope-map";
 import type { ToolResult } from "@/lib/mcp-tool-types";
-import { expandGrants } from "@/lib/tak/agent-grants";
+import { grantsBeyondCaller, type CredentialCaller } from "./credential-issue-authority";
+export { grantsBeyondCaller } from "./credential-issue-authority";
 
 export type GrokCredentialIssueDeps = {
   rows: (ownerUserId: string) => Promise<readonly GrokClientRow[]>;
@@ -30,18 +30,7 @@ export type GrokCredentialIssueDeps = {
   bindAgent: (oAuthClientId: string, agentRecordId: string) => Promise<void>;
 };
 
-export type GrokCredentialCaller = {
-  apiTokenId?: string;
-  authSource?: string;
-  tokenScope?: string;
-  tokenGrantScopes?: string[];
-};
-
-/** The grants the Grok client would carry that the caller does not hold. */
-export function grantsBeyondCaller(caller: GrokCredentialCaller): string[] {
-  const held = new Set(expandGrants(caller.tokenGrantScopes ?? []));
-  return grantsForPublicScopes([...GROK_CREDENTIAL_SCOPES]).filter((grant) => !held.has(grant));
-}
+export type GrokCredentialCaller = CredentialCaller;
 
 export async function issueGrokCredentialsClientForCaller(
   userId: string,

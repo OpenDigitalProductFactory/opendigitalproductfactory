@@ -413,8 +413,75 @@ test("environment failure classification uses stable runtime signals, not guard 
   assert.ok(isEnvironmentFailureOutput("GuardRuntimeEnvironmentError: localized wording"));
   assert.ok(isEnvironmentFailureOutput("Local package.json exists, but node_modules missing"));
   assert.ok(isEnvironmentFailureOutput("'tsx' is not recognized as an internal or external command"));
+  assert.ok(isEnvironmentFailureOutput("/bin/sh: 1: tsx: not found"));
+  assert.ok(isEnvironmentFailureOutput("bash: line 1: tsx: command not found"));
+  assert.ok(isEnvironmentFailureOutput("Error: Cannot find module 'fixture'"));
+  assert.ok(isEnvironmentFailureOutput("WARN Local package.json exists, but node_modules missing, did you mean to install?"));
   assert.ok(!isEnvironmentFailureOutput("module exceeds ratchet baseline: 1050 > 1047 lines"));
   assert.ok(!isEnvironmentFailureOutput("Missing UX-Fit-Decision trailer"));
+});
+
+test("environment words and quoted runtime diagnostics do not excuse guard violations", () => {
+  for (const output of [
+    "That test dies with ERR_MODULE_NOT_FOUND before it reaches its assertion.",
+    "The image build dies at first run with ERR_MODULE_NOT_FOUND.",
+    "Guard found MODULE_NOT_FOUND and Cannot find module in source text",
+    "Required diagnostic: node_modules missing; tsx is not found",
+    "Expected GuardRuntimeEnvironmentError: localized wording",
+    '"Error [ERR_MODULE_NOT_FOUND]: Cannot find package \'fixture\'"',
+    "AssertionError: expected Error: Cannot find module 'fixture'",
+    "not ok 1 - Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'fixture'",
+    "# Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'fixture'",
+    "the error err_module_not_found is part of the guard explanation",
+  ]) assert.equal(isEnvironmentFailureOutput(output), false, output);
+});
+
+test("real exit-1 diagnostics preserve violation versus missing-runtime classification", async (t) => {
+  const { createDefaultExecute } = await import("./lib/pregate-preflight.mjs");
+  const execute = createDefaultExecute(process.env, { maxDurationMs: 10_000 });
+  const cases = [
+    ["fixture import violation", "console.error('[fixture-script-imports] FAILED — a test copies a module into a temp tree but not the module it statically imports.\\nThat test dies with ERR_MODULE_NOT_FOUND before it reaches its assertion.');process.exit(1)", "failed"],
+    ["Dockerfile import violation", "console.error('[dockerfile-script-imports] FAILED — a Dockerfile-copied script statically imports a file the image never receives.\\nThe image build dies at first run with ERR_MODULE_NOT_FOUND.');process.exit(1)", "failed"],
+    ["native missing package", "import('dpf-intentionally-absent-preflight-runtime-package')", "skipped_environment"],
+  ];
+  for (const [name, program, status] of cases) await t.test(name, async () => {
+    const result = await runPreflight({ env: {},
+      plan: [{ id: name, name, commands: [[process.execPath, ["-e", program]]] }],
+      execute: async (...args) => {
+        const observed = await execute(...args);
+        assert.equal(observed.exitCode, 1, observed.output);
+        assert.equal(observed.outcome, null, observed.output);
+        assert.equal(observed.runnerFailure, false, observed.output);
+        assert.match(observed.output, /ERR_MODULE_NOT_FOUND/);
+        return observed;
+      },
+    });
+    assert.equal(result.entries[0].status, status);
+    assert.equal(result.ok, status === "skipped_environment");
+  });
+});
+
+test("colored native loader diagnostics and pnpm warning spacing retain environment classification", async () => {
+  const { createDefaultExecute } = await import("./lib/pregate-preflight.mjs");
+  const execute = createDefaultExecute({ ...process.env, FORCE_COLOR: "1" }, { maxDurationMs: 10_000 });
+  const observed = await execute(process.execPath, ["-e", "import('dpf-intentionally-absent-preflight-runtime-package')"]);
+  assert.equal(observed.exitCode, 1, observed.output);
+  assert.match(observed.output, /\u{001b}\[/u, "control must exercise actual colored Node output");
+  assert.equal(isEnvironmentFailureOutput(observed.output), true);
+  const coloredHeader = observed.output.replace(/^Error/m, "\u{001b}[31mError");
+  assert.equal(isEnvironmentFailureOutput(coloredHeader), true, "diagnostic styling must not change its kind");
+  assert.equal(isEnvironmentFailureOutput("\u{2009}WARN\u{2009} Local package.json exists, but node_modules missing, did you mean to install?"), true);
+  assert.equal(isEnvironmentFailureOutput("\u{001b}[31m# Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'fixture'\u{001b}[0m"), false);
+});
+
+test("explicit observer outcomes outrank runtime-looking output", async () => {
+  for (const outcome of ["cancelled", "timed_out", "runner_failed"]) {
+    const result = await runPreflight({ env: {}, plan: PLAN.slice(0, 1),
+      execute: () => ({ exitCode: 88, output: "Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'fixture'", outcome }),
+    });
+    assert.equal(result.entries[0].status, outcome);
+    assert.equal(result.ok, outcome === "runner_failed");
+  }
 });
 
 // ── pregate wiring ──────────────────────────────────────────────────────────

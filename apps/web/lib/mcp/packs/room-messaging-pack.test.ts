@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   ensureAgent: vi.fn(), syncUser: vi.fn(), appendPolicy: vi.fn(), persistAssignments: vi.fn(),
   postComment: vi.fn(), heartbeat: vi.fn(), loadMembers: vi.fn(), workrooms: vi.fn(), workroomByCapsule: vi.fn(), workroomAccess: vi.fn(),
   executeAppointment: vi.fn(), currentUser: vi.fn(), can: vi.fn(),
+  broadcastAsk: vi.fn(), broadcastAck: vi.fn(),
 }));
 vi.mock("@dpf/db", () => ({ prisma: {
   workItem: { findFirst: mocks.item, findMany: mocks.children, update: mocks.updateItem },
@@ -24,6 +25,10 @@ vi.mock("@/lib/work-management/workroom-agent-access.server", () => ({ resolveAg
 vi.mock("@/lib/work-management/execute-coordinator-appointment.server", () => ({ executeCoordinatorAppointment: mocks.executeAppointment }));
 vi.mock("@/lib/govern/current-user-context", () => ({ currentUserContext: mocks.currentUser }));
 vi.mock("@/lib/govern/permissions", () => ({ can: mocks.can }));
+vi.mock("@/lib/operate/coo-broadcast.server", () => ({
+  executeCooBroadcastAsk: mocks.broadcastAsk,
+  executeCooBroadcastAck: mocks.broadcastAck,
+}));
 vi.mock("@/lib/work-management/case-key", () => ({ decodeWorkCaseKey: (key: string) => ({ sourceType: "backlog-item", sourceId: key }) }));
 import { roomMessagingPack } from "./room-messaging-pack";
 
@@ -42,6 +47,14 @@ beforeEach(() => {
   mocks.executeAppointment.mockResolvedValue({ ok: true, data: { capsuleId: "WC-ONE", principalRef: "PRN-alice", displayName: "Alice" } });
   mocks.currentUser.mockResolvedValue({ userId: "alice" });
   mocks.can.mockReturnValue(false);
+  mocks.broadcastAsk.mockResolvedValue({
+    success: true, message: "Broadcast ask-1 asked 1 room(s).",
+    data: { commandKey: "ask-1", asked: 1, posted: 0, dispatchInvoked: false, rooms: ["WC-ONE"] },
+  });
+  mocks.broadcastAck.mockResolvedValue({
+    success: true, message: "Acknowledged ask-1 for WC-ONE.",
+    data: { commandKey: "ask-1", capsuleId: "WC-ONE", dispatchInvoked: false },
+  });
 });
 it("does not include an unadmitted child room in a parent's message feed", async () => {
   mocks.children.mockResolvedValue([{ id: "private-child", evidence: [], assignedToUserId: "bob", assignedToAgentId: "agent" }]);
@@ -121,4 +134,46 @@ it("allows a platform manager to execute the consequence-gated single-room recov
   expect(result.success).toBe(true);
   expect(mocks.currentUser).toHaveBeenCalledWith("alice");
   expect(mocks.executeAppointment).toHaveBeenCalledOnce();
+});
+
+it("broadcasts a COO ask without dispatching a stage", async () => {
+  const result = await roomMessagingPack.handlers.broadcast_workroom_ask(
+    { capsuleId: "WC-ONE", body: "Pause new intake." },
+    "alice",
+    { agentId: "agent" },
+  );
+  expect(result.success).toBe(true);
+  expect(result.data).toMatchObject({ dispatchInvoked: false, commandKey: "ask-1" });
+  expect(mocks.broadcastAsk).toHaveBeenCalledOnce();
+  expect(mocks.broadcastAsk.mock.calls[0]![0]).toMatchObject({
+    capsuleId: "WC-ONE",
+    body: "Pause new intake.",
+    actor: { userId: "alice", agentId: "agent" },
+  });
+  expect(roomMessagingPack.definitions.find((tool) => tool.name === "broadcast_workroom_ask")?.consequence).toBeUndefined();
+});
+
+it("refuses a COO broadcast when the caller is not admitted to the root room", async () => {
+  mocks.workroomAccess.mockResolvedValue({ decision: { level: "none", reason: "not-admitted" } });
+  const result = await roomMessagingPack.handlers.broadcast_workroom_ask(
+    { capsuleId: "WC-ONE", body: "Status please." },
+    "alice",
+    { agentId: "agent" },
+  );
+  expect(result).toMatchObject({ success: false, error: "forbidden" });
+  expect(mocks.broadcastAsk).not.toHaveBeenCalled();
+});
+
+it("records a COO broadcast acknowledgement without dispatching a stage", async () => {
+  const result = await roomMessagingPack.handlers.acknowledge_workroom_broadcast(
+    { capsuleId: "WC-ONE", commandKey: "ask-1" },
+    "alice",
+    { agentId: "agent" },
+  );
+  expect(result.success).toBe(true);
+  expect(result.data).toMatchObject({ dispatchInvoked: false });
+  expect(mocks.broadcastAck).toHaveBeenCalledWith(expect.objectContaining({
+    capsuleId: "WC-ONE",
+    commandKey: "ask-1",
+  }));
 });
