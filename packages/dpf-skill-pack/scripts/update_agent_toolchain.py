@@ -224,6 +224,44 @@ def stamp_delivered_version(pack: Path, version: str) -> None:
             path.write_bytes(stamped)
 
 
+def write_delivery_provenance(pack: Path, delivered: str, manifest: Optional[Mapping[str, Any]],
+                              source_checkout: Optional[Mapping[str, str]], now: float) -> None:
+    """Record where this copy came from (spec row X15), beside the stamp.
+
+    The host agent must not reinstall an older portal pack over copies a
+    contributor's source checkout delivered. `.dpf-delivery.json` is per
+    install and excluded from `delivered_digest`.
+    """
+    from urllib.parse import urlsplit
+
+    record: dict[str, Any] = {"deliveredVersion": delivered, "at": now}
+    if manifest is not None:
+        endpoint = urlsplit(str(manifest.get("mcpEndpoint") or ""))
+        record.update({
+            "source": "portal",
+            "releaseId": manifest.get("releaseId"),
+            "origin": f"{endpoint.scheme}://{endpoint.netloc}" if endpoint.scheme and endpoint.netloc else None,
+        })
+    else:
+        record.update({"source": "checkout", "root": (source_checkout or {}).get("root"),
+                       "commit": (source_checkout or {}).get("commit")})
+    write_json(pack / ".dpf-delivery.json", record)
+
+
+def source_checkout_of(skill_pack: Path) -> Optional[dict[str, str]]:
+    """The git checkout and commit a local skill pack was delivered from, if any."""
+    try:
+        root = subprocess.run(["git", "-C", str(skill_pack), "rev-parse", "--show-toplevel"],
+                              capture_output=True, text=True, timeout=10)
+        commit = subprocess.run(["git", "-C", str(skill_pack), "rev-parse", "HEAD"],
+                                capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if root.returncode != 0 or commit.returncode != 0:
+        return None
+    return {"root": root.stdout.strip(), "commit": commit.stdout.strip()}
+
+
 def codex_marketplace_path(home: Path) -> Path:
     return home / ".agents" / "plugins" / "marketplace.json"
 
@@ -2642,6 +2680,10 @@ def _main(argv: list[str]) -> int:
     delivered = _delivered_version(skill_pack) or version
     if not args.dry_run:
         stamp_delivered_version(shared_managed, delivered)
+        import time as _time
+
+        write_delivery_provenance(shared_managed, delivered, portal_manifest,
+                                  None if portal_manifest is not None else source_checkout_of(skill_pack), _time.time())
     codex_version = codex_content_version(skill_pack)
     if not args.dry_run:
         write_json(codex_managed / ".codex-plugin" / "plugin.json", {**manifest, "version": codex_version})

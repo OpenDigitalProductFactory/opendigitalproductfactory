@@ -149,6 +149,38 @@ class ClaudeRecordTest(unittest.TestCase):
             self.assertEqual(data["plugins"][0]["version"], "0.2.18+c.abcdefabcdef")
 
 
+class ProvenanceTest(unittest.TestCase):
+    """Spec row X15: the host agent must know where a copy came from."""
+
+    def test_a_portal_delivery_records_its_release_and_origin(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            pack = write_pack(Path(tmp))
+            updater.write_delivery_provenance(pack, "0.2.18+c.abcdefabcdef",
+                                              {"releaseId": "a" * 40, "mcpEndpoint": "https://localhost/api/mcp/v1"},
+                                              source_checkout=None, now=1000.0)
+            record = updater.read_json(pack / ".dpf-delivery.json", {})
+            self.assertEqual(record["source"], "portal")
+            self.assertEqual(record["releaseId"], "a" * 40)
+            self.assertEqual(record["origin"], "https://localhost")
+            self.assertEqual(record["deliveredVersion"], "0.2.18+c.abcdefabcdef")
+
+    def test_a_checkout_delivery_records_its_commit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            pack = write_pack(Path(tmp))
+            updater.write_delivery_provenance(pack, "0.2.18+c.abcdefabcdef", None,
+                                              source_checkout={"root": "/repo", "commit": "b" * 40}, now=1000.0)
+            record = updater.read_json(pack / ".dpf-delivery.json", {})
+            self.assertEqual(record["source"], "checkout")
+            self.assertEqual(record["commit"], "b" * 40)
+
+    def test_provenance_is_per_install_and_never_changes_the_digest(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            pack = write_pack(Path(tmp))
+            before = freshness.delivered_digest(pack)
+            updater.write_delivery_provenance(pack, "x", None, source_checkout=None, now=1.0)
+            self.assertEqual(freshness.delivered_digest(pack), before)
+
+
 class ReportTest(unittest.TestCase):
     def test_report_requires_the_stamped_version_on_claude_records(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -96,6 +96,7 @@ Every failure mode in the toolchain's history (2026-06-27 to 2026-10-27), plus f
 | X12 | Service never installed, or removed | M8 sees no state file or a stale heartbeat | M8 reinstalls it through the updater (idempotent) |
 | X13 | Several paired installations on one host | Existing `trusted-installations.json` pin | M2 follows the pinned origin only |
 | X14 | A client has no CLI for a setting the updater must change | M4 adapter declares the coverage | Direct write only in a stdlib-parsable format (JSON). Otherwise `unsupported-setting`, then M9 |
+| X15 | A contributor host's copies came from a source checkout that is ahead of the portal's release (observed 2026-10-26: installed 0.2.18, served 0.2.17; BI-81AB897A E3). A portal-only agent would reinstall the older pack every hour, against the session bootstrap, which installs from the checkout | M2 reads the delivery provenance M1 writes | M2 precedence rule: a checkout at or ahead of the served release wins, and the agent reports `ahead-of-portal` without writing |
 
 ## 5. Research & benchmarking
 
@@ -127,13 +128,15 @@ What this design adds that none of these provide:
 - The repo keeps a plain `packVersion` in `toolchain-version.json`. It changes only for semantic reasons: a floor, a breaking change, or a release note. The `README.md` instruction to bump it on every pack change is removed.
 - `sync-toolchain-version.mjs --check` stays as the copy-drift guard.
 
+Each delivery also writes `.dpf-delivery.json` into the shared copy: `source` (`portal` or `checkout`), the origin, `releaseId` (the served image's git sha), the checkout's commit when there is one, `deliveredVersion`, and the time. It is per install and excluded from the digest.
+
 Result: any delivered byte change produces a new version string in every client cache, with no human step. A downgrade (X8) works the same way.
 
 ### M2 — Host convergence service (D2)
 
 A per-user scheduled job, `dpf-toolchain-agent`:
 - installed by the bootstrap and by every updater run, idempotently;
-- reusing the existing per-platform scheduling code in `scripts/install-worktree-janitor-schedule.sh`, factored into a shared helper so there is no second scheduler implementation;
+- registered by the pack's own `scripts/toolchain_agent.py`, using the same launchd, systemd-user and Scheduled Task shapes as `scripts/install-worktree-janitor-schedule.sh`. The registration has to live in the pack, because a portal-sourced updater runs from the downloaded archive with no repository `scripts/` tree;
 - launchd `local.dpf.toolchain-agent` on macOS, a systemd user timer on Linux, a Scheduled Task on Windows;
 - running at login and every 60 minutes.
 
@@ -142,7 +145,10 @@ Each run:
 2. Reads `~/.dpf/toolchain-agent.json` for the opt-out (X10) and the pinned origin (X13).
 3. Fetches the manifest with `If-None-Match` (cheap when nothing changed) and verifies the signature and identity. Mismatch means refuse plus M9 (X2). Offline means back off (X1).
 4. Converges when the manifest digest differs from the last verified state, when any client's read-back (M3) is not verified, or when a client binary version changed (M7). It runs the same signed updater, `--from-portal … --expect-installation …`. Nothing else forks the update logic.
-5. Writes `~/.dpf/toolchain-state.json` atomically: per client the delivered digest, verified digest, client binary version, last attempt, last success, status code and one-line detail.
+   - **Precedence (X15).** If the shared copy's provenance is `checkout`, and that commit contains the served `releaseId` (a git ancestry check, or base `packVersion` ahead when no repository is reachable), the checkout wins. The agent writes nothing and reports `ahead-of-portal`. A checkout behind the served release converges from the portal like any stale copy.
+5. Writes `~/.dpf/toolchain-agent/state.json` atomically: the manifest digest, delivered version, client binary versions, last check, last attempt, last success, status, code and a one-line detail. This is the agent's own file. The bootstrap's readiness record, `~/.dpf/agent-toolchain-state.json`, keeps its single writer (M4).
+   - **One convergence at a time (X3).** Every updater run takes the same lock, `~/.dpf/toolchain-agent/run.lock`, and a second run exits 75. The holder passes `DPF_TOOLCHAIN_LOCK_HELD=1` to the updater processes it starts. Read-only modes take no lock.
+   - **No self-reload.** Reloading a launchd job terminates the running copy, so an updater running under the agent (`DPF_TOOLCHAIN_AGENT=1`) never re-registers the schedule.
 6. On repeated failure, backs off exponentially: 1, 2, 4… up to 24 hours. The state file keeps the first-failure time, which drives M9.
 
 The service handles no credentials. The manifest and archive endpoints are public, and the signature pin is the trust anchor.
@@ -160,6 +166,8 @@ An adapter's success is defined only by reading the client's own view after the 
 | Antigravity | **New.** Skills directory digest, plus `mcp_config.json` parsed for the `dpf` server and endpoint |
 
 `toolchain_convergence.py` must no longer snapshot the *shared copy* for Grok and Antigravity rows. `skipped: CLI not found` becomes its own state, `absent`, instead of collapsing to `unchanged`.
+
+A dry run reports `result: "preview"` and words like "would write". It never reports `converged`, "written" or "Done" (BI-81AB897A E3).
 
 ### M4 — The client CLI is the single writer (D3)
 
@@ -195,16 +203,17 @@ An adapter's success is defined only by reading the client's own view after the 
 ### M8 — Session backstop
 
 - The existing SessionStart `toolchain-freshness` hook reads `~/.dpf/toolchain-state.json` with no network call.
-- If the state is stale, or the service heartbeat is older than two intervals, the hook:
-  - starts the service once (`launchctl kickstart`, `systemctl --user start`, `schtasks /Run`);
-  - reinstalls the service if it is missing (X12);
-  - tells the agent one line: "DPF tools were updated; restart or `/reload-plugins` to load them."
+- If a copy is stale, the hook:
+  - starts the service at most once every 10 minutes, without waiting for it (`launchctl kickstart`, `systemctl --user start --no-block`, `schtasks /Run`);
+  - installs the service on a paired host that has none (X12). On an unpaired host it keeps the one-time approval path;
+  - tells the agent that no approval is needed and that only a restart (or `/reload-plugins`) loads the result.
+- If the agent's state is `needs-operator`, the hook names the cause and the single action in plain words, even when every copy looks current.
 - It never runs the updater inline.
 
 ### M9 — Escalate only what automation cannot fix
 
 - The connector declaration already sent on every MCP call (`X-DPF-Toolchain: pack=;digest=;client=`) gains `converge=<status>[:<code>]`, read from the state file. The status is `ok`, `failed`, `needs-operator`, `opted-out`, `offline` or `unproven`.
-- The portal stores it on `AgentToolchainObservation`, which exists, and shows it on the existing Connected Agent Clients card.
+- The portal stores it on `AgentToolchainObservation`, which exists, and shows it on the existing Connected Agent Clients card. The card keeps each verdict's reason instead of discarding it, and separates the endpoint and authentication, the loaded, installed and published identities, and the restart owed (BI-81AB897A E2).
 - A host that has stayed `failed` or `needs-operator` for more than 24 hours raises one attention item through the existing escalation path. The item carries the exact cause and the single operator action, for example Codex hook trust: "open Codex, run /hooks, choose Trust all".
 - No credentials move from host to portal.
 
@@ -237,8 +246,8 @@ The work ships as six slices, each one PR, planned in [`../plans/2026-10-27-self
 |---|---|
 | S1 | M1 content-stamped version. Also brings the Claude caches current |
 | S2 | M3 read-back for every adapter, plus M4 single writer |
-| S3 | M2 host service |
-| S4 | M8 backstop and M9 declaration, card and attention |
+| S3 | M2 host service, plus the client side of M8 (the session backstop) |
+| S4 | M9 declaration status, card reasons and attention |
 | S5 | M5 runtime floor and interpreter discovery (closes BI-6763D09E) |
 | S6 | M6 discovery and contract, M7 canary, M10 pruning |
 
