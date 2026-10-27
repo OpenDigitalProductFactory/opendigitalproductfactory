@@ -65,7 +65,7 @@ export async function runReassessmentCandidatePreflight(params: {
     // containerd store; release-image-reference.ts resolves either.
     const resolveRelease = async (): Promise<{ ref: string; id: string }> => {
       const resolution = await resolvePulledReleaseImage(runDocker, `ghcr.io/${release!.ghcrOwner}/dpf-portal`, release!);
-      return resolution.ok ? resolution : refuseReassessmentWithDetail(`release-image-unresolved: ${resolution.attempts.join("; ")}`);
+      return resolution.image ?? refuseReassessmentWithDetail(`release-image-unresolved: ${resolution.attempts.join("; ")}`);
     };
     const resolved = release ? await resolveRelease() : null;
     const configDigest = resolved?.id ?? await inspect();

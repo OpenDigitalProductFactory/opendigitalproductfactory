@@ -53,11 +53,11 @@ test("a release pulled by its index digest resolves to an id docker run accepts"
   const release = { channelDigest: CHANNEL_DIGEST, ...PLATFORMS[arch] };
 
   const resolution = await resolvePulledReleaseImage(docker, REPOSITORY, release);
-  assert.ok(resolution.ok, `unresolved on the ${store} store: ${resolution.ok ? "" : resolution.attempts.join("; ")}`);
+  assert.ok(resolution.image, `unresolved on the ${store} store: ${resolution.attempts.join("; ")}`);
   // Engine ids are store-specific; pin which one each store yields so a daemon
   // change that moves it is seen here, not on an install.
-  assert.equal(resolution.id, store === "containerd" ? CHANNEL_DIGEST : release.configDigest);
+  assert.equal(resolution.image.id, store === "containerd" ? CHANNEL_DIGEST : release.configDigest);
 
-  const ran = await docker(["run", "--rm", "--pull", "never", "--network", "none", resolution.id, "true"]);
+  const ran = await docker(["run", "--rm", "--pull", "never", "--network", "none", resolution.image.id, "true"]);
   assert.equal(ran.exitCode, 0, `docker run by the resolved id failed on the ${store} store: ${ran.stderr}`);
 });

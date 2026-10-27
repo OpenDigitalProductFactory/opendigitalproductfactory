@@ -348,6 +348,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // asserts live repository state rather than this guard's logic.
       conformanceTest("scripts/publish-image-release-identity.test.mjs"),
       conformanceTest("scripts/promote-source-identity.test.mjs"),
+      // BI-578131A3: real-daemon release image addressing; skips without a
+      // daemon. self-upgrade-acceptance.yml runs it on both image stores.
+      conformanceTest("scripts/release-image-reference.docker.test.mjs"),
     ]),
     guard("docs-link-integrity", "Docs Link Integrity", [
       node("scripts/gen-doc-index.mjs", "--check"),

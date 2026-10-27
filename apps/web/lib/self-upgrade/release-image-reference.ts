@@ -14,9 +14,8 @@ export type ImageInspectRunner = (args: string[]) => Promise<{ exitCode: number;
 
 export type ReleaseImageDigests = { configDigest: string; channelDigest: string; platformManifestDigest: string };
 
-export type ReleaseImageResolution =
-  | { ok: true; ref: string; id: string }
-  | { ok: false; attempts: string[] };
+/** `image` is null when no frozen reference resolved; `attempts` says why for each. */
+export type ReleaseImageResolution = { image: { ref: string; id: string } | null; attempts: string[] };
 
 /** Inspect only immutable references (never a tag) and accept an id only when
  * it is one of the frozen digests, the rule scripts/promote.sh applies. */
@@ -28,8 +27,8 @@ export async function resolvePulledReleaseImage(
   for (const ref of [release.configDigest, `${repository}@${release.channelDigest}`, `${repository}@${release.platformManifestDigest}`]) {
     const result = await runDocker(["image", "inspect", "--format", "{{.Id}}", ref]);
     const id = result.stdout.trim();
-    if (result.exitCode === 0 && frozen.has(id)) return { ok: true, ref, id };
+    if (result.exitCode === 0 && frozen.has(id)) return { image: { ref, id }, attempts };
     attempts.push(`${ref} -> ${result.exitCode === 0 ? `foreign id ${id || "(empty)"}` : (result.stderr.trim() || `exit ${result.exitCode}`).slice(0, 120)}`);
   }
-  return { ok: false, attempts };
+  return { image: null, attempts };
 }
