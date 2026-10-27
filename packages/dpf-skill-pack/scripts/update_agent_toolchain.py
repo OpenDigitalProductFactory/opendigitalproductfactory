@@ -19,7 +19,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Mapping, Optional
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from urllib.parse import urlparse
 
@@ -2435,7 +2435,53 @@ def hook_reference(skill_pack: Path) -> str:
     return "\n".join(lines)
 
 
+def register_toolchain_agent(home: Path, portal_sourced: bool, dry_run: bool, env: Mapping[str, str]) -> Optional[str]:
+    """Schedule the host convergence agent after a portal-sourced run (BI-65C17737).
+
+    A portal run is what pins the installation, so only then can the host keep
+    itself current. The agent runs from the shared copy this run refreshed, so
+    it is updated by the same delivery it performs.
+    """
+    if not portal_sourced or dry_run:
+        return None
+    import toolchain_agent
+
+    script = shared_managed_plugin_path(home) / "scripts" / "toolchain_agent.py"
+    if not script.is_file():
+        return "skipped: the shared copy has no toolchain_agent.py"
+    return toolchain_agent.ensure_schedule(home, sys.executable, str(script), env)
+
+
 def main(argv: list[str]) -> int:
+    """Run under the host's single convergence lock (BI-65C17737, spec row X3).
+
+    The hourly agent and an agent-run update must never converge at once. The
+    holder exports the lock to the updater processes it starts.
+    """
+    import time as _time
+
+    import toolchain_agent
+
+    # Read-only and repo-maintenance modes converge nothing, so they never wait
+    # on, or take, the host lock.
+    lock_free = {"--dry-run", "--check-hook-reference", "--write-hook-reference",
+                 "--print-existing-codex-mcp-url", "-h", "--help"}
+    if lock_free.intersection(argv) or os.environ.get(toolchain_agent.LOCK_HELD_ENV) == "1":
+        return _main(argv)
+    home = home_dir()
+    if not toolchain_agent.acquire_lock(home, _time.time()):
+        print("Another DPF toolchain convergence is running on this host and will finish the update. (busy)",
+              file=sys.stderr)
+        return toolchain_agent.EXIT_BUSY
+    os.environ[toolchain_agent.LOCK_HELD_ENV] = "1"
+    try:
+        return _main(argv)
+    finally:
+        os.environ.pop(toolchain_agent.LOCK_HELD_ENV, None)
+        toolchain_agent.release_lock(home)
+
+
+def _main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="Update DPF Codex/Claude/Grok/Antigravity agent skills and MCP wiring.")
     parser.add_argument("--skill-pack-path", default=str(default_skill_pack_path()))
     parser.add_argument("--project-root", type=Path, help="Explicit DPF source project for client configuration")
@@ -2784,6 +2830,9 @@ def main(argv: list[str]) -> int:
         for line in hook_roster(skill_pack):
             print(line)
 
+    agent_status = register_toolchain_agent(home, portal_manifest is not None, args.dry_run, os.environ)
+    if agent_status:
+        print(f"  Toolchain agent: {agent_status}")
     if report:
         written = report.write(args.report_json, args.dry_run)
         print(f"  Report     : {args.report_json} ({written['result']})")
