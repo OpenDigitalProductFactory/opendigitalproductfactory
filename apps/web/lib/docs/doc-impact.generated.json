@@ -790,6 +790,9 @@
     "apps/web/lib/deliberation/external-review-activation.ts": [
       "docs/architecture/agent-client-capability-parity.md"
     ],
+    "apps/web/lib/demand/duplicate-merge-consequence.ts": [
+      "docs/architecture/improvement-signal-intake.md"
+    ],
     "apps/web/lib/design-intelligence.ts": [
       "docs/architecture/operational-precedent-corpus.md"
     ],
@@ -3356,6 +3359,7 @@
       "scripts/installer/install-release-assets.mjs"
     ],
     "docs/architecture/improvement-signal-intake.md": [
+      "apps/web/lib/demand/duplicate-merge-consequence.ts",
       "apps/web/lib/improvement-flywheel/signals.ts",
       "apps/web/lib/operate/tool-defect-origin.ts"
     ],

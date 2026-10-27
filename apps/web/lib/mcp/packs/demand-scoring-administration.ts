@@ -218,7 +218,11 @@ export async function findDuplicateCandidatesHandler(params: Record<string, unkn
   };
 }
 
-export async function mergeBacklogItemsHandler(params: Record<string, unknown>): Promise<ToolResult> {
+export async function mergeBacklogItemsHandler(
+  params: Record<string, unknown>,
+  userId?: string,
+  context?: { agentId?: string },
+): Promise<ToolResult> {
   const canonicalItemId = String(params["canonicalItemId"] ?? "");
   const duplicateItemId = String(params["duplicateItemId"] ?? "");
   if (canonicalItemId === duplicateItemId) {
@@ -226,7 +230,10 @@ export async function mergeBacklogItemsHandler(params: Record<string, unknown>):
   }
   const [canonical, duplicate] = await Promise.all([
     prisma.backlogItem.findUnique({ where: { itemId: canonicalItemId }, select: { id: true, occurrenceCount: true } }),
-    prisma.backlogItem.findUnique({ where: { itemId: duplicateItemId }, select: { id: true, occurrenceCount: true, status: true } }),
+    prisma.backlogItem.findUnique({
+      where: { itemId: duplicateItemId },
+      select: { id: true, occurrenceCount: true, status: true, triageOutcome: true, duplicateOfId: true, completedAt: true },
+    }),
   ]);
   if (!canonical) return { success: false, error: "not_found", message: `Canonical ${canonicalItemId} not found` };
   if (!duplicate) return { success: false, error: "not_found", message: `Duplicate ${duplicateItemId} not found` };
@@ -243,6 +250,30 @@ export async function mergeBacklogItemsHandler(params: Record<string, unknown>):
     prisma.backlogItem.update({
       where: { itemId: duplicateItemId },
       data: { status: "retired", triageOutcome: "duplicate", duplicateOfId: canonical.id, completedAt: new Date() },
+    }),
+    // The prior state of both rows, so a merge can be undone from the record.
+    prisma.backlogItemActivity.create({
+      data: {
+        backlogItemId: duplicate.id,
+        kind: "duplicate_merge",
+        summary: `Merged into ${canonicalItemId}`,
+        payload: {
+          role: "duplicate",
+          canonicalItemId,
+          duplicateItemId,
+          rationale: typeof params["rationale"] === "string" ? params["rationale"] : null,
+          prior: {
+            status: duplicate.status,
+            triageOutcome: duplicate.triageOutcome,
+            duplicateOfId: duplicate.duplicateOfId,
+            completedAt: duplicate.completedAt?.toISOString() ?? null,
+          },
+          canonicalPriorOccurrenceCount: canonical.occurrenceCount,
+          mergedOccurrenceCount,
+        },
+        ...(userId ? { recordedById: userId } : {}),
+        ...(context?.agentId ? { recordedByAgentId: context.agentId } : {}),
+      },
     }),
   ]);
   return {
