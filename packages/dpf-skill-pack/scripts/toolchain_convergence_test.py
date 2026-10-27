@@ -229,6 +229,8 @@ class ReportJsonTest(unittest.TestCase):
             convergence.record_claude_scopes(report, Path("fixture"), "failed: local content unverified", {}, None, [])
             self.assertEqual(report.finish(False)["result"], "failed")
 
+    @unittest.skipIf(__import__("codex_toml")._stdlib_parser() is None,
+                     "fakes the Codex CLI, so its TOML needs Python 3.11+ or tomli; CI runs it (BI-90C9478D)")
     def test_report_names_each_client_and_scope(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

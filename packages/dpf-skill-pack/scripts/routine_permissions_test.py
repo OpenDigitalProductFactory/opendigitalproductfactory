@@ -16,7 +16,8 @@ class RoutinePermissionsTest(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.home = Path(self.temp.name) / 'home'
+        # Resolved: macOS temp folders sit under /var, a symlink the linked-path guard refuses.
+        self.home = Path(self.temp.name).resolve() / 'home'
         self.root = self.home / 'source'
         self.root.mkdir(parents=True)
         (self.root / '.git').mkdir()
@@ -212,6 +213,8 @@ class RoutinePermissionsTest(unittest.TestCase):
         with self.assertRaises(permissions.PermissionPlanError): self.plan()
         self.assertFalse((self.root/'.codex').exists())
 
+    @unittest.skipIf(__import__("codex_toml")._stdlib_parser() is None,
+                     "Codex 0.165 rejects the legacy `profile =` key this fixture uses; CI runs it with tomllib (BI-90C9478D)")
     def test_selected_codex_config_profile_keeps_approval_and_reviewer_policy(self):
         (self.home/'.codex').mkdir()
         (self.home/'.codex/config.toml').write_text('profile="careful"\n',encoding='utf-8')
@@ -227,7 +230,8 @@ class RoutinePermissionsTest(unittest.TestCase):
         name='_dpf_permissions_no_parser'
         spec=importlib.util.spec_from_file_location(name,permissions.__file__)
         module=importlib.util.module_from_spec(spec)
-        with patch.dict(sys.modules,{'tomllib':None,'tomli':None,name:module}):
+        import codex_toml
+        with patch.dict(sys.modules,{'tomllib':None,'tomli':None,name:module}),patch.object(codex_toml,'_codex_binary',return_value=None):
             spec.loader.exec_module(module)
             self.assertIsNone(module.tomllib)
             with self.assertRaises(module.PermissionPlanError): module.plan_permissions(self.root,self.home,PACK)

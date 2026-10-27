@@ -21,6 +21,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import update_agent_toolchain as updater
 
 
+
+NEEDS_STDLIB_TOML = unittest.skipIf(
+    __import__("codex_toml")._stdlib_parser() is None,
+    "fakes the Codex CLI, so its TOML needs Python 3.11+ or tomli; CI runs it (BI-90C9478D)",
+)
+
 class CodexCacheVersionTest(unittest.TestCase):
     def test_changed_contents_refresh_same_source_version_and_reruns_are_stable(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1952,6 +1958,7 @@ class OAuthDefaultTest(unittest.TestCase):
             updater.ensure_codex_config(home, "https://repair.example/api/mcp/v1", False)
             self.assertIn('url = "https://repair.example/api/mcp/v1?tier=full"', path.read_text())
 
+    @NEEDS_STDLIB_TOML
     def test_main_distinguishes_implicit_environment_and_cli_endpoints(self):
         original = "http://127.0.0.1:3000/api/mcp/v1?tier=full"
         environment = "https://environment.example/api/mcp/v1"
@@ -2108,6 +2115,7 @@ class WrapperEndpointParityTest(unittest.TestCase):
             self.assertFalse(updater.mcp_client_bearer_header_required(updater.DEFAULT_MCP_URL))
 
 
+@NEEDS_STDLIB_TOML
 class CodexRegistrationConvergenceTest(unittest.TestCase):
     def fixture(self, home, canonical=True, legacy=True):
         config = updater.codex_config_path(home)
@@ -2425,7 +2433,8 @@ class CodexProjectConfigTest(unittest.TestCase):
             config.parent.mkdir()
             original = '[mcp_servers.dpf]\nurl="http://localhost:3000/mcp"'
             config.write_text(original)
-            with patch.dict(sys.modules, {"tomllib": None, "tomli": None}):
+            import codex_toml
+            with patch.dict(sys.modules, {"tomllib": None, "tomli": None}), patch.object(codex_toml, "_codex_binary", return_value=None):
                 with self.assertRaisesRegex(ValueError, "Python 3.11"):
                     updater.ensure_codex_project_config(root, "https://localhost/api/mcp/v1", False)
             self.assertEqual(config.read_text(), original)
