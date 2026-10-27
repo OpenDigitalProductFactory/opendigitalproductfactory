@@ -103,6 +103,7 @@ def _log(home: Path, now: float, line: str) -> None:
         with path.open("a", encoding="utf-8") as handle:
             handle.write(f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(now))} {line}\n")
     except OSError:
+        # The log is a convenience; a full disk or unwritable folder must never fail a run.
         pass
 
 
@@ -152,6 +153,7 @@ def acquire_lock(home: Path, now: float, pid: Optional[int] = None) -> bool:
             try:
                 path.unlink()
             except FileNotFoundError:
+                # Another run removed the stale lock first; retry the exclusive create.
                 pass
             continue
         with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
@@ -164,6 +166,7 @@ def release_lock(home: Path) -> None:
     try:
         lock_path(home).unlink()
     except FileNotFoundError:
+        # Already released (or removed by a stale-lock takeover): release is idempotent.
         pass
 
 
@@ -359,6 +362,7 @@ def run_once(
         try:
             report.unlink()
         except FileNotFoundError:
+            # No report from a previous run: nothing to clear.
             pass
         command = [sys.executable, str(script), "--from-portal", str(origin),
                    "--expect-installation", str(device_id), "--report-json", str(report)]
