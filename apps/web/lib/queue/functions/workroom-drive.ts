@@ -14,7 +14,7 @@ import {
 import type { EffectiveHumanAccountability } from "@/lib/work-management/human-accountability";
 
 import { NOT_ASKED_ACCOUNTABILITY, resolveAccountabilityForConclusion } from "./workroom-drive-accountability";
-import { activeUserIdForHumanPrincipal, MISSING_TASK_OWNER_REASON, settleTickTaskOwner } from "./workroom-drive-task-owner";
+import { liveDriveTaskOwnerEffects, MISSING_TASK_OWNER_REASON, settleTickTaskOwner } from "./workroom-drive-task-owner";
 import type { PrismaClient } from "@dpf/db";
 import { jobs } from "@/lib/jobs";
 import { isRecord } from "@/lib/shared/coerce";
@@ -671,23 +671,11 @@ export function createWorkroomDriveEffects(
 ): WorkroomDriveEffects {
   return {
     ...createSubShapeChildEffects(loadDb as never),
-    // BI-12A083B4: the drive asks this only when a tick ends stuck, so a
-    // blockage can name who clears it instead of waiting on nobody. Composed
-    // from the same lineage walk the room workforce read uses, so the two
-    // cannot disagree about who answers for a room.
-    async resolveAccountability(roomId) {
-      const prisma = await loadDb();
-      const { resolveRoomAccountabilityFromDb } = await import(
-        "@/lib/work-management/room-workforce.server"
-      );
-      return resolveRoomAccountabilityFromDb(
-        prisma as unknown as Parameters<typeof resolveRoomAccountabilityFromDb>[0],
-        { workroomId: roomId },
-      );
-    },
-    async resolvePrincipalUserId(principalId) {
-      return activeUserIdForHumanPrincipal((await loadDb()) as never, principalId);
-    },
+    // BI-12A083B4: the drive asks accountability only when a tick ends stuck,
+    // so a blockage can name who clears it instead of waiting on nobody.
+    // BI-D13FA12A/BI-17238133: the same effects name a task's owner, shared
+    // with the scheduled-room mandate that re-checks it.
+    ...liveDriveTaskOwnerEffects(loadDb),
     notifyStall: async (input) => (await import("@/lib/work-management/workroom-stall-notice")).notifyWorkroomStall(input),
     revokeStagePermits: async (input) => (await import("@/lib/gpp/stage-permit-revocation")).revokeStagePermits(input),
     notifyDeadline: async (input) => (await import("@/lib/work-management/workroom-deadline-notice")).notifyWorkroomDeadline(input),

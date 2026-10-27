@@ -27,6 +27,8 @@ type EnvelopeSummary = {
 type AuthorityApprovalDb = {
   coworkerActionEnvelope: {
     findFirst(args: unknown): Promise<EnvelopeSummary | null>;
+    /** Optional so narrow fakes keep compiling; absent means no cross-run join. */
+    findMany?(args: unknown): Promise<EnvelopeSummary[]>;
     create(args: unknown): Promise<EnvelopeSummary>;
     updateMany(args: unknown): Promise<unknown>;
   };
@@ -71,6 +73,53 @@ async function findActiveEnvelope(
 function raisedUnderProposeBoundary(envelope: { argsJson?: unknown } | null): boolean {
   const args = envelope?.argsJson;
   return Boolean(args && typeof args === "object" && (args as Record<string, unknown>).proposeBoundary === true);
+}
+
+/**
+ * BI-AB0CF766: the same unanswered question from an earlier run.
+ *
+ * The binding names its TaskRun, so a scheduled retry that re-raises an
+ * unchanged call on every run never matches the earlier request and minted a
+ * fresh card each time — six open cards for one decision on 2026-10-27, from a
+ * cadence that fires every two hours. A propose-boundary request never pauses
+ * its run (BI-C8EC05C9), so a later run joining the open card strands nothing.
+ *
+ * Joined only when every term of the binding except its TaskRun matches, the
+ * earlier card is still unanswered, and both were raised under the boundary.
+ * An approved, expired, declined or settled card is never joined, and a request
+ * that pauses its run keeps its own card so its run can be resumed.
+ */
+async function findPendingTwinFromEarlierRun(
+  binding: CoworkerApprovalBinding,
+  approvalBindingFingerprint: string,
+  now: Date,
+  db: AuthorityApprovalDb,
+): Promise<EnvelopeSummary | null> {
+  if (!binding.taskRunId || !db.coworkerActionEnvelope.findMany) return null;
+  const runIndependent = fingerprintCoworkerApprovalBinding({ ...binding, taskRunId: null });
+  const candidates = await db.coworkerActionEnvelope.findMany({
+    where: {
+      coworkerAgentId: binding.actingAgentId,
+      delegatingUserId: binding.actingHumanUserId,
+      manifestActionId: binding.toolName,
+      inputFingerprint: binding.inputFingerprint,
+      approvalBindingFingerprint: { not: approvalBindingFingerprint },
+      status: "proposed",
+      expiresAt: { gt: now },
+    },
+    orderBy: { createdAt: "asc" },
+    take: 10,
+    select: { id: true, status: true, expiresAt: true, argsJson: true },
+  });
+  return candidates.find((row) => {
+    if (!raisedUnderProposeBoundary(row)) return false;
+    const stored = (row.argsJson as Record<string, unknown>).approvalBinding;
+    if (!stored || typeof stored !== "object") return false;
+    return fingerprintCoworkerApprovalBinding({
+      ...(stored as CoworkerApprovalBinding),
+      taskRunId: null,
+    }) === runIndependent;
+  }) ?? null;
 }
 
 async function pauseBoundTask(
@@ -177,6 +226,11 @@ export async function ensureAuthorityApprovalEnvelope(
     // binding collides with a boundary request here; that must not pause it.
     if (!raisedUnderProposeBoundary(existing)) await pauseBoundTask(input.binding.taskRunId, db);
     return existing;
+  }
+
+  if (input.proposeBoundary === true) {
+    const twin = await findPendingTwinFromEarlierRun(input.binding, approvalBindingFingerprint, now, db);
+    if (twin) return twin;
   }
 
   const expiresAt = new Date(

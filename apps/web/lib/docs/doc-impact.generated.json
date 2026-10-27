@@ -490,6 +490,9 @@
     "apps/web/components/workbooks/GridExportMenu.tsx": [
       "docs/user-guide/workspace/workbooks.md"
     ],
+    "apps/web/components/workbooks/WorkbookViewTabs.tsx": [
+      "docs/user-guide/workspace/workbooks.md"
+    ],
     "apps/web/components/workbooks/grid-office-export.ts": [
       "docs/user-guide/workspace/workbooks.md"
     ],
@@ -669,6 +672,9 @@
       "docs/architecture/build-gate-runbook.md",
       "docs/triage/2026-05-20-handoff-prompt-next-session.md"
     ],
+    "apps/web/lib/build/finalize-repair-routing.ts": [
+      "docs/architecture/build-gate-runbook.md"
+    ],
     "apps/web/lib/build/finalize-stage-runner.ts": [
       "docs/architecture/build-gate-runbook.md"
     ],
@@ -697,6 +703,9 @@
       "docs/triage/2026-05-20-handoff-prompt-next-session.md"
     ],
     "apps/web/lib/build/sandbox/test-scope-guard.ts": [
+      "docs/architecture/build-gate-runbook.md"
+    ],
+    "apps/web/lib/build/scoped-test-failure.ts": [
       "docs/architecture/build-gate-runbook.md"
     ],
     "apps/web/lib/build/unified-wip-query.ts": [
@@ -789,6 +798,9 @@
     ],
     "apps/web/lib/deliberation/external-review-activation.ts": [
       "docs/architecture/agent-client-capability-parity.md"
+    ],
+    "apps/web/lib/demand/duplicate-merge-consequence.ts": [
+      "docs/architecture/improvement-signal-intake.md"
     ],
     "apps/web/lib/design-intelligence.ts": [
       "docs/architecture/operational-precedent-corpus.md"
@@ -1095,7 +1107,8 @@
       "docs/maintenance/staleness-report.md"
     ],
     "apps/web/lib/mcp/packs/workbooks-pack.ts": [
-      "docs/architecture/mcp-tool-packs.md"
+      "docs/architecture/mcp-tool-packs.md",
+      "docs/user-guide/workspace/workbooks.md"
     ],
     "apps/web/lib/mcp/protocol-versions.ts": [
       "docs/architecture/mcp-tool-authorization-runbook.md"
@@ -1651,6 +1664,9 @@
     ],
     "apps/web/lib/workbooks/sheet-import.ts": [
       "docs/user-guide/workspace/supported-file-formats.md"
+    ],
+    "apps/web/lib/workbooks/workbook-authoring.ts": [
+      "docs/user-guide/workspace/workbooks.md"
     ],
     "apps/web/lib/workforce/oversight-copy.ts": [
       "docs/platform-usability-standards.md"
@@ -3099,11 +3115,13 @@
       ".github/workflows/stuck-auto-merge-alarm.yml",
       "apps/web/lib/build/build-orchestrator.ts",
       "apps/web/lib/build/coding-agent.ts",
+      "apps/web/lib/build/finalize-repair-routing.ts",
       "apps/web/lib/build/finalize-stage-runner.ts",
       "apps/web/lib/build/gauntlet-repair.ts",
       "apps/web/lib/build/pr-follow-through.ts",
       "apps/web/lib/build/pull-request-merged-signal.ts",
       "apps/web/lib/build/sandbox/test-scope-guard.ts",
+      "apps/web/lib/build/scoped-test-failure.ts",
       "apps/web/lib/nonprod/environment-lease-preview-yield.ts",
       "apps/web/lib/queue/functions/build-pr-delivery-reconcile.ts",
       "apps/web/lib/queue/functions/build-review-verification.ts",
@@ -3356,6 +3374,7 @@
       "scripts/installer/install-release-assets.mjs"
     ],
     "docs/architecture/improvement-signal-intake.md": [
+      "apps/web/lib/demand/duplicate-merge-consequence.ts",
       "apps/web/lib/improvement-flywheel/signals.ts",
       "apps/web/lib/operate/tool-defect-origin.ts"
     ],
@@ -4185,9 +4204,12 @@
     ],
     "docs/user-guide/workspace/workbooks.md": [
       "apps/web/components/workbooks/GridExportMenu.tsx",
+      "apps/web/components/workbooks/WorkbookViewTabs.tsx",
       "apps/web/components/workbooks/grid-office-export.ts",
+      "apps/web/lib/mcp/packs/workbooks-pack.ts",
       "apps/web/lib/workbooks/export-fods.ts",
-      "apps/web/lib/workbooks/export-workbook.ts"
+      "apps/web/lib/workbooks/export-workbook.ts",
+      "apps/web/lib/workbooks/workbook-authoring.ts"
     ]
   }
 }

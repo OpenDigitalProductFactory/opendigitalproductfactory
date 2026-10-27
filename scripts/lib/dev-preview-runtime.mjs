@@ -128,7 +128,11 @@ export function previewLeaseEventSummary(event) {
 }
 
 export function protectedServiceIdentity(containers) {
-  return containers.filter(container => !container.Config?.Labels?.['com.docker.compose.service']?.startsWith('dev-'))
+  // Compose stamps project/service labels onto the images it builds, so a bare `docker run`
+  // of a built image or a `compose run` one-off carries them too. Only a real service
+  // container has oneoff=False; anything else is transient and must not trip the fence.
+  return containers.filter(container => container.Config?.Labels?.['com.docker.compose.oneoff'] === 'False'
+    && !container.Config?.Labels?.['com.docker.compose.service']?.startsWith('dev-'))
     .map(container => ({ id: container.Id, service: container.Config?.Labels?.['com.docker.compose.service'],
       startedAt: container.State?.StartedAt, running: container.State?.Running,
       volumes: (container.Mounts || []).filter(mount => mount.Type === 'volume').map(mount => [mount.Destination, mount.Name]) }))

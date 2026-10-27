@@ -3,6 +3,7 @@ import {
   groupRowsByColumn,
   defaultGroupByColumn,
   cardFieldLayout,
+  boardCardLayout,
 } from "./kanban-grouping";
 import type { ColumnDefinition, GridRow } from "./types";
 
@@ -79,5 +80,18 @@ describe("cardFieldLayout", () => {
     expect(metaColumnIds).not.toContain("status");
     expect(metaColumnIds).not.toContain("title");
     expect(metaColumnIds.length).toBeLessThanOrEqual(2);
+  });
+});
+
+describe("boardCardLayout — a saved board's chosen card fields", () => {
+  it("uses the saved fields in order: the first is the title", () => {
+    expect(boardCardLayout(columns, "status", ["title", "status-missing", "title"])).toEqual({
+      titleColumnId: "title",
+      metaColumnIds: [],
+    });
+  });
+  it("falls back to the automatic layout when none are saved or none still exist", () => {
+    expect(boardCardLayout(columns, "status")).toEqual(cardFieldLayout(columns, "status"));
+    expect(boardCardLayout(columns, "status", ["gone"])).toEqual(cardFieldLayout(columns, "status"));
   });
 });

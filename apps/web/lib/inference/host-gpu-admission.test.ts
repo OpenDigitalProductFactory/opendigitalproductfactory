@@ -1,3 +1,6 @@
+// The reader resolves the configured path, so a POSIX fixture path reads as
+// a drive-letter path on a Windows host; compare against the resolved form.
+import { resolve as resolvePath } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const restricted = vi.hoisted(() => ({ active: false, request: vi.fn(), fetch: vi.fn() }));
 const platform = vi.hoisted(() => ({ readFile: vi.fn(), spawnSync: vi.fn() }));
@@ -264,7 +267,7 @@ describe("captured capacity preserves ordinary unknown telemetry policy", () => 
     const observations = captureRunners();
     await expect(inspectLocalGpuAdmission({ nowMs: NOW, modelId: "hf.co/ggml-org/Qwen3.8-27B-GGUF:Q4_K_M" })).resolves.toEqual({ defer: null, unloadIdle: false });
     expect(observations).toEqual([expect.objectContaining({ snapshot: null, runners: [], decision: { defer: null, unloadIdle: false },
-      provenance: expect.objectContaining({ source: "published-file", path: "/fixture-state/host-gpu.json", unknownReason: `published-snapshot-${state}` }) })]);
+      provenance: expect.objectContaining({ source: "published-file", path: resolvePath("/fixture-state/host-gpu.json"), unknownReason: `published-snapshot-${state}` }) })]);
     if (state === "absent") expect(observations[0]!.provenance).toEqual(expect.objectContaining({ readOutcome: "absent", errorCode: "ENOENT" }));
     else expect(observations[0]!.provenance).toEqual(expect.objectContaining({ readOutcome: "complete", bodyEncoding: "base64", bodyBase64: raw.toString("base64") }));
     expect(platform.spawnSync).not.toHaveBeenCalled(); expect(restricted.fetch).not.toHaveBeenCalled();

@@ -1,0 +1,17 @@
+{
+  "version": "1",
+  "decidedOption": "optional-outcome-field",
+  "decisionInteractionId": "DI-E7B64B6555AA",
+  "scope": {
+    "files": [
+      "apps/web/components/ops/BacklogPanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "optional-outcome-field",
+      "notes-placeholder-only"
+    ]
+  }
+}

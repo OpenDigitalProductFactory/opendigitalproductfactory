@@ -9,6 +9,7 @@ import type { FailureVerificationEvidence } from "@/lib/change-review/failure-an
 import type { SandboxTestResult } from "./coding-agent";
 import { authorFailureAnalysis, authorGateDecisions, trailerKeysForFailedGuards, type UnmitigatedRisk } from "./finalize-stage";
 import type { GauntletRun } from "./sandbox/run-and-record-gauntlet";
+import { classifyScopedTestResult } from "./scoped-test-failure";
 
 /** Decision rounds after the first gauntlet run. */
 export const FINALIZE_DECISION_ROUNDS = 2;
@@ -32,6 +33,20 @@ export type FinalizeDeps = {
    * (BI-FBA2FDBE: one tree re-ran the full gauntlet 20+ times).
    */
   priorFailure?: () => Promise<{ failedGuards: string[]; recordId?: string | null; treeSha?: string | null } | null>;
+  /**
+   * The recorded scoped-test failure for the tree this build would test now,
+   * run by the current test runner, or null (BI-33B54E4B: one tree re-ran its
+   * failing tests 500 times).
+   */
+  priorTestsFailure?: () => Promise<ScopedTestsFailure | null>;
+};
+
+/** A confirmed scoped-test failure, bound to the tree it ran on and its record. */
+export type ScopedTestsFailure = {
+  failure: "tests" | "typecheck";
+  failingTests: string[];
+  recordId: string;
+  treeSha: string;
 };
 
 /** Printed by a guard that could not evaluate the change (scripts/lib/git-changed-files.mjs). */
@@ -45,7 +60,8 @@ export type FinalizeOutcome =
   | { status: "decisions-missing"; missing: string[] }
   | { status: "decisions-exhausted"; failedGuards: string[] }
   | { status: "unbound" }
-  | { status: "tests-failed" }
+  | ({ status: "tests-failed"; reused?: true } & ScopedTestsFailure)
+  | { status: "tests-not-run"; reason: string }
   | { status: "evidence-unresolvable"; resolved: number }
   | { status: "analysis-invalid"; reasons: string[] }
   | { status: "risk-blocked"; risks: UnmitigatedRisk[]; treeSha: string };
@@ -66,6 +82,8 @@ export async function runBuildStudioFinalize(buildId: string, deps: FinalizeDeps
   if (prior) {
     return { status: "gauntlet-failed", failedGuards: prior.failedGuards, recordId: prior.recordId ?? null, treeSha: prior.treeSha ?? null, reused: true };
   }
+  const priorTests = await deps.priorTestsFailure?.();
+  if (priorTests) return { status: "tests-failed", ...priorTests, reused: true };
 
   let captured = await deps.capture();
   // BI-AF072BE5: a build with nothing committed has nothing to verify. Running
@@ -116,9 +134,28 @@ export async function runBuildStudioFinalize(buildId: string, deps: FinalizeDeps
   }
   if (!gauntlet.binding || !gauntlet.recordId) return done(deps, buildId, { status: "unbound" });
 
-  const tests = await deps.runScopedTests(captured.changedFiles);
-  const testsRecordId = await deps.recordTests({ binding: gauntlet.binding, changedFiles: captured.changedFiles, result: tests });
-  if (!tests.passed || !tests.typeCheckPassed || !testsRecordId) return done(deps, buildId, { status: "tests-failed" });
+  const binding = gauntlet.binding;
+  const runTests = async () => {
+    const result = await deps.runScopedTests(captured.changedFiles);
+    const recordId = await deps.recordTests({ binding, changedFiles: captured.changedFiles, result });
+    return { verdict: classifyScopedTestResult(result), recordId };
+  };
+  let tests = await runTests();
+  if (tests.verdict.kind === "tests") {
+    // Like a guard, a real test failure fails again on the same tree; one re-run
+    // separates it from a flake. Both runs are recorded; only the last is cited.
+    deps.log(`Scoped tests failed (${tests.verdict.failingTests.length || "unnamed"}); re-running once to separate a flake from a real failure.`);
+    tests = await runTests();
+  }
+  if (tests.verdict.kind === "not-run") return done(deps, buildId, { status: "tests-not-run", reason: tests.verdict.reason });
+  if (!tests.recordId) return done(deps, buildId, { status: "tests-not-run", reason: "the scoped-test result could not be recorded" });
+  if (tests.verdict.kind !== "passed") {
+    return done(deps, buildId, {
+      status: "tests-failed", failure: tests.verdict.kind, failingTests: tests.verdict.failingTests,
+      recordId: tests.recordId, treeSha: binding.headTreeHash,
+    });
+  }
+  const testsRecordId = tests.recordId;
 
   const room = await deps.workroom();
   const evidenceIds = [gauntlet.recordId, testsRecordId];
@@ -147,6 +184,7 @@ function done(deps: FinalizeDeps, buildId: string, outcome: FinalizeOutcome): Fi
     : "missing" in outcome ? `: missing ${outcome.missing.join(", ")}`
     : "reasons" in outcome ? `: ${outcome.reasons.slice(0, 3).join(", ")}`
     : "reason" in outcome ? `: ${outcome.reason}`
+    : "failingTests" in outcome ? `: ${outcome.failure === "typecheck" ? "typecheck failed" : outcome.failingTests.length > 0 ? outcome.failingTests.slice(0, 5).join("; ") : "see the recorded test output"}`
     : "risks" in outcome ? `: ${outcome.risks.map((r) => `${r.key} (${r.disposition})`).slice(0, 3).join(", ")}`
     : "";
   deps.log(`Finalize ${buildId}: ${outcome.status}${detail}`);

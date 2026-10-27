@@ -125,6 +125,22 @@ The auto-install hook (BI-98683E68) wires these into portal install + worktree c
 
 ## Standalone install and update
 
+### Runtime floor: the stock Python of every supported OS (BI-90C9478D)
+
+The updater and its scripts use only the standard library of Python 3.9, which is what stock macOS ships. CI runs every suite on a macOS runner's system `/usr/bin/python3` (the `Stock macOS Python` job) as well as on Linux with 3.12.
+
+Python 3.9 has no TOML parser, so `scripts/codex_toml.py` reads TOML in this order:
+
+1. `tomllib` (3.11+);
+2. `tomli`;
+3. Codex's own parser. It writes the text into a private, throw-away `CODEX_HOME` and asks `codex app-server` for `config/read`, so the result is exactly what Codex itself will load. Results are cached per run.
+
+The Codex path refuses two things rather than risk a wrong rewrite:
+- a file Codex itself calls invalid (`Invalid TOML for Codex: …`, with its line, column and reason);
+- a TOML date-time value, which JSON would turn into a string.
+
+The Codex CLI is found on `PATH`, in the usual install folders, and inside the ChatGPT app (`ChatGPT.app/Contents/Resources/codex-cli/bin/codex`). With no parser and no Codex CLI at all, nothing on the host reads Codex settings. Codex is then reported `absent` and its settings are left unchanged; the run does not fail.
+
 The root-clone guard distinguishes shell syntax from quoted diagnostic text and
 interpreter heredoc input (BI-F6176C63). Read-only scripts with comparisons or
 HTML are allowed. Shell redirections, commands after a heredoc, shell-fed input,
@@ -283,6 +299,8 @@ Until then, rows stay checklist-only in
 ### One version source, and what each release publishes
 
 `toolchain-version.json` is the only place the pack version is written. Every client manifest (`.claude-plugin`, `.grok-plugin`, `.antigravity-plugin`, the Codex manifest's base version) and both version fields in the root `.claude-plugin/marketplace.json` are generated from it with `node scripts/sync-toolchain-version.mjs`. The Toolchain Version Guard (`--check`) fails CI on any hand edit. To bump the version, edit `toolchain-version.json` and run the script.
+
+**A content change does not need a bump to ship (BI-4F9E3221).** The portal manifest publishes `deliveredVersion` = `<packVersion>+c.<packDigest[0:12]>`, and the updater stamps that string into every client manifest it delivers (`.claude-plugin`, `.grok-plugin`, `.antigravity-plugin`) and into the managed marketplace. Claude Code keys its plugin cache by that string, so any change of delivered bytes refreshes it. `delivered_digest` hashes those manifests with their version value blank, so stamping never changes the digest. Codex keeps its own `+codex.<digest>` suffix. Bump `packVersion` only for a semantic reason: a floor, a breaking change, or a release note. Design: [`docs/superpowers/specs/2026-10-27-self-converging-agent-toolchain-design.md`](../../docs/superpowers/specs/2026-10-27-self-converging-agent-toolchain-design.md) M1.
 
 Each portal serves the pack its image ships, with no source checkout needed (BI-52934B3E, design `docs/superpowers/specs/2026-10-07-agent-toolchain-release-delivery-design.md` §5.1):
 

@@ -101,17 +101,19 @@ def write_json(path: Path, data: Any) -> bool:
     return write_text_if_changed(path, content)
 
 
-def validate_toml(content: str) -> None:
-    """Refuse an unparseable candidate before touching any client configuration."""
+def validate_toml(content: str, context_dir: Optional[Path] = None) -> None:
+    """Refuse an unparseable candidate before touching any client configuration.
+
+    tomllib, tomli or, on stock Python 3.9, Codex's own parser (BI-90C9478D).
+    """
+    import codex_toml
+
     try:
-        import tomllib as parser
-    except ImportError:
-        try:
-            import tomli as parser
-        except ImportError:
-            raise ValueError("TOML updates require Python 3.11+ or tomli; configuration unchanged") from None
-    try:
-        parser.loads(content)
+        codex_toml.loads_any(content, context_dir=context_dir)
+    except codex_toml.CodexTomlUnavailable:
+        raise ValueError("TOML updates require Python 3.11+, tomli or the Codex CLI; configuration unchanged") from None
+    except codex_toml.UnsupportedToml as error:
+        raise ValueError(str(error)) from None
     except ValueError:
         # Parser diagnostics can echo operator credentials. Keep this bounded.
         raise ValueError("Invalid TOML candidate; configuration unchanged") from None
@@ -119,7 +121,7 @@ def validate_toml(content: str) -> None:
 
 def write_text_if_changed(path: Path, content: str) -> bool:
     if path.suffix == ".toml":
-        validate_toml(content)
+        validate_toml(content, context_dir=path.parent)
         before = path.read_bytes() if path.exists() else None
         after = content.encode("utf-8")
         if before == after:
@@ -199,6 +201,27 @@ def codex_content_version(skill_pack: Path) -> str:
         digest.update(relative.as_posix().encode("utf-8") + b"\0")
         digest.update(hashlib.sha256(content).digest())
     return f"{base_version}+codex.{digest.hexdigest()[:24]}"
+
+
+def stamp_delivered_version(pack: Path, version: str) -> None:
+    """Write the delivered version into every stamped client manifest of a copy.
+
+    BI-4F9E3221: Claude Code keys its plugin cache by version string and never
+    refreshes a cache whose version is unchanged, so content merged without a
+    manual bump stayed stale. Only the version value is replaced; every other
+    byte is preserved, which is what lets `delivered_digest` hash it blank.
+    """
+    from installed_copy_freshness import STAMPED_MANIFESTS, _VERSION_VALUE
+
+    replacement = version.encode("utf-8")
+    for relative in sorted(STAMPED_MANIFESTS):
+        path = pack / relative
+        if not path.is_file():
+            continue
+        content = path.read_bytes()
+        stamped = _VERSION_VALUE.sub(lambda match: match.group(1) + replacement + match.group(2), content, count=1)
+        if stamped != content:
+            path.write_bytes(stamped)
 
 
 def codex_marketplace_path(home: Path) -> Path:
@@ -892,16 +915,15 @@ def ensure_codex_project_config(project_root: Path, mcp_url: str, dry_run: bool)
     path = project_root / ".codex" / "config.toml"
     if not path.exists():
         return False
-    try:
-        import tomllib as toml_parser
-    except ImportError:
-        try:
-            import tomli as toml_parser
-        except ImportError:
-            raise ValueError("Project Codex TOML requires Python 3.11+ or tomli; configuration unchanged") from None
+    import codex_toml
+
     text = path.read_text(encoding="utf-8-sig")
     try:
-        parsed = toml_parser.loads(text)
+        parsed = codex_toml.loads_any(text, context_dir=path.parent)
+    except codex_toml.CodexTomlUnavailable:
+        raise ValueError("Project Codex TOML requires Python 3.11+, tomli or the Codex CLI; configuration unchanged") from None
+    except codex_toml.UnsupportedToml as error:
+        raise ValueError(str(error)) from None
     except ValueError:
         raise ValueError("Invalid project Codex TOML; configuration unchanged") from None
     servers = parsed.get("mcp_servers", {})
@@ -927,7 +949,7 @@ def ensure_codex_project_config(project_root: Path, mcp_url: str, dry_run: bool)
     updated = upsert_toml_table(text, "[mcp_servers.dpf]", body)
     servers["dpf"] = expected
     try:
-        verified = toml_parser.loads(updated) == parsed
+        verified = codex_toml.loads_any(updated, context_dir=path.parent) == parsed
     except ValueError:
         verified = False
     if not verified:
@@ -1085,16 +1107,18 @@ def claude_plugin_records(home: Path) -> list[dict[str, Any]]:
 
 def claude_record_content_matches(home: Path, entry: dict[str, Any]) -> bool:
     """Verify installed bytes with the existing delivered-content comparator."""
-    from installed_copy_freshness import delivered_digest, pack_version
+    from installed_copy_freshness import delivered_digest, installed_version
 
     install = entry.get("installPath")
     source = shared_managed_plugin_path(home)
     if not isinstance(install, str) or not source.is_dir() or not Path(install).is_dir():
         return False
     try:
-        expected_version = pack_version(source)
+        # The full string, stamp included (BI-4F9E3221): Claude Code keys the
+        # cache by it, so an unstamped record at the same base is stale.
+        expected_version = installed_version(source)
         return bool(expected_version and entry.get("version") == expected_version
-                    and pack_version(Path(install)) == expected_version
+                    and installed_version(Path(install)) == expected_version
                     and delivered_digest(Path(install)) == delivered_digest(source))
     except (OSError, ValueError):
         return False
@@ -1112,10 +1136,14 @@ def converge_claude_project_plugins(home: Path, version: str, dry_run: bool) -> 
     A record whose projectPath is gone is reported as prunable and left alone:
     Claude Code owns the file and drops it on its own uninstall.
     """
+    from installed_copy_freshness import installed_version
+
     result: dict[str, list[str]] = {"updated": [], "current": [], "pruned": [], "failed": []}
-    # Claude Code records the marketplace version without build metadata; the
-    # pack manifest may carry a `+codex.<stamp>` suffix (codex_content_version).
-    version = version.split("+", 1)[0]
+    # Claude Code records the version from the plugin manifest, which the
+    # delivery stamps with `+c.<digest>` (BI-4F9E3221). The shared copy is what
+    # `plugin update` installs, so its manifest is the expected version; a
+    # `+codex.<stamp>` on the argument is Codex's and is dropped.
+    version = installed_version(shared_managed_plugin_path(home)) or version.split("+", 1)[0]
     claude = resolve_claude_binary()
     for entry in claude_plugin_records(home):
         project = entry.get("projectPath")
@@ -1239,7 +1267,9 @@ def converge_claude_project_connectors(
 
     `outcome`, when given, receives the structured result for --report-json.
     """
-    version = version.split("+", 1)[0]
+    from installed_copy_freshness import installed_version
+
+    version = installed_version(shared_managed_plugin_path(home)) or version.split("+", 1)[0]
     plugins = converge_claude_project_plugins(home, version, dry_run)
     if outcome is not None:
         outcome["plugins"] = plugins
@@ -1387,6 +1417,12 @@ def disable_competitive_claude_plugins(
     return "; ".join(parts) if parts else "no competitive plugins present"
 
 
+# macOS app folders that may bundle a Codex CLI (BI-90C9478D): the ChatGPT app
+# ships one at Contents/Resources/codex-cli/bin/codex, and a host with only the
+# app has no `codex` on PATH, so the updater used to report Codex as absent.
+MACOS_APP_DIRS = (Path("/Applications"), Path.home() / "Applications")
+
+
 def resolve_codex_binary() -> str | None:
     home = home_dir()
     candidates: list[str] = []
@@ -1415,6 +1451,9 @@ def resolve_codex_binary() -> str | None:
             "/usr/local/bin/codex",
             str(home / ".local" / "bin" / "codex"),
         ])
+        if platform.system() == "Darwin":
+            candidates.extend(str(folder / "ChatGPT.app" / "Contents" / "Resources" / "codex-cli" / "bin" / "codex")
+                              for folder in MACOS_APP_DIRS)
     found = shutil.which("codex")
     if found:
         candidates.append(found)
@@ -2552,6 +2591,11 @@ def main(argv: list[str]) -> int:
 
     copy_skill_pack(skill_pack, codex_managed, args.dry_run)
     copy_skill_pack(skill_pack, shared_managed, args.dry_run)
+    from installed_copy_freshness import delivered_version as _delivered_version
+
+    delivered = _delivered_version(skill_pack) or version
+    if not args.dry_run:
+        stamp_delivered_version(shared_managed, delivered)
     codex_version = codex_content_version(skill_pack)
     if not args.dry_run:
         write_json(codex_managed / ".codex-plugin" / "plugin.json", {**manifest, "version": codex_version})
@@ -2604,8 +2648,14 @@ def main(argv: list[str]) -> int:
                 f"hooks {codex_hooks_status}"
             )
         except ValueError as error:
-            codex_status = f"failed: {error}"
-            codex_install_failed = True
+            if not codex_present and "require Python 3.11+, tomli or the Codex CLI" in str(error):
+                # No Codex binary and no TOML parser: nothing on this host reads
+                # Codex settings, so leaving them unchanged is not a failure
+                # (BI-90C9478D, spec row X11).
+                codex_status = "absent: no Codex CLI found and no TOML parser; Codex settings left unchanged"
+            else:
+                codex_status = f"failed: {error}"
+                codex_install_failed = True
             print(f"  Codex      : {codex_status}")
         grok_status = "skipped by flag"
         if not args.skip_grok_cli_install:
@@ -2655,7 +2705,7 @@ def main(argv: list[str]) -> int:
 
     claude_install_failed = False
     if not args.codex_only:
-        ensure_claude_marketplace(home, version, args.dry_run)
+        ensure_claude_marketplace(home, delivered, args.dry_run)
         ensure_claude_repo_mcp_config(
             shared_managed if not args.dry_run else skill_pack,
             mcp_url,
