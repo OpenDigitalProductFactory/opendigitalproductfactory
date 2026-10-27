@@ -1,5 +1,5 @@
 ---
-status: active
+status: draft
 ---
 
 # The agent toolchain converges itself on every client
@@ -61,7 +61,7 @@ The Claude Code docs describe the rest:
 
 ### 3.2 Codex already solved this for itself
 
-#5541 made the updater stamp Codex's version as `+codex.<24-hex content digest>`, keyed off `codex_content_version`. Codex has not gone stale since (F7). This design extends the same principle to every client, using one digest.
+#5541 made the updater stamp Codex's version as `+codex.<24-hex content digest>`, keyed off `codex_content_version`. Codex has not gone stale since (F7). This design extends the same principle to the other clients.
 
 ## 4. Failure catalogue and coverage
 
@@ -122,7 +122,7 @@ What this design adds that none of these provide:
 - When the updater copies the pack to each managed location, it writes `deliveredVersion` into every client manifest:
   - `.claude-plugin`, `.grok-plugin` and `.antigravity-plugin` `plugin.json`;
   - the managed marketplace `metadata.version` and the plugin entry;
-  - Codex keeps its `+codex.<digest>` form, re-derived from the same `delivered_digest`, so there is one digest algorithm (§3.2 noted `codex_content_version` diverges).
+  - Codex keeps its existing `+codex.<digest>` suffix from `codex_content_version`, unchanged. It already converges (§3.2), and changing it would force a reinstall of every Codex cache for no gain.
 - `delivered_digest` already excludes per-install `*.mcp.json` and the Codex manifest. It now also excludes every stamped manifest, so stamping cannot change the digest.
 - The repo keeps a plain `packVersion` in `toolchain-version.json`. It changes only for semantic reasons: a floor, a breaking change, or a release note. The `README.md` instruction to bump it on every pack change is removed.
 - `sync-toolchain-version.mjs --check` stays as the copy-drift guard.

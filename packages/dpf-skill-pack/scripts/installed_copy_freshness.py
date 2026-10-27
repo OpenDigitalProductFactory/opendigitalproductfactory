@@ -60,6 +60,19 @@ _TEMPLATE = re.compile(r"^\$\{(DPF_(?:CLAUDE_)?MCP_URL):-([^}]+)\}$")
 # is compared on its own, below.
 _PER_INSTALL = {Path(".codex-plugin") / "plugin.json"}
 _PER_INSTALL_DIRS = {".in_use"}
+# BI-4F9E3221: the updater stamps `<packVersion>+c.<digest12>` into these
+# client manifests when it delivers the pack, so a version-keyed client cache
+# (Claude Code) refreshes on any content change without a manual bump. Their
+# version value is therefore per delivery and is hashed blank; every other byte
+# of the manifest still counts. The portal's TypeScript copy normalizes the
+# same way (apps/web/lib/agent-toolchain/pack-digest.ts).
+STAMPED_MANIFESTS = frozenset(Path(client) / "plugin.json" for client in (".claude-plugin", ".grok-plugin", ".antigravity-plugin"))
+_VERSION_VALUE = re.compile(rb'("version"\s*:\s*")[^"]*(")')
+
+
+def blank_version(content: bytes) -> bytes:
+    """A stamped manifest's bytes with its first version value emptied."""
+    return _VERSION_VALUE.sub(rb"\1\2", content, count=1)
 
 
 def _read_json(path: Path) -> Any:
@@ -98,9 +111,24 @@ def delivered_digest(pack: Path) -> str:
             continue
         if len(relative.parts) == 1 and relative.name.endswith(".mcp.json"):
             continue
+        content = path.read_bytes()
+        if relative in STAMPED_MANIFESTS:
+            content = blank_version(content)
         digest.update(relative.as_posix().encode("utf-8") + b"\0")
-        digest.update(hashlib.sha256(path.read_bytes()).digest())
+        digest.update(hashlib.sha256(content).digest())
     return digest.hexdigest()
+
+
+def delivered_version(pack: Path) -> Optional[str]:
+    """The version a delivery stamps: the base pack version plus its content digest."""
+    base = pack_version(pack)
+    return f"{base}+c.{delivered_digest(pack)[:12]}" if base else None
+
+
+def installed_version(pack: Path) -> Optional[str]:
+    """The exact version string a copy's Claude manifest carries, stamp included."""
+    data = _read_json(pack / ".claude-plugin" / "plugin.json")
+    return str(data["version"]) if isinstance(data, dict) and data.get("version") else None
 
 
 def _endpoint(url: str) -> tuple[str, str, Optional[int], str]:

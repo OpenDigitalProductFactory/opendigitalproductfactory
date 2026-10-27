@@ -1,5 +1,5 @@
 ---
-status: active
+status: draft
 ---
 
 # Plan — the agent toolchain converges itself on every client
@@ -34,7 +34,7 @@ Each slice is one PR. Each is written test-first: the failing test lands with th
 2. **Implement.**
    - `apps/web/lib/agent-toolchain/toolchain-manifest.ts` adds `deliveredVersion`. It is included in the signed payload, with schemaVersion unchanged as an additive field.
    - `installed_copy_freshness.py` exposes one `delivered_version(pack_root)` helper.
-   - `update_agent_toolchain.py` stamps every managed manifest and the marketplace when it copies, and uses `delivered_digest` for the Codex suffix. That leaves one digest algorithm; `codex_content_version` becomes a thin wrapper.
+   - `update_agent_toolchain.py` stamps every managed manifest and the marketplace when it copies, Codex keeps its existing `codex_content_version` suffix, which already converges.
    - `delivered_digest`, in both the Python and TS mirrors, excludes the stamped manifests.
 3. **Update the docs.**
    - `packages/dpf-skill-pack/README.md:285`: packVersion is semantic only; delivery is content-addressed.
