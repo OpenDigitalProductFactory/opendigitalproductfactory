@@ -1,14 +1,14 @@
 # Backlog & planning runbook
 
-**Closure follows delivery (operator direction 2026-10-27, BI-C899BB40).**
-Delivery evidence closes every shape: a merge through the gates or a
-canonical deployment. At completion,
-`ACCEPTANCE_EVIDENCE_REQUIRED`, `OBJECTIVE_BASELINE_REQUIRED` and
-`OBJECTIVE_RECONCILIATION_REQUIRED` are not applicable once delivery passes.
-Only a current failure blocks the close. The terminal transition records
-`acceptanceObligation: not-owed` for non-customer work. Customer-reported work
-records `pending-submitter-confirmation`, and the acceptance sweep asks its
-submitter one bounded question. A `final-acceptance` runtime check
+**Closure follows delivery (operator direction 2026-10-27, BI-B1B44777 and
+BI-C899BB40).** A merge through the gates or a canonical deployment closes
+every item not tagged `contractual` (`deliveryClosesItem`); only a current
+failure or a conflicting reconciliation blocks it. A `contractual` item keeps
+its acceptance lane. The terminal transition records
+`acceptanceObligation: not-owed` for non-contractual work no customer reported;
+customer-reported, non-contractual work records
+`pending-submitter-confirmation`, and the acceptance sweep asks its submitter
+one bounded question. The sweep never re-selects a closed item for acceptance. A `final-acceptance` runtime check
 (`record_runtime_verification`, BI-80D1FBBF) can still be recorded as
 evidence, but none is owed.
 

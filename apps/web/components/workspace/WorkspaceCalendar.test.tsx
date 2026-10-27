@@ -35,6 +35,7 @@ vi.mock("./CalendarEventPopover", () => ({
 vi.mock("./CalendarDetailPopover", () => ({ CalendarDetailPopover: () => null }));
 vi.mock("./CalendarAgentScheduler", () => ({ CalendarAgentScheduler: () => null }));
 vi.mock("./CalendarSyncPanel", () => ({ CalendarSyncPanel: () => null }));
+vi.mock("./CalendarFeedSubscribePanel", () => ({ CalendarFeedSubscribePanel: () => null }));
 
 import { WorkspaceCalendar } from "./WorkspaceCalendar";
 

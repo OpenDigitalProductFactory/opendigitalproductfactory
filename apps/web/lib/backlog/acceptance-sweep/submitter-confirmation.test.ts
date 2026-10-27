@@ -136,6 +136,15 @@ describe("advanceSubmitterConfirmation", () => {
     expect(recorded).toEqual([expect.objectContaining({ outcome: "not-owed", resolved: true })]);
   });
 
+  it("never asks or waives acceptance for a contractual item", async () => {
+    const { p, recorded } = ports(state({ lifecycleTags: ["ecosystem-inbound", "contractual"],
+      closure: { recordedAt: CLOSED_AT, payload: { to: "done", closureBasis: "canonical-deployment", acceptanceObligation: "pending-independent-verification" } } }));
+    expect(await advanceSubmitterConfirmation(item, p)).toMatchObject({ step: "contractual" });
+    expect(p.postIssueComment).not.toHaveBeenCalled();
+    expect(recorded).toEqual([expect.objectContaining({ outcome: "contractual-acceptance-lane", resolved: true })]);
+    expect(recorded.some(row => row.outcome === "not-owed")).toBe(false);
+  });
+
   it("asks a legacy customer-reported item its one question", async () => {
     const { p } = ports(state({ closure: { recordedAt: CLOSED_AT, payload: { to: "done", closureBasis: "canonical-deployment", acceptanceObligation: "pending-independent-verification" } } }));
     expect(await advanceSubmitterConfirmation(item, p)).toMatchObject({ step: "question-sent" });

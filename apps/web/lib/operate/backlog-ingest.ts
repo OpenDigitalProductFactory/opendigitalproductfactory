@@ -39,6 +39,7 @@ import {
   type ImplementationCandidate,
 } from "@/lib/operate/implementation-scan";
 import { listRepoSourceFiles } from "@/lib/operate/repo-file-inventory";
+import { composeIntakeBody, statesOutcome } from "@/lib/backlog/intake-outcome";
 import {
   backlogOriginMarker,
   reconcileOrigin,
@@ -62,6 +63,14 @@ const defaultListRepoFiles = listRepoSourceFiles;
 export interface BacklogIngestInput {
   title: string;
   body?: string | null;
+  /**
+   * What will be true, and for whom, once this is done (BI-B1B44777). Written
+   * into the body as "## Outcome". Optional: an item without one is still
+   * filed, and `outcomeStated` tells the caller to prompt for it.
+   */
+  outcome?: string | null;
+  /** How we will know — given only when the outcome is not obvious from the change. */
+  howWeKnow?: string | null;
   /** The WHAT (closed enum) — required on every item per the workType spec. */
   workType: BacklogWorkType;
   /** The ORIGIN (closed enum) — how the work arrived. */
@@ -148,6 +157,12 @@ export interface BacklogIngestResult {
    * "nothing similar exists" (BI-3722E9A1).
    */
   duplicateSemanticUnavailable?: string | null;
+
+  /**
+   * Whether the stored body states the outcome the item delivers
+   * (BI-B1B44777). Advisory: false never refuses the filing.
+   */
+  outcomeStated?: boolean;
 }
 
 /**
@@ -467,7 +482,8 @@ export async function ingestBacklogItem(
   }
 
   const itemId = input.itemId?.trim() || generateBacklogItemId(input.itemIdPrefix);
-  const body = composeIngestBody(input.body, marker);
+  const intakeBody = composeIntakeBody({ body: input.body, outcome: input.outcome, howWeKnow: input.howWeKnow });
+  const body = composeIngestBody(intakeBody, marker);
   const demandStage = initialDemandStageForInput(input);
 
   const item = await store.backlogItem.create({
@@ -518,7 +534,7 @@ export async function ingestBacklogItem(
       },
     });
   }
-  indexKnowledge({ entityId: item.itemId, title: input.title, content: input.body ?? "" });
+  indexKnowledge({ entityId: item.itemId, title: input.title, content: input.outcome ? intakeBody ?? "" : input.body ?? "" });
 
   // ─── Implementation scan (BI-1A1EC5EC) ──────────────────────────────────────
   // Runs AFTER the create, deliberately. It is advisory, and a filing surface
@@ -639,5 +655,6 @@ export async function ingestBacklogItem(
     implementationCandidates,
     duplicateCandidates,
     duplicateSemanticUnavailable,
+    outcomeStated: statesOutcome(body),
   };
 }

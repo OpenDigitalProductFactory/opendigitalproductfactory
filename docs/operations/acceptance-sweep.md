@@ -2,11 +2,14 @@
 
 ## Delivered work closes on delivery (since 2026-10-27)
 
-A merged, green item is done. No shape owes an acceptance receipt after
-delivery, and nobody needs to come back and prove it (operator direction
-2026-10-27, BI-C899BB40). Only a failure recorded as the item's newest
-evidence keeps it open. If something is still wrong later, whoever finds it
-reports it and that becomes a new item.
+A merged, green item is done, unless it is tagged `contractual`. Nobody needs
+to come back and prove it (founder direction 2026-10-27, BI-B1B44777 and
+BI-C899BB40). Only a failure recorded as the item's newest evidence keeps it
+open. If something is still wrong later, whoever finds it reports it and that
+becomes a new item.
+
+A `contractual` item still waits in awaiting acceptance for its check or its
+named accepter, as before.
 
 Medium work can still list acceptance criteria in its body (an Acceptance
 heading with one criterion per bullet, or `AC-<id>:` bullets). They describe

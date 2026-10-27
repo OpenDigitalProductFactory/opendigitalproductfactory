@@ -330,6 +330,8 @@ const nextAuth: NextAuthResult = NextAuth({
         session.user.accountId = (token.accountId as string) ?? null;
         session.user.accountName = (token.accountName as string) ?? null;
         session.user.contactId = (token.contactId as string) ?? null;
+        // Written only by the automation sign-in route, never by a person's sign-in (BI-F586F8A5).
+        if (token.automationOAuthConsent) session.user.automationOAuthConsent = token.automationOAuthConsent;
       }
       return session;
     },

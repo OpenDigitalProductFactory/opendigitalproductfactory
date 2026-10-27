@@ -141,34 +141,3 @@ export function projectDeploymentClosure(decision: InitiativeReadinessDecision, 
     verdict: blockers.length ? "denied" : unmet.length ? "input-required" : "allowed",
   };
 }
-
-/**
- * The requirements delivery evidence settles at completion (BI-C899BB40,
- * operator direction 2026-10-27): once delivery passed, no shape owes an
- * acceptance receipt, an objective baseline or a reconciliation to close.
- */
-export const DELIVERY_SETTLED_COMPLETION_CODES: ReadonlySet<string> = new Set([
-  "ACCEPTANCE_EVIDENCE_REQUIRED",
-  "OBJECTIVE_BASELINE_REQUIRED",
-  "OBJECTIVE_RECONCILIATION_REQUIRED",
-]);
-
-/**
- * Closure follows delivery. Only the caller decides delivery passed; this
- * projection then marks the settled codes not applicable, never passed, and
- * leaves every recorded failure and every other requirement exactly as it was.
- * A merge never outranks a failure.
- */
-export function projectDeliveryClosure(decision: InitiativeReadinessDecision, basis: string): InitiativeReadinessDecision {
-  const settled = (row: { code: string; state: string }) => DELIVERY_SETTLED_COMPLETION_CODES.has(row.code) && row.state !== "fail";
-  const relaxed = decision.unmet.filter(settled);
-  if (relaxed.length === 0) return decision;
-  const unmet = decision.unmet.filter(row => !settled(row));
-  return { ...decision, unmet,
-    satisfied: [...decision.satisfied, ...relaxed.map(row => ({
-      ...row, state: "not-applicable" as const,
-      nextAction: `Delivery closed it (${basis}); post-delivery acceptance is not owed (operator direction 2026-10-27).`,
-    }))],
-    verdict: decision.blockers.length ? "denied" : unmet.length ? "input-required" : "allowed",
-  };
-}

@@ -297,8 +297,12 @@ remedy is raising the page size, not a redesign.
 
 ## 9. Closure follows delivery (operator direction 2026-10-27)
 
-Backlog item: BI-C899BB40. Absorbs the closure half of BI-B1B44777. This
-section supersedes §8's "never on a timeout or on silence" for work no
+Backlog item: BI-C899BB40. The completion gate is BI-B1B44777's
+([outcomes define done](2026-10-27-outcomes-define-done-design.md), kernel
+DI-1263D968DC26): a merge closes every item not tagged `contractual`. This
+section adds what that design left alone: the bounded obligation a closure
+records, the acceptance sweep's handling of done items, and the one question to
+a customer submitter. This section supersedes §8's "never on a timeout or on silence" for work no
 customer reported, and the "acceptance remains a separate verification
 obligation" wording of §3.6 and of the delivery-closeout addendum
 (`2026-09-04-delivery-closeout-cost-efficiency-design.md`).
@@ -322,15 +326,15 @@ could discharge.
 
 ### 9.2 The rule
 
-1. **Delivery evidence closes every shape.** A merge through CI, the merge
-   queue and PR review (a SHA reachable from `origin/main`) or a canonical
-   deployment is delivery. A hand-built completion manifest keeps its own
-   lanes (operational, documentation, small-shape acceptance). When delivery
-   passes, `ACCEPTANCE_EVIDENCE_REQUIRED`, `OBJECTIVE_BASELINE_REQUIRED` and
-   `OBJECTIVE_RECONCILIATION_REQUIRED` are `not-applicable` at completion
-   (`projectDeliveryClosure`, `deployment-closure.ts`). This holds for small,
-   medium, large and unshaped items. Other unmet completion codes keep their
-   meaning.
+1. **Delivery closes every non-contractual item (BI-B1B44777).** One rule,
+   owned by `deliveryClosesItem` in `backlog-completion-evaluation.ts`: a merge
+   through CI, the merge queue and PR review, or a canonical deployment, closes
+   any item not tagged `contractual`, with acceptance, baseline and
+   reconciliation recognised on the merge. This change adds no second
+   predicate. It reads the result as `closureFollowsDelivery`, a reported fact
+   the terminal transition uses to record the obligation (rule 4). A
+   `contractual` item keeps its acceptance lane and is never a delivery
+   closure.
 2. **Recorded failure still blocks.** The newest evidence in any dimension
    being a failure (BI-4A222439), an objective reconciliation that failed, a
    conflicting or malformed baseline, and an xlarge aggregate whose children are
@@ -345,12 +349,15 @@ could discharge.
    - `satisfied` when acceptance evidence passed;
    - `corrective-work-required` when a deployment closure carried a failed
      acceptance;
-   - `not-owed` for work no customer reported;
-   - `pending-submitter-confirmation` for customer-reported work.
+   - `not-owed` for non-contractual work no customer reported;
+   - `pending-submitter-confirmation` for customer-reported, non-contractual
+     work.
+   A `contractual` item closes only through its acceptance lane, so it is
+   never recorded `not-owed`.
    `pending-independent-verification` is no longer written. A legacy done item
    carrying it is re-selected only if it is customer-reported, and then only to
    ask its one question. Every other legacy item is treated as `not-owed`.
-5. **Customer-reported work gets one question.** `isCustomerReported`
+5. **Customer-reported, non-contractual work gets one question.** `isCustomerReported`
    (`backlog-completion-evaluation.ts`) reads the provenance that exists:
    lifecycle tag `ecosystem-inbound`, the origin markers
    `[origin:ecosystem-upstream-issue:`, `[origin:ecosystem-peer-demand:`,

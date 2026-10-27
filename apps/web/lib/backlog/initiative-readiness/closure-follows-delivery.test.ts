@@ -74,7 +74,8 @@ describe("completion shape tables under closure-follows-delivery", () => {
     const result = await evaluate(fixture({ shape: "delivery-small@1.0.0", activities: [research] }), "merged");
     expect(result.closureFollowsDelivery).toBe(true);
     expect(result.decision.verdict).toBe("allowed");
-    expect(result.decision.satisfied.find(row => row.code === "ACCEPTANCE_EVIDENCE_REQUIRED")?.state).toBe("not-applicable");
+    // BI-B1B44777 owns the rule: the merge is the acceptance for non-contractual work.
+    expect(result.decision.satisfied.find(row => row.code === "ACCEPTANCE_EVIDENCE_REQUIRED")?.state).toBe("pass");
   });
 
   it("medium: no independent acceptance receipt and no item-body baseline is owed once merged", async () => {
@@ -174,5 +175,22 @@ describe("the terminal transition records a bounded obligation (AC-CFD-1, AC-CFD
       expect(record?.payload.closureBasis).toBe("canonical-deployment");
     }
     expect(deliveryClosureRecord({ deployment: null, closureFollowsDelivery: false, acceptanceState: "missing", customerReported: true })).toBeNull();
+  });
+});
+
+// One rule (BI-B1B44777 owns it): a contractual item is never a delivery
+// closure, never asked the customer question and never recorded not-owed.
+describe("contractual work keeps its acceptance lane", () => {
+  it("a merged contractual item is not a delivery closure and still owes acceptance", async () => {
+    const result = await evaluate(fixture({ shape: "delivery-small@1.0.0", activities: [research],
+      item: { lifecycleTags: ["contractual", "ecosystem-inbound"], body: "[origin:ecosystem-upstream-issue:acme/repo#7]" } }), "merged");
+    expect(result.closureFollowsDelivery).toBe(false);
+    expect(result.customerReported).toBe(false);
+    expect(result.decision.verdict).not.toBe("allowed");
+    expect(open(result.decision)).toContain("ACCEPTANCE_EVIDENCE_REQUIRED");
+  });
+
+  it("records no obligation for a closure that delivery did not make", () => {
+    expect(deliveryClosureRecord({ deployment: null, closureFollowsDelivery: false, acceptanceState: "pass", customerReported: false })).toBeNull();
   });
 });

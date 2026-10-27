@@ -1,4 +1,4 @@
-import { isCustomerReported } from "@/lib/backlog/initiative-readiness/backlog-completion-evaluation";
+import { isContractualItem, isCustomerReported } from "@/lib/backlog/initiative-readiness/backlog-completion-evaluation";
 import type { ForgeRepository } from "@/lib/forge/types";
 import { isRecord } from "@/lib/shared/coerce";
 
@@ -98,6 +98,7 @@ export type ConfirmationStep =
   | { step: "confirmed" }
   | { step: "satisfied-by-silence" }
   | { step: "not-owed" }
+  | { step: "contractual" }
   | { step: "corrective-filed"; correctiveItemId: string | null }
   | { step: "resolved" }
   | { step: "unavailable" };
@@ -137,6 +138,15 @@ export async function advanceSubmitterConfirmation(
     await ports.record(item, { ...base, outcome: "corrective-filed", resolved: true, correctiveItemId: filed.itemId, fileAction: filed.action },
       `Corrective work ${filed.itemId ?? "not filed"} for the failed acceptance on ${state.itemId}`);
     return { step: "corrective-filed", correctiveItemId: filed.itemId };
+  }
+
+  if (isContractualItem({ lifecycleTags: state.lifecycleTags })) {
+    // A contractual item's acceptance belongs to its own lane (BI-B1B44777),
+    // never to the customer question, and is never recorded not-owed.
+    await ports.record(item, { ...base, outcome: "contractual-acceptance-lane", resolved: true,
+      reason: "Contractual work keeps its acceptance lane; the sweep asks no question and records no waiver." },
+      `${state.itemId} is contractual; acceptance stays with its acceptance lane`);
+    return { step: "contractual" };
   }
 
   const owesQuestion = obligation === "pending-submitter-confirmation"

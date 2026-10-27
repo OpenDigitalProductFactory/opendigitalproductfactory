@@ -24,7 +24,6 @@ import {
 import { type BoundWorkShapeDb, readBoundEditPaths, readBoundWorkShapeRef } from "./bound-work-shape";
 import { assessDeliverySensitivity } from "./delivery-sensitivity";
 import {
-  projectDeliveryClosure,
   projectDeploymentClosure,
   resolveBacklogDeploymentClosure,
   type DeploymentClosureProof,
@@ -64,6 +63,8 @@ export type BacklogCompletionItem = {
   scopeKind: string | null;
   archetypeCategories: string[];
   archetypeIds: string[];
+  /** Carries the reserved `contractual` tag (BI-B1B44777, DI-1263D968DC26). */
+  lifecycleTags?: string[] | null;
   organizationId: string | null;
   epicId: string | null;
   claimedAt: Date | null;
@@ -71,17 +72,15 @@ export type BacklogCompletionItem = {
   digitalProductId: string | null;
   activeBuild: { kind: string; verificationOut: unknown; uxVerificationStatus: string | null } | null;
   productObjectiveWork?: { id: string }[];
-  lifecycleTags?: string[];
 };
 
 /** The item columns the evaluation reads; both callers select exactly these. */
 export const BACKLOG_COMPLETION_ITEM_SELECT = {
   id: true, itemId: true, status: true, workType: true, type: true, source: true, title: true, body: true,
-  scopeKind: true, archetypeCategories: true, archetypeIds: true, organizationId: true,
+  scopeKind: true, archetypeCategories: true, archetypeIds: true, lifecycleTags: true, organizationId: true,
   epicId: true, claimedAt: true, createdAt: true, digitalProductId: true,
   activeBuild: { select: { kind: true, verificationOut: true, uxVerificationStatus: true } },
   productObjectiveWork: { select: { id: true }, take: 1 },
-  lifecycleTags: true,
 } as const;
 
 /** The activity kinds the completion evaluation reads. */
@@ -132,11 +131,14 @@ export type BacklogCompletionEvaluation = {
   hasDesignSpec: boolean;
   deliveryEvidenceRefs: string[];
   /**
-   * BI-C899BB40: delivery passed with no recorded failure, so acceptance,
-   * baseline and reconciliation were not applicable at completion.
+   * BI-C899BB40: this closure is BI-B1B44777's delivery-closes default (a
+   * non-contractual merge or deployment, nothing failed). Reported, not a gate.
    */
   closureFollowsDelivery: boolean;
-  /** BI-C899BB40: a customer reported this work, so its submitter is asked once. */
+  /**
+   * BI-C899BB40: a customer reported this non-contractual work, so its
+   * submitter is asked once. A contractual item keeps its acceptance lane.
+   */
   customerReported: boolean;
 };
 
@@ -274,6 +276,35 @@ export function isCustomerReported(item: {
 }
 
 /**
+ * The reserved lifecycle tag that marks an item contractual (BI-B1B44777,
+ * kernel decision DI-1263D968DC26). It reuses BacklogItem.lifecycleTags, which
+ * create_backlog_item and update_backlog_item already set and query_backlog
+ * already filters, so marking an item needs no new field.
+ */
+export const CONTRACTUAL_LIFECYCLE_TAG = "contractual";
+
+/** Whether the item carries a contractual acceptance commitment. */
+export function isContractualItem(item: { lifecycleTags?: readonly string[] | null }): boolean {
+  return (item.lifecycleTags ?? []).some((tag) => tag.trim().toLowerCase() === CONTRACTUAL_LIFECYCLE_TAG);
+}
+
+/**
+ * Outcomes define done (BI-B1B44777, founder direction 2026-10-27): a merge
+ * through CI and the merge queue closes an item by default. It satisfies
+ * acceptance and objective reconciliation, and no design-time gate is owed
+ * once the change has landed. If something is still wrong, whoever uses the
+ * change reports it and a new item is opened.
+ *
+ * Only a contractual item keeps the separate acceptance step. This replaces
+ * the scope and link terms of the direct-merge-platform predicate
+ * (EP-4614F35E) for completion; `isDirectMergePlatformWork` still bounds the
+ * retained runtime obligations of items that are already done.
+ */
+export function deliveryClosesItem(item: { lifecycleTags?: readonly string[] | null }): boolean {
+  return !isContractualItem(item);
+}
+
+/**
  * Evaluate the completion decision for `item`. Reads only. `db` is the
  * transition's locked transaction client, or the plain client for a read.
  */
@@ -343,7 +374,8 @@ export async function evaluateBacklogItemCompletion(args: {
   }
   const acceptanceState = reconciliation.state;
   // An initiative's own PR cannot prove its children or hypothesis outcomes.
-  const directMerge = !aggregate && isDirectMergePlatformWork(item);
+  // BI-B1B44777: every other non-contractual item closes on its merge.
+  const directMerge = !aggregate && deliveryClosesItem(item);
   const deploymentResult = directMerge
     ? await (deps.resolveDeploymentClosure ?? resolveBacklogDeploymentClosure)({
       itemId: item.itemId, workType: item.workType, roots: mergeSignalRoots(),
@@ -357,12 +389,11 @@ export async function evaluateBacklogItemCompletion(args: {
     workType: item.workType,
   });
   const hasDesignSpec = await (deps.resolveHasDesignSpec ?? defaultResolveHasDesignSpec)({ itemId: item.itemId });
-  // EP-4614F35E (kernel DI-54AECB341524): recognize a merge through the code
-  // gates (CI + merge queue + PR review) as completing DIRECT-MERGE PLATFORM
-  // work — the governance appropriate to maintainer changes — without the full
-  // demand-driven-feature reviewer lifecycle. Bounded by a tight predicate so
-  // customer feature work keeps every gate; a real objective conflict/malformed
-  // reconciliation is NEVER waved through.
+  // EP-4614F35E (kernel DI-54AECB341524), widened by BI-B1B44777: recognize a
+  // merge through the code gates (CI + merge queue + PR review) as completing
+  // any non-contractual item, without a separate acceptance reviewer. A
+  // contractual item keeps every gate; a real objective conflict/malformed
+  // reconciliation is NEVER waved through, and a current failure still blocks.
   //
   // BI-82DCD601, kernel DI-273E6E15C8EB: `hasDesignSpec` is NOT a term of either
   // predicate below. A bug fix has no design spec — that is what makes it a bug
@@ -489,19 +520,15 @@ export async function evaluateBacklogItemCompletion(args: {
     };
   }
   const projected = project(projectionInput);
-  // BI-C899BB40 (operator direction 2026-10-27): delivery evidence closes
-  // every shape. With delivery passed and nothing failed, acceptance, baseline
-  // and reconciliation are not applicable at completion. A recorded failure, a
-  // failed/conflicting/malformed reconciliation and an xlarge aggregate (whose
-  // own PR proves nothing about its children) are never closed this way.
-  // Delivery here is the trunk: a merge through the gates or a canonical
-  // deployment. A hand-built manifest keeps its own lanes (operational,
-  // documentation, small-shape acceptance).
-  const closureFollowsDelivery = !aggregate && delivery === "pass" && (mergedThroughGates === "merged" || deployment !== null)
-    && acceptanceFailures.length === 0
+  // BI-C899BB40: whether THIS closure is the delivery-closes default of
+  // BI-B1B44777 (deliveryClosesItem, recognizeMergeThroughGates above), so the
+  // terminal transition can record a bounded obligation. A reported fact, not
+  // a second rule: it adds no gate and relaxes nothing. A contractual item, an
+  // aggregate, a current failure or a failed/conflicting reconciliation is
+  // never a delivery closure.
+  const closureFollowsDelivery = recognizeMergeThroughGates && acceptanceFailures.length === 0
     && reconciliation.state !== "fail" && reconciliation.state !== "conflict" && reconciliation.state !== "malformed";
-  const deliveryBasis = deployment ? `deployed on ${deployment.runId}` : "merged through the gates";
-  const deploymentDecision = deployment ? projectDeploymentClosure(projected.decision, deployment) : projected.decision;
+
   const independent = project({ ...projectionInput, completion: {
     ...projectionInput.completion!,
     acceptanceEvidence: acceptanceFailures.length === 0
@@ -512,7 +539,7 @@ export async function evaluateBacklogItemCompletion(args: {
   } });
   return {
     governed: projected.governed,
-    decision: closureFollowsDelivery ? projectDeliveryClosure(deploymentDecision, deliveryBasis) : deploymentDecision,
+    decision: deployment ? projectDeploymentClosure(projected.decision, deployment) : projected.decision,
     independentAcceptanceDecision: independent.decision,
     reconciliation,
     delivery,
@@ -522,7 +549,7 @@ export async function evaluateBacklogItemCompletion(args: {
     hasDesignSpec,
     deliveryEvidenceRefs,
     closureFollowsDelivery,
-    customerReported: isCustomerReported(item),
+    customerReported: isCustomerReported(item) && !isContractualItem(item),
   };
 }
 
