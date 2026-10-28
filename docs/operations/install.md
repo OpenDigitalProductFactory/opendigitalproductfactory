@@ -10,6 +10,21 @@ Runtime topology is capability-driven. See [Capability-driven runtime profiles](
 
 That sentence is the whole contract for non-technical contributors. Everything below is for operators who need to diagnose a degraded state.
 
+## Codex hook readiness
+
+Plugin installation does not establish hook trust. The updater queries Codex's
+current hook inventory for the selected project and checks every supported
+handler in the delivered DPF roster. Missing, disabled, changed or untrusted
+handlers are reported by key; unavailable inventory remains unverified. Old
+saved trust records cannot make the current roster healthy. The JSON convergence
+report marks pending hook verification as unrun, and the completion message
+keeps installation separate from verified hook trust.
+
+Review changed definitions in Codex's hook browser, then start a fresh session
+for startup hooks. DPF does not grant trust or bypass that review. The existing
+required-trust option still makes pending verification a nonzero installer
+result. Unchanged approvals remain under Codex's own hash-based trust policy.
+
 ## Linux pilot and private startup state
 
 The [Linux guide](../install/linux.md) owns the recommended host, prerequisites

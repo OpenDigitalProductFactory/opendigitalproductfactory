@@ -2383,44 +2383,24 @@ def install_codex_hooks(managed: Path, home: Path, dry_run: bool) -> str:
     return f"merged guards into {path} (plugin hooks not proven active)" + ("" if changed else " (unchanged)")
 
 
-def codex_hook_trust_established(home: Path, *, plugin_plane: bool = False) -> bool:
-    """True when Codex has persisted hook-trust for the plane DPF relies on.
+def codex_hook_trust_status(home: Path, *, plugin_plane: bool = False,
+                            project_root: Optional[Path] = None) -> dict[str, Any]:
+    import codex_hook_trust
+    hooks_path = (codex_plugin_cache_hooks_path(codex_managed_plugin_path(home), home)
+                  if plugin_plane else codex_hooks_file(home))
+    names = {*CODEX_BASH_GUARDS, *CODEX_ASK_GUARDS, *CODEX_WRITE_GUARDS, "workroom-claim-refresh.mjs"}
+    return codex_hook_trust.audit(resolve_codex_binary(), home, hooks_path, plugin_plane,
+                                  names, project_root or Path.cwd(),
+                                  roster_path=codex_managed_plugin_path(home) / "hooks/hooks.json" if plugin_plane else None)
 
-    Live-probed (BI-883FC2FC): absent `hooks.state` / `[hooks.state.*] trusted_hash`
-    means every plugin + user hook is silently fail-open until the operator
-    reviews `/hooks` and trusts. On the user-file fallback we treat ANY persisted
-    trust as "operator has completed the flow at least once" -- a coarse but
-    non-forged signal. On the plugin plane (BI-2B634E68) only trust recorded for
-    the dpf-platform plugin hooks counts, so trust left over from the retired
-    ~/.codex/hooks.json copy cannot mask untrusted plugin guards.
-    """
-    plugin_key = re.compile(
-        r"hooks\.state\.[\"']" + re.escape(f"{CODEX_PLUGIN_ID}:hooks/hooks.json:")
-        + r"[^\n]*\]\s*\n(?:[^\[\n][^\n]*\n|\s*\n)*?\s*trusted_hash\s*="
-    )
-    config = codex_config_path(home)
-    if config.exists():
-        text = config.read_text(encoding="utf-8")
-        if plugin_plane:
-            if plugin_key.search(text):
-                return True
-        elif "hooks.state" in text and "trusted_hash" in text:
-            return True
-    for name in ("hooks.state", "hooks.state.toml"):
-        state_path = home / ".codex" / name
-        if not state_path.exists() or state_path.stat().st_size == 0:
-            continue
-        if not plugin_plane:
-            return True
-        if plugin_key.search(state_path.read_text(encoding="utf-8", errors="replace")):
-            return True
-    return False
+
+def codex_hook_trust_established(home: Path, *, plugin_plane: bool = False) -> bool:
+    """Only Codex's current per-handler inventory can establish hook trust."""
+    return codex_hook_trust_status(home, plugin_plane=plugin_plane)["healthy"]
 
 
 def codex_hook_trust_pending(home: Path, *, codex_present: bool, plugin_plane: bool = False) -> bool:
-    if not codex_present:
-        return False
-    return not codex_hook_trust_established(home, plugin_plane=plugin_plane)
+    return codex_present and not codex_hook_trust_established(home, plugin_plane=plugin_plane)
 
 
 def codex_hook_trust_blocking_notice(*, plugin_plane: bool = False) -> list[str]:
@@ -2437,8 +2417,8 @@ def codex_hook_trust_blocking_notice(*, plugin_plane: bool = False) -> list[str]
         ]
     return [
         "",
-        "ACTION REQUIRED — Codex hook trust not granted (BI-66EBEA06)",
-        "Plane-1 governance guards are installed but will NOT run until you trust them.",
+        "ACTION REQUIRED — Codex hook trust pending or unverified (BI-66EBEA06)",
+        "Do not treat installed governance guards as active until current trust is verified.",
         *where,
         "  1. Start Codex in this repo:  codex",
         "  2. Run:  /hooks",
@@ -3038,7 +3018,14 @@ def _main(argv: list[str]) -> int:
     exit_code = 1 if codex_install_failed or claude_install_failed or permission_failed else 0
     roster_printed = False
     plugin_plane = codex_plugin_hooks_active(codex_managed, home)
-    trust_pending = codex_hook_trust_pending(home, codex_present=codex_present, plugin_plane=plugin_plane)
+    trust = (codex_hook_trust_status(home, plugin_plane=plugin_plane, project_root=args.project_root)
+             if codex_present else {"healthy": True, "checked": 0, "pending": [], "reason": "Codex not installed"})
+    trust_pending = not trust["healthy"]
+    print(f"  Codex hooks: {trust['reason']} ({trust['checked']} required handlers checked)")
+    for key in trust["pending"]:
+        print(f"    Needs attention: {key}")
+    if report and trust_pending:
+        report.add("codex", "hooks", action="unrun", detail=trust["reason"])
     if trust_pending:
         for line in codex_hook_trust_blocking_notice(plugin_plane=plugin_plane):
             print(line)
@@ -3065,6 +3052,8 @@ def _main(argv: list[str]) -> int:
     elif args.dry_run:
         # A preview writes nothing; it never reports converged or done (BI-81AB897A E3).
         print("Preview only: nothing was written. These are the changes an update would make.")
+    elif trust_pending:
+        print("Installed; Codex hook trust remains unverified. Review the hook notice before source work.")
     elif permission_runtime_unavailable:
         print("Skills and connectors converged; routine permissions remain UNRUN because the Python TOML parser is unavailable.")
     else:

@@ -1701,6 +1701,16 @@ class ClientHookPlaneCoverageTest(unittest.TestCase):
 
 
 class CodexHookTrustTest(unittest.TestCase):
+    def test_obsolete_saved_hash_is_not_current_trust(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            (home / ".codex").mkdir()
+            (home / ".codex/config.toml").write_text(
+                '[hooks.state."dpf-platform@personal:hooks/hooks.json:pre_tool_use:0:0"]\n'
+                'trusted_hash = "sha256:obsolete-not-current"\n', encoding="utf-8")
+            with patch.object(updater, "resolve_codex_binary", return_value=None):
+                self.assertFalse(updater.codex_hook_trust_established(home, plugin_plane=True))
+
     def test_trust_pending_when_no_state_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
@@ -1709,7 +1719,7 @@ class CodexHookTrustTest(unittest.TestCase):
             self.assertFalse(updater.codex_hook_trust_established(home))
             self.assertTrue(updater.codex_hook_trust_pending(home, codex_present=True))
 
-    def test_trust_established_when_config_carries_trusted_hash(self) -> None:
+    def test_saved_hash_alone_cannot_establish_current_trust(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
             (home / ".codex").mkdir()
@@ -1718,8 +1728,9 @@ class CodexHookTrustTest(unittest.TestCase):
                 'trusted_hash = "abc123"\n',
                 encoding="utf-8",
             )
-            self.assertTrue(updater.codex_hook_trust_established(home))
-            self.assertFalse(updater.codex_hook_trust_pending(home, codex_present=True))
+            with patch.object(updater, "resolve_codex_binary", return_value=None):
+                self.assertFalse(updater.codex_hook_trust_established(home))
+                self.assertTrue(updater.codex_hook_trust_pending(home, codex_present=True))
 
     def test_install_codex_hooks_merges_without_clobbering_foreign_hooks(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1875,7 +1886,11 @@ class CodexHookTrustTest(unittest.TestCase):
                 'trusted_hash = "sha256:new"\n',
                 encoding="utf-8",
             )
-            self.assertFalse(updater.codex_hook_trust_pending(home, codex_present=True, plugin_plane=True))
+            # Saved hashes are insufficient without the current inventory.
+            with patch.object(updater, "resolve_codex_binary", return_value=None):
+                self.assertTrue(updater.codex_hook_trust_pending(home, codex_present=True, plugin_plane=True))
+            with patch.object(updater, "codex_hook_trust_status", return_value={"healthy": True}):
+                self.assertFalse(updater.codex_hook_trust_pending(home, codex_present=True, plugin_plane=True))
             notice = "\n".join(updater.codex_hook_trust_blocking_notice(plugin_plane=True))
             self.assertIn("once", notice)
             self.assertIn("dpf-platform", notice)
@@ -2883,7 +2898,8 @@ class QuotedCodexConvergenceTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             target = Path(tmp) / "config.toml"
             target.write_bytes(b'model = "keep"\n')
-            with patch.dict(sys.modules, {"tomllib": None, "tomli": None}):
+            # The supported Codex fallback must be absent too, not merely Python parsers.
+            with patch.dict(sys.modules, {"tomllib": None, "tomli": None}), patch("codex_toml._codex_binary", return_value=None):
                 with self.assertRaisesRegex(ValueError, "Python 3.11"):
                     updater.write_text_if_changed(target, 'model = "new"\n')
             self.assertEqual(target.read_bytes(), b'model = "keep"\n')
