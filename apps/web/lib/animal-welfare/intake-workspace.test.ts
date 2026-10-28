@@ -31,8 +31,8 @@ function db(over: Partial<Record<string, unknown>> = {}): IntakeWorkspaceDb {
       { id: "k2", label: "D2", kindSlug: "kennel", serviceArea: "Dog ward", capacity: 1, blockedReason: null, lifecycle: "active", version: 1 },
       { id: "k3", label: "Out", kindSlug: "kennel", serviceArea: "Dog ward", capacity: 1, blockedReason: "flooded", lifecycle: "active", version: 1 },
     ]) },
-    animalProfile: { findMany: vi.fn(async (args: { where: { lifecycleStatus?: unknown } }) =>
-      JSON.stringify(args.where.lifecycleStatus).includes("placed")
+    animalProfile: { findMany: vi.fn(async (args: { where: { lifecycleStatus?: unknown; custodyEpisodes?: unknown } }) =>
+      args.where.custodyEpisodes ? [] : JSON.stringify(args.where.lifecycleStatus).includes("placed")
         ? [{ id: "a9", name: "Old Timer", animalRef: "AN-9" }]
         : [{ animalRef: "AN-1", name: "Ranger", lifecycleStatus: "in_care" }, { animalRef: "AN-2", name: "Saffron", lifecycleStatus: "in_care" }]) },
   };
@@ -58,6 +58,29 @@ describe("loadIntakeWorkspace", () => {
     expect(workspace.housing).toEqual([{ id: "k1", label: "D1", kindSlug: "kennel", available: 1 }]);
     expect(workspace.existingAnimals).toEqual([{ animalProfileId: "a9", name: "Old Timer", animalRef: "AN-9" }]);
     expect(workspace.limit).toBe(25);
+  });
+
+  // BI-785385B4: the 2026-09-04 backfill gave every storefront animal a profile
+  // but no custody episode. Those animals sat in care or placement-ready with no
+  // way to open custody, so adoption approval refused them forever.
+  it("offers an in-care animal with no open custody episode so intake can open one", async () => {
+    const findMany = vi.fn(async (args: { where: { lifecycleStatus?: unknown; custodyEpisodes?: unknown } }) =>
+      args.where.custodyEpisodes
+        ? [{ id: "a7", name: "Pip", animalRef: "ANML-7" }]
+        : JSON.stringify(args.where.lifecycleStatus).includes("placed")
+          ? [{ id: "a9", name: "Old Timer", animalRef: "AN-9" }]
+          : []);
+    const workspace = await loadIntakeWorkspace({ organizationId: ORG, db: db({ animalProfile: { findMany } }), now: NOW });
+
+    expect(workspace.existingAnimals).toEqual([
+      { animalProfileId: "a7", name: "Pip", animalRef: "ANML-7", needsCustody: true },
+      { animalProfileId: "a9", name: "Old Timer", animalRef: "AN-9" },
+    ]);
+    const custodyQuery = findMany.mock.calls.map((call) => call[0]).find((args) => args.where.custodyEpisodes);
+    expect(custodyQuery?.where).toMatchObject({
+      lifecycleStatus: { in: ["in_care", "placement_ready"] },
+      custodyEpisodes: { none: { closedAt: null } },
+    });
   });
 
   it("sets the animal-subject RLS context before reading", async () => {
