@@ -154,28 +154,35 @@ product-line outcome ledger is created.
 
 #### Outcomes of delivered platform work
 
-DPF can tell you whether the platform work it delivers holds, without anyone
-recording it by hand. Turn this on by designating the business Product that
-your platform development work serves. An agent does this with
+Every backlog item carries its own outcome: what will be true, and for whom,
+once it is done. When nobody states one, DPF writes a draft from the item's
+title and marks it **derived**. Correct a derived draft whenever it is wrong,
+and it becomes **stated**. A Workroom shows the outcome of the item it carries.
+
+DPF records whether each delivered platform item achieved its outcome, with
+no one recording it by hand. Turn this on by designating the business Product
+that your platform development work serves. An agent does this with
 `designate_platform_work_product`, citing the business decision that chose
 the Product. DPF never guesses the Product. Until one is designated, it
 records nothing.
 
 Once a Product is designated, its outcomes list two kinds of objective:
 
-- **Delivered platform work holds** is the designation. It also collects work
-  that belongs to no epic.
-- **Delivered work holds: _epic title_** objectives appear on their own when
-  the first item in an epic is delivered.
+- **Delivered platform work achieves its outcomes** is the designation. It
+  also collects work that belongs to no epic.
+- **Item outcomes hold: _epic title_** objectives appear on their own when the
+  first item in an epic is delivered.
 
-Each time an item is delivered, DPF adds one observation to its objective. The
-value is the percentage of the objective's items delivered 14 to 90 days
-earlier that held. An item held if it is still done, was never reopened, and
-has no failing evidence recorded since delivery. The observation shows the
-count behind the percentage and names the items that did not hold. DPF
-records nothing until at least one delivery is 14 days old. Recording never
-blocks a delivery. Work scoped to an archetype or to a business Product is
-not counted, because it belongs to that Product's own outcomes.
+Each observation is about one item and names the outcome it measured:
+
+- **Delivered:** achieved (100).
+- **Reopened after it was done:** regressed (0).
+- **Failing evidence recorded while it is done:** not achieved (0).
+
+An objective's rate is the average of its items' observations. Nobody enters
+it separately. Recording never blocks a delivery. Work scoped to an archetype
+or to a business Product is not counted, because it belongs to that Product's
+own outcomes.
 
 ### Read the evidence-derived roadmap
 
