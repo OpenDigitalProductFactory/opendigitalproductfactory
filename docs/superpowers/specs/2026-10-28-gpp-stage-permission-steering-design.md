@@ -29,7 +29,7 @@ Reuse the normative [GPP contract](../../architecture/gated-permissions-process.
 
 ### Positive proof belongs at the reference monitor
 
-The proposed owner is one canonical monitor verifier before escalation. Tool-family refiners keep proving the semantics of their own call. They do not each reimplement permit verification. An independent architecture reviewer must approve this placement before implementation; a kernel assessment is supporting evidence, not an approval or a grant.
+WWMD assessment DI-C6A267176992 favors one canonical monitor verifier before escalation (high confidence; agent choice recorded). Its feature values are design estimates, not observed outcomes. Tool-family refiners keep proving the semantics of their own call. They do not each reimplement permit verification. An independent architecture reviewer must approve this placement before implementation; a kernel assessment is supporting evidence, not an approval or a grant.
 
 The monitor first resolves current authentication, token and coworker grants, human capabilities, room admission, sensitivity and ordinary action preconditions. It then resolves the exact stage permission and semantic consequence. A server-only verified proof can supply `gpp-permit` steering to authority resolution. A model argument, an unsigned handle, an agent name, an OAuth client label, a refiner result, or an old audit row cannot construct that proof.
 
@@ -83,7 +83,7 @@ Roll out one declared, bounded housekeeping binding in DEV first. Preserve exist
 | AC-06 | OBJ-REPLAY | Revocation, expiry, stage replacement and grant removal stop new effects; a stage cannot claim its barrier complete while a late effect remains possible. |
 | AC-07 | OBJ-DAMAGE | Missing keys, invalid MACs, stale versions, absent lineage and failed authority lookups cannot create steering or widen authority. |
 | AC-08 | OBJ-DAMAGE | The static declaration remains intact, refinement only narrows, and a refiner exception retains the declaration. |
-| AC-09 | OBJ-EVIDENCE | Audit records name the real client with a generic fallback; effective, permitted and used capabilities are reported for the last30days with explicit unknowns. |
+| AC-09 | OBJ-EVIDENCE | Audit records name the real client with a generic fallback; effective, permitted and used capabilities are reported for the last 30 days with explicit unknowns. |
 | AC-10 | OBJ-EVIDENCE | DEV records controlled-call card deltas and comparable complete-day CoworkerActionEnvelope counts before and after deployment. |
 | AC-11 | OBJ-REPLAY | Existing pending, declined, failed and execution-uncertain requests remain preserved and are never implicitly replayed or approved. |
 | AC-12 | OBJ-DAMAGE | Migration and rollback fixtures preserve legacy rows and refuse activation on an incompatible issuer, transport, verifier or writer. |
