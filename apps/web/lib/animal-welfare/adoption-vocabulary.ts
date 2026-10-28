@@ -59,7 +59,8 @@ export interface ActivePlacementCard {
 export interface AdoptionWorkspace {
   applications: AdoptionApplicationCard[];
   placements: ActivePlacementCard[];
-  animals: Array<{ animalProfileId: string; name: string; animalRef: string; ready: boolean }>;
+  /** `needsIntake`: no open custody episode, so approval would refuse it (BI-785385B4). */
+  animals: Array<{ animalProfileId: string; name: string; animalRef: string; ready: boolean; needsIntake: boolean }>;
   housing: Array<{ id: string; label: string; available: number }>;
   currency: string;
   limit: number;
