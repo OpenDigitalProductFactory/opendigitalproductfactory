@@ -57,6 +57,29 @@ in `scopePolicy.hostUpkeep`; an operator who later disables it is not
 overridden. Without `-WithEdge` the node runs `DPF_EDGE_ROLE=host-upkeep`:
 heartbeat and the action channel, with no network sweep and no discovery.
 
+**Existing installs (BI-084F85E5).** A container self-upgrade cannot install a
+host service, so host-side pieces converge through the release assets. The
+self-upgrade sets `DPF_REMOTE_ACTION_DISPATCH_ENABLED=1` wherever
+`DPF_EDGE_ACTION_DISPATCH_CONFIGURED=1` and the key is absent, and on Windows it
+replaces `dpf-start.ps1`, which runs at sign-in. Once the portal is healthy that
+script installs or upgrades the native agent for the running release and role,
+skipping the work when the agent is already current. It mints an enrollment
+token only for a machine that was never enrolled, and logs to
+`~/.dpf/logs/host-convergence.log`. A failure never blocks startup.
+
+On macOS and Linux the autostart launch script (`~/.dpf/dpf-autostart.sh`) lives
+outside the install directory, so it is now a one-line pointer to the shipped
+`scripts/installer/dpf-start.consumer.sh`, which does the same thing through
+`scripts/installer/lib/host-convergence.sh`. A launch script written before this
+change is bridged once by the self-upgrade itself (BI-EEFDB9E8). The promoter
+mounts the state directory, so after the release assets are committed
+`promote.sh` runs the shipped `scripts/installer/autostart-bridge.mjs` from the
+install root. That rewrites the launch script atomically into the pointer,
+keeping its install path and compose chain, and works for every launch script
+generation. The next boot or login then converges the host. A host-runtime
+change must now say how existing installs converge on Windows, macOS and Linux,
+or the Convergence-Impact gate fails it.
+
 ## Request and evidence flow
 
 1. The native Edge Node connects to the dedicated HTTPS action URL using its

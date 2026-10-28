@@ -233,6 +233,9 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       // BI-7371D444: .wslconfig keys land in the section WSL reads them from
       // (autoMemoryReclaim under [experimental]). Skips where no PowerShell exists.
       conformanceTest("scripts/installer/wslconfig-sections.test.mjs"),
+      // BI-084F85E5: the start script and host convergence ship as release assets;
+      // an existing install converges the native agent at its next logon.
+      conformanceTest("scripts/installer/host-convergence.test.mjs"),
     ]),
     // BI-1281A164 drain: a Prisma NOT-contains on a nullable column silently
     // drops every NULL row (SQL three-valued logic). It cost 29 epics their
