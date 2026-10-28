@@ -31,6 +31,13 @@ export type WikiPageEditorProps = {
    * the kernel page it overrides.
    */
   pageKindReadOnly?: boolean;
+  /**
+   * Shown above the form when the editor opens with a prepared change, e.g.
+   * "Link it" from the backlinks panel (BI-4EAFF7AC). Nothing is saved until
+   * the person saves.
+   */
+  notice?: string | null;
+  initialChangeSummary?: string;
 };
 
 const MODE_TITLES: Record<WikiPageEditorProps["mode"], string> = {
@@ -53,7 +60,7 @@ export function WikiPageEditor(props: WikiPageEditorProps): ReactNode {
   const [status, setStatus] = useState<WikiPageStatus>(props.initialStatus);
   const [pageKind, setPageKind] = useState<WikiPageKind>(props.initialPageKind);
   const [abstract, setAbstract] = useState(props.initialAbstract ?? "");
-  const [changeSummary, setChangeSummary] = useState("");
+  const [changeSummary, setChangeSummary] = useState(props.initialChangeSummary ?? "");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -99,6 +106,14 @@ export function WikiPageEditor(props: WikiPageEditorProps): ReactNode {
         <p className="mt-2 text-xs text-[var(--dpf-muted)]">
           {MODE_HELPERS[props.mode]}
         </p>
+        {props.notice ? (
+          <p
+            role="status"
+            className="mt-3 rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2 text-sm text-[var(--dpf-text)]"
+          >
+            {props.notice}
+          </p>
+        ) : null}
       </header>
 
       {error && (
