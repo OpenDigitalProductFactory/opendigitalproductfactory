@@ -45,7 +45,8 @@ export interface IntakeQueueEntry {
 export interface IntakeWorkspace {
   entries: IntakeQueueEntry[];
   housing: IntakeHousingOption[];
-  existingAnimals: Array<{ animalProfileId: string; name: string; animalRef: string }>;
+  /** `needsCustody`: in care with no open custody episode (BI-785385B4). */
+  existingAnimals: Array<{ animalProfileId: string; name: string; animalRef: string; needsCustody?: true }>;
   limit: number;
 }
 
@@ -208,11 +209,24 @@ export async function loadIntakeWorkspace(input: {
       take: 50,
       select: { id: true, name: true, animalRef: true },
     });
+    // BI-785385B4: the 2026-09-04 backfill gave every storefront animal a profile
+    // but no custody episode, and nothing else ever opened one for them. Offer
+    // them here, first, so an admission can start their custody record.
+    const withoutCustody = await tx.animalProfile.findMany({
+      where: { organizationId, lifecycleStatus: { in: ["in_care", "placement_ready"] }, custodyEpisodes: { none: { closedAt: null } } },
+      orderBy: [{ name: "asc" }],
+      take: 50,
+      select: { id: true, name: true, animalRef: true },
+    });
+    const option = (a: Row) => ({ animalProfileId: String(a.id), name: String(a.name), animalRef: String(a.animalRef) });
 
     return {
       entries,
       housing: housingOptions,
-      existingAnimals: existing.filter((a) => !inQueue.has(String(a.animalRef))).map((a) => ({ animalProfileId: String(a.id), name: String(a.name), animalRef: String(a.animalRef) })),
+      existingAnimals: [
+        ...withoutCustody.filter((a) => !inQueue.has(String(a.animalRef))).map((a) => ({ ...option(a), needsCustody: true as const })),
+        ...existing.filter((a) => !inQueue.has(String(a.animalRef))).map(option),
+      ],
       limit: INTAKE_QUEUE_LIMIT,
     };
   });

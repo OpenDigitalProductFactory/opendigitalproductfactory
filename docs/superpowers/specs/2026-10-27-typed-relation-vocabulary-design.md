@@ -357,6 +357,21 @@ export type RelationType = (typeof RELATION_TYPES)[number]["key"];
   removes the drift (`CLASSIFIED_AS` / `PARENT_OF` labels that nothing writes,
   and missing labels for IMPACTS, LINKS_TO, OVERRIDES and EA_REPRESENTS).
 
+**Delivered (BI-85389A35).** The registry is split in two:
+`relation-vocabulary.ts` holds the shape and the checks, and
+`relation-vocabulary-entries.ts` holds 66 entries. The source scan is in
+`relation-vocabulary-guard.ts`, and the lookup is created by migration
+`20261028060000_graph_relation_type`.
+
+Two details differ from the sketch above:
+
+- A third status, `deprecated`, keeps a legacy type writable until its owning
+  item retypes the writer. `retired` is refused.
+- Rows are added by migration, not by seed. `relation-vocabulary.test.ts`
+  checks that the migrations cover every registry key.
+
+The one-model raise of `prismaModelCount` is owed back by BI-7F47B63C.
+
 ## 6. Enforcement
 
 | Layer | Mechanism | Catches |
