@@ -1,4 +1,5 @@
 ---
+status: active
 title: Exact owned-review OAuth diagnosis
 date: 2026-10-28
 backlog:
