@@ -31,7 +31,9 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any, Mapping, Optional
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -45,7 +47,7 @@ _TEMPLATE = re.compile(r"^\$\{DPF_(?:CLAUDE_)?MCP_URL:-([^}]+)\}$")
 _SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
 RESTART_ACTIONS = ("updated", "retired")
 # Rows with nothing of the client's own to read back.
-_NO_READBACK = ("absent", "skipped", "failed", "prunable", "retired", "unrun")
+_NO_READBACK = ("absent", "skipped", "failed", "prunable", "pruned", "retired", "unrun", "unproven", "preview")
 _ABSENT = re.compile(r"^(absent:|skipped: .*\bnot found\b)")
 
 
@@ -433,6 +435,60 @@ _CLI_COMMANDS = {"claude-code": "resolve_claude_binary", "codex": "resolve_codex
                  "grok": "resolve_grok_binary", "antigravity": "resolve_antigravity_binary"}
 
 
+#: How each client shows it is installed (spec M6): a binary, or an app bundle
+#: under an applications folder. A config folder alone is leftover evidence of
+#: an uninstalled client, not an install. Clients in DEFAULT_CARRIERS have an
+#: adapter; any other client found here is reported `unproven`.
+DISCOVERY: dict[str, dict[str, tuple[str, ...]]] = {
+    "claude-code": {"binaries": ("claude",), "apps": ("Claude.app",)},
+    "codex": {"binaries": ("codex",), "apps": ("Codex.app",)},
+    "grok": {"binaries": ("grok",), "apps": ()},
+    "antigravity": {"binaries": ("agy",), "apps": ("Antigravity.app",)},
+    "vscode": {"binaries": ("code",), "apps": ("Visual Studio Code.app", "Microsoft VS Code/Code.exe")},
+    "cursor": {"binaries": ("cursor",), "apps": ("Cursor.app", "cursor/Cursor.exe")},
+    "gemini-cli": {"binaries": ("gemini",), "apps": ()},
+    "opencode": {"binaries": ("opencode",), "apps": ()},
+}
+
+
+def _relocated_home() -> bool:
+    return bool(os.environ.get("DPF_AGENT_TOOLCHAIN_HOME"))
+
+
+def default_app_roots(home: Path) -> list[Path]:
+    # A fixture or relocated home is searched only within itself, so a test
+    # never reports this host's own clients.
+    if _relocated_home():
+        return [home / "Applications"]
+    if sys.platform == "darwin":
+        return [Path("/Applications"), home / "Applications"]
+    if sys.platform.startswith("win") and os.environ.get("LOCALAPPDATA"):
+        return [Path(os.environ["LOCALAPPDATA"]) / "Programs"]
+    return []
+
+
+def discover_clients(home: Path, which: Any = None, app_roots: Optional[list[Path]] = None) -> dict[str, list[str]]:
+    """Every client installed on this host and the evidence for it, found on every run (spec M6)."""
+    updater = _updater()
+    roots = default_app_roots(home) if app_roots is None else app_roots
+    if which is None:
+        local = str(home / ".local" / "bin")
+        which = (lambda name: shutil.which(name, path=local)) if _relocated_home() else shutil.which
+    found: dict[str, list[str]] = {}
+    for client, shape in DISCOVERY.items():
+        resolver = _CLI_COMMANDS.get(client)
+        binary = getattr(updater, resolver)() if resolver else None
+        for name in () if binary else shape["binaries"]:
+            binary = which(name)
+            if binary:
+                break
+        evidence = [binary] if binary else []
+        evidence += [str(root / app) for root in roots for app in shape["apps"] if (root / app).exists()]
+        if evidence:
+            found[client] = evidence
+    return found
+
+
 def cli_versions() -> dict[str, Optional[str]]:
     """Each client CLI's own `--version` first line, or None when absent."""
     updater = _updater()
@@ -463,12 +519,22 @@ class ConvergenceReport:
         self.endpoint = endpoint
         self.before = snapshot(home, declarations.skill_names)
         self.entries: list[dict[str, Any]] = []
+        self.discovered: dict[str, list[str]] = {}
         self.permission_entries: list[dict[str, Any]] = []
 
     def add(self, client: str, scope: str, status: str = "", action: Optional[str] = None,
             backup_path: Optional[str] = None, detail: Optional[str] = None) -> None:
         self.entries.append({"client": client, "scope": scope, "status": status, "action": action,
                              "backupPath": backup_path, "detail": detail})
+
+    def add_discovery(self, found: Mapping[str, list[str]]) -> None:
+        """Report every installed client DPF cannot converge, never skipping one silently (spec M6)."""
+        self.discovered = dict(found)
+        for client, evidence in found.items():
+            if client not in DEFAULT_CARRIERS:
+                self.add(client, "discovery", action="unproven",
+                         detail=f"installed ({', '.join(evidence)}); DPF has no adapter for it yet, so its DPF tools are "
+                                "not managed. See \"Adding a client\" in docs/architecture/agent-client-capability-parity.md.")
 
     def add_permissions(self, entries: list[dict[str, Any]]) -> None:
         """Sanitized permission metadata is distinct from installed pack proof."""
@@ -516,9 +582,15 @@ class ConvergenceReport:
             now = after.get(key) or {"version": None, "digest": None, "authMode": None}
             action = entry["action"] or _derive_action(entry["status"], before, now)
             failure = None
+            apps = [path for path in self.discovered.get(entry["client"], []) if path.endswith((".app", ".exe"))]
+            if action == "absent" and apps:
+                # Installed, but without the CLI DPF converges it through (spec M6).
+                action = "unproven"
+                entry = {**entry, "detail": f"{', '.join(apps)} is installed, but its CLI is not, so DPF cannot update "
+                                            f"its tools ({entry['status']})"}
             if dry_run:
                 # A dry run writes nothing, so nothing is converged or written (BI-81AB897A E3).
-                action = action if action in ("absent", "failed") else "preview"
+                action = action if action in ("absent", "failed", "unproven", "prunable") else "preview"
             elif action not in _NO_READBACK:
                 failure = self.readback_failure(entry["client"], entry["scope"], now)
                 if failure:
@@ -608,8 +680,13 @@ def record_claude_scopes(
     if not local_record_found and local_status.startswith("failed:"):
         report.add("claude-code", "local", local_status)
     for bucket, projects in (project_outcome.get("plugins") or {}).items():
+        if bucket == "pruned" and "prune" in project_outcome:
+            continue  # reported below, from what pruning did (spec M10)
         for project in projects:
             report.add("claude-code", f"project:{project}", action=_PROJECT_ACTIONS.get(bucket, "failed"))
+    for row in project_outcome.get("prune") or []:
+        report.add("claude-code", f"project:{row['project']}", action=row["action"],
+                   backup_path=row.get("backupPath"), detail=row.get("detail"))
     for project, backup in project_outcome.get("retired") or []:
         report.add("claude-code", f"project-mcp-json:{project}", action="retired", backup_path=str(backup),
                    detail="duplicate project .mcp.json dpf connector disabled")

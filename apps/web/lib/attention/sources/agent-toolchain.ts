@@ -22,8 +22,16 @@ export const CONVERGE_ESCALATE_AFTER_MS = 24 * 60 * 60 * 1000;
 const SILENT_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
 const ESCALATING = new Set(["failed", "needs_operator"]);
 
+const CLIENT_NAMES: Record<string, string> = { "claude-code": "Claude Code", codex: "Codex", grok: "Grok", antigravity: "Antigravity" };
+
 /** The single plain-words action for each code a host can stop on. */
 function operatorStep(status: string, code: string | null): string {
+  // `unproven.<client>.<version>`: the client's own upgrade changed something the DPF tools rely on (BI-D43723D7, spec M7).
+  const unproven = /^unproven\.([a-z-]+)\.(.+)$/.exec(code ?? "");
+  if (unproven) {
+    const client = CLIENT_NAMES[unproven[1]] ?? unproven[1];
+    return `${client} ${unproven[2]} changed something the DPF tools rely on, so they could not be checked for it. A DPF update for that version is needed; the details are on the Self-upgrade page.`;
+  }
   switch (code) {
     case "identity_changed":
     case "identity_mismatch":

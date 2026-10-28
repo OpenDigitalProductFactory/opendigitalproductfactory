@@ -271,7 +271,10 @@ class ReportJsonTest(unittest.TestCase):
             self.assertTrue(shared["restartRequired"])
             self.assertEqual(report["result"], "failed")
             self.assertEqual(rows[("claude-code", f"project:{stale}")]["action"], "failed")
-            self.assertEqual(rows[("claude-code", f"project:{gone}")]["action"], "prunable")
+            # The fake CLI removes nothing, so pruning the gone record reads back as failed (spec M10).
+            self.assertEqual(rows[("claude-code", f"project:{gone}")]["action"], "failed")
+            self.assertIn("left the record in place", rows[("claude-code", f"project:{gone}")]["detail"])
+            self.assertFalse(gone.exists())
             self.assertEqual(rows[("claude-code", f"project-mcp-json:{stale}")]["action"], "retired")
             self.assertTrue(Path(rows[("claude-code", f"project-mcp-json:{stale}")]["backupPath"]).exists())
             self.assertEqual(rows[("claude-code", "user-mcp")]["action"], "retired")
