@@ -236,18 +236,17 @@ export const alertDeliveryBridge = jobs.createFunction(
   },
 );
 
-/** Providers the provider-credential lane already shows a reconnect item for. Best-effort. */
-async function providersShownByCredentialLane(): Promise<Set<string>> {
+/**
+ * Providers the provider-credential lane already shows an item for (expired,
+ * disabled-after-failure, or renewal refused — BI-A53C594E). Read through the
+ * lane's own loader so the two never disagree. Best-effort.
+ */
+async function providersShownByCredentialLane(db: unknown): Promise<Set<string>> {
   try {
-    const { getProviders } = await import("@/lib/ai-provider-data");
-    const { selectExpiredCredentialProviders, selectDisabledConnectedProviders } = await import(
-      "@/lib/attention/sources/provider-credential"
-    );
-    const rows = await getProviders();
-    return new Set([
-      ...selectExpiredCredentialProviders(rows).map((p) => p.providerId),
-      ...selectDisabledConnectedProviders(rows).map((p) => p.providerId),
-    ]);
+    const { loadProviderCredentialItems } = await import("@/lib/attention/sources/provider-credential");
+    const items = await loadProviderCredentialItems(db as Parameters<typeof loadProviderCredentialItems>[0]);
+    const prefix = "provider-credential:";
+    return new Set(items.filter((i) => i.id.startsWith(prefix)).map((i) => i.id.slice(prefix.length)));
   } catch {
     return new Set();
   }
@@ -259,7 +258,7 @@ export async function runAiCapacityWatchCycle() {
   const { runAiCapacityWatch } = await import("@/lib/routing/ai-capacity-watch");
   const { notifyAttentionLive, resolveOperatorRecipient } = await import("@/lib/attention/notify-live");
   return runAiCapacityWatch(prisma as never, {
-    coveredByCredentialLane: await providersShownByCredentialLane(),
+    coveredByCredentialLane: await providersShownByCredentialLane(prisma),
     notify: async (item) => {
       const recipient = await resolveOperatorRecipient();
       // No resolvable owner: notification is best-effort; the row still projects.

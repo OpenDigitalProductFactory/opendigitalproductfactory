@@ -34,7 +34,7 @@ Reproduced on `027053263fe`:
 ## Not in this change
 
 - Self-repair actions stay with their owners: background OAuth renewal is #6680, and usage-limit reclassification is #6679. The watch reports what is still failing after those mechanisms have acted.
-- After #6680 merges, its sign-in-required renewal lane should join the credential-coverage check in deliverable 4.
+- The credential-coverage check in deliverable 4 reads the provider-credential lane through its own loader, so the #6680 sign-in-required renewal lane is included.
 - The providers page's "Routable / No action needed" status belongs to BI-AE428731.
 
 ## Verification
