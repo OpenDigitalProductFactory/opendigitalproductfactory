@@ -490,6 +490,9 @@
     "apps/web/components/workbooks/GridExportMenu.tsx": [
       "docs/user-guide/workspace/workbooks.md"
     ],
+    "apps/web/components/workbooks/WorkbookViewTabs.tsx": [
+      "docs/user-guide/workspace/workbooks.md"
+    ],
     "apps/web/components/workbooks/grid-office-export.ts": [
       "docs/user-guide/workspace/workbooks.md"
     ],
@@ -609,6 +612,9 @@
     "apps/web/lib/backlog/deferral-contract.ts": [
       "docs/architecture/backlog-and-planning-runbook.md"
     ],
+    "apps/web/lib/backlog/initiative-readiness/backlog-completion-evaluation.ts": [
+      "docs/founder-kernel/wiki/principles/gates-proportional-to-shape.md"
+    ],
     "apps/web/lib/backlog/initiative-readiness/body-baseline-persistence.ts": [
       "docs/architecture/initiative-readiness-runbook.md"
     ],
@@ -624,6 +630,9 @@
     "apps/web/lib/backlog/initiative-readiness/parent-scope-inheritance.ts": [
       "docs/architecture/backlog-and-planning-runbook.md"
     ],
+    "apps/web/lib/backlog/initiative-readiness/platform-review-room.ts": [
+      "docs/architecture/initiative-readiness-runbook.md"
+    ],
     "apps/web/lib/backlog/initiative-readiness/readiness-guidance.ts": [
       "docs/architecture/initiative-readiness-runbook.md"
     ],
@@ -631,6 +640,9 @@
       "docs/architecture/initiative-readiness-runbook.md"
     ],
     "apps/web/lib/backlog/initiative-readiness/reviewer-identity.ts": [
+      "docs/architecture/initiative-readiness-runbook.md"
+    ],
+    "apps/web/lib/backlog/initiative-readiness/server-reviewer-dispatch.ts": [
       "docs/architecture/initiative-readiness-runbook.md"
     ],
     "apps/web/lib/backlog/initiative-readiness/shape-requirements.ts": [
@@ -669,6 +681,9 @@
       "docs/architecture/build-gate-runbook.md",
       "docs/triage/2026-05-20-handoff-prompt-next-session.md"
     ],
+    "apps/web/lib/build/finalize-repair-routing.ts": [
+      "docs/architecture/build-gate-runbook.md"
+    ],
     "apps/web/lib/build/finalize-stage-runner.ts": [
       "docs/architecture/build-gate-runbook.md"
     ],
@@ -693,10 +708,16 @@
     "apps/web/lib/build/pull-request-merged-signal.ts": [
       "docs/architecture/build-gate-runbook.md"
     ],
+    "apps/web/lib/build/sandbox/grok-governance-seed.ts": [
+      "docs/architecture/agent-client-capability-parity.md"
+    ],
     "apps/web/lib/build/sandbox/sandbox.ts": [
       "docs/triage/2026-05-20-handoff-prompt-next-session.md"
     ],
     "apps/web/lib/build/sandbox/test-scope-guard.ts": [
+      "docs/architecture/build-gate-runbook.md"
+    ],
+    "apps/web/lib/build/scoped-test-failure.ts": [
       "docs/architecture/build-gate-runbook.md"
     ],
     "apps/web/lib/build/unified-wip-query.ts": [
@@ -789,6 +810,9 @@
     ],
     "apps/web/lib/deliberation/external-review-activation.ts": [
       "docs/architecture/agent-client-capability-parity.md"
+    ],
+    "apps/web/lib/demand/duplicate-merge-consequence.ts": [
+      "docs/architecture/improvement-signal-intake.md"
     ],
     "apps/web/lib/design-intelligence.ts": [
       "docs/architecture/operational-precedent-corpus.md"
@@ -984,6 +1008,9 @@
     "apps/web/lib/inference/jit-retrieval-discipline.test.ts": [
       "docs/architecture/context-engineering-standards.md"
     ],
+    "apps/web/lib/inference/local-model-context-reconcile.ts": [
+      "docs/user-guide/ai-workforce/provider-developer-notes.md"
+    ],
     "apps/web/lib/inference/local-model-operations.ts": [
       "docs/architecture/background-operation-observation-contract.md"
     ],
@@ -1095,7 +1122,8 @@
       "docs/maintenance/staleness-report.md"
     ],
     "apps/web/lib/mcp/packs/workbooks-pack.ts": [
-      "docs/architecture/mcp-tool-packs.md"
+      "docs/architecture/mcp-tool-packs.md",
+      "docs/user-guide/workspace/workbooks.md"
     ],
     "apps/web/lib/mcp/protocol-versions.ts": [
       "docs/architecture/mcp-tool-authorization-runbook.md"
@@ -1269,6 +1297,9 @@
     "apps/web/lib/routes.ts": [
       "docs/architecture/data-model-stewardship-runbook.md"
     ],
+    "apps/web/lib/routing/ai-capacity-watch.ts": [
+      "docs/operations/observability-coverage.md"
+    ],
     "apps/web/lib/routing/anthropic-cache.ts": [
       "docs/architecture/agent-client-capability-parity.md"
     ],
@@ -1353,6 +1384,9 @@
     ],
     "apps/web/lib/self-upgrade/prepare-source.ts": [
       "docs/dev/collision-free-dev-workflow.md"
+    ],
+    "apps/web/lib/self-upgrade/release-image-reference.ts": [
+      "docs/runbooks/bet5-windows-self-upgrade.md"
     ],
     "apps/web/lib/self-upgrade/run-types.ts": [
       "docs/architecture/mcp-tool-packs.md"
@@ -1598,6 +1632,9 @@
       "docs/architecture/work-shapes-and-the-decision-gate.md",
       "docs/user-guide/workspace/finite-delivery-agreements.md"
     ],
+    "apps/web/lib/work-management/stage-dispatch-answered.ts": [
+      "docs/architecture/work-shapes-and-the-decision-gate.md"
+    ],
     "apps/web/lib/work-management/stage-tool-parity.test.ts": [
       "docs/architecture/gated-permissions-process.md"
     ],
@@ -1651,6 +1688,9 @@
     ],
     "apps/web/lib/workbooks/sheet-import.ts": [
       "docs/user-guide/workspace/supported-file-formats.md"
+    ],
+    "apps/web/lib/workbooks/workbook-authoring.ts": [
+      "docs/user-guide/workspace/workbooks.md"
     ],
     "apps/web/lib/workforce/oversight-copy.ts": [
       "docs/platform-usability-standards.md"
@@ -1740,11 +1780,16 @@
     "docs/testing/ci-observation-baseline.json": [
       "docs/testing/ci-evidence.md"
     ],
+    "docs/ux-fit/2026-10-22-review-reassessment-restore-availability.ux-fit.json": [
+      "docs/audits/2026-10-22-review-reassessment-restore-availability.md"
+    ],
     "dpf-reinstall.ps1": [
       "docs/install/windows.md",
       "docs/operations/disaster-recovery.md"
     ],
     "dpf-start.ps1": [
+      "docs/install/windows.md",
+      "docs/operations/remote-action-edge-dispatch.md",
       "docs/runbooks/bet5-windows-self-upgrade.md"
     ],
     "e2e/fixtures/evidence.ts": [
@@ -1955,11 +2000,23 @@
     "packages/dpf-skill-pack/client-capabilities.json": [
       "docs/architecture/agent-client-capability-parity.md"
     ],
+    "packages/dpf-skill-pack/hooks/client-hook-planes.json": [
+      "docs/architecture/agent-client-capability-parity.md"
+    ],
     "packages/dpf-skill-pack/hooks/decision-routing-guard.mjs": [
       "docs/founder-kernel/wiki/principles/consult-scopes-before-asking.md"
     ],
     "packages/dpf-skill-pack/hooks/design-grounding-precheck.mjs": [
       "docs/architecture/enforced-ci-gates.md"
+    ],
+    "packages/dpf-skill-pack/hooks/hooks.json": [
+      "docs/architecture/agent-client-capability-parity.md"
+    ],
+    "packages/dpf-skill-pack/hooks/lib/grok-hook-plane.mjs": [
+      "docs/architecture/agent-client-capability-parity.md"
+    ],
+    "packages/dpf-skill-pack/hooks/lib/hook-io.mjs": [
+      "docs/architecture/agent-client-capability-parity.md"
     ],
     "packages/dpf-skill-pack/hooks/lib/local-ci-override.mjs": [
       "docs/architecture/build-gate-runbook.md"
@@ -1991,11 +2048,20 @@
     "packages/dpf-skill-pack/scripts/generate-operating-contract.mjs": [
       "docs/architecture/skill-surfaces-runbook.md"
     ],
+    "packages/dpf-skill-pack/scripts/grok_credential.py": [
+      "docs/architecture/agent-client-capability-parity.md"
+    ],
+    "packages/dpf-skill-pack/scripts/toolchain_convergence.py": [
+      "docs/architecture/agent-client-capability-parity.md"
+    ],
     "packages/dpf-skill-pack/scripts/update-agent-toolchain.ps1": [
       "docs/operations/install.md"
     ],
     "packages/dpf-skill-pack/scripts/update-agent-toolchain.sh": [
       "docs/operations/install.md"
+    ],
+    "packages/dpf-skill-pack/scripts/update_agent_toolchain.py": [
+      "docs/architecture/agent-client-capability-parity.md"
     ],
     "packages/i18n/src/catalog.ts": [
       "docs/architecture/localization-runbook.md"
@@ -2394,8 +2460,14 @@
     "scripts/install-worktree-janitor-schedule.sh": [
       "docs/install/worktree-janitor-schedule.md"
     ],
+    "scripts/installer/autostart-bridge.mjs": [
+      "docs/operations/remote-action-edge-dispatch.md"
+    ],
     "scripts/installer/doctools-prepull.test.mjs": [
       "docs/install/platform-support-watchlist.md"
+    ],
+    "scripts/installer/dpf-start.consumer.sh": [
+      "docs/operations/remote-action-edge-dispatch.md"
     ],
     "scripts/installer/gpp-permit-secret-contract.test.mjs": [
       "docs/architecture/gated-permissions-process.md"
@@ -2409,6 +2481,9 @@
     ],
     "scripts/installer/lib/docker.test.mjs": [
       "docs/install/platform-support-watchlist.md"
+    ],
+    "scripts/installer/lib/host-convergence.sh": [
+      "docs/operations/remote-action-edge-dispatch.md"
     ],
     "scripts/installer/lib/platform.sh": [
       "docs/install/platform-support-watchlist.md"
@@ -2424,6 +2499,10 @@
     ],
     "scripts/lib/canonical-json.mjs": [
       "docs/architecture/data-model-stewardship-runbook.md"
+    ],
+    "scripts/lib/ci-evidence-plan.mjs": [
+      "docs/architecture/build-gate-runbook.md",
+      "docs/testing/pre-pr-gate.md"
     ],
     "scripts/lib/ci-policy-guards.mjs": [
       "docs/architecture/context-engineering-standards.md",
@@ -2579,6 +2658,9 @@
     "scripts/regen-lockfile.mjs": [
       "docs/architecture/agent-skill-index.md",
       "docs/architecture/contributor-procedure-runbook.md"
+    ],
+    "scripts/release-image-reference.docker.test.mjs": [
+      "docs/runbooks/bet5-windows-self-upgrade.md"
     ],
     "scripts/restore-postgres.sh": [
       "docs/operations/disaster-recovery.md"
@@ -2990,13 +3072,21 @@
     ],
     "docs/architecture/agent-client-capability-parity.md": [
       "apps/web/lib/build/investment-admission.ts",
+      "apps/web/lib/build/sandbox/grok-governance-seed.ts",
       "apps/web/lib/build/unified-wip-query.ts",
       "apps/web/lib/build/unified-wip.ts",
       "apps/web/lib/deliberation/external-review-activation.ts",
       "apps/web/lib/routing/anthropic-cache.ts",
       "e2e/fixtures/evidence.ts",
       "packages/dpf-skill-pack/client-capabilities.json",
-      "packages/dpf-skill-pack/hooks/plugin-hooks-wired.test.mjs"
+      "packages/dpf-skill-pack/hooks/client-hook-planes.json",
+      "packages/dpf-skill-pack/hooks/hooks.json",
+      "packages/dpf-skill-pack/hooks/lib/grok-hook-plane.mjs",
+      "packages/dpf-skill-pack/hooks/lib/hook-io.mjs",
+      "packages/dpf-skill-pack/hooks/plugin-hooks-wired.test.mjs",
+      "packages/dpf-skill-pack/scripts/grok_credential.py",
+      "packages/dpf-skill-pack/scripts/toolchain_convergence.py",
+      "packages/dpf-skill-pack/scripts/update_agent_toolchain.py"
     ],
     "docs/architecture/agent-client-governance.md": [
       "apps/web/lib/change-review/semantic-change-review.ts"
@@ -3096,11 +3186,13 @@
       ".github/workflows/stuck-auto-merge-alarm.yml",
       "apps/web/lib/build/build-orchestrator.ts",
       "apps/web/lib/build/coding-agent.ts",
+      "apps/web/lib/build/finalize-repair-routing.ts",
       "apps/web/lib/build/finalize-stage-runner.ts",
       "apps/web/lib/build/gauntlet-repair.ts",
       "apps/web/lib/build/pr-follow-through.ts",
       "apps/web/lib/build/pull-request-merged-signal.ts",
       "apps/web/lib/build/sandbox/test-scope-guard.ts",
+      "apps/web/lib/build/scoped-test-failure.ts",
       "apps/web/lib/nonprod/environment-lease-preview-yield.ts",
       "apps/web/lib/queue/functions/build-pr-delivery-reconcile.ts",
       "apps/web/lib/queue/functions/build-review-verification.ts",
@@ -3111,6 +3203,7 @@
       "scripts/check-stuck-auto-merge.mjs",
       "scripts/installer/install-release-assets.mjs",
       "scripts/lib/bootstrap-worktree-deps.mjs",
+      "scripts/lib/ci-evidence-plan.mjs",
       "scripts/lib/dco-signoff.mjs",
       "scripts/lib/gate-exit-classification.mjs",
       "scripts/pre-push-dco-check.mjs",
@@ -3353,6 +3446,7 @@
       "scripts/installer/install-release-assets.mjs"
     ],
     "docs/architecture/improvement-signal-intake.md": [
+      "apps/web/lib/demand/duplicate-merge-consequence.ts",
       "apps/web/lib/improvement-flywheel/signals.ts",
       "apps/web/lib/operate/tool-defect-origin.ts"
     ],
@@ -3361,9 +3455,11 @@
       "apps/web/lib/backlog/initiative-readiness/body-baseline-persistence.ts",
       "apps/web/lib/backlog/initiative-readiness/evaluate.ts",
       "apps/web/lib/backlog/initiative-readiness/objective-mapping-repository.ts",
+      "apps/web/lib/backlog/initiative-readiness/platform-review-room.ts",
       "apps/web/lib/backlog/initiative-readiness/readiness-guidance.ts",
       "apps/web/lib/backlog/initiative-readiness/receipt-schema.ts",
       "apps/web/lib/backlog/initiative-readiness/reviewer-identity.ts",
+      "apps/web/lib/backlog/initiative-readiness/server-reviewer-dispatch.ts",
       "apps/web/lib/backlog/initiative-readiness/terminal-recovery.ts",
       "apps/web/lib/backlog/initiative-readiness/types.ts",
       "apps/web/lib/kernel/governing-principles.ts",
@@ -3535,6 +3631,7 @@
       "apps/web/lib/work-management/room-posture.ts",
       "apps/web/lib/work-management/room-shapes.ts",
       "apps/web/lib/work-management/room-types.ts",
+      "apps/web/lib/work-management/stage-dispatch-answered.ts",
       "apps/web/lib/work-management/work-shapes.ts",
       "scripts/measure-capability-completeness.mjs"
     ],
@@ -3544,6 +3641,9 @@
       "apps/web/lib/work-management/portfolio-activity-projection.ts",
       "apps/web/lib/work-management/worker-rollup.ts",
       "scripts/check-prose-lint.ts"
+    ],
+    "docs/audits/2026-10-22-review-reassessment-restore-availability.md": [
+      "docs/ux-fit/2026-10-22-review-reassessment-restore-availability.ux-fit.json"
     ],
     "docs/design/golden-triangle-design.md": [
       "apps/web/lib/queue/functions/deliberation-run.ts",
@@ -3615,6 +3715,7 @@
       "apps/web/lib/govern/authority/escalation-gate.conformance.test.ts"
     ],
     "docs/founder-kernel/wiki/principles/gates-proportional-to-shape.md": [
+      "apps/web/lib/backlog/initiative-readiness/backlog-completion-evaluation.ts",
       "apps/web/lib/backlog/initiative-readiness/delivery-sensitivity.ts",
       "apps/web/lib/backlog/initiative-readiness/shape-requirements.ts",
       "apps/web/lib/work-management/delivery-shapes.ts"
@@ -3708,7 +3809,8 @@
       "services/edge-node/scripts/verify-lifecycle.ts"
     ],
     "docs/install/windows.md": [
-      "dpf-reinstall.ps1"
+      "dpf-reinstall.ps1",
+      "dpf-start.ps1"
     ],
     "docs/install/worktree-janitor-schedule.md": [
       "scripts/install-worktree-janitor-schedule.sh",
@@ -3781,6 +3883,7 @@
       "apps/web/lib/coworker/approval-lifetime.ts",
       "apps/web/lib/observability/monitor-source-reachability.ts",
       "apps/web/lib/queue/functions/alert-delivery-bridge.ts",
+      "apps/web/lib/routing/ai-capacity-watch.ts",
       "apps/web/lib/voice-synthesis/tts-health-contract.test.ts",
       "docker-compose.macos.yml",
       "monitoring/prometheus/prometheus.yml",
@@ -3790,7 +3893,11 @@
       "scripts/check-no-private-identity.mjs"
     ],
     "docs/operations/remote-action-edge-dispatch.md": [
-      "docker-compose.edge-actions.yml"
+      "docker-compose.edge-actions.yml",
+      "dpf-start.ps1",
+      "scripts/installer/autostart-bridge.mjs",
+      "scripts/installer/dpf-start.consumer.sh",
+      "scripts/installer/lib/host-convergence.sh"
     ],
     "docs/operations/runtime-glossary.md": [
       "docker-compose.dev-against-live-db.yml",
@@ -3868,7 +3975,9 @@
     ],
     "docs/runbooks/bet5-windows-self-upgrade.md": [
       "apps/web/lib/self-upgrade/host-memory-preflight.ts",
-      "dpf-start.ps1"
+      "apps/web/lib/self-upgrade/release-image-reference.ts",
+      "dpf-start.ps1",
+      "scripts/release-image-reference.docker.test.mjs"
     ],
     "docs/security/2026-05-24-shift-left-rollout.md": [
       ".github/workflows/ci.yml",
@@ -4041,6 +4150,7 @@
       "scripts/gate-worktree.mjs",
       "scripts/gate-worktree.sh",
       "scripts/hooks/converge-git-hooks.mjs",
+      "scripts/lib/ci-evidence-plan.mjs",
       "scripts/lib/ci-policy-guards.mjs",
       "scripts/lib/converge-hooks-dir.mjs",
       "scripts/lib/hooks-dir.mjs",
@@ -4102,6 +4212,7 @@
       "apps/web/app/auth/callback/route.ts",
       "apps/web/app/callback/route.ts",
       "apps/web/lib/actions/provider-oauth.ts",
+      "apps/web/lib/inference/local-model-context-reconcile.ts",
       "apps/web/lib/provider-oauth.ts"
     ],
     "docs/user-guide/ai-workforce/sensitive-data-policy-packs.md": [
@@ -4179,9 +4290,12 @@
     ],
     "docs/user-guide/workspace/workbooks.md": [
       "apps/web/components/workbooks/GridExportMenu.tsx",
+      "apps/web/components/workbooks/WorkbookViewTabs.tsx",
       "apps/web/components/workbooks/grid-office-export.ts",
+      "apps/web/lib/mcp/packs/workbooks-pack.ts",
       "apps/web/lib/workbooks/export-fods.ts",
-      "apps/web/lib/workbooks/export-workbook.ts"
+      "apps/web/lib/workbooks/export-workbook.ts",
+      "apps/web/lib/workbooks/workbook-authoring.ts"
     ]
   }
 }

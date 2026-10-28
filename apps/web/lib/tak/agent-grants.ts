@@ -6,6 +6,7 @@ import { PRODUCT_MANAGEMENT_TOOL_GRANTS } from "./product-management-tool-grants
 import { INITIATIVE_READINESS_TOOL_GRANTS } from "./initiative-readiness-tool-grants";
 import { BANKING_TOOL_GRANTS } from "./banking-tool-grants";
 import { DOCUMENT_TOOL_GRANTS } from "./document-tool-grants";
+import { WORKBOOK_TOOL_GRANTS } from "./workbook-tool-grants";
 import { CHANGE_REVIEW_TOOL_GRANTS } from "./change-review-tool-grants";
 import { CONTRIBUTOR_INVENTORY_TOOL_GRANTS } from "./contributor-inventory-tool-grants";
 import { PAYABLES_TOOL_GRANTS } from "./payables-tool-grants";
@@ -182,17 +183,8 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   report_quality_issue: ["backlog_write"],
   escalate_feedback_upstream: ["backlog_write"],
 
-  // Workbooks / Universal Grid (EP-GRID-WORKBOOKS, #1582). These MCP tools
-  // Previously default-denied without grants. The handler's capability split is
-  // view_workbooks (read) / manage_workbooks (write); mirror it as read/write
-  // grant categories. Held by no agent yet — workbook tools stay coworker-deny
-  // until a role grants them, which is the correct conservative default for a
-  // user-facing grid feature.
-  workbook_list_tables: ["workbook_read"],
-  workbook_get_schema: ["workbook_read"],
-  workbook_query_rows: ["workbook_read"],
-  workbook_create_row: ["workbook_write"],
-  workbook_update_cells: ["workbook_write"],
+  // Workbooks / Universal Grid (EP-GRID-WORKBOOKS) — workbook-tool-grants.ts.
+  ...WORKBOOK_TOOL_GRANTS,
 
   // Governed MCP backlog surface (spec 2026-04-25)
   create_epic: ["backlog_write"],
@@ -227,6 +219,8 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // communication grants (EP-WORKROOM-COMMS, BI-3F21C4D5).
   read_room_messages: ["work_room_read"],
   post_room_message: ["work_room_write"],
+  broadcast_workroom_ask: ["work_room_write"],
+  acknowledge_workroom_broadcast: ["work_room_write"],
   invite_room_participant: ["work_room_write"],
   appoint_room_coordinator: ["work_room_write"],
   plan_account_handover: ["work_room_write"],

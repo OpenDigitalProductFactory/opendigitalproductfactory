@@ -57,8 +57,14 @@ const mocks = vi.hoisted(() => ({
   runArchitectureParitySteward: vi.fn(),
   runConsolidationParitySteward: vi.fn(),
   runSelfOptimizationSweep: vi.fn(),
+  loadStageDispatchAnswered: vi.fn(),
 }));
 
+// Authority is covered by the delivery flow suite; these tests isolate writer attachment/correction.
+vi.mock("@/lib/work-management/room-stage-mandate", () => ({
+  loadScheduledRoomAuthorityLive: async () => ({ mandatedTools: [], roomTurn: null, withheldBecause: null, deliveryStage: null }),
+}));
+vi.mock("@/lib/work-management/stage-dispatch-answered", () => ({ loadStageDispatchAnswered: mocks.loadStageDispatchAnswered }));
 vi.mock("@/lib/auth", () => ({ auth: mocks.auth }));
 vi.mock("@/lib/platform-runtime/work-admission", () => ({ admitRuntimeGuardedWork: vi.fn() }));
 vi.mock("@dpf/db", () => ({
@@ -134,6 +140,7 @@ beforeEach(() => {
   mocks.prisma.toolExecution.findMany.mockResolvedValue([]);
   mocks.prisma.scheduledAgentTask.update.mockResolvedValue({});
   mocks.prisma.scheduledJob.update.mockResolvedValue({});
+  mocks.loadStageDispatchAnswered.mockResolvedValue({ answered: false });
 });
 
 afterEach(() => {
@@ -205,5 +212,33 @@ describe("a Workroom stage run and its evidence writer (BI-62DB6C03)", () => {
     await executeScheduledAgentTask(TASK_ID);
 
     expect(mocks.runAgenticLoop).toHaveBeenCalledTimes(1);
+  });
+});
+
+// BI-CAP-B5F50D1F: live 2026-10-28, WC-PIR-MCP-EFF-852B5BBE recorded its review at
+// 11:51:02 and the stage task's own tick ran it again at 12:00:00, before the
+// drive stopped the room; the refused second review was filed as an error.
+describe("a Workroom stage run whose dispatch is already answered (BI-CAP-B5F50D1F)", () => {
+  it("does not run the model again and records the run as unchanged, not an error", async () => {
+    mocks.loadStageDispatchAnswered.mockResolvedValue({
+      answered: true, roomId: "room-1", stageKey: "report", evidenceRecordedAt: new Date("2026-07-12T08:51:02.000Z"),
+    });
+
+    await executeScheduledAgentTask(TASK_ID);
+
+    expect(mocks.loadStageDispatchAnswered).toHaveBeenCalledWith(expect.objectContaining({ taskId: TASK_ID }));
+    expect(mocks.runAgenticLoop).not.toHaveBeenCalled();
+    expect(mocks.prisma.agentMessage.create).not.toHaveBeenCalled();
+    expect(mocks.prisma.taskRun.create).not.toHaveBeenCalled();
+    expect(recordedTask()).toMatchObject({ lastStatus: "unchanged", lastError: null, attempts: 0 });
+  });
+
+  it("runs as before when the dispatch is not answered", async () => {
+    mocks.runAgenticLoop.mockResolvedValue({ content: "Recorded.", executedTools: [{ name: "record_workroom_evidence", args: {}, result: { success: true, message: "ok" } }] });
+
+    await executeScheduledAgentTask(TASK_ID);
+
+    expect(mocks.runAgenticLoop).toHaveBeenCalledTimes(1);
+    expect(recordedTask().lastStatus).toBe("ok");
   });
 });

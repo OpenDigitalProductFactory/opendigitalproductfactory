@@ -77,6 +77,8 @@ export interface WorkroomPostureFacts {
   /** Existing Build Studio rightsizing facts, when this room fronts a build. */
   stakes?: WorkStakesInput | null;
   declaration: RoomPostureDeclaration | null;
+  /** The room's change passes a governed gate chain (isGateGovernedExecutor). */
+  gateGoverned?: boolean;
 }
 
 export interface WorkroomPostureView extends ResolvedWorkPosture {
@@ -119,6 +121,7 @@ export function resolveWorkroomPosture(
     hardPolicy: context.hardPolicy ?? null,
     declaration: facts.declaration,
     workroomDefault: context.workroomDefault ?? null,
+    gateGoverned: facts.gateGoverned ?? false,
     shape: {
       shapeKey: facts.shapeKey,
       activityKind: facts.activityKind,

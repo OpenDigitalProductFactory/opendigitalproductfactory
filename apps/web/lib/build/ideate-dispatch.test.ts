@@ -4,6 +4,7 @@ import {
   buildIdeateRunnerScript,
   deriveSearchTerms,
   runLocalIdeateWithRetry,
+  ideateClaudeCredentialFile,
   IDEATE_SOURCE_DIR,
   IDEATE_WORKING_DIR,
   LOCAL_IDEATE_MAX_ATTEMPTS,
@@ -217,5 +218,32 @@ describe("buildIdeateRunnerScript — where research runs, and what it can read"
     // current state honestly rather than asserting it is correct.
     expect(buildIdeateRunnerScript("grok", {})).toContain(`cd ${IDEATE_SOURCE_DIR}`);
     expect(buildIdeateRunnerScript("codex", {})).toContain(`cd ${IDEATE_SOURCE_DIR}`);
+  });
+});
+
+describe("buildIdeateRunnerScript — the claude credential file", () => {
+  const file = ideateClaudeCredentialFile("run-1");
+
+  it("loads the credential into the CLI's env and deletes the file before claude starts", () => {
+    const lines = buildIdeateRunnerScript("claude", {
+      claudeCredential: { envVar: "CLAUDE_CODE_OAUTH_TOKEN", file },
+    }).split("\n");
+    const load = lines.indexOf(`export CLAUDE_CODE_OAUTH_TOKEN="$(cat '${file}')"`);
+    const remove = lines.indexOf(`rm -f '${file}'`);
+    const run = lines.findIndex((l) => l.startsWith("claude "));
+    expect(load).toBeGreaterThan(-1);
+    expect(remove).toBeGreaterThan(load);
+    expect(run).toBeGreaterThan(remove);
+  });
+
+  it("emits no credential lines when no credential was prepared", () => {
+    const script = buildIdeateRunnerScript("claude", {});
+    expect(script).not.toContain("export ");
+    expect(script).not.toContain("ideate-claude-credential");
+  });
+
+  it("gives each run its own file, so one run cannot delete another's token", () => {
+    expect(ideateClaudeCredentialFile("run-1")).not.toBe(ideateClaudeCredentialFile("run-2"));
+    expect(ideateClaudeCredentialFile("a'; rm -rf /")).toBe("/tmp/ideate-claude-credential-arm-rf.txt");
   });
 });

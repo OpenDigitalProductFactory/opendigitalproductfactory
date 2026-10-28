@@ -19,6 +19,22 @@ records.
 Current implementation truth comes from code plus live evidence. A diagram, design
 document, or seeded row does not override those sources.
 
+## Restricted present reassessment
+
+The [review settlement amendment](../superpowers/specs/2026-10-16-original-initiative-review-settlement-design.md)
+defines a separate, restricted path for a new assessment of an exact immutable
+artifact. Its R2 source binds an existing in-process HTTP provider/account/model
+composition and exposes only `read_source_at_version` and the bound canonical
+writer. It disables native execution, provider fallback, tool-free inference and
+auxiliary grounding or reflection. Ordinary routing retains its existing behavior.
+
+Qualification records the actual current budget configuration and execution
+bounds, then rechecks them before each provider start. This source work does not
+establish release or served acceptance. In particular, finite total-token
+qualification still refuses without an authenticated input-bound producer; the
+normal 50,000-token case has not yet passed positive qualification. New task
+admission and genuine current review receipts remain separate required evidence.
+
 ## Streaming versus result delivery
 
 `RouteAndCallOptions.requiresStreaming` expresses token-streaming demand; it

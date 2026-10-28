@@ -9,7 +9,6 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import {
-  type ServiceUser,
   type WorkbookSummary,
   type WorkbookDetail,
   type TableSummary,
@@ -45,6 +44,7 @@ import {
   resolvePlatformReference,
   getReferenceTargetFields,
 } from "@/lib/workbooks/platform-tables";
+import { addTypedColumn } from "@/lib/workbooks/workbook-authoring";
 import { inferTableFromSheet, readSheetMatrix, type SheetCell } from "@/lib/workbooks/sheet-import";
 import { parseDelimitedGrid } from "@/lib/onboarding/roster-import";
 import { mapGridToEmployees } from "@/lib/onboarding/roster-from-grid";
@@ -61,14 +61,14 @@ import { ok, err, type ActionResult } from "@/lib/shared/action-result";
 // coworker conversation load on /ops and /employee, which pull in the Grid).
 // The type has no importers here; callers import it from @/lib/shared/action-result.
 
-async function requireUser(capability: "view_workbooks" | "manage_workbooks"): Promise<ServiceUser> {
+async function requireUser(capability: "view_workbooks" | "manage_workbooks"): Promise<PlatformUser> {
   const session = await auth();
   const user = session?.user;
   if (!user?.id) throw new WorkbookError("Not authenticated", 401);
   if (!can({ platformRole: user.platformRole, isSuperuser: user.isSuperuser }, capability)) {
     throw new WorkbookError("You do not have permission to use Workbooks", 403);
   }
-  return { id: user.id, isSuperuser: user.isSuperuser };
+  return { id: user.id, platformRole: user.platformRole, isSuperuser: user.isSuperuser };
 }
 
 function fail(e: unknown): { ok: false; error: string } {
@@ -151,8 +151,10 @@ export async function addColumnAction(
   input: { name: string; fieldType: FieldType; config?: FieldConfig; required?: boolean },
 ): Promise<ActionResult<ColumnDefinition>> {
   try {
+    // The same governed path as the coworker tool: table-aware rules (targets the
+    // person may reference, formula names, unique names) before the service write.
     const user = await requireUser("manage_workbooks");
-    const col = await svcAddColumn(user, tableId, input);
+    const col = await addTypedColumn(user, tableId, input);
     revalidatePath(`/workbooks/${workbookId}`);
     return ok(col);
   } catch (e) {
@@ -245,7 +247,9 @@ export async function getTableGridDataAction(tableId: string): Promise<
 export async function listViewsAction(tableId: string): Promise<ActionResult<SavedView[]>> {
   try {
     const user = await requireUser("view_workbooks");
-    return ok(await svcListViews(user, tableId));
+    // The grid's views menu holds grid view-states; kanban views open as boards
+    // from the workbook page's view tabs (BI-FE8DF004).
+    return ok((await svcListViews(user, tableId)).filter((v) => v.viewType !== "kanban"));
   } catch (e) {
     return fail(e);
   }

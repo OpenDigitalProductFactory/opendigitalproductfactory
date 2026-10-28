@@ -414,6 +414,8 @@ function resolveIt4itBinding(a: ArchetypeDefinition): It4ItStage[] {
     }
     if (stages.size > 0) return Array.from(stages);
   }
+  // A software platform builds and deploys what it serves (BI-B32D8C16).
+  if (a.category === "software-platform") return ["requirement-to-deploy", "request-to-fulfill"];
   return ["request-to-fulfill"];
 }
 

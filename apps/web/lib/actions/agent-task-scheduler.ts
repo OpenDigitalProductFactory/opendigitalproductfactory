@@ -143,6 +143,22 @@ export async function getScheduledAgentTasks(): Promise<ScheduledAgentTaskView[]
 
 // ─── Execution (called by Inngest dispatcher) ───────────────────────────────
 
+/** A run with nothing left to do: healthy, no error, the retry cycle closed. */
+async function recordUnchangedScheduledRun(task: { taskId: string; schedule: string }, now: Date): Promise<void> {
+  const oneShot = isOneShotCron(task.schedule);
+  const nextRunAt = oneShot ? null : computeNextCronRun(task.schedule, now);
+  await prisma.scheduledAgentTask.update({
+    where: { taskId: task.taskId },
+    data: { lastRunAt: now, lastStatus: "unchanged", lastError: null, nextRunAt, attempts: 0, ...(oneShot ? { isActive: false } : {}) },
+  });
+  await prisma.scheduledJob
+    .update({
+      where: { jobId: task.taskId },
+      data: { lastRunAt: now, lastStatus: "unchanged", lastError: null, nextRunAt, ...(oneShot ? { schedule: "disabled" } : {}) },
+    })
+    .catch(() => {});
+}
+
 export async function executeScheduledAgentTask(taskId: string): Promise<void> {
   const task = await prisma.scheduledAgentTask.findUnique({
     where: { taskId },
@@ -358,35 +374,17 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
   try {
     if (task.taskKind === PRODUCT_MANAGEMENT_PLAYBOOK_TASK_KIND) {
       preparedPlaybook = await prepareProductManagementPlaybookRun(task);
-      if (preparedPlaybook.unchanged) {
-        const oneShot = isOneShotCron(task.schedule);
-        const nextRunAt = oneShot
-          ? null
-          : computeNextCronRun(task.schedule, now);
-        await prisma.scheduledAgentTask.update({
-          where: { taskId },
-          data: {
-            lastRunAt: now,
-            lastStatus: "unchanged",
-            lastError: null,
-            nextRunAt,
-            attempts: 0,
-            ...(oneShot ? { isActive: false } : {}),
-          },
-        });
-        await prisma.scheduledJob
-          .update({
-            where: { jobId: taskId },
-            data: {
-              lastRunAt: now,
-              lastStatus: "unchanged",
-              lastError: null,
-              nextRunAt,
-              ...(oneShot ? { schedule: "disabled" } : {}),
-            },
-          })
-          .catch(() => {});
-        return;
+      if (preparedPlaybook.unchanged) return await recordUnchangedScheduledRun(task, now);
+    }
+    // BI-CAP-B5F50D1F: the stage task shares the drive's tick, so it can start
+    // before the drive reads the evidence that already answered this dispatch.
+    if (task.taskId.startsWith("workroom-")) {
+      const { loadStageDispatchAnswered } = await import("@/lib/work-management/stage-dispatch-answered");
+      const answer = await loadStageDispatchAnswered(task);
+      if (answer.answered) {
+        // Same form as the failure line below (CodeQL #39): JSON.stringify escapes CR/LF.
+        console.info("[agent-task-scheduler] %s: stage %s already has completing evidence for this dispatch (%s); not running it again.", JSON.stringify(taskId), JSON.stringify(answer.stageKey), answer.evidenceRecordedAt.toISOString());
+        return await recordUnchangedScheduledRun(task, now);
       }
     }
     const executionPrompt = preparedPlaybook?.prompt ?? task.prompt;
@@ -439,6 +437,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       routeContext: task.routeContext,
       title: task.title,
       prompt: executionPrompt,
+      taskConfig: task.taskConfig,
       proactivity,
       delegatedPosture,
     });
@@ -481,26 +480,22 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       },
     ];
 
-    // The proactivity plan's actionBoundary is ENFORCED here, not just displayed
-    // (BI-754C9E82). Three rungs:
-    //   advise  — side-effecting tools stripped from the run (recommend only)
-    //   propose — side-effecting NON-artifact tool calls are diverted to
-    //             AgentActionProposal for the owner to approve (BI-80532D5C);
-    //             curated artifact writes still run directly
-    //   act     — side-effecting tools run directly
-    // Tools are resolved in "act" mode for propose so the model can still CALL
-    // them; the loop's propose-interception captures the call as a proposal.
+    // Advise strips writes; propose diverts unmandated writes through the monitor.
     const boundary = proactivity.actionBoundary;
     // BI-0A59F936: unattended turns resolve external access from standing grants.
     const externalAccess = await resolveScheduledTurnExternalAccess(task.agentId);
+    const roomStage = task.taskId.startsWith("workroom-")
+      ? await (await import("@/lib/work-management/room-stage-mandate")).loadScheduledRoomAuthorityLive({ taskRunId: taskRunRef.taskRunId, agentId: task.agentId }) : null;
+    const roomTurn = roomStage?.roomTurn;
     // BI-CAP-F2D39F8F budgets attachment to the serving model. A prompt that NAMES
     // a governed writer declares a dependency on it, so it is pinned inside the
     // budget rather than left to runtime discovery (BI-4A394B21).
     const toolArgs = {
       userContext,
-      mode: (boundary === "advise" ? "advise" : "act") as "advise" | "act",
+      mode: (boundary === "advise" || roomTurn?.actionBoundary === "advise" ? "advise" : "act") as "advise" | "act",
       agentId: task.agentId,
-      externalAccessEnabled: externalAccess.enabled,
+      externalAccessEnabled: externalAccess.enabled && (roomTurn?.externalAccess.enabled ?? true),
+      ...(roomTurn ? { roomAuthorizedGrants: roomTurn.authorizedGrants } : {}),
       routeContext: task.routeContext,
       intentQuery: task.prompt,
     };
@@ -554,7 +549,8 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       agentId: task.agentId,
       threadId: thread.id,
       taskRunId: taskRunRef.taskRunId,
-      proposeSideEffects: boundary === "propose",
+      proposeSideEffects: boundary === "propose" || Boolean(roomTurn) || Boolean(roomStage?.withheldBecause),
+      ...(roomTurn ? { roomTurn } : {}),
       ...(Object.keys(modelRequirements).length > 0 ? { modelRequirements } : {}),
     };
     let result = await executeAutonomousAgenticLoop(loopInput);

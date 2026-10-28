@@ -4,6 +4,7 @@ import { validateInitiativeDisposition } from "./disposition-contract";
 import type { InitiativeSubject } from "./types";
 import type { ReadinessProfile } from "./types";
 import { independentReviewerRemedy } from "./reviewer-identity";
+import { commitRangesEqual, parseRepoCommitRangeRef, type RepoCommitRangeRef } from "./repo-commit-range";
 
 export const INITIATIVE_GATE_KEYS = [
   "classification",
@@ -35,7 +36,9 @@ export type InitiativeArtifactRef =
     commitSha: string;
     path: string;
     providerBlobId: string;
-  };
+  }
+  // BI-46E344FE: a merged repair's whole change (post-implementation review only).
+  | RepoCommitRangeRef;
 
 export type InitiativeAuthoritySnapshot = {
   decision: "allow";
@@ -134,6 +137,7 @@ function isArtifactRef(value: unknown): value is InitiativeArtifactRef {
   const ref = value as Record<string, unknown>;
   if (ref.kind === "feature-build-revision") return isNonEmptyString(ref.revisionId);
   if (ref.kind === "document-version") return isNonEmptyString(ref.versionId);
+  if (ref.kind === "repo-commit-range") return parseRepoCommitRangeRef(ref) !== null;
   return ref.kind === "repo-blob-at-commit"
     && isNonEmptyString(ref.repositoryFullName)
     && isNonEmptyString(ref.commitSha)
@@ -154,6 +158,10 @@ function artifactRefsMatch(left: InitiativeArtifactRef, right: InitiativeArtifac
       && left.commitSha === right.commitSha
       && left.path === right.path
       && left.providerBlobId === right.providerBlobId;
+  }
+  if (left.kind === "repo-commit-range" && right.kind === left.kind) {
+    return left.repositoryFullName === right.repositoryFullName && left.digest === right.digest
+      && commitRangesEqual(left.ranges, right.ranges);
   }
   return false;
 }

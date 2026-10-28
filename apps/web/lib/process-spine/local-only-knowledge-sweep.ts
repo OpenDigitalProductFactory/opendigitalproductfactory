@@ -202,6 +202,8 @@ export async function runLocalOnlyKnowledgeSweep(input: {
   store: SweepStore;
   ingest: (args: {
     title: string;
+    /** What will be true once the corpus is routed (BI-458CCA8D). */
+    outcome: string;
     body: string;
     workType: string;
     source: string;
@@ -237,6 +239,8 @@ export async function runLocalOnlyKnowledgeSweep(input: {
 
   const result = await input.ingest({
     title: buildSweepTitle(verdict),
+    // BI-458CCA8D: done when the unrouted findings reach the commons.
+    outcome: "The findings this install captured and never routed reach the shared commons (WWMD, WWWD, WSID or code and AGENTS.md), so the next weekly sweep no longer reports a corpus.",
     body: buildSweepBody({ verdict, proposals }),
     workType: "chore",
     source: "automated-detection",

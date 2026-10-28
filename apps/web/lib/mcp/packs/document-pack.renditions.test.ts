@@ -11,6 +11,10 @@ const blobStorage = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/documents/document-store", () => documentStore);
 vi.mock("@/lib/documents/blob-storage", () => blobStorage);
+// BI-957915CB: every document tool resolves the person it acts for.
+vi.mock("@/lib/documents/document-access", () => ({
+  resolveDocumentViewer: vi.fn(async (userId: string) => ({ principalId: `principal-${userId}` })),
+}));
 vi.mock("@/lib/identity/principal-linking", () => ({
   ensureAgentPrincipalIdentity: vi.fn(async () => null),
   syncUserPrincipal: vi.fn(async () => ({ id: "principal-user" })),

@@ -163,6 +163,9 @@ export async function dispatchExternalCoworkerTask(input: ExternalCoworkerTaskIn
         source: verified.source,
       },
       userContext: verified.userContext,
+      ...(reviewPacket?.binding.presentReassessment && input.context?.authorityDecisionId && input.context.agentId
+        ? { presentReviewAuthority: { authorityDecisionId: input.context.authorityDecisionId,
+            actingAgentId: input.context.agentId, tokenGrantScopes: input.context.tokenGrantScopes ?? [] } } : {}),
       params: {
         agentId: input.targetAgent,
         routeContext: input.context?.routeContext ?? "/build",
@@ -253,20 +256,25 @@ export async function fulfillCoworkerEngagement(engagementId: string, locator: u
     return { success: true, entityId: engagementId, message: "Persisted engagement state; no execution was requested.", data: { engagementId, status: latest?.status ?? engagement.status, fulfillment: record(latest?.metadata ?? engagement.metadata).fulfillment ?? null, result: record(latest?.metadata ?? engagement.metadata).result ?? null } };
   }
   const supplied = record(locator);
-  if (Object.keys(supplied).some(key => !["workroomId", "stageKey", "artifactRef", "guidanceArtifacts"].includes(key))) return { success: false, error: "engagement_locator_invalid", message: "Use the original artifact and current room stage; original request inputs cannot be replaced." };
+  if (Object.keys(supplied).some(key => !["workroomId", "stageKey", "artifactRef", "guidanceArtifacts", "visualEvidenceRef"].includes(key))) return { success: false, error: "engagement_locator_invalid", message: "Use the original artifact and current room stage; original request inputs cannot be replaced." };
   const room = typeof supplied.workroomId === "string" ? await prisma.workroom.findUnique({ where: { capsuleId: supplied.workroomId }, select: { headSha: true } }) : null;
   const binding = parseEngagementTaskBinding({
     version: 1, engagementId, offerId: engagement.offerId, serviceId: engagement.serviceId,
     providerAgentId: engagement.providerAgentId, actorAgentId: context.agentId, userId,
     workroomId: supplied.workroomId, stageKey: supplied.stageKey, artifactRef: supplied.artifactRef, roomHeadSha: room?.headSha,
     ...(supplied.guidanceArtifacts !== undefined ? { guidanceArtifacts: supplied.guidanceArtifacts } : {}),
+    ...(supplied.visualEvidenceRef !== undefined ? {visualEvidenceRef:supplied.visualEvidenceRef} : {}),
     inputDigest: engagementInputDigest(engagement.requestedOutcome, engagement.inputPayload),
   });
   if (!binding) return { success: false, error: "engagement_locator_invalid", message: "Provide the current Workroom stage and immutable repository artifact locator." };
   const existing = record(record(engagement.metadata).fulfillment);
   if (existing.taskRunId) {
     if (canonicalJson(existing.binding) !== canonicalJson(binding)) return { success: false, error: "engagement_already_bound", message: "Read the original engagementId without fulfillment to observe its existing task; do not submit a different revision or stage." };
-    if (engagement.status === "failed") {
+    if (engagement.status === "unavailable") {
+      return {success:false,error:"engagement_execution_proof_required",entityId:engagementId,
+        message:"No execution was requested. The original specialist contribution is incomplete and native capability/closure/effect proof is unavailable. Obtain the existing recovery owner's supported finite disposition; do not replay this task or create a replacement request.",
+        data:{engagementId,taskRunId:existing.taskRunId,executionRequested:false,resumable:false}};
+    } else if (engagement.status === "failed") {
     const { resumeUnstartedEngagementTask } = await import("@/lib/coworker-service-catalog/engagement-pre-admission-recovery");
     await resumeUnstartedEngagementTask({ taskRunId: String(existing.taskRunId), binding,
       token: { tokenId: context.apiTokenId, userId, capability: context.tokenScope === "write" || context.tokenScope === "admin" ? "write" : "read", source: context.authSource } });

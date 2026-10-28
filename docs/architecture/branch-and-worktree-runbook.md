@@ -47,6 +47,21 @@ The legacy `scripts/seed-worktree-mcp.{ps1,sh}` and `scripts/ensure-dpf-skill-pa
 
 Restart Claude Code in the worktree afterwards so `/mcp` picks up the `dpf` connector. See [`docs/operations/install.md`](../operations/install.md) for the readiness states and what each one means.
 
+## Routine client permissions
+
+Bootstrap also converges routine Codex, Claude and Grok permissions for the
+explicitly named source worktree through the signed updater's shared
+`--permissions-only` writer. Use that worktree as the client's actual workspace;
+the installed runtime remains an MCP administration context. Existing restrictive
+profiles, deny/ask rules and managed requirements keep their authority. A saved
+configuration does not widen an already-running managed chat.
+
+Routine independent review reuses the DEV task's existing scope, budget, grants
+and consent. No new approval is needed solely for a delivery phase. Source tests,
+protected publication and actual authority refusals still apply. See
+[routine development client permissions](../operations/install.md#routine-development-client-permissions)
+for backups, native diagnostics, parser compatibility and effective-session proof.
+
 ## Verification readiness classification
 
 The MCP seed scripts write `.dpf-worktree-readiness.json` with `compile-ready` or `source-only`.
@@ -100,7 +115,9 @@ The worktree janitor (`scripts/worktree-janitor.mjs`, fleet backstop; and the Se
 The SessionEnd reaper (`scripts/hooks/session-reaper.sh`) also terminates the ending session's own node sidecars and releases the leases that session owns. It is scoped on purpose: a process counts as the session's only when its command line names the session's worktree *outside* `node_modules` (shared binaries prove nothing about ownership) and names no other worktree; and a lease is released only when its `ownerSessionId` is the ending session. A session started in the root clone therefore never reaps a sibling worktree's local-CI gate run, which is how three gate runs died by SIGTERM on 2026-09-06 (BI-B0122A22).
 
 - **Live-session gate.** A session writes a gitignored `.dpf-session-heartbeat.json` marker into its worktree, refreshed every turn by the `worktree-session-heartbeat` hook (SessionStart/Stop) and removed on SessionEnd. The janitor treats a fresh marker (TTL default 60 min, `DPF_WORKTREE_SESSION_HEARTBEAT_TTL_MIN`) as `KEEP`, **outranking** Tier-A eligibility — because a live session's tree first becomes Tier-A the moment its own PR merges, which is exactly when it must not be reaped.
+- **Workroom ownership is read in full or not at all.** The janitor reads every page of one `list_workrooms` observation. A row without a provable `worktreePath` is resolved through its own `get_workroom` detail read, and an expired observation is restarted rather than mixed with a new one. Any incomplete read keeps every ownership-dependent tree, and the `--json` report's `claims.reason` says why (BI-83345811). See the [janitor schedule guide](../install/worktree-janitor-schedule.md#who-owns-a-worktree-bi-83345811).
 - **Abandoned-merge quarantine.** A worktree with `MERGE_HEAD` present and **no** live session is classified `FLAG_ABANDONED_MERGE`: surfaced in the janitor summary and never auto-reaped, since an interrupted merge can hide un-reconciled work. A *live* session's in-progress merge is kept, not flagged.
+- **Unpushed-work backup.** Before a live run deletes a stale, unmerged branch (bash stale prune, or Node Tier B), it counts commits on no remote (`git rev-list --count refs/heads/<b> --not --remotes`). If any exist it writes `refs/janitor-backup/<YYYY-MM-DD>/<b>` at the tip and logs it; if that count or ref write fails, the worktree is kept (BI-EBBBDF40). Recover with `git branch <b> refs/janitor-backup/<date>/<b>`.
 
 ## Rebasing on a shallow clone — never a bare `git rebase origin/main`
 
@@ -124,7 +141,7 @@ Three paths remove a worktree, and all three end at the same classifier so they 
 2. **Merge event** (`build/pr-merged-reap`, BI-848360EF) — runs the janitor scoped to the merged branch with `--branch`. This is the path that covers the gap above.
 3. **Daily fleet sweep** (`worktreeJanitor`, 05:40) — the backstop for leftovers after a crash, and for clients that write no heartbeat.
 
-Every one of them calls `classifyWorktree`, so a live session heartbeat, an active Workroom claim, `.worktree-pinned`, an active lease, an open PR or a dirty tree refuses the reap regardless of which path asked.
+Every one of them calls `classifyWorktree`, so a live session heartbeat, an active Workroom claim, `.worktree-pinned`, an active lease, an open PR or a dirty tree refuses the reap regardless of which path asked. A Workroom claim counts only while the room is non-terminal and the server's liveness verdict does not mark it reapable (`isReapable` on `list_workrooms`); a missing or shortened verdict keeps the claim (BI-CAA84E43).
 
 Removal always goes through the junction-safe helper. A worktree here carries roughly 28 junctions into the root clone's `node_modules` and `apps/web/node_modules/*`; a recursive delete that follows one destroys the root clone's dependencies, which is what happened on 2026-08-15. Unlink each reparse point first, verify none remain, and only then remove the tree.
 

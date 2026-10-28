@@ -274,7 +274,10 @@ describe("terminal writer resumption", () => {
     });
     db.updateMany.mockResolvedValue({ count: 1 });
     db.update.mockResolvedValue({});
-    db.findUnique.mockResolvedValue({ status: "working" });
+    db.findUnique.mockResolvedValue({
+      status: "working", updatedAt, userId: "user-1", currentAgentId: params.agentId,
+      a2aMetadata: metadata,
+    });
     autonomous.resolveAgent.mockResolvedValue({
       agentId: "build-specialist",
       displayName: "Build Lead",
@@ -341,7 +344,10 @@ describe("terminal writer resumption", () => {
     db.findToolExecution.mockResolvedValue(null);
     db.updateMany.mockResolvedValue({ count: 1 });
     db.update.mockResolvedValue({});
-    db.findUnique.mockResolvedValue({ status: "working" });
+    db.findUnique.mockResolvedValue({
+      status: "working", updatedAt, userId: "user-1", currentAgentId: params.agentId,
+      a2aMetadata: metadata,
+    });
     autonomous.execute.mockResolvedValue({
       content: "Receipt recorded.",
       executedTools: [{ name: "record_initiative_evidence", result: { success: true, data: { receiptId: "receipt-1" } } }],
@@ -466,6 +472,10 @@ describe("terminal writer resumption", () => {
     const exhaustedParams = { ...params, idempotencyKey: "missing-writer-resume-exhausted" };
     const metadata = await persistedMetadata("PAT-WRITER-EXHAUSTED", exhaustedParams);
     vi.clearAllMocks();
+    db.findUnique.mockResolvedValue({
+      status: "working", updatedAt: new Date("2026-08-28T07:25:00.000Z"),
+      userId: "user-1", currentAgentId: params.agentId, a2aMetadata: metadata,
+    });
     db.findFirst.mockResolvedValue({
       id: "task-internal",
       taskRunId: "TR-MCP-WRITER-EXHAUSTED",

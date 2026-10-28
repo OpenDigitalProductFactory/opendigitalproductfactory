@@ -141,14 +141,16 @@ describe("CoworkerEnvelopeApproval", () => {
     expect(
       screen.getByText("record that receipt so implementation planning may continue."),
     ).toBeTruthy();
-    expect(screen.getByText("BI-MCP-EFF-0285909C")).toBeTruthy();
-    expect(screen.getByText("research")).toBeTruthy();
-    expect(screen.getByText("pass")).toBeTruthy();
+    const technical = screen.getByText("Technical details").closest("details")!;
+    expect(technical.open).toBe(false);
+    expect(technical.textContent).toContain("BI-MCP-EFF-0285909C");
+    expect(technical.textContent).toContain("research");
+    expect(technical.textContent).toContain("pass");
     expect(screen.getByText("None")).toBeTruthy();
     expect(screen.getByText("Your coworker")).toBeTruthy();
     expect(screen.getByText("You")).toBeTruthy();
-    expect(screen.queryByText("AGT-WS-PORTFOLIO")).toBeNull();
-    expect(screen.queryByText("record_initiative_evidence")).toBeNull();
+    expect(screen.getByText("AGT-WS-PORTFOLIO").closest("details")).toBe(technical);
+    expect(screen.getByText("record_initiative_evidence").closest("details")).toBe(technical);
     expect(screen.queryByText("proposed")).toBeNull();
     expect(
       screen.queryByText("TR-MCP-Y210Nmg3bjg3MDBnYTAxbXhheDU2MXV2aQ-7A98D78A3948"),
@@ -349,7 +351,7 @@ describe("OwnerDecisionCards routing", () => {
     fireEvent.click(screen.getByText("Technical evidence"));
     expect(disclosure.open).toBe(true);
 
-    expect(screen.getByText("record_initiative_evidence")).toBeTruthy();
+    expect(screen.getAllByText("record_initiative_evidence")).toHaveLength(2);
     expect(
       screen.getByText("89e875eb49be0604ee8fa4156d0903b6a0932e62"),
     ).toBeTruthy();
@@ -389,9 +391,12 @@ describe("CoworkerEnvelopeApproval — exact effect (BI-12E5DD91)", () => {
     expect(screen.getByText("Proposed content")).toBeTruthy();
     expect(screen.getByText("Acceptance A.")).toBeTruthy();
     expect(screen.getByText(/None declared/)).toBeTruthy();
-    expect(screen.getByText(/no recorded delegation/)).toBeTruthy();
-    expect(screen.getByText(/does not review the content/)).toBeTruthy();
+    const technical = screen.getByText("Technical details").closest("details")!;
+    expect(technical.open).toBe(false);
+    expect(technical.textContent).toMatch(/no recorded delegation/);
+    expect(technical.textContent).toMatch(/does not review the content/);
     expect(screen.getByText("Waiting for your decision")).toBeTruthy();
+    expect(screen.getByText("Valid until")).toBeTruthy();
     expect(screen.queryByText("Findings")).toBeNull();
   });
 

@@ -95,6 +95,15 @@ override; do not invent a PASS or repeat full validation merely to repair text.
 Allowed overrides are reported as **UNRUN**, and protected checks still apply.
 These metadata checks run even when local guard results are reused or skipped.
 
+Readiness resolves main and the candidate to immutable commits before classifying
+the change or running guards. Its guard plan, baseline comparisons and local
+receipt use that same pair. A concurrent fetch in another worktree may advance
+the shared main reference; the report shows that newer value separately and
+does not claim the earlier checks cover it. A later invocation selecting a new
+base cannot reuse the old pair's receipt. Candidate, commit metadata, working
+tree, command plan, dependency, toolchain or environment changes still prevent
+reuse. Failed or inconclusive historical runs remain unchanged.
+
 ### Corrections after publication
 
 A failed GitHub check or merge attempt does not automatically send the entire

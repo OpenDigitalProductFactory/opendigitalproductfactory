@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const semanticMemory = vi.hoisted(() => ({
   searchPlatformKnowledge: vi.fn(),
+  searchPlatformKnowledgeLexical: vi.fn(),
   searchKnowledgeArticles: vi.fn(),
   storeKnowledgeArticle: vi.fn(),
 }));
@@ -68,7 +69,9 @@ describe("knowledge pack — handler behavior (delegation preserved)", () => {
       query: "widget",
       entityType: undefined,
       limit: 5,
+      embedTimeoutMs: 15_000,
     });
+    expect(semanticMemory.searchPlatformKnowledgeLexical).not.toHaveBeenCalled();
   });
 
   it("search_knowledge returns an empty result set when nothing matches", async () => {
@@ -88,6 +91,13 @@ describe("knowledge pack — handler behavior (delegation preserved)", () => {
       reason: "the embedding model did not return a vector for this query",
       results: [],
     });
+    // The lexical fallback could not look either, so there is nothing to answer with.
+    semanticMemory.searchPlatformKnowledgeLexical.mockResolvedValue({
+      status: "unavailable",
+      code: "search_unavailable",
+      reason: "the lexical fallback query failed (connection refused)",
+      results: [],
+    });
     const res = await knowledgePack.handlers.search_knowledge({ query: "none" }, "u1");
 
     expect(res.success).toBe(false);
@@ -95,6 +105,53 @@ describe("knowledge pack — handler behavior (delegation preserved)", () => {
     expect(res.message).toContain("unavailable");
     expect(res.message).toContain('NOT "no results"');
     expect(res.data).toMatchObject({ searchStatus: "unavailable" });
+  });
+
+  it("search_knowledge answers lexically when the embedding backend stalls (BI-MCP-EFF-4F823E5B)", async () => {
+    // Live ledger 2026-10-15: 30 of 56 calls failed in two bursts, each after
+    // exactly 30 s, while the embedder cold-loaded beside the chat model. The
+    // corpus was healthy the whole time; only the query could not be embedded.
+    semanticMemory.searchPlatformKnowledge.mockResolvedValue({
+      status: "unavailable",
+      code: "search_unavailable",
+      reason: "the embedding step failed (The operation was aborted due to timeout)",
+      results: [],
+    });
+    semanticMemory.searchPlatformKnowledgeLexical.mockResolvedValue({
+      status: "ok",
+      results: [{ entityType: "backlog", entityId: "BI-2", title: "Wiki backlinks panel", score: 1 }],
+    });
+
+    const res = await knowledgePack.handlers.search_knowledge({ query: "wiki backlinks", type: "backlog", limit: 3 }, "u1");
+
+    expect(res.success).toBe(true);
+    expect(semanticMemory.searchPlatformKnowledgeLexical).toHaveBeenCalledWith({
+      query: "wiki backlinks",
+      entityType: "backlog",
+      limit: 3,
+    });
+    expect(res.message).toContain("backlog:BI-2");
+    // Honest about what kind of look it was (BI-339C441F still holds).
+    expect(res.message).toContain("LEXICAL");
+    expect(res.message).toContain("timeout");
+    expect(res.data).toMatchObject({ searchStatus: "lexical-fallback", code: "search_unavailable" });
+  });
+
+  it("an empty lexical fallback is not reported as a clean miss", async () => {
+    semanticMemory.searchPlatformKnowledge.mockResolvedValue({
+      status: "unavailable",
+      code: "search_unavailable",
+      reason: "the embedding step failed (timeout)",
+      results: [],
+    });
+    semanticMemory.searchPlatformKnowledgeLexical.mockResolvedValue({ status: "ok", results: [] });
+
+    const res = await knowledgePack.handlers.search_knowledge({ query: "nothing like this" }, "u1");
+
+    expect(res.success).toBe(true);
+    expect(res.message).not.toBe("No matching knowledge found.");
+    expect(res.message).toContain("not evidence");
+    expect(res.data).toMatchObject({ results: [], searchStatus: "lexical-fallback" });
   });
 
   it("search_knowledge_base forwards the article filters to the service", async () => {

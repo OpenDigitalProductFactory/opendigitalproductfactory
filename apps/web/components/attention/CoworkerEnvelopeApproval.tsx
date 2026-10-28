@@ -255,9 +255,6 @@ export function CoworkerEnvelopeApproval({
         <dl className="mt-3 grid gap-x-6 gap-y-2 sm:grid-cols-2">
           <Fact label="Action" value={decision.action} wide />
           <Fact label="Destination" value={decision.target} wide />
-          {decision.subjectId ? <Fact label="Subject" value={decision.subjectId} /> : null}
-          {decision.gate ? <Fact label="Gate" value={decision.gate} /> : null}
-          {decision.decision ? <Fact label="Decision" value={decision.decision} /> : null}
           {decision.kind === "known" ? (
             <Fact
               label="Findings"
@@ -271,11 +268,8 @@ export function CoworkerEnvelopeApproval({
           ) : null}
           {decision.reason ? <Fact label="Reason" value={decision.reason} wide /> : null}
           <Fact label="Consequence" value={decision.consequence} wide />
-          <Fact label="Governing reason" value={decision.whyAPerson} wide />
-          <Fact label="Authorization scope" value={decision.scope} wide />
           <Fact label="Status" value={statusLabel(approval)} />
-          <Fact label="Recommender" value={decision.recommenderLabel} />
-          <Fact label="Accountable authorizer" value={decision.authorizerLabel} />
+          <Fact label="Valid until" value={validUntilLabel(approval.expiresAtIso)} />
         </dl>
         {decision.kind === "known" ? null : decision.kind === "exact" ? (
           <div className="mt-3">
@@ -295,6 +289,25 @@ export function CoworkerEnvelopeApproval({
         )}
         <Effects decision={decision} />
         </section>
+        )}
+        {decision.kind === "handover" ? null : (
+          <details className="mt-3">
+            <summary className="cursor-pointer text-xs font-semibold text-[var(--dpf-muted)]">
+              {COPY.technical}
+            </summary>
+            <dl className="mt-2 grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
+              <Fact label={COPY.tool} value={decision.toolName} wide />
+              <Fact label={COPY.request} value={approval.envelopeId} wide />
+              <Fact label={COPY.assistant} value={approval.coworkerAgentId} wide />
+              {decision.subjectId ? <Fact label="Subject" value={decision.subjectId} /> : null}
+              {decision.gate ? <Fact label="Gate" value={decision.gate} /> : null}
+              {decision.decision ? <Fact label="Decision" value={decision.decision} /> : null}
+              <Fact label="Recommender" value={decision.recommenderLabel} />
+              <Fact label="Accountable authorizer" value={decision.authorizerLabel} />
+              <Fact label={COPY.whyAsked} value={decision.whyAPerson} wide />
+              <Fact label={COPY.covers} value={decision.scope} wide />
+            </dl>
+          </details>
         )}
         {decision.completeProposedContent ? (
           <details className="mt-3">
@@ -336,6 +349,14 @@ function statusLabel(approval: AttentionEnvelopeApproval): string {
   if (approval.status === "declined") return "Declined";
   if (approval.status === "expired") return "Closed: the window expired";
   return approval.status;
+}
+
+function validUntilLabel(expiresAtIso: string | null): string {
+  if (!expiresAtIso) return "No expiry recorded";
+  const expiresAt = new Date(expiresAtIso);
+  return Number.isNaN(expiresAt.getTime())
+    ? "Invalid expiry recorded"
+    : new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(expiresAt);
 }
 
 function Effects({ decision }: { decision: AttentionEnvelopeApproval["decision"] }) {

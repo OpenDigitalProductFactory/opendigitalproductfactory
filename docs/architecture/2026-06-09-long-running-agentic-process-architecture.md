@@ -20,6 +20,20 @@ execution wait separately from completed individual verdicts. Retry only after
 reviewer execution recovers; original execution records remain intact. See the
 [MCP recovery contract](mcp-tool-authorization-runbook.md).
 
+**Restricted present reassessment (R2 source):** the
+[review settlement amendment](../superpowers/specs/2026-10-16-original-initiative-review-settlement-design.md)
+preserves uncertain original outcomes and defines a separate bounded current
+assessment. Its worker opens a sealed manifest before preparing the loop, binds
+the task/request, actor, generation, exact reader/writer and current provider
+configuration, and rejects callbacks outside that execution scope. The loop
+omits auxiliary grounding, draft reviews and asynchronous learning writers.
+Capture failure before an effect permits zero starts; failure after a start
+holds further effects and preserves unknown consumption. Readback reconciles a
+genuine committed writer receipt before reporting uncertainty. Neither a retry
+nor a new current verdict settles an unknown historical effect. Atomic admission,
+finite total-token qualification and canonical served positive/refusal acceptance
+remain required before this work is complete; this source note records no release.
+
 **Date:** 2026-06-09
 **Status:** Assessment / direction-setting. Not a build spec. The phased recommendations in §8 become backlog items, each promoted through Build Studio in the normal way.
 **Audience:** Operator (Mark), platform architects, the Build Studio sub-agents, and any coworker that owns a process which runs longer than a single request.
@@ -57,7 +71,7 @@ We have spent months hardening it and it remains fragile. The concrete, observed
 | Symptom | Mechanism in the code today | Memory / PR trail |
 |---|---|---|
 | **No task-level resume on restart** | Task results stored by **title**, matched on resume by string equality (`getCompletedTaskTitles()` [`build-orchestrator.ts:712`](../../apps/web/lib/build/build-orchestrator.ts)); a re-plan that renames/reorders tasks breaks the match → duplicate or skipped work. No per-step journal. | known limitation |
-| **Stranded builds** | `autoExecuteBuild()` is fire-and-forget in the portal process; a portal recycle kills it mid-flight. Recovery is a *boot hook* (`resumeStrandedBuildsOnBoot` [`instrumentation.ts:305`](../../apps/web/instrumentation.ts)) that re-dispatches stale rows — i.e. crash recovery is bolted on outside the execution model. | — |
+| **Stranded builds** | `autoExecuteBuild()` is fire-and-forget in the portal process; a portal recycle kills it mid-flight. Recovery is a *boot hook* (`resumeStrandedBuildsOnBoot` [`instrumentation.ts:305`](../../apps/web/instrumentation.ts)) that re-dispatches stale rows — i.e. crash recovery is bolted on outside the execution model. The hook runs every tick, so it records a skipped resume only when the skip reason changed since that build's previous resume row (`lib/build/resume-outcome-activity.ts`, BI-13971A7C). | — |
 | **Contradictory checkpoint states** | `buildExecState` can land in self-contradictory shapes (missing-step, error-without-fail, complete-no-verify); a second boot hook `recoverContradictoryBuildExecStatesOnBoot` [`instrumentation.ts:214`](../../apps/web/instrumentation.ts) classifies and clears them. | — |
 | **Self-upgrade kills in-session work** | A bundle-hash change recycles the portal container; the in-portal orchestrator dies. Quiescence + boot reconciliation (`reconcileSelfUpgradeRunsOnBoot` [`instrumentation.ts:119`](../../apps/web/instrumentation.ts)) patch around it. | self-upgrade-kills-in-session-ux |
 | **Lost task evidence** | `taskResults` write uses optimistic locking with `MAX_MERGE_RETRIES = 1` ([`build-orchestrator.ts`](../../apps/web/lib/build/build-orchestrator.ts)); on a second collision the write is **silently dropped** and the build proceeds as if it succeeded. | — |
@@ -314,6 +328,8 @@ A single pattern that every long-horizon process is an instance of. It is mostly
 **Implemented external Task slice (2026-08-31):** ordinary MCP `TaskRun` submissions now use the existing self-hosted Inngest substrate as a durable execution outbox. Submission commits the task and immutable request/authentication binding before enqueue; the worker claims it with the canonical heartbeat-aware compare-and-set transition, runs the unchanged governed executor, and emits status only after committed transitions. A scheduled two-minute reconciliation job re-enqueues bounded pending work after a portal restart or lost delivery. Streamable HTTP GET/SSE pushes MCP `notifications/tasks/status`; `tasks/get` and `tasks/list` remain the recovery and compatibility path. This realizes “notify, don't poll” as **push first, bounded polling second**—not push-only—and deliberately avoids caller-selected webhooks or a second task ledger.
 
 **Implemented upgrade drain that waits for work (2026-10-01, BI-F9EE05E5 slice A):** the `QuiescenceRun` coordinator (`queue/functions/quiescence-run.ts`) no longer stops in-flight work when a self-upgrade drains. Admission closes at drain start. TaskRuns are flipped to `quiescing` only once hard blockers clear (or on operator force), so live build phases run to completion and are never reaped while they still heartbeat. The wait checks once per tick and sleeps on an operator-control event between checks. It pauses in the non-terminal `awaiting-operator` status at a configurable bound (default 60 minutes), and an operator abort is recorded durably (`QuiescenceRun.abortRequestedAt/By`). The self-upgrade job runs as separate pre-drain, wait and swap steps (`self-upgrade-steps.ts`, `self-upgrade-swap.ts`) rather than one long request. The wait helpers live in `self-upgrade/drain-wait.ts`, admission re-assertion and the swap guard in `drain-admission.ts`, and the import-free status contract in `quiescence-contract.ts`. Reconcilers and the stuck-coordinator watchdog key on heartbeat and swap state, never on run age. Design: Activity Quiescence Protocol §11a.
+
+**Implemented sandbox lease reclaim (2026-10-28, sandbox containment spec AC-8):** each `taskrun-watchdog` tick, after the inert/stalled build reaper, runs `reclaimSandboxLeases` (`build/sandbox/sandbox-lease-reclaim.ts`). The reaper frees a build's worktree but not its `SandboxSlot` lease, so this pass releases leases held by missing, terminal or abandoned builds, and leases whose open build has no live `TaskRun` and no activity within `DPF_SANDBOX_LEASE_IDLE_MS` (default 60 minutes). It uses the reaper's liveness signals plus `FeatureBuild.updatedAt`. An idle build keeps its phase and re-acquires a slot on its next step. The pass is observe-only unless `DPF_SANDBOX_LEASE_RECLAIM_ENABLED=1`.
 
 **Implemented guard-finding repair (2026-09-30, BI-B2EEA6DE):** when a Build Studio build's finalize gauntlet fails on its own change, the review job hands the build back to its build phase and sends `build/gauntlet.repair`. That event-only function, registered in `queue/functions/index.ts` with per-build concurrency 1, dispatches one repair task through the orchestrator's specialist dispatch (`runGauntletRepairTask`) and returns the build to review. The bound (two hand-backs, then one operator escalation) and the state (`verificationOut.gauntletRepair`, pointing at the evidence record) live in `lib/build/gauntlet-repair.ts`.
 

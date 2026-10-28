@@ -433,7 +433,15 @@ describe("resolveTrustedInitiativeItemId (BI-099A0BA3, security review L1)", () 
     await expect(resolveTrustedInitiativeItemId({
       task: task("TR-SCHED-ABCD1234"), toolName: "record_initiative_evidence", boundItemId: null, loadStewardItemId,
     })).resolves.toBe("BI-ROUTED");
-    expect(loadStewardItemId).toHaveBeenCalledWith("TR-SCHED-ABCD1234");
+    expect(loadStewardItemId).toHaveBeenCalledWith("TR-SCHED-ABCD1234", "record_initiative_evidence");
+  });
+
+  it("takes a platform review run's subject from the review the platform issued its room (BI-AA47C672)", async () => {
+    const loadStewardItemId = vi.fn(async () => "BI-MERGED");
+    await expect(resolveTrustedInitiativeItemId({
+      task: task("TR-SCHED-PIR00001"), toolName: "record_initiative_post_implementation_review", boundItemId: null, loadStewardItemId,
+    })).resolves.toBe("BI-MERGED");
+    expect(loadStewardItemId).toHaveBeenCalledWith("TR-SCHED-PIR00001", "record_initiative_post_implementation_review");
   });
 
   it("asks nothing for another tool or a non-scheduled run", async () => {

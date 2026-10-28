@@ -63,4 +63,72 @@ A purpose in this file is not proof that an approval row displays it.
 - Hook 1: [uncommitted-work-guard.mjs](uncommitted-work-guard.mjs) — Warn about uncommitted work before ending the turn
 - Hook 2: [worktree-session-heartbeat.mjs](worktree-session-heartbeat.mjs) — Refresh this session heartbeat to protect active work
 
+## By client
+
+Generated from [client-hook-planes.json](client-hook-planes.json) (BI-742D707B). hooks.json is the one roster;
+that file records, per client, what delivers the hooks and every entry left out, with the reason.
+A count here is what DPF wires, not proof the client fired it; live probes are recorded in
+[client-capabilities.json](../client-capabilities.json).
+
+| Client | Delivered by | Wired | Run inside a substitute | Not wired |
+|---|---|---|---|---|
+| Claude Code | plugin hooks/hooks.json | 34 of 34 | 0 | 0 |
+| Codex | plugin hooks/hooks.json from the Codex plugin cache (~/.codex/hooks.json only as the blocking-guard fallback) | 33 of 34 | 0 | 1 |
+| Grok | ~/.grok/hooks/dpf-guards.json, generated from hooks.json (Grok ignores plugin-bundled hooks, BI-883FC2FC) | 25 of 34 | 3 | 6 |
+| Grok (Build Studio sandbox) | /home/node/.grok/hooks/dpf-guards.json in the sandbox, generated at each dispatch from the workspace pack by hooks/lib/grok-hook-plane.mjs | 25 of 34 | 3 | 6 |
+| Antigravity | none | 0 of 34 | 0 | 34 |
+| VS Code | none | 0 of 34 | 0 | 34 |
+| Cursor | none | 0 of 34 | 0 | 34 |
+| Gemini CLI | none | 0 of 34 | 0 | 34 |
+| OpenCode | none | 0 of 34 | 0 | 34 |
+
+| Event | Matcher | Hook | Claude Code | Codex | Grok | Grok (Build Studio sandbox) | Antigravity | VS Code | Cursor | Gemini CLI | OpenCode |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| PreToolUse | Bash | [lease-guard.mjs](lease-guard.mjs) | yes | yes | yes | yes | no (1) | no (2) | no (3) | no (4) | no (5) |
+| PreToolUse | Bash | [root-clone-guard.mjs](root-clone-guard.mjs) | yes | yes | yes | yes | no (1) | no (2) | no (3) | no (4) | no (5) |
+| PreToolUse | Bash | [compose-guard.mjs](compose-guard.mjs) | yes | yes | yes | yes | no (1) | no (2) | no (3) | no (4) | no (5) |
+| PreToolUse | Bash | [raw-tool-guard.mjs](raw-tool-guard.mjs) | yes | yes | yes | yes | no (1) | no (2) | no (3) | no (4) | no (5) |
+| PreToolUse | Bash | [portal-image-guard.mjs](portal-image-guard.mjs) | yes | yes | yes | yes | no (1) | no (2) | no (3) | no (4) | no (5) |
+| PreToolUse | Bash | [lease-punt-guard.mjs](lease-punt-guard.mjs) | yes | yes | yes | yes | no (1) | no (2) | no (3) | no (4) | no (5) |
+| PreToolUse | Bash | [pregate-evidence-guard.mjs](pregate-evidence-guard.mjs) | yes | yes | yes | yes | no (1) | no (2) | no (3) | no (4) | no (5) |
+| PreToolUse | Bash | [pregate-invocation-guard.mjs](pregate-invocation-guard.mjs) | yes | yes | yes | yes | no (1) | no (2) | no (3) | no (4) | no (5) |
+| PreToolUse | Bash | [workroom-claim-guard.mjs](workroom-claim-guard.mjs) | yes | yes | yes | yes | no (1) | no (2) | no (3) | no (4) | no (5) |
+| PreToolUse | AskUserQuestion | [decision-routing-guard.mjs](decision-routing-guard.mjs) | yes | yes | yes | yes | no (1) | no (2) | no (3) | no (4) | no (5) |
+| PreToolUse | Write\|Edit\|MultiEdit | [root-clone-guard.mjs](root-clone-guard.mjs) | yes | yes | yes | yes | no (1) | no (2) | no (3) | no (4) | no (5) |
+| PreToolUse | Write\|Edit\|MultiEdit | [plan-backlog-coverage-guard.mjs](plan-backlog-coverage-guard.mjs) | yes | yes | yes | yes | no (1) | no (2) | no (3) | no (4) | no (5) |
+| PreToolUse | Write\|Edit\|MultiEdit | [ux-fit-precheck.mjs](ux-fit-precheck.mjs) | yes | yes | no (6) | no (6) | no (1) | no (2) | no (3) | no (4) | no (5) |
+| PreToolUse | Write\|Edit\|MultiEdit | [spec-plan-doc-precheck.mjs](spec-plan-doc-precheck.mjs) | yes | yes | no (6) | no (6) | no (1) | no (2) | no (3) | no (4) | no (5) |
+| PreToolUse | Write\|Edit\|MultiEdit | [design-grounding-precheck.mjs](design-grounding-precheck.mjs) | yes | yes | no (6) | no (6) | no (1) | no (2) | no (3) | no (4) | no (5) |
+| PreToolUse | Write\|Edit\|MultiEdit | [tool-economy-precheck.mjs](tool-economy-precheck.mjs) | yes | yes | no (6) | no (6) | no (1) | no (2) | no (3) | no (4) | no (5) |
+| PreToolUse | Write\|Edit\|MultiEdit | [workroom-claim-guard.mjs](workroom-claim-guard.mjs) | yes | yes | yes | yes | no (1) | no (2) | no (3) | no (4) | no (5) |
+| WorktreeCreate | — | [worktree-create.mjs](worktree-create.mjs) | yes | no (7) | no (8) | no (8) | no (1) | no (2) | no (3) | no (4) | no (5) |
+| PostToolUse | ^mcp__.+__(adopt_worktree\|heartbeat_workroom\|claim_workroom_scope\|claim_backlog_item_for_work\|create_workroom)$ | [workroom-claim-refresh.mjs](workroom-claim-refresh.mjs) | yes | yes | yes | yes | no (1) | no (2) | no (3) | no (4) | no (5) |
+| SessionStart | — | [install-folder-contract.mjs](install-folder-contract.mjs) | yes | yes | yes | yes | no (1) | no (2) | no (3) | no (4) | no (5) |
+| SessionStart | — | [uncommitted-work-guard.mjs](uncommitted-work-guard.mjs) | yes | yes | yes | yes | no (1) | no (2) | no (3) | no (4) | no (5) |
+| SessionStart | — | [process-spine-health-check.mjs](process-spine-health-check.mjs) | yes | yes | in grok-session-start.mjs | in grok-session-start.mjs | no (1) | no (2) | no (3) | no (4) | no (5) |
+| SessionStart | — | [pretooluse-guard-selftest.mjs](pretooluse-guard-selftest.mjs) | yes | yes | no (9) | no (9) | no (1) | no (2) | no (3) | no (4) | no (5) |
+| SessionStart | — | [governance-freshness-check.mjs](governance-freshness-check.mjs) | yes | yes | in grok-session-start.mjs | in grok-session-start.mjs | no (1) | no (2) | no (3) | no (4) | no (5) |
+| SessionStart | — | [worktree-session-hygiene.mjs](worktree-session-hygiene.mjs) | yes | yes | yes | yes | no (1) | no (2) | no (3) | no (4) | no (5) |
+| SessionStart | — | [worktree-session-heartbeat.mjs](worktree-session-heartbeat.mjs) | yes | yes | yes | yes | no (1) | no (2) | no (3) | no (4) | no (5) |
+| SessionStart | — | [root-clone-freshness.mjs](root-clone-freshness.mjs) | yes | yes | yes | yes | no (1) | no (2) | no (3) | no (4) | no (5) |
+| SessionStart | — | [worktree-readiness-banner.mjs](worktree-readiness-banner.mjs) | yes | yes | yes | yes | no (1) | no (2) | no (3) | no (4) | no (5) |
+| SessionStart | — | [toolchain-freshness.mjs](toolchain-freshness.mjs) | yes | yes | in grok-session-start.mjs | in grok-session-start.mjs | no (1) | no (2) | no (3) | no (4) | no (5) |
+| SessionEnd | — | [uncommitted-work-guard.mjs](uncommitted-work-guard.mjs) | yes | yes | yes | yes | no (1) | no (2) | no (3) | no (4) | no (5) |
+| SessionEnd | — | [worktree-session-heartbeat.mjs](worktree-session-heartbeat.mjs) | yes | yes | yes | yes | no (1) | no (2) | no (3) | no (4) | no (5) |
+| SessionEnd | — | [worktree-session-hygiene.mjs](worktree-session-hygiene.mjs) | yes | yes | yes | yes | no (1) | no (2) | no (3) | no (4) | no (5) |
+| Stop | — | [uncommitted-work-guard.mjs](uncommitted-work-guard.mjs) | yes | yes | yes | yes | no (1) | no (2) | no (3) | no (4) | no (5) |
+| Stop | — | [worktree-session-heartbeat.mjs](worktree-session-heartbeat.mjs) | yes | yes | yes | yes | no (1) | no (2) | no (3) | no (4) | no (5) |
+
+Why an entry is not wired:
+
+1. No hook plane is proven for Antigravity (client-capabilities.json hookPlane unproven); nothing is wired until a probe is recorded.
+2. No DPF hook adapter: VS Code does not load the pack (client-capabilities.json loadsPack false). Discovery reports it unproven.
+3. No DPF hook adapter for Cursor yet. Discovery reports it unproven.
+4. No DPF hook adapter for Gemini CLI yet. Discovery reports it unproven.
+5. No DPF hook adapter for OpenCode yet. Discovery reports it unproven.
+6. Advisory precheck. Grok's PreToolUse has no non-blocking channel, so context-only output cannot reach the agent.
+7. Codex does not run it: on 2026-10-14 its hook trust state listed 33 of the 34 entries and none for WorktreeCreate.
+8. No WorktreeCreate event is known for Grok (none is recorded in client-capabilities.json).
+9. Probes the Claude deny contract and the plugin hooks.json commands; neither is Grok's plane or envelope.
+
 Regenerate with `python scripts/update_agent_toolchain.py --write-hook-reference` from the skill-pack directory.

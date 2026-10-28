@@ -1,6 +1,7 @@
 import type { InitiativeArtifactRef, InitiativeGateKey } from "@/lib/backlog/initiative-readiness";
 import { INITIATIVE_DISPOSITION_GUIDANCE, validateInitiativeDisposition, findingEvidenceMatchesRead, type InitiativeFindingEvidence } from "@/lib/backlog/initiative-readiness/disposition-contract";
 import { prisma } from "@dpf/db";
+import { canonicalJson } from "@dpf/integration-shared/canonical-json";
 import { parseInitiativeReviewBinding, type InitiativeReviewBinding } from "@/lib/mcp-task-review-contract";
 import {
   RESEARCH_DEFINITIONS,
@@ -16,19 +17,24 @@ import {
 } from "@/lib/tak/initiative-readiness-tool-grants";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { verifyTerminalWriterCitation } from "@/lib/mcp-task-terminal-writer-context";
-import { createInitiativeReviewTerminalToolPolicy, IMMUTABLE_PAGE_READER_TOOLS } from "@/lib/tak/terminal-tool-policy";
+import { createInitiativeReviewTerminalToolPolicy, IMMUTABLE_PAGE_READER_TOOLS, immutableReaderArgumentsFor } from "@/lib/tak/terminal-tool-policy";
 import { resolveAcceptanceStewardRunBinding } from "@/lib/backlog/acceptance-sweep/steward-objective-mapping-authority";
+import { parseRepoCommitRangeRef } from "@/lib/backlog/initiative-readiness/repo-commit-range";
 
 const artifactRefSchema = {
   type: "object",
   properties: {
-    kind: { type: "string", enum: ["feature-build-revision", "document-version", "repo-blob-at-commit"] },
+    kind: { type: "string", enum: ["feature-build-revision", "document-version", "repo-blob-at-commit", "repo-commit-range"] },
     revisionId: { type: "string" },
     versionId: { type: "string" },
     repositoryFullName: { type: "string" },
     commitSha: { type: "string" },
     path: { type: "string" },
     providerBlobId: { type: "string" },
+    // BI-46E344FE: a post-implementation review of a merged repair's whole change.
+    ranges: { type: "array", items: { type: "object", properties: { baseSha: { type: "string" }, headSha: { type: "string" } },
+      required: ["baseSha", "headSha"] } },
+    digest: { type: "string" },
   },
   required: ["kind"],
 };
@@ -234,11 +240,7 @@ function parseObjectiveMappings(value: unknown): Array<{ objectiveId: string; ev
   return mappings;
 }
 
-async function resolveExternalInitiativeReviewBinding(
-  actionKey: string,
-  taskRunId: string | undefined,
-  executionFence: import("@/lib/shared/task-execution-fence").TaskExecutionFence | null | undefined,
-): Promise<{
+type ExternalInitiativeReviewBinding = {
   itemId: string;
   gate: string;
   expectedCurrentBaselineId?: string | null;
@@ -246,20 +248,27 @@ async function resolveExternalInitiativeReviewBinding(
   artifactRef: InitiativeArtifactRef;
   workroomRef?: InitiativeReviewBinding["workroomRef"] | null;
   boundReviewTask?: import("@/lib/backlog/initiative-readiness/bound-review-effect").BoundReviewTask;
-} | null> {
-  if (!taskRunId) return null;
+};
+
+async function resolveExternalInitiativeReviewBinding(
+  actionKey: string,
+  taskRunId: string | undefined,
+  executionFence: import("@/lib/shared/task-execution-fence").TaskExecutionFence | null | undefined,
+): Promise<{ externalMcp: boolean; validated: boolean; binding: ExternalInitiativeReviewBinding | null }> {
+  const absent = (externalMcp = false) => ({ externalMcp, validated: false, binding: null });
+  if (!taskRunId) return absent();
   const run = await prisma.taskRun.findUnique({
     where: { taskRunId },
     select: { a2aMetadata: true },
   });
   const metadata = run?.a2aMetadata;
-  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return absent();
   const record = metadata as Record<string, unknown>;
-  if (record["trigger"] !== "external-mcp") return null;
+  if (record["trigger"] !== "external-mcp") return absent();
   const rawBinding = record["initiativeReviewBinding"];
-  if (!rawBinding || typeof rawBinding !== "object" || Array.isArray(rawBinding)) return null;
+  if (!rawBinding || typeof rawBinding !== "object" || Array.isArray(rawBinding)) return absent(true);
   const binding = rawBinding as Record<string, unknown>;
-  if (binding["writerToolName"] !== actionKey) return null;
+  if (binding["writerToolName"] !== actionKey) return absent(true);
   const itemId = typeof binding["itemId"] === "string" ? binding["itemId"].trim() : "";
   const gate = typeof binding["gate"] === "string" ? binding["gate"].trim() : "";
   const rawArtifact = binding["artifactRef"];
@@ -273,7 +282,7 @@ async function resolveExternalInitiativeReviewBinding(
     ? rawEligibleEvidenceActivityIds as string[]
     : null;
   if (!itemId.startsWith("BI-") || !gate || !rawArtifact || typeof rawArtifact !== "object" || Array.isArray(rawArtifact)) {
-    return null;
+    return absent(true);
   }
   const artifact = rawArtifact as Record<string, unknown>;
   // Reuse the issued-packet parser. Invalid context fails closed below; an
@@ -291,15 +300,17 @@ async function resolveExternalInitiativeReviewBinding(
     && typeof artifact["revisionId"] === "string" && artifact["revisionId"].trim().length > 0;
   const isDocument = artifact["kind"] === "document-version"
     && typeof artifact["versionId"] === "string" && artifact["versionId"].trim().length > 0;
+  const commitRange = parseRepoCommitRangeRef(artifact);
   if (
-    (!isRepoBlob && !isRevision && !isDocument)
+    (!isRepoBlob && !isRevision && !isDocument && !commitRange)
     || (expectedCurrentBaselineId !== undefined
       && expectedCurrentBaselineId !== null
       && typeof expectedCurrentBaselineId !== "string")
     || (rawEligibleEvidenceActivityIds !== undefined && !eligibleEvidenceActivityIds)
     || (gate === "objective-mapping" && !eligibleEvidenceActivityIds)
-  ) return null;
-  return {
+  ) return absent(true);
+  const parsed = parseInitiativeReviewBinding(rawBinding);
+  return { externalMcp: true, validated: !!parsed && canonicalJson(parsed) === canonicalJson(rawBinding), binding: {
     itemId,
     gate,
     boundReviewTask: { taskRunId, requestDigest: typeof record.requestDigest === "string" ? record.requestDigest : "", executionFence },
@@ -309,6 +320,7 @@ async function resolveExternalInitiativeReviewBinding(
       : {}),
     ...(eligibleEvidenceActivityIds ? { eligibleEvidenceActivityIds } : {}),
     artifactRef: isDocument ? { kind: "document-version", versionId: (artifact["versionId"] as string).trim() }
+      : commitRange ? commitRange
       : isRevision
       ? { kind: "feature-build-revision", revisionId: (artifact["revisionId"] as string).trim() }
       : {
@@ -318,7 +330,7 @@ async function resolveExternalInitiativeReviewBinding(
         path: artifact["path"] as string,
         providerBlobId: artifact["providerBlobId"] as string,
       },
-  };
+  } };
 }
 
 /**
@@ -330,7 +342,7 @@ async function resolveStewardRoomBinding(
   actionKey: string,
   params: Record<string, unknown>,
   taskRunId: string | undefined,
-): Promise<{ binding: Awaited<ReturnType<typeof resolveExternalInitiativeReviewBinding>> } | { refusal: ToolResult } | null> {
+): Promise<{ binding: ExternalInitiativeReviewBinding | null } | { refusal: ToolResult } | null> {
   if (actionKey !== "record_initiative_evidence") return null;
   const steward = await resolveAcceptanceStewardRunBinding(taskRunId);
   if (!steward) return null;
@@ -345,15 +357,55 @@ async function resolveStewardRoomBinding(
   return { binding: { ...binding, artifactRef: binding.artifactRef as InitiativeArtifactRef } };
 }
 
+/**
+ * BI-AA47C672: a platform post-implementation review room's scheduled run may
+ * write only the review the platform issued that room, for its item, while
+ * readiness still issues it (platform-review-room.ts). Null for every other
+ * run, which is untouched.
+ */
+async function resolvePlatformReviewBinding(
+  actionKey: string,
+  taskRunId: string | undefined,
+): Promise<{ binding: ExternalInitiativeReviewBinding } | { refusal: ToolResult } | null> {
+  const { PLATFORM_REVIEW_WRITER } = await import("@/lib/work-management/platform-review-shape");
+  if (actionKey !== PLATFORM_REVIEW_WRITER) return null;
+  const { resolvePlatformReviewRunBinding } = await import("@/lib/backlog/initiative-readiness/platform-review-room");
+  const platform = await resolvePlatformReviewRunBinding(taskRunId);
+  if (!platform) return null;
+  if (!platform.ok) {
+    return { refusal: { success: false, error: "platform-review-packet-unavailable", message: `This room holds no current platform-issued review it may record (${platform.reason}). Record what blocked you with record_workroom_evidence; the reviewer dispatch issues a current packet while the review is owed.` } };
+  }
+  const { binding } = platform.data;
+  return { binding: {
+    itemId: binding.itemId,
+    gate: binding.gate,
+    artifactRef: binding.artifactRef as InitiativeArtifactRef,
+    ...(binding.workroomRef ? { workroomRef: binding.workroomRef } : {}),
+    ...(Object.prototype.hasOwnProperty.call(binding, "expectedCurrentBaselineId") ? { expectedCurrentBaselineId: binding.expectedCurrentBaselineId ?? null } : {}),
+  } };
+}
+
 function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
   return async (params, userId, context): Promise<ToolResult> => {
-    let binding = await resolveExternalInitiativeReviewBinding(actionKey, context?.taskRunId, context?.taskExecutionFence);
+    const resolved = await resolveExternalInitiativeReviewBinding(actionKey, context?.taskRunId, context?.taskExecutionFence);
+    let binding = resolved.binding;
     if (binding?.workroomRef === null) return { success: false, error: "CANONICAL_DESIGN_AMBIGUOUS",
       message: "The accepted review's workroom binding is malformed. Reconcile the server-issued packet before retrying." };
+    if (lane.independent && resolved.externalMcp && !resolved.validated) {
+      return { success: false, error: "initiative_review_binding_required",
+        message: "An external independent review writer requires its accepted immutable review binding. Refresh the governed review packet before publication." };
+    }
     if (!binding) {
       const steward = await resolveStewardRoomBinding(actionKey, params, context?.taskRunId);
       if (steward && "refusal" in steward) return steward.refusal;
       if (steward) binding = steward.binding;
+    }
+    // BI-AA47C672: the platform's own reviewer, dispatched with no client token.
+    let platformReview = false;
+    if (!binding) {
+      const platform = await resolvePlatformReviewBinding(actionKey, context?.taskRunId);
+      if (platform && "refusal" in platform) return platform.refusal;
+      if (platform) { binding = platform.binding; platformReview = true; }
     }
     if (binding) {
       params = {
@@ -412,7 +464,8 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
     }
     const dispositionError = validateInitiativeDisposition(decision, findings, resolvedFindingRefs);
     if (dispositionError) return { success: false, error: "malformed-receipt", message: dispositionError };
-    if (binding && findings.length > 0 && binding.artifactRef.kind === "repo-blob-at-commit") {
+    if (binding && findings.length > 0
+      && (binding.artifactRef.kind === "repo-blob-at-commit" || binding.artifactRef.kind === "repo-commit-range")) {
       const reads = await prisma.toolExecution.findMany({
         where: { taskRunId: context?.taskRunId, toolName: { in: [...IMMUTABLE_PAGE_READER_TOOLS] }, success: true },
         orderBy: { createdAt: "asc" },
@@ -424,11 +477,13 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
       for (const finding of findings) {
         const evidence = finding.evidence;
         const artifact = binding.artifactRef;
+        // The reader identity of a blob or (BI-46E344FE) a whole commit range.
+        const read = immutableReaderArgumentsFor(artifact);
         let matchedRead = evidence && reads.some((row) => {
           const page = (row.result as { data?: Record<string, unknown> } | null)?.data;
-          return page && page.version === artifact.commitSha && page.path === artifact.path
+          return page && page.version === read.version && page.path === read.path
             && page.repositoryFullName === artifact.repositoryFullName
-            && findingEvidenceMatchesRead(evidence, page, artifact.providerBlobId);
+            && findingEvidenceMatchesRead(evidence, page, read.expectedBlobId);
         });
         if (!matchedRead && evidence && contentFreeReads) {
           const dispatch = context?.governedDispatch;
@@ -508,7 +563,10 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
       reviewerUserId: userId,
       reviewerAgentId: context?.agentId ?? null,
       authorityDecisionId: context?.authorityDecisionId ?? null,
-      tokenScope: context?.tokenScope ?? null,
+      // A platform review run carries no client token: it writes under the
+      // platform's own authority, recorded as such (platform-review-room.ts).
+      tokenScope: context?.tokenScope ?? (platformReview
+        ? (await import("@/lib/backlog/initiative-readiness/platform-review-room")).PLATFORM_REVIEW_TOKEN_SCOPE : null),
       requiresIndependentReviewer: lane.independent,
       authorizationParams: params,
       selectedProfile: gate === "classification" && decision === "pass" ? selectedProfile as never : undefined,

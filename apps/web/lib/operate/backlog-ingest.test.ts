@@ -174,6 +174,21 @@ describe("ingestBacklogItem", () => {
     expect(indexKnowledge).toHaveBeenCalledOnce();
   });
 
+  // BI-B146AB6B slice (BI-3EC4722F): a recurring miss carries its routing answer from filing.
+  it("records a recurring miss's routing answer on its intake activity, and refuses a malformed one", async () => {
+    const routing = { kind: "gate" as const, question: 1 as const, bindsTo: "work-shape:delivery-small#stage:repair", reason: "Decidable at the stage." };
+    const { store, activities } = makeStore();
+    await ingestBacklogItem(
+      { title: "Work keeps piling up", workType: "bug", source: "automated-detection", origin: { kind: "flow-bottleneck", id: "wr:x|y" }, routing },
+      { store, indexKnowledge: () => {} },
+    );
+    expect(activities[0]).toMatchObject({ kind: "intake_origin", payload: { routing } });
+    await expect(ingestBacklogItem(
+      { title: "Bad", workType: "bug", source: "automated-detection", routing: { ...routing, question: 3 } },
+      { store: makeStore().store, indexKnowledge: () => {} },
+    )).rejects.toThrow(/routing.question must be 1/);
+  });
+
   it("dedupes on the origin marker — bumps occurrence + writes a recurrence activity, no duplicate", async () => {
     const { store, created, activities } = makeStore({
       backlogItem: {
@@ -407,6 +422,17 @@ function memoryStore(seed: Array<Partial<MemItem> & { itemId: string }>, seedAct
     if (!where) return true;
     const body = where.body as { contains?: string } | undefined;
     if (body?.contains && !(item.body ?? "").includes(body.contains)) return false;
+    for (const clause of (where.AND as Array<Record<string, unknown>> | undefined) ?? []) {
+      if (clause.OR) {
+        const anyMatch = (clause.OR as Array<Record<string, unknown>>).some((alt) => {
+          if ("body" in alt && alt.body === null) return item.body === null;
+          const notContains = (alt.NOT as { body?: { contains?: string } } | undefined)?.body?.contains;
+          if (notContains) return !(item.body ?? "").includes(notContains);
+          return matches(item, alt);
+        });
+        if (!anyMatch) return false;
+      } else if (!matches(item, clause)) return false;
+    }
     const status = where.status as { notIn?: string[]; in?: readonly string[] } | undefined;
     if (status?.notIn && status.notIn.includes(item.status)) return false;
     if (status?.in && !status.in.includes(item.status)) return false;
@@ -664,6 +690,22 @@ describe("ingestBacklogItem — repository-qualified origin reconciliation (BI-9
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({ payload: { change: { kind: "reopened", fromState: "closed", toState: "open" } } });
     expect(mem.items[0].status).toBe("done");
+    expect(mem.itemWrites).toEqual([]);
+  });
+
+  it("never folds a local observation into a peer's work-sync mirror (BI-91FC6B9A)", async () => {
+    const mirrorBody = [
+      "x",
+      "[origin:tool-defect:surface_open]",
+      "[origin:federatedWork:inst_0123456789abcdef0123456789abcdef:BI-PEER]",
+    ].join("\n");
+    const mem = memoryStore([{ itemId: "BI-PEER", status: "open", body: mirrorBody }]);
+    const result = await ingestBacklogItem(
+      { title: "Stabilize surface_open", workType: "bug", source: "automated-detection", origin: { kind: "tool-defect", id: "surface_open" } },
+      { store: mem.store, ...quiet },
+    );
+    expect(result).toMatchObject({ created: true, outcome: "created" });
+    expect(mem.items[0]).toMatchObject({ itemId: "BI-PEER", occurrenceCount: 1 });
     expect(mem.itemWrites).toEqual([]);
   });
 

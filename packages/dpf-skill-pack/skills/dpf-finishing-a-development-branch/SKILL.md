@@ -64,6 +64,21 @@ This is the **decision** step; `dpf-pr-with-dco` is the **execution** step that 
 
 6. **Hand off.** With the shape decided, branch green + clean, and the current publication policy satisfied with any unrun review recorded, invoke [`dpf-pr-with-dco`](../dpf-pr-with-dco/SKILL.md) for PR mechanics.
 
+## Keep a checkpoint while you work
+
+You can run out of capacity at any step, and another assistant may have to
+finish. At each stage boundary, call `heartbeat_workroom` with a `checkpoint`:
+
+- `nextAction`
+- `addressing`: the failing checks your edits target
+- `uncommittedPaths`
+- `headSha` and `pushed`
+- `openRisks`
+
+The server keeps the latest checkpoint and shows it to whoever takes the room
+over. A checkpoint is your claim, not evidence: the next assistant still checks
+it against git and CI.
+
 ## Guardrails
 
 - **Don't bundle concerns to save a PR.** A mixed PR is harder to review and revert; split it.

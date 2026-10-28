@@ -93,6 +93,7 @@ import { PrismaClient } from "../generated/client/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { runSourceCheckedClone } from "./sanitized-clone-cleanup";
 import { assertSanitizedCloneSourceIntegrity } from "./sanitized-clone-source-integrity";
+import { resetCloneInstallationIdentity } from "./sanitized-clone-identity-reset";
 
 export {
   runSourceCheckedClone,
@@ -358,6 +359,7 @@ export async function runSanitizedClone(): Promise<void> {
           }
         }
 
+        await resetCloneInstallationIdentity(dev);
         await provisionContributorPreviewAdmin(dev, previewPassword);
       },
     );

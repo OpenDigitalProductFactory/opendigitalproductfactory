@@ -3,10 +3,12 @@ import type { ToolExecutionContext, ToolResult } from "./mcp-tool-types";
 
 export const APPROVAL_COMPLETION = "approval-completion";
 
-export async function checkRecoveredReviewAuthority(userId: string, context?: ToolExecutionContext): Promise<ToolResult | null> {
+export async function checkRecoveredReviewAuthority(userId: string, context?: ToolExecutionContext,
+  phase?: "working" | "approval-resume"): Promise<ToolResult | null> {
   if (!context?.taskRunId) return null;
   const { reviewRecoveryToolRefusal } = await import("./mcp-task-review-recovery");
-  return reviewRecoveryToolRefusal({ taskRunId: context.taskRunId, apiTokenId: context.apiTokenId, userId });
+  return reviewRecoveryToolRefusal({ taskRunId: context.taskRunId, apiTokenId: context.apiTokenId, userId,
+    actingAgentId: context.agentId, executionFence: context.taskExecutionFence, ...(phase ? { phase } : {}) });
 }
 
 /** Approved calls are checked at execution so a refusal closes their approval as failed. */

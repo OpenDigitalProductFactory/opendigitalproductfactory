@@ -6,9 +6,8 @@ import { Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDatabaseClient } from "@dpf/db";
 import { createHandoffDependencyPostgresFixture } from "../../../../packages/db/src/handoff-dependency-postgres-fixture";
-vi.mock("@/lib/portal-context/invalidation", () => ({ revalidatePortalContext: vi.fn() }));
-vi.mock("./receipted-tool", () => ({ hasBoundCommandTransaction: () => true }));
-const fixture = vi.hoisted(() => ({ prisma: null as any, telemetry: new Set<Promise<void>>(), afterEnvironmentLocks: undefined as (() => Promise<void>) | undefined, onReceiptTransaction: undefined as ((tx: ReceiptDb) => Promise<void>) | undefined, onExemptionTransaction: undefined as ((tx: RawTx) => Promise<void>) | undefined, beforeTransfer: undefined as ((tx: RawTx) => Promise<void>) | undefined, beforeEvidenceRead: undefined as (() => Promise<void>) | undefined, beforeEvidenceInsert: undefined as ((tx: RawTx) => Promise<void>) | undefined }));
+vi.mock("@/lib/portal-context/invalidation", () => ({ revalidatePortalContext: vi.fn(), revalidatePortalContextForCapsule: vi.fn() }));
+const fixture = vi.hoisted(() => ({ prisma: null as any, nestedTransactions: 0, telemetry: new Set<Promise<void>>(), afterEnvironmentLocks: undefined as (() => Promise<void>) | undefined, onReceiptTransaction: undefined as ((tx: ReceiptDb) => Promise<void>) | undefined, onExemptionTransaction: undefined as ((tx: RawTx) => Promise<void>) | undefined, beforeTransfer: undefined as ((tx: RawTx) => Promise<void>) | undefined, beforeEvidenceRead: undefined as (() => Promise<void>) | undefined, beforeEvidenceInsert: undefined as ((tx: RawTx) => Promise<void>) | undefined }));
 vi.mock("@dpf/db", async (original) => ({ ...await original<typeof import("@dpf/db")>(), get prisma() { return fixture.prisma; } }));
 vi.mock("@/lib/queue/queue-telemetry", async (original) => {
   const actual = await original<typeof import("@/lib/queue/queue-telemetry")>();
@@ -32,18 +31,20 @@ vi.mock("@/lib/work-management/workroom-agent-access.server", async (original) =
       room: { ...await db.workroom.findUnique({ where: { capsuleId: "WC-1" } }), participants: [{ principalId: "human", roles: ["coordinator"], lifecycle: "active", principal: { kind: "human" } }, ...["claude", "codex"].map((principalId) => ({ principalId, roles: ["contributor"], lifecycle: "active" }))], workItem: null } } };
   },
 }));
-import { commandAuthorityScopeKey, commandPayloadBinding, runReceiptedCommand, type ReceiptDb } from "./command-receipts";
+import type { ReceiptDb } from "./command-receipts";
+import { commandDb, hasBoundCommandTransaction, receiptedWorkroomTool } from "./receipted-tool";
+import { readBoundedHandoffLineage } from "./bounded-handoff";
+import { prepareBoundedHandoff } from "./bounded-handoff-tool";
 import { recordSemanticReviewExemption } from "../change-review/semantic-review-policy-exemption";
 import { lockAllNonprodEnvironments, NONPROD_ENVIRONMENT_KEYS, type NonprodEnvironmentKey } from "../nonprod/environment-lease-lock";
 import { claimNonprodEnvironmentLease, releaseNonprodEnvironmentLease, renewNonprodEnvironmentLease } from "../nonprod/environment-lease";
 import { reassignCapsuleExecutor } from "./reassign-executor-handler";
-import { parseBoundedHandoffCommand } from "./bounded-handoff-command";
 import type { CapsuleDb, WorkCapsuleActor } from "./work-capsule-store-types";
 import type { ToolResult } from "@/lib/mcp-tool-types";
 const configured = process.env.DATABASE_URL?.trim() ?? "";
 const DATABASE_URL = process.env.DPF_JOBS_TEST_DATABASE_URL?.trim() || (() => { try { return /^\/dpf_local_ci_[01]$/.test(new URL(configured).pathname) ? configured : ""; } catch { return ""; } })();
 const SCHEMA = "dpf_handoff_dependency_" + randomUUID().replaceAll("-", "");
-type RawTx = Pick<ReturnType<typeof createDatabaseClient>, "$queryRaw" | "$executeRaw">;
+type RawTx = Pick<ReturnType<typeof createDatabaseClient>, "$queryRaw" | "$executeRaw" | "$transaction">;
 const source: WorkCapsuleActor = { userId: "owner", principalId: "human", agentId: "AGT-EXT-CLAUDE", agentPrincipalId: "claude" };
 const receiver: WorkCapsuleActor = { ...source, agentId: "AGT-EXT-CODEX", agentPrincipalId: "codex" };
 const request = { phase: "request", commandId: "request-1", capsuleId: "WC-1", expectedLeaseHolderPrincipalId: "human", expectedExecutorKind: "claude-desktop", expectedExecutorRef: "source-chat", targetAgentId: "AGT-EXT-CODEX", toExecutorKind: "codex-desktop", toExecutorRef: "receiver-chat", handoffManifest: { nextAction: "Continue" } };
@@ -53,9 +54,14 @@ const waiver = () => ({ capsuleId: "WC-1", sourceHeadSha: HEAD, baseTreeHash: "d
 const operator = { userContext: { userId: "owner", platformRole: "HR-000", isSuperuser: false }, agentId: "AGT-EXT-CLAUDE", approvedAuthorityEnvelopeId: "approved-fixture" };
 type FixtureLeaseRow = { leaseId: string; ownerSessionId: string; status: string; environmentKey: string };
 type FixtureLeaseQuery = { where: { ownerSessionId: { in: string[] }; status: { notIn: string[] } } };
-function port(tx: RawTx): ReceiptDb & CapsuleDb & { workroomActivity: CapsuleDb["workroomActivity"] & { findUnique(args?: unknown): Promise<unknown> }; externalEvidenceRecord: any; nonProductionEnvironmentLease: any; platformConfig: any } {
+function port(tx: RawTx): ReceiptDb & CapsuleDb & { workroomActivity: CapsuleDb["workroomActivity"] & { findUnique(args?: unknown): Promise<unknown>; findMany(args: any): Promise<any[]> }; externalEvidenceRecord: any; nonProductionEnvironmentLease: any; platformConfig: any } {
   return {
     $queryRaw: tx.$queryRaw.bind(tx), $executeRaw: tx.$executeRaw.bind(tx),
+    // Preserve Prisma's actual nested transaction shape and savepoint semantics.
+    $transaction: <T>(work: (nested: ReceiptDb & CapsuleDb) => Promise<T>) => tx.$transaction(async (nested) => {
+      fixture.nestedTransactions += 1;
+      return work(port(nested));
+    }),
     workroom: { async findUnique(args: any) { const rows = await tx.$queryRaw<any[]>`SELECT * FROM "WorkCapsule" WHERE "capsuleId" = ${args.where.capsuleId ?? null} OR id = ${args.where.id ?? null}`; return rows[0] ?? null; },
       async update({ where, data }: any) { await fixture.beforeTransfer?.(tx); const rows = await tx.$queryRaw<any[]>`UPDATE "WorkCapsule" SET "executorKind" = ${data.executorKind}, "executorRef" = ${data.executorRef}, "leaseHolderPrincipalId" = ${data.leaseHolderPrincipalId}, "leaseExpiresAt" = ${data.leaseExpiresAt}, transfers = transfers + 1 WHERE "capsuleId" = ${where.capsuleId} RETURNING *`; return rows[0]; },
       create: async () => { throw new Error("Unused fixture port"); }, findMany: async () => [], findFirst: async () => null,
@@ -78,10 +84,28 @@ function port(tx: RawTx): ReceiptDb & CapsuleDb & { workroomActivity: CapsuleDb[
       async findMany({ where, take }: any) { return tx.$queryRaw<any[]>`SELECT * FROM "ExternalEvidenceRecord" WHERE "workCapsuleId" = ${where.workCapsuleId} AND "operationType" = ${where.operationType} AND details->>'sourceHeadSha' = ${where.details.path ? where.details.equals : HEAD} ORDER BY id LIMIT ${take}`; },
       async create({ data }: any) { await fixture.beforeEvidenceInsert?.(tx); const id = randomUUID(); await tx.$executeRaw`INSERT INTO "ExternalEvidenceRecord" (id, "workCapsuleId", "operationType", details) VALUES (${id}, ${data.workCapsuleId}, ${data.operationType}, ${JSON.stringify(data.details)}::jsonb)`; return { id, ...data }; },
     }, workroomActivity: {
+      async findMany({ where, take }: any) {
+        const approvalId = where.AND.find((part: any) => part.payload.path.at(-1) === "approvalId").payload.equals;
+        const executionId = where.AND.find((part: any) => part.payload.path.at(-1) === "executionId").payload.equals;
+        const since = where.recordedAt?.gte ?? new Date(0);
+        return tx.$queryRaw<any[]>`SELECT * FROM "WorkCapsuleActivity" WHERE "workCapsuleId" = ${where.workCapsuleId} AND kind = 'action' AND payload->>'kind' = 'bounded-handoff' AND payload->>'state' = 'pending-acknowledgement' AND payload #>> '{request,command,handoffManifest,priorFailure,approvalId}' = ${approvalId} AND payload #>> '{request,command,handoffManifest,priorFailure,executionId}' = ${executionId} AND "recordedAt" >= ${since} ORDER BY "recordedAt" DESC,id DESC LIMIT ${take}`;
+      },
       async findUnique() { return { id: "review", workCapsuleId: "row-1", kind: "evidence-recorded", recordedById: "owner", recordedByAgentId: "reviewer-fixture", payload: { result: { capsuleId: "WC-1", sourceHeadSha: HEAD, headTreeHash: TREE, diffDigest: DIFF, decision: "pass", rationale: "Independent fixture review covered the source and failure paths." } } }; },
       async findFirst({ where }: any) {
         if (where.commandScopeKey) { const rows = await tx.$queryRaw<any[]>`SELECT * FROM "WorkCapsuleActivity" WHERE "commandScopeKey" = ${where.commandScopeKey} AND "commandKey" = ${where.commandKey}`; return rows[0] ?? null; }
         if (where.id) { const rows = await tx.$queryRaw<any[]>`SELECT * FROM "WorkCapsuleActivity" WHERE id = ${where.id} AND "workCapsuleId" = ${where.workCapsuleId} AND kind = ${where.kind}`; return rows[0] ?? null; }
+        const original = where.AND.find((part: any) => part.payload.path.at(-1) === "approvalId");
+        if (original) {
+          const executionId = where.AND.find((part: any) => part.payload.path.at(-1) === "executionId").payload.equals;
+          const snapshotDigest = where.AND.find((part: any) => part.payload.path.at(-1) === "digest")?.payload.equals ?? null;
+          const rows = await tx.$queryRaw<any[]>`SELECT * FROM "WorkCapsuleActivity" WHERE "workCapsuleId" = ${where.workCapsuleId} AND kind = 'action' AND payload->>'kind' = 'bounded-handoff' AND payload->>'state' = 'pending-acknowledgement' AND payload #>> '{request,command,handoffManifest,priorFailure,approvalId}' = ${original.payload.equals} AND payload #>> '{request,command,handoffManifest,priorFailure,executionId}' = ${executionId} AND (${snapshotDigest}::text IS NULL OR payload #>> '{request,snapshot,digest}' = ${snapshotDigest}) ORDER BY "recordedAt" DESC,id DESC LIMIT 1`;
+          return rows[0] ?? null;
+        }
+        if (where.AND.some((part: any) => part.payload.path[0] === "state" && part.payload.equals === "pending-acknowledgement")) {
+          const since = where.recordedAt?.gte ?? new Date(0);
+          const rows = await tx.$queryRaw<any[]>`SELECT * FROM "WorkCapsuleActivity" WHERE "workCapsuleId" = ${where.workCapsuleId} AND kind = 'action' AND payload->>'kind' = 'bounded-handoff' AND payload->>'state' = 'pending-acknowledgement' AND "recordedAt" >= ${since} ORDER BY "recordedAt" DESC,id DESC LIMIT 1`;
+          return rows[0] ?? null;
+        }
         const requestId = where.AND.find((part: any) => part.payload.path[0] === "requestId").payload.equals;
         const rows = await tx.$queryRaw<any[]>`SELECT * FROM "WorkCapsuleActivity" WHERE "workCapsuleId" = ${where.workCapsuleId} AND kind = 'action' AND payload->>'kind' = 'bounded-handoff' AND payload->>'state' = 'completed' AND payload->>'requestId' = ${requestId}`; return rows[0] ?? null;
       },
@@ -111,23 +135,133 @@ describe.skipIf(!DATABASE_URL)("bounded handoff transaction protocol (PostgreSQL
       CREATE TABLE "User" (id TEXT PRIMARY KEY); CREATE TABLE "WorkItem" (id TEXT PRIMARY KEY); CREATE TABLE "WorkCapsuleParticipant" (id TEXT PRIMARY KEY, "workroomId" TEXT);`);
   });
   afterAll(async () => { while (fixture.telemetry.size) await Promise.all([...fixture.telemetry]); await prisma?.$disconnect(); if (pool) { try { await pool.query('DROP SCHEMA IF EXISTS "' + SCHEMA + '" CASCADE'); } finally { await pool.end(); } } });
-  beforeEach(async () => { while (fixture.telemetry.size) await Promise.all([...fixture.telemetry]); fixture.afterEnvironmentLocks = undefined; fixture.onReceiptTransaction = undefined; fixture.onExemptionTransaction = undefined; fixture.beforeTransfer = undefined; fixture.beforeEvidenceRead = undefined; fixture.beforeEvidenceInsert = undefined; fixture.prisma = { ...port(prisma), queueTelemetryEvent: prisma.queueTelemetryEvent, $transaction: (fn: any, options: any) => prisma.$transaction(async (tx) => { await fixture.onExemptionTransaction?.(tx); return fn(port(tx)); }, options) }; await pool.query(`TRUNCATE "WorkCapsuleActivity", "NonProductionEnvironmentLease", "ExternalEvidenceRecord", "QueueTelemetryEvent", "TaskRun", "PlatformConfig"; DELETE FROM "WorkCapsule"; INSERT INTO "WorkCapsule" (id, "capsuleId", "executorKind", "executorRef", "leaseHolderPrincipalId", "leaseExpiresAt", "createdByPrincipalId", "requestedByPrincipalId") VALUES ('row-1','WC-1','claude-desktop','source-chat','human',clock_timestamp()+interval '30 minutes','human','human'); UPDATE "WorkCapsule" SET "headSha"='${HEAD}', "repositoryFullName"='owner/repo', "headBranch"='fix/topic'`); });
-  async function call(params: Record<string, unknown>, actor = source) {
-    const command = parseBoundedHandoffCommand(params)!;
-    const db = { ...port(prisma), $transaction: <T>(fn: (tx: ReceiptDb) => Promise<T>, options?: any) => prisma.$transaction((tx) => fn(port(tx)), options) };
-    try {
-      return await runReceiptedCommand<ToolResult>({ db, commandType: "reassign-executor", authorityScopeKey: commandAuthorityScopeKey(actor), actor: { userId: actor.userId, agentId: actor.agentId }, commandId: command.commandId, target: { kind: "workroom", id: "WC-1" }, payloadBinding: commandPayloadBinding(command), beforeRoomLock: async (tx) => { await fixture.onReceiptTransaction?.(tx); await lockAllNonprodEnvironments(tx); await fixture.afterEnvironmentLocks?.(); },
-        run: async (tx) => { const result = await reassignCapsuleExecutor({ params, db: tx as CapsuleDb, resolveActor: async () => actor }); if (!result.success) throw Object.assign(new Error(result.message), { result }); return result; },
-        rejectionOf: (error: any) => error.result ? { code: error.result.error, message: error.message, data: { result: error.result } } : null });
-    } catch (error: any) { return error.result ?? error.rejection?.data?.result ?? { success: false, error: error.code }; }
+  beforeEach(async () => { while (fixture.telemetry.size) await Promise.all([...fixture.telemetry]); fixture.nestedTransactions = 0; fixture.afterEnvironmentLocks = undefined; fixture.onReceiptTransaction = undefined; fixture.onExemptionTransaction = undefined; fixture.beforeTransfer = undefined; fixture.beforeEvidenceRead = undefined; fixture.beforeEvidenceInsert = undefined; fixture.prisma = { ...port(prisma), queueTelemetryEvent: prisma.queueTelemetryEvent, $transaction: (fn: any, options: any) => prisma.$transaction(async (tx) => { await fixture.onExemptionTransaction?.(tx); return fn(port(tx)); }, options) }; await pool.query(`TRUNCATE "WorkCapsuleActivity", "NonProductionEnvironmentLease", "ExternalEvidenceRecord", "QueueTelemetryEvent", "TaskRun", "PlatformConfig"; DELETE FROM "WorkCapsule"; INSERT INTO "WorkCapsule" (id, "capsuleId", "executorKind", "executorRef", "leaseHolderPrincipalId", "leaseExpiresAt", "createdByPrincipalId", "requestedByPrincipalId") VALUES ('row-1','WC-1','claude-desktop','source-chat','human',clock_timestamp()+interval '30 minutes','human','human'); UPDATE "WorkCapsule" SET "headSha"='${HEAD}', "repositoryFullName"='owner/repo', "headBranch"='fix/topic'`); });
+  async function call(params: Record<string, unknown>, actor = source, candidate?: CapsuleDb): Promise<ToolResult> {
+    const tool = receiptedWorkroomTool("reassign-executor", async (normalized) => {
+      const active = commandDb();
+      expect(hasBoundCommandTransaction(active)).toBe(true);
+      expect(active.$transaction).toBeTypeOf("function");
+      return reassignCapsuleExecutor({ params: normalized, db: candidate ?? active, resolveActor: async () => actor });
+    }, { prepare: (raw) => {
+      const prepared = prepareBoundedHandoff(raw);
+      if (!prepared || "refusal" in prepared) return prepared;
+      return { ...prepared, beforeRoomLock: async (tx) => {
+        await fixture.onReceiptTransaction?.(tx);
+        await prepared.beforeRoomLock?.(tx);
+        await fixture.afterEnvironmentLocks?.();
+      } };
+    } });
+    return tool(params, actor.userId, { agentId: actor.agentId ?? undefined });
   }
   async function pending(commandId = "request-1") { const result = await call({ ...request, commandId }); expect(result.success).toBe(true); return (result.data as any).handoff.requestId as string; }
+  it("joins the real savepoint-capable Prisma client to the bound receipt wrapper", async () => {
+    await prisma.$transaction(async (tx) => {
+      expect(tx.$transaction).toBeTypeOf("function");
+      expect(tx.$queryRaw).toBeTypeOf("function");
+    });
+    const before = (await pool.query('SELECT "executorRef","leaseHolderPrincipalId","leaseExpiresAt",transfers FROM "WorkCapsule"')).rows[0];
+    const result = await call(request);
+    expect(result.error).toBeUndefined();
+    expect(result).toMatchObject({ success: true, data: { handoff: { state: "pending-acknowledgement" } } });
+    expect((await pool.query('SELECT "executorRef","leaseHolderPrincipalId","leaseExpiresAt",transfers FROM "WorkCapsule"')).rows[0]).toEqual(before);
+    expect((await pool.query(`SELECT count(*)::int AS n FROM "WorkCapsuleActivity" WHERE kind='command-accepted'`)).rows[0].n).toBe(1);
+    expect(fixture.nestedTransactions).toBe(0);
+  });
+  it("refuses direct handler execution before authority reads", async () => {
+    const candidate = port(prisma); const read = vi.spyOn(candidate.workroom, "findUnique");
+    expect(await reassignCapsuleExecutor({ params: request, db: candidate, resolveActor: async () => source }))
+      .toMatchObject({ success: false, error: "handoff-transaction-required" });
+    expect(read).not.toHaveBeenCalled();
+    expect((await pool.query('SELECT count(*)::int AS n FROM "WorkCapsuleActivity"')).rows[0].n).toBe(0);
+  });
+  it.each(["root", "foreign"] as const)("refuses the %s client inside an otherwise valid receipt", async (kind) => {
+    const candidate = kind === "root" ? fixture.prisma : port(prisma);
+    const read = vi.spyOn(candidate.workroom, "findUnique");
+    expect(await call(request, source, candidate)).toMatchObject({ success: false, error: "handoff-transaction-required" });
+    expect(read).not.toHaveBeenCalled();
+    expect((await pool.query('SELECT transfers FROM "WorkCapsule"')).rows[0].transfers).toBe(0);
+    expect((await pool.query(`SELECT count(*)::int AS n FROM "WorkCapsuleActivity" WHERE kind='command-accepted'`)).rows[0].n).toBe(0);
+  });
+  it("preserves a controlled pre-effect refusal while a fresh ordinary command transfers once", async () => {
+    const rejected = { ...request, commandId: "controlled-old-refusal" };
+    const refuse = receiptedWorkroomTool("reassign-executor", async () => ({
+      success: false, error: "handoff-transaction-required", message: "Controlled pre-effect fixture refusal",
+    }), { prepare: prepareBoundedHandoff });
+    expect(await refuse(rejected, source.userId, { agentId: source.agentId ?? undefined }))
+      .toMatchObject({ success: false, error: "handoff-transaction-required" });
+    const before = (await pool.query('SELECT "executorKind","executorRef","leaseHolderPrincipalId","leaseExpiresAt",transfers FROM "WorkCapsule"')).rows[0];
+    expect(await call(rejected)).toMatchObject({ success: false, error: "handoff-transaction-required" });
+    expect((await pool.query('SELECT "executorKind","executorRef","leaseHolderPrincipalId","leaseExpiresAt",transfers FROM "WorkCapsule"')).rows[0]).toEqual(before);
+    const fresh = await call({ ...request, commandId: "fresh-ordinary-request" });
+    expect(fresh).toMatchObject({ success: true, data: { handoff: { state: "pending-acknowledgement" } } });
+    const id = (fresh.data as any).handoff.requestId as string;
+    expect((await pool.query('SELECT transfers FROM "WorkCapsule"')).rows[0].transfers).toBe(0);
+    expect(await call(ack(id,"fresh-ordinary-ack"),receiver)).toMatchObject({ success: true });
+    expect((await pool.query('SELECT transfers FROM "WorkCapsule"')).rows[0].transfers).toBe(1);
+    expect((await pool.query(`SELECT count(*)::int AS n FROM "WorkCapsuleActivity" WHERE kind='command-rejected' AND "commandKey"='controlled-old-refusal'`)).rows[0].n).toBe(1);
+    expect(await call(rejected)).toMatchObject({ success: false, error: "handoff-transaction-required" });
+  });
   it("keeps request pending and transfers once for concurrent receiver acknowledgements", async () => {
     const id = await pending(); expect((await pool.query('SELECT transfers FROM "WorkCapsule"')).rows[0].transfers).toBe(0);
     const results = await Promise.all([call(ack(id,"ack-a"),receiver),call(ack(id,"ack-b"),receiver),call(ack(id,"ack-a"),receiver)]);
     expect(results.every((result) => result.success)).toBe(true);
     expect((await pool.query('SELECT transfers,"leaseHolderPrincipalId" FROM "WorkCapsule"')).rows[0]).toEqual({ transfers: 1, leaseHolderPrincipalId: "human" });
     expect((await pool.query(`SELECT count(*)::int AS n FROM "WorkCapsuleActivity" WHERE kind='executor-changed'`)).rows[0].n).toBe(1);
+    expect(fixture.nestedTransactions).toBe(1);
+  });
+  it("serializes stale recovery previews into one actual pending request", async () => {
+    const priorFailure = { approvalId: "original-refusal", executionId: "original-execution", reason: "handoff-transaction-required", preserve: true };
+    const a = { ...request, commandId: "recovery-preview-a", handoffManifest: { ...request.handoffManifest, priorFailure } };
+    const b = { ...a, commandId: "recovery-preview-b" };
+    const results = await Promise.all([call(a), call(b)]);
+    expect(results.filter(result => result.success)).toHaveLength(1);
+    expect(results.find(result => !result.success)).toMatchObject({ error: "handoff-recovery-already-requested" });
+    expect((await pool.query(`SELECT count(*)::int AS n FROM "WorkCapsuleActivity" WHERE kind='action' AND payload->>'state'='pending-acknowledgement'`)).rows[0].n).toBe(1);
+    expect((await pool.query('SELECT transfers FROM "WorkCapsule"')).rows[0].transfers).toBe(0);
+    const winner = results[0].success ? a : b;
+    expect(await call(winner)).toEqual(results.find(result => result.success));
+    expect((await pool.query(`SELECT count(*)::int AS n FROM "WorkCapsuleActivity" WHERE kind='command-accepted'`)).rows[0].n).toBe(1);
+  });
+  it.each(["lease", "head"] as const)("retains an obsolete %s request and admits one concurrent fresh recovery", async change => {
+    const priorFailure = { approvalId: "original-refusal", executionId: "original-execution", reason: "handoff-transaction-required", preserve: true };
+    const original = await call({ ...request, commandId: "before-lease-change", handoffManifest: { ...request.handoffManifest, priorFailure } });
+    expect(original.success).toBe(true);
+    const oldRequestId = (original.data as any).handoff.requestId;
+    if (change === "lease") await prisma.$executeRaw`UPDATE "WorkCapsule" SET "leaseExpiresAt" = "leaseExpiresAt" + interval '1 minute' WHERE "capsuleId" = 'WC-1'`;
+    else await prisma.$executeRaw`UPDATE "WorkCapsule" SET "headSha" = ${"b".repeat(40)} WHERE "capsuleId" = 'WC-1'`;
+    const reason = change === "lease" ? "handoff-lease-snapshot-changed" : "handoff-boundary-changed";
+    expect(await call(ack(oldRequestId, "obsolete-lease-ack"), receiver)).toMatchObject({ success: false, error: reason });
+    const db = port(prisma);
+    const currentRoom = await db.workroom.findUnique({ where: { capsuleId: "WC-1" } });
+    expect(await readBoundedHandoffLineage(db, currentRoom, { approvalId: priorFailure.approvalId, executionId: priorFailure.executionId,
+      executedAtIso: new Date(0).toISOString(), ownerUserId: source.userId, sourceAgentId: source.agentId,
+      command: { ...request, phase: "request" } }, { actor: source })).toMatchObject({ state: "stale", requestId: oldRequestId, reason });
+    const fresh = { ...request, handoffManifest: { ...request.handoffManifest, priorFailure } };
+    const results = await Promise.all([call({ ...fresh, commandId: "fresh-a" }), call({ ...fresh, commandId: "fresh-b" })]);
+    expect(results.filter(result => result.success)).toHaveLength(1);
+    expect(results.find(result => !result.success)).toMatchObject({ error: "handoff-recovery-already-requested" });
+    expect((await pool.query(`SELECT count(*)::int AS n FROM "WorkCapsuleActivity" WHERE kind='action' AND payload->>'state'='pending-acknowledgement'`)).rows[0].n).toBe(2);
+    expect((await pool.query('SELECT transfers FROM "WorkCapsule"')).rows[0].transfers).toBe(0);
+    expect((await pool.query('SELECT id FROM "WorkCapsuleActivity" WHERE id=$1', [oldRequestId])).rows).toHaveLength(1);
+  });
+  it("uses the same viable request after head restoration and preserves its later genuine completion", async () => {
+    const priorFailure = { approvalId: "original-refusal", executionId: "original-execution", reason: "handoff-transaction-required", preserve: true };
+    const command = { ...request, phase: "request" as const, handoffManifest: { ...request.handoffManifest, priorFailure } };
+    const a = await call({ ...command, commandId: "head-a-request" }); expect(a.success).toBe(true);
+    const requestA = (a.data as any).handoff.requestId;
+    await prisma.$executeRaw`UPDATE "WorkCapsule" SET "headSha" = ${"b".repeat(40)} WHERE "capsuleId" = 'WC-1'`;
+    const b = await call({ ...command, commandId: "head-b-request" }); expect(b.success).toBe(true);
+    await prisma.$executeRaw`UPDATE "WorkCapsule" SET "headSha" = ${HEAD} WHERE "capsuleId" = 'WC-1'`;
+    const failure = { ...priorFailure, executedAtIso: new Date(0).toISOString(), ownerUserId: source.userId, sourceAgentId: source.agentId, command };
+    const db = port(prisma);
+    expect(await readBoundedHandoffLineage(db, await db.workroom.findUnique({ where: { capsuleId: "WC-1" } }), failure, { actor: source }))
+      .toMatchObject({ state: "pending", requestId: requestA });
+    expect(await call({ ...command, commandId: "third-restored-head-request" })).toMatchObject({ success: false, error: "handoff-recovery-already-requested" });
+    expect(await call(ack(requestA, "ack-restored-head"), receiver)).toMatchObject({ success: true });
+    expect(await readBoundedHandoffLineage(db, await db.workroom.findUnique({ where: { capsuleId: "WC-1" } }), failure, { actor: source }))
+      .toMatchObject({ state: "completed", requestId: requestA });
+    expect((await pool.query(`SELECT count(*)::int AS n FROM "WorkCapsuleActivity" WHERE kind='action' AND payload->>'state'='pending-acknowledgement'`)).rows[0].n).toBe(2);
+    expect((await pool.query('SELECT transfers FROM "WorkCapsule"')).rows[0].transfers).toBe(1);
   });
   it("serializes competing requests and refuses the losing snapshot", async () => {
     const [a,b] = await Promise.all([pending("request-a"),pending("request-b")]);
@@ -217,9 +351,11 @@ describe.skipIf(!DATABASE_URL)("bounded handoff transaction protocol (PostgreSQL
     const id = await pending(); const prepared = signal(), releasePreparation = signal(), held = signal<number>(), waiting = signal<number>(), releaseTransfer = signal();
     fixture.beforeEvidenceRead = async () => { prepared.resolve(); await releasePreparation.promise; };
     fixture.beforeTransfer = async (tx) => { held.resolve(await backendPid(tx)); await releaseTransfer.promise; };
-    fixture.onExemptionTransaction = async (tx) => { waiting.resolve(await backendPid(tx)); };
     const publication = recordSemanticReviewExemption(waiver(), "owner", operator); await prepared.promise;
-    const handoff = call(ack(id,"ack-before-exemption"),receiver); const holder = await held.promise; releasePreparation.resolve();
+    const handoff = call(ack(id,"ack-before-exemption"),receiver); const holder = await held.promise;
+    // The real receipt wrapper also uses the shared root transaction; observe only the later publication.
+    fixture.onExemptionTransaction = async (tx) => { waiting.resolve(await backendPid(tx)); };
+    releasePreparation.resolve();
     try { await waitForBlockedBy(await waiting.promise, holder); } finally { releaseTransfer.resolve(); }
     expect(await handoff).toMatchObject({ success: true }); expect(await publication).toMatchObject({ success: false, error: "review_exemption_refused" });
     expect((await pool.query('SELECT count(*)::int AS n FROM "ExternalEvidenceRecord"')).rows[0].n).toBe(0);
@@ -304,10 +440,14 @@ describe.skipIf(!DATABASE_URL)("bounded handoff transaction protocol (PostgreSQL
     expect((await pool.query('SELECT transfers FROM "WorkCapsule"')).rows[0].transfers).toBe(0);
   });
   it("rolls back the transfer when durable completion publication fails", async () => {
-    const id = await pending(); await pool.query(`ALTER TABLE "WorkCapsuleActivity" ADD CONSTRAINT reject_completion CHECK (payload->>'state' IS DISTINCT FROM 'completed')`);
+    const id = await pending();
+    const before = (await pool.query('SELECT "executorKind","executorRef","leaseHolderPrincipalId","leaseExpiresAt",transfers FROM "WorkCapsule"')).rows[0];
+    await pool.query(`ALTER TABLE "WorkCapsuleActivity" ADD CONSTRAINT reject_completion CHECK (payload->>'state' IS DISTINCT FROM 'completed')`);
     try {
       expect((await call(ack(id,"ack-failed-write"),receiver)).success).toBe(false);
-      expect((await pool.query('SELECT transfers,"executorRef" FROM "WorkCapsule"')).rows[0]).toEqual({ transfers: 0, executorRef: "source-chat" });
+      expect(fixture.nestedTransactions).toBe(1); // The lease savepoint committed before outer publication failed.
+      expect((await pool.query('SELECT "executorKind","executorRef","leaseHolderPrincipalId","leaseExpiresAt",transfers FROM "WorkCapsule"')).rows[0]).toEqual(before);
+      expect((await pool.query(`SELECT count(*)::int AS n FROM "WorkCapsuleActivity" WHERE kind='command-accepted' AND "commandKey"='ack-failed-write'`)).rows[0].n).toBe(0);
       expect((await pool.query(`SELECT count(*)::int AS n FROM "WorkCapsuleActivity" WHERE kind='executor-changed'`)).rows[0].n).toBe(0);
       expect((await pool.query(`SELECT count(*)::int AS n FROM "WorkCapsuleActivity" WHERE kind='command-rejected'`)).rows[0].n).toBe(1);
     } finally { await pool.query('ALTER TABLE "WorkCapsuleActivity" DROP CONSTRAINT reject_completion'); }

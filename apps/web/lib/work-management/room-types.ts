@@ -6,6 +6,7 @@ import type {
   WorkCaseSourceRef,
   WorkCaseState,
 } from "./case-types";
+import type { RecordedWorkroomBlocker } from "@/lib/work-capsules/workroom-recovery-projection";
 import type { ReceiptEnvelope } from "./receipt-envelope";
 import type { WorkroomStructure } from "./room-structure";
 import type { WorkroomPostureView } from "./room-posture";
@@ -195,6 +196,9 @@ export interface WorkroomActivityView {
 }
 
 export interface WorkroomWorkView {
+  /** Authorized current-room coordination; never an execution grant or inferred repair owner. */
+  recordedBlocker?: RecordedWorkroomBlocker;
+  failedHandoffRecovery?: import("@/lib/work-capsules/workroom-recovery-projection").FailedHandoffRecovery | null;
   nextAction: string;
   attentionRequired: boolean;
   attentionReason: string | null;

@@ -1,3 +1,4 @@
+import { outcomeUnlessStated } from "@/lib/backlog/intake-outcome";
 import { createHash, randomUUID } from "node:crypto";
 
 import { prisma, Prisma } from "@dpf/db";
@@ -243,9 +244,16 @@ export async function dispositionFounderDemandCluster(input: {
     if (blocked.length > 0) throw new Error("Promote development/test origins explicitly before accepting this cluster.");
     if (!canonicalBacklogItemId) {
       const sample = cluster.members[0]?.signalSnapshot as Record<string, unknown> | undefined;
+      const clusterBody = `${typeof sample?.summary === "string" ? sample.summary : cluster.title}\n\nShared portfolio reach: ${cluster.members.length} distinct installation origin(s).`;
+      // BI-458CCA8D: keep a stated outcome; otherwise the asking installs get it or an answer.
+      const outcome = outcomeUnlessStated(
+        clusterBody,
+        `The ${cluster.members.length} installation(s) asking for "${cluster.title.trim()}" get it, or a clear answer.`,
+      );
       const result = await ingestBacklogItem({
         title: cluster.title,
-        body: `${typeof sample?.summary === "string" ? sample.summary : cluster.title}\n\nShared portfolio reach: ${cluster.members.length} distinct installation origin(s).`,
+        body: clusterBody,
+        ...(outcome ? { outcome } : {}),
         workType: asWorkType(sample?.workType),
         source: "user-request",
         type: "portfolio",
