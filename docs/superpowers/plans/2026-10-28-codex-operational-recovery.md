@@ -1,3 +1,7 @@
+---
+status: active
+---
+
 # Codex operational recovery
 
 Backlog: BI-4A28B171. Workroom: WC-5D3F4404.
