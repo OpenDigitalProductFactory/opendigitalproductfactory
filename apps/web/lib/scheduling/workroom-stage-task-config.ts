@@ -1,3 +1,8 @@
+import {
+  parseQualificationExperimentBinding,
+  type QualificationExperimentBinding,
+} from "@/lib/backlog/initiative-readiness/qualification-research-admission";
+
 /**
  * The Workroom stage a scheduled job is running, carried on `taskConfig`
  * (BI-43C3E914).
@@ -27,6 +32,8 @@ export interface WorkroomStageTaskConfig {
   stageKey: string;
   /** The stage's declared tools (WorkShapeStage.tools). Empty when undeclared. */
   tools: string[];
+  /** Server-issued qualification stages may only narrow the stage tool set. */
+  qualificationExperiment?: QualificationExperimentBinding;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -53,12 +60,23 @@ export function readWorkroomStageTaskConfig(taskConfig: unknown): WorkroomStageT
   const tools = Array.isArray(raw.tools)
     ? [...new Set(raw.tools.map(nonEmptyString).filter((name): name is string => name !== null))]
     : [];
+  const qualificationRaw = raw.qualificationExperiment;
+  if (qualificationRaw !== undefined) {
+    const qualification = parseQualificationExperimentBinding(qualificationRaw);
+    if (!qualification.ok) return null;
+    return { shapeKey, shapeVersion: nonEmptyString(raw.shapeVersion) ?? "", stageKey, tools,
+      qualificationExperiment: qualification.binding };
+  }
   return { shapeKey, shapeVersion: nonEmptyString(raw.shapeVersion) ?? "", stageKey, tools };
 }
 
 /** The stage's declared tools from a task's config, or []. */
 export function workroomStageToolsFromTaskConfig(taskConfig: unknown): string[] {
-  return readWorkroomStageTaskConfig(taskConfig)?.tools ?? [];
+  const stage = readWorkroomStageTaskConfig(taskConfig);
+  if (!stage) return [];
+  if (!stage.qualificationExperiment) return stage.tools;
+  const permitted = new Set(stage.qualificationExperiment.permittedTools);
+  return stage.tools.filter((tool) => permitted.has(tool));
 }
 
 /** Merge the stage record into an existing taskConfig, preserving every other key. */
@@ -74,6 +92,16 @@ export function withWorkroomStageTaskConfig(
       shapeVersion: stage.shapeVersion,
       stageKey: stage.stageKey,
       tools: [...new Set(stage.tools)],
+      ...(stage.qualificationExperiment ? { qualificationExperiment: {
+        ...stage.qualificationExperiment,
+        permittedTools: [...stage.qualificationExperiment.permittedTools],
+        allowedPaths: [...stage.qualificationExperiment.allowedPaths],
+        protocol: { ...stage.qualificationExperiment.protocol },
+        ...(stage.qualificationExperiment.candidate ? { candidate: {
+          ...stage.qualificationExperiment.candidate,
+          testBlobIds: [...stage.qualificationExperiment.candidate.testBlobIds],
+        } } : {}),
+      } } : {}),
     },
   };
 }
