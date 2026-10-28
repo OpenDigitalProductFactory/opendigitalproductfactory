@@ -375,6 +375,9 @@ export async function submitRemoteCoworkerTask(input: {
         })
       : null;
     if (terminalWriterReservation && terminalToolPolicy && existing.id && existing.threadId) {
+      const boundReview = parsed.initiativeReviewBinding ? {
+        executionFence: terminalWriterReservation.executionFence, userId: token.userId, agentId: parsed.agentId,
+      } : undefined;
       let readerExecutions = terminalWriterReservation.readerExecutions;
       let bootstrapFailure: { ok: false; code: string; error: string } | null = null;
       if (terminalWriterReservation.bootstrapReaderEvidence) {
@@ -400,6 +403,7 @@ export async function submitRemoteCoworkerTask(input: {
             agentId: resolveCanonicalAgentId(parsed.agentId),
             threadId: existing.threadId,
             taskRunId: existing.taskRunId,
+            taskExecutionFence: terminalWriterReservation.executionFence,
             apiTokenId: token.tokenId,
             tokenScope: token.capability,
             externalAccessEnabled: true,
@@ -427,6 +431,7 @@ export async function submitRemoteCoworkerTask(input: {
           agentId: resolveCanonicalAgentId(parsed.agentId),
           threadId: existing.threadId!,
           taskRunId: existing.taskRunId,
+          taskExecutionFence: terminalWriterReservation.executionFence,
           apiTokenId: token.tokenId,
           tokenScope: token.capability,
           externalAccessEnabled: true,
@@ -462,7 +467,7 @@ export async function submitRemoteCoworkerTask(input: {
               ...(escalation ? { terminalWriterEscalation: escalation } : {}),
             },
           },
-        }, terminalWriterReservation.wait.observedAt, dispatchIdentity(priorProgress));
+        }, terminalWriterReservation.wait.observedAt, dispatchIdentity(priorProgress), boundReview);
         if (displaced) return displaced;
         return {
           kind: "result",
@@ -504,7 +509,7 @@ export async function submitRemoteCoworkerTask(input: {
             },
           },
         },
-      }, terminalWriterReservation.wait.observedAt, dispatchIdentity(priorProgress));
+      }, terminalWriterReservation.wait.observedAt, dispatchIdentity(priorProgress), boundReview);
       if (displaced) return displaced;
       return executeRemoteTaskAttempt({
         run: {
@@ -518,6 +523,7 @@ export async function submitRemoteCoworkerTask(input: {
         parsed,
         idempotentReplay: true,
         resumeKind: "terminal-writer",
+        expectedExecutionFence: terminalWriterReservation.executionFence,
         expectedReservation: terminalWriterReservation.wait.observedAt,
         expectedDispatchClaim: dispatchIdentity(priorProgress),
         terminalWriterContext: hydration.data.context + (terminalWriterReservation.wait.validationFailure

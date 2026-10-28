@@ -89,3 +89,14 @@ Canonical deployment must contain the merged repair before any original-task rec
 Rollback is a protected source repair and canonical deployment. Preserve the execution fence, preflight and task history; incompatible generations remain refused. No task-state edits or weakened authority checks are a rollback.
 
 Implementation, regressions, native independent review and deployed verification are **UNRUN**. Design scope is the only admission currently recorded.
+
+## October 28 implementation checkpoint
+
+The ordinary immutable handoff from WC-6CCF8DAB released submit, execution and the new submit-types leaf module. The shared attempt input now lives in that leaf; this repair extends its internal contract without changing public arguments or authority. All affected production and test paths were claimed normally. Implementation admission IRD-16E238C72CF7 allowed the refreshed candidate based on 252fc0023cdc7881299b756bd6e2c70b6c02f2d3. That local immutable dependency still requires protected publication before final delivery.
+
+Two regressions retained the real autonomous work-tool wrapper and default preflight. Both failed with review_execution_authority_refused before reader backend execution, covering empty bootstrap and content-free hydration. The implementation captures one frozen fence from the proposed reservation progress before CAS, forwards it to both readers, guards both settlements, and validates that same fence at executor admission. Refactoring consolidates the reservation snapshot and shares the real-governance fixture across successful and adversarial cases. Existing settlement and authority predicates remain canonical.
+
+The three focused suites passed 53 tests. The graph-selected set ran 284 tests: 283 passed and one older disposition fixture lacked persisted owner/request metadata. Its corrected isolated rerun passed. Production and test TypeScript programs passed after regenerating this worktree's stale Prisma client from its existing schema. These are source-local results, not PostgreSQL effect proof or deployed review receipts. Canonical gate, independent review, protected publication, deployment and original-task readback remain pending.
+
+Documentation impact: this restores an existing internal recovery contract and adds no user-facing action, route, configuration or permission. The design records the implementation; no operator workflow documentation changes are required.
+The module-size guard caught the expanded legacy test module. Shared setup was extracted into test-support/terminal-writer-fixture.ts and the real-governance matrix into mcp-task-terminal-writer-hydration-fence.test.ts. All four directly affected suites passed 50 tests after extraction; the test TypeScript program and module-size guard passed. The initial local guard run passed 13 checks and failed only module size; its corrected isolated rerun passed. Native/runtime verification remains pending.
