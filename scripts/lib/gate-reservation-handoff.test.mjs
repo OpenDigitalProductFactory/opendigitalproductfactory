@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { ChildProcess } from "node:child_process";
 import { EventEmitter } from "node:events";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { resumeUntilAdmitted } from "../local-ci-durable-wait-resumer.mjs";
 import { advanceGateReservationPin } from "./gate-reservation-handoff.mjs";
+import { quiescenceWait } from "./gate-quiescence.mjs";
 import { EXIT_RUNNER_PREREQUISITE_UNAVAILABLE, EXIT_SOURCE_DRIFT, EXIT_WAIT_CANCELLED } from "./sandbox-freshness.mjs";
 
 const SHA = "a".repeat(40);
@@ -17,6 +18,7 @@ const ARGV = ["/repo/scripts/gate-worktree.mjs", "--branch", "fix/resume", "--sh
 const last = (args, flag) => args[args.lastIndexOf(flag) + 1];
 const queued = (leaseId, patch = {}) => ({ status: "queued", code: "local_ci_durable_wait", leaseId,
   taskRunId: "TR-NONPROD-EXAMPLE", claimKey: `local-ci:${OWNER}:${SHA}`, resumeMode: "durable-task", ...patch });
+const quiescing = () => quiescenceWait({ level: "draining", runId: "SUR-EXAMPLE", retryAfterSeconds: 30 });
 
 async function exercise(packets, { argv = ARGV, exits, prefix = "" } = {}) {
   const seen = [], logs = [];
@@ -49,6 +51,32 @@ test("two integration changes carry forward the latest reservation, without chan
   assert.deepEqual(ARGV, original, "caller argv is immutable");
 });
 
+test("quiescence preserves the original reservation before a genuine queued handoff", async () => {
+  const original = [...ARGV];
+  const r = await exercise([JSON.stringify(quiescing()), JSON.stringify(queued(B))]);
+  assert.equal(r.code, 0);
+  assert.deepEqual(r.seen.map(args => last(args, "--resume-lease-id")), [A, A, B]);
+  assert.deepEqual(r.seen[0], r.seen[1]);
+  assert.deepEqual(ARGV, original);
+  assert.equal(r.logs.filter(row => row.event === "queue-reservation-handoff").length, 1);
+});
+
+for (const patch of [
+  { resumeMode: "durable-task" }, { status: "queued" }, { retryAfterSeconds: 0 },
+  { retryAfterSeconds: "30" }, { runId: {} }, { level: "" }, { leaseId: B },
+]) test(`malformed quiescence cannot waive a pinned handoff: ${JSON.stringify(patch)}`, async () => {
+  const r = await exercise([JSON.stringify({ ...quiescing(), ...patch })]);
+  assert.equal(r.code, EXIT_RUNNER_PREREQUISITE_UNAVAILABLE);
+  assert.equal(r.outcome.reason, "queue-handoff-unverified");
+  assert.equal(r.seen.length, 1);
+});
+
+test("mixed quiescence and queue handoff remains ambiguous", async () => {
+  const r = await exercise([JSON.stringify(quiescing()) + "\n" + JSON.stringify(queued(B))]);
+  assert.equal(r.code, EXIT_RUNNER_PREREQUISITE_UNAVAILABLE);
+  assert.equal(r.seen.length, 1);
+});
+
 for (const [name, packet] of [
   ["missing", "not a handoff"], ["foreign owner", JSON.stringify(queued(B, { claimKey: `local-ci:someone-else:${SHA}` }))],
   ["foreign source", JSON.stringify(queued(B, { claimKey: `local-ci:${OWNER}:${"b".repeat(40)}` }))],
@@ -77,7 +105,43 @@ for (const code of [EXIT_WAIT_CANCELLED, EXIT_SOURCE_DRIFT]) {
     const r = await exercise([JSON.stringify(queued(B))], { exits: [code] });
     assert.equal(r.code, code); assert.equal(r.seen.length, 1);
   });
+  test(`terminal ${code} never retries a printed quiescence wait`, async () => {
+    const r = await exercise([JSON.stringify(quiescing())], { exits: [code] });
+    assert.equal(r.code, code); assert.equal(r.seen.length, 1);
+  });
 }
+
+test("quiescence retries remain bounded by the original deadline", async () => {
+  let elapsed = 0;
+  const r = await resumeUntilAdmitted({ gateArgv: ARGV, intervalMs: 10, deadlineMs: 10,
+    now: () => elapsed, sleepFn: async () => { elapsed += 10; },
+    spawnFn: () => { const stderr = new EventEmitter(); return { stderr, once(event, fn) {
+      if (event === "exit") queueMicrotask(() => {
+        stderr.emit("data", Buffer.from(JSON.stringify(quiescing()) + "\n")); fn(75);
+      });
+    } }; },
+  });
+  assert.equal(r.code, 75); assert.equal(r.attempts, 1);
+});
+
+for (const stream of ["stdout", "stderr"]) test(`real ${stream} quiescence retains its pin before handoff`, async () => {
+  const dir = mkdtempSync(join(tmpdir(), "quiescence-handoff-"));
+  const script = join(dir, "gate-worktree.mjs"), seenPath = join(dir, "seen.jsonl");
+  try {
+    writeFileSync(script, `import {existsSync,readFileSync,appendFileSync} from 'node:fs';
+const file = ${JSON.stringify(seenPath)};
+const prior = existsSync(file) ? readFileSync(file,'utf8').trim().split('\\n').length : 0;
+const pin = process.argv[process.argv.lastIndexOf('--resume-lease-id')+1];
+appendFileSync(file,JSON.stringify(pin)+'\\n');
+const packet = prior === 0 ? ${JSON.stringify(quiescing())} : prior === 1 ? ${JSON.stringify(queued(B))} : null;
+if (packet) { process.${stream}.write(JSON.stringify(packet)+'\\n'); process.exit(75); }
+process.exit(0);`);
+    const r = await resumeUntilAdmitted({ gateArgv: [script, ...ARGV.slice(1)],
+      intervalMs: 1, deadlineMs: 10000 });
+    assert.equal(r.code, 0);
+    assert.deepEqual(readFileSync(seenPath, "utf8").trim().split("\n").map(JSON.parse), [A, A, B]);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
 
 test("host resource invocations retain their separate immutable pin contract", async () => {
   const argv = ["/repo/scripts/host-resource-runner.mjs", "--resume-pin", "resource-pin", "--", "node", "worker.mjs"];
