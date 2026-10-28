@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 680,
+  "routeCount": 681,
   "routes": [
     {
       "routePath": "/",
@@ -5883,6 +5883,16 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/ops/dev-loop/page.tsx"
+    },
+    {
+      "routePath": "/ops/gate-efficacy",
+      "kind": "page",
+      "segments": [
+        "ops",
+        "gate-efficacy"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/ops/gate-efficacy/page.tsx"
     },
     {
       "routePath": "/ops/health",

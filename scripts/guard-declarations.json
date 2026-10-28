@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "description": "BI-FEDD8F45: guard owner, purpose and expected catch class, keyed by namespaced guard id (loop:<file stem>, policy:<id>, hook:<name>). An undeclared guard gets a derived default and is listed as undeclared on /ops/gate-efficacy; no gate refuses an undeclared guard. baselineInputs names the files whose change counts as raising the guard's baseline. keep {owner, expiry YYYY-MM-DD, reason, decisionRef} silences the retirement review until its expiry.",
+  "guards": {
+    "hook:pre-push-gate": {
+      "owner": "platform-engineering",
+      "purpose": "Refuse a push that has no passing local-CI gate record for its branch and sha.",
+      "catchClass": "unverified-push"
+    },
+    "policy:repo-guard-loop": {
+      "owner": "platform-engineering",
+      "purpose": "Run every check-no-* guard; its own results are recorded per guard as loop:*.",
+      "catchClass": "aggregate"
+    }
+  }
+}
