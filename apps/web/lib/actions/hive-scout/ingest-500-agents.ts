@@ -18,6 +18,7 @@
 // - ambiguity-review.ts — bounded autonomous review (schema, cache, TAK reviewer)
 // - ingest-db.ts — Prisma surface, workforce links, admin notification
 
+import { composeIntakeBody } from "@/lib/backlog/intake-outcome";
 import { prisma } from "@dpf/db";
 import { upsertRawSource } from "@dpf/db/wiki-store";
 import type { Prisma } from "@dpf/db";
@@ -385,7 +386,11 @@ export async function runHiveScoutIngest(
         title: `Coworker archetype: ${entry.name} (${entry.industry})`,
         type: "portfolio",
         status: finalStatus,
-        body: renderBody(bodyTemplate, entry, match),
+        // BI-458CCA8D: done when the catalog gap is closed or explicitly declined.
+        body: composeIntakeBody({
+          outcome: `A coworker for the ${entry.name} role (${entry.industry}) is available on the platform, or the gap is declined with a reason.`,
+          body: renderBody(bodyTemplate, entry, match),
+        }),
         source: BACKLOG_SOURCE,
         digitalProductId: workforceLinks.digitalProductId,
         taxonomyNodeId: workforceLinks.taxonomyNodeId,
