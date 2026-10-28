@@ -94,6 +94,7 @@ export function DirectionPanel({ initial, source, entityNoun, missionSuggestion 
     }
   }
 
+  const canRemove = (row: OutcomeRow) => outcomes.length > 1 || Boolean(row.statement || row.measure);
   const missingOutcomes = saved.outcomes.length === 0;
   const canAdd = outcomes.length < MAX_INSTANCE_OUTCOMES;
 
@@ -167,7 +168,7 @@ export function DirectionPanel({ initial, source, entityNoun, missionSuggestion 
                     maxLength={DIRECTION_LIMITS.measure}
                     autoComplete="off"
                   />
-                  {(outcomes.length > 1 || row.statement || row.measure) && (
+                  {canRemove(row) && (
                     <div>
                       <Button type="button" variant="ghost" size="sm" onClick={() => removeOutcome(index)}>
                         {t("direction.outcomes.remove", { n: index + 1 })}

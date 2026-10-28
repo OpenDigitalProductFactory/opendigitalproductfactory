@@ -680,6 +680,7 @@ model OrganizationCapabilityActivation {
 // stable semantic id IO-XXXXXXXX, minted in app code. The owner writes them;
 // no agent path does. At most five are active
 // (apps/web/lib/organization-direction/direction.ts).
+/// @dpf lifecycle=business-record retention=domain sensitivity=internal categories=configuration,operational owner=founder-business-owner steward=data-steward
 model InstanceOutcome {
   id             String       @id
   organizationId String
@@ -702,6 +703,7 @@ model InstanceOutcome {
 // Append-only version history of the instance's direction (mission, vision,
 // active outcomes). One row per owner save; decisions cite direction@vN.
 // Same snapshot pattern as WikiPageRevision and PromptRevision.
+/// @dpf lifecycle=business-record retention=domain sensitivity=internal categories=configuration,operational owner=founder-business-owner steward=data-steward
 model InstanceDirectionRevision {
   id              String       @id @default(cuid())
   organizationId  String

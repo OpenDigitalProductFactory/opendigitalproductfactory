@@ -60,5 +60,8 @@ BI-8AB6B4F7 acceptance, quoted from the item:
 - AC-3 When none are recorded, the decision says so. Nothing is invented.
 
 - Decision: decomposed
+- Parent: BI-916216E7
 - Receipt: `cmvsnpupc04c901msp9me6df4`
+- Mapping: capture-and-edit -> BI-916216E7
+- Mapping: decision-layers-read -> BI-8AB6B4F7
 - Dependencies: BI-8AB6B4F7 depends on BI-916216E7.
