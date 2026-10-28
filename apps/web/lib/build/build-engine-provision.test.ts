@@ -1,8 +1,11 @@
 // apps/web/lib/build/build-engine-provision.test.ts
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import {
   selectRecipe,
   buildInstallCommand,
+  PROVISIONED_ENGINE_BIN_DIR,
+  PROVISIONED_ENGINE_PREFIX,
   type EngineRecipe,
 } from "./build-engine-provision";
 
@@ -31,15 +34,15 @@ describe("selectRecipe", () => {
 });
 
 describe("buildInstallCommand", () => {
-  it("npm-global builds the global install command", () => {
+  it("npm-global installs into the provisioned-engine prefix, not /usr/local", () => {
     expect(buildInstallCommand({ method: "npm-global", package: "@openai/codex" }, "codex")).toBe(
-      "npm install -g @openai/codex",
+      "npm install -g --prefix /opt/dpf-engines/provisioned @openai/codex",
     );
   });
 
-  it("prestaged-binary copies the staged binary into PATH", () => {
+  it("prestaged-binary copies the staged binary into the provisioned bin dir on PATH", () => {
     expect(buildInstallCommand({ method: "prestaged-binary", stagedPath: "/opt/dpf-engines/grok" }, "grok")).toBe(
-      "install -m 0755 /opt/dpf-engines/grok /usr/local/bin/grok",
+      "mkdir -p /opt/dpf-engines/provisioned/bin && install -m 0755 /opt/dpf-engines/grok /opt/dpf-engines/provisioned/bin/grok",
     );
   });
 
@@ -55,5 +58,32 @@ describe("buildInstallCommand", () => {
 
   it("an explicit command overrides the npm-global default", () => {
     expect(buildInstallCommand({ method: "npm-global", package: "p", command: "custom" }, "x")).toBe("custom");
+  });
+});
+
+// The sandbox root is read-only (agent sandbox containment design, AC-1): no
+// registry recipe may write /usr/local, and every explicit command targets the
+// provisioned-engine bin dir that Dockerfile.sandbox puts on PATH.
+describe("build-engines.json recipes", () => {
+  const registry = JSON.parse(
+    readFileSync(new URL("../../../../packages/db/data/build-engines.json", import.meta.url), "utf8"),
+  ) as Record<string, { binary: string; recipes: EngineRecipe[] }>;
+
+  it("no recipe writes /usr/local", () => {
+    for (const [engineId, engine] of Object.entries(registry)) {
+      for (const recipe of engine.recipes) {
+        const command = buildInstallCommand(recipe, engine.binary) ?? "";
+        expect(command, `${engineId} ${recipe.method}`).not.toMatch(/\/usr\/local/);
+      }
+    }
+  });
+
+  it("every explicit installer command lands its binary in the provisioned bin dir", () => {
+    expect(PROVISIONED_ENGINE_BIN_DIR).toBe(`${PROVISIONED_ENGINE_PREFIX}/bin`);
+    for (const [engineId, engine] of Object.entries(registry)) {
+      for (const recipe of engine.recipes.filter((r) => r.command)) {
+        expect(recipe.command, engineId).toContain(`${PROVISIONED_ENGINE_BIN_DIR}/${engine.binary}`);
+      }
+    }
   });
 });

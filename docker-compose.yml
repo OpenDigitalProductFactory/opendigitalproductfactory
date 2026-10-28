@@ -596,6 +596,9 @@ services:
       - "${DPF_HOST_BIND_ADDRESS:-127.0.0.1}:3035:3000"
     volumes:
       - sandbox_workspace:/workspace
+      # Engines provisioned at runtime (build-engine-provision.ts); the root is
+      # read-only, so they get their own prefix instead of /usr/local.
+      - sandbox_engines:/opt/dpf-engines/provisioned
     environment:
       DATABASE_URL: postgresql://dpf:dpf_sandbox@sandbox-postgres:5432/dpf
       # No AUTH_SECRET here, ever (BI-F1C680C7). Agent CLIs run in this
@@ -1264,6 +1267,7 @@ volumes:
   dev_nm_svc_integration_test_harness:
   sandbox_pgdata:
   sandbox_workspace:
+  sandbox_engines:
   dpf_tts_voices:
   prometheus_data:
   grafana_data:

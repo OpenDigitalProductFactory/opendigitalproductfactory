@@ -148,7 +148,8 @@
         "${DPF_HOST_BIND_ADDRESS:-127.0.0.1}:3035:3000"
       ],
       "volumes": [
-        "sandbox_workspace:/workspace"
+        "sandbox_workspace:/workspace",
+        "sandbox_engines:/opt/dpf-engines/provisioned"
       ],
       "dependsOn": [
         "sandbox-init"

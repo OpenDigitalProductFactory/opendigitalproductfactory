@@ -228,3 +228,31 @@ test("updateEnv carries the Inngest keys into the committed install env", () => 
   assert.match(text, /^INNGEST_SIGNING_KEY=[0-9a-f]{64}\r$/m);
   assert.match(text, /^INNGEST_EVENT_KEY=[0-9a-f]{64}\r$/m);
 });
+
+// Agent sandbox containment (design 2026-10-21, AC-1): docker-compose.yml names
+// `seccomp=./config/sandbox/seccomp.json`, which compose opens relative to the
+// install directory. A self-upgrade that wrote the new compose without the
+// nested profile would leave the sandbox unable to start, so the profile must
+// arrive in the same transaction, into a directory the install did not have.
+test("a nested release asset (config/sandbox/seccomp.json) lands beside the compose file", async () => {
+  const f = await fixture();
+  const profile = '{"defaultAction":"SCMP_ACT_ERRNO","syscalls":[]}\n';
+  await mkdir(join(f.source, "config", "sandbox"), { recursive: true });
+  await writeFile(join(f.source, "config", "sandbox", "seccomp.json"), profile);
+  await writeFile(join(f.source, "SHA256SUMS"), [
+    `${digest(profile)}  ./config/sandbox/seccomp.json`,
+    `${digest("new-compose\n")}  ./docker-compose.yml`,
+    `${digest("new-script\n")}  ./scripts/new.mjs`,
+  ].join("\n") + "\n");
+  await installReleaseAssets({
+    sourceDir: f.source,
+    installDir: f.install,
+    statePath: f.statePath,
+    releaseTag: "v2.0.0",
+    ghcrOwner: "opendigitalproductfactory",
+    recoveryDir: join(f.root, "recovery"),
+  });
+  assert.equal(await readFile(join(f.install, "config", "sandbox", "seccomp.json"), "utf8"), profile);
+  assert.equal(await readFile(join(f.install, "docker-compose.yml"), "utf8"), "new-compose\n");
+  assert.match(await readFile(join(f.install, ".verified-release-assets.sha256"), "utf8"), /\.\/config\/sandbox\/seccomp\.json/);
+});

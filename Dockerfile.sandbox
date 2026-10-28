@@ -110,6 +110,14 @@ RUN mkdir -p /root/.codex && printf '%s\n' \
   '[plugins."github@openai-curated"]' \
   'enabled = false' \
   > /root/.codex/config.toml
+# Runtime-provisioned engines (provisionBuildEngine) install under their own
+# prefix, the `sandbox_engines` volume, because the root is read-only. Set only
+# after the baked CLI installs above, so those stay in /usr/local. The bin dir
+# is appended to PATH: a baked engine always wins over a provisioned copy
+# that an older image left on the volume.
+ENV NPM_CONFIG_PREFIX=/opt/dpf-engines/provisioned
+ENV PATH=$PATH:/opt/dpf-engines/provisioned/bin
+RUN mkdir -p /opt/dpf-engines/provisioned/bin
 # Read-only root (agent sandbox containment design, AC-1): compose mounts
 # /root and /home/node as tmpfs. Keep a copy of both homes as built so the
 # entrypoint can restore them into the empty tmpfs on each boot.

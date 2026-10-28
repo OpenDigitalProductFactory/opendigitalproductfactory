@@ -43,7 +43,7 @@
     "recipes": [
       {
         "method": "curl-installer",
-        "command": "curl -fsSL https://x.ai/cli/install.sh | GROK_BIN_DIR=/usr/local/bin bash && install -m 0755 \"$(readlink -f /usr/local/bin/grok)\" /usr/local/bin/grok.bin && ln -sf /usr/local/bin/grok.bin /usr/local/bin/grok && rm -rf /root/.grok",
+        "command": "mkdir -p /opt/dpf-engines/provisioned/bin && curl -fsSL https://x.ai/cli/install.sh | GROK_BIN_DIR=/opt/dpf-engines/provisioned/bin bash && install -m 0755 \"$(readlink -f /opt/dpf-engines/provisioned/bin/grok)\" /opt/dpf-engines/provisioned/bin/grok.bin && ln -sf /opt/dpf-engines/provisioned/bin/grok.bin /opt/dpf-engines/provisioned/bin/grok && rm -rf /root/.grok",
         "muslSafe": true,
         "requiresEgress": true,
         "priority": 10
@@ -74,7 +74,7 @@
       },
       {
         "method": "curl-installer",
-        "command": "curl -fsSL -o /tmp/opencode.tar.gz https://github.com/anomalyco/opencode/releases/download/v1.17.4/opencode-linux-x64-baseline-musl.tar.gz && tar -xzf /tmp/opencode.tar.gz -C /usr/local/bin && rm /tmp/opencode.tar.gz && chmod 755 /usr/local/bin/opencode",
+        "command": "curl -fsSL -o /tmp/opencode.tar.gz https://github.com/anomalyco/opencode/releases/download/v1.17.4/opencode-linux-x64-baseline-musl.tar.gz && mkdir -p /opt/dpf-engines/provisioned/bin && tar -xzf /tmp/opencode.tar.gz -C /opt/dpf-engines/provisioned/bin && rm /tmp/opencode.tar.gz && chmod 755 /opt/dpf-engines/provisioned/bin/opencode",
         "muslSafe": true,
         "requiresEgress": true,
         "priority": 20

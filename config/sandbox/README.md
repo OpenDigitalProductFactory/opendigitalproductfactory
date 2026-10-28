@@ -38,14 +38,45 @@ It is Phase 2 of the
   `/opt/dpf-home-seed`, and `scripts/sandbox-entrypoint.sh` restores them
   (codex config, git identity, the pre-seeded OpenCode provider) into an empty
   home.
-- With a read-only root, an engine binary must come from the image.
-  `provisionBuildEngine`'s fallback that installs into `/usr/local` at runtime
-  now fails with `Read-only file system` instead of changing the running
-  container. The image already bakes all four engines.
+- Engines provisioned at runtime (`provisionBuildEngine`, an admin action) go
+  to their own prefix, `/opt/dpf-engines/provisioned`, which is the
+  `sandbox_engines` volume. `/usr/local` stays read-only, because a volume over
+  it would hide or freeze the image's node. `npm-global` recipes run
+  `npm install -g --prefix /opt/dpf-engines/provisioned`, and prestaged and
+  curl-installer recipes write to `/opt/dpf-engines/provisioned/bin`.
+  `Dockerfile.sandbox` appends that directory to `PATH`, so the readiness
+  probes (`docker exec <sandbox> <engine> --version`) find it. A baked engine
+  still wins over a provisioned copy that an older image left on the volume.
+  The volume sits below `/opt/dpf-engines` rather than replacing it, because
+  that directory holds the image's prestaged binaries, and a named volume would
+  freeze them at whatever the first image put there.
 
 AppArmor is not set. Docker applies its default AppArmor profile on hosts that
 support it. The verification host did not support AppArmor, so a stricter DPF
 profile is left for a host that can test it.
+
+## How the profile reaches an install
+
+Compose loads `seccomp.json` on the client side, relative to the project
+directory, so the file has to be on disk wherever compose runs.
+
+- **Source and dev installs** (`install-dpf.sh`, `promote.sh` source mode,
+  where `_compose_root=$PROMOTE_SOURCE`) run compose from the checkout, which
+  contains `config/sandbox/`.
+- **Consumer install** (`install-dpf.ps1`, `Export-DPFConsumerReleaseAssets`):
+  `docker cp <image>:/dpf-release-assets/.` into a staging dir,
+  `Test-DPFReleaseAssetManifest -RejectUnlisted`, then `Copy-Item -Recurse`
+  of the whole staging dir into the install dir.
+- **Self-upgrade** (`promote.sh` release mode): the candidate image's
+  `/dpf-release-assets` is exported and checked with `sha256sum -c SHA256SUMS`,
+  then becomes `_compose_root`. The sandbox refresh (step 7b) runs
+  `docker compose --project-directory "$_compose_root" ... up sandbox` against
+  it. `install-release-assets.mjs` then writes every `SHA256SUMS` entry into the
+  install root, creating parent directories.
+
+All three paths ship exactly the files in the bundle. `Dockerfile` copies
+`seccomp.json` into `/dpf-release-assets/config/sandbox/` before it generates
+`SHA256SUMS`, and the contract test holds that order.
 
 ## Verification record (2026-10-28)
 

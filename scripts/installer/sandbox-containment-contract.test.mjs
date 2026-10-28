@@ -84,7 +84,29 @@ test("the image restores its homes into the empty tmpfs, and ships the profile t
   // Consumer installs have no checkout: compose resolves the seccomp path in the
   // install directory, which is the image's /dpf-release-assets bundle.
   const release = await read("Dockerfile");
-  assert.match(release, /cp config\/sandbox\/seccomp\.json \/dpf-release-assets\/config\/sandbox\//);
+  const bundled = release.indexOf("cp config/sandbox/seccomp.json /dpf-release-assets/config/sandbox/");
+  assert.ok(bundled >= 0, "the release bundle must ship config/sandbox/seccomp.json");
+  // install-dpf.ps1 (Copy-Item of the verified staging dir) and the promoter's
+  // install-release-assets.mjs both copy exactly the SHA256SUMS entries, and
+  // promote.sh runs compose from the exported bundle: the file is only on
+  // either path if the manifest is generated after it is copied in.
+  const manifest = release.indexOf("> SHA256SUMS");
+  assert.ok(manifest > bundled, "SHA256SUMS must be generated after the seccomp profile is copied into the bundle");
+});
+
+test("runtime-provisioned engines get their own prefix, after the baked ones on PATH", async () => {
+  const sandbox = serviceBlock(await read("docker-compose.yml"), "sandbox");
+  assert.match(sandbox, /^ {6}- sandbox_engines:\/opt\/dpf-engines\/provisioned$/m);
+  assert.match(await read("docker-compose.yml"), /^ {2}sandbox_engines:$/m);
+  const dockerfile = await read("Dockerfile.sandbox");
+  const prefix = dockerfile.indexOf("ENV NPM_CONFIG_PREFIX=/opt/dpf-engines/provisioned");
+  assert.ok(prefix >= 0, "Dockerfile.sandbox must set NPM_CONFIG_PREFIX to the provisioned prefix");
+  // Set after the baked `npm install -g` lines, or they would land on the volume.
+  assert.ok(dockerfile.lastIndexOf("npm install -g") < prefix);
+  // Appended, so a baked engine wins over a provisioned copy an older image left behind.
+  assert.match(dockerfile, /^ENV PATH=\$PATH:\/opt\/dpf-engines\/provisioned\/bin$/m);
+  // No mount over /usr/local: it would hide the image's node binary.
+  assert.doesNotMatch(sandbox, /:\/usr\/local/);
 });
 
 test("the egress allowlist is exactly the reviewed host set", async () => {

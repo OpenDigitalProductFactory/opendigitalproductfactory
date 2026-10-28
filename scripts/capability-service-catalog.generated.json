@@ -112,6 +112,7 @@
           "service": "sandbox",
           "targetClassification": "ephemeral-lifecycle",
           "volumes": [
+            "sandbox_engines:/opt/dpf-engines/provisioned",
             "sandbox_workspace:/workspace"
           ]
         },
@@ -1136,7 +1137,7 @@
       ]
     }
   ],
-  "catalogHash": "c41a8c22e60fb47c03a82468f29c700d90bfd511980c8b3d0aaf7a3801762120",
+  "catalogHash": "34f5aa052d4402fef3b864c9ed891c916282aa09203d76b55916892fce27177d",
   "catalogVersion": 1,
   "substrateManifestVersion": 2
 }

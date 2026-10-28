@@ -30,6 +30,16 @@ import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 
+/**
+ * Where a runtime-provisioned engine is installed. The sandbox root is
+ * read-only (agent sandbox containment design, AC-1), so /usr/local cannot be
+ * written; this prefix is the `sandbox_engines` volume, and Dockerfile.sandbox
+ * puts its bin directory on PATH after the baked engines, so a baked binary
+ * always wins over a stale provisioned copy.
+ */
+export const PROVISIONED_ENGINE_PREFIX = "/opt/dpf-engines/provisioned";
+export const PROVISIONED_ENGINE_BIN_DIR = `${PROVISIONED_ENGINE_PREFIX}/bin`;
+
 export type EngineRecipe = {
   method: "npm-global" | "prestaged-binary" | "curl-installer";
   /** npm-global: the package to install globally. */
@@ -78,12 +88,15 @@ export function selectRecipe(
 export function buildInstallCommand(recipe: EngineRecipe, binary: string): string | null {
   switch (recipe.method) {
     case "npm-global":
-      return recipe.command ?? (recipe.package ? `npm install -g ${recipe.package}` : null);
+      return (
+        recipe.command ??
+        (recipe.package ? `npm install -g --prefix ${PROVISIONED_ENGINE_PREFIX} ${recipe.package}` : null)
+      );
     case "prestaged-binary":
       return (
         recipe.command ??
         (recipe.stagedPath
-          ? `install -m 0755 ${recipe.stagedPath} /usr/local/bin/${binary}`
+          ? `mkdir -p ${PROVISIONED_ENGINE_BIN_DIR} && install -m 0755 ${recipe.stagedPath} ${PROVISIONED_ENGINE_BIN_DIR}/${binary}`
           : null)
       );
     case "curl-installer":
