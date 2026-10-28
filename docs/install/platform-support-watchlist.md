@@ -1,5 +1,24 @@
 # Platform Support Watch-List (living document)
 
+## Codex notify and desktop runtime replacement
+
+The Windows desktop's runtime callback repair in version 26.1023.6621.0 reads
+quoted TOML keys but removes only bare `notify` before inserting a replacement.
+A permissions writer that emits `"notify"` can therefore leave two equivalent
+root keys on the next runtime refresh, preventing configuration and plugins
+from loading. Removing the appended callback alone leaves the stale quoted
+entry and allows the same startup failure again (BI-34E03B27).
+
+The routine permission serializer emits legal bare keys and quotes only keys
+that need it. Existing Codex configurations with a quoted root notify receive
+one validated canonical rewrite even when permission values are unchanged;
+subsequent convergence is byte-stable. Callback arguments and all parsed values
+are preserved. Existing dry-run, backup, concurrent-edit and atomic-write checks
+remain in force. This does not pin runtime executables, grant hook trust or
+patch signed vendor binaries. An already malformed duplicate-key file is still
+refused rather than guessing which callback the operator intended.
+
+
 **Windows foreground gate cancellation.**
 
 BI-BFDB98B6's AC4 follow-up reproduces cancellation through the real Windows

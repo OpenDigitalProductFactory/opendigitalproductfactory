@@ -1,6 +1,7 @@
 """Routine permission convergence uses fixture homes only; no real client or model calls."""
 from __future__ import annotations
 import json
+import re
 from pathlib import Path
 import sys
 import tempfile
@@ -34,6 +35,82 @@ class RoutinePermissionsTest(unittest.TestCase):
         (self.root / 'packages/dpf-skill-pack').mkdir(parents=True)
     def plan(self):
         return permissions.plan_permissions(self.root, self.home, PACK)
+
+    @NEEDS_ANY_TOML
+    def test_serializer_keeps_notify_bare_and_special_keys_quoted(self):
+        data = {'notify': ['custom-callback', '--arg', '[brackets]'],
+                'key.with.dot': {'space key': 'preserve'}, '0123': True}
+        text = permissions.dump_toml(data)
+        self.assertIn('notify = ', text)
+        self.assertNotIn('"notify" = ', text)
+        self.assertIn('"key.with.dot"', text)
+        self.assertIn('"space key"', text)
+        self.assertEqual(permissions.tomllib.loads(text), data)
+
+    @NEEDS_ANY_TOML
+    def test_quoted_notify_converges_when_permission_values_are_unchanged(self):
+        permissions.apply_permissions(self.plan(), dry_run=False)
+        path = self.home / '.codex/config.toml'
+        for quote in ('"', "'"):
+            with self.subTest(quote=quote):
+                data = permissions.read_toml(path)
+                data['notify'] = ['my-callback', '--previous-notify', '["keep","arguments"]']
+                text = permissions.dump_toml(data)
+                text = re.sub(r'(?m)^(?:"notify"|notify)\s*=', lambda _: quote+'notify'+quote+' =', text)
+                path.write_text(text, encoding='utf-8')
+                before = path.read_bytes()
+                plan = self.plan()
+                self.assertTrue(next(file for file in plan.files if file.path == path).changed)
+                permissions.apply_permissions(plan, dry_run=True)
+                self.assertEqual(path.read_bytes(), before)
+                rows = permissions.apply_permissions(plan, dry_run=False)
+                self.assertEqual(permissions.read_toml(path), data)
+                self.assertIn('notify = ', path.read_text(encoding='utf-8'))
+                backups = next(row for row in rows if row['client'] == 'codex')['backups']
+                self.assertTrue(any(Path(backup).read_bytes() == before for backup in backups))
+                self.assertFalse(any(file.changed for file in self.plan().files))
+
+    @NEEDS_ANY_TOML
+    def test_multiline_notify_and_custom_arguments_are_preserved(self):
+        permissions.apply_permissions(self.plan(), dry_run=False)
+        path = self.home / '.codex/config.toml'
+        before = path.read_text(encoding='utf-8')
+        callback = ['callback with spaces', 'arg with "quotes"', '[brackets]', 'line\nbreak']
+        array = ',\n'.join(json.dumps(value) for value in callback)
+        path.write_text('"notify" = [\n'+array+'\n]\n'+before, encoding='utf-8')
+        expected = permissions.read_toml(path)
+        permissions.apply_permissions(self.plan(), dry_run=False)
+        self.assertEqual(permissions.read_toml(path), expected)
+        self.assertTrue(path.read_text(encoding='utf-8').startswith('notify = '))
+        self.assertFalse(any(file.changed for file in self.plan().files))
+
+    @NEEDS_ANY_TOML
+    def test_permission_writes_compose_with_repeated_desktop_runtime_replacements(self):
+        path = self.home / '.codex/config.toml'
+        path.parent.mkdir(parents=True)
+        path.write_text('notify = ["C:/old-runtime/codex-computer-use.exe", "turn-ended"]\n', encoding='utf-8')
+        permissions.apply_permissions(self.plan(), dry_run=False)
+        # The installed Codex desktop removes only a bare root notify before
+        # appending the new runtime callback. Quoted output reproduces the bug.
+        for index in range(3):
+            data = permissions.read_toml(path)
+            callback = ['C:/runtime-'+str(index)+'/codex-computer-use.exe', 'turn-ended']
+            text = re.sub(r'(?m)^notify\s*=.*\n?', '', path.read_text(encoding='utf-8'))
+            boundary = re.search(r'(?m)^\[', text)
+            at = boundary.start() if boundary else len(text)
+            text = text[:at]+'notify = '+json.dumps(callback)+'\n'+text[at:]
+            self.assertEqual(permissions.tomllib.loads(text), dict(data, notify=callback))
+            path.write_text(text, encoding='utf-8')
+            if index == 0:
+                other = self.home / 'second-source'
+                (other / '.git').mkdir(parents=True)
+                (other / 'packages/dpf-skill-pack').mkdir(parents=True)
+                (other / 'AGENTS.md').write_text('# DPF source\n', encoding='utf-8')
+                plan = permissions.plan_permissions(other, self.home, PACK, clients=('codex',))
+            else:
+                plan = self.plan()
+            permissions.apply_permissions(plan, dry_run=False)
+            self.assertEqual(permissions.read_toml(path)['notify'], callback)
     @NEEDS_ANY_TOML
     def test_dry_run_changes_nothing_and_has_three_client_scopes(self):
         plan = self.plan()
