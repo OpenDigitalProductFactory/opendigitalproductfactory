@@ -10,11 +10,18 @@ The recent BI-68EED40A report authorized but not run is retained as a separate o
 
 ## Choice and existing substrate
 
+CT-ADM is the existing governed preflight followed by unchanged receipt authorization. FLOW-ADM is trusted binding selection, read-only prerequisite resolution, then the original authority gate and final writer.
+
 Extend the existing preflight with a read-only evidence admission check. Share trusted binding selection with the existing evidence handler; resolve item, reviewer and immutable artifact using their existing canonical readers. Do not duplicate provenance rules in an approval-specific validator, execute a writer as a probe, synthesize authority, or treat preflight as permission. The final writer continues to revalidate mutable facts after approval.
 
 A new approval system or blanket approval of reports would not address impossible requests. This repair keeps existing envelope and authority contracts. Ordinary non-independent research/classification/dependency evidence is the bounded first deliverable. Objective-mapping proposals and independent review lanes retain their own issued-packet writers; their specialized contracts must not be accidentally narrowed by this change.
 
 ## Objectives and acceptance
+
+The existing parent acceptance remains the following, including its wider precondition coverage:
+
+- No approval card is minted for a call whose declared preconditions fail.
+- `record_initiative_evidence`'s artifact-author check runs in preflight.
 
 **OBJ-ADM-1:** An evidence request that lacks deterministic author or immutable artifact prerequisites is refused before an approval envelope can be created.
 **OBJ-ADM-2:** Valid evidence retains its exact current authorization and final writer checks.
