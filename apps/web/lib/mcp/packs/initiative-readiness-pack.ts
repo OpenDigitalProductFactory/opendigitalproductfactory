@@ -17,19 +17,24 @@ import {
 } from "@/lib/tak/initiative-readiness-tool-grants";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { verifyTerminalWriterCitation } from "@/lib/mcp-task-terminal-writer-context";
-import { createInitiativeReviewTerminalToolPolicy, IMMUTABLE_PAGE_READER_TOOLS } from "@/lib/tak/terminal-tool-policy";
+import { createInitiativeReviewTerminalToolPolicy, IMMUTABLE_PAGE_READER_TOOLS, immutableReaderArgumentsFor } from "@/lib/tak/terminal-tool-policy";
 import { resolveAcceptanceStewardRunBinding } from "@/lib/backlog/acceptance-sweep/steward-objective-mapping-authority";
+import { parseRepoCommitRangeRef } from "@/lib/backlog/initiative-readiness/repo-commit-range";
 
 const artifactRefSchema = {
   type: "object",
   properties: {
-    kind: { type: "string", enum: ["feature-build-revision", "document-version", "repo-blob-at-commit"] },
+    kind: { type: "string", enum: ["feature-build-revision", "document-version", "repo-blob-at-commit", "repo-commit-range"] },
     revisionId: { type: "string" },
     versionId: { type: "string" },
     repositoryFullName: { type: "string" },
     commitSha: { type: "string" },
     path: { type: "string" },
     providerBlobId: { type: "string" },
+    // BI-46E344FE: a post-implementation review of a merged repair's whole change.
+    ranges: { type: "array", items: { type: "object", properties: { baseSha: { type: "string" }, headSha: { type: "string" } },
+      required: ["baseSha", "headSha"] } },
+    digest: { type: "string" },
   },
   required: ["kind"],
 };
@@ -295,8 +300,9 @@ async function resolveExternalInitiativeReviewBinding(
     && typeof artifact["revisionId"] === "string" && artifact["revisionId"].trim().length > 0;
   const isDocument = artifact["kind"] === "document-version"
     && typeof artifact["versionId"] === "string" && artifact["versionId"].trim().length > 0;
+  const commitRange = parseRepoCommitRangeRef(artifact);
   if (
-    (!isRepoBlob && !isRevision && !isDocument)
+    (!isRepoBlob && !isRevision && !isDocument && !commitRange)
     || (expectedCurrentBaselineId !== undefined
       && expectedCurrentBaselineId !== null
       && typeof expectedCurrentBaselineId !== "string")
@@ -314,6 +320,7 @@ async function resolveExternalInitiativeReviewBinding(
       : {}),
     ...(eligibleEvidenceActivityIds ? { eligibleEvidenceActivityIds } : {}),
     artifactRef: isDocument ? { kind: "document-version", versionId: (artifact["versionId"] as string).trim() }
+      : commitRange ? commitRange
       : isRevision
       ? { kind: "feature-build-revision", revisionId: (artifact["revisionId"] as string).trim() }
       : {
@@ -422,7 +429,8 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
     }
     const dispositionError = validateInitiativeDisposition(decision, findings, resolvedFindingRefs);
     if (dispositionError) return { success: false, error: "malformed-receipt", message: dispositionError };
-    if (binding && findings.length > 0 && binding.artifactRef.kind === "repo-blob-at-commit") {
+    if (binding && findings.length > 0
+      && (binding.artifactRef.kind === "repo-blob-at-commit" || binding.artifactRef.kind === "repo-commit-range")) {
       const reads = await prisma.toolExecution.findMany({
         where: { taskRunId: context?.taskRunId, toolName: { in: [...IMMUTABLE_PAGE_READER_TOOLS] }, success: true },
         orderBy: { createdAt: "asc" },
@@ -434,11 +442,13 @@ function handlerFor(actionKey: string, lane: Lane): ToolPackHandler {
       for (const finding of findings) {
         const evidence = finding.evidence;
         const artifact = binding.artifactRef;
+        // The reader identity of a blob or (BI-46E344FE) a whole commit range.
+        const read = immutableReaderArgumentsFor(artifact);
         let matchedRead = evidence && reads.some((row) => {
           const page = (row.result as { data?: Record<string, unknown> } | null)?.data;
-          return page && page.version === artifact.commitSha && page.path === artifact.path
+          return page && page.version === read.version && page.path === read.path
             && page.repositoryFullName === artifact.repositoryFullName
-            && findingEvidenceMatchesRead(evidence, page, artifact.providerBlobId);
+            && findingEvidenceMatchesRead(evidence, page, read.expectedBlobId);
         });
         if (!matchedRead && evidence && contentFreeReads) {
           const dispatch = context?.governedDispatch;

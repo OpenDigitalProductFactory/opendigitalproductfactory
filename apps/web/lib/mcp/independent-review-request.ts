@@ -131,10 +131,14 @@ export async function authorizeCoworkerRequest(
   // request proceeds only if the readiness issuer below re-issues this exact
   // packet, and it issues a retired anchor only for a repair the trunk proves
   // merged, to a reviewer outside every delivery actor.
+  let headlessPirAnchor = false;
   if (!room && binding.gate === "post-implementation-review"
     && binding.writerToolName === "record_initiative_post_implementation_review") {
     room = await prisma.workroom.findFirst({ where: { capsuleId: binding.workroomRef.workroomId,
       status: { notIn: ["abandoned", "superseded"] } }, select: roomSelect });
+    // BI-46E344FE: an anchor that never recorded its head carries the merged
+    // head the issuer read from the trunk; the packet re-issue below proves it.
+    headlessPirAnchor = Boolean(room) && room!.headSha === null;
   }
   const roomOwnsItem = Boolean(room) && (room!.backlogItemId === binding.itemId
     || (room!.backlogItemId !== null && room!.backlogItemId === (await prisma.backlogItem.findUnique({ where: { itemId: binding.itemId }, select: { id: true } }))?.id));
@@ -161,7 +165,7 @@ export async function authorizeCoworkerRequest(
   // hashes and packet-shaped JSON are never evidence of server authorization.
   const { getBacklogItem } = await import("./packs/backlog-pack-read-tools");
   let currentDesignSource;
-  if (binding.artifactRef.kind === "repo-blob-at-commit") {
+  if (binding.artifactRef.kind === "repo-blob-at-commit" && !headlessPirAnchor) {
     if (!room || room.repositoryFullName !== binding.workroomRef.repositoryFullName
       || room.headBranch !== binding.workroomRef.branchName || room.headSha !== binding.workroomRef.headSha
       || !isFullSourceCommitSha(room.baseSha) || !isFullSourceCommitSha(room.headSha)) {

@@ -3,6 +3,7 @@
 // terminal-recovery.ts, which routes it.
 import { prisma } from "@dpf/db";
 
+import { MAX_COMMIT_RANGES } from "./repo-commit-range";
 import type { TerminalRecoveryEscalationReason, TerminalRecoveryRoom } from "./terminal-recovery";
 
 /**
@@ -11,6 +12,11 @@ import type { TerminalRecoveryEscalationReason, TerminalRecoveryRoom } from "./t
  * newest attempt and anchors the request (its recorded identity is what review
  * admission and the PIR evidence context match); the reviewed bytes are the
  * merged squash commit's range on the trunk, `parentSha..mergedCommitSha`.
+ *
+ * BI-46E344FE: a delivery of several squash commits names them all in
+ * `commits`, oldest first, and is reviewed as their ordered union;
+ * `mergedCommitSha`/`parentSha` are the newest. A room that never recorded its
+ * head is anchored to that newest merged commit.
  */
 export type MergedRepairSource =
   | {
@@ -18,12 +24,19 @@ export type MergedRepairSource =
     room: TerminalRecoveryRoom;
     mergedCommitSha: string;
     parentSha: string;
+    /** Every delivering commit, oldest first. Absent means the one `parentSha..mergedCommitSha`. */
+    commits?: Array<{ sha: string; parentSha: string }>;
     /** Every agent that delivered the item (delivery-actors.ts); none may review it. */
     deliveryActorIds: string[];
   }
   | { kind: "unavailable"; reason: TerminalRecoveryEscalationReason; nextAction: string };
 
 const FULL_SHA = /^[a-f0-9]{40}$/i;
+
+/** The delivering commits of a found source, oldest first. */
+export function mergedRepairCommits(source: Extract<MergedRepairSource, { kind: "found" }>): Array<{ sha: string; parentSha: string }> {
+  return source.commits ?? [{ sha: source.mergedCommitSha, parentSha: source.parentSha }];
+}
 
 /**
  * BI-CE661173. The newest delivery attempt for the item, when the trunk proves
@@ -54,26 +67,32 @@ export async function defaultLoadMergedRepairSource(args: {
   if (args.refusedWorkroomId && room.capsuleId !== args.refusedWorkroomId) {
     return notFound("The requested Workroom is not the item's newest delivery attempt. Read get_backlog_item with recoveryGate \"post-implementation-review\" for the current request.");
   }
-  if (!room.repositoryFullName || !room.headBranch || !room.headSha || !FULL_SHA.test(room.headSha)
-    || !room.baseSha || !FULL_SHA.test(room.baseSha)) {
+  // BI-46E344FE: a room that never recorded its base or head is still the
+  // delivery's anchor; the trunk supplies the head below. A recorded value that
+  // is not a full sha is a corrupt identity, not a missing one.
+  if (!room.repositoryFullName || !room.headBranch
+    || (room.headSha !== null && !FULL_SHA.test(room.headSha)) || (room.baseSha !== null && !FULL_SHA.test(room.baseSha))) {
     return { kind: "unavailable", reason: "workroom-identity-incomplete",
-      nextAction: "The item's newest Workroom lacks repository, branch, immutable base, or immutable head, so a post-merge review cannot be anchored to it. Re-sync it with adopt_worktree, then retry." };
+      nextAction: "The item's newest Workroom lacks repository or branch, or records a malformed base or head, so a post-merge review cannot be anchored to it. Re-sync it with adopt_worktree, then retry." };
   }
   const { resolveMergedDeliveryCommitFromDb } = await import("./merge-delivery-signal");
   const merged = await resolveMergedDeliveryCommitFromDb(prisma as never, {
     itemRowId: item.id, itemId: item.itemId, workType: item.workType ?? null,
     roomPullRequests: room.pullRequestNumber ? [room.pullRequestNumber] : [],
   }, options);
-  if (merged.kind === "ambiguous") {
+  if (merged.kind === "ambiguous" && merged.commits.length > MAX_COMMIT_RANGES) {
     return { kind: "unavailable", reason: "merged-delivery-ambiguous",
-      nextAction: `More than one standing commit on the trunk delivered ${item.itemId} (${merged.commits.map((c) => c.sha.slice(0, 12)).join(", ")}), so no single merged range can be reviewed. No commit was selected arbitrarily.` };
+      nextAction: `${merged.commits.length} standing commits on the trunk delivered ${item.itemId}, more than the ${MAX_COMMIT_RANGES} one post-implementation review can hold. Split the review by filing the later repairs as their own items.` };
   }
-  if (merged.kind !== "found") {
+  if (merged.kind !== "found" && merged.kind !== "ambiguous") {
     return { kind: "unavailable", reason: "merged-delivery-not-found",
       nextAction: merged.kind === "not-found"
         ? `No Workroom is live and the trunk carries no standing commit that delivered ${item.itemId}. A post-implementation review reviews merged work; merge the repair first.`
         : "No Workroom is live and the merge-through-gates signal could not read the trunk here, so the merged repair cannot be identified. Point DPF_HOST_SOURCE_ROOT at a source checkout, then retry." };
   }
+  const commits = (merged.kind === "found" ? [merged.commit] : merged.commits)
+    .map((commit) => ({ sha: commit.sha, parentSha: commit.parentSha }));
+  const newest = commits[commits.length - 1]!;
   const { loadItemDeliveryActorIds } = await import("@/lib/backlog/acceptance-sweep/delivery-actors");
   const actors = await loadItemDeliveryActorIds(prisma as never, item.itemId);
   if (!actors.ok) {
@@ -83,9 +102,10 @@ export async function defaultLoadMergedRepairSource(args: {
   return {
     kind: "found",
     room: { capsuleId: room.capsuleId, backlogItemId: room.backlogItemId, repositoryFullName: room.repositoryFullName,
-      baseSha: room.baseSha, headBranch: room.headBranch, headSha: room.headSha, isLive: false },
-    mergedCommitSha: merged.commit.sha,
-    parentSha: merged.commit.parentSha,
+      baseSha: room.baseSha ?? commits[0]!.parentSha, headBranch: room.headBranch, headSha: room.headSha ?? newest.sha, isLive: false },
+    mergedCommitSha: newest.sha,
+    parentSha: newest.parentSha,
+    commits,
     deliveryActorIds: actors.data,
   };
 }

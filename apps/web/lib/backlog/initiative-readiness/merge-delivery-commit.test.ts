@@ -84,6 +84,20 @@ describe("the merged delivery commit (BI-CE661173)", () => {
     expect(result.kind === "ambiguous" && result.commits.map((c) => c.sha).sort()).toEqual([sha.splitOne, sha.splitTwo].sort());
   });
 
+  it("names a pre-reopen commit whose PR the platform recorded again after the reopen (BI-46E344FE, BI-38064739)", async () => {
+    const after = new Date("2026-06-01T00:00:00Z");
+    // The reopen bounced the item; the PR-submit actuator then re-recorded the same merged PR.
+    await expect(findMergedDeliveryCommits(root, item("BI-FFFF6666"), { after, attestedPullRequests: [308] }))
+      .resolves.toEqual([expect.objectContaining({ sha: sha.old })]);
+    // An attested PR whose squash commit does not deliver the item is still not its delivery.
+    await expect(findMergedDeliveryCommits(root, item("BI-FFFF6666"), { after, attestedPullRequests: [302] })).resolves.toEqual([]);
+  });
+
+  it("orders a split delivery oldest first, so its ranges are reviewed in trunk order (BI-46E344FE)", async () => {
+    const commits = await findMergedDeliveryCommits(root, item("BI-DDDD4444"), { roomPullRequests: [306] });
+    expect(commits?.map((c) => c.sha)).toEqual([sha.splitOne, sha.splitTwo]);
+  });
+
   it("answers found, not-found, and unavailable from the database half", async () => {
     const db = { backlogItemActivity: { findMany: async () => [] } };
     await expect(resolveMergedDeliveryCommitFromDb(db, { itemRowId: "row", itemId: "BI-AAAA1111", workType: "bug", roomPullRequests: [] }, { roots: [root] }))

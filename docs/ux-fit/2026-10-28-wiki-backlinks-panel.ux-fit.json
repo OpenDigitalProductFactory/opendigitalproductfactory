@@ -1,0 +1,20 @@
+{
+  "version": "1",
+  "decidedOption": "side-column-grouped-with-collapsed-mentions",
+  "decisionInteractionId": "DI-30075A34C80C",
+  "scope": {
+    "files": [
+      "apps/web/components/wiki/BacklinkGroup.tsx",
+      "apps/web/components/wiki/WikiBacklinksPanel.tsx",
+      "apps/web/components/decision-perspective/MaterialBacklinksPanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "side-column-grouped-with-collapsed-mentions",
+      "bottom-section-flat-list",
+      "separate-backlinks-tab"
+    ]
+  }
+}

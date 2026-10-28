@@ -14,6 +14,7 @@ vi.mock("./reviewer-identity", async (importOriginal) => ({
 }));
 vi.mock("@dpf/db", () => ({ Prisma: { TransactionIsolationLevel: { Serializable: "Serializable" } }, prisma: {
   backlogItem: { findUnique: io.item }, authorizationDecisionLog: { findUnique: io.decision }, $transaction: io.transaction,
+  workroom: { findUnique: (...a: unknown[]) => io.room(...a) },
 } }));
 import { recordInitiativeGateReceipt } from "./receipt-repository";
 
@@ -348,6 +349,51 @@ describe("merged repair PIR receipt publication (BI-CE661173)", () => {
     expect(await recordInitiativeGateReceipt({ ...pirArgs, artifactRef: { ...pirArgs.artifactRef, commitSha: workroomRef.headSha } }))
       .toMatchObject({ ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS" });
     expect(merged.source).not.toHaveBeenCalled();
+    expect(io.append).not.toHaveBeenCalled();
+  });
+
+  // BI-46E344FE: the whole merged change, and a delivery room that never recorded its head.
+  const firstSha = "1".repeat(40);
+  const ranges = [{ baseSha: "0".repeat(40), headSha: firstSha }, { baseSha: "d".repeat(40), headSha: mergedSha }];
+  const rangeArgs = { ...pirArgs, artifactRef: { kind: "repo-commit-range" as const, repositoryFullName: workroomRef.repositoryFullName,
+    ranges, digest: `sha256:${"9".repeat(64)}` } };
+  const twoCommits = (overrides: Record<string, unknown> = {}) => found({
+    commits: [{ sha: firstSha, parentSha: "0".repeat(40) }, { sha: mergedSha, parentSha: "d".repeat(40) }], ...overrides });
+
+  it("publishes a range review when the trunk still names exactly those delivering commits", async () => {
+    merged.source.mockResolvedValue(twoCommits());
+    io.artifact.mockResolvedValue({ ok: true, artifact: { ref: rangeArgs.artifactRef, digest: rangeArgs.artifactRef.digest,
+      authorPrincipalId: "principal-author", authorAgentId: null, bytes: Buffer.from("range") } });
+    expect(await recordInitiativeGateReceipt(rangeArgs)).toMatchObject({ ok: true });
+    expect(io.artifact).toHaveBeenCalledWith(expect.objectContaining({ locator: rangeArgs.artifactRef,
+      mergedRepairProof: { workroomId: workroomRef.workroomId, commitSha: mergedSha } }));
+    expect(io.append).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["one of the commits is no longer a delivery", () => found()],
+    ["the commits are in another order", () => found({ commits: [{ sha: mergedSha, parentSha: "d".repeat(40) }, { sha: firstSha, parentSha: "0".repeat(40) }] })],
+  ])("refuses a range review when %s", async (_label, source) => {
+    merged.source.mockResolvedValue(source());
+    expect(await recordInitiativeGateReceipt(rangeArgs)).toMatchObject({ ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS" });
+    expect(io.artifact).not.toHaveBeenCalled();
+    expect(io.append).not.toHaveBeenCalled();
+  });
+
+  it("publishes through a delivery room that never recorded its head, anchored to the merged head", async () => {
+    room = { ...room, headSha: null };
+    const anchored = { ...workroomRef, headSha: mergedSha };
+    merged.source.mockResolvedValue(found({ room: { ...found().room, headSha: mergedSha } }));
+    expect(await recordInitiativeGateReceipt({ ...pirArgs, workroomRef: anchored })).toMatchObject({ ok: true });
+    expect(merged.source).toHaveBeenCalledWith({ itemId: args.itemId, refusedWorkroomId: workroomRef.workroomId });
+    expect(io.append).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not let a headless room publish without the trunk's proof", async () => {
+    room = { ...room, headSha: null };
+    merged.source.mockResolvedValue({ kind: "unavailable", reason: "merged-delivery-not-found", nextAction: "none" });
+    expect(await recordInitiativeGateReceipt({ ...pirArgs, workroomRef: { ...workroomRef, headSha: mergedSha } }))
+      .toMatchObject({ ok: false, code: "CANONICAL_DESIGN_AMBIGUOUS" });
     expect(io.append).not.toHaveBeenCalled();
   });
 });

@@ -298,6 +298,26 @@ export function workroomStageLiveCounts(
   return counts;
 }
 
+/** The order one drive pass writes a stage's transitions in; a close always comes last. */
+const STAGE_WRITE_ORDER: Readonly<Record<string, number>> = {
+  enqueued: 0, released: 1, held: 2, started: 2, finished: 3, cancelled: 3,
+};
+
+/**
+ * Order stage events by when they happened, then when they were recorded, then
+ * the order the drive writes them. One pass writes several events at one
+ * instant, and often in one recorded millisecond, so the first two keys alone
+ * leave "the latest event" up to the database.
+ */
+export function compareStageEvents(
+  a: { transition: string; occurredAt: Date; createdAt?: Date },
+  b: { transition: string; occurredAt: Date; createdAt?: Date },
+): number {
+  return a.occurredAt.getTime() - b.occurredAt.getTime()
+    || (a.createdAt && b.createdAt ? a.createdAt.getTime() - b.createdAt.getTime() : 0)
+    || (STAGE_WRITE_ORDER[a.transition] ?? 0) - (STAGE_WRITE_ORDER[b.transition] ?? 0);
+}
+
 /**
  * The stage a run of transitions leaves the room's item open at: the stage of
  * the last enqueue not followed by a finish, or `open` unchanged when the run
@@ -327,7 +347,7 @@ export function planRoomEndClosures(
   for (const event of events) {
     const key = `${event.queueKey}\x00${event.itemId}`;
     const seen = latest.get(key);
-    if (!seen || event.occurredAt.getTime() >= seen.occurredAt.getTime()) latest.set(key, event);
+    if (!seen || compareStageEvents(event, seen) >= 0) latest.set(key, event);
   }
   const out: StageTransition[] = [];
   for (const event of latest.values()) {
@@ -427,7 +447,9 @@ export async function reconcileEndedRoomStageTelemetry(): Promise<number> {
       SELECT DISTINCT ON (e."queueKey", e."itemId") e."queueKey", e."itemId", e."transition", e."occurredAt"
       FROM "QueueTelemetryEvent" e
       WHERE e."itemKind" = ${WORKROOM_STAGE_ITEM_KIND}
-      ORDER BY e."queueKey", e."itemId", e."occurredAt" DESC, e."createdAt" DESC
+      -- compareStageEvents, newest first: a close written in the same instant wins.
+      ORDER BY e."queueKey", e."itemId", e."occurredAt" DESC, e."createdAt" DESC,
+        CASE e."transition" WHEN 'enqueued' THEN 0 WHEN 'released' THEN 1 WHEN 'finished' THEN 3 WHEN 'cancelled' THEN 3 ELSE 2 END DESC
     )
     SELECT l."queueKey", l."itemId", l."transition", l."occurredAt", w."updatedAt" AS "endedAt"
     FROM latest l
@@ -446,11 +468,14 @@ export async function reconcileEndedRoomStageTelemetry(): Promise<number> {
 /** The stage of the room's newest stage event, unless that event closed the item. */
 async function readOpenStageFromTelemetry(capsuleId: string): Promise<string | null> {
   const { prisma } = await import("@dpf/db");
-  const latest = await prisma.queueTelemetryEvent.findFirst({
+  // One drive pass writes several events at one instant; read them all and order them.
+  const newest = await prisma.queueTelemetryEvent.findMany({
     where: { itemKind: WORKROOM_STAGE_ITEM_KIND, itemId: { startsWith: `${capsuleId}:` } },
     orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }],
-    select: { queueKey: true, transition: true },
+    take: 8,
+    select: { queueKey: true, transition: true, occurredAt: true, createdAt: true },
   });
+  const latest = newest.sort(compareStageEvents).at(-1);
   if (!latest || latest.transition === "finished" || latest.transition === "cancelled") return null;
   return latest.queueKey.slice(latest.queueKey.lastIndexOf(":") + 1);
 }
