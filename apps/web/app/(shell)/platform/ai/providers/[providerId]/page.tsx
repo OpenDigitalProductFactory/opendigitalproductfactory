@@ -37,8 +37,20 @@ import { ProviderAccountConnectionForm } from "@/components/platform/ProviderAcc
 import { ProviderDetailSections } from "@/components/platform/ProviderDetailSections";
 import { ModelSection } from "@/components/platform/ModelSection";
 import { Notice } from "@/components/ui/report-kit";
+import { ManagedInferencePanel } from "@/components/platform/ManagedInferencePanel";
+import { getManagedInferenceOffers } from "@/lib/actions/managed-inference";
 
 type Props = { params: Promise<{ providerId: string }>; searchParams: Promise<{ account?: string | string[] }> };
+
+async function ManagedInferenceSection() {
+  try {
+    const offers = await getManagedInferenceOffers();
+    const offer = offers.activate.available ? offers.activate : offers.rollback.available ? offers.rollback : offers.activate;
+    return <ManagedInferencePanel key={offer.available ? offer.token : "waiting"} offer={offer} />;
+  } catch {
+    return <Notice title="Local inference engine">Host engine details are unavailable. Refresh this page to check again.</Notice>;
+  }
+}
 
 export default async function ProviderDetailPage({ params, searchParams }: Props) {
   // Guard: this route has no middleware — data-fetching server actions enforce
@@ -159,6 +171,7 @@ export default async function ProviderDetailPage({ params, searchParams }: Props
   const session = await auth();
   const user = session?.user;
   const canWrite = !!user && can({ platformRole: user.platformRole, isSuperuser: user.isSuperuser }, "manage_provider_connections");
+  const canManageHost = !!user && can({ platformRole: user.platformRole, isSuperuser: user.isSuperuser }, "manage_platform");
   const routingView = !additionalAccount && pw.provider.endpointType !== "service"
     ? (await loadProviderRoutingControls([pw], new Map([[providerId, models.length]]), now)).get(providerId)
     : null;
@@ -240,6 +253,9 @@ export default async function ProviderDetailPage({ params, searchParams }: Props
           providerId={providerId}
         />
       )}
+      {providerId === "local" && !additionalAccount && canManageHost && <Suspense fallback={null}>
+        <ManagedInferenceSection />
+      </Suspense>}
 
       {pw.provider.costPerformanceNotes && (
         <div style={{

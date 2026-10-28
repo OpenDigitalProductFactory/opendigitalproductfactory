@@ -5808,7 +5808,8 @@
         "recurring-meta-pattern",
         "persisted-mcp-endpoint-recovery-bi-9f258707",
         "required-services-after-container-driven-upgrades-bi-fffea4ed",
-        "linux-pilot-startup-repairs-2026-10-03"
+        "linux-pilot-startup-repairs-2026-10-03",
+        "managed-mac-inference-qualification"
       ]
     },
     "docs/install/scratch-install-rehearsal.md": {

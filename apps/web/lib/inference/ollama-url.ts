@@ -1,6 +1,7 @@
 // apps/web/lib/ollama-url.ts
-// Pure helper — returns the base URL for the local LLM inference provider.
+// Server helper — resolves the installer-owned local LLM inference selection.
 // Supports Docker Model Runner (default) and Ollama (legacy).
+import { readManagedInferenceEndpoint } from "./managed-runtime-selection";
 
 type ProviderUrlFields = {
   providerId: string;
@@ -13,6 +14,17 @@ type ProviderUrlFields = {
  * Priority: LLM_BASE_URL env → provider config → Docker Model Runner default.
  */
 export function getOllamaBaseUrl(provider?: ProviderUrlFields | null): string {
+  if (!provider || provider.providerId === "local") {
+    const managed = readManagedInferenceEndpoint();
+    if (managed) {
+      const allowed = new Set(["http://model-runner.docker.internal/v1", managed]);
+      const overrides = [process.env.LLM_BASE_URL, process.env.OLLAMA_INTERNAL_URL, provider?.endpoint, provider?.baseUrl];
+      if (overrides.some(value => value && !allowed.has(value.replace(/\/+$/, "")))) {
+        throw new Error("Managed inference endpoint conflicts with explicit local provider configuration");
+      }
+      return managed;
+    }
+  }
   if (process.env.LLM_BASE_URL) {
     return process.env.LLM_BASE_URL;
   }

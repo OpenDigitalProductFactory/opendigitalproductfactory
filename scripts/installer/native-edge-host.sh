@@ -26,6 +26,48 @@ _dpf_native_edge_release_url() {
   fi
 }
 
+# Explicit supported opt-in for a qualified Mac. This stages immutable source
+# and artifacts while the old Edge service stays online. Activation remains a
+# separate approved, signed action; this grants no action type or capability.
+_dpf_native_edge_prepare_managed_inference() {
+  [ "${DPF_MANAGED_INFERENCE_ENABLED:-0}" = "1" ] || return 0
+  local repo_root="$1" state_root="$2" source_sha="${DPF_MANAGED_INFERENCE_SOURCE_SHA:-}"
+  if [ "$(uname -s)" != "Darwin" ] || [ "$(uname -m)" != "arm64" ]; then
+    echo "Managed inference is not qualified on this unsupported host." >&2; return 1
+  fi
+  [[ "$source_sha" =~ ^[a-f0-9]{40}$ ]] || { echo "An exact published native controller source is required." >&2; return 1; }
+  local runtime_package="${DPF_MANAGED_INFERENCE_RUNTIME_PACKAGE:-}" report="${DPF_MANAGED_INFERENCE_REPORT:-}"
+  local runtime_hash="${DPF_MANAGED_INFERENCE_RUNTIME_SHA256:-}" report_hash="${DPF_MANAGED_INFERENCE_REPORT_SHA256:-}"
+  [[ "$runtime_hash" =~ ^[a-f0-9]{64}$ ]] && [[ "$report_hash" =~ ^[a-f0-9]{64}$ ]] &&
+    [ -d "$runtime_package" ] && [ -f "$report" ] || { echo "Pinned runtime and qualification report are required." >&2; return 1; }
+  command -v node >/dev/null && command -v go >/dev/null || { echo "The maintained native controller requires Node and Go." >&2; return 1; }
+  GIT_NO_REPLACE_OBJECTS=1 git -C "$repo_root" merge-base --is-ancestor "$source_sha" refs/remotes/origin/main || return 1
+  local source_dir controller_root baseline
+  source_dir="$(umask 077; mktemp -d "$state_root/.native-controller-source.XXXXXX")" || return 1
+  (set -o pipefail; GIT_NO_REPLACE_OBJECTS=1 git -C "$repo_root" archive "$source_sha" tools/mac-inference scripts/lib scripts/installer packages/db/src services/edge-node-go | tar -x -C "$source_dir") || return 1
+  mkdir -p "$state_root/native-inference-controller" || return 1
+  chmod 0700 "$state_root/native-inference-controller" || return 1
+  controller_root="$state_root/native-inference-controller/$source_sha"
+  baseline="$HOME/.docker/bin/inference/llama-server"
+  (umask 077; node "$source_dir/tools/mac-inference/runtime-controller-package.mjs" --repo "$repo_root" --source "$source_sha" --out "$controller_root" > "$source_dir/controller.json") || return 1
+  node "$controller_root/tools/mac-inference/runtime-provision.mjs" --state-directory "$state_root" \
+    --runtime-package "$runtime_package" --source "$source_sha" --report "$report" \
+    --runtime-manifest-sha256 "$runtime_hash" --report-sha256 "$report_hash" --baseline-engine "$baseline" \
+    > "$source_dir/staging.json" || return 1
+  local manifest_hash
+  manifest_hash="$(node -e 'process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).manifestSha256)' "$source_dir/controller.json")" || return 1
+  [[ "$manifest_hash" =~ ^[a-f0-9]{64}$ ]] || return 1
+  (umask 077; {
+    printf 'DPF_MANAGED_INFERENCE_ENABLED=1\n'
+    printf 'DPF_MANAGED_INFERENCE_CONTROLLER_ROOT=%q\n' "$controller_root"
+    printf 'DPF_MANAGED_INFERENCE_MANIFEST_SHA256=%q\n' "$manifest_hash"
+    printf 'DPF_MANAGED_INFERENCE_SOURCE_SHA=%q\n' "$source_sha"
+    printf 'DPF_MANAGED_INFERENCE_STATE_DIR=%q\n' "$state_root"
+    printf 'DPF_MANAGED_INFERENCE_BASELINE_ENGINE=%q\n' "$baseline"
+  } > "$state_root/native-inference-controller.env.next") || return 1
+  _DPF_NATIVE_INFERENCE_BUILD_SOURCE="$source_dir"
+}
+
 _dpf_native_edge_acquire_macos() {
   local repo_root="$1" destination="$2" version="$3"
   # Every release publishes both Mac builds; an Intel Mac cannot run the arm64
@@ -37,7 +79,12 @@ _dpf_native_edge_acquire_macos() {
   local temporary_dir
   temporary_dir="$(mktemp -d "${TMPDIR:-/tmp}/dpf-native-edge.XXXXXX")"
 
-  if [ -x "$source_binary" ]; then
+  if [ "${DPF_MANAGED_INFERENCE_ENABLED:-0}" = "1" ]; then
+    [ -n "${_DPF_NATIVE_INFERENCE_BUILD_SOURCE:-}" ] || return 1
+    (cd "$_DPF_NATIVE_INFERENCE_BUILD_SOURCE/services/edge-node-go" && \
+      GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -trimpath \
+        -ldflags "-s -w -X main.Version=$DPF_MANAGED_INFERENCE_SOURCE_SHA" -o "$destination" ./cmd/dpf-edge-node) || return 1
+  elif [ -x "$source_binary" ]; then
     cp "$source_binary" "$destination"
   elif command -v go >/dev/null 2>&1 && [ -f "$repo_root/services/edge-node-go/go.mod" ]; then
     (cd "$repo_root/services/edge-node-go" && \
@@ -116,9 +163,15 @@ dpf_native_edge_install() {
 
   mkdir -p "$bin_dir" "$edge_state_dir" "$log_dir" "$HOME/Library/LaunchAgents"
   chmod 0700 "$state_root" "$edge_state_dir"
+  if [ "${DPF_MANAGED_INFERENCE_ENABLED:-0}" = "1" ]; then
+    [ -n "$edge_action_url" ] && [ -f "$edge_action_ca" ] && [ -f "$edge_action_cert" ] && [ -f "$edge_action_key" ] && [ -f "$edge_action_public" ] || {
+      echo "A complete enrolled host machine identity is required before managed inference provisioning." >&2; return 1;
+    }
+  fi
+  _dpf_native_edge_prepare_managed_inference "$repo_root" "$state_root" || return 1
   # Acquire and verify the replacement while the current service stays online.
   rm -f "$binary_candidate"
-  _dpf_native_edge_acquire_macos "$repo_root" "$binary_candidate" "$version"
+  _dpf_native_edge_acquire_macos "$repo_root" "$binary_candidate" "$version" || return 1
   # Integrity is checked before this host-local mutation. Clearing quarantine
   # and applying an ad-hoc signature lets launchd execute contributor builds
   # and unsigned community release artifacts; official Developer ID signing
@@ -130,6 +183,12 @@ dpf_native_edge_install() {
   if [ -f "$binary" ]; then
     cp "$binary" "$binary_backup"
     chmod 0755 "$binary_backup"
+  fi
+  if [ -f "$env_file" ]; then cp "$env_file" "$env_file.previous"; chmod 0600 "$env_file.previous"; fi
+  local native_env="$state_root/native-inference-controller.env"
+  if [ -f "$native_env.next" ]; then
+    if [ -f "$native_env" ]; then cp "$native_env" "$native_env.previous"; chmod 0600 "$native_env.previous"; fi
+    mv "$native_env.next" "$native_env"
   fi
   mv "$binary_candidate" "$binary"
 
@@ -158,6 +217,9 @@ dpf_native_edge_install() {
   {
     printf '%s\n' '#!/usr/bin/env bash' 'set -a'
     printf '. %q\n' "$env_file"
+    # Existing explicit selection survives ordinary host-agent upgrades. This
+    # private fragment contains paths and hashes only, never machine keys.
+    printf 'if [ -f %q ]; then . %q; fi\n' "$native_env" "$native_env"
     printf '%s\n' 'set +a'
     printf 'exec %q\n' "$binary"
   } > "$launch_script"
@@ -171,6 +233,8 @@ dpf_native_edge_install() {
   else
     if [ -f "$binary_backup" ]; then
       mv "$binary_backup" "$binary"
+      if [ -f "$env_file.previous" ]; then mv "$env_file.previous" "$env_file"; fi
+      if [ -f "$native_env.previous" ]; then mv "$native_env.previous" "$native_env"; fi
       launchctl bootstrap "gui/$UID" "$plist" 2>/dev/null || true
       warn "Native Edge Node could not start after upgrade; the prior binary was restored. See $log_dir/edge-node.err.log."
     else

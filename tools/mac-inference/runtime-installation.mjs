@@ -46,6 +46,7 @@ async function inspectRelease(releaseRoot, binding, facts) {
   const record = JSON.parse((await protectedRead(join(releaseRoot, 'release.json'))).toString());
   check(record.schemaVersion === 1 && record.status === 'staged' && record.activationAuthorized === false
     && canonicalJson(record.binding) === canonicalJson(binding), 'Staged release binding changed');
+  check(record.hostNodeId === facts.hostNodeId && record.physicalDevice === facts.physicalDevice, 'Staged physical host changed');
   const runtime = await verifyRuntimePackage(join(releaseRoot, 'runtime'));
   check(runtime.manifestSha256 === binding.runtimeManifestSha256, 'Staged runtime identity changed');
   const reportBytes = await protectedRead(join(releaseRoot, 'qualification.json'));
@@ -54,13 +55,36 @@ async function inspectRelease(releaseRoot, binding, facts) {
   return { ...record, packageRoot: join(releaseRoot, 'runtime'), releaseRoot };
 }
 
+// Read-only artifact descriptor, not current host qualification or activation.
+// The native adapter uses its report to locate the required model references,
+// then captures actual host/model facts and runs verifyRuntimeQualification.
+export async function readStagedRuntimeDescriptor({ stateDirectory, binding, hostNodeId }) {
+  check(typeof hostNodeId === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(hostNodeId), 'Enrolled host identity required');
+  binding = releaseBinding(binding);
+  const state = await protectedDirectory(stateDirectory);
+  const store = await protectedDirectory(join(state, 'mac-inference'));
+  const releases = await protectedDirectory(join(store, 'releases'));
+  const releaseRoot = await protectedDirectory(join(releases, sha256(canonicalJson(binding))));
+  const record = JSON.parse((await protectedRead(join(releaseRoot, 'release.json'))).toString());
+  check(record.schemaVersion === 1 && record.status === 'staged' && record.activationAuthorized === false
+    && canonicalJson(record.binding) === canonicalJson(binding), 'Staged release binding changed');
+  check(record.hostNodeId === hostNodeId, 'Staged physical host changed');
+  const runtime = await verifyRuntimePackage(join(releaseRoot, 'runtime'));
+  const reportBytes = await protectedRead(join(releaseRoot, 'qualification.json'));
+  check(runtime.manifestSha256 === binding.runtimeManifestSha256 && sha256(reportBytes) === binding.qualificationReportSha256,
+    'Staged descriptor identity changed');
+  check(JSON.parse(reportBytes.toString()).baselineEngineSha256 === binding.baselineEngineSha256, 'Qualification baseline identity changed');
+  return { packageRoot: join(releaseRoot, 'runtime'), releaseRoot, runtime, reportBytes, activationAuthorized: false };
+}
+
 // Staging copies immutable artifacts only. It consumes neither a native action
 // nor GPU admission and never installs a service, changes a provider or selects
 // an active runtime. The later signed host procedure must read/verify it again.
-export async function stageRuntimeInstallation({ stateDirectory, sourcePackage, reportBytes, binding,
+export async function stageRuntimeInstallation({ stateDirectory, sourcePackage, reportBytes, binding, hostNodeId,
   models, physicalDevice, nowMs = Date.now(), qualifiedAfterMs = 0 }) {
+  check(typeof hostNodeId === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(hostNodeId), 'Enrolled host identity required');
   binding = releaseBinding(binding);
-  const facts = { models: structuredClone(models), physicalDevice, nowMs, qualifiedAfterMs };
+  const facts = { models: structuredClone(models), physicalDevice, hostNodeId, nowMs, qualifiedAfterMs };
   check(servingProfileDigest({ models: facts.models, physicalDevice }) === binding.profileSha256, 'Serving profile identity changed');
   check(Buffer.isBuffer(reportBytes) && reportBytes.length > 0 && reportBytes.length <= 65536, 'Invalid qualification report size');
   // Copy caller buffers before asynchronous checks so the same verified bytes
@@ -84,7 +108,7 @@ export async function stageRuntimeInstallation({ stateDirectory, sourcePackage, 
     const staged = await stageVerifiedRuntime(sourcePackage, join(temporary, 'runtime'));
     check(staged.manifestSha256 === binding.runtimeManifestSha256, 'Staged source identity changed');
     await writeDurable(join(temporary, 'qualification.json'), reportBytes);
-    const record = { schemaVersion: 1, status: 'staged', activationAuthorized: false, binding };
+    const record = { schemaVersion: 1, status: 'staged', activationAuthorized: false, binding, hostNodeId, physicalDevice };
     await writeDurable(join(temporary, 'release.json'), canonicalJson(record));
     await inspectRelease(temporary, binding, facts); await syncPayload(temporary);
     await lock.assertOwned();

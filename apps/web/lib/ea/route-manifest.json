@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 681,
+  "routeCount": 682,
   "routes": [
     {
       "routePath": "/",
@@ -2783,6 +2783,19 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/api/v1/edge/actions/claim/route.ts"
+    },
+    {
+      "routePath": "/api/v1/edge/actions/inference-admission",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "edge",
+        "actions",
+        "inference-admission"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/v1/edge/actions/inference-admission/route.ts"
     },
     {
       "routePath": "/api/v1/edge/actions/result",

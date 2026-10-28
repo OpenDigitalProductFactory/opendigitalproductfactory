@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
+const managed = vi.hoisted(() => ({ endpoint: null as string | null, error: null as Error | null }));
+vi.mock("./managed-runtime-selection", () => ({ readManagedInferenceEndpoint: () => {
+  if (managed.error) throw managed.error;
+  return managed.endpoint;
+} }));
+beforeEach(() => { managed.endpoint = null; managed.error = null; });
+
 describe("getOllamaBaseUrl", () => {
   const originalEnv = process.env;
 
@@ -66,6 +73,25 @@ describe("getOllamaBaseUrl", () => {
     const { getOllamaBaseUrl } = await import("./ollama-url");
     expect(getOllamaBaseUrl()).toBe("http://custom:8080/v1");
     delete process.env.LLM_BASE_URL;
+  });
+
+  it("uses a committed managed selection for default local traffic and its management root", async () => {
+    managed.endpoint = "http://host.docker.internal:12436/v1";
+    process.env.LLM_BASE_URL = "http://model-runner.docker.internal/v1";
+    const { getOllamaBaseUrl, getOllamaApiRoot } = await import("./ollama-url");
+    expect(getOllamaBaseUrl()).toBe(managed.endpoint);
+    expect(getOllamaBaseUrl({ providerId: "local", endpoint: "http://model-runner.docker.internal/v1", baseUrl: null })).toBe(managed.endpoint);
+    expect(getOllamaApiRoot()).toBe("http://host.docker.internal:12436");
+  });
+
+  it("refuses conflicting explicit overrides and an unsettled selection rather than routing to another engine", async () => {
+    managed.endpoint = "http://host.docker.internal:12436/v1";
+    process.env.LLM_BASE_URL = "http://custom:8080/v1";
+    const { getOllamaBaseUrl } = await import("./ollama-url");
+    expect(() => getOllamaBaseUrl()).toThrow(/conflict/);
+    delete process.env.LLM_BASE_URL;
+    managed.error = new Error("transitioning");
+    expect(() => getOllamaBaseUrl()).toThrow(/transitioning/);
   });
 });
 

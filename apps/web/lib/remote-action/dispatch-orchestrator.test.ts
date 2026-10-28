@@ -52,6 +52,9 @@ const trustedInternalNode = {
 
 const claimOptions = { now: NOW, signer, nonceFactory: () => NONCE };
 
+const nativeParameters = () => ({ version: 1, operation: "activate", sourceSha: "a".repeat(40), profileSha256: "b".repeat(64),
+  runtimeManifestSha256: "c".repeat(64), qualificationReportSha256: "d".repeat(64), baselineEngineSha256: "e".repeat(64), leaseId: "NPEL-TEST" });
+
 function claimDb(candidates: ClaimableActionRow[], updateCount = 1) {
   const findMany = vi.fn().mockResolvedValue(candidates);
   const updateMany = vi.fn().mockResolvedValue({ count: updateCount });
@@ -66,6 +69,23 @@ function claimDb(candidates: ClaimableActionRow[], updateCount = 1) {
 }
 
 describe("claimActionsForNode", () => {
+  it("never signs arbitrary native commands even with the exact machine grant and approved change", async () => {
+    const { db, updateMany } = claimDb([candidate({ actionType: "inference.runtime.transition", riskClass: "high",
+      edgeNodeId: "node_1", changeRequestId: "change-1", parameters: { ...nativeParameters(), command: "arbitrary" } })]);
+    vi.mocked(db.changeRequest.findMany).mockResolvedValue([{ id: "change-1", status: "approved", approvedAt: NOW, approvedById: "employee-1" }]);
+    const result = await claimActionsForNode(db, { ...trustedInternalNode, allowedActionTypes: ["inference.runtime.transition"] }, claimOptions);
+    expect(result.claimed).toHaveLength(0);
+    expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: "failed" }) }));
+  });
+
+  it("signs only the bounded native transition and allows its five-minute original action window", async () => {
+    const { db } = claimDb([candidate({ actionType: "inference.runtime.transition", riskClass: "high",
+      edgeNodeId: "node_1", changeRequestId: "change-1", parameters: nativeParameters() })]);
+    vi.mocked(db.changeRequest.findMany).mockResolvedValue([{ id: "change-1", status: "approved", approvedAt: NOW, approvedById: "employee-1" }]);
+    const result = await claimActionsForNode(db, { ...trustedInternalNode, allowedActionTypes: ["inference.runtime.transition"] }, claimOptions);
+    expect(result.claimed[0]?.parameters).toEqual(nativeParameters());
+    expect(Date.parse(result.claimed[0]!.expiresAt) - NOW.getTime()).toBe(300000);
+  });
   it("scenario INTERNAL: claims an internal queued read-only action", async () => {
     const { db, updateMany } = claimDb([candidate()]);
     const res = await claimActionsForNode(db, trustedInternalNode, claimOptions);
@@ -149,7 +169,7 @@ describe("claimActionsForNode", () => {
   });
 });
 
-function resultDb(row: { actionKey: string; status: string; edgeNodeId: string | null } | null) {
+function resultDb(row: { actionKey: string; status: string; edgeNodeId: string | null; actionType?: string; evidence?: unknown; parameters?: unknown } | null) {
   const findUnique = vi.fn().mockResolvedValue(row);
   const update = vi.fn().mockResolvedValue({});
   return {
@@ -162,6 +182,26 @@ function resultDb(row: { actionKey: string; status: string; edgeNodeId: string |
 }
 
 describe("recordActionResult", () => {
+  it("retains native admission provenance and never lets a host replace it in its result", async () => {
+    const { db, update } = resultDb({ actionKey: "ra_1", status: "running", edgeNodeId: "node_1",
+      actionType: "inference.runtime.transition", parameters: nativeParameters(), evidence: {
+        nativeAdmission: { quiescenceRunId: "QR-original" }, nativeDispatch: { requestDigest: "a".repeat(64), sourceSha: "a".repeat(40), operation: "activate" } } });
+    await recordActionResult(db, { actionKey: "ra_1", edgeNodeRowId: "node_1", outcome: "failed",
+      evidence: { actionKey: "ra_1", requestDigest: "a".repeat(64), sourceSha: "a".repeat(40), nativeStatus: "uncertain",
+        nativeAdmission: { quiescenceRunId: "QR-foreign" }, settlement: "unknown" } });
+    expect(update.mock.calls[0][0].data.evidence.nativeAdmission).toEqual({ quiescenceRunId: "QR-original" });
+  });
+  it("rejects an unbound native success and permits only identical receipt delivery retries", async () => {
+    const base = { actionKey: "ra_1", status: "running", edgeNodeId: "node_1", actionType: "inference.runtime.transition", parameters: nativeParameters(),
+      evidence: { nativeDispatch: { requestDigest: "a".repeat(64), sourceSha: "a".repeat(40), operation: "activate" }, requestDigest: "a".repeat(64) } };
+    const { db, update } = resultDb(base);
+    expect((await recordActionResult(db, { actionKey: "ra_1", edgeNodeRowId: "node_1", outcome: "succeeded", evidence: { settlement: "confirmed", nativeStatus: "active" } })).ok).toBe(false);
+    expect(update).not.toHaveBeenCalled();
+    const report = { actionKey: "ra_1", requestDigest: "a".repeat(64), sourceSha: "a".repeat(40), nativeStatus: "uncertain", settlement: "unknown" };
+    const retry = resultDb({ ...base, status: "failed" });
+    expect(await recordActionResult(retry.db, { actionKey: "ra_1", edgeNodeRowId: "node_1", outcome: "failed", evidence: report })).toEqual({ ok: true, status: "failed" });
+    expect(retry.update).not.toHaveBeenCalled();
+  });
   it("the owning node reports success: terminal + evidence + completedAt", async () => {
     const { db, update } = resultDb({ actionKey: "ra_1", status: "claimed", edgeNodeId: "node_1" });
     const res = await recordActionResult(db, { actionKey: "ra_1", edgeNodeRowId: "node_1", outcome: "succeeded", evidence: { lines: 3 } }, { now: NOW });
