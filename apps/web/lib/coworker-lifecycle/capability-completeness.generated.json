@@ -2076,9 +2076,9 @@
           "level": 3,
           "missingGrants": [],
           "escalatesTo": "HR-200",
-          "reachableSideEffectingTools": 11,
-          "reachableGatedTools": 0,
-          "ungatedConsequenceNote": "every one of its 11 reachable side-effecting tool(s) executes with no kernel consultation required",
+          "reachableSideEffectingTools": 16,
+          "reachableGatedTools": 1,
+          "ungatedConsequenceNote": null,
           "detail": "principle_decide reachable; escalates to HR-200",
           "levelKey": "proven",
           "ceiling": 3,
@@ -2102,8 +2102,10 @@
           "level": 1,
           "directSkills": 0,
           "wildcardSkills": 10,
-          "reachableTools": 71,
+          "reachableTools": 94,
           "heldGrants": [
+            "file_read",
+            "initiative_design_review",
             "registry_read",
             "backlog_read",
             "release_gate_create",
@@ -2113,7 +2115,7 @@
           ],
           "services": 0,
           "unbackedSkillIds": [],
-          "detail": "no skill authored for it (10 wildcard only), 71 reachable tool(s)",
+          "detail": "no skill authored for it (10 wildcard only), 94 reachable tool(s)",
           "levelKey": "declared",
           "ceiling": 3,
           "atCeiling": false
@@ -2149,7 +2151,7 @@
           "plane": "toolsAndSkills",
           "level": 1,
           "ceiling": 3,
-          "detail": "no skill authored for it (10 wildcard only), 71 reachable tool(s)"
+          "detail": "no skill authored for it (10 wildcard only), 94 reachable tool(s)"
         },
         {
           "plane": "evidence",

@@ -62,3 +62,11 @@ behavior; retained receipts and historical failures are never deleted. No schema
 migration or visual interface change is required. The source change does not
 claim to resolve native process settlement: unknown historical executions stay
 held and their original evidence remains available.
+
+## Backlog coverage
+
+BI-AA8EE6CE has atomic coverage receipt `cmvsjgna700km01mf55h2ykid`,
+bound to this ordered design at `5a081d38986ca8aed17de484696116ecb4aa918e`.
+Research receipt: `initiative-48d6d442-3585-4747-94fa-d7b84874831e`.
+Implementation admission: `IRD-6C54B08185E0`, WC-9C19B12A.
+The PIR-RECOVERY deliverable maps to BI-AA8EE6CE with no independent children.
