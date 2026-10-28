@@ -1,7 +1,7 @@
 ---
 status: active
 backlog_item: BI-CD4EB130
-workroom: WC-C8326144
+workroom: WC-E8C575B4
 ---
 # Managed Mac runtime delivery plan
 
@@ -18,7 +18,7 @@ Implement [the canonical design](../specs/2026-10-26-mac-inference-runtime-desig
 
 ## Backlog coverage
 
-Parent and single delivery: BI-CD4EB130 / WC-C8326144. Decision: atomic. Current governed receipt: cmvpbrkdvbdq901t7ov7s0fdt, bound to published plan 0a23cfc3f7cb1fd981fd920f3cb8c9d46d1dc299 / blob 3c54465176f7bc711bf3f495b34e272da467b817. It supersedes cmvpa9n7malb001t7ll4q898k after the required item research note changed scope. Author research: initiative-2a3b51f3-41ec-4cfc-a698-496af14cf705. Implementation admission: IRD-273B96AAC778 (allowed). No independently shippable children or dependencies; existing BI-86B65F35 is prior delivered package evidence, not delivered again by this plan.
+Parent and single delivery: BI-CD4EB130. The archived WC-C8326144 delivered PR6612. Remaining implementation resumes on WC-E8C575B4 / `codex/mac-inference-activation`, preserving the old room and source history. Decision: atomic. Historical coverage cmvpbrkdvbdq901t7ov7s0fdt binds plan 0a23cfc3f7cb1fd981fd920f3cb8c9d46d1dc299 / blob 3c54465176f7bc711bf3f495b34e272da467b817. Its October 28 revalidation returned `receipt-invalid`: no live room records that historical head. Do not roll a room back to that SHA to satisfy the message. Publish this amended plan, bind the actual new head and obtain current coverage before implementation. Historical author research initiative-2a3b51f3-41ec-4cfc-a698-496af14cf705 and implementation admission IRD-273B96AAC778 remain records of the earlier source concern, not admission for the new head. Current design admission: IRD-C50296F4F18D. No independently shippable children or dependencies; BI-86B65F35 remains prior delivered package evidence.
 
 Traceability: AC-MRI1 through AC-MRI6; CONTRACT-MRI-IDENTITY, CONTRACT-MRI-PROVIDER, CONTRACT-MRI-LIFECYCLE, CONTRACT-MRI-ADMISSION, CONTRACT-MRI-ROLLBACK; FLOW-MRI-TRANSITION; VERIFY-MRI-RUNTIME. The design defines each reference.
 
@@ -33,7 +33,7 @@ Traceability: AC-MRI1 through AC-MRI6; CONTRACT-MRI-IDENTITY, CONTRACT-MRI-PROVI
 
 ## Verification and rollback
 
-All runtime-bound evidence belongs to the canonical served target or admitted shared lease. Node source tests may run without application dependencies when genuinely independent; source-only status forbids claiming pnpm/typecheck/Vitest passes. The current root index lock is not removed or bypassed. Full build runs in governed/cloud CI.
+All runtime-bound evidence belongs to the canonical served target or admitted shared lease. Node source tests may run without application dependencies when genuinely independent; source-only status forbids claiming pnpm/typecheck/Vitest passes. An existing lock is never removed or bypassed; the historical October 26 root lock is not assumed to remain present. Full build runs in governed/cloud CI.
 
 Reuse the completed engine qualification when its immutable payload/model/profile still match; do not repeat it solely because installer source changed. The new runner/lifecycle/API workflow needs its own actual qualification. Before activation the original Docker runtime remains active. During failure restore only the recorded previous selection, verify model service and retain the failed attempt. Unknown effects remain unknown until reconciled.
 
@@ -43,3 +43,16 @@ Reuse the completed engine qualification when its immutable payload/model/profil
 Source-pinned metal4.3 runner build, relocated-library sandbox allow/deny controls, bounded native reservation wait/expiry handling and runtime API qualification are complete. The API test passed eight chat/tool/prefix controls and the candidate embedding shape check, stopped all owned native processes and restored Docker. Operations evidence records the85-second candidate cold read and the baseline load caveat.
 
 This checkpoint does not close the atomic delivery. The supported managed native activation entry, full DPF workflow/under-load proof, protected publication and live convergence remain unfinished. Preserve the separate owner's unresolved original-upgrade obligation; do not submit a second uncertain upgrade or infer activation from this test.
+
+## Remaining implementation — October 28, 2026
+
+The canonical design's permanent-host amendment selects the existing signed native Edge action channel, DI-81525BCDC1F7. Its comparison favored server-owned recovery over an installer-only external-client crossing; it does not grant host or pilot authority. Steps below implement the same AC-MRI1–6 and CONTRACT-MRI-* / FLOW-MRI-TRANSITION / VERIFY-MRI-RUNTIME references above. They are internal sequencing of the same atomic outcome.
+
+1. **Refresh the executable scope.** Publish the amended existing design/plan under this room, record current research/coverage and request the actual implementation admission. Consume the changed-path impact contract. Preserve the receipt-invalid outcome and all old unknown review/application/upgrade histories. Confirm open-PR and live-backlog overlap before code and publication.
+2. **Implement and test the native procedure first.** Extend `tools/mac-inference/runtime-profile.mjs` and the existing native installer owner with versioned staging, current runtime-qualification validation, protected previous/active selection and persistent owned launchd lifecycle. Tests must first fail on changed/fenced evidence, unknown process snapshots, occupied/foreign job labels, lost bootstrap acknowledgement, expired admission, duplicate model residency, conflicting endpoint, concurrent state change and failed rollback. Reuse package/lease/state helpers; no second telemetry ledger or grant framework.
+3. **Connect the signed carrier.** Extend `packages/db/src/remote-action-dispatch.ts`, the existing Edge envelope/claim policy and `services/edge-node-go/internal/action/executor.go` with the specific inference lifecycle procedure. Add a native handler, not generic shell execution. Reuse existing replay, ChangeRequest, quiescence and result evidence. Tests prove wrong node, changed payload/digest, missing explicit action allowlist, expired authority, stale change approval and replay all refuse before effects. Keep restart-only automatic host upkeep unchanged.
+4. **Converge the host and provider contract.** Integrate handler provisioning with `scripts/installer/native-edge-host.sh` / `install-dpf.sh` and source-qualified native artifacts. The canonical release's profile selection must consistently reach chat/tools/embeddings/management through existing local endpoint resolution. No portal upgrade may claim host provisioning without an actual handler/version acknowledgement. Declare the supported existing-install bootstrap and its exact authorization before running it. Missing bootstrap authority or unsupported host capability is a specific stop boundary, not permission to run a worktree helper on production.
+5. **Publish source and admit one pilot.** Complete current unit/typecheck and applicable security/contract guards, canonical merged-source verification, exact-source independent review and the normal DCO PR/queue. Reuse valid native package evidence only when its bindings still match. Obtain actual per-host procedure authority, a current admitted GPU/runtime window and resolved safe drain before native effects. A successful newer portal upgrade neither settles old unknown operations nor authorizes a pilot.
+6. **Verify activation and rollback through DPF.** Prove the actual active binary/library/package identities and effective endpoint/settings. Exercise successful DPF chat, required tool/result writes and embedding consumers; compare cold/warm/input/cache/decode and queue metadata, then natural overlap. Perform the owned rollback and prove restoration, then activate only through the same managed procedure. Record missing/failed/unknown evidence honestly, retain all prior reports, and update DOC-B39A42F1 / BI-IMP-AE7792A0 without creating another scheduler. Keep unqualified Mac targets on Docker.
+
+The native installer/controller and signed action are not separately useful live optimizations: neither can safely switch regular requests without the other, current qualification, consistent provider convergence and rollback. This is why the remaining graph stays atomic. Source publication alone must not be described to the operator as a delivered performance improvement.

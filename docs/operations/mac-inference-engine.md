@@ -1,5 +1,7 @@
 # Maintained Mac inference engine candidate
 
+October 28 live status: PR6612 is merged and its source reached the canonical portal, but the faster native runtime is not active. Docker Model Runner is now1.2.9 while the installed engine executable still hashes to `0e9095b1a9068961682fa60fa101bdcf40e0b1f1e6b0c44c1616c0611c1d4b26`; the portal still routes to `http://model-runner.docker.internal/v1`. BI-CD4EB130 has been reopened for its genuinely unfinished native lifecycle/activation implementation, not for a waived customer acceptance question. The existing design and plan's October 28 amendment records the missing host-control path and the signed-action integration selected in DI-81525BCDC1F7. No live speedup is established by the portal upgrade. AI Ops' existing performance task still reports a required-writer failure; captured learning is not proof that recurring stewardship works.
+
 BI-86B65F35 / WC-06E454C7 owns this package repair. The [design](../superpowers/specs/2026-10-26-mac-metal-engine-package-design.md) and [plan](../superpowers/plans/2026-10-26-mac-metal-engine-package-plan.md) define its acceptance.
 
 ## Why this package exists
