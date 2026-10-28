@@ -1288,6 +1288,9 @@
     "apps/web/lib/routes.ts": [
       "docs/architecture/data-model-stewardship-runbook.md"
     ],
+    "apps/web/lib/routing/ai-capacity-watch.ts": [
+      "docs/operations/observability-coverage.md"
+    ],
     "apps/web/lib/routing/anthropic-cache.ts": [
       "docs/architecture/agent-client-capability-parity.md"
     ],
@@ -3831,6 +3834,7 @@
       "apps/web/lib/coworker/approval-lifetime.ts",
       "apps/web/lib/observability/monitor-source-reachability.ts",
       "apps/web/lib/queue/functions/alert-delivery-bridge.ts",
+      "apps/web/lib/routing/ai-capacity-watch.ts",
       "apps/web/lib/voice-synthesis/tts-health-contract.test.ts",
       "docker-compose.macos.yml",
       "monitoring/prometheus/prometheus.yml",
